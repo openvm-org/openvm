@@ -267,6 +267,15 @@ impl MemoryOfflineChecker {
     /// The max constraint degree of expressions in sends/receives is:
     /// max(max_deg(data), max_deg(prev_data), max_deg(timestamp), max_deg(prev_timestamps))
     /// Also, each one of them has count with degree: deg(enabled)
+    ///
+    /// **Bus pack**: the bus message is `BLOCK_FE_WIDTH` field elements wide. When
+    /// `N > BLOCK_FE_WIDTH` (today only the legacy u8 path with `N = 8` post-flip),
+    /// we pack groups of `N / BLOCK_FE_WIDTH` consecutive input elements into a
+    /// single field element using base-256: `out[i] = sum_k input[i*ratio + k] *
+    /// 256^k`. With `BUS_PTR_SCALE = 1` today, `BLOCK_FE_WIDTH = MEMORY_BLOCK_BYTES
+    /// = 8` and the pack ratio is 1 — `out[i] = input[i]`, a no-op pass-through.
+    /// In commit 6 with `BUS_PTR_SCALE = 2`, `BLOCK_FE_WIDTH = 4` and the pack
+    /// ratio is 2 — `out[i] = input[2i] + 256 * input[2i+1]`.
     #[allow(clippy::too_many_arguments)]
     fn eval_bulk_access<AB, const N: usize>(
         &self,
@@ -280,12 +289,44 @@ impl MemoryOfflineChecker {
     ) where
         AB: InteractionBuilder,
     {
+        let packed_data = pack_for_bus::<AB, N>(data);
+        let packed_prev = pack_for_bus::<AB, N>(prev_data);
+
         self.memory_bus
-            .receive(address.clone(), prev_data.to_vec(), prev_timestamp)
+            .receive(address.clone(), packed_prev, prev_timestamp)
             .eval(builder, enabled.clone());
 
         self.memory_bus
-            .send(address, data.to_vec(), timestamp)
+            .send(address, packed_data, timestamp)
             .eval(builder, enabled);
     }
+}
+
+/// Pack `N` input field expressions into `BLOCK_FE_WIDTH` output field
+/// expressions for the memory bus message. `N` must be a multiple of
+/// `BLOCK_FE_WIDTH`; today `BLOCK_FE_WIDTH = MEMORY_BLOCK_BYTES = 8` and the
+/// pack is a pass-through. In commit 6 when `BUS_PTR_SCALE` flips to 2,
+/// `BLOCK_FE_WIDTH` becomes 4 and `N = 8` callers get packed pairwise.
+fn pack_for_bus<AB, const N: usize>(data: &[AB::Expr; N]) -> Vec<AB::Expr>
+where
+    AB: InteractionBuilder,
+{
+    let pack_ratio = N / crate::arch::BLOCK_FE_WIDTH;
+    debug_assert_eq!(
+        pack_ratio * crate::arch::BLOCK_FE_WIDTH,
+        N,
+        "bridge bus pack: N={N} must be a multiple of BLOCK_FE_WIDTH={}",
+        crate::arch::BLOCK_FE_WIDTH
+    );
+    let mut packed = Vec::with_capacity(crate::arch::BLOCK_FE_WIDTH);
+    for i in 0..crate::arch::BLOCK_FE_WIDTH {
+        let mut acc = AB::Expr::ZERO;
+        let mut mult: u64 = 1;
+        for k in 0..pack_ratio {
+            acc = acc + AB::Expr::from_u64(mult) * data[i * pack_ratio + k].clone();
+            mult *= 256;
+        }
+        packed.push(acc);
+    }
+    packed
 }
