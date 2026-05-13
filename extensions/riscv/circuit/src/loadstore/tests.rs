@@ -824,9 +824,13 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[test_case(STOREB, 100)]
 #[test_case(STOREH, 100)]
 fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+    use openvm_circuit::arch::BUS_PTR_SCALE;
     let mut rng = create_seeded_rng();
+    // post Stage 1.6 flip: max bus_ptr = `BUS_PTR_SCALE * (num_cells - 1)` must
+    // fit in `pointer_max_bits` bits. Bump `pointer_max_bits` by
+    // `log2(BUS_PTR_SCALE)` so the existing `num_cells = 1 << 20` budgets fit.
     let mut mem_config = MemoryConfig {
-        pointer_max_bits: 20,
+        pointer_max_bits: 20 + BUS_PTR_SCALE.trailing_zeros() as usize,
         ..Default::default()
     };
     mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 20;
