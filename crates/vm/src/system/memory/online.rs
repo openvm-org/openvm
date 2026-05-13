@@ -203,9 +203,9 @@ impl<M: LinearMemory> AddressMap<M> {
     /// Panics or segfaults if `ptr..ptr + len` is out of bounds
     ///
     /// # Safety
-    /// - When `T = u8`, the slice is the raw byte storage of the AS (which is
-    ///   the little-endian byte layout of the configured cell type). Otherwise
-    ///   `T` must exactly match the AS's cell type.
+    /// - When `T = u8`, the slice is the raw byte storage of the AS (which is the little-endian
+    ///   byte layout of the configured cell type). Otherwise `T` must exactly match the AS's cell
+    ///   type.
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub unsafe fn get_slice<T: Copy + Debug + 'static>(
         &self,

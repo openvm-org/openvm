@@ -345,7 +345,8 @@ where
                     data,
                     local.from_state.timestamp
                         + AB::Expr::from_usize(2 + OUTPUT_TOTAL_MEMORY_OPS + chunk_idx)
-                        + (section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_BYTE_MEMORY_OPS)),
+                        + (section_idx_minus_one.clone()
+                            * AB::Expr::from_usize(DIGEST_BYTE_MEMORY_OPS)),
                     aux,
                 )
                 .eval(builder, local.is_valid - local.is_first);

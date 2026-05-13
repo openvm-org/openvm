@@ -321,7 +321,8 @@ mod tests {
         unsafe {
             memory.write::<u8, 4>(PUBLIC_VALUES_AS, 12, [0, 0, 0, 1]);
         }
-        let mut expected_pvs = F::zero_vec(super::pv_commit_cell_count(num_public_values, DIGEST_WIDTH));
+        let mut expected_pvs =
+            F::zero_vec(super::pv_commit_cell_count(num_public_values, DIGEST_WIDTH));
         expected_pvs[7] = F::from_u16(0x0100);
 
         let hasher = vm_poseidon2_hasher();

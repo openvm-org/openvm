@@ -34,15 +34,13 @@ impl<F: VmField> MemoryTester<F> {
     /// Dispatches one memory-bus message. The interface accepts two values of
     /// `N`:
     ///
-    /// - `N = BLOCK_FE_WIDTH`: `ptr` is a cell index. The chip's permutation
-    ///   message uses the normalized bus pointer `BUS_PTR_SCALE * ptr`.
-    ///   Storage type per AS: DEFERRAL_AS reads F cells, u16-celled ASes read
-    ///   u16 cells lifted to F via `F::from_u16`.
-    /// - `N = MEMORY_BLOCK_BYTES` (u16 ASes only): `ptr` is the **byte
-    ///   pointer** (= bus pointer for u16 ASes). Performs a byte-view read and
-    ///   returns the raw bytes lifted to F via `F::from_u8`. The chip's
-    ///   permutation message packs the bytes pairwise into `BLOCK_FE_WIDTH`
-    ///   field elements via base-256: `out[i] = byte[2i] + 256 * byte[2i+1]`.
+    /// - `N = BLOCK_FE_WIDTH`: `ptr` is a cell index. The chip's permutation message uses the
+    ///   normalized bus pointer `BUS_PTR_SCALE * ptr`. Storage type per AS: DEFERRAL_AS reads F
+    ///   cells, u16-celled ASes read u16 cells lifted to F via `F::from_u16`.
+    /// - `N = MEMORY_BLOCK_BYTES` (u16 ASes only): `ptr` is the **byte pointer** (= bus pointer for
+    ///   u16 ASes). Performs a byte-view read and returns the raw bytes lifted to F via
+    ///   `F::from_u8`. The chip's permutation message packs the bytes pairwise into
+    ///   `BLOCK_FE_WIDTH` field elements via base-256: `out[i] = byte[2i] + 256 * byte[2i+1]`.
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
         const { assert!(N == BLOCK_FE_WIDTH || N == MEMORY_BLOCK_BYTES) };
         if N == BLOCK_FE_WIDTH {
@@ -126,8 +124,7 @@ impl<F: VmField> MemoryTester<F> {
             matches!(cell_layout, MemoryCellType::U16),
             "MemoryTester::read byte-view requires a u16-celled AS, got {cell_layout:?}",
         );
-        let (t_prev, bytes) =
-            unsafe { memory.read::<u8, N>(addr_space as u32, byte_ptr as u32) };
+        let (t_prev, bytes) = unsafe { memory.read::<u8, N>(addr_space as u32, byte_ptr as u32) };
         let data = bytes.map(F::from_u8);
         let packed = pack_bytes_for_bus::<F>(&data);
         let bus_ptr = byte_ptr as u32;
@@ -137,12 +134,7 @@ impl<F: VmField> MemoryTester<F> {
         data
     }
 
-    fn write_bytes<const N: usize>(
-        &mut self,
-        addr_space: usize,
-        byte_ptr: usize,
-        data: [F; N],
-    ) {
+    fn write_bytes<const N: usize>(&mut self, addr_space: usize, byte_ptr: usize, data: [F; N]) {
         assert_eq!(N, MEMORY_BLOCK_BYTES);
         let memory = &mut self.memory;
         let t = memory.timestamp();
