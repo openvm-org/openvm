@@ -152,7 +152,7 @@ __global__ void branch_equal256_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        BranchEqual256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr));
+        BranchEqual256Core core{BitwiseOperationLookup(d_bitwise_lookup_ptr)};
         core.fill_trace_row(row.slice_from(COL_INDEX(BranchEqual256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(BranchEqual256Cols<uint8_t>));

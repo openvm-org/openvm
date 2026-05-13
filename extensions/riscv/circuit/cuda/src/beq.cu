@@ -42,7 +42,7 @@ __global__ void beq_tracegen(
         Rv64BranchAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full.adapter);
 
-        Rv64BranchEqualCore core(BitwiseOperationLookup(bw_ptr));
+        Rv64BranchEqualCore core{BitwiseOperationLookup(bw_ptr)};
         core.fill_trace_row(row.slice_from(COL_INDEX(BranchEqualCols, core)), full.core);
     } else {
         row.fill_zero(0, sizeof(BranchEqualCols<uint8_t>));
