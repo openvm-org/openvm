@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, iter};
 
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir},
@@ -10,7 +11,8 @@ use openvm_stark_backend::{
 
 use crate::system::memory::merkle::{MemoryDimensions, MemoryMerkleCols, MemoryMerklePvs};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, ColumnsAir)]
+#[columns_via(MemoryMerkleCols<u8, CHUNK>)]
 pub struct MemoryMerkleAir<const CHUNK: usize> {
     pub memory_dimensions: MemoryDimensions,
     pub merkle_bus: PermutationCheckBus,

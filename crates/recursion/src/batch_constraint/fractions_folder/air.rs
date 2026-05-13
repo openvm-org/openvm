@@ -1,6 +1,8 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{
+    utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -24,7 +26,7 @@ use crate::{
     utils::{ext_field_add, ext_field_multiply},
 };
 
-#[derive(AlignedBorrow, Clone, Copy, Debug)]
+#[derive(AlignedBorrow, Clone, Copy, Debug, StructReflection)]
 #[repr(C)]
 pub struct FractionsFolderCols<T> {
     pub is_valid: T,
@@ -43,6 +45,8 @@ pub struct FractionsFolderCols<T> {
     pub cur_hash: [T; D_EF],
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(FractionsFolderCols<u8>)]
 pub struct FractionsFolderAir {
     pub transcript_bus: TranscriptBus,
     pub fraction_folder_input_bus: FractionFolderInputBus,

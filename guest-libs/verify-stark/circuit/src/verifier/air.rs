@@ -1,7 +1,9 @@
 use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::arch::{ExitCode, POSEIDON2_WIDTH};
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{
+    utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_continuations::{
     circuit::{
         deferral::DeferralCircuitPvs,
@@ -45,7 +47,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct DeferredVerifyPvsCols<F> {
     pub child_verifier_pvs: VerifierBasePvs<F>,
     pub child_vm_pvs: VmPvs<F>,
@@ -62,6 +64,8 @@ pub struct DeferredVerifyPvsCols<F> {
     pub final_transcript_state: [F; POSEIDON2_WIDTH],
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(DeferredVerifyPvsCols<u8>)]
 pub struct DeferredVerifyPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,

@@ -10,7 +10,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow,
+    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -31,7 +31,7 @@ use crate::adapters::{
 };
 
 #[repr(C)]
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv32JalrCoreCols<T> {
     pub imm: T,
     pub rs1_data: [T; RV32_REGISTER_NUM_LIMBS],
@@ -46,7 +46,8 @@ pub struct Rv32JalrCoreCols<T> {
     pub imm_sign: T,
 }
 
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32JalrCoreCols<u8>)]
 pub struct Rv32JalrCoreAir {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,

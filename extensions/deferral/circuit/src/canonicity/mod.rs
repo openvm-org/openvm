@@ -1,3 +1,4 @@
+use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 
 use crate::utils::F_NUM_BYTES;
@@ -17,7 +18,7 @@ pub struct CanonicityIo<T> {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy, Debug)]
+#[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
 pub struct CanonicityAuxCols<T> {
     /// Marker for the first index where x[i] != order[i] (big-endian).
     pub diff_marker: [T; F_NUM_BYTES],

@@ -1,6 +1,7 @@
 use std::{array::from_fn, borrow::Borrow, sync::Arc};
 
 use derive_new::new;
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_poseidon2_air::{
     Poseidon2SubAir, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, POSEIDON2_WIDTH,
 };
@@ -30,6 +31,12 @@ impl<F: Field, const SBOX_REGISTERS: usize> BaseAirWithPublicValues<F>
 {
 }
 impl<F: Field, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
+    for Poseidon2PeripheryAir<F, SBOX_REGISTERS>
+{
+}
+// No columns provided: columns embed external `Poseidon2SubCols` which doesn't derive
+// `StructReflection`.
+impl<F: Field, const SBOX_REGISTERS: usize> ColumnsAir
     for Poseidon2PeripheryAir<F, SBOX_REGISTERS>
 {
 }

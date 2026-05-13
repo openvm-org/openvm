@@ -1,5 +1,6 @@
 use core::{array, borrow::Borrow};
 
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 pub use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -38,7 +39,7 @@ use crate::{
 /// (Second part) Standard merkle proof, the next row will be Poseidon2 compression of `c` and the
 /// sibling of `c`.
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct MerkleVerifyCols<T> {
     /// Index of the proof this row is for
     pub proof_idx: T,
@@ -86,6 +87,8 @@ pub(super) struct MerkleVerifyLog {
     pub commit_minor: usize,
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(MerkleVerifyCols<u8>)]
 pub struct MerkleVerifyAir {
     pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub merkle_verify_bus: MerkleVerifyBus,

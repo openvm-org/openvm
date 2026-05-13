@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     utils::{and, not},
-    SubAir,
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -28,7 +28,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct EqBitsCols<F> {
     // Proof index columns for continuations
     pub proof_idx: F,
@@ -49,6 +49,8 @@ pub struct EqBitsCols<F> {
     pub u_val: [F; D_EF],
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(EqBitsCols<u8>)]
 pub struct EqBitsAir {
     // Internal buses
     pub eq_bits_internal_bus: EqBitsInternalBus,

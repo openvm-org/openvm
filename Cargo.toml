@@ -205,6 +205,7 @@ snark-verifier-sdk = { version = "0.2.0", default-features = false, features = [
 snark-verifier = { version = "0.2.0", default-features = false }
 halo2-base = { version = "0.5.0", default-features = false }
 halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.2" }
+struct-reflection = "0.1.0"
 
 forge-fmt = { git = "https://github.com/foundry-rs/foundry.git", tag = "v1.5.0" }
 cargo_metadata = "0.18"

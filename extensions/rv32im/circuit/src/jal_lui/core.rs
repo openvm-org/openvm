@@ -6,7 +6,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    AlignedBytesBorrow,
+    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -30,7 +30,7 @@ use crate::adapters::{
 pub(super) const ADDITIONAL_BITS: u32 = 0b11000000;
 
 #[repr(C)]
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv32JalLuiCoreCols<T> {
     pub imm: T,
     pub rd_data: [T; RV32_REGISTER_NUM_LIMBS],
@@ -38,7 +38,8 @@ pub struct Rv32JalLuiCoreCols<T> {
     pub is_lui: T,
 }
 
-#[derive(Debug, Clone, Copy, derive_new::new)]
+#[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32JalLuiCoreCols<u8>)]
 pub struct Rv32JalLuiCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }

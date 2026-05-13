@@ -1,6 +1,6 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, ColumnsAir, SubAir};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -75,6 +75,9 @@ pub struct WhirRoundAir {
 
 impl BaseAirWithPublicValues<F> for WhirRoundAir {}
 impl PartitionedBaseAir<F> for WhirRoundAir {}
+// No columns provided: `WhirRoundCols` is parameterized by `ENC_WIDTH` chosen at runtime (1, 2, or
+// 3), so there is no single static layout to reflect.
+impl ColumnsAir for WhirRoundAir {}
 
 impl<F> BaseAir<F> for WhirRoundAir {
     fn width(&self) -> usize {

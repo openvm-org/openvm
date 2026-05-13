@@ -2,7 +2,7 @@
 
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::SubAir;
+use openvm_circuit_primitives::{ColumnsAir, SubAir};
 use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
     any_air_arc_vec,
@@ -23,9 +23,9 @@ const fn width<const DEPTH_MINUS_ONE: usize>() -> usize {
     size_of::<NestedForLoopIoCols<u8, DEPTH_MINUS_ONE>>()
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+#[columns_via(NestedForLoopIoCols<u8, DEPTH_MINUS_ONE>)]
 struct TestAir<const DEPTH_MINUS_ONE: usize>;
-
 impl<F: Field, const DEPTH_MINUS_ONE: usize> BaseAirWithPublicValues<F>
     for TestAir<DEPTH_MINUS_ONE>
 {

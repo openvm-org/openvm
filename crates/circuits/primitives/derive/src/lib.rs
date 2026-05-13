@@ -10,6 +10,56 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericParam, LitStr, Me
 mod cols_ref;
 use cols_ref::cols_ref_impl;
 
+/// Derives `ColumnsAir` for an AIR struct.
+///
+/// `#[columns_via(SomeCols<u8, ...>)]` selects the column struct whose
+/// `StructReflectionHelper::struct_reflection()` (typically derived via
+/// `#[derive(StructReflection)]`) provides the column names. The reflection is
+/// element-type invariant, so any concrete element type works — `u8` is just
+/// the conventional choice. If the AIR has no columns to reflect, write
+/// `impl ColumnsAir for X {}` by hand instead.
+#[proc_macro_derive(ColumnsAir, attributes(columns_via))]
+pub fn columns_air_derive(input: TokenStream) -> TokenStream {
+    let ast: DeriveInput = parse_macro_input!(input as DeriveInput);
+    let name = &ast.ident;
+
+    let columns_via = match ast
+        .attrs
+        .iter()
+        .find(|attr| attr.path().is_ident("columns_via"))
+    {
+        Some(attr) => attr,
+        None => {
+            return syn::Error::new_spanned(
+                &ast.ident,
+                "#[derive(ColumnsAir)] requires a `#[columns_via(ColsTy<u8, ...>)]` attribute. \
+                 If the AIR has no columns to reflect, write `impl ColumnsAir for X {}` by hand.",
+            )
+            .to_compile_error()
+            .into();
+        }
+    };
+
+    let cols_ty: syn::Type = match columns_via.parse_args() {
+        Ok(ty) => ty,
+        Err(err) => return err.to_compile_error().into(),
+    };
+
+    let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
+
+    quote! {
+        impl #impl_generics ::openvm_circuit_primitives::ColumnsAir
+            for #name #ty_generics
+            #where_clause
+        {
+            fn columns(&self) -> Option<Vec<String>> {
+                <#cols_ty as ::openvm_circuit_primitives::StructReflectionHelper>::struct_reflection()
+            }
+        }
+    }
+    .into()
+}
+
 #[proc_macro_derive(AlignedBorrow)]
 pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);

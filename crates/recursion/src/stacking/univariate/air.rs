@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     utils::{and, assert_array_eq, not},
-    SubAir,
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -24,7 +24,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct UnivariateRoundCols<F> {
     // Proof index columns for continuations
     pub proof_idx: F,
@@ -49,6 +49,8 @@ pub struct UnivariateRoundCols<F> {
     pub poly_rand_eval: [F; D_EF],
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(UnivariateRoundCols<u8>)]
 pub struct UnivariateRoundAir {
     // External buses
     pub transcript_bus: TranscriptBus,

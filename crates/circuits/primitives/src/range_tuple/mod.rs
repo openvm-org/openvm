@@ -19,7 +19,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
-use crate::Chip;
+use crate::{Chip, ColumnsAir};
 
 mod bus;
 pub use bus::*;
@@ -79,6 +79,17 @@ impl<const N: usize> RangeTupleCheckerAir<N> {
 }
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for RangeTupleCheckerAir<N> {}
 impl<F: Field, const N: usize> PartitionedBaseAir<F> for RangeTupleCheckerAir<N> {}
+impl<const N: usize> ColumnsAir for RangeTupleCheckerAir<N> {
+    // Implemented manually because struct reflection does not work on `RangeTupleColsRef`.
+    fn columns(&self) -> Option<Vec<String>> {
+        Some(
+            (0..N)
+                .map(|i| format!("tuple[{}]", i))
+                .chain(std::iter::once("mult".to_string()))
+                .collect(),
+        )
+    }
+}
 
 impl<F: Field, const N: usize> BaseAir<F> for RangeTupleCheckerAir<N> {
     fn width(&self) -> usize {

@@ -10,7 +10,7 @@ use crate::{
     is_less_than::{IsLtSubAir, LessThanAuxCols},
     utils::not,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    SubAir, TraceSubRowGenerator,
+    StructReflection, StructReflectionHelper, SubAir, TraceSubRowGenerator,
 };
 
 #[cfg(test)]
@@ -31,7 +31,7 @@ pub struct IsLtArrayIo<T, const NUM: usize> {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy, Debug)]
+#[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
 pub struct IsLtArrayAuxCols<T, const NUM: usize, const AUX_LEN: usize> {
     // `diff_marker` is filled with 0 except at the lowest index i such that
     // `x[i] != y[i]`. If such an `i` exists then it is constrained that `diff_inv = inv(y[i] -

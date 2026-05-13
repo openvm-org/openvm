@@ -17,18 +17,19 @@ use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
     prover::{AirProvingContext, CommittedTraceData, ProverBackend},
-    AirRef, StarkEngine, StarkProtocolConfig, Val,
+    StarkEngine, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashMap;
 
 use self::{connector::VmConnectorAir, program::ProgramAir};
 use crate::{
     arch::{
-        vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventory,
-        ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState, ExecutorInventory,
-        ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor, RowMajorMatrixArena,
-        SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig, VmField,
-        BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, DEFAULT_BLOCK_SIZE, PROGRAM_AIR_ID,
+        vm_poseidon2_config, AirInventory, AirInventoryError, AirRefWithColumns, BusIndexManager,
+        ChipInventory, ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState,
+        ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
+        RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig,
+        VmExecutionConfig, VmField, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, DEFAULT_BLOCK_SIZE,
+        PROGRAM_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -176,8 +177,8 @@ impl SystemAirInventory {
         }
     }
 
-    pub fn into_airs<SC: StarkProtocolConfig>(self) -> Vec<AirRef<SC>> {
-        let mut airs: Vec<AirRef<SC>> = Vec::new();
+    pub fn into_airs<SC: StarkProtocolConfig>(self) -> Vec<AirRefWithColumns<SC>> {
+        let mut airs: Vec<AirRefWithColumns<SC>> = Vec::new();
         airs.push(Arc::new(self.program));
         airs.push(Arc::new(self.connector));
         airs.extend(self.memory.into_airs());

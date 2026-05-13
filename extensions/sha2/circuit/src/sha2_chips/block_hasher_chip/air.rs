@@ -1,4 +1,4 @@
-use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, SubAir};
+use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, ColumnsAir, SubAir};
 use openvm_sha2_air::{compose, Sha2BlockHasherSubAir};
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -17,6 +17,9 @@ pub struct Sha2BlockHasherVmAir<C: Sha2BlockHasherVmConfig> {
     pub inner: Sha2BlockHasherSubAir<C>,
     pub sha2_bus: PermutationCheckBus,
 }
+// No columns provided: width is the config-dependent `C::BLOCK_HASHER_WIDTH` and rows are accessed
+// via `Sha2BlockHasher{Round,Digest}ColsRef` (slice-borrowing ref structs, no static `Cols`).
+impl<C: Sha2BlockHasherVmConfig> ColumnsAir for Sha2BlockHasherVmAir<C> {}
 
 impl<C: Sha2BlockHasherVmConfig> Sha2BlockHasherVmAir<C> {
     pub fn new(

@@ -11,7 +11,7 @@ use openvm_circuit_primitives::{
         OverflowInt,
     },
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    SubAir, TraceSubRowGenerator,
+    ColumnsAir, SubAir, TraceSubRowGenerator,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -317,6 +317,9 @@ impl Deref for FieldExpr {
 
 impl<F: Field> BaseAirWithPublicValues<F> for FieldExpr {}
 impl<F: Field> PartitionedBaseAir<F> for FieldExpr {}
+// No columns provided: width is built dynamically from the expression and `FieldExprCols` uses
+// `Vec<Vec<T>>`.
+impl ColumnsAir for FieldExpr {}
 impl<F: Field> BaseAir<F> for FieldExpr {
     fn width(&self) -> usize {
         assert!(self.builder.is_finalized());

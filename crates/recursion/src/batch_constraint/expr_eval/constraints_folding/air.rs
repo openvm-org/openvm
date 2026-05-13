@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     utils::{assert_array_eq, not},
-    SubAir,
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -26,7 +26,7 @@ use crate::{
     utils::{assert_zeros, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
 
-#[derive(AlignedBorrow, Copy, Clone)]
+#[derive(AlignedBorrow, Copy, Clone, StructReflection)]
 #[repr(C)]
 pub struct ConstraintsFoldingCols<T> {
     pub is_valid: T,
@@ -48,6 +48,8 @@ pub struct ConstraintsFoldingCols<T> {
     pub is_first_in_air: T,
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(ConstraintsFoldingCols<u8>)]
 pub struct ConstraintsFoldingAir {
     pub transcript_bus: TranscriptBus,
     pub constraint_bus: ConstraintsFoldingBus,

@@ -1,6 +1,8 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{
+    utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -26,7 +28,7 @@ use crate::{
 /// Each row in `SumcheckAir` constrains a round of sumcheck. Rows are grouped
 /// into groups of size `k_whir`.
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct SumcheckCols<T> {
     pub is_enabled: T,
     pub proof_idx: T,
@@ -54,6 +56,8 @@ pub struct SumcheckCols<T> {
     pub alpha_lookup_count: T,
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(SumcheckCols<u8>)]
 pub struct SumcheckAir {
     pub sumcheck_bus: WhirSumcheckBus,
     pub alpha_bus: WhirAlphaBus,

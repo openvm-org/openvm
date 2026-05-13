@@ -8,7 +8,9 @@ use openvm_circuit::{
         MemoryAddress,
     },
 };
-use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::not};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupBus, utils::not, ColumnsAir,
+};
 use openvm_instructions::riscv::{
     RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
 };
@@ -23,7 +25,8 @@ use openvm_stark_backend::{
 
 use crate::xorin::columns::{XorinVmCols, NUM_XORIN_VM_COLS};
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(XorinVmCols<u8>)]
 pub struct XorinVmAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,

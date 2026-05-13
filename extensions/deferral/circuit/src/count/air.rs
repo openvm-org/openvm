@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::utils::not;
+use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -13,14 +13,15 @@ use openvm_stark_backend::{
 use super::DeferralCircuitCountBus;
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct DeferralCircuitCountCols<T> {
     pub is_valid: T,
     pub row_idx: T,
     pub mult: T,
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(DeferralCircuitCountCols<u8>)]
 pub struct DeferralCircuitCountAir {
     pub lookup_bus: DeferralCircuitCountBus,
     pub num_deferral_circuits: usize,

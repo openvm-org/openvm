@@ -1,6 +1,8 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{
+    utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -22,7 +24,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct WhirQueryCols<T> {
     pub is_enabled: T,
     // loop counters
@@ -45,6 +47,8 @@ pub struct WhirQueryCols<T> {
     pub post_claim: [T; D_EF],
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(WhirQueryCols<u8>)]
 pub struct WhirQueryAir {
     pub transcript_bus: TranscriptBus,
     pub verify_queries_bus: VerifyQueriesBus,
