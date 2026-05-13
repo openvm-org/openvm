@@ -52,7 +52,7 @@ pub mod cuda {
 
     use crate::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU,
-        cuda_abi::bitwise_op_lookup::dummy_tracegen, Chip, ColumnsAir,
+        cuda_abi::bitwise_op_lookup::dummy_tracegen, Chip,
     };
 
     const RECORD_WIDTH: usize = 3;

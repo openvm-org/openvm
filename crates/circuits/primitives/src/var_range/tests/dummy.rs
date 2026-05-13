@@ -89,7 +89,6 @@ pub mod cuda {
 
     use crate::{
         cuda_abi::var_range::dummy_tracegen, var_range::VariableRangeCheckerChipGPU, Chip,
-        ColumnsAir,
     };
 
     /// Width of the dummy trace: [count, value, bits] = 3 columns
