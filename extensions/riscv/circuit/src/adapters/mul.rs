@@ -31,7 +31,7 @@ use super::{tracing_write, RV64_REGISTER_NUM_LIMBS};
 use crate::adapters::tracing_read;
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct Rv64MultAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
@@ -43,7 +43,8 @@ pub struct Rv64MultAdapterCols<T> {
 
 /// Reads instructions of the form OP a, b, c, d where \[a:8\]_d = \[b:8\]_d op \[c:8\]_d.
 /// Operand d can only be 1, and there is no immediate support.
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv64MultAdapterCols<u8>)]
 pub struct Rv64MultAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,

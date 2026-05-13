@@ -27,7 +27,7 @@ use crate::adapters::{
 };
 
 #[repr(C)]
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64JalLuiCoreCols<T> {
     pub imm: T,
     // We store only the low 32-bit limbs. The high limbs are constrained as sign extension.
@@ -37,7 +37,8 @@ pub struct Rv64JalLuiCoreCols<T> {
     pub is_sign_extend: T,
 }
 
-#[derive(Debug, Clone, Copy, derive_new::new)]
+#[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
+#[columns_via(Rv64JalLuiCoreCols<u8>)]
 pub struct Rv64JalLuiCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }
