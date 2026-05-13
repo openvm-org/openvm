@@ -155,15 +155,15 @@ where
         record.preimage_buffer_bytes.copy_from_slice(prestate);
         let poststate = keccakf_postimage_bytes(&record.preimage_buffer_bytes);
         for (word_idx, (word, aux)) in poststate
-            .chunks_exact(BLOCK_FE_WIDTH)
+            .chunks_exact(MEMORY_BLOCK_BYTES)
             .zip(&mut record.buffer_word_aux)
             .enumerate()
         {
             // We don't need prev_data since we read it earlier
-            let (t_prev, _) = timed_write::<BLOCK_FE_WIDTH>(
+            let (t_prev, _) = timed_write::<MEMORY_BLOCK_BYTES>(
                 state.memory,
                 RV64_MEMORY_AS,
-                buffer_ptr + (word_idx * BLOCK_FE_WIDTH) as u32,
+                buffer_ptr + (word_idx * MEMORY_BLOCK_BYTES) as u32,
                 word.try_into().unwrap(),
             );
             aux.prev_timestamp = t_prev;

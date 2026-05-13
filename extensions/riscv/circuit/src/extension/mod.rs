@@ -589,7 +589,11 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64M {
 
         let mul_w = Rv64MulWAir::new(
             Rv64MultWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            crate::mul_w::MulWCoreAir::new(range_tuple_checker, bitwise_lu, MulWOpcode::CLASS_OFFSET),
+            crate::mul_w::MulWCoreAir::new(
+                range_tuple_checker,
+                bitwise_lu,
+                MulWOpcode::CLASS_OFFSET,
+            ),
         );
         inventory.add_air(mul_w);
 

@@ -58,7 +58,7 @@ use {
             default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
             GpuTestChipHarness,
         },
-        EmptyAdapterCoreLayout, BLOCK_FE_WIDTH,
+        EmptyAdapterCoreLayout, MEMORY_BLOCK_BYTES,
     },
 };
 
@@ -929,7 +929,7 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
             &mut harness.matrix_arena,
             EmptyAdapterCoreLayout::<
                 F,
-                Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>,
+                Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, MEMORY_BLOCK_BYTES>,
             >::new(),
         );
 
@@ -995,7 +995,7 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
             &mut harness.matrix_arena,
             EmptyAdapterCoreLayout::<
                 F,
-                Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>,
+                Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, MEMORY_BLOCK_BYTES>,
             >::new(),
         );
 

@@ -10,7 +10,7 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, CustomBorrow, ExecutionError, MultiRowLayout, MultiRowMetadata,
         PreflightExecutor, RecordArena, SizedRecord, TraceFiller, VmField, VmStateMut,
-        BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
@@ -84,7 +84,7 @@ pub struct DeferralOutputRecordHeader {
 pub struct DeferralOutputRecordMut<'a> {
     pub header: &'a mut DeferralOutputRecordHeader,
     pub write_bytes: &'a mut [u8],
-    pub write_aux: &'a mut [MemoryWriteBytesAuxRecord<BLOCK_FE_WIDTH>],
+    pub write_aux: &'a mut [MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>],
 }
 
 impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for [u8] {
@@ -107,7 +107,7 @@ impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for
         // - Subslice operation [..layout.metadata.num_rows] validates sufficient capacity
         // - Layout calculation ensures space for alignment padding plus required aux records
         let (_, write_aux_buf, _) =
-            unsafe { rest.align_to_mut::<MemoryWriteBytesAuxRecord<BLOCK_FE_WIDTH>>() };
+            unsafe { rest.align_to_mut::<MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>>() };
 
         DeferralOutputRecordMut {
             header: header_buf.borrow_mut(),
@@ -132,10 +132,10 @@ impl<'a> SizedRecord<DeferralOutputLayout> for DeferralOutputRecordMut<'a> {
         let num_write_rows = layout.metadata.num_rows.saturating_sub(1);
         total_len += num_write_rows * DIGEST_SIZE;
         total_len =
-            total_len.next_multiple_of(align_of::<MemoryWriteBytesAuxRecord<BLOCK_FE_WIDTH>>());
+            total_len.next_multiple_of(align_of::<MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>>());
         total_len += num_write_rows
             * DIGEST_MEMORY_OPS
-            * size_of::<MemoryWriteBytesAuxRecord<BLOCK_FE_WIDTH>>();
+            * size_of::<MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>>();
         total_len
     }
 
@@ -179,11 +179,11 @@ where
 
         // Do a non-tracing read to get the output_len and compute num_rows
         let read_ptr = read_rv64_register_as_u32(state.memory.data(), rs_ptr);
-        let output_key_chunks: [[u8; BLOCK_FE_WIDTH]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
+        let output_key_chunks: [[u8; MEMORY_BLOCK_BYTES]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
             memory_read(
                 state.memory.data(),
                 RV64_MEMORY_AS,
-                read_ptr + (i * BLOCK_FE_WIDTH) as u32,
+                read_ptr + (i * MEMORY_BLOCK_BYTES) as u32,
             )
         });
         let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_memory_ops(output_key_chunks);
@@ -226,10 +226,10 @@ where
         let input_ptr = record.header.rs_val;
         let output_ptr = record.header.rd_val;
         for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
-            tracing_read::<BLOCK_FE_WIDTH>(
+            tracing_read::<MEMORY_BLOCK_BYTES>(
                 state.memory,
                 RV64_MEMORY_AS,
-                input_ptr + (chunk_idx * BLOCK_FE_WIDTH) as u32,
+                input_ptr + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
                 &mut record.header.output_commit_and_len_aux[chunk_idx].prev_timestamp,
             );
         }
@@ -245,7 +245,7 @@ where
                 tracing_write(
                     state.memory,
                     RV64_MEMORY_AS,
-                    row_output_ptr + (chunk_idx * BLOCK_FE_WIDTH) as u32,
+                    row_output_ptr + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
                     memory_op_chunk(output_chunk, chunk_idx),
                     &mut record.write_aux[aux_idx].prev_timestamp,
                     &mut record.write_aux[aux_idx].prev_data,

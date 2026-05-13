@@ -175,8 +175,7 @@ where
         // The pointer is RV64_REGISTER_NUM_LIMBS bytes (64-bit for RV64).
         let ptr_bytes = (pointer as u64).to_le_bytes();
         for i in (0..RV64_REGISTER_NUM_LIMBS).step_by(BLOCK_FE_WIDTH) {
-            let chunk: [u8; BLOCK_FE_WIDTH] =
-                ptr_bytes[i..i + BLOCK_FE_WIDTH].try_into().unwrap();
+            let chunk: [u8; BLOCK_FE_WIDTH] = ptr_bytes[i..i + BLOCK_FE_WIDTH].try_into().unwrap();
             self.write::<BLOCK_FE_WIDTH>(1, register + i, chunk.map(F::from_u8));
         }
         (register, pointer)
@@ -232,8 +231,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
         // The pointer is RV64_REGISTER_NUM_LIMBS bytes (64-bit for RV64).
         let ptr_bytes = (pointer as u64).to_le_bytes();
         for i in (0..RV64_REGISTER_NUM_LIMBS).step_by(BLOCK_FE_WIDTH) {
-            let chunk: [u8; BLOCK_FE_WIDTH] =
-                ptr_bytes[i..i + BLOCK_FE_WIDTH].try_into().unwrap();
+            let chunk: [u8; BLOCK_FE_WIDTH] = ptr_bytes[i..i + BLOCK_FE_WIDTH].try_into().unwrap();
             self.write::<BLOCK_FE_WIDTH>(1usize, register + i, chunk.map(F::from_u8));
         }
         // Always write in BLOCK_FE_WIDTH-byte chunks to match the fixed block size.

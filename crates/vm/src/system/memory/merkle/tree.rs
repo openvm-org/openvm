@@ -117,73 +117,71 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                 }
                 Some(ref mut rows) => {
                     let label_section_height = md.address_height.saturating_sub(height);
-                    let (tmp, new_rows): (Vec<(u64, [F; DIGEST_WIDTH], [F; DIGEST_WIDTH])>, Vec<[_; 2]>) =
-                        new_layer
-                            .into_par_iter()
-                            .map(|(par_index, left, right)| {
-                                let parent_address_label =
-                                    (par_index & ((1 << label_section_height) - 1)) as u32;
-                                let parent_as_label = ((par_index & !(1 << (self.height - height)))
-                                    >> label_section_height)
-                                    as u32;
-                                let left_node;
-                                let (left, old_left, changed_left) = match left {
-                                    Some((left, old_left)) => (left, old_left, true),
-                                    None => {
-                                        left_node = self.get_node(2 * par_index);
-                                        (&left_node, &left_node, false)
-                                    }
-                                };
-                                let right_node;
-                                let (right, old_right, changed_right) = match right {
-                                    Some((right, old_right)) => (right, old_right, true),
-                                    None => {
-                                        right_node = self.get_node(2 * par_index + 1);
-                                        (&right_node, &right_node, false)
-                                    }
-                                };
-                                let combined = compress(left, right);
-                                // This is a hacky way to say:
-                                // "and we also want to record the old values"
-                                compress(old_left, old_right);
-                                let par_old_values = self.get_node(par_index);
-                                (
-                                    (par_index, combined, par_old_values),
-                                    [
-                                        MemoryMerkleCols {
-                                            expand_direction: F::ONE,
-                                            height_section: F::from_bool(
-                                                height > md.address_height,
-                                            ),
-                                            parent_height: F::from_usize(height),
-                                            is_root: F::from_bool(height == md.overall_height()),
-                                            parent_as_label: F::from_u32(parent_as_label),
-                                            parent_address_label: F::from_u32(parent_address_label),
-                                            parent_hash: par_old_values,
-                                            left_child_hash: *old_left,
-                                            right_child_hash: *old_right,
-                                            left_direction_different: F::ZERO,
-                                            right_direction_different: F::ZERO,
-                                        },
-                                        MemoryMerkleCols {
-                                            expand_direction: F::NEG_ONE,
-                                            height_section: F::from_bool(
-                                                height > md.address_height,
-                                            ),
-                                            parent_height: F::from_usize(height),
-                                            is_root: F::from_bool(height == md.overall_height()),
-                                            parent_as_label: F::from_u32(parent_as_label),
-                                            parent_address_label: F::from_u32(parent_address_label),
-                                            parent_hash: combined,
-                                            left_child_hash: *left,
-                                            right_child_hash: *right,
-                                            left_direction_different: F::from_bool(!changed_left),
-                                            right_direction_different: F::from_bool(!changed_right),
-                                        },
-                                    ],
-                                )
-                            })
-                            .unzip();
+                    let (tmp, new_rows): (
+                        Vec<(u64, [F; DIGEST_WIDTH], [F; DIGEST_WIDTH])>,
+                        Vec<[_; 2]>,
+                    ) = new_layer
+                        .into_par_iter()
+                        .map(|(par_index, left, right)| {
+                            let parent_address_label =
+                                (par_index & ((1 << label_section_height) - 1)) as u32;
+                            let parent_as_label = ((par_index & !(1 << (self.height - height)))
+                                >> label_section_height)
+                                as u32;
+                            let left_node;
+                            let (left, old_left, changed_left) = match left {
+                                Some((left, old_left)) => (left, old_left, true),
+                                None => {
+                                    left_node = self.get_node(2 * par_index);
+                                    (&left_node, &left_node, false)
+                                }
+                            };
+                            let right_node;
+                            let (right, old_right, changed_right) = match right {
+                                Some((right, old_right)) => (right, old_right, true),
+                                None => {
+                                    right_node = self.get_node(2 * par_index + 1);
+                                    (&right_node, &right_node, false)
+                                }
+                            };
+                            let combined = compress(left, right);
+                            // This is a hacky way to say:
+                            // "and we also want to record the old values"
+                            compress(old_left, old_right);
+                            let par_old_values = self.get_node(par_index);
+                            (
+                                (par_index, combined, par_old_values),
+                                [
+                                    MemoryMerkleCols {
+                                        expand_direction: F::ONE,
+                                        height_section: F::from_bool(height > md.address_height),
+                                        parent_height: F::from_usize(height),
+                                        is_root: F::from_bool(height == md.overall_height()),
+                                        parent_as_label: F::from_u32(parent_as_label),
+                                        parent_address_label: F::from_u32(parent_address_label),
+                                        parent_hash: par_old_values,
+                                        left_child_hash: *old_left,
+                                        right_child_hash: *old_right,
+                                        left_direction_different: F::ZERO,
+                                        right_direction_different: F::ZERO,
+                                    },
+                                    MemoryMerkleCols {
+                                        expand_direction: F::NEG_ONE,
+                                        height_section: F::from_bool(height > md.address_height),
+                                        parent_height: F::from_usize(height),
+                                        is_root: F::from_bool(height == md.overall_height()),
+                                        parent_as_label: F::from_u32(parent_as_label),
+                                        parent_address_label: F::from_u32(parent_address_label),
+                                        parent_hash: combined,
+                                        left_child_hash: *left,
+                                        right_child_hash: *right,
+                                        left_direction_different: F::from_bool(!changed_left),
+                                        right_direction_different: F::from_bool(!changed_right),
+                                    },
+                                ],
+                            )
+                        })
+                        .unzip();
                     rows.extend(new_rows.into_iter().flatten());
                     layer = tmp;
                 }
@@ -225,7 +223,8 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                 .iter()
                 .map(|((addr_sp, ptr), v)| {
                     (
-                        (1 << self.height) + md.label_to_index((*addr_sp, *ptr / DIGEST_WIDTH as u32)),
+                        (1 << self.height)
+                            + md.label_to_index((*addr_sp, *ptr / DIGEST_WIDTH as u32)),
                         hasher.hash(v),
                     )
                 })

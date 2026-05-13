@@ -246,7 +246,11 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
                 bitwise_lu,
                 pointer_max_bits,
             )),
-            MultiplicationCoreAir::new(range_tuple_checker, bitwise_lu, Rv64Mul256Opcode::CLASS_OFFSET),
+            MultiplicationCoreAir::new(
+                range_tuple_checker,
+                bitwise_lu,
+                Rv64Mul256Opcode::CLASS_OFFSET,
+            ),
         );
         inventory.add_air(mult);
 

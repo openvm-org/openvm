@@ -397,11 +397,7 @@ impl GuestMemory {
     /// divisible by `cell_size`. The full byte range must lie within the
     /// AS's storage.
     #[inline(always)]
-    pub unsafe fn read_bytes<const N: usize>(
-        &self,
-        addr_space: u32,
-        byte_ptr: u32,
-    ) -> [u8; N] {
+    pub unsafe fn read_bytes<const N: usize>(&self, addr_space: u32, byte_ptr: u32) -> [u8; N] {
         self.debug_assert_byte_view_alignment(addr_space, byte_ptr, N);
         self.memory
             .get_memory()
@@ -470,7 +466,7 @@ pub struct TracingMemory {
     #[getset(get = "pub")]
     pub data: GuestMemory,
     /// Maps `(addr_space, ptr / BLOCK_FE_WIDTH)` to the latest access timestamp.
-    /// A value of 0 means the 4-cell touched-memory slot has never been accessed.
+    /// A value of 0 means the touched-memory slot has never been accessed.
     pub(super) meta: Vec<PagedVec<u32, PAGE_SIZE>>,
 }
 
@@ -547,10 +543,10 @@ impl TracingMemory {
     /// Returns `(t_prev, [pointer:BLOCK_SIZE]_{address_space})`.
     ///
     /// # Safety
-    /// - `T` must be `repr(C)` or `repr(transparent)`. When `T = u8`, this dispatches
-    ///   to the byte-view path which works against any cell type (u8/u16/u32) and
-    ///   `BLOCK_SIZE` is in bytes; otherwise `T` must match the AS's cell type and
-    ///   `BLOCK_SIZE` is in cells (must equal `BLOCK_FE_WIDTH`).
+    /// - `T` must be `repr(C)` or `repr(transparent)`. When `T = u8`, this dispatches to the
+    ///   byte-view path which works against any cell type (u8/u16/u32) and `BLOCK_SIZE` is in
+    ///   bytes; otherwise `T` must match the AS's cell type and `BLOCK_SIZE` is in cells (must
+    ///   equal `BLOCK_FE_WIDTH`).
     /// - `address_space` must be valid.
     /// - Both paths converge on a single `MEMORY_BLOCK_BYTES`-aligned metadata slot.
     #[inline(always)]
@@ -578,9 +574,9 @@ impl TracingMemory {
     /// Atomic write operation. Returns `(t_prev, values_prev)`.
     ///
     /// # Safety
-    /// - `T` must be `repr(C)` or `repr(transparent)`. When `T = u8`, this dispatches
-    ///   to the byte-view path; otherwise `T` must match the AS's cell type.
-    ///   See [`Self::read`] for full dispatch semantics.
+    /// - `T` must be `repr(C)` or `repr(transparent)`. When `T = u8`, this dispatches to the
+    ///   byte-view path; otherwise `T` must match the AS's cell type. See [`Self::read`] for full
+    ///   dispatch semantics.
     /// - `address_space` must be valid.
     #[inline(always)]
     pub unsafe fn write<T, const BLOCK_SIZE: usize>(

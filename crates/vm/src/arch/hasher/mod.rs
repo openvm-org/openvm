@@ -24,15 +24,23 @@ pub trait Hasher<const DIGEST_WIDTH: usize, F: Field> {
         leaves[0]
     }
 }
-pub trait HasherChip<const DIGEST_WIDTH: usize, F: Field>: Hasher<DIGEST_WIDTH, F> + Send + Sync {
+pub trait HasherChip<const DIGEST_WIDTH: usize, F: Field>:
+    Hasher<DIGEST_WIDTH, F> + Send + Sync
+{
     /// Stateful version of `hash` for recording the event in the chip.
-    fn compress_and_record(&self, left: &[F; DIGEST_WIDTH], right: &[F; DIGEST_WIDTH]) -> [F; DIGEST_WIDTH];
+    fn compress_and_record(
+        &self,
+        left: &[F; DIGEST_WIDTH],
+        right: &[F; DIGEST_WIDTH],
+    ) -> [F; DIGEST_WIDTH];
     fn hash_and_record(&self, values: &[F; DIGEST_WIDTH]) -> [F; DIGEST_WIDTH] {
         self.compress_and_record(values, &[F::ZERO; DIGEST_WIDTH])
     }
 }
 
-fn chunk_public_values<const DIGEST_WIDTH: usize, F: Field>(public_values: &[F]) -> Vec<[F; DIGEST_WIDTH]> {
+fn chunk_public_values<const DIGEST_WIDTH: usize, F: Field>(
+    public_values: &[F],
+) -> Vec<[F; DIGEST_WIDTH]> {
     public_values
         .chunks_exact(DIGEST_WIDTH)
         .map(|c| c.try_into().unwrap())

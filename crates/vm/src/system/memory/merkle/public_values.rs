@@ -97,7 +97,8 @@ impl<const DIGEST_WIDTH: usize, F: Field> UserPublicValuesProof<DIGEST_WIDTH, F>
         let pv_as = PUBLIC_VALUES_AS;
         let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
         let pvs = &self.public_values;
-        if !pvs.len().is_multiple_of(DIGEST_WIDTH) || !(pvs.len() / DIGEST_WIDTH).is_power_of_two() {
+        if !pvs.len().is_multiple_of(DIGEST_WIDTH) || !(pvs.len() / DIGEST_WIDTH).is_power_of_two()
+        {
             return Err(UserPublicValuesProofError::UnexpectedLength(pvs.len()));
         }
         let pv_height = log2_strict_usize(pvs.len() / DIGEST_WIDTH);

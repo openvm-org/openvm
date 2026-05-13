@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
+    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -131,7 +131,7 @@ fn deferral_fns(num_deferrals: usize) -> Vec<Arc<DeferralFn>> {
 fn read_deferral_digest(tester: &mut impl TestBuilder<F>, ptr: usize) -> [F; DIGEST_SIZE] {
     let chunks = from_fn(|chunk_idx| {
         tester
-            .read::<BLOCK_FE_WIDTH>(DEFERRAL_AS as usize, ptr + chunk_idx * BLOCK_FE_WIDTH)
+            .read::<MEMORY_BLOCK_BYTES>(DEFERRAL_AS as usize, ptr + chunk_idx * MEMORY_BLOCK_BYTES)
     });
     join_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(chunks)
 }
@@ -150,10 +150,10 @@ fn set_and_execute_call<RA, E>(
     RA: Arena,
     E: PreflightExecutor<F, RA>,
 {
-    let rd = gen_pointer(rng, BLOCK_FE_WIDTH);
-    let rs = gen_pointer(rng, BLOCK_FE_WIDTH);
-    let output_ptr = gen_pointer(rng, BLOCK_FE_WIDTH);
-    let input_ptr = gen_pointer(rng, BLOCK_FE_WIDTH);
+    let rd = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let rs = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let output_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let input_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = rng.random_range(0..num_deferrals);
 
     let input_commit_f: [F; DIGEST_SIZE] =
@@ -180,11 +180,11 @@ fn set_and_execute_call<RA, E>(
         rs,
         (input_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    for (chunk_idx, chunk) in input_commit.chunks_exact(BLOCK_FE_WIDTH).enumerate() {
-        let chunk: [u8; BLOCK_FE_WIDTH] = chunk.try_into().unwrap();
+    for (chunk_idx, chunk) in input_commit.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
+        let chunk: [u8; MEMORY_BLOCK_BYTES] = chunk.try_into().unwrap();
         tester.write(
             RV64_MEMORY_AS as usize,
-            input_ptr + chunk_idx * BLOCK_FE_WIDTH,
+            input_ptr + chunk_idx * MEMORY_BLOCK_BYTES,
             chunk.map(F::from_u8),
         );
     }
@@ -221,12 +221,12 @@ fn set_and_execute_call<RA, E>(
 
     let mut output_key = [0u8; OUTPUT_TOTAL_BYTES];
     for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
-        let chunk: [F; BLOCK_FE_WIDTH] = tester.read(
+        let chunk: [F; MEMORY_BLOCK_BYTES] = tester.read(
             RV64_MEMORY_AS as usize,
-            output_ptr + chunk_idx * BLOCK_FE_WIDTH,
+            output_ptr + chunk_idx * MEMORY_BLOCK_BYTES,
         );
-        for i in 0..BLOCK_FE_WIDTH {
-            output_key[chunk_idx * BLOCK_FE_WIDTH + i] = chunk[i].as_canonical_u32() as u8;
+        for i in 0..MEMORY_BLOCK_BYTES {
+            output_key[chunk_idx * MEMORY_BLOCK_BYTES + i] = chunk[i].as_canonical_u32() as u8;
         }
     }
     let output_commit_expected: [u8; COMMIT_NUM_BYTES] = output_commit.clone().try_into().unwrap();

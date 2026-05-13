@@ -125,7 +125,10 @@ fn test(
     for (address_space, address_label) in touched_labels {
         let initial_values = unsafe {
             array::from_fn(|i| {
-                initial_memory.get((address_space, address_label * DIGEST_WIDTH as u32 + i as u32))
+                initial_memory.get((
+                    address_space,
+                    address_label * DIGEST_WIDTH as u32 + i as u32,
+                ))
             })
         };
         let as_label = address_space - ADDR_SPACE_OFFSET;

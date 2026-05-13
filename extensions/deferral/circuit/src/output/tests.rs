@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
+    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -111,11 +111,11 @@ fn write_output_key(
     input_ptr: usize,
     output_key: [u8; OUTPUT_TOTAL_BYTES],
 ) {
-    for (chunk_idx, chunk) in output_key.chunks_exact(BLOCK_FE_WIDTH).enumerate() {
-        let chunk: [u8; BLOCK_FE_WIDTH] = chunk.try_into().unwrap();
+    for (chunk_idx, chunk) in output_key.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
+        let chunk: [u8; MEMORY_BLOCK_BYTES] = chunk.try_into().unwrap();
         tester.write(
             RV64_MEMORY_AS as usize,
-            input_ptr + chunk_idx * BLOCK_FE_WIDTH,
+            input_ptr + chunk_idx * MEMORY_BLOCK_BYTES,
             chunk.map(F::from_u8),
         );
     }
@@ -147,10 +147,10 @@ fn set_and_execute_output<RA, E>(
     RA: Arena,
     E: PreflightExecutor<F, RA>,
 {
-    let rd = gen_pointer(rng, BLOCK_FE_WIDTH);
-    let rs = gen_pointer(rng, BLOCK_FE_WIDTH);
-    let output_ptr = gen_pointer(rng, BLOCK_FE_WIDTH);
-    let input_ptr = gen_pointer(rng, BLOCK_FE_WIDTH);
+    let rd = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let rs = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let output_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let input_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = rng.random_range(0..num_deferrals);
 
     let mut input_commit = [0u8; COMMIT_NUM_BYTES];

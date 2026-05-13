@@ -45,7 +45,10 @@ impl BoundaryChipGPU {
         }
     }
 
-    pub fn finalize_records<const DIGEST_WIDTH: usize>(&mut self, records: Vec<PersistentBoundaryRecord>) {
+    pub fn finalize_records<const DIGEST_WIDTH: usize>(
+        &mut self,
+        records: Vec<PersistentBoundaryRecord>,
+    ) {
         self.num_records = Some(records.len());
         self.trace_width = Some(PersistentBoundaryCols::<F, DIGEST_WIDTH>::width());
         self.records = Some(if records.is_empty() {
