@@ -152,7 +152,7 @@ __global__ void branch_equal256_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        BranchEqual256Core core;
+        BranchEqual256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr));
         core.fill_trace_row(row.slice_from(COL_INDEX(BranchEqual256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(BranchEqual256Cols<uint8_t>));
@@ -432,7 +432,9 @@ __global__ void multiplication256_tracegen(
         RangeTupleChecker<2> range_tuple_checker(
             d_range_tuple_ptr, (uint32_t[2]){range_tuple_sizes.x, range_tuple_sizes.y}
         );
-        Multiplication256Core core(range_tuple_checker);
+        Multiplication256Core core(
+            range_tuple_checker, BitwiseOperationLookup(d_bitwise_lookup_ptr)
+        );
         core.fill_trace_row(row.slice_from(COL_INDEX(Multiplication256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(Multiplication256Cols<uint8_t>));

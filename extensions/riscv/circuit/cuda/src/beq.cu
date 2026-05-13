@@ -30,6 +30,7 @@ __global__ void beq_tracegen(
     DeviceBufferConstView<BranchEqualRecord> records,
     uint32_t *rc_ptr,
     uint32_t rc_bins,
+    uint32_t *bw_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -41,7 +42,7 @@ __global__ void beq_tracegen(
         Rv64BranchAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full.adapter);
 
-        Rv64BranchEqualCore core;
+        Rv64BranchEqualCore core(BitwiseOperationLookup(bw_ptr));
         core.fill_trace_row(row.slice_from(COL_INDEX(BranchEqualCols, core)), full.core);
     } else {
         row.fill_zero(0, sizeof(BranchEqualCols<uint8_t>));
@@ -55,12 +56,15 @@ extern "C" int _beq_tracegen(
     DeviceBufferConstView<BranchEqualRecord> d_records,
     uint32_t *d_rc,
     uint32_t rc_bins,
+    uint32_t *d_bw,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
     assert(width == sizeof(BranchEqualCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height);
-    beq_tracegen<<<grid, block, 0, stream>>>(d_trace, height, d_records, d_rc, rc_bins, timestamp_max_bits);
+    beq_tracegen<<<grid, block, 0, stream>>>(
+        d_trace, height, d_records, d_rc, rc_bins, d_bw, timestamp_max_bits
+    );
     return CHECK_KERNEL();
 }

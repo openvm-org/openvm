@@ -3,7 +3,8 @@ use std::{mem::size_of, sync::Arc};
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{
-    range_tuple::RangeTupleCheckerChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
+    var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
@@ -20,6 +21,7 @@ use crate::{
 #[derive(new)]
 pub struct Rv64MultiplicationChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
     pub timestamp_max_bits: usize,
 }
@@ -56,6 +58,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64MultiplicationChipGpu {
                 &d_records,
                 &self.range_checker.count,
                 self.range_checker.count.len(),
+                &self.bitwise_lookup.count,
                 &self.range_tuple_checker.count,
                 tuple_checker_sizes,
                 self.timestamp_max_bits as u32,

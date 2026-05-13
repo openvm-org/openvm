@@ -115,6 +115,12 @@ template <size_t NUM_LIMBS> struct BranchLessThanCore {
 
         bitwise_lookup.add_range(a_msb_range, b_msb_range);
 
+        // Mirror the AIR's non-MSB `send_range(a[i], b[i])` added in Stage 1.4.
+#pragma unroll
+        for (int i = 0; i + 1 < NUM_LIMBS; i++) {
+            bitwise_lookup.add_range(record.a[i], record.b[i]);
+        }
+
         uint8_t diff_marker[NUM_LIMBS] = {0};
         if (diff_idx != NUM_LIMBS) {
             bitwise_lookup.add_range(diff_val - 1, 0);

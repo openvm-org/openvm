@@ -39,11 +39,15 @@ __forceinline__ __device__ void run_mul(
 
 template <size_t NUM_LIMBS> struct MultiplicationCore {
     RangeTupleChecker<2> range_tuple_checker;
+    BitwiseOperationLookup bitwise_lookup;
 
     template <typename T> using Cols = MultiplicationCoreCols<T, NUM_LIMBS>;
 
-    __device__ MultiplicationCore(RangeTupleChecker<2> range_tuple_checker)
-        : range_tuple_checker(range_tuple_checker) {}
+    __device__ MultiplicationCore(
+        RangeTupleChecker<2> range_tuple_checker,
+        BitwiseOperationLookup bitwise_lookup
+    )
+        : range_tuple_checker(range_tuple_checker), bitwise_lookup(bitwise_lookup) {}
 
     __device__ void fill_trace_row(RowSlice row, MultiplicationCoreRecord<NUM_LIMBS> record) {
         uint8_t a[NUM_LIMBS];
@@ -54,6 +58,12 @@ template <size_t NUM_LIMBS> struct MultiplicationCore {
         for (size_t i = 0; i < NUM_LIMBS; i++) {
             uint32_t vals[2] = {static_cast<uint32_t>(a[i]), carry_buf[i]};
             range_tuple_checker.add_count(vals);
+        }
+
+        // Mirror the AIR's `send_range(b[i], c[i])` added in Stage 1.4.
+#pragma unroll
+        for (size_t i = 0; i < NUM_LIMBS; i++) {
+            bitwise_lookup.add_range(record.b[i], record.c[i]);
         }
 
         COL_WRITE_ARRAY(row, Cols, b, record.b);

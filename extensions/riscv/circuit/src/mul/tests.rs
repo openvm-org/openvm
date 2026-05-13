@@ -524,6 +524,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     );
     let gpu_chip = Rv64MultiplicationChipGpu::new(
         tester.range_checker(),
+        tester.bitwise_op_lookup(),
         tester.range_tuple_checker(),
         tester.timestamp_max_bits(),
     );
@@ -534,10 +535,14 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_rand_mul_tracegen() {
+    use openvm_circuit::arch::testing::BITWISE_OP_LOOKUP_BUS;
     let mut rng = create_seeded_rng();
-    let mut tester = GpuChipTestBuilder::default().with_range_tuple_checker(
-        RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES),
-    );
+    let mut tester = GpuChipTestBuilder::default()
+        .with_bitwise_op_lookup(BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS))
+        .with_range_tuple_checker(RangeTupleCheckerBus::new(
+            RANGE_TUPLE_CHECKER_BUS,
+            TUPLE_CHECKER_SIZES,
+        ));
 
     let mut harness = create_cuda_harness(&tester);
     let num_ops = 100;

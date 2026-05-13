@@ -65,6 +65,15 @@ struct Rv64JalrCore {
         rc.add_count(rd_bytes[2], RV64_CELL_BITS);
         rc.add_count(rd_bytes[3], PC_BITS - RV64_CELL_BITS * 3);
 
+        // Mirror the AIR's u8 range-checks on rs1_data read limbs (pairs)
+        // added in Stage 1.4.
+        uint8_t rs1_pair_bytes[RV64_WORD_NUM_LIMBS];
+        memcpy(rs1_pair_bytes, &record.rs1_val, sizeof(rs1_pair_bytes));
+#pragma unroll
+        for (int i = 0; i + 1 < RV64_WORD_NUM_LIMBS; i += 2) {
+            bw.add_range(rs1_pair_bytes[i], rs1_pair_bytes[i + 1]);
+        }
+
         COL_WRITE_VALUE(row, Rv64JalrCoreCols, imm_sign, record.imm_sign);
         COL_WRITE_ARRAY(row, Rv64JalrCoreCols, to_pc_limbs, to_pc_limbs);
         COL_WRITE_VALUE(row, Rv64JalrCoreCols, to_pc_least_sig_bit, (to_pc & 1) == 1 ? 1 : 0);

@@ -209,6 +209,18 @@ template <size_t NUM_LIMBS> struct DivRemCore {
             );
         }
 
+        // Mirror the AIR's non-MSB read-side `send_range(b[i], c[i])` added in
+        // Stage 1.4. For the unsigned path the MSB also needs an explicit u8
+        // check; the signed path's MSB is covered by the sign-shifted send
+        // above.
+#pragma unroll
+        for (int i = 0; i + 1 < NUM_LIMBS; i++) {
+            bitwise_lookup.add_range(record.b[i], record.c[i]);
+        }
+        if (!is_signed) {
+            bitwise_lookup.add_range(record.b[NUM_LIMBS - 1], record.c[NUM_LIMBS - 1]);
+        }
+
         // range tuple check carries
         uint32_t carry = 0;
 #pragma unroll
