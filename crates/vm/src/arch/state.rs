@@ -189,7 +189,7 @@ where
     }
 
     #[inline(always)]
-    pub fn vm_read_slice<T: Copy + Debug>(
+    pub fn vm_read_slice<T: Copy + Debug + 'static>(
         &mut self,
         addr_space: u32,
         ptr: u32,
@@ -227,7 +227,12 @@ where
     }
 
     #[inline(always)]
-    pub fn host_read_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
+    pub fn host_read_slice<T: Copy + Debug + 'static>(
+        &self,
+        addr_space: u32,
+        ptr: u32,
+        len: usize,
+    ) -> &[T] {
         // SAFETY:
         // - T is stack-allocated repr(C) or repr(transparent), usually u8 or F where F is the base
         //   field

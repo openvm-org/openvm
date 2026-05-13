@@ -203,17 +203,21 @@ impl<M: LinearMemory> AddressMap<M> {
     /// Panics or segfaults if `ptr..ptr + len` is out of bounds
     ///
     /// # Safety
-    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - When `T = u8`, the slice is the raw byte storage of the AS (which is
+    ///   the little-endian byte layout of the configured cell type). Otherwise
+    ///   `T` must exactly match the AS's cell type.
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub unsafe fn get_slice<T: Copy + Debug>(
+    pub unsafe fn get_slice<T: Copy + Debug + 'static>(
         &self,
         (addr_space, ptr): Address,
         len: usize,
     ) -> &[T] {
-        debug_assert_eq!(
-            size_of::<T>(),
-            self.config[addr_space as usize].layout.size()
-        );
+        if TypeId::of::<T>() != TypeId::of::<u8>() {
+            debug_assert_eq!(
+                size_of::<T>(),
+                self.config[addr_space as usize].layout.size()
+            );
+        }
         let start = (ptr as usize) * size_of::<T>();
         let mem = self.mem.get_unchecked(addr_space as usize);
         // SAFETY:
@@ -356,7 +360,12 @@ impl GuestMemory {
 
     #[inline(always)]
     #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn get_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
+    pub unsafe fn get_slice<T: Copy + Debug + 'static>(
+        &self,
+        addr_space: u32,
+        ptr: u32,
+        len: usize,
+    ) -> &[T] {
         self.memory.get_slice((addr_space, ptr), len)
     }
 
