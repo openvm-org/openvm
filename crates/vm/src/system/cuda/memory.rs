@@ -26,12 +26,11 @@ use super::{
 use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 
 // The CUDA merge kernel in `inventory.cu` is hardcoded to a 2-way merge of
-// `<IN_BLOCK_SIZE=4, 1>` records into `<OUT_BLOCK_SIZE=8, 2>` records, so only two
-// (BLOCK_FE_WIDTH, DIGEST_WIDTH) shapes are currently supported: the equal case (no merge) and
-// (4, 8) (the hardcoded merge).
+// `<IN_BLOCK_SIZE=4, 1>` records into `<OUT_BLOCK_SIZE=8, 2>` records, so the only
+// supported `(BLOCK_FE_WIDTH, DIGEST_WIDTH)` shape is `(4, 8)`.
 const _: () = assert!(
-    BLOCK_FE_WIDTH == DIGEST_WIDTH || (BLOCK_FE_WIDTH == 4 && DIGEST_WIDTH == 8),
-    "CUDA memory inventory only supports BLOCK_FE_WIDTH == DIGEST_WIDTH or (BLOCK_FE_WIDTH, DIGEST_WIDTH) == (4, 8)"
+    BLOCK_FE_WIDTH == 4 && DIGEST_WIDTH == 8,
+    "CUDA memory inventory only supports (BLOCK_FE_WIDTH, DIGEST_WIDTH) == (4, 8)"
 );
 
 pub struct MemoryInventoryGPU {
@@ -167,41 +166,6 @@ impl MemoryInventoryGPU {
             self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
 
             self.boundary.finalize_records::<DIGEST_WIDTH>(Vec::new());
-        } else if BLOCK_FE_WIDTH == DIGEST_WIDTH {
-            // TODO: remove this fast path once the u16 cell switch restores
-            // `BLOCK_FE_WIDTH < DIGEST_WIDTH` (and thus `BLOCKS_PER_LEAF > 1`). Until then,
-            // the merge kernel in `inventory.cu` hardcodes a 2-way merge (`<4,1> → <8,2>`), so
-            // when `BLOCK_FE_WIDTH == DIGEST_WIDTH` we bypass it: each touched block is
-            // already a full chunk, so no merge is needed.
-            // `partition` is already sorted by (addr_space, ptr) — see `GuestMemory::finalize`
-            // in system/memory/online.rs.
-            let records: Vec<MemoryInventoryRecord<DIGEST_WIDTH, 1>> = partition
-                .iter()
-                .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
-                    address_space: addr_space,
-                    ptr,
-                    timestamps: [ts_values.timestamp],
-                    values: ts_values.values.map(Self::field_to_raw_u32),
-                })
-                .collect();
-
-            let d_records = records
-                .to_device_on(&self.device_ctx)
-                .unwrap()
-                .as_buffer::<u32>();
-
-            self.boundary
-                .finalize_records_device::<DIGEST_WIDTH>(d_records, records.len());
-
-            // `MemoryInventoryRecord<DIGEST_WIDTH, 1>` has the same layout as
-            // `MemoryMerkleRecord`, so reinterpret `records` directly.
-            let merkle_words: &[u32] = unsafe {
-                std::slice::from_raw_parts(
-                    records.as_ptr() as *const u32,
-                    records.len() * MERKLE_TOUCHED_BLOCK_WIDTH,
-                )
-            };
-            self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
         } else if BLOCK_FE_WIDTH == 4 && DIGEST_WIDTH == 8 {
             // Merge BLOCK_FE_WIDTH-sized input blocks into DIGEST_WIDTH-sized chunks via the
             // hardcoded `<4,1> → <8,2>` kernel in `inventory.cu`.
