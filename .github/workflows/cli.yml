@@ -56,6 +56,9 @@ jobs:
           cargo build --locked --profile fast -p cargo-openvm
           echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
 
+      - name: Install openvm rust toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
+
       - name: Build and run book examples
         working-directory: examples
         run: |

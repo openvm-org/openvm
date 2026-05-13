@@ -26,7 +26,7 @@ hex-literal = { workspace = true }
 ff = { workspace = true }
 signature = { version = "2", optional = true }
 
-[target.'cfg(not(target_os = "none"))'.dependencies]
+[target.'cfg(not(any(target_os = "none", target_os = "openvm")))'.dependencies]
 num-bigint = { workspace = true }
 
 [dev-dependencies]

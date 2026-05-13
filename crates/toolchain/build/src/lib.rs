@@ -19,17 +19,24 @@ pub use self::config::GuestOptions;
 
 mod config;
 
-/// Custom rustc target for the openvm guest.
-pub const RUSTC_TARGET: &str = "riscv64im-unknown-openvm-elf";
+/// Default rustc target for the openvm guest. Built-in to the openvm rust
+/// fork. Override with `OPENVM_TARGET` to use a different rv64im target
+/// (e.g. an upstream `riscv64imac-unknown-none-elf` or future custom spec).
+pub const DEFAULT_RUSTC_TARGET: &str = "riscv64im-unknown-openvm-elf";
 
-/// Directory containing the target JSON; passed to cargo as `RUST_TARGET_PATH`.
-pub fn rustc_target_spec_dir() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+/// Get the target triple from environment variable or default.
+pub fn get_rustc_target() -> String {
+    env::var("OPENVM_TARGET").unwrap_or_else(|_| DEFAULT_RUSTC_TARGET.to_string())
 }
-/// The default Rust toolchain name to use if OPENVM_RUST_TOOLCHAIN is not set
-pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "openvm-rv64";
 
-/// Get the Rust toolchain name from environment variable or default
+/// Default rustup toolchain name. Format: `openvm-<rustup-name>` —
+/// `openvm-` prefix plus whatever rustup itself calls the upstream
+/// toolchain (`X.Y.Z` for stable, `nightly-YYYY-MM-DD` for nightly,
+/// `beta-YYYY-MM-DD` for beta). Bumped per release. Override with
+/// `OPENVM_RUST_TOOLCHAIN`.
+pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "openvm-nightly-2026-01-18";
+
+/// Get the Rust toolchain name from environment variable or default.
 pub fn get_rustup_toolchain_name() -> String {
     env::var("OPENVM_RUST_TOOLCHAIN").unwrap_or_else(|_| DEFAULT_RUSTUP_TOOLCHAIN_NAME.to_string())
 }
@@ -165,7 +172,7 @@ pub fn get_dir_with_profile(
     profile: &str,
     examples: bool,
 ) -> PathBuf {
-    let mut res = target_dir.as_ref().join(RUSTC_TARGET).to_path_buf();
+    let mut res = target_dir.as_ref().join(get_rustc_target()).to_path_buf();
     if profile == "dev" || profile == "test" {
         res.push("debug");
     } else if profile == "bench" {
@@ -219,7 +226,7 @@ pub fn guest_methods<S: AsRef<str>>(
                 .all(|required_feature| guest_features.contains(required_feature))
         })
         .flat_map(|target| {
-            let path_prefix = target_dir.as_ref().join(RUSTC_TARGET).join(profile);
+            let path_prefix = target_dir.as_ref().join(get_rustc_target()).join(profile);
             target
                 .kind
                 .iter()
@@ -250,14 +257,14 @@ fn sanitized_cmd(tool: &str) -> Command {
 
 /// Creates a std::process::Command to execute the given cargo
 /// command in an environment suitable for targeting the zkvm guest.
-/// If `with_std` is true, `std` is added to the `-Zbuild-std` crate list.
-pub fn cargo_command(subcmd: &str, rust_flags: &[&str], with_std: bool) -> Command {
+pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
     let toolchain = format!("+{}", get_rustup_toolchain_name());
+    let target = get_rustc_target();
 
     let rustc = sanitized_cmd("rustup")
         .args([&toolchain, "which", "rustc"])
         .output()
-        .expect("rustup failed to find nightly toolchain")
+        .expect("rustup failed to find openvm toolchain")
         .stdout;
 
     let rustc = String::from_utf8(rustc).unwrap();
@@ -265,18 +272,14 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str], with_std: bool) -> Comma
     println!("Using rustc: {rustc}");
 
     let mut cmd = sanitized_cmd("cargo");
-    let mut args = vec![&toolchain, subcmd, "--target", RUSTC_TARGET];
+    let mut args = vec![toolchain.as_str(), subcmd, "--target", target.as_str()];
 
     if std::env::var(BUILD_LOCKED_ENV).is_ok() {
         args.push("--locked");
     }
 
-    let build_std = if with_std {
-        "build-std=alloc,core,panic_abort,std"
-    } else {
-        "build-std=alloc,core,panic_abort"
-    };
-    args.extend_from_slice(&["-Z", build_std, "-Z", "build-std-features=compiler-builtins-mem"]);
+    // The openvm rust toolchain ships prebuilt std (with lower-atomic + panic=abort baked
+    // in at toolchain-build time), so the guest build does not need `-Z build-std`.
 
     println!("Building guest package: cargo {}", args.join(" "));
 
@@ -284,7 +287,6 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str], with_std: bool) -> Comma
 
     cmd.env("RUSTC", rustc)
         .env("CARGO_ENCODED_RUSTFLAGS", encoded_rust_flags)
-        .env("RUST_TARGET_PATH", rustc_target_spec_dir())
         .args(args);
     cmd
 }
@@ -314,14 +316,12 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
             // https://docs.rs/getrandom/0.3.2/getrandom/index.html#opt-in-backends
             "--cfg",
             "getrandom_backend=\"custom\"",
+            // Set by `cargo openvm build`; guest crates gate code on
+            // cfg(openvm_intrinsics) to switch between portable Rust impls
+            // and openvm-intrinsic-using impls.
             "--cfg",
             "openvm_intrinsics",
-            // Declare `openvm_intrinsics` to rustc so guest crates (ours and users')
-            // don't need a per-crate `unexpected_cfgs` lint declaration.
             "--check-cfg=cfg(openvm_intrinsics)",
-            // Custom JSON target specs require this unstable option.
-            "-Z",
-            "unstable-options",
         ],
     ]
     .concat()
@@ -396,25 +396,19 @@ pub fn build_generic(guest_opts: &GuestOptions) -> Result<PathBuf, Option<i32>> 
         return Err(None);
     }
 
-    // Check if the required toolchain and rust-src component are installed, and if not, install
-    // them. This requires that `rustup` is installed.
-    // Skip for linked toolchains (e.g. custom-built rustc) where rustup component commands
-    // don't apply — the toolchain is expected to already include rust-src.
+    // Verify the openvm toolchain is installed (linked via rustup). The
+    // openvm toolchain ships with rust-src embedded, so there is no rustup
+    // component to add — just check the linked dir is present.
     let toolchain_name = get_rustup_toolchain_name();
-    let is_linked_toolchain = !toolchain_name.contains("nightly") && !toolchain_name.contains("stable") && !toolchain_name.contains("beta");
-    if !is_linked_toolchain {
-        if let Err(code) = ensure_toolchain_installed(&toolchain_name, &["rust-src"]) {
-            eprintln!("rustup toolchain commands failed. Please ensure rustup is installed (https://www.rust-lang.org/tools/install)");
-            return Err(Some(code));
-        }
+    if let Err(code) = ensure_openvm_toolchain_linked(&toolchain_name) {
+        return Err(Some(code));
     }
 
     let target_dir = guest_opts.target_dir.as_ref().unwrap();
     fs::create_dir_all(target_dir).unwrap();
     let rust_flags: Vec<_> = guest_opts.rustc_flags.iter().map(|s| s.as_str()).collect();
 
-    let with_std = guest_opts.features.iter().any(|f| f == "std");
-    let mut cmd = cargo_command("build", &rust_flags, with_std);
+    let mut cmd = cargo_command("build", &rust_flags);
 
     if !guest_opts.features.is_empty() {
         cmd.args(["--features", guest_opts.features.join(",").as_str()]);
@@ -447,7 +441,10 @@ pub fn build_generic(guest_opts: &GuestOptions) -> Result<PathBuf, Option<i32>> 
         .expect("cargo build failed");
     let stderr = child.stderr.take().unwrap();
 
-    tty_println(&format!("openvm build: Starting build for {RUSTC_TARGET}"));
+    tty_println(&format!(
+        "openvm build: Starting build for {}",
+        get_rustc_target()
+    ));
 
     for line in BufReader::new(stderr).lines() {
         tty_println(&format!("openvm build: {}", line.unwrap()));
@@ -523,9 +520,13 @@ pub fn detect_toolchain(name: &str) {
     }
 }
 
-/// Ensures the required toolchain and components are installed.
-fn ensure_toolchain_installed(toolchain: &str, components: &[&str]) -> Result<(), i32> {
-    // Check if toolchain is installed
+/// Verify that the openvm rustup toolchain is linked and ships prebuilt rlibs
+/// for the guest target.
+///
+/// The openvm toolchain is a `rustup toolchain link <name> <dir>`-linked
+/// toolchain, not a normal rustup channel — `rustup toolchain install` cannot
+/// install it. The user must run `cargo openvm toolchain install` first.
+fn ensure_openvm_toolchain_linked(toolchain: &str) -> Result<(), i32> {
     let output = Command::new("rustup")
         .args(["toolchain", "list"])
         .output()
@@ -534,59 +535,47 @@ fn ensure_toolchain_installed(toolchain: &str, components: &[&str]) -> Result<()
             e.raw_os_error().unwrap_or(1)
         })?;
 
-    let toolchain_installed = String::from_utf8_lossy(&output.stdout)
+    let installed = String::from_utf8_lossy(&output.stdout)
         .lines()
         .any(|line| line.trim().starts_with(toolchain));
 
-    // Install toolchain if missing
-    if !toolchain_installed {
-        tty_println(&format!("Installing required toolchain: {toolchain}"));
-        let status = Command::new("rustup")
-            .args(["toolchain", "install", toolchain])
-            .status()
-            .map_err(|e| {
-                tty_println(&format!("Failed to install toolchain: {e}"));
-                e.raw_os_error().unwrap_or(1)
-            })?;
-
-        if !status.success() {
-            tty_println(&format!("Failed to install toolchain {toolchain}"));
-            return Err(status.code().unwrap_or(1));
-        }
+    if !installed {
+        tty_println(&format!(
+            "error: rustup toolchain `{toolchain}` is not installed.\n\nInstall it with:\n\n    cargo openvm toolchain install\n"
+        ));
+        return Err(1);
     }
 
-    // Check and install missing components
-    for component in components {
-        let output = Command::new("rustup")
-            .args(["component", "list", "--toolchain", toolchain])
-            .output()
-            .map_err(|e| {
-                tty_println(&format!("Failed to check components: {e}"));
-                e.raw_os_error().unwrap_or(1)
-            })?;
-
-        let is_installed = String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .any(|line| line.contains(component) && line.contains("(installed)"));
-
-        if !is_installed {
+    // Resolve the toolchain's sysroot to verify it ships the guest target's prebuilt rlibs.
+    let which_rustc = Command::new("rustup")
+        .args([&format!("+{toolchain}"), "which", "rustc"])
+        .output()
+        .map_err(|e| {
+            tty_println(&format!("Failed to resolve {toolchain} rustc: {e}"));
+            e.raw_os_error().unwrap_or(1)
+        })?;
+    if !which_rustc.status.success() {
+        return Err(which_rustc.status.code().unwrap_or(1));
+    }
+    let rustc_path = String::from_utf8_lossy(&which_rustc.stdout)
+        .trim()
+        .to_string();
+    let toolchain_root = Path::new(&rustc_path)
+        .parent()
+        .and_then(Path::parent)
+        .map(Path::to_path_buf);
+    if let Some(root) = toolchain_root {
+        // The built-in guest target's rlibs must be present. If they aren't, either the
+        // toolchain wasn't built for this target or the tarball was truncated.
+        let target = get_rustc_target();
+        let target_libdir = root.join("lib/rustlib").join(&target).join("lib");
+        if !target_libdir.exists() {
             tty_println(&format!(
-                "Installing component {component} for toolchain {toolchain}"
+                "error: toolchain `{toolchain}` does not ship target `{target}` (no {}). \n\
+                 Reinstall with: cargo openvm toolchain install --force",
+                target_libdir.display()
             ));
-            let status = Command::new("rustup")
-                .args(["component", "add", component, "--toolchain", toolchain])
-                .status()
-                .map_err(|e| {
-                    tty_println(&format!("Failed to install component: {e}"));
-                    e.raw_os_error().unwrap_or(1)
-                })?;
-
-            if !status.success() {
-                tty_println(&format!(
-                    "Failed to install component {component} for toolchain {toolchain}"
-                ));
-                return Err(status.code().unwrap_or(1));
-            }
+            return Err(1);
         }
     }
 

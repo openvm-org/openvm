@@ -20,9 +20,9 @@ pub use openvm_riscv_guest::*;
 
 #[cfg(openvm_intrinsics)]
 mod getrandom;
+pub mod io;
 #[cfg(openvm_intrinsics)]
 mod pal_abi;
-pub mod io;
 pub mod process;
 pub mod serde;
 
@@ -56,12 +56,13 @@ fn _fault() -> ! {
 
 /// Used for defining the guest's entrypoint and main function.
 ///
-/// When `#![no_main]` is used, the programs entrypoint and main function is left undefined. The
-/// `entry` macro is required to indicate the main function and link it to an entrypoint provided
-/// by the `openvm` crate.
+/// When `#![no_main]` is used, the program's entrypoint and main function are left undefined. The
+/// `entry` macro is required to indicate the main function and link it to the entrypoint provided
+/// by the `openvm` crate (a custom `_start` defined via `global_asm!`).
 ///
-/// When `std` is enabled, the entrypoint will be linked automatically and this macro is not
-/// required.
+/// The macro is always required for guest builds (when `openvm_intrinsics` is set), independent of
+/// whether the `std` feature is enabled — the custom `_start` replaces the one `std` would
+/// otherwise provide.
 ///
 /// # Example
 ///
@@ -117,9 +118,12 @@ unsafe extern "C" fn __start() -> ! {
 #[cfg(openvm_intrinsics)]
 static STACK_TOP: u64 = openvm_platform::memory::STACK_TOP;
 
-// Entry point; sets up global pointer and stack pointer and passes
-// to zkvm_start.  TODO: when asm_const is stabilized, use that here
-// instead of defining a symbol and dereferencing it.
+// Entry point; sets up global pointer and stack pointer and passes to `__start`.
+// Overrides std's default `_start` — the openvm guest has no OS runtime to
+// initialize, so we skip std's startup and jump straight into the user's `main`.
+//
+// TODO: when asm_const is stabilized, use that here instead of defining a symbol
+// and dereferencing it.
 #[cfg(openvm_intrinsics)]
 core::arch::global_asm!(
     r#"

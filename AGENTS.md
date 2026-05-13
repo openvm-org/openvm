@@ -64,8 +64,8 @@ cargo nextest run --cargo-profile=fast -p openvm-circuit -- test_name
 # Run tests in a working directory (as CI does)
 cd extensions/riscv/circuit && cargo nextest run --cargo-profile=fast
 
-# Integration tests for extensions (requires nightly rust-src for guest program compilation)
-rustup component add rust-src --toolchain nightly-2026-01-18
+# Integration tests for extensions (requires the openvm rust toolchain — rust-src ships inside it)
+cargo openvm toolchain install
 cd extensions/riscv/tests && cargo nextest run --cargo-profile=fast --profile=heavy
 
 # Run with parallelism (used in CI)
@@ -75,6 +75,8 @@ cargo nextest run --cargo-profile=fast --features parallel
 ### Environment Variables for Tests
 
 - `OPENVM_SKIP_DEBUG=1`: Skips debug-mode constraint checking in `air_test` (faster CI runs)
+- `OPENVM_RUST_TOOLCHAIN`: Override the rustup toolchain name used by `cargo openvm build`. Default is the `openvm-<rustup-name>` compiled into `cargo-openvm`. Set this to swap in a custom rustc fork.
+- `OPENVM_TARGET`: Override the rustc target triple used by `cargo openvm build`. Default is `riscv64im-unknown-openvm-elf` (built into our forked rustc). Any rv64im-flavored target works, but the user is responsible for ensuring the chosen toolchain supports it (e.g. has `rust-src` for `-Z build-std`).
 
 ### Nextest Profiles
 
@@ -162,9 +164,11 @@ Guest programs are compiled to RISC-V ELF, then transpiled to OpenVM instruction
 
 Guest code gates on three independent axes — keep them separate:
 
-- `cfg(openvm_intrinsics)` — set by `cargo openvm build` rustflags; selects guest-specific codegen. Unset under host `cargo check`/`clippy`.
-- `cfg(not(feature = "std"))` — gates `#![no_std]`. The `std` feature forwards to `openvm/std`.
-- `cfg(target_os = "none")` — gates `#![no_main]` and `openvm::entry!(main)` registration.
+- `cfg(openvm_intrinsics)` — set by `cargo openvm build` rustflags; selects guest-specific codegen (e.g. inline intrinsics, the openvm-platform `_start`). Unset under host `cargo check`/`clippy`.
+- `cfg(not(feature = "std"))` — gates `#![no_std]`. Feature-driven, independent of target. The `std` feature forwards to `openvm/std`.
+- `cfg(any(target_os = "none", target_os = "openvm"))` — gates `#![no_main]` and `openvm::entry!(main)` registration. Target-driven: dual form to support both the legacy `riscv64im-openvm-none-elf` JSON-spec target (`os = "none"`) and the built-in `riscv64im-unknown-openvm-elf` target (`os = "openvm"`). Matches the develop-v2.0.0-rc.1 pattern (which gated on `target_os = "zkvm"`).
+
+Mirror the same dual form in `Cargo.toml` target-specific dependency tables: `[target.'cfg(not(any(target_os = "none", target_os = "openvm")))'.dependencies]` for host-only deps, `[target.'cfg(all(target_arch = "riscv64", any(target_os = "none", target_os = "openvm")))'.dependencies]` for guest-only deps.
 
 For host `cargo check`/`clippy`, guest crates need `[lints.rust] unexpected_cfgs = { check-cfg = ['cfg(openvm_intrinsics)'] }` in their `Cargo.toml` (or `[lints] workspace = true`). `cargo openvm init` adds this automatically.
 
