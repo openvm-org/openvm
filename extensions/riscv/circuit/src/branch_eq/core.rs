@@ -106,7 +106,7 @@ where
         builder.when(is_valid.clone()).assert_one(sum);
 
         // Range-check read columns a, b to [0, 256). After the memory-bus pack
-        // (commit 6) pairs share a packed field element on the bus; without
+        // pairs share a packed field element on the bus; without
         // local u8 checks the prover could re-split values across (a[2i],
         // a[2i+1]) or (b[2i], b[2i+1]).
         for i in 0..NUM_LIMBS / 2 {

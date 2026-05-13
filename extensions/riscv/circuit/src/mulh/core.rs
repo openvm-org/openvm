@@ -157,7 +157,7 @@ where
             .eval(builder, cols.opcode_mulh_flag + cols.opcode_mulhsu_flag);
 
         // Range-check all read limbs b[i], c[i] to [0, 256). After the bus pack
-        // (commit 6) pairs share a packed field element and need local u8 checks.
+        // pairs share a packed field element and need local u8 checks.
         // The MSB sign-bit check above handles the signed-shifted form; the raw
         // u8 bound on the MSB is added here unconditionally.
         for i in 0..NUM_LIMBS {

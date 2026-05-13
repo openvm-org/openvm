@@ -126,7 +126,7 @@ where
             .eval(builder, is_valid);
 
         // Range-check the read-side rs1_data limbs to [0, 256). After the memory
-        // bus pack (commit 6), pairs of u8 limbs share a packed field element
+        // bus pack, pairs of u8 limbs share a packed field element
         // and need local u8 checks to prevent re-splitting.
         for i in 0..RV64_WORD_NUM_LIMBS / 2 {
             self.bitwise_lookup_bus

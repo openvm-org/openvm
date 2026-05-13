@@ -208,7 +208,7 @@ where
         }
 
         // Range-check the read columns b, c to [0, 256). Once the memory bus
-        // packs to 4 field elements (commit 6), pairs of limbs share a single
+        // packs to 4 field elements, pairs of limbs share a single
         // field element on the bus; without local u8 checks the prover could
         // re-split the packed value across (b[2i], b[2i+1]) or (c[2i], c[2i+1]).
         for i in 0..(NUM_LIMBS / 2) {

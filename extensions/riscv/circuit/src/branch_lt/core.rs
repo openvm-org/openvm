@@ -148,7 +148,7 @@ where
             .eval(builder, is_valid.clone());
 
         // Range-check the non-MSB read limbs a[0..NUM_LIMBS-1] and b[0..NUM_LIMBS-1] to
-        // [0, 256). After the bus pack (commit 6) these limbs share a packed field
+        // [0, 256). After the bus pack these limbs share a packed field
         // element with their neighbors and need local u8 checks for soundness.
         for i in 0..NUM_LIMBS - 1 {
             self.bus
