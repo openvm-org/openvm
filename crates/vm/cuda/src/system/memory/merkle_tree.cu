@@ -2,13 +2,14 @@
 #include "poseidon2.cuh"
 #include "primitives/shared_buffer.cuh"
 #include "primitives/trace_access.h"
+#include "system/memory/params.cuh"
 
 #include <cub/cub.cuh>
 
 using poseidon2::poseidon2_mix;
 
 struct alignas(32) digest_t {
-    Fp cells[CELLS_OUT];
+    Fp cells[DIGEST_WIDTH];
 };
 
 #define COPY_DIGEST(dst, src) memcpy(dst, src, sizeof(digest_t))
