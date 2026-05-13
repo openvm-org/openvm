@@ -53,7 +53,8 @@ pub struct ShiftCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 /// Shift AIR.
 /// Note: when the shift amount from operand is greater than the number of bits, only shift
 /// `shift_amount % num_bits` bits. This matches the RISC-V specs for SLL/SRL/SRA.
-#[derive(Copy, Clone, Debug, derive_new::new)]
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(ShiftCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
 pub struct ShiftCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
