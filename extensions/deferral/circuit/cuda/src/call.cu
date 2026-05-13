@@ -19,7 +19,10 @@ using namespace deferral;
 using namespace canonicity;
 using namespace lookup;
 
-template <typename T> using MemoryWriteAuxColsDef = MemoryWriteAuxCols<T, MEMORY_OP_SIZE>;
+// Byte-AS write aux (RV64_MEMORY_AS): `MEMORY_BLOCK_BYTES` bytes per bus op.
+template <typename T> using MemoryWriteAuxColsByte = MemoryWriteAuxCols<T, MEMORY_BLOCK_BYTES>;
+// F-AS write aux (DEFERRAL_AS): `BLOCK_FE_WIDTH` cells per bus op.
+template <typename T> using MemoryWriteAuxColsF = MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>;
 
 __device__ __forceinline__ Fp bytes4_to_fp(const uint8_t *bytes) {
     const uint32_t value =
@@ -173,12 +176,13 @@ template <typename T> struct DeferralCallAdapterRecord {
     MemoryReadAuxRecord rs_aux;
 
     MemoryReadAuxRecord input_commit_aux[COMMIT_MEMORY_OPS];
-    MemoryReadAuxRecord old_input_acc_aux[DIGEST_MEMORY_OPS];
-    MemoryReadAuxRecord old_output_acc_aux[DIGEST_MEMORY_OPS];
+    MemoryReadAuxRecord old_input_acc_aux[DIGEST_F_MEMORY_OPS];
+    MemoryReadAuxRecord old_output_acc_aux[DIGEST_F_MEMORY_OPS];
 
-    MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE> output_commit_and_len_aux[OUTPUT_TOTAL_MEMORY_OPS];
-    MemoryWriteAuxRecord<T, MEMORY_OP_SIZE> new_input_acc_aux[DIGEST_MEMORY_OPS];
-    MemoryWriteAuxRecord<T, MEMORY_OP_SIZE> new_output_acc_aux[DIGEST_MEMORY_OPS];
+    MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>
+        output_commit_and_len_aux[OUTPUT_TOTAL_MEMORY_OPS];
+    MemoryWriteAuxRecord<T, BLOCK_FE_WIDTH> new_input_acc_aux[DIGEST_F_MEMORY_OPS];
+    MemoryWriteAuxRecord<T, BLOCK_FE_WIDTH> new_output_acc_aux[DIGEST_F_MEMORY_OPS];
 };
 
 template <typename T> struct DeferralCallAdapterCols {
@@ -192,12 +196,12 @@ template <typename T> struct DeferralCallAdapterCols {
     MemoryReadAuxCols<T> rs_aux;
 
     MemoryReadAuxCols<T> input_commit_aux[COMMIT_MEMORY_OPS];
-    MemoryReadAuxCols<T> old_input_acc_aux[DIGEST_MEMORY_OPS];
-    MemoryReadAuxCols<T> old_output_acc_aux[DIGEST_MEMORY_OPS];
+    MemoryReadAuxCols<T> old_input_acc_aux[DIGEST_F_MEMORY_OPS];
+    MemoryReadAuxCols<T> old_output_acc_aux[DIGEST_F_MEMORY_OPS];
 
-    MemoryWriteAuxCols<T, MEMORY_OP_SIZE> output_commit_and_len_aux[OUTPUT_TOTAL_MEMORY_OPS];
-    MemoryWriteAuxCols<T, MEMORY_OP_SIZE> new_input_acc_aux[DIGEST_MEMORY_OPS];
-    MemoryWriteAuxCols<T, MEMORY_OP_SIZE> new_output_acc_aux[DIGEST_MEMORY_OPS];
+    MemoryWriteAuxCols<T, MEMORY_BLOCK_BYTES> output_commit_and_len_aux[OUTPUT_TOTAL_MEMORY_OPS];
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> new_input_acc_aux[DIGEST_F_MEMORY_OPS];
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> new_output_acc_aux[DIGEST_F_MEMORY_OPS];
 };
 
 __device__ __forceinline__ void deferral_call_adapter_tracegen(
@@ -222,7 +226,8 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
 
     uint32_t timestamp = record.from_timestamp;
     constexpr size_t read_aux_stride = sizeof(MemoryReadAuxCols<uint8_t>);
-    constexpr size_t write_aux_stride = sizeof(MemoryWriteAuxColsDef<uint8_t>);
+    constexpr size_t write_byte_aux_stride = sizeof(MemoryWriteAuxColsByte<uint8_t>);
+    constexpr size_t write_f_aux_stride = sizeof(MemoryWriteAuxColsF<uint8_t>);
 
     mem_helper.fill(
         row.slice_from(COL_INDEX(DeferralCallAdapterCols, rd_aux)),
@@ -247,7 +252,7 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
     }
 
 #pragma unroll
-    for (size_t i = 0; i < DIGEST_MEMORY_OPS; ++i) {
+    for (size_t i = 0; i < DIGEST_F_MEMORY_OPS; ++i) {
         mem_helper.fill(
             row.slice_from(
                 COL_INDEX(DeferralCallAdapterCols, old_input_acc_aux) + i * read_aux_stride
@@ -258,7 +263,7 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
     }
 
 #pragma unroll
-    for (size_t i = 0; i < DIGEST_MEMORY_OPS; ++i) {
+    for (size_t i = 0; i < DIGEST_F_MEMORY_OPS; ++i) {
         mem_helper.fill(
             row.slice_from(
                 COL_INDEX(DeferralCallAdapterCols, old_output_acc_aux) + i * read_aux_stride
@@ -271,32 +276,34 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
 #pragma unroll
     for (size_t i = 0; i < OUTPUT_TOTAL_MEMORY_OPS; ++i) {
         RowSlice aux_row = row.slice_from(
-            COL_INDEX(DeferralCallAdapterCols, output_commit_and_len_aux) + i * write_aux_stride
+            COL_INDEX(DeferralCallAdapterCols, output_commit_and_len_aux) +
+            i * write_byte_aux_stride
         );
         COL_WRITE_ARRAY(
-            aux_row, MemoryWriteAuxColsDef, prev_data, record.output_commit_and_len_aux[i].prev_data
+            aux_row, MemoryWriteAuxColsByte, prev_data,
+            record.output_commit_and_len_aux[i].prev_data
         );
         mem_helper.fill(aux_row, record.output_commit_and_len_aux[i].prev_timestamp, timestamp++);
     }
 
 #pragma unroll
-    for (size_t i = 0; i < DIGEST_MEMORY_OPS; ++i) {
+    for (size_t i = 0; i < DIGEST_F_MEMORY_OPS; ++i) {
         RowSlice aux_row = row.slice_from(
-            COL_INDEX(DeferralCallAdapterCols, new_input_acc_aux) + i * write_aux_stride
+            COL_INDEX(DeferralCallAdapterCols, new_input_acc_aux) + i * write_f_aux_stride
         );
         COL_WRITE_ARRAY(
-            aux_row, MemoryWriteAuxColsDef, prev_data, record.new_input_acc_aux[i].prev_data
+            aux_row, MemoryWriteAuxColsF, prev_data, record.new_input_acc_aux[i].prev_data
         );
         mem_helper.fill(aux_row, record.new_input_acc_aux[i].prev_timestamp, timestamp++);
     }
 
 #pragma unroll
-    for (size_t i = 0; i < DIGEST_MEMORY_OPS; ++i) {
+    for (size_t i = 0; i < DIGEST_F_MEMORY_OPS; ++i) {
         RowSlice aux_row = row.slice_from(
-            COL_INDEX(DeferralCallAdapterCols, new_output_acc_aux) + i * write_aux_stride
+            COL_INDEX(DeferralCallAdapterCols, new_output_acc_aux) + i * write_f_aux_stride
         );
         COL_WRITE_ARRAY(
-            aux_row, MemoryWriteAuxColsDef, prev_data, record.new_output_acc_aux[i].prev_data
+            aux_row, MemoryWriteAuxColsF, prev_data, record.new_output_acc_aux[i].prev_data
         );
         mem_helper.fill(aux_row, record.new_output_acc_aux[i].prev_timestamp, timestamp++);
     }
