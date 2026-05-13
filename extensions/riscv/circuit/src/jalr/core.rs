@@ -32,7 +32,7 @@ use crate::adapters::{
 };
 
 #[repr(C)]
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64JalrCoreCols<T> {
     pub imm: T,
     // Keep the same 32-bit decomposition columns and zero-extend to RV64 at the adapter boundary.
@@ -48,7 +48,8 @@ pub struct Rv64JalrCoreCols<T> {
     pub imm_sign: T,
 }
 
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone, derive_new::new, ColumnsAir)]
+#[columns_via(Rv64JalrCoreCols<u8>)]
 pub struct Rv64JalrCoreAir {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,

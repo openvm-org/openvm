@@ -4783,7 +4783,7 @@ dependencies = [
  "openvm-ecc-guest",
  "openvm-ecc-sw-macros",
  "openvm-ecc-transpiler",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-transpiler",
  "openvm-sha2-circuit",
  "openvm-sha2-transpiler",
  "openvm-stark-backend",
@@ -5654,7 +5654,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "openvm-custom-insn",
  "openvm-platform",
- "openvm-rv32im-guest",
+ "openvm-riscv-guest",
  "serde",
 ]
 
@@ -5683,8 +5683,8 @@ dependencies = [
  "openvm-instructions",
  "openvm-mod-circuit-builder",
  "openvm-pairing-guest",
- "openvm-rv32-adapters",
- "openvm-rv32im-circuit",
+ "openvm-riscv-adapters",
+ "openvm-riscv-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.9.2",
@@ -5715,7 +5715,7 @@ dependencies = [
  "openvm-algebra-complex-macros",
  "openvm-algebra-moduli-macros",
  "openvm-custom-insn",
- "openvm-rv32im-guest",
+ "openvm-riscv-guest",
  "serde-big-array",
  "strum_macros 0.26.4",
 ]
@@ -5742,7 +5742,7 @@ dependencies = [
  "openvm-circuit",
  "openvm-ecc-circuit",
  "openvm-instructions",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
@@ -5753,11 +5753,11 @@ name = "openvm-algebra-transpiler"
 version = "2.0.0-beta.2"
 dependencies = [
  "openvm-algebra-guest",
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum 0.26.3",
 ]
 
@@ -5790,8 +5790,8 @@ dependencies = [
  "openvm-pairing-circuit",
  "openvm-pairing-guest",
  "openvm-pairing-transpiler",
- "openvm-rv32im-circuit",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-circuit",
+ "openvm-riscv-transpiler",
  "openvm-sha2-circuit",
  "openvm-sha2-transpiler",
  "openvm-stark-sdk",
@@ -5854,9 +5854,9 @@ dependencies = [
  "openvm-cuda-builder",
  "openvm-cuda-common",
  "openvm-instructions",
- "openvm-rv32-adapters",
- "openvm-rv32im-circuit",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-adapters",
+ "openvm-riscv-circuit",
+ "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.9.2",
@@ -5879,12 +5879,12 @@ name = "openvm-bigint-transpiler"
 version = "2.0.0-beta.2"
 dependencies = [
  "openvm-bigint-guest",
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum 0.26.3",
 ]
 
@@ -6020,8 +6020,8 @@ dependencies = [
  "openvm-poseidon2-air",
  "openvm-recursion-circuit",
  "openvm-recursion-circuit-derive",
- "openvm-rv32im-circuit",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-circuit",
+ "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
@@ -6119,6 +6119,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-decoder"
+version = "2.0.0-beta.2"
+
+[[package]]
 name = "openvm-deferral-circuit"
 version = "2.0.0-beta.2"
 dependencies = [
@@ -6138,7 +6142,8 @@ dependencies = [
  "openvm-deferral-transpiler",
  "openvm-instructions",
  "openvm-poseidon2-air",
- "openvm-rv32im-circuit",
+ "openvm-riscv-circuit",
+ "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "p3-field",
@@ -6168,8 +6173,8 @@ dependencies = [
  "openvm-deferral-circuit",
  "openvm-deferral-transpiler",
  "openvm-instructions",
- "openvm-rv32im-circuit",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-circuit",
+ "openvm-riscv-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
@@ -6215,7 +6220,8 @@ dependencies = [
  "openvm-instructions",
  "openvm-mod-circuit-builder",
  "openvm-pairing-guest",
- "openvm-rv32-adapters",
+ "openvm-riscv-adapters",
+ "openvm-riscv-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.9.2",
@@ -6239,7 +6245,7 @@ dependencies = [
  "openvm-algebra-guest",
  "openvm-custom-insn",
  "openvm-ecc-sw-macros",
- "openvm-rv32im-guest",
+ "openvm-riscv-guest",
  "serde",
  "strum_macros 0.26.4",
 ]
@@ -6256,7 +6262,7 @@ dependencies = [
  "openvm-circuit",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-transpiler",
  "openvm-sdk",
  "openvm-sdk-config",
  "openvm-stark-sdk",
@@ -6279,12 +6285,12 @@ dependencies = [
 name = "openvm-ecc-transpiler"
 version = "2.0.0-beta.2"
 dependencies = [
+ "openvm-decoder",
  "openvm-ecc-guest",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum 0.26.3",
 ]
 
@@ -6302,7 +6308,7 @@ dependencies = [
  "openvm-algebra-transpiler",
  "openvm-circuit",
  "openvm-instructions",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
@@ -6353,7 +6359,7 @@ dependencies = [
  "openvm-keccak256-circuit",
  "openvm-keccak256-guest",
  "openvm-keccak256-transpiler",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-transpiler",
  "openvm-sdk",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
@@ -6379,7 +6385,7 @@ dependencies = [
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-keccak256-transpiler",
- "openvm-rv32im-circuit",
+ "openvm-riscv-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "p3-keccak-air",
@@ -6402,12 +6408,12 @@ dependencies = [
 name = "openvm-keccak256-transpiler"
 version = "2.0.0-beta.2"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-keccak256-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum 0.26.3",
 ]
 
@@ -6466,8 +6472,8 @@ dependencies = [
  "openvm-pairing-guest",
  "openvm-pairing-transpiler",
  "openvm-platform",
- "openvm-rv32im-guest",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-guest",
+ "openvm-riscv-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
@@ -6498,7 +6504,7 @@ dependencies = [
  "openvm-mod-circuit-builder",
  "openvm-pairing-guest",
  "openvm-pairing-transpiler",
- "openvm-rv32im-circuit",
+ "openvm-riscv-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.8.5",
@@ -6535,11 +6541,11 @@ dependencies = [
 name = "openvm-pairing-transpiler"
 version = "2.0.0-beta.2"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-pairing-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum 0.26.3",
 ]
 
@@ -6551,7 +6557,7 @@ dependencies = [
  "embedded-alloc",
  "libm",
  "openvm-custom-insn",
- "openvm-rv32im-guest",
+ "openvm-riscv-guest",
 ]
 
 [[package]]
@@ -6623,7 +6629,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-rv32-adapters"
+name = "openvm-riscv-adapters"
 version = "2.0.0-beta.2"
 dependencies = [
  "derive-new 0.6.0",
@@ -6632,14 +6638,14 @@ dependencies = [
  "openvm-circuit-primitives",
  "openvm-circuit-primitives-derive",
  "openvm-instructions",
- "openvm-rv32im-circuit",
+ "openvm-riscv-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.9.2",
 ]
 
 [[package]]
-name = "openvm-rv32im-circuit"
+name = "openvm-riscv-circuit"
 version = "2.0.0-beta.2"
 dependencies = [
  "cfg-if 1.0.1",
@@ -6657,7 +6663,7 @@ dependencies = [
  "openvm-cuda-builder",
  "openvm-cuda-common",
  "openvm-instructions",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.9.2",
@@ -6670,7 +6676,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-rv32im-guest"
+name = "openvm-riscv-guest"
 version = "2.0.0-beta.2"
 dependencies = [
  "openvm-custom-insn",
@@ -6678,16 +6684,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-rv32im-integration-tests"
+name = "openvm-riscv-integration-tests"
 version = "2.0.0-beta.2"
 dependencies = [
  "eyre",
  "openvm",
  "openvm-circuit",
  "openvm-instructions",
- "openvm-rv32im-circuit",
- "openvm-rv32im-guest",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-circuit",
+ "openvm-riscv-guest",
+ "openvm-riscv-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
@@ -6697,15 +6703,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-rv32im-transpiler"
+name = "openvm-riscv-transpiler"
 version = "2.0.0-beta.2"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
- "openvm-rv32im-guest",
+ "openvm-riscv-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "serde",
  "strum 0.26.3",
  "tracing",
@@ -6786,8 +6792,8 @@ dependencies = [
  "openvm-keccak256-transpiler",
  "openvm-pairing-circuit",
  "openvm-pairing-transpiler",
- "openvm-rv32im-circuit",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-circuit",
+ "openvm-riscv-transpiler",
  "openvm-sha2-circuit",
  "openvm-sha2-transpiler",
  "openvm-stark-backend",
@@ -6806,7 +6812,7 @@ dependencies = [
  "hex",
  "openvm-circuit",
  "openvm-instructions",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-transpiler",
  "openvm-sdk",
  "openvm-sha2-circuit",
  "openvm-sha2-guest",
@@ -6849,7 +6855,7 @@ dependencies = [
  "openvm-cuda-builder",
  "openvm-cuda-common",
  "openvm-instructions",
- "openvm-rv32im-circuit",
+ "openvm-riscv-circuit",
  "openvm-sha2-air",
  "openvm-sha2-transpiler",
  "openvm-stark-backend",
@@ -6872,12 +6878,12 @@ dependencies = [
 name = "openvm-sha2-transpiler"
 version = "2.0.0-beta.2"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-sha2-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum 0.26.3",
 ]
 
@@ -6987,8 +6993,8 @@ dependencies = [
  "openvm-ecc-circuit",
  "openvm-instructions",
  "openvm-platform",
- "openvm-rv32im-circuit",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-circuit",
+ "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
@@ -7004,10 +7010,10 @@ version = "2.0.0-beta.2"
 dependencies = [
  "elf",
  "eyre",
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-platform",
  "openvm-stark-backend",
- "rrs-lib",
  "rustc-demangle",
  "thiserror 1.0.69",
 ]
@@ -7030,8 +7036,8 @@ dependencies = [
  "openvm-poseidon2-air",
  "openvm-recursion-circuit",
  "openvm-recursion-circuit-derive",
- "openvm-rv32im-circuit",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-circuit",
+ "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
@@ -7120,7 +7126,7 @@ dependencies = [
  "openvm-ecc-guest",
  "openvm-ecc-sw-macros",
  "openvm-ecc-transpiler",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-transpiler",
  "openvm-sha2-circuit",
  "openvm-sha2-transpiler",
  "openvm-stark-backend",
