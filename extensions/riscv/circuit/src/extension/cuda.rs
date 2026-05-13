@@ -17,6 +17,7 @@ use crate::{
     Rv64LoadSignExtendAir, Rv64LoadSignExtendChipGpu, Rv64LoadStoreAir, Rv64LoadStoreChipGpu,
     Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir, Rv64MulWChipGpu, Rv64MultiplicationAir,
     Rv64MultiplicationChipGpu, Rv64ShiftAir, Rv64ShiftChipGpu, Rv64ShiftWAir, Rv64ShiftWChipGpu,
+    Rv64XorOrAndAir, Rv64XorOrAndChipGpu,
 };
 
 pub struct Rv64ImGpuProverExt;
@@ -44,6 +45,14 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             timestamp_max_bits,
         );
         inventory.add_executor_chip(add_sub);
+
+        inventory.next_air::<Rv64XorOrAndAir>()?;
+        let xor_or_and = Rv64XorOrAndChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(xor_or_and);
 
         inventory.next_air::<Rv64AddSubWAir>()?;
         let add_sub_w = Rv64AddSubWChipGpu::new(
