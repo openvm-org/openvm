@@ -48,14 +48,21 @@ __global__ void cukernel_persistent_boundary_tracegen(
             FpArray<8> init_values;
             uint32_t addr_space_idx = record.address_space - 1;
             if (initial_mem[addr_space_idx]) {
+                // Post Stage 1.6 flip: AS 1/2/3 (RV64_REGISTER_AS,
+                // RV64_MEMORY_AS, PUBLIC_VALUES_AS) are u16-celled with LE
+                // byte layout, while AS 4 (DEFERRAL_AS) is F-celled. `record.ptr`
+                // is the normalized bus pointer; for u16 ASes this equals
+                // `2 * cell_idx = byte_ptr`, so the byte offset is exactly
+                // `record.ptr`. For F AS the cell index is `record.ptr / 2`
+                // (BUS_PTR_SCALE = 2), so reinterpret-cast at the F offset.
                 init_values =
                     record.address_space == DEFERRAL_AS
                         ? FpArray<8>::from_raw_array(
                             reinterpret_cast<uint32_t const *>(
                                 initial_mem[addr_space_idx]
-                            ) + record.ptr
+                            ) + (record.ptr / 2)
                         )
-                        : FpArray<8>::from_u8_array(
+                        : FpArray<8>::from_u16_le_array(
                             initial_mem[addr_space_idx] + record.ptr
                         );
             } else {
