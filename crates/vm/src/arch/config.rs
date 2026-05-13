@@ -127,11 +127,11 @@ pub const MEMORY_BLOCK_BYTES: usize = 8;
 
 /// Normalized bus-pointer scale: `bus_ptr = BUS_PTR_SCALE * cell_idx`.
 ///
-/// Today `= 1` (byte-celled storage). After the cell-type flip to u16 cells,
-/// `= 2`. For u16 ASes the scale equals `cell_size`, so the normalized bus
-/// pointer is exactly the RV64 byte pointer. For F ASes (DEFERRAL) the same
-/// scale applies to the F-cell index — proof-level normalization, not a
-/// storage byte offset.
+/// Today `= 1` (byte-celled storage). After the cell-type flip to u16 cells
+/// in Stage 1's commit 6, `= 2`. For u16 ASes the scale equals `cell_size`,
+/// so the normalized bus pointer is exactly the RV64 byte pointer. For F
+/// ASes (DEFERRAL) the same scale applies to the F-cell index — proof-level
+/// normalization, not a storage byte offset.
 pub const BUS_PTR_SCALE: usize = 1;
 
 // --- Derived constants below ---

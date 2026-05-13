@@ -119,16 +119,27 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB> for PersistentBo
             local.expand_direction * local.expand_direction,
         );
 
-        let chunk_size_f = AB::F::from_usize(DIGEST_WIDTH);
+        // Normalized bus-pointer formula
+        //
+        //   bus_ptr = BUS_LEAF_STRIDE * leaf_label + BUS_BLOCK_STRIDE * block_idx
+        //           = BUS_PTR_SCALE * (DIGEST_WIDTH * leaf_label + BLOCK_FE_WIDTH * block_idx)
+        //
+        // Today `BUS_PTR_SCALE = 1` so the strides are `(DIGEST_WIDTH,
+        // BLOCK_FE_WIDTH) = (8, 8)` and `bus_ptr = 8 * leaf_label` with
+        // `BLOCKS_PER_LEAF = 1`. After the commit-6 flip,
+        // `BUS_PTR_SCALE = 2`, `BLOCK_FE_WIDTH = 4`, strides are `(16, 8)` and
+        // `bus_ptr = 16 * leaf_label + 8 * block_idx` for `block_idx in 0..2`.
+        let leaf_stride_f = AB::F::from_usize(crate::system::memory::BUS_LEAF_STRIDE);
+        let block_stride_f = AB::F::from_usize(crate::arch::BUS_BLOCK_STRIDE);
         for block_idx in 0..BLOCKS_PER_LEAF {
-            let offset = AB::F::from_usize(block_idx * BLOCK_FE_WIDTH);
-            // Split the 1xCHUNK leaf into BLOCK_FE_WIDTH-sized bus messages.
+            let offset = block_stride_f * AB::F::from_usize(block_idx);
+            // Split the leaf into BLOCK_FE_WIDTH-sized bus messages.
             // Each block uses its own timestamp - untouched blocks stay at t=0.
             self.memory_bus
                 .send(
                     MemoryAddress::new(
                         local.address_space,
-                        local.leaf_label * chunk_size_f + offset,
+                        local.leaf_label * leaf_stride_f + offset,
                     ),
                     local.values
                         [block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
