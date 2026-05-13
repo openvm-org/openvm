@@ -45,14 +45,24 @@ fn test_memory_write(its: usize) {
 #[test_case(1000)]
 #[test_case(0)]
 fn test_cuda_memory_write(its: usize) {
-    use crate::arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder};
-    // The default PUBLIC_VALUES_AS sizing (`DEFAULT_MAX_NUM_PUBLIC_VALUES /
-    // U16_CELL_SIZE = 16` cells) is too small for the random `max_ptr = 20`
-    // cell range the helper uses. Bump it so all three writable address
-    // spaces fit the test's pointer range.
+    use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+
+    use crate::{
+        arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder},
+        system::memory::merkle::public_values::PUBLIC_VALUES_AS,
+    };
+    // The full default `RV64_MEMORY_AS` capacity (1<<28 u16 cells) blows up
+    // GPU merkle subtree allocation for this targeted test. Shrink all three
+    // writable address spaces to the smallest power of two big enough for the
+    // helper's `max_ptr = 20` cell range; merkle tree sizing scales with
+    // `pointer_max_bits`, so drop that to match.
     let mut mem_config = MemoryConfig::default();
-    use crate::system::memory::merkle::public_values::PUBLIC_VALUES_AS;
-    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 10;
+    let small = 1 << 10;
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = small;
+    mem_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = small;
+    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = small;
+    mem_config.pointer_max_bits =
+        small.ilog2() as usize + crate::arch::BUS_PTR_SCALE.trailing_zeros() as usize;
     let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus());
     test_memory_write_by_tester(&mut tester, its);
     let tester = tester.build().finalize();
