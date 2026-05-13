@@ -3,8 +3,8 @@ use openvm_stark_backend::p3_util::log2_strict_usize;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    arch::{MemoryConfig, ADDR_SPACE_OFFSET},
-    system::memory::CHUNK,
+    arch::{MemoryConfig, ADDR_SPACE_OFFSET, BUS_PTR_SCALE},
+    system::memory::DIGEST_WIDTH,
 };
 
 // indicates that there are 2^`addr_space_height` address spaces numbered starting from 1,
@@ -48,9 +48,16 @@ impl MemoryDimensions {
 
 impl MemoryConfig {
     pub fn memory_dimensions(&self) -> MemoryDimensions {
+        // Universal formula: `pointer_max_bits` bounds the normalized memory-bus
+        // pointer, and `bus_ptr = BUS_PTR_SCALE * cell_idx`. The cell range bit
+        // width is `pointer_max_bits - log2(BUS_PTR_SCALE)`, and each leaf holds
+        // `DIGEST_WIDTH` cells. When `BUS_PTR_SCALE = 1` (today) this evaluates
+        // to `pointer_max_bits - log2(DIGEST_WIDTH)` — same as before.
         MemoryDimensions {
             addr_space_height: self.addr_space_height,
-            address_height: self.pointer_max_bits - log2_strict_usize(CHUNK),
+            address_height: self.pointer_max_bits
+                - log2_strict_usize(BUS_PTR_SCALE)
+                - log2_strict_usize(DIGEST_WIDTH),
         }
     }
 }

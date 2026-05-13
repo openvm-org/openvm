@@ -15,9 +15,7 @@ use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
 use poseidon2::Poseidon2PeripheryChipGPU;
 use program::ProgramChipGPU;
 
-use crate::system::memory::CHUNK;
-
-pub(crate) const DIGEST_WIDTH: usize = 8;
+pub(crate) use crate::system::memory::DIGEST_WIDTH;
 
 pub mod boundary;
 pub mod connector;
@@ -104,7 +102,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             .collect()
     }
 
-    fn memory_top_tree(&self) -> Option<&[[F; CHUNK]]> {
+    fn memory_top_tree(&self) -> Option<&[[F; DIGEST_WIDTH]]> {
         let top_tree = &self.memory_inventory.merkle_tree.top_roots_host;
         (!top_tree.is_empty()).then_some(top_tree.as_slice())
     }

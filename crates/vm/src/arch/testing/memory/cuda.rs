@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         testing::memory::air::{MemoryDummyAir, MemoryDummyChip},
-        MemoryConfig, DEFAULT_BLOCK_SIZE,
+        MemoryConfig, BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryBus},
@@ -77,7 +77,7 @@ impl DeviceMemoryTester {
     }
 
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
-        const { assert!(N == DEFAULT_BLOCK_SIZE) };
+        const { assert!(N == BLOCK_FE_WIDTH) };
         let t = self.memory.timestamp();
         let (t_prev, data) = if addr_space as u32 == DEFERRAL_AS {
             unsafe { self.memory.read::<F, N>(addr_space as u32, ptr as u32) }
@@ -93,7 +93,7 @@ impl DeviceMemoryTester {
     }
 
     pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
-        const { assert!(N == DEFAULT_BLOCK_SIZE) };
+        const { assert!(N == BLOCK_FE_WIDTH) };
         let t = self.memory.timestamp();
         let (t_prev, data_prev) = if addr_space as u32 == DEFERRAL_AS {
             unsafe {
@@ -154,7 +154,7 @@ impl<RA> Chip<RA, GpuBackend> for FixedSizeMemoryTester {
                 width,
                 &records.to_device_on(&self.1).unwrap(),
                 num_records,
-                DEFAULT_BLOCK_SIZE,
+                BLOCK_FE_WIDTH,
                 self.1.stream.as_raw(),
             )
             .unwrap();

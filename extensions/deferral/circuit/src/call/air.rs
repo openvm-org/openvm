@@ -4,7 +4,7 @@ use itertools::{izip, Itertools as _};
 use openvm_circuit::{
     arch::{
         AdapterAirContext, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
-        VmAdapterInterface, VmCoreAir, DEFAULT_BLOCK_SIZE,
+        VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -244,9 +244,9 @@ pub struct DeferralCallAdapterCols<T> {
 
     // Write auxiliary columns
     pub output_commit_and_len_aux:
-        [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; OUTPUT_TOTAL_MEMORY_OPS],
-    pub new_input_acc_aux: [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
-    pub new_output_acc_aux: [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
+        [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; OUTPUT_TOTAL_MEMORY_OPS],
+    pub new_input_acc_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_MEMORY_OPS],
+    pub new_output_acc_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_MEMORY_OPS],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
@@ -376,7 +376,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 .read(
                     MemoryAddress::new(
                         e.clone(),
-                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * BLOCK_FE_WIDTH),
                     ),
                     data,
                     timestamp_pp(),
@@ -397,7 +397,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                     MemoryAddress::new(
                         deferral_as.clone(),
                         input_acc_ptr.clone()
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                            + AB::Expr::from_usize(chunk_idx * BLOCK_FE_WIDTH),
                     ),
                     data,
                     timestamp_pp(),
@@ -418,7 +418,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                     MemoryAddress::new(
                         deferral_as.clone(),
                         output_acc_ptr.clone()
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                            + AB::Expr::from_usize(chunk_idx * BLOCK_FE_WIDTH),
                     ),
                     data,
                     timestamp_pp(),
@@ -441,7 +441,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 .write(
                     MemoryAddress::new(
                         e.clone(),
-                        output_ptr.clone() + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                        output_ptr.clone() + AB::Expr::from_usize(chunk_idx * BLOCK_FE_WIDTH),
                     ),
                     data,
                     timestamp_pp(),
@@ -462,7 +462,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                     MemoryAddress::new(
                         deferral_as.clone(),
                         input_acc_ptr.clone()
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                            + AB::Expr::from_usize(chunk_idx * BLOCK_FE_WIDTH),
                     ),
                     data,
                     timestamp_pp(),
@@ -483,7 +483,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                     MemoryAddress::new(
                         deferral_as.clone(),
                         output_acc_ptr.clone()
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                            + AB::Expr::from_usize(chunk_idx * BLOCK_FE_WIDTH),
                     ),
                     data,
                     timestamp_pp(),

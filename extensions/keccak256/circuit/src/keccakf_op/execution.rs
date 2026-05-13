@@ -165,10 +165,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     if IS_E1 {
         exec_state.vm_write(RV64_MEMORY_AS, buffer_ptr, &postimage);
     } else {
-        for (word_idx, word) in postimage.chunks_exact(DEFAULT_BLOCK_SIZE).enumerate() {
-            exec_state.vm_write::<u8, DEFAULT_BLOCK_SIZE>(
+        for (word_idx, word) in postimage.chunks_exact(BLOCK_FE_WIDTH).enumerate() {
+            exec_state.vm_write::<u8, BLOCK_FE_WIDTH>(
                 RV64_MEMORY_AS,
-                buffer_ptr + (word_idx * DEFAULT_BLOCK_SIZE) as u32,
+                buffer_ptr + (word_idx * BLOCK_FE_WIDTH) as u32,
                 word.try_into().unwrap(),
             );
         }

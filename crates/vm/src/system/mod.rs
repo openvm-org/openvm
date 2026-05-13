@@ -28,7 +28,7 @@ use crate::{
         ChipInventory, ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState,
         ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
         RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig,
-        VmExecutionConfig, VmField, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, DEFAULT_BLOCK_SIZE,
+        VmExecutionConfig, VmField, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, BLOCK_FE_WIDTH,
         PROGRAM_AIR_ID,
     },
     system::{
@@ -36,7 +36,7 @@ use crate::{
         memory::{
             offline_checker::{MemoryBridge, MemoryBus},
             online::GuestMemory,
-            MemoryAirInventory, MemoryController, TimestampedEquipartition, CHUNK,
+            MemoryAirInventory, MemoryController, TimestampedEquipartition, DIGEST_WIDTH,
         },
         phantom::{
             CycleEndPhantomExecutor, CycleStartPhantomExecutor, NopPhantomExecutor, PhantomAir,
@@ -91,7 +91,7 @@ pub trait SystemChipComplex<RA, PB: ProverBackend> {
     /// This function **must** return `Some` if called after
     /// [`generate_proving_ctx`](Self::generate_proving_ctx) and may return `None` if called before
     /// that.
-    fn memory_top_tree(&self) -> Option<&[[PB::Val; CHUNK]]>;
+    fn memory_top_tree(&self) -> Option<&[[PB::Val; DIGEST_WIDTH]]>;
 }
 
 /// Trait meant to be implemented on a SystemChipComplex.
@@ -112,7 +112,7 @@ pub struct SystemRecords<F> {
     pub touched_memory: TouchedMemory<F>,
 }
 
-pub type TouchedMemory<F> = TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>;
+pub type TouchedMemory<F> = TimestampedEquipartition<F, BLOCK_FE_WIDTH>;
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]
 #[cfg_attr(feature = "aot", derive(AotExecutor, AotMeteredExecutor))]
@@ -369,7 +369,7 @@ where
             .collect()
     }
 
-    fn memory_top_tree(&self) -> Option<&[[Val<SC>; CHUNK]]> {
+    fn memory_top_tree(&self) -> Option<&[[Val<SC>; DIGEST_WIDTH]]> {
         let top_tree = &self.memory_controller.interface_chip.merkle_chip.top_tree;
         (!top_tree.is_empty()).then_some(top_tree.as_slice())
     }

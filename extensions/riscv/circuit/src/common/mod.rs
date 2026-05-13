@@ -11,7 +11,7 @@ mod aot {
             execution_mode::{metered::memory_ctx::MemoryCtx, MeteredCtx},
             AotError, SystemConfig, VmExecState, ADDR_SPACE_OFFSET,
         },
-        system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, CHUNK},
+        system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, DIGEST_WIDTH},
     };
     use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
 
@@ -234,7 +234,7 @@ mod aot {
         // For a specific RV32 instruction, the variables can be treated as constants at AOT
         // compilation time:
         // Inputs:
-        // - `chunk`: always 8(CHUNK) because we only support when continuation is enabled.
+        // - `chunk`: always 8(DIGEST_WIDTH) because we only support when continuation is enabled.
         // - `address_space`: always a constant because it is derived from an Instruction
         // - `size`: RV32 instruction always read 4 bytes(in the AIR level).
         // - `self.memory_dimensions.address_height`: known at AOT compilation time because it is derived from the memory configuration.
@@ -250,12 +250,12 @@ mod aot {
         // Therefore the loop only iterates once for `page_id = start_page_id`.
 
         let initial_block_size: usize = config.initial_block_size();
-        if initial_block_size != CHUNK {
+        if initial_block_size != DIGEST_WIDTH {
             return Err(AotError::Other(format!(
-                "initial_block_size must be {CHUNK}, got {initial_block_size}"
+                "initial_block_size must be {DIGEST_WIDTH}, got {initial_block_size}"
             )));
         }
-        let chunk_bits = CHUNK.ilog2();
+        let chunk_bits = DIGEST_WIDTH.ilog2();
         let as_offset = ((address_space - ADDR_SPACE_OFFSET) as u64)
             << (config.memory_config.memory_dimensions().address_height);
 

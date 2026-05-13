@@ -3,7 +3,7 @@ use openvm_instructions::DEFERRAL_AS;
 use rand::Rng;
 
 use crate::{
-    arch::{VmField, DEFAULT_BLOCK_SIZE},
+    arch::{VmField, BLOCK_FE_WIDTH},
     system::memory::{online::TracingMemory, MemoryController},
 };
 
@@ -15,7 +15,7 @@ mod cuda;
 pub use cuda::*;
 
 /// A dummy testing chip that sends/receives unconstrained messages on the [MemoryBus].
-/// All memory accesses use `DEFAULT_BLOCK_SIZE`.
+/// All memory accesses use `BLOCK_FE_WIDTH`.
 pub struct MemoryTester<F: VmField> {
     pub(crate) chip: MemoryDummyChip<F>,
     pub memory: TracingMemory,
@@ -33,7 +33,7 @@ impl<F: VmField> MemoryTester<F> {
     }
 
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
-        const { assert!(N == DEFAULT_BLOCK_SIZE) };
+        const { assert!(N == BLOCK_FE_WIDTH) };
         let memory = &mut self.memory;
         let t = memory.timestamp();
         let (t_prev, data) = if addr_space as u32 == DEFERRAL_AS {
@@ -50,7 +50,7 @@ impl<F: VmField> MemoryTester<F> {
     }
 
     pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
-        const { assert!(N == DEFAULT_BLOCK_SIZE) };
+        const { assert!(N == BLOCK_FE_WIDTH) };
         let memory = &mut self.memory;
         let t = memory.timestamp();
         let (t_prev, data_prev) = if addr_space as u32 == DEFERRAL_AS {

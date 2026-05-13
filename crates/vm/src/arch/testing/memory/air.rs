@@ -12,7 +12,7 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    arch::DEFAULT_BLOCK_SIZE,
+    arch::BLOCK_FE_WIDTH,
     system::memory::{offline_checker::MemoryBus, MemoryAddress},
 };
 
@@ -64,7 +64,7 @@ impl<'a, T> DummyMemoryInteractionColsMut<'a, T> {
     }
 }
 
-/// AIR width = DEFAULT_BLOCK_SIZE + 4 (addr_space, ptr, data[DEFAULT_BLOCK_SIZE], timestamp, count)
+/// AIR width = BLOCK_FE_WIDTH + 4 (addr_space, ptr, data[BLOCK_FE_WIDTH], timestamp, count)
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct MemoryDummyAir {
     pub bus: MemoryBus,
@@ -77,7 +77,7 @@ impl<F> PartitionedBaseAir<F> for MemoryDummyAir {}
 impl ColumnsAir for MemoryDummyAir {}
 impl<F> BaseAir<F> for MemoryDummyAir {
     fn width(&self) -> usize {
-        DEFAULT_BLOCK_SIZE + 4
+        BLOCK_FE_WIDTH + 4
     }
 }
 
@@ -122,7 +122,7 @@ impl<F: PrimeField32> MemoryDummyChip<F> {
     }
 
     pub fn push(&mut self, addr_space: u32, ptr: u32, data: &[F], timestamp: u32, count: F) {
-        assert_eq!(data.len(), DEFAULT_BLOCK_SIZE);
+        assert_eq!(data.len(), BLOCK_FE_WIDTH);
         self.trace.push(F::from_u32(addr_space));
         self.trace.push(F::from_u32(ptr));
         self.trace.extend_from_slice(data);

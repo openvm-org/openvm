@@ -52,7 +52,7 @@ use crate::{
             POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
         },
         Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState, MatrixRecordArena,
-        MemoryConfig, PreflightExecutor, Streams, VmStateMut, DEFAULT_BLOCK_SIZE,
+        MemoryConfig, PreflightExecutor, Streams, VmStateMut, BLOCK_FE_WIDTH,
     },
     system::{
         cuda::poseidon2::Poseidon2PeripheryChipGPU,
@@ -341,14 +341,14 @@ impl GpuChipTestBuilder {
             register,
             (pointer as u64).to_le_bytes().map(F::from_u8),
         );
-        // Always write in DEFAULT_BLOCK_SIZE-byte chunks to match the fixed block size.
+        // Always write in BLOCK_FE_WIDTH-byte chunks to match the fixed block size.
         for (i, &write) in writes.iter().enumerate() {
             let ptr = pointer + i * NUM_LIMBS;
-            for j in (0..NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
-                self.write::<DEFAULT_BLOCK_SIZE>(
+            for j in (0..NUM_LIMBS).step_by(BLOCK_FE_WIDTH) {
+                self.write::<BLOCK_FE_WIDTH>(
                     2usize,
                     ptr + j,
-                    write[j..j + DEFAULT_BLOCK_SIZE].try_into().unwrap(),
+                    write[j..j + BLOCK_FE_WIDTH].try_into().unwrap(),
                 );
             }
         }

@@ -13,22 +13,22 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct MerkleTree<F, const CHUNK: usize> {
+pub struct MerkleTree<F, const DIGEST_WIDTH: usize> {
     /// Height of the tree -- the root is the only node at height `height`,
     /// and the leaves are at height `0`.
     height: usize,
     /// Nodes corresponding to all zeroes.
-    zero_nodes: Vec<[F; CHUNK]>,
+    zero_nodes: Vec<[F; DIGEST_WIDTH]>,
     /// Nodes in the tree that have ever been touched.
-    nodes: FxHashMap<u64, [F; CHUNK]>,
+    nodes: FxHashMap<u64, [F; DIGEST_WIDTH]>,
 }
 
-impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
-    pub fn new(height: usize, hasher: &impl Hasher<CHUNK, F>) -> Self {
+impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
+    pub fn new(height: usize, hasher: &impl Hasher<DIGEST_WIDTH, F>) -> Self {
         Self {
             height,
             zero_nodes: (0..height + 1)
-                .scan(hasher.hash(&[F::ZERO; CHUNK]), |acc, _| {
+                .scan(hasher.hash(&[F::ZERO; DIGEST_WIDTH]), |acc, _| {
                     let result = Some(*acc);
                     *acc = hasher.compress(acc, acc);
                     result
@@ -38,11 +38,11 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         }
     }
 
-    pub fn root(&self) -> [F; CHUNK] {
+    pub fn root(&self) -> [F; DIGEST_WIDTH] {
         self.get_node(1)
     }
 
-    pub fn get_node(&self, index: u64) -> [F; CHUNK] {
+    pub fn get_node(&self, index: u64) -> [F; DIGEST_WIDTH] {
         self.nodes
             .get(&index)
             .cloned()
@@ -53,12 +53,12 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
     /// Shared logic for both from_memory and finalize.
     fn process_layers<CompressFn>(
         &mut self,
-        layer: Vec<(u64, [F; CHUNK])>,
+        layer: Vec<(u64, [F; DIGEST_WIDTH])>,
         md: &MemoryDimensions,
-        mut rows: Option<&mut Vec<MemoryMerkleCols<F, CHUNK>>>,
+        mut rows: Option<&mut Vec<MemoryMerkleCols<F, DIGEST_WIDTH>>>,
         compress: CompressFn,
     ) where
-        CompressFn: Fn(&[F; CHUNK], &[F; CHUNK]) -> [F; CHUNK] + Send + Sync,
+        CompressFn: Fn(&[F; DIGEST_WIDTH], &[F; DIGEST_WIDTH]) -> [F; DIGEST_WIDTH] + Send + Sync,
     {
         let mut new_entries = layer;
         let mut layer = new_entries
@@ -117,7 +117,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                 }
                 Some(ref mut rows) => {
                     let label_section_height = md.address_height.saturating_sub(height);
-                    let (tmp, new_rows): (Vec<(u64, [F; CHUNK], [F; CHUNK])>, Vec<[_; 2]>) =
+                    let (tmp, new_rows): (Vec<(u64, [F; DIGEST_WIDTH], [F; DIGEST_WIDTH])>, Vec<[_; 2]>) =
                         new_layer
                             .into_par_iter()
                             .map(|(par_index, left, right)| {
@@ -202,7 +202,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
     pub fn from_memory(
         memory: &AddressMap,
         md: &MemoryDimensions,
-        hasher: &(impl Hasher<CHUNK, F> + Sync),
+        hasher: &(impl Hasher<DIGEST_WIDTH, F> + Sync),
     ) -> Self {
         let mut tree = Self::new(md.overall_height(), hasher);
         let layer: Vec<_> = memory_to_vec_partition(memory, md)
@@ -215,17 +215,17 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
 
     pub fn finalize(
         &mut self,
-        hasher: &impl HasherChip<CHUNK, F>,
-        touched: &Equipartition<F, CHUNK>,
+        hasher: &impl HasherChip<DIGEST_WIDTH, F>,
+        touched: &Equipartition<F, DIGEST_WIDTH>,
         md: &MemoryDimensions,
-    ) -> FinalState<CHUNK, F> {
+    ) -> FinalState<DIGEST_WIDTH, F> {
         let init_root = self.get_node(1);
         let layer: Vec<_> = if !touched.is_empty() {
             touched
                 .iter()
                 .map(|((addr_sp, ptr), v)| {
                     (
-                        (1 << self.height) + md.label_to_index((*addr_sp, *ptr / CHUNK as u32)),
+                        (1 << self.height) + md.label_to_index((*addr_sp, *ptr / DIGEST_WIDTH as u32)),
                         hasher.hash(v),
                     )
                 })
@@ -261,7 +261,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         }
     }
 
-    pub fn top_tree(&self, top_height: usize) -> Vec<[F; CHUNK]> {
+    pub fn top_tree(&self, top_height: usize) -> Vec<[F; DIGEST_WIDTH]> {
         // tree root is at index 1
         (0..(2 << top_height) - 1)
             .map(|i| self.get_node(i + 1))

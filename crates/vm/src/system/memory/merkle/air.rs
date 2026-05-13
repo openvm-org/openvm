@@ -12,27 +12,27 @@ use openvm_stark_backend::{
 use crate::system::memory::merkle::{MemoryDimensions, MemoryMerkleCols, MemoryMerklePvs};
 
 #[derive(Clone, Debug, ColumnsAir)]
-#[columns_via(MemoryMerkleCols<u8, CHUNK>)]
-pub struct MemoryMerkleAir<const CHUNK: usize> {
+#[columns_via(MemoryMerkleCols<u8, DIGEST_WIDTH>)]
+pub struct MemoryMerkleAir<const DIGEST_WIDTH: usize> {
     pub memory_dimensions: MemoryDimensions,
     pub merkle_bus: PermutationCheckBus,
     pub compression_bus: PermutationCheckBus,
 }
 
-impl<const CHUNK: usize, F: Field> PartitionedBaseAir<F> for MemoryMerkleAir<CHUNK> {}
-impl<const CHUNK: usize, F: Field> BaseAir<F> for MemoryMerkleAir<CHUNK> {
+impl<const DIGEST_WIDTH: usize, F: Field> PartitionedBaseAir<F> for MemoryMerkleAir<DIGEST_WIDTH> {}
+impl<const DIGEST_WIDTH: usize, F: Field> BaseAir<F> for MemoryMerkleAir<DIGEST_WIDTH> {
     fn width(&self) -> usize {
-        MemoryMerkleCols::<F, CHUNK>::width()
+        MemoryMerkleCols::<F, DIGEST_WIDTH>::width()
     }
 }
-impl<const CHUNK: usize, F: Field> BaseAirWithPublicValues<F> for MemoryMerkleAir<CHUNK> {
+impl<const DIGEST_WIDTH: usize, F: Field> BaseAirWithPublicValues<F> for MemoryMerkleAir<DIGEST_WIDTH> {
     fn num_public_values(&self) -> usize {
-        MemoryMerklePvs::<F, CHUNK>::width()
+        MemoryMerklePvs::<F, DIGEST_WIDTH>::width()
     }
 }
 
-impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
-    for MemoryMerkleAir<CHUNK>
+impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
+    for MemoryMerkleAir<DIGEST_WIDTH>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -40,8 +40,8 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
             main.row_slice(0).expect("window should have two elements"),
             main.row_slice(1).expect("window should have two elements"),
         );
-        let local: &MemoryMerkleCols<_, CHUNK> = (*local).borrow();
-        let next: &MemoryMerkleCols<_, CHUNK> = (*next).borrow();
+        let local: &MemoryMerkleCols<_, DIGEST_WIDTH> = (*local).borrow();
+        let next: &MemoryMerkleCols<_, DIGEST_WIDTH> = (*next).borrow();
 
         // `expand_direction` should be -1, 0, 1
         builder.assert_eq(
@@ -110,11 +110,11 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
         );
 
         // constrain public values
-        let &MemoryMerklePvs::<_, CHUNK> {
+        let &MemoryMerklePvs::<_, DIGEST_WIDTH> {
             initial_root,
             final_root,
         } = builder.public_values().borrow();
-        for i in 0..CHUNK {
+        for i in 0..DIGEST_WIDTH {
             builder
                 .when_first_row()
                 .assert_eq(local.parent_hash[i], initial_root[i]);
@@ -127,11 +127,11 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
     }
 }
 
-impl<const CHUNK: usize> MemoryMerkleAir<CHUNK> {
+impl<const DIGEST_WIDTH: usize> MemoryMerkleAir<DIGEST_WIDTH> {
     pub fn eval_interactions<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: &MemoryMerkleCols<AB::Var, CHUNK>,
+        local: &MemoryMerkleCols<AB::Var, DIGEST_WIDTH>,
     ) {
         // interaction does not occur for first two rows;
         // for those, parent hash value comes from public values

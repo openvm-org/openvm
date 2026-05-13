@@ -20,36 +20,37 @@ use tracing::instrument;
 
 use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP};
 use crate::{
-    arch::{hasher::Hasher, ADDR_SPACE_OFFSET, DEFAULT_BLOCK_SIZE},
+    arch::{hasher::Hasher, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     primitives::Chip,
     system::memory::{
-        controller::CHUNK, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
+        controller::DIGEST_WIDTH, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
         TimestampedEquipartition,
     },
 };
 
-/// Number of DEFAULT_BLOCK_SIZE blocks per CHUNK (e.g., 1 when DEFAULT_BLOCK_SIZE == CHUNK).
-/// Blocks are on the same row only for Merkle tree hashing (CHUNK bytes at a time).
-/// Memory bus interactions use per-block timestamps.
-pub const BLOCKS_PER_CHUNK: usize = CHUNK / DEFAULT_BLOCK_SIZE;
+/// Number of `BLOCK_FE_WIDTH`-sized bus messages per merkle leaf.
+/// Equal to 1 when `BLOCK_FE_WIDTH == DIGEST_WIDTH`. Blocks are on the same row
+/// only for merkle-tree hashing (`DIGEST_WIDTH` field elements at a time);
+/// memory-bus interactions use per-block timestamps.
+pub const BLOCKS_PER_LEAF: usize = DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
-/// The values describe aligned chunk of memory of size `CHUNK`---the data together with the last
+/// The values describe aligned chunk of memory of size `DIGEST_WIDTH`---the data together with the last
 /// accessed timestamp---in either the initial or final memory state.
 #[repr(C)]
 #[derive(Debug, AlignedBorrow, StructReflection)]
-pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
+pub struct PersistentBoundaryCols<T, const DIGEST_WIDTH: usize> {
     // `expand_direction` =  1 corresponds to initial memory state
     // `expand_direction` = -1 corresponds to final memory state
     // `expand_direction` =  0 corresponds to irrelevant row (all interactions multiplicity 0)
     pub expand_direction: T,
     pub address_space: T,
     pub leaf_label: T,
-    pub values: [T; CHUNK],
-    pub hash: [T; CHUNK],
-    /// Per-block timestamps. Each DEFAULT_BLOCK_SIZE block within the chunk has its own timestamp.
+    pub values: [T; DIGEST_WIDTH],
+    pub hash: [T; DIGEST_WIDTH],
+    /// Per-block timestamps. Each BLOCK_FE_WIDTH block within the chunk has its own timestamp.
     /// For untouched blocks, timestamp stays at 0 (balances: boundary sends at t=0 init, receives
     /// at t=0 final).
-    pub timestamps: [T; BLOCKS_PER_CHUNK],
+    pub timestamps: [T; BLOCKS_PER_LEAF],
 }
 
 /// Imposes the following constraints:
@@ -60,27 +61,27 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
 /// - if `expand_direction` is -1, receives `[1, 0, address_space_label, leaf_label]` from
 ///   `merkle_bus`.
 #[derive(Clone, Debug, ColumnsAir)]
-#[columns_via(PersistentBoundaryCols<u8, CHUNK>)]
-pub struct PersistentBoundaryAir<const CHUNK: usize> {
+#[columns_via(PersistentBoundaryCols<u8, DIGEST_WIDTH>)]
+pub struct PersistentBoundaryAir<const DIGEST_WIDTH: usize> {
     pub memory_bus: MemoryBus,
     pub merkle_bus: PermutationCheckBus,
     pub compression_bus: PermutationCheckBus,
 }
 
-impl<const CHUNK: usize, F> BaseAir<F> for PersistentBoundaryAir<CHUNK> {
+impl<const DIGEST_WIDTH: usize, F> BaseAir<F> for PersistentBoundaryAir<DIGEST_WIDTH> {
     fn width(&self) -> usize {
-        PersistentBoundaryCols::<F, CHUNK>::width()
+        PersistentBoundaryCols::<F, DIGEST_WIDTH>::width()
     }
 }
 
-impl<const CHUNK: usize, F> BaseAirWithPublicValues<F> for PersistentBoundaryAir<CHUNK> {}
-impl<const CHUNK: usize, F> PartitionedBaseAir<F> for PersistentBoundaryAir<CHUNK> {}
+impl<const DIGEST_WIDTH: usize, F> BaseAirWithPublicValues<F> for PersistentBoundaryAir<DIGEST_WIDTH> {}
+impl<const DIGEST_WIDTH: usize, F> PartitionedBaseAir<F> for PersistentBoundaryAir<DIGEST_WIDTH> {}
 
-impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryAir<CHUNK> {
+impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryAir<DIGEST_WIDTH> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0).expect("window should have two elements");
-        let local: &PersistentBoundaryCols<AB::Var, CHUNK> = (*local).borrow();
+        let local: &PersistentBoundaryCols<AB::Var, DIGEST_WIDTH> = (*local).borrow();
 
         // `direction` should be -1, 0, 1
         builder.assert_eq(
@@ -93,7 +94,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
         // with the constraint below.
         let mut when_initial =
             builder.when(local.expand_direction * (local.expand_direction + AB::F::ONE));
-        for i in 0..BLOCKS_PER_CHUNK {
+        for i in 0..BLOCKS_PER_LEAF {
             when_initial.assert_zero(local.timestamps[i]);
         }
 
@@ -113,15 +114,15 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             builder,
             iter::empty()
                 .chain(local.values.map(Into::into))
-                .chain(iter::repeat_n(AB::Expr::ZERO, CHUNK))
+                .chain(iter::repeat_n(AB::Expr::ZERO, DIGEST_WIDTH))
                 .chain(local.hash.map(Into::into)),
             local.expand_direction * local.expand_direction,
         );
 
-        let chunk_size_f = AB::F::from_usize(CHUNK);
-        for block_idx in 0..BLOCKS_PER_CHUNK {
-            let offset = AB::F::from_usize(block_idx * DEFAULT_BLOCK_SIZE);
-            // Split the 1xCHUNK leaf into DEFAULT_BLOCK_SIZE-sized bus messages.
+        let chunk_size_f = AB::F::from_usize(DIGEST_WIDTH);
+        for block_idx in 0..BLOCKS_PER_LEAF {
+            let offset = AB::F::from_usize(block_idx * BLOCK_FE_WIDTH);
+            // Split the 1xCHUNK leaf into BLOCK_FE_WIDTH-sized bus messages.
             // Each block uses its own timestamp - untouched blocks stay at t=0.
             self.memory_bus
                 .send(
@@ -130,7 +131,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
                         local.leaf_label * chunk_size_f + offset,
                     ),
                     local.values
-                        [block_idx * DEFAULT_BLOCK_SIZE..(block_idx + 1) * DEFAULT_BLOCK_SIZE]
+                        [block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
                         .to_vec(),
                     local.timestamps[block_idx],
                 )
@@ -139,36 +140,36 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
     }
 }
 
-pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
-    pub air: PersistentBoundaryAir<CHUNK>,
-    touched_labels: Option<Vec<FinalTouchedLabel<F, CHUNK>>>,
+pub struct PersistentBoundaryChip<F, const DIGEST_WIDTH: usize> {
+    pub air: PersistentBoundaryAir<DIGEST_WIDTH>,
+    touched_labels: Option<Vec<FinalTouchedLabel<F, DIGEST_WIDTH>>>,
     overridden_height: Option<usize>,
 }
 
 #[derive(Debug)]
-pub struct FinalTouchedLabel<F, const CHUNK: usize> {
+pub struct FinalTouchedLabel<F, const DIGEST_WIDTH: usize> {
     address_space: u32,
     label: u32,
-    init_values: [F; CHUNK],
-    final_values: [F; CHUNK],
-    init_hash: [F; CHUNK],
-    final_hash: [F; CHUNK],
-    /// Per-block timestamps. Each DEFAULT_BLOCK_SIZE block has its own timestamp.
-    final_timestamps: [u32; BLOCKS_PER_CHUNK],
+    init_values: [F; DIGEST_WIDTH],
+    final_values: [F; DIGEST_WIDTH],
+    init_hash: [F; DIGEST_WIDTH],
+    final_hash: [F; DIGEST_WIDTH],
+    /// Per-block timestamps. Each BLOCK_FE_WIDTH block has its own timestamp.
+    final_timestamps: [u32; BLOCKS_PER_LEAF],
 }
 
-type BlockInfo<F> = (usize, u32, [F; DEFAULT_BLOCK_SIZE]); // (block_idx, timestamp, values)
+type BlockInfo<F> = (usize, u32, [F; BLOCK_FE_WIDTH]); // (block_idx, timestamp, values)
 type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // (chunk_key, block_info)
 pub(crate) type ChunkedTouchedMemory<F> = Vec<((u32, u32), Vec<BlockInfo<F>>)>;
 
 pub(crate) fn group_touched_memory_by_chunk<F: Copy + Send + Sync>(
-    final_memory: &TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>,
+    final_memory: &TimestampedEquipartition<F, BLOCK_FE_WIDTH>,
 ) -> ChunkedTouchedMemory<F> {
     let mut enriched: Vec<EnrichedEntry<F>> = final_memory
         .par_iter()
         .map(|&((addr_space, ptr), ts_values)| {
-            let chunk_label = ptr / CHUNK as u32;
-            let block_idx = ((ptr % CHUNK as u32) / DEFAULT_BLOCK_SIZE as u32) as usize;
+            let chunk_label = ptr / DIGEST_WIDTH as u32;
+            let block_idx = ((ptr % DIGEST_WIDTH as u32) / BLOCK_FE_WIDTH as u32) as usize;
             let key = (addr_space, chunk_label);
             let block_info = (block_idx, ts_values.timestamp, ts_values.values);
             (key, block_info)
@@ -186,7 +187,7 @@ pub(crate) fn group_touched_memory_by_chunk<F: Copy + Send + Sync>(
         .collect()
 }
 
-impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
+impl<const DIGEST_WIDTH: usize, F: PrimeField32> PersistentBoundaryChip<F, DIGEST_WIDTH> {
     pub fn new(
         memory_bus: MemoryBus,
         merkle_bus: PermutationCheckBus,
@@ -209,35 +210,35 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
 
     /// Finalize the boundary chip with per-block timestamped memory.
     ///
-    /// `final_memory` is at DEFAULT_BLOCK_SIZE granularity, with a single timestamp per entry.
-    /// This function rechunks into CHUNK-sized groups with per-block timestamps. Untouched
+    /// `final_memory` is at BLOCK_FE_WIDTH granularity, with a single timestamp per entry.
+    /// This function rechunks into DIGEST_WIDTH-sized groups with per-block timestamps. Untouched
     /// blocks within a touched chunk get values from initial_memory and timestamp 0.
     #[instrument(name = "boundary_finalize", level = "debug", skip_all)]
     pub(crate) fn finalize<H>(
         &mut self,
         initial_memory: &MemoryImage,
-        // Touched stuff at DEFAULT_BLOCK_SIZE granularity
-        final_memory: &TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>,
+        // Touched stuff at BLOCK_FE_WIDTH granularity
+        final_memory: &TimestampedEquipartition<F, BLOCK_FE_WIDTH>,
         hasher: &H,
     ) where
-        H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
+        H: Hasher<DIGEST_WIDTH, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
         let final_touched_labels: Vec<_> = group_touched_memory_by_chunk(final_memory)
             .into_par_iter()
             .map(|((addr_space, chunk_label), blocks)| {
-                let chunk_ptr = chunk_label * CHUNK as u32;
+                let chunk_ptr = chunk_label * DIGEST_WIDTH as u32;
                 // SAFETY: addr_space from `final_memory` are all in bounds
-                let init_values: [F; CHUNK] = array::from_fn(|i| unsafe {
+                let init_values: [F; DIGEST_WIDTH] = array::from_fn(|i| unsafe {
                     initial_memory.get_f::<F>(addr_space, chunk_ptr + i as u32)
                 });
 
                 let mut final_values = init_values;
-                let mut timestamps = [0u32; BLOCKS_PER_CHUNK];
+                let mut timestamps = [0u32; BLOCKS_PER_LEAF];
 
                 for (block_idx, ts, values) in blocks {
                     timestamps[block_idx] = ts;
                     for (i, &val) in values.iter().enumerate() {
-                        final_values[block_idx * DEFAULT_BLOCK_SIZE + i] = val;
+                        final_values[block_idx * BLOCK_FE_WIDTH + i] = val;
                     }
                 }
 
@@ -262,7 +263,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     }
 }
 
-impl<const CHUNK: usize, RA, SC> Chip<RA, CpuBackend<SC>> for PersistentBoundaryChip<Val<SC>, CHUNK>
+impl<const DIGEST_WIDTH: usize, RA, SC> Chip<RA, CpuBackend<SC>> for PersistentBoundaryChip<Val<SC>, DIGEST_WIDTH>
 where
     SC: StarkProtocolConfig,
     Val<SC>: PrimeField32,
@@ -273,7 +274,7 @@ where
                 .touched_labels
                 .as_ref()
                 .expect("Cannot generate trace before finalization");
-            let width = PersistentBoundaryCols::<Val<SC>, CHUNK>::width();
+            let width = PersistentBoundaryCols::<Val<SC>, DIGEST_WIDTH>::width();
             // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
             let mut height = (2 * touched_labels.len()).next_power_of_two();
             if let Some(mut oh) = self.overridden_height {
@@ -296,7 +297,7 @@ where
                         leaf_label: Val::<SC>::from_u32(touched_label.label),
                         values: touched_label.init_values,
                         hash: touched_label.init_hash,
-                        timestamps: [Val::<SC>::from_u32(INITIAL_TIMESTAMP); BLOCKS_PER_CHUNK],
+                        timestamps: [Val::<SC>::from_u32(INITIAL_TIMESTAMP); BLOCKS_PER_LEAF],
                     };
 
                     *final_row.borrow_mut() = PersistentBoundaryCols {

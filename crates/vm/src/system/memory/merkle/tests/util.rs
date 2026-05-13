@@ -12,18 +12,18 @@ use crate::arch::{
     testing::POSEIDON2_DIRECT_BUS,
 };
 
-pub fn test_hash_sum<const CHUNK: usize, F: Field>(
-    left: [F; CHUNK],
-    right: [F; CHUNK],
-) -> [F; CHUNK] {
+pub fn test_hash_sum<const DIGEST_WIDTH: usize, F: Field>(
+    left: [F; DIGEST_WIDTH],
+    right: [F; DIGEST_WIDTH],
+) -> [F; DIGEST_WIDTH] {
     from_fn(|i| left[i] + right[i])
 }
 
-pub struct HashTestChip<const CHUNK: usize, F> {
-    requests: Mutex<Vec<[[F; CHUNK]; 3]>>,
+pub struct HashTestChip<const DIGEST_WIDTH: usize, F> {
+    requests: Mutex<Vec<[[F; DIGEST_WIDTH]; 3]>>,
 }
 
-impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
+impl<const DIGEST_WIDTH: usize, F: Field> HashTestChip<DIGEST_WIDTH, F> {
     pub fn new() -> Self {
         Self {
             requests: Mutex::new(vec![]),
@@ -31,7 +31,7 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
     }
 
     pub fn air(&self) -> DummyInteractionAir {
-        DummyInteractionAir::new(3 * CHUNK, false, POSEIDON2_DIRECT_BUS)
+        DummyInteractionAir::new(3 * DIGEST_WIDTH, false, POSEIDON2_DIRECT_BUS)
     }
 
     pub fn trace(&self) -> RowMajorMatrix<F> {
@@ -56,14 +56,14 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
     }
 }
 
-impl<const CHUNK: usize, F: Field> Hasher<CHUNK, F> for HashTestChip<CHUNK, F> {
-    fn compress(&self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK] {
+impl<const DIGEST_WIDTH: usize, F: Field> Hasher<DIGEST_WIDTH, F> for HashTestChip<DIGEST_WIDTH, F> {
+    fn compress(&self, left: &[F; DIGEST_WIDTH], right: &[F; DIGEST_WIDTH]) -> [F; DIGEST_WIDTH] {
         test_hash_sum(*left, *right)
     }
 }
 
-impl<const CHUNK: usize, F: Field> HasherChip<CHUNK, F> for HashTestChip<CHUNK, F> {
-    fn compress_and_record(&self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK] {
+impl<const DIGEST_WIDTH: usize, F: Field> HasherChip<DIGEST_WIDTH, F> for HashTestChip<DIGEST_WIDTH, F> {
+    fn compress_and_record(&self, left: &[F; DIGEST_WIDTH], right: &[F; DIGEST_WIDTH]) -> [F; DIGEST_WIDTH] {
         let result = test_hash_sum(*left, *right);
         let mut requests = self.requests.lock().expect("mutex poisoned");
         requests.push([*left, *right, result]);

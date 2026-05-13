@@ -21,19 +21,19 @@ pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: u32 = PUBLIC_VALUES_AS - ADDR_SPAC
 /// Merkle proof for user public values in the memory state.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound(
-    serialize = "F: Serialize, [F; CHUNK]: Serialize",
-    deserialize = "F: Deserialize<'de>, [F; CHUNK]: Deserialize<'de>"
+    serialize = "F: Serialize, [F; DIGEST_WIDTH]: Serialize",
+    deserialize = "F: Deserialize<'de>, [F; DIGEST_WIDTH]: Deserialize<'de>"
 ))]
-pub struct UserPublicValuesProof<const CHUNK: usize, F> {
+pub struct UserPublicValuesProof<const DIGEST_WIDTH: usize, F> {
     /// Proof of the path from the root of public values to the memory root in the format of
     /// sequence of sibling node hashes.
-    pub proof: Vec<[F; CHUNK]>,
-    /// Raw public values. Its length should be (a power of two) * CHUNK.
+    pub proof: Vec<[F; DIGEST_WIDTH]>,
+    /// Raw public values. Its length should be (a power of two) * DIGEST_WIDTH.
     pub public_values: Vec<F>,
     /// Merkle root of public values. The computation of this value follows the same logic of
     /// `MemoryNode`. The merkle tree doesn't pad because the length `public_values` implies the
     /// merkle tree is always a full binary tree.
-    pub public_values_commit: [F; CHUNK],
+    pub public_values_commit: [F; DIGEST_WIDTH],
 }
 
 #[derive(Error, Debug)]
@@ -48,21 +48,21 @@ pub enum UserPublicValuesProofError {
     FinalMemoryRootMismatch,
 }
 
-impl<const CHUNK: usize, F: Field> UserPublicValuesProof<CHUNK, F> {
+impl<const DIGEST_WIDTH: usize, F: Field> UserPublicValuesProof<DIGEST_WIDTH, F> {
     /// Computes the proof of the public values from the final memory state and the Merkle top
     /// sub-tree of address space roots. This function will re-compute the empty merkle roots of
     /// each height `0..=address_height` internally.
     ///
     /// Assumption:
-    /// - `num_public_values` is a power of two * CHUNK. It cannot be 0.
+    /// - `num_public_values` is a power of two * DIGEST_WIDTH. It cannot be 0.
     /// - `top_tree` is 0-indexed and a segment tree of length `2 * 2^addr_space_height - 1`.
     #[instrument(name = "compute_user_public_values_proof", skip_all)]
     pub fn compute(
         memory_dimensions: MemoryDimensions,
         num_public_values: usize,
-        hasher: &(impl Hasher<CHUNK, F> + Sync),
+        hasher: &(impl Hasher<DIGEST_WIDTH, F> + Sync),
         final_memory: &MemoryImage,
-        top_tree: &[[F; CHUNK]],
+        top_tree: &[[F; DIGEST_WIDTH]],
     ) -> Self {
         let public_values = extract_public_values(num_public_values, final_memory)
             .iter()
@@ -84,9 +84,9 @@ impl<const CHUNK: usize, F: Field> UserPublicValuesProof<CHUNK, F> {
 
     pub fn verify(
         &self,
-        hasher: &impl Hasher<CHUNK, F>,
+        hasher: &impl Hasher<DIGEST_WIDTH, F>,
         memory_dimensions: MemoryDimensions,
-        final_memory_root: [F; CHUNK],
+        final_memory_root: [F; DIGEST_WIDTH],
     ) -> Result<(), UserPublicValuesProofError> {
         // Verify user public values Merkle proof:
         // 0. Get correct indices for Merkle proof based on memory dimensions
@@ -97,10 +97,10 @@ impl<const CHUNK: usize, F: Field> UserPublicValuesProof<CHUNK, F> {
         let pv_as = PUBLIC_VALUES_AS;
         let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
         let pvs = &self.public_values;
-        if !pvs.len().is_multiple_of(CHUNK) || !(pvs.len() / CHUNK).is_power_of_two() {
+        if !pvs.len().is_multiple_of(DIGEST_WIDTH) || !(pvs.len() / DIGEST_WIDTH).is_power_of_two() {
             return Err(UserPublicValuesProofError::UnexpectedLength(pvs.len()));
         }
-        let pv_height = log2_strict_usize(pvs.len() / CHUNK);
+        let pv_height = log2_strict_usize(pvs.len() / DIGEST_WIDTH);
         let proof_len = memory_dimensions.overall_height() - pv_height;
         let idx_prefix = pv_start_idx >> pv_height;
         // 1.
@@ -129,7 +129,7 @@ impl<const CHUNK: usize, F: Field> UserPublicValuesProof<CHUNK, F> {
         Ok(())
     }
 
-    pub fn encode<SC: EncodableConfig<F = F, Digest = [F; CHUNK]>, W: Write>(
+    pub fn encode<SC: EncodableConfig<F = F, Digest = [F; DIGEST_WIDTH]>, W: Write>(
         &self,
         writer: &mut W,
     ) -> io::Result<()> {
@@ -139,7 +139,7 @@ impl<const CHUNK: usize, F: Field> UserPublicValuesProof<CHUNK, F> {
         Ok(())
     }
 
-    pub fn decode<SC: DecodableConfig<F = F, Digest = [F; CHUNK]>, R: io::Read>(
+    pub fn decode<SC: DecodableConfig<F = F, Digest = [F; DIGEST_WIDTH]>, R: io::Read>(
         reader: &mut R,
     ) -> io::Result<Self> {
         let proof = SC::decode_digest_vec(reader)?;
@@ -153,21 +153,21 @@ impl<const CHUNK: usize, F: Field> UserPublicValuesProof<CHUNK, F> {
     }
 }
 
-fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: Field>(
+fn compute_merkle_proof_to_user_public_values_root<const DIGEST_WIDTH: usize, F: Field>(
     memory_dimensions: MemoryDimensions,
     num_public_values: usize,
-    hasher: &(impl Hasher<CHUNK, F> + Sync),
-    top_tree: &[[F; CHUNK]],
-) -> Vec<[F; CHUNK]> {
+    hasher: &(impl Hasher<DIGEST_WIDTH, F> + Sync),
+    top_tree: &[[F; DIGEST_WIDTH]],
+) -> Vec<[F; DIGEST_WIDTH]> {
     assert_eq!(
-        num_public_values % CHUNK,
+        num_public_values % DIGEST_WIDTH,
         0,
-        "num_public_values must be a multiple of memory chunk {CHUNK}"
+        "num_public_values must be a multiple of memory chunk {DIGEST_WIDTH}"
     );
     let address_height = memory_dimensions.address_height;
     let addr_space_height = memory_dimensions.addr_space_height;
     assert_eq!(top_tree.len(), (2 << addr_space_height) - 1);
-    let num_pv_chunks: usize = num_public_values / CHUNK;
+    let num_pv_chunks: usize = num_public_values / DIGEST_WIDTH;
     // This enforces the number of public values cannot be 0.
     assert!(
         num_pv_chunks.is_power_of_two(),
@@ -179,7 +179,7 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: Field>
     let mut cur_node_idx = 1; // root
     let mut proof = Vec::with_capacity(addr_space_height + address_leading_zeros);
     let zero_nodes: Vec<_> = (0..address_height)
-        .scan(hasher.hash(&[F::ZERO; CHUNK]), |acc, _| {
+        .scan(hasher.hash(&[F::ZERO; DIGEST_WIDTH]), |acc, _| {
             let result = Some(*acc);
             *acc = hasher.compress(acc, acc);
             result
@@ -236,7 +236,7 @@ mod tests {
         system::memory::{
             merkle::{public_values::PUBLIC_VALUES_AS, tree::MerkleTree},
             online::GuestMemory,
-            AddressMap, CHUNK,
+            AddressMap, DIGEST_WIDTH,
         },
     };
 
@@ -263,7 +263,7 @@ mod tests {
         let hasher = vm_poseidon2_hasher();
         let tree = MerkleTree::from_memory(&memory.memory, &memory_dimensions, &hasher);
         let top_tree = tree.top_tree(addr_space_height);
-        let pv_proof = UserPublicValuesProof::<{ CHUNK }, F>::compute(
+        let pv_proof = UserPublicValuesProof::<{ DIGEST_WIDTH }, F>::compute(
             memory_dimensions,
             num_public_values,
             &hasher,

@@ -9,7 +9,7 @@ use openvm_stark_backend::{
 use tracing::instrument;
 
 use crate::{
-    arch::{AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryConfig, DEFAULT_BLOCK_SIZE},
+    arch::{AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryConfig, BLOCK_FE_WIDTH},
     system::{memory::TimestampedValues, TouchedMemory},
 };
 
@@ -374,7 +374,7 @@ pub struct TracingMemory {
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     #[getset(get = "pub")]
     pub data: GuestMemory,
-    /// Maps `(addr_space, ptr / DEFAULT_BLOCK_SIZE)` to the latest access timestamp.
+    /// Maps `(addr_space, ptr / BLOCK_FE_WIDTH)` to the latest access timestamp.
     /// A value of 0 means the 4-cell touched-memory slot has never been accessed.
     pub(super) meta: Vec<PagedVec<u32, PAGE_SIZE>>,
 }
@@ -391,7 +391,7 @@ impl TracingMemory {
             .memory
             .config
             .iter()
-            .map(|config| PagedVec::new(config.num_cells.div_ceil(DEFAULT_BLOCK_SIZE)))
+            .map(|config| PagedVec::new(config.num_cells.div_ceil(BLOCK_FE_WIDTH)))
             .collect();
         Self {
             data: image,
@@ -405,8 +405,8 @@ impl TracingMemory {
         debug_assert_ne!(addr_space, 0);
         debug_assert!(block_size.is_power_of_two());
         debug_assert_eq!(
-            block_size, DEFAULT_BLOCK_SIZE,
-            "TracingMemory only supports {DEFAULT_BLOCK_SIZE}-cell accesses; got {block_size}"
+            block_size, BLOCK_FE_WIDTH,
+            "TracingMemory only supports {BLOCK_FE_WIDTH}-cell accesses; got {block_size}"
         );
         assert_eq!(
             ptr % block_size as u32,
@@ -416,10 +416,10 @@ impl TracingMemory {
     }
 
     /// Returns the previous access timestamp and updates the metadata slot.
-    /// Block size is always `DEFAULT_BLOCK_SIZE`, so this is a single-slot read/write.
+    /// Block size is always `BLOCK_FE_WIDTH`, so this is a single-slot read/write.
     #[inline(always)]
     fn prev_access_time(&mut self, address_space: usize, pointer: usize) -> u32 {
-        let idx = pointer / DEFAULT_BLOCK_SIZE;
+        let idx = pointer / BLOCK_FE_WIDTH;
         // SAFETY: address_space is validated during instruction decoding
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let prev = meta_page.get(idx);
@@ -433,7 +433,7 @@ impl TracingMemory {
     /// # Safety
     /// - `T` must be `repr(C)` or `repr(transparent)` and match the cell type for `address_space`.
     /// - `address_space` must be valid.
-    /// - `BLOCK_SIZE` is measured in memory cells and is tracked in fixed `DEFAULT_BLOCK_SIZE`
+    /// - `BLOCK_SIZE` is measured in memory cells and is tracked in fixed `BLOCK_FE_WIDTH`
     ///   touched-memory slots.
     #[inline(always)]
     pub unsafe fn read<T, const BLOCK_SIZE: usize>(
@@ -457,7 +457,7 @@ impl TracingMemory {
     /// # Safety
     /// - `T` must be `repr(C)` or `repr(transparent)` and match the cell type for `address_space`.
     /// - `address_space` must be valid.
-    /// - `BLOCK_SIZE` is measured in memory cells and is tracked in fixed `DEFAULT_BLOCK_SIZE`
+    /// - `BLOCK_SIZE` is measured in memory cells and is tracked in fixed `BLOCK_FE_WIDTH`
     ///   touched-memory slots.
     #[inline(always)]
     pub unsafe fn write<T, const BLOCK_SIZE: usize>(
@@ -508,7 +508,7 @@ impl TracingMemory {
                     .par_iter()
                     .filter_map(move |(idx, timestamp)| {
                         if timestamp > INITIAL_TIMESTAMP {
-                            let ptr = idx as u32 * DEFAULT_BLOCK_SIZE as u32;
+                            let ptr = idx as u32 * BLOCK_FE_WIDTH as u32;
                             Some(((addr_space as u32, ptr), timestamp))
                         } else {
                             None

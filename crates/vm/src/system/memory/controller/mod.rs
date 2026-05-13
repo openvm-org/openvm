@@ -11,18 +11,17 @@ use openvm_circuit_primitives::{
 };
 use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
-    interaction::PermutationCheckBus, p3_field::PrimeField32, p3_util::log2_strict_usize,
-    prover::AirProvingContext, StarkProtocolConfig,
+    interaction::PermutationCheckBus, p3_field::PrimeField32, prover::AirProvingContext,
+    StarkProtocolConfig,
 };
 use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
 use super::AddressMap;
 use crate::{
-    arch::{MemoryConfig, VmField, DEFAULT_BLOCK_SIZE},
+    arch::{MemoryConfig, VmField, BLOCK_FE_WIDTH, BUS_PTR_SCALE},
     system::{
         memory::{
-            dimensions::MemoryDimensions,
             merkle::MemoryMerkleChip,
             offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
             persistent::{group_touched_memory_by_chunk, PersistentBoundaryChip},
@@ -35,7 +34,17 @@ use crate::{
 pub mod dimensions;
 pub mod interface;
 
-pub const CHUNK: usize = 8;
+/// Field elements per merkle leaf and per Poseidon2 half. Tied to
+/// `POSEIDON2_WIDTH = 2 * DIGEST_WIDTH = 16`.
+pub const DIGEST_WIDTH: usize = 8;
+
+/// Bus-pointer delta between consecutive merkle leaves.
+pub const BUS_LEAF_STRIDE: usize = BUS_PTR_SCALE * DIGEST_WIDTH;
+
+const _: () = assert!(
+    DIGEST_WIDTH % BLOCK_FE_WIDTH == 0,
+    "DIGEST_WIDTH must be divisible by BLOCK_FE_WIDTH so BLOCKS_PER_LEAF is integer-valued"
+);
 
 /// The offset of the Merkle AIR in AIRs of MemoryController.
 pub const MERKLE_AIR_OFFSET: usize = 1;
@@ -103,10 +112,7 @@ impl<F: VmField> MemoryController<F> {
         compression_bus: PermutationCheckBus,
         hasher_chip: Arc<Poseidon2PeripheryChip<F>>,
     ) -> Self {
-        let memory_dims = MemoryDimensions {
-            addr_space_height: mem_config.addr_space_height,
-            address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
-        };
+        let memory_dims = mem_config.memory_dimensions();
         let range_checker_bus = range_checker.bus();
         let interface_chip = MemoryInterface {
             boundary_chip: PersistentBoundaryChip::new(memory_bus, merkle_bus, compression_bus),
@@ -181,19 +187,19 @@ impl<F: VmField> MemoryController<F> {
         let hasher = self.hasher_chip.as_ref().unwrap();
         boundary_chip.finalize(initial_memory, &final_memory, hasher.as_ref());
 
-        // Rechunk DEFAULT_BLOCK_SIZE blocks into CHUNK-sized blocks for merkle_chip
+        // Rechunk BLOCK_FE_WIDTH blocks into DIGEST_WIDTH-sized blocks for merkle_chip
         // Note: Equipartition key is (addr_space, ptr) where ptr is the starting pointer
-        let final_memory_values: Equipartition<F, CHUNK> =
+        let final_memory_values: Equipartition<F, DIGEST_WIDTH> =
             group_touched_memory_by_chunk(&final_memory)
                 .into_iter()
                 .map(|((addr_space, chunk_label), blocks)| {
-                    let chunk_ptr = chunk_label * CHUNK as u32;
+                    let chunk_ptr = chunk_label * DIGEST_WIDTH as u32;
                     let mut values = std::array::from_fn(|i| unsafe {
                         initial_memory.get_f::<F>(addr_space, chunk_ptr + i as u32)
                     });
                     for (block_idx, _, block_values) in blocks {
                         for (i, val) in block_values.into_iter().enumerate() {
-                            values[block_idx * DEFAULT_BLOCK_SIZE + i] = val;
+                            values[block_idx * BLOCK_FE_WIDTH + i] = val;
                         }
                     }
                     ((addr_space, chunk_ptr), values)
