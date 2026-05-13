@@ -4,11 +4,17 @@ use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_lift::ExtensionRegistry;
 
-use super::{bridge::map_rvr_execute_error, execute::execute, RvrCompiled};
+use super::{bridge::map_rvr_execute_error, execute::execute, state::PureState, RvrCompiled};
 use crate::{
     arch::{ExecutionError, Streams, SystemConfig, VmState},
     system::memory::online::GuestMemory,
 };
+
+/// `suspended` is `false` for unlimited runs.
+pub struct RvrPureResult {
+    pub state: PureState,
+    pub suspended: bool,
+}
 
 pub struct RvrPureInstance<F: PrimeField32> {
     pub(crate) system_config: SystemConfig,

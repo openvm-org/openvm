@@ -22,13 +22,19 @@ use super::{
         metered_periodic_check, MeteredConfig, MeteredTracerData, RvrMeteredResult,
         SegmentationState, NO_LAST_PAGE,
     },
-    metered_cost::{prepare_metered_cost, MeteredCostConfig, MeteredCostData, PureTracerData},
+    metered_cost::{
+        prepare_metered_cost, MeteredCostConfig, MeteredCostData, PureTracerData,
+        RvrMeteredCostResult,
+    },
+    pure::RvrPureResult,
     state::{
-        init_rvr_state, init_rvr_state_with_metered, init_rvr_state_with_metered_cost,
-        MeteredCostState, PureState, TracerPtr,
+        init_rvr_state, init_rvr_state_with_metered, init_rvr_state_with_metered_cost, TracerPtr,
     },
 };
 use crate::{arch::VmState, system::memory::online::GuestMemory};
+
+type RegisterFn = unsafe extern "C" fn(*const OpenVmHostCallbacks);
+type ExecuteFn = unsafe extern "C" fn(*mut c_void);
 
 /// Error during execution.
 #[derive(Debug, thiserror::Error)]
@@ -43,19 +49,6 @@ pub enum ExecuteError {
     MemoryAlloc(#[from] MemoryError),
     #[error("extension host callback registration failed: {0}")]
     ExtensionRegistration(#[from] ExtensionError),
-}
-
-/// `suspended` is `false` for unlimited runs.
-pub struct RvrPureResult {
-    pub state: PureState,
-    pub suspended: bool,
-}
-
-/// `suspended` is `false` for unlimited runs.
-pub struct RvrMeteredCostResult {
-    pub state: MeteredCostState,
-    pub cost: u64,
-    pub suspended: bool,
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -98,7 +91,6 @@ pub unsafe fn register_openvm_callbacks(
     compiled: &RvrCompiled,
     callbacks: &OpenVmHostCallbacks,
 ) -> Result<(), ExecuteError> {
-    type RegisterFn = unsafe extern "C" fn(*const OpenVmHostCallbacks);
     let register_fn: RegisterFn = unsafe {
         let sym = compiled
             .lib
@@ -119,7 +111,6 @@ pub unsafe fn rv_execute(
     compiled: &RvrCompiled,
     state_ptr: *mut c_void,
 ) -> Result<(), ExecuteError> {
-    type ExecuteFn = unsafe extern "C" fn(*mut c_void);
     let execute_fn: ExecuteFn = unsafe {
         let sym = compiled
             .lib
@@ -175,9 +166,11 @@ where
 {
     let mut io_state = build_io_state_borrowed(vm_state);
     let callbacks = build_callbacks(&mut io_state);
-    unsafe { register_openvm_callbacks(compiled, &callbacks) }?;
-    unsafe { extensions.register_host_callbacks(&compiled.lib) }?;
-    unsafe { rv_execute(compiled, state.as_void_ptr()) }?;
+    unsafe {
+        register_openvm_callbacks(compiled, &callbacks)?;
+        extensions.register_host_callbacks(&compiled.lib)?;
+        rv_execute(compiled, state.as_void_ptr())?;
+    }
 
     let status = state.execution_status();
     let success = match status {
@@ -205,14 +198,14 @@ where
 
 /// Execute a VmExe using a compiled rvr shared library against `vm_state`.
 ///
-/// If `limit` is `Some(n)`, the suspender is armed at `n` instructions and a
-/// `Suspended` outcome is accepted as success; otherwise only `Terminated`
+/// If `num_insns` is `Some(n)`, the suspender is armed at `n` instructions and
+/// a `Suspended` outcome is accepted as success; otherwise only `Terminated`
 /// (with exit-code 0) succeeds.
 pub fn execute<F: PrimeField32>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
     vm_state: &mut VmState<F, GuestMemory>,
-    limit: Option<u64>,
+    num_insns: Option<u64>,
 ) -> Result<RvrPureResult, ExecuteError> {
     let pc = vm_state.pc();
     let initial_regs = read_rv32_registers(vm_state);
@@ -221,7 +214,7 @@ pub fn execute<F: PrimeField32>(
     let mut state = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
     state.tracer = TracerPtr(&mut tracer_data);
-    if let Some(n) = limit {
+    if let Some(n) = num_insns {
         state.suspender.set_target(n);
     }
 
@@ -230,7 +223,7 @@ pub fn execute<F: PrimeField32>(
         extensions,
         vm_state,
         &mut state,
-        limit.is_some(),
+        num_insns.is_some(),
         "execution failed",
     )?;
     Ok(RvrPureResult {
@@ -239,14 +232,14 @@ pub fn execute<F: PrimeField32>(
     })
 }
 
-/// Execute a VmExe with metered cost tracking. If `limit` is `Some(n)`, the
+/// Execute a VmExe with metered cost tracking. If `num_insns` is `Some(n)`, the
 /// suspender is armed at `n` instructions and `Suspended` counts as success.
 pub fn execute_metered_cost<F: PrimeField32>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
     vm_state: &mut VmState<F, GuestMemory>,
     metered_cost_config: MeteredCostConfig,
-    limit: Option<u64>,
+    num_insns: Option<u64>,
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
     let pc = vm_state.pc();
     let initial_regs = read_rv32_registers(vm_state);
@@ -259,7 +252,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
     let widths_u64 = prepare_metered_cost(&metered_cost_config);
     state.tracer.chip_widths = widths_u64.as_ptr();
     state.tracer.cost = 0;
-    if let Some(n) = limit {
+    if let Some(n) = num_insns {
         state.suspender.set_target(n);
     }
 
@@ -268,7 +261,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
         extensions,
         vm_state,
         &mut state,
-        limit.is_some(),
+        num_insns.is_some(),
         "metered-cost execution failed",
     )?;
     let cost = state.tracer.cost;

@@ -10,7 +10,7 @@ use super::{
     bridge::{map_rvr_compile_error, map_rvr_execute_error},
     compile::ChipMapping,
     compile_metered_cost, compile_metered_cost_with_extensions, execute_metered_cost,
-    state::{TracerPayload, TracerPtr},
+    state::{MeteredCostState, TracerPayload, TracerPtr},
 };
 use crate::{
     arch::{
@@ -19,6 +19,13 @@ use crate::{
     },
     system::memory::online::GuestMemory,
 };
+
+/// `suspended` is `false` for unlimited runs.
+pub struct RvrMeteredCostResult {
+    pub state: MeteredCostState,
+    pub cost: u64,
+    pub suspended: bool,
+}
 
 /// Configuration for mapping PCs and memory operations to metering costs.
 pub struct MeteredCostConfig {

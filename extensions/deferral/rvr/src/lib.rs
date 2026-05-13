@@ -205,8 +205,8 @@ impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
 
     fn c_sources(&self) -> Vec<(&str, &str)> {
         vec![(
-            "ext_deferral_lookup.c",
-            include_str!("../c/ext_deferral_lookup.c"),
+            "rvr_ext_deferral.c",
+            include_str!("../c/rvr_ext_deferral.c"),
         )]
     }
 
@@ -218,7 +218,6 @@ impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
         &self,
         lib: &libloading::Library,
     ) -> Result<(), ExtensionError> {
-        type RegisterFn = unsafe extern "C" fn(*const DeferralHostCallbacks);
         let register_fn: RegisterFn = unsafe {
             let sym = lib
                 .get::<RegisterFn>(b"register_deferral_callbacks")
@@ -238,7 +237,9 @@ impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
 
 // ── Host callbacks ──────────────────────────────────────────────────────────
 
-/// Must match the C `DeferralHostCallbacks` layout in `ext_deferral_lookup.c`.
+type RegisterFn = unsafe extern "C" fn(*const DeferralHostCallbacks);
+
+/// Must match the C `DeferralHostCallbacks` layout in `rvr_ext_deferral.c`.
 #[repr(C)]
 pub struct DeferralHostCallbacks {
     pub ctx: *mut c_void,

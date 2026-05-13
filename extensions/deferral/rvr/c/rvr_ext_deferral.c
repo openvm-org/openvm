@@ -1,5 +1,5 @@
 /*
- * ext_deferral_lookup.c — Host callback bridge for the deferral extension.
+ * rvr_ext_deferral.c — Host callback bridge for the deferral extension.
  *
  * Thin stubs that forward ext_deferral_*_lookup calls through function
  * pointers to Rust handlers registered via register_deferral_callbacks().

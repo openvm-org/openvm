@@ -8,9 +8,9 @@
 use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
 use rvr_state::NUM_REGS_I;
 
-use super::ExecuteError;
+use super::{compile::CompileError, ExecuteError};
 use crate::{
-    arch::{ExecutionError, VmState},
+    arch::{ExecutionError, StaticProgramError, VmState},
     system::memory::{
         merkle::public_values::PUBLIC_VALUES_AS,
         online::{GuestMemory, LinearMemory},
@@ -53,8 +53,8 @@ pub fn map_rvr_execute_error(err: ExecuteError) -> ExecutionError {
     }
 }
 
-pub fn map_rvr_compile_error(err: super::compile::CompileError) -> crate::arch::StaticProgramError {
-    crate::arch::StaticProgramError::FailToGenerateDynamicLibrary {
+pub fn map_rvr_compile_error(err: CompileError) -> StaticProgramError {
+    StaticProgramError::FailToGenerateDynamicLibrary {
         err: err.to_string(),
     }
 }

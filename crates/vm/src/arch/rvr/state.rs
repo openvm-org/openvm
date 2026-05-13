@@ -14,6 +14,10 @@ use super::{
 };
 use crate::{arch::VmState, system::memory::online::GuestMemory};
 
+pub type PureState = RvState<Rv32, PureTracer, InstretSuspender>;
+pub type MeteredCostState = RvState<Rv32, MeteredCostMeter, InstretSuspender>;
+pub type MeteredState = RvState<Rv32, MeteredTracer, InstretSuspender>;
+
 /// A payload type that can sit behind a [`TracerPtr`]. The const `KIND`
 /// matches the tracer-kind ABI the rvr-generated C code expects.
 pub trait TracerPayload {
@@ -64,10 +68,6 @@ impl<T> std::ops::DerefMut for TracerPtr<T> {
         unsafe { &mut *self.0 }
     }
 }
-
-pub type PureState = RvState<Rv32, PureTracer, InstretSuspender>;
-pub type MeteredCostState = RvState<Rv32, MeteredCostMeter, InstretSuspender>;
-pub type MeteredState = RvState<Rv32, MeteredTracer, InstretSuspender>;
 
 /// Build a `PureState` whose memory pointer aliases `vm_state`'s
 /// `RV32_MEMORY_AS` segment, with pc set to `pc`. Suspender is disabled by
