@@ -13,7 +13,7 @@ use crate::{
     adapters::{
         Rv64BaseAluWAdapterCols, Rv64BaseAluWAdapterRecord, RV64_CELL_BITS, RV64_WORD_NUM_LIMBS,
     },
-    cuda_abi::alu_w_cuda::tracegen,
+    cuda_abi::add_sub_w_cuda::tracegen,
     AddSubCoreCols, AddSubCoreRecord,
 };
 
