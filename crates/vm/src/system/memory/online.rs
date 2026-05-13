@@ -364,6 +364,92 @@ impl GuestMemory {
             self.memory.config[addr_space as usize].layout.size()
         );
     }
+
+    // ---- Byte-view abstraction ---------------------------------------------
+    //
+    // Byte-view methods take `byte_ptr` (a byte address into the AS's storage
+    // backing) and return raw bytes regardless of the AS's cell type. Today
+    // when `cell_size = 1`, `byte_ptr` coincides with the cell-indexed pointer
+    // used by `read::<u8, N>`. After the cell-type flip to `U16`, callers that
+    // need byte access (LoadStore, Hintstore, ELF loader, ISA-level byte ops)
+    // continue to use these methods unchanged, and the storage backing is
+    // still a `Vec<u8>`, so reading N raw bytes at `byte_ptr` returns the
+    // packed-u16 byte representation correctly.
+    //
+    // Asserts that the access is aligned to and divisible by the cell size,
+    // since the byte-view does not support sub-cell access or
+    // read-modify-write.
+
+    /// Read `N` bytes starting at `byte_ptr` within `addr_space`. Returns
+    /// the raw byte representation regardless of cell type.
+    ///
+    /// # Safety
+    /// `byte_ptr` must be aligned to the AS's `cell_size`, and `N` must be
+    /// divisible by `cell_size`. The full byte range must lie within the
+    /// AS's storage.
+    #[inline(always)]
+    pub unsafe fn read_bytes<const N: usize>(
+        &self,
+        addr_space: u32,
+        byte_ptr: u32,
+    ) -> [u8; N] {
+        self.debug_assert_byte_view_alignment(addr_space, byte_ptr, N);
+        self.memory
+            .get_memory()
+            .get_unchecked(addr_space as usize)
+            .read(byte_ptr as usize)
+    }
+
+    /// Write `N` bytes starting at `byte_ptr` within `addr_space`. Raw byte
+    /// write regardless of cell type.
+    ///
+    /// # Safety
+    /// See [`GuestMemory::read_bytes`].
+    #[inline(always)]
+    pub unsafe fn write_bytes<const N: usize>(
+        &mut self,
+        addr_space: u32,
+        byte_ptr: u32,
+        values: [u8; N],
+    ) {
+        self.debug_assert_byte_view_alignment(addr_space, byte_ptr, N);
+        self.memory
+            .get_memory_mut()
+            .get_unchecked_mut(addr_space as usize)
+            .write(byte_ptr as usize, values);
+    }
+
+    /// Non-traced single-byte extraction for tests / SDK / public-values /
+    /// state-comparison utilities that need to read individual bytes from
+    /// packed-cell storage without creating any memory-bus record. Does NOT
+    /// participate in tracegen.
+    ///
+    /// # Safety
+    /// `byte_ptr` must be within the AS's storage.
+    #[inline(always)]
+    pub unsafe fn extract_byte(&self, addr_space: u32, byte_ptr: u32) -> u8 {
+        let cell: [u8; 1] = self
+            .memory
+            .get_memory()
+            .get_unchecked(addr_space as usize)
+            .read(byte_ptr as usize);
+        cell[0]
+    }
+
+    #[inline(always)]
+    fn debug_assert_byte_view_alignment(&self, addr_space: u32, byte_ptr: u32, n: usize) {
+        let cell_size = self.memory.config[addr_space as usize].layout.size();
+        debug_assert_eq!(
+            (byte_ptr as usize) % cell_size,
+            0,
+            "byte_ptr={byte_ptr} not aligned to cell_size {cell_size}"
+        );
+        debug_assert_eq!(
+            n % cell_size,
+            0,
+            "N={n} not divisible by cell_size {cell_size}"
+        );
+    }
 }
 
 /// Online memory that stores additional information for trace generation purposes.
@@ -476,6 +562,82 @@ impl TracingMemory {
         self.timestamp += 1;
 
         (t_prev, values_prev)
+    }
+
+    // ---- Traced byte-view ---------------------------------------------------
+    //
+    // These methods are the traced counterparts of `GuestMemory::read_bytes` /
+    // `write_bytes`. They create a memory-bus record (timestamp update + meta
+    // slot tracking) at the `MEMORY_BLOCK_BYTES`-aligned block containing the
+    // access. Today (cell_size = 1 everywhere) these are equivalent to
+    // `read::<u8, N>` / `write::<u8, N>` with N = MEMORY_BLOCK_BYTES. After
+    // the cell-type flip in commit 6, the slot index uses the byte-aware
+    // formula (`byte_ptr / MEMORY_BLOCK_BYTES`) while underlying storage is
+    // u16-celled.
+
+    /// Atomic byte-view read. `byte_ptr` is a byte address into the AS's
+    /// storage backing; returns the raw `N` bytes.
+    #[inline(always)]
+    pub unsafe fn read_bytes<const N: usize>(
+        &mut self,
+        address_space: u32,
+        byte_ptr: u32,
+    ) -> (u32, [u8; N]) {
+        self.assert_valid_byte_view_access(N, address_space, byte_ptr);
+        let values = self.data.read_bytes::<N>(address_space, byte_ptr);
+        let t_prev = self.byte_view_prev_access_time(address_space as usize, byte_ptr as usize);
+        self.timestamp += 1;
+
+        (t_prev, values)
+    }
+
+    /// Atomic byte-view write. See [`TracingMemory::read_bytes`].
+    #[inline(always)]
+    pub unsafe fn write_bytes<const N: usize>(
+        &mut self,
+        address_space: u32,
+        byte_ptr: u32,
+        values: [u8; N],
+    ) -> (u32, [u8; N]) {
+        self.assert_valid_byte_view_access(N, address_space, byte_ptr);
+        let values_prev = self.data.read_bytes::<N>(address_space, byte_ptr);
+        let t_prev = self.byte_view_prev_access_time(address_space as usize, byte_ptr as usize);
+        self.data.write_bytes::<N>(address_space, byte_ptr, values);
+        self.timestamp += 1;
+
+        (t_prev, values_prev)
+    }
+
+    /// Byte-view metadata slot lookup. The slot is at the
+    /// `MEMORY_BLOCK_BYTES`-aligned block containing `byte_ptr`. This formula
+    /// matches `prev_access_time` today (since `MEMORY_BLOCK_BYTES = BLOCK_FE_WIDTH`
+    /// for cell_size = 1) and remains correct after the cell-type flip when
+    /// the relationship becomes `MEMORY_BLOCK_BYTES = BLOCK_FE_WIDTH * cell_size`.
+    #[inline(always)]
+    fn byte_view_prev_access_time(&mut self, address_space: usize, byte_ptr: usize) -> u32 {
+        let cell_size = self.data.memory.config[address_space].layout.size();
+        let idx = byte_ptr / (BLOCK_FE_WIDTH * cell_size);
+        // SAFETY: address_space is validated during instruction decoding
+        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
+        let prev = meta_page.get(idx);
+        meta_page.set(idx, self.timestamp);
+        prev
+    }
+
+    #[inline(always)]
+    fn assert_valid_byte_view_access(&self, n_bytes: usize, addr_space: u32, byte_ptr: u32) {
+        debug_assert_ne!(addr_space, 0);
+        let cell_size = self.data.memory.config[addr_space as usize].layout.size();
+        let block_bytes = BLOCK_FE_WIDTH * cell_size;
+        debug_assert_eq!(
+            n_bytes, block_bytes,
+            "TracingMemory byte-view supports only {block_bytes}-byte (= BLOCK_FE_WIDTH * cell_size) accesses; got {n_bytes}"
+        );
+        debug_assert_eq!(
+            byte_ptr as usize % block_bytes,
+            0,
+            "byte_ptr={byte_ptr} not aligned to block_bytes {block_bytes}"
+        );
     }
 
     pub fn increment_timestamp(&mut self) {
