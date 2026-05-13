@@ -161,10 +161,10 @@ pub fn timed_read<const N: usize>(
     );
 
     // SAFETY:
-    // - Address spaces RV64_REGISTER_AS / RV64_MEMORY_AS / PUBLIC_VALUES_AS are
-    //   u16-celled post Stage 1.6; passing `T = u8` routes through the byte-view
-    //   dispatch on `TracingMemory::read`, which requires `N = MEMORY_BLOCK_BYTES`.
-    //   `ptr` is the byte pointer (= bus pointer for u16 ASes).
+    // - Address spaces RV64_REGISTER_AS / RV64_MEMORY_AS / PUBLIC_VALUES_AS are u16-celled post
+    //   Stage 1.6; passing `T = u8` routes through the byte-view dispatch on `TracingMemory::read`,
+    //   which requires `N = MEMORY_BLOCK_BYTES`. `ptr` is the byte pointer (= bus pointer for u16
+    //   ASes).
     #[cfg(feature = "legacy-v1-3-mem-align")]
     if address_space == RV64_MEMORY_AS {
         unsafe { memory.read::<u8, N>(address_space, ptr) }
