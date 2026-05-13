@@ -52,8 +52,7 @@ use crate::{
             POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
         },
         Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState, MatrixRecordArena,
-        MemoryConfig, PreflightExecutor, Streams, VmStateMut, BLOCK_FE_WIDTH, BUS_PTR_SCALE,
-        MEMORY_BLOCK_BYTES,
+        MemoryConfig, PreflightExecutor, Streams, VmStateMut, BUS_PTR_SCALE, MEMORY_BLOCK_BYTES,
     },
     system::{
         cuda::poseidon2::Poseidon2PeripheryChipGPU,
