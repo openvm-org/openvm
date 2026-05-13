@@ -90,7 +90,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
                 .eval(builder, is_valid);
         }
         // u8-range-check the non-MSB buffer_ptr_limbs (read from rs1 register).
-        // After the bus pack (commit 6) pairs share a packed field element; without
+        // After the bus pack pairs share a packed field element; without
         // local u8 checks the prover could re-split values between adjacent limbs.
         // The MSB already has a tighter range via the limb_shift check above; we
         // pair limb[2] with limb[3] here for an additional (redundant on the MSB

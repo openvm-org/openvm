@@ -48,13 +48,12 @@ impl MemoryBridge {
     /// Prepare a logical memory read operation.
     ///
     /// **Legacy API (transitional, will be removed in Stage 2).** Used by
-    /// every chip that today takes `[T; 8]` data arrays. In commit 6 this
-    /// path packs `data` and `prev_data` from `[T; 8]` to `[T; 4]` for the
-    /// bus; pre-commit-6 it emits N elements as-is.
+    /// every chip that takes `[T; 8]` data arrays; this path packs them
+    /// pairwise into `[T; BLOCK_FE_WIDTH]` (= `[T; 4]`) for the u16 memory bus.
     ///
-    /// For new chip code that produces 4 bus-shaped field expressions
-    /// directly, use [`MemoryBridge::read_4`] instead — it skips the legacy
-    /// pack.
+    /// For new chip code that produces `BLOCK_FE_WIDTH` bus-shaped field
+    /// expressions directly, use [`MemoryBridge::read_4`] instead — it
+    /// skips the legacy pack.
     #[must_use]
     pub fn read<'a, T, V, const N: usize>(
         &self,
@@ -94,18 +93,11 @@ impl MemoryBridge {
         }
     }
 
-    /// Forward-compat: prepare a logical memory read whose chip-side AIR
-    /// already produces the `BLOCK_FE_WIDTH`-shaped bus message (= `[T; 4]`
-    /// after commit 6's flip). No packing on the bridge side; chips are
-    /// responsible for composing the 4 expressions from their native
-    /// columns — `[col[0]+256·col[1], …]` for Pattern A (u8) chips or 4
-    /// u16 columns directly for Pattern B.
-    ///
-    /// **Soundness note**: until commit 6 flips `BLOCK_FE_WIDTH` from 8 to
-    /// 4, the bus is logically 8-wide and emitting 4-wide messages would
-    /// imbalance the permutation. **No callers may invoke this method
-    /// before commit 6.** It is defined so commit 6 doesn't have to
-    /// simultaneously add new APIs and migrate callers.
+    /// Prepare a logical memory read whose chip-side AIR already produces
+    /// the `BLOCK_FE_WIDTH`-shaped bus message (= `[T; 4]`). No packing on
+    /// the bridge side; chips are responsible for composing the 4
+    /// expressions from their native columns — `[col[0]+256·col[1], …]` for
+    /// Pattern A (u8) chips or 4 u16 columns directly for Pattern B.
     #[must_use]
     pub fn read_4<'a, T, V>(
         &self,
@@ -269,13 +261,11 @@ impl MemoryOfflineChecker {
     /// Also, each one of them has count with degree: deg(enabled)
     ///
     /// **Bus pack**: the bus message is `BLOCK_FE_WIDTH` field elements wide. When
-    /// `N > BLOCK_FE_WIDTH` (today only the legacy u8 path with `N = 8` post-flip),
-    /// we pack groups of `N / BLOCK_FE_WIDTH` consecutive input elements into a
-    /// single field element using base-256: `out[i] = sum_k input[i*ratio + k] *
-    /// 256^k`. With `BUS_PTR_SCALE = 1` today, `BLOCK_FE_WIDTH = MEMORY_BLOCK_BYTES
-    /// = 8` and the pack ratio is 1 — `out[i] = input[i]`, a no-op pass-through.
-    /// In commit 6 with `BUS_PTR_SCALE = 2`, `BLOCK_FE_WIDTH = 4` and the pack
-    /// ratio is 2 — `out[i] = input[2i] + 256 * input[2i+1]`.
+    /// `N > BLOCK_FE_WIDTH` (the legacy u8 path with `N = 8`), we pack groups of
+    /// `N / BLOCK_FE_WIDTH` consecutive input elements into a single field
+    /// element using base-256: `out[i] = sum_k input[i*ratio + k] * 256^k`. With
+    /// `BUS_PTR_SCALE = 2`, `BLOCK_FE_WIDTH = 4` and the pack ratio is 2 —
+    /// `out[i] = input[2i] + 256 * input[2i+1]`.
     #[allow(clippy::too_many_arguments)]
     fn eval_bulk_access<AB, const N: usize>(
         &self,
@@ -304,9 +294,8 @@ impl MemoryOfflineChecker {
 
 /// Pack `N` input field expressions into `BLOCK_FE_WIDTH` output field
 /// expressions for the memory bus message. `N` must be a multiple of
-/// `BLOCK_FE_WIDTH`; today `BLOCK_FE_WIDTH = MEMORY_BLOCK_BYTES = 8` and the
-/// pack is a pass-through. In commit 6 when `BUS_PTR_SCALE` flips to 2,
-/// `BLOCK_FE_WIDTH` becomes 4 and `N = 8` callers get packed pairwise.
+/// `BLOCK_FE_WIDTH`. With `BUS_PTR_SCALE = 2`, `BLOCK_FE_WIDTH = 4` and
+/// `N = 8` callers get packed pairwise: `out[i] = input[2i] + 256·input[2i+1]`.
 fn pack_for_bus<AB, const N: usize>(data: &[AB::Expr; N]) -> Vec<AB::Expr>
 where
     AB: InteractionBuilder,

@@ -259,7 +259,7 @@ where
         // Range-check non-MSB read limbs b[0..NUM_LIMBS-1] and c[0..NUM_LIMBS-1] to
         // [0, 256). MSB is range-checked above (via the signed sign-bit interaction
         // when signed, but unsigned ops need an explicit check on the MSB too).
-        // After the bus pack (commit 6) these limbs share a packed field element.
+        // After the bus pack these limbs share a packed field element.
         for i in 0..NUM_LIMBS - 1 {
             self.bitwise_lookup_bus
                 .send_range(b[i], c[i])

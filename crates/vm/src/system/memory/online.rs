@@ -623,11 +623,9 @@ impl TracingMemory {
     // These methods are the traced counterparts of `GuestMemory::read_bytes` /
     // `write_bytes`. They create a memory-bus record (timestamp update + meta
     // slot tracking) at the `MEMORY_BLOCK_BYTES`-aligned block containing the
-    // access. Today (cell_size = 1 everywhere) these are equivalent to
-    // `read::<u8, N>` / `write::<u8, N>` with N = MEMORY_BLOCK_BYTES. After
-    // the cell-type flip in commit 6, the slot index uses the byte-aware
-    // formula (`byte_ptr / MEMORY_BLOCK_BYTES`) while underlying storage is
-    // u16-celled.
+    // access. The slot index uses the byte-aware formula
+    // (`byte_ptr / MEMORY_BLOCK_BYTES`); the underlying storage is u16-celled
+    // for RV64 byte ASes but accessed as raw bytes.
 
     /// Atomic byte-view read. `byte_ptr` is a byte address into the AS's
     /// storage backing; returns the raw `N` bytes.
@@ -644,8 +642,8 @@ impl TracingMemory {
         byte_ptr: u32,
     ) -> (u32, [u8; N]) {
         self.assert_valid_byte_view_access(N, address_space, byte_ptr);
-        let values = self.data.read_bytes::<N>(address_space, byte_ptr);
         let t_prev = self.byte_view_prev_access_time(address_space as usize, byte_ptr as usize);
+        let values = self.data.read_bytes::<N>(address_space, byte_ptr);
         self.timestamp += 1;
 
         (t_prev, values)
@@ -663,8 +661,8 @@ impl TracingMemory {
         values: [u8; N],
     ) -> (u32, [u8; N]) {
         self.assert_valid_byte_view_access(N, address_space, byte_ptr);
-        let values_prev = self.data.read_bytes::<N>(address_space, byte_ptr);
         let t_prev = self.byte_view_prev_access_time(address_space as usize, byte_ptr as usize);
+        let values_prev = self.data.read_bytes::<N>(address_space, byte_ptr);
         self.data.write_bytes::<N>(address_space, byte_ptr, values);
         self.timestamp += 1;
 

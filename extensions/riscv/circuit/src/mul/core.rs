@@ -95,7 +95,7 @@ where
         }
 
         // Range-check read columns b, c to [0, 256). After the memory-bus
-        // packing to 4 field elements (commit 6), the bus carries
+        // packing to 4 field elements, the bus carries
         // `b[2k] + 256·b[2k+1]` as a single field element, so without local u8
         // checks the prover could split that value differently between b[2k]
         // and b[2k+1]. The send_range checks both arguments to [0, 256).

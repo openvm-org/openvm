@@ -140,7 +140,7 @@ where
         }
 
         // ADD/SUB only range-check `a` (the write) via the send_xor above. After
-        // the memory-bus pack to 4 u16 (commit 6), the read columns `b` and `c`
+        // the memory-bus pack to 4 u16, the read columns `b` and `c`
         // would have decomposition freedom unless they're locally u8-range-
         // checked. Add range checks for `b[i]` and `c[i]` gated on ADD or SUB —
         // XOR/AND/OR already check b, c via the send_xor.
