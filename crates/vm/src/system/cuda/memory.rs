@@ -312,7 +312,7 @@ mod tests {
     use std::sync::Arc;
 
     use openvm_circuit::{
-        arch::{vm_poseidon2_config, MemoryConfig},
+        arch::{vm_poseidon2_config, MemoryConfig, MEMORY_BLOCK_BYTES, U16_CELL_SIZE},
         system::{
             memory::{merkle::MerkleTree, online::GuestMemory, AddressMap, TimestampedValues},
             poseidon2::Poseidon2PeripheryChip,
@@ -337,8 +337,16 @@ mod tests {
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
-            memory.write::<u8, DIGEST_WIDTH>(RV64_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
-            memory.write::<u8, { DIGEST_WIDTH / 2 }>(RV64_MEMORY_AS, 0, [9, 10, 11, 12]);
+            memory.write::<u8, MEMORY_BLOCK_BYTES>(
+                RV64_REGISTER_AS,
+                0,
+                [1, 2, 3, 4, 5, 6, 7, 8],
+            );
+            memory.write::<u8, MEMORY_BLOCK_BYTES>(
+                RV64_MEMORY_AS,
+                0,
+                [9, 10, 11, 12, 0, 0, 0, 0],
+            );
         }
 
         let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
@@ -397,34 +405,41 @@ mod tests {
     // TODO: pre-rv64 this test put two `BLOCK_FE_WIDTH == 4` touched blocks at ptrs 0 and 4,
     // which both fell in Merkle chunk 0 and exercised the 2-way merge path in `inventory.cu`. On
     // rv64 `BLOCK_FE_WIDTH == DIGEST_WIDTH == 8`, so two blocks cannot share a chunk and the test
-    // now covers only the "two independent full chunks" case. Restore merge-path coverage when
-    // the u16 cell switch brings `BLOCK_FE_WIDTH` back to 4.
+    // Touched-memory coverage for the merge path: writes two MEMORY_BLOCK_BYTES
+    // blocks into RV64_MEMORY_AS (u16-celled, so each block is
+    // BLOCK_FE_WIDTH = 4 u16 cells = MEMORY_BLOCK_BYTES = 8 bytes) and routes
+    // them through `inventory.cu`'s `<4, 1> → <8, 2>` merge kernel.
     #[test]
     fn test_touched_memory_updates_memory_address_space() {
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
         for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
+            // num_cells is in u16 cells; allocate 2 * DIGEST_WIDTH = 16 cells.
             addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
         }
         let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17);
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
-            memory.write::<u8, DIGEST_WIDTH>(RV64_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
-            memory.write::<u8, { DIGEST_WIDTH / 2 }>(RV64_MEMORY_AS, 0, [9, 10, 11, 12]);
+            memory.write::<u8, MEMORY_BLOCK_BYTES>(
+                RV64_REGISTER_AS,
+                0,
+                [1, 2, 3, 4, 5, 6, 7, 8],
+            );
+            memory.write::<u8, MEMORY_BLOCK_BYTES>(
+                RV64_MEMORY_AS,
+                0,
+                [9, 10, 11, 12, 0, 0, 0, 0],
+            );
         }
 
         let mut final_memory = memory.clone();
         let touched_bytes = [101u8, 102, 103, 104, 105, 106, 107, 108];
         let touched_bytes_late = [111u8, 112, 113, 114, 115, 116, 117, 118];
         unsafe {
-            final_memory.write::<u8, { crate::arch::BLOCK_FE_WIDTH }>(
+            final_memory.write::<u8, MEMORY_BLOCK_BYTES>(RV64_MEMORY_AS, 0, touched_bytes);
+            final_memory.write::<u8, MEMORY_BLOCK_BYTES>(
                 RV64_MEMORY_AS,
-                0,
-                touched_bytes,
-            );
-            final_memory.write::<u8, { crate::arch::BLOCK_FE_WIDTH }>(
-                RV64_MEMORY_AS,
-                crate::arch::BLOCK_FE_WIDTH as u32,
+                MEMORY_BLOCK_BYTES as u32,
                 touched_bytes_late,
             );
         }
@@ -459,19 +474,32 @@ mod tests {
             MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
         inventory.set_initial_memory(&memory.memory);
 
+        // Pack 8 bytes (one MEMORY_BLOCK_BYTES block) into 4 u16-celled F
+        // values via little-endian; matches the storage layout the boundary
+        // chip sees post Stage 1.6 flip.
+        let pack_block = |bytes: [u8; MEMORY_BLOCK_BYTES]| -> [F; BLOCK_FE_WIDTH] {
+            let mut out = [F::ZERO; BLOCK_FE_WIDTH];
+            for (i, slot) in out.iter_mut().enumerate() {
+                *slot = F::from_u16(u16::from_le_bytes([
+                    bytes[i * U16_CELL_SIZE],
+                    bytes[i * U16_CELL_SIZE + 1],
+                ]));
+            }
+            out
+        };
         let touched_memory = vec![
             (
                 (RV64_MEMORY_AS, 0),
                 TimestampedValues {
                     timestamp: 1,
-                    values: touched_bytes.map(F::from_u8),
+                    values: pack_block(touched_bytes),
                 },
             ),
             (
-                (RV64_MEMORY_AS, crate::arch::BLOCK_FE_WIDTH as u32),
+                (RV64_MEMORY_AS, BLOCK_FE_WIDTH as u32),
                 TimestampedValues {
                     timestamp: 3,
-                    values: touched_bytes_late.map(F::from_u8),
+                    values: pack_block(touched_bytes_late),
                 },
             ),
         ];
