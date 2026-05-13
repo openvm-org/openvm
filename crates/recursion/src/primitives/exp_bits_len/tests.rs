@@ -319,7 +319,6 @@ fn test_exp_bits_len_rejects_nonzero_terminal_tail_on_last_row() {
 mod cuda_tests {
     use std::sync::Arc;
 
-    use openvm_circuit_primitives::ColumnsAir;
     use openvm_cuda_backend::data_transporter::assert_eq_host_and_device_matrix;
 
     use super::*;
