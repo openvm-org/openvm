@@ -42,8 +42,8 @@ use crate::{
     output::DeferralOutputCols,
     poseidon2::DeferralPoseidon2Chip,
     utils::{
-        f_commit_to_bytes, join_memory_ops, memory_op_chunk, split_output, DIGEST_MEMORY_OPS,
-        F_NUM_BYTES, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        byte_memory_op_chunk, f_commit_to_bytes, join_byte_memory_ops, split_output,
+        DIGEST_BYTE_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
 
@@ -112,7 +112,7 @@ impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for
         DeferralOutputRecordMut {
             header: header_buf.borrow_mut(),
             write_bytes,
-            write_aux: &mut write_aux_buf[..num_write_rows * DIGEST_MEMORY_OPS],
+            write_aux: &mut write_aux_buf[..num_write_rows * DIGEST_BYTE_MEMORY_OPS],
         }
     }
 
@@ -134,7 +134,7 @@ impl<'a> SizedRecord<DeferralOutputLayout> for DeferralOutputRecordMut<'a> {
         total_len =
             total_len.next_multiple_of(align_of::<MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>>());
         total_len += num_write_rows
-            * DIGEST_MEMORY_OPS
+            * DIGEST_BYTE_MEMORY_OPS
             * size_of::<MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>>();
         total_len
     }
@@ -186,7 +186,7 @@ where
                 read_ptr + (i * MEMORY_BLOCK_BYTES) as u32,
             )
         });
-        let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_memory_ops(output_key_chunks);
+        let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_byte_memory_ops(output_key_chunks);
         let (output_commit, output_len) = split_output(output_key);
 
         let output_len_val = rv64_bytes_to_u32(output_len) as usize;
@@ -240,13 +240,13 @@ where
 
         for (row_idx, output_chunk) in output_raw.chunks_exact(DIGEST_SIZE).enumerate() {
             let row_output_ptr = output_ptr + (row_idx * DIGEST_SIZE) as u32;
-            for chunk_idx in 0..DIGEST_MEMORY_OPS {
-                let aux_idx = row_idx * DIGEST_MEMORY_OPS + chunk_idx;
+            for chunk_idx in 0..DIGEST_BYTE_MEMORY_OPS {
+                let aux_idx = row_idx * DIGEST_BYTE_MEMORY_OPS + chunk_idx;
                 tracing_write(
                     state.memory,
                     RV64_MEMORY_AS,
                     row_output_ptr + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
-                    memory_op_chunk(output_chunk, chunk_idx),
+                    byte_memory_op_chunk(output_chunk, chunk_idx),
                     &mut record.write_aux[aux_idx].prev_timestamp,
                     &mut record.write_aux[aux_idx].prev_data,
                 );
@@ -401,8 +401,8 @@ where
                         &current_poseidon2_res,
                         row_idx + 1 == num_rows,
                     );
-                    for chunk_idx in 0..DIGEST_MEMORY_OPS {
-                        let aux_idx = (row_idx - 1) * DIGEST_MEMORY_OPS + chunk_idx;
+                    for chunk_idx in 0..DIGEST_BYTE_MEMORY_OPS {
+                        let aux_idx = (row_idx - 1) * DIGEST_BYTE_MEMORY_OPS + chunk_idx;
                         cols.write_bytes_aux[chunk_idx]
                             .set_prev_data(write_aux[aux_idx].prev_data.map(F::from_u8));
                         mem_helper.fill(
