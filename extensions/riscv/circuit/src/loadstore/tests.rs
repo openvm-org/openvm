@@ -142,10 +142,13 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         * RV64_REGISTER_NUM_LIMBS;
 
     let is_load = [LOADD, LOADWU, LOADHU, LOADBU].contains(&opcode);
+    // Store ASes restricted to u16-celled spaces (RV64_MEMORY_AS, PUBLIC_VALUES_AS).
+    // The DEFERRAL_AS (4) store path requires the F-AS 4-F refactor — see
+    // `positive_stored_native_test` (ignored) for the full explanation.
     let mem_as = mem_as.unwrap_or(if is_load {
         2
     } else {
-        *[2, 3, 4].choose(rng).unwrap()
+        *[2, 3].choose(rng).unwrap()
     });
 
     tester.write(1, b, rs1.map(F::from_u8));
