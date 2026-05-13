@@ -61,7 +61,7 @@ mod tests;
 const REM_WORDS_NUM_LIMBS: usize = 2;
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct Rv64HintStoreCols<T> {
     // common
     pub is_single: T,
@@ -88,7 +88,8 @@ pub struct Rv64HintStoreCols<T> {
     pub num_words_aux_cols: MemoryReadAuxCols<T>,
 }
 
-#[derive(Copy, Clone, Debug, derive_new::new)]
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv64HintStoreCols<u8>)]
 pub struct Rv64HintStoreAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
