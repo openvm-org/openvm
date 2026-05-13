@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
+        Arena, ExecutionBridge, PreflightExecutor, MEMORY_BLOCK_BYTES,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
@@ -96,7 +96,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         None => MAX_LEN,
     };
 
-    assert!(buffer_length.is_multiple_of(BLOCK_FE_WIDTH));
+    assert!(buffer_length.is_multiple_of(MEMORY_BLOCK_BYTES));
 
     let rand_buffer = get_random_message(rng, MAX_LEN);
     let mut rand_buffer_arr = [0u8; MAX_LEN];
@@ -111,36 +111,36 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-    // Align buffer/input pointers to BLOCK_FE_WIDTH-byte blocks for memory bus compatibility
-    let num_blocks = buffer_length.div_ceil(BLOCK_FE_WIDTH);
-    let aligned_len = num_blocks * BLOCK_FE_WIDTH;
+    // Align buffer/input pointers to MEMORY_BLOCK_BYTES-byte blocks for memory bus compatibility
+    let num_blocks = buffer_length.div_ceil(MEMORY_BLOCK_BYTES);
+    let aligned_len = num_blocks * MEMORY_BLOCK_BYTES;
     let buffer_ptr = gen_pointer(rng, aligned_len);
     let input_ptr = gen_pointer(rng, aligned_len);
 
     let rand_buffer_arr_f = rand_buffer_arr.map(F::from_u8);
     let rand_input_arr_f = rand_input_arr.map(F::from_u8);
 
-    // Write memory in BLOCK_FE_WIDTH-byte blocks; for the last partial block, pad with zeros
+    // Write memory in MEMORY_BLOCK_BYTES-byte blocks; for the last partial block, pad with zeros
     for i in 0..num_blocks {
-        let start = BLOCK_FE_WIDTH * i;
-        let end = std::cmp::min(start + BLOCK_FE_WIDTH, MAX_LEN);
-        let mut buffer_chunk = [F::ZERO; BLOCK_FE_WIDTH];
+        let start = MEMORY_BLOCK_BYTES * i;
+        let end = std::cmp::min(start + MEMORY_BLOCK_BYTES, MAX_LEN);
+        let mut buffer_chunk = [F::ZERO; MEMORY_BLOCK_BYTES];
         for (j, &v) in rand_buffer_arr_f[start..end].iter().enumerate() {
             buffer_chunk[j] = v;
         }
         tester.write(
             RV64_MEMORY_AS as usize,
-            buffer_ptr + BLOCK_FE_WIDTH * i,
+            buffer_ptr + MEMORY_BLOCK_BYTES * i,
             buffer_chunk,
         );
 
-        let mut input_chunk = [F::ZERO; BLOCK_FE_WIDTH];
+        let mut input_chunk = [F::ZERO; MEMORY_BLOCK_BYTES];
         for (j, &v) in rand_input_arr_f[start..end].iter().enumerate() {
             input_chunk[j] = v;
         }
         tester.write(
             RV64_MEMORY_AS as usize,
-            input_ptr + BLOCK_FE_WIDTH * i,
+            input_ptr + MEMORY_BLOCK_BYTES * i,
             input_chunk,
         );
     }
@@ -183,10 +183,10 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let mut output_buffer = [F::from_u8(0); MAX_LEN];
 
     for i in 0..num_blocks {
-        let output_chunk: [F; BLOCK_FE_WIDTH] =
-            tester.read(RV64_MEMORY_AS as usize, buffer_ptr + BLOCK_FE_WIDTH * i);
-        let start = BLOCK_FE_WIDTH * i;
-        let end = std::cmp::min(start + BLOCK_FE_WIDTH, MAX_LEN);
+        let output_chunk: [F; MEMORY_BLOCK_BYTES] =
+            tester.read(RV64_MEMORY_AS as usize, buffer_ptr + MEMORY_BLOCK_BYTES * i);
+        let start = MEMORY_BLOCK_BYTES * i;
+        let end = std::cmp::min(start + MEMORY_BLOCK_BYTES, MAX_LEN);
         output_buffer[start..end].copy_from_slice(&output_chunk[..end - start]);
     }
 
@@ -204,7 +204,7 @@ fn xorin_chip_positive_tests() {
         let mut tester = VmChipTestBuilder::default();
         let (mut harness, bitwise) = create_test_harness(&mut tester);
 
-        let buffer_length = Some(rng.random_range(1..=KECCAK_RATE_MEM_OPS) * BLOCK_FE_WIDTH);
+        let buffer_length = Some(rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
 
         set_and_execute(
             &mut tester,
@@ -238,7 +238,7 @@ fn run_xorin_chip_negative_tests(
     let (mut harness, bitwise) = create_test_harness(&mut tester);
 
     let buffer_length =
-        Some(rng.random_range(1..=KECCAK_RATE_MEM_OPS) * BLOCK_FE_WIDTH);
+        Some(rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
 
     set_and_execute(
         &mut tester,
@@ -344,7 +344,7 @@ fn cuda_set_and_execute(
 ) {
     use openvm_circuit::arch::testing::memory::gen_pointer;
 
-    let len = len.unwrap_or_else(|| rng.random_range(1..=KECCAK_RATE_MEM_OPS) * BLOCK_FE_WIDTH);
+    let len = len.unwrap_or_else(|| rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
     if len == 0 {
         return;
     }
@@ -369,21 +369,21 @@ fn cuda_set_and_execute(
     tester.write(1, len_reg, (len as u64).to_le_bytes().map(F::from_u8));
 
     let buffer_data: Vec<u8> = (0..len).map(|_| rng.random()).collect();
-    for (i, chunk) in buffer_data.chunks(BLOCK_FE_WIDTH).enumerate() {
-        let mut word = [F::ZERO; BLOCK_FE_WIDTH];
+    for (i, chunk) in buffer_data.chunks(MEMORY_BLOCK_BYTES).enumerate() {
+        let mut word = [F::ZERO; MEMORY_BLOCK_BYTES];
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_u8(byte);
         }
-        tester.write(2, buffer_ptr + i * BLOCK_FE_WIDTH, word);
+        tester.write(2, buffer_ptr + i * MEMORY_BLOCK_BYTES, word);
     }
 
     let input_data: Vec<u8> = (0..len).map(|_| rng.random()).collect();
-    for (i, chunk) in input_data.chunks(BLOCK_FE_WIDTH).enumerate() {
-        let mut word = [F::ZERO; BLOCK_FE_WIDTH];
+    for (i, chunk) in input_data.chunks(MEMORY_BLOCK_BYTES).enumerate() {
+        let mut word = [F::ZERO; MEMORY_BLOCK_BYTES];
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_u8(byte);
         }
-        tester.write(2, input_ptr + i * BLOCK_FE_WIDTH, word);
+        tester.write(2, input_ptr + i * MEMORY_BLOCK_BYTES, word);
     }
 
     let instruction = Instruction::from_usize(

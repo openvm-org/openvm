@@ -1,5 +1,5 @@
 use openvm_circuit::{
-    arch::{ExecutionCtxTrait, VmExecState, BLOCK_FE_WIDTH},
+    arch::{ExecutionCtxTrait, VmExecState, MEMORY_BLOCK_BYTES},
     system::memory::online::GuestMemory,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -17,9 +17,9 @@ pub fn read_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
 ) -> [u8; INT256_NUM_LIMBS] {
     let mut result = [0u8; INT256_NUM_LIMBS];
     for i in 0..INT256_NUM_BLOCKS {
-        let block: [u8; BLOCK_FE_WIDTH] =
-            exec_state.vm_read(addr_space, ptr + (i * BLOCK_FE_WIDTH) as u32);
-        result[i * BLOCK_FE_WIDTH..(i + 1) * BLOCK_FE_WIDTH].copy_from_slice(&block);
+        let block: [u8; MEMORY_BLOCK_BYTES] =
+            exec_state.vm_read(addr_space, ptr + (i * MEMORY_BLOCK_BYTES) as u32);
+        result[i * MEMORY_BLOCK_BYTES..(i + 1) * MEMORY_BLOCK_BYTES].copy_from_slice(&block);
     }
     result
 }
@@ -33,11 +33,11 @@ pub fn write_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
     data: &[u8; INT256_NUM_LIMBS],
 ) {
     for i in 0..INT256_NUM_BLOCKS {
-        let block: [u8; BLOCK_FE_WIDTH] = data
-            [i * BLOCK_FE_WIDTH..(i + 1) * BLOCK_FE_WIDTH]
+        let block: [u8; MEMORY_BLOCK_BYTES] = data
+            [i * MEMORY_BLOCK_BYTES..(i + 1) * MEMORY_BLOCK_BYTES]
             .try_into()
             .unwrap();
-        exec_state.vm_write(addr_space, ptr + (i * BLOCK_FE_WIDTH) as u32, &block);
+        exec_state.vm_write(addr_space, ptr + (i * MEMORY_BLOCK_BYTES) as u32, &block);
     }
 }
 

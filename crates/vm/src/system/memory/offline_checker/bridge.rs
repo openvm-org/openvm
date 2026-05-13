@@ -312,7 +312,7 @@ where
     AB: InteractionBuilder,
 {
     let pack_ratio = N / crate::arch::BLOCK_FE_WIDTH;
-    debug_assert_eq!(
+    assert_eq!(
         pack_ratio * crate::arch::BLOCK_FE_WIDTH,
         N,
         "bridge bus pack: N={N} must be a multiple of BLOCK_FE_WIDTH={}",

@@ -6,7 +6,7 @@ use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension, BLOCK_FE_WIDTH,
+        VmExecutionExtension, VmProverExtension, MEMORY_BLOCK_BYTES,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -81,11 +81,11 @@ impl Fp2Extension {
 )]
 pub enum Fp2ExtensionExecutor {
     // 32 limbs prime
-    Fp2AddSubRv64_32(Fp2Executor<FP2_BLOCKS_32, BLOCK_FE_WIDTH>), // Fp2AddSub
-    Fp2MulDivRv64_32(Fp2Executor<FP2_BLOCKS_32, BLOCK_FE_WIDTH>), // Fp2MulDiv
+    Fp2AddSubRv64_32(Fp2Executor<FP2_BLOCKS_32, MEMORY_BLOCK_BYTES>), // Fp2AddSub
+    Fp2MulDivRv64_32(Fp2Executor<FP2_BLOCKS_32, MEMORY_BLOCK_BYTES>), // Fp2MulDiv
     // 48 limbs prime
-    Fp2AddSubRv64_48(Fp2Executor<FP2_BLOCKS_48, BLOCK_FE_WIDTH>), // Fp2AddSub
-    Fp2MulDivRv64_48(Fp2Executor<FP2_BLOCKS_48, BLOCK_FE_WIDTH>), // Fp2MulDiv
+    Fp2AddSubRv64_48(Fp2Executor<FP2_BLOCKS_48, MEMORY_BLOCK_BYTES>), // Fp2AddSub
+    Fp2MulDivRv64_48(Fp2Executor<FP2_BLOCKS_48, MEMORY_BLOCK_BYTES>), // Fp2MulDiv
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
@@ -209,7 +209,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
                     limb_bits: 8,
                 };
 
-                let addsub = get_fp2_addsub_air::<FP2_BLOCKS_32, BLOCK_FE_WIDTH>(
+                let addsub = get_fp2_addsub_air::<FP2_BLOCKS_32, MEMORY_BLOCK_BYTES>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -220,7 +220,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
                 );
                 inventory.add_air(addsub);
 
-                let muldiv = get_fp2_muldiv_air::<FP2_BLOCKS_32, BLOCK_FE_WIDTH>(
+                let muldiv = get_fp2_muldiv_air::<FP2_BLOCKS_32, MEMORY_BLOCK_BYTES>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -237,7 +237,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
                     limb_bits: 8,
                 };
 
-                let addsub = get_fp2_addsub_air::<FP2_BLOCKS_48, BLOCK_FE_WIDTH>(
+                let addsub = get_fp2_addsub_air::<FP2_BLOCKS_48, MEMORY_BLOCK_BYTES>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -248,7 +248,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
                 );
                 inventory.add_air(addsub);
 
-                let muldiv = get_fp2_muldiv_air::<FP2_BLOCKS_48, BLOCK_FE_WIDTH>(
+                let muldiv = get_fp2_muldiv_air::<FP2_BLOCKS_48, MEMORY_BLOCK_BYTES>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -310,8 +310,8 @@ where
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<Fp2Air<FP2_BLOCKS_32, BLOCK_FE_WIDTH>>()?;
-                let addsub = get_fp2_addsub_chip::<Val<SC>, FP2_BLOCKS_32, BLOCK_FE_WIDTH>(
+                inventory.next_air::<Fp2Air<FP2_BLOCKS_32, MEMORY_BLOCK_BYTES>>()?;
+                let addsub = get_fp2_addsub_chip::<Val<SC>, FP2_BLOCKS_32, MEMORY_BLOCK_BYTES>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -320,8 +320,8 @@ where
                 );
                 inventory.add_executor_chip(addsub);
 
-                inventory.next_air::<Fp2Air<FP2_BLOCKS_32, BLOCK_FE_WIDTH>>()?;
-                let muldiv = get_fp2_muldiv_chip::<Val<SC>, FP2_BLOCKS_32, BLOCK_FE_WIDTH>(
+                inventory.next_air::<Fp2Air<FP2_BLOCKS_32, MEMORY_BLOCK_BYTES>>()?;
+                let muldiv = get_fp2_muldiv_chip::<Val<SC>, FP2_BLOCKS_32, MEMORY_BLOCK_BYTES>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -336,8 +336,8 @@ where
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<Fp2Air<FP2_BLOCKS_48, BLOCK_FE_WIDTH>>()?;
-                let addsub = get_fp2_addsub_chip::<Val<SC>, FP2_BLOCKS_48, BLOCK_FE_WIDTH>(
+                inventory.next_air::<Fp2Air<FP2_BLOCKS_48, MEMORY_BLOCK_BYTES>>()?;
+                let addsub = get_fp2_addsub_chip::<Val<SC>, FP2_BLOCKS_48, MEMORY_BLOCK_BYTES>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -346,8 +346,8 @@ where
                 );
                 inventory.add_executor_chip(addsub);
 
-                inventory.next_air::<Fp2Air<FP2_BLOCKS_48, BLOCK_FE_WIDTH>>()?;
-                let muldiv = get_fp2_muldiv_chip::<Val<SC>, FP2_BLOCKS_48, BLOCK_FE_WIDTH>(
+                inventory.next_air::<Fp2Air<FP2_BLOCKS_48, MEMORY_BLOCK_BYTES>>()?;
+                let muldiv = get_fp2_muldiv_chip::<Val<SC>, FP2_BLOCKS_48, MEMORY_BLOCK_BYTES>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),

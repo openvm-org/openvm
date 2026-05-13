@@ -56,14 +56,22 @@ impl<const DIGEST_WIDTH: usize, F: Field> HashTestChip<DIGEST_WIDTH, F> {
     }
 }
 
-impl<const DIGEST_WIDTH: usize, F: Field> Hasher<DIGEST_WIDTH, F> for HashTestChip<DIGEST_WIDTH, F> {
+impl<const DIGEST_WIDTH: usize, F: Field> Hasher<DIGEST_WIDTH, F>
+    for HashTestChip<DIGEST_WIDTH, F>
+{
     fn compress(&self, left: &[F; DIGEST_WIDTH], right: &[F; DIGEST_WIDTH]) -> [F; DIGEST_WIDTH] {
         test_hash_sum(*left, *right)
     }
 }
 
-impl<const DIGEST_WIDTH: usize, F: Field> HasherChip<DIGEST_WIDTH, F> for HashTestChip<DIGEST_WIDTH, F> {
-    fn compress_and_record(&self, left: &[F; DIGEST_WIDTH], right: &[F; DIGEST_WIDTH]) -> [F; DIGEST_WIDTH] {
+impl<const DIGEST_WIDTH: usize, F: Field> HasherChip<DIGEST_WIDTH, F>
+    for HashTestChip<DIGEST_WIDTH, F>
+{
+    fn compress_and_record(
+        &self,
+        left: &[F; DIGEST_WIDTH],
+        right: &[F; DIGEST_WIDTH],
+    ) -> [F; DIGEST_WIDTH] {
         let result = test_hash_sum(*left, *right);
         let mut requests = self.requests.lock().expect("mutex poisoned");
         requests.push([*left, *right, result]);

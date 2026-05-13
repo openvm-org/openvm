@@ -161,27 +161,27 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     let input_u32 = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32));
     let length_u32 = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32));
     debug_assert!(
-        (length_u32 as usize).is_multiple_of(BLOCK_FE_WIDTH),
+        (length_u32 as usize).is_multiple_of(MEMORY_BLOCK_BYTES),
         "xorin length must be {}-byte aligned",
-        BLOCK_FE_WIDTH
+        MEMORY_BLOCK_BYTES
     );
 
     // SAFETY: RV64_MEMORY_AS is memory address space of type u8
-    let num_reads = (length_u32 as usize).div_ceil(BLOCK_FE_WIDTH);
+    let num_reads = (length_u32 as usize).div_ceil(MEMORY_BLOCK_BYTES);
     let buffer_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
-            exec_state.vm_read::<u8, BLOCK_FE_WIDTH>(
+            exec_state.vm_read::<u8, MEMORY_BLOCK_BYTES>(
                 RV64_MEMORY_AS,
-                buffer_u32 + (i * BLOCK_FE_WIDTH) as u32,
+                buffer_u32 + (i * MEMORY_BLOCK_BYTES) as u32,
             )
         })
         .collect();
 
     let input_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
-            exec_state.vm_read::<u8, BLOCK_FE_WIDTH>(
+            exec_state.vm_read::<u8, MEMORY_BLOCK_BYTES>(
                 RV64_MEMORY_AS,
-                input_u32 + (i * BLOCK_FE_WIDTH) as u32,
+                input_u32 + (i * MEMORY_BLOCK_BYTES) as u32,
             )
         })
         .collect();
@@ -193,12 +193,12 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     }
 
     // Write XOR result back to the buffer memory in 8-byte blocks.
-    // Note: this means output_bytes length is a multiple of BLOCK_FE_WIDTH
-    for (i, chunk) in output_bytes.chunks_exact(BLOCK_FE_WIDTH).enumerate() {
-        let chunk: [u8; BLOCK_FE_WIDTH] = chunk.try_into().unwrap();
-        exec_state.vm_write::<u8, BLOCK_FE_WIDTH>(
+    // Note: this means output_bytes length is a multiple of MEMORY_BLOCK_BYTES
+    for (i, chunk) in output_bytes.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
+        let chunk: [u8; MEMORY_BLOCK_BYTES] = chunk.try_into().unwrap();
+        exec_state.vm_write::<u8, MEMORY_BLOCK_BYTES>(
             RV64_MEMORY_AS,
-            buffer_u32 + (i * BLOCK_FE_WIDTH) as u32,
+            buffer_u32 + (i * MEMORY_BLOCK_BYTES) as u32,
             &chunk,
         );
     }

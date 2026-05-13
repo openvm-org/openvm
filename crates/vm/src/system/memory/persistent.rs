@@ -34,8 +34,8 @@ use crate::{
 /// memory-bus interactions use per-block timestamps.
 pub const BLOCKS_PER_LEAF: usize = DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
-/// The values describe aligned chunk of memory of size `DIGEST_WIDTH`---the data together with the last
-/// accessed timestamp---in either the initial or final memory state.
+/// The values describe aligned chunk of memory of size `DIGEST_WIDTH`---the data together with the
+/// last accessed timestamp---in either the initial or final memory state.
 #[repr(C)]
 #[derive(Debug, AlignedBorrow, StructReflection)]
 pub struct PersistentBoundaryCols<T, const DIGEST_WIDTH: usize> {
@@ -74,10 +74,15 @@ impl<const DIGEST_WIDTH: usize, F> BaseAir<F> for PersistentBoundaryAir<DIGEST_W
     }
 }
 
-impl<const DIGEST_WIDTH: usize, F> BaseAirWithPublicValues<F> for PersistentBoundaryAir<DIGEST_WIDTH> {}
+impl<const DIGEST_WIDTH: usize, F> BaseAirWithPublicValues<F>
+    for PersistentBoundaryAir<DIGEST_WIDTH>
+{
+}
 impl<const DIGEST_WIDTH: usize, F> PartitionedBaseAir<F> for PersistentBoundaryAir<DIGEST_WIDTH> {}
 
-impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryAir<DIGEST_WIDTH> {
+impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
+    for PersistentBoundaryAir<DIGEST_WIDTH>
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0).expect("window should have two elements");
@@ -141,8 +146,7 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB> for PersistentBo
                         local.address_space,
                         local.leaf_label * leaf_stride_f + offset,
                     ),
-                    local.values
-                        [block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
+                    local.values[block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
                         .to_vec(),
                     local.timestamps[block_idx],
                 )
@@ -274,7 +278,8 @@ impl<const DIGEST_WIDTH: usize, F: PrimeField32> PersistentBoundaryChip<F, DIGES
     }
 }
 
-impl<const DIGEST_WIDTH: usize, RA, SC> Chip<RA, CpuBackend<SC>> for PersistentBoundaryChip<Val<SC>, DIGEST_WIDTH>
+impl<const DIGEST_WIDTH: usize, RA, SC> Chip<RA, CpuBackend<SC>>
+    for PersistentBoundaryChip<Val<SC>, DIGEST_WIDTH>
 where
     SC: StarkProtocolConfig,
     Val<SC>: PrimeField32,

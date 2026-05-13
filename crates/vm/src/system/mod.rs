@@ -28,7 +28,7 @@ use crate::{
         ChipInventory, ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState,
         ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
         RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig,
-        VmExecutionConfig, VmField, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, BLOCK_FE_WIDTH,
+        VmExecutionConfig, VmField, BLOCK_FE_WIDTH, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID,
         PROGRAM_AIR_ID,
     },
     system::{

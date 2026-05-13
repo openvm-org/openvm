@@ -25,7 +25,9 @@ impl<const DIGEST_WIDTH: usize, F: Field> BaseAir<F> for MemoryMerkleAir<DIGEST_
         MemoryMerkleCols::<F, DIGEST_WIDTH>::width()
     }
 }
-impl<const DIGEST_WIDTH: usize, F: Field> BaseAirWithPublicValues<F> for MemoryMerkleAir<DIGEST_WIDTH> {
+impl<const DIGEST_WIDTH: usize, F: Field> BaseAirWithPublicValues<F>
+    for MemoryMerkleAir<DIGEST_WIDTH>
+{
     fn num_public_values(&self) -> usize {
         MemoryMerklePvs::<F, DIGEST_WIDTH>::width()
     }

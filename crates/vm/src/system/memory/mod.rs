@@ -18,8 +18,8 @@ pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 use crate::{
     arch::{AirRefWithColumns, MemoryConfig},
     system::memory::{
-        interface::MemoryInterfaceAirs, merkle::MemoryMerkleAir,
-        offline_checker::MemoryBridge, persistent::PersistentBoundaryAir,
+        interface::MemoryInterfaceAirs, merkle::MemoryMerkleAir, offline_checker::MemoryBridge,
+        persistent::PersistentBoundaryAir,
     },
 };
 

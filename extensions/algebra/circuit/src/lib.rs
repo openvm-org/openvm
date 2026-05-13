@@ -5,7 +5,7 @@
 
 use std::ops::{Deref, DerefMut};
 
-use openvm_circuit::arch::BLOCK_FE_WIDTH;
+use openvm_circuit::arch::MEMORY_BLOCK_BYTES;
 use openvm_mod_circuit_builder::FieldExpressionExecutor;
 use openvm_riscv_adapters::Rv64VecHeapAdapterExecutor;
 #[cfg(feature = "cuda")]
@@ -21,15 +21,15 @@ pub const NUM_LIMBS_32: usize = 32;
 pub const NUM_LIMBS_48: usize = 48;
 
 // Blocks per operation for modular arithmetic (single field element)
-/// Blocks for 32-limb modular operations: 32 / 4 = 8 blocks
-pub const MODULAR_BLOCKS_32: usize = NUM_LIMBS_32 / BLOCK_FE_WIDTH;
-/// Blocks for 48-limb modular operations: 48 / 4 = 12 blocks
-pub const MODULAR_BLOCKS_48: usize = NUM_LIMBS_48 / BLOCK_FE_WIDTH;
+/// Blocks for 32-limb modular operations: 32 / 8 = 4 blocks
+pub const MODULAR_BLOCKS_32: usize = NUM_LIMBS_32 / MEMORY_BLOCK_BYTES;
+/// Blocks for 48-limb modular operations: 48 / 8 = 6 blocks
+pub const MODULAR_BLOCKS_48: usize = NUM_LIMBS_48 / MEMORY_BLOCK_BYTES;
 
 // Blocks per operation for Fp2 (two field elements)
-/// Blocks for Fp2 with 32-limb base field: 2 * 8 = 16 blocks
+/// Blocks for Fp2 with 32-limb base field: 2 * 4 = 8 blocks
 pub const FP2_BLOCKS_32: usize = 2 * MODULAR_BLOCKS_32;
-/// Blocks for Fp2 with 48-limb base field: 2 * 12 = 24 blocks
+/// Blocks for Fp2 with 48-limb base field: 2 * 6 = 12 blocks
 pub const FP2_BLOCKS_48: usize = 2 * MODULAR_BLOCKS_48;
 
 pub mod fp2_chip;
