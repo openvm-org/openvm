@@ -8,7 +8,9 @@ use openvm_circuit::{
         MemoryAddress,
     },
 };
-use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose, ColumnsAir,
+};
 use openvm_instructions::riscv::{
     RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };

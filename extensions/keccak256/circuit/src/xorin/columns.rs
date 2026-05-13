@@ -2,6 +2,7 @@ use openvm_circuit::{
     arch::DEFAULT_BLOCK_SIZE,
     system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
+use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::riscv::RV64_WORD_NUM_LIMBS;
 

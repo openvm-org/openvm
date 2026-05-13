@@ -44,7 +44,7 @@ use openvm_stark_backend::{
 /// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `BLOCK_SIZE` from the heap.
 /// * Writes are to 64-bit register rd (8 bytes).
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct Rv64IsEqualModAdapterCols<
     T,
     const NUM_READS: usize,
@@ -63,7 +63,8 @@ pub struct Rv64IsEqualModAdapterCols<
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv64IsEqualModAdapterCols<u8, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>)]
 pub struct Rv64IsEqualModAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,

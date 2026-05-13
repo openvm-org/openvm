@@ -34,7 +34,7 @@ use super::RV64_REGISTER_NUM_LIMBS;
 use crate::adapters::{tracing_read, tracing_write};
 
 #[repr(C)]
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64JalrAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
@@ -46,7 +46,8 @@ pub struct Rv64JalrAdapterCols<T> {
     pub needs_write: T,
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv64JalrAdapterCols<u8>)]
 pub struct Rv64JalrAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
