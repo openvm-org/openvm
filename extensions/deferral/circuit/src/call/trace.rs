@@ -5,7 +5,7 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterTraceExecutor, AdapterTraceFiller, EmptyAdapterCoreLayout,
         ExecutionError, PreflightExecutor, RecordArena, TraceFiller, VmField, VmStateMut,
-        MEMORY_BLOCK_BYTES,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord, MemoryWriteBytesAuxRecord},
@@ -36,11 +36,18 @@ use crate::{
     count::DeferralCircuitCountChip,
     poseidon2::{deferral_poseidon2_chip, DeferralPoseidon2Chip},
     utils::{
-        byte_commit_to_f, combine_output, join_memory_ops, memory_op_chunk, COMMIT_MEMORY_OPS,
-        DIGEST_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        byte_commit_to_f, byte_memory_op_chunk, combine_output, f_memory_op_chunk,
+        join_byte_memory_ops, join_f_memory_ops, COMMIT_MEMORY_OPS, DIGEST_F_MEMORY_OPS,
+        F_NUM_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
     DeferralFn,
 };
+
+/// `DIGEST_SIZE` cast to `u32` for use in pointer arithmetic that operates on
+/// `u32` cell pointers.
+const DIGEST_SIZE_U32: u32 = DIGEST_SIZE as u32;
+/// Number of accumulators per `deferral_idx` (input + output).
+const NUM_ACCUMULATORS_PER_IDX: u32 = 2;
 
 // ========================= CORE ==============================
 
@@ -241,14 +248,16 @@ pub struct DeferralCallAdapterRecord<F> {
 
     // Read auxiliary records
     pub input_commit_aux: [MemoryReadAuxRecord; COMMIT_MEMORY_OPS],
-    pub old_input_acc_aux: [MemoryReadAuxRecord; DIGEST_MEMORY_OPS],
-    pub old_output_acc_aux: [MemoryReadAuxRecord; DIGEST_MEMORY_OPS],
+    pub old_input_acc_aux: [MemoryReadAuxRecord; DIGEST_F_MEMORY_OPS],
+    pub old_output_acc_aux: [MemoryReadAuxRecord; DIGEST_F_MEMORY_OPS],
 
-    // Write auxiliary records
+    // Write auxiliary records. `output_commit_and_len` writes to byte-AS
+    // RV64_MEMORY_AS in `MEMORY_BLOCK_BYTES`-sized chunks; the accumulator
+    // writes go to F-celled DEFERRAL_AS in `BLOCK_FE_WIDTH`-sized chunks.
     pub output_commit_and_len_aux:
         [MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>; OUTPUT_TOTAL_MEMORY_OPS],
-    pub new_input_acc_aux: [MemoryWriteAuxRecord<F, MEMORY_BLOCK_BYTES>; DIGEST_MEMORY_OPS],
-    pub new_output_acc_aux: [MemoryWriteAuxRecord<F, MEMORY_BLOCK_BYTES>; DIGEST_MEMORY_OPS],
+    pub new_input_acc_aux: [MemoryWriteAuxRecord<F, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
+    pub new_output_acc_aux: [MemoryWriteAuxRecord<F, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
 }
 
 #[derive(Clone, Copy)]
@@ -307,30 +316,31 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
                 &mut record.input_commit_aux[i].prev_timestamp,
             )
         });
-        let input_commit = join_memory_ops(input_commit_chunks);
+        let input_commit = join_byte_memory_ops(input_commit_chunks);
 
         let deferral_idx = c.as_canonical_u32();
 
-        const DIGEST_SIZE_U32: u32 = DIGEST_SIZE as u32;
-        let input_acc_ptr = 2 * deferral_idx * DIGEST_SIZE_U32;
+        // DEFERRAL_AS uses cell pointers; each accumulator is DIGEST_SIZE F cells,
+        // and there are NUM_ACCUMULATORS_PER_IDX accumulators per deferral idx.
+        let input_acc_ptr = NUM_ACCUMULATORS_PER_IDX * deferral_idx * DIGEST_SIZE_U32;
         let output_acc_ptr = input_acc_ptr + DIGEST_SIZE_U32;
 
-        let old_input_acc_chunks: [[F; MEMORY_BLOCK_BYTES]; DIGEST_MEMORY_OPS] = from_fn(|i| {
+        let old_input_acc_chunks: [[F; BLOCK_FE_WIDTH]; DIGEST_F_MEMORY_OPS] = from_fn(|i| {
             tracing_read_deferral(
                 memory,
-                input_acc_ptr + (i * MEMORY_BLOCK_BYTES) as u32,
+                input_acc_ptr + (i * BLOCK_FE_WIDTH) as u32,
                 &mut record.old_input_acc_aux[i].prev_timestamp,
             )
         });
-        let old_output_acc_chunks: [[F; MEMORY_BLOCK_BYTES]; DIGEST_MEMORY_OPS] = from_fn(|i| {
+        let old_output_acc_chunks: [[F; BLOCK_FE_WIDTH]; DIGEST_F_MEMORY_OPS] = from_fn(|i| {
             tracing_read_deferral(
                 memory,
-                output_acc_ptr + (i * MEMORY_BLOCK_BYTES) as u32,
+                output_acc_ptr + (i * BLOCK_FE_WIDTH) as u32,
                 &mut record.old_output_acc_aux[i].prev_timestamp,
             )
         });
-        let old_input_acc = join_memory_ops(old_input_acc_chunks);
-        let old_output_acc = join_memory_ops(old_output_acc_chunks);
+        let old_input_acc = join_f_memory_ops(old_input_acc_chunks);
+        let old_output_acc = join_f_memory_ops(old_output_acc_chunks);
 
         DeferralCallReads {
             input_commit,
@@ -362,7 +372,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
                 memory,
                 e.as_canonical_u32(),
                 record.rd_val + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
-                memory_op_chunk(&output_commit_and_len, chunk_idx),
+                byte_memory_op_chunk(&output_commit_and_len, chunk_idx),
                 &mut record.output_commit_and_len_aux[chunk_idx].prev_timestamp,
                 &mut record.output_commit_and_len_aux[chunk_idx].prev_data,
             );
@@ -370,25 +380,25 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
 
         let deferral_idx = c.as_canonical_u32();
 
-        const DIGEST_SIZE_U32: u32 = DIGEST_SIZE as u32;
-        let input_acc_ptr = 2 * deferral_idx * DIGEST_SIZE_U32;
+        // DEFERRAL_AS uses cell pointers; accumulator base advance by full DIGEST_SIZE.
+        let input_acc_ptr = NUM_ACCUMULATORS_PER_IDX * deferral_idx * DIGEST_SIZE_U32;
         let output_acc_ptr = input_acc_ptr + DIGEST_SIZE_U32;
 
-        for chunk_idx in 0..DIGEST_MEMORY_OPS {
+        for chunk_idx in 0..DIGEST_F_MEMORY_OPS {
             tracing_write_deferral(
                 memory,
-                input_acc_ptr + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
-                memory_op_chunk(&data.new_input_acc, chunk_idx),
+                input_acc_ptr + (chunk_idx * BLOCK_FE_WIDTH) as u32,
+                f_memory_op_chunk(&data.new_input_acc, chunk_idx),
                 &mut record.new_input_acc_aux[chunk_idx].prev_timestamp,
                 &mut record.new_input_acc_aux[chunk_idx].prev_data,
             );
         }
 
-        for chunk_idx in 0..DIGEST_MEMORY_OPS {
+        for chunk_idx in 0..DIGEST_F_MEMORY_OPS {
             tracing_write_deferral(
                 memory,
-                output_acc_ptr + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
-                memory_op_chunk(&data.new_output_acc, chunk_idx),
+                output_acc_ptr + (chunk_idx * BLOCK_FE_WIDTH) as u32,
+                f_memory_op_chunk(&data.new_output_acc, chunk_idx),
                 &mut record.new_output_acc_aux[chunk_idx].prev_timestamp,
                 &mut record.new_output_acc_aux[chunk_idx].prev_data,
             );
@@ -420,7 +430,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
         // Timestamps in AIR are assigned in strict sequence starting from
         // `from_state.timestamp`; mirror that exact sequence in reverse here.
         let timestamp_delta =
-            2 + COMMIT_MEMORY_OPS + OUTPUT_TOTAL_MEMORY_OPS + 4 * DIGEST_MEMORY_OPS;
+            2 + COMMIT_MEMORY_OPS + OUTPUT_TOTAL_MEMORY_OPS + 4 * DIGEST_F_MEMORY_OPS;
         let mut timestamp = record.from_timestamp + timestamp_delta as u32;
         let mut timestamp_mm = || {
             timestamp -= 1;
@@ -428,7 +438,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
         };
 
         // Writing in reverse order to avoid overwriting the record
-        for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+        for chunk_idx in (0..DIGEST_F_MEMORY_OPS).rev() {
             adapter_row.new_output_acc_aux[chunk_idx]
                 .set_prev_data(record.new_output_acc_aux[chunk_idx].prev_data);
             mem_helper.fill(
@@ -437,7 +447,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
                 adapter_row.new_output_acc_aux[chunk_idx].as_mut(),
             );
         }
-        for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+        for chunk_idx in (0..DIGEST_F_MEMORY_OPS).rev() {
             adapter_row.new_input_acc_aux[chunk_idx]
                 .set_prev_data(record.new_input_acc_aux[chunk_idx].prev_data);
             mem_helper.fill(
@@ -459,14 +469,14 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
             );
         }
 
-        for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+        for chunk_idx in (0..DIGEST_F_MEMORY_OPS).rev() {
             mem_helper.fill(
                 record.old_output_acc_aux[chunk_idx].prev_timestamp,
                 timestamp_mm(),
                 adapter_row.old_output_acc_aux[chunk_idx].as_mut(),
             );
         }
-        for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+        for chunk_idx in (0..DIGEST_F_MEMORY_OPS).rev() {
             mem_helper.fill(
                 record.old_input_acc_aux[chunk_idx].prev_timestamp,
                 timestamp_mm(),

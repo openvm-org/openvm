@@ -1,6 +1,5 @@
 use std::io::{self, Write};
 
-use itertools::Itertools;
 use openvm_stark_backend::{
     codec::{DecodableConfig, EncodableConfig},
     p3_util::log2_strict_usize,
@@ -11,12 +10,31 @@ use thiserror::Error;
 use tracing::instrument;
 
 use crate::{
-    arch::{hasher::Hasher, MemoryCellType, ADDR_SPACE_OFFSET},
+    arch::{hasher::Hasher, MemoryCellType, ADDR_SPACE_OFFSET, U16_CELL_SIZE},
     system::memory::{dimensions::MemoryDimensions, online::LinearMemory, MemoryImage},
 };
 
 pub const PUBLIC_VALUES_AS: u32 = 3;
 pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: u32 = PUBLIC_VALUES_AS - ADDR_SPACE_OFFSET;
+
+/// Number of u16-celled storage slots required to hold `num_public_values`
+/// bytes. Rounds up so an odd byte count still fits (the trailing high byte
+/// is zero-padded by the producer).
+#[inline(always)]
+pub const fn pv_cell_count(num_public_values: usize) -> usize {
+    num_public_values.div_ceil(U16_CELL_SIZE)
+}
+
+/// Number of cell field elements in the merkle-commit shape: `pv_cell_count`
+/// rounded up to a power-of-two number of `DIGEST_WIDTH`-sized leaves. Real
+/// cells fill the first `pv_cell_count` slots; the rest are zero padding so
+/// the merkle layout is always a full binary tree.
+#[inline(always)]
+pub const fn pv_commit_cell_count(num_public_values: usize, digest_width: usize) -> usize {
+    let cells = pv_cell_count(num_public_values);
+    let chunks = cells.div_ceil(digest_width);
+    chunks.next_power_of_two() * digest_width
+}
 
 /// Merkle proof for user public values in the memory state.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -64,10 +82,12 @@ impl<const DIGEST_WIDTH: usize, F: Field> UserPublicValuesProof<DIGEST_WIDTH, F>
         final_memory: &MemoryImage,
         top_tree: &[[F; DIGEST_WIDTH]],
     ) -> Self {
-        let public_values = extract_public_values(num_public_values, final_memory)
-            .iter()
-            .map(|&x| F::from_u8(x))
-            .collect_vec();
+        // `public_values` is the merkle leaves: `pv_commit_cell_count` u16
+        // cells lifted to F via little-endian decode. Real cells fill the
+        // first `pv_cell_count` slots; trailing cells are zero padding so the
+        // merkle layout is always a full binary tree.
+        let public_values =
+            extract_public_value_cells::<DIGEST_WIDTH, F>(num_public_values, final_memory);
         let public_values_commit = hasher.merkle_root(&public_values);
         let proof = compute_merkle_proof_to_user_public_values_root(
             memory_dimensions,
@@ -160,15 +180,13 @@ fn compute_merkle_proof_to_user_public_values_root<const DIGEST_WIDTH: usize, F:
     hasher: &(impl Hasher<DIGEST_WIDTH, F> + Sync),
     top_tree: &[[F; DIGEST_WIDTH]],
 ) -> Vec<[F; DIGEST_WIDTH]> {
-    assert_eq!(
-        num_public_values % DIGEST_WIDTH,
-        0,
-        "num_public_values must be a multiple of memory chunk {DIGEST_WIDTH}"
-    );
     let address_height = memory_dimensions.address_height;
     let addr_space_height = memory_dimensions.addr_space_height;
     assert_eq!(top_tree.len(), (2 << addr_space_height) - 1);
-    let num_pv_chunks: usize = num_public_values / DIGEST_WIDTH;
+    // PUBLIC_VALUES_AS is u16-celled; the merkle layout is over packed
+    // u16 cells, padded out to a power-of-two number of `DIGEST_WIDTH` leaves.
+    let pv_commit_cells = pv_commit_cell_count(num_public_values, DIGEST_WIDTH);
+    let num_pv_chunks: usize = pv_commit_cells / DIGEST_WIDTH;
     // This enforces the number of public values cannot be 0.
     assert!(
         num_pv_chunks.is_power_of_two(),
@@ -205,24 +223,62 @@ fn compute_merkle_proof_to_user_public_values_root<const DIGEST_WIDTH: usize, F:
     proof
 }
 
+/// Extracts the `num_public_values` user-facing bytes from
+/// `PUBLIC_VALUES_AS`. Storage is u16-celled in little-endian byte layout, so
+/// `as_slice()` already yields the bytes in user order; we truncate to the
+/// caller-requested length.
 pub fn extract_public_values(num_public_values: usize, final_memory: &MemoryImage) -> Vec<u8> {
     let mut public_values: Vec<u8> = {
         assert_eq!(
             final_memory.config[PUBLIC_VALUES_AS as usize].layout,
-            MemoryCellType::U8
+            MemoryCellType::U16
         );
         final_memory.mem[PUBLIC_VALUES_AS as usize]
             .as_slice()
             .to_vec()
     };
 
+    let byte_capacity = public_values.len();
     assert!(
-        public_values.len() >= num_public_values,
-        "Public values address space has {} elements, but configuration has num_public_values={}",
-        public_values.len(),
+        byte_capacity >= num_public_values,
+        "Public values address space has {} bytes of storage, but configuration has num_public_values={}",
+        byte_capacity,
         num_public_values
     );
     public_values.truncate(num_public_values);
+    public_values
+}
+
+/// Reads `pv_commit_cell_count` u16 cells from `PUBLIC_VALUES_AS` and lifts
+/// them to F via the configured cell layout. The first `pv_cell_count` slots
+/// are real packed cells; the rest are zero padding required by the merkle
+/// commit shape.
+fn extract_public_value_cells<const DIGEST_WIDTH: usize, F: Field>(
+    num_public_values: usize,
+    final_memory: &MemoryImage,
+) -> Vec<F> {
+    assert_eq!(
+        final_memory.config[PUBLIC_VALUES_AS as usize].layout,
+        MemoryCellType::U16
+    );
+    let storage = final_memory.mem[PUBLIC_VALUES_AS as usize].as_slice();
+    let cells = pv_cell_count(num_public_values);
+    let commit_cells = pv_commit_cell_count(num_public_values, DIGEST_WIDTH);
+    let byte_capacity = storage.len();
+    assert!(
+        byte_capacity >= cells * U16_CELL_SIZE,
+        "Public values storage has {} bytes, but {} u16 cells ({} bytes) are required",
+        byte_capacity,
+        cells,
+        cells * U16_CELL_SIZE
+    );
+    let mut public_values = Vec::with_capacity(commit_cells);
+    for i in 0..cells {
+        let lo = storage[i * U16_CELL_SIZE];
+        let hi = storage[i * U16_CELL_SIZE + 1];
+        public_values.push(F::from_u16(u16::from_le_bytes([lo, hi])));
+    }
+    public_values.resize(commit_cells, F::ZERO);
     public_values
 }
 
@@ -249,17 +305,24 @@ mod tests {
         vm_config.memory_config.addr_space_height = addr_space_height;
         vm_config.memory_config.pointer_max_bits = 5;
         let memory_dimensions = vm_config.memory_config.memory_dimensions();
+        // 16 bytes of public values = 8 packed u16 cells = 1 merkle leaf
+        // (DIGEST_WIDTH = 8 cells), already a power-of-two leaf count.
         let num_public_values = 16;
         let mut addr_spaces_config = MemoryConfig::empty_address_space_configs(4);
-        addr_spaces_config[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
+        addr_spaces_config[PUBLIC_VALUES_AS as usize].num_cells =
+            super::pv_cell_count(num_public_values);
         let mut memory = GuestMemory {
             memory: AddressMap::new(addr_spaces_config),
         };
+        // Write the byte sequence [0, 0, 0, 1] at byte_ptr = 12. With u16 LE
+        // storage this corresponds to u16 cells at cell_idx 6 = {0x0000} and
+        // cell_idx 7 = {0x0100}, so when lifted to F the last cell is
+        // F::from_u16(0x0100) = F::from_u16(256).
         unsafe {
             memory.write::<u8, 4>(PUBLIC_VALUES_AS, 12, [0, 0, 0, 1]);
         }
-        let mut expected_pvs = F::zero_vec(num_public_values);
-        expected_pvs[15] = F::ONE;
+        let mut expected_pvs = F::zero_vec(super::pv_commit_cell_count(num_public_values, DIGEST_WIDTH));
+        expected_pvs[7] = F::from_u16(0x0100);
 
         let hasher = vm_poseidon2_hasher();
         let tree = MerkleTree::from_memory(&memory.memory, &memory_dimensions, &hasher);

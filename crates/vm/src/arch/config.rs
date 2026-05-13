@@ -127,12 +127,12 @@ pub const MEMORY_BLOCK_BYTES: usize = 8;
 
 /// Normalized bus-pointer scale: `bus_ptr = BUS_PTR_SCALE * cell_idx`.
 ///
-/// Today `= 1` (byte-celled storage). After the cell-type flip to u16 cells
-/// in Stage 1's commit 6, `= 2`. For u16 ASes the scale equals `cell_size`,
-/// so the normalized bus pointer is exactly the RV64 byte pointer. For F
-/// ASes (DEFERRAL) the same scale applies to the F-cell index — proof-level
-/// normalization, not a storage byte offset.
-pub const BUS_PTR_SCALE: usize = 1;
+/// Flipped from 1 to 2 in the Stage 1.6 cell-type flip: u16-celled storage
+/// for RV64 register/memory/public-values ASes, so the normalized bus
+/// pointer is `2 * cell_idx = byte_ptr` (since cell_size = 2 for u16). For
+/// F ASes (DEFERRAL) the same scale applies to the F-cell index — proof-
+/// level normalization, not a storage byte offset.
+pub const BUS_PTR_SCALE: usize = 2;
 
 // --- Derived constants below ---
 
@@ -143,6 +143,20 @@ pub const BLOCK_FE_WIDTH: usize = MEMORY_BLOCK_BYTES / BUS_PTR_SCALE;
 
 /// Bus-pointer delta between consecutive bus messages.
 pub const BUS_BLOCK_STRIDE: usize = BUS_PTR_SCALE * BLOCK_FE_WIDTH;
+
+/// Host byte width of a u16-celled address space cell. Used wherever code
+/// converts between u16 cell counts and byte counts (e.g. `num_cells` vs
+/// `byte_capacity`, public-values byte packing). Declared as a `const` so
+/// callers don't sprinkle a literal `2` through the codebase.
+pub const U16_CELL_SIZE: usize = size_of::<u16>();
+
+/// Default byte-capacity for `RV64_MEMORY_AS` in `MemoryConfig::default`.
+/// With u16-celled storage the corresponding `num_cells` is
+/// `DEFAULT_RV64_MEMORY_BYTE_CAPACITY / U16_CELL_SIZE`.
+pub const DEFAULT_RV64_MEMORY_BYTE_CAPACITY: usize = 1 << 29;
+
+/// Number of registers in the RV64 register file.
+pub const NUM_RV64_REGISTERS: usize = 32;
 
 // --- Static invariants on the source-of-truth constants ---
 // Catch silent miscompiles if someone later edits the constants without
@@ -220,10 +234,19 @@ impl Default for MemoryConfig {
     fn default() -> Self {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
-        const MAX_CELLS: usize = 1 << 29;
-        addr_spaces[RV64_REGISTER_AS as usize].num_cells = 32 * size_of::<u64>();
-        addr_spaces[RV64_MEMORY_AS as usize].num_cells = MAX_CELLS;
-        addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
+        // Storage is u16-celled for RV64 register/memory/public-values ASes
+        // post Stage 1.6 flip; `num_cells` is in cells, not bytes. Each u16
+        // cell holds `U16_CELL_SIZE` bytes, so
+        // byte-capacity = `num_cells * U16_CELL_SIZE`.
+        // 32 × 8-byte registers = 256 bytes = 128 u16 cells.
+        addr_spaces[RV64_REGISTER_AS as usize].num_cells =
+            NUM_RV64_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;
+        addr_spaces[RV64_MEMORY_AS as usize].num_cells =
+            DEFAULT_RV64_MEMORY_BYTE_CAPACITY / U16_CELL_SIZE;
+        // `pv_cell_count = ceil(num_public_values / U16_CELL_SIZE)` packed u16
+        // cells; rounding up so an odd `num_public_values` still fits.
+        addr_spaces[PUBLIC_VALUES_AS as usize].num_cells =
+            DEFAULT_MAX_NUM_PUBLIC_VALUES.div_ceil(U16_CELL_SIZE);
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
     }
 }
@@ -234,11 +257,13 @@ impl MemoryConfig {
         let mut addr_spaces =
             vec![AddressSpaceHostConfig::new(0, MemoryCellType::field32()); num_addr_spaces];
         addr_spaces[RV64_IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
-        addr_spaces[RV64_REGISTER_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
+        addr_spaces[RV64_REGISTER_AS as usize] =
+            AddressSpaceHostConfig::new(0, MemoryCellType::U16);
 
-        addr_spaces[RV64_MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
+        addr_spaces[RV64_MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U16);
 
-        addr_spaces[PUBLIC_VALUES_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
+        addr_spaces[PUBLIC_VALUES_AS as usize] =
+            AddressSpaceHostConfig::new(0, MemoryCellType::U16);
 
         addr_spaces
     }
@@ -285,7 +310,13 @@ impl SystemConfig {
             memory_config.timestamp_max_bits <= 29,
             "Timestamp max bits must be <= 29 for LessThan to work in 31-bit field"
         );
-        memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
+        // PUBLIC_VALUES_AS is u16-celled; `num_public_values` is still a byte
+        // count semantically. Storage is `ceil(num_bytes / U16_CELL_SIZE)` u16
+        // cells; the proof/commit shape is widened to `pv_commit_cell_count`
+        // zero-padded cells in `UserPublicValuesProof` (see
+        // merkle/public_values.rs).
+        memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells =
+            num_public_values.div_ceil(U16_CELL_SIZE);
         Self {
             max_constraint_degree,
             memory_config,
@@ -305,7 +336,9 @@ impl SystemConfig {
 
     pub fn with_public_values(mut self, num_public_values: usize) -> Self {
         self.num_public_values = num_public_values;
-        self.memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
+        // PUBLIC_VALUES_AS is u16-celled; `num_public_values` remains a byte count.
+        self.memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells =
+            num_public_values.div_ceil(U16_CELL_SIZE);
         self
     }
 

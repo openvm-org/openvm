@@ -1,5 +1,6 @@
 use std::{array::from_fn, sync::Arc};
 
+use openvm_circuit::arch::BLOCK_FE_WIDTH;
 use openvm_circuit::arch::{
     deferral::{DeferralState, InputMapVal},
     testing::{
@@ -48,7 +49,8 @@ use crate::{
         DeferralPoseidon2Bus, DeferralPoseidon2Chip,
     },
     utils::{
-        byte_commit_to_f, join_memory_ops, COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, OUTPUT_TOTAL_BYTES,
+        byte_commit_to_f, join_f_memory_ops, COMMIT_NUM_BYTES, DIGEST_F_MEMORY_OPS,
+        OUTPUT_TOTAL_BYTES,
         OUTPUT_TOTAL_MEMORY_OPS,
     },
     DeferralFn,
@@ -131,9 +133,9 @@ fn deferral_fns(num_deferrals: usize) -> Vec<Arc<DeferralFn>> {
 fn read_deferral_digest(tester: &mut impl TestBuilder<F>, ptr: usize) -> [F; DIGEST_SIZE] {
     let chunks = from_fn(|chunk_idx| {
         tester
-            .read::<MEMORY_BLOCK_BYTES>(DEFERRAL_AS as usize, ptr + chunk_idx * MEMORY_BLOCK_BYTES)
+            .read::<BLOCK_FE_WIDTH>(DEFERRAL_AS as usize, ptr + chunk_idx * BLOCK_FE_WIDTH)
     });
-    join_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(chunks)
+    join_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(chunks)
 }
 
 fn init_streams(tester: &mut impl TestBuilder<F>, num_deferrals: usize) {
