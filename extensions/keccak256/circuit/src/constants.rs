@@ -1,9 +1,9 @@
-use openvm_circuit::arch::DEFAULT_BLOCK_SIZE;
+use openvm_circuit::arch::BLOCK_FE_WIDTH;
 
 /// Number of memory operations for the full keccakf state (200 / 8 = 25).
-pub const KECCAK_WIDTH_MEM_OPS: usize = KECCAK_WIDTH_BYTES / DEFAULT_BLOCK_SIZE;
+pub const KECCAK_WIDTH_MEM_OPS: usize = KECCAK_WIDTH_BYTES / BLOCK_FE_WIDTH;
 /// Number of memory operations for the keccak rate portion (136 / 8 = 17).
-pub const KECCAK_RATE_MEM_OPS: usize = KECCAK_RATE_BYTES / DEFAULT_BLOCK_SIZE;
+pub const KECCAK_RATE_MEM_OPS: usize = KECCAK_RATE_BYTES / BLOCK_FE_WIDTH;
 
 // ==== Do not change these constants! ====
 /// Total number of sponge bytes: number of rate bytes + number of capacity

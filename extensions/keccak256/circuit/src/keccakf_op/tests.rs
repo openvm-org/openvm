@@ -11,7 +11,7 @@ use openvm_circuit::{
             memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, ExecutionBridge, PreflightExecutor, DEFAULT_BLOCK_SIZE,
+        Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
@@ -127,14 +127,14 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     let rand_buffer_arr_f = rand_buffer_arr.map(F::from_u8);
 
-    for i in 0..(MAX_LEN / DEFAULT_BLOCK_SIZE) {
-        let buffer_chunk: [F; DEFAULT_BLOCK_SIZE] = rand_buffer_arr_f
-            [DEFAULT_BLOCK_SIZE * i..DEFAULT_BLOCK_SIZE * (i + 1)]
+    for i in 0..(MAX_LEN / BLOCK_FE_WIDTH) {
+        let buffer_chunk: [F; BLOCK_FE_WIDTH] = rand_buffer_arr_f
+            [BLOCK_FE_WIDTH * i..BLOCK_FE_WIDTH * (i + 1)]
             .try_into()
             .expect("slice has correct length");
         tester.write(
             RV64_MEMORY_AS as usize,
-            buffer_ptr + DEFAULT_BLOCK_SIZE * i,
+            buffer_ptr + BLOCK_FE_WIDTH * i,
             buffer_chunk,
         );
     }
@@ -150,11 +150,11 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let mut output_buffer = [0u8; MAX_LEN];
 
-    for i in 0..(MAX_LEN / DEFAULT_BLOCK_SIZE) {
-        let output_chunk: [F; DEFAULT_BLOCK_SIZE] =
-            tester.read(RV64_MEMORY_AS as usize, buffer_ptr + DEFAULT_BLOCK_SIZE * i);
+    for i in 0..(MAX_LEN / BLOCK_FE_WIDTH) {
+        let output_chunk: [F; BLOCK_FE_WIDTH] =
+            tester.read(RV64_MEMORY_AS as usize, buffer_ptr + BLOCK_FE_WIDTH * i);
         let output_chunk = output_chunk.map(|x| x.as_canonical_u32() as u8);
-        output_buffer[DEFAULT_BLOCK_SIZE * i..DEFAULT_BLOCK_SIZE * (i + 1)]
+        output_buffer[BLOCK_FE_WIDTH * i..BLOCK_FE_WIDTH * (i + 1)]
             .copy_from_slice(&output_chunk);
     }
     let mut state: [u64; KECCAK_WIDTH_U64S] = from_fn(|i| {
@@ -302,12 +302,12 @@ fn cuda_set_and_execute(
     );
 
     let state_data: Vec<u8> = (0..KECCAK_STATE_BYTES).map(|_| rng.random()).collect();
-    for (i, chunk) in state_data.chunks(DEFAULT_BLOCK_SIZE).enumerate() {
-        let mut word = [F::ZERO; DEFAULT_BLOCK_SIZE];
+    for (i, chunk) in state_data.chunks(BLOCK_FE_WIDTH).enumerate() {
+        let mut word = [F::ZERO; BLOCK_FE_WIDTH];
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_u8(byte);
         }
-        tester.write(2, buffer_ptr + i * DEFAULT_BLOCK_SIZE, word);
+        tester.write(2, buffer_ptr + i * BLOCK_FE_WIDTH, word);
     }
 
     let instruction = Instruction::from_usize(
@@ -411,11 +411,11 @@ fn test_keccakf_cuda_tracegen_zero_state() {
         (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
 
-    for i in 0..(KECCAK_STATE_BYTES / DEFAULT_BLOCK_SIZE) {
+    for i in 0..(KECCAK_STATE_BYTES / BLOCK_FE_WIDTH) {
         tester.write(
             2,
-            buffer_ptr + i * DEFAULT_BLOCK_SIZE,
-            [F::ZERO; DEFAULT_BLOCK_SIZE],
+            buffer_ptr + i * BLOCK_FE_WIDTH,
+            [F::ZERO; BLOCK_FE_WIDTH],
         );
     }
 

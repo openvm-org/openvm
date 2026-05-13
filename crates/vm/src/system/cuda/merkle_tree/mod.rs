@@ -1,7 +1,7 @@
 use std::{ffi::c_void, sync::Arc};
 
 use openvm_circuit::{
-    arch::{MemoryConfig, ADDR_SPACE_OFFSET, DEFAULT_BLOCK_SIZE},
+    arch::{MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     system::memory::{merkle::MemoryMerkleCols, TimestampedEquipartition},
     utils::next_power_of_two_or_zero,
 };
@@ -24,9 +24,9 @@ pub mod cuda;
 use cuda::merkle_tree::*;
 
 type H = [F; DIGEST_WIDTH];
-/// Width of `((u32, u32), TimestampedValues<F, DEFAULT_BLOCK_SIZE>)` in u32 units.
-/// = 2 (key) + 1 (timestamp) + DEFAULT_BLOCK_SIZE (values)
-pub const TIMESTAMPED_BLOCK_WIDTH: usize = 3 + DEFAULT_BLOCK_SIZE;
+/// Width of `((u32, u32), TimestampedValues<F, BLOCK_FE_WIDTH>)` in u32 units.
+/// = 2 (key) + 1 (timestamp) + BLOCK_FE_WIDTH (values)
+pub const TIMESTAMPED_BLOCK_WIDTH: usize = 3 + BLOCK_FE_WIDTH;
 /// Width of `((u32, u32), TimestampedValues<F, DIGEST_WIDTH>)` in u32 units.
 /// = 2 (key) + 1 (timestamp) + DIGEST_WIDTH (values)
 pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + DIGEST_WIDTH;

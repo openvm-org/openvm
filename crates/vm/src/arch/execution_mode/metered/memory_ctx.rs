@@ -3,12 +3,12 @@ use openvm_instructions::riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGI
 
 use crate::{
     arch::{SystemConfig, BOUNDARY_AIR_ID, MERKLE_AIR_ID},
-    system::memory::{dimensions::MemoryDimensions, CHUNK},
+    system::memory::{dimensions::MemoryDimensions, DIGEST_WIDTH},
 };
 
-/// CHUNK granularity (merkle leaf size) for page fault tracking.
-/// Must match the CHUNK used to compute `MemoryDimensions::address_height`.
-const CHUNK_U32: u32 = CHUNK as u32;
+/// DIGEST_WIDTH granularity (merkle leaf size) for page fault tracking.
+/// Must match the DIGEST_WIDTH used to compute `MemoryDimensions::address_height`.
+const CHUNK_U32: u32 = DIGEST_WIDTH as u32;
 const CHUNK_BITS: u32 = CHUNK_U32.ilog2();
 
 /// Upper bound on number of memory pages accessed per instruction. Used for buffer allocation.
@@ -253,7 +253,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
     /// Overestimates trace heights from page faults.
     ///
-    /// Memory leaves (CHUNK-sized) form a sparse merkle tree of height `h`. Each segment
+    /// Memory leaves (DIGEST_WIDTH-sized) form a sparse merkle tree of height `h`. Each segment
     /// maintains an initial and final tree, so all counts are doubled.
     ///
     /// On each page fault, we conservatively assume all `2^PAGE_BITS` leaves in the page

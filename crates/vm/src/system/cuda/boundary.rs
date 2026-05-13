@@ -1,5 +1,5 @@
 use openvm_circuit::{
-    arch::DEFAULT_BLOCK_SIZE, system::memory::persistent::PersistentBoundaryCols,
+    arch::BLOCK_FE_WIDTH, system::memory::persistent::PersistentBoundaryCols,
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::Chip;
@@ -22,14 +22,14 @@ pub struct BoundaryChipGPU {
     pub trace_width: Option<usize>,
 }
 
-const BLOCKS_PER_CHUNK: usize = DIGEST_WIDTH / DEFAULT_BLOCK_SIZE;
+const BLOCKS_PER_LEAF: usize = DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct PersistentBoundaryRecord {
     pub address_space: u32,
     pub ptr: u32,
-    pub timestamps: [u32; BLOCKS_PER_CHUNK],
+    pub timestamps: [u32; BLOCKS_PER_LEAF],
     pub values: [F; DIGEST_WIDTH],
 }
 
@@ -45,9 +45,9 @@ impl BoundaryChipGPU {
         }
     }
 
-    pub fn finalize_records<const CHUNK: usize>(&mut self, records: Vec<PersistentBoundaryRecord>) {
+    pub fn finalize_records<const DIGEST_WIDTH: usize>(&mut self, records: Vec<PersistentBoundaryRecord>) {
         self.num_records = Some(records.len());
-        self.trace_width = Some(PersistentBoundaryCols::<F, CHUNK>::width());
+        self.trace_width = Some(PersistentBoundaryCols::<F, DIGEST_WIDTH>::width());
         self.records = Some(if records.is_empty() {
             DeviceBuffer::new()
         } else {
@@ -58,13 +58,13 @@ impl BoundaryChipGPU {
         });
     }
 
-    pub fn finalize_records_device<const CHUNK: usize>(
+    pub fn finalize_records_device<const DIGEST_WIDTH: usize>(
         &mut self,
         records: DeviceBuffer<u32>,
         num_records: usize,
     ) {
         self.num_records = Some(num_records);
-        self.trace_width = Some(PersistentBoundaryCols::<F, CHUNK>::width());
+        self.trace_width = Some(PersistentBoundaryCols::<F, DIGEST_WIDTH>::width());
         self.records = Some(records);
     }
 

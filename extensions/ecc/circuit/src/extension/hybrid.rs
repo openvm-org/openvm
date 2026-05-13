@@ -2,7 +2,7 @@
 
 use openvm_algebra_circuit::Rv64ModularHybridBuilder;
 use openvm_circuit::{
-    arch::{DEFAULT_BLOCK_SIZE, *},
+    arch::{BLOCK_FE_WIDTH, *},
     system::{
         cuda::{
             extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
@@ -115,8 +115,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
-                let addne = get_ec_addne_chip::<F, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
+                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_32, BLOCK_FE_WIDTH>>()?;
+                let addne = get_ec_addne_chip::<F, ECC_BLOCKS_32, BLOCK_FE_WIDTH>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -125,8 +125,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(addne, device_ctx.clone()));
 
-                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
-                let double = get_ec_double_chip::<F, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
+                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_32, BLOCK_FE_WIDTH>>()?;
+                let double = get_ec_double_chip::<F, ECC_BLOCKS_32, BLOCK_FE_WIDTH>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -142,8 +142,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
-                let addne = get_ec_addne_chip::<F, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
+                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_48, BLOCK_FE_WIDTH>>()?;
+                let addne = get_ec_addne_chip::<F, ECC_BLOCKS_48, BLOCK_FE_WIDTH>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -152,8 +152,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(addne, device_ctx.clone()));
 
-                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
-                let double = get_ec_double_chip::<F, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
+                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_48, BLOCK_FE_WIDTH>>()?;
+                let double = get_ec_double_chip::<F, ECC_BLOCKS_48, BLOCK_FE_WIDTH>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),

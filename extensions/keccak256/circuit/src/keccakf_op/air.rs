@@ -2,7 +2,7 @@ use std::{borrow::Borrow, iter};
 
 use itertools::izip;
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState, DEFAULT_BLOCK_SIZE},
+    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH},
     system::memory::{
         offline_checker::{MemoryBridge, MemoryWriteAuxCols},
         MemoryAddress,
@@ -106,8 +106,8 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         // ======== Constrain new writes of `buffer` to memory =========
         // NOTE: we use the _next_ row's `buffer` as the pre-state
         for (word_idx, (prev_word, post_word, base_aux)) in izip!(
-            local.preimage.chunks_exact(DEFAULT_BLOCK_SIZE),
-            local.postimage.chunks_exact(DEFAULT_BLOCK_SIZE),
+            local.preimage.chunks_exact(BLOCK_FE_WIDTH),
+            local.postimage.chunks_exact(BLOCK_FE_WIDTH),
             local.buffer_word_aux
         )
         .enumerate()
@@ -122,10 +122,10 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             //   a previous valid write at `ptr`. Assuming the invariant that all previous memory
             //   accesses are valid and timestamp always moves forward, the new write to `ptr` must
             //   be valid as well.
-            let ptr = buffer_ptr.clone() + AB::F::from_usize(word_idx * DEFAULT_BLOCK_SIZE);
-            let prev_data: &[_; DEFAULT_BLOCK_SIZE] = prev_word.try_into().unwrap();
+            let ptr = buffer_ptr.clone() + AB::F::from_usize(word_idx * BLOCK_FE_WIDTH);
+            let prev_data: &[_; BLOCK_FE_WIDTH] = prev_word.try_into().unwrap();
             // post_word consists of bytes due to range checks above
-            let data: &[_; DEFAULT_BLOCK_SIZE] = post_word.try_into().unwrap();
+            let data: &[_; BLOCK_FE_WIDTH] = post_word.try_into().unwrap();
             let write_aux = MemoryWriteAuxCols {
                 base: base_aux,
                 prev_data: *prev_data,

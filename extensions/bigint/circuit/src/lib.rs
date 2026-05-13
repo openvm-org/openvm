@@ -4,7 +4,7 @@
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 use openvm_circuit::{
     self,
-    arch::{InitFileGenerator, SystemConfig, VmAirWrapper, VmChipWrapper, DEFAULT_BLOCK_SIZE},
+    arch::{InitFileGenerator, SystemConfig, VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH},
     system::SystemExecutor,
 };
 use openvm_circuit_derive::{PreflightExecutor, VmConfig};
@@ -43,8 +43,8 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-/// Number of blocks for INT256 operations (INT256_NUM_LIMBS / DEFAULT_BLOCK_SIZE)
-pub const INT256_NUM_BLOCKS: usize = INT256_NUM_LIMBS / DEFAULT_BLOCK_SIZE;
+/// Number of blocks for INT256 operations (INT256_NUM_LIMBS / BLOCK_FE_WIDTH)
+pub const INT256_NUM_BLOCKS: usize = INT256_NUM_LIMBS / BLOCK_FE_WIDTH;
 /// Number of u64 limbs in a 256-bit integer.
 pub const INT256_NUM_U64_LIMBS: usize = INT256_NUM_LIMBS / size_of::<u64>();
 /// Number of u32 limbs in a 256-bit integer.
@@ -58,13 +58,13 @@ type AluAdapterAir = VecToFlatAluAdapterAir<
         NUM_READS,
         INT256_NUM_BLOCKS,
         INT256_NUM_BLOCKS,
-        DEFAULT_BLOCK_SIZE,
-        DEFAULT_BLOCK_SIZE,
+        BLOCK_FE_WIDTH,
+        BLOCK_FE_WIDTH,
     >,
     NUM_READS,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
-    DEFAULT_BLOCK_SIZE,
+    BLOCK_FE_WIDTH,
     INT256_NUM_LIMBS,
     INT256_NUM_LIMBS,
 >;
@@ -75,32 +75,32 @@ type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
         NUM_READS,
         INT256_NUM_BLOCKS,
         INT256_NUM_BLOCKS,
-        DEFAULT_BLOCK_SIZE,
-        DEFAULT_BLOCK_SIZE,
+        BLOCK_FE_WIDTH,
+        BLOCK_FE_WIDTH,
     >,
     NUM_READS,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
-    DEFAULT_BLOCK_SIZE,
+    BLOCK_FE_WIDTH,
     INT256_NUM_LIMBS,
     INT256_NUM_LIMBS,
 >;
 
 /// Type alias for the Branch adapter AIR wrapper
 type BranchAdapterAir = VecToFlatBranchAdapterAir<
-    Rv64VecHeapBranchAdapterAir<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+    Rv64VecHeapBranchAdapterAir<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>,
     NUM_READS,
     INT256_NUM_BLOCKS,
-    DEFAULT_BLOCK_SIZE,
+    BLOCK_FE_WIDTH,
     INT256_NUM_LIMBS,
 >;
 
 /// Type alias for the Branch adapter executor wrapper
 type BranchAdapterExecutor = VecToFlatBranchAdapterExecutor<
-    Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+    Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>,
     NUM_READS,
     INT256_NUM_BLOCKS,
-    DEFAULT_BLOCK_SIZE,
+    BLOCK_FE_WIDTH,
     INT256_NUM_LIMBS,
 >;
 
@@ -118,8 +118,8 @@ pub type Rv64BaseAlu256Chip<F> = VmChipWrapper<
             NUM_READS,
             INT256_NUM_BLOCKS,
             INT256_NUM_BLOCKS,
-            DEFAULT_BLOCK_SIZE,
-            DEFAULT_BLOCK_SIZE,
+            BLOCK_FE_WIDTH,
+            BLOCK_FE_WIDTH,
         >,
         INT256_NUM_LIMBS,
         RV64_CELL_BITS,
@@ -140,8 +140,8 @@ pub type Rv64LessThan256Chip<F> = VmChipWrapper<
             NUM_READS,
             INT256_NUM_BLOCKS,
             INT256_NUM_BLOCKS,
-            DEFAULT_BLOCK_SIZE,
-            DEFAULT_BLOCK_SIZE,
+            BLOCK_FE_WIDTH,
+            BLOCK_FE_WIDTH,
         >,
         INT256_NUM_LIMBS,
         RV64_CELL_BITS,
@@ -162,8 +162,8 @@ pub type Rv64Multiplication256Chip<F> = VmChipWrapper<
             NUM_READS,
             INT256_NUM_BLOCKS,
             INT256_NUM_BLOCKS,
-            DEFAULT_BLOCK_SIZE,
-            DEFAULT_BLOCK_SIZE,
+            BLOCK_FE_WIDTH,
+            BLOCK_FE_WIDTH,
         >,
         INT256_NUM_LIMBS,
         RV64_CELL_BITS,
@@ -184,8 +184,8 @@ pub type Rv64Shift256Chip<F> = VmChipWrapper<
             NUM_READS,
             INT256_NUM_BLOCKS,
             INT256_NUM_BLOCKS,
-            DEFAULT_BLOCK_SIZE,
-            DEFAULT_BLOCK_SIZE,
+            BLOCK_FE_WIDTH,
+            BLOCK_FE_WIDTH,
         >,
         INT256_NUM_LIMBS,
         RV64_CELL_BITS,
@@ -200,7 +200,7 @@ pub struct Rv64BranchEqual256Executor(BranchEqualExecutor<BranchAdapterExecutor,
 pub type Rv64BranchEqual256Chip<F> = VmChipWrapper<
     F,
     BranchEqualFiller<
-        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>,
         INT256_NUM_LIMBS,
     >,
 >;
@@ -215,7 +215,7 @@ pub struct Rv64BranchLessThan256Executor(
 pub type Rv64BranchLessThan256Chip<F> = VmChipWrapper<
     F,
     BranchLessThanFiller<
-        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>,
         INT256_NUM_LIMBS,
         RV64_CELL_BITS,
     >,

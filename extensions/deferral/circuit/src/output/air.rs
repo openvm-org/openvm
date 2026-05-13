@@ -2,7 +2,7 @@ use std::{array::from_fn, borrow::Borrow};
 
 use itertools::{izip, Itertools};
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState, DEFAULT_BLOCK_SIZE},
+    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH},
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
@@ -79,7 +79,7 @@ pub struct DeferralOutputCols<T> {
     // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
     // written to memory and auxiliary columns.
     pub sponge_inputs: [T; DIGEST_SIZE],
-    pub write_bytes_aux: [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
+    pub write_bytes_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_MEMORY_OPS],
 
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.
@@ -310,7 +310,7 @@ where
                 .read(
                     MemoryAddress::new(
                         e.clone(),
-                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * BLOCK_FE_WIDTH),
                     ),
                     data,
                     local.from_state.timestamp + AB::Expr::from_usize(2 + chunk_idx),
@@ -340,7 +340,7 @@ where
                         e.clone(),
                         output_ptr.clone()
                             + (section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_SIZE))
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                            + AB::Expr::from_usize(chunk_idx * BLOCK_FE_WIDTH),
                     ),
                     data,
                     local.from_state.timestamp

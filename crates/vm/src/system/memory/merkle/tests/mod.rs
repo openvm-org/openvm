@@ -34,7 +34,7 @@ use crate::{
 
 mod util;
 
-const CHUNK: usize = 8;
+const DIGEST_WIDTH: usize = 8;
 const COMPRESSION_BUS: PermutationCheckBus = PermutationCheckBus::new(POSEIDON2_DIRECT_BUS);
 type F = BabyBear;
 
@@ -57,9 +57,9 @@ fn test(
                 initial_memory.get_f::<F>(address_space as u32, pointer as u32)
                     != final_memory.get_f(address_space as u32, pointer as u32)
             } {
-                let label = (pointer / CHUNK) as u32;
+                let label = (pointer / DIGEST_WIDTH) as u32;
                 assert!(address_space - (ADDR_SPACE_OFFSET as usize) < (1 << addr_space_height));
-                assert!(pointer < (CHUNK << address_height));
+                assert!(pointer < (DIGEST_WIDTH << address_height));
                 assert!(touched_labels.contains(&(address_space as u32, label)));
             }
         }
@@ -71,21 +71,21 @@ fn test(
         MerkleTree::from_memory(final_memory, &memory_dimensions, &hash_test_chip);
 
     let mut chip =
-        MemoryMerkleChip::<CHUNK, _>::new(memory_dimensions, merkle_bus, COMPRESSION_BUS);
-    let final_partition: BTreeMap<_, [F; CHUNK]> =
-        memory_to_vec_partition::<F, CHUNK>(final_memory, &memory_dimensions)
+        MemoryMerkleChip::<DIGEST_WIDTH, _>::new(memory_dimensions, merkle_bus, COMPRESSION_BUS);
+    let final_partition: BTreeMap<_, [F; DIGEST_WIDTH]> =
+        memory_to_vec_partition::<F, DIGEST_WIDTH>(final_memory, &memory_dimensions)
             .into_iter()
             .map(|(idx, values)| {
                 let address_space =
                     (idx >> memory_dimensions.address_height) as u32 + ADDR_SPACE_OFFSET;
                 let label = (idx & ((1 << memory_dimensions.address_height) - 1)) as u32;
-                ((address_space, label * (CHUNK as u32)), values)
+                ((address_space, label * (DIGEST_WIDTH as u32)), values)
             })
             .collect();
     let final_partition = final_partition
         .into_iter()
         .filter(|((address_space, pointer), _)| {
-            touched_labels.contains(&(*address_space, pointer / CHUNK as u32))
+            touched_labels.contains(&(*address_space, pointer / DIGEST_WIDTH as u32))
         })
         .collect();
     chip.finalize(initial_memory, &final_partition, &hash_test_chip);
@@ -96,14 +96,14 @@ fn test(
     );
     let chip_api = chip.generate_proving_ctx();
 
-    let dummy_interaction_air = DummyInteractionAir::new(4 + CHUNK, true, merkle_bus.index);
+    let dummy_interaction_air = DummyInteractionAir::new(4 + DIGEST_WIDTH, true, merkle_bus.index);
     let mut dummy_interaction_trace_rows = vec![];
     let mut interaction = |interaction_type: PermutationInteractionType,
                            is_compress: bool,
                            height: usize,
                            as_label: u32,
                            address_label: u32,
-                           hash: [BabyBear; CHUNK]| {
+                           hash: [BabyBear; DIGEST_WIDTH]| {
         let expand_direction = if is_compress {
             BabyBear::NEG_ONE
         } else {
@@ -125,7 +125,7 @@ fn test(
     for (address_space, address_label) in touched_labels {
         let initial_values = unsafe {
             array::from_fn(|i| {
-                initial_memory.get((address_space, address_label * CHUNK as u32 + i as u32))
+                initial_memory.get((address_space, address_label * DIGEST_WIDTH as u32 + i as u32))
             })
         };
         let as_label = address_space - ADDR_SPACE_OFFSET;
@@ -138,7 +138,7 @@ fn test(
             initial_values,
         );
         let final_values = *final_partition
-            .get(&(address_space, address_label * (CHUNK as u32)))
+            .get(&(address_space, address_label * (DIGEST_WIDTH as u32)))
             .unwrap();
         interaction(
             PermutationInteractionType::Send,
@@ -194,11 +194,11 @@ fn random_test(
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
+                num_cells: DIGEST_WIDTH << height,
                 layout: MemoryCellType::F { size: 4 },
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
+                num_cells: DIGEST_WIDTH << height,
                 layout: MemoryCellType::F { size: 4 },
             },
         ],
@@ -216,7 +216,7 @@ fn random_test(
     while num_initial_addresses != 0 || num_touched_addresses != 0 {
         let address_space = (next_u32() & 1) + 1;
         let label = next_u32() % (1 << height);
-        let pointer = label * CHUNK as u32 + (next_u32() % CHUNK as u32);
+        let pointer = label * DIGEST_WIDTH as u32 + (next_u32() % DIGEST_WIDTH as u32);
 
         if seen.insert(pointer) {
             let is_initial = next_u32() & 1 == 0;
@@ -283,11 +283,11 @@ fn expand_test_no_accesses() {
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
+                num_cells: DIGEST_WIDTH << height,
                 layout: MemoryCellType::F { size: 4 },
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
+                num_cells: DIGEST_WIDTH << height,
                 layout: MemoryCellType::F { size: 4 },
             },
         ],
@@ -299,7 +299,7 @@ fn expand_test_no_accesses() {
 
     let memory = AddressMap::from_mem_config(&mem_config);
 
-    let mut chip: MemoryMerkleChip<CHUNK, _> = MemoryMerkleChip::new(
+    let mut chip: MemoryMerkleChip<DIGEST_WIDTH, _> = MemoryMerkleChip::new(
         md,
         PermutationCheckBus::new(MEMORY_MERKLE_BUS),
         COMPRESSION_BUS,
@@ -328,11 +328,11 @@ fn expand_test_negative() {
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
+                num_cells: DIGEST_WIDTH << height,
                 layout: MemoryCellType::F { size: 4 },
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
+                num_cells: DIGEST_WIDTH << height,
                 layout: MemoryCellType::F { size: 4 },
             },
         ],
@@ -344,7 +344,7 @@ fn expand_test_negative() {
 
     let memory = AddressMap::from_mem_config(&mem_config);
 
-    let mut chip: MemoryMerkleChip<CHUNK, _> = MemoryMerkleChip::new(
+    let mut chip: MemoryMerkleChip<DIGEST_WIDTH, _> = MemoryMerkleChip::new(
         md,
         PermutationCheckBus::new(MEMORY_MERKLE_BUS),
         COMPRESSION_BUS,
@@ -354,7 +354,7 @@ fn expand_test_negative() {
     let mut chip_ctx = chip.generate_proving_ctx();
     {
         for row in chip_ctx.common_main.rows_mut() {
-            let row: &mut MemoryMerkleCols<_, CHUNK> = row.borrow_mut();
+            let row: &mut MemoryMerkleCols<_, DIGEST_WIDTH> = row.borrow_mut();
             if row.expand_direction == BabyBear::NEG_ONE {
                 row.left_direction_different = BabyBear::ZERO;
                 row.right_direction_different = BabyBear::ZERO;

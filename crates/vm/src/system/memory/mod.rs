@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_stark_backend::{
-    interaction::PermutationCheckBus, p3_util::log2_strict_usize, StarkProtocolConfig,
-};
+use openvm_stark_backend::{interaction::PermutationCheckBus, StarkProtocolConfig};
 
 mod controller;
 pub mod merkle;
@@ -20,7 +18,7 @@ pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 use crate::{
     arch::{AirRefWithColumns, MemoryConfig},
     system::memory::{
-        dimensions::MemoryDimensions, interface::MemoryInterfaceAirs, merkle::MemoryMerkleAir,
+        interface::MemoryInterfaceAirs, merkle::MemoryMerkleAir,
         offline_checker::MemoryBridge, persistent::PersistentBoundaryAir,
     },
 };
@@ -78,16 +76,13 @@ impl MemoryAirInventory {
         compression_bus: PermutationCheckBus,
     ) -> Self {
         let memory_bus = bridge.memory_bus();
-        let memory_dims = MemoryDimensions {
-            addr_space_height: mem_config.addr_space_height,
-            address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
-        };
-        let boundary = PersistentBoundaryAir::<CHUNK> {
+        let memory_dims = mem_config.memory_dimensions();
+        let boundary = PersistentBoundaryAir::<DIGEST_WIDTH> {
             memory_bus,
             merkle_bus,
             compression_bus,
         };
-        let merkle = MemoryMerkleAir::<CHUNK> {
+        let merkle = MemoryMerkleAir::<DIGEST_WIDTH> {
             memory_dimensions: memory_dims,
             merkle_bus,
             compression_bus,

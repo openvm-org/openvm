@@ -1,5 +1,5 @@
 use openvm_circuit::{
-    arch::DEFAULT_BLOCK_SIZE,
+    arch::BLOCK_FE_WIDTH,
     system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
@@ -52,7 +52,7 @@ pub struct XorinMemoryCols<T> {
     pub input_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_MEM_OPS],
     pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_MEM_OPS],
     pub buffer_bytes_write_aux_cols:
-        [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; KECCAK_RATE_MEM_OPS],
+        [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; KECCAK_RATE_MEM_OPS],
 }
 
 pub const NUM_XORIN_VM_COLS: usize = size_of::<XorinVmCols<u8>>();

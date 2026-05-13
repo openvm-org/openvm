@@ -111,9 +111,50 @@ where
 
 pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";
 pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
-/// Default block size (in bytes) for memory bus interactions. Memory is always read/written a
-/// full block at a time even when the instruction accesses fewer bytes (e.g. RISC-V `lb`/`lh`).
-pub const DEFAULT_BLOCK_SIZE: usize = 8;
+
+// =========================================================================
+// Memory layout source-of-truth constants
+//
+// Three independent constants; everything else is derived. See plan_u16.md
+// for the semantic model. Static invariants below guarantee the derived
+// constants are integer-valued.
+// =========================================================================
+
+/// Bytes per logical guest-memory access (e.g. RV64 8-byte block). Stays 8
+/// regardless of cell type; used in byte-view APIs and extension chips that
+/// reason about byte-aligned chunks.
+pub const MEMORY_BLOCK_BYTES: usize = 8;
+
+/// Normalized bus-pointer scale: `bus_ptr = BUS_PTR_SCALE * cell_idx`.
+///
+/// Today `= 1` (byte-celled storage). After the cell-type flip to u16 cells,
+/// `= 2`. For u16 ASes the scale equals `cell_size`, so the normalized bus
+/// pointer is exactly the RV64 byte pointer. For F ASes (DEFERRAL) the same
+/// scale applies to the F-cell index — proof-level normalization, not a
+/// storage byte offset.
+pub const BUS_PTR_SCALE: usize = 1;
+
+// --- Derived constants below ---
+
+/// Field elements (= cells) per memory bus access. Used in the memory
+/// subsystem core (bus, bridge, boundary, equipartition, TracingMemory
+/// metadata).
+pub const BLOCK_FE_WIDTH: usize = MEMORY_BLOCK_BYTES / BUS_PTR_SCALE;
+
+/// Bus-pointer delta between consecutive bus messages.
+pub const BUS_BLOCK_STRIDE: usize = BUS_PTR_SCALE * BLOCK_FE_WIDTH;
+
+// --- Static invariants on the source-of-truth constants ---
+// Catch silent miscompiles if someone later edits the constants without
+// updating the relationship.
+const _: () = assert!(
+    BUS_PTR_SCALE.is_power_of_two(),
+    "BUS_PTR_SCALE must be a power of two"
+);
+const _: () = assert!(
+    MEMORY_BLOCK_BYTES % BUS_PTR_SCALE == 0,
+    "MEMORY_BLOCK_BYTES must be divisible by BUS_PTR_SCALE so BLOCK_FE_WIDTH is integer-valued"
+);
 
 /// Trait for generating a init.rs file that contains a call to moduli_init!,
 /// complex_init!, sw_init! with the supported moduli and curves.

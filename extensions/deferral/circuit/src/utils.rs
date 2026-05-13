@@ -1,7 +1,7 @@
 use std::array::from_fn;
 
 use itertools::Itertools;
-use openvm_circuit::arch::DEFAULT_BLOCK_SIZE;
+use openvm_circuit::arch::BLOCK_FE_WIDTH;
 use openvm_instructions::riscv::RV64_CELL_BITS;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
@@ -16,29 +16,29 @@ pub const OUTPUT_TOTAL_MEMORY_OPS: usize = num_memory_ops(OUTPUT_TOTAL_BYTES);
 
 #[inline(always)]
 pub const fn num_memory_ops(total_cells: usize) -> usize {
-    assert!(total_cells.is_multiple_of(DEFAULT_BLOCK_SIZE));
-    total_cells / DEFAULT_BLOCK_SIZE
+    assert!(total_cells.is_multiple_of(BLOCK_FE_WIDTH));
+    total_cells / BLOCK_FE_WIDTH
 }
 
 pub fn split_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
     data: [T; TOTAL_CELLS],
-) -> [[T; DEFAULT_BLOCK_SIZE]; NUM_OPS] {
-    assert_eq!(TOTAL_CELLS, NUM_OPS * DEFAULT_BLOCK_SIZE);
+) -> [[T; BLOCK_FE_WIDTH]; NUM_OPS] {
+    assert_eq!(TOTAL_CELLS, NUM_OPS * BLOCK_FE_WIDTH);
     let mut it = data.into_iter();
     from_fn(|_| from_fn(|_| it.next().unwrap()))
 }
 
 pub fn join_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
-    chunks: [[T; DEFAULT_BLOCK_SIZE]; NUM_OPS],
+    chunks: [[T; BLOCK_FE_WIDTH]; NUM_OPS],
 ) -> [T; TOTAL_CELLS] {
-    assert_eq!(TOTAL_CELLS, NUM_OPS * DEFAULT_BLOCK_SIZE);
+    assert_eq!(TOTAL_CELLS, NUM_OPS * BLOCK_FE_WIDTH);
     chunks.into_iter().flatten().collect_array().unwrap()
 }
 
-pub fn memory_op_chunk<T: Clone>(data: &[T], chunk_idx: usize) -> [T; DEFAULT_BLOCK_SIZE] {
-    debug_assert!(data.len().is_multiple_of(DEFAULT_BLOCK_SIZE));
-    let start = chunk_idx * DEFAULT_BLOCK_SIZE;
-    debug_assert!(start + DEFAULT_BLOCK_SIZE <= data.len());
+pub fn memory_op_chunk<T: Clone>(data: &[T], chunk_idx: usize) -> [T; BLOCK_FE_WIDTH] {
+    debug_assert!(data.len().is_multiple_of(BLOCK_FE_WIDTH));
+    let start = chunk_idx * BLOCK_FE_WIDTH;
+    debug_assert!(start + BLOCK_FE_WIDTH <= data.len());
     from_fn(|i| data[start + i].clone())
 }
 
