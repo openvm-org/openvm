@@ -257,15 +257,19 @@ where
             .eval(builder, signed.clone());
 
         // Range-check non-MSB read limbs b[0..NUM_LIMBS-1] and c[0..NUM_LIMBS-1] to
-        // [0, 256). MSB is range-checked above (via the signed sign-bit interaction
-        // when signed, but unsigned ops need an explicit check on the MSB too).
-        // After the bus pack these limbs share a packed field element.
+        // [0, 256). After the bus pack these limbs share a packed field element.
+        // The MSB is also handled, but split by signedness:
+        //   - signed path: the sign-bit interaction above range-checks `2 * (b[MSB] - b_sign *
+        //     128)` to [0, 256), which forces `b[MSB] - b_sign*128 ∈ [0, 128)`, i.e. b[MSB] ∈ [0,
+        //     128) when b_sign=0 and [128, 256) when b_sign=1 — covering all of [0, 256). Same for
+        //     c[MSB].
+        //   - unsigned path: no sign-bit interaction fires, so add an explicit u8 check on the MSB
+        //     below.
         for i in 0..NUM_LIMBS - 1 {
             self.bitwise_lookup_bus
                 .send_range(b[i], c[i])
                 .eval(builder, is_valid.clone());
         }
-        // For the unsigned path the MSB also needs an explicit u8 check.
         self.bitwise_lookup_bus
             .send_range(b[NUM_LIMBS - 1], c[NUM_LIMBS - 1])
             .eval(builder, is_valid.clone() - signed.clone());
