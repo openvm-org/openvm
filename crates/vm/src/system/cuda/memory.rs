@@ -333,7 +333,10 @@ mod tests {
         for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
             addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
         }
-        let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17);
+        // pointer_max_bits = 5: address_height = 5 - log2(BUS_PTR_SCALE) -
+        // log2(DIGEST_WIDTH) = 5 - 1 - 3 = 1, giving max_size = 2 ≥
+        // num_cells / DIGEST_WIDTH = 2.
+        let mem_config = MemoryConfig::new(2, addr_spaces, 5, 29, 17);
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
@@ -416,7 +419,8 @@ mod tests {
             // num_cells is in u16 cells; allocate 2 * DIGEST_WIDTH = 16 cells.
             addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
         }
-        let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17);
+        // pointer_max_bits = 5: address_height = 1, max_size = 2 ≥ num_cells / DIGEST_WIDTH.
+        let mem_config = MemoryConfig::new(2, addr_spaces, 5, 29, 17);
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
