@@ -139,6 +139,18 @@ where
                 .eval(builder, is_valid.clone());
         }
 
+        // ADD/SUB only range-check `a` (the write) via the send_xor above. After
+        // the memory-bus pack to 4 u16 (commit 6), the read columns `b` and `c`
+        // would have decomposition freedom unless they're locally u8-range-
+        // checked. Add range checks for `b[i]` and `c[i]` gated on ADD or SUB —
+        // XOR/AND/OR already check b, c via the send_xor.
+        let add_or_sub = cols.opcode_add_flag + cols.opcode_sub_flag;
+        for i in 0..NUM_LIMBS {
+            self.bus
+                .send_range(b[i], c[i])
+                .eval(builder, add_or_sub.clone());
+        }
+
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
             flags.iter().zip(BaseAluOpcode::iter()).fold(
@@ -276,6 +288,13 @@ where
             for a_val in a {
                 self.bitwise_lookup_chip
                     .request_xor(a_val as u32, a_val as u32);
+            }
+            // Mirror the AIR's `send_range(b[i], c[i])` gated on ADD/SUB so the
+            // bitwise lookup bus stays balanced (the AIR send must match a
+            // tracegen request).
+            for (b_val, c_val) in zip(record.b, record.c) {
+                self.bitwise_lookup_chip
+                    .request_range(b_val as u32, c_val as u32);
             }
         } else {
             for (b_val, c_val) in zip(record.b, record.c) {
