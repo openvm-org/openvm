@@ -391,6 +391,10 @@ impl AddressSpaceHostConfig {
 pub enum MemoryCellType {
     Null,
     U8,
+    /// Represented in little-endian format. Each storage cell encodes
+    /// `bytes[2k] + 256 * bytes[2k+1]` per the convention documented in
+    /// `memory_to_vec_partition` and the byte-view abstraction in
+    /// `TracingMemory`.
     U16,
     /// Represented in little-endian format.
     U32,
@@ -430,8 +434,18 @@ impl AddressSpaceHostLayout for MemoryCellType {
         match self {
             Self::Null => unreachable!(),
             Self::U8 => F::from_u8(*value.get_unchecked(0)),
-            Self::U16 => F::from_u16(core::ptr::read(value.as_ptr() as *const u16)),
-            Self::U32 => F::from_u32(core::ptr::read(value.as_ptr() as *const u32)),
+            // Explicit little-endian conversion: avoids host-endian assumptions
+            // and unaligned loads. Per the documented encoding convention.
+            Self::U16 => F::from_u16(u16::from_le_bytes([
+                *value.get_unchecked(0),
+                *value.get_unchecked(1),
+            ])),
+            Self::U32 => F::from_u32(u32::from_le_bytes([
+                *value.get_unchecked(0),
+                *value.get_unchecked(1),
+                *value.get_unchecked(2),
+                *value.get_unchecked(3),
+            ])),
             Self::F { .. } => core::ptr::read(value.as_ptr() as *const F),
         }
     }
