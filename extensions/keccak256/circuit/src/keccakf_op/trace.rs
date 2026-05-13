@@ -247,6 +247,13 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                 self.bitwise_lookup_chip
                     .request_range(scaled_limb, scaled_limb);
 
+                // Mirror AIR's u8 range-checks on buffer_ptr_limb pairs
+                // (limb[0], limb[1]) and (limb[2], limb[3]).
+                self.bitwise_lookup_chip
+                    .request_range(ptr_bytes[0] as u32, ptr_bytes[1] as u32);
+                self.bitwise_lookup_chip
+                    .request_range(ptr_bytes[2] as u32, ptr_bytes[3] as u32);
+
                 for pair in postimage_buffer_bytes.chunks_exact(2) {
                     self.bitwise_lookup_chip
                         .request_range(pair[0] as u32, pair[1] as u32);

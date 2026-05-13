@@ -89,6 +89,18 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
                 .send_range(msb * limb_shift, msb * limb_shift)
                 .eval(builder, is_valid);
         }
+        // u8-range-check the non-MSB buffer_ptr_limbs (read from rs1 register).
+        // After the bus pack (commit 6) pairs share a packed field element; without
+        // local u8 checks the prover could re-split values between adjacent limbs.
+        // The MSB already has a tighter range via the limb_shift check above; we
+        // pair limb[2] with limb[3] here for an additional (redundant on the MSB
+        // but tight on limb[2]) u8 check.
+        self.bitwise_lookup_bus
+            .send_range(local.buffer_ptr_limbs[0], local.buffer_ptr_limbs[1])
+            .eval(builder, is_valid);
+        self.bitwise_lookup_bus
+            .send_range(local.buffer_ptr_limbs[2], local.buffer_ptr_limbs[3])
+            .eval(builder, is_valid);
         // Now it is safe to cast buffer_ptr to F
         let buffer_ptr: AB::Expr = compose(&local.buffer_ptr_limbs[..], RV64_CELL_BITS);
 
