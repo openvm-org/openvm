@@ -46,6 +46,15 @@ impl MemoryBridge {
     }
 
     /// Prepare a logical memory read operation.
+    ///
+    /// **Legacy API (transitional, will be removed in Stage 2).** Used by
+    /// every chip that today takes `[T; 8]` data arrays. In commit 6 this
+    /// path packs `data` and `prev_data` from `[T; 8]` to `[T; 4]` for the
+    /// bus; pre-commit-6 it emits N elements as-is.
+    ///
+    /// For new chip code that produces 4 bus-shaped field expressions
+    /// directly, use [`MemoryBridge::read_4`] instead — it skips the legacy
+    /// pack.
     #[must_use]
     pub fn read<'a, T, V, const N: usize>(
         &self,
@@ -64,6 +73,10 @@ impl MemoryBridge {
     }
 
     /// Prepare a logical memory write operation.
+    ///
+    /// **Legacy API (transitional, will be removed in Stage 2).** See
+    /// [`MemoryBridge::read`] for the rationale; the matching forward-compat
+    /// method is [`MemoryBridge::write_4`].
     #[must_use]
     pub fn write<'a, T, V, const N: usize>(
         &self,
@@ -79,6 +92,42 @@ impl MemoryBridge {
             timestamp: timestamp.into(),
             aux,
         }
+    }
+
+    /// Forward-compat: prepare a logical memory read whose chip-side AIR
+    /// already produces the `BLOCK_FE_WIDTH`-shaped bus message (= `[T; 4]`
+    /// after commit 6's flip). No packing on the bridge side; chips are
+    /// responsible for composing the 4 expressions from their native
+    /// columns — `[col[0]+256·col[1], …]` for Pattern A (u8) chips or 4
+    /// u16 columns directly for Pattern B.
+    ///
+    /// **Soundness note**: until commit 6 flips `BLOCK_FE_WIDTH` from 8 to
+    /// 4, the bus is logically 8-wide and emitting 4-wide messages would
+    /// imbalance the permutation. **No callers may invoke this method
+    /// before commit 6.** It is defined so commit 6 doesn't have to
+    /// simultaneously add new APIs and migrate callers.
+    #[must_use]
+    pub fn read_4<'a, T, V>(
+        &self,
+        address: MemoryAddress<impl Into<T>, impl Into<T>>,
+        data: [impl Into<T>; crate::arch::BLOCK_FE_WIDTH],
+        timestamp: impl Into<T>,
+        aux: &'a MemoryReadAuxCols<V>,
+    ) -> MemoryReadOperation<'a, T, V, { crate::arch::BLOCK_FE_WIDTH }> {
+        self.read(address, data, timestamp, aux)
+    }
+
+    /// Forward-compat counterpart of [`MemoryBridge::write`]. See
+    /// [`MemoryBridge::read_4`].
+    #[must_use]
+    pub fn write_4<'a, T, V>(
+        &self,
+        address: MemoryAddress<impl Into<T>, impl Into<T>>,
+        data: [impl Into<T>; crate::arch::BLOCK_FE_WIDTH],
+        timestamp: impl Into<T>,
+        aux: &'a MemoryWriteAuxCols<V, { crate::arch::BLOCK_FE_WIDTH }>,
+    ) -> MemoryWriteOperation<'a, T, V, { crate::arch::BLOCK_FE_WIDTH }> {
+        self.write(address, data, timestamp, aux)
     }
 }
 
