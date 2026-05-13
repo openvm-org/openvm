@@ -14,7 +14,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
-use crate::Chip;
+use crate::{Chip, ColumnsAir, StructReflection, StructReflectionHelper};
 
 mod bus;
 pub use bus::*;
@@ -27,7 +27,7 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-#[derive(AlignedBorrow, Copy, Clone)]
+#[derive(AlignedBorrow, StructReflection, Copy, Clone)]
 #[repr(C)]
 pub struct BitwiseOperationLookupCols<T, const NUM_BITS: usize> {
     /// Binary decomposition of x (x_bits[0] is LSB, x_bits[NUM_BITS-1] is MSB)
@@ -43,7 +43,8 @@ pub struct BitwiseOperationLookupCols<T, const NUM_BITS: usize> {
 /// Number of multiplicity columns (mult_range and mult_xor)
 pub const NUM_BITWISE_OP_LOOKUP_MULT_COLS: usize = 2;
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(BitwiseOperationLookupCols<u8, NUM_BITS>)]
 pub struct BitwiseOperationLookupAir<const NUM_BITS: usize> {
     pub bus: BitwiseOperationLookupBus,
 }

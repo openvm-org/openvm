@@ -31,10 +31,13 @@ use {
 };
 
 use super::{IsEqArrayAuxCols, IsEqArrayIo, IsEqArraySubAir};
-use crate::{utils::test_engine_small, SubAir, TraceSubRowGenerator};
+use crate::{
+    utils::test_engine_small, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+    TraceSubRowGenerator,
+};
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct IsEqArrayCols<T, const N: usize> {
     x: [T; N],
     y: [T; N],
@@ -42,7 +45,8 @@ pub struct IsEqArrayCols<T, const N: usize> {
     aux: IsEqArrayAuxCols<T, N>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+#[columns_via(IsEqArrayCols<u8, N>)]
 pub struct IsEqArrayTestAir<const N: usize>(IsEqArraySubAir<N>);
 
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for IsEqArrayTestAir<N> {}

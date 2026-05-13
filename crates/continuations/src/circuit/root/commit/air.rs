@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use itertools::Itertools;
-use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, ColumnsAir, SubAir};
 use openvm_recursion_circuit::{bus::Poseidon2CompressBus, utils::assert_zeros};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -29,6 +29,9 @@ pub struct UserPvsCommitAir {
     encoder: Encoder,
     num_user_pvs: usize,
 }
+// No columns provided: width is dynamic — `MerkleTreeCols` followed by encoder flags whose count
+// depends on `num_user_pvs`.
+impl ColumnsAir for UserPvsCommitAir {}
 
 impl UserPvsCommitAir {
     pub fn new(

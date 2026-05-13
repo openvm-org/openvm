@@ -4,7 +4,7 @@ use itertools::fold;
 use openvm_circuit_primitives::{
     encoder::Encoder,
     utils::{and, not, or, select},
-    SubAir,
+    ColumnsAir, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -187,6 +187,12 @@ impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<
 {
 }
 impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>
+    for ProofShapeAir<NUM_LIMBS, LIMB_BITS>
+{
+}
+// No columns provided: width is dynamic — `ProofShapeCols` plus encoder flags plus
+// `max_cached * DIGEST_SIZE` cached commit columns.
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ColumnsAir
     for ProofShapeAir<NUM_LIMBS, LIMB_BITS>
 {
 }

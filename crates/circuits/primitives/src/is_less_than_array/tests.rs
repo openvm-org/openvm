@@ -24,10 +24,10 @@ use {
 };
 
 use super::*;
-use crate::utils::test_engine_small;
+use crate::{utils::test_engine_small, ColumnsAir, StructReflection, StructReflectionHelper};
 
 #[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy, Debug)]
+#[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
 pub struct IsLtArrayCols<T, const NUM: usize, const AUX_LEN: usize> {
     pub x: [T; NUM],
     pub y: [T; NUM],
@@ -35,7 +35,8 @@ pub struct IsLtArrayCols<T, const NUM: usize, const AUX_LEN: usize> {
     pub aux: IsLtArrayAuxCols<T, NUM, AUX_LEN>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+#[columns_via(IsLtArrayCols<u8, NUM, AUX_LEN>)]
 pub struct IsLtArrayTestAir<const NUM: usize, const AUX_LEN: usize>(IsLtArraySubAir<NUM>);
 
 impl<F: Field, const NUM: usize, const AUX_LEN: usize> BaseAirWithPublicValues<F>

@@ -1,6 +1,8 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{
+    utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -25,7 +27,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, Debug, StructReflection)]
 pub struct GkrLayerCols<T> {
     /// Whether the current row is enabled (i.e. not padding)
     pub is_enabled: T,
@@ -67,6 +69,8 @@ pub struct GkrLayerCols<T> {
 }
 
 /// The GkrLayerAir handles layer-to-layer transitions in the GKR protocol
+#[derive(ColumnsAir)]
+#[columns_via(GkrLayerCols<u8>)]
 pub struct GkrLayerAir {
     // External buses
     pub xi_randomness_bus: XiRandomnessBus,

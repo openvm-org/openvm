@@ -1,6 +1,8 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::not, AlignedBorrow, SubAir};
+use openvm_circuit_primitives::{
+    utils::not, AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -15,7 +17,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, Debug, StructReflection)]
 pub struct PublicValuesCols<F> {
     pub is_valid: F,
 
@@ -30,6 +32,8 @@ pub struct PublicValuesCols<F> {
     pub value: F,
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(PublicValuesCols<u8>)]
 pub struct PublicValuesAir {
     pub public_values_bus: PublicValuesBus,
     pub num_pvs_bus: NumPublicValuesBus,

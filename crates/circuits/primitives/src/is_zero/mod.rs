@@ -2,7 +2,7 @@ use derive_new::new;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{p3_air::AirBuilder, p3_field::Field};
 
-use crate::{SubAir, TraceSubRowGenerator};
+use crate::{StructReflection, StructReflectionHelper, SubAir, TraceSubRowGenerator};
 
 #[cfg(test)]
 pub mod tests;
@@ -19,7 +19,7 @@ pub struct IsZeroIo<T> {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow, Copy, Clone, Debug, new)]
+#[derive(AlignedBorrow, StructReflection, Copy, Clone, Debug, new)]
 pub struct IsZeroAuxCols<T> {
     pub inv: T,
 }

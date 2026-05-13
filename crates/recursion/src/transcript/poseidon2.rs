@@ -1,6 +1,7 @@
 use core::borrow::Borrow;
 use std::{array::from_fn, sync::Arc};
 
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_poseidon2_air::{
     Poseidon2SubAir, Poseidon2SubCols, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
 };
@@ -33,6 +34,10 @@ pub struct Poseidon2Air<F: Field, const SBOX_REGISTERS: usize> {
     pub poseidon2_permute_bus: Poseidon2PermuteBus,
     pub poseidon2_compress_bus: Poseidon2CompressBus,
 }
+
+// No columns provided: `Poseidon2Cols` embeds external `Poseidon2SubCols` which doesn't derive
+// `StructReflection`.
+impl<F: Field, const SBOX_REGISTERS: usize> ColumnsAir for Poseidon2Air<F, SBOX_REGISTERS> {}
 
 impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for Poseidon2Air<F, SBOX_REGISTERS> {
     fn width(&self) -> usize {

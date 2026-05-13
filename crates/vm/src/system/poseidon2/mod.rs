@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use openvm_circuit_primitives::Chip;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
-use openvm_stark_backend::{interaction::LookupBus, AirRef, StarkProtocolConfig, Val};
+use openvm_stark_backend::{interaction::LookupBus, StarkProtocolConfig, Val};
 
 #[cfg(test)]
 pub mod tests;
@@ -25,7 +25,7 @@ pub use chip::*;
 use crate::{
     arch::{
         hasher::{Hasher, HasherChip},
-        VmField,
+        AirRefWithColumns, VmField,
     },
     system::poseidon2::air::Poseidon2PeripheryAir,
 };
@@ -55,7 +55,7 @@ pub fn new_poseidon2_periphery_air<SC>(
     poseidon2_config: Poseidon2Config<Val<SC>>,
     direct_bus: LookupBus,
     max_constraint_degree: usize,
-) -> AirRef<SC>
+) -> AirRefWithColumns<SC>
 where
     SC: StarkProtocolConfig,
     Val<SC>: VmField,

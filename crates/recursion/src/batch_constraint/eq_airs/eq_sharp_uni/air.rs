@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     utils::{assert_array_eq, not},
-    SubAir,
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -27,7 +27,7 @@ use crate::{
     },
 };
 
-#[derive(AlignedBorrow, Clone, Copy)]
+#[derive(AlignedBorrow, Clone, Copy, StructReflection)]
 #[repr(C)]
 pub struct EqSharpUniCols<T> {
     pub is_valid: T,
@@ -46,6 +46,8 @@ pub struct EqSharpUniCols<T> {
     pub is_first_iter: T,
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(EqSharpUniCols<u8>)]
 pub struct EqSharpUniAir {
     pub xi_bus: XiRandomnessBus,
     pub eq_bus: EqSharpUniBus,
@@ -278,7 +280,7 @@ where
     }
 }
 
-#[derive(AlignedBorrow, Clone, Copy)]
+#[derive(AlignedBorrow, Clone, Copy, StructReflection)]
 #[repr(C)]
 pub struct EqSharpUniReceiverCols<T> {
     pub is_valid: T,
@@ -292,6 +294,8 @@ pub struct EqSharpUniReceiverCols<T> {
     pub cur_sum: [T; D_EF],
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(EqSharpUniReceiverCols<u8>)]
 pub struct EqSharpUniReceiverAir {
     pub r_bus: BatchConstraintConductorBus,
     pub eq_bus: EqSharpUniBus,

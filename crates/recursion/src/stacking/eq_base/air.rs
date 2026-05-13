@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     utils::{and, assert_array_eq, not, or},
-    SubAir,
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -33,7 +33,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct EqBaseCols<F> {
     // Proof index columns for continuations
     pub proof_idx: F,
@@ -73,6 +73,8 @@ pub struct EqBaseCols<F> {
     pub mult_neg: F,
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(EqBaseCols<u8>)]
 pub struct EqBaseAir {
     // External buses
     pub constraint_randomness_bus: ConstraintSumcheckRandomnessBus,
