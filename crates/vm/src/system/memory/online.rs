@@ -9,7 +9,10 @@ use openvm_stark_backend::{
 use tracing::instrument;
 
 use crate::{
-    arch::{AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryConfig, BLOCK_FE_WIDTH},
+    arch::{
+        AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryConfig, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
+    },
     system::{memory::TimestampedValues, TouchedMemory},
 };
 
@@ -492,6 +495,9 @@ impl TracingMemory {
         }
     }
 
+    /// Validates a cell-typed access. `block_size` is in memory cells of the AS's
+    /// declared cell type, so it must match `BLOCK_FE_WIDTH`. For byte-view u8
+    /// access against u16/u32 storage, see [`Self::assert_valid_u8_access`].
     #[inline(always)]
     fn assert_valid_access(&self, block_size: usize, addr_space: u32, ptr: u32) {
         debug_assert_ne!(addr_space, 0);
@@ -504,6 +510,24 @@ impl TracingMemory {
             ptr % block_size as u32,
             0,
             "pointer={ptr} not aligned to block_size {block_size}"
+        );
+    }
+
+    /// Validates a u8 byte-view access. `block_size` is in bytes and must match
+    /// `MEMORY_BLOCK_BYTES`. Used when T = u8 is read/written against storage
+    /// whose underlying cell type may be larger (u16 / u32).
+    #[inline(always)]
+    fn assert_valid_u8_access(&self, block_size: usize, addr_space: u32, byte_ptr: u32) {
+        debug_assert_ne!(addr_space, 0);
+        debug_assert!(block_size.is_power_of_two());
+        debug_assert_eq!(
+            block_size, MEMORY_BLOCK_BYTES,
+            "TracingMemory u8 byte-view supports only {MEMORY_BLOCK_BYTES}-byte accesses; got {block_size}"
+        );
+        assert_eq!(
+            byte_ptr % block_size as u32,
+            0,
+            "byte_ptr={byte_ptr} not aligned to block_size {block_size}"
         );
     }
 
@@ -523,10 +547,12 @@ impl TracingMemory {
     /// Returns `(t_prev, [pointer:BLOCK_SIZE]_{address_space})`.
     ///
     /// # Safety
-    /// - `T` must be `repr(C)` or `repr(transparent)` and match the cell type for `address_space`.
+    /// - `T` must be `repr(C)` or `repr(transparent)`. When `T = u8`, this dispatches
+    ///   to the byte-view path which works against any cell type (u8/u16/u32) and
+    ///   `BLOCK_SIZE` is in bytes; otherwise `T` must match the AS's cell type and
+    ///   `BLOCK_SIZE` is in cells (must equal `BLOCK_FE_WIDTH`).
     /// - `address_space` must be valid.
-    /// - `BLOCK_SIZE` is measured in memory cells and is tracked in fixed `BLOCK_FE_WIDTH`
-    ///   touched-memory slots.
+    /// - Both paths converge on a single `MEMORY_BLOCK_BYTES`-aligned metadata slot.
     #[inline(always)]
     pub unsafe fn read<T, const BLOCK_SIZE: usize>(
         &mut self,
@@ -536,9 +562,14 @@ impl TracingMemory {
     where
         T: Copy + Debug + 'static,
     {
-        self.assert_valid_access(BLOCK_SIZE, address_space, pointer);
+        let t_prev = if TypeId::of::<T>() == TypeId::of::<u8>() {
+            self.assert_valid_u8_access(BLOCK_SIZE, address_space, pointer);
+            self.byte_view_prev_access_time(address_space as usize, pointer as usize)
+        } else {
+            self.assert_valid_access(BLOCK_SIZE, address_space, pointer);
+            self.prev_access_time(address_space as usize, pointer as usize)
+        };
         let values = self.data.read(address_space, pointer);
-        let t_prev = self.prev_access_time(address_space as usize, pointer as usize);
         self.timestamp += 1;
 
         (t_prev, values)
@@ -547,10 +578,10 @@ impl TracingMemory {
     /// Atomic write operation. Returns `(t_prev, values_prev)`.
     ///
     /// # Safety
-    /// - `T` must be `repr(C)` or `repr(transparent)` and match the cell type for `address_space`.
+    /// - `T` must be `repr(C)` or `repr(transparent)`. When `T = u8`, this dispatches
+    ///   to the byte-view path; otherwise `T` must match the AS's cell type.
+    ///   See [`Self::read`] for full dispatch semantics.
     /// - `address_space` must be valid.
-    /// - `BLOCK_SIZE` is measured in memory cells and is tracked in fixed `BLOCK_FE_WIDTH`
-    ///   touched-memory slots.
     #[inline(always)]
     pub unsafe fn write<T, const BLOCK_SIZE: usize>(
         &mut self,
@@ -561,9 +592,14 @@ impl TracingMemory {
     where
         T: Copy + Debug + 'static,
     {
-        self.assert_valid_access(BLOCK_SIZE, address_space, pointer);
+        let t_prev = if TypeId::of::<T>() == TypeId::of::<u8>() {
+            self.assert_valid_u8_access(BLOCK_SIZE, address_space, pointer);
+            self.byte_view_prev_access_time(address_space as usize, pointer as usize)
+        } else {
+            self.assert_valid_access(BLOCK_SIZE, address_space, pointer);
+            self.prev_access_time(address_space as usize, pointer as usize)
+        };
         let values_prev = self.data.read(address_space, pointer);
-        let t_prev = self.prev_access_time(address_space as usize, pointer as usize);
         self.data.write(address_space, pointer, values);
         self.timestamp += 1;
 
