@@ -3,8 +3,10 @@
 #include "primitives/shared_buffer.cuh"
 #include "primitives/trace_access.h"
 
-inline constexpr size_t PERSISTENT_CHUNK = 8;
-inline constexpr size_t BLOCKS_PER_CHUNK = 1;
+inline constexpr size_t PERSISTENT_CHUNK = 8; // = DIGEST_WIDTH
+// Post Stage 1.6 cell-type flip: `BLOCK_FE_WIDTH = 4`, so each leaf is
+// `BLOCKS_PER_LEAF = DIGEST_WIDTH / BLOCK_FE_WIDTH = 2` bus messages.
+inline constexpr size_t BLOCKS_PER_CHUNK = 2;
 // TODO better address space handling
 inline constexpr uint32_t DEFERRAL_AS = 4;
 
