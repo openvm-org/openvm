@@ -124,6 +124,14 @@ template <size_t NUM_LIMBS> struct ShiftCore {
             bitwise_lookup.add_range(a[i], a[i + 1]);
         }
 
+        // Mirror the AIR's read-side `send_range` on (b[2i], b[2i+1]) and
+        // (c[2i], c[2i+1]) pairs added in Stage 1.4.
+#pragma unroll
+        for (size_t i = 0; i + 1 < NUM_LIMBS; i += 2) {
+            bitwise_lookup.add_range(record.b[i], record.b[i + 1]);
+            bitwise_lookup.add_range(record.c[i], record.c[i + 1]);
+        }
+
         size_t combined_bits = NUM_LIMBS * RV64_CELL_BITS;
         size_t num_bits_log = 0;
         while ((1u << num_bits_log) < combined_bits) {

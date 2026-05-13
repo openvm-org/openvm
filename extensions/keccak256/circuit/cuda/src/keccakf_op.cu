@@ -88,6 +88,11 @@ static __device__ __noinline__ void fill_keccakf_op_row(
                            << (RV64_TOTAL_BITS - pointer_max_bits);
     bitwise_lookup.add_range(scaled_limb, scaled_limb);
 
+    // Mirror the AIR's u8 range-checks on buffer_ptr_limb pairs added in
+    // Stage 1.4: (limb[0], limb[1]) and (limb[2], limb[3]).
+    bitwise_lookup.add_range(buffer_ptr_limbs[0], buffer_ptr_limbs[1]);
+    bitwise_lookup.add_range(buffer_ptr_limbs[2], buffer_ptr_limbs[3]);
+
     // Range check for postimage bytes (pairs)
     for (size_t i = 0; i < KECCAK_WIDTH_BYTES; i += 2) {
         bitwise_lookup.add_range(state.bytes[i], state.bytes[i + 1]);

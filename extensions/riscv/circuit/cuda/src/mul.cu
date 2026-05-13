@@ -30,6 +30,7 @@ __global__ void mul_tracegen(
     DeviceBufferConstView<Rv64MultiplicationRecord> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
+    uint32_t *d_bitwise_lookup_ptr,
     uint32_t *d_range_tuple_ptr,
     uint2 range_tuple_sizes,
     uint32_t timestamp_max_bits
@@ -47,7 +48,8 @@ __global__ void mul_tracegen(
         RangeTupleChecker<2> range_tuple_checker(
             d_range_tuple_ptr, (uint32_t[2]){range_tuple_sizes.x, range_tuple_sizes.y}
         );
-        Rv64MultiplicationCore core(range_tuple_checker);
+        BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr);
+        Rv64MultiplicationCore core(range_tuple_checker, bitwise_lookup);
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv64MultiplicationCols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(Rv64MultiplicationCols<uint8_t>));
@@ -61,6 +63,7 @@ extern "C" int _mul_tracegen(
     DeviceBufferConstView<Rv64MultiplicationRecord> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
+    uint32_t *d_bitwise_lookup_ptr,
     uint32_t *d_range_tuple_ptr,
     uint2 range_tuple_sizes,
     uint32_t timestamp_max_bits,
@@ -75,6 +78,7 @@ extern "C" int _mul_tracegen(
         d_records,
         d_range_checker_ptr,
         range_checker_bins,
+        d_bitwise_lookup_ptr,
         d_range_tuple_ptr,
         range_tuple_sizes,
         timestamp_max_bits

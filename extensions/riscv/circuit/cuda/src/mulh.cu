@@ -130,6 +130,14 @@ template <size_t NUM_LIMBS> struct MulHCore {
             );
         }
 
+        // Mirror the AIR's `send_range(b[i], c[i])` for all read limbs (added
+        // in Stage 1.4): each read limb must be locally u8-range-checked so
+        // the bus pack from 8 columns to 4 packed field elements is sound.
+#pragma unroll
+        for (int i = 0; i < NUM_LIMBS; i++) {
+            bitwise_lookup.add_range(b[i], c[i]);
+        }
+
         COL_WRITE_ARRAY(row, Cols, a, a);
         COL_WRITE_ARRAY(row, Cols, b, b);
         COL_WRITE_ARRAY(row, Cols, c, c);
