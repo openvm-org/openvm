@@ -282,4 +282,4 @@ ignored = ["cargo-openvm"]
 # Override halo2-axiom with the GPU fork (axiom-crypto/halo2-gpu) so
 # the CUDA prover path is exercised end-to-end.
 [patch.crates-io]
-halo2-axiom = { git = "ssh://git@github.com/axiom-crypto/halo2-gpu.git", rev = "c879c054" }
+halo2-axiom = { git = "ssh://git@github.com/axiom-crypto/halo2-gpu.git", rev = "b691925a58d2c01214c0a9360f2124360cf0657c" }
