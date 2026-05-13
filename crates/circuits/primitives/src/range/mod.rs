@@ -19,6 +19,8 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
+use crate::{ColumnsAir, StructReflection, StructReflectionHelper};
+
 mod bus;
 
 #[cfg(test)]
@@ -26,14 +28,14 @@ pub mod tests;
 
 pub use bus::*;
 
-#[derive(Default, AlignedBorrow, Copy, Clone)]
+#[derive(Default, AlignedBorrow, StructReflection, Copy, Clone)]
 #[repr(C)]
 pub struct RangeCols<T> {
     /// Number of range checks for each value
     pub mult: T,
 }
 
-#[derive(Default, AlignedBorrow, Copy, Clone)]
+#[derive(Default, AlignedBorrow, StructReflection, Copy, Clone)]
 #[repr(C)]
 pub struct RangePreprocessedCols<T> {
     /// Contains all possible values within range [0, max)
@@ -43,7 +45,8 @@ pub struct RangePreprocessedCols<T> {
 pub const NUM_RANGE_COLS: usize = size_of::<RangeCols<u8>>();
 pub const NUM_RANGE_PREPROCESSED_COLS: usize = size_of::<RangePreprocessedCols<u8>>();
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(RangeCols<u8>)]
 pub struct RangeCheckerAir {
     pub bus: RangeCheckBus,
 }

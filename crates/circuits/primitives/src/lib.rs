@@ -20,8 +20,17 @@
 //! - [is_less_than_array]
 //! - [is_zero]
 
+// Allows our own derive macros to refer to `::openvm_circuit_primitives::...`
+// when expanded inside this crate.
+extern crate self as openvm_circuit_primitives;
+
 /// Derive macros
 pub use openvm_circuit_primitives_derive::*;
+/// Struct reflection for column names
+pub use struct_reflection::{StructReflection, StructReflectionHelper};
+
+mod columns_air;
+pub use columns_air::ColumnsAir;
 
 pub mod assert_less_than;
 pub mod bigint;

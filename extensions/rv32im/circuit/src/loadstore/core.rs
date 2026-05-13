@@ -8,7 +8,9 @@ use openvm_circuit::{
     arch::*,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
-use openvm_circuit_primitives::{AlignedBorrow, AlignedBytesBorrow};
+use openvm_circuit_primitives::{
+    AlignedBorrow, AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+};
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
 };
@@ -47,7 +49,7 @@ use InstructionOpcode::*;
 /// It also handles the shifting in case of not 4 byte aligned instructions
 /// This chips treats each (opcode, shift) pair as a separate instruction
 #[repr(C)]
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub flags: [T; 4],
     /// we need to keep the degree of is_valid and is_load to 1
@@ -61,7 +63,8 @@ pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub write_data: [T; NUM_CELLS],
 }
 
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone, derive_new::new, ColumnsAir)]
+#[columns_via(LoadStoreCoreCols<u8, NUM_CELLS>)]
 pub struct LoadStoreCoreAir<const NUM_CELLS: usize> {
     pub offset: usize,
 }

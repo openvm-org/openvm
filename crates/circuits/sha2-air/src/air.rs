@@ -2,7 +2,8 @@ use std::{iter::once, marker::PhantomData};
 
 use ndarray::s;
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::select, SubAir,
+    bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::select, ColumnsAir,
+    SubAir,
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -29,6 +30,10 @@ pub struct Sha2BlockHasherSubAir<C: Sha2BlockHasherSubairConfig> {
     pub private_bus: PermutationCheckBus,
     _phantom: PhantomData<C>,
 }
+
+// No columns provided: width is the config-dependent `C::SUBAIR_WIDTH` and rows are accessed via
+// `Sha2{Round,Digest}ColsRef` (slice-borrowing ref structs, no static `Cols` to reflect).
+impl<C: Sha2BlockHasherSubairConfig> ColumnsAir for Sha2BlockHasherSubAir<C> {}
 
 impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
     pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, private_bus_idx: BusIndex) -> Self {

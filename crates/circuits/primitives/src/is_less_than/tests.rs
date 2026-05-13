@@ -26,7 +26,7 @@ use crate::{
     is_less_than::IsLtSubAir,
     utils::test_engine_small,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    SubAir, TraceSubRowGenerator,
+    ColumnsAir, SubAir, TraceSubRowGenerator,
 };
 
 /// Struct purely for testing purposes. We could make this have a const generic just like
@@ -45,6 +45,9 @@ pub struct IsLessThanCols<T> {
 #[derive(Clone, Copy)]
 pub struct IsLtTestAir(pub IsLtSubAir);
 
+// No columns provided: `IsLessThanCols` intentionally uses `Vec<T>` for `lower_decomp` (see comment
+// on the struct), so it can't derive `StructReflection`.
+impl ColumnsAir for IsLtTestAir {}
 impl<F: Field> BaseAirWithPublicValues<F> for IsLtTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsLtTestAir {}
 impl<F: Field> BaseAir<F> for IsLtTestAir {

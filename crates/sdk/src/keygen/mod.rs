@@ -9,7 +9,7 @@ use openvm_circuit::{
 use openvm_continuations::RootSC;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
-    StarkEngine,
+    AirRef, StarkEngine,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
 use serde::{Deserialize, Serialize};
@@ -65,6 +65,7 @@ where
                         .app_vm_config
                         .create_airs()?
                         .into_airs()
+                        .map(|a| a as AirRef<_>)
                         .collect_vec(),
                 )
                 .0;

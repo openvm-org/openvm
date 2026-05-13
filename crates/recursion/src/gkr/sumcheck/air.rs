@@ -1,6 +1,8 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{
+    utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -24,7 +26,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, Debug, StructReflection)]
 pub struct GkrLayerSumcheckCols<T> {
     /// Whether the current row is enabled (i.e. not padding)
     pub is_enabled: T,
@@ -70,6 +72,8 @@ pub struct GkrLayerSumcheckCols<T> {
     pub eq_out: [T; D_EF],
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(GkrLayerSumcheckCols<u8>)]
 pub struct GkrLayerSumcheckAir {
     pub transcript_bus: TranscriptBus,
     pub xi_randomness_bus: XiRandomnessBus,

@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     utils::{assert_array_eq, not},
-    SubAir,
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -50,7 +50,7 @@ use crate::{
 /// ```
 ///
 /// `is_interaction` is derived as `1 - group_idx` (not a separate column).
-#[derive(AlignedBorrow, Copy, Clone, Debug)]
+#[derive(AlignedBorrow, Copy, Clone, Debug, StructReflection)]
 #[repr(C)]
 pub struct ExpressionClaimCols<T> {
     // --- Loop structure (enforced by NestedForLoopSubAir<4>) ---
@@ -92,6 +92,8 @@ pub struct ExpressionClaimCols<T> {
     pub num_multilinear_sumcheck_rounds: T,
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(ExpressionClaimCols<u8>)]
 pub struct ExpressionClaimAir {
     pub expression_claim_n_max_bus: ExpressionClaimNMaxBus,
     pub expr_claim_bus: ExpressionClaimBus,

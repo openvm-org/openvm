@@ -1,6 +1,7 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
 use eyre::Result;
+use openvm_circuit_primitives::ColumnsAir;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
@@ -17,6 +18,8 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use crate::{circuit::deferral::DeferralCircuitPvs, SC};
 
 pub(in crate::tests) struct EmptyAirWithPvs(pub(in crate::tests) usize);
+// No columns provided: test dummy with a single anonymous column and no matching `Cols` struct.
+impl ColumnsAir for EmptyAirWithPvs {}
 
 impl<F> BaseAir<F> for EmptyAirWithPvs {
     fn width(&self) -> usize {
