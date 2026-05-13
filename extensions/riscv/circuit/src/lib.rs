@@ -21,8 +21,7 @@ pub mod adapters;
 // TEMP: commented out modules not yet ported to RV64
 mod add_sub;
 mod auipc;
-mod base_alu;
-mod base_alu_w;
+mod add_sub_w;
 mod branch_eq;
 mod branch_lt;
 pub mod common;
@@ -43,8 +42,7 @@ mod xor_or_and;
 
 pub use add_sub::*;
 pub use auipc::*;
-pub use base_alu::*;
-pub use base_alu_w::*;
+pub use add_sub_w::*;
 pub use branch_eq::*;
 pub use branch_lt::*;
 pub use divrem::*;
