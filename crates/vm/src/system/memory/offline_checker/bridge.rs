@@ -292,6 +292,23 @@ impl MemoryOfflineChecker {
     }
 }
 
+/// Pack `MEMORY_BLOCK_BYTES` u8-typed field expressions into
+/// `BLOCK_FE_WIDTH` bus expressions via base-256:
+/// `out[i] = data[2i] + 256·data[2i+1]`.
+///
+/// Pattern A chips that keep their `[T; 8]` u8 columns but want to call the
+/// new [`MemoryBridge::read_4`] / [`MemoryBridge::write_4`] API can pass
+/// the result of this helper directly to the bridge.
+pub fn pack_u8_for_bus<AB: InteractionBuilder>(
+    data: &[AB::Expr; crate::arch::MEMORY_BLOCK_BYTES],
+) -> [AB::Expr; crate::arch::BLOCK_FE_WIDTH] {
+    let mut out: [AB::Expr; crate::arch::BLOCK_FE_WIDTH] = std::array::from_fn(|_| AB::Expr::ZERO);
+    for i in 0..crate::arch::BLOCK_FE_WIDTH {
+        out[i] = data[i * 2].clone() + AB::Expr::from_u64(256) * data[i * 2 + 1].clone();
+    }
+    out
+}
+
 /// Pack `N` input field expressions into `BLOCK_FE_WIDTH` output field
 /// expressions for the memory bus message. `N` must be a multiple of
 /// `BLOCK_FE_WIDTH`. With `BUS_PTR_SCALE = 2`, `BLOCK_FE_WIDTH = 4` and
