@@ -1,4 +1,4 @@
-use std::{array::from_fn, fmt::Debug};
+use std::{any::TypeId, array::from_fn, fmt::Debug};
 
 use getset::Getters;
 use openvm_instructions::exe::SparseMemoryImage;
@@ -295,7 +295,7 @@ impl GuestMemory {
         ptr: u32,
     ) -> [T; BLOCK_SIZE]
     where
-        T: Copy + Debug,
+        T: Copy + Debug + 'static,
     {
         self.debug_assert_cell_type::<T>(addr_space);
         // SAFETY:
@@ -318,7 +318,7 @@ impl GuestMemory {
         ptr: u32,
         values: [T; BLOCK_SIZE],
     ) where
-        T: Copy + Debug,
+        T: Copy + Debug + 'static,
     {
         self.debug_assert_cell_type::<T>(addr_space);
         // SAFETY:
@@ -340,7 +340,7 @@ impl GuestMemory {
         ptr: u32,
         values: &mut [T; BLOCK_SIZE],
     ) where
-        T: Copy + Debug,
+        T: Copy + Debug + 'static,
     {
         self.debug_assert_cell_type::<T>(addr_space);
         // SAFETY:
@@ -358,7 +358,13 @@ impl GuestMemory {
     }
 
     #[inline(always)]
-    fn debug_assert_cell_type<T>(&self, addr_space: u32) {
+    fn debug_assert_cell_type<T: 'static>(&self, addr_space: u32) {
+        // u8 callers are always allowed: the byte-view path reads raw bytes
+        // from the storage backing regardless of the AS's cell type. For
+        // other types, T must exactly match the cell type.
+        if TypeId::of::<T>() == TypeId::of::<u8>() {
+            return;
+        }
         debug_assert_eq!(
             size_of::<T>(),
             self.memory.config[addr_space as usize].layout.size()
@@ -528,7 +534,7 @@ impl TracingMemory {
         pointer: u32,
     ) -> (u32, [T; BLOCK_SIZE])
     where
-        T: Copy + Debug,
+        T: Copy + Debug + 'static,
     {
         self.assert_valid_access(BLOCK_SIZE, address_space, pointer);
         let values = self.data.read(address_space, pointer);
@@ -553,7 +559,7 @@ impl TracingMemory {
         values: [T; BLOCK_SIZE],
     ) -> (u32, [T; BLOCK_SIZE])
     where
-        T: Copy + Debug,
+        T: Copy + Debug + 'static,
     {
         self.assert_valid_access(BLOCK_SIZE, address_space, pointer);
         let values_prev = self.data.read(address_space, pointer);

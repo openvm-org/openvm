@@ -205,7 +205,7 @@ where
 unsafe fn execute_e12_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
-    T: Copy + Debug + Default,
+    T: Copy + Debug + Default + 'static,
     OP: LoadStoreOp<T>,
     const ENABLED: bool,
 >(
@@ -261,7 +261,7 @@ unsafe fn execute_e12_impl<
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
-    T: Copy + Debug + Default,
+    T: Copy + Debug + Default + 'static,
     OP: LoadStoreOp<T>,
     const ENABLED: bool,
 >(
@@ -278,7 +278,7 @@ unsafe fn execute_e1_impl<
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
-    T: Copy + Debug + Default,
+    T: Copy + Debug + Default + 'static,
     OP: LoadStoreOp<T>,
     const ENABLED: bool,
 >(

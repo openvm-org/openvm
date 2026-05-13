@@ -165,7 +165,7 @@ where
 {
     /// Runtime read operation for a block of memory
     #[inline(always)]
-    pub fn vm_read<T: Copy + Debug, const BLOCK_SIZE: usize>(
+    pub fn vm_read<T: Copy + Debug + 'static, const BLOCK_SIZE: usize>(
         &mut self,
         addr_space: u32,
         ptr: u32,
@@ -177,7 +177,7 @@ where
 
     /// Runtime write operation for a block of memory
     #[inline(always)]
-    pub fn vm_write<T: Copy + Debug, const BLOCK_SIZE: usize>(
+    pub fn vm_write<T: Copy + Debug + 'static, const BLOCK_SIZE: usize>(
         &mut self,
         addr_space: u32,
         ptr: u32,
@@ -200,7 +200,7 @@ where
     }
 
     #[inline(always)]
-    pub fn host_read<T: Copy + Debug, const BLOCK_SIZE: usize>(
+    pub fn host_read<T: Copy + Debug + 'static, const BLOCK_SIZE: usize>(
         &self,
         addr_space: u32,
         ptr: u32,
@@ -213,7 +213,7 @@ where
     }
 
     #[inline(always)]
-    pub fn host_write<T: Copy + Debug, const BLOCK_SIZE: usize>(
+    pub fn host_write<T: Copy + Debug + 'static, const BLOCK_SIZE: usize>(
         &mut self,
         addr_space: u32,
         ptr: u32,
