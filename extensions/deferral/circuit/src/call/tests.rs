@@ -5,7 +5,8 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH, BUS_PTR_SCALE,
+    MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -106,7 +107,10 @@ struct CudaHarnessBundle {
 
 fn test_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
-    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    // u16-celled AS: saturate at `pointer_max_bits - log2(BUS_PTR_SCALE)` so bus
+    // pointers (= BUS_PTR_SCALE * cell_idx) stay within `pointer_max_bits`.
+    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells =
+        1 << (config.pointer_max_bits - BUS_PTR_SCALE.trailing_zeros() as usize);
     config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     config
 }
