@@ -10,8 +10,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-#[allow(unused_imports)]
-use crate::{adapters::imm_to_bytes, common::*, BaseAluExecutor};
+use crate::{adapters::imm_to_bytes, common::*};
 use crate::{common::address_space_start_to_gpr, LoadStoreExecutor};
 
 impl<F, A, const NUM_CELLS: usize> AotExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
