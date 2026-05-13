@@ -11,10 +11,8 @@ use std::{collections::VecDeque, ffi::c_void, io::Write};
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, Rng};
-use rvr_openvm_ext_deferral::eval_deferral_call;
-use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_BYTES};
 
-use crate::arch::deferral::{DeferralState, InputMapVal};
+use crate::arch::deferral::DeferralState;
 
 /// IO execution state borrowed from the host `VmState<F>` for the duration of
 /// one rvr call. Streams, rng, and the public-values byte slice are mutable
@@ -40,9 +38,6 @@ pub struct OpenVmHostCallbacks {
     pub hint_buffer: extern "C" fn(*mut c_void, u32, u32),
     pub reveal: extern "C" fn(*mut c_void, u32, u32, u32),
     pub hint_stream_set: unsafe extern "C" fn(*mut c_void, *const u8, u32),
-    pub deferral_call_lookup: unsafe extern "C" fn(*mut c_void, u32, *const u8, *mut u8) -> i32,
-    pub deferral_output_lookup:
-        unsafe extern "C" fn(*mut c_void, u32, *const u8, *mut u8, u32) -> i32,
 }
 
 // ── Callback implementations ────────────────────────────────────────────────
@@ -161,80 +156,4 @@ pub unsafe extern "C" fn host_hint_stream_set<F: PrimeField32>(
             io.hint_stream.push_back(F::from_u8(b));
         }
     }
-}
-
-// ── Deferral callbacks ─────────────────────────────────────────────────────
-
-/// Deferral CALL lookup. Returns 1 on hit, 0 on miss. The closure-evaluation
-/// side (Raw → Output_raw + commit) is delegated to a thread-local runtime;
-/// this callback only owns the cache.
-///
-/// # Safety
-///
-/// `input_commit_raw` must point to `DEFERRAL_COMMIT_NUM_BYTES` readable bytes.
-/// `output_key_out` must point to `DEFERRAL_OUTPUT_KEY_BYTES` writable bytes.
-pub unsafe extern "C" fn host_deferral_call_lookup<F: PrimeField32>(
-    ctx: *mut c_void,
-    def_idx: u32,
-    input_commit_raw: *const u8,
-    output_key_out: *mut u8,
-) -> i32 {
-    let io = &mut *(ctx as *mut OpenVmIoState<'_, F>);
-    let input_commit: Vec<u8> =
-        std::slice::from_raw_parts(input_commit_raw, DEFERRAL_COMMIT_NUM_BYTES).to_vec();
-
-    let Some(state) = io.deferrals.get_mut(def_idx as usize) else {
-        return 0;
-    };
-
-    let (output_commit, output_len) = match state.get_input(&input_commit).clone() {
-        InputMapVal::Output(commit) => {
-            let len = state.get_output(&commit).len() as u64;
-            let arr: [u8; DEFERRAL_COMMIT_NUM_BYTES] = commit.as_slice().try_into().unwrap();
-            (arr, len)
-        }
-        InputMapVal::Raw(input_raw) => {
-            let (commit, output_raw) = eval_deferral_call(def_idx, &input_raw);
-            let len = output_raw.len() as u64;
-            io.deferrals[def_idx as usize].store_output(&input_commit, commit.to_vec(), output_raw);
-            (commit, len)
-        }
-    };
-
-    let mut output_key = [0u8; DEFERRAL_OUTPUT_KEY_BYTES];
-    output_key[..DEFERRAL_COMMIT_NUM_BYTES].copy_from_slice(&output_commit);
-    output_key[DEFERRAL_COMMIT_NUM_BYTES..].copy_from_slice(&output_len.to_le_bytes());
-    std::ptr::copy_nonoverlapping(
-        output_key.as_ptr(),
-        output_key_out,
-        DEFERRAL_OUTPUT_KEY_BYTES,
-    );
-    1
-}
-
-/// Deferral OUTPUT lookup: `deferrals[def_idx].output_map[output_commit]`.
-/// Returns 1 on hit, 0 on miss.
-///
-/// # Safety
-///
-/// `output_commit_raw` must point to `DEFERRAL_COMMIT_NUM_BYTES` readable bytes.
-/// `output_raw_out` must point to at least `expected_len` writable bytes.
-pub unsafe extern "C" fn host_deferral_output_lookup<F: PrimeField32>(
-    ctx: *mut c_void,
-    def_idx: u32,
-    output_commit_raw: *const u8,
-    output_raw_out: *mut u8,
-    expected_len: u32,
-) -> i32 {
-    let io = &*(ctx as *const OpenVmIoState<'_, F>);
-    let output_commit: Vec<u8> =
-        std::slice::from_raw_parts(output_commit_raw, DEFERRAL_COMMIT_NUM_BYTES).to_vec();
-    let Some(state) = io.deferrals.get(def_idx as usize) else {
-        return 0;
-    };
-    let raw = state.get_output(&output_commit);
-    // TODO: change these panics to something better to handle across the FFI boundary.
-    assert_eq!(raw.len(), expected_len as usize);
-    std::ptr::copy_nonoverlapping(raw.as_ptr(), output_raw_out, raw.len());
-    1
 }

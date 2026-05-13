@@ -178,7 +178,15 @@ where
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         let result = tracing::info_span!("execute_metered_cost")
-            .in_scope(|| execute_metered_cost(&compiled, &mut vm_state, metered_cost_config, None))
+            .in_scope(|| {
+                execute_metered_cost(
+                    &compiled,
+                    &self.extensions,
+                    &mut vm_state,
+                    metered_cost_config,
+                    None,
+                )
+            })
             .map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]
         {

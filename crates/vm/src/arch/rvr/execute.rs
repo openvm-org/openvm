@@ -8,15 +8,15 @@
 use std::ffi::c_void;
 
 use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm_lift::{ExtensionError, ExtensionRegistry};
 use rvr_state::{MemoryError, Rv32, RvState, SuspenderState, TracerState, NUM_REGS_I};
 
 use super::{
     bridge::{public_values_slice, read_rv32_registers, rv32_memory_ptr, write_rv32_registers},
     compile::RvrCompiled,
     io::{
-        host_deferral_call_lookup, host_deferral_output_lookup, host_hint_buffer, host_hint_input,
-        host_hint_random, host_hint_storew, host_hint_stream_set, host_print_str, host_reveal,
-        OpenVmHostCallbacks, OpenVmIoState,
+        host_hint_buffer, host_hint_input, host_hint_random, host_hint_storew,
+        host_hint_stream_set, host_print_str, host_reveal, OpenVmHostCallbacks, OpenVmIoState,
     },
     metered::{
         metered_periodic_check, MeteredConfig, MeteredTracerData, RvrMeteredResult,
@@ -41,6 +41,8 @@ pub enum ExecuteError {
     GuestExit(u8),
     #[error("memory allocation failed: {0}")]
     MemoryAlloc(#[from] MemoryError),
+    #[error("extension host callback registration failed: {0}")]
+    ExtensionRegistration(#[from] ExtensionError),
 }
 
 /// `suspended` is `false` for unlimited runs.
@@ -122,8 +124,6 @@ pub fn build_callbacks<F: PrimeField32>(
         hint_buffer: host_hint_buffer::<F>,
         reveal: host_reveal::<F>,
         hint_stream_set: host_hint_stream_set::<F>,
-        deferral_call_lookup: host_deferral_call_lookup::<F>,
-        deferral_output_lookup: host_deferral_output_lookup::<F>,
     }
 }
 
@@ -144,14 +144,11 @@ fn build_io_state_borrowed<'a, F: PrimeField32>(
 
 /// # Safety
 ///
-/// - `compiled` must contain a valid rvr-compiled shared library with the expected ABI
-///   (`register_openvm_callbacks` and `rv_execute` symbols).
-/// - `state_ptr` must point to a valid, mutable RV32 state struct whose tracer variant matches the
-///   one compiled into the shared library.
-pub unsafe fn register_and_execute(
+/// `compiled` must contain a valid rvr-compiled shared library exporting the
+/// `register_openvm_callbacks` symbol with the expected ABI.
+pub unsafe fn register_openvm_callbacks(
     compiled: &RvrCompiled,
     callbacks: &OpenVmHostCallbacks,
-    state_ptr: *mut c_void,
 ) -> Result<(), ExecuteError> {
     type RegisterFn = unsafe extern "C" fn(*const OpenVmHostCallbacks);
     let register_fn: RegisterFn = unsafe {
@@ -162,7 +159,18 @@ pub unsafe fn register_and_execute(
         *sym
     };
     unsafe { register_fn(callbacks) };
+    Ok(())
+}
 
+/// # Safety
+///
+/// - `compiled` must contain a valid rvr-compiled shared library exporting the `rv_execute` symbol.
+/// - `state_ptr` must point to a valid, mutable RV32 state struct whose tracer variant matches the
+///   one compiled into the shared library.
+pub unsafe fn rv_execute(
+    compiled: &RvrCompiled,
+    state_ptr: *mut c_void,
+) -> Result<(), ExecuteError> {
     type ExecuteFn = unsafe extern "C" fn(*mut c_void);
     let execute_fn: ExecuteFn = unsafe {
         let sym = compiled
@@ -210,6 +218,7 @@ fn execution_error(
 /// limit-armed callers pass `true`; unlimited callers pass `false`).
 fn run_and_finalize<F, S>(
     compiled: &RvrCompiled,
+    extensions: &ExtensionRegistry<F>,
     vm_state: &mut VmState<F, GuestMemory>,
     state: &mut S,
     allow_suspended: bool,
@@ -221,7 +230,9 @@ where
 {
     let mut io_state = build_io_state_borrowed(vm_state);
     let callbacks = build_callbacks(&mut io_state);
-    unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }?;
+    unsafe { register_openvm_callbacks(compiled, &callbacks) }?;
+    unsafe { extensions.register_host_callbacks(&compiled.lib) }?;
+    unsafe { rv_execute(compiled, state.as_void_ptr()) }?;
 
     let outcome = outcome_of(state);
     let success = match outcome {
@@ -254,6 +265,7 @@ where
 /// (with exit-code 0) succeeds.
 pub fn execute<F: PrimeField32>(
     compiled: &RvrCompiled,
+    extensions: &ExtensionRegistry<F>,
     vm_state: &mut VmState<F, GuestMemory>,
     limit: Option<u64>,
 ) -> Result<RvrPureResult, ExecuteError> {
@@ -270,6 +282,7 @@ pub fn execute<F: PrimeField32>(
 
     let outcome = run_and_finalize(
         compiled,
+        extensions,
         vm_state,
         &mut state,
         limit.is_some(),
@@ -285,6 +298,7 @@ pub fn execute<F: PrimeField32>(
 /// suspender is armed at `n` instructions and `Suspended` counts as success.
 pub fn execute_metered_cost<F: PrimeField32>(
     compiled: &RvrCompiled,
+    extensions: &ExtensionRegistry<F>,
     vm_state: &mut VmState<F, GuestMemory>,
     metered_cost_config: MeteredCostConfig,
     limit: Option<u64>,
@@ -306,6 +320,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
 
     let outcome = run_and_finalize(
         compiled,
+        extensions,
         vm_state,
         &mut state,
         limit.is_some(),
@@ -322,6 +337,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
 /// Execute a VmExe with per-chip metered execution and segmentation.
 pub fn execute_metered<F: PrimeField32>(
     compiled: &RvrCompiled,
+    extensions: &ExtensionRegistry<F>,
     vm_state: &mut VmState<F, GuestMemory>,
     trace_config: MeteredConfig,
 ) -> Result<RvrMeteredResult, ExecuteError> {
@@ -348,6 +364,7 @@ pub fn execute_metered<F: PrimeField32>(
 
     run_and_finalize(
         compiled,
+        extensions,
         vm_state,
         &mut state,
         false,

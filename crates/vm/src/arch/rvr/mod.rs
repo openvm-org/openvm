@@ -19,8 +19,8 @@ pub use compile::{
 };
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
 pub use execute::{
-    build_callbacks, execute, execute_metered, execute_metered_cost, register_and_execute,
-    ExecuteError, RvrMeteredCostResult, RvrPureResult, RvrStateInspect,
+    build_callbacks, execute, execute_metered, execute_metered_cost, register_openvm_callbacks,
+    rv_execute, ExecuteError, RvrMeteredCostResult, RvrPureResult, RvrStateInspect,
 };
 pub use metered::{
     build_metered_config, MeteredConfig, RvrMeteredInstance, RvrMeteredResult, RvrSegment,

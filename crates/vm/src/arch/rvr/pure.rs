@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm_lift::ExtensionRegistry;
 
 use super::{bridge::map_rvr_execute_error, execute::execute, RvrCompiled};
 use crate::{
@@ -9,10 +10,11 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-pub struct RvrPureInstance<F> {
+pub struct RvrPureInstance<F: PrimeField32> {
     pub(crate) system_config: SystemConfig,
     pub(crate) exe: Arc<VmExe<F>>,
     pub(crate) compiled: RvrCompiled,
+    pub(crate) extensions: ExtensionRegistry<F>,
 }
 
 impl<F> RvrPureInstance<F>
@@ -42,7 +44,7 @@ where
         let start = std::time::Instant::now();
         #[allow(unused_variables)]
         let result = tracing::info_span!("execute_e1")
-            .in_scope(|| execute(&self.compiled, &mut vm_state, num_insns))
+            .in_scope(|| execute(&self.compiled, &self.extensions, &mut vm_state, num_insns))
             .map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]
         {

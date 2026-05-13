@@ -301,6 +301,7 @@ where
             system_config: self.inventory.config().clone(),
             exe: Arc::new(exe.clone()),
             compiled,
+            extensions,
         })
     }
 }
