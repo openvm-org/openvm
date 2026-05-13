@@ -207,6 +207,19 @@ where
                 .eval(builder, is_valid.clone());
         }
 
+        // Range-check the read columns b, c to [0, 256). Once the memory bus
+        // packs to 4 field elements (commit 6), pairs of limbs share a single
+        // field element on the bus; without local u8 checks the prover could
+        // re-split the packed value across (b[2i], b[2i+1]) or (c[2i], c[2i+1]).
+        for i in 0..(NUM_LIMBS / 2) {
+            self.bitwise_lookup_bus
+                .send_range(b[i * 2], b[i * 2 + 1])
+                .eval(builder, is_valid.clone());
+            self.bitwise_lookup_bus
+                .send_range(c[i * 2], c[i * 2 + 1])
+                .eval(builder, is_valid.clone());
+        }
+
         for carry in cols.bit_shift_carry {
             self.range_bus
                 .send(carry, bit_shift.clone())
@@ -368,6 +381,17 @@ where
             run_shift::<NUM_LIMBS, LIMB_BITS>(opcode, &record.b, &record.c);
 
         for pair in a.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
+        }
+
+        // Mirror the AIR's read-side `send_range(b[i*2], b[i*2+1])` and the
+        // analogous c-pair sends so the bitwise-lookup bus stays balanced.
+        for pair in record.b.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
+        }
+        for pair in record.c.chunks_exact(2) {
             self.bitwise_lookup_chip
                 .request_range(pair[0] as u32, pair[1] as u32);
         }

@@ -156,6 +156,16 @@ where
             )
             .eval(builder, cols.opcode_mulh_flag + cols.opcode_mulhsu_flag);
 
+        // Range-check all read limbs b[i], c[i] to [0, 256). After the bus pack
+        // (commit 6) pairs share a packed field element and need local u8 checks.
+        // The MSB sign-bit check above handles the signed-shifted form; the raw
+        // u8 bound on the MSB is added here unconditionally.
+        for i in 0..NUM_LIMBS {
+            self.bitwise_lookup_bus
+                .send_range(b[i], c[i])
+                .eval(builder, is_valid.clone());
+        }
+
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
             flags.iter().zip(MulHOpcode::iter()).fold(
@@ -331,6 +341,12 @@ where
                 (record.c[NUM_LIMBS - 1] as u32 - c_sign_mask)
                     << ((opcode == MulHOpcode::MULH) as u32),
             );
+        }
+
+        // Mirror AIR's u8 range-check over all read limbs (b[i], c[i]).
+        for i in 0..NUM_LIMBS {
+            self.bitwise_lookup_chip
+                .request_range(record.b[i] as u32, record.c[i] as u32);
         }
 
         // Write in reverse order

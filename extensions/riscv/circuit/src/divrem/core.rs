@@ -256,6 +256,20 @@ where
             )
             .eval(builder, signed.clone());
 
+        // Range-check non-MSB read limbs b[0..NUM_LIMBS-1] and c[0..NUM_LIMBS-1] to
+        // [0, 256). MSB is range-checked above (via the signed sign-bit interaction
+        // when signed, but unsigned ops need an explicit check on the MSB too).
+        // After the bus pack (commit 6) these limbs share a packed field element.
+        for i in 0..NUM_LIMBS - 1 {
+            self.bitwise_lookup_bus
+                .send_range(b[i], c[i])
+                .eval(builder, is_valid.clone());
+        }
+        // For the unsigned path the MSB also needs an explicit u8 check.
+        self.bitwise_lookup_bus
+            .send_range(b[NUM_LIMBS - 1], c[NUM_LIMBS - 1])
+            .eval(builder, is_valid.clone() - signed.clone());
+
         // Constrain that 0 <= |r| < |c| by checking that r_prime < c (unsigned LT). By
         // definition, the sign of r must be b_sign. If c is negative then we want
         // to constrain c < r_prime. If c is positive, then we want to constrain r_prime < c.
@@ -516,6 +530,20 @@ where
             self.bitwise_lookup_chip.request_range(
                 (record.b[NUM_LIMBS - 1] as u32 - b_sign_mask) << 1,
                 (record.c[NUM_LIMBS - 1] as u32 - c_sign_mask) << 1,
+            );
+        }
+
+        // Mirror AIR's non-MSB read-side u8 checks for (b[i], c[i]).
+        for i in 0..NUM_LIMBS - 1 {
+            self.bitwise_lookup_chip
+                .request_range(record.b[i] as u32, record.c[i] as u32);
+        }
+        // For the unsigned path the MSB check is added explicitly in the AIR;
+        // mirror it here.
+        if !is_signed {
+            self.bitwise_lookup_chip.request_range(
+                record.b[NUM_LIMBS - 1] as u32,
+                record.c[NUM_LIMBS - 1] as u32,
             );
         }
 
