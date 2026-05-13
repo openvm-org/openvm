@@ -9,7 +9,7 @@ use std::ffi::c_void;
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_lift::{ExtensionError, ExtensionRegistry};
-use rvr_state::{MemoryError, Rv32, RvState, SuspenderState, TracerState, NUM_REGS_I};
+use rvr_state::{ExecutionStatus, MemoryError, Rv32, RvState, SuspenderState, TracerState};
 
 use super::{
     bridge::{public_values_slice, read_rv32_registers, rv32_memory_ptr, write_rv32_registers},
@@ -56,58 +56,6 @@ pub struct RvrMeteredCostResult {
     pub state: MeteredCostState,
     pub cost: u64,
     pub suspended: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ExecuteOutcome {
-    Running,
-    Terminated,
-    Suspended,
-}
-
-/// Read-only view of any RV32 rvr state, regardless of tracer variant.
-pub trait RvrStateInspect {
-    fn pc(&self) -> u32;
-    fn instret(&self) -> u64;
-    fn regs(&self) -> &[u32; NUM_REGS_I];
-    fn is_terminated(&self) -> bool;
-    fn is_suspended(&self) -> bool;
-    fn result_code(&self) -> u8;
-    fn as_void_ptr(&mut self) -> *mut c_void;
-}
-
-fn outcome_of<S: RvrStateInspect>(state: &S) -> ExecuteOutcome {
-    if state.is_terminated() {
-        ExecuteOutcome::Terminated
-    } else if state.is_suspended() {
-        ExecuteOutcome::Suspended
-    } else {
-        ExecuteOutcome::Running
-    }
-}
-
-impl<T: TracerState, S: SuspenderState> RvrStateInspect for RvState<Rv32, T, S> {
-    fn pc(&self) -> u32 {
-        self.pc
-    }
-    fn instret(&self) -> u64 {
-        self.instret
-    }
-    fn regs(&self) -> &[u32; NUM_REGS_I] {
-        &self.regs
-    }
-    fn is_terminated(&self) -> bool {
-        Self::is_terminated(self)
-    }
-    fn is_suspended(&self) -> bool {
-        Self::is_suspended(self)
-    }
-    fn result_code(&self) -> u8 {
-        Self::result_code(self)
-    }
-    fn as_void_ptr(&mut self) -> *mut c_void {
-        Self::as_void_ptr(self)
-    }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -184,30 +132,26 @@ pub unsafe fn rv_execute(
     Ok(())
 }
 
-fn report_failure(prefix: &str, outcome: ExecuteOutcome, pc: u32, instret: u64, exit_code: u8) {
+fn report_failure(prefix: &str, status: ExecutionStatus, pc: u32, instret: u64, exit_code: u8) {
     if std::env::var_os("RVR_OPENVM_DEBUG_EXEC_FAILURE").is_some() {
         eprintln!(
-            "[rvr-openvm] {prefix}: outcome={outcome:?}, pc={pc:#x}, instret={instret}, guest_exit_code={exit_code}"
+            "[rvr-openvm] {prefix}: status={status:?}, pc={pc:#x}, instret={instret}, guest_exit_code={exit_code}"
         );
     }
 }
 
 fn execution_error(
     prefix: &str,
-    outcome: ExecuteOutcome,
+    status: ExecutionStatus,
     pc: u32,
     instret: u64,
     exit_code: u8,
 ) -> ExecuteError {
-    report_failure(prefix, outcome, pc, instret, exit_code);
-    if outcome == ExecuteOutcome::Terminated && exit_code != 0 {
+    report_failure(prefix, status, pc, instret, exit_code);
+    if status == ExecutionStatus::Terminated && exit_code != 0 {
         ExecuteError::GuestExit(exit_code)
     } else {
-        ExecuteError::ExecutionFailed(match outcome {
-            ExecuteOutcome::Running => 0,
-            ExecuteOutcome::Terminated => 1,
-            ExecuteOutcome::Suspended => 2,
-        })
+        ExecuteError::ExecutionFailed(status as i32)
     }
 }
 
@@ -216,17 +160,18 @@ fn execution_error(
 ///
 /// `allow_suspended` permits `Suspended` as a successful outcome (the
 /// limit-armed callers pass `true`; unlimited callers pass `false`).
-fn run_and_finalize<F, S>(
+fn run_and_finalize<F, T, S>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
     vm_state: &mut VmState<F, GuestMemory>,
-    state: &mut S,
+    state: &mut RvState<Rv32, T, S>,
     allow_suspended: bool,
     failure_prefix: &str,
-) -> Result<ExecuteOutcome, ExecuteError>
+) -> Result<ExecutionStatus, ExecuteError>
 where
     F: PrimeField32,
-    S: RvrStateInspect,
+    T: TracerState,
+    S: SuspenderState,
 {
     let mut io_state = build_io_state_borrowed(vm_state);
     let callbacks = build_callbacks(&mut io_state);
@@ -234,23 +179,23 @@ where
     unsafe { extensions.register_host_callbacks(&compiled.lib) }?;
     unsafe { rv_execute(compiled, state.as_void_ptr()) }?;
 
-    let outcome = outcome_of(state);
-    let success = match outcome {
-        ExecuteOutcome::Terminated => state.is_terminated() && state.result_code() == 0,
-        ExecuteOutcome::Suspended => allow_suspended,
-        ExecuteOutcome::Running => false,
+    let status = state.execution_status();
+    let success = match status {
+        ExecutionStatus::Terminated => state.result_code() == 0,
+        ExecutionStatus::Suspended => allow_suspended,
+        ExecutionStatus::Running | ExecutionStatus::Trapped => false,
     };
 
     if success {
-        write_rv32_registers(vm_state, state.regs());
-        vm_state.set_pc(state.pc());
-        Ok(outcome)
+        write_rv32_registers(vm_state, &state.regs);
+        vm_state.set_pc(state.pc);
+        Ok(status)
     } else {
         Err(execution_error(
             failure_prefix,
-            outcome,
-            state.pc(),
-            state.instret(),
+            status,
+            state.pc,
+            state.instret,
             state.result_code(),
         ))
     }
@@ -280,7 +225,7 @@ pub fn execute<F: PrimeField32>(
         state.suspender.set_target(n);
     }
 
-    let outcome = run_and_finalize(
+    let status = run_and_finalize(
         compiled,
         extensions,
         vm_state,
@@ -290,7 +235,7 @@ pub fn execute<F: PrimeField32>(
     )?;
     Ok(RvrPureResult {
         state,
-        suspended: outcome == ExecuteOutcome::Suspended,
+        suspended: status == ExecutionStatus::Suspended,
     })
 }
 
@@ -318,7 +263,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
         state.suspender.set_target(n);
     }
 
-    let outcome = run_and_finalize(
+    let status = run_and_finalize(
         compiled,
         extensions,
         vm_state,
@@ -330,7 +275,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
     Ok(RvrMeteredCostResult {
         state,
         cost,
-        suspended: outcome == ExecuteOutcome::Suspended,
+        suspended: status == ExecutionStatus::Suspended,
     })
 }
 
