@@ -576,7 +576,7 @@ fn test_cuda_rand_alu_w_tracegen(opcode: BaseAluWOpcode, num_ops: usize) {
 
     type Record<'a> = (
         &'a mut Rv64BaseAluWAdapterRecord,
-        &'a mut BaseAluCoreRecord<RV64_WORD_NUM_LIMBS>,
+        &'a mut AddSubCoreRecord<RV64_WORD_NUM_LIMBS>,
     );
 
     harness
