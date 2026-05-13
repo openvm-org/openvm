@@ -160,8 +160,10 @@ impl DeviceMemoryTester {
             matches!(cell_layout, MemoryCellType::U16),
             "DeviceMemoryTester::read byte-view requires a u16-celled AS, got {cell_layout:?}",
         );
-        let (t_prev, bytes) =
-            unsafe { self.memory.read::<u8, N>(addr_space as u32, byte_ptr as u32) };
+        let (t_prev, bytes) = unsafe {
+            self.memory
+                .read::<u8, N>(addr_space as u32, byte_ptr as u32)
+        };
         let data = bytes.map(F::from_u8);
         let packed = pack_bytes_for_bus(&data);
         let bus_ptr = byte_ptr as u32;

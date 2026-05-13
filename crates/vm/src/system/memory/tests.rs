@@ -35,7 +35,20 @@ fn test_memory_write_by_tester(tester: &mut impl TestBuilder<F>, its: usize) {
 #[test_case(1000)]
 #[test_case(0)]
 fn test_memory_write(its: usize) {
-    let mut tester = VmChipTestBuilder::<F>::from_config(MemoryConfig::default());
+    use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+
+    use crate::system::memory::merkle::public_values::PUBLIC_VALUES_AS;
+    // `PUBLIC_VALUES_AS` in `MemoryConfig::default` only sizes for
+    // `DEFAULT_MAX_NUM_PUBLIC_VALUES = 32` field elements; expressed in u16
+    // cells that's `16` cells (`32` bytes), which is too small for the
+    // helper's `max_ptr = 20` cell range. Match the GPU test and bump the
+    // three writable ASes to a small but workable size.
+    let mut mem_config = MemoryConfig::default();
+    let small = 1 << 10;
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = small;
+    mem_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = small;
+    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = small;
+    let mut tester = VmChipTestBuilder::<F>::from_config(mem_config);
     test_memory_write_by_tester(&mut tester, its);
     let tester = tester.build().finalize();
     tester.simple_test().expect("Verification failed");

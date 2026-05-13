@@ -1,4 +1,4 @@
-use std::{any::TypeId, array::from_fn, fmt::Debug};
+use std::{array::from_fn, fmt::Debug};
 
 use getset::Getters;
 use openvm_instructions::exe::SparseMemoryImage;
@@ -212,7 +212,9 @@ impl<M: LinearMemory> AddressMap<M> {
         (addr_space, ptr): Address,
         len: usize,
     ) -> &[T] {
-        if TypeId::of::<T>() != TypeId::of::<u8>() {
+        // 1-byte typed slices (`u8`, the loadstore `U8(u8)` newtype) always
+        // alias the raw byte storage. For wider types, `T` must match cell type.
+        if size_of::<T>() != 1 {
             debug_assert_eq!(
                 size_of::<T>(),
                 self.config[addr_space as usize].layout.size()
@@ -371,10 +373,12 @@ impl GuestMemory {
 
     #[inline(always)]
     fn debug_assert_cell_type<T: 'static>(&self, addr_space: u32) {
-        // u8 callers are always allowed: the byte-view path reads raw bytes
-        // from the storage backing regardless of the AS's cell type. For
-        // other types, T must exactly match the cell type.
-        if TypeId::of::<T>() == TypeId::of::<u8>() {
+        // 1-byte callers are always allowed: the storage backing is a `Vec<u8>`
+        // and a 1-byte typed read/write coincides with the byte-view path
+        // regardless of the AS's cell type. This covers both `u8` and the
+        // loadstore `U8(u8)` newtype wrapper. For wider types, `T` must
+        // exactly match the cell type.
+        if size_of::<T>() == 1 {
             return;
         }
         debug_assert_eq!(
@@ -567,7 +571,9 @@ impl TracingMemory {
     where
         T: Copy + Debug + 'static,
     {
-        let t_prev = if TypeId::of::<T>() == TypeId::of::<u8>() {
+        // 1-byte `T` (covers `u8` and 1-byte newtypes like loadstore's `U8`)
+        // dispatches to the byte-view path; otherwise typed cell access.
+        let t_prev = if size_of::<T>() == 1 {
             self.assert_valid_u8_access(BLOCK_SIZE, address_space, pointer);
             self.byte_view_prev_access_time(address_space as usize, pointer as usize)
         } else {
@@ -597,7 +603,8 @@ impl TracingMemory {
     where
         T: Copy + Debug + 'static,
     {
-        let t_prev = if TypeId::of::<T>() == TypeId::of::<u8>() {
+        // 1-byte `T` dispatches to the byte-view path; see [`Self::read`].
+        let t_prev = if size_of::<T>() == 1 {
             self.assert_valid_u8_access(BLOCK_SIZE, address_space, pointer);
             self.byte_view_prev_access_time(address_space as usize, pointer as usize)
         } else {
@@ -626,8 +633,8 @@ impl TracingMemory {
     /// storage backing; returns the raw `N` bytes.
     ///
     /// # Safety
-    /// - `byte_ptr` must be aligned to `N` and `N` must equal
-    ///   `MEMORY_BLOCK_BYTES` (= cell_size * BLOCK_FE_WIDTH).
+    /// - `byte_ptr` must be aligned to `N` and `N` must equal `MEMORY_BLOCK_BYTES` (= cell_size *
+    ///   BLOCK_FE_WIDTH).
     /// - `byte_ptr + N` must be within the AS's storage backing.
     /// - `address_space` must be a valid configured address space.
     #[inline(always)]
