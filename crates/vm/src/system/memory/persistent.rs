@@ -4,6 +4,7 @@ use std::{
     iter,
 };
 
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{
@@ -35,7 +36,7 @@ pub const BLOCKS_PER_CHUNK: usize = CHUNK / DEFAULT_BLOCK_SIZE;
 /// The values describe aligned chunk of memory of size `CHUNK`---the data together with the last
 /// accessed timestamp---in either the initial or final memory state.
 #[repr(C)]
-#[derive(Debug, AlignedBorrow)]
+#[derive(Debug, AlignedBorrow, StructReflection)]
 pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
     // `expand_direction` =  1 corresponds to initial memory state
     // `expand_direction` = -1 corresponds to final memory state
@@ -58,7 +59,8 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
 /// - if `expand_direction` is 1, sends `[0, 0, address_space_label, leaf_label]` to `merkle_bus`.
 /// - if `expand_direction` is -1, receives `[1, 0, address_space_label, leaf_label]` from
 ///   `merkle_bus`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, ColumnsAir)]
+#[columns_via(PersistentBoundaryCols<u8, CHUNK>)]
 pub struct PersistentBoundaryAir<const CHUNK: usize> {
     pub memory_bus: MemoryBus,
     pub merkle_bus: PermutationCheckBus,

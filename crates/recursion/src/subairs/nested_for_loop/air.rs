@@ -1,4 +1,4 @@
-use openvm_circuit_primitives::SubAir;
+use openvm_circuit_primitives::{StructReflection, StructReflectionHelper, SubAir};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use p3_air::AirBuilder;
 use p3_field::PrimeCharacteristicRing;
@@ -14,7 +14,7 @@ use p3_field::PrimeCharacteristicRing;
 pub struct NestedForLoopSubAir<const DEPTH_MINUS_ONE: usize>;
 
 #[repr(C)]
-#[derive(AlignedBorrow, Copy, Clone, Debug)]
+#[derive(AlignedBorrow, StructReflection, Copy, Clone, Debug)]
 pub struct NestedForLoopIoCols<T, const DEPTH_MINUS_ONE: usize> {
     /// Whether the current row is enabled (i.e. not padding)
     pub is_enabled: T,

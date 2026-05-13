@@ -3,8 +3,9 @@ use std::{
     marker::PhantomData,
 };
 
-use openvm_circuit_primitives::var_range::{
-    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+use openvm_circuit_primitives::{
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_cpu_backend::CpuBackend;
@@ -32,7 +33,8 @@ mod tests;
 /// But we will use this value when generating the proof.
 pub const DEFAULT_SUSPEND_EXIT_CODE: u32 = 42;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, ColumnsAir)]
+#[columns_via(ConnectorCols<u8>)]
 pub struct VmConnectorAir {
     pub execution_bus: ExecutionBus,
     pub program_bus: ProgramBus,
@@ -41,7 +43,7 @@ pub struct VmConnectorAir {
     timestamp_max_bits: usize,
 }
 
-#[derive(Debug, Clone, Copy, AlignedBorrow)]
+#[derive(Debug, Clone, Copy, AlignedBorrow, StructReflection)]
 #[repr(C)]
 pub struct VmConnectorPvs<F> {
     /// The initial PC of this segment.
@@ -114,7 +116,7 @@ impl VmConnectorAir {
     }
 }
 
-#[derive(Debug, Copy, Clone, AlignedBorrow, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, AlignedBorrow, StructReflection, Serialize, Deserialize)]
 #[repr(C)]
 pub struct ConnectorCols<T> {
     pub pc: T,

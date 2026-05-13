@@ -1,5 +1,6 @@
 use core::borrow::Borrow;
 
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, p3_util::log2_strict_usize, BaseAirWithPublicValues,
@@ -14,7 +15,7 @@ use crate::primitives::bus::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, Debug, StructReflection)]
 pub struct PowerCheckerCols<T> {
     pub log: T,
     pub pow: T,
@@ -22,7 +23,8 @@ pub struct PowerCheckerCols<T> {
     pub mult_range: T,
 }
 
-#[derive(Debug)]
+#[derive(Debug, ColumnsAir)]
+#[columns_via(PowerCheckerCols<u8>)]
 pub struct PowerCheckerAir<const BASE: usize, const N: usize> {
     pub pow_bus: PowerCheckerBus,
     pub range_bus: RangeCheckerBus,

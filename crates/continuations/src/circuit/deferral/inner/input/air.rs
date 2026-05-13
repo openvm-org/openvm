@@ -1,6 +1,8 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::{utils::not, SubAir};
+use openvm_circuit_primitives::{
+    utils::not, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+};
 use openvm_recursion_circuit::{
     bus::{
         CachedCommitBus, CachedCommitBusMessage, Poseidon2PermuteBus, Poseidon2PermuteMessage,
@@ -26,7 +28,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct InputCommitCols<F> {
     pub is_valid: F,
     pub is_first: F,
@@ -43,6 +45,8 @@ pub struct InputCommitCols<F> {
     pub res_right: [F; DIGEST_SIZE],
 }
 
+#[derive(ColumnsAir)]
+#[columns_via(InputCommitCols<u8>)]
 pub struct InputCommitAir {
     pub public_values_bus: PublicValuesBus,
     pub poseidon2_bus: Poseidon2PermuteBus,

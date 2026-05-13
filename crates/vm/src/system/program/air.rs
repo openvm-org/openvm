@@ -1,3 +1,4 @@
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     air_builders::PartitionedAirBuilder,
@@ -10,14 +11,14 @@ use openvm_stark_backend::{
 
 use super::ProgramBus;
 
-#[derive(Copy, Clone, Debug, AlignedBorrow, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection, PartialEq, Eq)]
 #[repr(C)]
 pub struct ProgramCols<T> {
     pub exec: ProgramExecutionCols<T>,
     pub exec_freq: T,
 }
 
-#[derive(Copy, Clone, Debug, AlignedBorrow, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection, PartialEq, Eq)]
 #[repr(C)]
 pub struct ProgramExecutionCols<T> {
     pub pc: T,
@@ -32,7 +33,8 @@ pub struct ProgramExecutionCols<T> {
     pub g: T,
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(ProgramCols<u8>)]
 pub struct ProgramAir {
     pub bus: ProgramBus,
 }
