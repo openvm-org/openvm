@@ -19,7 +19,7 @@ use rand::RngCore;
 use crate::{
     arch::{
         testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
-        AddressSpaceHostConfig, MemoryCellType, MemoryConfig, ADDR_SPACE_OFFSET,
+        AddressSpaceHostConfig, MemoryCellType, MemoryConfig, ADDR_SPACE_OFFSET, BUS_PTR_SCALE,
     },
     system::memory::{
         merkle::{
@@ -35,6 +35,13 @@ use crate::{
 mod util;
 
 const DIGEST_WIDTH: usize = 8;
+
+/// `pointer_max_bits` for a test that wants `address_height = height`.
+/// Derived from the universal formula
+/// `address_height = pointer_max_bits - log2(BUS_PTR_SCALE) - log2(DIGEST_WIDTH)`.
+const fn test_pointer_max_bits_for(height: usize) -> usize {
+    height + BUS_PTR_SCALE.trailing_zeros() as usize + DIGEST_WIDTH.trailing_zeros() as usize
+}
 const COMPRESSION_BUS: PermutationCheckBus = PermutationCheckBus::new(POSEIDON2_DIRECT_BUS);
 type F = BabyBear;
 
@@ -205,7 +212,7 @@ fn random_test(
                 layout: MemoryCellType::F { size: 4 },
             },
         ],
-        height + 3,
+        test_pointer_max_bits_for(height),
         20,
         17,
     );
@@ -294,7 +301,7 @@ fn expand_test_no_accesses() {
                 layout: MemoryCellType::F { size: 4 },
             },
         ],
-        height + 3,
+        test_pointer_max_bits_for(height),
         20,
         17,
     );
@@ -339,7 +346,7 @@ fn expand_test_negative() {
                 layout: MemoryCellType::F { size: 4 },
             },
         ],
-        height + 3,
+        test_pointer_max_bits_for(height),
         20,
         17,
     );
