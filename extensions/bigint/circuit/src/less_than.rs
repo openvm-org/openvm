@@ -81,7 +81,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64LessThan256Executor {
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32> AotExecutor<F> for Rv32LessThan256Executor {}
+impl<F: PrimeField32> AotExecutor<F> for Rv64LessThan256Executor {}
 
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64LessThan256Executor {
     fn metered_pre_compute_size(&self) -> usize {
@@ -124,7 +124,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64LessThan256Executor 
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32> AotMeteredExecutor<F> for Rv32LessThan256Executor {}
+impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64LessThan256Executor {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U256: bool>(

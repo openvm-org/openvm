@@ -572,7 +572,7 @@ where
         }
 
         let r_prime_f = r_prime.map(F::from_u32);
-        core_row.r_inv = r_prime_f.map(|r| (r - F::from_u32(256)).inverse());
+        core_row.r_inv = r_prime_f.map(|r| (r - F::from_u32(1 << LIMB_BITS)).inverse());
         core_row.r_prime = r_prime_f;
 
         let r_sum_f = r.iter().fold(F::ZERO, |acc, r| acc + F::from_u32(*r));

@@ -390,13 +390,13 @@ impl GuestMemory {
     // ---- Byte-view abstraction ---------------------------------------------
     //
     // Byte-view methods take `byte_ptr` (a byte address into the AS's storage
-    // backing) and return raw bytes regardless of the AS's cell type. Today
-    // when `cell_size = 1`, `byte_ptr` coincides with the cell-indexed pointer
-    // used by `read::<u8, N>`. After the cell-type flip to `U16`, callers that
-    // need byte access (LoadStore, Hintstore, ELF loader, ISA-level byte ops)
-    // continue to use these methods unchanged, and the storage backing is
-    // still a `Vec<u8>`, so reading N raw bytes at `byte_ptr` returns the
-    // packed-u16 byte representation correctly.
+    // backing) and return raw bytes regardless of the AS's cell type. For u8
+    // ASes, `byte_ptr` coincides with the cell-indexed pointer used by
+    // `read::<u8, N>`. For u16-celled ASes (RV64_REGISTER_AS, RV64_MEMORY_AS,
+    // PUBLIC_VALUES_AS — `cell_size = 2`), byte-access callers (LoadStore,
+    // Hintstore, ELF loader, ISA-level byte ops) use these methods unchanged:
+    // the storage backing is still a `Vec<u8>`, so reading N raw bytes at
+    // `byte_ptr` returns the packed-u16 byte representation correctly.
     //
     // Asserts that the access is aligned to and divisible by the cell size,
     // since the byte-view does not support sub-cell access or
@@ -747,7 +747,9 @@ impl TracingMemory {
         touched_blocks
     }
 
-    /// Returns the fixed 4-byte touched memory equipartition.
+    /// Returns the fixed `BLOCK_FE_WIDTH`-cell touched memory equipartition
+    /// (4 cells per block × 2 bytes/cell = 8 bytes on u16-celled ASes;
+    /// 4 cells × 1 byte/cell = 4 bytes on u8 ASes).
     fn touched_blocks_to_equipartition<F: Field>(
         &self,
         touched_blocks: Vec<((u32, u32), u32)>,
