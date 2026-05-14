@@ -755,7 +755,7 @@ fn run_lt_256_rand_test_cuda(opcode: LessThanOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, AluAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, crate::LtAluAdapterU16Executor>::new(),
         );
 
     tester
