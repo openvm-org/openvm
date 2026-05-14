@@ -3,7 +3,6 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "primitives/variable_range.cuh"
 
 using namespace riscv;
 

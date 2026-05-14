@@ -1,7 +1,7 @@
 #pragma once
 
+#include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "primitives/variable_range.cuh"
 
 template <size_t NUM_LIMBS> struct BranchEqualCoreRecord {
     uint16_t a[NUM_LIMBS];
