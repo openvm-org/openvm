@@ -15,13 +15,13 @@ use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, FieldExpressionCoreRecordMut, FieldExpressionRecordLayout,
 };
-use openvm_riscv_adapters::Rv64VecHeapAdapterExecutor;
+use openvm_riscv_adapters::{Rv64VecHeapAdapterExecutor, Rv64VecHeapU16AdapterExecutor};
 use openvm_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
 use crate::{
     fields::{field_operation, fp2_operation, FieldType, Operation},
-    FieldExprVecHeapExecutor,
+    FieldExprVecHeapExecutor, FieldExprVecHeapU16Executor,
 };
 
 /// Generates a match statement dispatching (FieldType, Operation) pairs to a const-generic
@@ -251,6 +251,148 @@ where
             state.memory,
             instruction,
             output,
+            &mut adapter_record,
+        );
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        Ok(())
+    }
+
+    fn get_opcode_name(&self, _opcode: usize) -> String {
+        self.inner.name.clone()
+    }
+}
+
+// =================================================================================================
+// U16 variant: identical control flow to the u8 implementation above, but the adapter executor
+// is `Rv64VecHeapU16AdapterExecutor` (so reads/writes are `[[[u16; BLOCK_SIZE_U16]; BLOCKS]; 2]`
+// / `[[u16; BLOCK_SIZE_U16]; BLOCKS]`). We convert at the buffer/byte boundary:
+//   - u16 read data → little-endian bytes for `core_record.input_limbs` and the byte-shaped
+//     `compute_output_fast::<BLOCKS, BLOCK_BYTES, _>` / `run_field_expression_precomputed`,
+//   - byte-shaped output → u16 cells for the adapter `write`.
+//
+// `BLOCK_BYTES` must equal `BLOCK_SIZE_U16 * 2` (asserted in `FieldExprVecHeapU16Executor::new`).
+// =================================================================================================
+impl<
+        F,
+        RA,
+        const BLOCKS: usize,
+        const BLOCK_SIZE_U16: usize,
+        const BLOCK_BYTES: usize,
+        const IS_FP2: bool,
+    > PreflightExecutor<F, RA>
+    for FieldExprVecHeapU16Executor<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES, IS_FP2>
+where
+    F: PrimeField32,
+    for<'buf> RA: RecordArena<
+        'buf,
+        FieldExpressionRecordLayout<
+            F,
+            Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE_U16, BLOCK_SIZE_U16>,
+        >,
+        (
+            <Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE_U16, BLOCK_SIZE_U16> as openvm_circuit::arch::AdapterTraceExecutor<F>>::RecordMut<'buf>,
+            FieldExpressionCoreRecordMut<'buf>,
+        ),
+    >,
+{
+    fn execute(
+        &self,
+        state: VmStateMut<F, TracingMemory, RA>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError> {
+        use openvm_circuit::arch::AdapterTraceExecutor;
+
+        let (mut adapter_record, mut core_record) =
+            state.ctx.alloc(self.inner.get_record_layout());
+
+        <Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE_U16, BLOCK_SIZE_U16> as AdapterTraceExecutor<F>>::start(
+            *state.pc,
+            state.memory,
+            &mut adapter_record,
+        );
+
+        let read_data_u16: [[[u16; BLOCK_SIZE_U16]; BLOCKS]; 2] = self
+            .inner
+            .adapter()
+            .read(state.memory, instruction, &mut adapter_record);
+
+        // Convert u16 read_data → byte read_data for the byte-shaped record buffer and the
+        // byte-shaped field-operation / generic field-expression evaluators.
+        //
+        // `BLOCK_BYTES == BLOCK_SIZE_U16 * 2` is enforced by the constructor.
+        let mut read_data_bytes: [[[u8; BLOCK_BYTES]; BLOCKS]; 2] = [[[0u8; BLOCK_BYTES]; BLOCKS]; 2];
+        for inp in 0..2 {
+            for blk in 0..BLOCKS {
+                for c in 0..BLOCK_SIZE_U16 {
+                    let cell = read_data_u16[inp][blk][c];
+                    let lo = (cell & 0xff) as u8;
+                    let hi = (cell >> 8) as u8;
+                    read_data_bytes[inp][blk][2 * c] = lo;
+                    read_data_bytes[inp][blk][2 * c + 1] = hi;
+                }
+            }
+        }
+
+        let local_opcode = instruction.opcode.local_opcode_idx(self.inner.offset);
+
+        core_record.fill_from_execution_data(
+            local_opcode as u8,
+            read_data_bytes.as_flattened().as_flattened(),
+        );
+
+        // Try fast path: use native field arithmetic for known field types and non-setup operations
+        let operation = if IS_FP2 {
+            local_opcode_to_fp2_operation(local_opcode)
+        } else {
+            local_opcode_to_modular_operation(local_opcode)
+        };
+
+        let output_bytes: [[u8; BLOCK_BYTES]; BLOCKS] =
+            if let Some(output) = compute_output_fast::<BLOCKS, BLOCK_BYTES, IS_FP2>(
+                self.cached_field_type,
+                operation,
+                read_data_bytes,
+            ) {
+                output
+            } else {
+                // Fall back to slow path for unsupported field types or SETUP operations
+                let flag_idx = self
+                    .inner
+                    .local_opcode_idx
+                    .iter()
+                    .position(|&idx| idx == local_opcode)
+                    .and_then(|pos| {
+                        if pos < self.inner.opcode_flag_idx.len() {
+                            Some(self.inner.opcode_flag_idx[pos])
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| self.inner.expr.num_flags());
+
+                run_field_expression_precomputed::<true>(
+                    &self.inner.expr,
+                    flag_idx,
+                    read_data_bytes.as_flattened().as_flattened(),
+                )
+                .into()
+            };
+
+        // Repack the byte-shaped output back into u16 cells for the adapter write.
+        let mut output_u16: [[u16; BLOCK_SIZE_U16]; BLOCKS] = [[0u16; BLOCK_SIZE_U16]; BLOCKS];
+        for blk in 0..BLOCKS {
+            for c in 0..BLOCK_SIZE_U16 {
+                let lo = output_bytes[blk][2 * c] as u16;
+                let hi = output_bytes[blk][2 * c + 1] as u16;
+                output_u16[blk][c] = lo | (hi << 8);
+            }
+        }
+
+        self.inner.adapter().write(
+            state.memory,
+            instruction,
+            output_u16,
             &mut adapter_record,
         );
 

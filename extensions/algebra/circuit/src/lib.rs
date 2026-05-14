@@ -7,7 +7,7 @@ use std::ops::{Deref, DerefMut};
 
 use openvm_circuit::arch::MEMORY_BLOCK_BYTES;
 use openvm_mod_circuit_builder::FieldExpressionExecutor;
-use openvm_riscv_adapters::Rv64VecHeapAdapterExecutor;
+use openvm_riscv_adapters::{Rv64VecHeapAdapterExecutor, Rv64VecHeapU16AdapterExecutor};
 #[cfg(feature = "cuda")]
 use {
     openvm_mod_circuit_builder::FieldExpressionCoreRecordMut,
@@ -115,3 +115,88 @@ pub(crate) type AlgebraRecord<
     &'a mut Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     FieldExpressionCoreRecordMut<'a>,
 );
+
+// U16-shaped variant of [`FieldExprVecHeapExecutor`].
+//
+// Used for `FieldExpression` chips at `LIMB_BITS=16` (currently add/sub-only — mul/div blocked
+// by the BabyBear carry budget). The inner adapter executor is
+// [`Rv64VecHeapU16AdapterExecutor`]; `BLOCK_SIZE_U16` counts u16 cells per heap block.
+//
+// `BLOCK_BYTES` is the byte equivalent (= `BLOCK_SIZE_U16 * 2`) used by the byte-addressed
+// Interpreter/Aot paths and by [`field_operation`] / [`fp2_operation`]; it must equal
+// `BLOCK_SIZE_U16 * 2` (asserted at construction time). We carry both constants because
+// `BLOCK_SIZE_U16 * 2` is not currently usable in const-generic position on stable Rust.
+//
+// `PreflightExecutor` is implemented manually in `preflight.rs` to handle the u16↔byte
+// conversions at the record-buffer boundary; the byte-shaped Interpreter/Aot paths in
+// `execution.rs` are reused via a thin shim that re-parameterizes by `BLOCK_BYTES`.
+#[derive(Clone)]
+pub struct FieldExprVecHeapU16Executor<
+    const BLOCKS: usize,
+    const BLOCK_SIZE_U16: usize,
+    const BLOCK_BYTES: usize,
+    const IS_FP2: bool,
+> {
+    inner: FieldExpressionExecutor<
+        Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE_U16, BLOCK_SIZE_U16>,
+    >,
+    pub(crate) cached_field_type: Option<FieldType>,
+}
+
+impl<
+        const BLOCKS: usize,
+        const BLOCK_SIZE_U16: usize,
+        const BLOCK_BYTES: usize,
+        const IS_FP2: bool,
+    > FieldExprVecHeapU16Executor<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES, IS_FP2>
+{
+    pub fn new(
+        inner: FieldExpressionExecutor<
+            Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE_U16, BLOCK_SIZE_U16>,
+        >,
+    ) -> Self {
+        assert_eq!(
+            BLOCK_BYTES,
+            BLOCK_SIZE_U16 * 2,
+            "FieldExprVecHeapU16Executor: BLOCK_BYTES ({BLOCK_BYTES}) must equal BLOCK_SIZE_U16 * 2 ({})",
+            BLOCK_SIZE_U16 * 2
+        );
+        let cached_field_type = if IS_FP2 {
+            get_fp2_field_type(&inner.expr.prime)
+        } else {
+            get_field_type(&inner.expr.prime)
+        };
+        Self {
+            inner,
+            cached_field_type,
+        }
+    }
+}
+
+impl<
+        const BLOCKS: usize,
+        const BLOCK_SIZE_U16: usize,
+        const BLOCK_BYTES: usize,
+        const IS_FP2: bool,
+    > Deref for FieldExprVecHeapU16Executor<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES, IS_FP2>
+{
+    type Target = FieldExpressionExecutor<
+        Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE_U16, BLOCK_SIZE_U16>,
+    >;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<
+        const BLOCKS: usize,
+        const BLOCK_SIZE_U16: usize,
+        const BLOCK_BYTES: usize,
+        const IS_FP2: bool,
+    > DerefMut for FieldExprVecHeapU16Executor<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES, IS_FP2>
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}

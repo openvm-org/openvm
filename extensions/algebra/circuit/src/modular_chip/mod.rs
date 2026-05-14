@@ -3,10 +3,11 @@ use openvm_circuit_derive::PreflightExecutor;
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
 use openvm_riscv_adapters::{
     Rv64IsEqualModAdapterU16Air, Rv64IsEqualModAdapterU16Executor, Rv64IsEqualModAdapterU16Filler,
-    Rv64VecHeapAdapterAir, Rv64VecHeapAdapterFiller,
+    Rv64VecHeapAdapterAir, Rv64VecHeapAdapterFiller, Rv64VecHeapU16AdapterAir,
+    Rv64VecHeapU16AdapterFiller,
 };
 
-use crate::FieldExprVecHeapExecutor;
+use crate::{FieldExprVecHeapExecutor, FieldExprVecHeapU16Executor};
 
 mod is_eq;
 pub use is_eq::*;
@@ -29,6 +30,28 @@ pub type ModularExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> =
 pub type ModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = VmChipWrapper<
     F,
     FieldExpressionFiller<Rv64VecHeapAdapterFiller<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
+>;
+
+// U16-shaped variants of [`ModularAir`] / [`ModularExecutor`] / [`ModularChip`] for the
+// `LIMB_BITS=16` modular addsub path. `BLOCK_SIZE_U16` counts u16 cells per heap block; in
+// practice this equals [`BLOCK_FE_WIDTH`] (= 4). `BLOCK_BYTES` is the byte-equivalent
+// (= `BLOCK_SIZE_U16 * 2`) used by the byte-shaped Interpreter/Aot paths.
+pub type ModularAirU16<const BLOCKS: usize, const BLOCK_SIZE_U16: usize> = VmAirWrapper<
+    Rv64VecHeapU16AdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE_U16, BLOCK_SIZE_U16>,
+    FieldExpressionCoreAir,
+>;
+
+pub type ModularExecutorU16<
+    const BLOCKS: usize,
+    const BLOCK_SIZE_U16: usize,
+    const BLOCK_BYTES: usize,
+> = FieldExprVecHeapU16Executor<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES, false>;
+
+pub type ModularChipU16<F, const BLOCKS: usize, const BLOCK_SIZE_U16: usize> = VmChipWrapper<
+    F,
+    FieldExpressionFiller<
+        Rv64VecHeapU16AdapterFiller<2, BLOCKS, BLOCKS, BLOCK_SIZE_U16, BLOCK_SIZE_U16>,
+    >,
 >;
 
 // U16-shaped is_eq AIR/chip/executor/filler. The chip reads two u16-celled heap operands and

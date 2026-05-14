@@ -45,10 +45,12 @@ use {
 
 use crate::{
     modular_chip::{
-        get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
+        get_modular_addsub_air, get_modular_addsub_air_u16, get_modular_addsub_chip,
+        get_modular_addsub_chip_u16, get_modular_addsub_step, get_modular_addsub_step_u16,
         get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
-        ModularChip, ModularExecutor, ModularIsEqualCoreAir, ModularIsEqualCoreCols,
-        ModularIsEqualFiller, ModularIsEqualU16Air, ModularIsEqualU16Chip, VmModularIsEqualU16Executor,
+        ModularAirU16, ModularChip, ModularChipU16, ModularExecutor, ModularExecutorU16,
+        ModularIsEqualCoreAir, ModularIsEqualCoreCols, ModularIsEqualFiller, ModularIsEqualU16Air,
+        ModularIsEqualU16Chip, VmModularIsEqualU16Executor,
     },
     MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_32_U16, NUM_LIMBS_48,
     NUM_LIMBS_48_U16,
@@ -429,6 +431,288 @@ mod addsub_tests {
             BLS12_381_MODULUS.clone(),
             50,
         );
+    }
+}
+
+/// U16-shaped (LIMB_BITS=16) addsub harness — kept compiled so the u16 infrastructure
+/// (`get_modular_addsub_air_u16`, `get_modular_addsub_chip_u16`, `FieldExprVecHeapU16Executor`,
+/// etc.) does not bit-rot, but the tests themselves are `#[ignore]`'d because **u16 modular
+/// addsub is not viable in BabyBear**.
+///
+/// The hard blocker is `check_carry_to_zero.rs:81`:
+/// ```text
+/// assert!(carry_abs_bits + limb_bits < F::bits() - 1, "carry is too large")
+/// ```
+/// For BabyBear (`F::bits() = 31`) at `limb_bits = 16`, this requires
+/// `carry_abs_bits < 14`. But the modular-reduction carry for `(x1 ± x2) - q·p` at
+/// `limb_bits=16` with a full-width 256-bit prime works out to `carry_abs_bits = 18` —
+/// the per-limb max of `q·p` is `≈ 2^32` (= `canonical_limb_max_abs²`) which dominates
+/// `max_overflow_bits ≈ 33`, giving `carry_bits = 33 - 16 = 17` and `carry_abs_bits = 18`.
+///
+/// 18 + 16 = 34 ≫ 30, so the AIR assertion fires regardless of the range checker's `decomp`.
+/// This is fundamental to BabyBear's bit width; only a larger prime field (e.g. Goldilocks)
+/// or a smaller `limb_bits` (`≤ 13` for full-width primes, leaves usable column packing on
+/// the table) would unblock it.
+///
+/// The u16 scaffolding is kept compiled and not deleted so a future field-width change or
+/// limb-bits compromise (e.g. 13-bit limbs packed in u16 cells) can re-activate it without
+/// re-deriving everything.
+#[cfg(test)]
+mod addsub_u16_tests {
+    use openvm_circuit::arch::BLOCK_FE_WIDTH;
+
+    use super::*;
+
+    #[allow(dead_code)]
+    const ADD_LOCAL: usize = Rv64ModularArithmeticOpcode::ADD as usize;
+
+    #[allow(dead_code)]
+    type Harness<const BLOCKS: usize, const BLOCK_SIZE_U16: usize, const BLOCK_BYTES: usize> =
+        TestChipHarness<
+            F,
+            ModularExecutorU16<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES>,
+            ModularAirU16<BLOCKS, BLOCK_SIZE_U16>,
+            ModularChipU16<F, BLOCKS, BLOCK_SIZE_U16>,
+        >;
+
+    fn create_harness<
+        const BLOCKS: usize,
+        const BLOCK_SIZE_U16: usize,
+        const BLOCK_BYTES: usize,
+    >(
+        tester: &VmChipTestBuilder<F>,
+        config: ExprBuilderConfig,
+        offset: usize,
+    ) -> (
+        Harness<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES>,
+        (
+            BitwiseOperationLookupAir<RV64_CELL_BITS>,
+            SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        ),
+    ) {
+        let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+            bitwise_bus,
+        ));
+
+        let air = get_modular_addsub_air_u16::<BLOCKS, BLOCK_SIZE_U16>(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            config.clone(),
+            tester.range_checker().bus(),
+            bitwise_bus,
+            tester.address_bits(),
+            offset,
+        );
+        let executor = get_modular_addsub_step_u16::<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES>(
+            config.clone(),
+            tester.range_checker().bus(),
+            tester.address_bits(),
+            offset,
+        );
+        let chip = get_modular_addsub_chip_u16::<F, BLOCKS, BLOCK_SIZE_U16>(
+            config,
+            tester.memory_helper(),
+            tester.range_checker(),
+            bitwise_chip.clone(),
+            tester.address_bits(),
+        );
+        let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+        (harness, (bitwise_chip.air, bitwise_chip))
+    }
+
+    /// Set up memory and execute one `ADD`/`SUB`/`SETUP_ADDSUB` on the u16 chip, then check the
+    /// memory result matches the BigUint reference computation. Mirrors `set_and_execute_addsub`
+    /// but writes inputs into byte-shaped memory in a way that the u16 adapter reads as 2-byte
+    /// LE u16 cells.
+    fn set_and_execute_addsub_u16<
+        const BLOCKS: usize,
+        const BLOCK_SIZE_U16: usize,
+        const BLOCK_BYTES: usize,
+        const NUM_LIMBS_BYTES: usize,
+        RA: Arena,
+    >(
+        tester: &mut impl TestBuilder<F>,
+        executor: &mut ModularExecutorU16<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES>,
+        arena: &mut RA,
+        rng: &mut StdRng,
+        modulus: &BigUint,
+        is_setup: bool,
+        offset: usize,
+    ) where
+        ModularExecutorU16<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES>: PreflightExecutor<F, RA>,
+    {
+        // `BLOCK_BYTES = BLOCK_SIZE_U16 * 2` and `NUM_LIMBS_BYTES = BLOCKS * BLOCK_BYTES`.
+        // We work in *bytes* here since both guest memory and the byte-shaped record buffer
+        // operate on bytes.
+
+        let (a, b, op) = if is_setup {
+            (modulus.clone(), BigUint::zero(), ADD_LOCAL + 2)
+        } else {
+            let a = generate_random_biguint(modulus);
+            let b = generate_random_biguint(modulus);
+            let op = rng.random_range(0..2) + ADD_LOCAL; // 0 for add, 1 for sub
+            (a, b, op)
+        };
+
+        let expected_answer = match op - ADD_LOCAL {
+            0 => (&a + &b) % modulus,
+            1 => (&a + modulus - &b) % modulus,
+            2 => a.clone() % modulus,
+            _ => panic!(),
+        };
+
+        let ptr_as = RV64_REGISTER_AS as usize;
+        let addr_ptr1 = 0;
+        let addr_ptr2 = 3 * RV64_REGISTER_NUM_LIMBS;
+        let addr_ptr3 = 6 * RV64_REGISTER_NUM_LIMBS;
+
+        let data_as = RV64_MEMORY_AS as usize;
+        let address1 = gen_pointer(rng, BLOCK_BYTES) as u32;
+        let address2 = gen_pointer(rng, BLOCK_BYTES) as u32;
+        let address3 = gen_pointer(rng, BLOCK_BYTES) as u32;
+
+        write_ptr_reg(tester, ptr_as, addr_ptr1, address1.into());
+        write_ptr_reg(tester, ptr_as, addr_ptr2, address2.into());
+        write_ptr_reg(tester, ptr_as, addr_ptr3, address3.into());
+
+        // Byte limb decomposition of the inputs.
+        let a_limbs: Vec<F> = biguint_to_limbs_vec(&a, NUM_LIMBS_BYTES)
+            .into_iter()
+            .map(F::from_u8)
+            .collect();
+        let b_limbs: Vec<F> = biguint_to_limbs_vec(&b, NUM_LIMBS_BYTES)
+            .into_iter()
+            .map(F::from_u8)
+            .collect();
+
+        for i in (0..NUM_LIMBS_BYTES).step_by(BLOCK_BYTES) {
+            tester.write::<BLOCK_BYTES>(
+                data_as,
+                address1 as usize + i,
+                a_limbs[i..i + BLOCK_BYTES].try_into().unwrap(),
+            );
+            tester.write::<BLOCK_BYTES>(
+                data_as,
+                address2 as usize + i,
+                b_limbs[i..i + BLOCK_BYTES].try_into().unwrap(),
+            );
+        }
+
+        let instruction = Instruction::from_isize(
+            VmOpcode::from_usize(offset + op),
+            addr_ptr3 as isize,
+            addr_ptr1 as isize,
+            addr_ptr2 as isize,
+            ptr_as as isize,
+            data_as as isize,
+        );
+        tester.execute(executor, arena, &instruction);
+
+        let expected_limbs: Vec<F> = biguint_to_limbs_vec(&expected_answer, NUM_LIMBS_BYTES)
+            .into_iter()
+            .map(F::from_u8)
+            .collect();
+
+        for i in (0..NUM_LIMBS_BYTES).step_by(BLOCK_BYTES) {
+            let read_vals = tester.read::<BLOCK_BYTES>(data_as, address3 as usize + i);
+            let expected_limbs: [F; BLOCK_BYTES] =
+                expected_limbs[i..i + BLOCK_BYTES].try_into().unwrap();
+            assert_eq!(read_vals, expected_limbs);
+        }
+    }
+
+    fn run_addsub_test_u16<
+        const BLOCKS: usize,
+        const BLOCK_SIZE_U16: usize,
+        const BLOCK_BYTES: usize,
+        const NUM_LIMBS_U16: usize,
+        const NUM_LIMBS_BYTES: usize,
+    >(
+        opcode_offset: usize,
+        modulus: BigUint,
+        num_ops: usize,
+    ) {
+        let mut rng = create_seeded_rng();
+        let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let config = ExprBuilderConfig {
+            modulus: modulus.clone(),
+            num_limbs: NUM_LIMBS_U16,
+            limb_bits: 16,
+        };
+
+        let (mut harness, bitwise) =
+            create_harness::<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES>(&tester, config, offset);
+
+        for i in 0..num_ops {
+            set_and_execute_addsub_u16::<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES, NUM_LIMBS_BYTES, _>(
+                &mut tester,
+                &mut harness.executor,
+                &mut harness.arena,
+                &mut rng,
+                &modulus,
+                i == 0,
+                offset,
+            );
+        }
+
+        let tester = tester
+            .build()
+            .load(harness)
+            .load_periphery(bitwise)
+            .finalize();
+        tester.simple_test().expect("Verification failed");
+    }
+
+    // NOTE: a small-modulus (78-bit) variant of this test is intentionally omitted. At
+    // `limb_bits = 16, num_limbs = 16`, a 78-bit prime forces `q_limbs ≈ 12` in
+    // `(expr - q * p)`, which pushes the per-limb overflow size to ~2^36. Even for full-width
+    // primes the same constraint hits `carry_abs_bits = 18` and the hard F-bit guard
+    // (`carry_abs_bits + limb_bits < F::bits() - 1` = 30 for BabyBear) requires < 14. Cannot
+    // be unblocked by widening `decomp` — see the module doc above.
+
+    #[test]
+    #[ignore = "u16 modular addsub blocked by BabyBear F::bits: carry_abs_bits=18 + limb_bits=16 ≥ 30"]
+    fn test_modular_addsub_u16_32limb_secp256k1() {
+        run_addsub_test_u16::<
+            MODULAR_BLOCKS_32,
+            BLOCK_FE_WIDTH,
+            MEMORY_BLOCK_BYTES,
+            NUM_LIMBS_32_U16,
+            NUM_LIMBS_32,
+        >(0, secp256k1_coord_prime(), 50);
+        run_addsub_test_u16::<
+            MODULAR_BLOCKS_32,
+            BLOCK_FE_WIDTH,
+            MEMORY_BLOCK_BYTES,
+            NUM_LIMBS_32_U16,
+            NUM_LIMBS_32,
+        >(4, secp256k1_scalar_prime(), 50);
+    }
+
+    #[test]
+    #[ignore = "u16 modular addsub blocked by BabyBear F::bits: carry_abs_bits=18 + limb_bits=16 ≥ 30"]
+    fn test_modular_addsub_u16_32limb_bn254() {
+        run_addsub_test_u16::<
+            MODULAR_BLOCKS_32,
+            BLOCK_FE_WIDTH,
+            MEMORY_BLOCK_BYTES,
+            NUM_LIMBS_32_U16,
+            NUM_LIMBS_32,
+        >(0, BN254_MODULUS.clone(), 50);
+    }
+
+    #[test]
+    #[ignore = "u16 modular addsub blocked by BabyBear F::bits: carry_abs_bits=18 + limb_bits=16 ≥ 30"]
+    fn test_modular_addsub_u16_48limb_bls12_381() {
+        run_addsub_test_u16::<
+            MODULAR_BLOCKS_48,
+            BLOCK_FE_WIDTH,
+            MEMORY_BLOCK_BYTES,
+            NUM_LIMBS_48_U16,
+            NUM_LIMBS_48,
+        >(0, BLS12_381_MODULUS.clone(), 50);
     }
 }
 
