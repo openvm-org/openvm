@@ -72,7 +72,9 @@ impl<const DIGEST_WIDTH: usize, F: Field> UserPublicValuesProof<DIGEST_WIDTH, F>
     /// each height `0..=address_height` internally.
     ///
     /// Assumption:
-    /// - `num_public_values` is a power of two * DIGEST_WIDTH. It cannot be 0.
+    /// - `num_public_values > 0`. Any positive value is accepted: the merkle commitment pads to
+    ///   `pv_commit_cell_count(num_public_values, DIGEST_WIDTH)` u16 cells (which rounds up to a
+    ///   power-of-two number of `DIGEST_WIDTH`-sized chunks).
     /// - `top_tree` is 0-indexed and a segment tree of length `2 * 2^addr_space_height - 1`.
     #[instrument(name = "compute_user_public_values_proof", skip_all)]
     pub fn compute(

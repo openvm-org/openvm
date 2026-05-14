@@ -65,6 +65,9 @@ impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
     for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
+        // The AIR walks `0..NUM_LIMBS / 2` for pairwise byte range checks, which is only
+        // sound when `NUM_LIMBS` is even. Mirror the `branch_eq` compile-time guard.
+        const { assert!(NUM_LIMBS.is_multiple_of(2), "NUM_LIMBS must be even") };
         ShiftCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }

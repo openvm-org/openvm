@@ -130,7 +130,7 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
         //           = BUS_PTR_SCALE * (DIGEST_WIDTH * leaf_label + BLOCK_FE_WIDTH * block_idx)
         //
         // With `BUS_PTR_SCALE = 2`, `BLOCK_FE_WIDTH = 4`, `BLOCKS_PER_LEAF = 2`, the
-        // strides `(DIGEST_WIDTH, BLOCK_FE_WIDTH) = (16, 8)` on the bus give
+        // strides `(BUS_LEAF_STRIDE, BUS_BLOCK_STRIDE) = (16, 8)` on the bus give
         // `bus_ptr = 16 * leaf_label + 8 * block_idx` for `block_idx in 0..2` —
         // each leaf is split into two BLOCK_FE_WIDTH-wide bus messages.
         let leaf_stride_f = AB::F::from_usize(crate::system::memory::BUS_LEAF_STRIDE);

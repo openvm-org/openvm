@@ -216,7 +216,19 @@ unsafe fn execute_e12_impl<
     let (pc, rd) = run_jal_lui(IS_JAL, exec_state.pc(), signed_imm);
 
     if ENABLED {
-        exec_state.vm_write(RV64_REGISTER_AS, a as u32, &rd);
+        // `run_jal_lui` returns 4 u16 cells; unpack to 8 LE bytes for the byte-addressed
+        // write (mirrors the auipc fix — `vm_write::<u16, 4>` would treat `a` as a u16-cell
+        // index instead of a byte offset).
+        let rd_bytes: [u8; openvm_instructions::riscv::RV64_REGISTER_NUM_LIMBS] =
+            std::array::from_fn(|i| {
+                let cell = rd[i / 2];
+                if i & 1 == 0 {
+                    (cell & 0xff) as u8
+                } else {
+                    (cell >> 8) as u8
+                }
+            });
+        exec_state.vm_write(RV64_REGISTER_AS, a as u32, &rd_bytes);
     }
     exec_state.set_pc(pc);
 }

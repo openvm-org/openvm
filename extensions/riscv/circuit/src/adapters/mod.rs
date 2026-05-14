@@ -400,10 +400,21 @@ pub fn rv64_u64_to_u32(val: u64) -> u32 {
 }
 
 /// Convert an 8-byte RV64 register value to a u32 pointer, asserting (in debug) that the upper 4
-/// bytes are zero.
+/// bytes are zero. Use [`rv64_bytes_to_u32_wrapping`] for base-register reads in loadstore/jalr
+/// where rs1 may legitimately hold a sign-extended u64 and only the low 32 bits matter after the
+/// `wrapping_add(imm)` step.
 #[inline(always)]
 pub fn rv64_bytes_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
     rv64_u64_to_u32(u64::from_le_bytes(bytes))
+}
+
+/// Convert an 8-byte RV64 register value to its low 32 bits, **without** asserting that the
+/// upper 4 bytes are zero. Use for base-register reads in instructions like SB/LB/SD/LD/JALR
+/// where rs1 may hold any u64 (e.g. a sign-extended negative immediate); the consumer is
+/// responsible for bounding the final address (`rs1.wrapping_add(imm) < 2^pointer_max_bits`).
+#[inline(always)]
+pub fn rv64_bytes_to_u32_wrapping(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
+    u64::from_le_bytes(bytes) as u32
 }
 
 /// Expand `N` limbs to `RV64_REGISTER_NUM_LIMBS` (8) by zero-padding the upper limbs. Used for
