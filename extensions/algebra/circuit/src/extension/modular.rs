@@ -75,9 +75,8 @@ impl ModularExtension {
 )]
 pub enum ModularExtensionExecutor {
     // 32 limbs prime
-    // NOTE: AddSub remains LIMB_BITS=8 until the production range checker is bumped (see TODO in
-    // `extend_execution`). MulDiv is locked at LIMB_BITS=8 by the BabyBear carry budget. IsEq is
-    // u16-shaped (separate carry-budget story).
+    // NOTE: AddSub/MulDiv stay at LIMB_BITS=8; see modular_chip/addsub.rs for the BabyBear F-bit
+    // explanation. IsEq is u16-shaped.
     ModularAddSubRv64_32(ModularExecutor<MODULAR_BLOCKS_32, MEMORY_BLOCK_BYTES>), // ModularAddSub
     ModularMulDivRv64_32(ModularExecutor<MODULAR_BLOCKS_32, MEMORY_BLOCK_BYTES>), // ModularMulDiv
     ModularIsEqualRv64_32(
@@ -108,13 +107,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
             let modulus_limbs_u16 = big_uint_to_limbs(modulus, 16);
             if bytes <= NUM_LIMBS_32 {
-                // NOTE: u16 AddSub (`get_modular_addsub_step_u16`) is NOT viable on BabyBear.
-                // The check_carry_to_zero AIR enforces
-                // `carry_abs_bits + limb_bits < F::bits() - 1` (= 30 for BabyBear). At
-                // `limb_bits=16` and full-width primes, `carry_abs_bits = 18`, so 18+16=34 > 30.
-                // This is a hard F-level guard, not a range-checker `decomp` setting — widening
-                // `decomp` does NOT help. The u16 scaffolding exists for a future field swap or a
-                // sub-16-bit limb_bits packing; see modular_chip/addsub.rs module docs.
+                // NOTE: AddSub stays at LIMB_BITS=8; see modular_chip/addsub.rs for the BabyBear
+                // F-bit explanation.
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_32,
@@ -134,7 +128,6 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                // MulDiv: u8-shaped (LIMB_BITS=8) — carry-budget locked at limb_bits=8.
                 let muldiv = get_modular_muldiv_step::<MODULAR_BLOCKS_32, MEMORY_BLOCK_BYTES>(
                     config,
                     dummy_range_checker_bus,
@@ -170,7 +163,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= NUM_LIMBS_48 {
-                // NOTE: u16 AddSub blocked by BabyBear F-bit guard — see 32-byte branch above.
+                // NOTE: AddSub stays at LIMB_BITS=8; see modular_chip/addsub.rs for the BabyBear
+                // F-bit explanation.
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_48,
@@ -276,7 +270,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                 Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
 
             if bytes <= NUM_LIMBS_32 {
-                // NOTE: u16 AddSub blocked by BabyBear F-bit guard — see `extend_execution`.
+                // NOTE: AddSub stays at LIMB_BITS=8; see modular_chip/addsub.rs for the BabyBear
+                // F-bit explanation.
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_32,
@@ -320,7 +315,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                 );
                 inventory.add_air(is_eq);
             } else if bytes <= NUM_LIMBS_48 {
-                // NOTE: u16 AddSub blocked by BabyBear F-bit guard — see 32-byte branch above.
+                // NOTE: AddSub stays at LIMB_BITS=8; see modular_chip/addsub.rs for the BabyBear
+                // F-bit explanation.
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_48,
@@ -413,7 +409,8 @@ where
             let modulus_limbs_u16 = big_uint_to_limbs(modulus, 16);
 
             if bytes <= NUM_LIMBS_32 {
-                // NOTE: u16 AddSub blocked by BabyBear F-bit guard — see `extend_execution`.
+                // NOTE: AddSub stays at LIMB_BITS=8; see modular_chip/addsub.rs for the BabyBear
+                // F-bit explanation.
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_32,
@@ -470,7 +467,8 @@ where
                 );
                 inventory.add_executor_chip(is_eq);
             } else if bytes <= NUM_LIMBS_48 {
-                // NOTE: u16 AddSub blocked by BabyBear F-bit guard — see 32-byte branch above.
+                // NOTE: AddSub stays at LIMB_BITS=8; see modular_chip/addsub.rs for the BabyBear
+                // F-bit explanation.
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_48,
