@@ -153,16 +153,12 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             Rv64XorOrAndExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
         inventory.add_executor(
             xor_or_and,
-            [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
-                .map(|x| x.global_opcode()),
+            [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND].map(|x| x.global_opcode()),
         )?;
 
         let add_sub_w =
             Rv64AddSubWExecutor::new(Rv64BaseAluWAdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
-        inventory.add_executor(
-            add_sub_w,
-            BaseAluWOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        inventory.add_executor(add_sub_w, BaseAluWOpcode::iter().map(|x| x.global_opcode()))?;
 
         let lt =
             Rv64LessThanExecutor::new(Rv64BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);

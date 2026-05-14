@@ -26,9 +26,5 @@ pub type Rv64AddSubExecutor = AddSubExecutor<
 >;
 pub type Rv64AddSubChip<F> = VmChipWrapper<
     F,
-    AddSubFiller<
-        Rv64BaseAluAdapterFiller<RV64_CELL_BITS>,
-        RV64_REGISTER_NUM_LIMBS,
-        RV64_CELL_BITS,
-    >,
+    AddSubFiller<Rv64BaseAluAdapterFiller<RV64_CELL_BITS>, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
 >;

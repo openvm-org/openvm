@@ -116,9 +116,9 @@ where
         // Range-check each limb of a via the bitwise lookup: send_xor(a, a, 0) enforces
         // a[i] < 2^LIMB_BITS without otherwise constraining its value (the carry loops above
         // already constrain a[i] = (b[i] op c[i]) mod 2^LIMB_BITS).
-        for i in 0..NUM_LIMBS {
+        for &a_limb in a.iter() {
             self.bus
-                .send_xor(a[i], a[i], AB::Expr::ZERO)
+                .send_xor(a_limb, a_limb, AB::Expr::ZERO)
                 .eval(builder, is_valid.clone());
         }
 
