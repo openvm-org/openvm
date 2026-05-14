@@ -16,11 +16,20 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_riscv_adapters::{
     Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
-    Rv64VecHeapU16AdapterAir, Rv64VecHeapU16AdapterExecutor, Rv64VecHeapU16AdapterFiller,
 };
 
-use super::{ModularAir, ModularAirU16, ModularChip, ModularChipU16, ModularExecutor, ModularExecutorU16};
-use crate::{FieldExprVecHeapExecutor, FieldExprVecHeapU16Executor};
+use super::{ModularAir, ModularChip, ModularExecutor};
+use crate::FieldExprVecHeapExecutor;
+
+// TODO(rv64-u16): `mod-builder` `FieldExpression` chips (modular addsub/muldiv, fp2 addsub/muldiv,
+// ecc weierstrass, pairing) cannot migrate to `limb_bits = 16` on BabyBear. The
+// `check_carry_to_zero` AIR enforces `carry_abs_bits + limb_bits < F::bits() - 1` (= 30 for
+// BabyBear); at `limb_bits = 16` with a full-width 256-bit prime, the modular reduction
+// `(x ± y) - q·p` produces `carry_abs_bits = 18` because the cross-product `q·p` per output
+// limb has max `≈ 2^32` (= `(2^16 - 1)²`, dominated by `min(q_limbs, num_limbs) *
+// canonical_limb_max_abs²`), giving `max_overflow_bits ≈ 33` and `carry_bits = 17`. 18 + 16 = 34 ≫
+// 30 — fails. This is a hard F-level guard, not a range-checker `decomp` setting. Only a larger
+// prime field (e.g. Goldilocks) or `limb_bits ≤ 13` (which forfeits the cell savings) unblocks it.
 
 pub fn addsub_expr(
     config: ExprBuilderConfig,
@@ -114,79 +123,6 @@ pub fn get_modular_addsub_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     ModularChip::new(
         FieldExpressionFiller::new(
             Rv64VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
-            expr,
-            local_opcode_idx,
-            opcode_flag_idx,
-            range_checker,
-            false,
-        ),
-        mem_helper,
-    )
-}
-
-// ---------------------------------------------------------------------------
-// U16-shaped (LIMB_BITS=16) variants of the addsub air / executor / chip.
-//
-// These are wired with `Rv64VecHeapU16Adapter*` and use the u16 PreflightExecutor on
-// [`FieldExprVecHeapU16Executor`]. `config.limb_bits` should be 16 and `config.num_limbs`
-// should match `BLOCKS * BLOCK_SIZE_U16` (e.g. for a 256-bit modulus with `BLOCKS=4` and
-// `BLOCK_SIZE_U16=4`: `num_limbs = 16`).
-// ---------------------------------------------------------------------------
-
-pub fn get_modular_addsub_air_u16<const BLOCKS: usize, const BLOCK_SIZE_U16: usize>(
-    exec_bridge: ExecutionBridge,
-    mem_bridge: MemoryBridge,
-    config: ExprBuilderConfig,
-    range_checker_bus: VariableRangeCheckerBus,
-    bitwise_lookup_bus: BitwiseOperationLookupBus,
-    pointer_max_bits: usize,
-    offset: usize,
-) -> ModularAirU16<BLOCKS, BLOCK_SIZE_U16> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
-    ModularAirU16::new(
-        Rv64VecHeapU16AdapterAir::new(
-            exec_bridge,
-            mem_bridge,
-            bitwise_lookup_bus,
-            pointer_max_bits,
-        ),
-        FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx),
-    )
-}
-
-pub fn get_modular_addsub_step_u16<
-    const BLOCKS: usize,
-    const BLOCK_SIZE_U16: usize,
-    const BLOCK_BYTES: usize,
->(
-    config: ExprBuilderConfig,
-    range_checker_bus: VariableRangeCheckerBus,
-    pointer_max_bits: usize,
-    offset: usize,
-) -> ModularExecutorU16<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
-
-    FieldExprVecHeapU16Executor::new(FieldExpressionExecutor::new(
-        Rv64VecHeapU16AdapterExecutor::new(pointer_max_bits),
-        expr,
-        offset,
-        local_opcode_idx,
-        opcode_flag_idx,
-        "ModularAddSubU16",
-    ))
-}
-
-pub fn get_modular_addsub_chip_u16<F, const BLOCKS: usize, const BLOCK_SIZE_U16: usize>(
-    config: ExprBuilderConfig,
-    mem_helper: SharedMemoryHelper<F>,
-    range_checker: SharedVariableRangeCheckerChip,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
-    pointer_max_bits: usize,
-) -> ModularChipU16<F, BLOCKS, BLOCK_SIZE_U16> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
-    ModularChipU16::new(
-        FieldExpressionFiller::new(
-            Rv64VecHeapU16AdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
             local_opcode_idx,
             opcode_flag_idx,
