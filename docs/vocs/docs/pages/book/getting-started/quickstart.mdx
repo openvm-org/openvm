@@ -28,7 +28,7 @@ The `read` function takes input from the stdin (it also works with OpenVM runtim
 
 ```rust
 // src/main.rs
-#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(any(target_os = "none", target_os = "openvm"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use openvm::io::{read, reveal_u64};
@@ -58,7 +58,7 @@ cargo openvm build
 
 This will output:
 
-- an RV64IM ELF containing [custom OpenVM instructions](/specs/reference/riscv-custom-code) at `./target/riscv64im-unknown-none-elf/release/fibonacci`
+- an RV64IM ELF containing [custom OpenVM instructions](/specs/reference/riscv-custom-code) at `./target/riscv64im-unknown-openvm-elf/release/fibonacci`
 - an OpenVM executable binary at `${target-dir}/../openvm/release/fibonacci.vmexe` (by default `./openvm/release/fibonacci.vmexe`)
 
 ## Keygen

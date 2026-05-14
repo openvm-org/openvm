@@ -20,7 +20,8 @@ OpenVM is a modular zkVM (zero-knowledge virtual machine) framework built on STA
 - Rust 1.91.1 (stable), specified in `rust-toolchain.toml`
 - Nightly is only needed for:
   - `rustfmt` (unstable formatting options)
-  - guest program compilation / some integration tests (requires `rust-src`, pinned nightly: `nightly-2026-01-18`)
+  - some workflows that build `cargo-openvm` with experimental features (pinned nightly: `nightly-2026-01-18`)
+- Guest program compilation uses the prebuilt `openvm-nightly-2026-01-18` toolchain from the [openvm-org/rust](https://github.com/openvm-org/rust) fork, installed via `cargo openvm toolchain install` (or `ci/install-openvm-toolchain.sh` in CI). The fork's tarball ships `std`/`core`/`alloc`/`panic_abort` rlibs for `riscv64im-unknown-openvm-elf`, so guest builds do not use `-Z build-std`.
 
 ### Building
 
@@ -64,7 +65,7 @@ cargo nextest run --cargo-profile=fast -p openvm-circuit -- test_name
 # Run tests in a working directory (as CI does)
 cd extensions/riscv/circuit && cargo nextest run --cargo-profile=fast
 
-# Integration tests for extensions (requires the openvm rust toolchain — rust-src ships inside it)
+# Integration tests for extensions (requires the openvm rust toolchain)
 cargo openvm toolchain install
 cd extensions/riscv/tests && cargo nextest run --cargo-profile=fast --profile=heavy
 
@@ -76,7 +77,7 @@ cargo nextest run --cargo-profile=fast --features parallel
 
 - `OPENVM_SKIP_DEBUG=1`: Skips debug-mode constraint checking in `air_test` (faster CI runs)
 - `OPENVM_RUST_TOOLCHAIN`: Override the rustup toolchain name used by `cargo openvm build`. Default is the `openvm-<rustup-name>` compiled into `cargo-openvm`. Set this to swap in a custom rustc fork.
-- `OPENVM_TARGET`: Override the rustc target triple used by `cargo openvm build`. Default is `riscv64im-unknown-openvm-elf` (built into our forked rustc). Any rv64im-flavored target works, but the user is responsible for ensuring the chosen toolchain supports it (e.g. has `rust-src` for `-Z build-std`).
+- `OPENVM_TARGET`: Override the rustc target triple used by `cargo openvm build`. Default is `riscv64im-unknown-openvm-elf` (built into our forked rustc). Any rv64im-flavored target works, but the user is responsible for ensuring the chosen toolchain supports it (i.e. ships the corresponding prebuilt rlibs in its sysroot).
 
 ### Nextest Profiles
 

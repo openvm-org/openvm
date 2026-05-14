@@ -123,7 +123,7 @@ To selectively enable the standard library, add the `std` feature to your `Cargo
 
 ```rust
 // main.rs
-#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(any(target_os = "none", target_os = "openvm"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
 
