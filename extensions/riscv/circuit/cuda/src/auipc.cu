@@ -8,14 +8,12 @@
 using namespace riscv;
 using namespace program;
 
+// Pattern B u16: rd_data is 2 u16 limbs (low 32 bits of rd); imm_limbs stays 3 byte limbs.
 template <typename T> struct Rv64AuipcCoreCols {
     T is_valid;
     T is_sign_extend;
-    // The limbs of the immediate except the least significant limb since it is always 0
-    T imm_limbs[RV64_WORD_NUM_LIMBS - 1];
-    // The limbs of the PC except the most significant and the least significant limbs
-    T pc_limbs[RV64_WORD_NUM_LIMBS - 2];
-    T rd_data[RV64_WORD_NUM_LIMBS];
+    T imm_limbs[RV64_WORD_NUM_LIMBS - 1]; // 3 byte limbs of imm (imm is 24 bits)
+    T rd_data[2];                          // 2 u16 limbs of rd_low_32
 };
 
 struct Rv64AuipcCoreRecord {
@@ -27,30 +25,35 @@ __device__ uint32_t run_auipc(uint32_t pc, uint32_t imm) { return pc + (imm << R
 
 struct Rv64AuipcCore {
     BitwiseOperationLookup bitwise_lookup;
+    VariableRangeChecker range_checker;
 
-    __device__ Rv64AuipcCore(BitwiseOperationLookup bitwise_lookup)
-        : bitwise_lookup(bitwise_lookup) {}
+    __device__ Rv64AuipcCore(
+        BitwiseOperationLookup bitwise_lookup,
+        VariableRangeChecker range_checker
+    )
+        : bitwise_lookup(bitwise_lookup), range_checker(range_checker) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv64AuipcCoreRecord record) {
-        auto pc_limbs = reinterpret_cast<uint8_t *>(&record.from_pc);
-        auto imm_limbs = reinterpret_cast<uint8_t *>(&record.imm);
+        auto imm_bytes = reinterpret_cast<uint8_t *>(&record.imm);
         auto auipc = run_auipc(record.from_pc, record.imm);
-        auto rd_data = reinterpret_cast<uint8_t *>(&auipc);
+        uint16_t rd_lo = (uint16_t)(auipc & 0xffff);
+        uint16_t rd_hi = (uint16_t)(auipc >> 16);
+        uint32_t is_sign_ext = (rd_hi >> 15) & 1;
 
-        bitwise_lookup.add_range(imm_limbs[0], imm_limbs[1]);
-        bitwise_lookup.add_range(imm_limbs[2], pc_limbs[1]);
-        auto msl_shift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - PC_BITS;
-        bitwise_lookup.add_range(pc_limbs[2], pc_limbs[3] << msl_shift);
-        bitwise_lookup.add_range(rd_data[0], rd_data[1]);
-        uint32_t is_sign_ext = (rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) & 1;
-        bitwise_lookup.add_range(
-            rd_data[RV64_WORD_NUM_LIMBS - 2],
-            2 * rd_data[RV64_WORD_NUM_LIMBS - 1] - is_sign_ext * (1 << RV64_CELL_BITS)
-        );
+        // Byte-range checks for imm limbs.
+        bitwise_lookup.add_range(imm_bytes[0], imm_bytes[0]);
+        bitwise_lookup.add_range(imm_bytes[1], imm_bytes[1]);
+        bitwise_lookup.add_range(imm_bytes[2], imm_bytes[2]);
+        // u16 range checks for rd_data.
+        range_checker.add_count(rd_lo, 16);
+        range_checker.add_count(rd_hi, 16);
+        // Sign-extension consistency: 2 * rd_hi - is_sign_ext * 2^16 ∈ [0, 2^16).
+        range_checker.add_count(2u * rd_hi - (is_sign_ext << 16), 16);
 
-        COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, imm_limbs, imm_limbs);
-        COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, pc_limbs, pc_limbs + 1);
-        COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, rd_data, rd_data);
+        uint32_t rd_u16[2] = {rd_lo, rd_hi};
+        uint32_t imm_u32[3] = {imm_bytes[0], imm_bytes[1], imm_bytes[2]};
+        COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, imm_limbs, imm_u32);
+        COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, rd_data, rd_u16);
         COL_WRITE_VALUE(row, Rv64AuipcCoreCols, is_sign_extend, is_sign_ext);
         COL_WRITE_VALUE(row, Rv64AuipcCoreCols, is_valid, 1);
     }
@@ -85,7 +88,10 @@ __global__ void auipc_tracegen(
         );
         adapter.fill_trace_row(row, record.adapter);
 
-        auto core = Rv64AuipcCore(BitwiseOperationLookup(bitwise_lookup_ptr));
+        auto core = Rv64AuipcCore(
+            BitwiseOperationLookup(bitwise_lookup_ptr),
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins)
+        );
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv64AuipcCols, core)), record.core);
     } else {
         row.fill_zero(0, sizeof(Rv64AuipcCols<uint8_t>));

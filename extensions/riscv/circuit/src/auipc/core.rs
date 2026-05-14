@@ -1,7 +1,4 @@
-use std::{
-    array::{self, from_fn},
-    borrow::{Borrow, BorrowMut},
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::*,
@@ -9,6 +6,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -26,26 +24,42 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
-    RV64_WORD_NUM_LIMBS,
+    Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_WORD_NUM_LIMBS,
 };
+
+/// Pattern B u16 AUIPC.
+///
+/// Semantics: `rd = pc + (imm << 8)` where `imm` is 24-bit (3 imm_byte limbs).
+///
+/// At u16-cell granularity (low 32 bits of `rd` split into 2 u16 limbs `rd[0]`, `rd[1]`):
+///
+/// - `imm << 8` is a 32-bit value with byte 0 = 0; bytes 1..4 = imm bytes 0..3. As 2 u16 limbs:
+///     `sl[0] = imm_b0 * 256` (low byte zero, high byte = imm_b0)
+///     `sl[1] = imm_b1 + imm_b2 * 256`
+/// - The constraint reduces to:
+///     `pc[0] + sl[0] = rd[0] + carry0 * 2^16`
+///     `pc[1] + sl[1] + carry0 = rd[1] + carry1 * 2^16`
+///     where `pc[0]`, `pc[1]` are the low/high u16 of `pc`, with `pc = pc[0] + pc[1] * 2^16`.
+/// - Sign extension on bits 32..64 is uniformly `is_sign_extend * 0xffff` per cell, with
+///   `is_sign_extend = (rd[1] >> 15) & 1`.
+const AUIPC_NUM_U16: usize = 2;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64AuipcCoreCols<T> {
     pub is_valid: T,
     pub is_sign_extend: T,
-    // The limbs of the immediate except the least significant limb since it is always 0
+    /// 3 byte limbs of `imm` (imm is 24 bits).
     pub imm_limbs: [T; RV64_WORD_NUM_LIMBS - 1],
-    // The limbs of the PC except the most significant and the least significant limbs
-    pub pc_limbs: [T; RV64_WORD_NUM_LIMBS - 2],
-    pub rd_data: [T; RV64_WORD_NUM_LIMBS],
+    /// Low 32 bits of `rd` as 2 u16 limbs.
+    pub rd_data: [T; AUIPC_NUM_U16],
 }
 
 #[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
 #[columns_via(Rv64AuipcCoreCols<u8>)]
 pub struct Rv64AuipcCoreAir {
-    pub bus: BitwiseOperationLookupBus,
+    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
+    pub range_bus: VariableRangeCheckerBus,
 }
 
 impl<F: Field> BaseAir<F> for Rv64AuipcCoreAir {
@@ -61,7 +75,7 @@ where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; 0]; 0]>,
-    I::Writes: From<[[AB::Expr; RV64_REGISTER_NUM_LIMBS]; 1]>,
+    I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
     I::ProcessedInstruction: From<ImmInstruction<AB::Expr>>,
 {
     fn eval(
@@ -76,121 +90,103 @@ where
             is_valid,
             is_sign_extend,
             imm_limbs,
-            pc_limbs,
             rd_data,
         } = *cols;
         builder.assert_bool(is_valid);
         builder.assert_bool(is_sign_extend);
 
-        // We want to constrain rd = pc + imm (i32 add) where:
-        // - rd_data represents limbs of rd
-        // - pc_limbs are limbs of pc except the most and least significant limbs
-        // - imm_limbs are limbs of imm except the least significant limb
+        // u16 limbs of `imm << 8`.
+        let sl_lo = imm_limbs[0] * AB::Expr::from_u32(1 << RV64_CELL_BITS); // imm_b0 * 256
+        let sl_hi = imm_limbs[1] + imm_limbs[2] * AB::Expr::from_u32(1 << RV64_CELL_BITS);
+        // imm_b1 + imm_b2 * 256
 
-        // We know that rd_data[0] is equal to the least significant limb of PC
-        // Thus, the intermediate value will be equal to PC without its most significant limb:
-        let intermed_val = rd_data[0]
-            + pc_limbs
-                .iter()
-                .enumerate()
-                .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                    acc + val * AB::Expr::from_u32(1 << ((i + 1) * RV64_CELL_BITS))
-                });
+        // Decompose pc into 2 u16 limbs: pc = pc_lo + pc_hi * 2^16.
+        // We know from_pc is range-checked by the program bus to fit in PC_BITS; we just need
+        // a canonical decomposition. The chip witnesses `rd[0]` and infers carry implicitly via
+        // the bool-carry constraint on each row.
+        let two_pow_16 = AB::F::from_u32(1 << 16);
+        let inv_2_16 = two_pow_16.inverse();
 
-        // Compute the most significant limb of PC
-        let pc_msl = (from_pc - intermed_val)
-            * AB::F::from_usize(1 << (RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1))).inverse();
+        // carry0 ∈ {0, 1} bool-checked via:
+        //   carry0 = (pc_lo + sl_lo - rd[0]) / 2^16
+        // We don't have pc_lo as a column. Instead express the sum: the chip will use the
+        // composed PC `from_pc = pc_lo + pc_hi * 2^16` via the carry chain plus a witnessed
+        // `pc_lo` value. Following the existing AUIPC pattern of deriving pc decomposition
+        // from from_pc, we represent the system as:
+        //
+        //   sum_low = from_pc - pc_hi * 2^16          (= pc_lo)
+        //   rd[0] = sum_low + sl_lo - carry0 * 2^16
+        //   rd[1] = pc_hi + sl_hi + carry0 - carry1 * 2^16
+        //
+        // We witness `pc_hi` implicitly: from the final equation `rd[1]` and the carry,
+        // pc_hi is recovered. The simpler formulation: derive carry0 from rd[0] and from_pc.
+        //
+        // Concretely:
+        //   carry0 = (from_pc + sl_lo - rd[0] - pc_hi * 2^16) * 2^-16 ∈ {0, 1}
+        //   carry1 = (pc_hi + sl_hi + carry0 - rd[1]) * 2^-16 ∈ {0, 1}
+        //
+        // But pc_hi is a free witness. To eliminate it, observe that
+        //   from_pc = pc_lo + pc_hi * 2^16 = (rd[0] - sl_lo + carry0 * 2^16) + pc_hi * 2^16
+        // so `pc_hi = (from_pc - rd[0] + sl_lo - carry0 * 2^16) * 2^-16`. Substituting into
+        // the second equation gives a single constraint linking rd[0], rd[1], from_pc, and
+        // the imm bytes.
+        //
+        // Simpler: use a single carry-chain on 2 u16 limbs with witness `pc_hi_witness`.
+        //
+        // We track pc_hi as a witness column to keep constraints degree-1 in the chip. Storing
+        // pc_hi adds one column but avoids cubic carries.
+        //
+        // For minimal column count, we keep no extra pc witness and instead enforce
+        //   2^32 * carry_top = from_pc + (imm << 8) - rd_low_32
+        // where `rd_low_32 = rd[0] + rd[1] * 2^16` and `carry_top ∈ {0, 1}` (PC + imm fits in
+        // 32 bits with at most 1 wrap which is handled by the sign-extension upper limbs).
+        let rd_low_32 = rd_data[0] + rd_data[1] * two_pow_16;
+        let imm_shifted = sl_lo.clone() + sl_hi.clone() * two_pow_16;
+        // carry_top * 2^32 = from_pc + imm_shifted - rd_low_32; carry_top ∈ {0, 1}.
+        let carry_top = (from_pc + imm_shifted - rd_low_32) * inv_2_16 * inv_2_16;
+        builder.when(is_valid).assert_bool(carry_top.clone());
 
-        // The vector pc_limbs contains the actual limbs of PC in little endian order
-        let pc_limbs = [rd_data[0]]
-            .iter()
-            .chain(pc_limbs.iter())
-            .map(|x| (*x).into())
-            .chain([pc_msl])
-            .collect::<Vec<AB::Expr>>();
-
-        let mut carry: [AB::Expr; RV64_WORD_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
-        let carry_divide = AB::F::from_usize(1 << RV64_CELL_BITS).inverse();
-
-        // Don't need to constrain the least significant limb of the addition
-        // since we already know that rd_data[0] = pc_limbs[0] and the least significant limb of imm
-        // is 0 Note: imm_limbs doesn't include the least significant limb so imm_limbs[i -
-        // 1] means the i-th limb of imm
-        for i in 1..RV64_WORD_NUM_LIMBS {
-            carry[i] = AB::Expr::from(carry_divide)
-                * (pc_limbs[i].clone() + imm_limbs[i - 1] - rd_data[i] + carry[i - 1].clone());
-            builder.when(is_valid).assert_bool(carry[i].clone());
-        }
-
-        // Byte-range check rd_data with two bus sends:
-        //   1. (rd_data[0], rd_data[1]).
-        //   2. (rd_data[2], 2*rd_data[3] - is_sign_extend * 2^RV64_CELL_BITS) — constraining the
-        //      second value to [0, 2^RV64_CELL_BITS) forces is_sign_extend = msb(rd_data[3]) and
-        //      (combined with the carry chain) byte-bounds rd_data[3].
-        self.bus
-            .send_range(rd_data[0], rd_data[1])
-            .eval(builder, is_valid);
-        self.bus
-            .send_range(
-                rd_data[RV64_WORD_NUM_LIMBS - 2],
-                AB::Expr::from_u32(2) * rd_data[RV64_WORD_NUM_LIMBS - 1]
-                    - is_sign_extend * AB::Expr::from_u32(1 << RV64_CELL_BITS),
+        // Sign extension constraint: the existing AUIPC AIR forces is_sign_extend to equal the
+        // top bit of the most-significant byte of rd_low_32 via:
+        //   second_range_limb = 2 * rd[3] - 2^8 * is_sign_extend ∈ [0, 2^8)
+        // For u16 limbs, the top bit of rd_low_32 is bit 15 of rd[1]. We enforce:
+        //   second_range_limb_u16 = 2 * rd[1] - 2^16 * is_sign_extend ∈ [0, 2^16)
+        self.range_bus
+            .range_check(
+                AB::Expr::from_u32(2) * rd_data[1]
+                    - is_sign_extend * AB::Expr::from_u32(1 << 16),
+                16,
             )
             .eval(builder, is_valid);
 
-        // The immediate and PC limbs need range checking to ensure they're within [0,
-        // 2^RV64_CELL_BITS) Since we range check two items at a time, doing this way helps
-        // efficiently divide the limbs into groups of 2 Note: range checking the limbs of
-        // immediate and PC separately would result in additional range checks       since
-        // they both have odd number of limbs that need to be range checked
-        let mut need_range_check: Vec<AB::Expr> = Vec::new();
-        for limb in imm_limbs {
-            need_range_check.push(limb.into());
-        }
-
-        assert_eq!(pc_limbs.len(), RV64_WORD_NUM_LIMBS);
-        // use enumerate to match pc_limbs[0] => i = 0, pc_limbs[1] => i = 1, ...
-        // pc_limbs[0] is already range checked through rd_data[0], so we skip it
-        for (i, limb) in pc_limbs.iter().enumerate().skip(1) {
-            // the most significant limb is pc_limbs[3] => i = 3
-            if i == pc_limbs.len() - 1 {
-                // Range check the most significant limb of pc to be in [0,
-                // 2^{PC_BITS-(RV64_WORD_NUM_LIMBS-1)*RV64_CELL_BITS})
-                need_range_check.push(
-                    (*limb).clone()
-                        * AB::Expr::from_usize(1 << (pc_limbs.len() * RV64_CELL_BITS - PC_BITS)),
-                );
-            } else {
-                need_range_check.push((*limb).clone());
-            }
-        }
-
-        // need_range_check contains (RV64_WORD_NUM_LIMBS - 1) elements from imm_limbs
-        // and (RV64_WORD_NUM_LIMBS - 1) elements from pc_limbs
-        // Hence, is of even length 2*RV64_WORD_NUM_LIMBS - 2
-        assert_eq!(need_range_check.len() % 2, 0);
-        for pair in need_range_check.chunks_exact(2) {
-            self.bus
-                .send_range(pair[0].clone(), pair[1].clone())
+        // Range checks: u16 limbs of rd to [0, 2^16) and imm bytes to [0, 256).
+        self.range_bus
+            .range_check(rd_data[0], 16)
+            .eval(builder, is_valid);
+        self.range_bus
+            .range_check(rd_data[1], 16)
+            .eval(builder, is_valid);
+        for &b in imm_limbs.iter() {
+            self.bitwise_lookup_bus
+                .send_range(b, b)
                 .eval(builder, is_valid);
         }
 
-        let imm = imm_limbs
-            .iter()
-            .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_u32(1 << (i * RV64_CELL_BITS))
-            });
+        // imm reconstruction: imm = imm_limbs[0] + imm_limbs[1] * 256 + imm_limbs[2] * 2^16
+        let imm = imm_limbs[0]
+            + imm_limbs[1] * AB::Expr::from_u32(1 << RV64_CELL_BITS)
+            + imm_limbs[2] * AB::Expr::from_u32(1 << (2 * RV64_CELL_BITS));
 
-        let sign_extend_limb = is_sign_extend * AB::Expr::from_u32(u8::MAX as u32);
-        let write_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                rd_data[i].into()
-            } else {
-                sign_extend_limb.clone()
-            }
-        });
+        let sign_extend_cell = is_sign_extend * AB::Expr::from_u32(0xffff);
+        let write_data: [AB::Expr; BLOCK_FE_WIDTH] = [
+            rd_data[0].into(),
+            rd_data[1].into(),
+            sign_extend_cell.clone(),
+            sign_extend_cell,
+        ];
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, AUIPC);
+        // Suppress unused warning on imports for non-AB paths.
+        let _ = PC_BITS;
         AdapterAirContext {
             to_pc: None,
             reads: [].into(),
@@ -225,12 +221,14 @@ pub struct Rv64AuipcExecutor<A = Rv64RdWriteAdapterExecutor> {
 pub struct Rv64AuipcFiller<A = Rv64RdWriteAdapterFiller> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<F, A, RA> PreflightExecutor<F, RA> for Rv64AuipcExecutor<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceExecutor<F, ReadData = (), WriteData = [u8; RV64_REGISTER_NUM_LIMBS]>,
+    A: 'static
+        + AdapterTraceExecutor<F, ReadData = (), WriteData = [u16; BLOCK_FE_WIDTH]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -270,60 +268,43 @@ where
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // Rv64AuipcCoreCols::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid Rv64AuipcCoreRecord written by the executor
-        // during trace generation
         let record: &Rv64AuipcCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
 
         let core_row: &mut Rv64AuipcCoreCols<F> = core_row.borrow_mut();
 
-        let imm_limbs = record.imm.to_le_bytes();
-        let pc_limbs = record.from_pc.to_le_bytes();
-        let rd_data = run_auipc(record.from_pc, record.imm);
-        debug_assert_eq!(imm_limbs[3], 0);
+        let imm_bytes = record.imm.to_le_bytes();
+        debug_assert_eq!(imm_bytes[3], 0);
+        let imm_limbs = [imm_bytes[0], imm_bytes[1], imm_bytes[2]];
 
-        // range checks:
-        // hardcoding for performance: first 3 limbs of imm_limbs, last 3 limbs of pc_limbs where
-        // most significant limb of pc_limbs is shifted up
-        self.bitwise_lookup_chip
-            .request_range(imm_limbs[0] as u32, imm_limbs[1] as u32);
-        self.bitwise_lookup_chip
-            .request_range(imm_limbs[2] as u32, pc_limbs[1] as u32);
-        let msl_shift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - PC_BITS;
-        self.bitwise_lookup_chip
-            .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);
-        // Mirror the AIR: rd_data[0..2] pair, then rd_data[2] paired with the sign-extend
-        // constraint on rd_data[3].
-        self.bitwise_lookup_chip
-            .request_range(rd_data[0] as u32, rd_data[1] as u32);
-        let is_sign_extend = (rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) & 1;
-        self.bitwise_lookup_chip.request_range(
-            rd_data[RV64_WORD_NUM_LIMBS - 2] as u32,
-            2 * rd_data[RV64_WORD_NUM_LIMBS - 1] as u32
-                - is_sign_extend as u32 * (1 << RV64_CELL_BITS),
-        );
+        let rd_block = run_auipc(record.from_pc, record.imm);
+        let rd_u16 = [rd_block[0], rd_block[1]];
 
-        // Writing in reverse order
-        core_row.rd_data = from_fn(|i| F::from_u8(rd_data[i]));
-        // only the middle 2 limbs:
-        core_row.pc_limbs = from_fn(|i| F::from_u8(pc_limbs[i + 1]));
-        core_row.imm_limbs = from_fn(|i| F::from_u8(imm_limbs[i]));
+        // Range checks:
+        for &b in imm_limbs.iter() {
+            self.bitwise_lookup_chip.request_range(b as u32, b as u32);
+        }
+        self.range_checker_chip.add_count(rd_u16[0] as u32, 16);
+        self.range_checker_chip.add_count(rd_u16[1] as u32, 16);
+        let is_sign_extend = (rd_u16[1] >> 15) & 1;
+        let second_range_limb = 2u32 * (rd_u16[1] as u32) - ((is_sign_extend as u32) << 16);
+        self.range_checker_chip.add_count(second_range_limb, 16);
+
+        core_row.rd_data = rd_u16.map(|v| F::from_u32(v as u32));
+        core_row.imm_limbs = imm_limbs.map(F::from_u8);
         core_row.is_sign_extend = F::from_bool(is_sign_extend != 0);
-
         core_row.is_valid = F::ONE;
     }
 }
 
-// returns rd_data
+// Returns the low 32 bits of `rd` as 2 u16 cells plus 2 sign-extension u16 cells (total 4 cells
+// matching `BLOCK_FE_WIDTH`).
 #[inline(always)]
-pub(super) fn run_auipc(pc: u32, imm: u32) -> [u8; RV64_REGISTER_NUM_LIMBS] {
-    let rd = pc.wrapping_add(imm << RV64_CELL_BITS);
-    let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-    rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&rd.to_le_bytes());
-    let sign_extend_limb = (rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) * u8::MAX;
-    rd_data[RV64_WORD_NUM_LIMBS..].fill(sign_extend_limb);
-    rd_data
+pub(super) fn run_auipc(pc: u32, imm: u32) -> [u16; BLOCK_FE_WIDTH] {
+    let rd_low_32 = pc.wrapping_add(imm << RV64_CELL_BITS);
+    let lo = (rd_low_32 & 0xffff) as u16;
+    let hi = (rd_low_32 >> 16) as u16;
+    let sign = if (hi >> 15) & 1 == 1 { 0xffffu16 } else { 0 };
+    [lo, hi, sign, sign]
 }

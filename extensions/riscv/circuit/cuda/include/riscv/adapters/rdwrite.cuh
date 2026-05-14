@@ -13,11 +13,18 @@ template <typename T> struct Rv64RdWriteAdapterCols {
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> rd_aux_cols;
 };
 
+/// Pattern B u16: rd_aux_record stores `BLOCK_FE_WIDTH` u16 cells (= 8 bytes) natively, matching
+/// the bridge's `MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>` shape.
+struct Rv64RdWriteAdapterWriteAuxRecord {
+    uint32_t prev_timestamp;
+    uint16_t prev_data[BLOCK_FE_WIDTH];
+};
+
 struct Rv64RdWriteAdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
     uint32_t rd_ptr;
-    MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS> rd_aux_record;
+    Rv64RdWriteAdapterWriteAuxRecord rd_aux_record;
 };
 
 struct Rv64RdWriteAdapter {
@@ -31,15 +38,12 @@ struct Rv64RdWriteAdapter {
         COL_WRITE_VALUE(row, Rv64RdWriteAdapterCols, from_state.timestamp, record.from_timestamp);
         COL_WRITE_VALUE(row, Rv64RdWriteAdapterCols, rd_ptr, record.rd_ptr);
 
-        Fp packed_prev[BLOCK_FE_WIDTH];
+        Fp prev[BLOCK_FE_WIDTH];
 #pragma unroll
         for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
-            packed_prev[i] = Fp(
-                uint32_t(record.rd_aux_record.prev_data[2 * i])
-                + 256u * uint32_t(record.rd_aux_record.prev_data[2 * i + 1])
-            );
+            prev[i] = Fp(uint32_t(record.rd_aux_record.prev_data[i]));
         }
-        COL_WRITE_ARRAY(row, Rv64RdWriteAdapterCols, rd_aux_cols.prev_data, packed_prev);
+        COL_WRITE_ARRAY(row, Rv64RdWriteAdapterCols, rd_aux_cols.prev_data, prev);
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64RdWriteAdapterCols, rd_aux_cols.base)),
             record.rd_aux_record.prev_timestamp,
