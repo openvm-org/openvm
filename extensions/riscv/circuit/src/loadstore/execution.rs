@@ -19,7 +19,7 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::LoadStoreExecutor;
-use crate::adapters::rv64_bytes_to_u32;
+use crate::adapters::rv64_bytes_to_u32_wrapping;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -215,7 +215,9 @@ unsafe fn execute_e12_impl<
     let pc = exec_state.pc();
     let rs1_bytes: [u8; RV64_REGISTER_NUM_LIMBS] =
         exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs1_val = rv64_bytes_to_u32(rs1_bytes);
+    // rs1 may legitimately hold any u64 (e.g. a sign-extended negative immediate); the final
+    // pointer is bounded by the `< 2^POINTER_MAX_BITS` debug_assert below.
+    let rs1_val = rv64_bytes_to_u32_wrapping(rs1_bytes);
     let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
     // sign_extend([r64{c,g}(b):2]_e)
     debug_assert!(ptr_val < (1 << POINTER_MAX_BITS));

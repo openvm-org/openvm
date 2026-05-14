@@ -168,6 +168,13 @@ const _: () = assert!(
     MEMORY_BLOCK_BYTES.is_multiple_of(BUS_PTR_SCALE),
     "MEMORY_BLOCK_BYTES must be divisible by BUS_PTR_SCALE so BLOCK_FE_WIDTH is integer-valued"
 );
+// The byte-view dispatch on u16-celled ASes assumes
+// `byte_ptr / (BLOCK_FE_WIDTH * cell_size)` maps to the metadata block index,
+// which requires `MEMORY_BLOCK_BYTES == BLOCK_FE_WIDTH * U16_CELL_SIZE`.
+const _: () = assert!(
+    MEMORY_BLOCK_BYTES == BLOCK_FE_WIDTH * U16_CELL_SIZE,
+    "MEMORY_BLOCK_BYTES must equal BLOCK_FE_WIDTH * U16_CELL_SIZE for u16-celled byte-view"
+);
 
 /// Trait for generating a init.rs file that contains a call to moduli_init!,
 /// complex_init!, sw_init! with the supported moduli and curves.
