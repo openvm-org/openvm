@@ -10,26 +10,31 @@ using namespace program;
 using hintstore::MAX_HINT_BUFFER_DWORDS;
 using hintstore::MAX_HINT_BUFFER_DWORDS_BITS;
 
-// The num_words range check below only works for MAX_HINT_BUFFER_DWORDS_BITS in [8, 16)
+// The rem_words range check below only works for MAX_HINT_BUFFER_DWORDS_BITS <= 16
 static_assert(
-    MAX_HINT_BUFFER_DWORDS_BITS >= 8 && MAX_HINT_BUFFER_DWORDS_BITS < 16,
-    "MAX_HINT_BUFFER_DWORDS_BITS must be in [8, 16) for the num_words range check"
+    MAX_HINT_BUFFER_DWORDS_BITS <= 16,
+    "MAX_HINT_BUFFER_DWORDS_BITS must be <= 16 for the rem_words range check"
 );
 
-constexpr size_t REM_WORDS_NUM_LIMBS = 2;
+// Number of u16 cells used to represent the low 32 bits of `mem_ptr`. Matches the Rust
+// `MEM_PTR_NUM_LIMBS` constant.
+constexpr size_t MEM_PTR_NUM_LIMBS = RV64_WORD_NUM_LIMBS / 2;
 
 template <typename T> struct Rv64HintStoreCols {
     // common
     T is_single;
     T is_buffer;
 
-    // Low bytes of the 8-byte RV64 register that holds `rem_words`; the upper 6 bytes are
-    // known to be zero and are hardcoded in the memory bus interaction.
-    T rem_words_limbs[REM_WORDS_NUM_LIMBS];
+    // Single u16 cell holding `rem_words`. `rem_words <= MAX_HINT_BUFFER_DWORDS < 2^16`
+    // fits in a single u16 cell; the upper 6 bytes of the 8-byte RV64 register are zero
+    // and hardcoded in the memory bus interaction.
+    T rem_words;
 
     ExecutionState<T> from_state;
     T mem_ptr_ptr;
-    T mem_ptr_limbs[RV64_WORD_NUM_LIMBS];
+    // Low 32 bits of `mem_ptr` packed into 2 u16 cells. The upper 4 bytes are zero and
+    // hardcoded in the memory bus interaction.
+    T mem_ptr_limbs[MEM_PTR_NUM_LIMBS];
     MemoryReadAuxCols<T> mem_ptr_aux_cols;
 
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
@@ -67,16 +72,15 @@ struct Rv64HintStoreVars {
 
 struct Rv64HintStore {
     size_t pointer_max_bits;
-    BitwiseOperationLookup bitwise_lookup;
+    VariableRangeChecker range_checker;
     MemoryAuxColsFactory mem_helper;
 
     __device__ Rv64HintStore(
-        BitwiseOperationLookup bitwise_lookup,
         size_t pointer_max_bits,
         VariableRangeChecker range_checker,
         uint32_t timestamp_max_bits
     )
-        : bitwise_lookup(bitwise_lookup), pointer_max_bits(pointer_max_bits),
+        : pointer_max_bits(pointer_max_bits), range_checker(range_checker),
           mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ void fill_trace_row(
@@ -89,12 +93,19 @@ struct Rv64HintStore {
         uint32_t timestamp = record.timestamp + local_idx * 3;
         uint32_t rem_words = record.num_words - local_idx;
         uint32_t mem_ptr = record.mem_ptr + local_idx * (uint32_t)RV64_REGISTER_NUM_LIMBS;
-        auto rem_words_limbs = reinterpret_cast<uint8_t *>(&rem_words);
-        auto mem_ptr_limbs = reinterpret_cast<uint8_t *>(&mem_ptr);
+        // Pack low 4 bytes of `mem_ptr` into 2 u16 cells; the high 4 bytes are zero.
+        auto mem_ptr_bytes = reinterpret_cast<uint8_t *>(&mem_ptr);
+        uint32_t mem_ptr_limbs[MEM_PTR_NUM_LIMBS];
+#pragma unroll
+        for (size_t i = 0; i < MEM_PTR_NUM_LIMBS; i++) {
+            mem_ptr_limbs[i] =
+                uint32_t(mem_ptr_bytes[2 * i]) + 256u * uint32_t(mem_ptr_bytes[2 * i + 1]);
+        }
 
         COL_WRITE_VALUE(row, Rv64HintStoreCols, is_single, is_single);
         COL_WRITE_VALUE(row, Rv64HintStoreCols, is_buffer, !is_single);
-        COL_WRITE_ARRAY(row, Rv64HintStoreCols, rem_words_limbs, rem_words_limbs);
+        // `rem_words <= MAX_HINT_BUFFER_DWORDS < 2^16` fits in a single u16 cell.
+        COL_WRITE_VALUE(row, Rv64HintStoreCols, rem_words, rem_words);
         COL_WRITE_VALUE(row, Rv64HintStoreCols, from_state.pc, record.from_pc);
         COL_WRITE_VALUE(row, Rv64HintStoreCols, from_state.timestamp, timestamp);
         COL_WRITE_VALUE(row, Rv64HintStoreCols, mem_ptr_ptr, record.mem_ptr_ptr);
@@ -108,21 +119,17 @@ struct Rv64HintStore {
             assert(record.num_words <= MAX_HINT_BUFFER_DWORDS);
 #endif
 
-            // Range check for mem_ptr (using pointer_max_bits). `mem_ptr` is a 4-limb value;
-            // the range check packs the most-significant of those 4 limbs into a single byte.
-            uint32_t msl_rshift = (RV64_WORD_NUM_LIMBS - 1) * RV64_CELL_BITS;
-            uint32_t msl_lshift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - pointer_max_bits;
+            // Range check for `mem_ptr` (using pointer_max_bits): the high u16 cell of
+            // the low 32 bits scaled by `1 << (32 - pointer_max_bits)` must fit in 16 bits.
+            uint32_t mem_ptr_msl_lshift = 32u - (uint32_t)pointer_max_bits;
+            uint32_t mem_ptr_high_u16 = record.mem_ptr >> 16;
+            range_checker.add_count(mem_ptr_high_u16 << mem_ptr_msl_lshift, 16);
 
-            // Range check for num_words (using MAX_HINT_BUFFER_DWORDS_BITS).
-            uint32_t rem_words_msl_lshift =
-                REM_WORDS_NUM_LIMBS * RV64_CELL_BITS - MAX_HINT_BUFFER_DWORDS_BITS;
+            // Range check for `rem_words` (using MAX_HINT_BUFFER_DWORDS_BITS): scaled by
+            // `1 << (16 - MAX_HINT_BUFFER_DWORDS_BITS)` and range-checked to 16 bits.
+            uint32_t rem_words_lshift = 16u - (uint32_t)MAX_HINT_BUFFER_DWORDS_BITS;
+            range_checker.add_count(record.num_words << rem_words_lshift, 16);
 
-            // Combined range check for mem_ptr and num_words
-            bitwise_lookup.add_range(
-                (record.mem_ptr >> msl_rshift) << msl_lshift,
-                ((record.num_words >> (RV64_CELL_BITS * (REM_WORDS_NUM_LIMBS - 1))) & 0xFF)
-                    << rem_words_msl_lshift
-            );
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv64HintStoreCols, mem_ptr_aux_cols)),
                 record.mem_ptr_aux_record.prev_timestamp,
@@ -186,7 +193,6 @@ __global__ void hintstore_tracegen(
     uint32_t pointer_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
-    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -203,7 +209,6 @@ __global__ void hintstore_tracegen(
         auto data_write = reinterpret_cast<Rv64HintStoreVars *>(writes_start)[local_idx];
 
         auto filler = Rv64HintStore(
-            BitwiseOperationLookup(bitwise_lookup_ptr),
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits
@@ -224,7 +229,6 @@ extern "C" int _hintstore_tracegen(
     uint32_t pointer_max_bits,
     uint32_t *__restrict__ d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t *__restrict__ d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -240,7 +244,6 @@ extern "C" int _hintstore_tracegen(
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,
-        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();
