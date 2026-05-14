@@ -143,14 +143,14 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchEqual256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Less Than
 //////////////////////////////////////////////////////////////////////////////////////
-pub type LessThan256AdapterRecord = Rv64VecHeapAdapterRecord<
+pub type LessThan256AdapterRecord = openvm_riscv_adapters::Rv64VecHeapU16AdapterRecord<
     NUM_READS,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
-    MEMORY_BLOCK_BYTES,
-    MEMORY_BLOCK_BYTES,
+    BLOCK_FE_WIDTH,
+    BLOCK_FE_WIDTH,
 >;
-pub type LessThan256CoreRecord = LessThanCoreRecord<INT256_NUM_LIMBS, RV64_CELL_BITS>;
+pub type LessThan256CoreRecord = LessThanCoreRecord<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>;
 
 #[derive(new)]
 pub struct LessThan256ChipGpu {
@@ -169,15 +169,16 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = LessThanCoreCols::<F, INT256_NUM_LIMBS, RV64_CELL_BITS>::width()
-            + Rv64VecHeapAdapterCols::<
-                F,
-                NUM_READS,
-                INT256_NUM_BLOCKS,
-                INT256_NUM_BLOCKS,
-                MEMORY_BLOCK_BYTES,
-                MEMORY_BLOCK_BYTES,
-            >::width();
+        let trace_width =
+            LessThanCoreCols::<F, INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>::width()
+                + openvm_riscv_adapters::Rv64VecHeapU16AdapterCols::<
+                    F,
+                    NUM_READS,
+                    INT256_NUM_BLOCKS,
+                    INT256_NUM_BLOCKS,
+                    BLOCK_FE_WIDTH,
+                    BLOCK_FE_WIDTH,
+                >::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
