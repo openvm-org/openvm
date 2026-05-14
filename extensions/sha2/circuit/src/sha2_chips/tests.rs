@@ -13,9 +13,12 @@ use openvm_circuit::{
     system::{memory::SharedMemoryHelper, SystemPort},
     utils::get_random_message,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::VariableRangeCheckerChip,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -611,15 +614,18 @@ fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness
         tester.address_bits(),
     );
 
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        openvm_circuit::arch::testing::default_var_range_checker_bus(),
+    ));
     let block_hasher_air = Sha2BlockHasherVmAir::new(
         bitwise_bus,
-        tester.range_checker().bus(),
+        dummy_range_checker_chip.bus(),
         SUBAIR_BUS_IDX,
         SHA2_BUS_IDX,
     );
     let block_hasher_chip = Sha2BlockHasherChip::new(
         dummy_bitwise_chip.clone(),
-        tester.range_checker(),
+        dummy_range_checker_chip,
         tester.address_bits(),
         tester.dummy_memory_helper(),
         main_chip.records.clone(),
