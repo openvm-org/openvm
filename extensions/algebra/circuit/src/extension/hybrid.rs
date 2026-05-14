@@ -2,7 +2,7 @@
 
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::{
-    arch::{MEMORY_BLOCK_BYTES, *},
+    arch::{BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, *},
     system::{
         cuda::{
             extensions::{
@@ -26,8 +26,9 @@ use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_riscv_adapters::{
-    Rv64IsEqualModAdapterCols, Rv64IsEqualModAdapterExecutor, Rv64IsEqualModAdapterFiller,
-    Rv64IsEqualModAdapterRecord, Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor,
+    Rv64IsEqualModAdapterU16Cols, Rv64IsEqualModAdapterU16Executor,
+    Rv64IsEqualModAdapterU16Filler, Rv64IsEqualModAdapterU16Record, Rv64VecHeapAdapterCols,
+    Rv64VecHeapAdapterExecutor,
 };
 use openvm_riscv_circuit::Rv64ImGpuProverExt;
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
@@ -37,7 +38,8 @@ use crate::{
     fp2_chip::{get_fp2_addsub_chip, get_fp2_muldiv_chip, Fp2Air, Fp2Chip},
     modular_chip::*,
     AlgebraRecord, Fp2Extension, ModularExtension, Rv64ModularConfig, Rv64ModularWithFp2Config,
-    FP2_BLOCKS_32, FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
+    FP2_BLOCKS_32, FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32,
+    NUM_LIMBS_32_U16, NUM_LIMBS_48, NUM_LIMBS_48_U16,
 };
 
 #[derive(derive_new::new)]
@@ -98,7 +100,7 @@ pub struct HybridModularIsEqualChip<
     const LANE_SIZE: usize,
     const TOTAL_LIMBS: usize,
 > {
-    cpu: ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+    cpu: ModularIsEqualU16Chip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
     device_ctx: GpuDeviceCtx,
 }
 
@@ -108,10 +110,10 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
 {
     fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         let record_size = size_of::<(
-            Rv64IsEqualModAdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            Rv64IsEqualModAdapterU16Record<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             ModularIsEqualRecord<TOTAL_LIMBS>,
         )>();
-        let trace_width = Rv64IsEqualModAdapterCols::<F, 2, NUM_LANES, LANE_SIZE>::width()
+        let trace_width = Rv64IsEqualModAdapterU16Cols::<F, 2, NUM_LANES, LANE_SIZE>::width()
             + ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width();
         let records = arena.allocated();
         if records.is_empty() {
@@ -122,11 +124,11 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
         let num_records = records.len() / record_size;
         let height = num_records.next_power_of_two();
         let mut seeker = arena.get_record_seeker::<(
-            &mut Rv64IsEqualModAdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            &mut Rv64IsEqualModAdapterU16Record<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             &mut ModularIsEqualRecord<TOTAL_LIMBS>,
         ), EmptyAdapterCoreLayout<
             F,
-            Rv64IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            Rv64IsEqualModAdapterU16Executor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         >>();
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, trace_width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, EmptyAdapterCoreLayout::new());
@@ -161,7 +163,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
             let start_offset =
                 Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
 
-            let modulus_limbs = big_uint_to_limbs(modulus, 8);
+            let modulus_limbs_u16 = big_uint_to_limbs(modulus, 16);
 
             if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
@@ -190,25 +192,29 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(muldiv, device_ctx.clone()));
 
-                let modulus_limbs = std::array::from_fn(|i| {
-                    if i < modulus_limbs.len() {
-                        modulus_limbs[i] as u8
+                let modulus_limbs_u16_arr: [u16; NUM_LIMBS_32_U16] = std::array::from_fn(|i| {
+                    if i < modulus_limbs_u16.len() {
+                        modulus_limbs_u16[i] as u16
                     } else {
                         0
                     }
                 });
-                inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_32, MEMORY_BLOCK_BYTES, NUM_LIMBS_32>>()?;
-                let is_eq = ModularIsEqualChip::<
+                inventory.next_air::<ModularIsEqualU16Air<
+                    MODULAR_BLOCKS_32,
+                    BLOCK_FE_WIDTH,
+                    NUM_LIMBS_32_U16,
+                >>()?;
+                let is_eq = ModularIsEqualU16Chip::<
                     F,
                     MODULAR_BLOCKS_32,
-                    MEMORY_BLOCK_BYTES,
-                    NUM_LIMBS_32,
+                    BLOCK_FE_WIDTH,
+                    NUM_LIMBS_32_U16,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModAdapterU16Filler::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
-                        modulus_limbs,
-                        bitwise_lu.clone(),
+                        modulus_limbs_u16_arr,
+                        range_checker.clone(),
                     ),
                     mem_helper.clone(),
                 );
@@ -241,25 +247,29 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(muldiv, device_ctx.clone()));
 
-                let modulus_limbs = std::array::from_fn(|i| {
-                    if i < modulus_limbs.len() {
-                        modulus_limbs[i] as u8
+                let modulus_limbs_u16_arr: [u16; NUM_LIMBS_48_U16] = std::array::from_fn(|i| {
+                    if i < modulus_limbs_u16.len() {
+                        modulus_limbs_u16[i] as u16
                     } else {
                         0
                     }
                 });
-                inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_48, MEMORY_BLOCK_BYTES, NUM_LIMBS_48>>()?;
-                let is_eq = ModularIsEqualChip::<
+                inventory.next_air::<ModularIsEqualU16Air<
+                    MODULAR_BLOCKS_48,
+                    BLOCK_FE_WIDTH,
+                    NUM_LIMBS_48_U16,
+                >>()?;
+                let is_eq = ModularIsEqualU16Chip::<
                     F,
                     MODULAR_BLOCKS_48,
-                    MEMORY_BLOCK_BYTES,
-                    NUM_LIMBS_48,
+                    BLOCK_FE_WIDTH,
+                    NUM_LIMBS_48_U16,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModAdapterU16Filler::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
-                        modulus_limbs,
-                        bitwise_lu.clone(),
+                        modulus_limbs_u16_arr,
+                        range_checker.clone(),
                     ),
                     mem_helper.clone(),
                 );
