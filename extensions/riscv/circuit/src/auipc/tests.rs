@@ -181,8 +181,10 @@ struct AuipcPrankValues {
     pub is_sign_extend: Option<u32>,
     /// 2 u16 limbs (low 32 bits of rd).
     pub rd_data: Option<[u32; 2]>,
-    /// 3 byte limbs of imm.
-    pub imm_limbs: Option<[u32; 3]>,
+    /// Low byte of imm.
+    pub imm_low_8: Option<u32>,
+    /// High 16 bits of imm.
+    pub imm_high_16: Option<u32>,
 }
 
 fn run_negative_auipc_test(
@@ -218,8 +220,11 @@ fn run_negative_auipc_test(
         if let Some(data) = prank_vals.rd_data {
             core_cols.rd_data = data.map(F::from_u32);
         }
-        if let Some(data) = prank_vals.imm_limbs {
-            core_cols.imm_limbs = data.map(F::from_u32);
+        if let Some(val) = prank_vals.imm_low_8 {
+            core_cols.imm_low_8 = F::from_u32(val);
+        }
+        if let Some(val) = prank_vals.imm_high_16 {
+            core_cols.imm_high_16 = F::from_u32(val);
         }
 
         *trace = RowMajorMatrix::new(trace_row, trace.width());
@@ -238,14 +243,15 @@ fn run_negative_auipc_test(
 
 #[test]
 fn invalid_imm_limb_negative_test() {
-    // Out-of-byte-range imm limbs fail the bitwise_lookup range check.
+    // Out-of-byte-range imm_low_8 fails the bitwise_lookup range check.
     run_negative_auipc_test(
         AUIPC,
         Some(0x123456),
         None,
         AuipcPrankValues {
-            // Bytes of 0x123456 are [0x56, 0x34, 0x12]; prank limb 0 to 0x100.
-            imm_limbs: Some([0x100, 0x34, 0x12]),
+            // imm = 0x123456 ⇒ imm_low_8 = 0x56, imm_high_16 = 0x1234. Prank low byte to 0x100.
+            imm_low_8: Some(0x100),
+            imm_high_16: Some(0x1234),
             ..Default::default()
         },
         false,
@@ -342,16 +348,17 @@ fn sign_extend_flag_negative_tests() {
 
 #[test]
 fn overflow_negative_tests() {
-    // Force imm_limbs to compose to a different imm than what the instruction encoded.
-    // Without proper byte range checks, the chip would accept the wrong decomposition;
-    // with them, the byte-range check rejects out-of-range limbs.
+    // Force imm decomposition to disagree with the instruction-encoded imm. The byte-range
+    // check rejects out-of-range `imm_low_8` and the u16 range check rejects out-of-range
+    // `imm_high_16`.
     run_negative_auipc_test(
         AUIPC,
         Some(256264),
         None,
         AuipcPrankValues {
-            // 0x3e988 bytes: [0x88, 0xe9, 0x03]; out-of-byte values fail the byte range check.
-            imm_limbs: Some([3592, 219, 3]),
+            // 0x3e988 ⇒ imm_low_8 = 0x88, imm_high_16 = 0x03e9. Prank low byte out of u8 range.
+            imm_low_8: Some(3592),
+            imm_high_16: Some(0x03e9),
             ..Default::default()
         },
         false,
@@ -362,7 +369,8 @@ fn overflow_negative_tests() {
         None,
         AuipcPrankValues {
             // F::NEG_ONE is way past byte range — fails the bitwise lookup.
-            imm_limbs: Some([F::NEG_ONE.as_canonical_u32(), 1, 0]),
+            imm_low_8: Some(F::NEG_ONE.as_canonical_u32()),
+            imm_high_16: Some(0),
             ..Default::default()
         },
         true,

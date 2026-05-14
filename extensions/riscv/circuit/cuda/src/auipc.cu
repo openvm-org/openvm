@@ -8,12 +8,14 @@
 using namespace riscv;
 using namespace program;
 
-// Pattern B u16: rd_data is 2 u16 limbs (low 32 bits of rd); imm_limbs stays 3 byte limbs.
+// Pattern B u16: rd_data is 2 u16 limbs (low 32 bits of rd); imm stored as 1 byte + 1 u16
+// (`imm = imm_low_8 + imm_high_16 * 256`).
 template <typename T> struct Rv64AuipcCoreCols {
     T is_valid;
     T is_sign_extend;
-    T imm_limbs[RV64_WORD_NUM_LIMBS - 1]; // 3 byte limbs of imm (imm is 24 bits)
-    T rd_data[2];                          // 2 u16 limbs of rd_low_32
+    T imm_low_8;   // imm & 0xff
+    T imm_high_16; // (imm >> 8) & 0xffff
+    T rd_data[2];  // 2 u16 limbs of rd_low_32
 };
 
 struct Rv64AuipcCoreRecord {
@@ -35,24 +37,24 @@ struct Rv64AuipcCore {
 
     __device__ void fill_trace_row(RowSlice row, Rv64AuipcCoreRecord record) {
         auto imm_bytes = reinterpret_cast<uint8_t *>(&record.imm);
+        uint32_t imm_low_8 = imm_bytes[0];
+        uint32_t imm_high_16 = (uint32_t)imm_bytes[1] | ((uint32_t)imm_bytes[2] << 8);
         auto auipc = run_auipc(record.from_pc, record.imm);
         uint16_t rd_lo = (uint16_t)(auipc & 0xffff);
         uint16_t rd_hi = (uint16_t)(auipc >> 16);
         uint32_t is_sign_ext = (rd_hi >> 15) & 1;
 
-        // Byte-range checks for imm limbs.
-        bitwise_lookup.add_range(imm_bytes[0], imm_bytes[0]);
-        bitwise_lookup.add_range(imm_bytes[1], imm_bytes[1]);
-        bitwise_lookup.add_range(imm_bytes[2], imm_bytes[2]);
-        // u16 range checks for rd_data.
+        // Range checks: low byte via bitwise lookup, high 16 bits + rd via range checker.
+        bitwise_lookup.add_range(imm_low_8, imm_low_8);
+        range_checker.add_count(imm_high_16, 16);
         range_checker.add_count(rd_lo, 16);
         range_checker.add_count(rd_hi, 16);
         // Sign-extension consistency: 2 * rd_hi - is_sign_ext * 2^16 ∈ [0, 2^16).
         range_checker.add_count(2u * rd_hi - (is_sign_ext << 16), 16);
 
         uint32_t rd_u16[2] = {rd_lo, rd_hi};
-        uint32_t imm_u32[3] = {imm_bytes[0], imm_bytes[1], imm_bytes[2]};
-        COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, imm_limbs, imm_u32);
+        COL_WRITE_VALUE(row, Rv64AuipcCoreCols, imm_low_8, imm_low_8);
+        COL_WRITE_VALUE(row, Rv64AuipcCoreCols, imm_high_16, imm_high_16);
         COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, rd_data, rd_u16);
         COL_WRITE_VALUE(row, Rv64AuipcCoreCols, is_sign_extend, is_sign_ext);
         COL_WRITE_VALUE(row, Rv64AuipcCoreCols, is_valid, 1);
