@@ -133,6 +133,9 @@ where
 pub struct Sha2BlockHasherChipGpu<C: Sha2Config> {
     records: Arc<Mutex<Option<Sha2SharedRecordsGpu>>>,
     bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<8>>,
+    /// 16-bit range checker for the per-cell range checks on the digest row's `final_hash`
+    /// cells (mirrors `Sha2BlockHasherSubAir`'s `range_bus`).
+    pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     _marker: PhantomData<C>,
 }
 
@@ -206,6 +209,7 @@ where
                         &d_prev_hashes,
                         &self.bitwise_lookup.count,
                         &d_scratch,
+                        &self.range_checker.count,
                         device_ctx.stream.as_raw(),
                     )
                     .unwrap();
@@ -261,6 +265,7 @@ where
                         &d_prev_hashes,
                         &self.bitwise_lookup.count,
                         &d_scratch,
+                        &self.range_checker.count,
                         device_ctx.stream.as_raw(),
                     )
                     .unwrap();
@@ -292,10 +297,12 @@ impl<C: Sha2Config> Sha2BlockHasherChipGpu<C> {
     pub fn new(
         records: Arc<Mutex<Option<Sha2SharedRecordsGpu>>>,
         bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<8>>,
+        range_checker: Arc<VariableRangeCheckerChipGPU>,
     ) -> Self {
         Self {
             records,
             bitwise_lookup,
+            range_checker,
             _marker: PhantomData,
         }
     }
