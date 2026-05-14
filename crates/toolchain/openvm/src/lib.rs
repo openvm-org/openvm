@@ -115,15 +115,9 @@ unsafe extern "C" fn __start() -> ! {
     unreachable!()
 }
 
-#[cfg(openvm_intrinsics)]
-static STACK_TOP: u64 = openvm_platform::memory::STACK_TOP;
-
 // Entry point; sets up global pointer and stack pointer and passes to `__start`.
 // Overrides std's default `_start` — the openvm guest has no OS runtime to
 // initialize, so we skip std's startup and jump straight into the user's `main`.
-//
-// TODO: when asm_const is stabilized, use that here instead of defining a symbol
-// and dereferencing it.
 #[cfg(openvm_intrinsics)]
 core::arch::global_asm!(
     r#"
@@ -134,11 +128,10 @@ _start:
     .option norelax;
     la gp, __global_pointer$;
     .option pop;
-    la sp, {0};
-    ld sp, 0(sp);
+    li sp, {STACK_TOP};
     call __start;
 "#,
-    sym STACK_TOP
+    STACK_TOP = const openvm_platform::memory::STACK_TOP,
 );
 
 /// Require that accesses to behind the given pointer before the memory
