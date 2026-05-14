@@ -8,6 +8,13 @@ use openvm_instructions::riscv::RV64_WORD_NUM_LIMBS;
 
 use crate::{KECCAK_RATE_BYTES, KECCAK_RATE_MEM_OPS};
 
+/// Number of u16 cells used to represent the low 32 bits of each pointer
+/// (`buffer_ptr` / `input_ptr`). The high 4 bytes of the 8-byte RV64 register are zero
+/// and hardcoded in the memory bus interaction via `expand_to_rv64_block` rather than
+/// materialized as columns. Matches the `BUFFER_PTR_NUM_LIMBS` convention used by
+/// `keccakf_op` and hintstore's `MEM_PTR_NUM_LIMBS`.
+pub const XORIN_PTR_NUM_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
+
 #[repr(C)]
 #[derive(Debug, AlignedBorrow, StructReflection)]
 pub struct XorinVmCols<T> {
@@ -26,9 +33,13 @@ pub struct XorinInstructionCols<T> {
     pub input_reg_ptr: T,
     pub len_reg_ptr: T,
     pub buffer_ptr: T,
-    pub buffer_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
+    /// Low 4 bytes of the 8-byte `rs0` register packed into 2 u16 cells (matching AS2
+    /// u16 cell granularity). The upper 4 bytes of the register are zero and are
+    /// hardcoded in the memory bus interaction via `expand_to_rv64_block`.
+    pub buffer_ptr_limbs: [T; XORIN_PTR_NUM_LIMBS],
     pub input_ptr: T,
-    pub input_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
+    /// See `buffer_ptr_limbs`.
+    pub input_ptr_limbs: [T; XORIN_PTR_NUM_LIMBS],
     pub len: T,
     pub len_limb: T,
     pub start_timestamp: T,

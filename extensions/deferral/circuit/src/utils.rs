@@ -25,10 +25,9 @@ pub const OUTPUT_LEN_NUM_U16S: usize = F_NUM_U16S;
 /// bytes (one guest-visible block).
 pub const DIGEST_BYTE_MEMORY_OPS: usize = num_byte_memory_ops(DIGEST_SIZE);
 /// Number of memory bus messages to read/write a `DIGEST_SIZE`-cell chunk from the
-/// F-celled DEFERRAL_AS. Each bus access covers `BLOCK_FE_WIDTH` cells. With
-/// `BLOCK_FE_WIDTH = MEMORY_BLOCK_BYTES = 8` today this equals
-/// `DIGEST_BYTE_MEMORY_OPS`; after the Stage 1.6 flip `BLOCK_FE_WIDTH = 4` and the
-/// count doubles (deferral chip emits two F bus messages per logical 8-F op).
+/// F-celled DEFERRAL_AS. Each bus access covers `BLOCK_FE_WIDTH = 4` cells, so a
+/// `DIGEST_SIZE = 8` chunk takes two F bus messages (deferral chip emits two F bus
+/// messages per logical 8-F op).
 pub const DIGEST_F_MEMORY_OPS: usize = num_f_memory_ops(DIGEST_SIZE);
 /// Number of memory bus messages to read a `COMMIT_NUM_BYTES`-byte commit from a
 /// byte-addressed AS. With `MEMORY_BLOCK_BYTES = 8`, this is `32 / 8 = 4` reads.

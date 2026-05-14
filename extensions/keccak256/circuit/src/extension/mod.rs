@@ -185,6 +185,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
             exec_bridge,
             memory_bridge,
             bitwise_lu,
+            range_checker,
             pointer_max_bits,
             XorinOpcode::CLASS_OFFSET,
         );
@@ -247,7 +248,7 @@ where
 
         inventory.next_air::<XorinVmAir>()?;
         let xorin_chip = XorinVmChip::new(
-            XorinVmFiller::new(bitwise_lu.clone(), pointer_max_bits),
+            XorinVmFiller::new(bitwise_lu.clone(), range_checker.clone(), pointer_max_bits),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(xorin_chip);

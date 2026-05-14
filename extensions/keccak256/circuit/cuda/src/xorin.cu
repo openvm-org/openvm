@@ -66,13 +66,22 @@ __global__ void xorin_tracegen(
         XORIN_WRITE(instruction.len, rec.len);
         XORIN_WRITE(instruction.start_timestamp, rec.timestamp);
 
-        // Fill buffer/input/len limbs
-        XORIN_WRITE_ARRAY(
-            instruction.buffer_ptr_limbs, reinterpret_cast<const uint8_t *>(&rec.buffer)
-        );
-        XORIN_WRITE_ARRAY(
-            instruction.input_ptr_limbs, reinterpret_cast<const uint8_t *>(&rec.input)
-        );
+        // Pack the low 4 bytes of `buffer_ptr` and `input_ptr` (u32 memory addresses)
+        // into 2 u16 cells each. The upper 4 bytes of the RV64 register are zero and
+        // hardcoded in the memory bus interaction via `expand_to_rv64_block`.
+        auto buffer_ptr_bytes = reinterpret_cast<uint8_t const *>(&rec.buffer);
+        auto input_ptr_bytes = reinterpret_cast<uint8_t const *>(&rec.input);
+        uint32_t buffer_ptr_limbs[XORIN_PTR_NUM_LIMBS];
+        uint32_t input_ptr_limbs[XORIN_PTR_NUM_LIMBS];
+#pragma unroll
+        for (size_t i = 0; i < XORIN_PTR_NUM_LIMBS; i++) {
+            buffer_ptr_limbs[i] =
+                uint32_t(buffer_ptr_bytes[2 * i]) + 256u * uint32_t(buffer_ptr_bytes[2 * i + 1]);
+            input_ptr_limbs[i] =
+                uint32_t(input_ptr_bytes[2 * i]) + 256u * uint32_t(input_ptr_bytes[2 * i + 1]);
+        }
+        XORIN_WRITE_ARRAY(instruction.buffer_ptr_limbs, buffer_ptr_limbs);
+        XORIN_WRITE_ARRAY(instruction.input_ptr_limbs, input_ptr_limbs);
         XORIN_WRITE(instruction.len_limb, static_cast<uint8_t>(rec.len));
 
         // Fill is_padding_bytes
@@ -163,13 +172,13 @@ __global__ void xorin_tracegen(
             XORIN_FILL_ZERO(mem_oc.buffer_bytes_write_aux_cols[t]);
         }
 
-        // Range check for pointer bounds
-        constexpr uint32_t MSL_RSHIFT = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
-        constexpr uint32_t RV64_TOTAL_BITS = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS;
-        bitwise_lookup.add_range(
-            (rec.buffer >> MSL_RSHIFT) << (RV64_TOTAL_BITS - pointer_max_bits),
-            (rec.input >> MSL_RSHIFT) << (RV64_TOTAL_BITS - pointer_max_bits)
-        );
+        // Range check for pointer bounds. The high u16 cell of each pointer
+        // (covering bits [16, 32) of the low 32 bits of `buffer_ptr` / `input_ptr`)
+        // is scaled by `1 << (32 - pointer_max_bits)` and range-checked to 16 bits.
+        uint32_t ptr_msl_lshift = 32u - pointer_max_bits;
+        VariableRangeChecker range_checker(d_range_checker_ptr, range_checker_num_bins);
+        range_checker.add_count((rec.buffer >> 16) << ptr_msl_lshift, 16);
+        range_checker.add_count((rec.input >> 16) << ptr_msl_lshift, 16);
 
     } else {
         // Zero-fill padding rows

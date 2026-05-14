@@ -10,6 +10,10 @@ namespace xorin {
 inline constexpr size_t XORIN_RATE_BYTES = keccak256::KECCAK_RATE_BYTES;
 inline constexpr size_t XORIN_REGISTER_READS = 3;
 
+// Number of u16 cells used to represent the low 32 bits of each pointer
+// (`buffer_ptr` / `input_ptr`). Matches the Rust `XORIN_PTR_NUM_LIMBS` constant.
+inline constexpr size_t XORIN_PTR_NUM_LIMBS = riscv::RV64_WORD_NUM_LIMBS / 2;
+
 template <typename T>
 struct XorinInstructionCols {
     T pc;
@@ -18,9 +22,12 @@ struct XorinInstructionCols {
     T input_reg_ptr;
     T len_reg_ptr;
     T buffer_ptr;
-    T buffer_ptr_limbs[riscv::RV64_WORD_NUM_LIMBS];
+    // Low 32 bits of `buffer_ptr` packed into 2 u16 cells; the high 32 bits of the
+    // RV64 register are zero and hardcoded in the memory bus interaction.
+    T buffer_ptr_limbs[XORIN_PTR_NUM_LIMBS];
     T input_ptr;
-    T input_ptr_limbs[riscv::RV64_WORD_NUM_LIMBS];
+    // See `buffer_ptr_limbs`.
+    T input_ptr_limbs[XORIN_PTR_NUM_LIMBS];
     T len;
     T len_limb;
     T start_timestamp;

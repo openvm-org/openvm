@@ -84,10 +84,15 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             )
             .eval(builder, is_valid);
 
-        // Range check that buffer_ptr < 2^ptr_max_bits. `buffer_ptr_limbs[1]` is the
-        // high u16 cell (covering bits [16, 32)); scaling by `1 << (32 - ptr_max_bits)`
-        // and range-checking the result to 16 bits forces the cell into
-        // `[0, 2^(ptr_max_bits - 16))`.
+        // Range check that buffer_ptr < 2^ptr_max_bits. AS2 cells are u16-wide on the
+        // memory bus, but the bus message carries a *u32* pointer (4 u8-equivalent
+        // bytes packed into 2 u16 cells); the bus itself does not impose a
+        // `pointer_max_bits`-tight bound, so this per-cell range check is still
+        // required to enforce `buffer_ptr < 2^ptr_max_bits` (otherwise the prover
+        // could choose any value that fits in two u16 cells, up to 32 bits).
+        // `buffer_ptr_limbs[1]` is the high u16 cell (covering bits [16, 32));
+        // scaling by `1 << (32 - ptr_max_bits)` and range-checking the result to 16
+        // bits forces the cell into `[0, 2^(ptr_max_bits - 16))`.
         assert!(
             (16..=32).contains(&self.ptr_max_bits),
             "ptr_max_bits must be in [16, 32] for the buffer_ptr range check"

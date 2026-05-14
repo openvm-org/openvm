@@ -15,7 +15,7 @@ use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
@@ -233,9 +233,24 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         trace_row.instruction.input_reg_ptr = F::from_u32(record.rs1_ptr);
         trace_row.instruction.len_reg_ptr = F::from_u32(record.rs2_ptr);
         trace_row.instruction.buffer_ptr = F::from_u32(record.buffer);
-        trace_row.instruction.buffer_ptr_limbs = record.buffer.to_le_bytes().map(F::from_u8);
+        // Pack the low 4 bytes of `buffer_ptr` / `input_ptr` into `XORIN_PTR_NUM_LIMBS`
+        // (= 2) u16 cells. The upper 4 bytes of the RV64 register are zero and
+        // hardcoded in the memory bus interaction via `expand_to_rv64_block`.
+        let buffer_ptr_bytes = record.buffer.to_le_bytes();
+        trace_row.instruction.buffer_ptr_limbs = std::array::from_fn(|i| {
+            F::from_u16(u16::from_le_bytes([
+                buffer_ptr_bytes[2 * i],
+                buffer_ptr_bytes[2 * i + 1],
+            ]))
+        });
         trace_row.instruction.input_ptr = F::from_u32(record.input);
-        trace_row.instruction.input_ptr_limbs = record.input.to_le_bytes().map(F::from_u8);
+        let input_ptr_bytes = record.input.to_le_bytes();
+        trace_row.instruction.input_ptr_limbs = std::array::from_fn(|i| {
+            F::from_u16(u16::from_le_bytes([
+                input_ptr_bytes[2 * i],
+                input_ptr_bytes[2 * i + 1],
+            ]))
+        });
         trace_row.instruction.len = F::from_u32(record.len);
         trace_row.instruction.len_limb = F::from_u8(record.len as u8);
         trace_row.instruction.start_timestamp = F::from_u32(record.timestamp);
@@ -311,15 +326,14 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             timestamp += 1;
         }
 
-        let msb_byte =
-            |val: u32| -> u32 { (val >> (RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1))) & 0xFF };
-        let need_range_check = [msb_byte(record.buffer), msb_byte(record.input)];
-
-        let limb_shift = 1u32 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits);
-
-        for pair in need_range_check.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] * limb_shift, pair[1] * limb_shift);
+        // Mirror the AIR's high-cell range check for `buffer_ptr` and `input_ptr`.
+        // The high u16 cell covers bits [16, 32) of each pointer; scale by
+        // `1 << (32 - pointer_max_bits)` and range-check the result to 16 bits.
+        let ptr_msl_lshift: u32 = (32 - self.pointer_max_bits) as u32;
+        for ptr in [record.buffer, record.input] {
+            let high_u16 = ptr >> 16;
+            self.range_checker_chip
+                .add_count(high_u16 << ptr_msl_lshift, 16);
         }
     }
 }
