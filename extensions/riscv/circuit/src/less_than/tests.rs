@@ -609,8 +609,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[test_case(LessThanOpcode::SLT, 100)]
 #[test_case(LessThanOpcode::SLTU, 100)]
 fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
-    let mut tester =
-        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let mut tester = GpuChipTestBuilder::default();
     let mut rng = create_seeded_rng();
 
     let mut harness = create_cuda_harness(&tester);
