@@ -270,6 +270,8 @@ fn create_cpu_harness(
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
+    let range_checker = tester.range_checker();
+    let range_bus = range_checker.bus();
 
     let count_bus = DeferralCircuitCountBus::new(DEFERRAL_COUNT_BUS);
     let poseidon2_bus = DeferralPoseidon2Bus::new(DEFERRAL_POSEIDON2_BUS);
@@ -281,9 +283,10 @@ fn create_cpu_harness(
             tester.execution_bridge(),
             tester.memory_bridge(),
             bitwise_bus,
+            range_bus,
             tester.address_bits(),
         ),
-        DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus),
+        DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus, range_bus),
     );
     let executor = DeferralCallExecutor::new(DeferralCallAdapterExecutor, fns);
     let chip = DeferralCallChip::new(
@@ -291,6 +294,7 @@ fn create_cpu_harness(
             DeferralCallAdapterFiller::new(bitwise_chip.clone(), tester.address_bits()),
             count_chip.clone(),
             poseidon2_chip.clone(),
+            range_checker.clone(),
             bitwise_chip.clone(),
             tester.address_bits(),
         ),
@@ -320,6 +324,12 @@ fn create_cuda_harness(
     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
+    let dummy_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChip::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+        ),
+    );
+    let range_bus = dummy_range_checker.bus();
 
     let count_bus = DeferralCircuitCountBus::new(DEFERRAL_COUNT_BUS);
     let poseidon2_bus = DeferralPoseidon2Bus::new(DEFERRAL_POSEIDON2_BUS);
@@ -331,9 +341,10 @@ fn create_cuda_harness(
             tester.execution_bridge(),
             tester.memory_bridge(),
             bitwise_bus,
+            range_bus,
             tester.address_bits(),
         ),
-        DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus),
+        DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus, range_bus),
     );
     let executor = DeferralCallExecutor::new(DeferralCallAdapterExecutor, fns);
     let cpu_chip = DeferralCallChip::new(
@@ -341,6 +352,7 @@ fn create_cuda_harness(
             DeferralCallAdapterFiller::new(dummy_bitwise_chip.clone(), tester.address_bits()),
             count_chip_cpu,
             poseidon2_chip_cpu,
+            dummy_range_checker,
             dummy_bitwise_chip,
             tester.address_bits(),
         ),

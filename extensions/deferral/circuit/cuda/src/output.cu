@@ -85,14 +85,15 @@ template <typename T> struct DeferralOutputCols {
     MemoryReadAuxCols<T> rs_aux;
 
     // Read data and auxiliary columns. output_commit and output_len are read
-    // contiguously from heap with layout [output_commit || output_len]. The
+    // contiguously from heap with layout [output_commit || output_len]. Both
+    // are stored as u16 cells (matching the underlying Pattern B memory). The
     // onion hash of all bytes written by this opcode invocation is constrained
     // to output_commit.
-    T output_commit[COMMIT_NUM_BYTES];
-    T output_len[F_NUM_BYTES];
+    T output_commit[COMMIT_NUM_U16S];
+    T output_len[OUTPUT_LEN_NUM_U16S];
     MemoryReadAuxCols<T> output_commit_and_len_aux[OUTPUT_TOTAL_MEMORY_OPS];
 
-    // Auxiliary columns to ensure the canonicity of each F byte decomposition in
+    // Auxiliary columns to ensure the canonicity of each F u16-cell decomposition in
     // output_commit.
     CanonicityAuxCols<T> output_commit_lt_aux[DIGEST_SIZE];
 
@@ -147,9 +148,8 @@ __global__ void deferral_output_tracegen(
     const bool is_last = section_idx + 1 == header.num_rows;
 
     Histogram count_buffer(count_ptr, num_def_circuits);
-    MemoryAuxColsFactory mem_helper(
-        VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
-    );
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
+    MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
     BitwiseOperationLookup bitwise_buffer(bitwise_ptr);
     DeferralPoseidon2Buffer poseidon2_buffer(
         poseidon2_records, poseidon2_counts, poseidon2_idx, poseidon2_capacity
@@ -169,14 +169,19 @@ __global__ void deferral_output_tracegen(
     COL_WRITE_ARRAY(row, DeferralOutputCols, rd_val, header.rd_val);
     COL_WRITE_ARRAY(row, DeferralOutputCols, rs_val, header.rs_val);
 
-    COL_WRITE_ARRAY(row, DeferralOutputCols, output_commit, call_data.output_commit);
-    const uint8_t output_len_bytes[F_NUM_BYTES] = {
-        static_cast<uint8_t>(output_len & 0xffu),
-        static_cast<uint8_t>((output_len >> 8) & 0xffu),
-        static_cast<uint8_t>((output_len >> 16) & 0xffu),
-        static_cast<uint8_t>((output_len >> 24) & 0xffu),
+    // Pack the byte-shaped output_commit record into u16 cells.
+    uint16_t output_commit_u16s[COMMIT_NUM_U16S];
+#pragma unroll
+    for (size_t i = 0; i < COMMIT_NUM_U16S; ++i) {
+        output_commit_u16s[i] = static_cast<uint16_t>(call_data.output_commit[2 * i]) |
+                                (static_cast<uint16_t>(call_data.output_commit[2 * i + 1]) << 8);
+    }
+    COL_WRITE_ARRAY(row, DeferralOutputCols, output_commit, output_commit_u16s);
+    const uint16_t output_len_u16s[OUTPUT_LEN_NUM_U16S] = {
+        static_cast<uint16_t>(output_len & 0xffffu),
+        static_cast<uint16_t>((output_len >> 16) & 0xffffu),
     };
-    COL_WRITE_ARRAY(row, DeferralOutputCols, output_len, output_len_bytes);
+    COL_WRITE_ARRAY(row, DeferralOutputCols, output_len, output_len_u16s);
 
     if (is_first) {
         count_buffer.add_count(header.deferral_idx);
@@ -186,10 +191,25 @@ __global__ void deferral_output_tracegen(
             static_cast<uint32_t>(header.rd_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
             static_cast<uint32_t>(header.rs_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits
         );
-        bitwise_buffer.add_range(
-            static_cast<uint32_t>(output_len_bytes[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
-            0
+        // `output_len < 2^address_bits` enforced via scaled 16-bit range check
+        // on the high u16 cell.
+        const uint32_t output_len_high_lshift =
+            static_cast<uint32_t>(F_NUM_U16S * 16 - address_bits);
+        range_checker.add_count(
+            static_cast<uint32_t>(output_len_u16s[OUTPUT_LEN_NUM_U16S - 1])
+                << output_len_high_lshift,
+            16
         );
+
+        // Per-cell 16-bit range checks on `output_commit` and `output_len`.
+#pragma unroll
+        for (size_t i = 0; i < COMMIT_NUM_U16S; ++i) {
+            range_checker.add_count(static_cast<uint32_t>(output_commit_u16s[i]), 16);
+        }
+#pragma unroll
+        for (size_t i = 0; i < OUTPUT_LEN_NUM_U16S; ++i) {
+            range_checker.add_count(static_cast<uint32_t>(output_len_u16s[i]), 16);
+        }
 
         mem_helper.fill(
             row.slice_from(COL_INDEX(DeferralOutputCols, rd_aux)),
@@ -214,21 +234,17 @@ __global__ void deferral_output_tracegen(
             );
         }
 
-        uint32_t output_commit_rcs[DIGEST_SIZE];
 #pragma unroll
         for (size_t i = 0; i < DIGEST_SIZE; ++i) {
             CanonicityAuxCols<Fp> aux;
-            Fp x_le[F_NUM_BYTES];
+            Fp x_le[F_NUM_U16S];
 #pragma unroll
-            for (size_t j = 0; j < F_NUM_BYTES; ++j) {
-                x_le[j] = Fp(call_data.output_commit[i * F_NUM_BYTES + j]);
+            for (size_t j = 0; j < F_NUM_U16S; ++j) {
+                x_le[j] = Fp(static_cast<uint32_t>(output_commit_u16s[i * F_NUM_U16S + j]));
             }
-            output_commit_rcs[i] = generate_subrow(x_le, aux);
+            uint32_t rc = generate_subrow(x_le, aux);
+            range_checker.add_count(rc, 16);
             write_canonicity_aux(row, COL_INDEX(DeferralOutputCols, output_commit_lt_aux), i, aux);
-        }
-#pragma unroll
-        for (size_t i = 0; i < DIGEST_SIZE; i += 2) {
-            bitwise_buffer.add_range(output_commit_rcs[i], output_commit_rcs[i + 1]);
         }
 
         Fp sponge_inputs[DIGEST_SIZE];

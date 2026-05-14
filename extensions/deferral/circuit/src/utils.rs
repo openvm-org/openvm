@@ -10,6 +10,16 @@ pub const F_NUM_BYTES: usize = 4;
 pub const COMMIT_NUM_BYTES: usize = DIGEST_SIZE * F_NUM_BYTES;
 pub const OUTPUT_LEN_NUM_BYTES: usize = 8;
 pub const OUTPUT_TOTAL_BYTES: usize = OUTPUT_LEN_NUM_BYTES + COMMIT_NUM_BYTES;
+
+/// Number of u16 cells per `F` element (BabyBear is 31-bit; two u16 limbs cover
+/// it with one of them effectively bounded by `F::ORDER_U32 >> 16 + 1` after the
+/// canonicity sub-AIR runs).
+pub const F_NUM_U16S: usize = 2;
+/// `DIGEST_SIZE` F elements expressed as u16 cells.
+pub const COMMIT_NUM_U16S: usize = DIGEST_SIZE * F_NUM_U16S;
+/// Number of u16 cells representing `output_len` (one F element worth).
+pub const OUTPUT_LEN_NUM_U16S: usize = F_NUM_U16S;
+
 /// Number of memory bus messages to read/write a `DIGEST_SIZE`-byte chunk from a
 /// byte-addressed AS (RV64_MEMORY_AS). Each bus access covers `MEMORY_BLOCK_BYTES`
 /// bytes (one guest-visible block).
@@ -20,6 +30,10 @@ pub const DIGEST_BYTE_MEMORY_OPS: usize = num_byte_memory_ops(DIGEST_SIZE);
 /// `DIGEST_BYTE_MEMORY_OPS`; after the Stage 1.6 flip `BLOCK_FE_WIDTH = 4` and the
 /// count doubles (deferral chip emits two F bus messages per logical 8-F op).
 pub const DIGEST_F_MEMORY_OPS: usize = num_f_memory_ops(DIGEST_SIZE);
+/// Number of memory bus messages to read a `COMMIT_NUM_BYTES`-byte commit from a
+/// byte-addressed AS. With `MEMORY_BLOCK_BYTES = 8`, this is `32 / 8 = 4` reads.
+/// Each on-bus message now carries `BLOCK_FE_WIDTH = 4` u16 cells (which the
+/// columns store directly post u16 migration).
 pub const COMMIT_MEMORY_OPS: usize = num_byte_memory_ops(COMMIT_NUM_BYTES);
 pub const OUTPUT_TOTAL_MEMORY_OPS: usize = num_byte_memory_ops(OUTPUT_TOTAL_BYTES);
 
@@ -94,6 +108,20 @@ pub fn byte_commit_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(
         .unwrap()
 }
 
+/// Compose a `COMMIT_NUM_U16S`-long slice of u16 cells (little-endian within
+/// each F element) into a `DIGEST_SIZE`-array of F values. Mirrors
+/// [`byte_commit_to_f`] but on u16 cells.
+pub fn u16_commit_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(
+    u16_commit: &[T],
+) -> [F; DIGEST_SIZE] {
+    assert_eq!(u16_commit.len(), COMMIT_NUM_U16S);
+    u16_commit
+        .chunks_exact(F_NUM_U16S)
+        .map(|chunk| u16s_to_f(chunk))
+        .collect_array()
+        .unwrap()
+}
+
 pub fn f_commit_to_bytes<F: PrimeField32>(f_commit: &[F; DIGEST_SIZE]) -> [u8; COMMIT_NUM_BYTES] {
     f_commit
         .iter()
@@ -102,10 +130,31 @@ pub fn f_commit_to_bytes<F: PrimeField32>(f_commit: &[F; DIGEST_SIZE]) -> [u8; C
         .unwrap()
 }
 
+/// Decompose a `DIGEST_SIZE` array of F values into a `COMMIT_NUM_U16S` array of
+/// u16 cells (little-endian within each F element).
+pub fn f_commit_to_u16s<F: PrimeField32>(f_commit: &[F; DIGEST_SIZE]) -> [u16; COMMIT_NUM_U16S] {
+    f_commit
+        .iter()
+        .flat_map(|f| {
+            let v = f.as_canonical_u32();
+            [(v & 0xFFFF) as u16, ((v >> 16) & 0xFFFF) as u16]
+        })
+        .collect_array()
+        .unwrap()
+}
+
 pub fn bytes_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(register: &[T]) -> F {
     assert_eq!(register.len(), F_NUM_BYTES);
     register.iter().enumerate().fold(F::ZERO, |acc, (i, limb)| {
         acc + (limb.clone().into() * F::from_usize(1 << (i * RV64_CELL_BITS)))
+    })
+}
+
+/// Sum `limbs[i] * 2^(16*i)` over the u16 limbs of `register`.
+pub fn u16s_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(register: &[T]) -> F {
+    assert_eq!(register.len(), F_NUM_U16S);
+    register.iter().enumerate().fold(F::ZERO, |acc, (i, limb)| {
+        acc + (limb.clone().into() * F::from_usize(1 << (i * 16)))
     })
 }
 
