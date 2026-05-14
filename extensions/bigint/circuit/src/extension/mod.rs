@@ -105,7 +105,9 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         inventory.add_executor(alu, Rv64BaseAlu256Opcode::iter().map(|x| x.global_opcode()))?;
 
         let lt = Rv64LessThan256Executor::new(
-            AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(pointer_max_bits)),
+            crate::LtAluAdapterU16Executor::new(Rv64VecHeapU16AdapterExecutor::new(
+                pointer_max_bits,
+            )),
             Rv64LessThan256Opcode::CLASS_OFFSET,
         );
         inventory.add_executor(lt, Rv64LessThan256Opcode::iter().map(|x| x.global_opcode()))?;
@@ -203,13 +205,13 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
         inventory.add_air(alu);
 
         let lt = Rv64LessThan256Air::new(
-            AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
+            crate::LtAluAdapterU16Air::new(Rv64VecHeapU16AdapterAir::new(
                 exec_bridge,
                 memory_bridge,
                 bitwise_lu,
                 pointer_max_bits,
             )),
-            LessThanCoreAir::new(bitwise_lu, Rv64LessThan256Opcode::CLASS_OFFSET),
+            LessThanCoreAir::new(range_checker, Rv64LessThan256Opcode::CLASS_OFFSET),
         );
         inventory.add_air(lt);
 
@@ -335,8 +337,8 @@ where
         inventory.next_air::<Rv64LessThan256Air>()?;
         let lt = Rv64LessThan256Chip::new(
             LessThanFiller::new(
-                Rv64VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
-                bitwise_lu.clone(),
+                Rv64VecHeapU16AdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                range_checker.clone(),
                 Rv64LessThan256Opcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),

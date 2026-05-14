@@ -114,10 +114,12 @@ fn create_alu_harness_fields(
     (air, executor, chip)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_lt_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -126,22 +128,26 @@ fn create_lt_harness_fields(
     Rv64LessThan256Chip<F>,
 ) {
     let air = Rv64LessThan256Air::new(
-        AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
-            execution_bridge,
-            memory_bridge,
-            bitwise_chip.bus(),
-            address_bits,
-        )),
-        LessThanCoreAir::new(bitwise_chip.bus(), Rv64LessThan256Opcode::CLASS_OFFSET),
+        crate::LtAluAdapterU16Air::new(
+            openvm_riscv_adapters::Rv64VecHeapU16AdapterAir::new(
+                execution_bridge,
+                memory_bridge,
+                bitwise_chip.bus(),
+                address_bits,
+            ),
+        ),
+        LessThanCoreAir::new(range_checker_chip.bus(), Rv64LessThan256Opcode::CLASS_OFFSET),
     );
     let executor = Rv64LessThan256Executor::new(
-        AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(address_bits)),
+        crate::LtAluAdapterU16Executor::new(openvm_riscv_adapters::Rv64VecHeapU16AdapterExecutor::new(
+            address_bits,
+        )),
         Rv64LessThan256Opcode::CLASS_OFFSET,
     );
     let chip = Rv64LessThan256Chip::new(
         LessThanFiller::new(
-            Rv64VecHeapAdapterFiller::new(address_bits, bitwise_chip.clone()),
-            bitwise_chip.clone(),
+            openvm_riscv_adapters::Rv64VecHeapU16AdapterFiller::new(address_bits, bitwise_chip.clone()),
+            range_checker_chip,
             Rv64LessThan256Opcode::CLASS_OFFSET,
         ),
         memory_helper,
@@ -439,6 +445,7 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
         tester.memory_bridge(),
         tester.execution_bridge(),
         bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -707,10 +714,14 @@ fn run_lt_256_rand_test_cuda(opcode: LessThanOpcode, num_ops: usize) {
         bitwise_bus,
     ));
 
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
+    ));
     let (air, executor, cpu_chip) = create_lt_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );

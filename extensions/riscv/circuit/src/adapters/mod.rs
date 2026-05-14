@@ -14,6 +14,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 mod alu;
+mod alu_u16;
 mod alu_w;
 mod branch;
 mod jalr;
@@ -23,6 +24,7 @@ mod mul_w;
 mod rdwrite;
 
 pub use alu::*;
+pub use alu_u16::*;
 pub use alu_w::*;
 pub use branch::*;
 pub use jalr::*;

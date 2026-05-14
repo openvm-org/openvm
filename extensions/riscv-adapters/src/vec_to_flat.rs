@@ -325,6 +325,98 @@ where
     }
 }
 
+/// Pattern B u16 counterpart of [`VecToFlatAluAdapterExecutor`]. Flattens
+/// `[[[u16; BLOCK_SIZE]; BLOCKS_PER_READ]; NUM_READS]` reads and
+/// `[[u16; BLOCK_SIZE]; BLOCKS_PER_WRITE]` writes — `BLOCK_SIZE` here counts u16 cells, not bytes.
+#[derive(Clone, Copy, Debug, derive_new::new)]
+pub struct VecToFlatAluU16AdapterExecutor<
+    A,
+    const NUM_READS: usize,
+    const BLOCKS_PER_READ: usize,
+    const BLOCKS_PER_WRITE: usize,
+    const BLOCK_SIZE: usize,
+    const TOTAL_READ_SIZE: usize,
+    const TOTAL_WRITE_SIZE: usize,
+>(pub A);
+
+impl<
+        F,
+        A,
+        const NUM_READS: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCKS_PER_WRITE: usize,
+        const BLOCK_SIZE: usize,
+        const TOTAL_READ_SIZE: usize,
+        const TOTAL_WRITE_SIZE: usize,
+    > AdapterTraceExecutor<F>
+    for VecToFlatAluU16AdapterExecutor<
+        A,
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCKS_PER_WRITE,
+        BLOCK_SIZE,
+        TOTAL_READ_SIZE,
+        TOTAL_WRITE_SIZE,
+    >
+where
+    F: PrimeField32,
+    A: AdapterTraceExecutor<
+        F,
+        ReadData = [[[u16; BLOCK_SIZE]; BLOCKS_PER_READ]; NUM_READS],
+        WriteData = [[u16; BLOCK_SIZE]; BLOCKS_PER_WRITE],
+    >,
+{
+    const WIDTH: usize = A::WIDTH;
+    type ReadData = [[u16; TOTAL_READ_SIZE]; NUM_READS];
+    type WriteData = [[u16; TOTAL_WRITE_SIZE]; 1];
+    type RecordMut<'a>
+        = A::RecordMut<'a>
+    where
+        Self: 'a;
+
+    #[inline(always)]
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
+        A::start(pc, memory, record);
+    }
+
+    #[inline(always)]
+    fn read(
+        &self,
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        record: &mut Self::RecordMut<'_>,
+    ) -> Self::ReadData {
+        let data_inner = <A as AdapterTraceExecutor<F>>::read(&self.0, memory, instruction, record);
+
+        core::array::from_fn(|i| {
+            let mut out = [0u16; TOTAL_READ_SIZE];
+            for (block_idx, block) in data_inner[i].iter().enumerate() {
+                let start = block_idx * BLOCK_SIZE;
+                out[start..start + BLOCK_SIZE].copy_from_slice(&block[..]);
+            }
+            out
+        })
+    }
+
+    #[inline(always)]
+    fn write(
+        &self,
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        data: Self::WriteData,
+        record: &mut Self::RecordMut<'_>,
+    ) {
+        let data_inner: <A as AdapterTraceExecutor<F>>::WriteData = core::array::from_fn(|i| {
+            let start = i * BLOCK_SIZE;
+            data[0][start..start + BLOCK_SIZE]
+                .try_into()
+                .expect("slice length matches BLOCK_SIZE")
+        });
+
+        <A as AdapterTraceExecutor<F>>::write(&self.0, memory, instruction, data_inner, record);
+    }
+}
+
 // =================================================================================================
 // Branch Adapter Wrappers (reads only, no writes)
 // =================================================================================================

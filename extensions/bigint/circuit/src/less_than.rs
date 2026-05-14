@@ -18,11 +18,11 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{self, read_int256, write_int256},
-    AluAdapterExecutor, Rv64LessThan256Executor, INT256_NUM_LIMBS,
+    LtAluAdapterU16Executor, Rv64LessThan256Executor, INT256_NUM_LIMBS,
 };
 
 impl Rv64LessThan256Executor {
-    pub fn new(adapter: AluAdapterExecutor, offset: usize) -> Self {
+    pub fn new(adapter: LtAluAdapterU16Executor, offset: usize) -> Self {
         Self(LessThanExecutor::new(adapter, offset))
     }
 }

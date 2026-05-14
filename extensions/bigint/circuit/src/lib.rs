@@ -11,8 +11,9 @@ use openvm_circuit_derive::{PreflightExecutor, VmConfig};
 use openvm_riscv_adapters::{
     Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
     Rv64VecHeapBranchAdapterAir, Rv64VecHeapBranchAdapterExecutor, Rv64VecHeapBranchAdapterFiller,
-    VecToFlatAluAdapterAir, VecToFlatAluAdapterExecutor, VecToFlatBranchAdapterAir,
-    VecToFlatBranchAdapterExecutor,
+    Rv64VecHeapU16AdapterAir, Rv64VecHeapU16AdapterExecutor, Rv64VecHeapU16AdapterFiller,
+    VecToFlatAluAdapterAir, VecToFlatAluAdapterExecutor, VecToFlatAluU16AdapterExecutor,
+    VecToFlatBranchAdapterAir, VecToFlatBranchAdapterExecutor,
 };
 use openvm_riscv_circuit::{
     adapters::{INT256_NUM_LIMBS, RV64_CELL_BITS},
@@ -90,6 +91,40 @@ type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
     INT256_NUM_LIMBS,
 >;
 
+/// Pattern B u16 ALU adapter for LessThan256: same `VecToFlatAlu` wrapper shape but the inner
+/// vec-heap adapter is the u16 variant (READ_SIZE/WRITE_SIZE in u16 cells = `BLOCK_FE_WIDTH`).
+type LtAluAdapterU16Air = VecToFlatAluAdapterAir<
+    Rv64VecHeapU16AdapterAir<
+        NUM_READS,
+        INT256_NUM_BLOCKS,
+        INT256_NUM_BLOCKS,
+        BLOCK_FE_WIDTH,
+        BLOCK_FE_WIDTH,
+    >,
+    NUM_READS,
+    INT256_NUM_BLOCKS,
+    INT256_NUM_BLOCKS,
+    BLOCK_FE_WIDTH,
+    INT256_NUM_U16_LIMBS,
+    INT256_NUM_U16_LIMBS,
+>;
+
+type LtAluAdapterU16Executor = VecToFlatAluU16AdapterExecutor<
+    Rv64VecHeapU16AdapterExecutor<
+        NUM_READS,
+        INT256_NUM_BLOCKS,
+        INT256_NUM_BLOCKS,
+        BLOCK_FE_WIDTH,
+        BLOCK_FE_WIDTH,
+    >,
+    NUM_READS,
+    INT256_NUM_BLOCKS,
+    INT256_NUM_BLOCKS,
+    BLOCK_FE_WIDTH,
+    INT256_NUM_U16_LIMBS,
+    INT256_NUM_U16_LIMBS,
+>;
+
 /// Type alias for the Branch adapter AIR wrapper.
 ///
 /// After the Pattern B migration the heap-branch adapter delivers `BLOCK_FE_WIDTH=4` u16 cells
@@ -133,25 +168,27 @@ pub type Rv64BaseAlu256Chip<F> = VmChipWrapper<
     >,
 >;
 
-/// LessThan256
-pub type Rv64LessThan256Air =
-    VmAirWrapper<AluAdapterAir, LessThanCoreAir<INT256_NUM_LIMBS, RV64_CELL_BITS>>;
+/// LessThan256 (Pattern B u16): 16 u16 limbs with `LIMB_BITS = 16`.
+pub type Rv64LessThan256Air = VmAirWrapper<
+    LtAluAdapterU16Air,
+    LessThanCoreAir<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>,
+>;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv64LessThan256Executor(
-    LessThanExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV64_CELL_BITS>,
+    LessThanExecutor<LtAluAdapterU16Executor, INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>,
 );
 pub type Rv64LessThan256Chip<F> = VmChipWrapper<
     F,
     LessThanFiller<
-        Rv64VecHeapAdapterFiller<
+        Rv64VecHeapU16AdapterFiller<
             NUM_READS,
             INT256_NUM_BLOCKS,
             INT256_NUM_BLOCKS,
-            MEMORY_BLOCK_BYTES,
-            MEMORY_BLOCK_BYTES,
+            BLOCK_FE_WIDTH,
+            BLOCK_FE_WIDTH,
         >,
-        INT256_NUM_LIMBS,
-        RV64_CELL_BITS,
+        INT256_NUM_U16_LIMBS,
+        INT256_U16_LIMB_BITS,
     >,
 >;
 
