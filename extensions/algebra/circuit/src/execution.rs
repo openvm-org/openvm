@@ -19,7 +19,7 @@ use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpr};
 use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::FieldExprVecHeapExecutor;
+use super::{FieldExprVecHeapExecutor, FieldExprVecHeapU16Executor};
 use crate::fields::{
     field_operation, fp2_operation, get_field_type, get_fp2_field_type, FieldType, Operation,
 };
@@ -637,4 +637,340 @@ unsafe fn execute_e2_generic_impl<
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
     execute_e12_generic_impl::<_, _, BLOCKS, BLOCK_SIZE>(&pre_compute.data, exec_state);
+}
+
+// =================================================================================================
+// U16 variant Interpreter / Aot impls.
+//
+// The Interpreter / Aot paths read guest memory as `[u8; BLOCK_BYTES]` blocks regardless of
+// whether the proving chip stores cells as `u8` or `u16` (memory is byte-addressed). We reuse the
+// existing `execute_e1*` / `execute_e2*` handlers by parameterizing them with `BLOCK_BYTES`
+// instead of `BLOCK_SIZE_U16`. `BLOCK_BYTES == BLOCK_SIZE_U16 * 2` is enforced by the
+// `FieldExprVecHeapU16Executor::new` constructor.
+// =================================================================================================
+
+impl<
+        'a,
+        const BLOCKS: usize,
+        const BLOCK_SIZE_U16: usize,
+        const BLOCK_BYTES: usize,
+        const IS_FP2: bool,
+    > FieldExprVecHeapU16Executor<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES, IS_FP2>
+{
+    fn pre_compute_impl<F: PrimeField32>(
+        &'a self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut FieldExpressionPreCompute<'a>,
+    ) -> Result<Option<Operation>, StaticProgramError> {
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = inst;
+
+        let a = a.as_canonical_u32();
+        let b = b.as_canonical_u32();
+        let c = c.as_canonical_u32();
+        let d = d.as_canonical_u32();
+        let e = e.as_canonical_u32();
+        if d != RV64_REGISTER_AS || e != RV64_MEMORY_AS {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
+
+        let local_opcode = opcode.local_opcode_idx(self.inner.offset);
+
+        let needs_setup = self.inner.expr.needs_setup();
+        let mut flag_idx = self.inner.expr.num_flags() as u8;
+        if needs_setup {
+            if let Some(opcode_position) = self
+                .inner
+                .local_opcode_idx
+                .iter()
+                .position(|&idx| idx == local_opcode)
+            {
+                if opcode_position < self.inner.opcode_flag_idx.len() {
+                    flag_idx = self.inner.opcode_flag_idx[opcode_position] as u8;
+                }
+            }
+        }
+
+        let rs_addrs = from_fn(|i| if i == 0 { b } else { c } as u8);
+        *data = FieldExpressionPreCompute {
+            a: a as u8,
+            rs_addrs,
+            expr: &self.inner.expr,
+            flag_idx,
+        };
+
+        if IS_FP2 {
+            let is_setup = local_opcode == Fp2Opcode::SETUP_ADDSUB as usize
+                || local_opcode == Fp2Opcode::SETUP_MULDIV as usize;
+
+            let op = if is_setup {
+                None
+            } else {
+                match local_opcode {
+                    x if x == Fp2Opcode::ADD as usize => Some(Operation::Add),
+                    x if x == Fp2Opcode::SUB as usize => Some(Operation::Sub),
+                    x if x == Fp2Opcode::MUL as usize => Some(Operation::Mul),
+                    x if x == Fp2Opcode::DIV as usize => Some(Operation::Div),
+                    _ => unreachable!(),
+                }
+            };
+
+            Ok(op)
+        } else {
+            let is_setup = local_opcode == Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize
+                || local_opcode == Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize;
+
+            let op = if is_setup {
+                None
+            } else {
+                match local_opcode {
+                    x if x == Rv64ModularArithmeticOpcode::ADD as usize => Some(Operation::Add),
+                    x if x == Rv64ModularArithmeticOpcode::SUB as usize => Some(Operation::Sub),
+                    x if x == Rv64ModularArithmeticOpcode::MUL as usize => Some(Operation::Mul),
+                    x if x == Rv64ModularArithmeticOpcode::DIV as usize => Some(Operation::Div),
+                    _ => unreachable!(),
+                }
+            };
+
+            Ok(op)
+        }
+    }
+}
+
+/// `dispatch!` for the U16 variant. Identical to the macro above, but uses `BLOCK_BYTES`
+/// as the byte block size (since guest memory is byte-addressed regardless of the chip's
+/// internal u16-cell shape).
+macro_rules! dispatch_u16 {
+    ($execute_impl:ident,$execute_generic_impl:ident,$execute_setup_impl:ident,$pre_compute:ident,$op:ident) => {
+        if let Some(op) = $op {
+            let modulus = &$pre_compute.expr.prime;
+            if IS_FP2 {
+                if let Some(field_type) = get_fp2_field_type(modulus) {
+                    generate_fp2_dispatch!(
+                        field_type,
+                        op,
+                        BLOCKS,
+                        BLOCK_BYTES,
+                        $execute_impl,
+                        [
+                            (BN254Coordinate, Add),
+                            (BN254Coordinate, Sub),
+                            (BN254Coordinate, Mul),
+                            (BN254Coordinate, Div),
+                            (BLS12_381Coordinate, Add),
+                            (BLS12_381Coordinate, Sub),
+                            (BLS12_381Coordinate, Mul),
+                            (BLS12_381Coordinate, Div),
+                        ]
+                    )
+                } else {
+                    Ok($execute_generic_impl::<_, _, BLOCKS, BLOCK_BYTES, IS_FP2>)
+                }
+            } else if let Some(field_type) = get_field_type(modulus) {
+                generate_field_dispatch!(
+                    field_type,
+                    op,
+                    BLOCKS,
+                    BLOCK_BYTES,
+                    $execute_impl,
+                    [
+                        (K256Coordinate, Add),
+                        (K256Coordinate, Sub),
+                        (K256Coordinate, Mul),
+                        (K256Coordinate, Div),
+                        (K256Scalar, Add),
+                        (K256Scalar, Sub),
+                        (K256Scalar, Mul),
+                        (K256Scalar, Div),
+                        (P256Coordinate, Add),
+                        (P256Coordinate, Sub),
+                        (P256Coordinate, Mul),
+                        (P256Coordinate, Div),
+                        (P256Scalar, Add),
+                        (P256Scalar, Sub),
+                        (P256Scalar, Mul),
+                        (P256Scalar, Div),
+                        (BN254Coordinate, Add),
+                        (BN254Coordinate, Sub),
+                        (BN254Coordinate, Mul),
+                        (BN254Coordinate, Div),
+                        (BN254Scalar, Add),
+                        (BN254Scalar, Sub),
+                        (BN254Scalar, Mul),
+                        (BN254Scalar, Div),
+                        (BLS12_381Coordinate, Add),
+                        (BLS12_381Coordinate, Sub),
+                        (BLS12_381Coordinate, Mul),
+                        (BLS12_381Coordinate, Div),
+                        (BLS12_381Scalar, Add),
+                        (BLS12_381Scalar, Sub),
+                        (BLS12_381Scalar, Mul),
+                        (BLS12_381Scalar, Div),
+                    ]
+                )
+            } else {
+                Ok($execute_generic_impl::<_, _, BLOCKS, BLOCK_BYTES, IS_FP2>)
+            }
+        } else {
+            Ok($execute_setup_impl::<_, _, BLOCKS, BLOCK_BYTES, IS_FP2>)
+        }
+    };
+}
+
+impl<
+        F: PrimeField32,
+        const BLOCKS: usize,
+        const BLOCK_SIZE_U16: usize,
+        const BLOCK_BYTES: usize,
+        const IS_FP2: bool,
+    > InterpreterExecutor<F>
+    for FieldExprVecHeapU16Executor<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES, IS_FP2>
+{
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        std::mem::size_of::<FieldExpressionPreCompute>()
+    }
+
+    #[cfg(not(feature = "tco"))]
+    fn pre_compute<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut FieldExpressionPreCompute = data.borrow_mut();
+        let op = self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        dispatch_u16!(
+            execute_e1_handler,
+            execute_e1_generic_handler,
+            execute_e1_setup_handler,
+            pre_compute,
+            op
+        )
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut FieldExpressionPreCompute = data.borrow_mut();
+        let op = self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        dispatch_u16!(
+            execute_e1_handler,
+            execute_e1_generic_handler,
+            execute_e1_setup_handler,
+            pre_compute,
+            op
+        )
+    }
+}
+
+#[cfg(feature = "aot")]
+impl<
+        F: PrimeField32,
+        const BLOCKS: usize,
+        const BLOCK_SIZE_U16: usize,
+        const BLOCK_BYTES: usize,
+        const IS_FP2: bool,
+    > AotExecutor<F>
+    for FieldExprVecHeapU16Executor<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES, IS_FP2>
+{
+}
+
+impl<
+        F: PrimeField32,
+        const BLOCKS: usize,
+        const BLOCK_SIZE_U16: usize,
+        const BLOCK_BYTES: usize,
+        const IS_FP2: bool,
+    > InterpreterMeteredExecutor<F>
+    for FieldExprVecHeapU16Executor<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES, IS_FP2>
+{
+    #[inline(always)]
+    fn metered_pre_compute_size(&self) -> usize {
+        std::mem::size_of::<E2PreCompute<FieldExpressionPreCompute>>()
+    }
+
+    #[cfg(not(feature = "tco"))]
+    fn metered_pre_compute<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let pre_compute: &mut E2PreCompute<FieldExpressionPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+
+        let pre_compute_pure = &mut pre_compute.data;
+        let op = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
+
+        dispatch_u16!(
+            execute_e2_handler,
+            execute_e2_generic_handler,
+            execute_e2_setup_handler,
+            pre_compute_pure,
+            op
+        )
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let pre_compute: &mut E2PreCompute<FieldExpressionPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+
+        let pre_compute_pure = &mut pre_compute.data;
+        let op = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
+
+        dispatch_u16!(
+            execute_e2_handler,
+            execute_e2_generic_handler,
+            execute_e2_setup_handler,
+            pre_compute_pure,
+            op
+        )
+    }
+}
+
+#[cfg(feature = "aot")]
+impl<
+        F: PrimeField32,
+        const BLOCKS: usize,
+        const BLOCK_SIZE_U16: usize,
+        const BLOCK_BYTES: usize,
+        const IS_FP2: bool,
+    > AotMeteredExecutor<F>
+    for FieldExprVecHeapU16Executor<BLOCKS, BLOCK_SIZE_U16, BLOCK_BYTES, IS_FP2>
+{
 }

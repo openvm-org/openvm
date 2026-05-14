@@ -24,11 +24,11 @@ use openvm_cuda_backend::{
 };
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::LocalOpcode;
-use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
+use openvm_mod_circuit_builder::{field_element_bytes, ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_riscv_adapters::{
     Rv64IsEqualModAdapterU16Cols, Rv64IsEqualModAdapterU16Executor,
     Rv64IsEqualModAdapterU16Filler, Rv64IsEqualModAdapterU16Record, Rv64VecHeapAdapterCols,
-    Rv64VecHeapAdapterExecutor,
+    Rv64VecHeapAdapterExecutor, Rv64VecHeapU16AdapterCols, Rv64VecHeapU16AdapterExecutor,
 };
 use openvm_riscv_circuit::Rv64ImGpuProverExt;
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
@@ -54,8 +54,12 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
     for HybridModularChip<F, BLOCKS, BLOCK_SIZE>
 {
     fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        // `total_input_limbs` is the byte length of the serialized inputs buffer in the core
+        // record. For limb_bits=8 this equals `num_inputs * canonical_num_limbs()`; for
+        // limb_bits=16 it equals `num_inputs * canonical_num_limbs() * 2`. We use
+        // `field_element_bytes` from mod-builder so both cases work.
         let total_input_limbs =
-            self.cpu.inner.num_inputs() * self.cpu.inner.expr.canonical_num_limbs();
+            self.cpu.inner.num_inputs() * field_element_bytes(&self.cpu.inner.expr);
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
             Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
@@ -85,6 +89,84 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
             >>();
         let adapter_width =
             Rv64VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>::width();
+        let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
+        let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
+        seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
+        let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
+        cpu_proving_ctx_to_gpu(cpu_ctx, &self.device_ctx)
+    }
+}
+
+// =============================================================================================
+// U16-shaped variant of [`HybridModularChip`] for the LIMB_BITS=16 addsub path.
+// Wraps a CPU-shaped [`ModularChipU16`]; trace generation runs on CPU and the trace matrix is
+// then transferred to the GPU.
+//
+// NOTE: not currently wired into [`AlgebraHybridProverExt`] — the AddSub chain is locked at
+// LIMB_BITS=8 until the production range checker `decomp` is widened (see TODO in
+// `extension::modular`). Kept here so the u16 hybrid infrastructure does not bit-rot.
+// =============================================================================================
+#[allow(dead_code)]
+#[derive(derive_new::new)]
+pub struct HybridModularChipU16<F, const BLOCKS: usize, const BLOCK_SIZE_U16: usize> {
+    cpu: ModularChipU16<F, BLOCKS, BLOCK_SIZE_U16>,
+    device_ctx: GpuDeviceCtx,
+}
+
+// We need a u16-cell-shaped variant of `AlgebraRecord` for the tuple-record seeker.
+#[allow(dead_code)]
+type AlgebraRecordU16<'a, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE_U16: usize> = (
+    &'a mut openvm_riscv_adapters::Rv64VecHeapU16AdapterRecord<
+        NUM_READS,
+        BLOCKS,
+        BLOCKS,
+        BLOCK_SIZE_U16,
+        BLOCK_SIZE_U16,
+    >,
+    openvm_mod_circuit_builder::FieldExpressionCoreRecordMut<'a>,
+);
+
+impl<const BLOCKS: usize, const BLOCK_SIZE_U16: usize> Chip<DenseRecordArena, GpuBackend>
+    for HybridModularChipU16<F, BLOCKS, BLOCK_SIZE_U16>
+{
+    fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        let total_input_limbs =
+            self.cpu.inner.num_inputs() * field_element_bytes(&self.cpu.inner.expr);
+        let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
+            F,
+            Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE_U16, BLOCK_SIZE_U16>,
+        >::new(total_input_limbs));
+
+        let record_size = RecordSeeker::<
+            DenseRecordArena,
+            AlgebraRecordU16<2, BLOCKS, BLOCK_SIZE_U16>,
+            _,
+        >::get_aligned_record_size(&layout);
+
+        let records = arena.allocated();
+        if records.is_empty() {
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        }
+        debug_assert_eq!(records.len() % record_size, 0);
+
+        let num_records = records.len() / record_size;
+
+        let height = num_records.next_power_of_two();
+        let mut seeker = arena
+            .get_record_seeker::<AlgebraRecordU16<2, BLOCKS, BLOCK_SIZE_U16>, AdapterCoreLayout<
+                FieldExpressionMetadata<
+                    F,
+                    Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE_U16, BLOCK_SIZE_U16>,
+                >,
+            >>();
+        let adapter_width = Rv64VecHeapU16AdapterCols::<
+            F,
+            2,
+            BLOCKS,
+            BLOCKS,
+            BLOCK_SIZE_U16,
+            BLOCK_SIZE_U16,
+        >::width();
         let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
@@ -166,6 +248,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
             let modulus_limbs_u16 = big_uint_to_limbs(modulus, 16);
 
             if bytes <= NUM_LIMBS_32 {
+                // NOTE: u16 AddSub blocked by BabyBear F-bit guard (carry_abs_bits + limb_bits
+                // ≥ 30 at limb_bits=16 with full-width primes). Both AIRs stay u8-shaped.
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_32,
@@ -221,6 +305,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 inventory
                     .add_executor_chip(HybridModularIsEqualChip::new(is_eq, device_ctx.clone()));
             } else if bytes <= NUM_LIMBS_48 {
+                // NOTE: u16 AddSub blocked by BabyBear F-bit guard — see 32-byte branch above.
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_48,

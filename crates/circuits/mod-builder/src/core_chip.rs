@@ -213,6 +213,17 @@ where
 
 pub type FieldExpressionRecordLayout<F, A> = AdapterCoreLayout<FieldExpressionMetadata<F, A>>;
 
+/// Number of bytes used to encode a single field element in the (byte-shaped) `input_limbs`
+/// buffer of [`FieldExpressionCoreRecordMut`].
+///
+/// For `limb_bits = 8` this is just `num_limbs` (one byte per limb). For `limb_bits = 16`
+/// each limb is encoded as 2 little-endian bytes so the count is `num_limbs * 2`. In general
+/// we round `limb_bits` up to the nearest byte boundary.
+#[inline]
+pub fn field_element_bytes(expr: &FieldExpr) -> usize {
+    expr.canonical_num_limbs() * expr.canonical_limb_bits().div_ceil(8)
+}
+
 pub struct FieldExpressionCoreRecordMut<'a> {
     pub opcode: &'a mut u8,
     pub input_limbs: &'a mut [u8],
@@ -254,12 +265,15 @@ impl<F, A> SizedRecord<FieldExpressionRecordLayout<F, A>> for FieldExpressionCor
 
 impl<'a> FieldExpressionCoreRecordMut<'a> {
     // This method is only used in testing
+    // `bytes_per_input` is the number of bytes used to encode one field element in the
+    // serialized input buffer. For `limb_bits = 8` chips this equals `num_limbs`; for
+    // `limb_bits = 16` chips it equals `num_limbs * 2`.
     pub fn new_from_execution_data(
         buffer: &'a mut [u8],
         inputs: &[BigUint],
-        limbs_per_input: usize,
+        bytes_per_input: usize,
     ) -> Self {
-        let record_info = FieldExpressionMetadata::<(), ()>::new(inputs.len() * limbs_per_input);
+        let record_info = FieldExpressionMetadata::<(), ()>::new(inputs.len() * bytes_per_input);
 
         let record: Self = buffer.custom_borrow(FieldExpressionRecordLayout {
             metadata: record_info,
@@ -321,7 +335,7 @@ impl<A> FieldExpressionExecutor<A> {
     pub fn get_record_layout<F>(&self) -> FieldExpressionRecordLayout<F, A> {
         FieldExpressionRecordLayout {
             metadata: FieldExpressionMetadata::new(
-                self.expr.builder.num_input * self.expr.canonical_num_limbs(),
+                self.expr.builder.num_input * field_element_bytes(&self.expr),
             ),
         }
     }
@@ -380,7 +394,7 @@ impl<A> FieldExpressionFiller<A> {
     pub fn get_record_layout<F>(&self) -> FieldExpressionRecordLayout<F, A> {
         FieldExpressionRecordLayout {
             metadata: FieldExpressionMetadata::new(
-                self.num_inputs() * self.expr.canonical_num_limbs(),
+                self.num_inputs() * field_element_bytes(&self.expr),
             ),
         }
     }
@@ -500,13 +514,16 @@ fn run_field_expression(
     data: &[u8],
     local_opcode_idx: usize,
 ) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>) {
-    let field_element_limbs = expr.canonical_num_limbs();
-    assert_eq!(data.len(), expr.builder.num_input * field_element_limbs);
+    // `field_element_bytes` is the byte-length of one field element in the byte-shaped
+    // `data` buffer. For limb_bits=8 it equals `canonical_num_limbs()`; for limb_bits=16
+    // it equals `canonical_num_limbs() * 2`.
+    let fe_bytes = field_element_bytes(expr);
+    assert_eq!(data.len(), expr.builder.num_input * fe_bytes);
 
     let mut inputs = Vec::with_capacity(expr.builder.num_input);
     for i in 0..expr.builder.num_input {
-        let start = i * field_element_limbs;
-        let end = start + field_element_limbs;
+        let start = i * fe_bytes;
+        let end = start + fe_bytes;
         let limb_slice = &data[start..end];
         let input = BigUint::from_bytes_le(limb_slice);
         inputs.push(input);
@@ -536,12 +553,12 @@ fn run_field_expression(
 
     // Write outputs directly to a pre-allocated buffer to avoid intermediate Vecs
     let num_outputs = expr.builder.output_indices.len();
-    let total_output_bytes = num_outputs * field_element_limbs;
+    let total_output_bytes = num_outputs * fe_bytes;
     let mut write_buffer = vec![0u8; total_output_bytes];
     for (i, &var_idx) in expr.builder.output_indices.iter().enumerate() {
-        let start = i * field_element_limbs;
+        let start = i * fe_bytes;
         let bytes = vars[var_idx].to_bytes_le();
-        let copy_len = bytes.len().min(field_element_limbs);
+        let copy_len = bytes.len().min(fe_bytes);
         write_buffer[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
         // Remaining bytes are already zero from vec![0u8; ...]
     }
@@ -556,13 +573,13 @@ pub fn run_field_expression_precomputed<const NEEDS_SETUP: bool>(
     flag_idx: usize,
     data: &[u8],
 ) -> DynArray<u8> {
-    let field_element_limbs = expr.canonical_num_limbs();
-    assert_eq!(data.len(), expr.num_inputs() * field_element_limbs);
+    let fe_bytes = field_element_bytes(expr);
+    assert_eq!(data.len(), expr.num_inputs() * fe_bytes);
 
     let mut inputs = Vec::with_capacity(expr.num_inputs());
     for i in 0..expr.num_inputs() {
-        let start = i * expr.canonical_num_limbs();
-        let end = start + expr.canonical_num_limbs();
+        let start = i * fe_bytes;
+        let end = start + fe_bytes;
         let limb_slice = &data[start..end];
         let input = BigUint::from_bytes_le(limb_slice);
         inputs.push(input);
@@ -583,12 +600,12 @@ pub fn run_field_expression_precomputed<const NEEDS_SETUP: bool>(
 
     // Write outputs directly to a pre-allocated buffer to avoid intermediate Vecs
     let num_outputs = expr.output_indices().len();
-    let total_output_bytes = num_outputs * field_element_limbs;
+    let total_output_bytes = num_outputs * fe_bytes;
     let mut write_buffer = vec![0u8; total_output_bytes];
     for (i, &var_idx) in expr.output_indices().iter().enumerate() {
-        let start = i * field_element_limbs;
+        let start = i * fe_bytes;
         let bytes = vars[var_idx].to_bytes_le();
-        let copy_len = bytes.len().min(field_element_limbs);
+        let copy_len = bytes.len().min(fe_bytes);
         write_buffer[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
     }
     write_buffer.into()
