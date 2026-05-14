@@ -33,7 +33,7 @@ struct LessThanPreCompute {
     b: u8,
 }
 
-impl<A, const LIMB_BITS: usize> LessThanExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanExecutor<A, NUM_LIMBS, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -84,8 +84,8 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for LessThanExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
+    for LessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -199,8 +199,8 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for LessThanExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
+    for LessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {

@@ -156,7 +156,7 @@ impl<
         let e = AB::F::from_u32(RV64_MEMORY_AS);
         // Reads from heap. After Pattern B, `READ_SIZE` is u16-cell count (= BLOCK_FE_WIDTH=4
         // for an 8-byte chunk); each block's bus pointer advances by 2*READ_SIZE bytes.
-        const BUS_PTR_SCALE: usize = openvm_circuit::arch::BUS_PTR_SCALE as usize;
+        const BUS_PTR_SCALE: usize = openvm_circuit::arch::BUS_PTR_SCALE;
         let bytes_per_block = READ_SIZE * BUS_PTR_SCALE;
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {

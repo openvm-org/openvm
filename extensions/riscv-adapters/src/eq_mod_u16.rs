@@ -54,7 +54,7 @@ use openvm_stark_backend::{
 };
 
 /// Number of bytes per u16 memory cell on the bus.
-const BUS_BYTES_PER_CELL: usize = BUS_PTR_SCALE as usize;
+const BUS_BYTES_PER_CELL: usize = BUS_PTR_SCALE;
 
 /// U16-shaped variant of [`Rv64IsEqualModAdapterCols`].
 ///
@@ -163,7 +163,7 @@ impl<
         let rs_val_f: [AB::Expr; NUM_READS] = from_fn(|i| {
             let mut acc = AB::Expr::ZERO;
             for j in 0..BLOCK_FE_WIDTH {
-                acc = acc + cols.rs_val[i][j] * AB::F::from_u64(1u64 << (16 * j));
+                acc += cols.rs_val[i][j] * AB::F::from_u64(1u64 << (16 * j));
             }
             acc
         });

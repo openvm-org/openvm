@@ -13,13 +13,12 @@ use openvm_circuit::{
     system::{memory::SharedMemoryHelper, SystemPort},
     utils::get_random_message,
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::{
-        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-        SharedBitwiseOperationLookupChip,
-    },
-    var_range::VariableRangeCheckerChip,
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    SharedBitwiseOperationLookupChip,
 };
+#[cfg(feature = "cuda")]
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS},
