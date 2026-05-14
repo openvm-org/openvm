@@ -2,6 +2,7 @@ use std::{marker::PhantomData, ops::Range};
 
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder, utils::compose,
+    var_range::SharedVariableRangeCheckerChip,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use sha2::{compress256, compress512, digest::generic_array::GenericArray};
@@ -9,7 +10,7 @@ use sha2::{compress256, compress512, digest::generic_array::GenericArray};
 use crate::{
     big_sig0, big_sig0_field, big_sig1, big_sig1_field, ch, ch_field, get_flag_pt_array,
     le_limbs_into_word, maj, maj_field, set_arrayview_from_u32_slice, small_sig0, small_sig0_field,
-    small_sig1, small_sig1_field, word_into_bits, word_into_u16_limbs, word_into_u8_limbs,
+    small_sig1, small_sig1_field, word_into_bits, word_into_u16_limbs,
     Sha2BlockHasherSubairConfig, Sha2DigestColsRefMut, Sha2RoundColsRef, Sha2RoundColsRefMut,
     Sha2Variant, WrappingAdd,
 };
@@ -79,6 +80,7 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
         trace_start_col: usize,
         input: &[C::Word],
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
+        range_checker_chip: &SharedVariableRangeCheckerChip,
         prev_hash: &[C::Word],
         next_block_prev_hash: &[C::Word],
         global_block_idx: u32,
@@ -287,23 +289,20 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
                 let final_hash: Vec<C::Word> = (0..C::HASH_WORDS)
                     .map(|i| work_vars[i].wrapping_add(prev_hash[i]))
                     .collect();
-                let final_hash_limbs: Vec<Vec<u32>> = final_hash
+                // `final_hash` is stored as u16 limbs (matching `prev_hash`); range-check each
+                // cell through the variable range checker.
+                let final_hash_u16_limbs: Vec<Vec<u32>> = final_hash
                     .iter()
-                    .map(|word| word_into_u8_limbs::<C>(*word))
+                    .map(|word| word_into_u16_limbs::<C>(*word))
                     .collect();
-                // need to ensure final hash limbs are bytes, in order for
-                //   prev_hash[i] + work_vars[i] == final_hash[i]
-                // to be constrained correctly
-                for word in final_hash_limbs.iter() {
-                    for chunk in word.chunks(2) {
-                        bitwise_lookup_chip.request_range(chunk[0], chunk[1]);
+                for word in final_hash_u16_limbs.iter() {
+                    for &limb in word.iter() {
+                        range_checker_chip.add_count(limb, 16);
                     }
                 }
                 set_arrayview_from_u32_slice(
                     &mut cols.final_hash,
-                    final_hash
-                        .iter()
-                        .flat_map(|word| word_into_u8_limbs::<C>(*word)),
+                    final_hash_u16_limbs.iter().flatten().copied(),
                 );
                 set_arrayview_from_u32_slice(
                     &mut cols.prev_hash,

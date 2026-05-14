@@ -35,13 +35,13 @@ pub struct Sha2BlockCols<
     /// Input bytes for this block
     pub message_bytes: [T; BLOCK_BYTES],
     /// Previous state of the SHA-2 hasher object, as little-endian 16-bit cells. Each cell
-    /// holds two consecutive message bytes packed `lo | hi << 8` to match the bus interaction
-    /// with the block hasher.
+    /// holds two consecutive bytes packed `lo | hi << 8` to match the bus interaction with the
+    /// block hasher and the underlying u16-celled memory.
     pub prev_state: [T; STATE_U16S],
     /// New state of the SHA-2 hasher object after processing this block, as little-endian
-    /// **bytes**. The block hasher receives `final_hash` byte-by-byte, so this column stays
-    /// byte-shaped.
-    pub new_state: [T; STATE_BYTES],
+    /// 16-bit cells. The block hasher's `final_hash` is also u16-shaped, so the sha2 bus
+    /// payload uses these cells directly without byte-pairing.
+    pub new_state: [T; STATE_U16S],
 }
 
 #[repr(C)]

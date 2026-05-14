@@ -105,10 +105,16 @@ fn create_test_harness<RA: Arena, C: Sha2Config>(
 
     let harness = Harness::<RA, C>::with_capacity(executor, air, main_chip, MAX_INS_CAPACITY);
 
-    let block_hasher_air =
-        Sha2BlockHasherVmAir::new(bitwise_chip.bus(), SUBAIR_BUS_IDX, SHA2_BUS_IDX);
+    let range_checker = tester.range_checker();
+    let block_hasher_air = Sha2BlockHasherVmAir::new(
+        bitwise_chip.bus(),
+        range_checker.bus(),
+        SUBAIR_BUS_IDX,
+        SHA2_BUS_IDX,
+    );
     let block_hasher_chip = Sha2BlockHasherChip::new(
         bitwise_chip.clone(),
+        range_checker,
         tester.address_bits(),
         tester.memory_helper(),
         shared_records,
@@ -529,7 +535,7 @@ fn negative_sha2_test_bad_final_hash<C: Sha2Config + 'static>() {
             );
             if cols.inner.flags.is_digest_row.is_one() {
                 for i in 0..C::HASH_WORDS {
-                    for j in 0..C::WORD_U8S {
+                    for j in 0..C::WORD_U16S {
                         cols.inner.final_hash[[i, j]] = F::ZERO;
                     }
                 }

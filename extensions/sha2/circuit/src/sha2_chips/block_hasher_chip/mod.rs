@@ -13,7 +13,9 @@ pub use air::*;
 pub use columns::*;
 pub use config::*;
 use openvm_circuit::system::memory::SharedMemoryHelper;
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
+};
 use openvm_instructions::riscv::RV64_CELL_BITS;
 use openvm_sha2_air::{Sha2BlockHasherFillerHelper, Sha2BlockHasherSubairConfig};
 
@@ -22,6 +24,8 @@ pub use super::{config::*, Sha2SharedRecords};
 pub struct Sha2BlockHasherChip<F, C: Sha2BlockHasherSubairConfig> {
     pub inner: Sha2BlockHasherFillerHelper<C>,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    /// Variable range checker used for the u16-shaped `final_hash` cells.
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub pointer_max_bits: usize,
     pub mem_helper: SharedMemoryHelper<F>,
     // This Arc<Mutex<Option<RA>>> is shared with the main chip (Sha2MainChip).
@@ -39,6 +43,7 @@ pub struct Sha2BlockHasherChip<F, C: Sha2BlockHasherSubairConfig> {
 impl<F, C: Sha2BlockHasherSubairConfig> Sha2BlockHasherChip<F, C> {
     pub fn new(
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        range_checker_chip: SharedVariableRangeCheckerChip,
         pointer_max_bits: usize,
         mem_helper: SharedMemoryHelper<F>,
         records: Arc<Mutex<Option<Sha2SharedRecords<F>>>>,
@@ -46,6 +51,7 @@ impl<F, C: Sha2BlockHasherSubairConfig> Sha2BlockHasherChip<F, C> {
         Self {
             inner: Sha2BlockHasherFillerHelper::new(),
             bitwise_lookup_chip,
+            range_checker_chip,
             pointer_max_bits,
             mem_helper,
             records,

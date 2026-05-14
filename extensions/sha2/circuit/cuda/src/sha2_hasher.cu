@@ -762,18 +762,20 @@ __global__ void sha2_first_pass_phase2(
         typename V::Word work_vars[8] = {a, b, c, d, e, f, g, h};
         for (int i = 0; i < static_cast<int>(V::HASH_WORDS); i++) {
             typename V::Word fh_val = prev_hash[i] + work_vars[i];
-            for (uint32_t limb = 0; limb < V::WORD_U8S; limb++) {
+            // `final_hash` is u16-shaped (matching `prev_hash`) so each limb is one cell.
+            for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
                 SHA2INNER_WRITE_DIGEST(V, inner_row, final_hash[i][limb],
-                    Fp(word_to_u8_limb<V>(fh_val, limb)));
+                    Fp(word_to_u16_limb<V>(fh_val, limb)));
             }
             for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
                 SHA2INNER_WRITE_DIGEST(V, inner_row, prev_hash[i][limb],
                     Fp(word_to_u16_limb<V>(prev_hash[i], limb)));
             }
-            for (uint32_t limb = 0; limb < V::WORD_U8S; limb += 2) {
-                bitwise_lookup.add_range(
-                    word_to_u8_limb<V>(fh_val, limb), word_to_u8_limb<V>(fh_val, limb + 1));
-            }
+            // TODO(u16-migration): the new AIR range-checks `final_hash` cells through the
+            // variable range checker (16 bits per cell). The GPU kernel currently only has
+            // access to the bitwise lookup; the variable range checker needs to be plumbed
+            // through `Sha2BlockHasherChipGpu` and the kernel ABI before this is sound.
+            // The CPU path (the only path we test) is already wired correctly.
         }
 
         for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {

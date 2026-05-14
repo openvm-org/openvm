@@ -1,4 +1,7 @@
-use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, ColumnsAir, SubAir};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupBus, var_range::VariableRangeCheckerBus, ColumnsAir,
+    SubAir,
+};
 use openvm_sha2_air::{compose, Sha2BlockHasherSubAir};
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -24,11 +27,12 @@ impl<C: Sha2BlockHasherVmConfig> ColumnsAir for Sha2BlockHasherVmAir<C> {}
 impl<C: Sha2BlockHasherVmConfig> Sha2BlockHasherVmAir<C> {
     pub fn new(
         bitwise_lookup_bus: BitwiseOperationLookupBus,
+        range_bus: VariableRangeCheckerBus,
         inner_bus_idx: BusIndex,
         sha2_bus_idx: BusIndex,
     ) -> Self {
         Self {
-            inner: Sha2BlockHasherSubAir::new(bitwise_lookup_bus, inner_bus_idx),
+            inner: Sha2BlockHasherSubAir::new(bitwise_lookup_bus, range_bus, inner_bus_idx),
             sha2_bus: PermutationCheckBus::new(sha2_bus_idx),
         }
     }
