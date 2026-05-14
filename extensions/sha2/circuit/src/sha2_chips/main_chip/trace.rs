@@ -211,7 +211,12 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
             .iter()
             .zip(cols.mem.write_aux)
             .for_each(|(write_aux_record, write_aux_cols)| {
-                write_aux_cols.set_prev_data(write_aux_record.prev_data.map(F::from_u8));
+                write_aux_cols.set_prev_data(std::array::from_fn(|i| {
+                    F::from_u32(
+                        write_aux_record.prev_data[2 * i] as u32
+                            + 256 * write_aux_record.prev_data[2 * i + 1] as u32,
+                    )
+                }));
                 mem_helper.fill(
                     write_aux_record.prev_timestamp,
                     timestamp,

@@ -8,12 +8,12 @@ use itertools::izip;
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        ExecutionBridge, ExecutionState, VecHeapAdapterInterface, VmAdapterAir,
+        ExecutionBridge, ExecutionState, VecHeapAdapterInterface, VmAdapterAir, BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
+            pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -68,7 +68,7 @@ pub struct Rv64VecHeapAdapterCols<
     pub rd_read_aux: MemoryReadAuxCols<T>,
 
     pub reads_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
-    pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; BLOCKS_PER_WRITE],
+    pub writes_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; BLOCKS_PER_WRITE],
 }
 
 #[allow(dead_code)]
@@ -157,9 +157,9 @@ impl<
             &cols.rd_read_aux,
         ))) {
             self.memory_bridge
-                .read(
+                .read_4(
                     MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), ptr),
-                    expand_to_rv64_register(&val),
+                    pack_u8_for_bus::<AB>(&expand_to_rv64_register(&val)),
                     timestamp_pp(),
                     aux,
                 )
@@ -201,13 +201,20 @@ impl<
         // Reads from heap
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux,) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
+                debug_assert_eq!(
+                    READ_SIZE,
+                    openvm_circuit::arch::MEMORY_BLOCK_BYTES,
+                    "VecHeap adapter only supports READ_SIZE = MEMORY_BLOCK_BYTES"
+                );
+                let read_array: [AB::Expr; openvm_circuit::arch::MEMORY_BLOCK_BYTES] =
+                    std::array::from_fn(|j| read[j].clone());
                 self.memory_bridge
-                    .read(
+                    .read_4(
                         MemoryAddress::new(
                             e,
                             address.clone() + AB::Expr::from_usize(i * READ_SIZE),
                         ),
-                        read,
+                        pack_u8_for_bus::<AB>(&read_array),
                         timestamp_pp(),
                         aux,
                     )
@@ -217,10 +224,17 @@ impl<
 
         // Writes to heap
         for (i, (write, aux)) in zip(ctx.writes, &cols.writes_aux).enumerate() {
+            debug_assert_eq!(
+                WRITE_SIZE,
+                openvm_circuit::arch::MEMORY_BLOCK_BYTES,
+                "VecHeap adapter only supports WRITE_SIZE = MEMORY_BLOCK_BYTES"
+            );
+            let write_array: [AB::Expr; openvm_circuit::arch::MEMORY_BLOCK_BYTES] =
+                std::array::from_fn(|j| write[j].clone());
             self.memory_bridge
-                .write(
+                .write_4(
                     MemoryAddress::new(e, rd_val_f.clone() + AB::Expr::from_usize(i * WRITE_SIZE)),
-                    write,
+                    pack_u8_for_bus::<AB>(&write_array),
                     timestamp_pp(),
                     aux,
                 )
@@ -520,7 +534,11 @@ impl<
             .rev()
             .zip(cols.writes_aux.iter_mut().rev())
             .for_each(|(write, cols_write)| {
-                cols_write.set_prev_data(write.prev_data.map(F::from_u8));
+                cols_write.set_prev_data(from_fn(|i| {
+                    F::from_u32(
+                        write.prev_data[2 * i] as u32 + 256 * write.prev_data[2 * i + 1] as u32,
+                    )
+                }));
                 mem_helper.fill(write.prev_timestamp, timestamp_mm(), cols_write.as_mut());
             });
 

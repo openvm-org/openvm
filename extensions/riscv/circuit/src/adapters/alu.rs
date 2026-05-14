@@ -4,11 +4,12 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
+            pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -44,7 +45,7 @@ pub struct Rv64BaseAluAdapterCols<T> {
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: T,
     pub reads_aux: [MemoryReadAuxCols<T>; 2],
-    pub writes_aux: MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS>,
+    pub writes_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
 
 /// Reads instructions of the form OP a, b, c, d, e where \[a:4\]_d = \[b:4\]_d op \[c:4\]_e.
@@ -112,9 +113,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterAir {
             .eval(builder, ctx.instruction.is_valid.clone() - local.rs2_as);
 
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs1_ptr),
-                ctx.reads[0].clone(),
+                pack_u8_for_bus::<AB>(&ctx.reads[0].clone()),
                 timestamp_pp(),
                 &local.reads_aux[0],
             )
@@ -125,18 +126,18 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterAir {
             .when(local.rs2_as)
             .assert_one(ctx.instruction.is_valid.clone());
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(local.rs2_as, local.rs2),
-                ctx.reads[1].clone(),
+                pack_u8_for_bus::<AB>(&ctx.reads[1].clone()),
                 timestamp_pp(),
                 &local.reads_aux[1],
             )
             .eval(builder, local.rs2_as);
 
         self.memory_bridge
-            .write(
+            .write_4(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rd_ptr),
-                ctx.writes[0].clone(),
+                pack_u8_for_bus::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),
                 &local.writes_aux,
             )
@@ -296,7 +297,12 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
 
         adapter_row
             .writes_aux
-            .set_prev_data(record.writes_aux.prev_data.map(F::from_u8));
+            .set_prev_data(std::array::from_fn(|i| {
+                F::from_u32(
+                    record.writes_aux.prev_data[2 * i] as u32
+                        + 256 * record.writes_aux.prev_data[2 * i + 1] as u32,
+                )
+            }));
         mem_helper.fill(
             record.writes_aux.prev_timestamp,
             timestamp,

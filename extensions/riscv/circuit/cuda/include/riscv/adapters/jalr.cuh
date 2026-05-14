@@ -12,7 +12,7 @@ template <typename T> struct Rv64JalrAdapterCols {
     T rs1_ptr;
     MemoryReadAuxCols<T> rs1_aux_cols;
     T rd_ptr;
-    MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS> rd_aux_cols;
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> rd_aux_cols;
     T needs_write;
 };
 
@@ -39,9 +39,15 @@ struct Rv64JalrAdapter {
         COL_WRITE_VALUE(row, Rv64JalrAdapterCols, needs_write, do_write);
 
         if (do_write) {
-            COL_WRITE_ARRAY(
-                row, Rv64JalrAdapterCols, rd_aux_cols.prev_data, record.writes_aux.prev_data
-            );
+            Fp packed_prev[BLOCK_FE_WIDTH];
+#pragma unroll
+            for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
+                packed_prev[i] = Fp(
+                    uint32_t(record.writes_aux.prev_data[2 * i])
+                    + 256u * uint32_t(record.writes_aux.prev_data[2 * i + 1])
+                );
+            }
+            COL_WRITE_ARRAY(row, Rv64JalrAdapterCols, rd_aux_cols.prev_data, packed_prev);
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv64JalrAdapterCols, rd_aux_cols.base)),
                 record.writes_aux.prev_timestamp,

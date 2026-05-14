@@ -103,10 +103,18 @@ static __device__ __forceinline__ void sha2_main_row_body(
 
     for (int i = 0; i < static_cast<int>(V::STATE_WRITES); i++) {
         RowSlice write_aux = SHA2_MAIN_SLICE_MEM(V, row, write_aux[i]);
+        Fp packed_prev[BLOCK_FE_WIDTH];
+#pragma unroll
+        for (size_t k = 0; k < BLOCK_FE_WIDTH; k++) {
+            packed_prev[k] = Fp(
+                uint32_t(record.write_aux[i].prev_data[2 * k])
+                + 256u * uint32_t(record.write_aux[i].prev_data[2 * k + 1])
+            );
+        }
         write_aux.write_array(
             COL_INDEX(MemoryWriteAuxCols, prev_data),
-            sha2::SHA2_WRITE_SIZE,
-            record.write_aux[i].prev_data
+            BLOCK_FE_WIDTH,
+            packed_prev
         );
         RowSlice base_slice = write_aux.slice_from(COL_INDEX(MemoryWriteAuxCols, base));
         mem_helper.fill(base_slice, record.write_aux[i].prev_timestamp, timestamp);

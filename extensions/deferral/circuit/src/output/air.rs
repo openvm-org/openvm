@@ -2,9 +2,9 @@ use std::{array::from_fn, borrow::Borrow};
 
 use itertools::{izip, Itertools};
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState, MEMORY_BLOCK_BYTES},
+    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
@@ -79,7 +79,7 @@ pub struct DeferralOutputCols<T> {
     // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
     // written to memory and auxiliary columns.
     pub sponge_inputs: [T; DIGEST_SIZE],
-    pub write_bytes_aux: [MemoryWriteAuxCols<T, MEMORY_BLOCK_BYTES>; DIGEST_BYTE_MEMORY_OPS],
+    pub write_bytes_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_BYTE_MEMORY_OPS],
 
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.
@@ -265,18 +265,18 @@ where
         let rs_full = expand_to_rv64_register(&local.rs_val);
 
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(d.clone(), local.rd_ptr),
-                rd_full,
+                pack_u8_for_bus::<AB>(&rd_full),
                 local.from_state.timestamp,
                 &local.rd_aux,
             )
             .eval(builder, local.is_first);
 
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(d.clone(), local.rs_ptr),
-                rs_full,
+                pack_u8_for_bus::<AB>(&rs_full),
                 local.from_state.timestamp + AB::Expr::ONE,
                 &local.rs_aux,
             )
@@ -307,12 +307,12 @@ where
             .enumerate()
         {
             self.memory_bridge
-                .read(
+                .read_4(
                     MemoryAddress::new(
                         e.clone(),
                         input_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
                     ),
-                    data,
+                    pack_u8_for_bus::<AB>(&data),
                     local.from_state.timestamp + AB::Expr::from_usize(2 + chunk_idx),
                     aux,
                 )
@@ -334,15 +334,16 @@ where
                     .eval(builder, local.is_valid - local.is_first);
             }
 
+            let data_expr: [AB::Expr; MEMORY_BLOCK_BYTES] = from_fn(|i| data[i].into());
             self.memory_bridge
-                .write(
+                .write_4(
                     MemoryAddress::new(
                         e.clone(),
                         output_ptr.clone()
                             + (section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_SIZE))
                             + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
                     ),
-                    data,
+                    pack_u8_for_bus::<AB>(&data_expr),
                     local.from_state.timestamp
                         + AB::Expr::from_usize(2 + OUTPUT_TOTAL_MEMORY_OPS + chunk_idx)
                         + (section_idx_minus_one.clone()

@@ -5,7 +5,10 @@ use ndarray::s;
 use openvm_circuit::{
     arch::ExecutionBridge,
     system::{
-        memory::{offline_checker::MemoryBridge, MemoryAddress},
+        memory::{
+            offline_checker::{pack_u8_for_bus, MemoryBridge},
+            MemoryAddress,
+        },
         SystemPort,
     },
 };
@@ -13,7 +16,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose, ColumnsAir,
 };
 use openvm_instructions::riscv::{
-    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
 };
 use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_sha2_air::Sha2BlockHasherSubairConfig;
@@ -215,9 +218,9 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 std::array::from_fn(|i| *val.get(i).unwrap());
             let data = expand_to_rv64_register(&val_arr);
             self.memory_bridge
-                .read::<_, _, RV64_REGISTER_NUM_LIMBS>(
+                .read_4(
                     MemoryAddress::new(AB::Expr::from_u32(RV64_REGISTER_AS), ptr),
-                    data,
+                    pack_u8_for_bus::<AB>(&data),
                     timestamp_pp(),
                     aux,
                 )
@@ -272,21 +275,23 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             RV64_CELL_BITS,
         );
         for i in 0..C::BLOCK_READS {
+            let chunk: [AB::Var; SHA2_READ_SIZE] = local
+                .block
+                .message_bytes
+                .slice(s![i * SHA2_READ_SIZE..(i + 1) * SHA2_READ_SIZE])
+                .to_vec()
+                .try_into()
+                .unwrap_or_else(|_| {
+                    panic!("message bytes is not the correct size");
+                });
+            let chunk_expr: [AB::Expr; SHA2_READ_SIZE] = chunk.map(Into::into);
             self.memory_bridge
-                .read::<_, _, SHA2_READ_SIZE>(
+                .read_4(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_MEMORY_AS),
                         input_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
                     ),
-                    local
-                        .block
-                        .message_bytes
-                        .slice(s![i * SHA2_READ_SIZE..(i + 1) * SHA2_READ_SIZE])
-                        .to_vec()
-                        .try_into()
-                        .unwrap_or_else(|_| {
-                            panic!("message bytes is not the correct size");
-                        }),
+                    pack_u8_for_bus::<AB>(&chunk_expr),
                     timestamp_pp(),
                     &local.mem.input_reads[i],
                 )
@@ -302,21 +307,23 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             RV64_CELL_BITS,
         );
         for i in 0..C::STATE_READS {
+            let chunk: [AB::Var; SHA2_READ_SIZE] = local
+                .block
+                .prev_state
+                .slice(s![i * SHA2_READ_SIZE..(i + 1) * SHA2_READ_SIZE])
+                .to_vec()
+                .try_into()
+                .unwrap_or_else(|_| {
+                    panic!("prev state is not the correct size");
+                });
+            let chunk_expr: [AB::Expr; SHA2_READ_SIZE] = chunk.map(Into::into);
             self.memory_bridge
-                .read::<_, _, SHA2_READ_SIZE>(
+                .read_4(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_MEMORY_AS),
                         state_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
                     ),
-                    local
-                        .block
-                        .prev_state
-                        .slice(s![i * SHA2_READ_SIZE..(i + 1) * SHA2_READ_SIZE])
-                        .to_vec()
-                        .try_into()
-                        .unwrap_or_else(|_| {
-                            panic!("prev state is not the correct size");
-                        }),
+                    pack_u8_for_bus::<AB>(&chunk_expr),
                     timestamp_pp(),
                     &local.mem.state_reads[i],
                 )
@@ -339,21 +346,23 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             RV64_CELL_BITS,
         );
         for i in 0..C::STATE_READS {
+            let chunk: [AB::Var; SHA2_WRITE_SIZE] = local
+                .block
+                .new_state
+                .slice(s![i * SHA2_READ_SIZE..(i + 1) * SHA2_READ_SIZE])
+                .to_vec()
+                .try_into()
+                .unwrap_or_else(|_| {
+                    panic!("new state is not the correct size");
+                });
+            let chunk_expr: [AB::Expr; SHA2_WRITE_SIZE] = chunk.map(Into::into);
             self.memory_bridge
-                .write::<_, _, SHA2_WRITE_SIZE>(
+                .write_4(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_MEMORY_AS),
                         dst_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
                     ),
-                    local
-                        .block
-                        .new_state
-                        .slice(s![i * SHA2_READ_SIZE..(i + 1) * SHA2_READ_SIZE])
-                        .to_vec()
-                        .try_into()
-                        .unwrap_or_else(|_| {
-                            panic!("new state is not the correct size");
-                        }),
+                    pack_u8_for_bus::<AB>(&chunk_expr),
                     timestamp_pp(),
                     &local.mem.write_aux[i],
                 )

@@ -7,7 +7,7 @@ use openvm_circuit::{
         VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH, BUS_PTR_SCALE, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
@@ -249,8 +249,7 @@ pub struct DeferralCallAdapterCols<T> {
     // Write auxiliary columns. `output_commit_and_len` is on byte-AS
     // RV64_MEMORY_AS (data width `MEMORY_BLOCK_BYTES`); the two accumulator
     // writes are on F-celled DEFERRAL_AS (data width `BLOCK_FE_WIDTH`).
-    pub output_commit_and_len_aux:
-        [MemoryWriteAuxCols<T, MEMORY_BLOCK_BYTES>; OUTPUT_TOTAL_MEMORY_OPS],
+    pub output_commit_and_len_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; OUTPUT_TOTAL_MEMORY_OPS],
     pub new_input_acc_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
     pub new_output_acc_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
 }
@@ -298,18 +297,18 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
 
         // Heap pointers are first read from their respective registers.
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(d.clone(), cols.rd_ptr),
-                rd_full,
+                pack_u8_for_bus::<AB>(&rd_full),
                 timestamp_pp(),
                 &cols.rd_aux,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(d.clone(), cols.rs_ptr),
-                rs_full,
+                pack_u8_for_bus::<AB>(&rs_full),
                 timestamp_pp(),
                 &cols.rs_aux,
             )
@@ -387,12 +386,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             .enumerate()
         {
             self.memory_bridge
-                .read(
+                .read_4(
                     MemoryAddress::new(
                         e.clone(),
                         input_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
                     ),
-                    data,
+                    pack_u8_for_bus::<AB>(&data),
                     timestamp_pp(),
                     aux,
                 )
@@ -407,7 +406,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             .enumerate()
         {
             self.memory_bridge
-                .read(
+                .read_4(
                     MemoryAddress::new(
                         deferral_as.clone(),
                         input_acc_ptr.clone()
@@ -428,7 +427,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             .enumerate()
         {
             self.memory_bridge
-                .read(
+                .read_4(
                     MemoryAddress::new(
                         deferral_as.clone(),
                         output_acc_ptr.clone()
@@ -452,12 +451,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             .enumerate()
         {
             self.memory_bridge
-                .write(
+                .write_4(
                     MemoryAddress::new(
                         e.clone(),
                         output_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
                     ),
-                    data,
+                    pack_u8_for_bus::<AB>(&data),
                     timestamp_pp(),
                     aux,
                 )
@@ -472,7 +471,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             .enumerate()
         {
             self.memory_bridge
-                .write(
+                .write_4(
                     MemoryAddress::new(
                         deferral_as.clone(),
                         input_acc_ptr.clone()
@@ -493,7 +492,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             .enumerate()
         {
             self.memory_bridge
-                .write(
+                .write_4(
                     MemoryAddress::new(
                         deferral_as.clone(),
                         output_acc_ptr.clone()

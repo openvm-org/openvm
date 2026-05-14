@@ -302,8 +302,12 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
                 timestamp,
                 trace_row.mem_oc.buffer_bytes_write_aux_cols[t].as_mut(),
             );
-            trace_row.mem_oc.buffer_bytes_write_aux_cols[t].prev_data =
-                record.buffer_write_aux_cols[t].prev_data.map(F::from_u8);
+            trace_row.mem_oc.buffer_bytes_write_aux_cols[t].prev_data = std::array::from_fn(|i| {
+                F::from_u32(
+                    record.buffer_write_aux_cols[t].prev_data[2 * i] as u32
+                        + 256 * record.buffer_write_aux_cols[t].prev_data[2 * i + 1] as u32,
+                )
+            });
             timestamp += 1;
         }
 

@@ -457,11 +457,14 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
             );
         }
         for chunk_idx in (0..OUTPUT_TOTAL_MEMORY_OPS).rev() {
-            adapter_row.output_commit_and_len_aux[chunk_idx].set_prev_data(
-                record.output_commit_and_len_aux[chunk_idx]
-                    .prev_data
-                    .map(F::from_u8),
-            );
+            adapter_row.output_commit_and_len_aux[chunk_idx].set_prev_data(from_fn(|i| {
+                F::from_u32(
+                    record.output_commit_and_len_aux[chunk_idx].prev_data[2 * i] as u32
+                        + 256
+                            * record.output_commit_and_len_aux[chunk_idx].prev_data[2 * i + 1]
+                                as u32,
+                )
+            }));
             mem_helper.fill(
                 record.output_commit_and_len_aux[chunk_idx].prev_timestamp,
                 timestamp_mm(),

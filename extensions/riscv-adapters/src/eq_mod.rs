@@ -8,11 +8,12 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
+            pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -59,7 +60,7 @@ pub struct Rv64IsEqualModAdapterCols<
     pub heap_read_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
 
     pub rd_ptr: T,
-    pub writes_aux: MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS>,
+    pub writes_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
 
 #[allow(dead_code)]
@@ -131,9 +132,9 @@ impl<
         // Read register values for rs.
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
-                .read(
+                .read_4(
                     MemoryAddress::new(d, ptr),
-                    expand_to_rv64_register(&val),
+                    pack_u8_for_bus::<AB>(&expand_to_rv64_register(&val)),
                     timestamp_pp(),
                     aux,
                 )
@@ -173,10 +174,17 @@ impl<
 
         for (ptr, block_data, block_aux) in izip!(rs_val_f, read_block_data, &cols.heap_read_aux) {
             for (offset, data, aux) in izip!(block_ptr_offset, block_data, block_aux) {
+                debug_assert_eq!(
+                    BLOCK_SIZE,
+                    openvm_circuit::arch::MEMORY_BLOCK_BYTES,
+                    "Rv64IsEqualMod adapter only supports BLOCK_SIZE = MEMORY_BLOCK_BYTES"
+                );
+                let data_array: [AB::Expr; openvm_circuit::arch::MEMORY_BLOCK_BYTES] =
+                    from_fn(|j| data[j].clone());
                 self.memory_bridge
-                    .read(
+                    .read_4(
                         MemoryAddress::new(e, ptr.clone() + offset),
-                        data,
+                        pack_u8_for_bus::<AB>(&data_array),
                         timestamp_pp(),
                         aux,
                     )
@@ -186,9 +194,9 @@ impl<
 
         // Write to rd register
         self.memory_bridge
-            .write(
+            .write_4(
                 MemoryAddress::new(d, cols.rd_ptr),
-                ctx.writes[0].clone(),
+                pack_u8_for_bus::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),
                 &cols.writes_aux,
             )
@@ -416,8 +424,12 @@ impl<
             },
         );
         // Writing in reverse order
-        cols.writes_aux
-            .set_prev_data(record.writes_aux.prev_data.map(F::from_u8));
+        cols.writes_aux.set_prev_data(from_fn(|i| {
+            F::from_u32(
+                record.writes_aux.prev_data[2 * i] as u32
+                    + 256 * record.writes_aux.prev_data[2 * i + 1] as u32,
+            )
+        }));
         mem_helper.fill(
             record.writes_aux.prev_timestamp,
             timestamp_mm(),

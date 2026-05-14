@@ -11,8 +11,8 @@ use openvm_circuit::{
     },
     system::memory::{
         offline_checker::{
-            MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
-            MemoryWriteAuxCols,
+            pack_u8_for_bus, MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols,
+            MemoryReadAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -163,9 +163,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         // read rs1
         let rs1_data = expand_to_rv64_register(&local_cols.rs1_data);
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rs1_ptr),
-                rs1_data,
+                pack_u8_for_bus::<AB>(&rs1_data),
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
             )
@@ -233,15 +233,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             - load_shift_amount;
 
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(read_as, read_ptr),
-                ctx.reads.1,
+                pack_u8_for_bus::<AB>(&ctx.reads.1),
                 timestamp_pp(),
                 &local_cols.read_data_aux,
             )
             .eval(builder, is_valid.clone());
-
-        let write_aux_cols = MemoryWriteAuxCols::from_base(local_cols.write_base_aux, ctx.reads.0);
 
         // write_as is 1 for loads and [local_cols.mem_as] for stores
         let write_as = select::<AB::Expr>(
@@ -254,12 +252,19 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         let write_ptr = select::<AB::Expr>(is_load.clone(), local_cols.rd_rs2_ptr, mem_ptr.clone())
             - store_shift_amount;
 
+        // prev_data is supplied by the core via `ctx.reads.0` as `RV64_REGISTER_NUM_LIMBS` Vars
+        // (the bytes previously at the write location). Pack them into BLOCK_FE_WIDTH
+        // expressions and feed them directly to the bridge via `write_4_with_prev`, which
+        // bypasses the `MemoryWriteAuxCols::prev_data` column slot entirely.
+        let prev_data_expr: [AB::Expr; openvm_circuit::arch::MEMORY_BLOCK_BYTES] =
+            ctx.reads.0.map(Into::into);
         self.memory_bridge
-            .write(
+            .write_4_with_prev(
                 MemoryAddress::new(write_as, write_ptr),
-                ctx.writes[0].clone(),
+                pack_u8_for_bus::<AB>(&ctx.writes[0].clone()),
+                pack_u8_for_bus::<AB>(&prev_data_expr),
                 timestamp_pp(),
-                &write_aux_cols,
+                &local_cols.write_base_aux,
             )
             .eval(builder, write_count);
 

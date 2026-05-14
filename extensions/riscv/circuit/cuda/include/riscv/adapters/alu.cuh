@@ -14,7 +14,7 @@ template <typename T> struct Rv64BaseAluAdapterCols {
     T rs2;    // Pointer if rs2 was a read, immediate value otherwise
     T rs2_as; // 1 if rs2 was a read, 0 if an immediate
     MemoryReadAuxCols<T> reads_aux[2];
-    MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS> writes_aux;
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> writes_aux;
 };
 
 struct Rv64BaseAluAdapterRecord {
@@ -72,9 +72,15 @@ struct Rv64BaseAluAdapter {
             bitwise_lookup.add_range(record.rs2 & mask, (record.rs2 >> RV64_CELL_BITS) & mask);
         }
 
-        COL_WRITE_ARRAY(
-            row, Rv64BaseAluAdapterCols, writes_aux.prev_data, record.writes_aux.prev_data
-        );
+        Fp packed_prev[BLOCK_FE_WIDTH];
+#pragma unroll
+        for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
+            packed_prev[i] = Fp(
+                uint32_t(record.writes_aux.prev_data[2 * i])
+                + 256u * uint32_t(record.writes_aux.prev_data[2 * i + 1])
+            );
+        }
+        COL_WRITE_ARRAY(row, Rv64BaseAluAdapterCols, writes_aux.prev_data, packed_prev);
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64BaseAluAdapterCols, writes_aux)),
             record.writes_aux.prev_timestamp,

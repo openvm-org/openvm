@@ -4,8 +4,8 @@ use openvm_circuit::{
     arch::*,
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
+            pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -79,7 +79,7 @@ pub struct Rv64HintStoreCols<T> {
     pub mem_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
     pub mem_ptr_aux_cols: MemoryReadAuxCols<T>,
 
-    pub write_aux: MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS>,
+    pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
     pub data: [T; RV64_REGISTER_NUM_LIMBS],
 
     // only buffer
@@ -171,9 +171,9 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         // read mem_ptr
         let mem_ptr_data = expand_to_rv64_register(&local_cols.mem_ptr_limbs);
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.mem_ptr_ptr),
-                mem_ptr_data,
+                pack_u8_for_bus::<AB>(&mem_ptr_data),
                 timestamp_pp(),
                 &local_cols.mem_ptr_aux_cols,
             )
@@ -182,9 +182,9 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         // read num_words
         let num_words_data = expand_to_rv64_register(&local_cols.rem_words_limbs);
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.num_words_ptr),
-                num_words_data,
+                pack_u8_for_bus::<AB>(&num_words_data),
                 timestamp_pp(),
                 &local_cols.num_words_aux_cols,
             )
@@ -192,9 +192,9 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
 
         // write hint
         self.memory_bridge
-            .write(
+            .write_4(
                 MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), mem_ptr.clone()),
-                local_cols.data,
+                pack_u8_for_bus::<AB>(&local_cols.data.map(Into::into)),
                 timestamp_pp(),
                 &local_cols.write_aux,
             )
@@ -617,8 +617,12 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                         // Note: writing in reverse
                         cols.data = var.data.map(|x| F::from_u8(x));
 
-                        cols.write_aux
-                            .set_prev_data(var.data_write_aux.prev_data.map(|x| F::from_u8(x)));
+                        cols.write_aux.set_prev_data(std::array::from_fn(|i| {
+                            F::from_u32(
+                                var.data_write_aux.prev_data[2 * i] as u32
+                                    + 256 * var.data_write_aux.prev_data[2 * i + 1] as u32,
+                            )
+                        }));
                         mem_helper.fill(
                             var.data_write_aux.prev_timestamp,
                             timestamp + 2,

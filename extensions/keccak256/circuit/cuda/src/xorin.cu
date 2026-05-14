@@ -145,9 +145,17 @@ __global__ void xorin_tracegen(
                 rec.buffer_write_aux_cols[t].prev_timestamp,
                 timestamp
             );
+            Fp packed_prev[BLOCK_FE_WIDTH];
+#pragma unroll
+            for (size_t k = 0; k < BLOCK_FE_WIDTH; k++) {
+                packed_prev[k] = Fp(
+                    uint32_t(rec.buffer_write_aux_cols[t].prev_data[2 * k])
+                    + 256u * uint32_t(rec.buffer_write_aux_cols[t].prev_data[2 * k + 1])
+                );
+            }
             XORIN_WRITE_ARRAY(
                 mem_oc.buffer_bytes_write_aux_cols[t].prev_data,
-                rec.buffer_write_aux_cols[t].prev_data
+                packed_prev
             );
             timestamp++;
         }
