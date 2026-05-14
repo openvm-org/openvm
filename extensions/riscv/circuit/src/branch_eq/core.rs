@@ -5,8 +5,8 @@ use openvm_circuit::{
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
@@ -37,24 +37,27 @@ pub struct BranchEqualCoreCols<T, const NUM_LIMBS: usize> {
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(BranchEqualCoreCols<u8, NUM_LIMBS>)]
-pub struct BranchEqualCoreAir<const NUM_LIMBS: usize> {
-    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
+#[columns_via(BranchEqualCoreCols<u16, NUM_LIMBS>)]
+pub struct BranchEqualCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub range_bus: VariableRangeCheckerBus,
     offset: usize,
     pc_step: u32,
 }
 
-impl<F: Field, const NUM_LIMBS: usize> BaseAir<F> for BranchEqualCoreAir<NUM_LIMBS> {
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
+    for BranchEqualCoreAir<NUM_LIMBS, LIMB_BITS>
+{
     fn width(&self) -> usize {
         BranchEqualCoreCols::<F, NUM_LIMBS>::width()
     }
 }
-impl<F: Field, const NUM_LIMBS: usize> BaseAirWithPublicValues<F>
-    for BranchEqualCoreAir<NUM_LIMBS>
+impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
+    for BranchEqualCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
-impl<AB, I, const NUM_LIMBS: usize> VmCoreAir<AB, I> for BranchEqualCoreAir<NUM_LIMBS>
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
+    for BranchEqualCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -105,16 +108,16 @@ where
         }
         builder.when(is_valid.clone()).assert_one(sum);
 
-        // Range-check read columns a, b to [0, 256). After the memory-bus pack
-        // pairs share a packed field element on the bus; without
-        // local u8 checks the prover could re-split values across (a[2i],
-        // a[2i+1]) or (b[2i], b[2i+1]).
-        for i in 0..NUM_LIMBS / 2 {
-            self.bitwise_lookup_bus
-                .send_range(a[i * 2], a[i * 2 + 1])
+        // Range-check the LIMB_BITS-wide read columns a, b. Each limb is the canonical content of
+        // one packed memory-bus field element; without these checks two different limb assignments
+        // could collide on the bus while disagreeing in the AIR's equality check above (the
+        // diff `a[i] - b[i]` is taken element-wise in F, not packed).
+        for i in 0..NUM_LIMBS {
+            self.range_bus
+                .range_check(a[i], LIMB_BITS)
                 .eval(builder, is_valid.clone());
-            self.bitwise_lookup_bus
-                .send_range(b[i * 2], b[i * 2 + 1])
+            self.range_bus
+                .range_check(b[i], LIMB_BITS)
                 .eval(builder, is_valid.clone());
         }
 
@@ -151,8 +154,8 @@ where
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct BranchEqualCoreRecord<const NUM_LIMBS: usize> {
-    pub a: [u8; NUM_LIMBS],
-    pub b: [u8; NUM_LIMBS],
+    pub a: [u16; NUM_LIMBS],
+    pub b: [u16; NUM_LIMBS],
     pub imm: u32,
     pub local_opcode: u8,
 }
@@ -165,9 +168,9 @@ pub struct BranchEqualExecutor<A, const NUM_LIMBS: usize> {
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct BranchEqualFiller<A, const NUM_LIMBS: usize> {
+pub struct BranchEqualFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub offset: usize,
     pub pc_step: u32,
 }
@@ -176,7 +179,7 @@ impl<F, A, RA, const NUM_LIMBS: usize> PreflightExecutor<F, RA>
     for BranchEqualExecutor<A, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceExecutor<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    A: 'static + AdapterTraceExecutor<F, ReadData: Into<[[u16; NUM_LIMBS]; 2]>, WriteData = ()>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -223,7 +226,8 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize> TraceFiller<F> for BranchEqualFiller<A, NUM_LIMBS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
+    for BranchEqualFiller<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
@@ -255,19 +259,17 @@ where
         core_row.imm = F::from_u32(record.imm);
         core_row.cmp_result = F::from_bool(cmp_result);
 
-        // Mirror AIR's u8 range-checks on read pairs (a[2i], a[2i+1]) and
-        // (b[2i], b[2i+1]) so the bitwise-lookup bus stays balanced.
-        for pair in record.a.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32, pair[1] as u32);
+        // Mirror AIR's per-limb LIMB_BITS-wide range-checks on each read limb so the variable
+        // range checker bus stays balanced.
+        for &v in record.a.iter() {
+            self.range_checker_chip.add_count(v as u32, LIMB_BITS);
         }
-        for pair in record.b.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32, pair[1] as u32);
+        for &v in record.b.iter() {
+            self.range_checker_chip.add_count(v as u32, LIMB_BITS);
         }
 
-        core_row.b = record.b.map(F::from_u8);
-        core_row.a = record.a.map(F::from_u8);
+        core_row.b = record.b.map(|v| F::from_u32(v as u32));
+        core_row.a = record.a.map(|v| F::from_u32(v as u32));
     }
 }
 
@@ -275,8 +277,8 @@ where
 #[inline(always)]
 pub(super) fn fast_run_eq<const NUM_LIMBS: usize>(
     local_opcode: BranchEqualOpcode,
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
+    x: &[u16; NUM_LIMBS],
+    y: &[u16; NUM_LIMBS],
 ) -> bool {
     match local_opcode {
         BranchEqualOpcode::BEQ => x == y,
@@ -288,15 +290,19 @@ pub(super) fn fast_run_eq<const NUM_LIMBS: usize>(
 #[inline(always)]
 pub(super) fn run_eq<F, const NUM_LIMBS: usize>(
     is_beq: bool,
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
+    x: &[u16; NUM_LIMBS],
+    y: &[u16; NUM_LIMBS],
 ) -> (bool, usize, F)
 where
     F: PrimeField32,
 {
     for i in 0..NUM_LIMBS {
         if x[i] != y[i] {
-            return (!is_beq, i, (F::from_u8(x[i]) - F::from_u8(y[i])).inverse());
+            return (
+                !is_beq,
+                i,
+                (F::from_u32(x[i] as u32) - F::from_u32(y[i] as u32)).inverse(),
+            );
         }
     }
     (is_beq, 0, F::ZERO)

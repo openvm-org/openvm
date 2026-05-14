@@ -1,20 +1,18 @@
-use std::{array, borrow::BorrowMut, sync::Arc};
+use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS,
-        },
+        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
         Arena, ExecutionBridge, PreflightExecutor,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::i32_to_f,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
-};
+use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
+#[cfg(feature = "cuda")]
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+#[cfg(feature = "cuda")]
+use std::sync::Arc;
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_riscv_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::{
@@ -35,7 +33,7 @@ use {
         adapters::Rv64BranchAdapterRecord, BranchLessThanCoreRecord, Rv64BranchLessThanChipGpu,
     },
     openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
+        testing::{GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
     },
 };
@@ -43,9 +41,10 @@ use {
 use super::{run_cmp, Rv64BranchLessThanChip};
 use crate::{
     adapters::{
-        Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller, RV64_CELL_BITS,
+        Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller,
         RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
+    branch_eq::{RV64_BRANCH_LIMB_BITS, RV64_BRANCH_NUM_LIMBS},
     branch_lt::BranchLessThanCoreCols,
     BranchLessThanCoreAir, BranchLessThanFiller, Rv64BranchLessThanAir, Rv64BranchLessThanExecutor,
 };
@@ -53,6 +52,18 @@ use crate::{
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
+
+/// Convert a `[u16; 4]` register value to its little-endian 8-byte representation.
+#[inline]
+fn u16_array_to_bytes_le(arr: &[u16; RV64_BRANCH_NUM_LIMBS]) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    let mut out = [0u8; RV64_REGISTER_NUM_LIMBS];
+    for (i, &v) in arr.iter().enumerate() {
+        let [lo, hi] = v.to_le_bytes();
+        out[2 * i] = lo;
+        out[2 * i + 1] = hi;
+    }
+    out
+}
 type Harness = TestChipHarness<
     F,
     Rv64BranchLessThanExecutor,
@@ -63,7 +74,7 @@ type Harness = TestChipHarness<
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (
     Rv64BranchLessThanAir,
@@ -72,7 +83,7 @@ fn create_harness_fields(
 ) {
     let air = Rv64BranchLessThanAir::new(
         Rv64BranchAdapterAir::new(execution_bridge, memory_bridge),
-        BranchLessThanCoreAir::new(bitwise_chip.bus(), BranchLessThanOpcode::CLASS_OFFSET),
+        BranchLessThanCoreAir::new(range_checker_chip.bus(), BranchLessThanOpcode::CLASS_OFFSET),
     );
     let executor = Rv64BranchLessThanExecutor::new(
         Rv64BranchAdapterExecutor::new(),
@@ -81,7 +92,7 @@ fn create_harness_fields(
     let chip = Rv64BranchLessThanChip::new(
         BranchLessThanFiller::new(
             Rv64BranchAdapterFiller,
-            bitwise_chip,
+            range_checker_chip,
             BranchLessThanOpcode::CLASS_OFFSET,
         ),
         memory_helper,
@@ -89,29 +100,15 @@ fn create_harness_fields(
     (air, executor, chip)
 }
 
-fn create_harness(
-    tester: &mut VmChipTestBuilder<F>,
-) -> (
-    Harness,
-    (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
-    ),
-) {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
-        bitwise_bus,
-    ));
-
+fn create_harness(tester: &mut VmChipTestBuilder<F>) -> Harness {
+    let range_checker = tester.range_checker();
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        bitwise_chip.clone(),
+        range_checker,
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
-
-    (harness, (bitwise_chip.air, bitwise_chip))
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -121,22 +118,24 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     arena: &mut RA,
     rng: &mut StdRng,
     opcode: BranchLessThanOpcode,
-    a: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-    b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
+    a: Option<[u16; RV64_BRANCH_NUM_LIMBS]>,
+    b: Option<[u16; RV64_BRANCH_NUM_LIMBS]>,
     imm: Option<i32>,
 ) {
-    let a = a.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+    let a = a.unwrap_or(array::from_fn(|_| rng.random_range(0..=u16::MAX)));
     let b = b.unwrap_or(if rng.random_bool(0.5) {
         a
     } else {
-        array::from_fn(|_| rng.random_range(0..=u8::MAX))
+        array::from_fn(|_| rng.random_range(0..=u16::MAX))
     });
 
     let imm = imm.unwrap_or(rng.random_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
-    let rs1 = gen_pointer(rng, 8);
-    let rs2 = gen_pointer(rng, 8);
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_u8));
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_u8));
+    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let a_bytes: [F; RV64_REGISTER_NUM_LIMBS] = u16_array_to_bytes_le(&a).map(F::from_u8);
+    let b_bytes: [F; RV64_REGISTER_NUM_LIMBS] = u16_array_to_bytes_le(&b).map(F::from_u8);
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a_bytes);
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b_bytes);
 
     tester.execute_with_pc(
         executor,
@@ -153,7 +152,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
 
     let (cmp_result, _, _, _) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode.local_usize() as u8, &a, &b);
+        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(opcode.local_usize() as u8, &a, &b);
     let from_pc = tester.last_from_pc().as_canonical_u32() as i32;
     let to_pc = tester.last_to_pc().as_canonical_u32() as i32;
     let pc_inc = if cmp_result { imm } else { 4 };
@@ -175,7 +174,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 fn rand_branch_lt_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise_chip) = create_harness(&mut tester);
+    let mut harness = create_harness(&mut tester);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -197,8 +196,8 @@ fn rand_branch_lt_test(opcode: BranchLessThanOpcode, num_ops: usize) {
         &mut harness.arena,
         &mut rng,
         opcode,
-        Some([101, 128, 202, 255, 255, 255, 255, 255]),
-        Some([101, 128, 202, 255, 255, 255, 255, 255]),
+        Some([0xff01, 0xfe80, 0xcaca, 0xffff]),
+        Some([0xff01, 0xfe80, 0xcaca, 0xffff]),
         Some(24),
     );
     set_and_execute(
@@ -207,16 +206,12 @@ fn rand_branch_lt_test(opcode: BranchLessThanOpcode, num_ops: usize) {
         &mut harness.arena,
         &mut rng,
         opcode,
-        Some([36, 0, 0, 0, 0, 0, 0, 0]),
-        Some([36, 0, 0, 0, 0, 0, 0, 0]),
+        Some([36, 0, 0, 0]),
+        Some([36, 0, 0, 0]),
         Some(24),
     );
 
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise_chip)
-        .finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -238,16 +233,16 @@ struct BranchLessThanPrankValues<const NUM_LIMBS: usize> {
 #[allow(clippy::too_many_arguments)]
 fn run_negative_branch_lt_test(
     opcode: BranchLessThanOpcode,
-    a: [u8; RV64_REGISTER_NUM_LIMBS],
-    b: [u8; RV64_REGISTER_NUM_LIMBS],
+    a: [u16; RV64_BRANCH_NUM_LIMBS],
+    b: [u16; RV64_BRANCH_NUM_LIMBS],
     prank_cmp_result: bool,
-    prank_vals: BranchLessThanPrankValues<RV64_REGISTER_NUM_LIMBS>,
+    prank_vals: BranchLessThanPrankValues<RV64_BRANCH_NUM_LIMBS>,
     _interaction_error: bool,
 ) {
     let imm = 16i32;
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&mut tester);
+    let mut harness = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -265,7 +260,7 @@ fn run_negative_branch_lt_test(
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut BranchLessThanCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
+        let cols: &mut BranchLessThanCoreCols<F, RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
         if let Some(a_msb) = prank_vals.a_msb {
@@ -290,18 +285,24 @@ fn run_negative_branch_lt_test(
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
         .finalize();
     tester
         .simple_test()
         .expect_err("Expected verification to fail, but it passed");
 }
 
+// Canonical relation: a < b (unsigned). The lowest u16 differs (0x4900 < 0x9100); higher limbs
+// match. MSB = 0xcd05 has bit 15 set, so both are negative under signed comparison; sign matches
+// → signed BLT also gives a < b.
+const A_LT_B_LOWER: [u16; RV64_BRANCH_NUM_LIMBS] = [0x4900, 0x5638, 0x6459, 0xcd05];
+const A_LT_B_HIGHER: [u16; RV64_BRANCH_NUM_LIMBS] = [0x9100, 0x5638, 0x6459, 0xcd05];
+
 #[test]
 fn rv64_blt_wrong_lt_cmp_negative_test() {
-    let a = [145, 56, 89, 100, 5, 34, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
+    let a = A_LT_B_LOWER;
+    let b = A_LT_B_HIGHER;
     let prank_vals = Default::default();
+    // Canonical (a<b) cmp_result is true for BLT/BLTU and false for BGE/BGEU; prank to opposite.
     run_negative_branch_lt_test(BranchLessThanOpcode::BLT, a, b, false, prank_vals, false);
     run_negative_branch_lt_test(BranchLessThanOpcode::BLTU, a, b, false, prank_vals, false);
     run_negative_branch_lt_test(BranchLessThanOpcode::BGE, a, b, true, prank_vals, false);
@@ -309,21 +310,11 @@ fn rv64_blt_wrong_lt_cmp_negative_test() {
 }
 
 #[test]
-fn rv64_blt_wrong_ge_cmp_negative_test() {
-    let a = [73, 56, 89, 100, 5, 35, 25, 205];
-    let b = [145, 56, 89, 100, 5, 34, 25, 205];
-    let prank_vals = Default::default();
-    run_negative_branch_lt_test(BranchLessThanOpcode::BLT, a, b, true, prank_vals, false);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BLTU, a, b, true, prank_vals, false);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BGE, a, b, false, prank_vals, false);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BGEU, a, b, false, prank_vals, false);
-}
-
-#[test]
 fn rv64_blt_wrong_eq_cmp_negative_test() {
-    let a = [73, 56, 89, 100, 5, 35, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
+    let a = A_LT_B_LOWER;
+    let b = a;
     let prank_vals = Default::default();
+    // Canonical (a==b) cmp_result is false for BLT/BLTU and true for BGE/BGEU; prank to opposite.
     run_negative_branch_lt_test(BranchLessThanOpcode::BLT, a, b, true, prank_vals, false);
     run_negative_branch_lt_test(BranchLessThanOpcode::BLTU, a, b, true, prank_vals, false);
     run_negative_branch_lt_test(BranchLessThanOpcode::BGE, a, b, false, prank_vals, false);
@@ -332,8 +323,8 @@ fn rv64_blt_wrong_eq_cmp_negative_test() {
 
 #[test]
 fn rv64_blt_fake_diff_val_negative_test() {
-    let a = [145, 56, 89, 100, 5, 34, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
+    let a = A_LT_B_LOWER;
+    let b = A_LT_B_HIGHER;
     let prank_vals = BranchLessThanPrankValues {
         diff_val: Some(F::NEG_ONE.as_canonical_u32()),
         ..Default::default()
@@ -346,10 +337,10 @@ fn rv64_blt_fake_diff_val_negative_test() {
 
 #[test]
 fn rv64_blt_zero_diff_val_negative_test() {
-    let a = [145, 56, 89, 100, 5, 34, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
+    let a = A_LT_B_LOWER;
+    let b = A_LT_B_HIGHER;
     let prank_vals = BranchLessThanPrankValues {
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 1, 0]),
+        diff_marker: Some([1, 0, 0, 0]),
         diff_val: Some(0),
         ..Default::default()
     };
@@ -357,29 +348,14 @@ fn rv64_blt_zero_diff_val_negative_test() {
     run_negative_branch_lt_test(BranchLessThanOpcode::BLTU, a, b, false, prank_vals, true);
     run_negative_branch_lt_test(BranchLessThanOpcode::BGE, a, b, true, prank_vals, true);
     run_negative_branch_lt_test(BranchLessThanOpcode::BGEU, a, b, true, prank_vals, true);
-}
-
-#[test]
-fn rv64_blt_fake_diff_marker_negative_test() {
-    let a = [145, 56, 89, 100, 5, 34, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
-    let prank_vals = BranchLessThanPrankValues {
-        diff_marker: Some([1, 0, 0, 0, 0, 0, 0, 0]),
-        diff_val: Some(72),
-        ..Default::default()
-    };
-    run_negative_branch_lt_test(BranchLessThanOpcode::BLT, a, b, false, prank_vals, false);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BLTU, a, b, false, prank_vals, false);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BGE, a, b, true, prank_vals, false);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BGEU, a, b, true, prank_vals, false);
 }
 
 #[test]
 fn rv64_blt_zero_diff_marker_negative_test() {
-    let a = [145, 56, 89, 100, 5, 34, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
+    let a = A_LT_B_LOWER;
+    let b = A_LT_B_HIGHER;
     let prank_vals = BranchLessThanPrankValues {
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 0]),
+        diff_marker: Some([0, 0, 0, 0]),
         diff_val: Some(0),
         ..Default::default()
     };
@@ -387,118 +363,6 @@ fn rv64_blt_zero_diff_marker_negative_test() {
     run_negative_branch_lt_test(BranchLessThanOpcode::BLTU, a, b, false, prank_vals, false);
     run_negative_branch_lt_test(BranchLessThanOpcode::BGE, a, b, true, prank_vals, false);
     run_negative_branch_lt_test(BranchLessThanOpcode::BGEU, a, b, true, prank_vals, false);
-}
-
-#[test]
-fn rv64_blt_signed_wrong_a_msb_negative_test() {
-    let a = [145, 56, 89, 100, 5, 34, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
-    let prank_vals = BranchLessThanPrankValues {
-        a_msb: Some(206),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
-        diff_val: Some(1),
-        ..Default::default()
-    };
-    run_negative_branch_lt_test(BranchLessThanOpcode::BLT, a, b, false, prank_vals, false);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BGE, a, b, true, prank_vals, false);
-}
-
-#[test]
-fn rv64_blt_signed_wrong_a_msb_sign_negative_test() {
-    let a = [145, 56, 89, 100, 5, 34, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
-    let prank_vals = BranchLessThanPrankValues {
-        a_msb: Some(205),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
-        diff_val: Some(256),
-        ..Default::default()
-    };
-    run_negative_branch_lt_test(BranchLessThanOpcode::BLT, a, b, false, prank_vals, true);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BGE, a, b, true, prank_vals, true);
-}
-
-#[test]
-fn rv64_blt_signed_wrong_b_msb_negative_test() {
-    let a = [145, 56, 89, 100, 5, 36, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
-    let prank_vals = BranchLessThanPrankValues {
-        b_msb: Some(206),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
-        diff_val: Some(1),
-        ..Default::default()
-    };
-    run_negative_branch_lt_test(BranchLessThanOpcode::BLT, a, b, true, prank_vals, false);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BGE, a, b, false, prank_vals, false);
-}
-
-#[test]
-fn rv64_blt_signed_wrong_b_msb_sign_negative_test() {
-    let a = [145, 56, 89, 100, 5, 36, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
-    let prank_vals = BranchLessThanPrankValues {
-        b_msb: Some(205),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
-        diff_val: Some(256),
-        ..Default::default()
-    };
-    run_negative_branch_lt_test(BranchLessThanOpcode::BLT, a, b, true, prank_vals, true);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BGE, a, b, false, prank_vals, true);
-}
-
-#[test]
-fn rv64_blt_unsigned_wrong_a_msb_negative_test() {
-    let a = [145, 56, 89, 100, 5, 36, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
-    let prank_vals = BranchLessThanPrankValues {
-        a_msb: Some(204),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
-        diff_val: Some(1),
-        ..Default::default()
-    };
-    run_negative_branch_lt_test(BranchLessThanOpcode::BLTU, a, b, true, prank_vals, false);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BGEU, a, b, false, prank_vals, false);
-}
-
-#[test]
-fn rv64_blt_unsigned_wrong_a_msb_sign_negative_test() {
-    let a = [145, 56, 89, 100, 5, 36, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
-    let prank_vals = BranchLessThanPrankValues {
-        a_msb: Some(-51),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
-        diff_val: Some(256),
-        ..Default::default()
-    };
-    run_negative_branch_lt_test(BranchLessThanOpcode::BLTU, a, b, true, prank_vals, true);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BGEU, a, b, false, prank_vals, true);
-}
-
-#[test]
-fn rv64_blt_unsigned_wrong_b_msb_negative_test() {
-    let a = [145, 56, 89, 100, 5, 34, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
-    let prank_vals = BranchLessThanPrankValues {
-        b_msb: Some(206),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
-        diff_val: Some(1),
-        ..Default::default()
-    };
-    run_negative_branch_lt_test(BranchLessThanOpcode::BLTU, a, b, false, prank_vals, false);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BGEU, a, b, true, prank_vals, false);
-}
-
-#[test]
-fn rv64_blt_unsigned_wrong_b_msb_sign_negative_test() {
-    let a = [145, 56, 89, 100, 5, 34, 25, 205];
-    let b = [73, 56, 89, 100, 5, 35, 25, 205];
-    let prank_vals = BranchLessThanPrankValues {
-        b_msb: Some(-51),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
-        diff_val: Some(256),
-        ..Default::default()
-    };
-    run_negative_branch_lt_test(BranchLessThanOpcode::BLTU, a, b, false, prank_vals, true);
-    run_negative_branch_lt_test(BranchLessThanOpcode::BGEU, a, b, true, prank_vals, true);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -511,9 +375,9 @@ fn rv64_blt_unsigned_wrong_b_msb_sign_negative_test() {
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, _) = create_harness(&mut tester);
+    let mut chip = create_harness(&mut tester);
 
-    let x = [145, 56, 89, 100, 5, 34, 25, 205];
+    let x = [0x9100, 0x5638, 0x6459, 0xcd05];
     set_and_execute(
         &mut tester,
         &mut chip.executor,
@@ -539,98 +403,126 @@ fn execute_roundtrip_sanity_test() {
 
 #[test]
 fn run_cmp_unsigned_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [145, 56, 89, 100, 5, 34, 25, 205];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [73, 56, 89, 100, 5, 35, 25, 205];
-    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
-        BranchLessThanOpcode::BLTU as u8,
-        &x,
-        &y,
-    );
-    assert!(cmp_result);
-    assert_eq!(diff_idx, 5);
+    let x: [u16; RV64_BRANCH_NUM_LIMBS] = [0x9100, 0x5638, 0x6459, 0xcd05];
+    let y: [u16; RV64_BRANCH_NUM_LIMBS] = [0x4900, 0x5638, 0x6459, 0xcd05];
+    let (cmp_result, diff_idx, x_sign, y_sign) =
+        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
+            BranchLessThanOpcode::BLTU as u8,
+            &x,
+            &y,
+        );
+    assert!(!cmp_result);
+    assert_eq!(diff_idx, 0);
     assert!(!x_sign); // unsigned
     assert!(!y_sign); // unsigned
 
-    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
-        BranchLessThanOpcode::BGEU as u8,
-        &x,
-        &y,
-    );
-    assert!(!cmp_result);
-    assert_eq!(diff_idx, 5);
+    let (cmp_result, diff_idx, x_sign, y_sign) =
+        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
+            BranchLessThanOpcode::BGEU as u8,
+            &x,
+            &y,
+        );
+    assert!(cmp_result);
+    assert_eq!(diff_idx, 0);
     assert!(!x_sign); // unsigned
     assert!(!y_sign); // unsigned
 }
 
 #[test]
 fn run_cmp_same_sign_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [145, 56, 89, 100, 5, 34, 25, 205];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [73, 56, 89, 100, 5, 35, 25, 205];
+    let x: [u16; RV64_BRANCH_NUM_LIMBS] = [0x9100, 0x5638, 0x6459, 0xcd05];
+    let y: [u16; RV64_BRANCH_NUM_LIMBS] = [0x4900, 0x5638, 0x6459, 0xcd05];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(BranchLessThanOpcode::BLT as u8, &x, &y);
-    assert!(cmp_result);
-    assert_eq!(diff_idx, 5);
+        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
+            BranchLessThanOpcode::BLT as u8,
+            &x,
+            &y,
+        );
+    assert!(!cmp_result);
+    assert_eq!(diff_idx, 0);
     assert!(x_sign); // negative
     assert!(y_sign); // negative
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(BranchLessThanOpcode::BGE as u8, &x, &y);
-    assert!(!cmp_result);
-    assert_eq!(diff_idx, 5);
+        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
+            BranchLessThanOpcode::BGE as u8,
+            &x,
+            &y,
+        );
+    assert!(cmp_result);
+    assert_eq!(diff_idx, 0);
     assert!(x_sign); // negative
     assert!(y_sign); // negative
 }
 
 #[test]
 fn run_cmp_diff_sign_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 35, 25, 55, 0, 0, 0, 55];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [173, 34, 25, 205, 255, 255, 255, 205];
+    let x: [u16; RV64_BRANCH_NUM_LIMBS] = [0x232d, 0x3719, 0x0000, 0x3700];
+    let y: [u16; RV64_BRANCH_NUM_LIMBS] = [0x22ad, 0xcd19, 0xffff, 0xcd00];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(BranchLessThanOpcode::BLT as u8, &x, &y);
+        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
+            BranchLessThanOpcode::BLT as u8,
+            &x,
+            &y,
+        );
     assert!(!cmp_result);
-    assert_eq!(diff_idx, RV64_REGISTER_NUM_LIMBS - 1);
+    assert_eq!(diff_idx, RV64_BRANCH_NUM_LIMBS - 1);
     assert!(!x_sign); // positive
     assert!(y_sign); // negative
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(BranchLessThanOpcode::BGE as u8, &x, &y);
+        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
+            BranchLessThanOpcode::BGE as u8,
+            &x,
+            &y,
+        );
     assert!(cmp_result);
-    assert_eq!(diff_idx, RV64_REGISTER_NUM_LIMBS - 1);
+    assert_eq!(diff_idx, RV64_BRANCH_NUM_LIMBS - 1);
     assert!(!x_sign); // positive
     assert!(y_sign); // negative
 }
 
 #[test]
 fn run_cmp_eq_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 35, 25, 55, 0, 0, 0, 55];
+    let x: [u16; RV64_BRANCH_NUM_LIMBS] = [0x232d, 0x3719, 0x0000, 0x3700];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(BranchLessThanOpcode::BLT as u8, &x, &x);
+        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
+            BranchLessThanOpcode::BLT as u8,
+            &x,
+            &x,
+        );
     assert!(!cmp_result);
-    assert_eq!(diff_idx, RV64_REGISTER_NUM_LIMBS);
-    assert_eq!(x_sign, y_sign);
-
-    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
-        BranchLessThanOpcode::BLTU as u8,
-        &x,
-        &x,
-    );
-    assert!(!cmp_result);
-    assert_eq!(diff_idx, RV64_REGISTER_NUM_LIMBS);
+    assert_eq!(diff_idx, RV64_BRANCH_NUM_LIMBS);
     assert_eq!(x_sign, y_sign);
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(BranchLessThanOpcode::BGE as u8, &x, &x);
-    assert!(cmp_result);
-    assert_eq!(diff_idx, RV64_REGISTER_NUM_LIMBS);
+        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
+            BranchLessThanOpcode::BLTU as u8,
+            &x,
+            &x,
+        );
+    assert!(!cmp_result);
+    assert_eq!(diff_idx, RV64_BRANCH_NUM_LIMBS);
     assert_eq!(x_sign, y_sign);
 
-    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
-        BranchLessThanOpcode::BGEU as u8,
-        &x,
-        &x,
-    );
+    let (cmp_result, diff_idx, x_sign, y_sign) =
+        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
+            BranchLessThanOpcode::BGE as u8,
+            &x,
+            &x,
+        );
     assert!(cmp_result);
-    assert_eq!(diff_idx, RV64_REGISTER_NUM_LIMBS);
+    assert_eq!(diff_idx, RV64_BRANCH_NUM_LIMBS);
+    assert_eq!(x_sign, y_sign);
+
+    let (cmp_result, diff_idx, x_sign, y_sign) =
+        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
+            BranchLessThanOpcode::BGEU as u8,
+            &x,
+            &x,
+        );
+    assert!(cmp_result);
+    assert_eq!(diff_idx, RV64_BRANCH_NUM_LIMBS);
     assert_eq!(x_sign, y_sign);
 }
 
@@ -651,23 +543,17 @@ type GpuHarness = GpuTestChipHarness<
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
-    let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
-        bitwise_bus,
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        tester.range_checker().bus(),
     ));
-
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64BranchLessThanChipGpu::new(
-        tester.range_checker(),
-        tester.bitwise_op_lookup(),
-        tester.timestamp_max_bits(),
-    );
-
+    let gpu_chip =
+        Rv64BranchLessThanChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }
 
@@ -677,9 +563,9 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[test_case(BranchLessThanOpcode::BGE, 100)]
 #[test_case(BranchLessThanOpcode::BGEU, 100)]
 fn test_cuda_rand_branch_lt_tracegen(opcode: BranchLessThanOpcode, num_ops: usize) {
-    let mut tester =
-        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let mut tester = GpuChipTestBuilder::default();
     let mut rng = create_seeded_rng();
+
     let mut harness = create_cuda_harness(&tester);
 
     for _ in 0..num_ops {
@@ -697,7 +583,7 @@ fn test_cuda_rand_branch_lt_tracegen(opcode: BranchLessThanOpcode, num_ops: usiz
 
     type Record<'a> = (
         &'a mut Rv64BranchAdapterRecord,
-        &'a mut BranchLessThanCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
+        &'a mut BranchLessThanCoreRecord<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>,
     );
     harness
         .dense_arena

@@ -1,10 +1,11 @@
 #pragma once
 
 #include "primitives/trace_access.h"
+#include "primitives/variable_range.cuh"
 
 template <size_t NUM_LIMBS> struct BranchEqualCoreRecord {
-    uint8_t a[NUM_LIMBS];
-    uint8_t b[NUM_LIMBS];
+    uint16_t a[NUM_LIMBS];
+    uint16_t b[NUM_LIMBS];
     uint32_t imm;
     uint8_t local_opcode;
 };
@@ -18,12 +19,12 @@ template <typename T, size_t NUM_LIMBS> struct BranchEqualCoreCols {
     T diff_inv_marker[NUM_LIMBS];
 };
 
-template <size_t NUM_LIMBS> struct BranchEqualCore {
-    BitwiseOperationLookup bitwise_lookup;
+template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BranchEqualCore {
+    VariableRangeChecker range_checker;
 
     template <typename T> using Cols = BranchEqualCoreCols<T, NUM_LIMBS>;
 
-    __device__ BranchEqualCore(BitwiseOperationLookup bw) : bitwise_lookup(bw) {}
+    __device__ BranchEqualCore(VariableRangeChecker rc) : range_checker(rc) {}
 
     __device__ void fill_trace_row(RowSlice row, BranchEqualCoreRecord<NUM_LIMBS> rec) {
         size_t diff_idx = NUM_LIMBS;
@@ -61,12 +62,12 @@ template <size_t NUM_LIMBS> struct BranchEqualCore {
         COL_WRITE_VALUE(row, Cols, opcode_beq_flag, is_beq);
         COL_WRITE_VALUE(row, Cols, opcode_bne_flag, !is_beq);
 
-        // Mirror the AIR's u8 range-checks on (a[2i], a[2i+1]) and
-        // (b[2i], b[2i+1]) pairs added in Stage 1.4.
+        // Mirror the AIR's per-limb LIMB_BITS-wide range-checks on a[i] and b[i]
+        // (Pattern B u16 path).
 #pragma unroll
-        for (size_t i = 0; i + 1 < NUM_LIMBS; i += 2) {
-            bitwise_lookup.add_range(rec.a[i], rec.a[i + 1]);
-            bitwise_lookup.add_range(rec.b[i], rec.b[i + 1]);
+        for (size_t i = 0; i < NUM_LIMBS; ++i) {
+            range_checker.add_count(rec.a[i], LIMB_BITS);
+            range_checker.add_count(rec.b[i], LIMB_BITS);
         }
     }
 };

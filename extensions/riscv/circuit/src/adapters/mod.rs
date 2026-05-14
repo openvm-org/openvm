@@ -219,11 +219,14 @@ pub fn tracing_read<const N: usize>(
 
 /// Native u16-typed timestamped read. Pattern B chips that carry u16 limbs use this instead of
 /// `timed_read` (which routes through the u8 byte-view).
+///
+/// `byte_ptr` is the byte address (= bus pointer for u16-celled ASes); it is divided by the cell
+/// size (= 2) to obtain the cell-indexed pointer that `TracingMemory::read::<u16, N>` expects.
 #[inline(always)]
 pub fn timed_read_u16<const N: usize>(
     memory: &mut TracingMemory,
     address_space: u32,
-    ptr: u32,
+    byte_ptr: u32,
 ) -> (u32, [u16; N]) {
     debug_assert!(
         address_space == RV64_REGISTER_AS
@@ -233,9 +236,9 @@ pub fn timed_read_u16<const N: usize>(
 
     // SAFETY: Address spaces RV64_REGISTER_AS / RV64_MEMORY_AS / PUBLIC_VALUES_AS are u16-celled
     // post Stage 1.6; native u16 typed read hits the matching cell-type fast path.
-    // `ptr` is the byte pointer (= bus pointer for u16 ASes) so alignment to 2 is required.
-    debug_assert_eq!(ptr & 1, 0, "u16 typed read requires 2-byte aligned ptr");
-    unsafe { memory.read::<u16, N>(address_space, ptr) }
+    debug_assert_eq!(byte_ptr & 1, 0, "u16 typed read requires 2-byte aligned ptr");
+    let cell_ptr = byte_ptr >> 1;
+    unsafe { memory.read::<u16, N>(address_space, cell_ptr) }
 }
 
 /// u16-typed counterpart to [`tracing_read`].
@@ -243,10 +246,10 @@ pub fn timed_read_u16<const N: usize>(
 pub fn tracing_read_u16<const N: usize>(
     memory: &mut TracingMemory,
     address_space: u32,
-    ptr: u32,
+    byte_ptr: u32,
     prev_timestamp: &mut u32,
 ) -> [u16; N] {
-    let (t_prev, data) = timed_read_u16(memory, address_space, ptr);
+    let (t_prev, data) = timed_read_u16(memory, address_space, byte_ptr);
     *prev_timestamp = t_prev;
     data
 }
@@ -256,7 +259,7 @@ pub fn tracing_read_u16<const N: usize>(
 pub fn timed_write_u16<const N: usize>(
     memory: &mut TracingMemory,
     address_space: u32,
-    ptr: u32,
+    byte_ptr: u32,
     data: [u16; N],
 ) -> (u32, [u16; N]) {
     debug_assert!(
@@ -264,9 +267,10 @@ pub fn timed_write_u16<const N: usize>(
             || address_space == RV64_MEMORY_AS
             || address_space == PUBLIC_VALUES_AS
     );
-    debug_assert_eq!(ptr & 1, 0, "u16 typed write requires 2-byte aligned ptr");
+    debug_assert_eq!(byte_ptr & 1, 0, "u16 typed write requires 2-byte aligned ptr");
+    let cell_ptr = byte_ptr >> 1;
     // SAFETY: see `timed_read_u16`.
-    unsafe { memory.write::<u16, N>(address_space, ptr, data) }
+    unsafe { memory.write::<u16, N>(address_space, cell_ptr, data) }
 }
 
 /// u16-typed counterpart to [`tracing_write`].
@@ -274,12 +278,12 @@ pub fn timed_write_u16<const N: usize>(
 pub fn tracing_write_u16<const N: usize>(
     memory: &mut TracingMemory,
     address_space: u32,
-    ptr: u32,
+    byte_ptr: u32,
     data: [u16; N],
     prev_timestamp: &mut u32,
     prev_data: &mut [u16; N],
 ) {
-    let (t_prev, data_prev) = timed_write_u16(memory, address_space, ptr, data);
+    let (t_prev, data_prev) = timed_write_u16(memory, address_space, byte_ptr, data);
     *prev_timestamp = t_prev;
     *prev_data = data_prev;
 }

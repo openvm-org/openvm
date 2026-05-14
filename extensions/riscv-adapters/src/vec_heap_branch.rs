@@ -27,7 +27,8 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{
-    abstract_compose, expand_to_rv64_register, tracing_read, tracing_read_reg_ptr, RV64_CELL_BITS,
+    abstract_compose, expand_to_rv64_register, tracing_read_reg_ptr, tracing_read_u16,
+    RV64_CELL_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -38,9 +39,12 @@ use openvm_stark_backend::{
 /// This adapter reads from NUM_READS <= 2 pointers (for branch operations).
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
 ///   (address space 1).
-/// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `READ_SIZE` from the heap,
-///   starting from the addresses in `rs[0]` (and `rs[1]` if `NUM_READS = 2`).
+/// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `READ_SIZE` u16 cells
+///   from the heap, starting from the addresses in `rs[0]` (and `rs[1]` if `NUM_READS = 2`).
 /// * No writes are performed (branch operations only compare values).
+///
+/// Post Stage 2 Pattern B migration: `READ_SIZE` counts **u16 cells** (= 2 bytes each), matching
+/// the BLOCK_FE_WIDTH=4 bus shape. For an 8-byte heap chunk pass READ_SIZE=4.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct Rv64VecHeapBranchAdapterCols<
@@ -105,7 +109,8 @@ impl<
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Read register values for rs
+        // Read register values for rs (still byte-shaped: 4 low + 4 high zero-padded bytes,
+        // packed to 4 u16 for the bus).
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
                 .read_4(
@@ -149,23 +154,26 @@ impl<
         let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(abstract_compose);
 
         let e = AB::F::from_u32(RV64_MEMORY_AS);
-        // Reads from heap
+        // Reads from heap. After Pattern B, `READ_SIZE` is u16-cell count (= BLOCK_FE_WIDTH=4
+        // for an 8-byte chunk); each block's bus pointer advances by 2*READ_SIZE bytes.
+        const BUS_PTR_SCALE: usize = openvm_circuit::arch::BUS_PTR_SCALE as usize;
+        let bytes_per_block = READ_SIZE * BUS_PTR_SCALE;
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
                 debug_assert_eq!(
                     READ_SIZE,
-                    openvm_circuit::arch::MEMORY_BLOCK_BYTES,
-                    "VecHeapBranch adapter only supports READ_SIZE = MEMORY_BLOCK_BYTES"
+                    openvm_circuit::arch::BLOCK_FE_WIDTH,
+                    "VecHeapBranch adapter only supports READ_SIZE = BLOCK_FE_WIDTH (u16 cells)"
                 );
-                let read_array: [AB::Expr; openvm_circuit::arch::MEMORY_BLOCK_BYTES] =
+                let read_array: [AB::Expr; openvm_circuit::arch::BLOCK_FE_WIDTH] =
                     from_fn(|j| read[j].clone());
                 self.memory_bridge
                     .read_4(
                         MemoryAddress::new(
                             e,
-                            address.clone() + AB::Expr::from_usize(i * READ_SIZE),
+                            address.clone() + AB::Expr::from_usize(i * bytes_per_block),
                         ),
-                        pack_u8_for_bus::<AB>(&read_array),
+                        read_array,
                         timestamp_pp(),
                         aux,
                     )
@@ -250,7 +258,7 @@ impl<
 {
     const WIDTH: usize =
         Rv64VecHeapBranchAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>::width();
-    type ReadData = [[[u8; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
+    type ReadData = [[[u16; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
     type WriteData = ();
     type RecordMut<'a> =
         &'a mut Rv64VecHeapBranchAdapterRecord<NUM_READS, BLOCKS_PER_READ, READ_SIZE>;
@@ -283,17 +291,18 @@ impl<
             )
         });
 
-        // Read memory values
+        // Read memory values. READ_SIZE is in u16 cells; bytes per block = 2 * READ_SIZE.
+        let bytes_per_block = READ_SIZE * 2;
         from_fn(|i| {
             debug_assert!(
-                (record.rs_vals[i] as u64) + ((READ_SIZE * BLOCKS_PER_READ - 1) as u64)
+                (record.rs_vals[i] as u64) + ((bytes_per_block * BLOCKS_PER_READ - 1) as u64)
                     < (1u64 << self.pointer_max_bits)
             );
             from_fn(|j| {
-                tracing_read(
+                tracing_read_u16(
                     memory,
                     RV64_MEMORY_AS,
-                    record.rs_vals[i] + (j * READ_SIZE) as u32,
+                    record.rs_vals[i] + (j * bytes_per_block) as u32,
                     &mut record.reads_aux[i][j].prev_timestamp,
                 )
             })

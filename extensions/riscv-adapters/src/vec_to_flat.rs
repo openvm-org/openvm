@@ -487,12 +487,12 @@ where
     F: PrimeField32,
     A: AdapterTraceExecutor<
         F,
-        ReadData = [[[u8; BLOCK_SIZE]; BLOCKS_PER_READ]; NUM_READS],
+        ReadData = [[[u16; BLOCK_SIZE]; BLOCKS_PER_READ]; NUM_READS],
         WriteData = (),
     >,
 {
     const WIDTH: usize = A::WIDTH;
-    type ReadData = [[u8; TOTAL_READ_SIZE]; NUM_READS];
+    type ReadData = [[u16; TOTAL_READ_SIZE]; NUM_READS];
     type WriteData = ();
     type RecordMut<'a>
         = A::RecordMut<'a>
@@ -514,7 +514,7 @@ where
         let data_inner = <A as AdapterTraceExecutor<F>>::read(&self.0, memory, instruction, record);
 
         core::array::from_fn(|i| {
-            let mut out = [0u8; TOTAL_READ_SIZE];
+            let mut out = [0u16; TOTAL_READ_SIZE];
             for (block_idx, block) in data_inner[i].iter().enumerate() {
                 let start = block_idx * BLOCK_SIZE;
                 out[start..start + BLOCK_SIZE].copy_from_slice(&block[..]);
