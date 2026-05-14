@@ -253,11 +253,6 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                     .request_range(ptr_bytes[0] as u32, ptr_bytes[1] as u32);
                 self.bitwise_lookup_chip
                     .request_range(ptr_bytes[2] as u32, ptr_bytes[3] as u32);
-
-                for pair in postimage_buffer_bytes.chunks_exact(2) {
-                    self.bitwise_lookup_chip
-                        .request_range(pair[0] as u32, pair[1] as u32);
-                }
             });
         *self.shared_records.lock().unwrap() = records;
     }

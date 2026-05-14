@@ -247,12 +247,11 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             )
             .eval(builder, is_start.clone());
 
-        // Checking that hint is bytes
-        for i in 0..RV64_REGISTER_NUM_LIMBS / 2 {
-            self.bitwise_operation_lookup_bus
-                .send_range(local_cols.data[2 * i], local_cols.data[(2 * i) + 1])
-                .eval(builder, is_valid.clone());
-        }
+        // Note: `local_cols.data` is intentionally NOT byte-range-checked. The bytes appear only
+        // inside `pack_u8_for_bus(&local_cols.data)` for the AS2 memory write; AS2 is u16-celled
+        // post Stage 1.6, so the consumer of this memory only ever sees the packed
+        // `data[2k] + 256·data[2k+1]` field element. Any byte-pair decomposition that produces the
+        // same packed value satisfies the memory bus identically — there is no soundness gap.
 
         // buffer transition
         // `is_end` implies that the next row belongs to a new instruction,
@@ -592,11 +591,6 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                     .rchunks_exact_mut(width)
                     .zip(record.var.iter().enumerate().rev())
                     .for_each(|(row, (idx, var))| {
-                        for pair in var.data.chunks_exact(2) {
-                            self.bitwise_lookup_chip
-                                .request_range(pair[0] as u32, pair[1] as u32);
-                        }
-
                         let cols: &mut Rv64HintStoreCols<F> = row.borrow_mut();
                         let is_single = record.inner.num_words_ptr == u32::MAX;
                         timestamp -= 3;

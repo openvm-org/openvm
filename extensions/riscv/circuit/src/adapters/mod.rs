@@ -217,6 +217,73 @@ pub fn tracing_read<const N: usize>(
     data
 }
 
+/// Native u16-typed timestamped read. Pattern B chips that carry u16 limbs use this instead of
+/// `timed_read` (which routes through the u8 byte-view).
+#[inline(always)]
+pub fn timed_read_u16<const N: usize>(
+    memory: &mut TracingMemory,
+    address_space: u32,
+    ptr: u32,
+) -> (u32, [u16; N]) {
+    debug_assert!(
+        address_space == RV64_REGISTER_AS
+            || address_space == RV64_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS
+    );
+
+    // SAFETY: Address spaces RV64_REGISTER_AS / RV64_MEMORY_AS / PUBLIC_VALUES_AS are u16-celled
+    // post Stage 1.6; native u16 typed read hits the matching cell-type fast path.
+    // `ptr` is the byte pointer (= bus pointer for u16 ASes) so alignment to 2 is required.
+    debug_assert_eq!(ptr & 1, 0, "u16 typed read requires 2-byte aligned ptr");
+    unsafe { memory.read::<u16, N>(address_space, ptr) }
+}
+
+/// u16-typed counterpart to [`tracing_read`].
+#[inline(always)]
+pub fn tracing_read_u16<const N: usize>(
+    memory: &mut TracingMemory,
+    address_space: u32,
+    ptr: u32,
+    prev_timestamp: &mut u32,
+) -> [u16; N] {
+    let (t_prev, data) = timed_read_u16(memory, address_space, ptr);
+    *prev_timestamp = t_prev;
+    data
+}
+
+/// Native u16-typed timestamped write.
+#[inline(always)]
+pub fn timed_write_u16<const N: usize>(
+    memory: &mut TracingMemory,
+    address_space: u32,
+    ptr: u32,
+    data: [u16; N],
+) -> (u32, [u16; N]) {
+    debug_assert!(
+        address_space == RV64_REGISTER_AS
+            || address_space == RV64_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS
+    );
+    debug_assert_eq!(ptr & 1, 0, "u16 typed write requires 2-byte aligned ptr");
+    // SAFETY: see `timed_read_u16`.
+    unsafe { memory.write::<u16, N>(address_space, ptr, data) }
+}
+
+/// u16-typed counterpart to [`tracing_write`].
+#[inline(always)]
+pub fn tracing_write_u16<const N: usize>(
+    memory: &mut TracingMemory,
+    address_space: u32,
+    ptr: u32,
+    data: [u16; N],
+    prev_timestamp: &mut u32,
+    prev_data: &mut [u16; N],
+) {
+    let (t_prev, data_prev) = timed_write_u16(memory, address_space, ptr, data);
+    *prev_timestamp = t_prev;
+    *prev_data = data_prev;
+}
+
 /// Reads an RV64 register, records the memory access, and returns the low 32 bits. Debug-asserts
 /// the returned value fits in `pointer_max_bits` (which, for `pointer_max_bits <= 32`, also
 /// implies the upper 32 bits are zero).
