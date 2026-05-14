@@ -28,11 +28,11 @@ use test_case::test_case;
 
 use super::{core::run_add_sub, AddSubCoreAir, Rv64AddSubChip, Rv64AddSubExecutor};
 use crate::{
-    add_sub::AddSubCoreCols,
     adapters::{
         Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
         RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
     },
+    add_sub::AddSubCoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
     AddSubFiller, Rv64AddSubAir,
 };

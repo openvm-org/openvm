@@ -1,11 +1,11 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::{
-    add_sub::{AddSubCoreAir, AddSubExecutor, AddSubFiller},
     adapters::{
         Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller,
         RV64_CELL_BITS, RV64_WORD_NUM_LIMBS,
     },
+    add_sub::{AddSubCoreAir, AddSubExecutor, AddSubFiller},
 };
 
 mod execution;
