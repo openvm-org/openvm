@@ -145,7 +145,8 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
 
         *cols.block.request_id = F::from_usize(row_idx);
         set_arrayview_from_u8_slice(&mut cols.block.message_bytes, message_bytes);
-        // `prev_state` is u16-shaped: pack each pair of consecutive bytes into one u16 cell.
+        // Both `prev_state` and `new_state` are u16-shaped: pack each pair of consecutive bytes
+        // into one u16 cell.
         let prev_state_u16s = prev_state
             .chunks_exact(2)
             .map(|c| u16::from_le_bytes([c[0], c[1]]));
@@ -154,7 +155,14 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
             .iter_mut()
             .zip(prev_state_u16s)
             .for_each(|(slot, v)| *slot = F::from_u16(v));
-        set_arrayview_from_u8_slice(&mut cols.block.new_state, new_state);
+        let new_state_u16s = new_state
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]));
+        cols.block
+            .new_state
+            .iter_mut()
+            .zip(new_state_u16s)
+            .for_each(|(slot, v)| *slot = F::from_u16(v));
 
         *cols.instruction.is_enabled = F::ONE;
         cols.instruction.from_state.timestamp = F::from_u32(vm_record.timestamp);

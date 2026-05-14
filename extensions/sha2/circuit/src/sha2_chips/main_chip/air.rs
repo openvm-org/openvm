@@ -129,16 +129,23 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 *local.block.request_id + AB::Expr::ONE,
             );
 
-        // `prev_state` is already stored as u16 cells (one u16 per pair of bytes), so the bus
-        // payload is just the column values; no byte-pairing transformation is needed.
+        // Both `prev_state` and `new_state` are stored as u16 cells (one u16 per pair of bytes),
+        // matching the receiver-side `prev_hash` / `final_hash` shapes. The bus payload is just
+        // the column values; no byte-pairing transformation is needed.
         let prev_state_as_u16s = local
             .block
             .prev_state
             .iter()
             .map(|x| (*x).into())
             .collect::<Vec<AB::Expr>>();
+        let new_state_as_u16s = local
+            .block
+            .new_state
+            .iter()
+            .map(|x| (*x).into())
+            .collect::<Vec<AB::Expr>>();
 
-        // Send (STATE, request_id, prev_state_as_u16s, new_state) to the sha2 bus
+        // Send (STATE, request_id, prev_state_as_u16s, new_state_as_u16s) to the sha2 bus
         self.sha2_bus.send(
             builder,
             [
@@ -147,7 +154,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             ]
             .into_iter()
             .chain(prev_state_as_u16s)
-            .chain(local.block.new_state.into_iter().copied().map(|x| x.into())),
+            .chain(new_state_as_u16s),
             *local.instruction.is_enabled,
         );
 
@@ -341,24 +348,25 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .to_vec(),
             RV64_CELL_BITS,
         );
-        for i in 0..C::STATE_READS {
-            let chunk: [AB::Var; SHA2_WRITE_SIZE] = local
-                .block
-                .new_state
-                .slice(s![i * SHA2_READ_SIZE..(i + 1) * SHA2_READ_SIZE])
-                .to_vec()
-                .try_into()
-                .unwrap_or_else(|_| {
-                    panic!("new state is not the correct size");
-                });
-            let chunk_expr: [AB::Expr; SHA2_WRITE_SIZE] = chunk.map(Into::into);
+        // `new_state` is u16-shaped, so each `SHA2_WRITE_SIZE` (8-byte) memory write consumes
+        // `BLOCK_FE_WIDTH` u16 cells from the column. The bus payload is those cells (no
+        // byte→u16 packing).
+        for i in 0..C::STATE_WRITES {
+            let chunk: [AB::Expr; openvm_circuit::arch::BLOCK_FE_WIDTH] = std::array::from_fn(|j| {
+                (*local
+                    .block
+                    .new_state
+                    .get(i * openvm_circuit::arch::BLOCK_FE_WIDTH + j)
+                    .expect("new_state index out of bounds"))
+                .into()
+            });
             self.memory_bridge
                 .write_4(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_MEMORY_AS),
-                        dst_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
+                        dst_ptr_val.clone() + AB::F::from_usize(i * SHA2_WRITE_SIZE),
                     ),
-                    pack_u8_for_bus::<AB>(&chunk_expr),
+                    chunk,
                     timestamp_pp(),
                     &local.mem.write_aux[i],
                 )

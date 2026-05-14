@@ -161,14 +161,22 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
             }
         };
 
+        // The block hasher uses the variable range checker to validate the u16-shaped
+        // `final_hash` cells.
+        let range_bus = inventory.range_checker().bus;
+
         // this bus will be used for communication between the block hasher chip and the main chip
         let sha2_bus_index = inventory.new_bus_idx();
         // the sha2 subair needs its own bus for self-interactions
         let subair_bus_index = inventory.new_bus_idx();
 
         // SHA-256
-        let sha256_block_hasher_air =
-            Sha2BlockHasherVmAir::<Sha256Config>::new(bitwise_lu, subair_bus_index, sha2_bus_index);
+        let sha256_block_hasher_air = Sha2BlockHasherVmAir::<Sha256Config>::new(
+            bitwise_lu,
+            range_bus,
+            subair_bus_index,
+            sha2_bus_index,
+        );
         inventory.add_air(sha256_block_hasher_air);
 
         let sha256_main_air = Sha2MainAir::<Sha256Config>::new(
@@ -181,8 +189,12 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
         inventory.add_air(sha256_main_air);
 
         // SHA-512
-        let sha512_block_hasher_air =
-            Sha2BlockHasherVmAir::<Sha512Config>::new(bitwise_lu, subair_bus_index, sha2_bus_index);
+        let sha512_block_hasher_air = Sha2BlockHasherVmAir::<Sha512Config>::new(
+            bitwise_lu,
+            range_bus,
+            subair_bus_index,
+            sha2_bus_index,
+        );
         inventory.add_air(sha512_block_hasher_air);
 
         let sha512_main_air = Sha2MainAir::<Sha512Config>::new(
@@ -243,6 +255,7 @@ where
         let records = Arc::new(Mutex::new(None));
         let sha256_block_hasher_chip = Sha2BlockHasherChip::<Val<SC>, Sha256Config>::new(
             bitwise_lu.clone(),
+            range_checker.clone(),
             pointer_max_bits,
             mem_helper.clone(),
             records.clone(),
@@ -264,6 +277,7 @@ where
         let records = Arc::new(Mutex::new(None));
         let sha512_block_hasher_chip = Sha2BlockHasherChip::<Val<SC>, Sha512Config>::new(
             bitwise_lu.clone(),
+            range_checker.clone(),
             pointer_max_bits,
             mem_helper.clone(),
             records.clone(),

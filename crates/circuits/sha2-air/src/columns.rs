@@ -64,9 +64,9 @@ pub struct Sha2DigestCols<
     pub hash: Sha2WorkVarsCols<T, WORD_BITS, ROUNDS_PER_ROW, WORD_U16S>,
     pub schedule_helper:
         Sha2MessageHelperCols<T, WORD_U16S, ROUNDS_PER_ROW, ROUNDS_PER_ROW_MINUS_ONE>,
-    /// The actual final hash values of the given block
+    /// The actual final hash values of the given block, as little-endian 16-bit limbs.
     /// Note: the above `hash` will be equal to `final_hash` unless we are on the last block
-    pub final_hash: [[T; WORD_U8S]; HASH_WORDS],
+    pub final_hash: [[T; WORD_U16S]; HASH_WORDS],
     /// The final hash of the previous block
     /// Note: will be constrained using interactions with the chip itself
     pub prev_hash: [[T; WORD_U16S]; HASH_WORDS],

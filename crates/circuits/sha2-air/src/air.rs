@@ -2,8 +2,8 @@ use std::{iter::once, marker::PhantomData};
 
 use ndarray::s;
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::select, ColumnsAir,
-    SubAir,
+    bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::select,
+    var_range::VariableRangeCheckerBus, ColumnsAir, SubAir,
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -25,6 +25,8 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct Sha2BlockHasherSubAir<C: Sha2BlockHasherSubairConfig> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
+    /// 16-bit range checker bus used to validate the u16-shaped `final_hash` cells.
+    pub range_bus: VariableRangeCheckerBus,
     pub row_idx_encoder: Encoder,
     /// Internal bus for self-interactions in this AIR.
     pub private_bus: PermutationCheckBus,
@@ -36,9 +38,14 @@ pub struct Sha2BlockHasherSubAir<C: Sha2BlockHasherSubairConfig> {
 impl<C: Sha2BlockHasherSubairConfig> ColumnsAir for Sha2BlockHasherSubAir<C> {}
 
 impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
-    pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, private_bus_idx: BusIndex) -> Self {
+    pub fn new(
+        bitwise_lookup_bus: BitwiseOperationLookupBus,
+        range_bus: VariableRangeCheckerBus,
+        private_bus_idx: BusIndex,
+    ) -> Self {
         Self {
             bitwise_lookup_bus,
+            range_bus,
             row_idx_encoder: Encoder::new(C::ROWS_PER_BLOCK + 1, 2, false), /* + 1 for dummy
                                                                              *   (padding) rows */
             private_bus: PermutationCheckBus::new(private_bus_idx),
@@ -149,7 +156,9 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
     ) {
         // Assert that the previous hash + work vars == final hash.
         // That is, `next.prev_hash[i] + local.work_vars[i] == next.final_hash[i]`
-        // where addition is done modulo 2^32
+        // where addition is done modulo 2^32.
+        // `final_hash` is now stored as `WORD_U16S` u16 limbs per word (matching `prev_hash`),
+        // so each limb is taken directly from the column without byte-pairing.
         for i in 0..C::HASH_WORDS {
             let mut carry = AB::Expr::ZERO;
             for j in 0..C::WORD_U16S {
@@ -174,13 +183,7 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
                         1,
                     )
                 };
-                let final_hash_limb = compose::<AB::Expr>(
-                    next.final_hash
-                        .slice(s![i, j * 2..(j + 1) * 2])
-                        .as_slice()
-                        .unwrap(),
-                    8,
-                );
+                let final_hash_limb: AB::Expr = next.final_hash[[i, j]].into();
 
                 carry = AB::Expr::from(AB::F::from_u32(1 << 16).inverse())
                     * (next.prev_hash[[i, j]] + work_var_limb + carry - final_hash_limb);
@@ -188,11 +191,12 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
                     .when(*next.flags.is_digest_row)
                     .assert_bool(carry.clone());
             }
-            // constrain the final hash limbs two at a time since we can do two checks per
-            // interaction
-            for chunk in next.final_hash.row(i).as_slice().unwrap().chunks(2) {
-                self.bitwise_lookup_bus
-                    .send_range(chunk[0], chunk[1])
+            // Range-check each u16 limb of `final_hash` via the variable range checker bus.
+            // (The old byte-shaped representation paired bytes for a single bitwise-lookup
+            // interaction; with u16 cells we issue one range_check per cell.)
+            for j in 0..C::WORD_U16S {
+                self.range_bus
+                    .range_check(next.final_hash[[i, j]], 16)
                     .eval(builder, *next.flags.is_digest_row);
             }
         }
