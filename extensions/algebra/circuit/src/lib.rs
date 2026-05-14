@@ -20,6 +20,13 @@ pub const NUM_LIMBS_32: usize = 32;
 /// Number of limbs for 384-bit (48-byte) moduli
 pub const NUM_LIMBS_48: usize = 48;
 
+// U16-cell limb counts for u16-shaped chips. Each u16 cell holds 2 bytes, so the u16-cell count
+// is half the byte limb count.
+/// Number of u16 limbs for 256-bit moduli: 32 / 2 = 16
+pub const NUM_LIMBS_32_U16: usize = NUM_LIMBS_32 / 2;
+/// Number of u16 limbs for 384-bit moduli: 48 / 2 = 24
+pub const NUM_LIMBS_48_U16: usize = NUM_LIMBS_48 / 2;
+
 // Blocks per operation for modular arithmetic (single field element)
 /// Blocks for 32-limb modular operations: 32 / 8 = 4 blocks
 pub const MODULAR_BLOCKS_32: usize = NUM_LIMBS_32 / MEMORY_BLOCK_BYTES;
