@@ -425,7 +425,7 @@ type GpuHarness = GpuTestChipHarness<
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
-        tester.range_checker().bus(),
+        openvm_circuit::arch::testing::default_var_range_checker_bus(),
     ));
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),

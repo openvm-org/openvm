@@ -411,6 +411,26 @@ pub fn expand_to_rv64_register<V: Clone + Into<T>, T: PrimeCharacteristicRing, c
     })
 }
 
+/// Expand `N` u16 limbs to `BLOCK_FE_WIDTH` (4) by zero-padding the upper limbs. Pattern B
+/// counterpart to [`expand_to_rv64_register`] for chips that carry u16 columns and emit a
+/// 4-cell bus message directly.
+pub fn expand_to_rv64_block<V, T, const N: usize>(
+    limbs: &[V; N],
+) -> [T; openvm_circuit::arch::BLOCK_FE_WIDTH]
+where
+    V: Clone + Into<T>,
+    T: PrimeCharacteristicRing,
+{
+    const { assert!(N <= openvm_circuit::arch::BLOCK_FE_WIDTH) }
+    std::array::from_fn(|i| {
+        if i < N {
+            limbs[i].clone().into()
+        } else {
+            T::ZERO
+        }
+    })
+}
+
 pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>, const N: usize>(
     data: [V; N],
 ) -> T {
