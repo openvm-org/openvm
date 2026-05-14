@@ -1,17 +1,17 @@
 //! Pattern B u16-shaped variant of [`Rv64IsEqualModAdapter`].
 //!
 //! Differences vs the u8 variant:
-//! - Register-side `rs_val` columns are `[T; BLOCK_FE_WIDTH]` (4 u16 cells) instead of
-//!   `[T; RV64_WORD_NUM_LIMBS]` (8 bytes). The register read passes the u16 cells directly to
-//!   the memory bus via [`expand_to_rv64_block`].
+//! - Register-side `rs_val` columns are `[T; BLOCK_FE_WIDTH]` (4 u16 cells) instead of `[T;
+//!   RV64_WORD_NUM_LIMBS]` (8 bytes). The register read passes the u16 cells directly to the memory
+//!   bus via [`expand_to_rv64_block`].
 //! - Heap reads are u16-cell-shaped: `BLOCK_SIZE` counts u16 cells per block (= `BLOCK_FE_WIDTH`),
 //!   and the per-block byte stride is `j * BLOCK_SIZE * BUS_PTR_SCALE`. The 4 u16 cells of each
 //!   read block are passed through to `read_4` without `pack_u8_for_bus`.
 //! - The write to `rd` is `BLOCK_FE_WIDTH` u16 cells wide (passed through directly).
 //! - The base-address composition uses base 2^16 per cell rather than 2^8 per byte.
-//! - The pointer high-cell range check uses the same byte-pair bitwise lookup with the shift
-//!   `1 << (16 * BLOCK_FE_WIDTH - address_bits)`; for typical `address_bits < 56` this constrains
-//!   the top u16 cell to 0.
+//! - The pointer high-cell range check uses the same byte-pair bitwise lookup with the shift `1 <<
+//!   (16 * BLOCK_FE_WIDTH - address_bits)`; for typical `address_bits < 56` this constrains the top
+//!   u16 cell to 0.
 
 use std::{
     array::from_fn,
@@ -45,8 +45,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    expand_to_rv64_block, tracing_read_reg_ptr, tracing_read_u16, tracing_write_u16,
-    RV64_CELL_BITS,
+    expand_to_rv64_block, tracing_read_reg_ptr, tracing_read_u16, tracing_write_u16, RV64_CELL_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -510,4 +509,3 @@ impl<
         cols.from_state.pc = F::from_u32(record.from_pc);
     }
 }
-

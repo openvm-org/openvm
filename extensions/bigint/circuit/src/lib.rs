@@ -4,7 +4,10 @@
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 use openvm_circuit::{
     self,
-    arch::{InitFileGenerator, SystemConfig, VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
+    arch::{
+        InitFileGenerator, SystemConfig, VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
+    },
     system::SystemExecutor,
 };
 use openvm_circuit_derive::{PreflightExecutor, VmConfig};
@@ -128,7 +131,8 @@ type LtAluAdapterU16Executor = VecToFlatAluU16AdapterExecutor<
 /// Type alias for the Branch adapter AIR wrapper.
 ///
 /// After the Pattern B migration the heap-branch adapter delivers `BLOCK_FE_WIDTH=4` u16 cells
-/// per block, so the flattened width is `INT256_NUM_BLOCKS * BLOCK_FE_WIDTH = INT256_NUM_U16_LIMBS`.
+/// per block, so the flattened width is `INT256_NUM_BLOCKS * BLOCK_FE_WIDTH =
+/// INT256_NUM_U16_LIMBS`.
 type BranchAdapterAir = VecToFlatBranchAdapterAir<
     Rv64VecHeapBranchAdapterAir<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>,
     NUM_READS,
@@ -169,10 +173,8 @@ pub type Rv64BaseAlu256Chip<F> = VmChipWrapper<
 >;
 
 /// LessThan256 (Pattern B u16): 16 u16 limbs with `LIMB_BITS = 16`.
-pub type Rv64LessThan256Air = VmAirWrapper<
-    LtAluAdapterU16Air,
-    LessThanCoreAir<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>,
->;
+pub type Rv64LessThan256Air =
+    VmAirWrapper<LtAluAdapterU16Air, LessThanCoreAir<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>>;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv64LessThan256Executor(
     LessThanExecutor<LtAluAdapterU16Executor, INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>,
@@ -237,10 +239,8 @@ pub type Rv64Shift256Chip<F> = VmChipWrapper<
 >;
 
 /// BranchEqual256
-pub type Rv64BranchEqual256Air = VmAirWrapper<
-    BranchAdapterAir,
-    BranchEqualCoreAir<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>,
->;
+pub type Rv64BranchEqual256Air =
+    VmAirWrapper<BranchAdapterAir, BranchEqualCoreAir<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>>;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv64BranchEqual256Executor(
     BranchEqualExecutor<BranchAdapterExecutor, INT256_NUM_U16_LIMBS>,

@@ -7,6 +7,8 @@ use openvm_circuit::{
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
+#[cfg(feature = "cuda")]
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -14,8 +16,6 @@ use openvm_circuit_primitives::{
     },
     var_range::SharedVariableRangeCheckerChip,
 };
-#[cfg(feature = "cuda")]
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_riscv_transpiler::Rv64JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
@@ -42,8 +42,7 @@ use {
 use crate::{
     adapters::{
         Rv64CondRdWriteAdapterAir, Rv64CondRdWriteAdapterCols, Rv64CondRdWriteAdapterExecutor,
-        Rv64CondRdWriteAdapterFiller, Rv64RdWriteAdapterFiller, RV64_CELL_BITS,
-        RV_J_TYPE_IMM_BITS,
+        Rv64CondRdWriteAdapterFiller, Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV_J_TYPE_IMM_BITS,
     },
     jal_lui::{get_signed_imm, run_jal_lui, Rv64JalLuiCoreCols},
     Rv64JalLuiAir, Rv64JalLuiChip, Rv64JalLuiCoreAir, Rv64JalLuiExecutor, Rv64JalLuiFiller,
@@ -680,7 +679,10 @@ fn test_cuda_rand_jal_lui_tracegen(opcode: Rv64JalLuiOpcode, num_ops: usize) {
         );
     }
 
-    type Record<'a> = (&'a mut Rv64RdWriteAdapterRecord, &'a mut Rv64JalLuiCoreRecord);
+    type Record<'a> = (
+        &'a mut Rv64RdWriteAdapterRecord,
+        &'a mut Rv64JalLuiCoreRecord,
+    );
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()

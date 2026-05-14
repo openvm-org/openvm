@@ -19,7 +19,9 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues,
 };
 
-use crate::adapters::{Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, RV_J_TYPE_IMM_BITS};
+use crate::adapters::{
+    Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, RV_J_TYPE_IMM_BITS,
+};
 
 /// Pattern B u16 JAL/LUI.
 ///
@@ -140,10 +142,7 @@ where
         // guaranteed for valid PCs).
         const PC_HIGH_U16_BITS: usize = openvm_instructions::program::PC_BITS - 16;
         self.range_bus
-            .range_check(
-                rd[1] * AB::F::from_u32(1 << (16 - PC_HIGH_U16_BITS)),
-                16,
-            )
+            .range_check(rd[1] * AB::F::from_u32(1 << (16 - PC_HIGH_U16_BITS)), 16)
             .eval(builder, is_jal);
 
         // Suppress unused bitwise bus warning by routing JAL's imm canonicity through it for a
@@ -206,8 +205,7 @@ pub struct Rv64JalLuiFiller<A = Rv64CondRdWriteAdapterFiller> {
 impl<F, A, RA> PreflightExecutor<F, RA> for Rv64JalLuiExecutor<A>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterTraceExecutor<F, ReadData = (), WriteData = [u16; BLOCK_FE_WIDTH]>,
+    A: 'static + for<'a> AdapterTraceExecutor<F, ReadData = (), WriteData = [u16; BLOCK_FE_WIDTH]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,

@@ -152,10 +152,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             BaseAluWOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let lt = Rv64LessThanExecutor::new(
-            Rv64BaseAluAdapterU16Executor,
-            LessThanOpcode::CLASS_OFFSET,
-        );
+        let lt =
+            Rv64LessThanExecutor::new(Rv64BaseAluAdapterU16Executor, LessThanOpcode::CLASS_OFFSET);
         inventory.add_executor(lt, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
         let shift = Rv64ShiftExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
@@ -315,7 +313,11 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let beq = Rv64BranchEqualAir::new(
             Rv64BranchAdapterAir::new(exec_bridge, memory_bridge),
-            BranchEqualCoreAir::new(range_checker, BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+            BranchEqualCoreAir::new(
+                range_checker,
+                BranchEqualOpcode::CLASS_OFFSET,
+                DEFAULT_PC_STEP,
+            ),
         );
         inventory.add_air(beq);
 
@@ -834,11 +836,7 @@ where
 
         inventory.next_air::<Rv64HintStoreAir>()?;
         let hint_store = Rv64HintStoreChip::new(
-            Rv64HintStoreFiller::new(
-                pointer_max_bits,
-                bitwise_lu.clone(),
-                range_checker.clone(),
-            ),
+            Rv64HintStoreFiller::new(pointer_max_bits, bitwise_lu.clone(), range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(hint_store);

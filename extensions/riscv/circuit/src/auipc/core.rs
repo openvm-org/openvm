@@ -10,9 +10,7 @@ use openvm_circuit_primitives::{
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode,
-};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_transpiler::Rv64AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -32,12 +30,11 @@ use crate::adapters::{Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64
 ///
 /// At u16-cell granularity (low 32 bits of `rd` split into 2 u16 limbs `rd[0]`, `rd[1]`):
 ///
-/// - `imm << 8` is a 32-bit value with byte 0 = 0. As 2 u16 limbs:
-///     `sl_lo = imm_low_8 * 256` (low u16: low byte zero, high byte = imm_low_8)
-///     `sl_hi = imm_high_16`     (high u16: bytes 1-2 of imm)
-/// - The composite-carry constraint is:
-///     `carry_top * 2^32 = from_pc + (imm << 8) - rd_low_32`, `carry_top ∈ {0, 1}`,
-///     where `rd_low_32 = rd[0] + rd[1] * 2^16`.
+/// - `imm << 8` is a 32-bit value with byte 0 = 0. As 2 u16 limbs: `sl_lo = imm_low_8 * 256` (low
+///   u16: low byte zero, high byte = imm_low_8) `sl_hi = imm_high_16`     (high u16: bytes 1-2 of
+///   imm)
+/// - The composite-carry constraint is: `carry_top * 2^32 = from_pc + (imm << 8) - rd_low_32`,
+///   `carry_top ∈ {0, 1}`, where `rd_low_32 = rd[0] + rd[1] * 2^16`.
 /// - Sign extension on bits 32..64 is uniformly `is_sign_extend * 0xffff` per cell, with
 ///   `is_sign_extend = (rd[1] >> 15) & 1`.
 const AUIPC_NUM_U16: usize = 2;
@@ -116,8 +113,7 @@ where
         //   2 * rd[1] - is_sign_extend * 2^16 ∈ [0, 2^16)
         self.range_bus
             .range_check(
-                AB::Expr::from_u32(2) * rd_data[1]
-                    - is_sign_extend * AB::Expr::from_u32(1 << 16),
+                AB::Expr::from_u32(2) * rd_data[1] - is_sign_extend * AB::Expr::from_u32(1 << 16),
                 16,
             )
             .eval(builder, is_valid);
@@ -187,8 +183,7 @@ pub struct Rv64AuipcFiller<A = Rv64RdWriteAdapterFiller> {
 impl<F, A, RA> PreflightExecutor<F, RA> for Rv64AuipcExecutor<A>
 where
     F: PrimeField32,
-    A: 'static
-        + AdapterTraceExecutor<F, ReadData = (), WriteData = [u16; BLOCK_FE_WIDTH]>,
+    A: 'static + AdapterTraceExecutor<F, ReadData = (), WriteData = [u16; BLOCK_FE_WIDTH]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,

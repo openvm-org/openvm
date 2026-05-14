@@ -9,10 +9,6 @@ use openvm_circuit::{
     utils::i32_to_f,
 };
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
-#[cfg(feature = "cuda")]
-use {
-    openvm_circuit_primitives::var_range::VariableRangeCheckerChip, std::sync::Arc,
-};
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::LessThanOpcode::{self, *};
 use openvm_stark_backend::{
@@ -35,6 +31,8 @@ use {
         EmptyAdapterCoreLayout,
     },
 };
+#[cfg(feature = "cuda")]
+use {openvm_circuit_primitives::var_range::VariableRangeCheckerChip, std::sync::Arc};
 
 use super::{
     core::run_less_than, LessThanCoreAir, Rv64LessThanChip, RV64_LESS_THAN_LIMB_BITS,
@@ -42,7 +40,7 @@ use super::{
 };
 use crate::{
     adapters::{
-        Rv64BaseAluAdapterU16Executor, Rv64BaseAluAdapterU16Filler, Rv64BaseAluAdapterU16Air,
+        Rv64BaseAluAdapterU16Air, Rv64BaseAluAdapterU16Executor, Rv64BaseAluAdapterU16Filler,
         RV64_REGISTER_NUM_LIMBS,
     },
     less_than::LessThanCoreCols,
@@ -131,12 +129,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let b_u16 = bytes_to_u16(&b);
     let c_u16 = bytes_to_u16(&c);
-    let (cmp, _, _, _) =
-        run_less_than::<RV64_LESS_THAN_NUM_LIMBS, RV64_LESS_THAN_LIMB_BITS>(
-            opcode == SLT,
-            &b_u16,
-            &c_u16,
-        );
+    let (cmp, _, _, _) = run_less_than::<RV64_LESS_THAN_NUM_LIMBS, RV64_LESS_THAN_LIMB_BITS>(
+        opcode == SLT,
+        &b_u16,
+        &c_u16,
+    );
     let mut a = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
     a[0] = F::from_bool(cmp);
     assert_eq!(a, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd));
@@ -194,11 +191,7 @@ fn run_rv64_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
         Some(b),
     );
 
-    let tester = tester
-        .build()
-        .load(harness)
-        
-        .finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -268,7 +261,6 @@ fn run_negative_less_than_test(
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
-        
         .finalize();
     tester
         .simple_test()
@@ -514,7 +506,6 @@ fn rv64_lt_adapter_imm_sign_extension_negative_test() {
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
-        
         .finalize();
     tester
         .simple_test()

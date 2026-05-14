@@ -312,14 +312,15 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         // to `BLOCK_FE_WIDTH` u16 cells consumed from the column. The bus payload is just those
         // cells (no byte→u16 packing).
         for i in 0..C::STATE_READS {
-            let chunk: [AB::Expr; openvm_circuit::arch::BLOCK_FE_WIDTH] = std::array::from_fn(|j| {
-                (*local
-                    .block
-                    .prev_state
-                    .get(i * openvm_circuit::arch::BLOCK_FE_WIDTH + j)
-                    .expect("prev_state index out of bounds"))
-                .into()
-            });
+            let chunk: [AB::Expr; openvm_circuit::arch::BLOCK_FE_WIDTH] =
+                std::array::from_fn(|j| {
+                    (*local
+                        .block
+                        .prev_state
+                        .get(i * openvm_circuit::arch::BLOCK_FE_WIDTH + j)
+                        .expect("prev_state index out of bounds"))
+                    .into()
+                });
             self.memory_bridge
                 .read_4(
                     MemoryAddress::new(
@@ -352,14 +353,15 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         // `BLOCK_FE_WIDTH` u16 cells from the column. The bus payload is those cells (no
         // byte→u16 packing).
         for i in 0..C::STATE_WRITES {
-            let chunk: [AB::Expr; openvm_circuit::arch::BLOCK_FE_WIDTH] = std::array::from_fn(|j| {
-                (*local
-                    .block
-                    .new_state
-                    .get(i * openvm_circuit::arch::BLOCK_FE_WIDTH + j)
-                    .expect("new_state index out of bounds"))
-                .into()
-            });
+            let chunk: [AB::Expr; openvm_circuit::arch::BLOCK_FE_WIDTH] =
+                std::array::from_fn(|j| {
+                    (*local
+                        .block
+                        .new_state
+                        .get(i * openvm_circuit::arch::BLOCK_FE_WIDTH + j)
+                        .expect("new_state index out of bounds"))
+                    .into()
+                });
             self.memory_bridge
                 .write_4(
                     MemoryAddress::new(
