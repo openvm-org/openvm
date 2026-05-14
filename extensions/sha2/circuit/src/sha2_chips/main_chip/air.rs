@@ -129,19 +129,14 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 *local.block.request_id + AB::Expr::ONE,
             );
 
-        let prev_state_as_u16s: Vec<AB::Expr> = local
+        // `prev_state` is already stored as u16 cells (one u16 per pair of bytes), so the bus
+        // payload is just the column values; no byte-pairing transformation is needed.
+        let prev_state_as_u16s = local
             .block
             .prev_state
-            .exact_chunks(C::WORD_U8S)
-            .into_iter()
-            .flat_map(|word| {
-                word.as_slice()
-                    .unwrap()
-                    .chunks_exact(2)
-                    .map(|x| x[1] * AB::F::from_u64(1 << 8) + x[0])
-                    .collect::<Vec<_>>()
-            })
-            .collect();
+            .iter()
+            .map(|x| (*x).into())
+            .collect::<Vec<AB::Expr>>();
 
         // Send (STATE, request_id, prev_state_as_u16s, new_state) to the sha2 bus
         self.sha2_bus.send(
@@ -306,24 +301,25 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .to_vec(),
             RV64_CELL_BITS,
         );
+        // `prev_state` is u16-shaped, so each `SHA2_READ_SIZE` (8-byte) memory read corresponds
+        // to `BLOCK_FE_WIDTH` u16 cells consumed from the column. The bus payload is just those
+        // cells (no byte→u16 packing).
         for i in 0..C::STATE_READS {
-            let chunk: [AB::Var; SHA2_READ_SIZE] = local
-                .block
-                .prev_state
-                .slice(s![i * SHA2_READ_SIZE..(i + 1) * SHA2_READ_SIZE])
-                .to_vec()
-                .try_into()
-                .unwrap_or_else(|_| {
-                    panic!("prev state is not the correct size");
-                });
-            let chunk_expr: [AB::Expr; SHA2_READ_SIZE] = chunk.map(Into::into);
+            let chunk: [AB::Expr; openvm_circuit::arch::BLOCK_FE_WIDTH] = std::array::from_fn(|j| {
+                (*local
+                    .block
+                    .prev_state
+                    .get(i * openvm_circuit::arch::BLOCK_FE_WIDTH + j)
+                    .expect("prev_state index out of bounds"))
+                .into()
+            });
             self.memory_bridge
                 .read_4(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_MEMORY_AS),
                         state_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
                     ),
-                    pack_u8_for_bus::<AB>(&chunk_expr),
+                    chunk,
                     timestamp_pp(),
                     &local.mem.state_reads[i],
                 )
