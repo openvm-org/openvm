@@ -16,6 +16,13 @@ template <typename T> struct Rv64JalrAdapterCols {
     T needs_write;
 };
 
+/// Pattern B u16: stored prev_data is the BLOCK_FE_WIDTH u16 cells written to the register, not
+/// raw bytes. Matches the Rust `Rv64JalrAdapterWriteAuxRecord` shape.
+struct Rv64JalrAdapterWriteAuxRecord {
+    uint32_t prev_timestamp;
+    uint16_t prev_data[BLOCK_FE_WIDTH];
+};
+
 struct Rv64JalrAdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
@@ -25,7 +32,7 @@ struct Rv64JalrAdapterRecord {
     uint32_t rd_ptr;
 
     MemoryReadAuxRecord reads_aux;
-    MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS> writes_aux;
+    Rv64JalrAdapterWriteAuxRecord writes_aux;
 };
 
 struct Rv64JalrAdapter {
@@ -39,15 +46,12 @@ struct Rv64JalrAdapter {
         COL_WRITE_VALUE(row, Rv64JalrAdapterCols, needs_write, do_write);
 
         if (do_write) {
-            Fp packed_prev[BLOCK_FE_WIDTH];
+            Fp prev[BLOCK_FE_WIDTH];
 #pragma unroll
             for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
-                packed_prev[i] = Fp(
-                    uint32_t(record.writes_aux.prev_data[2 * i])
-                    + 256u * uint32_t(record.writes_aux.prev_data[2 * i + 1])
-                );
+                prev[i] = Fp(uint32_t(record.writes_aux.prev_data[i]));
             }
-            COL_WRITE_ARRAY(row, Rv64JalrAdapterCols, rd_aux_cols.prev_data, packed_prev);
+            COL_WRITE_ARRAY(row, Rv64JalrAdapterCols, rd_aux_cols.prev_data, prev);
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv64JalrAdapterCols, rd_aux_cols.base)),
                 record.writes_aux.prev_timestamp,

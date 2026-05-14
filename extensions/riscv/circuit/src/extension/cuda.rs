@@ -107,11 +107,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.add_executor_chip(jal_lui);
 
         inventory.next_air::<Rv64JalrAir>()?;
-        let jalr = Rv64JalrChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            timestamp_max_bits,
-        );
+        let jalr = Rv64JalrChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(jalr);
 
         inventory.next_air::<Rv64AuipcAir>()?;

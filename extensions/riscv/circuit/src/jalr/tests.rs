@@ -51,7 +51,7 @@ use crate::Rv64ImConfig;
 use crate::{
     adapters::{
         compose, Rv64JalrAdapterAir, Rv64JalrAdapterCols, Rv64JalrAdapterExecutor,
-        Rv64JalrAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        Rv64JalrAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
     Rv64JalrAir, Rv64JalrFiller,
@@ -73,17 +73,14 @@ fn create_harness_fields(
     range_checker_chip: Arc<VariableRangeCheckerChip>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64JalrAir, Rv64JalrExecutor, Rv64JalrChip<F>) {
+    let _ = bitwise_chip;
     let air = Rv64JalrAir::new(
         Rv64JalrAdapterAir::new(memory_bridge, execution_bridge),
-        Rv64JalrCoreAir::new(bitwise_chip.bus(), range_checker_chip.bus()),
+        Rv64JalrCoreAir::new(range_checker_chip.bus()),
     );
     let executor = Rv64JalrExecutor::new(Rv64JalrAdapterExecutor);
     let chip = Rv64JalrChip::<F>::new(
-        Rv64JalrFiller::new(
-            Rv64JalrAdapterFiller::new(),
-            bitwise_chip,
-            range_checker_chip,
-        ),
+        Rv64JalrFiller::new(Rv64JalrAdapterFiller::new(), range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -164,14 +161,18 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let rs1 = compose(rs1) as u32;
 
     let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, imm_sign == 1);
-    let rd_data = if a == 0 {
-        [0; RV64_REGISTER_NUM_LIMBS]
-    } else {
-        rd_data
-    };
+    // run_jalr returns [u16; BLOCK_FE_WIDTH=4]; the register is zero for the x0 sink.
+    let rd_data = if a == 0 { [0u16; 4] } else { rd_data };
 
     assert_eq!(next_pc & !1, final_pc);
-    assert_eq!(rd_data.map(F::from_u8), tester.read::<8>(1, a));
+    // Convert the 4 u16 limbs to the 8-byte view that the byte-view memory read returns.
+    let mut rd_bytes = [0u8; RV64_REGISTER_NUM_LIMBS];
+    for (i, &v) in rd_data.iter().enumerate() {
+        let [lo, hi] = v.to_le_bytes();
+        rd_bytes[2 * i] = lo;
+        rd_bytes[2 * i + 1] = hi;
+    }
+    assert_eq!(rd_bytes.map(F::from_u8), tester.read::<8>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -217,10 +218,12 @@ fn rand_jalr_test() {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
+// Post Pattern B u16: jalr stores the low 32 of rd as 1 u16 (= LOW_U16_LIMBS-1)
+// and rs1 as 2 u16. Prank values match.
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalrPrankValues {
-    pub rd_data: Option<[u32; RV64_WORD_NUM_LIMBS - 1]>,
-    pub rs1_data: Option<[u32; RV64_WORD_NUM_LIMBS]>,
+    pub rd_data: Option<[u32; 1]>,
+    pub rs1_data: Option<[u32; 2]>,
     pub to_pc_least_sig_bit: Option<u32>,
     pub to_pc_limbs: Option<[u32; 2]>,
     pub imm_sign: Option<u32>,
@@ -522,7 +525,7 @@ fn overflow_negative_tests() {
         None,
         None,
         JalrPrankValues {
-            rd_data: Some([1, 0, 0]),
+            rd_data: Some([1]),
             ..Default::default()
         },
         true,
@@ -558,7 +561,8 @@ fn run_jalr_sanity_test() {
     let rs1 = 736482910;
     let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, true);
     assert_eq!(next_pc & !1, 736481674);
-    assert_eq!(rd_data, [252, 36, 14, 47, 0, 0, 0, 0]);
+    // u32 pc+4 = 789456124 = 0x2f0e24fc → low u16=0x24fc, high u16=0x2f0e, high u32 zero.
+    assert_eq!(rd_data, [0x24fc, 0x2f0e, 0, 0]);
 }
 
 #[test]
@@ -705,11 +709,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64JalrChipGpu::new(
-        tester.range_checker(),
-        tester.bitwise_op_lookup(),
-        tester.timestamp_max_bits(),
-    );
+    let gpu_chip = Rv64JalrChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }

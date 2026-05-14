@@ -1,14 +1,10 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::*,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
@@ -27,31 +23,40 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    expand_to_rv64_register, rv64_bytes_to_u32, Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller,
-    RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+    expand_to_rv64_block, rv64_bytes_to_u32, Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller,
 };
+
+/// Pattern B (u16) JALR:
+/// - `rs1_data` is the **low 32 bits** of `rs1` as 2 u16 limbs (`rs1[0]`: bits 0..16,
+///   `rs1[1]`: bits 16..32). The adapter zero-extends the read to `BLOCK_FE_WIDTH=4` u16 cells.
+/// - `rd_data_high_u16` is the high u16 of the low 32 bits of `rd` (= `pc + 4` low 32);
+///   the low u16 of `rd` is derived from `from_pc + 4 - rd_data_high_u16 * 2^16` and
+///   range-checked.
+/// - `to_pc_least_sig_bit + 2 * to_pc_limbs[0] + to_pc_limbs[1] * 2^16 = rs1 + imm` as i32
+///   carry-chain at 16-bit boundaries.
+const LOW_U16_LIMBS: usize = 2;
+const RD_DATA_U16_LIMBS: usize = LOW_U16_LIMBS - 1;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64JalrCoreCols<T> {
     pub imm: T,
-    // Keep the same 32-bit decomposition columns and zero-extend to RV64 at the adapter boundary.
-    pub rs1_data: [T; RV64_WORD_NUM_LIMBS],
-    // To save a column, we only store the 3 most significant limbs of low-32 rd_data.
-    // The least significant limb can be derived from from_pc and these limbs.
-    pub rd_data: [T; RV64_WORD_NUM_LIMBS - 1],
+    /// Low 32 bits of rs1 as 2 u16 limbs.
+    pub rs1_data: [T; LOW_U16_LIMBS],
+    /// High u16 of the low 32 bits of rd (= `pc + 4` low 32 bits).
+    pub rd_data: [T; RD_DATA_U16_LIMBS],
     pub is_valid: T,
 
     pub to_pc_least_sig_bit: T,
-    /// These are the limbs of `to_pc * 2`.
+    /// Limbs of `to_pc * 2`: `to_pc_limbs[0]` is the low 16 bits after the LSB strip,
+    /// `to_pc_limbs[1]` is the high `PC_BITS - 16` bits.
     pub to_pc_limbs: [T; 2],
     pub imm_sign: T,
 }
 
 #[derive(Debug, Clone, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64JalrCoreCols<u8>)]
+#[columns_via(Rv64JalrCoreCols<u16>)]
 pub struct Rv64JalrCoreAir {
-    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
 }
 
@@ -67,8 +72,8 @@ impl<AB, I> VmCoreAir<AB, I> for Rv64JalrCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<[[AB::Expr; RV64_REGISTER_NUM_LIMBS]; 1]>,
-    I::Writes: From<[[AB::Expr; RV64_REGISTER_NUM_LIMBS]; 1]>,
+    I::Reads: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
+    I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
     I::ProcessedInstruction: From<SignedImmInstruction<AB::Expr>>,
 {
     fn eval(
@@ -81,7 +86,7 @@ where
         let Rv64JalrCoreCols::<AB::Var> {
             imm,
             rs1_data: rs1,
-            rd_data: rd,
+            rd_data: rd_high,
             is_valid,
             imm_sign,
             to_pc_least_sig_bit,
@@ -90,67 +95,45 @@ where
 
         builder.assert_bool(is_valid);
 
-        // composed is the composition of 3 most significant limbs of low-32 rd.
-        let composed = rd
-            .iter()
-            .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_u32(1 << ((i + 1) * RV64_CELL_BITS))
-            });
+        // Reconstruct the low u16 of (pc + 4) from `from_pc` and the stored high u16:
+        //   rd_low = from_pc + 4 - rd_high * 2^16
+        // The subsequent range_check on `rd_low` to 16 bits forces `rd_high` to be the canonical
+        // high u16 of `from_pc + 4` (the low 32 of pc+4 since pc < 2^PC_BITS ≤ 2^32).
+        let rd_low =
+            from_pc + AB::F::from_u32(DEFAULT_PC_STEP) - rd_high[0] * AB::F::from_u32(1 << 16);
 
-        let least_sig_limb = from_pc + AB::F::from_u32(DEFAULT_PC_STEP) - composed;
+        let rd_data_low: [AB::Expr; LOW_U16_LIMBS] = [rd_low.clone(), rd_high[0].into()];
 
-        // rd_data_low is the low-32-bit decomposition of `from_pc + DEFAULT_PC_STEP`.
-        // The range check on `least_sig_limb` also ensures that `rd_data_low` correctly
-        // represents `from_pc + DEFAULT_PC_STEP`. Specifically, if the prover provides
-        // incorrect values for `rd` (the 3 most significant limbs), then `least_sig_limb`
-        // absorbs the error and falls outside [0, 2^RV64_CELL_BITS), failing the range check.
-        let rd_data_low: [AB::Expr; RV64_WORD_NUM_LIMBS] = array::from_fn(|i| {
-            if i == 0 {
-                least_sig_limb.clone()
-            } else {
-                rd[i - 1].into().clone()
-            }
-        });
-
-        // Constrain rd_data_low.
-        // Assumes only from_pc in [0,2^PC_BITS) is allowed by program bus
-        self.bitwise_lookup_bus
-            .send_range(rd_data_low[0].clone(), rd_data_low[1].clone())
+        // Range-check rd_low to 16 bits and rd_high to `PC_BITS - 16` bits so the
+        // composed `rd_low + rd_high * 2^16 = from_pc + 4 < 2^PC_BITS`.
+        self.range_bus
+            .range_check(rd_low.clone(), 16)
             .eval(builder, is_valid);
         self.range_bus
-            .range_check(rd_data_low[2].clone(), RV64_CELL_BITS)
-            .eval(builder, is_valid);
-        self.range_bus
-            .range_check(rd_data_low[3].clone(), PC_BITS - RV64_CELL_BITS * 3)
+            .range_check(rd_high[0], PC_BITS - 16)
             .eval(builder, is_valid);
 
-        // Range-check the read-side rs1_data limbs to [0, 256). After the memory
-        // bus pack, pairs of u8 limbs share a packed field element
-        // and need local u8 checks to prevent re-splitting.
-        for i in 0..RV64_WORD_NUM_LIMBS / 2 {
-            self.bitwise_lookup_bus
-                .send_range(rs1[i * 2], rs1[i * 2 + 1])
-                .eval(builder, is_valid);
+        // Range-check the read-side rs1_data u16 limbs.
+        for &v in rs1.iter() {
+            self.range_bus.range_check(v, 16).eval(builder, is_valid);
         }
 
         builder.assert_bool(imm_sign);
 
-        // Constrain to_pc_least_sig_bit + 2 * to_pc_limbs = rs1 + imm as an i32 addition with 2
-        // 16-bit limbs. RISC-V spec explicitly sets the least significant bit of `to_pc` to 0.
-        let rs1_limbs_01 = rs1[0] + rs1[1] * AB::F::from_u32(1 << RV64_CELL_BITS);
-        let rs1_limbs_23 = rs1[2] + rs1[3] * AB::F::from_u32(1 << RV64_CELL_BITS);
+        // Constrain `to_pc_least_sig_bit + 2 * to_pc_limbs[0] + to_pc_limbs[1] * 2^16 = rs1 + imm`
+        // as an i32 addition with 2 16-bit limbs. RISC-V spec sets the least significant bit of
+        // `to_pc` to 0.
         let inv = AB::F::from_u32(1 << 16).inverse();
 
         builder.assert_bool(to_pc_least_sig_bit);
-        let carry = (rs1_limbs_01 + imm - to_pc_limbs[0] * AB::F::TWO - to_pc_least_sig_bit) * inv;
+        let carry = (rs1[0] + imm - to_pc_limbs[0] * AB::F::TWO - to_pc_least_sig_bit) * inv;
         builder.when(is_valid).assert_bool(carry.clone());
 
         let imm_extend_limb = imm_sign * AB::F::from_u32((1 << 16) - 1);
-        let carry = (rs1_limbs_23 + imm_extend_limb + carry - to_pc_limbs[1]) * inv;
+        let carry = (rs1[1] + imm_extend_limb + carry - to_pc_limbs[1]) * inv;
         builder.when(is_valid).assert_bool(carry);
 
-        // preventing to_pc overflow
+        // Prevent to_pc overflow: to_pc < 2^PC_BITS.
         self.range_bus
             .range_check(to_pc_limbs[1], PC_BITS - 16)
             .eval(builder, is_valid);
@@ -159,9 +142,9 @@ where
             .eval(builder, is_valid);
         let to_pc = to_pc_limbs[0] * AB::F::TWO + to_pc_limbs[1] * AB::F::from_u32(1 << 16);
 
-        // Zero-extend low-32 rs1/rd at the adapter interface.
-        let rs1_data = expand_to_rv64_register(&rs1);
-        let rd_data = expand_to_rv64_register(&rd_data_low);
+        // Zero-extend low-32 rs1/rd into the BLOCK_FE_WIDTH-cell bus message.
+        let rs1_data = expand_to_rv64_block(&rs1);
+        let rd_data = expand_to_rv64_block(&rd_data_low);
 
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, JALR);
 
@@ -201,20 +184,14 @@ pub struct Rv64JalrExecutor<A = Rv64JalrAdapterExecutor> {
 #[derive(Clone)]
 pub struct Rv64JalrFiller<A = Rv64JalrAdapterFiller> {
     adapter: A,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<A> Rv64JalrFiller<A> {
-    pub fn new(
-        adapter: A,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
-        range_checker_chip: SharedVariableRangeCheckerChip,
-    ) -> Self {
+    pub fn new(adapter: A, range_checker_chip: SharedVariableRangeCheckerChip) -> Self {
         assert!(range_checker_chip.range_max_bits() >= 16);
         Self {
             adapter,
-            bitwise_lookup_chip,
             range_checker_chip,
         }
     }
@@ -226,8 +203,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData = [u8; RV64_REGISTER_NUM_LIMBS],
-            WriteData = [u8; RV64_REGISTER_NUM_LIMBS],
+            ReadData = [u16; BLOCK_FE_WIDTH],
+            WriteData = [u16; BLOCK_FE_WIDTH],
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -261,7 +238,9 @@ where
         let rs1_data = self
             .adapter
             .read(state.memory, instruction, &mut adapter_record);
-        core_record.rs1_val = rv64_bytes_to_u32(rs1_data);
+        // Recombine the BLOCK_FE_WIDTH u16 cells back to 8 bytes for fast_jalr semantics.
+        let rs1_bytes = u16_block_to_bytes(rs1_data);
+        core_record.rs1_val = rv64_bytes_to_u32(rs1_bytes);
 
         core_record.imm = c.as_canonical_u32() as u16;
         core_record.imm_sign = g.is_one();
@@ -306,20 +285,21 @@ where
         self.range_checker_chip.add_count(to_pc_limbs[0], 15);
         self.range_checker_chip
             .add_count(to_pc_limbs[1], PC_BITS - 16);
-        self.bitwise_lookup_chip
-            .request_range(rd_data[0] as u32, rd_data[1] as u32);
 
-        self.range_checker_chip
-            .add_count(rd_data[2] as u32, RV64_CELL_BITS);
-        self.range_checker_chip
-            .add_count(rd_data[3] as u32, PC_BITS - RV64_CELL_BITS * 3);
+        // rd low 32 bits as 2 u16 limbs.
+        let rd_low_u16_lo = rd_data[0];
+        let rd_low_u16_hi = rd_data[1];
 
-        // Mirror AIR's u8 range-check on rs1_data read limbs (pairs).
-        let rs1_bytes = record.rs1_val.to_le_bytes();
-        for i in 0..RV64_WORD_NUM_LIMBS / 2 {
-            self.bitwise_lookup_chip
-                .request_range(rs1_bytes[i * 2] as u32, rs1_bytes[i * 2 + 1] as u32);
-        }
+        // Range-check the low u16 (derived) and the stored high u16.
+        self.range_checker_chip.add_count(rd_low_u16_lo as u32, 16);
+        self.range_checker_chip
+            .add_count(rd_low_u16_hi as u32, PC_BITS - 16);
+
+        // Mirror AIR's per-limb u16 range-check on rs1_data low 32 bits.
+        let rs1_low_u16_lo = (record.rs1_val & 0xffff) as u16;
+        let rs1_low_u16_hi = (record.rs1_val >> 16) as u16;
+        self.range_checker_chip.add_count(rs1_low_u16_lo as u32, 16);
+        self.range_checker_chip.add_count(rs1_low_u16_hi as u32, 16);
 
         // Write in reverse order
         core_row.imm_sign = F::from_bool(record.imm_sign);
@@ -327,31 +307,46 @@ where
         core_row.to_pc_least_sig_bit = F::from_bool(to_pc & 1 == 1);
         // fill_trace_row is called only on valid rows
         core_row.is_valid = F::ONE;
-        core_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_u8);
-        core_row
-            .rd_data
-            .iter_mut()
-            .rev()
-            .zip(rd_data[..RV64_WORD_NUM_LIMBS].iter().skip(1).rev())
-            .for_each(|(dst, src)| {
-                *dst = F::from_u8(*src);
-            });
+        core_row.rs1_data = [
+            F::from_u32(rs1_low_u16_lo as u32),
+            F::from_u32(rs1_low_u16_hi as u32),
+        ];
+        // Store only the high u16 of the low 32 bits of rd_data.
+        core_row.rd_data = [F::from_u32(rd_low_u16_hi as u32); RD_DATA_U16_LIMBS];
         core_row.imm = F::from_u16(record.imm);
     }
 }
 
-// returns (to_pc, rd_data)
+#[inline(always)]
+fn u16_block_to_bytes(
+    block: [u16; openvm_circuit::arch::BLOCK_FE_WIDTH],
+) -> [u8; crate::adapters::RV64_REGISTER_NUM_LIMBS] {
+    let mut out = [0u8; crate::adapters::RV64_REGISTER_NUM_LIMBS];
+    for (i, &v) in block.iter().enumerate() {
+        let [lo, hi] = v.to_le_bytes();
+        out[2 * i] = lo;
+        out[2 * i + 1] = hi;
+    }
+    out
+}
+
+// returns (to_pc, rd_data) as 4 u16 cells (low 32 = rd, high 32 = 0).
 #[inline(always)]
 pub(super) fn run_jalr(
     pc: u32,
     rs1: u32,
     imm: u16,
     imm_sign: bool,
-) -> (u32, [u8; RV64_REGISTER_NUM_LIMBS]) {
+) -> (u32, [u16; openvm_circuit::arch::BLOCK_FE_WIDTH]) {
     let to_pc = rs1.wrapping_add(imm as u32 + (imm_sign as u32 * 0xffff0000));
     assert!(to_pc < (1 << PC_BITS));
 
-    let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-    rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&pc.wrapping_add(DEFAULT_PC_STEP).to_le_bytes());
+    let rd_low_u32 = pc.wrapping_add(DEFAULT_PC_STEP);
+    let rd_data = [
+        (rd_low_u32 & 0xffff) as u16,
+        (rd_low_u32 >> 16) as u16,
+        0,
+        0,
+    ];
     (to_pc, rd_data)
 }
