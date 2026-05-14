@@ -167,6 +167,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let pointer_max_bits = inventory.pointer_max_bits();
+        let range_checker = inventory.range_checker().bus;
 
         let bitwise_lu = {
             let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
@@ -198,6 +199,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
             memory_bridge,
             bitwise_lu,
             keccakf_state_bus,
+            range_checker,
             pointer_max_bits,
             KeccakfOpcode::CLASS_OFFSET,
         );
@@ -262,6 +264,7 @@ where
         inventory.next_air::<KeccakfOpAir>()?;
         let op_chip = KeccakfOpChip::new(
             bitwise_lu,
+            range_checker.clone(),
             pointer_max_bits,
             mem_helper.clone(),
             shared_records,

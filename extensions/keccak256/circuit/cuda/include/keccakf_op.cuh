@@ -25,15 +25,23 @@ struct KeccakfOpRecord {
     uint8_t preimage_buffer_bytes[KECCAK_WIDTH_BYTES];
 };
 
+// Number of u16 cells used to represent the low 32 bits of `buffer_ptr`. Matches the
+// Rust `BUFFER_PTR_NUM_LIMBS` constant.
+inline constexpr size_t BUFFER_PTR_NUM_LIMBS = RV64_WORD_NUM_LIMBS / 2;
+
 // Column structure matching Rust KeccakfOpCols (from columns.rs)
 template <typename T> struct KeccakfOpCols {
     T pc;
     T is_valid;
     T timestamp;
     T rd_ptr;
-    T buffer_ptr_limbs[RV64_WORD_NUM_LIMBS]; // 4 limbs
-    T preimage[KECCAK_WIDTH_BYTES];              // 200 bytes
-    T postimage[KECCAK_WIDTH_BYTES];             // 200 bytes
+    // Low 32 bits of `buffer_ptr` packed into 2 u16 cells; the high 32 bits of the
+    // RV64 register are zero and hardcoded in the memory bus interaction.
+    T buffer_ptr_limbs[BUFFER_PTR_NUM_LIMBS];
+    // `preimage` / `postimage` stored as u16 cells (one per pair of state bytes),
+    // matching the keccakf periphery bus and AS2 u16-celled memory.
+    T preimage[KECCAK_WIDTH_U16S];
+    T postimage[KECCAK_WIDTH_U16S];
     MemoryReadAuxCols<T> rd_aux;
     MemoryBaseAuxCols<T> buffer_word_aux[KECCAK_WIDTH_MEM_OPS]; // 25 words
 };

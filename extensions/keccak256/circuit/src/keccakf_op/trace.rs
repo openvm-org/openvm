@@ -13,13 +13,14 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, AlignedBytesBorrow, Chip,
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
+    AlignedBytesBorrow, Chip,
 };
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, timed_write, tracing_read};
@@ -39,7 +40,12 @@ use crate::{
 
 #[derive(derive_new::new)]
 pub struct KeccakfOpChip<F> {
+    /// Kept for parity with the rest of the keccak256 extension's bus wiring; this chip
+    /// no longer emits any 8-bit bitwise-lookup messages now that `buffer_ptr` is stored
+    /// as u16 cells. The high-cell range check goes through `range_checker_chip` instead.
+    #[allow(dead_code)]
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub pointer_max_bits: usize,
     pub mem_helper: SharedMemoryHelper<F>,
     // NOTE[jpw]: this is an awkward way to pass data from this execution chip to the
@@ -215,14 +221,29 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                 local.is_valid = F::ONE;
                 local.timestamp = F::from_u32(record.timestamp);
                 local.rd_ptr = F::from_u32(record.rd_ptr);
+                // Pack the low 4 bytes of `buffer_ptr` (a u32 memory address) into
+                // `BUFFER_PTR_NUM_LIMBS = 2` u16 cells. The upper 4 bytes of the RV64
+                // register are zero and hardcoded in the memory bus interaction via
+                // `expand_to_rv64_block`.
                 let ptr_bytes = record.buffer_ptr.to_le_bytes();
-                local.buffer_ptr_limbs = ptr_bytes.map(F::from_u8);
+                local.buffer_ptr_limbs = std::array::from_fn(|i| {
+                    F::from_u16(u16::from_le_bytes([ptr_bytes[2 * i], ptr_bytes[2 * i + 1]]))
+                });
 
-                for (dst, &byte) in local.preimage.iter_mut().zip(&record.preimage_buffer_bytes) {
-                    *dst = F::from_u8(byte);
+                // Pack consecutive pairs of state bytes into u16 cells.
+                for (dst, bytes) in local
+                    .preimage
+                    .iter_mut()
+                    .zip(record.preimage_buffer_bytes.chunks_exact(2))
+                {
+                    *dst = F::from_u16(u16::from_le_bytes([bytes[0], bytes[1]]));
                 }
-                for (dst, &byte) in local.postimage.iter_mut().zip(&postimage_buffer_bytes) {
-                    *dst = F::from_u8(byte);
+                for (dst, bytes) in local
+                    .postimage
+                    .iter_mut()
+                    .zip(postimage_buffer_bytes.chunks_exact(2))
+                {
+                    *dst = F::from_u16(u16::from_le_bytes([bytes[0], bytes[1]]));
                 }
 
                 let mut timestamp = record.timestamp;
@@ -241,18 +262,13 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                     timestamp += 1;
                 }
 
-                let limb_shift =
-                    1u32 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits) as u32;
-                let scaled_limb = (ptr_bytes[RV64_WORD_NUM_LIMBS - 1] as u32) * limb_shift;
-                self.bitwise_lookup_chip
-                    .request_range(scaled_limb, scaled_limb);
-
-                // Mirror AIR's u8 range-checks on buffer_ptr_limb pairs
-                // (limb[0], limb[1]) and (limb[2], limb[3]).
-                self.bitwise_lookup_chip
-                    .request_range(ptr_bytes[0] as u32, ptr_bytes[1] as u32);
-                self.bitwise_lookup_chip
-                    .request_range(ptr_bytes[2] as u32, ptr_bytes[3] as u32);
+                // Mirror the AIR's high-cell range check for `buffer_ptr`. The high
+                // u16 cell covers bits [16, 32) of `buffer_ptr`; scale it by
+                // `1 << (32 - pointer_max_bits)` and range-check the result to 16 bits.
+                let mem_ptr_msl_lshift: u32 = (32 - self.pointer_max_bits) as u32;
+                let buffer_ptr_high_u16 = record.buffer_ptr >> 16;
+                self.range_checker_chip
+                    .add_count(buffer_ptr_high_u16 << mem_ptr_msl_lshift, 16);
             });
         *self.shared_records.lock().unwrap() = records;
     }
