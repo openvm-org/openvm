@@ -1,6 +1,3 @@
-// Exercises libstd compiled for riscv64im-unknown-openvm-elf: HashMap and BTreeMap
-// from std::collections, plus a Vec<String> allocation, all going through the
-// PAL (sys_alloc_aligned, sys_rand if HashMap seeds, etc.).
 #![cfg_attr(any(target_os = "none", target_os = "openvm"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 

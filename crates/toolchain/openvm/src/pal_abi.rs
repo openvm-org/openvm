@@ -146,5 +146,3 @@ pub unsafe extern "C" fn sys_argv(
     terminate::<{ exit_code::UNIMP }>();
     unreachable!()
 }
-
-// sys_alloc_aligned is already extern no_mangle exported from openvm_platform::memory

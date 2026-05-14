@@ -280,9 +280,6 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
         args.push("--locked");
     }
 
-    // The openvm rust toolchain ships prebuilt std (with lower-atomic + panic=abort baked
-    // in at toolchain-build time), so the guest build does not need `-Z build-std`.
-
     println!("Building guest package: cargo {}", args.join(" "));
 
     let encoded_rust_flags = encode_rust_flags(rust_flags);
@@ -398,9 +395,7 @@ pub fn build_generic(guest_opts: &GuestOptions) -> Result<PathBuf, Option<i32>> 
         return Err(None);
     }
 
-    // Verify the openvm toolchain is installed (linked via rustup). The
-    // openvm toolchain ships with rust-src embedded, so there is no rustup
-    // component to add — just check the linked dir is present.
+    // Verify the openvm toolchain is installed (linked via rustup).
     let toolchain_name = get_rustup_toolchain_name();
     if let Err(code) = ensure_openvm_toolchain_linked(&toolchain_name) {
         return Err(Some(code));
