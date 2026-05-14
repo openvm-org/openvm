@@ -7,11 +7,12 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, SignedImmInstruction, VmAdapterAir,
+        BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
+            pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -40,7 +41,7 @@ pub struct Rv64JalrAdapterCols<T> {
     pub rs1_ptr: T,
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
     pub rd_ptr: T,
-    pub rd_aux_cols: MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS>,
+    pub rd_aux_cols: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
     /// Only writes if `needs_write`.
     /// Sets `needs_write` to 0 iff `rd == x0`
     pub needs_write: T,
@@ -92,18 +93,18 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
             .assert_zero(write_count);
 
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rs1_ptr),
-                ctx.reads[0].clone(),
+                pack_u8_for_bus::<AB>(&ctx.reads[0].clone()),
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.memory_bridge
-            .write(
+            .write_4(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rd_ptr),
-                ctx.writes[0].clone(),
+                pack_u8_for_bus::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),
                 &local_cols.rd_aux_cols,
             )
@@ -247,7 +248,12 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64JalrAdapterFiller {
         if record.rd_ptr != u32::MAX {
             adapter_row
                 .rd_aux_cols
-                .set_prev_data(record.writes_aux.prev_data.map(F::from_u8));
+                .set_prev_data(std::array::from_fn(|i| {
+                    F::from_u32(
+                        record.writes_aux.prev_data[2 * i] as u32
+                            + 256 * record.writes_aux.prev_data[2 * i + 1] as u32,
+                    )
+                }));
             mem_helper.fill(
                 record.writes_aux.prev_timestamp,
                 record.from_timestamp + 1,

@@ -27,7 +27,7 @@ struct Rv64VecHeapAdapterCols {
     MemoryReadAuxCols<T> rd_read_aux;
 
     MemoryReadAuxCols<T> reads_aux[NUM_READS][BLOCKS_PER_READ];
-    MemoryWriteAuxCols<T, WRITE_SIZE> writes_aux[BLOCKS_PER_WRITE];
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> writes_aux[BLOCKS_PER_WRITE];
 };
 
 template <
@@ -120,7 +120,15 @@ struct Rv64VecHeapAdapter {
 
         for (int i = BLOCKS_PER_WRITE - 1; i >= 0; i--) {
             timestamp--;
-            COL_WRITE_ARRAY(row, Cols, writes_aux[i].prev_data, record.writes_aux[i].prev_data);
+            Fp packed_prev[BLOCK_FE_WIDTH];
+#pragma unroll
+            for (size_t k = 0; k < BLOCK_FE_WIDTH; k++) {
+                packed_prev[k] = Fp(
+                    uint32_t(record.writes_aux[i].prev_data[2 * k])
+                    + 256u * uint32_t(record.writes_aux[i].prev_data[2 * k + 1])
+                );
+            }
+            COL_WRITE_ARRAY(row, Cols, writes_aux[i].prev_data, packed_prev);
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Cols, writes_aux[i])),
                 record.writes_aux[i].prev_timestamp,

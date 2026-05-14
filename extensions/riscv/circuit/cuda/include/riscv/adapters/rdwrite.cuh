@@ -3,13 +3,14 @@
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
 #include "system/memory/controller.cuh"
+#include "system/memory/offline_checker.cuh"
 
 using namespace riscv;
 
 template <typename T> struct Rv64RdWriteAdapterCols {
     ExecutionState<T> from_state; // { pub pc: T, pub timestamp: T}
     T rd_ptr;
-    MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS> rd_aux_cols;
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> rd_aux_cols;
 };
 
 struct Rv64RdWriteAdapterRecord {
@@ -30,9 +31,15 @@ struct Rv64RdWriteAdapter {
         COL_WRITE_VALUE(row, Rv64RdWriteAdapterCols, from_state.timestamp, record.from_timestamp);
         COL_WRITE_VALUE(row, Rv64RdWriteAdapterCols, rd_ptr, record.rd_ptr);
 
-        COL_WRITE_ARRAY(
-            row, Rv64RdWriteAdapterCols, rd_aux_cols.prev_data, record.rd_aux_record.prev_data
-        );
+        Fp packed_prev[BLOCK_FE_WIDTH];
+#pragma unroll
+        for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
+            packed_prev[i] = Fp(
+                uint32_t(record.rd_aux_record.prev_data[2 * i])
+                + 256u * uint32_t(record.rd_aux_record.prev_data[2 * i + 1])
+            );
+        }
+        COL_WRITE_ARRAY(row, Rv64RdWriteAdapterCols, rd_aux_cols.prev_data, packed_prev);
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64RdWriteAdapterCols, rd_aux_cols.base)),
             record.rd_aux_record.prev_timestamp,

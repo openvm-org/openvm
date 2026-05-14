@@ -403,8 +403,12 @@ where
                     );
                     for chunk_idx in 0..DIGEST_BYTE_MEMORY_OPS {
                         let aux_idx = (row_idx - 1) * DIGEST_BYTE_MEMORY_OPS + chunk_idx;
-                        cols.write_bytes_aux[chunk_idx]
-                            .set_prev_data(write_aux[aux_idx].prev_data.map(F::from_u8));
+                        cols.write_bytes_aux[chunk_idx].set_prev_data(from_fn(|i| {
+                            F::from_u32(
+                                write_aux[aux_idx].prev_data[2 * i] as u32
+                                    + 256 * write_aux[aux_idx].prev_data[2 * i + 1] as u32,
+                            )
+                        }));
                         mem_helper.fill(
                             write_aux[aux_idx].prev_timestamp,
                             header.from_timestamp

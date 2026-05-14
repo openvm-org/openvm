@@ -11,7 +11,7 @@ use openvm_circuit::{
         ExecutionBridge, ExecutionState, VecHeapBranchAdapterInterface, VmAdapterAir,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord},
+        offline_checker::{pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord},
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
@@ -108,9 +108,9 @@ impl<
         // Read register values for rs
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
-                .read(
+                .read_4(
                     MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), ptr),
-                    expand_to_rv64_register(&val),
+                    pack_u8_for_bus::<AB>(&expand_to_rv64_register(&val)),
                     timestamp_pp(),
                     aux,
                 )
@@ -152,13 +152,20 @@ impl<
         // Reads from heap
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
+                debug_assert_eq!(
+                    READ_SIZE,
+                    openvm_circuit::arch::MEMORY_BLOCK_BYTES,
+                    "VecHeapBranch adapter only supports READ_SIZE = MEMORY_BLOCK_BYTES"
+                );
+                let read_array: [AB::Expr; openvm_circuit::arch::MEMORY_BLOCK_BYTES] =
+                    from_fn(|j| read[j].clone());
                 self.memory_bridge
-                    .read(
+                    .read_4(
                         MemoryAddress::new(
                             e,
                             address.clone() + AB::Expr::from_usize(i * READ_SIZE),
                         ),
-                        read,
+                        pack_u8_for_bus::<AB>(&read_array),
                         timestamp_pp(),
                         aux,
                     )

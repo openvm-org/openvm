@@ -2,9 +2,9 @@ use std::borrow::Borrow;
 
 use itertools::izip;
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState, MEMORY_BLOCK_BYTES},
+    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
@@ -156,9 +156,9 @@ impl XorinVmAir {
             register_aux
         ) {
             self.memory_bridge
-                .read(
+                .read_4(
                     MemoryAddress::new(AB::Expr::from_u32(RV64_REGISTER_AS), ptr),
-                    value,
+                    pack_u8_for_bus::<AB>(&value),
                     timestamp.clone(),
                     aux,
                 )
@@ -227,9 +227,9 @@ impl XorinVmAir {
             let should_read = is_enabled * not(is_padding);
 
             self.memory_bridge
-                .read(
+                .read_4(
                     MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), ptr),
-                    [
+                    pack_u8_for_bus::<AB>(&[
                         input[0].into(),
                         input[1].into(),
                         input[2].into(),
@@ -238,7 +238,7 @@ impl XorinVmAir {
                         input[5].into(),
                         input[6].into(),
                         input[7].into(),
-                    ],
+                    ]),
                     timestamp.clone(),
                     mem_aux,
                 )
@@ -260,9 +260,9 @@ impl XorinVmAir {
             let should_read = is_enabled * not(is_padding);
 
             self.memory_bridge
-                .read(
+                .read_4(
                     MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), ptr),
-                    [
+                    pack_u8_for_bus::<AB>(&[
                         input[0].into(),
                         input[1].into(),
                         input[2].into(),
@@ -271,7 +271,7 @@ impl XorinVmAir {
                         input[5].into(),
                         input[6].into(),
                         input[7].into(),
-                    ],
+                    ]),
                     timestamp.clone(),
                     mem_aux,
                 )
@@ -316,7 +316,7 @@ impl XorinVmAir {
         builder: &mut AB,
         local: &XorinVmCols<AB::Var>,
         start_write_timestamp: AB::Expr,
-        mem_aux: &[MemoryWriteAuxCols<AB::Var, MEMORY_BLOCK_BYTES>; KECCAK_RATE_MEM_OPS],
+        mem_aux: &[MemoryWriteAuxCols<AB::Var, BLOCK_FE_WIDTH>; KECCAK_RATE_MEM_OPS],
     ) {
         let mut timestamp = start_write_timestamp;
         let is_enabled = local.instruction.is_enabled;
@@ -336,9 +336,9 @@ impl XorinVmAir {
             let ptr = local.instruction.buffer_ptr + AB::F::from_usize(i * MEMORY_BLOCK_BYTES);
 
             self.memory_bridge
-                .write(
+                .write_4(
                     MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), ptr),
-                    [
+                    pack_u8_for_bus::<AB>(&[
                         output[0].into(),
                         output[1].into(),
                         output[2].into(),
@@ -347,7 +347,7 @@ impl XorinVmAir {
                         output[5].into(),
                         output[6].into(),
                         output[7].into(),
-                    ],
+                    ]),
                     timestamp.clone(),
                     mem_aux,
                 )

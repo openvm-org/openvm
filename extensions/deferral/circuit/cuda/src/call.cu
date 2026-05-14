@@ -19,8 +19,9 @@ using namespace deferral;
 using namespace canonicity;
 using namespace lookup;
 
-// Byte-AS write aux (RV64_MEMORY_AS): `MEMORY_BLOCK_BYTES` bytes per bus op.
-template <typename T> using MemoryWriteAuxColsByte = MemoryWriteAuxCols<T, MEMORY_BLOCK_BYTES>;
+// Byte-AS write aux (RV64_MEMORY_AS): `MEMORY_BLOCK_BYTES` bytes packed into
+// `BLOCK_FE_WIDTH` field cells per bus op.
+template <typename T> using MemoryWriteAuxColsByte = MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>;
 // F-AS write aux (DEFERRAL_AS): `BLOCK_FE_WIDTH` cells per bus op.
 template <typename T> using MemoryWriteAuxColsF = MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>;
 
@@ -199,7 +200,7 @@ template <typename T> struct DeferralCallAdapterCols {
     MemoryReadAuxCols<T> old_input_acc_aux[DIGEST_F_MEMORY_OPS];
     MemoryReadAuxCols<T> old_output_acc_aux[DIGEST_F_MEMORY_OPS];
 
-    MemoryWriteAuxCols<T, MEMORY_BLOCK_BYTES> output_commit_and_len_aux[OUTPUT_TOTAL_MEMORY_OPS];
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> output_commit_and_len_aux[OUTPUT_TOTAL_MEMORY_OPS];
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> new_input_acc_aux[DIGEST_F_MEMORY_OPS];
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> new_output_acc_aux[DIGEST_F_MEMORY_OPS];
 };
@@ -279,10 +280,15 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
             COL_INDEX(DeferralCallAdapterCols, output_commit_and_len_aux) +
             i * write_byte_aux_stride
         );
-        COL_WRITE_ARRAY(
-            aux_row, MemoryWriteAuxColsByte, prev_data,
-            record.output_commit_and_len_aux[i].prev_data
-        );
+        Fp packed_prev[BLOCK_FE_WIDTH];
+#pragma unroll
+        for (size_t k = 0; k < BLOCK_FE_WIDTH; ++k) {
+            packed_prev[k] = Fp(
+                uint32_t(record.output_commit_and_len_aux[i].prev_data[2 * k])
+                + 256u * uint32_t(record.output_commit_and_len_aux[i].prev_data[2 * k + 1])
+            );
+        }
+        COL_WRITE_ARRAY(aux_row, MemoryWriteAuxColsByte, prev_data, packed_prev);
         mem_helper.fill(aux_row, record.output_commit_and_len_aux[i].prev_timestamp, timestamp++);
     }
 

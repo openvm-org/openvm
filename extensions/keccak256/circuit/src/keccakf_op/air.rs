@@ -4,7 +4,7 @@ use itertools::izip;
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionState, MEMORY_BLOCK_BYTES},
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryWriteAuxCols},
+        offline_checker::{pack_u8_for_bus, MemoryBridge},
         MemoryAddress,
     },
 };
@@ -71,9 +71,9 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         let buffer_ptr_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] =
             expand_to_rv64_register(&local.buffer_ptr_limbs);
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), rd_ptr),
-                buffer_ptr_limbs,
+                pack_u8_for_bus::<AB>(&buffer_ptr_limbs),
                 timestamp_pp(),
                 &local.rd_aux,
             )
@@ -135,19 +135,17 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             //   accesses are valid and timestamp always moves forward, the new write to `ptr` must
             //   be valid as well.
             let ptr = buffer_ptr.clone() + AB::F::from_usize(word_idx * MEMORY_BLOCK_BYTES);
-            let prev_data: &[_; MEMORY_BLOCK_BYTES] = prev_word.try_into().unwrap();
+            let prev_data: [AB::Expr; MEMORY_BLOCK_BYTES] =
+                std::array::from_fn(|i| prev_word[i].into());
             // post_word consists of bytes due to range checks above
-            let data: &[_; MEMORY_BLOCK_BYTES] = post_word.try_into().unwrap();
-            let write_aux = MemoryWriteAuxCols {
-                base: base_aux,
-                prev_data: *prev_data,
-            };
+            let data: [AB::Expr; MEMORY_BLOCK_BYTES] = std::array::from_fn(|i| post_word[i].into());
             self.memory_bridge
-                .write(
+                .write_4_with_prev(
                     MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), ptr),
-                    *data,
+                    pack_u8_for_bus::<AB>(&data),
+                    pack_u8_for_bus::<AB>(&prev_data),
                     timestamp_pp(),
-                    &write_aux,
+                    &base_aux,
                 )
                 .eval(builder, is_valid);
         }

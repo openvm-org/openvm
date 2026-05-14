@@ -45,23 +45,19 @@ impl MemoryBridge {
         self.offline_checker.timestamp_lt_air.bus
     }
 
-    /// Prepare a logical memory read operation.
-    ///
-    /// **Legacy API (transitional, will be removed in Stage 2).** Used by
-    /// every chip that takes `[T; 8]` data arrays; this path packs them
-    /// pairwise into `[T; BLOCK_FE_WIDTH]` (= `[T; 4]`) for the u16 memory bus.
-    ///
-    /// For new chip code that produces `BLOCK_FE_WIDTH` bus-shaped field
-    /// expressions directly, use [`MemoryBridge::read_4`] instead — it
-    /// skips the legacy pack.
+    /// Prepare a logical memory read whose chip-side AIR produces the
+    /// `BLOCK_FE_WIDTH`-shaped bus message (= `[T; 4]`). Chips are
+    /// responsible for composing the 4 expressions from their native
+    /// columns — `[col[0]+256·col[1], …]` for Pattern A (u8) chips or 4 u16
+    /// columns directly for Pattern B.
     #[must_use]
-    pub fn read<'a, T, V, const N: usize>(
+    pub fn read_4<'a, T, V>(
         &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
-        data: [impl Into<T>; N],
+        data: [impl Into<T>; crate::arch::BLOCK_FE_WIDTH],
         timestamp: impl Into<T>,
         aux: &'a MemoryReadAuxCols<V>,
-    ) -> MemoryReadOperation<'a, T, V, N> {
+    ) -> MemoryReadOperation<'a, T, V, { crate::arch::BLOCK_FE_WIDTH }> {
         MemoryReadOperation {
             offline_checker: self.offline_checker,
             address: MemoryAddress::from(address),
@@ -71,19 +67,16 @@ impl MemoryBridge {
         }
     }
 
-    /// Prepare a logical memory write operation.
-    ///
-    /// **Legacy API (transitional, will be removed in Stage 2).** See
-    /// [`MemoryBridge::read`] for the rationale; the matching forward-compat
-    /// method is [`MemoryBridge::write_4`].
+    /// Prepare a logical memory write whose chip-side AIR produces the
+    /// `BLOCK_FE_WIDTH`-shaped bus message. See [`MemoryBridge::read_4`].
     #[must_use]
-    pub fn write<'a, T, V, const N: usize>(
+    pub fn write_4<'a, T, V>(
         &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
-        data: [impl Into<T>; N],
+        data: [impl Into<T>; crate::arch::BLOCK_FE_WIDTH],
         timestamp: impl Into<T>,
-        aux: &'a MemoryWriteAuxCols<V, N>,
-    ) -> MemoryWriteOperation<'a, T, V, N> {
+        aux: &'a MemoryWriteAuxCols<V, { crate::arch::BLOCK_FE_WIDTH }>,
+    ) -> MemoryWriteOperation<'a, T, V, { crate::arch::BLOCK_FE_WIDTH }> {
         MemoryWriteOperation {
             offline_checker: self.offline_checker,
             address: MemoryAddress::from(address),
@@ -93,33 +86,30 @@ impl MemoryBridge {
         }
     }
 
-    /// Prepare a logical memory read whose chip-side AIR already produces
-    /// the `BLOCK_FE_WIDTH`-shaped bus message (= `[T; 4]`). No packing on
-    /// the bridge side; chips are responsible for composing the 4
-    /// expressions from their native columns — `[col[0]+256·col[1], …]` for
-    /// Pattern A (u8) chips or 4 u16 columns directly for Pattern B.
+    /// Variant of [`MemoryBridge::write_4`] where `prev_data` is supplied as
+    /// `BLOCK_FE_WIDTH` field-element expressions (e.g. composed from the
+    /// chip's own u8 columns) instead of being read off an
+    /// `MemoryWriteAuxCols` column slot. The aux only contains the timestamp
+    /// metadata (`MemoryBaseAuxCols`). Used by chips like Keccak256 / SHA2 /
+    /// LoadStore that already materialize the prev_data bytes in their own
+    /// columns and don't want to duplicate them in an adapter aux slot.
     #[must_use]
-    pub fn read_4<'a, T, V>(
+    pub fn write_4_with_prev<'a, T, V>(
         &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
         data: [impl Into<T>; crate::arch::BLOCK_FE_WIDTH],
+        prev_data: [impl Into<T>; crate::arch::BLOCK_FE_WIDTH],
         timestamp: impl Into<T>,
-        aux: &'a MemoryReadAuxCols<V>,
-    ) -> MemoryReadOperation<'a, T, V, { crate::arch::BLOCK_FE_WIDTH }> {
-        self.read(address, data, timestamp, aux)
-    }
-
-    /// Forward-compat counterpart of [`MemoryBridge::write`]. See
-    /// [`MemoryBridge::read_4`].
-    #[must_use]
-    pub fn write_4<'a, T, V>(
-        &self,
-        address: MemoryAddress<impl Into<T>, impl Into<T>>,
-        data: [impl Into<T>; crate::arch::BLOCK_FE_WIDTH],
-        timestamp: impl Into<T>,
-        aux: &'a MemoryWriteAuxCols<V, { crate::arch::BLOCK_FE_WIDTH }>,
-    ) -> MemoryWriteOperation<'a, T, V, { crate::arch::BLOCK_FE_WIDTH }> {
-        self.write(address, data, timestamp, aux)
+        aux_base: &'a MemoryBaseAuxCols<V>,
+    ) -> MemoryWriteOperationWithPrev<'a, T, V> {
+        MemoryWriteOperationWithPrev {
+            offline_checker: self.offline_checker,
+            address: MemoryAddress::from(address),
+            data: data.map(Into::into),
+            prev_data: prev_data.map(Into::into),
+            timestamp: timestamp.into(),
+            aux_base,
+        }
     }
 }
 
@@ -215,6 +205,45 @@ impl<T: PrimeCharacteristicRing, V: Copy + Into<T>, const N: usize>
             &self.aux.prev_data.map(Into::into),
             self.timestamp,
             self.aux.base.prev_timestamp,
+            enabled,
+        );
+    }
+}
+
+/// Constraints and interactions for a write whose `prev_data` is supplied as
+/// `BLOCK_FE_WIDTH` field-element expressions rather than being loaded from a
+/// `MemoryWriteAuxCols` column slot. See
+/// [`MemoryBridge::write_4_with_prev`].
+pub struct MemoryWriteOperationWithPrev<'a, T, V> {
+    offline_checker: MemoryOfflineChecker,
+    address: MemoryAddress<T, T>,
+    data: [T; crate::arch::BLOCK_FE_WIDTH],
+    prev_data: [T; crate::arch::BLOCK_FE_WIDTH],
+    timestamp: T,
+    aux_base: &'a MemoryBaseAuxCols<V>,
+}
+
+impl<T: PrimeCharacteristicRing, V: Copy + Into<T>> MemoryWriteOperationWithPrev<'_, T, V> {
+    /// Evaluate constraints and send/receive interactions. `enabled` must be boolean.
+    pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
+    where
+        AB: InteractionBuilder<Var = V, Expr = T>,
+    {
+        let enabled = enabled.into();
+        self.offline_checker.eval_timestamps(
+            builder,
+            self.timestamp.clone(),
+            self.aux_base,
+            enabled.clone(),
+        );
+
+        self.offline_checker.eval_bulk_access(
+            builder,
+            self.address,
+            &self.data,
+            &self.prev_data,
+            self.timestamp,
+            self.aux_base.prev_timestamp,
             enabled,
         );
     }

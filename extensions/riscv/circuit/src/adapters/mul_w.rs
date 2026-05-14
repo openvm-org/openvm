@@ -7,11 +7,12 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
+            pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -49,7 +50,7 @@ pub struct Rv64MultWAdapterCols<T> {
     /// Sign bit of the low-word core result used to build full-width sign-extended writes.
     pub result_sign: T,
     pub reads_aux: [MemoryReadAuxCols<T>; 2],
-    pub writes_aux: MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS>,
+    pub writes_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
 
 /// Same instruction format as `Rv64MultAdapterAir`, but only exposes the low 32-bit limbs
@@ -101,9 +102,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
             }
         });
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs1_ptr),
-                rs1_data,
+                pack_u8_for_bus::<AB>(&rs1_data),
                 timestamp_pp(),
                 &local.reads_aux[0],
             )
@@ -117,9 +118,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
             }
         });
         self.memory_bridge
-            .read(
+            .read_4(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs2_ptr),
-                rs2_data,
+                pack_u8_for_bus::<AB>(&rs2_data),
                 timestamp_pp(),
                 &local.reads_aux[1],
             )
@@ -146,9 +147,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
             }
         });
         self.memory_bridge
-            .write(
+            .write_4(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rd_ptr),
-                write_data,
+                pack_u8_for_bus::<AB>(&write_data),
                 timestamp_pp(),
                 &local.writes_aux,
             )
@@ -294,9 +295,12 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64MultWAdapterFiller {
         // We must assign in reverse
         let mut timestamp = record.from_timestamp + 2;
 
-        adapter_row
-            .writes_aux
-            .set_prev_data(record.writes_aux.prev_data.map(F::from_u8));
+        adapter_row.writes_aux.set_prev_data(array::from_fn(|i| {
+            F::from_u32(
+                record.writes_aux.prev_data[2 * i] as u32
+                    + 256 * record.writes_aux.prev_data[2 * i + 1] as u32,
+            )
+        }));
         mem_helper.fill(
             record.writes_aux.prev_timestamp,
             timestamp,

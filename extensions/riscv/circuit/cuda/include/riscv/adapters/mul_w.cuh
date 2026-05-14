@@ -19,7 +19,7 @@ template <typename T> struct Rv64MultWAdapterCols {
     /// Sign bit of the low-word core result used to build full-width sign-extended writes.
     T result_sign;
     MemoryReadAuxCols<T> reads_aux[2];
-    MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS> writes_aux;
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> writes_aux;
 };
 
 struct Rv64MultWAdapterRecord {
@@ -50,9 +50,15 @@ struct Rv64MultWAdapter {
         : mem_helper(range_checker, timestamp_max_bits), bitwise_lookup(lookup) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv64MultWAdapterRecord record) {
-        COL_WRITE_ARRAY(
-            row, Rv64MultWAdapterCols, writes_aux.prev_data, record.writes_aux.prev_data
-        );
+        Fp packed_prev[BLOCK_FE_WIDTH];
+#pragma unroll
+        for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
+            packed_prev[i] = Fp(
+                uint32_t(record.writes_aux.prev_data[2 * i])
+                + 256u * uint32_t(record.writes_aux.prev_data[2 * i + 1])
+            );
+        }
+        COL_WRITE_ARRAY(row, Rv64MultWAdapterCols, writes_aux.prev_data, packed_prev);
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64MultWAdapterCols, writes_aux.base)),
             record.writes_aux.prev_timestamp,

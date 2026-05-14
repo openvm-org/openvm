@@ -39,7 +39,7 @@ struct XorinMemoryCols {
     MemoryReadAuxCols<T> register_aux_cols[XORIN_REGISTER_READS];
     MemoryReadAuxCols<T> input_bytes_read_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
     MemoryReadAuxCols<T> buffer_bytes_read_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
-    MemoryWriteAuxCols<T, program::DEFAULT_BLOCK_SIZE>
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>
         buffer_bytes_write_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
 };
 

@@ -46,7 +46,7 @@ struct DeferralOutputPerRow {
     Fp poseidon2_res[DIGEST_SIZE];
 };
 
-template <typename T> using MemoryWriteAuxColsDef = MemoryWriteAuxCols<T, MEMORY_BLOCK_BYTES>;
+template <typename T> using MemoryWriteAuxColsDef = MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>;
 
 __device__ __forceinline__ size_t align_up(size_t value, size_t alignment) {
     return ((value + alignment - 1) / alignment) * alignment;
@@ -100,7 +100,7 @@ template <typename T> struct DeferralOutputCols {
     // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
     // written to memory and auxiliary columns.
     T sponge_inputs[DIGEST_SIZE];
-    MemoryWriteAuxCols<T, MEMORY_BLOCK_BYTES> write_bytes_aux[DIGEST_BYTE_MEMORY_OPS];
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_bytes_aux[DIGEST_BYTE_MEMORY_OPS];
 
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.
@@ -271,7 +271,15 @@ __global__ void deferral_output_tracegen(
             RowSlice aux_row = row.slice_from(
                 COL_INDEX(DeferralOutputCols, write_bytes_aux) + chunk_idx * write_aux_stride
             );
-            COL_WRITE_ARRAY(aux_row, MemoryWriteAuxColsDef, prev_data, write_aux[aux_idx].prev_data);
+            Fp packed_prev[BLOCK_FE_WIDTH];
+#pragma unroll
+            for (size_t k = 0; k < BLOCK_FE_WIDTH; ++k) {
+                packed_prev[k] = Fp(
+                    uint32_t(write_aux[aux_idx].prev_data[2 * k])
+                    + 256u * uint32_t(write_aux[aux_idx].prev_data[2 * k + 1])
+                );
+            }
+            COL_WRITE_ARRAY(aux_row, MemoryWriteAuxColsDef, prev_data, packed_prev);
             mem_helper.fill(
                 aux_row,
                 write_aux[aux_idx].prev_timestamp,
