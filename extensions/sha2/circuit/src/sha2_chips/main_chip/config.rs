@@ -16,6 +16,10 @@ pub trait Sha2MainChipConfig: Send + Sync + Clone {
     const BLOCK_READS: usize = Self::BLOCK_BYTES / SHA2_READ_SIZE;
     const STATE_READS: usize = Self::STATE_BYTES / SHA2_READ_SIZE;
     const STATE_WRITES: usize = Self::STATE_BYTES / SHA2_WRITE_SIZE;
+    /// Number of u16 cells in a SHA state (= STATE_BYTES / 2). Used for the `prev_state` column,
+    /// which the chip stores natively as u16 cells (matching the bus's pair-of-bytes shape) to
+    /// save half the cells vs. the byte-shaped representation.
+    const STATE_U16S: usize = Self::STATE_BYTES / 2;
 
     const TIMESTAMP_DELTA: usize =
         Self::BLOCK_READS + Self::STATE_READS + Self::STATE_WRITES + SHA2_REGISTER_READS;

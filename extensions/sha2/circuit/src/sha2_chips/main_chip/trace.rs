@@ -145,7 +145,15 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
 
         *cols.block.request_id = F::from_usize(row_idx);
         set_arrayview_from_u8_slice(&mut cols.block.message_bytes, message_bytes);
-        set_arrayview_from_u8_slice(&mut cols.block.prev_state, prev_state);
+        // `prev_state` is u16-shaped: pack each pair of consecutive bytes into one u16 cell.
+        let prev_state_u16s = prev_state
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]));
+        cols.block
+            .prev_state
+            .iter_mut()
+            .zip(prev_state_u16s)
+            .for_each(|(slot, v)| *slot = F::from_u16(v));
         set_arrayview_from_u8_slice(&mut cols.block.new_state, new_state);
 
         *cols.instruction.is_enabled = F::ONE;

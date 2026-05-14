@@ -10,8 +10,13 @@ use crate::{Sha2MainChipConfig, SHA2_REGISTER_READS, SHA2_WRITE_SIZE};
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
 #[config(Sha2MainChipConfig)]
-pub struct Sha2Cols<T, const BLOCK_BYTES: usize, const STATE_BYTES: usize> {
-    pub block: Sha2BlockCols<T, BLOCK_BYTES, STATE_BYTES>,
+pub struct Sha2Cols<
+    T,
+    const BLOCK_BYTES: usize,
+    const STATE_BYTES: usize,
+    const STATE_U16S: usize,
+> {
+    pub block: Sha2BlockCols<T, BLOCK_BYTES, STATE_BYTES, STATE_U16S>,
     pub instruction: Sha2InstructionCols<T>,
     pub mem: Sha2MemoryCols<T, BLOCK_BYTES, STATE_BYTES, SHA2_WRITE_SIZE>,
 }
@@ -19,14 +24,23 @@ pub struct Sha2Cols<T, const BLOCK_BYTES: usize, const STATE_BYTES: usize> {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
 #[config(Sha2MainChipConfig)]
-pub struct Sha2BlockCols<T, const BLOCK_BYTES: usize, const STATE_BYTES: usize> {
+pub struct Sha2BlockCols<
+    T,
+    const BLOCK_BYTES: usize,
+    const STATE_BYTES: usize,
+    const STATE_U16S: usize,
+> {
     /// Identifier of this row in the interactions between the two chips
     pub request_id: T,
     /// Input bytes for this block
     pub message_bytes: [T; BLOCK_BYTES],
-    /// Previous state of the SHA-2 hasher object, as little-endian words
-    pub prev_state: [T; STATE_BYTES],
-    /// New state of the SHA-2 hasher object after processing this block, as little-endian words
+    /// Previous state of the SHA-2 hasher object, as little-endian 16-bit cells. Each cell
+    /// holds two consecutive message bytes packed `lo | hi << 8` to match the bus interaction
+    /// with the block hasher.
+    pub prev_state: [T; STATE_U16S],
+    /// New state of the SHA-2 hasher object after processing this block, as little-endian
+    /// **bytes**. The block hasher receives `final_hash` byte-by-byte, so this column stays
+    /// byte-shaped.
     pub new_state: [T; STATE_BYTES],
 }
 

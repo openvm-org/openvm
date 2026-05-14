@@ -41,7 +41,18 @@ static __device__ __forceinline__ void sha2_main_row_body(
     // Block cols
     SHA2_MAIN_WRITE_BLOCK(V, row, request_id, Fp(row_idx));
     SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, message_bytes, record.message_bytes);
-    SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, prev_state, record.prev_state);
+    // `prev_state` is u16-shaped: pack each pair of consecutive bytes into one cell.
+    {
+        Fp prev_state_u16s[V::STATE_U16S];
+#pragma unroll
+        for (size_t k = 0; k < V::STATE_U16S; k++) {
+            prev_state_u16s[k] = Fp(
+                static_cast<uint32_t>(record.prev_state[2 * k])
+                | (static_cast<uint32_t>(record.prev_state[2 * k + 1]) << 8)
+            );
+        }
+        SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, prev_state, prev_state_u16s);
+    }
     SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, new_state, record.new_state);
 
     // Instruction cols

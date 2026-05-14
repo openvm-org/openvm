@@ -14,7 +14,9 @@ namespace sha2 {
 template <typename V, typename T> struct Sha2MainBlockCols {
     T request_id;
     T message_bytes[V::BLOCK_U8S];
-    T prev_state[V::STATE_BYTES];
+    // `prev_state` is u16-shaped (one u16 cell per byte pair); `new_state` stays byte-shaped
+    // because the block hasher receives it byte-by-byte.
+    T prev_state[V::STATE_U16S];
     T new_state[V::STATE_BYTES];
 };
 
