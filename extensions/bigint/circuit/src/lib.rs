@@ -4,7 +4,7 @@
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 use openvm_circuit::{
     self,
-    arch::{InitFileGenerator, SystemConfig, VmAirWrapper, VmChipWrapper, MEMORY_BLOCK_BYTES},
+    arch::{InitFileGenerator, SystemConfig, VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
     system::SystemExecutor,
 };
 use openvm_circuit_derive::{PreflightExecutor, VmConfig};
@@ -49,6 +49,10 @@ pub const INT256_NUM_BLOCKS: usize = INT256_NUM_LIMBS / MEMORY_BLOCK_BYTES;
 pub const INT256_NUM_U64_LIMBS: usize = INT256_NUM_LIMBS / size_of::<u64>();
 /// Number of u32 limbs in a 256-bit integer.
 pub const INT256_NUM_U32_LIMBS: usize = INT256_NUM_LIMBS / size_of::<u32>();
+/// Number of u16 limbs in a 256-bit integer.
+pub const INT256_NUM_U16_LIMBS: usize = INT256_NUM_LIMBS / size_of::<u16>();
+/// Bit width of an INT256 u16 limb (post Pattern B Branch256 migration).
+pub const INT256_U16_LIMB_BITS: usize = 16;
 /// Number of source operand reads (rs1, rs2) for binary 256-bit instructions.
 pub(crate) const NUM_READS: usize = 2;
 
@@ -86,22 +90,25 @@ type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
     INT256_NUM_LIMBS,
 >;
 
-/// Type alias for the Branch adapter AIR wrapper
+/// Type alias for the Branch adapter AIR wrapper.
+///
+/// After the Pattern B migration the heap-branch adapter delivers `BLOCK_FE_WIDTH=4` u16 cells
+/// per block, so the flattened width is `INT256_NUM_BLOCKS * BLOCK_FE_WIDTH = INT256_NUM_U16_LIMBS`.
 type BranchAdapterAir = VecToFlatBranchAdapterAir<
-    Rv64VecHeapBranchAdapterAir<NUM_READS, INT256_NUM_BLOCKS, MEMORY_BLOCK_BYTES>,
+    Rv64VecHeapBranchAdapterAir<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>,
     NUM_READS,
     INT256_NUM_BLOCKS,
-    MEMORY_BLOCK_BYTES,
-    INT256_NUM_LIMBS,
+    BLOCK_FE_WIDTH,
+    INT256_NUM_U16_LIMBS,
 >;
 
-/// Type alias for the Branch adapter executor wrapper
+/// Type alias for the Branch adapter executor wrapper.
 type BranchAdapterExecutor = VecToFlatBranchAdapterExecutor<
-    Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, MEMORY_BLOCK_BYTES>,
+    Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>,
     NUM_READS,
     INT256_NUM_BLOCKS,
-    MEMORY_BLOCK_BYTES,
-    INT256_NUM_LIMBS,
+    BLOCK_FE_WIDTH,
+    INT256_NUM_U16_LIMBS,
 >;
 
 /// BaseAlu256
@@ -193,31 +200,38 @@ pub type Rv64Shift256Chip<F> = VmChipWrapper<
 >;
 
 /// BranchEqual256
-pub type Rv64BranchEqual256Air =
-    VmAirWrapper<BranchAdapterAir, BranchEqualCoreAir<INT256_NUM_LIMBS>>;
+pub type Rv64BranchEqual256Air = VmAirWrapper<
+    BranchAdapterAir,
+    BranchEqualCoreAir<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>,
+>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv64BranchEqual256Executor(BranchEqualExecutor<BranchAdapterExecutor, INT256_NUM_LIMBS>);
+pub struct Rv64BranchEqual256Executor(
+    BranchEqualExecutor<BranchAdapterExecutor, INT256_NUM_U16_LIMBS>,
+);
 pub type Rv64BranchEqual256Chip<F> = VmChipWrapper<
     F,
     BranchEqualFiller<
-        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, MEMORY_BLOCK_BYTES>,
-        INT256_NUM_LIMBS,
+        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>,
+        INT256_NUM_U16_LIMBS,
+        INT256_U16_LIMB_BITS,
     >,
 >;
 
 /// BranchLessThan256
-pub type Rv64BranchLessThan256Air =
-    VmAirWrapper<BranchAdapterAir, BranchLessThanCoreAir<INT256_NUM_LIMBS, RV64_CELL_BITS>>;
+pub type Rv64BranchLessThan256Air = VmAirWrapper<
+    BranchAdapterAir,
+    BranchLessThanCoreAir<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>,
+>;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv64BranchLessThan256Executor(
-    BranchLessThanExecutor<BranchAdapterExecutor, INT256_NUM_LIMBS, RV64_CELL_BITS>,
+    BranchLessThanExecutor<BranchAdapterExecutor, INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>,
 );
 pub type Rv64BranchLessThan256Chip<F> = VmChipWrapper<
     F,
     BranchLessThanFiller<
-        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, MEMORY_BLOCK_BYTES>,
-        INT256_NUM_LIMBS,
-        RV64_CELL_BITS,
+        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>,
+        INT256_NUM_U16_LIMBS,
+        INT256_U16_LIMB_BITS,
     >,
 >;
 

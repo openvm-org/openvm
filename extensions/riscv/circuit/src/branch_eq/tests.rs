@@ -1,19 +1,17 @@
-use std::{array, borrow::BorrowMut, sync::Arc};
+use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS,
-        },
+        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
         Arena, ExecutionBridge, PreflightExecutor,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
-};
+use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
+#[cfg(feature = "cuda")]
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+#[cfg(feature = "cuda")]
+use std::sync::Arc;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
@@ -41,10 +39,10 @@ use {
     },
 };
 
-use super::{core::run_eq, BranchEqualCoreCols, Rv64BranchEqualChip};
+use super::{core::run_eq, BranchEqualCoreCols, Rv64BranchEqualChip, RV64_BRANCH_NUM_LIMBS};
 use crate::{
     adapters::{
-        Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller, RV64_CELL_BITS,
+        Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller,
         RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_eq::fast_run_eq,
@@ -54,13 +52,25 @@ use crate::{
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
+
+/// Convert a `[u16; 4]` register value to its little-endian 8-byte representation.
+#[inline]
+fn u16_array_to_bytes_le(arr: &[u16; RV64_BRANCH_NUM_LIMBS]) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    let mut out = [0u8; RV64_REGISTER_NUM_LIMBS];
+    for (i, &v) in arr.iter().enumerate() {
+        let [lo, hi] = v.to_le_bytes();
+        out[2 * i] = lo;
+        out[2 * i + 1] = hi;
+    }
+    out
+}
 type Harness =
     TestChipHarness<F, Rv64BranchEqualExecutor, Rv64BranchEqualAir, Rv64BranchEqualChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (
     Rv64BranchEqualAir,
@@ -70,7 +80,7 @@ fn create_harness_fields(
     let air = Rv64BranchEqualAir::new(
         Rv64BranchAdapterAir::new(execution_bridge, memory_bridge),
         BranchEqualCoreAir::new(
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             BranchEqualOpcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
@@ -83,7 +93,7 @@ fn create_harness_fields(
     let chip = Rv64BranchEqualChip::new(
         BranchEqualFiller::new(
             Rv64BranchAdapterFiller,
-            bitwise_chip,
+            range_checker_chip,
             BranchEqualOpcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
@@ -92,28 +102,15 @@ fn create_harness_fields(
     (air, executor, chip)
 }
 
-fn create_harness(
-    tester: &mut VmChipTestBuilder<F>,
-) -> (
-    Harness,
-    (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
-    ),
-) {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
-        bitwise_bus,
-    ));
-
+fn create_harness(tester: &mut VmChipTestBuilder<F>) -> Harness {
+    let range_checker = tester.range_checker();
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        bitwise_chip.clone(),
+        range_checker,
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
-    (harness, (bitwise_chip.air, bitwise_chip))
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -123,22 +120,24 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     arena: &mut RA,
     rng: &mut StdRng,
     opcode: BranchEqualOpcode,
-    a: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-    b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
+    a: Option<[u16; RV64_BRANCH_NUM_LIMBS]>,
+    b: Option<[u16; RV64_BRANCH_NUM_LIMBS]>,
     imm: Option<i32>,
 ) {
-    let a = a.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+    let a = a.unwrap_or(array::from_fn(|_| rng.random_range(0..=u16::MAX)));
     let b = b.unwrap_or(if rng.random_bool(0.5) {
         a
     } else {
-        array::from_fn(|_| rng.random_range(0..=u8::MAX))
+        array::from_fn(|_| rng.random_range(0..=u16::MAX))
     });
 
     let imm = imm.unwrap_or(rng.random_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
-    let rs1 = gen_pointer(rng, 8);
-    let rs2 = gen_pointer(rng, 8);
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_u8));
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_u8));
+    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let a_bytes: [F; RV64_REGISTER_NUM_LIMBS] = u16_array_to_bytes_le(&a).map(F::from_u8);
+    let b_bytes: [F; RV64_REGISTER_NUM_LIMBS] = u16_array_to_bytes_le(&b).map(F::from_u8);
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a_bytes);
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b_bytes);
 
     let initial_pc = rng.random_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)));
     tester.execute_with_pc(
@@ -175,7 +174,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 fn rand_rv64_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&mut tester);
+    let mut harness = create_harness(&mut tester);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -190,11 +189,7 @@ fn rand_rv64_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
         );
     }
 
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -208,16 +203,16 @@ fn rand_rv64_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
 #[allow(clippy::too_many_arguments)]
 fn run_negative_branch_eq_test(
     opcode: BranchEqualOpcode,
-    a: [u8; RV64_REGISTER_NUM_LIMBS],
-    b: [u8; RV64_REGISTER_NUM_LIMBS],
+    a: [u16; RV64_BRANCH_NUM_LIMBS],
+    b: [u16; RV64_BRANCH_NUM_LIMBS],
     prank_cmp_result: Option<bool>,
-    prank_diff_inv_marker: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prank_diff_inv_marker: Option<[u32; RV64_BRANCH_NUM_LIMBS]>,
     _interaction_error: bool,
 ) {
     let imm = 16i32;
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&mut tester);
+    let mut harness = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -233,7 +228,7 @@ fn run_negative_branch_eq_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut BranchEqualCoreCols<F, RV64_REGISTER_NUM_LIMBS> =
+        let cols: &mut BranchEqualCoreCols<F, RV64_BRANCH_NUM_LIMBS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         if let Some(cmp_result) = prank_cmp_result {
             cols.cmp_result = F::from_bool(cmp_result);
@@ -248,7 +243,6 @@ fn run_negative_branch_eq_test(
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
         .finalize();
     tester
         .simple_test()
@@ -259,8 +253,8 @@ fn run_negative_branch_eq_test(
 fn rv64_beq_wrong_cmp_negative_test() {
     run_negative_branch_eq_test(
         BranchEqualOpcode::BEQ,
-        [0, 0, 7, 0, 0, 0, 0, 0],
-        [0, 0, 0, 7, 0, 0, 0, 0],
+        [0, 7, 0, 0],
+        [0, 0, 7, 0],
         Some(true),
         None,
         false,
@@ -268,8 +262,8 @@ fn rv64_beq_wrong_cmp_negative_test() {
 
     run_negative_branch_eq_test(
         BranchEqualOpcode::BEQ,
-        [0, 0, 7, 0, 0, 0, 0, 0],
-        [0, 0, 7, 0, 0, 0, 0, 0],
+        [0, 7, 0, 0],
+        [0, 7, 0, 0],
         Some(false),
         None,
         false,
@@ -280,10 +274,10 @@ fn rv64_beq_wrong_cmp_negative_test() {
 fn rv64_beq_zero_inv_marker_negative_test() {
     run_negative_branch_eq_test(
         BranchEqualOpcode::BEQ,
-        [0, 0, 7, 0, 0, 0, 0, 0],
-        [0, 0, 0, 7, 0, 0, 0, 0],
+        [0, 7, 0, 0],
+        [0, 0, 7, 0],
         Some(true),
-        Some([0, 0, 0, 0, 0, 0, 0, 0]),
+        Some([0, 0, 0, 0]),
         false,
     );
 }
@@ -292,10 +286,10 @@ fn rv64_beq_zero_inv_marker_negative_test() {
 fn rv64_beq_invalid_inv_marker_negative_test() {
     run_negative_branch_eq_test(
         BranchEqualOpcode::BEQ,
-        [0, 0, 7, 0, 0, 0, 0, 0],
-        [0, 0, 7, 0, 0, 0, 0, 0],
+        [0, 7, 0, 0],
+        [0, 7, 0, 0],
         Some(false),
-        Some([0, 0, 1, 0, 0, 0, 0, 0]),
+        Some([0, 1, 0, 0]),
         false,
     );
 }
@@ -304,8 +298,8 @@ fn rv64_beq_invalid_inv_marker_negative_test() {
 fn rv64_bne_wrong_cmp_negative_test() {
     run_negative_branch_eq_test(
         BranchEqualOpcode::BNE,
-        [0, 0, 7, 0, 0, 0, 0, 0],
-        [0, 0, 0, 7, 0, 0, 0, 0],
+        [0, 7, 0, 0],
+        [0, 0, 7, 0],
         Some(false),
         None,
         false,
@@ -313,8 +307,8 @@ fn rv64_bne_wrong_cmp_negative_test() {
 
     run_negative_branch_eq_test(
         BranchEqualOpcode::BNE,
-        [0, 0, 7, 0, 0, 0, 0, 0],
-        [0, 0, 7, 0, 0, 0, 0, 0],
+        [0, 7, 0, 0],
+        [0, 7, 0, 0],
         Some(true),
         None,
         false,
@@ -325,10 +319,10 @@ fn rv64_bne_wrong_cmp_negative_test() {
 fn rv64_bne_zero_inv_marker_negative_test() {
     run_negative_branch_eq_test(
         BranchEqualOpcode::BNE,
-        [0, 0, 7, 0, 0, 0, 0, 0],
-        [0, 0, 0, 7, 0, 0, 0, 0],
+        [0, 7, 0, 0],
+        [0, 0, 7, 0],
         Some(false),
-        Some([0, 0, 0, 0, 0, 0, 0, 0]),
+        Some([0, 0, 0, 0]),
         false,
     );
 }
@@ -337,10 +331,10 @@ fn rv64_bne_zero_inv_marker_negative_test() {
 fn rv64_bne_invalid_inv_marker_negative_test() {
     run_negative_branch_eq_test(
         BranchEqualOpcode::BNE,
-        [0, 0, 7, 0, 0, 0, 0, 0],
-        [0, 0, 7, 0, 0, 0, 0, 0],
+        [0, 7, 0, 0],
+        [0, 7, 0, 0],
         Some(true),
-        Some([0, 0, 1, 0, 0, 0, 0, 0]),
+        Some([0, 1, 0, 0]),
         false,
     );
 }
@@ -355,10 +349,10 @@ fn rv64_bne_invalid_inv_marker_negative_test() {
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, _bitwise) = create_harness(&mut tester);
+    let mut harness = create_harness(&mut tester);
 
-    let x = [19, 4, 179, 60, 201, 77, 1, 240];
-    let y = [19, 32, 180, 60, 201, 77, 1, 240];
+    let x = [19, 4179, 60201, 7700];
+    let y = [19, 4180, 60201, 7700];
     set_and_execute(
         &mut tester,
         &mut harness.executor,
@@ -384,31 +378,31 @@ fn execute_roundtrip_sanity_test() {
 
 #[test]
 fn run_eq_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [19, 4, 17, 60, 201, 77, 1, 240];
-    let (cmp_result, _, diff_val) = run_eq::<F, RV64_REGISTER_NUM_LIMBS>(true, &x, &x);
+    let x: [u16; RV64_BRANCH_NUM_LIMBS] = [19, 4179, 60201, 7700];
+    let (cmp_result, _, diff_val) = run_eq::<F, RV64_BRANCH_NUM_LIMBS>(true, &x, &x);
     assert!(cmp_result);
     assert_eq!(diff_val, F::ZERO);
 
-    let (cmp_result, _, diff_val) = run_eq::<F, RV64_REGISTER_NUM_LIMBS>(false, &x, &x);
+    let (cmp_result, _, diff_val) = run_eq::<F, RV64_BRANCH_NUM_LIMBS>(false, &x, &x);
     assert!(!cmp_result);
     assert_eq!(diff_val, F::ZERO);
 }
 
 #[test]
 fn run_ne_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [19, 4, 17, 60, 201, 77, 1, 240];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [19, 32, 18, 60, 201, 77, 1, 240];
-    let (cmp_result, diff_idx, diff_val) = run_eq::<F, RV64_REGISTER_NUM_LIMBS>(true, &x, &y);
+    let x: [u16; RV64_BRANCH_NUM_LIMBS] = [19, 4179, 60201, 7700];
+    let y: [u16; RV64_BRANCH_NUM_LIMBS] = [19, 4180, 60201, 7700];
+    let (cmp_result, diff_idx, diff_val) = run_eq::<F, RV64_BRANCH_NUM_LIMBS>(true, &x, &y);
     assert!(!cmp_result);
     assert_eq!(
-        diff_val * (F::from_u8(x[diff_idx]) - F::from_u8(y[diff_idx])),
+        diff_val * (F::from_u32(x[diff_idx] as u32) - F::from_u32(y[diff_idx] as u32)),
         F::ONE
     );
 
-    let (cmp_result, diff_idx, diff_val) = run_eq::<F, RV64_REGISTER_NUM_LIMBS>(false, &x, &y);
+    let (cmp_result, diff_idx, diff_val) = run_eq::<F, RV64_BRANCH_NUM_LIMBS>(false, &x, &y);
     assert!(cmp_result);
     assert_eq!(
-        diff_val * (F::from_u8(x[diff_idx]) - F::from_u8(y[diff_idx])),
+        diff_val * (F::from_u32(x[diff_idx] as u32) - F::from_u32(y[diff_idx] as u32)),
         F::ONE
     );
 }
@@ -430,21 +424,16 @@ type GpuHarness = GpuTestChipHarness<
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
-        bitwise_bus,
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        tester.range_checker().bus(),
     ));
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64BranchEqualChipGpu::new(
-        tester.range_checker(),
-        tester.bitwise_op_lookup(),
-        tester.timestamp_max_bits(),
-    );
+    let gpu_chip = Rv64BranchEqualChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }
 
@@ -452,8 +441,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[test_case(BranchEqualOpcode::BEQ, 100)]
 #[test_case(BranchEqualOpcode::BNE, 100)]
 fn test_cuda_rand_beq_tracegen(opcode: BranchEqualOpcode, num_ops: usize) {
-    let mut tester = GpuChipTestBuilder::default()
-        .with_bitwise_op_lookup(BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS));
+    let mut tester = GpuChipTestBuilder::default();
     let mut rng = create_seeded_rng();
 
     let mut harness = create_cuda_harness(&tester);
@@ -473,7 +461,7 @@ fn test_cuda_rand_beq_tracegen(opcode: BranchEqualOpcode, num_ops: usize) {
 
     type Record<'a> = (
         &'a mut Rv64BranchAdapterRecord,
-        &'a mut BranchEqualCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+        &'a mut BranchEqualCoreRecord<RV64_BRANCH_NUM_LIMBS>,
     );
     harness
         .dense_arena

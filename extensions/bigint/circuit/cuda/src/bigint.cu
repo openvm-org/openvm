@@ -10,21 +10,25 @@
 #include "riscv/cores/less_than.cuh"
 #include "riscv/cores/mul.cuh"
 #include "riscv/cores/shift.cuh"
+#include "system/memory/params.cuh"
 
 using namespace riscv;
 using namespace program;
 
 constexpr size_t INT256_NUM_LIMBS = 32;
 constexpr size_t INT256_NUM_BLOCKS = INT256_NUM_LIMBS / DEFAULT_BLOCK_SIZE;
+constexpr size_t INT256_NUM_U16_LIMBS = INT256_NUM_BLOCKS * BLOCK_FE_WIDTH; // 16 u16 limbs
+constexpr size_t INT256_U16_LIMB_BITS = 16;
 constexpr size_t NUM_READS = 2;
 
 using BaseAlu256CoreRecord = BaseAluCoreRecord<INT256_NUM_LIMBS>;
 using BaseAlu256Core = BaseAluCore<INT256_NUM_LIMBS>;
 template <typename T> using BaseAlu256CoreCols = BaseAluCoreCols<T, INT256_NUM_LIMBS>;
 
-using BranchEqual256Core = BranchEqualCore<INT256_NUM_LIMBS>;
-template <typename T> using BranchEqual256CoreCols = BranchEqualCoreCols<T, INT256_NUM_LIMBS>;
-using BranchEqual256CoreRecord = BranchEqualCoreRecord<INT256_NUM_LIMBS>;
+using BranchEqual256Core = BranchEqualCore<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>;
+template <typename T>
+using BranchEqual256CoreCols = BranchEqualCoreCols<T, INT256_NUM_U16_LIMBS>;
+using BranchEqual256CoreRecord = BranchEqualCoreRecord<INT256_NUM_U16_LIMBS>;
 
 using LessThan256CoreRecord = LessThanCoreRecord<INT256_NUM_LIMBS>;
 using LessThan256Core = LessThanCore<INT256_NUM_LIMBS>;
@@ -38,9 +42,12 @@ using Shift256CoreRecord = ShiftCoreRecord<INT256_NUM_LIMBS>;
 using Shift256Core = ShiftCore<INT256_NUM_LIMBS>;
 template <typename T> using Shift256CoreCols = ShiftCoreCols<T, INT256_NUM_LIMBS>;
 
-using BranchLessThan256CoreRecord = BranchLessThanCoreRecord<INT256_NUM_LIMBS>;
-using BranchLessThan256Core = BranchLessThanCore<INT256_NUM_LIMBS>;
-template <typename T> using BranchLessThan256CoreCols = BranchLessThanCoreCols<T, INT256_NUM_LIMBS>;
+using BranchLessThan256CoreRecord =
+    BranchLessThanCoreRecord<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>;
+using BranchLessThan256Core = BranchLessThanCore<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>;
+template <typename T>
+using BranchLessThan256CoreCols =
+    BranchLessThanCoreCols<T, INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>;
 
 // Heap adapter instantiation for 256-bit operations
 // NUM_READS = 2, BLOCKS_PER_READ = INT256_NUM_BLOCKS (4), BLOCKS_PER_WRITE = INT256_NUM_BLOCKS (4)
@@ -116,11 +123,13 @@ extern "C" int _alu256_tracegen(
 }
 
 // Heap branch adapter instantiation for 256-bit operations
-// NUM_READS = 2, BLOCKS_PER_READ = INT256_NUM_BLOCKS (4), READ_SIZE = DEFAULT_BLOCK_SIZE (8 bytes)
-using Rv64VecHeapBranchAdapter256 = Rv64VecHeapBranchAdapter<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>;
+// NUM_READS = 2, BLOCKS_PER_READ = INT256_NUM_BLOCKS (4),
+// READ_SIZE = BLOCK_FE_WIDTH (4 u16 cells = 8 bytes per block) post Pattern B u16 migration.
+using Rv64VecHeapBranchAdapter256 =
+    Rv64VecHeapBranchAdapter<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>;
 
 template <typename T> struct BranchEqual256Cols {
-    Rv64VecHeapBranchAdapterCols<T, NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE> adapter;
+    Rv64VecHeapBranchAdapterCols<T, NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH> adapter;
     BranchEqual256CoreCols<T> core;
 };
 
@@ -152,7 +161,7 @@ __global__ void branch_equal256_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        BranchEqual256Core core{BitwiseOperationLookup(d_bitwise_lookup_ptr)};
+        BranchEqual256Core core{VariableRangeChecker(d_range_checker_ptr, range_checker_bins)};
         core.fill_trace_row(row.slice_from(COL_INDEX(BranchEqual256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(BranchEqual256Cols<uint8_t>));
@@ -256,7 +265,7 @@ extern "C" int _less_than256_tracegen(
 }
 
 template <typename T> struct BranchLessThan256Cols {
-    Rv64VecHeapBranchAdapterCols<T, NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE> adapter;
+    Rv64VecHeapBranchAdapterCols<T, NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH> adapter;
     BranchLessThan256CoreCols<T> core;
 };
 
@@ -288,7 +297,7 @@ __global__ void branch_less_than256_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        BranchLessThan256Core core{BitwiseOperationLookup(d_bitwise_lookup_ptr)};
+        BranchLessThan256Core core{VariableRangeChecker(d_range_checker_ptr, range_checker_bins)};
         core.fill_trace_row(row.slice_from(COL_INDEX(BranchLessThan256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(BranchLessThan256Cols<uint8_t>));

@@ -18,7 +18,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip},
-    var_range::VariableRangeCheckerChip,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
 };
 use openvm_instructions::{
     program::{DEFAULT_PC_STEP, PC_BITS},
@@ -227,10 +227,12 @@ fn create_shift_harness_fields(
     (air, executor, chip)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_beq_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -246,7 +248,7 @@ fn create_beq_harness_fields(
             address_bits,
         )),
         BranchEqualCoreAir::new(
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             Rv64BranchEqual256Opcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
@@ -259,7 +261,7 @@ fn create_beq_harness_fields(
     let chip = Rv64BranchEqual256Chip::new(
         BranchEqualFiller::new(
             Rv64VecHeapBranchAdapterFiller::new(address_bits, bitwise_chip.clone()),
-            bitwise_chip,
+            range_checker_chip,
             Rv64BranchEqual256Opcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
@@ -268,10 +270,12 @@ fn create_beq_harness_fields(
     (air, executor, chip)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_blt_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -287,7 +291,7 @@ fn create_blt_harness_fields(
             address_bits,
         )),
         BranchLessThanCoreAir::new(
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             Rv64BranchLessThan256Opcode::CLASS_OFFSET,
         ),
     );
@@ -298,7 +302,7 @@ fn create_blt_harness_fields(
     let chip = Rv64BranchLessThan256Chip::new(
         BranchLessThanFiller::new(
             Rv64VecHeapBranchAdapterFiller::new(address_bits, bitwise_chip.clone()),
-            bitwise_chip,
+            range_checker_chip,
             Rv64BranchLessThan256Opcode::CLASS_OFFSET,
         ),
         memory_helper,
@@ -560,6 +564,7 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
         tester.memory_bridge(),
         tester.execution_bridge(),
         bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -601,6 +606,7 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
         tester.memory_bridge(),
         tester.execution_bridge(),
         bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -894,6 +900,7 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
         tester.memory_bridge(),
         tester.execution_bridge(),
         dummy_bitwise_chip,
+        tester.range_checker(),
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
@@ -960,6 +967,7 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
         tester.memory_bridge(),
         tester.execution_bridge(),
         dummy_bitwise_chip,
+        tester.range_checker(),
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );

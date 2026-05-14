@@ -91,19 +91,11 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.add_executor_chip(load_sign_extend);
 
         inventory.next_air::<Rv64BranchEqualAir>()?;
-        let beq = Rv64BranchEqualChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            timestamp_max_bits,
-        );
+        let beq = Rv64BranchEqualChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(beq);
 
         inventory.next_air::<Rv64BranchLessThanAir>()?;
-        let blt = Rv64BranchLessThanChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            timestamp_max_bits,
-        );
+        let blt = Rv64BranchLessThanChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(blt);
 
         inventory.next_air::<Rv64JalLuiAir>()?;

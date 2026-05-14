@@ -313,13 +313,13 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let beq = Rv64BranchEqualAir::new(
             Rv64BranchAdapterAir::new(exec_bridge, memory_bridge),
-            BranchEqualCoreAir::new(bitwise_lu, BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+            BranchEqualCoreAir::new(range_checker, BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
         );
         inventory.add_air(beq);
 
         let blt = Rv64BranchLessThanAir::new(
             Rv64BranchAdapterAir::new(exec_bridge, memory_bridge),
-            BranchLessThanCoreAir::new(bitwise_lu, BranchLessThanOpcode::CLASS_OFFSET),
+            BranchLessThanCoreAir::new(range_checker, BranchLessThanOpcode::CLASS_OFFSET),
         );
         inventory.add_air(blt);
 
@@ -463,7 +463,7 @@ where
         let beq = Rv64BranchEqualChip::new(
             BranchEqualFiller::new(
                 Rv64BranchAdapterFiller,
-                bitwise_lu.clone(),
+                range_checker.clone(),
                 BranchEqualOpcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
@@ -475,7 +475,7 @@ where
         let blt = Rv64BranchLessThanChip::new(
             BranchLessThanFiller::new(
                 Rv64BranchAdapterFiller,
-                bitwise_lu.clone(),
+                range_checker.clone(),
                 BranchLessThanOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
