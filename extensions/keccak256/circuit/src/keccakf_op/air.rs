@@ -104,18 +104,13 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         // Now it is safe to cast buffer_ptr to F
         let buffer_ptr: AB::Expr = compose(&local.buffer_ptr_limbs[..], RV64_CELL_BITS);
 
-        // ======== Constrain that post-state consists of bytes =========
-        // We know that the pre-state buffer consists of bytes due to the invariant of Address Space
-        // 2 in memory. The keccakf_state_bus guarantees that the post-state consists of
-        // u16, but we still need to constrain that each pair actually consists of bytes.
-        // NOTE[jpw]: this can be removed if AS2 cells are changed to u16s
-        for pair in local.postimage.chunks_exact(2) {
-            self.bitwise_lookup_bus
-                .send_range(pair[0], pair[1])
-                .eval(builder, is_valid);
-        }
-
         // ======== Constrain new writes of `buffer` to memory =========
+        // Note: the post-state byte pairs are NOT individually byte-range-checked. Each pair
+        // (post_word[2k], post_word[2k+1]) is used only in packed `pair[0] + 256·pair[1]` form:
+        // once on the keccakf_state_bus (which constrains the packed value to a canonical u16
+        // produced by the keccakf periphery) and once on the memory bus (where AS2 is u16-celled
+        // so the consumer also sees the packed value, never the individual byte). Any byte-pair
+        // decomposition that matches the packed u16 satisfies both buses identically.
         // NOTE: we use the _next_ row's `buffer` as the pre-state
         for (word_idx, (prev_word, post_word, base_aux)) in izip!(
             local.preimage.chunks_exact(MEMORY_BLOCK_BYTES),

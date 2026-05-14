@@ -160,10 +160,6 @@ struct Rv64HintStore {
         );
 
         COL_WRITE_ARRAY(row, Rv64HintStoreCols, data, write.data);
-#pragma unroll
-        for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i += 2) {
-            bitwise_lookup.add_range(write.data[i], write.data[i + 1]);
-        }
     }
 };
 
