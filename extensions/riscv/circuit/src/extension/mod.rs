@@ -327,7 +327,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let jal_lui = Rv64JalLuiAir::new(
             Rv64CondRdWriteAdapterAir::new(Rv64RdWriteAdapterAir::new(memory_bridge, exec_bridge)),
-            Rv64JalLuiCoreAir::new(bitwise_lu),
+            Rv64JalLuiCoreAir::new(bitwise_lu, range_checker),
         );
         inventory.add_air(jal_lui);
 
@@ -339,7 +339,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let auipc = Rv64AuipcAir::new(
             Rv64RdWriteAdapterAir::new(memory_bridge, exec_bridge),
-            Rv64AuipcCoreAir::new(bitwise_lu),
+            Rv64AuipcCoreAir::new(bitwise_lu, range_checker),
         );
         inventory.add_air(auipc);
 
@@ -489,6 +489,7 @@ where
             Rv64JalLuiFiller::new(
                 Rv64CondRdWriteAdapterFiller::new(Rv64RdWriteAdapterFiller),
                 bitwise_lu.clone(),
+                range_checker.clone(),
             ),
             mem_helper.clone(),
         );
@@ -503,7 +504,11 @@ where
 
         inventory.next_air::<Rv64AuipcAir>()?;
         let auipc = Rv64AuipcChip::new(
-            Rv64AuipcFiller::new(Rv64RdWriteAdapterFiller, bitwise_lu.clone()),
+            Rv64AuipcFiller::new(
+                Rv64RdWriteAdapterFiller,
+                bitwise_lu.clone(),
+                range_checker.clone(),
+            ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(auipc);

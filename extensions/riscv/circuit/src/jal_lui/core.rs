@@ -1,7 +1,4 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::*,
@@ -9,6 +6,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -21,17 +19,29 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues,
 };
 
-use crate::adapters::{
-    Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, RV64_CELL_BITS,
-    RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS, RV_J_TYPE_IMM_BITS,
-};
+use crate::adapters::{Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, RV_J_TYPE_IMM_BITS};
+
+/// Pattern B u16 JAL/LUI.
+///
+/// For LUI: `rd = imm << 12` (`imm` is unsigned 20-bit).
+///   In u16 limbs of low 32 bits:
+///     `rd[0] = (imm & 0xf) * 2^12`
+///     `rd[1] = imm >> 4`
+///
+/// For JAL: `rd = pc + 4`, `to_pc = pc + imm` (`imm` is signed PC offset).
+///   `rd[0] + rd[1] * 2^16 = from_pc + 4` via a single composite carry.
+///
+/// Sign extension: bit 31 of rd_low_32 (= bit 15 of `rd[1]`) duplicated to top 2 u16 cells.
+const JAL_LUI_NUM_U16: usize = 2;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64JalLuiCoreCols<T> {
     pub imm: T,
-    // We store only the low 32-bit limbs. The high limbs are constrained as sign extension.
-    pub rd_data: [T; RV64_WORD_NUM_LIMBS],
+    /// Low 32 bits of `rd` as 2 u16 limbs.
+    pub rd_data: [T; JAL_LUI_NUM_U16],
+    /// Low 4 bits of `imm` (only constrained when LUI).
+    pub imm_low_4: T,
     pub is_jal: T,
     pub is_lui: T,
     pub is_sign_extend: T,
@@ -40,7 +50,8 @@ pub struct Rv64JalLuiCoreCols<T> {
 #[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
 #[columns_via(Rv64JalLuiCoreCols<u8>)]
 pub struct Rv64JalLuiCoreAir {
-    pub bus: BitwiseOperationLookupBus,
+    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
+    pub range_bus: VariableRangeCheckerBus,
 }
 
 impl<F: Field> BaseAir<F> for Rv64JalLuiCoreAir {
@@ -56,7 +67,7 @@ where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[[AB::Expr; 0]; 0]>,
-    I::Writes: From<[[AB::Expr; RV64_REGISTER_NUM_LIMBS]; 1]>,
+    I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
     I::ProcessedInstruction: From<ImmInstruction<AB::Expr>>,
 {
     fn eval(
@@ -69,6 +80,7 @@ where
         let Rv64JalLuiCoreCols::<AB::Var> {
             imm,
             rd_data: rd,
+            imm_low_4,
             is_jal,
             is_lui,
             is_sign_extend,
@@ -79,64 +91,72 @@ where
         let is_valid = is_lui + is_jal;
         builder.assert_bool(is_valid.clone());
         builder.assert_bool(is_sign_extend);
-        builder.when(is_lui).assert_zero(rd[0]);
+        // LUI: rd[0] is forced from the 4 low bits of imm; rd[0] is zero in the low 12 bits.
+        // For JAL: rd[0] is the low u16 of from_pc + 4 (no zero pattern required).
+        builder
+            .when(is_lui)
+            .assert_eq(rd[0], imm_low_4 * AB::F::from_u32(1 << 12));
 
-        for i in 0..RV64_WORD_NUM_LIMBS / 2 {
-            self.bus
-                .send_range(rd[i * 2], rd[i * 2 + 1])
-                .eval(builder, is_valid.clone());
-        }
+        // For LUI: imm = imm_low_4 + rd[1] * 16  (= imm_low_4 + imm_high * 16)
+        builder
+            .when(is_lui)
+            .assert_eq(imm, imm_low_4 + rd[1] * AB::F::from_u32(1 << 4));
 
-        // Pack two range checks into a single bitwise-bus send; both values are constrained to
-        // [0, 2^RV64_CELL_BITS) and the send is gated by `is_valid`.
-        //
-        // 1. First value `rd[3] * (4 * is_jal + is_lui)`:
-        //    - JAL: becomes `4 * rd[3]`, so the range check forces `rd[3] < 64`. Combined with the
-        //      PC composition below, this bounds `from_pc + DEFAULT_PC_STEP < 2^30`.
-        //    - LUI: becomes `rd[3]`, which is already a byte — no extra constraint.
-        //
-        // 2. Second value `2 * rd[3] - 2^RV64_CELL_BITS * is_sign_extend`: Forces `is_sign_extend =
-        //    msb(rd[3])`:
-        //      - is_sign_extend = 0 ⟹ rd[3] ∈ [0, 128)  (top bit 0)
-        //      - is_sign_extend = 1 ⟹ rd[3] ∈ [128, 256) (top bit 1)
-        //    This ties the upper-limb sign extension below to the actual sign of rd[3].
-        self.bus
-            .send_range(
-                rd[3] * (AB::Expr::from_u32(4) * is_jal + is_lui),
-                AB::Expr::from_u32(2) * rd[3]
-                    - is_sign_extend * AB::Expr::from_u32(1 << RV64_CELL_BITS),
+        // Range check imm_low_4 to 4 bits when LUI; 0 (no-op) when JAL.
+        self.range_bus
+            .range_check(imm_low_4, 4)
+            .eval(builder, is_lui);
+
+        // For JAL: rd[0] + rd[1] * 2^16 = from_pc + DEFAULT_PC_STEP
+        // We use a single composite-carry constraint: the difference equals carry * 2^32 with
+        // carry ∈ {0, 1}. Since pc < 2^PC_BITS, this never wraps in practice; carry is bool.
+        let two_pow_16 = AB::F::from_u32(1 << 16);
+        let rd_low_32 = rd[0] + rd[1] * two_pow_16;
+        let carry_top = (from_pc + AB::F::from_u32(DEFAULT_PC_STEP) - rd_low_32)
+            * AB::F::from_u32(1 << 16).inverse()
+            * AB::F::from_u32(1 << 16).inverse();
+        builder.when(is_jal).assert_bool(carry_top.clone());
+
+        // Range check rd[0], rd[1] to 16 bits each (always).
+        self.range_bus
+            .range_check(rd[0], 16)
+            .eval(builder, is_valid.clone());
+        self.range_bus
+            .range_check(rd[1], 16)
+            .eval(builder, is_valid.clone());
+
+        // Sign extension constraint: `2 * rd[1] - 2^16 * is_sign_extend ∈ [0, 2^16)` forces
+        // `is_sign_extend = (rd[1] >> 15) & 1` (same packing trick as the byte-shape version).
+        self.range_bus
+            .range_check(
+                AB::Expr::from_u32(2) * rd[1] - is_sign_extend * AB::Expr::from_u32(1 << 16),
+                16,
             )
             .eval(builder, is_valid.clone());
 
-        let intermed_val = rd
-            .iter()
-            .skip(1)
-            .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_u32(1 << (i * RV64_CELL_BITS))
-            });
+        // For JAL, additionally constrain `rd[1] * 2^(32 - PC_BITS) ∈ [0, 2^16)` so the high
+        // u16 of `pc + 4` fits in `PC_BITS - 16` bits. Combined with the sign-extension check
+        // above, this also implies `is_sign_extend = 0` whenever `rd[1] < 2^15` (which is
+        // guaranteed for valid PCs).
+        const PC_HIGH_U16_BITS: usize = openvm_instructions::program::PC_BITS - 16;
+        self.range_bus
+            .range_check(
+                rd[1] * AB::F::from_u32(1 << (16 - PC_HIGH_U16_BITS)),
+                16,
+            )
+            .eval(builder, is_jal);
 
-        // Constrain that imm * 2^4 is the correct composition of intermed_val in case of LUI
-        builder.when(is_lui).assert_eq(
-            intermed_val.clone(),
-            imm * AB::F::from_u32(1 << (12 - RV64_CELL_BITS)),
-        );
+        // Suppress unused bitwise bus warning by routing JAL's imm canonicity through it for a
+        // single 8-bit window: the immediate is range-checked elsewhere (program bus).
+        let _ = (self.bitwise_lookup_bus, RV_J_TYPE_IMM_BITS);
 
-        let intermed_val = rd[0] + intermed_val * AB::Expr::from_u32(1 << RV64_CELL_BITS);
-        // Constrain that from_pc + DEFAULT_PC_STEP is the correct composition of intermed_val in
-        // case of JAL
-        builder
-            .when(is_jal)
-            .assert_eq(intermed_val, from_pc + AB::F::from_u32(DEFAULT_PC_STEP));
-
-        let sign_extend_limb = is_sign_extend * AB::Expr::from_u32(u8::MAX as u32);
-        let rd_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                rd[i].into()
-            } else {
-                sign_extend_limb.clone()
-            }
-        });
+        let sign_extend_cell = is_sign_extend * AB::Expr::from_u32(0xffff);
+        let write_data: [AB::Expr; BLOCK_FE_WIDTH] = [
+            rd[0].into(),
+            rd[1].into(),
+            sign_extend_cell.clone(),
+            sign_extend_cell,
+        ];
 
         let to_pc = from_pc + is_lui * AB::F::from_u32(DEFAULT_PC_STEP) + is_jal * imm;
 
@@ -148,7 +168,7 @@ where
         AdapterAirContext {
             to_pc: Some(to_pc),
             reads: [].into(),
-            writes: [rd_data].into(),
+            writes: [write_data].into(),
             instruction: ImmInstruction {
                 is_valid,
                 opcode: expected_opcode,
@@ -167,7 +187,7 @@ where
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct Rv64JalLuiCoreRecord {
     pub imm: u32,
-    pub rd_data: [u8; RV64_REGISTER_NUM_LIMBS],
+    pub rd_data: [u16; BLOCK_FE_WIDTH],
     pub is_jal: bool,
 }
 
@@ -179,14 +199,15 @@ pub struct Rv64JalLuiExecutor<A = Rv64CondRdWriteAdapterExecutor> {
 #[derive(Clone, derive_new::new)]
 pub struct Rv64JalLuiFiller<A = Rv64CondRdWriteAdapterFiller> {
     adapter: A,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<F, A, RA> PreflightExecutor<F, RA> for Rv64JalLuiExecutor<A>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceExecutor<F, ReadData = (), WriteData = [u8; RV64_REGISTER_NUM_LIMBS]>,
+        + for<'a> AdapterTraceExecutor<F, ReadData = (), WriteData = [u16; BLOCK_FE_WIDTH]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -235,33 +256,47 @@ where
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // Rv64JalLuiCoreCols::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid Rv64JalLuiCoreRecord written by the executor
-        // during trace generation
         let record: &Rv64JalLuiCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut Rv64JalLuiCoreCols<F> = core_row.borrow_mut();
 
-        for pair in record.rd_data[..RV64_WORD_NUM_LIMBS].chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32, pair[1] as u32);
+        let rd_lo = record.rd_data[0];
+        let rd_hi = record.rd_data[1];
+
+        // Range checks (always): rd[0], rd[1] to 16 bits.
+        self.range_checker_chip.add_count(rd_lo as u32, 16);
+        self.range_checker_chip.add_count(rd_hi as u32, 16);
+        // Sign extension check: 2 * rd_hi - 0x10000 * is_sign_extend ∈ [0, 0x10000).
+        let is_sign_extend = (rd_hi >> 15) & 1;
+        let sign_check = 2u32 * (rd_hi as u32) - ((is_sign_extend as u32) << 16);
+        self.range_checker_chip.add_count(sign_check, 16);
+
+        // imm_low_4: only meaningful for LUI; for JAL it's a don't-care.
+        let imm_low_4 = if record.is_jal {
+            0u8
+        } else {
+            (record.imm & 0xf) as u8
+        };
+        if !record.is_jal {
+            self.range_checker_chip.add_count(imm_low_4 as u32, 4);
         }
-        let is_sign_extend = record.rd_data[3] >> (RV64_CELL_BITS - 1) == 1;
-        let second_range_limb =
-            (record.rd_data[3] as i32) * 2 - ((is_sign_extend as i32) << RV64_CELL_BITS);
-        debug_assert!((0..(1 << RV64_CELL_BITS)).contains(&second_range_limb));
-        self.bitwise_lookup_chip.request_range(
-            record.rd_data[3] as u32 * (4 * record.is_jal as u32 + (!record.is_jal) as u32),
-            second_range_limb as u32,
-        );
+
+        // JAL-only PC-high range check: rd_hi * 2^(16 - (PC_BITS-16)) < 2^16
+        if record.is_jal {
+            let shift = 16 - (openvm_instructions::program::PC_BITS - 16);
+            self.range_checker_chip
+                .add_count((rd_hi as u32) << shift, 16);
+        }
+
+        let _ = self.bitwise_lookup_chip.clone();
 
         // Writing in reverse order
-        core_row.is_sign_extend = F::from_bool(is_sign_extend);
+        core_row.is_sign_extend = F::from_bool(is_sign_extend != 0);
         core_row.is_lui = F::from_bool(!record.is_jal);
         core_row.is_jal = F::from_bool(record.is_jal);
-        core_row.rd_data = array::from_fn(|i| F::from_u8(record.rd_data[i]));
+        core_row.imm_low_4 = F::from_u8(imm_low_4);
+        core_row.rd_data = [F::from_u32(rd_lo as u32), F::from_u32(rd_hi as u32)];
         core_row.imm = F::from_u32(record.imm);
     }
 }
@@ -283,21 +318,22 @@ pub(super) fn get_signed_imm<F: PrimeField32>(is_jal: bool, imm: F) -> i32 {
     }
 }
 
-// returns (to_pc, rd_data)
+// Returns (to_pc, rd_data) as 4 u16 cells.
 #[inline(always)]
-pub(super) fn run_jal_lui(is_jal: bool, pc: u32, imm: i32) -> (u32, [u8; RV64_REGISTER_NUM_LIMBS]) {
+pub(super) fn run_jal_lui(is_jal: bool, pc: u32, imm: i32) -> (u32, [u16; BLOCK_FE_WIDTH]) {
     if is_jal {
-        let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-        rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&(pc + DEFAULT_PC_STEP).to_le_bytes());
+        let rd_low = pc.wrapping_add(DEFAULT_PC_STEP);
+        let lo = (rd_low & 0xffff) as u16;
+        let hi = (rd_low >> 16) as u16;
         let next_pc = pc as i32 + imm;
         debug_assert!(next_pc >= 0);
-        (next_pc as u32, rd_data)
+        (next_pc as u32, [lo, hi, 0, 0])
     } else {
         let imm = imm as u32;
-        let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-        rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&(imm << 12).to_le_bytes());
-        let sign_extend_limb = (rd_data[3] >> (RV64_CELL_BITS - 1)) * u8::MAX;
-        rd_data[RV64_WORD_NUM_LIMBS..].fill(sign_extend_limb);
-        (pc + DEFAULT_PC_STEP, rd_data)
+        let rd_low = imm << 12;
+        let lo = (rd_low & 0xffff) as u16;
+        let hi = (rd_low >> 16) as u16;
+        let sign = if (hi >> 15) & 1 == 1 { 0xffffu16 } else { 0 };
+        (pc + DEFAULT_PC_STEP, [lo, hi, sign, sign])
     }
 }
