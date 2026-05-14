@@ -331,7 +331,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let jalr = Rv64JalrAir::new(
             Rv64JalrAdapterAir::new(memory_bridge, exec_bridge),
-            Rv64JalrCoreAir::new(bitwise_lu, range_checker),
+            Rv64JalrCoreAir::new(range_checker),
         );
         inventory.add_air(jalr);
 
@@ -494,11 +494,7 @@ where
 
         inventory.next_air::<Rv64JalrAir>()?;
         let jalr = Rv64JalrChip::new(
-            Rv64JalrFiller::new(
-                Rv64JalrAdapterFiller,
-                bitwise_lu.clone(),
-                range_checker.clone(),
-            ),
+            Rv64JalrFiller::new(Rv64JalrAdapterFiller, range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(jalr);

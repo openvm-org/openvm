@@ -8,14 +8,19 @@
 using namespace riscv;
 using namespace program;
 
+// Pattern B (u16): rs1_data is 2 u16 limbs (low 32 bits of rs1); rd_data is 1 u16 limb
+// (high u16 of low 32 of pc+4; low u16 is derived from from_pc).
+constexpr size_t JALR_LOW_U16_LIMBS = 2;
+constexpr size_t JALR_RD_U16_LIMBS = JALR_LOW_U16_LIMBS - 1;
+
 template <typename T> struct Rv64JalrCoreCols {
-    T imm;                                  // 1 byte
-    T rs1_data[RV64_WORD_NUM_LIMBS];        // 4 bytes
-    T rd_data[RV64_WORD_NUM_LIMBS - 1];     // 3 bytes
-    T is_valid;                             // 1 byte
-    T to_pc_least_sig_bit;                  // 1 byte
-    T to_pc_limbs[2];                       // 2 bytes
-    T imm_sign;                             // 1 byte
+    T imm;
+    T rs1_data[JALR_LOW_U16_LIMBS];
+    T rd_data[JALR_RD_U16_LIMBS];
+    T is_valid;
+    T to_pc_least_sig_bit;
+    T to_pc_limbs[2];
+    T imm_sign;
 };
 
 struct Rv64JalrCoreRecord {
@@ -25,64 +30,44 @@ struct Rv64JalrCoreRecord {
     uint8_t imm_sign; // 0 or 1
 };
 
-__device__ void run_jalr(
-    uint32_t pc,
-    uint32_t rs1,
-    uint16_t imm,
-    bool imm_sign,
-    uint32_t &out_pc,
-    uint8_t rd_bytes[RV64_WORD_NUM_LIMBS]
-) {
-    uint32_t offset = imm + (imm_sign ? 0xffff0000 : 0);
-    uint32_t to_pc = rs1 + offset;
-
-    assert(to_pc < (1u << PC_BITS));
-    out_pc = to_pc;
-    uint32_t rd_val = pc + DEFAULT_PC_STEP;
-    uint8_t *p = reinterpret_cast<uint8_t *>(&rd_val);
-#pragma unroll
-    for (int i = 0; i < RV64_WORD_NUM_LIMBS; i++) {
-        rd_bytes[i] = p[i];
-    }
-}
-
 struct Rv64JalrCore {
     VariableRangeChecker rc;
-    BitwiseOperationLookup bw;
 
-    __device__ Rv64JalrCore(VariableRangeChecker rc, BitwiseOperationLookup bw) : rc(rc), bw(bw) {}
+    __device__ Rv64JalrCore(VariableRangeChecker rc) : rc(rc) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv64JalrCoreRecord record) {
-        uint32_t to_pc;
-        uint8_t rd_bytes[RV64_WORD_NUM_LIMBS];
-        run_jalr(record.from_pc, record.rs1_val, record.imm, record.imm_sign, to_pc, rd_bytes);
+        uint32_t offset = record.imm + (record.imm_sign ? 0xffff0000 : 0);
+        uint32_t to_pc = record.rs1_val + offset;
+        assert(to_pc < (1u << PC_BITS));
 
         uint32_t to_pc_limbs[2] = {(to_pc & ((1u << 16) - 1)) >> 1, to_pc >> 16};
-
         rc.add_count(to_pc_limbs[0], 15);
         rc.add_count(to_pc_limbs[1], PC_BITS - 16);
-        bw.add_range(rd_bytes[0], rd_bytes[1]);
-        rc.add_count(rd_bytes[2], RV64_CELL_BITS);
-        rc.add_count(rd_bytes[3], PC_BITS - RV64_CELL_BITS * 3);
 
-        // Mirror the AIR's u8 range-checks on rs1_data read limbs (pairs)
-        // added in Stage 1.4.
-        uint8_t rs1_pair_bytes[RV64_WORD_NUM_LIMBS];
-        memcpy(rs1_pair_bytes, &record.rs1_val, sizeof(rs1_pair_bytes));
-#pragma unroll
-        for (int i = 0; i + 1 < RV64_WORD_NUM_LIMBS; i += 2) {
-            bw.add_range(rs1_pair_bytes[i], rs1_pair_bytes[i + 1]);
-        }
+        // Low 32 of (pc + 4) split into 2 u16 limbs; we only store the high u16, the low u16
+        // is reconstructed from `from_pc` and the stored high u16 in the AIR.
+        uint32_t rd_low_u32 = record.from_pc + DEFAULT_PC_STEP;
+        uint32_t rd_low_u16_lo = rd_low_u32 & 0xffff;
+        uint32_t rd_low_u16_hi = (rd_low_u32 >> 16) & 0xffff;
+
+        rc.add_count(rd_low_u16_lo, 16);
+        rc.add_count(rd_low_u16_hi, PC_BITS - 16);
+
+        // rs1_data low 32 as 2 u16 limbs.
+        uint32_t rs1_u16_lo = record.rs1_val & 0xffff;
+        uint32_t rs1_u16_hi = (record.rs1_val >> 16) & 0xffff;
+        rc.add_count(rs1_u16_lo, 16);
+        rc.add_count(rs1_u16_hi, 16);
 
         COL_WRITE_VALUE(row, Rv64JalrCoreCols, imm_sign, record.imm_sign);
         COL_WRITE_ARRAY(row, Rv64JalrCoreCols, to_pc_limbs, to_pc_limbs);
         COL_WRITE_VALUE(row, Rv64JalrCoreCols, to_pc_least_sig_bit, (to_pc & 1) == 1 ? 1 : 0);
         COL_WRITE_VALUE(row, Rv64JalrCoreCols, is_valid, 1);
 
-        uint8_t rs1_bytes[RV64_WORD_NUM_LIMBS];
-        memcpy(rs1_bytes, &record.rs1_val, sizeof(rs1_bytes));
-        COL_WRITE_ARRAY(row, Rv64JalrCoreCols, rs1_data, rs1_bytes);
-        COL_WRITE_ARRAY(row, Rv64JalrCoreCols, rd_data, rd_bytes + 1);
+        uint32_t rs1_limbs[JALR_LOW_U16_LIMBS] = {rs1_u16_lo, rs1_u16_hi};
+        COL_WRITE_ARRAY(row, Rv64JalrCoreCols, rs1_data, rs1_limbs);
+        uint32_t rd_limbs[JALR_RD_U16_LIMBS] = {rd_low_u16_hi};
+        COL_WRITE_ARRAY(row, Rv64JalrCoreCols, rd_data, rd_limbs);
         COL_WRITE_VALUE(row, Rv64JalrCoreCols, imm, record.imm);
     }
 };
@@ -103,7 +88,6 @@ __global__ void jalr_tracegen(
     DeviceBufferConstView<Rv64JalrRecord> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
-    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -119,10 +103,7 @@ __global__ void jalr_tracegen(
         adapter.fill_trace_row(row, full.adapter);
 
         // core pass
-        Rv64JalrCore core(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
-            BitwiseOperationLookup(bitwise_lookup_ptr)
-        );
+        Rv64JalrCore core(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv64JalrCols, core)), full.core);
     } else {
         row.fill_zero(0, sizeof(Rv64JalrCols<uint8_t>));
@@ -136,7 +117,6 @@ extern "C" int _jalr_tracegen(
     DeviceBufferConstView<Rv64JalrRecord> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -150,7 +130,6 @@ extern "C" int _jalr_tracegen(
         d_records,
         d_range_checker,
         range_checker_num_bins,
-        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();
