@@ -41,7 +41,7 @@ macro_rules! hint_buffer_u64 {
 ///
 /// `ptr` must be valid for writes of `num_dwords * HINT_WORD_BYTES` bytes.
 #[inline(always)]
-pub fn hint_buffer_chunked(mut ptr: *mut u8, mut num_dwords: usize) {
+pub unsafe fn hint_buffer_chunked(mut ptr: *mut u8, mut num_dwords: usize) {
     while num_dwords > 0 {
         let chunk = core::cmp::min(num_dwords, MAX_HINT_BUFFER_DWORDS);
         hint_buffer_u64!(ptr, chunk);

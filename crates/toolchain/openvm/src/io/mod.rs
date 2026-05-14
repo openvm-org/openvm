@@ -73,10 +73,11 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
         // The heap-embedded-alloc uses linked list allocator, which has a minimum alignment of
         // `sizeof(usize) * 2 = 16` on 64-bit architectures: https://github.com/rust-osdev/linked-list-allocator/blob/b5caf3271259ddda60927752fa26527e0ccd2d56/src/hole.rs#L429
         let mut bytes = Vec::with_capacity(capacity);
-        hint_buffer_chunked(bytes.as_mut_ptr(), num_words as usize);
-        // SAFETY: We populate a `Vec<u8>` by hintstore-ing `num_words` 8 byte words. We set the
-        // length to `len` and don't care about the extra `capacity - len` bytes stored.
+        // SAFETY: `bytes` has `capacity = num_words * WORD_SIZE` bytes reserved, so the
+        // hintstore writes stay within the allocation. We then set the length to `len`
+        // and don't care about the extra `capacity - len` bytes stored.
         unsafe {
+            hint_buffer_chunked(bytes.as_mut_ptr(), num_words as usize);
             bytes.set_len(len);
         }
         bytes

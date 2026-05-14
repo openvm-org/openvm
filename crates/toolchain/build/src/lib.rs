@@ -34,6 +34,8 @@ pub fn get_rustc_target() -> String {
 /// toolchain (`X.Y.Z` for stable, `nightly-YYYY-MM-DD` for nightly,
 /// `beta-YYYY-MM-DD` for beta). Bumped per release. Override with
 /// `OPENVM_RUST_TOOLCHAIN`.
+//
+// Keep in sync with the default `TAG` in `ci/install-openvm-toolchain.sh`.
 pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "openvm-nightly-2026-01-18";
 
 /// Get the Rust toolchain name from environment variable or default.
