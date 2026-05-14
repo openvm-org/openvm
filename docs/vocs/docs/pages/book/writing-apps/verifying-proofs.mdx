@@ -16,7 +16,7 @@ cargo openvm verify app
     --proof <path_to_proof>
 ```
 
-Options `--manifest-path`, `--target-dir` are also available to `verify`. If you omit `--app_vk` the command will search for the verifying key at `${target_dir}/openvm/app.vk`.
+Options `--manifest-path`, `--target-dir` are also available to `verify`. If you omit `--app-vk` the command will search for the verifying key at `${target_dir}/openvm/app.vk`.
 
 If you omit `--proof`, the command will search the working directory for files with the `.app.proof` extension. In this 
 case, we expect to find a single proof, and `verify` will fail otherwise.
@@ -72,7 +72,7 @@ The EVM proof is written as a JSON of the following format:
   "proof_data": {
     "accumulator": "..",
     "proof": ".."
-  },
+  }
 }
 ```
 
