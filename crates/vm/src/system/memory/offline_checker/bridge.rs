@@ -331,6 +331,16 @@ impl MemoryOfflineChecker {
 pub fn pack_u8_for_bus<AB: InteractionBuilder>(
     data: &[AB::Expr; crate::arch::MEMORY_BLOCK_BYTES],
 ) -> [AB::Expr; crate::arch::BLOCK_FE_WIDTH] {
+    // `data[i * 2]` / `data[i * 2 + 1]` hardcodes a 2:1 byte-to-cell ratio.
+    // Surface that assumption locally so a future change to
+    // `MEMORY_BLOCK_BYTES` or `BLOCK_FE_WIDTH` trips here instead of
+    // silently producing wrong packings.
+    const {
+        assert!(
+            crate::arch::MEMORY_BLOCK_BYTES / crate::arch::BLOCK_FE_WIDTH == 2,
+            "pack_u8_for_bus assumes 2 bytes per bus cell"
+        )
+    };
     let mut out: [AB::Expr; crate::arch::BLOCK_FE_WIDTH] = std::array::from_fn(|_| AB::Expr::ZERO);
     for i in 0..crate::arch::BLOCK_FE_WIDTH {
         out[i] = data[i * 2].clone() + AB::Expr::from_u64(256) * data[i * 2 + 1].clone();
