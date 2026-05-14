@@ -17,7 +17,7 @@ mod fp2;
 pub mod pairing;
 #[cfg(all(
     feature = "halo2curves",
-    not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))
+    not(any(openvm_intrinsics, target_os = "openvm"))
 ))]
 pub(crate) mod utils;
 
@@ -27,7 +27,7 @@ pub use fp2::*;
 #[cfg(all(
     test,
     feature = "halo2curves",
-    not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))
+    not(any(openvm_intrinsics, target_os = "openvm"))
 ))]
 pub mod tests;
 

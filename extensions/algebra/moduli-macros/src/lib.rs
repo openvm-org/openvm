@@ -156,13 +156,13 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                 #[inline(always)]
                 fn add_assign_impl(&mut self, other: &Self) {
-                    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                     {
                         *self = Self::from_biguint(
                             (self.as_biguint() + other.as_biguint()) % Self::modulus_biguint(),
                         );
                     }
-                    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                     {
                         Self::set_up_once();
                         unsafe {
@@ -177,14 +177,14 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                 #[inline(always)]
                 fn sub_assign_impl(&mut self, other: &Self) {
-                    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                     {
                         let modulus = Self::modulus_biguint();
                         *self = Self::from_biguint(
                             (self.as_biguint() + modulus.clone() - other.as_biguint()) % modulus,
                         );
                     }
-                    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                     {
                         Self::set_up_once();
                         unsafe {
@@ -199,13 +199,13 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                 #[inline(always)]
                 fn mul_assign_impl(&mut self, other: &Self) {
-                    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                     {
                         *self = Self::from_biguint(
                             (self.as_biguint() * other.as_biguint()) % Self::modulus_biguint(),
                         );
                     }
-                    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                     {
                         Self::set_up_once();
                         unsafe {
@@ -220,13 +220,13 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                 #[inline(always)]
                 fn div_assign_unsafe_impl(&mut self, other: &Self) {
-                    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                     {
                         let modulus = Self::modulus_biguint();
                         let inv = other.as_biguint().modinv(&modulus).unwrap();
                         *self = Self::from_biguint((self.as_biguint() * inv) % modulus);
                     }
-                    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                     {
                         Self::set_up_once();
                         unsafe {
@@ -243,7 +243,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 /// - `dst_ptr` must be a raw pointer to `&mut Self`. It will be written to only at the very end.
                 #[inline(always)]
                 unsafe fn add_refs_impl<const CHECK_SETUP: bool>(&self, other: &Self, dst_ptr: *mut Self) {
-                    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                     {
                         let mut res = self.clone();
                         res += other;
@@ -251,7 +251,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         let dst = unsafe { &mut *dst_ptr };
                         *dst = res;
                     }
-                    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                     {
                         if CHECK_SETUP {
                             Self::set_up_once();
@@ -268,7 +268,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 /// It will be written to only at the very end .
                 #[inline(always)]
                 unsafe fn sub_refs_impl(&self, other: &Self, dst_ptr: *mut Self) {
-                    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                     {
                         let mut res = self.clone();
                         res -= other;
@@ -276,7 +276,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         let dst = unsafe { &mut *dst_ptr };
                         *dst = res;
                     }
-                    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                     {
                         Self::set_up_once();
                         unsafe {
@@ -293,7 +293,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 /// It will be written to only at the very end .
                 #[inline(always)]
                 unsafe fn mul_refs_impl(&self, other: &Self, dst_ptr: *mut Self) {
-                    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                     {
                         let mut res = self.clone();
                         res *= other;
@@ -301,7 +301,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         let dst = unsafe { &mut *dst_ptr };
                         *dst = res;
                     }
-                    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                     {
                         Self::set_up_once();
                         unsafe {
@@ -316,13 +316,13 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                 #[inline(always)]
                 fn div_unsafe_refs_impl(&self, other: &Self) -> Self {
-                    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                     {
                         let modulus = Self::modulus_biguint();
                         let inv = other.as_biguint().modinv(&modulus).unwrap();
                         Self::from_biguint((self.as_biguint() * inv) % modulus)
                     }
-                    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                     {
                         Self::set_up_once();
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
@@ -339,11 +339,11 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                 #[inline(always)]
                 unsafe fn eq_impl<const CHECK_SETUP: bool>(&self, other: &Self) -> bool {
-                    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                     {
                         self.as_le_bytes() == other.as_le_bytes()
                     }
-                    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                     {
                         if CHECK_SETUP {
                             Self::set_up_once();
@@ -354,7 +354,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                 // Helper function to call the setup instruction on first use
                 #[inline(always)]
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 fn set_up_once() {
                     static is_setup: ::openvm_algebra_guest::once_cell::race::OnceBool = ::openvm_algebra_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
@@ -363,7 +363,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     });
                 }
                 #[inline(always)]
-                #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 fn set_up_once() {
                     // No-op for non-ZKVM targets
                 }
@@ -455,17 +455,17 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         core::array::from_fn(|i| self.0[#limbs - 1 - i])
                     }
 
-                    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                     fn modulus_biguint() -> num_bigint::BigUint {
                         num_bigint::BigUint::from_bytes_le(&Self::MODULUS)
                     }
 
-                    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                     fn from_biguint(biguint: num_bigint::BigUint) -> Self {
                         Self(openvm::utils::biguint_to_limbs(&biguint))
                     }
 
-                    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                     fn as_biguint(&self) -> num_bigint::BigUint {
                         num_bigint::BigUint::from_bytes_le(self.as_le_bytes())
                     }
@@ -877,11 +877,11 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     // Otherwise, returns Some((is_square, sqrt)) where sqrt is a square root of self if is_square is true,
                     // and a square root of self * non_qr if is_square is false.
                     fn hint_sqrt_impl(&self) -> Option<(bool, Self)> {
-                        #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                        #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                         {
                             unimplemented!();
                         }
-                        #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                        #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                         {
                             use ::openvm_algebra_guest::{openvm_custom_insn, openvm_riscv_guest}; // needed for hint_store_u64! and hint_buffer_chunked
 
@@ -904,11 +904,11 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                     // Generate a non quadratic residue by using a hint
                     fn init_non_qr() -> alloc::boxed::Box<#struct_name> {
-                        #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                        #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                         {
                             unimplemented!();
                         }
-                        #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                        #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                         {
                             use ::openvm_algebra_guest::{openvm_custom_insn, openvm_riscv_guest}; // needed for hint_buffer_chunked
 
@@ -1109,7 +1109,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #setup_extern_func() {
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 {
                     // To avoid importing #struct_name, we create a placeholder struct with the same size and alignment.
                     #[repr(C, align(#block_size))]
@@ -1167,7 +1167,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
     let cnt_limbs_list_len = limb_list_borders.len();
     TokenStream::from(quote::quote_spanned! { span.into() =>
         #[allow(non_snake_case)]
-        #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+        #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
         mod openvm_intrinsics_ffi {
             #(#externs)*
         }

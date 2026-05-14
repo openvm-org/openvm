@@ -28,7 +28,7 @@ pub use openvm_algebra_guest as algebra;
 /// These should **only** be importable on a host machine.
 #[cfg(all(
     feature = "halo2curves",
-    not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))
+    not(any(openvm_intrinsics, target_os = "openvm"))
 ))]
 pub mod halo2curves_shims;
 

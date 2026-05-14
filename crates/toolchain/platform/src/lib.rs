@@ -4,19 +4,13 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 pub use openvm_custom_insn::{custom_insn_i, custom_insn_r};
-#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 pub mod alloc;
-#[cfg(all(
-    feature = "rust-runtime",
-    any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")
-))]
+#[cfg(all(feature = "rust-runtime", any(openvm_intrinsics, target_os = "openvm")))]
 pub mod heap;
-#[cfg(all(
-    feature = "export-libm",
-    any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")
-))]
+#[cfg(all(feature = "export-libm", any(openvm_intrinsics, target_os = "openvm")))]
 mod libm_extern;
 
 pub mod memory;

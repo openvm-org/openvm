@@ -82,9 +82,9 @@ impl ReprEndianness {
         };
 
         quote! {
-            #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+            #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 let r = #zkvm_impl;
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 let r = #non_zkvm_impl;
         }
     }
@@ -134,11 +134,11 @@ impl ReprEndianness {
         };
 
         quote! {
-            #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+            #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
             {
                 #zkvm_impl
             }
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             {
                 #non_zkvm_impl
             }
@@ -250,9 +250,9 @@ pub fn openvm_prime_field(
 
     // TODO: test the non-zkvm case
     gen.extend(quote! {
-        #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+        #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
             #openvm_struct
-        #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+        #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             #ast
     });
 
@@ -712,7 +712,7 @@ fn prime_field_constants_and_sqrt(
             const MODULUS: REPR_BITS = [#(#modulus_le_bytes,)*];
 
             /// This is the modulus m of the prime field in limb form
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             const MODULUS_LIMBS: #name = #name([#(#modulus,)*]);
 
             /// This is the modulus m of the prime field in hex string form
@@ -726,49 +726,49 @@ fn prime_field_constants_and_sqrt(
             const REPR_SHAVE_BITS: u32 = #repr_shave_bits;
 
             /// 2^{limbs*64} mod m
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             const R: #name = #name(#r);
 
             /// 2^{limbs*64*2} mod m
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             const R2: #name = #name(#r2);
 
             /// -(m^{-1} mod m) mod m
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             const INV: u64 = #inv;
 
             /// 2^{-1} mod m
-            #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+            #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
             const TWO_INV: #name = <#name>::from_const_bytes(#two_inv_bytes);
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             const TWO_INV: #name = #name(#two_inv);
 
             /// Multiplicative generator of `MODULUS` - 1 order, also quadratic
             /// nonresidue.
-            #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+            #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
             const GENERATOR: #name = <#name>::from_const_bytes(#generator_bytes);
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             const GENERATOR: #name = #name(#generator_u64_limbs);
 
             /// 2^s * t = MODULUS - 1 with t odd
             const S: u32 = #s;
 
             /// 2^s root of unity computed by GENERATOR^t
-            #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+            #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
             const ROOT_OF_UNITY: #name = <#name>::from_const_bytes(#root_of_unity_bytes);
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             const ROOT_OF_UNITY: #name = #name(#root_of_unity);
 
             /// (2^s)^{-1} mod m
-            #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+            #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
             const ROOT_OF_UNITY_INV: #name = <#name>::from_const_bytes(#root_of_unity_inv_bytes);
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             const ROOT_OF_UNITY_INV: #name = #name(#root_of_unity_inv);
 
             /// GENERATOR^{2^s}
-            #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+            #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
             const DELTA: #name = <#name>::from_const_bytes(#delta_bytes);
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             const DELTA: #name = #name(#delta);
         },
         sqrt_impl,
@@ -806,13 +806,13 @@ fn prime_field_impl(
 
     // Implement montgomery reduction for some number of limbs
     fn mont_impl(limbs: usize) -> proc_macro2::TokenStream {
-        #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+        #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
         {
             quote! {
                 unimplemented!();
             }
         }
-        #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+        #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
         {
             let mut gen = proc_macro2::TokenStream::new();
 
@@ -1064,21 +1064,21 @@ fn prime_field_impl(
 
     // Since moduli_declare! already implements some traits, we need to conditionally
     // compile some of the trait impls depending on whether we're in zkvm or not.
-    // So, we create a new module with #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"),
-    // target_os = "openvm")))] and place the impls in there.
+    // So, we create a new module with #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
+    // and place the impls in there.
     let impl_module_ident =
         syn::Ident::new(&format!("impl_{name}"), proc_macro2::Span::call_site());
 
     let zero_impl = quote! {
-        #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+        #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
             const ZERO: Self = <Self as ::openvm_algebra_guest::IntMod>::ZERO;
-        #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+        #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             const ZERO: Self = #name([0; #limbs]);
     };
     let one_impl = quote! {
-        #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+        #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
             const ONE: Self = <Self as ::openvm_algebra_guest::IntMod>::ONE;
-        #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+        #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             const ONE: Self = R;
     };
 
@@ -1103,14 +1103,14 @@ fn prime_field_impl(
         impl Ord for #name {
             #[inline(always)]
             fn cmp(&self, other: &#name) -> ::core::cmp::Ordering {
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 {
                     <Self as ::openvm_algebra_guest::IntMod>::assert_reduced(self);
                     <Self as ::openvm_algebra_guest::IntMod>::assert_reduced(other);
 
                     self.cmp_native(other)
                 }
-                #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 {
                     let mut a = *self;
                     a.mont_reduce(
@@ -1137,11 +1137,11 @@ fn prime_field_impl(
         impl From<u64> for #name {
             #[inline(always)]
             fn from(val: u64) -> #name {
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 {
                     <#name as ::openvm_algebra_guest::IntMod>::from_u64(val)
                 }
-                #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 {
                     let mut raw = [0u64; #limbs];
                     raw[0] = val;
@@ -1166,7 +1166,7 @@ fn prime_field_impl(
 
         impl ::ff::derive::subtle::ConditionallySelectable for #name {
             fn conditional_select(a: &#name, b: &#name, choice: ::ff::derive::subtle::Choice) -> #name {
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 {
                     let mut res = [0u8; #zkvm_limbs];
                     let a_le_bytes = <Self as ::openvm_algebra_guest::IntMod>::as_le_bytes(a);
@@ -1176,7 +1176,7 @@ fn prime_field_impl(
                     }
                     #name(res)
                 }
-                #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 {
                     let mut res = [0u64; #limbs];
                     for i in 0..#limbs {
@@ -1189,7 +1189,7 @@ fn prime_field_impl(
 
         // All the traits that are implemented in this module are already implemented
         // on our zkvm-compatible struct, so we need to conditionally implement them
-        #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+        #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
         mod #impl_module_ident {
             use super::{#name, MODULUS_LIMBS};
 
@@ -1376,11 +1376,11 @@ fn prime_field_impl(
             fn from_repr(r: #repr) -> ::ff::derive::subtle::CtOption<#name> {
                 #from_repr_impl
 
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 {
                     ::ff::derive::subtle::CtOption::new(r, r.constant_time_is_reduced())
                 }
-                #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 {
                     // Try to subtract the modulus
                     let borrow = r.0.iter().zip(MODULUS_LIMBS.0.iter()).fold(0, |borrow, (a, b)| {
@@ -1401,7 +1401,7 @@ fn prime_field_impl(
             fn from_repr_vartime(r: #repr) -> Option<#name> {
                 #from_repr_impl
 
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 {
                     if <Self as ::openvm_algebra_guest::IntMod>::is_reduced(&r) {
                         Some(r)
@@ -1409,7 +1409,7 @@ fn prime_field_impl(
                         None
                     }
                 }
-                #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 {
                     if r.is_valid() {
                         Some(r * R2)
@@ -1426,11 +1426,11 @@ fn prime_field_impl(
 
             #[inline(always)]
             fn is_odd(&self) -> ::ff::derive::subtle::Choice {
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 {
                     ::ff::derive::subtle::Choice::from((<Self as ::openvm_algebra_guest::IntMod>::as_le_bytes(self)[0] & 1) as u8)
                 }
-                #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 {
                     let mut r = *self;
                     r.mont_reduce(
@@ -1470,11 +1470,11 @@ fn prime_field_impl(
 
             /// Computes a uniformly random element using rejection sampling.
             fn random(mut rng: impl ::ff::derive::rand_core::RngCore) -> Self {
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 {
                     panic!("randomn is not implemented for the zkvm");
                 }
-                #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 {
                     loop {
                         let mut tmp = {
@@ -1501,11 +1501,11 @@ fn prime_field_impl(
 
             #[inline]
             fn is_zero_vartime(&self) -> bool {
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 {
                     self == &Self::ZERO
                 }
-                #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 {
                     self.0.iter().all(|&e| e == 0)
                 }
@@ -1513,11 +1513,11 @@ fn prime_field_impl(
 
             #[inline]
             fn double(&self) -> Self {
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 {
                     <Self as ::openvm_algebra_guest::IntMod>::double(self)
                 }
-                #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 {
                     let mut ret = *self;
 
@@ -1539,7 +1539,7 @@ fn prime_field_impl(
 
             /// Note that invert is not constant-time in the zkvm.
             fn invert(&self) -> ::ff::derive::subtle::CtOption<Self> {
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 {
                     let is_self_zero = self.is_zero_vartime();
                     let res = if is_self_zero {
@@ -1550,7 +1550,7 @@ fn prime_field_impl(
                     };
                     ::ff::derive::subtle::CtOption::new(res, (!is_self_zero as u8).into())
                 }
-                #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 {
                     #invert_impl
                 }
@@ -1559,11 +1559,11 @@ fn prime_field_impl(
             #[inline]
             fn square(&self) -> Self
             {
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 {
                     <Self as ::openvm_algebra_guest::IntMod>::square(self)
                 }
-                #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 {
                     #squaring_impl
                 }
@@ -1575,7 +1575,7 @@ fn prime_field_impl(
 
             /// Note that sqrt is not constant-time in the zkvm
             fn sqrt(&self) -> ::ff::derive::subtle::CtOption<Self> {
-                #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+                #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
                 {
                     use ::openvm_algebra_guest::Sqrt;
                     match Sqrt::sqrt(self) {
@@ -1583,7 +1583,7 @@ fn prime_field_impl(
                         None => ::ff::derive::subtle::CtOption::new(Self::ZERO, 0u8.into()),
                     }
                 }
-                #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+                #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
                 {
                     #sqrt_impl
                 }
@@ -1609,7 +1609,7 @@ fn prime_field_impl(
             /// Determines if the element is really in the field. This is only used
             /// internally.
             #[inline(always)]
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             fn is_valid(&self) -> bool {
                 // The Ord impl calls `reduce`, which in turn calls `is_valid`, so we use
                 // this internal function to eliminate the cycle.
@@ -1617,7 +1617,7 @@ fn prime_field_impl(
             }
 
             #[inline(always)]
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             fn add_nocarry(&mut self, other: &#name) {
                 let mut carry = 0;
 
@@ -1629,7 +1629,7 @@ fn prime_field_impl(
             }
 
             #[inline(always)]
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             fn sub_noborrow(&mut self, other: &#name) {
                 let mut borrow = 0;
 
@@ -1643,7 +1643,7 @@ fn prime_field_impl(
             /// Subtracts the modulus from this element if this element is not in the
             /// field. Only used internally.
             #[inline(always)]
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             fn reduce(&mut self) {
                 if !self.is_valid() {
                     self.sub_noborrow(&MODULUS_LIMBS);
@@ -1652,7 +1652,7 @@ fn prime_field_impl(
 
             #[allow(clippy::too_many_arguments)]
             #[inline(always)]
-            #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             fn mont_reduce(
                 &mut self,
                 #mont_paramlist
@@ -1668,7 +1668,7 @@ fn prime_field_impl(
             }
 
             // A variant of IntMod::is_reduced that runs in constant time
-            #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+            #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
             fn constant_time_is_reduced(&self) -> ::ff::derive::subtle::Choice {
                 let mut is_less = 0u8.into();
                 // Iterate over limbs in little endian order and retain the result of the last non-equal comparison.

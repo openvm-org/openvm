@@ -12,7 +12,7 @@ mod test_line;
 #[cfg(test)]
 mod test_miller_loop;
 
-#[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+#[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 #[allow(non_snake_case)]
 #[allow(clippy::type_complexity)]
 pub fn generate_test_points_bls12_381(

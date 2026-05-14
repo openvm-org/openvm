@@ -8,17 +8,17 @@
 extern crate alloc;
 
 // always include rust_rt so the memory allocator is enabled
-#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 use core::arch::asm;
 
 pub use openvm_platform as platform;
-#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[allow(unused_imports)]
 use openvm_platform::rust_rt;
-#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 pub use openvm_riscv_guest::*;
 
-#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 mod getrandom;
 pub mod io;
 #[cfg(all(feature = "std", target_os = "openvm"))]
@@ -26,19 +26,19 @@ pub mod pal_abi;
 pub mod process;
 pub mod serde;
 
-#[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+#[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 pub mod utils;
 
-#[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+#[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 pub mod host;
 
-#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 core::arch::global_asm!(include_str!("memset.s"));
-#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 core::arch::global_asm!(include_str!("memcpy.s"));
 
 fn _fault() -> ! {
-    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
     unsafe {
         asm!("sd x0, 1(x0)")
     };
@@ -73,10 +73,7 @@ fn _fault() -> ! {
 ///
 /// fn main() { }
 /// ```
-#[cfg(all(
-    not(feature = "std"),
-    any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")
-))]
+#[cfg(all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")))]
 #[macro_export]
 macro_rules! entry {
     ($path:path) => {
@@ -95,16 +92,13 @@ macro_rules! entry {
 }
 /// This macro does nothing. You should name the function `main` so that the normal rust main
 /// function setup is used.
-#[cfg(any(
-    feature = "std",
-    not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))
-))]
+#[cfg(any(feature = "std", not(any(openvm_intrinsics, target_os = "openvm"))))]
 #[macro_export]
 macro_rules! entry {
     ($path:path) => {};
 }
 
-#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[no_mangle]
 unsafe extern "C" fn __start() -> ! {
     #[cfg(feature = "heap-embedded-alloc")]
@@ -122,7 +116,7 @@ unsafe extern "C" fn __start() -> ! {
 }
 
 // Entry point; sets up global pointer and stack pointer and passes to `__start`.
-#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 core::arch::global_asm!(
     r#"
 .section .text._start;
@@ -144,21 +138,18 @@ _start:
 #[allow(unused_variables)]
 pub fn memory_barrier<T>(ptr: *const T) {
     // SAFETY: This passes a pointer in, but does nothing with it.
-    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
     unsafe {
         asm!("/* {0} */", in(reg) (ptr))
     }
-    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
     core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst)
 }
 
 // When std is not linked, register a panic handler here so the user does not
 // have to. If std is linked, it will define the panic handler instead. This
 // panic handler must not be included.
-#[cfg(all(
-    any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"),
-    not(feature = "std")
-))]
+#[cfg(all(any(openvm_intrinsics, target_os = "openvm"), not(feature = "std")))]
 #[panic_handler]
 fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
     use core::fmt::Write;

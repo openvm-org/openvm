@@ -33,12 +33,12 @@ impl ConditionallySelectable for Secp256k1Coord {
 
 impl ConstantTimeEq for Secp256k1Coord {
     fn ct_eq(&self, other: &Secp256k1Coord) -> Choice {
-        #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+        #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
         {
             // Requires canonical form
             self.as_le_bytes().ct_eq(other.as_le_bytes())
         }
-        #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+        #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
         {
             // The zkVM implementation calls iseqmod opcode so it is constant time, _except_ a check
             // of whether the setup opcode has been called already

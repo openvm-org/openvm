@@ -101,7 +101,7 @@ pub fn read_u64() -> u64 {
 #[cfg(all(
     feature = "std",
     test,
-    not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))
+    not(any(openvm_intrinsics, target_os = "openvm"))
 ))]
 mod tests {
     use alloc::vec;

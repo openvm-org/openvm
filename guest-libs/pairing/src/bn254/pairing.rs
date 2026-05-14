@@ -14,12 +14,12 @@ use openvm_pairing_guest::{
 };
 #[cfg(all(
     feature = "halo2curves",
-    not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))
+    not(any(openvm_intrinsics, target_os = "openvm"))
 ))]
 use openvm_pairing_guest::{
     halo2curves_shims::bn254::Bn254 as Halo2CurvesBn254, pairing::FinalExp,
 };
-#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 use {
     core::mem::MaybeUninit,
     openvm_pairing_guest::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
@@ -30,7 +30,7 @@ use {
 use super::{Bn254, Fp, Fp12, Fp2};
 #[cfg(all(
     feature = "halo2curves",
-    not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))
+    not(any(openvm_intrinsics, target_os = "openvm"))
 ))]
 use crate::bn254::utils::{
     convert_bn254_fp2_to_halo2_fq2, convert_bn254_fp_to_halo2_fq, convert_bn254_halo2_fq12_to_fp12,
@@ -286,7 +286,7 @@ impl PairingCheck for Bn254 {
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
     ) -> (Self::Fp12, Self::Fp12) {
-        #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+        #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
         {
             #[cfg(not(feature = "halo2curves"))]
             panic!("`halo2curves` feature must be enabled to use pairing check hint on host");
@@ -318,7 +318,7 @@ impl PairingCheck for Bn254 {
                 (c, s)
             }
         }
-        #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+        #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
         {
             let mut hint = MaybeUninit::<(Fp12, Fp12)>::uninit();
             // We do not rely on the slice P's memory layout since rust does not guarantee it across

@@ -52,13 +52,13 @@ use core::{
 };
 
 pub use field::Field;
-#[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+#[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 use num_bigint::BigUint;
 pub use openvm_algebra_complex_macros as complex_macros;
 pub use openvm_algebra_moduli_macros as moduli_macros;
-#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 pub use openvm_custom_insn;
-#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 pub use openvm_riscv_guest;
 pub use serde_big_array::BigArray;
 use strum_macros::FromRepr;
@@ -67,7 +67,7 @@ use strum_macros::FromRepr;
 /// Used for testing and also VM runtime execution.
 /// These should **only** be importable on a host machine.
 #[cfg(all(
-    not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")),
+    not(any(openvm_intrinsics, target_os = "openvm")),
     feature = "halo2curves"
 ))]
 mod halo2curves;
@@ -191,15 +191,15 @@ pub trait IntMod:
     fn to_be_bytes(&self) -> Self::Repr;
 
     /// Modulus N as a BigUint.
-    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
     fn modulus_biguint() -> BigUint;
 
     /// Creates a new IntMod from a BigUint.
-    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
     fn from_biguint(biguint: BigUint) -> Self;
 
     /// Value of this IntMod as a BigUint.
-    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
+    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
     fn as_biguint(&self) -> BigUint;
 
     fn neg_assign(&mut self);
