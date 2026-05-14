@@ -769,6 +769,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
         } = inventory.system().port();
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
+        let range_checker = inventory.range_checker().bus;
         let pointer_max_bits = inventory.pointer_max_bits();
 
         let bitwise_lu = {
@@ -787,6 +788,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
             exec_bridge,
             memory_bridge,
             bitwise_lu,
+            range_checker,
             Rv64HintStoreOpcode::CLASS_OFFSET,
             pointer_max_bits,
         );
@@ -832,7 +834,11 @@ where
 
         inventory.next_air::<Rv64HintStoreAir>()?;
         let hint_store = Rv64HintStoreChip::new(
-            Rv64HintStoreFiller::new(pointer_max_bits, bitwise_lu.clone()),
+            Rv64HintStoreFiller::new(
+                pointer_max_bits,
+                bitwise_lu.clone(),
+                range_checker.clone(),
+            ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(hint_store);

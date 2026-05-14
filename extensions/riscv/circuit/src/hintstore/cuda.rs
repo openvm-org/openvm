@@ -21,6 +21,10 @@ use crate::{
 #[derive(new)]
 pub struct Rv64HintStoreChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    /// Kept for ABI parity with the rest of `Rv64Im` periphery wiring (the AIR still
+    /// declares a `bitwise_operation_lookup_bus` even though hintstore no longer emits
+    /// any messages on it).
+    #[allow(dead_code)]
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
@@ -73,7 +77,6 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64HintStoreChipGpu {
                 &d_record_offsets,
                 self.pointer_max_bits as u32,
                 &self.range_checker.count,
-                &self.bitwise_lookup.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )
