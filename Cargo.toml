@@ -282,9 +282,11 @@ cuda-runtime-sys = "0.3.0-alpha.1"
 [workspace.metadata.cargo-shear]
 ignored = ["cargo-openvm"]
 
-# Declares `openvm_intrinsics` so host-side builds (plain `cargo check/test/clippy`)
-# don't warn on the cfg. Guest builds declare the same cfg via
-# `--check-cfg=cfg(openvm_intrinsics)` in the guest-build rustflags. Crates opt
-# in with `[lints] workspace = true`.
+# Declares the two custom cfgs the guest gating uses so host-side builds
+# (plain `cargo check/test/clippy` with stable-rustc) don't warn:
+#   - `openvm_intrinsics` — custom cfg set by `cargo openvm build` rustflags.
+#   - `target_os = "openvm"` — the value is only known to the openvm-fork toolchain;
+#     stable-rustc otherwise treats it as an unknown target_os value.
+# Crates opt in with `[lints] workspace = true`.
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(target_os, values("openvm"))'] }
