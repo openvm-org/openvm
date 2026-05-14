@@ -209,7 +209,7 @@ impl<
         let e = AB::F::from_u32(RV64_MEMORY_AS);
         // Heap reads. `READ_SIZE` is u16 cells; the per-block byte stride is
         // `BUS_PTR_SCALE * READ_SIZE` (= 2 * READ_SIZE for u16 cells).
-        const BUS_BYTES_PER_CELL: usize = BUS_PTR_SCALE as usize;
+        const BUS_BYTES_PER_CELL: usize = BUS_PTR_SCALE;
         let read_bytes_per_block = READ_SIZE * BUS_BYTES_PER_CELL;
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux,) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {

@@ -747,7 +747,7 @@ unsafe fn execute_e12_impl<
     // Compare modulus byte-by-byte: byte 2*i = low byte of cell i, byte 2*i+1 = high byte.
     let modulus_byte = |i: usize| -> u8 {
         let cell = pre_compute.modulus_limbs[i / 2];
-        if i % 2 == 0 {
+        if i.is_multiple_of(2) {
             (cell & 0xff) as u8
         } else {
             (cell >> 8) as u8

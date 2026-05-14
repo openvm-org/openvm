@@ -121,14 +121,14 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let is_jal = opcode == JAL;
     let imm = imm.unwrap_or_else(|| {
         if is_jal {
-            let raw = rng.random_range(0..(1 << (RV_J_TYPE_IMM_BITS - 1))) as i32;
+            let raw: i32 = rng.random_range(0..(1 << (RV_J_TYPE_IMM_BITS - 1)));
             if rng.random_bool(0.5) {
                 -raw
             } else {
                 raw
             }
         } else {
-            rng.random_range(0..(1 << 20)) as i32
+            rng.random_range(0..(1 << 20))
         }
     });
     let a = rd_ptr.unwrap_or_else(|| (rng.random_range(0..32) << 3) as usize);
@@ -562,7 +562,7 @@ fn execute_roundtrip_sanity_test() {
         &mut harness.arena,
         &mut rng,
         JAL,
-        Some(((1 << (RV_J_TYPE_IMM_BITS - 1)) - 1) as i32),
+        Some((1i32 << (RV_J_TYPE_IMM_BITS - 1)) - 1),
         None,
         None,
     );
