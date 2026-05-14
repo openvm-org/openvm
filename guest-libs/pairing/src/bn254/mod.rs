@@ -15,13 +15,20 @@ use openvm_pairing_guest::pairing::PairingIntrinsics;
 mod fp12;
 mod fp2;
 pub mod pairing;
-#[cfg(all(feature = "halo2curves", not(openvm_intrinsics)))]
+#[cfg(all(
+    feature = "halo2curves",
+    not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))
+))]
 pub(crate) mod utils;
 
 pub use fp12::*;
 pub use fp2::*;
 
-#[cfg(all(test, feature = "halo2curves", not(openvm_intrinsics)))]
+#[cfg(all(
+    test,
+    feature = "halo2curves",
+    not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))
+))]
 pub mod tests;
 
 moduli_declare! {

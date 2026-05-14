@@ -24,5 +24,8 @@ pub enum Int256Funct7 {
     Mul,
 }
 
-#[cfg(all(feature = "export-intrinsics", openvm_intrinsics))]
+#[cfg(all(
+    feature = "export-intrinsics",
+    any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")
+))]
 pub mod externs;

@@ -316,8 +316,8 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
             "--cfg",
             "getrandom_backend=\"custom\"",
             // Set by `cargo openvm build`; guest crates gate code on
-            // cfg(openvm_intrinsics) to switch between portable Rust impls
-            // and openvm-intrinsic-using impls.
+            // cfg(any(openvm_intrinsics, target_os = "openvm")) to switch between portable Rust
+            // impls and openvm-intrinsic-using impls.
             "--cfg",
             "openvm_intrinsics",
             "--check-cfg=cfg(openvm_intrinsics)",

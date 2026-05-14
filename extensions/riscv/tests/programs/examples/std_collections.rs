@@ -1,4 +1,4 @@
-#![cfg_attr(any(target_os = "none", target_os = "openvm"), no_main)]
+#![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 openvm::entry!(main);

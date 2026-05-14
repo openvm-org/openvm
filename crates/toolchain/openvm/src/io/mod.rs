@@ -1,15 +1,15 @@
 //! User IO functions
 
 use alloc::vec::Vec;
-#[cfg(openvm_intrinsics)]
+#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
 use core::alloc::Layout;
 use core::fmt::Write;
 
-#[cfg(openvm_intrinsics)]
+#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
 use openvm_riscv_guest::{hint_buffer_chunked, hint_input, hint_store_u64};
 use serde::de::DeserializeOwned;
 
-#[cfg(not(openvm_intrinsics))]
+#[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
 use crate::host::{hint_input, read_n_bytes, read_u64};
 use crate::serde::Deserializer;
 
@@ -34,7 +34,7 @@ pub fn read<T: DeserializeOwned>() -> T {
 /// Read the next 8 bytes from the hint stream into a register.
 /// Because [hint_store_u64] stores a word to memory, this function first reads to memory and then
 /// loads from memory to register.
-#[cfg(openvm_intrinsics)]
+#[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
 #[inline(always)]
 #[allow(asm_sub_register)]
 pub fn read_u64() -> u64 {
@@ -48,9 +48,9 @@ pub fn read_u64() -> u64 {
 }
 
 fn hint_store_word(ptr: *mut u64) {
-    #[cfg(openvm_intrinsics)]
+    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
     hint_store_u64!(ptr);
-    #[cfg(not(openvm_intrinsics))]
+    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
     unsafe {
         *ptr = crate::host::read_u64();
     }
@@ -61,7 +61,7 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
     let num_words = len.div_ceil(WORD_SIZE);
     let capacity = num_words * WORD_SIZE;
 
-    #[cfg(openvm_intrinsics)]
+    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
     {
         // Allocate a buffer of the required length
         // We prefer that the allocator should allocate this buffer to a 8-byte boundary,
@@ -82,7 +82,7 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
         }
         bytes
     }
-    #[cfg(not(openvm_intrinsics))]
+    #[cfg(not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")))]
     {
         let mut buffer = Vec::with_capacity(capacity);
         buffer.append(&mut read_n_bytes(len));
@@ -111,9 +111,12 @@ pub fn reveal_bytes32(bytes: [u8; 32]) {
 #[inline(always)]
 pub fn reveal_u64(x: u64, index: usize) {
     let byte_index = (index * 8) as u64;
-    #[cfg(openvm_intrinsics)]
+    #[cfg(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm"))]
     openvm_riscv_guest::reveal!(byte_index, x, 0);
-    #[cfg(all(not(openvm_intrinsics), feature = "std"))]
+    #[cfg(all(
+        not(any(any(openvm_intrinsics, target_os = "openvm"), target_os = "openvm")),
+        feature = "std"
+    ))]
     println!("reveal {} at byte location {}", x, index * 8);
 }
 
