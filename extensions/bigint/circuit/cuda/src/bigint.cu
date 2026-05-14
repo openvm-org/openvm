@@ -4,6 +4,7 @@
 #include "primitives/trace_access.h"
 #include "riscv-adapters/vec_heap.cuh"
 #include "riscv-adapters/vec_heap_branch.cuh"
+#include "riscv-adapters/vec_heap_u16.cuh"
 #include "riscv/cores/alu.cuh"
 #include "riscv/cores/beq.cuh"
 #include "riscv/cores/blt.cuh"
@@ -30,9 +31,12 @@ template <typename T>
 using BranchEqual256CoreCols = BranchEqualCoreCols<T, INT256_NUM_U16_LIMBS>;
 using BranchEqual256CoreRecord = BranchEqualCoreRecord<INT256_NUM_U16_LIMBS>;
 
-using LessThan256CoreRecord = LessThanCoreRecord<INT256_NUM_LIMBS>;
-using LessThan256Core = LessThanCore<INT256_NUM_LIMBS>;
-template <typename T> using LessThan256CoreCols = LessThanCoreCols<T, INT256_NUM_LIMBS>;
+using LessThan256CoreRecord =
+    LessThanCoreRecord<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>;
+using LessThan256Core = LessThanCore<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>;
+template <typename T>
+using LessThan256CoreCols =
+    LessThanCoreCols<T, INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>;
 
 using Multiplication256CoreRecord = MultiplicationCoreRecord<INT256_NUM_LIMBS>;
 using Multiplication256Core = MultiplicationCore<INT256_NUM_LIMBS>;
@@ -196,13 +200,17 @@ extern "C" int _branch_equal256_tracegen(
     return CHECK_KERNEL();
 }
 
+// Pattern B u16 LessThan256: u16 cells, READ_SIZE/WRITE_SIZE = BLOCK_FE_WIDTH (in u16 cells).
+using Rv64VecHeapU16Adapter256 =
+    Rv64VecHeapU16Adapter<NUM_READS, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH, BLOCK_FE_WIDTH>;
+
 template <typename T> struct LessThan256Cols {
-    Rv64VecHeapAdapterCols<T, NUM_READS, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE, DEFAULT_BLOCK_SIZE> adapter;
+    Rv64VecHeapU16AdapterCols<T, NUM_READS, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH, BLOCK_FE_WIDTH> adapter;
     LessThan256CoreCols<T> core;
 };
 
 struct LessThan256Record {
-    Rv64VecHeapAdapterRecord<NUM_READS, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE, DEFAULT_BLOCK_SIZE> adapter;
+    Rv64VecHeapU16AdapterRecord<NUM_READS, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH, BLOCK_FE_WIDTH> adapter;
     LessThan256CoreRecord core;
 };
 
@@ -221,7 +229,7 @@ __global__ void less_than256_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        Rv64VecHeapAdapter256 adapter(
+        Rv64VecHeapU16Adapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
             BitwiseOperationLookup(d_bitwise_lookup_ptr),
@@ -229,7 +237,7 @@ __global__ void less_than256_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        LessThan256Core core{BitwiseOperationLookup(d_bitwise_lookup_ptr)};
+        LessThan256Core core{VariableRangeChecker(d_range_checker_ptr, range_checker_bins)};
         core.fill_trace_row(row.slice_from(COL_INDEX(LessThan256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(LessThan256Cols<uint8_t>));

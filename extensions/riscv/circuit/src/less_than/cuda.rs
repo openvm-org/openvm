@@ -2,33 +2,29 @@ use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
-};
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{
-        Rv64BaseAluAdapterCols, Rv64BaseAluAdapterRecord, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
-    },
+    adapters::{Rv64BaseAluAdapterU16Cols, Rv64BaseAluAdapterU16Record},
     cuda_abi::less_than_cuda::tracegen,
+    less_than::{RV64_LESS_THAN_LIMB_BITS, RV64_LESS_THAN_NUM_LIMBS},
     LessThanCoreCols, LessThanCoreRecord,
 };
 
 #[derive(new)]
 pub struct Rv64LessThanChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64LessThanChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv64BaseAluAdapterRecord,
-            LessThanCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
+            Rv64BaseAluAdapterU16Record,
+            LessThanCoreRecord<RV64_LESS_THAN_NUM_LIMBS, RV64_LESS_THAN_LIMB_BITS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
@@ -36,8 +32,8 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LessThanChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64BaseAluAdapterCols::<F>::width()
-            + LessThanCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>::width();
+        let trace_width = Rv64BaseAluAdapterU16Cols::<F>::width()
+            + LessThanCoreCols::<F, RV64_LESS_THAN_NUM_LIMBS, RV64_LESS_THAN_LIMB_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
@@ -50,7 +46,6 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LessThanChipGpu {
                 trace_height,
                 &d_records,
                 &self.range_checker.count,
-                &self.bitwise_lookup.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )
