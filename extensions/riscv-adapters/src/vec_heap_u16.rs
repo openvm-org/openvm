@@ -3,8 +3,8 @@
 //! Differences vs the u8 variant:
 //! - `READ_SIZE` and `WRITE_SIZE` are counted in **u16 cells**, not bytes; the per-block byte
 //!   stride is `BUS_PTR_SCALE * READ_SIZE = 2 * READ_SIZE`.
-//! - `ReadData` / `WriteData` are `[[[u16; READ_SIZE]; ...]; ...]` and the bus call passes the
-//!   u16 cells through directly without `pack_u8_for_bus`.
+//! - `ReadData` / `WriteData` are `[[[u16; READ_SIZE]; ...]; ...]` and the bus call passes the u16
+//!   cells through directly without `pack_u8_for_bus`.
 //! - All other shape constants (rs_ptr / rs_val / rd_ptr / rd_val) are unchanged because the
 //!   register-side reads still go through the byte-shaped register cells that the existing
 //!   `Rv64VecHeapAdapter` already handles via `expand_to_rv64_register`.
@@ -23,7 +23,10 @@ use openvm_circuit::{
         BUS_PTR_SCALE,
     },
     system::memory::{
-        offline_checker::{pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols},
+        offline_checker::{
+            pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols,
+        },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
@@ -99,7 +102,13 @@ impl<
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > BaseAir<F>
-    for Rv64VecHeapU16AdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    for Rv64VecHeapU16AdapterAir<
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCKS_PER_WRITE,
+        READ_SIZE,
+        WRITE_SIZE,
+    >
 {
     fn width(&self) -> usize {
         Rv64VecHeapU16AdapterCols::<
@@ -121,7 +130,13 @@ impl<
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > VmAdapterAir<AB>
-    for Rv64VecHeapU16AdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    for Rv64VecHeapU16AdapterAir<
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCKS_PER_WRITE,
+        READ_SIZE,
+        WRITE_SIZE,
+    >
 {
     type Interface = VecHeapAdapterInterface<
         AB::Expr,
@@ -545,8 +560,7 @@ impl<
                 // WRITE_SIZE == BLOCK_FE_WIDTH is enforced by the AIR-side debug_assert above;
                 // build the BLOCK_FE_WIDTH-shaped array explicitly so the type-checker is happy.
                 debug_assert_eq!(WRITE_SIZE, BLOCK_FE_WIDTH);
-                let prev: [F; BLOCK_FE_WIDTH] =
-                    from_fn(|i| F::from_u32(write.prev_data[i] as u32));
+                let prev: [F; BLOCK_FE_WIDTH] = from_fn(|i| F::from_u32(write.prev_data[i] as u32));
                 cols_write.set_prev_data(prev);
                 mem_helper.fill(write.prev_timestamp, timestamp_mm(), cols_write.as_mut());
             });

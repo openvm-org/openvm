@@ -238,7 +238,11 @@ pub fn timed_read_u16<const N: usize>(
 
     // SAFETY: Address spaces RV64_REGISTER_AS / RV64_MEMORY_AS / PUBLIC_VALUES_AS are u16-celled
     // post Stage 1.6; native u16 typed read hits the matching cell-type fast path.
-    debug_assert_eq!(byte_ptr & 1, 0, "u16 typed read requires 2-byte aligned ptr");
+    debug_assert_eq!(
+        byte_ptr & 1,
+        0,
+        "u16 typed read requires 2-byte aligned ptr"
+    );
     let cell_ptr = byte_ptr >> 1;
     unsafe { memory.read::<u16, N>(address_space, cell_ptr) }
 }
@@ -269,7 +273,11 @@ pub fn timed_write_u16<const N: usize>(
             || address_space == RV64_MEMORY_AS
             || address_space == PUBLIC_VALUES_AS
     );
-    debug_assert_eq!(byte_ptr & 1, 0, "u16 typed write requires 2-byte aligned ptr");
+    debug_assert_eq!(
+        byte_ptr & 1,
+        0,
+        "u16 typed write requires 2-byte aligned ptr"
+    );
     let cell_ptr = byte_ptr >> 1;
     // SAFETY: see `timed_read_u16`.
     unsafe { memory.write::<u16, N>(address_space, cell_ptr, data) }

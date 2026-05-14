@@ -32,12 +32,9 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64BranchLessThanChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = BranchLessThanCoreCols::<
-            F,
-            RV64_BRANCH_NUM_LIMBS,
-            RV64_BRANCH_LIMB_BITS,
-        >::width()
-            + Rv64BranchAdapterCols::<F>::width();
+        let trace_width =
+            BranchLessThanCoreCols::<F, RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>::width()
+                + Rv64BranchAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 

@@ -7,8 +7,8 @@
 //! - The bus emits the 4 u16 cells directly (no `pack_u8_for_bus`).
 //! - `rs2` immediate decomposition is a single u16 limb plus a 1-bit sign extension; the
 //!   sign-extended high cells are produced as `imm_sign * 0xffff` in the AIR.
-//! - The immediate range check uses [`VariableRangeCheckerBus`] rather than the byte-pair
-//!   bitwise lookup, since we no longer have byte-shaped imm columns.
+//! - The immediate range check uses [`VariableRangeCheckerBus`] rather than the byte-pair bitwise
+//!   lookup, since we no longer have byte-shaped imm columns.
 
 use std::borrow::{Borrow, BorrowMut};
 
@@ -19,7 +19,9 @@ use openvm_circuit::{
         BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols},
+        offline_checker::{
+            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+        },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
@@ -104,8 +106,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterU16Air {
         };
 
         // When rs2 is an immediate, constrain the u16-celled view:
-        //   - rs2 = rs2_limbs[0] + 2^16 * rs2_limbs[1]
-        //     where rs2_limbs[1] = rs2_imm_sign * 0xffff (= sign extension u16)
+        //   - rs2 = rs2_limbs[0] + 2^16 * rs2_limbs[1] where rs2_limbs[1] = rs2_imm_sign * 0xffff
+        //     (= sign extension u16)
         //   - rs2_limbs[2..4] = sign-extended u16 (= rs2_imm_sign * 0xffff)
         // The 24-bit signed immediate stored in `rs2` reconstructs from the low u16 limb plus the
         // 16-bit-or-higher sign extension. We range-check the low u16 limb here (since it isn't

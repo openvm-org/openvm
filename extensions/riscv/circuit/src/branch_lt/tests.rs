@@ -1,3 +1,5 @@
+#[cfg(feature = "cuda")]
+use std::sync::Arc;
 use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
@@ -11,8 +13,6 @@ use openvm_circuit::{
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 #[cfg(feature = "cuda")]
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-#[cfg(feature = "cuda")]
-use std::sync::Arc;
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_riscv_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::{
@@ -405,23 +405,19 @@ fn execute_roundtrip_sanity_test() {
 fn run_cmp_unsigned_sanity_test() {
     let x: [u16; RV64_BRANCH_NUM_LIMBS] = [0x9100, 0x5638, 0x6459, 0xcd05];
     let y: [u16; RV64_BRANCH_NUM_LIMBS] = [0x4900, 0x5638, 0x6459, 0xcd05];
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
-            BranchLessThanOpcode::BLTU as u8,
-            &x,
-            &y,
-        );
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<
+        RV64_BRANCH_NUM_LIMBS,
+        RV64_BRANCH_LIMB_BITS,
+    >(BranchLessThanOpcode::BLTU as u8, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, 0);
     assert!(!x_sign); // unsigned
     assert!(!y_sign); // unsigned
 
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
-            BranchLessThanOpcode::BGEU as u8,
-            &x,
-            &y,
-        );
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<
+        RV64_BRANCH_NUM_LIMBS,
+        RV64_BRANCH_LIMB_BITS,
+    >(BranchLessThanOpcode::BGEU as u8, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 0);
     assert!(!x_sign); // unsigned
@@ -432,23 +428,19 @@ fn run_cmp_unsigned_sanity_test() {
 fn run_cmp_same_sign_sanity_test() {
     let x: [u16; RV64_BRANCH_NUM_LIMBS] = [0x9100, 0x5638, 0x6459, 0xcd05];
     let y: [u16; RV64_BRANCH_NUM_LIMBS] = [0x4900, 0x5638, 0x6459, 0xcd05];
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
-            BranchLessThanOpcode::BLT as u8,
-            &x,
-            &y,
-        );
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<
+        RV64_BRANCH_NUM_LIMBS,
+        RV64_BRANCH_LIMB_BITS,
+    >(BranchLessThanOpcode::BLT as u8, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, 0);
     assert!(x_sign); // negative
     assert!(y_sign); // negative
 
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
-            BranchLessThanOpcode::BGE as u8,
-            &x,
-            &y,
-        );
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<
+        RV64_BRANCH_NUM_LIMBS,
+        RV64_BRANCH_LIMB_BITS,
+    >(BranchLessThanOpcode::BGE as u8, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 0);
     assert!(x_sign); // negative
@@ -459,23 +451,19 @@ fn run_cmp_same_sign_sanity_test() {
 fn run_cmp_diff_sign_sanity_test() {
     let x: [u16; RV64_BRANCH_NUM_LIMBS] = [0x232d, 0x3719, 0x0000, 0x3700];
     let y: [u16; RV64_BRANCH_NUM_LIMBS] = [0x22ad, 0xcd19, 0xffff, 0xcd00];
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
-            BranchLessThanOpcode::BLT as u8,
-            &x,
-            &y,
-        );
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<
+        RV64_BRANCH_NUM_LIMBS,
+        RV64_BRANCH_LIMB_BITS,
+    >(BranchLessThanOpcode::BLT as u8, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, RV64_BRANCH_NUM_LIMBS - 1);
     assert!(!x_sign); // positive
     assert!(y_sign); // negative
 
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
-            BranchLessThanOpcode::BGE as u8,
-            &x,
-            &y,
-        );
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<
+        RV64_BRANCH_NUM_LIMBS,
+        RV64_BRANCH_LIMB_BITS,
+    >(BranchLessThanOpcode::BGE as u8, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, RV64_BRANCH_NUM_LIMBS - 1);
     assert!(!x_sign); // positive
@@ -485,42 +473,34 @@ fn run_cmp_diff_sign_sanity_test() {
 #[test]
 fn run_cmp_eq_sanity_test() {
     let x: [u16; RV64_BRANCH_NUM_LIMBS] = [0x232d, 0x3719, 0x0000, 0x3700];
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
-            BranchLessThanOpcode::BLT as u8,
-            &x,
-            &x,
-        );
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<
+        RV64_BRANCH_NUM_LIMBS,
+        RV64_BRANCH_LIMB_BITS,
+    >(BranchLessThanOpcode::BLT as u8, &x, &x);
     assert!(!cmp_result);
     assert_eq!(diff_idx, RV64_BRANCH_NUM_LIMBS);
     assert_eq!(x_sign, y_sign);
 
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
-            BranchLessThanOpcode::BLTU as u8,
-            &x,
-            &x,
-        );
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<
+        RV64_BRANCH_NUM_LIMBS,
+        RV64_BRANCH_LIMB_BITS,
+    >(BranchLessThanOpcode::BLTU as u8, &x, &x);
     assert!(!cmp_result);
     assert_eq!(diff_idx, RV64_BRANCH_NUM_LIMBS);
     assert_eq!(x_sign, y_sign);
 
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
-            BranchLessThanOpcode::BGE as u8,
-            &x,
-            &x,
-        );
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<
+        RV64_BRANCH_NUM_LIMBS,
+        RV64_BRANCH_LIMB_BITS,
+    >(BranchLessThanOpcode::BGE as u8, &x, &x);
     assert!(cmp_result);
     assert_eq!(diff_idx, RV64_BRANCH_NUM_LIMBS);
     assert_eq!(x_sign, y_sign);
 
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>(
-            BranchLessThanOpcode::BGEU as u8,
-            &x,
-            &x,
-        );
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<
+        RV64_BRANCH_NUM_LIMBS,
+        RV64_BRANCH_LIMB_BITS,
+    >(BranchLessThanOpcode::BGEU as u8, &x, &x);
     assert!(cmp_result);
     assert_eq!(diff_idx, RV64_BRANCH_NUM_LIMBS);
     assert_eq!(x_sign, y_sign);

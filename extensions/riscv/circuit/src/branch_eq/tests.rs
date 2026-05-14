@@ -1,3 +1,5 @@
+#[cfg(feature = "cuda")]
+use std::sync::Arc;
 use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
@@ -10,8 +12,6 @@ use openvm_circuit::{
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 #[cfg(feature = "cuda")]
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-#[cfg(feature = "cuda")]
-use std::sync::Arc;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},

@@ -7,6 +7,8 @@ use openvm_circuit::{
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
+#[cfg(feature = "cuda")]
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -14,8 +16,6 @@ use openvm_circuit_primitives::{
     },
     var_range::SharedVariableRangeCheckerChip,
 };
-#[cfg(feature = "cuda")]
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_riscv_transpiler::Rv64AuipcOpcode::{self, *};
 use openvm_stark_backend::{
@@ -448,7 +448,10 @@ fn test_cuda_rand_auipc_tracegen() {
         );
     }
 
-    type Record<'a> = (&'a mut Rv64RdWriteAdapterRecord, &'a mut Rv64AuipcCoreRecord);
+    type Record<'a> = (
+        &'a mut Rv64RdWriteAdapterRecord,
+        &'a mut Rv64AuipcCoreRecord,
+    );
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()

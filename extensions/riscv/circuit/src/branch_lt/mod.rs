@@ -23,11 +23,8 @@ pub type Rv64BranchLessThanAir = VmAirWrapper<
     Rv64BranchAdapterAir,
     BranchLessThanCoreAir<RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>,
 >;
-pub type Rv64BranchLessThanExecutor = BranchLessThanExecutor<
-    Rv64BranchAdapterExecutor,
-    RV64_BRANCH_NUM_LIMBS,
-    RV64_BRANCH_LIMB_BITS,
->;
+pub type Rv64BranchLessThanExecutor =
+    BranchLessThanExecutor<Rv64BranchAdapterExecutor, RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>;
 pub type Rv64BranchLessThanChip<F> = VmChipWrapper<
     F,
     BranchLessThanFiller<Rv64BranchAdapterFiller, RV64_BRANCH_NUM_LIMBS, RV64_BRANCH_LIMB_BITS>,

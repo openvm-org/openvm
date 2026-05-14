@@ -27,11 +27,10 @@ use crate::adapters::{
 };
 
 /// Pattern B (u16) JALR:
-/// - `rs1_data` is the **low 32 bits** of `rs1` as 2 u16 limbs (`rs1[0]`: bits 0..16,
-///   `rs1[1]`: bits 16..32). The adapter zero-extends the read to `BLOCK_FE_WIDTH=4` u16 cells.
-/// - `rd_data_high_u16` is the high u16 of the low 32 bits of `rd` (= `pc + 4` low 32);
-///   the low u16 of `rd` is derived from `from_pc + 4 - rd_data_high_u16 * 2^16` and
-///   range-checked.
+/// - `rs1_data` is the **low 32 bits** of `rs1` as 2 u16 limbs (`rs1[0]`: bits 0..16, `rs1[1]`:
+///   bits 16..32). The adapter zero-extends the read to `BLOCK_FE_WIDTH=4` u16 cells.
+/// - `rd_data_high_u16` is the high u16 of the low 32 bits of `rd` (= `pc + 4` low 32); the low u16
+///   of `rd` is derived from `from_pc + 4 - rd_data_high_u16 * 2^16` and range-checked.
 /// - `to_pc_least_sig_bit + 2 * to_pc_limbs[0] + to_pc_limbs[1] * 2^16 = rs1 + imm` as i32
 ///   carry-chain at 16-bit boundaries.
 const LOW_U16_LIMBS: usize = 2;
@@ -201,11 +200,7 @@ impl<F, A, RA> PreflightExecutor<F, RA> for Rv64JalrExecutor<A>
 where
     F: PrimeField32,
     A: 'static
-        + AdapterTraceExecutor<
-            F,
-            ReadData = [u16; BLOCK_FE_WIDTH],
-            WriteData = [u16; BLOCK_FE_WIDTH],
-        >,
+        + AdapterTraceExecutor<F, ReadData = [u16; BLOCK_FE_WIDTH], WriteData = [u16; BLOCK_FE_WIDTH]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,

@@ -725,7 +725,10 @@ unsafe fn execute_e12_impl<
     // matches the on-chip layout.
     let bytes_per_block: usize = LANE_SIZE * 2;
     let total_bytes: usize = TOTAL_READ_SIZE * 2;
-    debug_assert_eq!(bytes_per_block, 8, "host fast path assumes 8-byte memory blocks");
+    debug_assert_eq!(
+        bytes_per_block, 8,
+        "host fast path assumes 8-byte memory blocks"
+    );
     let mut b_bytes: Vec<u8> = Vec::with_capacity(total_bytes);
     let mut c_bytes: Vec<u8> = Vec::with_capacity(total_bytes);
     debug_assert!(rs_vals[0] as usize + total_bytes - 1 < (1 << POINTER_MAX_BITS));

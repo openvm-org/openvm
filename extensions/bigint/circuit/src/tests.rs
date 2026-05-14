@@ -128,25 +128,29 @@ fn create_lt_harness_fields(
     Rv64LessThan256Chip<F>,
 ) {
     let air = Rv64LessThan256Air::new(
-        crate::LtAluAdapterU16Air::new(
-            openvm_riscv_adapters::Rv64VecHeapU16AdapterAir::new(
-                execution_bridge,
-                memory_bridge,
-                bitwise_chip.bus(),
-                address_bits,
-            ),
-        ),
-        LessThanCoreAir::new(range_checker_chip.bus(), Rv64LessThan256Opcode::CLASS_OFFSET),
-    );
-    let executor = Rv64LessThan256Executor::new(
-        crate::LtAluAdapterU16Executor::new(openvm_riscv_adapters::Rv64VecHeapU16AdapterExecutor::new(
+        crate::LtAluAdapterU16Air::new(openvm_riscv_adapters::Rv64VecHeapU16AdapterAir::new(
+            execution_bridge,
+            memory_bridge,
+            bitwise_chip.bus(),
             address_bits,
         )),
+        LessThanCoreAir::new(
+            range_checker_chip.bus(),
+            Rv64LessThan256Opcode::CLASS_OFFSET,
+        ),
+    );
+    let executor = Rv64LessThan256Executor::new(
+        crate::LtAluAdapterU16Executor::new(
+            openvm_riscv_adapters::Rv64VecHeapU16AdapterExecutor::new(address_bits),
+        ),
         Rv64LessThan256Opcode::CLASS_OFFSET,
     );
     let chip = Rv64LessThan256Chip::new(
         LessThanFiller::new(
-            openvm_riscv_adapters::Rv64VecHeapU16AdapterFiller::new(address_bits, bitwise_chip.clone()),
+            openvm_riscv_adapters::Rv64VecHeapU16AdapterFiller::new(
+                address_bits,
+                bitwise_chip.clone(),
+            ),
             range_checker_chip,
             Rv64LessThan256Opcode::CLASS_OFFSET,
         ),

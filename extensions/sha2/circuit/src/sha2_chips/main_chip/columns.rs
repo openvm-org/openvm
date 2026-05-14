@@ -10,12 +10,8 @@ use crate::{Sha2MainChipConfig, SHA2_REGISTER_READS, SHA2_WRITE_SIZE};
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
 #[config(Sha2MainChipConfig)]
-pub struct Sha2Cols<
-    T,
-    const BLOCK_BYTES: usize,
-    const STATE_BYTES: usize,
-    const STATE_U16S: usize,
-> {
+pub struct Sha2Cols<T, const BLOCK_BYTES: usize, const STATE_BYTES: usize, const STATE_U16S: usize>
+{
     pub block: Sha2BlockCols<T, BLOCK_BYTES, STATE_BYTES, STATE_U16S>,
     pub instruction: Sha2InstructionCols<T>,
     pub mem: Sha2MemoryCols<T, BLOCK_BYTES, STATE_BYTES, SHA2_WRITE_SIZE>,

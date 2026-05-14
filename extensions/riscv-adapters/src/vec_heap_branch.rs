@@ -39,8 +39,8 @@ use openvm_stark_backend::{
 /// This adapter reads from NUM_READS <= 2 pointers (for branch operations).
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
 ///   (address space 1).
-/// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `READ_SIZE` u16 cells
-///   from the heap, starting from the addresses in `rs[0]` (and `rs[1]` if `NUM_READS = 2`).
+/// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `READ_SIZE` u16 cells from
+///   the heap, starting from the addresses in `rs[0]` (and `rs[1]` if `NUM_READS = 2`).
 /// * No writes are performed (branch operations only compare values).
 ///
 /// Post Stage 2 Pattern B migration: `READ_SIZE` counts **u16 cells** (= 2 bytes each), matching

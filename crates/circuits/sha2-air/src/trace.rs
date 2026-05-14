@@ -10,9 +10,8 @@ use sha2::{compress256, compress512, digest::generic_array::GenericArray};
 use crate::{
     big_sig0, big_sig0_field, big_sig1, big_sig1_field, ch, ch_field, get_flag_pt_array,
     le_limbs_into_word, maj, maj_field, set_arrayview_from_u32_slice, small_sig0, small_sig0_field,
-    small_sig1, small_sig1_field, word_into_bits, word_into_u16_limbs,
-    Sha2BlockHasherSubairConfig, Sha2DigestColsRefMut, Sha2RoundColsRef, Sha2RoundColsRefMut,
-    Sha2Variant, WrappingAdd,
+    small_sig1, small_sig1_field, word_into_bits, word_into_u16_limbs, Sha2BlockHasherSubairConfig,
+    Sha2DigestColsRefMut, Sha2RoundColsRef, Sha2RoundColsRefMut, Sha2Variant, WrappingAdd,
 };
 
 /// A helper struct for the SHA-2 trace generation.

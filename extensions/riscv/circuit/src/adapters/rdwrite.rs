@@ -89,14 +89,7 @@ impl Rv64RdWriteAdapterAir {
         local_cols: &Rv64RdWriteAdapterCols<AB::Var>,
         ctx: AdapterAirContext<
             AB::Expr,
-            BasicAdapterInterface<
-                AB::Expr,
-                ImmInstruction<AB::Expr>,
-                0,
-                1,
-                0,
-                BLOCK_FE_WIDTH,
-            >,
+            BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 0, BLOCK_FE_WIDTH>,
         >,
         needs_write: Option<AB::Expr>,
     ) {
@@ -280,9 +273,12 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64RdWriteAdapterFiller {
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv64RdWriteAdapterCols<F> = adapter_row.borrow_mut();
 
-        adapter_row
-            .rd_aux_cols
-            .set_prev_data(record.rd_aux_record.prev_data.map(|v| F::from_u32(v as u32)));
+        adapter_row.rd_aux_cols.set_prev_data(
+            record
+                .rd_aux_record
+                .prev_data
+                .map(|v| F::from_u32(v as u32)),
+        );
         mem_helper.fill(
             record.rd_aux_record.prev_timestamp,
             record.from_timestamp,

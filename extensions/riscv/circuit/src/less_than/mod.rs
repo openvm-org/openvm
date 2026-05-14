@@ -32,9 +32,5 @@ pub type Rv64LessThanExecutor = LessThanExecutor<
 >;
 pub type Rv64LessThanChip<F> = VmChipWrapper<
     F,
-    LessThanFiller<
-        Rv64BaseAluAdapterU16Filler,
-        RV64_LESS_THAN_NUM_LIMBS,
-        RV64_LESS_THAN_LIMB_BITS,
-    >,
+    LessThanFiller<Rv64BaseAluAdapterU16Filler, RV64_LESS_THAN_NUM_LIMBS, RV64_LESS_THAN_LIMB_BITS>,
 >;
