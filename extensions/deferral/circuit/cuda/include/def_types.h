@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "fp.h"
 #include "system/memory/params.cuh"
 
 namespace deferral {
@@ -28,5 +29,9 @@ inline constexpr size_t OUTPUT_TOTAL_MEMORY_OPS = OUTPUT_TOTAL_BYTES / MEMORY_BL
 // Memory-op count for F-celled DEFERRAL_AS: each bus message covers
 // `BLOCK_FE_WIDTH` cells. Mirrors the CPU-side `DIGEST_F_MEMORY_OPS`.
 inline constexpr size_t DIGEST_F_MEMORY_OPS = DIGEST_SIZE / BLOCK_FE_WIDTH;
+
+// BabyBear modulus. Used by the canonicity sub-AIR's lexicographic comparison
+// against `F::ORDER_U32` in big-endian limb order.
+inline constexpr uint32_t BABY_BEAR_ORDER = Fp::P;
 
 } // namespace deferral
