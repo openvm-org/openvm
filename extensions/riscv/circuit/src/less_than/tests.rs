@@ -54,18 +54,6 @@ type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 type Harness = TestChipHarness<F, Rv64LessThanExecutor, Rv64LessThanAir, Rv64LessThanChip<F>>;
 
-/// Convert a `[u16; 4]` u16-celled register value to its `[u8; 8]` byte representation.
-#[inline]
-fn u16_to_bytes_le(arr: &[u16; RV64_LESS_THAN_NUM_LIMBS]) -> [u8; RV64_REGISTER_NUM_LIMBS] {
-    let mut out = [0u8; RV64_REGISTER_NUM_LIMBS];
-    for (i, &v) in arr.iter().enumerate() {
-        let [lo, hi] = v.to_le_bytes();
-        out[2 * i] = lo;
-        out[2 * i + 1] = hi;
-    }
-    out
-}
-
 #[inline]
 fn bytes_to_u16(bytes: &[u8; RV64_REGISTER_NUM_LIMBS]) -> [u16; RV64_LESS_THAN_NUM_LIMBS] {
     array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
@@ -602,22 +590,17 @@ type GpuHarness = GpuTestChipHarness<
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
-    let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
-        bitwise_bus,
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        openvm_circuit::arch::testing::default_var_range_checker_bus(),
     ));
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64LessThanChipGpu::new(
-        tester.range_checker(),
-        tester.bitwise_op_lookup(),
-        tester.timestamp_max_bits(),
-    );
+    let gpu_chip = Rv64LessThanChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }
@@ -645,15 +628,15 @@ fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut Rv64BaseAluAdapterRecord,
-        &'a mut LessThanCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
+        &'a mut Rv64BaseAluAdapterU16Record,
+        &'a mut LessThanCoreRecord<RV64_LESS_THAN_NUM_LIMBS, RV64_LESS_THAN_LIMB_BITS>,
     );
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluAdapterExecutor<RV64_CELL_BITS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluAdapterU16Executor>::new(),
         );
 
     tester
