@@ -85,6 +85,10 @@ pub type SharedKeccakfRecordsGpu = Arc<Mutex<SharedKeccakfRecords>>;
 #[derive(new)]
 pub struct KeccakfOpChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    /// Kept for ABI parity with the rest of the keccak256 extension's bus wiring;
+    /// the chip no longer emits any 8-bit bitwise-lookup messages (the buffer_ptr
+    /// high-cell range check moved to `range_checker` to support 16-bit cells).
+    #[allow(dead_code)]
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: u32,
@@ -119,7 +123,6 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
                 trace_height,
                 &d_records,
                 &self.range_checker.count,
-                &self.bitwise_lookup.count,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits,
                 device_ctx.stream.as_raw(),
