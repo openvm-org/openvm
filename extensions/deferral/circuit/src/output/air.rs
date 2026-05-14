@@ -11,6 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
     utils::{assert_array_eq, not},
+    var_range::VariableRangeCheckerBus,
     ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -36,8 +37,9 @@ use crate::{
     count::DeferralCircuitCountBus,
     poseidon2::DeferralPoseidon2Bus,
     utils::{
-        byte_commit_to_f, bytes_to_f, combine_output, split_byte_memory_ops, COMMIT_NUM_BYTES,
-        DIGEST_BYTE_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        bytes_to_f, split_byte_memory_ops, split_f_memory_ops, u16_commit_to_f, u16s_to_f,
+        COMMIT_MEMORY_OPS, COMMIT_NUM_U16S, DIGEST_BYTE_MEMORY_OPS, F_NUM_U16S,
+        OUTPUT_LEN_NUM_U16S, OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
 
@@ -65,13 +67,14 @@ pub struct DeferralOutputCols<T> {
 
     // Read data and auxiliary columns. output_commit and output_len are read
     // contiguously from heap with layout [output_commit || output_len].
+    // Both are stored as u16 cells (matching Pattern B memory granularity).
     // The onion hash of all bytes written by this opcode invocation is
     // constrained to output_commit.
-    pub output_commit: [T; COMMIT_NUM_BYTES],
-    pub output_len: [T; F_NUM_BYTES],
+    pub output_commit: [T; COMMIT_NUM_U16S],
+    pub output_len: [T; OUTPUT_LEN_NUM_U16S],
     pub output_commit_and_len_aux: [MemoryReadAuxCols<T>; OUTPUT_TOTAL_MEMORY_OPS],
 
-    // Auxiliary columns to ensure the canonicity of each F byte decomposition in
+    // Auxiliary columns to ensure the canonicity of each F u16-cell decomposition in
     // output_commit.
     pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
 
@@ -94,6 +97,10 @@ pub struct DeferralOutputAir {
     pub count_bus: DeferralCircuitCountBus,
     pub poseidon2_bus: DeferralPoseidon2Bus,
     pub bitwise_bus: BitwiseOperationLookupBus,
+    /// 16-bit range checker bus used for per-cell range checks on
+    /// `output_commit` and `output_len` u16 cells, and for the
+    /// canonicity sub-AIR's `diff_val - 1` outputs.
+    pub range_bus: VariableRangeCheckerBus,
     pub address_bits: usize,
 }
 
@@ -175,27 +182,40 @@ where
             next.output_len,
         );
 
-        // Constrain the canonicity of output_commit and output_len, i.e. that every
-        // F_NUM_BYTES bytes uniquely represents an element of F.
+        // Constrain the canonicity of output_commit, i.e. that every
+        // `F_NUM_U16S` u16 cells uniquely represent an element of F.
         let output_commit_rcs = izip!(
-            local.output_commit.chunks_exact(F_NUM_BYTES),
+            local.output_commit.chunks_exact(F_NUM_U16S),
             local.output_commit_lt_aux
         )
-        .map(|(bytes, aux)| {
-            CanonicitySubAir.assert_canonicity(builder, bytes, &aux, local.is_first.into())
+        .map(|(cells, aux)| {
+            CanonicitySubAir.assert_canonicity(builder, cells, &aux, local.is_first.into())
         })
         .collect_vec();
 
-        for rc_pair in output_commit_rcs.chunks_exact(2) {
-            self.bitwise_bus
-                .send_range(rc_pair[0].clone(), rc_pair[1].clone())
+        // Range-check each canonicity output to 16 bits (one interaction/cell).
+        for rc in output_commit_rcs {
+            self.range_bus
+                .range_check(rc, 16)
+                .eval(builder, local.is_first);
+        }
+
+        // Range-check every u16 cell of `output_commit` and `output_len` (per-cell).
+        for &cell in local.output_commit.iter() {
+            self.range_bus
+                .range_check(cell, 16)
+                .eval(builder, local.is_first);
+        }
+        for &cell in local.output_len.iter() {
+            self.range_bus
+                .range_check(cell, 16)
                 .eval(builder, local.is_first);
         }
 
         // Constrain the consistency of current_commit_state at each point in this
         // section's rows. The initial state should be [deferral_idx, output_len,
         // ..., 0].
-        let output_len = bytes_to_f(&local.output_len);
+        let output_len = u16s_to_f(&local.output_len);
         let mut initial_state = [AB::Expr::ZERO; DIGEST_SIZE];
         initial_state[0] = local.deferral_idx.into();
         initial_state[1] = output_len.clone();
@@ -220,7 +240,7 @@ where
         );
         assert_array_eq(
             &mut when_last,
-            byte_commit_to_f(&local.output_commit),
+            u16_commit_to_f(&local.output_commit),
             local.poseidon2_res,
         );
 
@@ -248,11 +268,15 @@ where
             )
             .eval(builder, local.is_first);
 
-        // We also constrain output_len to be under 2^address_bits.
-        self.bitwise_bus
-            .send_range(
-                local.output_len[F_NUM_BYTES - 1] * limb_shift,
-                AB::Expr::ZERO,
+        // We also constrain output_len to be under 2^address_bits. `output_len`
+        // is 2 u16 cells; the high cell holds bits [16, 32). Scale it so the
+        // 16-bit range check forces the value into `[0, 2^(address_bits - 16))`.
+        debug_assert!(self.address_bits >= 16);
+        let output_len_high_lshift = AB::F::from_usize(1 << (F_NUM_U16S * 16 - self.address_bits));
+        self.range_bus
+            .range_check(
+                local.output_len[OUTPUT_LEN_NUM_U16S - 1] * output_len_high_lshift,
+                16,
             )
             .eval(builder, local.is_first);
 
@@ -287,37 +311,42 @@ where
         // pointers. c carries deferral_idx.
         let input_ptr = bytes_to_f(&local.rs_val);
         let output_ptr = bytes_to_f(&local.rd_val);
-        let output_len_full = from_fn(|i| {
-            if i < F_NUM_BYTES {
+
+        // Zero-pad `output_len` to `BLOCK_FE_WIDTH` u16 cells for the bus
+        // payload (the upper 4 bytes of the 8-byte memory block are zero).
+        let output_len_full: [AB::Expr; BLOCK_FE_WIDTH] = from_fn(|i| {
+            if i < OUTPUT_LEN_NUM_U16S {
                 local.output_len[i].into()
             } else {
                 AB::Expr::ZERO
             }
         });
-        let output_commit_and_len =
-            combine_output(local.output_commit.map(Into::into), output_len_full);
-        let output_commit_and_len_chunks =
-            split_byte_memory_ops::<_, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS>(
-                output_commit_and_len,
-            );
 
-        for (chunk_idx, (data, aux)) in output_commit_and_len_chunks
+        // `output_commit` is 16 u16 cells → 4 memory ops of `BLOCK_FE_WIDTH`
+        // cells each; the 5th op carries `output_len_full`.
+        let output_commit_chunks: [[AB::Expr; BLOCK_FE_WIDTH]; COMMIT_MEMORY_OPS] =
+            split_f_memory_ops::<AB::Expr, COMMIT_NUM_U16S, COMMIT_MEMORY_OPS>(
+                local.output_commit.map(Into::into),
+            );
+        let mut combined_chunks_iter = output_commit_chunks
             .into_iter()
-            .zip(&local.output_commit_and_len_aux)
-            .enumerate()
-        {
+            .chain(std::iter::once(output_len_full));
+
+        for (chunk_idx, aux) in local.output_commit_and_len_aux.iter().enumerate() {
+            let data = combined_chunks_iter.next().unwrap();
             self.memory_bridge
                 .read_4(
                     MemoryAddress::new(
                         e.clone(),
                         input_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
                     ),
-                    pack_u8_for_bus::<AB>(&data),
+                    data,
                     local.from_state.timestamp + AB::Expr::from_usize(2 + chunk_idx),
                     aux,
                 )
                 .eval(builder, local.is_first);
         }
+        debug_assert!(combined_chunks_iter.next().is_none());
 
         let write_bytes_chunks =
             split_byte_memory_ops::<_, DIGEST_SIZE, DIGEST_BYTE_MEMORY_OPS>(local.sponge_inputs);

@@ -19,7 +19,8 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, AlignedBytesBorrow,
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
+    AlignedBytesBorrow,
 };
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
@@ -42,8 +43,9 @@ use crate::{
     output::DeferralOutputCols,
     poseidon2::DeferralPoseidon2Chip,
     utils::{
-        byte_memory_op_chunk, f_commit_to_bytes, join_byte_memory_ops, split_output,
-        DIGEST_BYTE_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        byte_memory_op_chunk, f_commit_to_u16s, join_byte_memory_ops, split_output,
+        DIGEST_BYTE_MEMORY_OPS, F_NUM_U16S, OUTPUT_LEN_NUM_U16S, OUTPUT_TOTAL_BYTES,
+        OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
 
@@ -151,6 +153,10 @@ pub struct DeferralOutputExecutor;
 pub struct DeferralOutputFiller<F: VmField> {
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
+    /// Per-cell range checks on `output_commit`, `output_len`, and on the
+    /// canonicity sub-AIR `diff_val - 1` outputs.
+    range_checker_chip: SharedVariableRangeCheckerChip,
+    /// Kept for write-bytes byte-pair range checks on the per-row payload.
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     address_bits: usize,
 }
@@ -315,10 +321,13 @@ where
             let mut current_poseidon2_res = [F::ZERO; DIGEST_SIZE];
             self.count_chip.add_count(header.deferral_idx);
 
-            let output_len_bytes = u32::try_from(output_len)
-                .expect("deferral output length should fit a u32")
-                .to_le_bytes();
-            let output_len_f = output_len_bytes.map(F::from_u8);
+            let output_len_u32 =
+                u32::try_from(output_len).expect("deferral output length should fit a u32");
+            let output_len_u16s: [u16; OUTPUT_LEN_NUM_U16S] = [
+                (output_len_u32 & 0xFFFF) as u16,
+                ((output_len_u32 >> 16) & 0xFFFF) as u16,
+            ];
+            let output_len_f = output_len_u16s.map(F::from_u16);
 
             for (row_idx, row) in section_chunk.chunks_exact_mut(width).enumerate() {
                 let cols: &mut DeferralOutputCols<F> = row.borrow_mut();
@@ -347,10 +356,18 @@ where
                         (header.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32)
                             << limb_shift_bits,
                     );
-                    self.bitwise_lookup_chip.request_range(
-                        (output_len_bytes[F_NUM_BYTES - 1] as u32) << limb_shift_bits,
-                        0,
+                    // `output_len` high-cell range check (16-bit, scaled to enforce
+                    // `output_len < 2^address_bits`).
+                    debug_assert!(self.address_bits >= 16);
+                    let high_cell_lshift = (F_NUM_U16S * 16 - self.address_bits) as u32;
+                    self.range_checker_chip.add_count(
+                        (output_len_u16s[OUTPUT_LEN_NUM_U16S - 1] as u32) << high_cell_lshift,
+                        16,
                     );
+                    // Per-cell range checks on `output_len`.
+                    for &cell in output_len_u16s.iter() {
+                        self.range_checker_chip.add_count(cell as u32, 16);
+                    }
 
                     mem_helper.fill(
                         header.rd_aux.prev_timestamp,
@@ -422,23 +439,28 @@ where
                 cols.poseidon2_res = current_poseidon2_res;
             }
 
-            let output_commit = f_commit_to_bytes(&current_poseidon2_res).map(F::from_u8);
+            let output_commit_u16s = f_commit_to_u16s(&current_poseidon2_res);
+            let output_commit = output_commit_u16s.map(F::from_u16);
             for row in section_chunk.chunks_exact_mut(width) {
                 let cols: &mut DeferralOutputCols<F> = row.borrow_mut();
                 cols.output_commit = output_commit;
             }
+            // Per-cell range checks on `output_commit` (every section has them
+            // because the AIR walks the cells on `is_first`).
+            for &cell in output_commit_u16s.iter() {
+                self.range_checker_chip.add_count(cell as u32, 16);
+            }
             let cols: &mut DeferralOutputCols<F> = section_chunk[..width].borrow_mut();
             let output_commit_rcs = output_commit
-                .chunks_exact(F_NUM_BYTES)
+                .chunks_exact(F_NUM_U16S)
                 .zip(cols.output_commit_lt_aux.iter_mut())
-                .map(|(bytes, aux)| {
-                    let x_le = from_fn(|i| bytes[i]);
+                .map(|(cells, aux)| {
+                    let x_le = from_fn(|i| cells[i]);
                     CanonicityTraceGen::generate_subrow(&x_le, aux)
                 })
                 .collect_vec();
-            for rc_pair in output_commit_rcs.chunks_exact(2) {
-                self.bitwise_lookup_chip
-                    .request_range(rc_pair[0], rc_pair[1]);
+            for rc in output_commit_rcs {
+                self.range_checker_chip.add_count(rc, 16);
             }
 
             trace = rest;

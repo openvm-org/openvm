@@ -121,6 +121,7 @@ where
                 air.bus
             }
         };
+        let range_bus = inventory.range_checker().bus;
 
         let base_num_airs = inventory.num_airs();
         let address_bits = inventory.pointer_max_bits();
@@ -132,8 +133,14 @@ where
 
         assert_eq!(inventory.num_airs() - base_num_airs, CALL_AIR_REL_IDX);
         inventory.add_air(DeferralCallAir::new(
-            DeferralCallAdapterAir::new(execution_bridge, memory_bridge, bitwise_bus, address_bits),
-            DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus),
+            DeferralCallAdapterAir::new(
+                execution_bridge,
+                memory_bridge,
+                bitwise_bus,
+                range_bus,
+                address_bits,
+            ),
+            DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus, range_bus),
         ));
 
         assert_eq!(inventory.num_airs() - base_num_airs, OUTPUT_AIR_REL_IDX);
@@ -143,6 +150,7 @@ where
             count_bus,
             poseidon2_bus,
             bitwise_bus,
+            range_bus,
             address_bits,
         ));
 
@@ -197,6 +205,7 @@ where
                 DeferralCallAdapterFiller::new(bitwise_lu.clone(), address_bits),
                 count_chip.clone(),
                 poseidon2_chip.clone(),
+                range_checker.clone(),
                 bitwise_lu.clone(),
                 address_bits,
             ),
@@ -208,6 +217,7 @@ where
             DeferralOutputFiller::new(
                 count_chip.clone(),
                 poseidon2_chip.clone(),
+                range_checker.clone(),
                 bitwise_lu,
                 address_bits,
             ),
