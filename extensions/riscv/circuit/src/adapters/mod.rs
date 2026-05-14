@@ -122,9 +122,7 @@ pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr
             || address_space == PUBLIC_VALUES_AS,
     );
 
-    // SAFETY:
-    // - address space `RV64_REGISTER_AS` and `RV64_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV64_REGISTER_NUM_LIMBS`
+    // SAFETY: see `timed_read` — u8 byte-view dispatch against u16-celled storage.
     unsafe { memory.read::<u8, N>(address_space, ptr) }
 }
 
@@ -141,9 +139,7 @@ pub fn memory_write<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // SAFETY:
-    // - address space `RV64_REGISTER_AS` and `RV64_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV64_REGISTER_NUM_LIMBS`
+    // SAFETY: see `timed_read` — u8 byte-view dispatch against u16-celled storage.
     unsafe { memory.write::<u8, N>(address_space, ptr, data) }
 }
 

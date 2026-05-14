@@ -95,7 +95,7 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A> AotExecutor<F> for Rv32JalrExecutor<A>
+impl<F, A> AotExecutor<F> for Rv64JalrExecutor<A>
 where
     F: PrimeField32,
 {
@@ -183,7 +183,7 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A> AotMeteredExecutor<F> for Rv32JalrExecutor<A>
+impl<F, A> AotMeteredExecutor<F> for Rv64JalrExecutor<A>
 where
     F: PrimeField32,
 {
