@@ -149,6 +149,15 @@ where
             .when(cols.opcode_mulhu_flag + cols.opcode_mulhsu_flag)
             .assert_zero(c_sign.clone());
 
+        // Sign-bit range check for the MSB limbs of `b` and `c`. The asymmetric
+        // coefficient `(opcode_mulh_flag + 1)` on the `c` side is `2` for MULH and
+        // `1` for MULHSU:
+        // - MULH: `c` is signed, so `c_sign` can be 0 or 1; the coefficient `2` doubles `(c[MSB] -
+        //   c_sign*128)` (which lies in `[-128, 128)`) so the bitwise lookup sees a value in `[0,
+        //   256)`.
+        // - MULHSU: `c` is constrained unsigned via `c_sign = 0` above, so `c[MSB] - c_sign*128 =
+        //   c[MSB]` already lies in `[0, 256)` and the coefficient `1` range-checks it directly.
+        // `b` is signed in both ops, so it uses coefficient `2` unconditionally.
         self.bitwise_lookup_bus
             .send_range(
                 AB::Expr::from_u32(2) * (b[NUM_LIMBS - 1] - b_sign * sign_mask),

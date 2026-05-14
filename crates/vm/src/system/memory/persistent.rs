@@ -129,11 +129,10 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
         //   bus_ptr = BUS_LEAF_STRIDE * leaf_label + BUS_BLOCK_STRIDE * block_idx
         //           = BUS_PTR_SCALE * (DIGEST_WIDTH * leaf_label + BLOCK_FE_WIDTH * block_idx)
         //
-        // Today `BUS_PTR_SCALE = 1` so the strides are `(DIGEST_WIDTH,
-        // BLOCK_FE_WIDTH) = (8, 8)` and `bus_ptr = 8 * leaf_label` with
-        // `BLOCKS_PER_LEAF = 1`. After the commit-6 flip,
-        // `BUS_PTR_SCALE = 2`, `BLOCK_FE_WIDTH = 4`, strides are `(16, 8)` and
-        // `bus_ptr = 16 * leaf_label + 8 * block_idx` for `block_idx in 0..2`.
+        // With `BUS_PTR_SCALE = 2`, `BLOCK_FE_WIDTH = 4`, `BLOCKS_PER_LEAF = 2`, the
+        // strides `(DIGEST_WIDTH, BLOCK_FE_WIDTH) = (16, 8)` on the bus give
+        // `bus_ptr = 16 * leaf_label + 8 * block_idx` for `block_idx in 0..2` —
+        // each leaf is split into two BLOCK_FE_WIDTH-wide bus messages.
         let leaf_stride_f = AB::F::from_usize(crate::system::memory::BUS_LEAF_STRIDE);
         let block_stride_f = AB::F::from_usize(crate::arch::BUS_BLOCK_STRIDE);
         for block_idx in 0..BLOCKS_PER_LEAF {

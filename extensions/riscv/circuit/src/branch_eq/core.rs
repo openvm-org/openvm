@@ -36,12 +36,25 @@ pub struct BranchEqualCoreCols<T, const NUM_LIMBS: usize> {
     pub diff_inv_marker: [T; NUM_LIMBS],
 }
 
-#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[derive(Copy, Clone, Debug, ColumnsAir)]
 #[columns_via(BranchEqualCoreCols<u16, NUM_LIMBS>)]
 pub struct BranchEqualCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub range_bus: VariableRangeCheckerBus,
     offset: usize,
     pc_step: u32,
+}
+
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchEqualCoreAir<NUM_LIMBS, LIMB_BITS> {
+    pub fn new(range_bus: VariableRangeCheckerBus, offset: usize, pc_step: u32) -> Self {
+        // The chip iterates limb-pairs (and the trace records pair u8 reads into u16
+        // cells), so the limb count must be even.
+        assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
+        Self {
+            range_bus,
+            offset,
+            pc_step,
+        }
+    }
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -160,19 +173,47 @@ pub struct BranchEqualCoreRecord<const NUM_LIMBS: usize> {
     pub local_opcode: u8,
 }
 
-#[derive(Clone, Copy, derive_new::new)]
+#[derive(Clone, Copy)]
 pub struct BranchEqualExecutor<A, const NUM_LIMBS: usize> {
     adapter: A,
     pub offset: usize,
     pub pc_step: u32,
 }
 
-#[derive(Clone, derive_new::new)]
+impl<A, const NUM_LIMBS: usize> BranchEqualExecutor<A, NUM_LIMBS> {
+    pub fn new(adapter: A, offset: usize, pc_step: u32) -> Self {
+        assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
+        Self {
+            adapter,
+            offset,
+            pc_step,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct BranchEqualFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub offset: usize,
     pub pc_step: u32,
+}
+
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> BranchEqualFiller<A, NUM_LIMBS, LIMB_BITS> {
+    pub fn new(
+        adapter: A,
+        range_checker_chip: SharedVariableRangeCheckerChip,
+        offset: usize,
+        pc_step: u32,
+    ) -> Self {
+        assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
+        Self {
+            adapter,
+            range_checker_chip,
+            offset,
+            pc_step,
+        }
+    }
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize> PreflightExecutor<F, RA>

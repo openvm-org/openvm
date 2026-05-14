@@ -51,8 +51,8 @@ impl MemoryConfig {
         // Universal formula: `pointer_max_bits` bounds the normalized memory-bus
         // pointer, and `bus_ptr = BUS_PTR_SCALE * cell_idx`. The cell range bit
         // width is `pointer_max_bits - log2(BUS_PTR_SCALE)`, and each leaf holds
-        // `DIGEST_WIDTH` cells. When `BUS_PTR_SCALE = 1` (today) this evaluates
-        // to `pointer_max_bits - log2(DIGEST_WIDTH)` — same as before.
+        // `DIGEST_WIDTH` cells. With `BUS_PTR_SCALE = 2` this evaluates to
+        // `pointer_max_bits - 1 - log2(DIGEST_WIDTH)`.
         MemoryDimensions {
             addr_space_height: self.addr_space_height,
             address_height: self.pointer_max_bits

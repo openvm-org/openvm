@@ -8,9 +8,12 @@ use openvm_circuit::{
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::SharedVariableRangeCheckerChip,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -35,6 +38,7 @@ fn create_harness_fields(
     execution_bridge: ExecutionBridge,
     memory_bridge: MemoryBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (XorinVmAir, XorinVmExecutor, XorinVmChip<F>) {
@@ -42,13 +46,14 @@ fn create_harness_fields(
         execution_bridge,
         memory_bridge,
         bitwise_chip.bus(),
+        range_checker_chip.bus(),
         address_bits,
         XorinOpcode::CLASS_OFFSET,
     );
 
     let executor = XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, address_bits);
     let chip = XorinVmChip::new(
-        XorinVmFiller::new(bitwise_chip, address_bits),
+        XorinVmFiller::new(bitwise_chip, range_checker_chip, address_bits),
         memory_helper,
     );
     (air, executor, chip)
@@ -72,6 +77,7 @@ fn create_test_harness(
         tester.execution_bridge(),
         tester.memory_bridge(),
         bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -315,11 +321,17 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
+    let dummy_range_checker_chip = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChip::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+        ),
+    );
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.execution_bridge(),
         tester.memory_bridge(),
         dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );

@@ -670,10 +670,11 @@ impl TracingMemory {
     }
 
     /// Byte-view metadata slot lookup. The slot is at the
-    /// `MEMORY_BLOCK_BYTES`-aligned block containing `byte_ptr`. This formula
-    /// matches `prev_access_time` today (since `MEMORY_BLOCK_BYTES = BLOCK_FE_WIDTH`
-    /// for cell_size = 1) and remains correct after the cell-type flip when
-    /// the relationship becomes `MEMORY_BLOCK_BYTES = BLOCK_FE_WIDTH * cell_size`.
+    /// `MEMORY_BLOCK_BYTES`-aligned block containing `byte_ptr`. The relationship
+    /// `MEMORY_BLOCK_BYTES = BLOCK_FE_WIDTH * cell_size` holds across address
+    /// spaces (`cell_size = 1` for byte ASes and `cell_size = 2` for u16-celled
+    /// ASes), so `byte_ptr / (BLOCK_FE_WIDTH * cell_size)` is the canonical block
+    /// index used by `prev_access_time`.
     #[inline(always)]
     fn byte_view_prev_access_time(&mut self, address_space: usize, byte_ptr: usize) -> u32 {
         let cell_size = self.data.memory.config[address_space].layout.size();
