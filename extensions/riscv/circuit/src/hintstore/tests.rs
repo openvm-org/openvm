@@ -6,7 +6,7 @@ use openvm_circuit::{
             memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, ExecutionBridge, MatrixRecordArena, PreflightExecutor,
+        Arena, ExecutionBridge, MatrixRecordArena, PreflightExecutor, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -373,7 +373,7 @@ fn test_hintstore_rs1_upper_bytes_non_zero() {
 #[allow(clippy::too_many_arguments)]
 fn run_negative_hintstore_test(
     opcode: Rv64HintStoreOpcode,
-    prank_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prank_data: Option<[u32; BLOCK_FE_WIDTH]>,
     _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
@@ -410,7 +410,9 @@ fn run_negative_hintstore_test(
 
 #[test]
 fn negative_hintstore_tests() {
-    run_negative_hintstore_test(HINT_STORED, Some([92, 187, 45, 280, 17, 211, 64, 5]), true);
+    // 4 u16-cell values; differ from the random hint-stream input so the bus interaction
+    // (which sends both the new and previous data) fails to balance.
+    run_negative_hintstore_test(HINT_STORED, Some([0x5c92, 0x182d, 0xd311, 0x0540]), true);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////

@@ -57,7 +57,9 @@ mod tests;
 
 /// `rem_words` is bounded by `2^MAX_HINT_BUFFER_DWORDS_BITS` (= 2^10), so only the low
 /// 2 bytes of the 8-byte RV64 register carry information. We materialize only 2 columns
-/// and hardcode the upper 6 bytes to zero in the memory bus interaction.
+/// and hardcode the upper 6 bytes to zero in the memory bus interaction. Kept as bytes
+/// rather than a single u16 cell because the AIR enforces `rem_words < 2^10` via the
+/// 8-bit byte-bitwise lookup, which can only range-check 8-bit (not 16-bit) values.
 const REM_WORDS_NUM_LIMBS: usize = 2;
 
 #[repr(C)]
@@ -75,12 +77,18 @@ pub struct Rv64HintStoreCols<T> {
     pub mem_ptr_ptr: T,
     /// Low 4 bytes of the 8-byte RV64 register that holds `mem_ptr`. `mem_ptr` is a u32
     /// memory address, so the upper 4 bytes are known to be zero and are hardcoded in
-    /// the memory bus interaction rather than materialized as columns.
+    /// the memory bus interaction rather than materialized as columns. Kept as bytes
+    /// rather than 2 u16 cells because the AIR enforces `mem_ptr < 2^pointer_max_bits`
+    /// via the 8-bit byte-bitwise lookup, which can only range-check 8-bit values.
     pub mem_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
     pub mem_ptr_aux_cols: MemoryReadAuxCols<T>,
 
     pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
-    pub data: [T; RV64_REGISTER_NUM_LIMBS],
+    /// 4 u16 cells holding the data word for the memory write. AS=`RV64_MEMORY_AS` is
+    /// u16-celled, so the bus consumes these cells directly without any byte-pair
+    /// packing. The data is not range-checked here: any cell decomposition that produces
+    /// the same packed value satisfies the bus identically.
+    pub data: [T; BLOCK_FE_WIDTH],
 
     // only buffer
     pub is_buffer_start: T,
@@ -190,11 +198,13 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             )
             .eval(builder, local_cols.is_buffer_start);
 
-        // write hint
+        // write hint. `data` is already 4 u16 cells, matching the bus payload directly
+        // (no byte-pair packing). Mirrors the SHA-2 `new_state` and AUIPC `rd_data` u16
+        // migrations.
         self.memory_bridge
             .write_4(
                 MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), mem_ptr.clone()),
-                pack_u8_for_bus::<AB>(&local_cols.data.map(Into::into)),
+                local_cols.data.map(Into::into),
                 timestamp_pp(),
                 &local_cols.write_aux,
             )
@@ -247,11 +257,11 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             )
             .eval(builder, is_start.clone());
 
-        // Note: `local_cols.data` is intentionally NOT byte-range-checked. The bytes appear only
-        // inside `pack_u8_for_bus(&local_cols.data)` for the AS2 memory write; AS2 is u16-celled
-        // post Stage 1.6, so the consumer of this memory only ever sees the packed
-        // `data[2k] + 256·data[2k+1]` field element. Any byte-pair decomposition that produces the
-        // same packed value satisfies the memory bus identically — there is no soundness gap.
+        // Note: `local_cols.data` is intentionally NOT range-checked. The cells appear only as
+        // the bus payload of the AS2 memory write; AS2 is u16-celled post Stage 1.6, so the
+        // consumer of this memory only ever sees the same 4 u16 cells. Any cell decomposition
+        // that produces the same packed value satisfies the memory bus identically — there is
+        // no soundness gap.
 
         // buffer transition
         // `is_end` implies that the next row belongs to a new instruction,
@@ -608,8 +618,14 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
 
                         cols.is_buffer_start = F::from_bool(idx == 0 && !is_single);
 
-                        // Note: writing in reverse
-                        cols.data = var.data.map(|x| F::from_u8(x));
+                        // Note: writing in reverse. `data` is 4 u16 cells packed from 8 source
+                        // bytes via `u16::from_le_bytes`.
+                        cols.data = std::array::from_fn(|i| {
+                            F::from_u16(u16::from_le_bytes([
+                                var.data[2 * i],
+                                var.data[2 * i + 1],
+                            ]))
+                        });
 
                         cols.write_aux.set_prev_data(std::array::from_fn(|i| {
                             F::from_u32(

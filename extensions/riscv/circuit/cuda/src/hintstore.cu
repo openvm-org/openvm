@@ -33,7 +33,9 @@ template <typename T> struct Rv64HintStoreCols {
     MemoryReadAuxCols<T> mem_ptr_aux_cols;
 
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
-    T data[RV64_REGISTER_NUM_LIMBS];
+    // 4 u16 cells holding the data word for the memory write. AS=`RV64_MEMORY_AS` is
+    // u16-celled, so the bus consumes these cells directly without any byte-pair packing.
+    T data[BLOCK_FE_WIDTH];
 
     // only buffer
     T is_buffer_start;
@@ -159,7 +161,14 @@ struct Rv64HintStore {
             timestamp + 2
         );
 
-        COL_WRITE_ARRAY(row, Rv64HintStoreCols, data, write.data);
+        // Pack 8 source bytes into 4 u16 cells; mirrors the Rust trace-fill loop.
+        Fp packed_data[BLOCK_FE_WIDTH];
+#pragma unroll
+        for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
+            packed_data[i] =
+                Fp(uint32_t(write.data[2 * i]) + 256u * uint32_t(write.data[2 * i + 1]));
+        }
+        COL_WRITE_ARRAY(row, Rv64HintStoreCols, data, packed_data);
     }
 };
 
