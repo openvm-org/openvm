@@ -164,12 +164,24 @@ where
         let cols: &mut DeferralCallCoreCols<F> = core_row.borrow_mut();
 
         // Pack record bytes into u16 cells (little-endian within each pair).
-        let input_commit_u16: [u16; COMMIT_NUM_U16S] =
-            from_fn(|i| u16::from_le_bytes([record.read_data.input_commit[2 * i], record.read_data.input_commit[2 * i + 1]]));
-        let output_commit_u16: [u16; COMMIT_NUM_U16S] =
-            from_fn(|i| u16::from_le_bytes([record.write_data.output_commit[2 * i], record.write_data.output_commit[2 * i + 1]]));
-        let output_len_u16: [u16; OUTPUT_LEN_NUM_U16S] =
-            from_fn(|i| u16::from_le_bytes([record.write_data.output_len[2 * i], record.write_data.output_len[2 * i + 1]]));
+        let input_commit_u16: [u16; COMMIT_NUM_U16S] = from_fn(|i| {
+            u16::from_le_bytes([
+                record.read_data.input_commit[2 * i],
+                record.read_data.input_commit[2 * i + 1],
+            ])
+        });
+        let output_commit_u16: [u16; COMMIT_NUM_U16S] = from_fn(|i| {
+            u16::from_le_bytes([
+                record.write_data.output_commit[2 * i],
+                record.write_data.output_commit[2 * i + 1],
+            ])
+        });
+        let output_len_u16: [u16; OUTPUT_LEN_NUM_U16S] = from_fn(|i| {
+            u16::from_le_bytes([
+                record.write_data.output_len[2 * i],
+                record.write_data.output_len[2 * i + 1],
+            ])
+        });
         let input_commit_f = input_commit_u16.map(F::from_u16);
         let output_commit_f = output_commit_u16.map(F::from_u16);
         let output_len_f = output_len_u16.map(F::from_u16);

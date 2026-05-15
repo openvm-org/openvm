@@ -218,11 +218,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64Io>
         let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         inventory.next_air::<Rv64HintStoreAir>()?;
-        let hint_store = Rv64HintStoreChipGpu::new(
-            range_checker.clone(),
-            pointer_max_bits,
-            timestamp_max_bits,
-        );
+        let hint_store =
+            Rv64HintStoreChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(hint_store);
 
         Ok(())
