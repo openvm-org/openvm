@@ -34,11 +34,11 @@ const DEFAULT_MAIN_CELL_WEIGHT: usize = 3; // 1 + 2^{log_blowup=1}
 /// size `(constraint_degree / 2) \* mat_eval_bytes`. We use max constraint degree of 4, so this is
 /// `2 \* mat_eval_bytes`.
 ///
-/// In total we have `3 \* mat_eval_bytes = 3 \* (1 + need_rot) \* main_cnt` bytes. The main cell
-/// secondary weight in base field elements (4 bytes) is `3 \* (1 + need_rot) / 4`, i.e. `1.5` when
-/// `need_rot = true` and `0.75` when `need_rot = false`. The split is applied per-AIR in
-/// [`SegmentationCtx::counts_to_memory`].
-const DEFAULT_MAIN_CELL_SECONDARY_WEIGHT: f64 = 1.5;
+/// In total we have `3 \* mat_eval_bytes = 3 \* (1 + need_rot) \* main_cnt` bytes. The base weight
+/// (per PCS opening, in base field elements of 4 bytes) is `3 / 4 = 0.75`. AIRs with
+/// `need_rot = true` commit 2 openings per column so use `2 \* 0.75 = 1.5`; `need_rot = false`
+/// AIRs use `0.75`. The split is applied per-AIR in [`SegmentationCtx::counts_to_memory`].
+const DEFAULT_MAIN_CELL_SECONDARY_WEIGHT: f64 = 0.75;
 /// Each interaction contributes `2 * D_EF` base field elements to the real GKR fractional
 /// sumcheck leaves (`Frac<EF> = (p, q)` pairs). The CUDA GKR prover virtualizes input padding, so
 /// this is weighted by the real interaction count instead of the next power of two.
@@ -72,8 +72,10 @@ pub struct SegmentationConfig {
     /// Weight multiplier for main trace cells in memory calculation.
     #[getset(set_with = "pub")]
     pub main_cell_weight: usize,
-    /// Second order memory contribution from main cells. This term is maxed with the weighted
-    /// interaction contribution.
+    /// Second order memory contribution per main cell, per PCS opening. AIRs with
+    /// `need_rot = true` open 2 cells per column (so contribute `2 *` this weight); AIRs with
+    /// `need_rot = false` contribute `1 *` this weight. Maxed with the weighted interaction
+    /// contribution.
     #[getset(set_with = "pub")]
     pub main_cell_secondary_weight: f64,
     /// Weight multiplier for interaction cells in memory calculation.
@@ -233,8 +235,8 @@ impl SegmentationCtx {
 
     /// Convert main and interaction cell counts to memory bytes.
     /// Formula: base_field_size * (main_cell_weight * main_cells + interaction_cell_weight *
-    /// interaction_cells). `main_cnt_no_rot` cells commit 1 PCS opening per column instead of
-    /// 2, so their `main_cell_secondary_weight` contribution is halved.
+    /// interaction_cells). `main_cnt_with_rot` cells commit 2 PCS openings per column so use
+    /// `2 * main_cell_secondary_weight`; `main_cnt_no_rot` cells use the base weight.
     #[inline(always)]
     fn counts_to_memory(
         &self,
@@ -254,12 +256,11 @@ impl SegmentationCtx {
         let main_cnt = main_cnt_with_rot + main_cnt_no_rot;
         let main_memory = main_cnt * main_weight * base_field_size;
         let main_secondary_memory =
-            ceil_weighted_bytes(main_cnt_with_rot, base_field_size, main_secondary_weight)
-                + ceil_weighted_bytes(
-                    main_cnt_no_rot,
-                    base_field_size,
-                    main_secondary_weight / 2.0,
-                );
+            ceil_weighted_bytes(
+                main_cnt_with_rot,
+                base_field_size,
+                2.0 * main_secondary_weight,
+            ) + ceil_weighted_bytes(main_cnt_no_rot, base_field_size, main_secondary_weight);
         let interaction_memory =
             ceil_weighted_bytes(interaction_cnt, base_field_size, interaction_weight)
                 + DEFAULT_INTERACTION_CONSTANT_OVERHEAD;
