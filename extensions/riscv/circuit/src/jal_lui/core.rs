@@ -5,7 +5,6 @@ use openvm_circuit::{
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
@@ -52,7 +51,6 @@ pub struct Rv64JalLuiCoreCols<T> {
 #[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
 #[columns_via(Rv64JalLuiCoreCols<u8>)]
 pub struct Rv64JalLuiCoreAir {
-    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
 }
 
@@ -145,10 +143,6 @@ where
             .range_check(rd[1] * AB::F::from_u32(1 << (16 - PC_HIGH_U16_BITS)), 16)
             .eval(builder, is_jal);
 
-        // Suppress unused bitwise bus warning by routing JAL's imm canonicity through it for a
-        // single 8-bit window: the immediate is range-checked elsewhere (program bus).
-        let _ = (self.bitwise_lookup_bus, RV_J_TYPE_IMM_BITS);
-
         let sign_extend_cell = is_sign_extend * AB::Expr::from_u32(0xffff);
         let write_data: [AB::Expr; BLOCK_FE_WIDTH] = [
             rd[0].into(),
@@ -198,7 +192,6 @@ pub struct Rv64JalLuiExecutor<A = Rv64CondRdWriteAdapterExecutor> {
 #[derive(Clone, derive_new::new)]
 pub struct Rv64JalLuiFiller<A = Rv64CondRdWriteAdapterFiller> {
     adapter: A,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
@@ -286,8 +279,6 @@ where
             self.range_checker_chip
                 .add_count((rd_hi as u32) << shift, 16);
         }
-
-        let _ = self.bitwise_lookup_chip.clone();
 
         // Writing in reverse order
         core_row.is_sign_extend = F::from_bool(is_sign_extend != 0);

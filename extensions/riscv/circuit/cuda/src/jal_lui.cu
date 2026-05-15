@@ -25,11 +25,9 @@ struct Rv64JalLuiCoreRecord {
 };
 
 struct Rv64JalLuiCore {
-    BitwiseOperationLookup bw;
     VariableRangeChecker range_checker;
 
-    __device__ Rv64JalLuiCore(BitwiseOperationLookup bw, VariableRangeChecker rc)
-        : bw(bw), range_checker(rc) {}
+    __device__ Rv64JalLuiCore(VariableRangeChecker rc) : range_checker(rc) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv64JalLuiCoreRecord record) {
         uint32_t rd_lo = record.rd_data[0];
@@ -52,9 +50,6 @@ struct Rv64JalLuiCore {
             const uint32_t shift = 16 - (PC_BITS - 16);
             range_checker.add_count(rd_hi << shift, 16);
         }
-
-        // bitwise lookup not used in the u16 path, but kept for API stability with the chip.
-        (void)bw;
 
         uint32_t rd_u16[2] = {rd_lo, rd_hi};
         COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, is_sign_extend, is_sign_extend);
@@ -82,7 +77,6 @@ __global__ void jal_lui_tracegen(
     DeviceBufferConstView<Rv64JalLuiRecord> records,
     uint32_t *rc_ptr,
     uint32_t rc_bins,
-    uint32_t *bw_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -93,9 +87,7 @@ __global__ void jal_lui_tracegen(
 
         Rv64CondRdWriteAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full.adapter);
-        Rv64JalLuiCore core(
-            BitwiseOperationLookup(bw_ptr), VariableRangeChecker(rc_ptr, rc_bins)
-        );
+        Rv64JalLuiCore core(VariableRangeChecker(rc_ptr, rc_bins));
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv64JalLuiCols, core)), full.core);
     } else {
         row.fill_zero(0, sizeof(Rv64JalLuiCols<uint8_t>));
@@ -109,7 +101,6 @@ extern "C" int _jal_lui_tracegen(
     DeviceBufferConstView<Rv64JalLuiRecord> d_records,
     uint32_t *d_rc,
     uint32_t rc_bins,
-    uint32_t *d_bw,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -118,7 +109,7 @@ extern "C" int _jal_lui_tracegen(
     auto [grid, block] = kernel_launch_params(height);
 
     jal_lui_tracegen<<<grid, block, 0, stream>>>(
-        d_trace, height, d_records, d_rc, rc_bins, d_bw, timestamp_max_bits
+        d_trace, height, d_records, d_rc, rc_bins, timestamp_max_bits
     );
     return CHECK_KERNEL();
 }

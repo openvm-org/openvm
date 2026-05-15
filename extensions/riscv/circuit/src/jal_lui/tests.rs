@@ -56,7 +56,6 @@ type Harness = TestChipHarness<F, Rv64JalLuiExecutor, Rv64JalLuiAir, Rv64JalLuiC
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64JalLuiAir, Rv64JalLuiExecutor, Rv64JalLuiChip<F>) {
@@ -65,7 +64,7 @@ fn create_harness_fields(
             memory_bridge,
             execution_bridge,
         )),
-        Rv64JalLuiCoreAir::new(bitwise_chip.bus(), range_checker_chip.bus()),
+        Rv64JalLuiCoreAir::new(range_checker_chip.bus()),
     );
     let executor = Rv64JalLuiExecutor::new(Rv64CondRdWriteAdapterExecutor::new(
         crate::adapters::Rv64RdWriteAdapterExecutor::new(),
@@ -73,7 +72,6 @@ fn create_harness_fields(
     let chip = VmChipWrapper::<F, _>::new(
         Rv64JalLuiFiller::new(
             Rv64CondRdWriteAdapterFiller::new(Rv64RdWriteAdapterFiller::new()),
-            bitwise_chip,
             range_checker_chip,
         ),
         memory_helper,
@@ -97,7 +95,6 @@ fn create_harness(
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        bitwise_chip.clone(),
         tester.range_checker(),
         tester.memory_helper(),
     );
@@ -635,23 +632,17 @@ type GpuHarness =
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
-    let bitwise_bus = openvm_circuit::arch::testing::default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
-        bitwise_bus,
-    ));
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
     ));
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        dummy_bitwise_chip,
         dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
     let gpu_chip = Rv64JalLuiChipGpu::new(
         tester.range_checker(),
-        tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
     );
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
