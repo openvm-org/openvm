@@ -754,17 +754,31 @@ where
         }
         .map_err(map_rvr_compile_error)?;
 
-        let metered_result = execute_metered(
-            &compiled_metered,
-            self.exe.as_ref(),
-            input_stream,
-            hint_stream,
-            trace_config,
-            deferrals,
-            deferral_fns,
-            deferral_hash,
-        )
-        .map_err(map_rvr_execute_error)?;
+        #[cfg(feature = "metrics")]
+        let start = std::time::Instant::now();
+        let metered_result = tracing::info_span!("execute_metered")
+            .in_scope(|| {
+                execute_metered(
+                    &compiled_metered,
+                    self.exe.as_ref(),
+                    input_stream,
+                    hint_stream,
+                    trace_config,
+                    deferrals,
+                    deferral_fns,
+                    deferral_hash,
+                )
+            })
+            .map_err(map_rvr_execute_error)?;
+        #[cfg(feature = "metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = metered_result.instret;
+            tracing::info!("instructions_executed={insns}");
+            metrics::counter!("execute_metered_insns").absolute(insns);
+            metrics::gauge!("execute_metered_insn_mi/s")
+                .set(insns as f64 / elapsed.as_micros() as f64);
+        }
 
         let segments = metered_result
             .segments
@@ -865,10 +879,22 @@ where
         io_state.public_values = read_public_values_from_guest_memory(&guest_memory);
         io_state.rng = rng;
         let callbacks = build_callbacks(&mut io_state);
-        unsafe {
-            register_and_execute(&compiled_metered, &callbacks, state_as_void_ptr(&mut state))
+        #[cfg(feature = "metrics")]
+        let start = std::time::Instant::now();
+        tracing::info_span!("execute_metered")
+            .in_scope(|| unsafe {
+                register_and_execute(&compiled_metered, &callbacks, state_as_void_ptr(&mut state))
+            })
+            .map_err(map_rvr_execute_error)?;
+        #[cfg(feature = "metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = state.instret;
+            tracing::info!("instructions_executed={insns}");
+            metrics::counter!("execute_metered_insns").absolute(insns);
+            metrics::gauge!("execute_metered_insn_mi/s")
+                .set(insns as f64 / elapsed.as_micros() as f64);
         }
-        .map_err(map_rvr_execute_error)?;
         ensure_rvr_outcome(
             "metered execution from state",
             state.is_terminated(),
