@@ -322,7 +322,7 @@ where
             self.count_chip.add_count(header.deferral_idx);
 
             let output_len_u32 =
-                u32::try_from(output_len).expect("deferral output length should fit a u32");
+                u32::try_from(output_len).expect("deferral output length should fit in a u32");
             let output_len_u16s: [u16; OUTPUT_LEN_NUM_U16S] = [
                 (output_len_u32 & 0xFFFF) as u16,
                 ((output_len_u32 >> 16) & 0xFFFF) as u16,
