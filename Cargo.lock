@@ -6132,8 +6132,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-backend"
-version = "1.3.0"
-source = "git+ssh://git@github.com/axiom-crypto/stark-backend-private.git?branch=p3-v0.4.3-rc#c016604b66920f7a8afe0596764893c7430ad8db"
+version = "1.4.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.4.0#2d4c6da0c84f43b15fcdac84ce13fd2325148c66"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -6164,8 +6164,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-builder"
-version = "1.3.0"
-source = "git+ssh://git@github.com/axiom-crypto/stark-backend-private.git?branch=p3-v0.4.3-rc#c016604b66920f7a8afe0596764893c7430ad8db"
+version = "1.4.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.4.0#2d4c6da0c84f43b15fcdac84ce13fd2325148c66"
 dependencies = [
  "cc",
  "glob",
@@ -6173,8 +6173,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-common"
-version = "1.3.0"
-source = "git+ssh://git@github.com/axiom-crypto/stark-backend-private.git?branch=p3-v0.4.3-rc#c016604b66920f7a8afe0596764893c7430ad8db"
+version = "1.4.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.4.0#2d4c6da0c84f43b15fcdac84ce13fd2325148c66"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6925,8 +6925,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-backend"
-version = "1.3.0"
-source = "git+ssh://git@github.com/axiom-crypto/stark-backend-private.git?branch=p3-v0.4.3-rc#c016604b66920f7a8afe0596764893c7430ad8db"
+version = "1.4.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.4.0#2d4c6da0c84f43b15fcdac84ce13fd2325148c66"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6954,8 +6954,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-sdk"
-version = "1.3.0"
-source = "git+ssh://git@github.com/axiom-crypto/stark-backend-private.git?branch=p3-v0.4.3-rc#c016604b66920f7a8afe0596764893c7430ad8db"
+version = "1.4.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.4.0#2d4c6da0c84f43b15fcdac84ce13fd2325148c66"
 dependencies = [
  "dashmap",
  "derivative",
@@ -7122,7 +7122,8 @@ dependencies = [
 [[package]]
 name = "p3-air"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "daee3082e2ca0db2ac876c43c9c8fd53204b0fcb95cfe7258d21f4a925ad82c4"
 dependencies = [
  "p3-field",
  "p3-matrix",
@@ -7131,7 +7132,8 @@ dependencies = [
 [[package]]
 name = "p3-baby-bear"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a1a49f4d9c8b8cbdab61e25d9de1b78b3c8347dd2fb88b11d990b3efa8cdd3a"
 dependencies = [
  "p3-challenger",
  "p3-field",
@@ -7145,7 +7147,8 @@ dependencies = [
 [[package]]
 name = "p3-blake3"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a8f97fd783752532861bf29bac344b7c226a0d1e2151148834c43c651a5d401"
 dependencies = [
  "blake3",
  "p3-symmetric",
@@ -7155,7 +7158,8 @@ dependencies = [
 [[package]]
 name = "p3-bn254"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "923bd91df7dd93481b4bfb53aa903d46d1a49d51160513472a5e95ca92ef1b46"
 dependencies = [
  "num-bigint 0.4.6",
  "p3-field",
@@ -7170,7 +7174,8 @@ dependencies = [
 [[package]]
 name = "p3-challenger"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7d2d45f5a51dc3f965e8d6da60a6c26c807e88657863d56da275eaa05ad36f1"
 dependencies = [
  "p3-field",
  "p3-maybe-rayon",
@@ -7183,7 +7188,8 @@ dependencies = [
 [[package]]
 name = "p3-commit"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf6d7dcb58a8f21f0e1325dc7f7699ad749878ccbe7e286e61f9d46bde2bfa88"
 dependencies = [
  "itertools 0.14.0",
  "p3-challenger",
@@ -7197,7 +7203,8 @@ dependencies = [
 [[package]]
 name = "p3-dft"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "beabb40bc8ac7f5f95870f271fb844c7e2e1ebb7f0761a8eebb2614b56c6b1c1"
 dependencies = [
  "itertools 0.14.0",
  "p3-field",
@@ -7211,7 +7218,8 @@ dependencies = [
 [[package]]
 name = "p3-field"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4819a3e4c1882431a63d4847ffa10d110017aee4cb9cf4319ca6dca191930969"
 dependencies = [
  "itertools 0.14.0",
  "num-bigint 0.4.6",
@@ -7226,7 +7234,8 @@ dependencies = [
 [[package]]
 name = "p3-fri"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13ca6a795cfc4180425fbf16dfdb4c9c2bfa85971dd55b5930d97b513e0835df"
 dependencies = [
  "itertools 0.14.0",
  "p3-challenger",
@@ -7246,7 +7255,8 @@ dependencies = [
 [[package]]
 name = "p3-goldilocks"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13c47d5c650bbeb25941b9a1fa9bfaf59b3cd202a438ea2c20892489af001399"
 dependencies = [
  "num-bigint 0.4.6",
  "p3-challenger",
@@ -7264,7 +7274,8 @@ dependencies = [
 [[package]]
 name = "p3-interpolation"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f27a3696641a8f4ec990ff8c91862fb4f3b4ff29f589f78005d046023fe3550f"
 dependencies = [
  "p3-field",
  "p3-matrix",
@@ -7275,7 +7286,8 @@ dependencies = [
 [[package]]
 name = "p3-keccak"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a61b090fb42152d1fcb2f82227b8619b1b022f9cd4a123123dccc9c2ab75d5de"
 dependencies = [
  "p3-field",
  "p3-symmetric",
@@ -7286,7 +7298,8 @@ dependencies = [
 [[package]]
 name = "p3-keccak-air"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4832d817455f7a4a35b598cbb8a42f1ee0430ee82df0203956c26917b2509865"
 dependencies = [
  "p3-air",
  "p3-field",
@@ -7300,7 +7313,8 @@ dependencies = [
 [[package]]
 name = "p3-koala-bear"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfb02789fca0950e246123d652bd78e75a76e3b90a651fd88dbb215cd3e81f5a"
 dependencies = [
  "p3-challenger",
  "p3-field",
@@ -7313,7 +7327,8 @@ dependencies = [
 [[package]]
 name = "p3-matrix"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6fde449bd2963d394284ec46db8c647e6a5602d90601117b76752072ab54168"
 dependencies = [
  "itertools 0.14.0",
  "p3-field",
@@ -7327,7 +7342,8 @@ dependencies = [
 [[package]]
 name = "p3-maybe-rayon"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54afab3883d8a14676b492709d6c4e9fa535c36718b737db0817aacfaaaa11f6"
 dependencies = [
  "rayon",
 ]
@@ -7335,7 +7351,8 @@ dependencies = [
 [[package]]
 name = "p3-mds"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3895055d735ac96d010747b3aaabd4c2645b9fd80226960550318db2e25afb75"
 dependencies = [
  "p3-dft",
  "p3-field",
@@ -7347,7 +7364,8 @@ dependencies = [
 [[package]]
 name = "p3-merkle-tree"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60e20f61ea816e94f83ed7b8134a5e98d0cad7bd6dff226bc1da17a5143c63cb"
 dependencies = [
  "itertools 0.14.0",
  "p3-commit",
@@ -7365,7 +7383,8 @@ dependencies = [
 [[package]]
 name = "p3-monty-31"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9fe0be661891af1f703ceaf57334fcbd540804988984dc2b500dd99740e7c81"
 dependencies = [
  "itertools 0.14.0",
  "num-bigint 0.4.6",
@@ -7387,7 +7406,8 @@ dependencies = [
 [[package]]
 name = "p3-poseidon"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "548af7ff569975882bc411f653aba7d89a6d85813ca58ef922fd0b1ecb6b5866"
 dependencies = [
  "p3-field",
  "p3-mds",
@@ -7398,7 +7418,8 @@ dependencies = [
 [[package]]
 name = "p3-poseidon2"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c6fc2368447576283f8b3849a36095017f25addf06eab9e33b0ce7f96b0b99d"
 dependencies = [
  "p3-field",
  "p3-mds",
@@ -7410,7 +7431,8 @@ dependencies = [
 [[package]]
 name = "p3-poseidon2-air"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a80481b023f74c0f8ded5058dab8054174e8060d82d400da7b67cf7f2f0a87bc"
 dependencies = [
  "p3-air",
  "p3-field",
@@ -7424,7 +7446,8 @@ dependencies = [
 [[package]]
 name = "p3-symmetric"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a14456a42a7d9e65f13999706f1bca2832175935169b3a54286e18331cf1d82f"
 dependencies = [
  "itertools 0.14.0",
  "p3-field",
@@ -7434,7 +7457,8 @@ dependencies = [
 [[package]]
 name = "p3-util"
 version = "0.4.3"
-source = "git+ssh://git@github.com/axiom-crypto/plonky3-private.git?branch=v0.4.3-rc#d81707f603b29d9988e6e2e7f34f44218a8e0c5a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "911154accf66034b0eec4452956c088f92a200b37a8225c1caed74cfbd38cc8d"
 dependencies = [
  "serde",
  "transpose",
@@ -9746,7 +9770,7 @@ dependencies = [
  "solar-config",
  "solar-data-structures",
  "solar-macros",
- "thiserror 1.0.69",
+ "thiserror 2.0.15",
  "tracing",
  "unicode-width 0.2.2",
 ]
@@ -10104,7 +10128,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.15",
  "url",
  "zip",
 ]
