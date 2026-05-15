@@ -22,6 +22,7 @@ use openvm_stark_backend::{
     prover::AirProvingContext,
 };
 
+use super::pack_bytes_for_bus;
 use crate::{
     cuda_abi::memory_testing,
     system::cuda::{memory::MemoryInventoryGPU, poseidon2::Poseidon2PeripheryChipGPU},
@@ -203,26 +204,6 @@ impl DeviceMemoryTester {
             .receive(addr_space as u32, bus_ptr, &packed_prev, t_prev);
         self.chip.send(addr_space as u32, bus_ptr, &packed_new, t);
     }
-}
-
-/// Packs `MEMORY_BLOCK_BYTES` u8-typed F values into `BLOCK_FE_WIDTH` packed F
-/// values via base-256; matches `bridge::pack_u8_for_bus` and the CPU
-/// `MemoryTester::pack_bytes_for_bus` so the chip's bus message exactly equals
-/// what byte-shaped chips emit.
-fn pack_bytes_for_bus(data: &[F]) -> [F; BLOCK_FE_WIDTH] {
-    assert_eq!(data.len(), MEMORY_BLOCK_BYTES);
-    let ratio = MEMORY_BLOCK_BYTES / BLOCK_FE_WIDTH;
-    let mut packed = [F::ZERO; BLOCK_FE_WIDTH];
-    for i in 0..BLOCK_FE_WIDTH {
-        let mut acc = F::ZERO;
-        let mut mult = 1u64;
-        for k in 0..ratio {
-            acc += data[i * ratio + k] * F::from_u64(mult);
-            mult *= 256;
-        }
-        packed[i] = acc;
-    }
-    packed
 }
 
 pub struct FixedSizeMemoryTester(pub(crate) MemoryDummyChip<F>, GpuDeviceCtx);
