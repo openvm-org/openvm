@@ -145,24 +145,14 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
 
         *cols.block.request_id = F::from_usize(row_idx);
         set_arrayview_from_u8_slice(&mut cols.block.message_bytes, message_bytes);
-        // Both `prev_state` and `new_state` are u16-shaped: pack each pair of consecutive bytes
-        // into one u16 cell.
-        let prev_state_u16s = prev_state
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]));
-        cols.block
-            .prev_state
-            .iter_mut()
-            .zip(prev_state_u16s)
-            .for_each(|(slot, v)| *slot = F::from_u16(v));
-        let new_state_u16s = new_state
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]));
-        cols.block
-            .new_state
-            .iter_mut()
-            .zip(new_state_u16s)
-            .for_each(|(slot, v)| *slot = F::from_u16(v));
+        // Pack byte-pairs into u16-shaped `prev_state` and `new_state` columns.
+        let pack_u16_into = |dst: ndarray::ArrayViewMut1<F>, bytes: &[u8]| {
+            for (slot, pair) in dst.into_iter().zip(bytes.chunks_exact(2)) {
+                *slot = F::from_u16(u16::from_le_bytes([pair[0], pair[1]]));
+            }
+        };
+        pack_u16_into(cols.block.prev_state.view_mut(), &prev_state);
+        pack_u16_into(cols.block.new_state.view_mut(), &new_state);
 
         *cols.instruction.is_enabled = F::ONE;
         cols.instruction.from_state.timestamp = F::from_u32(vm_record.timestamp);
