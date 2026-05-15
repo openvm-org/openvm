@@ -33,6 +33,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         air_names: Vec<String>,
         widths: Vec<usize>,
         interactions: Vec<usize>,
+        need_rot: Vec<bool>,
         config: &SystemConfig,
     ) -> Self {
         let (trace_heights, is_trace_height_constant): (Vec<u32>, Vec<bool>) =
@@ -51,6 +52,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             air_names,
             widths,
             interactions,
+            need_rot,
             config.segmentation_config.clone(),
         );
         let memory_ctx = MemoryCtx::new(config, segmentation_ctx.segment_check_insns);
