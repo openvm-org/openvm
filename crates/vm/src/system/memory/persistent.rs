@@ -124,21 +124,13 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
             local.expand_direction * local.expand_direction,
         );
 
-        // Normalized bus-pointer formula
-        //
-        //   bus_ptr = BUS_LEAF_STRIDE * leaf_label + BUS_BLOCK_STRIDE * block_idx
-        //           = BUS_PTR_SCALE * (DIGEST_WIDTH * leaf_label + BLOCK_FE_WIDTH * block_idx)
-        //
-        // With `BUS_PTR_SCALE = 2`, `BLOCK_FE_WIDTH = 4`, `BLOCKS_PER_LEAF = 2`, the
-        // strides `(BUS_LEAF_STRIDE, BUS_BLOCK_STRIDE) = (16, 8)` on the bus give
-        // `bus_ptr = 16 * leaf_label + 8 * block_idx` for `block_idx in 0..2` —
-        // each leaf is split into two BLOCK_FE_WIDTH-wide bus messages.
+        // Each leaf splits into `BLOCKS_PER_LEAF` bus messages of `BLOCK_FE_WIDTH` cells,
+        // addressed by `bus_ptr = BUS_LEAF_STRIDE * leaf_label + BUS_BLOCK_STRIDE * block_idx`.
         let leaf_stride_f = AB::F::from_usize(crate::system::memory::BUS_LEAF_STRIDE);
         let block_stride_f = AB::F::from_usize(BUS_BLOCK_STRIDE);
         for block_idx in 0..BLOCKS_PER_LEAF {
             let offset = block_stride_f * AB::F::from_usize(block_idx);
-            // Split the leaf into BLOCK_FE_WIDTH-sized bus messages.
-            // Each block uses its own timestamp - untouched blocks stay at t=0.
+            // Each block uses its own timestamp — untouched blocks stay at t=0.
             self.memory_bus
                 .send(
                     MemoryAddress::new(
