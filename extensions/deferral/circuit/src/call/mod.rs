@@ -1,5 +1,8 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
+/// A deferral call manipulates two accumulators per `deferral_idx`: input + output.
+const NUM_ACCUMULATORS_PER_IDX: usize = 2;
+
 mod air;
 pub use air::*;
 mod trace;

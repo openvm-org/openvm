@@ -42,8 +42,7 @@ use crate::{
     },
 };
 
-/// Number of accumulators owned by each `deferral_idx` (input + output).
-const NUM_ACCUMULATORS_PER_IDX: usize = 2;
+use super::NUM_ACCUMULATORS_PER_IDX;
 
 // ========================= CORE ==============================
 

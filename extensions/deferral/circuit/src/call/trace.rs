@@ -50,8 +50,7 @@ use crate::{
 /// `DIGEST_SIZE` cast to `u32` for use in pointer arithmetic that operates on
 /// `u32` cell pointers.
 const DIGEST_SIZE_U32: u32 = DIGEST_SIZE as u32;
-/// Number of accumulators per `deferral_idx` (input + output).
-const NUM_ACCUMULATORS_PER_IDX: u32 = 2;
+const NUM_ACCUMULATORS_PER_IDX: u32 = super::NUM_ACCUMULATORS_PER_IDX as u32;
 
 // ========================= CORE ==============================
 
