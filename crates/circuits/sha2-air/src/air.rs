@@ -156,9 +156,9 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
     ) {
         // Assert that the previous hash + work vars == final hash.
         // That is, `next.prev_hash[i] + local.work_vars[i] == next.final_hash[i]`
-        // where addition is done modulo 2^32.
-        // `final_hash` is now stored as `WORD_U16S` u16 limbs per word (matching `prev_hash`),
-        // so each limb is taken directly from the column without byte-pairing.
+        // where addition is done modulo 2^32. `final_hash` and `prev_hash` are
+        // both `WORD_U16S` u16 limbs per word, so each limb is taken directly
+        // from the column.
         for i in 0..C::HASH_WORDS {
             let mut carry = AB::Expr::ZERO;
             for j in 0..C::WORD_U16S {

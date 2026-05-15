@@ -288,8 +288,7 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
                 let final_hash: Vec<C::Word> = (0..C::HASH_WORDS)
                     .map(|i| work_vars[i].wrapping_add(prev_hash[i]))
                     .collect();
-                // `final_hash` is stored as u16 limbs (matching `prev_hash`); range-check each
-                // cell through the variable range checker.
+                // Range-check each u16 limb of `final_hash`.
                 let final_hash_u16_limbs: Vec<Vec<u32>> = final_hash
                     .iter()
                     .map(|word| word_into_u16_limbs::<C>(*word))

@@ -129,9 +129,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 *local.block.request_id + AB::Expr::ONE,
             );
 
-        // Both `prev_state` and `new_state` are stored as u16 cells (one u16 per pair of bytes),
-        // matching the receiver-side `prev_hash` / `final_hash` shapes. The bus payload is just
-        // the column values; no byte-pairing transformation is needed.
+        // `prev_state` and `new_state` are u16 cells; pass directly to the bus.
         let prev_state_as_u16s = local
             .block
             .prev_state
