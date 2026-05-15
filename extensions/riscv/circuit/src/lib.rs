@@ -38,6 +38,7 @@ mod mulh;
 mod shift;
 mod shift_w;
 mod sub;
+mod xor;
 mod xor_or_and;
 
 pub use add::*;
@@ -61,6 +62,7 @@ pub use mulh::*;
 pub use shift::*;
 pub use shift_w::*;
 pub use sub::*;
+pub use xor::*;
 pub use xor_or_and::*;
 
 mod extension;
