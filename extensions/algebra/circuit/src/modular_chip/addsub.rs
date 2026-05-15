@@ -21,15 +21,15 @@ use openvm_riscv_adapters::{
 use super::{ModularAir, ModularChip, ModularExecutor};
 use crate::FieldExprVecHeapExecutor;
 
-// TODO(rv64-u16): `mod-builder` `FieldExpression` chips (modular addsub/muldiv, fp2 addsub/muldiv,
-// ecc weierstrass, pairing) cannot migrate to `limb_bits = 16` on BabyBear. The
-// `check_carry_to_zero` AIR enforces `carry_abs_bits + limb_bits < F::bits() - 1` (= 30 for
-// BabyBear); at `limb_bits = 16` with a full-width 256-bit prime, the modular reduction
-// `(x ± y) - q·p` produces `carry_abs_bits = 18` because the cross-product `q·p` per output
-// limb has max `≈ 2^32` (= `(2^16 - 1)²`, dominated by `min(q_limbs, num_limbs) *
-// canonical_limb_max_abs²`), giving `max_overflow_bits ≈ 33` and `carry_bits = 17`. 18 + 16 = 34 ≫
-// 30 — fails. This is a hard F-level guard, not a range-checker `decomp` setting. Only a larger
-// prime field (e.g. Goldilocks) or `limb_bits ≤ 13` (which forfeits the cell savings) unblocks it.
+// NOTE: `mod-builder` `FieldExpression` chips (modular addsub/muldiv, fp2 addsub/muldiv, ecc
+// weierstrass, pairing) cannot migrate to `limb_bits = 16` on BabyBear. The `check_carry_to_zero`
+// AIR enforces `carry_abs_bits + limb_bits < F::bits() - 1` (= 30 for BabyBear); at
+// `limb_bits = 16` with a full-width 256-bit prime, the modular reduction `(x ± y) - q·p`
+// produces `carry_abs_bits = 18` because the cross-product `q·p` per output limb has max
+// `≈ 2^32` (= `(2^16 - 1)²`, dominated by `min(q_limbs, num_limbs) * canonical_limb_max_abs²`),
+// giving `max_overflow_bits ≈ 33` and `carry_bits = 17`. 18 + 16 = 34 ≫ 30 — fails. This is a
+// hard F-level guard, not a range-checker `decomp` setting. Only a larger prime field (e.g.
+// Goldilocks) or `limb_bits ≤ 13` (which forfeits the cell savings) unblocks it.
 
 pub fn addsub_expr(
     config: ExprBuilderConfig,
