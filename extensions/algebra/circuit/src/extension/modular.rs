@@ -107,9 +107,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
             let modulus_limbs_u16 = big_uint_to_limbs(modulus, 16);
             if bytes <= NUM_LIMBS_32 {
-                // NOTE: AddSub stays at LIMB_BITS=8; see modular_chip/addsub.rs for the BabyBear
-                // F-bit explanation.
-                let config = ExprBuilderConfig {
+let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
@@ -163,9 +161,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= NUM_LIMBS_48 {
-                // NOTE: AddSub stays at LIMB_BITS=8; see modular_chip/addsub.rs for the BabyBear
-                // F-bit explanation.
-                let config = ExprBuilderConfig {
+let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
@@ -270,9 +266,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                 Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
 
             if bytes <= NUM_LIMBS_32 {
-                // NOTE: AddSub stays at LIMB_BITS=8; see modular_chip/addsub.rs for the BabyBear
-                // F-bit explanation.
-                let config = ExprBuilderConfig {
+let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
@@ -315,9 +309,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                 );
                 inventory.add_air(is_eq);
             } else if bytes <= NUM_LIMBS_48 {
-                // NOTE: AddSub stays at LIMB_BITS=8; see modular_chip/addsub.rs for the BabyBear
-                // F-bit explanation.
-                let config = ExprBuilderConfig {
+let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
@@ -409,9 +401,7 @@ where
             let modulus_limbs_u16 = big_uint_to_limbs(modulus, 16);
 
             if bytes <= NUM_LIMBS_32 {
-                // NOTE: AddSub stays at LIMB_BITS=8; see modular_chip/addsub.rs for the BabyBear
-                // F-bit explanation.
-                let config = ExprBuilderConfig {
+let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
@@ -467,9 +457,7 @@ where
                 );
                 inventory.add_executor_chip(is_eq);
             } else if bytes <= NUM_LIMBS_48 {
-                // NOTE: AddSub stays at LIMB_BITS=8; see modular_chip/addsub.rs for the BabyBear
-                // F-bit explanation.
-                let config = ExprBuilderConfig {
+let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
                     num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,

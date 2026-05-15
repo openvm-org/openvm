@@ -164,34 +164,12 @@ where
         let cols: &mut DeferralCallCoreCols<F> = core_row.borrow_mut();
 
         // Pack record bytes into u16 cells (little-endian within each pair).
-        let pack_u16 = |bytes: &[u8]| -> u16 {
-            debug_assert_eq!(bytes.len(), 2);
-            (bytes[0] as u16) | ((bytes[1] as u16) << 8)
-        };
-        let input_commit_u16: [u16; COMMIT_NUM_U16S] = record
-            .read_data
-            .input_commit
-            .chunks_exact(2)
-            .map(pack_u16)
-            .collect_vec()
-            .try_into()
-            .unwrap();
-        let output_commit_u16: [u16; COMMIT_NUM_U16S] = record
-            .write_data
-            .output_commit
-            .chunks_exact(2)
-            .map(pack_u16)
-            .collect_vec()
-            .try_into()
-            .unwrap();
-        let output_len_u16: [u16; OUTPUT_LEN_NUM_U16S] = record
-            .write_data
-            .output_len
-            .chunks_exact(2)
-            .map(pack_u16)
-            .collect_vec()
-            .try_into()
-            .unwrap();
+        let input_commit_u16: [u16; COMMIT_NUM_U16S] =
+            from_fn(|i| u16::from_le_bytes([record.read_data.input_commit[2 * i], record.read_data.input_commit[2 * i + 1]]));
+        let output_commit_u16: [u16; COMMIT_NUM_U16S] =
+            from_fn(|i| u16::from_le_bytes([record.write_data.output_commit[2 * i], record.write_data.output_commit[2 * i + 1]]));
+        let output_len_u16: [u16; OUTPUT_LEN_NUM_U16S] =
+            from_fn(|i| u16::from_le_bytes([record.write_data.output_len[2 * i], record.write_data.output_len[2 * i + 1]]));
         let input_commit_f = input_commit_u16.map(F::from_u16);
         let output_commit_f = output_commit_u16.map(F::from_u16);
         let output_len_f = output_len_u16.map(F::from_u16);
@@ -232,27 +210,21 @@ where
         );
 
         // Write columns in reverse order to avoid clobbering the record.
-        let input_commit_rcs = input_commit_f
+        for (cells, aux) in input_commit_f
             .chunks_exact(F_NUM_U16S)
             .zip(cols.input_commit_lt_aux.iter_mut())
-            .map(|(cells, aux)| {
-                let x_le = from_fn(|i| cells[i]);
-                CanonicityTraceGen::generate_subrow(&x_le, aux)
-            })
-            .collect_vec();
-        for rc in input_commit_rcs {
+        {
+            let x_le = from_fn(|i| cells[i]);
+            let rc = CanonicityTraceGen::generate_subrow(&x_le, aux);
             self.range_checker_chip.add_count(rc, 16);
         }
 
-        let output_commit_rcs = output_commit_f
+        for (cells, aux) in output_commit_f
             .chunks_exact(F_NUM_U16S)
             .zip(cols.output_commit_lt_aux.iter_mut())
-            .map(|(cells, aux)| {
-                let x_le = from_fn(|i| cells[i]);
-                CanonicityTraceGen::generate_subrow(&x_le, aux)
-            })
-            .collect_vec();
-        for rc in output_commit_rcs {
+        {
+            let x_le = from_fn(|i| cells[i]);
+            let rc = CanonicityTraceGen::generate_subrow(&x_le, aux);
             self.range_checker_chip.add_count(rc, 16);
         }
 
