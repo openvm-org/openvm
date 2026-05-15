@@ -21,22 +21,16 @@ use openvm_stark_backend::{
 
 use crate::adapters::{Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_CELL_BITS};
 
-/// U16 AUIPC core.
+/// AUIPC core. `rd = pc + (imm << 8)` with `imm` 24-bit.
 ///
-/// Semantics: `rd = pc + (imm << 8)` where `imm` is 24-bit.
-///
-/// Minimal-column imm storage: 1 byte (`imm_low_8`) + 1 u16 (`imm_high_16`) instead of 3 bytes.
+/// Imm is stored as `imm_low_8` (1 byte) + `imm_high_16` (1 u16);
 /// `imm = imm_low_8 + imm_high_16 * 256`.
 ///
-/// At u16-cell granularity (low 32 bits of `rd` split into 2 u16 limbs `rd[0]`, `rd[1]`):
-///
-/// - `imm << 8` is a 32-bit value with byte 0 = 0. As 2 u16 limbs: `sl_lo = imm_low_8 * 256` (low
-///   u16: low byte zero, high byte = imm_low_8) `sl_hi = imm_high_16`     (high u16: bytes 1-2 of
-///   imm)
-/// - The composite-carry constraint is: `carry_top * 2^32 = from_pc + (imm << 8) - rd_low_32`,
-///   `carry_top ∈ {0, 1}`, where `rd_low_32 = rd[0] + rd[1] * 2^16`.
-/// - Sign extension on bits 32..64 is uniformly `is_sign_extend * 0xffff` per cell, with
-///   `is_sign_extend = (rd[1] >> 15) & 1`.
+/// The low 32 bits of `rd` are 2 u16 limbs. `imm << 8` as 2 u16 limbs is
+/// `(imm_low_8 * 256, imm_high_16)`. The composite-carry constraint
+/// `carry_top * 2^32 = from_pc + (imm << 8) - (rd[0] + rd[1] * 2^16)`
+/// with `carry_top ∈ {0, 1}` pins `rd[0..2]`. The upper 32 bits sign-extend to
+/// `is_sign_extend * 0xffff` per cell, with `is_sign_extend = (rd[1] >> 15) & 1`.
 const AUIPC_NUM_U16: usize = 2;
 
 #[repr(C)]
