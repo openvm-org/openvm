@@ -72,9 +72,6 @@ where
         let b = &cols.b;
         let c = &cols.c;
 
-        // For OR, a = b | c implies b ^ c = 2 * a - b - c (since b + c = (b | c) + (b & c) and
-        // b ^ c = (b | c) - (b & c)). The bitwise lookup constrains the result of b ^ c, which
-        // together with the algebraic relation forces a[i] = b[i] | c[i].
         for i in 0..NUM_LIMBS {
             let x_xor_y = AB::Expr::from_u32(2) * a[i] - b[i] - c[i];
             self.bus
