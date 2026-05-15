@@ -140,10 +140,8 @@ pub const BLOCK_FE_WIDTH: usize = MEMORY_BLOCK_BYTES / BUS_PTR_SCALE;
 /// Bus-pointer delta between consecutive bus messages.
 pub const BUS_BLOCK_STRIDE: usize = BUS_PTR_SCALE * BLOCK_FE_WIDTH;
 
-/// Host byte width of a u16-celled address space cell. Used wherever code
-/// converts between u16 cell counts and byte counts (e.g. `num_cells` vs
-/// `byte_capacity`, public-values byte packing). Declared as a `const` so
-/// callers don't sprinkle a literal `2` through the codebase.
+/// Host byte width of a u16-celled address space cell. Use wherever code
+/// converts between u16 cell counts and byte counts.
 pub const U16_CELL_SIZE: usize = size_of::<u16>();
 
 /// Default byte-capacity for `RV64_MEMORY_AS` in `MemoryConfig::default`.
@@ -155,8 +153,6 @@ pub const DEFAULT_RV64_MEMORY_BYTE_CAPACITY: usize = 1 << 29;
 pub const NUM_RV64_REGISTERS: usize = 32;
 
 // --- Static invariants on the source-of-truth constants ---
-// Catch silent miscompiles if someone later edits the constants without
-// updating the relationship.
 const _: () = assert!(
     BUS_PTR_SCALE.is_power_of_two(),
     "BUS_PTR_SCALE must be a power of two"
@@ -165,9 +161,8 @@ const _: () = assert!(
     MEMORY_BLOCK_BYTES.is_multiple_of(BUS_PTR_SCALE),
     "MEMORY_BLOCK_BYTES must be divisible by BUS_PTR_SCALE so BLOCK_FE_WIDTH is integer-valued"
 );
-// The byte-view dispatch on u16-celled ASes assumes
-// `byte_ptr / (BLOCK_FE_WIDTH * cell_size)` maps to the metadata block index,
-// which requires `MEMORY_BLOCK_BYTES == BLOCK_FE_WIDTH * U16_CELL_SIZE`.
+// The byte-view dispatch on u16-celled ASes requires the metadata block index to be
+// `byte_ptr / MEMORY_BLOCK_BYTES`, which holds only when the three constants line up:
 const _: () = assert!(
     MEMORY_BLOCK_BYTES == BLOCK_FE_WIDTH * U16_CELL_SIZE,
     "MEMORY_BLOCK_BYTES must equal BLOCK_FE_WIDTH * U16_CELL_SIZE for u16-celled byte-view"
