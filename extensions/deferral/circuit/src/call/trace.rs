@@ -77,10 +77,6 @@ pub struct DeferralCallCoreFiller<A, F: VmField> {
     /// Per-cell range checks on `output_commit`, `output_len`, and on the
     /// canonicity sub-AIR `diff_val - 1` outputs.
     range_checker_chip: SharedVariableRangeCheckerChip,
-    /// Kept for the adapter filler (heap-pointer range check) and as a
-    /// historical placeholder; no longer used by the core filler itself.
-    #[allow(dead_code)]
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     address_bits: usize,
 }
 

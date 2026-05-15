@@ -211,8 +211,8 @@ fn rand_jal_lui_test(opcode: Rv64JalLuiOpcode, num_ops: usize) {
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS
 //
-// Pattern B u16: `rd_data` is `[T; 2]` u16 limbs (was `[T; 4]` u8); the chip also stores
-// `imm_low_4` for LUI's low-4-bit imm witness. Prank patterns are adapted accordingly.
+// `rd_data` is `[T; 2]` u16 limbs; the chip also stores `imm_low_4`
+// for LUI's low-4-bit imm witness.
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -422,7 +422,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
-        // u16 cells (post Pattern B): bump the high cell.
+        // u16 cells: bump the high cell.
         adapter_cols.inner.rd_aux_cols.prev_data[1] = F::from_u32(1);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
@@ -467,7 +467,7 @@ fn sign_extend_flag_negative_tests() {
 
 #[test]
 fn overflow_negative_tests() {
-    // Pattern B u16: out-of-canonical rd_data fails the per-limb range check via range_bus.
+    // Out-of-canonical rd_data fails the per-limb range check via range_bus.
     run_negative_jal_lui_test(
         JAL,
         None,

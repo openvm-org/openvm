@@ -7,7 +7,7 @@
 using namespace riscv;
 using namespace program;
 
-// Pattern B u16: rd_data is 2 u16 limbs (low 32 bits of rd); imm_low_4 is a new witness used
+// rd_data is 2 u16 limbs (low 32 bits of rd); imm_low_4 is a witness used
 // only for LUI's `imm = imm_low_4 + rd[1] * 16` constraint.
 template <typename T> struct Rv64JalLuiCoreCols {
     T imm;

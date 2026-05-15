@@ -1,17 +1,5 @@
-//! U16-shaped variant of [`Rv64IsEqualModAdapter`].
-//!
-//! Differences vs the u8 variant:
-//! - Register-side `rs_val` columns are `[T; BLOCK_FE_WIDTH]` (4 u16 cells) instead of `[T;
-//!   RV64_WORD_NUM_LIMBS]` (8 bytes). The register read passes the u16 cells directly to the memory
-//!   bus via [`expand_to_rv64_block`].
-//! - Heap reads are u16-cell-shaped: `BLOCK_SIZE` counts u16 cells per block (= `BLOCK_FE_WIDTH`),
-//!   and the per-block byte stride is `j * BLOCK_SIZE * BUS_PTR_SCALE`. The 4 u16 cells of each
-//!   read block are passed through to `read` without `pack_u8_for_bus`.
-//! - The write to `rd` is `BLOCK_FE_WIDTH` u16 cells wide (passed through directly).
-//! - The base-address composition uses base 2^16 per cell rather than 2^8 per byte.
-//! - The pointer high-cell range check uses the same byte-pair bitwise lookup with the shift `1 <<
-//!   (16 * BLOCK_FE_WIDTH - address_bits)`; for typical `address_bits < 56` this constrains the top
-//!   u16 cell to 0.
+//! U16-shaped equality-mod adapter. Register and heap payloads are `BLOCK_FE_WIDTH` u16 cells and
+//! are sent to the memory bus directly.
 
 use std::{
     array::from_fn,
@@ -52,9 +40,6 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
-
-/// Number of bytes per u16 memory cell on the bus.
-const BUS_BYTES_PER_CELL: usize = BUS_PTR_SCALE;
 
 /// U16-shaped variant of [`Rv64IsEqualModAdapterCols`].
 ///
@@ -145,8 +130,7 @@ impl<
         let d = AB::F::from_u32(RV64_REGISTER_AS);
         let e = AB::F::from_u32(RV64_MEMORY_AS);
 
-        // Read register values for rs. The cell width is BLOCK_FE_WIDTH (4 u16 cells), passed
-        // through to the bus directly via `expand_to_rv64_block` (zero-pads when N < target).
+        // Read register values for rs.
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
                 .read(
@@ -158,8 +142,7 @@ impl<
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Compose the BLOCK_FE_WIDTH u16 cells of each register value into a single field element
-        // used as the heap base byte-address: cell j contributes `cells[j] * 2^(16*j)`.
+        // Compose u16 cells into the heap base byte address.
         let rs_val_f: [AB::Expr; NUM_READS] = from_fn(|i| {
             let mut acc = AB::Expr::ZERO;
             for j in 0..BLOCK_FE_WIDTH {
@@ -176,10 +159,7 @@ impl<
             }
         });
 
-        // Top u16 cell occupies bits 48..64; the bus check enforces
-        //   top_cell << (64 - address_bits) < 2^8.
-        // For typical `address_bits < 56` this constrains the top u16 cell to 0; for larger
-        // address_bits it allows `(address_bits - 56)` non-zero bits in the top cell.
+        // Range-check the high cell after shifting out unused pointer bits.
         let limb_shift = AB::F::from_u64(1u64 << (16 * BLOCK_FE_WIDTH - self.address_bits));
 
         self.bus
@@ -189,8 +169,7 @@ impl<
             )
             .eval(builder, ctx.instruction.is_valid.clone());
 
-        // Reads from heap. `BLOCK_SIZE` counts u16 cells per block and must equal BLOCK_FE_WIDTH;
-        // the per-block byte stride is `BLOCK_SIZE * BUS_PTR_SCALE`.
+        // Reads from heap. `BLOCK_SIZE` counts u16 cells per block.
         assert_eq!(TOTAL_READ_SIZE, BLOCKS_PER_READ * BLOCK_SIZE);
         assert_eq!(
             BLOCK_SIZE, BLOCK_FE_WIDTH,
@@ -202,7 +181,7 @@ impl<
                 from_fn(|_| from_fn(|_| r_it.next().unwrap()))
             });
         let block_ptr_offset: [_; BLOCKS_PER_READ] =
-            from_fn(|i| AB::F::from_usize(i * BLOCK_SIZE * BUS_BYTES_PER_CELL));
+            from_fn(|i| AB::F::from_usize(i * BLOCK_SIZE * BUS_PTR_SCALE));
 
         for (ptr, block_data, block_aux) in izip!(rs_val_f, read_block_data, &cols.heap_read_aux) {
             for (offset, data, aux) in izip!(block_ptr_offset, block_data, block_aux) {
@@ -218,7 +197,7 @@ impl<
             }
         }
 
-        // Write to rd register. `ctx.writes[0]` is already BLOCK_FE_WIDTH u16 cells; pass through.
+        // Write to rd register.
         self.memory_bridge
             .write(
                 MemoryAddress::new(d, cols.rd_ptr),
@@ -371,7 +350,7 @@ where
         });
 
         // Read memory values as u16 cells; the per-block byte stride is `BLOCK_SIZE * 2`.
-        let bytes_per_block = BLOCK_SIZE * BUS_BYTES_PER_CELL;
+        let bytes_per_block = BLOCK_SIZE * BUS_PTR_SCALE;
         from_fn(|i| {
             debug_assert!(
                 (record.rs_val[i] as u64) + ((bytes_per_block * BLOCKS_PER_READ - 1) as u64)

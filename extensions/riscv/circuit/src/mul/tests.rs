@@ -535,7 +535,6 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_rand_mul_tracegen() {
-    use openvm_circuit::arch::testing::BITWISE_OP_LOOKUP_BUS;
     let mut rng = create_seeded_rng();
     let mut tester = GpuChipTestBuilder::default()
         .with_bitwise_op_lookup(BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS))

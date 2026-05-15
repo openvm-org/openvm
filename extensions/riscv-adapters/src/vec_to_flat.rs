@@ -325,9 +325,9 @@ where
     }
 }
 
-/// Pattern B u16 counterpart of [`VecToFlatAluAdapterExecutor`]. Flattens
+/// U16 counterpart of [`VecToFlatAluAdapterExecutor`]. Flattens
 /// `[[[u16; BLOCK_SIZE]; BLOCKS_PER_READ]; NUM_READS]` reads and
-/// `[[u16; BLOCK_SIZE]; BLOCKS_PER_WRITE]` writes — `BLOCK_SIZE` here counts u16 cells, not bytes.
+/// `[[u16; BLOCK_SIZE]; BLOCKS_PER_WRITE]` writes. `BLOCK_SIZE` counts u16 cells, not bytes.
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct VecToFlatAluU16AdapterExecutor<
     A,

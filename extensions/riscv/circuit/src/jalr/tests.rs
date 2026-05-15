@@ -218,8 +218,7 @@ fn rand_jalr_test() {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-// Post Pattern B u16: jalr stores the low 32 of rd as 1 u16 (= LOW_U16_LIMBS-1)
-// and rs1 as 2 u16. Prank values match.
+// JALR stores the low 32 of rd as 1 u16 (= LOW_U16_LIMBS-1) and rs1 as 2 u16.
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalrPrankValues {
     pub rd_data: Option<[u32; 1]>,

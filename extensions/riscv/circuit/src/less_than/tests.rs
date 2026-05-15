@@ -464,7 +464,7 @@ fn rv64_sltu_wrong_c_msb_sign_negative_test() {
 #[test]
 fn rv64_lt_adapter_imm_sign_extension_negative_test() {
     // Execute SLTU with a positive immediate, then prank c[2] (u16 cell 2 = bytes 4..6)
-    // to violate the imm sign-extension constraint. After Pattern B u16 the four u16 cells of
+    // to violate the imm sign-extension constraint. The four u16 cells of
     // an imm rs2 are [imm_low_u16, sign_u16, sign_u16, sign_u16]; for positive imm sign_u16 = 0.
     //
     // Original execution: b bytes=[10,0,0,0,1,0,0,0] → b_u16=[10,0,1,0]; c (imm=5)=[5,0,0,0]_u16.

@@ -9,7 +9,7 @@
 
 using namespace riscv;
 
-// Pattern B (u16): each register read is BLOCK_FE_WIDTH=4 u16 cells with LIMB_BITS=16.
+// Each register read is BLOCK_FE_WIDTH=4 u16 cells with LIMB_BITS=16.
 constexpr size_t RV64_BRANCH_NUM_LIMBS = BLOCK_FE_WIDTH;
 constexpr size_t RV64_BRANCH_LIMB_BITS = 16;
 

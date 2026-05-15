@@ -10,7 +10,7 @@
 using namespace riscv;
 using namespace program;
 
-// Pattern B u16 less_than: 4 u16 cells per side with LIMB_BITS = 16.
+// less_than: 4 u16 cells per side with LIMB_BITS = 16.
 constexpr size_t RV64_LESS_THAN_NUM_LIMBS = BLOCK_FE_WIDTH;
 constexpr size_t RV64_LESS_THAN_LIMB_BITS = 16;
 

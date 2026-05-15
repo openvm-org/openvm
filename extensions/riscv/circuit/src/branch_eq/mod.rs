@@ -14,8 +14,8 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-/// Pattern B: each RV64 register read returns `BLOCK_FE_WIDTH` u16 cells and the core compares
-/// limb-by-limb with `LIMB_BITS = 16` range checks.
+/// Each RV64 register read returns `BLOCK_FE_WIDTH` u16 cells and the core compares
+/// limb-by-limb with `LIMB_BITS = 16`.
 pub const RV64_BRANCH_NUM_LIMBS: usize = BLOCK_FE_WIDTH;
 pub const RV64_BRANCH_LIMB_BITS: usize = 16;
 

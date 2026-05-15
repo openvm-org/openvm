@@ -23,7 +23,7 @@ use crate::adapters::{
     Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, RV_J_TYPE_IMM_BITS,
 };
 
-/// Pattern B u16 JAL/LUI.
+/// U16 JAL/LUI core.
 ///
 /// For LUI: `rd = imm << 12` (`imm` is unsigned 20-bit).
 ///   In u16 limbs of low 32 bits:

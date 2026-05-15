@@ -21,7 +21,7 @@ use openvm_stark_backend::{
 
 use crate::adapters::{Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_CELL_BITS};
 
-/// Pattern B u16 AUIPC.
+/// U16 AUIPC core.
 ///
 /// Semantics: `rd = pc + (imm << 8)` where `imm` is 24-bit.
 ///

@@ -8,7 +8,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, PreflightExecutor, MEMORY_BLOCK_BYTES,
+    Arena, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::{
     bigint::utils::{secp256k1_coord_prime, secp256k1_scalar_prime},
@@ -23,14 +23,25 @@ use openvm_instructions::{
     VmOpcode,
 };
 use openvm_mod_circuit_builder::{
-    test_utils::{generate_field_element, generate_random_biguint},
+    test_utils::{biguint_to_limbs, generate_field_element, generate_random_biguint},
     utils::biguint_to_limbs_vec,
     ExprBuilderConfig,
 };
 use openvm_pairing_guest::{bls12_381::BLS12_381_MODULUS, bn254::BN254_MODULUS};
-use openvm_riscv_adapters::{rv64_write_heap_default, write_ptr_reg};
+use openvm_riscv_adapters::{
+    rv64_write_heap_default, write_ptr_reg, Rv64IsEqualModAdapterU16Air,
+    Rv64IsEqualModAdapterU16Executor, Rv64IsEqualModAdapterU16Filler,
+};
 use openvm_riscv_circuit::adapters::RV64_REGISTER_NUM_LIMBS;
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_backend::{
+    p3_air::BaseAir,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
+};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
@@ -811,21 +822,6 @@ mod muldiv_tests {
 
 #[cfg(test)]
 mod is_equal_tests {
-    use openvm_circuit::arch::BLOCK_FE_WIDTH;
-    use openvm_mod_circuit_builder::test_utils::biguint_to_limbs;
-    use openvm_riscv_adapters::{
-        Rv64IsEqualModAdapterU16Air, Rv64IsEqualModAdapterU16Executor,
-        Rv64IsEqualModAdapterU16Filler,
-    };
-    use openvm_stark_backend::{
-        p3_air::BaseAir,
-        p3_matrix::{
-            dense::{DenseMatrix, RowMajorMatrix},
-            Matrix,
-        },
-        utils::disable_debug_builder,
-    };
-
     use super::*;
 
     // Per-byte limb bit-width used for generating byte-shaped test input. Different from the

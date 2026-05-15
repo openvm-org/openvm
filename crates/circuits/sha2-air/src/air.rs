@@ -192,8 +192,6 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
                     .assert_bool(carry.clone());
             }
             // Range-check each u16 limb of `final_hash` via the variable range checker bus.
-            // (The old byte-shaped representation paired bytes for a single bitwise-lookup
-            // interaction; with u16 cells we issue one range_check per cell.)
             for j in 0..C::WORD_U16S {
                 self.range_bus
                     .range_check(next.final_hash[[i, j]], 16)

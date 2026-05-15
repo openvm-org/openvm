@@ -206,7 +206,6 @@ where
                 count_chip.clone(),
                 poseidon2_chip.clone(),
                 range_checker.clone(),
-                bitwise_lu.clone(),
                 address_bits,
             ),
             mem_helper.clone(),

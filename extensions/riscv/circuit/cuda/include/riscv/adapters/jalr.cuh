@@ -16,7 +16,7 @@ template <typename T> struct Rv64JalrAdapterCols {
     T needs_write;
 };
 
-/// Pattern B u16: stored prev_data is the BLOCK_FE_WIDTH u16 cells written to the register, not
+/// U16 path: stored prev_data is the BLOCK_FE_WIDTH u16 cells written to the register, not
 /// raw bytes. Matches the Rust `Rv64JalrAdapterWriteAuxRecord` shape.
 struct Rv64JalrAdapterWriteAuxRecord {
     uint32_t prev_timestamp;

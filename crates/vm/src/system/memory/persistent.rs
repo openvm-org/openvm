@@ -20,7 +20,7 @@ use tracing::instrument;
 
 use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP};
 use crate::{
-    arch::{hasher::Hasher, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
+    arch::{hasher::Hasher, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH, BUS_BLOCK_STRIDE},
     primitives::Chip,
     system::memory::{
         controller::DIGEST_WIDTH, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
@@ -134,7 +134,7 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
         // `bus_ptr = 16 * leaf_label + 8 * block_idx` for `block_idx in 0..2` —
         // each leaf is split into two BLOCK_FE_WIDTH-wide bus messages.
         let leaf_stride_f = AB::F::from_usize(crate::system::memory::BUS_LEAF_STRIDE);
-        let block_stride_f = AB::F::from_usize(crate::arch::BUS_BLOCK_STRIDE);
+        let block_stride_f = AB::F::from_usize(BUS_BLOCK_STRIDE);
         for block_idx in 0..BLOCKS_PER_LEAF {
             let offset = block_stride_f * AB::F::from_usize(block_idx);
             // Split the leaf into BLOCK_FE_WIDTH-sized bus messages.

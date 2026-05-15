@@ -1,13 +1,5 @@
-//! U16-shaped variant of [`Rv64VecHeapAdapter`].
-//!
-//! Differences vs the u8 variant:
-//! - `READ_SIZE` and `WRITE_SIZE` are counted in **u16 cells**, not bytes; the per-block byte
-//!   stride is `BUS_PTR_SCALE * READ_SIZE = 2 * READ_SIZE`.
-//! - `ReadData` / `WriteData` are `[[[u16; READ_SIZE]; ...]; ...]` and the bus call passes the u16
-//!   cells through directly without `pack_u8_for_bus`.
-//! - All other shape constants (rs_ptr / rs_val / rd_ptr / rd_val) are unchanged because the
-//!   register-side reads still go through the byte-shaped register cells that the existing
-//!   `Rv64VecHeapAdapter` already handles via `expand_to_rv64_register`.
+//! U16-shaped vec-heap adapter. Heap `READ_SIZE` / `WRITE_SIZE` are counted in u16 cells, while
+//! register pointers are still read through the byte-shaped register helper.
 
 use std::{
     array::from_fn,
@@ -51,7 +43,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-/// See module-level docs. `READ_SIZE`/`WRITE_SIZE` are in **u16 cells**.
+/// `READ_SIZE`/`WRITE_SIZE` are in u16 cells.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct Rv64VecHeapU16AdapterCols<
@@ -168,7 +160,7 @@ impl<
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Register reads (still u8-byte-shaped on the register side; packed for the bus).
+        // Register reads are byte-shaped and packed for the bus.
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux).chain(once((
             cols.rd_ptr,
             cols.rd_val,
@@ -184,7 +176,7 @@ impl<
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Pointer high-byte range checks (unchanged).
+        // Pointer high-byte range checks.
         let need_range_check: Vec<AB::Var> = cols
             .rs_val
             .iter()
@@ -207,10 +199,7 @@ impl<
         let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(abstract_compose);
 
         let e = AB::F::from_u32(RV64_MEMORY_AS);
-        // Heap reads. `READ_SIZE` is u16 cells; the per-block byte stride is
-        // `BUS_PTR_SCALE * READ_SIZE` (= 2 * READ_SIZE for u16 cells).
-        const BUS_BYTES_PER_CELL: usize = BUS_PTR_SCALE;
-        let read_bytes_per_block = READ_SIZE * BUS_BYTES_PER_CELL;
+        let read_bytes_per_block = READ_SIZE * BUS_PTR_SCALE;
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux,) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
                 debug_assert_eq!(
@@ -232,7 +221,7 @@ impl<
             }
         }
 
-        let write_bytes_per_block = WRITE_SIZE * BUS_BYTES_PER_CELL;
+        let write_bytes_per_block = WRITE_SIZE * BUS_PTR_SCALE;
         for (i, (write, aux)) in zip(ctx.writes, &cols.writes_aux).enumerate() {
             debug_assert_eq!(
                 WRITE_SIZE, BLOCK_FE_WIDTH,
@@ -523,7 +512,7 @@ impl<
             WRITE_SIZE,
         > = adapter_row.borrow_mut();
 
-        // Pointer high-byte range checks (unchanged from u8 adapter).
+        // Pointer high-byte range checks.
         debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * RV64_WORD_NUM_LIMBS);
         let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits;
         const MSL_SHIFT: usize = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
@@ -556,9 +545,6 @@ impl<
             .rev()
             .zip(cols.writes_aux.iter_mut().rev())
             .for_each(|(write, cols_write)| {
-                // `prev_data` is already u16-cell-shaped; no byte→u16 packing needed.
-                // WRITE_SIZE == BLOCK_FE_WIDTH is enforced by the AIR-side debug_assert above;
-                // build the BLOCK_FE_WIDTH-shaped array explicitly so the type-checker is happy.
                 debug_assert_eq!(WRITE_SIZE, BLOCK_FE_WIDTH);
                 let prev: [F; BLOCK_FE_WIDTH] = from_fn(|i| F::from_u32(write.prev_data[i] as u32));
                 cols_write.set_prev_data(prev);

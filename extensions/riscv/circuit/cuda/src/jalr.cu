@@ -8,7 +8,7 @@
 using namespace riscv;
 using namespace program;
 
-// Pattern B (u16): rs1_data is 2 u16 limbs (low 32 bits of rs1); rd_data is 1 u16 limb
+// rs1_data is 2 u16 limbs (low 32 bits of rs1); rd_data is 1 u16 limb
 // (high u16 of low 32 of pc+4; low u16 is derived from from_pc).
 constexpr size_t JALR_LOW_U16_LIMBS = 2;
 constexpr size_t JALR_RD_U16_LIMBS = JALR_LOW_U16_LIMBS - 1;

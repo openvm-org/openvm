@@ -1,14 +1,4 @@
-//! U16-shaped variant of [`Rv64BaseAluAdapter`] dedicated to chips whose ALU
-//! operands and results are u16-celled (currently: `less_than`).
-//!
-//! Layout differences vs the u8 adapter:
-//! - `ReadData` / `WriteData` are `[[u16; BLOCK_FE_WIDTH]; 2]` / `[[u16; BLOCK_FE_WIDTH]; 1]`
-//!   instead of `[[u8; RV64_REGISTER_NUM_LIMBS]; ...]`.
-//! - The bus emits the 4 u16 cells directly (no `pack_u8_for_bus`).
-//! - `rs2` immediate decomposition is a single u16 limb plus a 1-bit sign extension; the
-//!   sign-extended high cells are produced as `imm_sign * 0xffff` in the AIR.
-//! - The immediate range check uses [`VariableRangeCheckerBus`] rather than the byte-pair bitwise
-//!   lookup, since we no longer have byte-shaped imm columns.
+//! U16-shaped base-ALU adapter for chips whose operands and results are u16-celled.
 
 use std::borrow::{Borrow, BorrowMut};
 
@@ -105,13 +95,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterU16Air {
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // When rs2 is an immediate, constrain the u16-celled view:
-        //   - rs2 = rs2_limbs[0] + 2^16 * rs2_limbs[1] where rs2_limbs[1] = rs2_imm_sign * 0xffff
-        //     (= sign extension u16)
-        //   - rs2_limbs[2..4] = sign-extended u16 (= rs2_imm_sign * 0xffff)
-        // The 24-bit signed immediate stored in `rs2` reconstructs from the low u16 limb plus the
-        // 16-bit-or-higher sign extension. We range-check the low u16 limb here (since it isn't
-        // memory-bus-permutation-checked when rs2 is an imm).
+        // Immediate rs2 is represented as [low_u16, sign_u16, sign_u16, sign_u16].
         let rs2_limbs = ctx.reads[1].clone();
         let rs2_sign_u16 = local.rs2_imm_sign * AB::Expr::from_u32(0xffff);
         let rs2_low_u16 = rs2_limbs[0].clone();
@@ -121,11 +105,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterU16Air {
         builder.assert_bool(local.rs2_imm_sign);
 
         let mut rs2_imm_when = builder.when(not(local.rs2_as));
-        // rs2_low_u16 must equal the low 16 bits of the stored 24-bit `rs2`. The stored `rs2`
-        // value is the 24-bit signed encoding of imm; for positive imms the high 8 bits are 0
-        // (so `rs2 = rs2_low_u16`); for negative imms the high 8 bits are 0xff (so
-        // `rs2 = rs2_low_u16 + 0xff_0000`). Equivalently:
-        //   rs2 = rs2_low_u16 + rs2_imm_sign * 0xff_0000
         rs2_imm_when.assert_eq(
             local.rs2,
             rs2_low_u16.clone() + local.rs2_imm_sign * AB::Expr::from_u32(0xff_0000),
@@ -273,8 +252,6 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluAdapterU16Executor 
             record.rs2_as = RV64_IMM_AS as u8;
             let imm = c.as_canonical_u32();
             record.rs2 = imm;
-            // The 24-bit encoded immediate sign-extends to 64 bits as 4 u16 limbs:
-            // [imm_low_u16, sign_u16, sign_u16, sign_u16] where sign_u16 ∈ {0, 0xffff}.
             let imm64 = imm_to_u64(imm);
             let sign_u16 = (imm64 >> 16) as u16; // 0 or 0xffff
             record.rs2_imm_sign = sign_u16 != 0;
@@ -321,9 +298,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluAdapterU16Filler {
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv64BaseAluAdapterU16Cols<F> = adapter_row.borrow_mut();
 
-        if record.rs2_as == 0 {
-            // Immediate: range-check the low u16 limb so the AIR's range_check on rs2_low_u16
-            // is mirrored.
+        if record.rs2_as as u32 == RV64_IMM_AS {
             let imm_low_u16 = record.rs2 & 0xffff;
             self.range_checker_chip
                 .add_count(imm_low_u16, RV64_BASE_ALU_U16_LIMB_BITS);

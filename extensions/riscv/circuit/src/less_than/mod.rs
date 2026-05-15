@@ -16,7 +16,7 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-/// Pattern B: RV64 less_than reads/writes 4 u16 cells per register and compares with
+/// RV64 less_than reads/writes 4 u16 cells per register and compares with
 /// `LIMB_BITS = 16` per-limb range checks.
 pub const RV64_LESS_THAN_NUM_LIMBS: usize = BLOCK_FE_WIDTH;
 pub const RV64_LESS_THAN_LIMB_BITS: usize = 16;

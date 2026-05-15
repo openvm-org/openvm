@@ -8,7 +8,7 @@
 using namespace riscv;
 using namespace program;
 
-// Pattern B u16: rd_data is 2 u16 limbs (low 32 bits of rd); imm stored as 1 byte + 1 u16
+// rd_data is 2 u16 limbs (low 32 bits of rd); imm stored as 1 byte + 1 u16
 // (`imm = imm_low_8 + imm_high_16 * 256`).
 template <typename T> struct Rv64AuipcCoreCols {
     T is_valid;

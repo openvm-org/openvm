@@ -13,7 +13,7 @@ template <typename T> struct Rv64RdWriteAdapterCols {
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> rd_aux_cols;
 };
 
-/// Pattern B u16: rd_aux_record stores `BLOCK_FE_WIDTH` u16 cells (= 8 bytes) natively, matching
+/// U16 path: rd_aux_record stores `BLOCK_FE_WIDTH` u16 cells (= 8 bytes) natively, matching
 /// the bridge's `MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>` shape.
 struct Rv64RdWriteAdapterWriteAuxRecord {
     uint32_t prev_timestamp;

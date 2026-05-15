@@ -26,7 +26,7 @@ use crate::adapters::{
     expand_to_rv64_block, rv64_bytes_to_u32, Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller,
 };
 
-/// Pattern B (u16) JALR:
+/// U16 JALR core:
 /// - `rs1_data` is the **low 32 bits** of `rs1` as 2 u16 limbs (`rs1[0]`: bits 0..16, `rs1[1]`:
 ///   bits 16..32). The adapter zero-extends the read to `BLOCK_FE_WIDTH=4` u16 cells.
 /// - `rd_data_high_u16` is the high u16 of the low 32 bits of `rd` (= `pc + 4` low 32); the low u16
@@ -314,7 +314,7 @@ where
 
 #[inline(always)]
 fn u16_block_to_bytes(
-    block: [u16; openvm_circuit::arch::BLOCK_FE_WIDTH],
+    block: [u16; BLOCK_FE_WIDTH],
 ) -> [u8; crate::adapters::RV64_REGISTER_NUM_LIMBS] {
     let mut out = [0u8; crate::adapters::RV64_REGISTER_NUM_LIMBS];
     for (i, &v) in block.iter().enumerate() {
@@ -332,7 +332,7 @@ pub(super) fn run_jalr(
     rs1: u32,
     imm: u16,
     imm_sign: bool,
-) -> (u32, [u16; openvm_circuit::arch::BLOCK_FE_WIDTH]) {
+) -> (u32, [u16; BLOCK_FE_WIDTH]) {
     let to_pc = rs1.wrapping_add(imm as u32 + (imm_sign as u32 * 0xffff0000));
     assert!(to_pc < (1 << PC_BITS));
 

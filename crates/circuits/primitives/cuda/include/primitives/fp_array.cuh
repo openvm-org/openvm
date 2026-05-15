@@ -44,8 +44,7 @@ template <size_t N> struct FpArray {
 
     // Reads `N` u16-celled cells from a raw byte buffer in little-endian order
     // and lifts each to Fp. Used by the boundary chip / merkle init to decode
-    // u16-celled address spaces (RV64_REGISTER_AS, RV64_MEMORY_AS,
-    // PUBLIC_VALUES_AS) post Stage 1.6 cell-type flip.
+    // u16-celled address spaces.
     __device__ static FpArray from_u16_le_array(uint8_t const bytes[2 * N]) {
         FpArray result;
         for (int i = 0; i < N; i++) {

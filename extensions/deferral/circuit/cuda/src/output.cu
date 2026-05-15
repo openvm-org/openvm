@@ -86,7 +86,7 @@ template <typename T> struct DeferralOutputCols {
 
     // Read data and auxiliary columns. output_commit and output_len are read
     // contiguously from heap with layout [output_commit || output_len]. Both
-    // are stored as u16 cells (matching the underlying Pattern B memory). The
+    // are stored as u16 cells (matching memory granularity). The
     // onion hash of all bytes written by this opcode invocation is constrained
     // to output_commit.
     T output_commit[COMMIT_NUM_U16S];

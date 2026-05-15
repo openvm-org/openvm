@@ -145,8 +145,7 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                                 }
                             };
                             let combined = compress(left, right);
-                            // This is a hacky way to say:
-                            // "and we also want to record the old values"
+                            // Record the old child pair on the compression bus.
                             compress(old_left, old_right);
                             let par_old_values = self.get_node(par_index);
                             (

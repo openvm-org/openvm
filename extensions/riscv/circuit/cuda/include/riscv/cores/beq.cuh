@@ -63,6 +63,6 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BranchEqualCore {
         COL_WRITE_VALUE(row, Cols, opcode_bne_flag, !is_beq);
 
         // No per-limb range checks: the bus invariant guarantees a[i], b[i]
-        // are u16-valid in F (Pattern B u16 path).
+        // are u16-valid in F.
     }
 };

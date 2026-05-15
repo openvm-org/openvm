@@ -397,9 +397,6 @@ mod tests {
         assert_eq!(expected_root, gpu_root);
     }
 
-    // TODO: pre-rv64 this test put two `BLOCK_FE_WIDTH == 4` touched blocks at ptrs 0 and 4,
-    // which both fell in Merkle chunk 0 and exercised the 2-way merge path in `inventory.cu`. On
-    // rv64 `BLOCK_FE_WIDTH == DIGEST_WIDTH == 8`, so two blocks cannot share a chunk and the test
     // Touched-memory coverage for the merge path: writes two MEMORY_BLOCK_BYTES
     // blocks into RV64_MEMORY_AS (u16-celled, so each block is
     // BLOCK_FE_WIDTH = 4 u16 cells = MEMORY_BLOCK_BYTES = 8 bytes) and routes
