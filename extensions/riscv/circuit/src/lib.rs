@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod adapters;
 // TEMP: commented out modules not yet ported to RV64
+mod add;
 mod add_sub;
 mod add_sub_w;
 mod auipc;
@@ -38,6 +39,7 @@ mod shift;
 mod shift_w;
 mod xor_or_and;
 
+pub use add::*;
 pub use add_sub::*;
 pub use add_sub_w::*;
 pub use auipc::*;
