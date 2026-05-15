@@ -461,12 +461,6 @@ type GpuHarness = GpuTestChipHarness<
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
-    // getting bus from tester since `gpu_chip` and `air` must use the same bus
-    let bitwise_bus = default_bitwise_lookup_bus();
-    // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
-        bitwise_bus,
-    ));
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
     ));
