@@ -334,7 +334,7 @@ fn assert_round_only_trace_is_rejected(trace_data: &[u32], bitwise_queries: &[(u
     let air = Sha256TestAir {
         sub_air: Sha256Air::new(bitwise_bus, SELF_BUS_IDX),
     };
-    let air_ctx = AirProvingContext::simple_no_pis(Arc::new(trace));
+    let air_ctx = AirProvingContext::simple_no_pis(trace);
 
     let tester = VmChipTestBuilder::default()
         .build()

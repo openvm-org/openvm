@@ -170,12 +170,13 @@ for i in "${!CRATE_NAMES[@]}"; do
     name="${CRATE_NAMES[$i]}"
     dir="${CRATE_DIRS[$i]}"
     feats="$(crate_features "$dir")"
-    feat_args=()
-    [ -n "$feats" ] && feat_args=(--features "$feats")
 
     echo -n "  clippy $name "
     [ -n "$feats" ] && echo -n "(+$feats) "
-    if cargo clippy -p "$name" --all-targets --tests "${feat_args[@]}" -- -D warnings; then
+    args=(clippy -p "$name" --all-targets --tests)
+    [ -n "$feats" ] && args+=(--features "$feats")
+    args+=(-- -D warnings)
+    if cargo "${args[@]}"; then
         pass ""
     else
         fail ""
@@ -198,26 +199,30 @@ for i in "${!CRATE_NAMES[@]}"; do
     name="${CRATE_NAMES[$i]}"
     dir="${CRATE_DIRS[$i]}"
     feats="$(crate_features "$dir")"
-    feat_args=()
-    [ -n "$feats" ] && feat_args=(--features "$feats")
 
     echo -n "  test $name "
     [ -n "$feats" ] && echo -n "(+$feats) "
 
     if [ "$USE_NEXTEST" -eq 1 ]; then
-        profile_args=()
+        heavy=0
         if is_heavy "$name"; then
-            profile_args=(--profile=heavy)
+            heavy=1
             echo -n "(heavy) "
         fi
-        if cargo nextest run --cargo-profile=fast -p "$name" "${feat_args[@]}" "${profile_args[@]}"; then
+        args=(nextest run --cargo-profile=fast -p "$name")
+        [ -n "$feats" ] && args+=(--features "$feats")
+        [ "$heavy" -eq 1 ] && args+=(--profile=heavy)
+        [ "$name" = "cargo-openvm" ] && args+=(--test-threads=1)
+        if cargo "${args[@]}"; then
             pass ""
         else
             fail ""
             ERRORS=$((ERRORS + 1))
         fi
     else
-        if cargo test --profile fast -p "$name" "${feat_args[@]}"; then
+        args=(test --profile fast -p "$name")
+        [ -n "$feats" ] && args+=(--features "$feats")
+        if cargo "${args[@]}"; then
             pass ""
         else
             fail ""
