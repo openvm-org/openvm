@@ -76,12 +76,7 @@ impl DeviceMemoryTester {
         MemoryBridge::new(self.mem_bus, self.config.timestamp_max_bits, self.range_bus)
     }
 
-    /// See [`crate::arch::testing::MemoryTester::read`] for the dual-N
-    /// semantics: `N = BLOCK_FE_WIDTH` is cell-indexed access (`ptr` is a
-    /// cell index, chip records `BUS_PTR_SCALE * ptr` as bus pointer);
-    /// `N = MEMORY_BLOCK_BYTES` is byte-view against u16 ASes only (`ptr` is
-    /// the byte/bus pointer, bytes are packed pairwise into `BLOCK_FE_WIDTH`
-    /// field elements for the chip's bus message).
+    /// See [`crate::arch::testing::MemoryTester::read`] for the dual-N semantics.
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
         const { assert!(N == BLOCK_FE_WIDTH || N == MEMORY_BLOCK_BYTES) };
         if N == BLOCK_FE_WIDTH {
