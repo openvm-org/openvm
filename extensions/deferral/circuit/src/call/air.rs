@@ -32,6 +32,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::PrimeField32;
 
+use super::NUM_ACCUMULATORS_PER_IDX;
 use crate::{
     canonicity::{CanonicityAuxCols, CanonicitySubAir},
     count::DeferralCircuitCountBus,
@@ -41,8 +42,6 @@ use crate::{
         DIGEST_F_MEMORY_OPS, F_NUM_U16S, OUTPUT_LEN_NUM_U16S, OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
-
-use super::NUM_ACCUMULATORS_PER_IDX;
 
 // ========================= CORE ==============================
 
