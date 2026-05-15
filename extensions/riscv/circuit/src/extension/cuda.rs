@@ -215,7 +215,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64Io>
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
-        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         inventory.next_air::<Rv64HintStoreAir>()?;
         let hint_store =

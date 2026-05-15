@@ -246,10 +246,6 @@ struct CudaTestHarness {
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> CudaTestHarness {
-    let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
-        bitwise_bus,
-    ));
     let dummy_range_checker_chip = Arc::new(
         openvm_circuit_primitives::var_range::VariableRangeCheckerChip::new(
             openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -259,7 +255,6 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> CudaTestHarness {
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.execution_bridge(),
         tester.memory_bridge(),
-        dummy_bitwise_chip,
         dummy_range_checker_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
