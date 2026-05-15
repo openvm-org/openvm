@@ -613,12 +613,9 @@ impl TracingMemory {
 
     // ---- Traced byte-view ---------------------------------------------------
     //
-    // These methods are the traced counterparts of `GuestMemory::read_bytes` /
-    // `write_bytes`. They create a memory-bus record (timestamp update + meta
-    // slot tracking) at the `MEMORY_BLOCK_BYTES`-aligned block containing the
-    // access. The slot index uses the byte-aware formula
-    // (`byte_ptr / MEMORY_BLOCK_BYTES`); the underlying storage is u16-celled
-    // for RV64 byte ASes but accessed as raw bytes.
+    // Traced counterparts of `GuestMemory::read_bytes` / `write_bytes`. They create a memory-bus
+    // record (timestamp update + meta slot tracking) at the `MEMORY_BLOCK_BYTES`-aligned block
+    // containing the access; the slot index is `byte_ptr / MEMORY_BLOCK_BYTES`.
 
     /// Atomic byte-view read. `byte_ptr` is a byte address into the AS's
     /// storage backing; returns the raw `N` bytes.
