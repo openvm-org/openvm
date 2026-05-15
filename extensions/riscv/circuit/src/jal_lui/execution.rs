@@ -216,9 +216,8 @@ unsafe fn execute_e12_impl<
     let (pc, rd) = run_jal_lui(IS_JAL, exec_state.pc(), signed_imm);
 
     if ENABLED {
-        // `run_jal_lui` returns 4 u16 cells; unpack to 8 LE bytes for the byte-addressed
-        // write (mirrors the auipc fix — `vm_write::<u16, 4>` would treat `a` as a u16-cell
-        // index instead of a byte offset).
+        // `a` is a byte offset; unpack the 4 u16 cells to 8 LE bytes before writing
+        // (`vm_write::<u16, 4>` would treat `a` as a u16-cell index).
         let rd_bytes: [u8; openvm_instructions::riscv::RV64_REGISTER_NUM_LIMBS] =
             std::array::from_fn(|i| {
                 let cell = rd[i / 2];

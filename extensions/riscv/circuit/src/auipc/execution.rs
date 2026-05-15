@@ -191,9 +191,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 ) {
     let pc = exec_state.pc();
     let rd = run_auipc(pc, pre_compute.imm);
-    // `run_auipc` returns 4 u16 cells (for column trace gen); for the interpreter's
-    // byte-addressed write path we unpack them to 8 LE bytes. `vm_write::<u16, 4>`
-    // would treat `pre_compute.a` as a u16-cell index (× 2) instead of a byte offset.
+    // `pre_compute.a` is a byte offset; unpack the 4 u16 cells to 8 LE bytes before
+    // writing (`vm_write::<u16, 4>` would treat `a` as a u16-cell index).
     let rd_bytes: [u8; openvm_instructions::riscv::RV64_REGISTER_NUM_LIMBS] =
         std::array::from_fn(|i| {
             let cell = rd[i / 2];
