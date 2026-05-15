@@ -5,12 +5,9 @@ use openvm_circuit::{
     arch::{DenseRecordArena, RecordSeeker},
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
-};
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_instructions::riscv::RV64_CELL_BITS;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -21,11 +18,6 @@ use crate::{
 #[derive(new)]
 pub struct Rv64HintStoreChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    /// Kept for ABI parity with the rest of `Rv64Im` periphery wiring (the AIR still
-    /// declares a `bitwise_operation_lookup_bus` even though hintstore no longer emits
-    /// any messages on it).
-    #[allow(dead_code)]
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }

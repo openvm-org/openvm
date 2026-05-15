@@ -220,7 +220,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64Io>
         inventory.next_air::<Rv64HintStoreAir>()?;
         let hint_store = Rv64HintStoreChipGpu::new(
             range_checker.clone(),
-            bitwise_lu.clone(),
             pointer_max_bits,
             timestamp_max_bits,
         );

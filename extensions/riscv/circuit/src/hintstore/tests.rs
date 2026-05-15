@@ -56,7 +56,6 @@ type Harness<RA> =
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
@@ -68,14 +67,13 @@ fn create_harness_fields(
     let air = Rv64HintStoreAir::new(
         execution_bridge,
         memory_bridge,
-        bitwise_chip.bus(),
         range_checker_chip.bus(),
         Rv64HintStoreOpcode::CLASS_OFFSET,
         address_bits,
     );
     let executor = Rv64HintStoreExecutor::new(address_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
     let chip = Rv64HintStoreChip::<F>::new(
-        Rv64HintStoreFiller::new(address_bits, bitwise_chip, range_checker_chip),
+        Rv64HintStoreFiller::new(address_bits, range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -98,7 +96,6 @@ fn create_harness<RA: Arena>(
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        bitwise_chip.clone(),
         tester.range_checker().clone(),
         tester.memory_helper(),
         tester.address_bits(),
@@ -477,14 +474,12 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        dummy_bitwise_chip.clone(),
         dummy_range_checker_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
     let gpu_chip = Rv64HintStoreChipGpu::new(
         tester.range_checker(),
-        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );

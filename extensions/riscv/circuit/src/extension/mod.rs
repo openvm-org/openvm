@@ -773,22 +773,9 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
         let range_checker = inventory.range_checker().bus;
         let pointer_max_bits = inventory.pointer_max_bits();
 
-        let bitwise_lu = {
-            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
-            if let Some(air) = existing_air {
-                air.bus
-            } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
-                let air = BitwiseOperationLookupAir::<8>::new(bus);
-                inventory.add_air(air);
-                air.bus
-            }
-        };
-
         let hint_store = Rv64HintStoreAir::new(
             exec_bridge,
             memory_bridge,
-            bitwise_lu,
             range_checker,
             Rv64HintStoreOpcode::CLASS_OFFSET,
             pointer_max_bits,
@@ -819,23 +806,9 @@ where
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let pointer_max_bits = inventory.airs().pointer_max_bits();
 
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
-                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
-
         inventory.next_air::<Rv64HintStoreAir>()?;
         let hint_store = Rv64HintStoreChip::new(
-            Rv64HintStoreFiller::new(pointer_max_bits, bitwise_lu.clone(), range_checker.clone()),
+            Rv64HintStoreFiller::new(pointer_max_bits, range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(hint_store);

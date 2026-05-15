@@ -12,7 +12,6 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     ColumnsAir, StructReflection, StructReflectionHelper,
@@ -21,10 +20,7 @@ use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{
-        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
-        RV64_WORD_NUM_LIMBS,
-    },
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{
@@ -101,8 +97,7 @@ pub struct Rv64HintStoreCols<T> {
 pub struct Rv64HintStoreAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
-    pub bitwise_operation_lookup_bus: BitwiseOperationLookupBus,
-    /// Used to range-check the u16 high cells of `mem_ptr` and `rem_words` after scaling.
+    /// Range-checks the u16 high cells of `mem_ptr` and `rem_words` after scaling.
     pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
     pointer_max_bits: usize,
@@ -408,11 +403,6 @@ pub struct Rv64HintStoreExecutor {
 #[derive(Clone, derive_new::new)]
 pub struct Rv64HintStoreFiller {
     pointer_max_bits: usize,
-    /// Kept for parity with the AIR's `bitwise_operation_lookup_bus` field even though
-    /// hintstore no longer emits any 8-bit bitwise-lookup messages (both range checks
-    /// moved to `range_checker_chip` to support 16-bit cells).
-    #[allow(dead_code)]
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
