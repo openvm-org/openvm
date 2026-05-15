@@ -192,12 +192,14 @@ where
         air_names: &[String],
         widths: &[usize],
         interactions: &[usize],
+        need_rot: &[bool],
     ) -> MeteredCtx {
         MeteredCtx::new(
             constant_trace_heights.to_vec(),
             air_names.to_vec(),
             widths.to_vec(),
             interactions.to_vec(),
+            need_rot.to_vec(),
             self.config.as_ref(),
         )
     }
@@ -853,7 +855,8 @@ where
     pub fn build_metered_ctx(&self, exe: &VmExe<Val<E::SC>>) -> MeteredCtx {
         let program_len = exe.program.num_defined_instructions();
 
-        let (mut constant_trace_heights, air_names, widths, interactions): (
+        let (mut constant_trace_heights, air_names, widths, interactions, need_rot): (
+            Vec<_>,
             Vec<_>,
             Vec<_>,
             Vec<_>,
@@ -867,7 +870,14 @@ where
                 let air_names = pk.air_name.clone();
                 let width = pk.vk.params.width.total_width();
                 let num_interactions = pk.vk.symbolic_constraints.interactions.len();
-                (constant_trace_height, air_names, width, num_interactions)
+                let need_rot = pk.vk.params.need_rot;
+                (
+                    constant_trace_height,
+                    air_names,
+                    width,
+                    num_interactions,
+                    need_rot,
+                )
             })
             .multiunzip();
 
@@ -893,6 +903,7 @@ where
             &air_names,
             &widths,
             &interactions,
+            &need_rot,
         )
     }
 
