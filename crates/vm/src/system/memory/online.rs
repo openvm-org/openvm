@@ -389,17 +389,10 @@ impl GuestMemory {
 
     // ---- Byte-view abstraction ---------------------------------------------
     //
-    // Byte-view methods take `byte_ptr` (a byte address into the AS's storage
-    // backing) and return raw bytes regardless of the AS's cell type. For u8
-    // ASes, `byte_ptr` coincides with the cell-indexed pointer used by
-    // `read::<u8, N>`. For u16-celled ASes (RV64_REGISTER_AS, RV64_MEMORY_AS,
-    // PUBLIC_VALUES_AS — `cell_size = 2`), byte-access callers (LoadStore,
-    // Hintstore, ELF loader, ISA-level byte ops) use these methods unchanged:
-    // the storage backing is still a `Vec<u8>`, so reading N raw bytes at
-    // `byte_ptr` returns the packed-u16 byte representation correctly.
-    //
-    // Asserts that the access is aligned to and divisible by the cell size,
-    // since the byte-view does not support sub-cell access or
+    // Read/write raw bytes at `byte_ptr` regardless of cell type. Storage is a
+    // `Vec<u8>`, so on u16-celled ASes (`cell_size = 2`) this returns the
+    // packed-u16 byte representation in little-endian order. Access must be
+    // aligned to and divisible by `cell_size`; no sub-cell access or
     // read-modify-write.
 
     /// Read `N` bytes starting at `byte_ptr` within `addr_space`. Returns
