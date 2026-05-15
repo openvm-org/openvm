@@ -16,10 +16,14 @@ use openvm_circuit::{
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    Chip,
 };
+use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS},
@@ -27,15 +31,15 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode::{self, *};
 use openvm_stark_backend::{
-    p3_air::{Air, AirBuilder, BaseAir},
+    p3_air::{Air, AirBuilder, BaseAir, BaseAirWithPublicValues},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
     },
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    prover::AirProvingContext,
     utils::disable_debug_builder,
+    AirRef, PartitionedBaseAir,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use p3_keccak_air::NUM_ROUNDS;
@@ -416,7 +420,7 @@ fn assert_keccak_trace_sound(air: &KeccakVmAir, trace: RowMajorMatrix<F>) {
         .build()
         .load_air_proving_ctx((
             Arc::new(KeccakLocalSoundnessTestAir { sub_air: *air }) as AirRef<TestSC>,
-            AirProvingContext::simple_no_pis(Arc::new(trace)),
+            AirProvingContext::simple_no_pis(trace),
         ))
         .finalize();
 
@@ -461,14 +465,9 @@ fn enabled_partial_tail_height_64_is_rejected() {
     );
 
     let air = harness.air;
-    let mut ctx: AirProvingContext<CpuBackend<TestSC>> =
+    let ctx: AirProvingContext<CpuBackend<TestSC>> =
         harness.chip.generate_proving_ctx(harness.arena);
-    let mut trace = Arc::into_inner(
-        ctx.common_main
-            .take()
-            .expect("keccak main trace should be present"),
-    )
-    .expect("keccak main trace should not be shared");
+    let mut trace = ctx.common_main;
 
     assert_eq!(trace.height(), expected_height);
     let tail_start = trace.height() - trace.height() % NUM_ROUNDS;

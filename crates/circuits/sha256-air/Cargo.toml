@@ -17,4 +17,8 @@ openvm-circuit = { workspace = true, features = ["test-utils"] }
 
 [features]
 default = ["parallel"]
-parallel = ["openvm-stark-backend/parallel", "openvm-circuit-primitives/parallel"]
+parallel = [
+    "openvm-stark-backend/parallel",
+    "openvm-circuit-primitives/parallel",
+    "openvm-circuit/parallel", # dev-dependency only
+]
