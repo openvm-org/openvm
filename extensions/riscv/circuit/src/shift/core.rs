@@ -210,18 +210,21 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        // Range-check the read columns b, c to [0, 256). Once the memory bus
-        // packs to 4 field elements, pairs of limbs share a single
-        // field element on the bus; without local u8 checks the prover could
-        // re-split the packed value across (b[2i], b[2i+1]) or (c[2i], c[2i+1]).
-        for i in 0..(NUM_LIMBS / 2) {
-            self.bitwise_lookup_bus
-                .send_range(b[i * 2], b[i * 2 + 1])
-                .eval(builder, is_valid.clone());
-            self.bitwise_lookup_bus
-                .send_range(c[i * 2], c[i * 2 + 1])
-                .eval(builder, is_valid.clone());
-        }
+        // Note: no explicit u8 range-check on the read columns `b` and `c`.
+        // The packed-bus pair contribution
+        // `256^(2i) * b[2i] + 256^(2i+1) * b[2i+1]` is invariant under any
+        // non-canonical `(b_low + 256m, b_high - m)` decomposition, so the
+        // integer value of `b` is uniquely determined by the bus messages.
+        // The shift constraint (per limb_shift_marker i)
+        //   `a[j] = prev_carry + b[j-i] * bit_multiplier - 256 * carry[j-i]`
+        // for SLL (and the SRL/SRA analogue) is linear in `b[j-i]`, so
+        // `Σ_j 256^j * a[j]` is forced to equal `B * 2^bit_shift` mod 2^64
+        // regardless of the prover-chosen decomposition. The send_range
+        // loop above range-checks `a`; that pins `a` to canonical u8 limbs.
+        // The shift amount `c[0]` is constrained via the
+        // `(c[0] - limb_shift*LIMB_BITS - bit_shift) / num_bits` range
+        // check above; `c[1..NUM_LIMBS]` are unused garbage columns whose
+        // bus values are pinned by the bus invariant.
 
         for carry in cols.bit_shift_carry {
             self.range_bus
@@ -388,16 +391,11 @@ where
                 .request_range(pair[0] as u32, pair[1] as u32);
         }
 
-        // Mirror the AIR's read-side `send_range(b[i*2], b[i*2+1])` and the
-        // analogous c-pair sends so the bitwise-lookup bus stays balanced.
-        for pair in record.b.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32, pair[1] as u32);
-        }
-        for pair in record.c.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32, pair[1] as u32);
-        }
+        // No `b`/`c` range request: the AIR no longer emits the
+        // `send_range(b[i*2], b[i*2+1])` / `send_range(c[i*2], c[i*2+1])`
+        // interactions (see AIR comment — the packed-bus pair contribution
+        // is decomposition-invariant, and the shift constraint is linear
+        // in `b`).
 
         let num_bits_log = (NUM_LIMBS * LIMB_BITS).ilog2();
         self.range_checker_chip.add_count(
