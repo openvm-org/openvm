@@ -24,7 +24,7 @@ use crate::{
     primitives::Chip,
     system::memory::{
         controller::DIGEST_WIDTH, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
-        TimestampedEquipartition,
+        TimestampedEquipartition, BUS_LEAF_STRIDE,
     },
 };
 
@@ -126,7 +126,7 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
 
         // Each leaf splits into `BLOCKS_PER_LEAF` bus messages of `BLOCK_FE_WIDTH` cells,
         // addressed by `bus_ptr = BUS_LEAF_STRIDE * leaf_label + BUS_BLOCK_STRIDE * block_idx`.
-        let leaf_stride_f = AB::F::from_usize(crate::system::memory::BUS_LEAF_STRIDE);
+        let leaf_stride_f = AB::F::from_usize(BUS_LEAF_STRIDE);
         let block_stride_f = AB::F::from_usize(BUS_BLOCK_STRIDE);
         for block_idx in 0..BLOCKS_PER_LEAF {
             let offset = block_stride_f * AB::F::from_usize(block_idx);

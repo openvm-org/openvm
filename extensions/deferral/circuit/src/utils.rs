@@ -37,20 +37,20 @@ pub const COMMIT_MEMORY_OPS: usize = num_byte_memory_ops(COMMIT_NUM_BYTES);
 pub const OUTPUT_TOTAL_MEMORY_OPS: usize = num_byte_memory_ops(OUTPUT_TOTAL_BYTES);
 
 #[inline(always)]
-pub const fn num_byte_memory_ops(total_bytes: usize) -> usize {
+pub(crate) const fn num_byte_memory_ops(total_bytes: usize) -> usize {
     assert!(total_bytes.is_multiple_of(MEMORY_BLOCK_BYTES));
     total_bytes / MEMORY_BLOCK_BYTES
 }
 
 #[inline(always)]
-pub const fn num_f_memory_ops(total_cells: usize) -> usize {
+pub(crate) const fn num_f_memory_ops(total_cells: usize) -> usize {
     assert!(total_cells.is_multiple_of(BLOCK_FE_WIDTH));
     total_cells / BLOCK_FE_WIDTH
 }
 
 /// Split `TOTAL_BYTES` bytes of byte-addressed-AS data into `NUM_OPS` chunks of
 /// `MEMORY_BLOCK_BYTES` bytes each. Used for RV64_MEMORY_AS accesses.
-pub fn split_byte_memory_ops<T, const TOTAL_BYTES: usize, const NUM_OPS: usize>(
+pub(crate) fn split_byte_memory_ops<T, const TOTAL_BYTES: usize, const NUM_OPS: usize>(
     data: [T; TOTAL_BYTES],
 ) -> [[T; MEMORY_BLOCK_BYTES]; NUM_OPS] {
     assert_eq!(TOTAL_BYTES, NUM_OPS * MEMORY_BLOCK_BYTES);
@@ -58,14 +58,17 @@ pub fn split_byte_memory_ops<T, const TOTAL_BYTES: usize, const NUM_OPS: usize>(
     from_fn(|_| from_fn(|_| it.next().unwrap()))
 }
 
-pub fn join_byte_memory_ops<T, const TOTAL_BYTES: usize, const NUM_OPS: usize>(
+pub(crate) fn join_byte_memory_ops<T, const TOTAL_BYTES: usize, const NUM_OPS: usize>(
     chunks: [[T; MEMORY_BLOCK_BYTES]; NUM_OPS],
 ) -> [T; TOTAL_BYTES] {
     assert_eq!(TOTAL_BYTES, NUM_OPS * MEMORY_BLOCK_BYTES);
     chunks.into_iter().flatten().collect_array().unwrap()
 }
 
-pub fn byte_memory_op_chunk<T: Clone>(data: &[T], chunk_idx: usize) -> [T; MEMORY_BLOCK_BYTES] {
+pub(crate) fn byte_memory_op_chunk<T: Clone>(
+    data: &[T],
+    chunk_idx: usize,
+) -> [T; MEMORY_BLOCK_BYTES] {
     debug_assert!(data.len().is_multiple_of(MEMORY_BLOCK_BYTES));
     let start = chunk_idx * MEMORY_BLOCK_BYTES;
     debug_assert!(start + MEMORY_BLOCK_BYTES <= data.len());
@@ -74,7 +77,7 @@ pub fn byte_memory_op_chunk<T: Clone>(data: &[T], chunk_idx: usize) -> [T; MEMOR
 
 /// Split `TOTAL_CELLS` F cells of DEFERRAL_AS data into `NUM_OPS` chunks of
 /// `BLOCK_FE_WIDTH` cells each. Used for DEFERRAL_AS accesses.
-pub fn split_f_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
+pub(crate) fn split_f_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
     data: [T; TOTAL_CELLS],
 ) -> [[T; BLOCK_FE_WIDTH]; NUM_OPS] {
     assert_eq!(TOTAL_CELLS, NUM_OPS * BLOCK_FE_WIDTH);
@@ -82,21 +85,21 @@ pub fn split_f_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
     from_fn(|_| from_fn(|_| it.next().unwrap()))
 }
 
-pub fn join_f_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
+pub(crate) fn join_f_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
     chunks: [[T; BLOCK_FE_WIDTH]; NUM_OPS],
 ) -> [T; TOTAL_CELLS] {
     assert_eq!(TOTAL_CELLS, NUM_OPS * BLOCK_FE_WIDTH);
     chunks.into_iter().flatten().collect_array().unwrap()
 }
 
-pub fn f_memory_op_chunk<T: Clone>(data: &[T], chunk_idx: usize) -> [T; BLOCK_FE_WIDTH] {
+pub(crate) fn f_memory_op_chunk<T: Clone>(data: &[T], chunk_idx: usize) -> [T; BLOCK_FE_WIDTH] {
     debug_assert!(data.len().is_multiple_of(BLOCK_FE_WIDTH));
     let start = chunk_idx * BLOCK_FE_WIDTH;
     debug_assert!(start + BLOCK_FE_WIDTH <= data.len());
     from_fn(|i| data[start + i].clone())
 }
 
-pub fn byte_commit_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(
+pub(crate) fn byte_commit_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(
     byte_commit: &[T],
 ) -> [F; DIGEST_SIZE] {
     assert_eq!(byte_commit.len(), COMMIT_NUM_BYTES);
@@ -110,7 +113,7 @@ pub fn byte_commit_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(
 /// Compose a `COMMIT_NUM_U16S`-long slice of u16 cells (little-endian within
 /// each F element) into a `DIGEST_SIZE`-array of F values. Mirrors
 /// [`byte_commit_to_f`] but on u16 cells.
-pub fn u16_commit_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(
+pub(crate) fn u16_commit_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(
     u16_commit: &[T],
 ) -> [F; DIGEST_SIZE] {
     assert_eq!(u16_commit.len(), COMMIT_NUM_U16S);
@@ -121,7 +124,9 @@ pub fn u16_commit_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(
         .unwrap()
 }
 
-pub fn f_commit_to_bytes<F: PrimeField32>(f_commit: &[F; DIGEST_SIZE]) -> [u8; COMMIT_NUM_BYTES] {
+pub(crate) fn f_commit_to_bytes<F: PrimeField32>(
+    f_commit: &[F; DIGEST_SIZE],
+) -> [u8; COMMIT_NUM_BYTES] {
     f_commit
         .iter()
         .flat_map(|f| f.as_canonical_u32().to_le_bytes())
@@ -131,7 +136,9 @@ pub fn f_commit_to_bytes<F: PrimeField32>(f_commit: &[F; DIGEST_SIZE]) -> [u8; C
 
 /// Decompose a `DIGEST_SIZE` array of F values into a `COMMIT_NUM_U16S` array of
 /// u16 cells (little-endian within each F element).
-pub fn f_commit_to_u16s<F: PrimeField32>(f_commit: &[F; DIGEST_SIZE]) -> [u16; COMMIT_NUM_U16S] {
+pub(crate) fn f_commit_to_u16s<F: PrimeField32>(
+    f_commit: &[F; DIGEST_SIZE],
+) -> [u16; COMMIT_NUM_U16S] {
     f_commit
         .iter()
         .flat_map(|f| {
@@ -142,7 +149,7 @@ pub fn f_commit_to_u16s<F: PrimeField32>(f_commit: &[F; DIGEST_SIZE]) -> [u16; C
         .unwrap()
 }
 
-pub fn bytes_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(register: &[T]) -> F {
+pub(crate) fn bytes_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(register: &[T]) -> F {
     assert_eq!(register.len(), F_NUM_BYTES);
     register.iter().enumerate().fold(F::ZERO, |acc, (i, limb)| {
         acc + (limb.clone().into() * F::from_usize(1 << (i * RV64_CELL_BITS)))
@@ -150,14 +157,14 @@ pub fn bytes_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(register: &[T]
 }
 
 /// Sum `limbs[i] * 2^(16*i)` over the u16 limbs of `register`.
-pub fn u16s_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(register: &[T]) -> F {
+pub(crate) fn u16s_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(register: &[T]) -> F {
     assert_eq!(register.len(), F_NUM_U16S);
     register.iter().enumerate().fold(F::ZERO, |acc, (i, limb)| {
         acc + (limb.clone().into() * F::from_usize(1 << (i * 16)))
     })
 }
 
-pub fn combine_output<T>(
+pub(crate) fn combine_output<T>(
     output_commit: impl IntoIterator<Item = T>,
     output_len: [T; OUTPUT_LEN_NUM_BYTES],
 ) -> [T; OUTPUT_TOTAL_BYTES] {
@@ -168,7 +175,7 @@ pub fn combine_output<T>(
         .unwrap()
 }
 
-pub fn split_output<T>(
+pub(crate) fn split_output<T>(
     output: [T; OUTPUT_TOTAL_BYTES],
 ) -> ([T; COMMIT_NUM_BYTES], [T; OUTPUT_LEN_NUM_BYTES]) {
     let mut it = output.into_iter();
