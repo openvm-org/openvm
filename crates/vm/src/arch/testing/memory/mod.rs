@@ -177,8 +177,8 @@ where
 
 /// Packs `MEMORY_BLOCK_BYTES` u8-typed F values into `BLOCK_FE_WIDTH` packed F
 /// values via base-256: `out[i] = data[ratio*i] + 256 * data[ratio*i+1] + …`.
-/// Matches `bridge::pack_for_bus` so the testing chip's bus message exactly
-/// equals the bus message a real chip would emit through the legacy bridge.
+/// Matches `bridge::pack_u8_for_bus` so the testing chip's bus message exactly
+/// equals the bus message emitted by byte-shaped chips.
 fn pack_bytes_for_bus<F: VmField>(data: &[F]) -> [F; BLOCK_FE_WIDTH] {
     assert_eq!(data.len(), MEMORY_BLOCK_BYTES);
     let ratio = MEMORY_BLOCK_BYTES / BLOCK_FE_WIDTH;

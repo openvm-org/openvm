@@ -158,7 +158,7 @@ impl XorinVmAir {
             register_aux
         ) {
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(AB::Expr::from_u32(RV64_REGISTER_AS), ptr),
                     value,
                     timestamp.clone(),
@@ -238,7 +238,7 @@ impl XorinVmAir {
             let should_read = is_enabled * not(is_padding);
 
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), ptr),
                     pack_u8_for_bus::<AB>(&[
                         input[0].into(),
@@ -271,7 +271,7 @@ impl XorinVmAir {
             let should_read = is_enabled * not(is_padding);
 
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), ptr),
                     pack_u8_for_bus::<AB>(&[
                         input[0].into(),
@@ -347,7 +347,7 @@ impl XorinVmAir {
             let ptr = local.instruction.buffer_ptr + AB::F::from_usize(i * MEMORY_BLOCK_BYTES);
 
             self.memory_bridge
-                .write_4(
+                .write(
                     MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), ptr),
                     pack_u8_for_bus::<AB>(&[
                         output[0].into(),

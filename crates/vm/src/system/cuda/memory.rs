@@ -462,9 +462,8 @@ mod tests {
             MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
         inventory.set_initial_memory(&memory.memory);
 
-        // Pack 8 bytes (one MEMORY_BLOCK_BYTES block) into 4 u16-celled F
-        // values via little-endian; matches the storage layout the boundary
-        // chip sees post Stage 1.6 flip.
+        // Pack one byte-view block into little-endian u16 cells, matching the
+        // storage layout seen by the boundary chip.
         let pack_block = |bytes: [u8; MEMORY_BLOCK_BYTES]| -> [F; BLOCK_FE_WIDTH] {
             let mut out = [F::ZERO; BLOCK_FE_WIDTH];
             for (i, slot) in out.iter_mut().enumerate() {

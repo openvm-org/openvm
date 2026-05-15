@@ -102,7 +102,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
             }
         });
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs1_ptr),
                 pack_u8_for_bus::<AB>(&rs1_data),
                 timestamp_pp(),
@@ -118,7 +118,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
             }
         });
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs2_ptr),
                 pack_u8_for_bus::<AB>(&rs2_data),
                 timestamp_pp(),
@@ -147,7 +147,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
             }
         });
         self.memory_bridge
-            .write_4(
+            .write(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rd_ptr),
                 pack_u8_for_bus::<AB>(&write_data),
                 timestamp_pp(),

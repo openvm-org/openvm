@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use itertools::izip;
 use ndarray::s;
 use openvm_circuit::{
-    arch::ExecutionBridge,
+    arch::{ExecutionBridge, BLOCK_FE_WIDTH},
     system::{
         memory::{
             offline_checker::{pack_u8_for_bus, MemoryBridge},
@@ -220,7 +220,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 std::array::from_fn(|i| *val.get(i).unwrap());
             let data = expand_to_rv64_register(&val_arr);
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(AB::Expr::from_u32(RV64_REGISTER_AS), ptr),
                     pack_u8_for_bus::<AB>(&data),
                     timestamp_pp(),
@@ -288,7 +288,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 });
             let chunk_expr: [AB::Expr; SHA2_READ_SIZE] = chunk.map(Into::into);
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_MEMORY_AS),
                         input_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
@@ -312,17 +312,16 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         // to `BLOCK_FE_WIDTH` u16 cells consumed from the column. The bus payload is just those
         // cells (no byte→u16 packing).
         for i in 0..C::STATE_READS {
-            let chunk: [AB::Expr; openvm_circuit::arch::BLOCK_FE_WIDTH] =
-                std::array::from_fn(|j| {
-                    (*local
-                        .block
-                        .prev_state
-                        .get(i * openvm_circuit::arch::BLOCK_FE_WIDTH + j)
-                        .expect("prev_state index out of bounds"))
-                    .into()
-                });
+            let chunk: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|j| {
+                (*local
+                    .block
+                    .prev_state
+                    .get(i * BLOCK_FE_WIDTH + j)
+                    .expect("prev_state index out of bounds"))
+                .into()
+            });
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_MEMORY_AS),
                         state_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
@@ -353,17 +352,16 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         // `BLOCK_FE_WIDTH` u16 cells from the column. The bus payload is those cells (no
         // byte→u16 packing).
         for i in 0..C::STATE_WRITES {
-            let chunk: [AB::Expr; openvm_circuit::arch::BLOCK_FE_WIDTH] =
-                std::array::from_fn(|j| {
-                    (*local
-                        .block
-                        .new_state
-                        .get(i * openvm_circuit::arch::BLOCK_FE_WIDTH + j)
-                        .expect("new_state index out of bounds"))
-                    .into()
-                });
+            let chunk: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|j| {
+                (*local
+                    .block
+                    .new_state
+                    .get(i * BLOCK_FE_WIDTH + j)
+                    .expect("new_state index out of bounds"))
+                .into()
+            });
             self.memory_bridge
-                .write_4(
+                .write(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_MEMORY_AS),
                         dst_ptr_val.clone() + AB::F::from_usize(i * SHA2_WRITE_SIZE),

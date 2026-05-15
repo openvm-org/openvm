@@ -9,10 +9,8 @@ mod trace;
 pub use air::*;
 pub use trace::*;
 
-/// Number of limbs the canonicity sub-AIR walks over. Set to `F_NUM_U16S` (2)
-/// after the u16 cell-shape migration. The sub-AIR is generic over this constant
-/// (and the corresponding limb bit-width) so the same proof template covers any
-/// limb decomposition of an F element.
+/// Number of limbs the canonicity sub-AIR walks over. The sub-AIR is generic
+/// over this constant and the corresponding limb bit-width.
 pub const CANONICITY_NUM_LIMBS: usize = F_NUM_U16S;
 /// Bit width of each limb the canonicity sub-AIR walks over.
 pub const CANONICITY_LIMB_BITS: usize = 16;

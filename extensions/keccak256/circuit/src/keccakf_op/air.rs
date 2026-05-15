@@ -76,7 +76,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         let buffer_ptr_data: [AB::Expr; BLOCK_FE_WIDTH] =
             expand_to_rv64_block(&local.buffer_ptr_limbs);
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), rd_ptr),
                 buffer_ptr_data,
                 timestamp_pp(),
@@ -142,7 +142,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
                 std::array::from_fn(|i| prev_word[i].into());
             let data: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|i| post_word[i].into());
             self.memory_bridge
-                .write_4_with_prev(
+                .write_with_prev(
                     MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), ptr),
                     data,
                     prev_data,

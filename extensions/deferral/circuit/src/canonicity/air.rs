@@ -12,9 +12,8 @@ use super::{CanonicityAuxCols, CanonicityIo, CANONICITY_LIMB_BITS, CANONICITY_NU
 /// - It is assumed that each limb has been range checked to `CANONICITY_LIMB_BITS`.
 /// - `eval` returns a value to be range checked (in `[0, 2^CANONICITY_LIMB_BITS)`).
 ///
-/// The lexicographic comparison is granularity-agnostic — it works against
-/// any limb decomposition of `F::ORDER_U32`. For the u16-cell migration the
-/// AIR walks 2 u16 limbs MSL-first; before the migration it walked 4 bytes.
+/// The lexicographic comparison is granularity-agnostic: it walks the
+/// configured limbs MSL-first and checks them against `F::ORDER_U32`.
 pub struct CanonicitySubAir;
 
 impl<AB: InteractionBuilder> SubAir<AB> for CanonicitySubAir

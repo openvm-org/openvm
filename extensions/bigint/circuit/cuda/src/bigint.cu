@@ -128,7 +128,7 @@ extern "C" int _alu256_tracegen(
 
 // Heap branch adapter instantiation for 256-bit operations
 // NUM_READS = 2, BLOCKS_PER_READ = INT256_NUM_BLOCKS (4),
-// READ_SIZE = BLOCK_FE_WIDTH (4 u16 cells = 8 bytes per block) post Pattern B u16 migration.
+// READ_SIZE = BLOCK_FE_WIDTH (4 u16 cells = 8 bytes per block).
 using Rv64VecHeapBranchAdapter256 =
     Rv64VecHeapBranchAdapter<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>;
 
@@ -200,7 +200,7 @@ extern "C" int _branch_equal256_tracegen(
     return CHECK_KERNEL();
 }
 
-// Pattern B u16 LessThan256: u16 cells, READ_SIZE/WRITE_SIZE = BLOCK_FE_WIDTH (in u16 cells).
+// U16 LessThan256: READ_SIZE/WRITE_SIZE = BLOCK_FE_WIDTH u16 cells.
 using Rv64VecHeapU16Adapter256 =
     Rv64VecHeapU16Adapter<NUM_READS, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH, BLOCK_FE_WIDTH>;
 

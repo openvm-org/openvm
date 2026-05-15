@@ -1,5 +1,7 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::BUS_PTR_SCALE;
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
@@ -334,12 +336,10 @@ fn positive_storew_public_values_test() {
     tester.simple_test().expect("Verification failed");
 }
 
-// The loadstore adapter today emits one legacy 8-data `bridge.write` call per
-// access; with `mem_as = DEFERRAL_AS` (F-celled), this packs 8 F values to 4
-// via base-256 — a bus shape that does not match the boundary AIR's two
-// 4-element messages per leaf for F-celled storage. Until the loadstore F-AS
-// path is refactored to emit two `read_4` / `write_4` calls (mirroring the
-// deferral chip's F-celled bus shape), STORED-to-DEFERRAL_AS is unsupported.
+// The loadstore adapter is byte-shaped. With `mem_as = DEFERRAL_AS` (F-celled),
+// its single packed payload does not match the boundary AIR's two
+// `BLOCK_FE_WIDTH` messages per leaf. STORED-to-DEFERRAL_AS is unsupported
+// until the F-AS path emits the same shape as the deferral chips.
 //
 // TODO: refactor the loadstore adapter to emit two BLOCK_FE_WIDTH-sized bus
 // messages on F-celled address spaces and re-enable this test.
@@ -827,11 +827,10 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[test_case(STOREB, 100)]
 #[test_case(STOREH, 100)]
 fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
-    use openvm_circuit::arch::BUS_PTR_SCALE;
     let mut rng = create_seeded_rng();
-    // post Stage 1.6 flip: max bus_ptr = `BUS_PTR_SCALE * (num_cells - 1)` must
-    // fit in `pointer_max_bits` bits. Bump `pointer_max_bits` by
-    // `log2(BUS_PTR_SCALE)` so the existing `num_cells = 1 << 20` budgets fit.
+    // max bus_ptr = `BUS_PTR_SCALE * (num_cells - 1)` must fit in
+    // `pointer_max_bits` bits. Bump by `log2(BUS_PTR_SCALE)` so the existing
+    // `num_cells = 1 << 20` budgets fit.
     let mut mem_config = MemoryConfig {
         pointer_max_bits: 20 + BUS_PTR_SCALE.trailing_zeros() as usize,
         ..Default::default()

@@ -1,4 +1,4 @@
-//! Pattern B u16-shaped variant of [`Rv64BaseAluAdapter`] dedicated to chips whose ALU
+//! U16-shaped variant of [`Rv64BaseAluAdapter`] dedicated to chips whose ALU
 //! operands and results are u16-celled (currently: `less_than`).
 //!
 //! Layout differences vs the u8 adapter:
@@ -65,7 +65,7 @@ pub struct Rv64BaseAluAdapterU16Cols<T> {
     pub writes_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
 
-/// Pattern B u16 ALU adapter. Same shape as [`crate::adapters::Rv64BaseAluAdapterAir`] but the
+/// U16 ALU adapter. Same shape as [`crate::adapters::Rv64BaseAluAdapterAir`] but the
 /// read/write data widths are `BLOCK_FE_WIDTH` u16 cells (= 8 bytes per register).
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(Rv64BaseAluAdapterU16Cols<u16>)]
@@ -140,7 +140,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterU16Air {
             .eval(builder, ctx.instruction.is_valid.clone() - local.rs2_as);
 
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs1_ptr),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
@@ -152,7 +152,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterU16Air {
             .when(local.rs2_as)
             .assert_one(ctx.instruction.is_valid.clone());
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(local.rs2_as, local.rs2),
                 ctx.reads[1].clone(),
                 timestamp_pp(),
@@ -161,7 +161,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterU16Air {
             .eval(builder, local.rs2_as);
 
         self.memory_bridge
-            .write_4(
+            .write(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp_pp(),

@@ -41,4 +41,5 @@ inline constexpr size_t U16_CELL_SIZE = 2;
 inline constexpr uint32_t DEFERRAL_AS = 4;
 
 static_assert(BLOCK_FE_WIDTH * BUS_PTR_SCALE == MEMORY_BLOCK_BYTES, "memory layout invariant");
+static_assert(BLOCK_FE_WIDTH * U16_CELL_SIZE == MEMORY_BLOCK_BYTES, "u16 byte-view invariant");
 static_assert(BLOCKS_PER_LEAF * BLOCK_FE_WIDTH == DIGEST_WIDTH, "merkle layout invariant");

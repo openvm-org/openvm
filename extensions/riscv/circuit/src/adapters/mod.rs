@@ -1,7 +1,7 @@
 use std::ops::Mul;
 
 use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtxTrait, VmStateMut},
+    arch::{execution_mode::ExecutionCtxTrait, VmStateMut, BLOCK_FE_WIDTH},
     system::memory::{
         merkle::public_values::PUBLIC_VALUES_AS,
         online::{GuestMemory, TracingMemory},
@@ -158,11 +158,9 @@ pub fn timed_read<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // SAFETY:
-    // - Address spaces RV64_REGISTER_AS / RV64_MEMORY_AS / PUBLIC_VALUES_AS are u16-celled post
-    //   Stage 1.6; passing `T = u8` routes through the byte-view dispatch on `TracingMemory::read`,
-    //   which requires `N = MEMORY_BLOCK_BYTES`. `ptr` is the byte pointer (= bus pointer for u16
-    //   ASes).
+    // SAFETY: byte-addressed RV64/public-values ASes are u16-celled; passing
+    // `T = u8` routes through `TracingMemory`'s byte-view dispatch. `ptr` is
+    // the byte pointer (= bus pointer for u16 ASes).
     #[cfg(feature = "legacy-v1-3-mem-align")]
     if address_space == RV64_MEMORY_AS {
         unsafe { memory.read::<u8, N>(address_space, ptr) }
@@ -188,7 +186,7 @@ pub fn timed_write<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // SAFETY: see `timed_read` — u8 byte-view dispatch against u16-celled storage.
+    // SAFETY: see `timed_read`.
     #[cfg(feature = "legacy-v1-3-mem-align")]
     if address_space == RV64_MEMORY_AS {
         unsafe { memory.write::<u8, N>(address_space, ptr, data) }
@@ -215,7 +213,7 @@ pub fn tracing_read<const N: usize>(
     data
 }
 
-/// Native u16-typed timestamped read. Pattern B chips that carry u16 limbs use this instead of
+/// Native u16-typed timestamped read. Chips that carry u16 limbs use this instead of
 /// `timed_read` (which routes through the u8 byte-view).
 ///
 /// `byte_ptr` is the byte address (= bus pointer for u16-celled ASes); it is divided by the cell
@@ -232,8 +230,7 @@ pub fn timed_read_u16<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // SAFETY: Address spaces RV64_REGISTER_AS / RV64_MEMORY_AS / PUBLIC_VALUES_AS are u16-celled
-    // post Stage 1.6; native u16 typed read hits the matching cell-type fast path.
+    // SAFETY: native u16 typed read hits the matching cell-type path.
     debug_assert_eq!(
         byte_ptr & 1,
         0,
@@ -428,17 +425,14 @@ pub fn expand_to_rv64_register<V: Clone + Into<T>, T: PrimeCharacteristicRing, c
     })
 }
 
-/// Expand `N` u16 limbs to `BLOCK_FE_WIDTH` (4) by zero-padding the upper limbs. Pattern B
-/// counterpart to [`expand_to_rv64_register`] for chips that carry u16 columns and emit a
-/// 4-cell bus message directly.
-pub fn expand_to_rv64_block<V, T, const N: usize>(
-    limbs: &[V; N],
-) -> [T; openvm_circuit::arch::BLOCK_FE_WIDTH]
+/// Expand `N` u16 limbs to `BLOCK_FE_WIDTH` (4) by zero-padding the upper limbs.
+/// Chips that carry u16 columns can emit this 4-cell bus message directly.
+pub fn expand_to_rv64_block<V, T, const N: usize>(limbs: &[V; N]) -> [T; BLOCK_FE_WIDTH]
 where
     V: Clone + Into<T>,
     T: PrimeCharacteristicRing,
 {
-    const { assert!(N <= openvm_circuit::arch::BLOCK_FE_WIDTH) }
+    const { assert!(N <= BLOCK_FE_WIDTH) }
     std::array::from_fn(|i| {
         if i < N {
             limbs[i].clone().into()

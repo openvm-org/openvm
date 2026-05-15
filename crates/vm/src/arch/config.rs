@@ -119,18 +119,15 @@ pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 // invariants below guarantee the derived constants are integer-valued.
 // =========================================================================
 
-/// Bytes per logical guest-memory access (e.g. RV64 8-byte block). Stays 8
-/// regardless of cell type; used in byte-view APIs and extension chips that
-/// reason about byte-aligned chunks.
+/// Bytes per logical guest-memory access (e.g. an RV64 8-byte block). Used in
+/// byte-view APIs and extension chips that reason about byte-aligned chunks.
 pub const MEMORY_BLOCK_BYTES: usize = 8;
 
 /// Normalized bus-pointer scale: `bus_ptr = BUS_PTR_SCALE * cell_idx`.
 ///
-/// Flipped from 1 to 2 in the Stage 1.6 cell-type flip: u16-celled storage
-/// for RV64 register/memory/public-values ASes, so the normalized bus
-/// pointer is `2 * cell_idx = byte_ptr` (since cell_size = 2 for u16). For
-/// F ASes (DEFERRAL) the same scale applies to the F-cell index — proof-
-/// level normalization, not a storage byte offset.
+/// For u16-celled RV64 register/memory/public-values ASes this equals the
+/// byte pointer. For F-celled ASes the same scale is proof-level address
+/// normalization, not a storage byte offset.
 pub const BUS_PTR_SCALE: usize = 2;
 
 // --- Derived constants below ---
@@ -240,10 +237,8 @@ impl Default for MemoryConfig {
     fn default() -> Self {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
-        // Storage is u16-celled for RV64 register/memory/public-values ASes
-        // post Stage 1.6 flip; `num_cells` is in cells, not bytes. Each u16
-        // cell holds `U16_CELL_SIZE` bytes, so
-        // byte-capacity = `num_cells * U16_CELL_SIZE`.
+        // Storage is u16-celled for RV64 register/memory/public-values ASes;
+        // `num_cells` is in cells, not bytes.
         // 32 × 8-byte registers = 256 bytes = 128 u16 cells.
         addr_spaces[RV64_REGISTER_AS as usize].num_cells =
             NUM_RV64_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;

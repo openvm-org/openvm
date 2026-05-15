@@ -91,7 +91,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
             .assert_zero(write_count);
 
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rs1_ptr),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
@@ -100,7 +100,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.memory_bridge
-            .write_4(
+            .write(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
@@ -154,7 +154,7 @@ pub struct Rv64JalrAdapterRecord {
     pub writes_aux: Rv64JalrAdapterWriteAuxRecord,
 }
 
-/// Pattern B: store the previous data as u16 cells to mirror the bus shape.
+/// Store the previous data as u16 cells to mirror the bus shape.
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug, Default, Clone, Copy)]
 pub struct Rv64JalrAdapterWriteAuxRecord {

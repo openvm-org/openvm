@@ -45,7 +45,7 @@ pub struct Rv64CondRdWriteAdapterCols<T> {
     pub needs_write: T,
 }
 
-/// Pattern B u16: this adapter doesn't read anything and writes `BLOCK_FE_WIDTH` u16 cells to
+/// U16 path: this adapter doesn't read anything and writes `BLOCK_FE_WIDTH` u16 cells to
 /// `[a:8]_d` (d == 1).
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(Rv64RdWriteAdapterCols<u8>)]
@@ -101,7 +101,7 @@ impl Rv64RdWriteAdapterAir {
             (ctx.instruction.is_valid.clone(), AB::Expr::ZERO)
         };
         self.memory_bridge
-            .write_4(
+            .write(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp,
@@ -185,7 +185,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64CondRdWriteAdapterAir {
     }
 }
 
-/// Pattern B u16: this adapter doesn't read anything and writes `BLOCK_FE_WIDTH` u16 cells.
+/// U16 path: this adapter doesn't read anything and writes `BLOCK_FE_WIDTH` u16 cells.
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug, Clone)]
 pub struct Rv64RdWriteAdapterRecord {

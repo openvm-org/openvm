@@ -16,12 +16,11 @@ struct alignas(32) digest_t {
 
 // `ADDR_SPACE_IDX` is the address space minus `ADDR_SPACE_OFFSET` (which is 1)
 //
-// Address spaces 1, 2, 3 (idx 0, 1, 2) are u16-celled post Stage 1.6 flip: each
-// memory cell occupies two consecutive bytes in `data` in little-endian order,
-// so cell `k` lifts to `Fp(uint16_t(data[2*k]) | (uint16_t(data[2*k+1]) << 8))`.
+// Address spaces before DEFERRAL_AS are u16-celled: each memory cell occupies
+// two consecutive bytes in `data` in little-endian order.
 //
-// Address space >= 4 (idx >= 3) is field-celled (DEFERRAL_AS): each cell is a
-// raw `Fp` value in the byte buffer.
+// DEFERRAL_AS and later address spaces are field-celled: each cell is a raw
+// `Fp` value in the byte buffer.
 template <int ADDR_SPACE_IDX>
 __global__ void merkle_tree_init(uint8_t *__restrict__ data, digest_t *__restrict__ out) {
     auto gid = blockDim.x * blockIdx.x + threadIdx.x;
@@ -29,13 +28,13 @@ __global__ void merkle_tree_init(uint8_t *__restrict__ data, digest_t *__restric
     Fp cells[CELLS] = {0};
 #pragma unroll
     for (size_t i = 0; i < CELLS_OUT; ++i) {
-        if constexpr (ADDR_SPACE_IDX < 3) {
+        if constexpr (ADDR_SPACE_IDX < DEFERRAL_AS - 1) {
             // u16 cells, little-endian.
-            auto byte_off = 2 * (CELLS_OUT * gid + i);
+            auto byte_off = U16_CELL_SIZE * (DIGEST_WIDTH * gid + i);
             uint32_t cell = uint32_t(data[byte_off]) | (uint32_t(data[byte_off + 1]) << 8);
             cells[i] = Fp(cell);
         } else {
-            cells[i] = reinterpret_cast<Fp *>(data)[CELLS_OUT * gid + i];
+            cells[i] = reinterpret_cast<Fp *>(data)[DIGEST_WIDTH * gid + i];
         }
     }
 

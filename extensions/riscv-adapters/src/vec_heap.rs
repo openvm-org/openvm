@@ -9,6 +9,7 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         ExecutionBridge, ExecutionState, VecHeapAdapterInterface, VmAdapterAir, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{
@@ -157,7 +158,7 @@ impl<
             &cols.rd_read_aux,
         ))) {
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), ptr),
                     pack_u8_for_bus::<AB>(&expand_to_rv64_register(&val)),
                     timestamp_pp(),
@@ -202,14 +203,13 @@ impl<
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux,) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
                 debug_assert_eq!(
-                    READ_SIZE,
-                    openvm_circuit::arch::MEMORY_BLOCK_BYTES,
+                    READ_SIZE, MEMORY_BLOCK_BYTES,
                     "VecHeap adapter only supports READ_SIZE = MEMORY_BLOCK_BYTES"
                 );
-                let read_array: [AB::Expr; openvm_circuit::arch::MEMORY_BLOCK_BYTES] =
+                let read_array: [AB::Expr; MEMORY_BLOCK_BYTES] =
                     std::array::from_fn(|j| read[j].clone());
                 self.memory_bridge
-                    .read_4(
+                    .read(
                         MemoryAddress::new(
                             e,
                             address.clone() + AB::Expr::from_usize(i * READ_SIZE),
@@ -225,14 +225,13 @@ impl<
         // Writes to heap
         for (i, (write, aux)) in zip(ctx.writes, &cols.writes_aux).enumerate() {
             debug_assert_eq!(
-                WRITE_SIZE,
-                openvm_circuit::arch::MEMORY_BLOCK_BYTES,
+                WRITE_SIZE, MEMORY_BLOCK_BYTES,
                 "VecHeap adapter only supports WRITE_SIZE = MEMORY_BLOCK_BYTES"
             );
-            let write_array: [AB::Expr; openvm_circuit::arch::MEMORY_BLOCK_BYTES] =
+            let write_array: [AB::Expr; MEMORY_BLOCK_BYTES] =
                 std::array::from_fn(|j| write[j].clone());
             self.memory_bridge
-                .write_4(
+                .write(
                     MemoryAddress::new(e, rd_val_f.clone() + AB::Expr::from_usize(i * WRITE_SIZE)),
                     pack_u8_for_bus::<AB>(&write_array),
                     timestamp_pp(),

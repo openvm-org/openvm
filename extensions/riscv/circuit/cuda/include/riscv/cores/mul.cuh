@@ -60,7 +60,7 @@ template <size_t NUM_LIMBS> struct MultiplicationCore {
             range_tuple_checker.add_count(vals);
         }
 
-        // Mirror the AIR's `send_range(b[i], c[i])` added in Stage 1.4.
+        // Mirror the AIR's `send_range(b[i], c[i])`.
 #pragma unroll
         for (size_t i = 0; i < NUM_LIMBS; i++) {
             bitwise_lookup.add_range(record.b[i], record.c[i]);

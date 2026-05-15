@@ -169,11 +169,10 @@ fn rand_auipc_test() {
 // NEGATIVE TESTS
 //
 // Given a fake trace of a single operation, setup a chip and run the test. We replace
-// part of the trace and check that the chip throws the expected error. Post Pattern B
-// u16 migration: rd_data is `[T; 2]` u16 (was `[T; 4]` u8), and `pc_limbs` is no longer
-// a column — the chip recovers `pc` via the composite-carry decomposition
-// `pc + (imm << 8) = rd[0] + rd[1] * 2^16 + carry * 2^32`, so prank-pc tests now target
-// rd_data + imm_limbs directly.
+// part of the trace and check that the chip throws the expected error. `rd_data` is
+// `[T; 2]` u16, and `pc_limbs` is not a column: the chip recovers `pc` via the composite-carry
+// decomposition `pc + (imm << 8) = rd[0] + rd[1] * 2^16 + carry * 2^32`, so prank-pc tests now
+// target rd_data + imm_limbs directly.
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -300,7 +299,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64RdWriteAdapterCols<F> = adapter_row.borrow_mut();
-        // Pattern B: prev_data is `[F; BLOCK_FE_WIDTH=4]` u16 cells; bump one to a different
+        // prev_data is `[F; BLOCK_FE_WIDTH=4]` u16 cells; bump one to a different
         // canonical u16 value.
         adapter_cols.rd_aux_cols.prev_data[1] = F::from_u32(1);
         *trace = RowMajorMatrix::new(trace_row, trace.width());

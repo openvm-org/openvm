@@ -113,7 +113,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterAir {
             .eval(builder, ctx.instruction.is_valid.clone() - local.rs2_as);
 
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs1_ptr),
                 pack_u8_for_bus::<AB>(&ctx.reads[0].clone()),
                 timestamp_pp(),
@@ -126,7 +126,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterAir {
             .when(local.rs2_as)
             .assert_one(ctx.instruction.is_valid.clone());
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(local.rs2_as, local.rs2),
                 pack_u8_for_bus::<AB>(&ctx.reads[1].clone()),
                 timestamp_pp(),
@@ -135,7 +135,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterAir {
             .eval(builder, local.rs2_as);
 
         self.memory_bridge
-            .write_4(
+            .write(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rd_ptr),
                 pack_u8_for_bus::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),

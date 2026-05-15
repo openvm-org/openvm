@@ -172,8 +172,7 @@ where
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
         // Write pointer in `MEMORY_BLOCK_BYTES`-byte chunks via the byte-view
-        // dispatch (`MemoryTester::write::<MEMORY_BLOCK_BYTES>`) so this works
-        // uniformly against u16-celled storage post Stage 1.6 flip.
+        // dispatch so this works uniformly against u16-celled storage.
         // The pointer is `RV64_REGISTER_NUM_LIMBS` bytes (64-bit for RV64).
         let ptr_bytes = (pointer as u64).to_le_bytes();
         for i in (0..RV64_REGISTER_NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {

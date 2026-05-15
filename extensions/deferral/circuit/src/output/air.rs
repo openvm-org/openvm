@@ -67,7 +67,7 @@ pub struct DeferralOutputCols<T> {
 
     // Read data and auxiliary columns. output_commit and output_len are read
     // contiguously from heap with layout [output_commit || output_len].
-    // Both are stored as u16 cells (matching Pattern B memory granularity).
+    // Both are stored as u16 cells (matching memory granularity).
     // The onion hash of all bytes written by this opcode invocation is
     // constrained to output_commit.
     pub output_commit: [T; COMMIT_NUM_U16S],
@@ -289,7 +289,7 @@ where
         let rs_full = expand_to_rv64_register(&local.rs_val);
 
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(d.clone(), local.rd_ptr),
                 pack_u8_for_bus::<AB>(&rd_full),
                 local.from_state.timestamp,
@@ -298,7 +298,7 @@ where
             .eval(builder, local.is_first);
 
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(d.clone(), local.rs_ptr),
                 pack_u8_for_bus::<AB>(&rs_full),
                 local.from_state.timestamp + AB::Expr::ONE,
@@ -335,7 +335,7 @@ where
         for (chunk_idx, aux) in local.output_commit_and_len_aux.iter().enumerate() {
             let data = combined_chunks_iter.next().unwrap();
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(
                         e.clone(),
                         input_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
@@ -365,7 +365,7 @@ where
 
             let data_expr: [AB::Expr; MEMORY_BLOCK_BYTES] = from_fn(|i| data[i].into());
             self.memory_bridge
-                .write_4(
+                .write(
                     MemoryAddress::new(
                         e.clone(),
                         output_ptr.clone()

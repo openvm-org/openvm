@@ -31,8 +31,8 @@ pub const DIGEST_BYTE_MEMORY_OPS: usize = num_byte_memory_ops(DIGEST_SIZE);
 pub const DIGEST_F_MEMORY_OPS: usize = num_f_memory_ops(DIGEST_SIZE);
 /// Number of memory bus messages to read a `COMMIT_NUM_BYTES`-byte commit from a
 /// byte-addressed AS. With `MEMORY_BLOCK_BYTES = 8`, this is `32 / 8 = 4` reads.
-/// Each on-bus message now carries `BLOCK_FE_WIDTH = 4` u16 cells (which the
-/// columns store directly post u16 migration).
+/// Each on-bus message carries `BLOCK_FE_WIDTH` u16 cells, which the columns
+/// store directly.
 pub const COMMIT_MEMORY_OPS: usize = num_byte_memory_ops(COMMIT_NUM_BYTES);
 pub const OUTPUT_TOTAL_MEMORY_OPS: usize = num_byte_memory_ops(OUTPUT_TOTAL_BYTES);
 

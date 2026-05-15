@@ -206,9 +206,9 @@ impl DeviceMemoryTester {
 }
 
 /// Packs `MEMORY_BLOCK_BYTES` u8-typed F values into `BLOCK_FE_WIDTH` packed F
-/// values via base-256; matches `bridge::pack_for_bus` and the CPU
+/// values via base-256; matches `bridge::pack_u8_for_bus` and the CPU
 /// `MemoryTester::pack_bytes_for_bus` so the chip's bus message exactly equals
-/// what a real chip would emit through the legacy bridge pack.
+/// what byte-shaped chips emit.
 fn pack_bytes_for_bus(data: &[F]) -> [F; BLOCK_FE_WIDTH] {
     assert_eq!(data.len(), MEMORY_BLOCK_BYTES);
     let ratio = MEMORY_BLOCK_BYTES / BLOCK_FE_WIDTH;

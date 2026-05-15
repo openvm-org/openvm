@@ -68,7 +68,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
         };
 
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs1_ptr),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
@@ -77,7 +77,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs2_ptr),
                 ctx.reads[1].clone(),
                 timestamp_pp(),
@@ -119,8 +119,7 @@ pub struct Rv64BranchAdapterRecord {
 }
 
 /// Reads instructions of the form OP a, b, c, d, e where if(\[a:8\]_d op \[b:8\]_e) pc += c.
-/// Operands d and e can only be 1. Reads are returned as 4 u16 cells per register (= 8 bytes)
-/// post Stage 2 Pattern B migration.
+/// Operands d and e can only be 1. Reads are returned as 4 u16 cells per register (= 8 bytes).
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64BranchAdapterExecutor;
 

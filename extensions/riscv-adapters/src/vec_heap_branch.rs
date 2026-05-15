@@ -9,6 +9,7 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         ExecutionBridge, ExecutionState, VecHeapBranchAdapterInterface, VmAdapterAir,
+        BLOCK_FE_WIDTH, BUS_PTR_SCALE,
     },
     system::memory::{
         offline_checker::{pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord},
@@ -43,8 +44,8 @@ use openvm_stark_backend::{
 ///   the heap, starting from the addresses in `rs[0]` (and `rs[1]` if `NUM_READS = 2`).
 /// * No writes are performed (branch operations only compare values).
 ///
-/// Post Stage 2 Pattern B migration: `READ_SIZE` counts **u16 cells** (= 2 bytes each), matching
-/// the BLOCK_FE_WIDTH=4 bus shape. For an 8-byte heap chunk pass READ_SIZE=4.
+/// `READ_SIZE` counts u16 cells, matching the `BLOCK_FE_WIDTH` bus shape. For an
+/// 8-byte heap chunk, pass `READ_SIZE = BLOCK_FE_WIDTH`.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct Rv64VecHeapBranchAdapterCols<
@@ -113,7 +114,7 @@ impl<
         // packed to 4 u16 for the bus).
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), ptr),
                     pack_u8_for_bus::<AB>(&expand_to_rv64_register(&val)),
                     timestamp_pp(),
@@ -154,21 +155,18 @@ impl<
         let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(abstract_compose);
 
         let e = AB::F::from_u32(RV64_MEMORY_AS);
-        // Reads from heap. After Pattern B, `READ_SIZE` is u16-cell count (= BLOCK_FE_WIDTH=4
-        // for an 8-byte chunk); each block's bus pointer advances by 2*READ_SIZE bytes.
-        const BUS_PTR_SCALE: usize = openvm_circuit::arch::BUS_PTR_SCALE;
+        // Reads from heap. `READ_SIZE` is a u16-cell count; each block's bus pointer advances by
+        // `BUS_PTR_SCALE * READ_SIZE` bytes.
         let bytes_per_block = READ_SIZE * BUS_PTR_SCALE;
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
                 debug_assert_eq!(
-                    READ_SIZE,
-                    openvm_circuit::arch::BLOCK_FE_WIDTH,
+                    READ_SIZE, BLOCK_FE_WIDTH,
                     "VecHeapBranch adapter only supports READ_SIZE = BLOCK_FE_WIDTH (u16 cells)"
                 );
-                let read_array: [AB::Expr; openvm_circuit::arch::BLOCK_FE_WIDTH] =
-                    from_fn(|j| read[j].clone());
+                let read_array: [AB::Expr; BLOCK_FE_WIDTH] = from_fn(|j| read[j].clone());
                 self.memory_bridge
-                    .read_4(
+                    .read(
                         MemoryAddress::new(
                             e,
                             address.clone() + AB::Expr::from_usize(i * bytes_per_block),

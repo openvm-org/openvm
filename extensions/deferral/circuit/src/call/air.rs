@@ -51,7 +51,7 @@ const NUM_ACCUMULATORS_PER_IDX: usize = 2;
 #[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
 pub struct DeferralCallReads<B, F> {
     /// Commit to a specific deferral input, stored as u16 cells (matching the
-    /// underlying Pattern B memory granularity).
+    /// underlying u16 memory granularity).
     pub input_commit: [B; COMMIT_NUM_U16S],
 
     // Deferral address space accumulators immediately prior to the current deferral call
@@ -332,7 +332,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
 
         // Heap pointers are first read from their respective registers.
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(d.clone(), cols.rd_ptr),
                 pack_u8_for_bus::<AB>(&rd_full),
                 timestamp_pp(),
@@ -341,7 +341,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(d.clone(), cols.rs_ptr),
                 pack_u8_for_bus::<AB>(&rs_full),
                 timestamp_pp(),
@@ -429,7 +429,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             .enumerate()
         {
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(
                         e.clone(),
                         input_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
@@ -449,7 +449,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             .enumerate()
         {
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(
                         deferral_as.clone(),
                         input_acc_ptr.clone()
@@ -470,7 +470,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             .enumerate()
         {
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(
                         deferral_as.clone(),
                         output_acc_ptr.clone()
@@ -495,7 +495,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         for (chunk_idx, aux) in cols.output_commit_and_len_aux.iter().enumerate() {
             let data = combined_chunks_iter.next().unwrap();
             self.memory_bridge
-                .write_4(
+                .write(
                     MemoryAddress::new(
                         e.clone(),
                         output_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
@@ -516,7 +516,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             .enumerate()
         {
             self.memory_bridge
-                .write_4(
+                .write(
                     MemoryAddress::new(
                         deferral_as.clone(),
                         input_acc_ptr.clone()
@@ -537,7 +537,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             .enumerate()
         {
             self.memory_bridge
-                .write_4(
+                .write(
                     MemoryAddress::new(
                         deferral_as.clone(),
                         output_acc_ptr.clone()

@@ -7,9 +7,12 @@ use openvm_circuit_primitives::{
 use openvm_stark_backend::{interaction::InteractionBuilder, p3_field::PrimeCharacteristicRing};
 
 use super::bus::MemoryBus;
-use crate::system::memory::{
-    offline_checker::columns::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
-    MemoryAddress,
+use crate::{
+    arch::{BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
+    system::memory::{
+        offline_checker::columns::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
+        MemoryAddress,
+    },
 };
 
 /// AUX_LEN is the number of auxiliary columns (aka the number of limbs that the input numbers will
@@ -45,19 +48,17 @@ impl MemoryBridge {
         self.offline_checker.timestamp_lt_air.bus
     }
 
-    /// Prepare a logical memory read whose chip-side AIR produces the
-    /// `BLOCK_FE_WIDTH`-shaped bus message (= `[T; 4]`). Chips are
-    /// responsible for composing the 4 expressions from their native
-    /// columns — `[col[0]+256·col[1], …]` for Pattern A (u8) chips or 4 u16
-    /// columns directly for Pattern B.
+    /// Prepare a logical memory read whose chip-side AIR already produces a
+    /// `BLOCK_FE_WIDTH`-shaped bus payload. Byte-shaped chips pack u8 columns
+    /// with [`pack_u8_for_bus`]; u16-shaped chips pass u16 columns directly.
     #[must_use]
-    pub fn read_4<'a, T, V>(
+    pub fn read<'a, T, V>(
         &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
-        data: [impl Into<T>; crate::arch::BLOCK_FE_WIDTH],
+        data: [impl Into<T>; BLOCK_FE_WIDTH],
         timestamp: impl Into<T>,
         aux: &'a MemoryReadAuxCols<V>,
-    ) -> MemoryReadOperation<'a, T, V, { crate::arch::BLOCK_FE_WIDTH }> {
+    ) -> MemoryReadOperation<'a, T, V> {
         MemoryReadOperation {
             offline_checker: self.offline_checker,
             address: MemoryAddress::from(address),
@@ -67,16 +68,15 @@ impl MemoryBridge {
         }
     }
 
-    /// Prepare a logical memory write whose chip-side AIR produces the
-    /// `BLOCK_FE_WIDTH`-shaped bus message. See [`MemoryBridge::read_4`].
+    /// Prepare a logical memory write. See [`MemoryBridge::read`].
     #[must_use]
-    pub fn write_4<'a, T, V>(
+    pub fn write<'a, T, V>(
         &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
-        data: [impl Into<T>; crate::arch::BLOCK_FE_WIDTH],
+        data: [impl Into<T>; BLOCK_FE_WIDTH],
         timestamp: impl Into<T>,
-        aux: &'a MemoryWriteAuxCols<V, { crate::arch::BLOCK_FE_WIDTH }>,
-    ) -> MemoryWriteOperation<'a, T, V, { crate::arch::BLOCK_FE_WIDTH }> {
+        aux: &'a MemoryWriteAuxCols<V, BLOCK_FE_WIDTH>,
+    ) -> MemoryWriteOperation<'a, T, V> {
         MemoryWriteOperation {
             offline_checker: self.offline_checker,
             address: MemoryAddress::from(address),
@@ -86,7 +86,7 @@ impl MemoryBridge {
         }
     }
 
-    /// Variant of [`MemoryBridge::write_4`] where `prev_data` is supplied as
+    /// Variant of [`MemoryBridge::write`] where `prev_data` is supplied as
     /// `BLOCK_FE_WIDTH` field-element expressions (e.g. composed from the
     /// chip's own u8 columns) instead of being read off an
     /// `MemoryWriteAuxCols` column slot. The aux only contains the timestamp
@@ -94,11 +94,11 @@ impl MemoryBridge {
     /// LoadStore that already materialize the prev_data bytes in their own
     /// columns and don't want to duplicate them in an adapter aux slot.
     #[must_use]
-    pub fn write_4_with_prev<'a, T, V>(
+    pub fn write_with_prev<'a, T, V>(
         &self,
         address: MemoryAddress<impl Into<T>, impl Into<T>>,
-        data: [impl Into<T>; crate::arch::BLOCK_FE_WIDTH],
-        prev_data: [impl Into<T>; crate::arch::BLOCK_FE_WIDTH],
+        data: [impl Into<T>; BLOCK_FE_WIDTH],
+        prev_data: [impl Into<T>; BLOCK_FE_WIDTH],
         timestamp: impl Into<T>,
         aux_base: &'a MemoryBaseAuxCols<V>,
     ) -> MemoryWriteOperationWithPrev<'a, T, V> {
@@ -121,10 +121,10 @@ impl MemoryBridge {
 /// The generic `T` type is intended to be `AB::Expr` where `AB` is the [AirBuilder].
 /// The auxiliary columns are not expected to be expressions, so the generic `V` type is intended
 /// to be `AB::Var`.
-pub struct MemoryReadOperation<'a, T, V, const N: usize> {
+pub struct MemoryReadOperation<'a, T, V> {
     offline_checker: MemoryOfflineChecker,
     address: MemoryAddress<T, T>,
-    data: [T; N],
+    data: [T; BLOCK_FE_WIDTH],
     timestamp: T,
     aux: &'a MemoryReadAuxCols<V>,
 }
@@ -132,9 +132,7 @@ pub struct MemoryReadOperation<'a, T, V, const N: usize> {
 /// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to private function MemoryOfflineChecker::eval_bulk_access
-impl<F: PrimeCharacteristicRing, V: Copy + Into<F>, const N: usize>
-    MemoryReadOperation<'_, F, V, N>
-{
+impl<F: PrimeCharacteristicRing, V: Copy + Into<F>> MemoryReadOperation<'_, F, V> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where
@@ -170,21 +168,19 @@ impl<F: PrimeCharacteristicRing, V: Copy + Into<F>, const N: usize>
 /// Includes constraints for `timestamp_prev < timestamp`.
 ///
 /// **Note:** This can be used as a logical read operation by setting `data_prev = data`.
-pub struct MemoryWriteOperation<'a, T, V, const N: usize> {
+pub struct MemoryWriteOperation<'a, T, V> {
     offline_checker: MemoryOfflineChecker,
     address: MemoryAddress<T, T>,
-    data: [T; N],
+    data: [T; BLOCK_FE_WIDTH],
     /// The timestamp of the current read
     timestamp: T,
-    aux: &'a MemoryWriteAuxCols<V, N>,
+    aux: &'a MemoryWriteAuxCols<V, BLOCK_FE_WIDTH>,
 }
 
 /// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to private function MemoryOfflineChecker::eval_bulk_access
-impl<T: PrimeCharacteristicRing, V: Copy + Into<T>, const N: usize>
-    MemoryWriteOperation<'_, T, V, N>
-{
+impl<T: PrimeCharacteristicRing, V: Copy + Into<T>> MemoryWriteOperation<'_, T, V> {
     /// Evaluate constraints and send/receive interactions. `enabled` must be boolean.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where
@@ -213,12 +209,12 @@ impl<T: PrimeCharacteristicRing, V: Copy + Into<T>, const N: usize>
 /// Constraints and interactions for a write whose `prev_data` is supplied as
 /// `BLOCK_FE_WIDTH` field-element expressions rather than being loaded from a
 /// `MemoryWriteAuxCols` column slot. See
-/// [`MemoryBridge::write_4_with_prev`].
+/// [`MemoryBridge::write_with_prev`].
 pub struct MemoryWriteOperationWithPrev<'a, T, V> {
     offline_checker: MemoryOfflineChecker,
     address: MemoryAddress<T, T>,
-    data: [T; crate::arch::BLOCK_FE_WIDTH],
-    prev_data: [T; crate::arch::BLOCK_FE_WIDTH],
+    data: [T; BLOCK_FE_WIDTH],
+    prev_data: [T; BLOCK_FE_WIDTH],
     timestamp: T,
     aux_base: &'a MemoryBaseAuxCols<V>,
 }
@@ -288,35 +284,25 @@ impl MemoryOfflineChecker {
     /// The max constraint degree of expressions in sends/receives is:
     /// max(max_deg(data), max_deg(prev_data), max_deg(timestamp), max_deg(prev_timestamps))
     /// Also, each one of them has count with degree: deg(enabled)
-    ///
-    /// **Bus pack**: the bus message is `BLOCK_FE_WIDTH` field elements wide. When
-    /// `N > BLOCK_FE_WIDTH` (the legacy u8 path with `N = 8`), we pack groups of
-    /// `N / BLOCK_FE_WIDTH` consecutive input elements into a single field
-    /// element using base-256: `out[i] = sum_k input[i*ratio + k] * 256^k`. With
-    /// `BUS_PTR_SCALE = 2`, `BLOCK_FE_WIDTH = 4` and the pack ratio is 2 —
-    /// `out[i] = input[2i] + 256 * input[2i+1]`.
     #[allow(clippy::too_many_arguments)]
-    fn eval_bulk_access<AB, const N: usize>(
+    fn eval_bulk_access<AB>(
         &self,
         builder: &mut AB,
         address: MemoryAddress<AB::Expr, AB::Expr>,
-        data: &[AB::Expr; N],
-        prev_data: &[AB::Expr; N],
+        data: &[AB::Expr; BLOCK_FE_WIDTH],
+        prev_data: &[AB::Expr; BLOCK_FE_WIDTH],
         timestamp: AB::Expr,
         prev_timestamp: AB::Var,
         enabled: AB::Expr,
     ) where
         AB: InteractionBuilder,
     {
-        let packed_data = pack_for_bus::<AB, N>(data);
-        let packed_prev = pack_for_bus::<AB, N>(prev_data);
-
         self.memory_bus
-            .receive(address.clone(), packed_prev, prev_timestamp)
+            .receive(address.clone(), prev_data.to_vec(), prev_timestamp)
             .eval(builder, enabled.clone());
 
         self.memory_bus
-            .send(address, packed_data, timestamp)
+            .send(address, data.to_vec(), timestamp)
             .eval(builder, enabled);
     }
 }
@@ -325,53 +311,20 @@ impl MemoryOfflineChecker {
 /// `BLOCK_FE_WIDTH` bus expressions via base-256:
 /// `out[i] = data[2i] + 256·data[2i+1]`.
 ///
-/// Pattern A chips that keep their `[T; 8]` u8 columns but want to call the
-/// new [`MemoryBridge::read_4`] / [`MemoryBridge::write_4`] API can pass
-/// the result of this helper directly to the bridge.
+/// Byte-shaped chips that keep their `[T; 8]` u8 columns pass the result of this
+/// helper directly to the bridge.
 pub fn pack_u8_for_bus<AB: InteractionBuilder>(
-    data: &[AB::Expr; crate::arch::MEMORY_BLOCK_BYTES],
-) -> [AB::Expr; crate::arch::BLOCK_FE_WIDTH] {
-    // `data[i * 2]` / `data[i * 2 + 1]` hardcodes a 2:1 byte-to-cell ratio.
-    // Surface that assumption locally so a future change to
-    // `MEMORY_BLOCK_BYTES` or `BLOCK_FE_WIDTH` trips here instead of
-    // silently producing wrong packings.
+    data: &[AB::Expr; MEMORY_BLOCK_BYTES],
+) -> [AB::Expr; BLOCK_FE_WIDTH] {
     const {
         assert!(
-            crate::arch::MEMORY_BLOCK_BYTES / crate::arch::BLOCK_FE_WIDTH == 2,
+            MEMORY_BLOCK_BYTES / BLOCK_FE_WIDTH == 2,
             "pack_u8_for_bus assumes 2 bytes per bus cell"
         )
     };
-    let mut out: [AB::Expr; crate::arch::BLOCK_FE_WIDTH] = std::array::from_fn(|_| AB::Expr::ZERO);
-    for i in 0..crate::arch::BLOCK_FE_WIDTH {
+    let mut out: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|_| AB::Expr::ZERO);
+    for i in 0..BLOCK_FE_WIDTH {
         out[i] = data[i * 2].clone() + AB::Expr::from_u64(256) * data[i * 2 + 1].clone();
     }
     out
-}
-
-/// Pack `N` input field expressions into `BLOCK_FE_WIDTH` output field
-/// expressions for the memory bus message. `N` must be a multiple of
-/// `BLOCK_FE_WIDTH`. With `BUS_PTR_SCALE = 2`, `BLOCK_FE_WIDTH = 4` and
-/// `N = 8` callers get packed pairwise: `out[i] = input[2i] + 256·input[2i+1]`.
-fn pack_for_bus<AB, const N: usize>(data: &[AB::Expr; N]) -> Vec<AB::Expr>
-where
-    AB: InteractionBuilder,
-{
-    let pack_ratio = N / crate::arch::BLOCK_FE_WIDTH;
-    assert_eq!(
-        pack_ratio * crate::arch::BLOCK_FE_WIDTH,
-        N,
-        "bridge bus pack: N={N} must be a multiple of BLOCK_FE_WIDTH={}",
-        crate::arch::BLOCK_FE_WIDTH
-    );
-    let mut packed = Vec::with_capacity(crate::arch::BLOCK_FE_WIDTH);
-    for i in 0..crate::arch::BLOCK_FE_WIDTH {
-        let mut acc = AB::Expr::ZERO;
-        let mut mult: u64 = 1;
-        for k in 0..pack_ratio {
-            acc += AB::Expr::from_u64(mult) * data[i * pack_ratio + k].clone();
-            mult *= 256;
-        }
-        packed.push(acc);
-    }
-    packed
 }

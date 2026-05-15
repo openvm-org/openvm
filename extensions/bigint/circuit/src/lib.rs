@@ -55,7 +55,7 @@ pub const INT256_NUM_U64_LIMBS: usize = INT256_NUM_LIMBS / size_of::<u64>();
 pub const INT256_NUM_U32_LIMBS: usize = INT256_NUM_LIMBS / size_of::<u32>();
 /// Number of u16 limbs in a 256-bit integer.
 pub const INT256_NUM_U16_LIMBS: usize = INT256_NUM_LIMBS / size_of::<u16>();
-/// Bit width of an INT256 u16 limb (post Pattern B Branch256 migration).
+/// Bit width of an INT256 u16 limb.
 pub const INT256_U16_LIMB_BITS: usize = 16;
 /// Number of source operand reads (rs1, rs2) for binary 256-bit instructions.
 pub(crate) const NUM_READS: usize = 2;
@@ -94,7 +94,7 @@ type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
     INT256_NUM_LIMBS,
 >;
 
-/// Pattern B u16 ALU adapter for LessThan256: same `VecToFlatAlu` wrapper shape but the inner
+/// U16 ALU adapter for LessThan256: same `VecToFlatAlu` wrapper shape but the inner
 /// vec-heap adapter is the u16 variant (READ_SIZE/WRITE_SIZE in u16 cells = `BLOCK_FE_WIDTH`).
 type LtAluAdapterU16Air = VecToFlatAluAdapterAir<
     Rv64VecHeapU16AdapterAir<
@@ -130,8 +130,8 @@ type LtAluAdapterU16Executor = VecToFlatAluU16AdapterExecutor<
 
 /// Type alias for the Branch adapter AIR wrapper.
 ///
-/// After the Pattern B migration the heap-branch adapter delivers `BLOCK_FE_WIDTH=4` u16 cells
-/// per block, so the flattened width is `INT256_NUM_BLOCKS * BLOCK_FE_WIDTH =
+/// The heap-branch adapter delivers `BLOCK_FE_WIDTH` u16 cells per block, so
+/// the flattened width is `INT256_NUM_BLOCKS * BLOCK_FE_WIDTH =
 /// INT256_NUM_U16_LIMBS`.
 type BranchAdapterAir = VecToFlatBranchAdapterAir<
     Rv64VecHeapBranchAdapterAir<NUM_READS, INT256_NUM_BLOCKS, BLOCK_FE_WIDTH>,
@@ -172,7 +172,7 @@ pub type Rv64BaseAlu256Chip<F> = VmChipWrapper<
     >,
 >;
 
-/// LessThan256 (Pattern B u16): 16 u16 limbs with `LIMB_BITS = 16`.
+/// LessThan256 over 16 u16 limbs with `LIMB_BITS = 16`.
 pub type Rv64LessThan256Air =
     VmAirWrapper<LtAluAdapterU16Air, LessThanCoreAir<INT256_NUM_U16_LIMBS, INT256_U16_LIMB_BITS>>;
 #[derive(Clone, PreflightExecutor)]

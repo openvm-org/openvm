@@ -1,4 +1,4 @@
-//! Pattern B u16-shaped variant of [`Rv64IsEqualModAdapter`].
+//! U16-shaped variant of [`Rv64IsEqualModAdapter`].
 //!
 //! Differences vs the u8 variant:
 //! - Register-side `rs_val` columns are `[T; BLOCK_FE_WIDTH]` (4 u16 cells) instead of `[T;
@@ -6,7 +6,7 @@
 //!   bus via [`expand_to_rv64_block`].
 //! - Heap reads are u16-cell-shaped: `BLOCK_SIZE` counts u16 cells per block (= `BLOCK_FE_WIDTH`),
 //!   and the per-block byte stride is `j * BLOCK_SIZE * BUS_PTR_SCALE`. The 4 u16 cells of each
-//!   read block are passed through to `read_4` without `pack_u8_for_bus`.
+//!   read block are passed through to `read` without `pack_u8_for_bus`.
 //! - The write to `rd` is `BLOCK_FE_WIDTH` u16 cells wide (passed through directly).
 //! - The base-address composition uses base 2^16 per cell rather than 2^8 per byte.
 //! - The pointer high-cell range check uses the same byte-pair bitwise lookup with the shift `1 <<
@@ -149,7 +149,7 @@ impl<
         // through to the bus directly via `expand_to_rv64_block` (zero-pads when N < target).
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(d, ptr),
                     expand_to_rv64_block(&val),
                     timestamp_pp(),
@@ -208,7 +208,7 @@ impl<
             for (offset, data, aux) in izip!(block_ptr_offset, block_data, block_aux) {
                 let data_array: [AB::Expr; BLOCK_FE_WIDTH] = from_fn(|j| data[j].clone());
                 self.memory_bridge
-                    .read_4(
+                    .read(
                         MemoryAddress::new(e, ptr.clone() + offset),
                         data_array,
                         timestamp_pp(),
@@ -220,7 +220,7 @@ impl<
 
         // Write to rd register. `ctx.writes[0]` is already BLOCK_FE_WIDTH u16 cells; pass through.
         self.memory_bridge
-            .write_4(
+            .write(
                 MemoryAddress::new(d, cols.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp_pp(),

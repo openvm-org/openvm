@@ -40,6 +40,8 @@ use tracing::Level;
 
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
+#[cfg(feature = "touchemall")]
+use crate::primitives::utils::check_trace_validity;
 use crate::{
     arch::{
         instructions::instruction::Instruction,
@@ -243,9 +245,9 @@ pub struct GpuChipTestBuilder {
 impl Default for GpuChipTestBuilder {
     fn default() -> Self {
         let mut mem_config = MemoryConfig::default();
-        // Tests use `gen_pointer` over the full byte range, but `num_cells` is in
-        // u16 cells post Stage 1.6 flip — saturate at the per-AS cell budget
-        // implied by `pointer_max_bits` (= 2^(pointer_max_bits - log2(BUS_PTR_SCALE))).
+        // Tests use `gen_pointer` over the full byte range, but `num_cells` is
+        // in u16 cells. Saturate at the per-AS cell budget implied by
+        // `pointer_max_bits`.
         mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells =
             1 << (mem_config.pointer_max_bits - BUS_PTR_SCALE.trailing_zeros() as usize);
         Self::new(mem_config, default_var_range_checker_bus())
@@ -344,10 +346,9 @@ impl GpuChipTestBuilder {
             register,
             (pointer as u64).to_le_bytes().map(F::from_u8),
         );
-        // Heap payload writes go through the byte-view dispatch
-        // (`DeviceMemoryTester::write::<MEMORY_BLOCK_BYTES>`) so this works
-        // against u16-celled storage post Stage 1.6 flip. NUM_LIMBS must be
-        // a multiple of `MEMORY_BLOCK_BYTES`.
+        // Heap payload writes go through the byte-view dispatch, so this works
+        // against u16-celled storage. NUM_LIMBS must be a multiple of
+        // `MEMORY_BLOCK_BYTES`.
         for (i, &write) in writes.iter().enumerate() {
             let ptr = pointer + i * NUM_LIMBS;
             for j in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
@@ -522,8 +523,6 @@ impl GpuChipTester {
     ) -> Self {
         #[cfg(feature = "touchemall")]
         {
-            use crate::primitives::utils::check_trace_validity;
-
             check_trace_validity(&proving_ctx, &air.name());
         }
         self.airs.push(air);
@@ -548,8 +547,6 @@ impl GpuChipTester {
         let expected_trace = cpu_chip.generate_proving_ctx(cpu_arena).common_main;
         #[cfg(feature = "touchemall")]
         {
-            use crate::primitives::utils::check_trace_validity;
-
             check_trace_validity(&proving_ctx, &air.name());
         }
         let expected_trace_cm = ColMajorMatrix::from_row_major(&expected_trace);

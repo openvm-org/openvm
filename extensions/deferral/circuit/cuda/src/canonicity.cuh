@@ -11,9 +11,8 @@ namespace canonicity {
 
 using namespace deferral;
 
-// Number of limbs / bits per limb the canonicity sub-AIR walks. After the u16
-// migration these match the CPU-side `CANONICITY_NUM_LIMBS` /
-// `CANONICITY_LIMB_BITS` constants.
+// Number of limbs / bits per limb the canonicity sub-AIR walks. These match
+// the CPU-side `CANONICITY_NUM_LIMBS` / `CANONICITY_LIMB_BITS` constants.
 inline constexpr size_t CANONICITY_NUM_LIMBS = F_NUM_U16S;
 inline constexpr size_t CANONICITY_LIMB_BITS = 16;
 

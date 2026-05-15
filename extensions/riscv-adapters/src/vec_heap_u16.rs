@@ -1,4 +1,4 @@
-//! Pattern B u16-shaped variant of [`Rv64VecHeapAdapter`].
+//! U16-shaped variant of [`Rv64VecHeapAdapter`].
 //!
 //! Differences vs the u8 variant:
 //! - `READ_SIZE` and `WRITE_SIZE` are counted in **u16 cells**, not bytes; the per-block byte
@@ -175,7 +175,7 @@ impl<
             &cols.rd_read_aux,
         ))) {
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), ptr),
                     pack_u8_for_bus::<AB>(&expand_to_rv64_register(&val)),
                     timestamp_pp(),
@@ -219,7 +219,7 @@ impl<
                 );
                 let read_array: [AB::Expr; BLOCK_FE_WIDTH] = from_fn(|j| read[j].clone());
                 self.memory_bridge
-                    .read_4(
+                    .read(
                         MemoryAddress::new(
                             e,
                             address.clone() + AB::Expr::from_usize(i * read_bytes_per_block),
@@ -240,7 +240,7 @@ impl<
             );
             let write_array: [AB::Expr; BLOCK_FE_WIDTH] = from_fn(|j| write[j].clone());
             self.memory_bridge
-                .write_4(
+                .write(
                     MemoryAddress::new(
                         e,
                         rd_val_f.clone() + AB::Expr::from_usize(i * write_bytes_per_block),

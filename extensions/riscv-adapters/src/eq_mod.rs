@@ -8,7 +8,7 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
-        BLOCK_FE_WIDTH,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{
@@ -132,7 +132,7 @@ impl<
         // Read register values for rs.
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
-                .read_4(
+                .read(
                     MemoryAddress::new(d, ptr),
                     pack_u8_for_bus::<AB>(&expand_to_rv64_register(&val)),
                     timestamp_pp(),
@@ -175,14 +175,12 @@ impl<
         for (ptr, block_data, block_aux) in izip!(rs_val_f, read_block_data, &cols.heap_read_aux) {
             for (offset, data, aux) in izip!(block_ptr_offset, block_data, block_aux) {
                 debug_assert_eq!(
-                    BLOCK_SIZE,
-                    openvm_circuit::arch::MEMORY_BLOCK_BYTES,
+                    BLOCK_SIZE, MEMORY_BLOCK_BYTES,
                     "Rv64IsEqualMod adapter only supports BLOCK_SIZE = MEMORY_BLOCK_BYTES"
                 );
-                let data_array: [AB::Expr; openvm_circuit::arch::MEMORY_BLOCK_BYTES] =
-                    from_fn(|j| data[j].clone());
+                let data_array: [AB::Expr; MEMORY_BLOCK_BYTES] = from_fn(|j| data[j].clone());
                 self.memory_bridge
-                    .read_4(
+                    .read(
                         MemoryAddress::new(e, ptr.clone() + offset),
                         pack_u8_for_bus::<AB>(&data_array),
                         timestamp_pp(),
@@ -194,7 +192,7 @@ impl<
 
         // Write to rd register
         self.memory_bridge
-            .write_4(
+            .write(
                 MemoryAddress::new(d, cols.rd_ptr),
                 pack_u8_for_bus::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),

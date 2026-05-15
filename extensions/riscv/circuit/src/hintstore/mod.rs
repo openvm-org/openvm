@@ -78,8 +78,8 @@ pub struct Rv64HintStoreCols<T> {
     /// Low 4 bytes of the 8-byte RV64 register that holds `mem_ptr`, packed into 2 u16
     /// cells (low 32 bits of the register). `mem_ptr` is a u32 memory address, so the
     /// upper 4 bytes are known to be zero and hardcoded in the memory bus interaction.
-    /// Stored as u16 cells (matching AS2 cell granularity post Stage 1.6); the AIR
-    /// enforces `mem_ptr < 2^pointer_max_bits` via the variable range checker (16-bit).
+    /// Stored as u16 cells (matching AS2 cell granularity); the AIR enforces
+    /// `mem_ptr < 2^pointer_max_bits` via the variable range checker.
     pub mem_ptr_limbs: [T; MEM_PTR_NUM_LIMBS],
     pub mem_ptr_aux_cols: MemoryReadAuxCols<T>,
 
@@ -179,7 +179,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         let mem_ptr_data: [AB::Expr; BLOCK_FE_WIDTH] =
             expand_to_rv64_block(&local_cols.mem_ptr_limbs);
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.mem_ptr_ptr),
                 mem_ptr_data,
                 timestamp_pp(),
@@ -196,7 +196,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             AB::Expr::ZERO,
         ];
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.num_words_ptr),
                 num_words_data,
                 timestamp_pp(),
@@ -205,10 +205,9 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .eval(builder, local_cols.is_buffer_start);
 
         // write hint. `data` is already 4 u16 cells, matching the bus payload directly
-        // (no byte-pair packing). Mirrors the SHA-2 `new_state` and AUIPC `rd_data` u16
-        // migrations.
+        // (no byte-pair packing).
         self.memory_bridge
-            .write_4(
+            .write(
                 MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), mem_ptr.clone()),
                 local_cols.data.map(Into::into),
                 timestamp_pp(),
@@ -265,11 +264,8 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             )
             .eval(builder, is_start.clone());
 
-        // Note: `local_cols.data` is intentionally NOT range-checked. The cells appear only as
-        // the bus payload of the AS2 memory write; AS2 is u16-celled post Stage 1.6, so the
-        // consumer of this memory only ever sees the same 4 u16 cells. Any cell decomposition
-        // that produces the same packed value satisfies the memory bus identically — there is
-        // no soundness gap.
+        // `local_cols.data` is already the AS2 u16-cell bus payload and is not
+        // decomposed by this AIR, so no byte range check is needed here.
 
         // buffer transition
         // `is_end` implies that the next row belongs to a new instruction,

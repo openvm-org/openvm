@@ -20,7 +20,7 @@ template <size_t CHUNK, size_t BLOCKS> struct MemoryInventoryRecord {
 
 // Input records are one memory-bus message (`BLOCK_FE_WIDTH` cells, one
 // timestamp). The merge kernel groups `BLOCKS_PER_LEAF` of them per merkle
-// leaf (= `DIGEST_WIDTH` cells, two timestamps post Stage 1.6 flip).
+// leaf (= `DIGEST_WIDTH` cells, `BLOCKS_PER_LEAF` timestamps).
 using InRec = MemoryInventoryRecord<BLOCK_FE_WIDTH, 1>;
 using OutRec = MemoryInventoryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF>;
 
@@ -45,8 +45,7 @@ __device__ inline bool same_output_block(
 /// `chunk_ptr` is a **cell index** (the partition key carries cell_idx, not the
 /// normalized bus pointer). Cell sizes per AS:
 /// - DEFERRAL_AS: 4 bytes per cell (Fp), already Montgomery-encoded.
-/// - Other ASes: 2 bytes per cell (u16) in little-endian byte layout post Stage
-///   1.6 cell-type flip.
+/// - Other ASes: 2 bytes per cell (u16) in little-endian byte layout.
 __device__ inline void read_initial_chunk(
     uint32_t *out_values, // Montgomery-encoded Fp values
     uint8_t const *const *initial_mem,

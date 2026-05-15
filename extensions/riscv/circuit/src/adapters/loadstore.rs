@@ -7,7 +7,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface,
+        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{
@@ -163,7 +163,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         // read rs1
         let rs1_data = expand_to_rv64_register(&local_cols.rs1_data);
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rs1_ptr),
                 pack_u8_for_bus::<AB>(&rs1_data),
                 timestamp_pp(),
@@ -233,7 +233,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             - load_shift_amount;
 
         self.memory_bridge
-            .read_4(
+            .read(
                 MemoryAddress::new(read_as, read_ptr),
                 pack_u8_for_bus::<AB>(&ctx.reads.1),
                 timestamp_pp(),
@@ -254,12 +254,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
 
         // prev_data is supplied by the core via `ctx.reads.0` as `RV64_REGISTER_NUM_LIMBS` Vars
         // (the bytes previously at the write location). Pack them into BLOCK_FE_WIDTH
-        // expressions and feed them directly to the bridge via `write_4_with_prev`, which
+        // expressions and feed them directly to the bridge via `write_with_prev`, which
         // bypasses the `MemoryWriteAuxCols::prev_data` column slot entirely.
-        let prev_data_expr: [AB::Expr; openvm_circuit::arch::MEMORY_BLOCK_BYTES] =
-            ctx.reads.0.map(Into::into);
+        let prev_data_expr: [AB::Expr; MEMORY_BLOCK_BYTES] = ctx.reads.0.map(Into::into);
         self.memory_bridge
-            .write_4_with_prev(
+            .write_with_prev(
                 MemoryAddress::new(write_as, write_ptr),
                 pack_u8_for_bus::<AB>(&ctx.writes[0].clone()),
                 pack_u8_for_bus::<AB>(&prev_data_expr),
