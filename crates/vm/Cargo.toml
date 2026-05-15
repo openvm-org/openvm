@@ -70,6 +70,7 @@ parallel = [
     "dashmap/rayon",
     "openvm-stark-sdk?/parallel",
     "openvm-cpu-backend/parallel",
+    "openvm-circuit-primitives/parallel"
 ]
 metrics = [
     "dep:metrics",

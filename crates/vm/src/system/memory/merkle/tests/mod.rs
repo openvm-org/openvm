@@ -401,12 +401,12 @@ fn expand_test_label_rebinding_attack() {
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
                 min_block_size: 1,
-                layout: MemoryCellType::Native { size: 4 },
+                layout: MemoryCellType::field32(),
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
                 min_block_size: 1,
-                layout: MemoryCellType::Native { size: 4 },
+                layout: MemoryCellType::field32(),
             },
         ],
         height + 3,
@@ -443,7 +443,6 @@ fn expand_test_label_rebinding_attack() {
     let mut chip_ctx = chip.generate_proving_ctx();
 
     {
-        let mut trace: RowMajorMatrix<BabyBear> = (*chip_ctx.clone().common_main.unwrap()).clone();
         let half = BabyBear::TWO.inverse();
         // Rebind the path of fake_label to claimed_label by solving labels bottom-up:
         // x_{h} = (x_{h-1} - bit_{h-1}(fake_label)) / 2, x_0 = claimed_label.
@@ -464,16 +463,14 @@ fn expand_test_label_rebinding_attack() {
             *dst = root_address_label;
         }
 
-        for row in trace.rows_mut() {
-            let row: &mut MemoryMerkleCols<_, CHUNK> = row.borrow_mut();
+        for row in chip_ctx.common_main.rows_mut() {
+            let row: &mut MemoryMerkleCols<BabyBear, CHUNK> = row.borrow_mut();
             if row.expand_direction == BabyBear::ZERO {
                 continue;
             }
             let h = row.parent_height.as_canonical_u32() as usize;
             row.parent_address_label = per_height[h];
         }
-
-        chip_ctx.common_main.replace(Arc::new(trace));
     }
 
     let dummy_interaction_air = DummyInteractionAir::new(4 + CHUNK, true, merkle_bus.index);
@@ -538,19 +535,20 @@ fn expand_test_label_rebinding_attack() {
         dummy_interaction_trace_rows,
         dummy_interaction_air.field_width() + 1,
     );
-    let dummy_interaction_api = AirProvingContext::simple_no_pis(Arc::new(dummy_interaction_trace));
+    let dummy_interaction_api = AirProvingContext::simple_no_pis(dummy_interaction_trace);
 
-    BabyBearPoseidon2Engine::run_test_fast(
-        vec![
-            Arc::new(chip.air),
-            Arc::new(dummy_interaction_air),
-            Arc::new(hash_test_chip.air()),
-        ],
-        vec![
-            chip_ctx,
-            dummy_interaction_api,
-            hash_test_chip.generate_proving_ctx(),
-        ],
-    )
-    .expect("Label-rebinding attack unexpectedly failed");
+    test_cpu_engine()
+        .run_test(
+            vec![
+                Arc::new(chip.air),
+                Arc::new(dummy_interaction_air),
+                Arc::new(hash_test_chip.air()),
+            ],
+            vec![
+                chip_ctx,
+                dummy_interaction_api,
+                hash_test_chip.generate_proving_ctx(),
+            ],
+        )
+        .expect("Label-rebinding attack unexpectedly failed");
 }
