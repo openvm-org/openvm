@@ -186,15 +186,15 @@ where
         GenericSdk::new(AppConfig::standard(app_params), agg_params).unwrap()
     }
 
-    /// Creates SDK with a configuration with RISC-V RV32IM and IO VM extensions loaded.
+    /// Creates SDK with a configuration with RISC-V RV64IM and IO VM extensions loaded.
     ///
     /// **Note**: To use this configuration, your `openvm.toml` must exactly match the following:
     ///
     /// ```toml
-    #[doc = include_str!("../../sdk-config/src/openvm_riscv32.toml")]
+    #[doc = include_str!("../../sdk-config/src/openvm_riscv64.toml")]
     /// ```
-    pub fn riscv32(app_params: SystemParams, agg_params: AggregationSystemParams) -> Self {
-        GenericSdk::new(AppConfig::riscv32(app_params), agg_params).unwrap()
+    pub fn riscv64(app_params: SystemParams, agg_params: AggregationSystemParams) -> Self {
+        GenericSdk::new(AppConfig::riscv64(app_params), agg_params).unwrap()
     }
 }
 

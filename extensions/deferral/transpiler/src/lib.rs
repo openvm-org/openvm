@@ -3,7 +3,7 @@ use openvm_deferral_guest::{COMMIT_NUM_BYTES, DEFERRAL_FUNCT3, MAX_DEF_CIRCUITS,
 use openvm_instructions::{
     exe::SparseMemoryImage,
     instruction::Instruction,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_instructions_derive::LocalOpcode;
@@ -82,21 +82,21 @@ impl<F: PrimeField32> TranspilerExtension<F> for DeferralTranspilerExtension {
             DeferralOpcode::CALL => Instruction::from_usize(
                 DeferralOpcode::CALL.global_opcode(),
                 [
-                    RV32_REGISTER_NUM_LIMBS * dec_insn.rd,
-                    RV32_REGISTER_NUM_LIMBS * dec_insn.rs1,
+                    RV64_REGISTER_NUM_LIMBS * dec_insn.rd,
+                    RV64_REGISTER_NUM_LIMBS * dec_insn.rs1,
                     def_idx,
-                    RV32_REGISTER_AS as usize,
-                    RV32_MEMORY_AS as usize,
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
                 ],
             ),
             DeferralOpcode::OUTPUT => Instruction::from_usize(
                 DeferralOpcode::OUTPUT.global_opcode(),
                 [
-                    RV32_REGISTER_NUM_LIMBS * dec_insn.rd,
-                    RV32_REGISTER_NUM_LIMBS * dec_insn.rs1,
+                    RV64_REGISTER_NUM_LIMBS * dec_insn.rd,
+                    RV64_REGISTER_NUM_LIMBS * dec_insn.rs1,
                     def_idx,
-                    RV32_REGISTER_AS as usize,
-                    RV32_MEMORY_AS as usize,
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
                 ],
             ),
         };

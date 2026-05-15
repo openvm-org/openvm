@@ -10,9 +10,9 @@ on:
 #     - "crates/circuits/primitives/**"
 #     - "crates/vm/**"
 #     - "crates/toolchain/**"
-      - "extensions/rv32im/circuit/**"
-      - "extensions/rv32im/transpiler/**"
-      - "extensions/rv32im/guest/**"
+      - "extensions/riscv/circuit/**"
+      - "extensions/riscv/transpiler/**"
+      - "extensions/riscv/guest/**"
 #     - "Cargo.toml"
       - ".github/workflows/riscv.yml"
 
@@ -29,10 +29,11 @@ jobs:
     strategy:
       matrix:
         platform:
+          # TODO(aot): restore `features: "aot"`
           - {
               runner: "64cpu-linux-x64",
               image: "ubuntu24-full-x64",
-              features: "aot",
+              features: "",
             }
           - {
               runner: "test-gpu-nvidia",
@@ -85,7 +86,7 @@ jobs:
           rm gcc.tar.xz
 
       - name: Run Makefile
-        working-directory: crates/toolchain/tests/rv32im-test-vectors
+        working-directory: crates/toolchain/tests/riscv-test-vectors
         run: |
           make
 
@@ -95,9 +96,9 @@ jobs:
         run: |
           rustup component add rust-src --toolchain nightly-2026-01-18
           if [[ ${{ matrix.platform.runner }} == *"gpu"* ]]; then
-            TEST_NAME=test_rv32im_riscv_vector_prove
+            TEST_NAME=test_rv64im_riscv_vector_prove
           else
-            TEST_NAME=test_rv32im_riscv_vector_runtime
+            TEST_NAME=test_rv64im_riscv_vector_runtime
           fi
           cargo nextest run ${{ env.FEATURE_ARGS }} --cargo-profile=fast --run-ignored only --no-capture -- $TEST_NAME
 

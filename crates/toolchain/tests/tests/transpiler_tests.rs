@@ -17,11 +17,11 @@ use openvm_circuit::{
 use openvm_ecc_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
-use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32ImBuilder, Rv32ImConfig, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
+use openvm_riscv_circuit::{
+    Rv64I, Rv64IExecutor, Rv64ImBuilder, Rv64ImConfig, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
-use openvm_rv32im_transpiler::{
-    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+use openvm_riscv_transpiler::{
+    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
@@ -40,22 +40,22 @@ fn get_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
 // An "eyeball test" only: prints the decoded ELF for eyeball inspection
 #[test]
 fn test_decode_elf() -> Result<()> {
-    let elf = get_elf("tests/data/rv32im-empty-program-elf")?;
+    let elf = get_elf("tests/data/rv64im-empty-program-elf")?;
     dbg!(elf);
     Ok(())
 }
 
-// To create ELF directly from .S file, `brew install riscv-gnu-toolchain` and run
-// `riscv64-unknown-elf-gcc -march=rv32im -mabi=ilp32 -nostartfiles -e _start -Ttext 0 fib.S -o
-// rv32im-fib-from-as` riscv64-unknown-elf-gcc supports rv32im if you set -march target
-#[test_case("tests/data/rv32im-fib-from-as")]
-#[test_case("tests/data/rv32im-intrin-from-as")]
+// To create ELF directly from .S file, install riscv-gnu-toolchain and run
+// `riscv64-unknown-elf-gcc -march=rv64im -mabi=lp64 -nostartfiles -nostdlib -e _start -Ttext 0
+// fib.S -o rv64im-fib-from-as`
+#[test_case("tests/data/rv64im-fib-from-as")]
+#[test_case("tests/data/rv64im-intrin-from-as")]
 fn test_generate_program(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let program = Transpiler::<F>::default()
-        .with_extension(Rv32ITranspilerExtension)
-        .with_extension(Rv32MTranspilerExtension)
-        .with_extension(Rv32IoTranspilerExtension)
+        .with_extension(Rv64ITranspilerExtension)
+        .with_extension(Rv64MTranspilerExtension)
+        .with_extension(Rv64IoTranspilerExtension)
         .with_extension(ModularTranspilerExtension)
         .transpile(&elf.instructions)?;
     for instruction in program {
@@ -65,18 +65,18 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
 }
 
 #[cfg(feature = "aot")]
-#[test_case("tests/data/rv32im-exp-from-as")]
-fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
+#[test_case("tests/data/rv64im-exp-from-as")]
+fn test_rv64im_aot_pure_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(Rv32ITranspilerExtension)
-            .with_extension(Rv32MTranspilerExtension)
-            .with_extension(Rv32IoTranspilerExtension),
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension),
     )?;
 
-    let config = Rv32ImConfig::default();
+    let config = Rv64ImConfig::default();
     let executor = VmExecutor::new(config.clone())?;
 
     let interpreter = executor.instance(&exe)?;
@@ -86,19 +86,19 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
 }
 /*
 #[cfg(feature = "aot")]
-#[test_case("tests/data/rv32im-exp-from-as")]
-fn test_rv32im_aot_pure_runtime_with_path(elf_path: &str) -> Result<()> {
+#[test_case("tests/data/rv64im-exp-from-as")]
+fn test_rv64im_aot_pure_runtime_with_path(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(Rv32ITranspilerExtension)
-            .with_extension(Rv32MTranspilerExtension)
-            .with_extension(Rv32IoTranspilerExtension),
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension),
     )?;
 
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let config = Rv32ImConfig::default();
+    let config = Rv64ImConfig::default();
     let executor = VmExecutor::new(config.clone())?;
 
     let interpreter = executor.instance(&exe)?;
@@ -115,18 +115,18 @@ fn test_rv32im_aot_pure_runtime_with_path(elf_path: &str) -> Result<()> {
 }
     */
 
-#[test_case("tests/data/rv32im-exp-from-as")]
-#[test_case("tests/data/rv32im-fib-from-as")]
-fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
+#[test_case("tests/data/rv64im-exp-from-as")]
+#[test_case("tests/data/rv64im-fib-from-as")]
+fn test_rv64im_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(Rv32ITranspilerExtension)
-            .with_extension(Rv32MTranspilerExtension)
-            .with_extension(Rv32IoTranspilerExtension),
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension),
     )?;
-    let config = Rv32ImConfig::default();
+    let config = Rv64ImConfig::default();
     let executor = VmExecutor::new(config)?;
     let interpreter = executor.instance(&exe)?;
     interpreter.execute(vec![], None)?;
@@ -134,15 +134,15 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
 }
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
-pub struct Rv32ModularFp2Int256Config {
+pub struct Rv64ModularFp2Int256Config {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
-    pub base: Rv32I,
+    pub base: Rv64I,
     #[extension]
-    pub mul: Rv32M,
+    pub mul: Rv64M,
     #[extension]
-    pub io: Rv32Io,
+    pub io: Rv64Io,
     #[extension]
     pub modular: ModularExtension,
     #[extension]
@@ -151,7 +151,7 @@ pub struct Rv32ModularFp2Int256Config {
     pub int256: Int256,
 }
 
-impl Rv32ModularFp2Int256Config {
+impl Rv64ModularFp2Int256Config {
     pub fn new(modular_moduli: Vec<BigUint>, fp2_moduli: Vec<(String, BigUint)>) -> Self {
         Self {
             system: SystemConfig::default(),
@@ -165,7 +165,7 @@ impl Rv32ModularFp2Int256Config {
     }
 }
 
-impl InitFileGenerator for Rv32ModularFp2Int256Config {
+impl InitFileGenerator for Rv64ModularFp2Int256Config {
     fn generate_init_file_contents(&self) -> Option<String> {
         Some(format!(
             "{}\n{}\n",
@@ -175,9 +175,9 @@ impl InitFileGenerator for Rv32ModularFp2Int256Config {
     }
 }
 
-#[test_case("tests/data/rv32im-intrin-from-as")]
+#[test_case("tests/data/rv64im-intrin-from-as")]
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
-    let config = Rv32ModularFp2Int256Config::new(
+    let config = Rv64ModularFp2Int256Config::new(
         vec![SECP256K1_MODULUS.clone(), SECP256K1_ORDER.clone()],
         vec![("Secp256k1Coord".to_string(), SECP256K1_MODULUS.clone())],
     );
@@ -185,9 +185,9 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let openvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(Rv32ITranspilerExtension)
-            .with_extension(Rv32MTranspilerExtension)
-            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension)
             .with_extension(Fp2TranspilerExtension),
     )?;
@@ -199,16 +199,16 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
 
 #[test]
 fn test_terminate_prove() -> Result<()> {
-    let config = Rv32ImConfig::default();
-    let elf = get_elf("tests/data/rv32im-terminate-from-as")?;
+    let config = Rv64ImConfig::default();
+    let elf = get_elf("tests/data/rv64im-terminate-from-as")?;
     let openvm_exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(Rv32ITranspilerExtension)
-            .with_extension(Rv32MTranspilerExtension)
-            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
     )?;
-    air_test(Rv32ImBuilder, config, openvm_exe);
+    air_test(Rv64ImBuilder, config, openvm_exe);
     Ok(())
 }

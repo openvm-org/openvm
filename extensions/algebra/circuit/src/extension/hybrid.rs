@@ -1,6 +1,6 @@
 //! Prover extension for the GPU backend which still does trace generation on CPU.
 
-use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::{DEFAULT_BLOCK_SIZE, *},
     system::{
@@ -25,18 +25,18 @@ use openvm_cuda_backend::{
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
-use openvm_rv32_adapters::{
-    Rv32IsEqualModAdapterCols, Rv32IsEqualModAdapterExecutor, Rv32IsEqualModAdapterFiller,
-    Rv32IsEqualModAdapterRecord, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor,
+use openvm_riscv_adapters::{
+    Rv64IsEqualModAdapterCols, Rv64IsEqualModAdapterExecutor, Rv64IsEqualModAdapterFiller,
+    Rv64IsEqualModAdapterRecord, Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor,
 };
-use openvm_rv32im_circuit::Rv32ImGpuProverExt;
+use openvm_riscv_circuit::Rv64ImGpuProverExt;
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 use strum::EnumCount;
 
 use crate::{
     fp2_chip::{get_fp2_addsub_chip, get_fp2_muldiv_chip, Fp2Air, Fp2Chip},
     modular_chip::*,
-    AlgebraRecord, Fp2Extension, ModularExtension, Rv32ModularConfig, Rv32ModularWithFp2Config,
+    AlgebraRecord, Fp2Extension, ModularExtension, Rv64ModularConfig, Rv64ModularWithFp2Config,
     FP2_BLOCKS_32, FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
@@ -56,7 +56,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
             self.cpu.inner.num_inputs() * self.cpu.inner.expr.canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
-            Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >::new(total_input_limbs));
 
         let record_size = RecordSeeker::<
@@ -78,11 +78,11 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
             .get_record_seeker::<AlgebraRecord<2, BLOCKS, BLOCK_SIZE>, AdapterCoreLayout<
                 FieldExpressionMetadata<
                     F,
-                    Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+                    Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
                 >,
             >>();
         let adapter_width =
-            Rv32VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>::width();
+            Rv64VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>::width();
         let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
@@ -108,10 +108,10 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
 {
     fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         let record_size = size_of::<(
-            Rv32IsEqualModAdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            Rv64IsEqualModAdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             ModularIsEqualRecord<TOTAL_LIMBS>,
         )>();
-        let trace_width = Rv32IsEqualModAdapterCols::<F, 2, NUM_LANES, LANE_SIZE>::width()
+        let trace_width = Rv64IsEqualModAdapterCols::<F, 2, NUM_LANES, LANE_SIZE>::width()
             + ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width();
         let records = arena.allocated();
         if records.is_empty() {
@@ -122,11 +122,11 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
         let num_records = records.len() / record_size;
         let height = num_records.next_power_of_two();
         let mut seeker = arena.get_record_seeker::<(
-            &mut Rv32IsEqualModAdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            &mut Rv64IsEqualModAdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             &mut ModularIsEqualRecord<TOTAL_LIMBS>,
         ), EmptyAdapterCoreLayout<
             F,
-            Rv32IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            Rv64IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         >>();
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, trace_width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, EmptyAdapterCoreLayout::new());
@@ -159,7 +159,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
             let start_offset =
-                Rv32ModularArithmeticOpcode::CLASS_OFFSET + i * Rv32ModularArithmeticOpcode::COUNT;
+                Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
 
             let modulus_limbs = big_uint_to_limbs(modulus, 8);
 
@@ -205,7 +205,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     NUM_LIMBS_32,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs,
                         bitwise_lu.clone(),
@@ -256,7 +256,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     NUM_LIMBS_48,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs,
                         bitwise_lu.clone(),
@@ -288,7 +288,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
             self.cpu.inner.num_inputs() * self.cpu.inner.expr.canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
-            Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >::new(total_input_limbs));
 
         let record_size = RecordSeeker::<
@@ -309,11 +309,11 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
             .get_record_seeker::<AlgebraRecord<2, BLOCKS, BLOCK_SIZE>, AdapterCoreLayout<
                 FieldExpressionMetadata<
                     F,
-                    Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+                    Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
                 >,
             >>();
         let adapter_width =
-            Rv32VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>::width();
+            Rv64VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>::width();
         let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
@@ -404,21 +404,21 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
     }
 }
 
-/// This builder will do tracegen for the RV32IM extensions on GPU but the modular extensions on
+/// This builder will do tracegen for the RV64IM extensions on GPU but the modular extensions on
 /// CPU.
 #[derive(Clone)]
-pub struct Rv32ModularHybridBuilder;
+pub struct Rv64ModularHybridBuilder;
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for Rv32ModularHybridBuilder {
-    type VmConfig = Rv32ModularConfig;
+impl VmBuilder<E> for Rv64ModularHybridBuilder {
+    type VmConfig = Rv64ModularConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
-        config: &Rv32ModularConfig,
+        config: &Rv64ModularConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
@@ -432,9 +432,9 @@ impl VmBuilder<E> for Rv32ModularHybridBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.base, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.mul, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.base, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.mul, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &AlgebraHybridProverExt,
             &config.modular,
@@ -444,19 +444,19 @@ impl VmBuilder<E> for Rv32ModularHybridBuilder {
     }
 }
 
-/// This builder will do tracegen for the RV32IM extensions on GPU but the modular and complex
+/// This builder will do tracegen for the RV64IM extensions on GPU but the modular and complex
 /// extensions on CPU.
 #[derive(Clone)]
-pub struct Rv32ModularWithFp2HybridBuilder;
+pub struct Rv64ModularWithFp2HybridBuilder;
 
-impl VmBuilder<E> for Rv32ModularWithFp2HybridBuilder {
-    type VmConfig = Rv32ModularWithFp2Config;
+impl VmBuilder<E> for Rv64ModularWithFp2HybridBuilder {
+    type VmConfig = Rv64ModularWithFp2Config;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
-        config: &Rv32ModularWithFp2Config,
+        config: &Rv64ModularWithFp2Config,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
@@ -464,7 +464,7 @@ impl VmBuilder<E> for Rv32ModularWithFp2HybridBuilder {
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &Rv32ModularHybridBuilder,
+            &Rv64ModularHybridBuilder,
             &config.modular,
             circuit,
             device_ctx,

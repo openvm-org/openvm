@@ -27,8 +27,8 @@ struct DeferralOutputRecordHeader {
     uint32_t deferral_idx;
     uint32_t num_rows;
 
-    uint8_t rd_val[RV32_REGISTER_NUM_LIMBS];
-    uint8_t rs_val[RV32_REGISTER_NUM_LIMBS];
+    uint8_t rd_val[RV64_WORD_NUM_LIMBS];
+    uint8_t rs_val[RV64_WORD_NUM_LIMBS];
     MemoryReadAuxRecord rd_aux;
     MemoryReadAuxRecord rs_aux;
 
@@ -46,7 +46,7 @@ struct DeferralOutputPerRow {
     Fp poseidon2_res[DIGEST_SIZE];
 };
 
-template <typename T> using MemoryWriteAuxCols4 = MemoryWriteAuxCols<T, MEMORY_OP_SIZE>;
+template <typename T> using MemoryWriteAuxColsDef = MemoryWriteAuxCols<T, MEMORY_OP_SIZE>;
 
 __device__ __forceinline__ size_t align_up(size_t value, size_t alignment) {
     return ((value + alignment - 1) / alignment) * alignment;
@@ -79,8 +79,8 @@ template <typename T> struct DeferralOutputCols {
     T deferral_idx;
 
     // Heap pointers + auxiliary read columns
-    T rd_val[RV32_REGISTER_NUM_LIMBS];
-    T rs_val[RV32_REGISTER_NUM_LIMBS];
+    T rd_val[RV64_WORD_NUM_LIMBS];
+    T rs_val[RV64_WORD_NUM_LIMBS];
     MemoryReadAuxCols<T> rd_aux;
     MemoryReadAuxCols<T> rs_aux;
 
@@ -120,7 +120,6 @@ __global__ void deferral_output_tracegen(
     const uint32_t range_checker_num_bins,
     const uint32_t timestamp_max_bits,
     uint32_t *bitwise_ptr,
-    const size_t bitwise_num_bits,
     const size_t address_bits,
     FpArray<16> *poseidon2_records,
     DeferralPoseidon2Count *poseidon2_counts,
@@ -151,7 +150,7 @@ __global__ void deferral_output_tracegen(
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
-    BitwiseOperationLookup bitwise_buffer(bitwise_ptr, bitwise_num_bits);
+    BitwiseOperationLookup bitwise_buffer(bitwise_ptr);
     DeferralPoseidon2Buffer poseidon2_buffer(
         poseidon2_records, poseidon2_counts, poseidon2_idx, poseidon2_capacity
     );
@@ -182,13 +181,13 @@ __global__ void deferral_output_tracegen(
     if (is_first) {
         count_buffer.add_count(header.deferral_idx);
 
-        const uint32_t limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits;
+        const uint32_t limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - address_bits;
         bitwise_buffer.add_range(
-            static_cast<uint32_t>(header.rd_val[RV32_REGISTER_NUM_LIMBS - 1]) << limb_shift_bits,
-            static_cast<uint32_t>(header.rs_val[RV32_REGISTER_NUM_LIMBS - 1]) << limb_shift_bits
+            static_cast<uint32_t>(header.rd_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
+            static_cast<uint32_t>(header.rs_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits
         );
         bitwise_buffer.add_range(
-            static_cast<uint32_t>(output_len_bytes[RV32_REGISTER_NUM_LIMBS - 1]) << limb_shift_bits,
+            static_cast<uint32_t>(output_len_bytes[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
             0
         );
 
@@ -265,14 +264,14 @@ __global__ void deferral_output_tracegen(
             bitwise_buffer.add_range(write_bytes_start[i], write_bytes_start[i + 1]);
         }
 
-        constexpr size_t write_aux_stride = sizeof(MemoryWriteAuxCols4<uint8_t>);
+        constexpr size_t write_aux_stride = sizeof(MemoryWriteAuxColsDef<uint8_t>);
 #pragma unroll
         for (size_t chunk_idx = 0; chunk_idx < DIGEST_MEMORY_OPS; ++chunk_idx) {
             const size_t aux_idx = (section_idx - 1) * DIGEST_MEMORY_OPS + chunk_idx;
             RowSlice aux_row = row.slice_from(
                 COL_INDEX(DeferralOutputCols, write_bytes_aux) + chunk_idx * write_aux_stride
             );
-            COL_WRITE_ARRAY(aux_row, MemoryWriteAuxCols4, prev_data, write_aux[aux_idx].prev_data);
+            COL_WRITE_ARRAY(aux_row, MemoryWriteAuxColsDef, prev_data, write_aux[aux_idx].prev_data);
             mem_helper.fill(
                 aux_row,
                 write_aux[aux_idx].prev_timestamp,
@@ -318,7 +317,6 @@ extern "C" int _deferral_output_tracegen(
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits,
     uint32_t *d_bitwise,
-    uint32_t bitwise_num_bits,
     size_t address_bits,
     Fp *d_poseidon2_records,
     DeferralPoseidon2Count *d_poseidon2_counts,
@@ -346,7 +344,6 @@ extern "C" int _deferral_output_tracegen(
         range_checker_num_bins,
         timestamp_max_bits,
         d_bitwise,
-        bitwise_num_bits,
         address_bits,
         reinterpret_cast<FpArray<16> *>(d_poseidon2_records),
         d_poseidon2_counts,

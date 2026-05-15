@@ -7,6 +7,7 @@ edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
+include = ["src/**/*", "README.md", "LICENSE-*", "*.json"]
 
 [dependencies]
 openvm-platform = { workspace = true }
@@ -18,3 +19,6 @@ cargo_metadata.workspace = true
 [dev-dependencies]
 
 [features]
+
+[lints]
+workspace = true

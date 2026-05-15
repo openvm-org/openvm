@@ -19,8 +19,14 @@ pub use self::config::GuestOptions;
 
 mod config;
 
-/// The rustc compiler [target](https://doc.rust-lang.org/rustc/targets/index.html).
-pub const RUSTC_TARGET: &str = "riscv32im-risc0-zkvm-elf";
+/// Custom rustc target for the openvm guest. The JSON spec lives at
+/// `<RUSTC_TARGET>.json` next to this crate.
+pub const RUSTC_TARGET: &str = "riscv64im-openvm-none-elf";
+
+/// Directory containing the target JSON; passed to cargo as `RUST_TARGET_PATH`.
+pub fn rustc_target_spec_dir() -> &'static Path {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+}
 /// The default Rust toolchain name to use if OPENVM_RUST_TOOLCHAIN is not set
 pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2026-01-18";
 
@@ -265,17 +271,12 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
         args.push("--locked");
     }
 
-    // let rust_src = get_env_var("OPENVM_RUST_SRC");
-    // if !rust_src.is_empty() {
-    // TODO[jpw]: only do this for custom src once we make openvm toolchain
     args.extend_from_slice(&[
         "-Z",
-        "build-std=alloc,core,proc_macro,panic_abort,std",
+        "build-std=alloc,core,panic_abort",
         "-Z",
         "build-std-features=compiler-builtins-mem",
     ]);
-    // cmd.env("__CARGO_TESTS_ONLY_SRC_ROOT", rust_src);
-    // }
 
     println!("Building guest package: cargo {}", args.join(" "));
 
@@ -283,6 +284,7 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
 
     cmd.env("RUSTC", rustc)
         .env("CARGO_ENCODED_RUSTFLAGS", encoded_rust_flags)
+        .env("RUST_TARGET_PATH", rustc_target_spec_dir())
         .args(args);
     cmd
 }
@@ -312,6 +314,14 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
             // https://docs.rs/getrandom/0.3.2/getrandom/index.html#opt-in-backends
             "--cfg",
             "getrandom_backend=\"custom\"",
+            "--cfg",
+            "openvm_intrinsics",
+            // Declare `openvm_intrinsics` to rustc so guest crates (ours and users')
+            // don't need a per-crate `unexpected_cfgs` lint declaration.
+            "--check-cfg=cfg(openvm_intrinsics)",
+            // Custom JSON target specs require this unstable option.
+            "-Z",
+            "unstable-options",
         ],
     ]
     .concat()

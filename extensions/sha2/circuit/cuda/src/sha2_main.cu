@@ -29,12 +29,11 @@ static __device__ __forceinline__ void sha2_main_row_body(
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits,
     uint32_t timestamp_max_bits
 ) {
     Sha2RecordHeader<V> *header = record.header;
 
-    BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr, bitwise_num_bits);
+    BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr);
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
@@ -53,9 +52,9 @@ static __device__ __forceinline__ void sha2_main_row_body(
     SHA2_MAIN_WRITE_INSTR(V, row, state_reg_ptr, header->state_reg_ptr);
     SHA2_MAIN_WRITE_INSTR(V, row, input_reg_ptr, header->input_reg_ptr);
 
-    uint8_t dst_ptr_bytes[RV32_REGISTER_NUM_LIMBS];
-    uint8_t state_ptr_bytes[RV32_REGISTER_NUM_LIMBS];
-    uint8_t input_ptr_bytes[RV32_REGISTER_NUM_LIMBS];
+    uint8_t dst_ptr_bytes[RV64_WORD_NUM_LIMBS];
+    uint8_t state_ptr_bytes[RV64_WORD_NUM_LIMBS];
+    uint8_t input_ptr_bytes[RV64_WORD_NUM_LIMBS];
     memcpy(dst_ptr_bytes, &header->dst_ptr, sizeof(uint32_t));
     memcpy(state_ptr_bytes, &header->state_ptr, sizeof(uint32_t));
     memcpy(input_ptr_bytes, &header->input_ptr, sizeof(uint32_t));
@@ -66,12 +65,12 @@ static __device__ __forceinline__ void sha2_main_row_body(
 
     // Range checks on top limbs
     uint8_t needs_range_check[4] = {
-        dst_ptr_bytes[RV32_REGISTER_NUM_LIMBS - 1],
-        state_ptr_bytes[RV32_REGISTER_NUM_LIMBS - 1],
-        input_ptr_bytes[RV32_REGISTER_NUM_LIMBS - 1],
-        input_ptr_bytes[RV32_REGISTER_NUM_LIMBS - 1],
+        dst_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
+        state_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
+        input_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
+        input_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
     };
-    uint32_t shift = 1u << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - ptr_max_bits);
+    uint32_t shift = 1u << (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - ptr_max_bits);
     for (int i = 0; i < 4; i += 2) {
         bitwise_lookup.add_range(
             static_cast<uint32_t>(needs_range_check[i]) * shift,
@@ -128,7 +127,6 @@ static __device__ __noinline__ void sha2_main_row_outlined(
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits,
     uint32_t timestamp_max_bits
 ) {
     sha2_main_row_body<V>(
@@ -139,7 +137,6 @@ static __device__ __noinline__ void sha2_main_row_outlined(
         range_checker_ptr,
         range_checker_num_bins,
         bitwise_lookup_ptr,
-        bitwise_num_bits,
         timestamp_max_bits
     );
 }
@@ -156,7 +153,6 @@ __global__ void sha2_main_tracegen(
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits,
     uint32_t timestamp_max_bits
 ) {
     uint32_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -184,7 +180,6 @@ __global__ void sha2_main_tracegen(
             range_checker_ptr,
             range_checker_num_bins,
             bitwise_lookup_ptr,
-            bitwise_num_bits,
             timestamp_max_bits
         );
     } else {
@@ -196,7 +191,6 @@ __global__ void sha2_main_tracegen(
             range_checker_ptr,
             range_checker_num_bins,
             bitwise_lookup_ptr,
-            bitwise_num_bits,
             timestamp_max_bits
         );
     }
@@ -215,7 +209,6 @@ int launch_sha2_main_tracegen(
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
-    uint32_t bitwise_num_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -230,7 +223,6 @@ int launch_sha2_main_tracegen(
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,
-        bitwise_num_bits,
         timestamp_max_bits
     );
     return CHECK_KERNEL();
@@ -248,7 +240,6 @@ int launch_sha256_main_tracegen(
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
-    uint32_t bitwise_num_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -262,7 +253,6 @@ int launch_sha256_main_tracegen(
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,
-        bitwise_num_bits,
         timestamp_max_bits,
         stream
     );
@@ -278,7 +268,6 @@ int launch_sha512_main_tracegen(
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
-    uint32_t bitwise_num_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -292,7 +281,6 @@ int launch_sha512_main_tracegen(
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,
-        bitwise_num_bits,
         timestamp_max_bits,
         stream
     );

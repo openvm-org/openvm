@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice, CpuProverError};
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     DEFERRAL_AS,
 };
 use openvm_poseidon2_air::Poseidon2SubAir;
@@ -172,9 +172,9 @@ where
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
         // Write pointer in DEFAULT_BLOCK_SIZE-byte chunks to match the fixed block size.
-        // The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
-        let ptr_bytes = (pointer as u32).to_le_bytes();
-        for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
+        // The pointer is RV64_REGISTER_NUM_LIMBS bytes (64-bit for RV64).
+        let ptr_bytes = (pointer as u64).to_le_bytes();
+        for i in (0..RV64_REGISTER_NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
             let chunk: [u8; DEFAULT_BLOCK_SIZE] =
                 ptr_bytes[i..i + DEFAULT_BLOCK_SIZE].try_into().unwrap();
             self.write::<DEFAULT_BLOCK_SIZE>(1, register + i, chunk.map(F::from_u8));
@@ -229,9 +229,9 @@ impl<F: VmField> VmChipTestBuilder<F> {
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
         // Write pointer in DEFAULT_BLOCK_SIZE-byte chunks to match the fixed block size.
-        // The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
-        let ptr_bytes = (pointer as u32).to_le_bytes();
-        for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
+        // The pointer is RV64_REGISTER_NUM_LIMBS bytes (64-bit for RV64).
+        let ptr_bytes = (pointer as u64).to_le_bytes();
+        for i in (0..RV64_REGISTER_NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
             let chunk: [u8; DEFAULT_BLOCK_SIZE] =
                 ptr_bytes[i..i + DEFAULT_BLOCK_SIZE].try_into().unwrap();
             self.write::<DEFAULT_BLOCK_SIZE>(1usize, register + i, chunk.map(F::from_u8));
@@ -352,7 +352,7 @@ impl<F: VmField> Default for VmChipTestBuilder<F> {
         let mut mem_config = MemoryConfig::default();
         // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
         // removed when tests are updated.
-        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
+        mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
         mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 0;
         Self::from_config(mem_config)
     }

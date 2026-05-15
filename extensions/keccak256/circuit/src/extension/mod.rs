@@ -24,8 +24,8 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::*;
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
-use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
+use openvm_riscv_circuit::{
+    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_stark_backend::{
     interaction::PermutationCheckBus, p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val,
@@ -45,51 +45,51 @@ mod cuda;
 pub use cuda::*;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Keccak256Rv32Config {
+pub struct Keccak256Rv64Config {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
-    pub rv32i: Rv32I,
+    pub rv64i: Rv64I,
     #[extension]
-    pub rv32m: Rv32M,
+    pub rv64m: Rv64M,
     #[extension]
-    pub io: Rv32Io,
+    pub io: Rv64Io,
     #[extension]
     pub keccak: Keccak256,
 }
 
-impl Default for Keccak256Rv32Config {
+impl Default for Keccak256Rv64Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),
-            rv32i: Rv32I,
-            rv32m: Rv32M::default(),
-            io: Rv32Io,
+            rv64i: Rv64I,
+            rv64m: Rv64M::default(),
+            io: Rv64Io,
             keccak: Keccak256,
         }
     }
 }
 
 // Default implementation uses no init file
-impl InitFileGenerator for Keccak256Rv32Config {}
+impl InitFileGenerator for Keccak256Rv64Config {}
 
 #[derive(Clone)]
-pub struct Keccak256Rv32CpuBuilder;
+pub struct Keccak256Rv64CpuBuilder;
 
-impl<SC, E> VmBuilder<E> for Keccak256Rv32CpuBuilder
+impl<SC, E> VmBuilder<E> for Keccak256Rv64CpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
-    type VmConfig = Keccak256Rv32Config;
+    type VmConfig = Keccak256Rv64Config;
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
-        config: &Keccak256Rv32Config,
+        config: &Keccak256Rv64Config,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
@@ -103,9 +103,9 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &Keccak256CpuProverExt,
             &config.keccak,

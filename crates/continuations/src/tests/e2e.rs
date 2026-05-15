@@ -17,16 +17,16 @@ use openvm_circuit::{
 };
 use openvm_cuda_backend::{BabyBearBn254Poseidon2GpuEngine, BabyBearPoseidon2GpuEngine};
 use openvm_deferral_circuit::{
-    DeferralExtension, DeferralFn, Rv32DeferralBuilder, Rv32DeferralConfig,
+    DeferralExtension, DeferralFn, Rv64DeferralBuilder, Rv64DeferralConfig,
 };
 use openvm_deferral_transpiler::DeferralTranspilerExtension;
 use openvm_recursion_circuit::{
     prelude::DIGEST_SIZE,
     utils::{poseidon2_hash_slice, poseidon2_hash_slice_with_states},
 };
-use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
-use openvm_rv32im_transpiler::{
-    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+use openvm_riscv_circuit::{Rv64I, Rv64Io, Rv64M};
+use openvm_riscv_transpiler::{
+    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
 use openvm_stark_backend::{proof::Proof, AirRef, StarkEngine};
 use openvm_stark_sdk::{
@@ -119,7 +119,7 @@ fn input_commit_to_f(commit: &[u8; 32]) -> [F; DIGEST_SIZE] {
 fn commit_to_stdin_fields(commit: &[u8; 32]) -> Vec<F> {
     commit
         .iter()
-        .flat_map(|b| [*b, 0, 0, 0])
+        .flat_map(|b| [*b, 0, 0, 0, 0, 0, 0, 0])
         .map(F::from_u8)
         .collect()
 }
@@ -308,16 +308,16 @@ fn test_deferral_e2e() -> Result<()> {
     let transpiler_commits = vec![def_circuit_commit_bytes; NUM_DEF_CIRCUITS];
 
     // =========================================================================
-    // SECTION 1: Set up Rv32DeferralConfig, build ELF, set up deferral streams.
+    // SECTION 1: Set up Rv64DeferralConfig, build ELF, set up deferral streams.
     // =========================================================================
     let mut system = test_system_config().with_max_segment_len(1 << 20);
     system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
 
-    let config = Rv32DeferralConfig {
+    let config = Rv64DeferralConfig {
         system: system.clone(),
-        rv32i: Rv32I,
-        rv32m: Rv32M::default(),
-        io: Rv32Io,
+        rv64i: Rv64I,
+        rv64m: Rv64M::default(),
+        io: Rv64Io,
         deferral: make_deferral_extension(transpiler_commits.clone()),
     };
 
@@ -328,9 +328,9 @@ fn test_deferral_e2e() -> Result<()> {
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(Rv32ITranspilerExtension)
-            .with_extension(Rv32MTranspilerExtension)
-            .with_extension(Rv32IoTranspilerExtension)
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension)
             .with_extension(DeferralTranspilerExtension::new(transpiler_commits)),
     )?;
 
@@ -370,7 +370,7 @@ fn test_deferral_e2e() -> Result<()> {
     // SECTION 2: Run the VM, capture merkle proofs before and after execution.
     // =========================================================================
     let app_engine = GpuEngine::new(app_system_params());
-    let (vm, app_pk) = VirtualMachine::new_with_keygen(app_engine, Rv32DeferralBuilder, config)?;
+    let (vm, app_pk) = VirtualMachine::new_with_keygen(app_engine, Rv64DeferralBuilder, config)?;
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
 

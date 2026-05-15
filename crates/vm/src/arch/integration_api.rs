@@ -400,7 +400,7 @@ pub struct MinimalInstruction<T> {
     pub opcode: T,
 }
 
-// This ProcessedInstruction is used by rv32_rdwrite
+// This ProcessedInstruction is used by rv64_rdwrite
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
 pub struct ImmInstruction<T> {
@@ -410,7 +410,7 @@ pub struct ImmInstruction<T> {
     pub immediate: T,
 }
 
-// This ProcessedInstruction is used by rv32_jalr
+// This ProcessedInstruction is used by rv64_jalr
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
 pub struct SignedImmInstruction<T> {

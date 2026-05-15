@@ -40,8 +40,8 @@ pub fn default_app_config() -> AppConfig<SdkVmConfig> {
     AppConfig {
         app_vm_config: SdkVmConfig::builder()
             .system(Default::default())
-            .rv32i(Default::default())
-            .rv32m(Default::default())
+            .rv64i(Default::default())
+            .rv64m(Default::default())
             .io(Default::default())
             .build(),
         system_params: app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT),

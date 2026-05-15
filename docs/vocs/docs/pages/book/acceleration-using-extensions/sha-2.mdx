@@ -13,7 +13,7 @@ unsafe extern "C" {
 }
 
 fn sha256(input: &[u8]) -> [u8; 32] {
-    #[cfg(target_os = "zkvm")]
+    #[cfg(openvm_intrinsics)]
     {
         let mut state = [
             0x6a09e667,
@@ -44,7 +44,7 @@ fn sha256(input: &[u8]) -> [u8; 32] {
         }
         digest
     }
-    #[cfg(not(target_os = "zkvm"))] {
+    #[cfg(not(openvm_intrinsics))] {
         // Regular SHA-256 implementation
     }
 }

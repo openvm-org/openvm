@@ -1,13 +1,13 @@
 use hex_literal::hex;
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_intrinsics))]
 use lazy_static::lazy_static;
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_intrinsics))]
 use num_bigint::BigUint;
 
-#[cfg(all(test, feature = "halo2curves", not(target_os = "zkvm")))]
+#[cfg(all(test, feature = "halo2curves", not(openvm_intrinsics)))]
 mod tests;
 
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_intrinsics))]
 lazy_static! {
     pub static ref BLS12_381_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
         "1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab"
@@ -32,10 +32,10 @@ pub const BLS12_381_PSEUDO_BINARY_ENCODING: [i8; 64] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1,
 ];
 
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_intrinsics))]
 // Used in WeierstrassExtension config
 pub const BLS12_381_ECC_STRUCT_NAME: &str = "Bls12_381G1Affine";
 
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_intrinsics))]
 // Used in Fp2Extension config
 pub const BLS12_381_COMPLEX_STRUCT_NAME: &str = "Bls12_381Fp2";

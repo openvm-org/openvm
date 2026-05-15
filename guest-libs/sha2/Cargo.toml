@@ -23,7 +23,7 @@ openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
 openvm-transpiler = { workspace = true }
 openvm-sha2-transpiler = { workspace = true }
 openvm-sha2-circuit = { workspace = true }
-openvm-rv32im-transpiler = { workspace = true }
+openvm-riscv-transpiler = { workspace = true }
 openvm-toolchain-tests = { workspace = true }
 eyre = { workspace = true }
 
@@ -34,3 +34,6 @@ import_sha2 = ["dep:sha2"]
 aot = ["openvm-sdk/aot"]
 # Internal feature for testing only.
 cuda = ["openvm-sha2-circuit/cuda"]
+
+[lints]
+workspace = true

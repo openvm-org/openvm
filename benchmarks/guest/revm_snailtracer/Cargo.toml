@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-openvm = { workspace = true, features = ["std"] }
+openvm = { workspace = true }
 openvm-algebra-guest.workspace = true
 openvm-ecc-guest.workspace = true
 revm = { version = "18.0.0", default-features = false }
@@ -16,3 +16,7 @@ derive_more = { version = "1.0.0", default-features = false, features = [
 
 [features]
 default = []
+std = ["openvm/std"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

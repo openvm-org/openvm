@@ -12,12 +12,12 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::XorinVmExecutor;
-use crate::KECCAK_WORD_SIZE;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -45,7 +45,7 @@ impl XorinVmExecutor {
         } = inst;
 
         let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
+        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
@@ -157,46 +157,48 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     pre_compute: &XorinPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let buffer = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
-    let input = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
-    let length = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
-    let buffer_u32 = u32::from_le_bytes(buffer);
-    let input_u32 = u32::from_le_bytes(input);
-    let length_u32 = u32::from_le_bytes(length);
+    let buffer_u32 = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
+    let input_u32 = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32));
+    let length_u32 = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32));
+    debug_assert!(
+        (length_u32 as usize).is_multiple_of(DEFAULT_BLOCK_SIZE),
+        "xorin length must be {}-byte aligned",
+        DEFAULT_BLOCK_SIZE
+    );
 
-    // SAFETY: RV32_MEMORY_AS is memory address space of type u8
-    let num_reads = (length_u32 as usize).div_ceil(KECCAK_WORD_SIZE);
+    // SAFETY: RV64_MEMORY_AS is memory address space of type u8
+    let num_reads = (length_u32 as usize).div_ceil(DEFAULT_BLOCK_SIZE);
     let buffer_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
-            exec_state.vm_read::<u8, KECCAK_WORD_SIZE>(
-                RV32_MEMORY_AS,
-                buffer_u32 + (i * KECCAK_WORD_SIZE) as u32,
+            exec_state.vm_read::<u8, DEFAULT_BLOCK_SIZE>(
+                RV64_MEMORY_AS,
+                buffer_u32 + (i * DEFAULT_BLOCK_SIZE) as u32,
             )
         })
         .collect();
 
     let input_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
-            exec_state.vm_read::<u8, KECCAK_WORD_SIZE>(
-                RV32_MEMORY_AS,
-                input_u32 + (i * KECCAK_WORD_SIZE) as u32,
+            exec_state.vm_read::<u8, DEFAULT_BLOCK_SIZE>(
+                RV64_MEMORY_AS,
+                input_u32 + (i * DEFAULT_BLOCK_SIZE) as u32,
             )
         })
         .collect();
 
     let mut output_bytes = buffer_bytes;
-    for i in 0..output_bytes.len() {
+    // Only XOR the active bytes (first length_u32 bytes).
+    for i in 0..(length_u32 as usize) {
         output_bytes[i] ^= input_bytes[i];
     }
 
-    // Write XOR result back to the buffer memory in KECCAK_WORD_SIZE chunks.
-    // Note: this means output_bytes has to be multiple of KECCAK_WORD_SIZE
-    // Todo: recheck the above condition is okay
-    for (i, chunk) in output_bytes.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
-        let chunk: [u8; KECCAK_WORD_SIZE] = chunk.try_into().unwrap();
-        exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(
-            RV32_MEMORY_AS,
-            buffer_u32 + (i * KECCAK_WORD_SIZE) as u32,
+    // Write XOR result back to the buffer memory in 8-byte blocks.
+    // Note: this means output_bytes length is a multiple of DEFAULT_BLOCK_SIZE
+    for (i, chunk) in output_bytes.chunks_exact(DEFAULT_BLOCK_SIZE).enumerate() {
+        let chunk: [u8; DEFAULT_BLOCK_SIZE] = chunk.try_into().unwrap();
+        exec_state.vm_write::<u8, DEFAULT_BLOCK_SIZE>(
+            RV64_MEMORY_AS,
+            buffer_u32 + (i * DEFAULT_BLOCK_SIZE) as u32,
             &chunk,
         );
     }

@@ -11,7 +11,6 @@ namespace keccakf_op {
 using namespace riscv;
 using namespace keccak256;
 
-inline constexpr size_t KECCAK_WIDTH_WORDS = KECCAK_WIDTH_BYTES / RV32_REGISTER_NUM_LIMBS;
 inline constexpr size_t NUM_OP_ROWS_PER_INS = 1; // 1 row per instruction
 
 // Record structure matching Rust KeccakfRecord (from trace.rs)
@@ -22,7 +21,7 @@ struct KeccakfOpRecord {
     uint32_t rd_ptr;
     uint32_t buffer_ptr;
     MemoryReadAuxRecord rd_aux;
-    MemoryReadAuxRecord buffer_word_aux[KECCAK_WIDTH_WORDS];
+    MemoryReadAuxRecord buffer_word_aux[KECCAK_WIDTH_MEM_OPS];
     uint8_t preimage_buffer_bytes[KECCAK_WIDTH_BYTES];
 };
 
@@ -32,11 +31,11 @@ template <typename T> struct KeccakfOpCols {
     T is_valid;
     T timestamp;
     T rd_ptr;
-    T buffer_ptr_limbs[RV32_REGISTER_NUM_LIMBS]; // 4 limbs
+    T buffer_ptr_limbs[RV64_WORD_NUM_LIMBS]; // 4 limbs
     T preimage[KECCAK_WIDTH_BYTES];              // 200 bytes
     T postimage[KECCAK_WIDTH_BYTES];             // 200 bytes
     MemoryReadAuxCols<T> rd_aux;
-    MemoryBaseAuxCols<T> buffer_word_aux[KECCAK_WIDTH_WORDS]; // 50 words
+    MemoryBaseAuxCols<T> buffer_word_aux[KECCAK_WIDTH_MEM_OPS]; // 25 words
 };
 
 inline constexpr size_t NUM_KECCAKF_OP_COLS = sizeof(KeccakfOpCols<uint8_t>);

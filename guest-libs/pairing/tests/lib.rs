@@ -9,14 +9,14 @@ mod bn254 {
         bn256::{Fq12, Fq2, Fr, G1Affine, G2Affine},
         ff::Field,
     };
-    use openvm_algebra_circuit::{Fp2Extension, Rv32ModularConfig};
+    use openvm_algebra_circuit::{Fp2Extension, Rv64ModularConfig};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::utils::{
         air_test, air_test_impl, air_test_with_min_segments, test_system_config,
         TestStarkEngine as Engine,
     };
     use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, WeierstrassExtension,
+        CurveConfig, Rv64WeierstrassBuilder, Rv64WeierstrassConfig, WeierstrassExtension,
     };
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
@@ -25,7 +25,7 @@ mod bn254 {
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_instructions::exe::VmExe;
     use openvm_pairing_circuit::{
-        PairingCurve, PairingExtension, Rv32PairingBuilder, Rv32PairingConfig,
+        PairingCurve, PairingExtension, Rv64PairingBuilder, Rv64PairingConfig,
     };
     use openvm_pairing_guest::{
         bn254::{BN254_COMPLEX_STRUCT_NAME, BN254_MODULUS},
@@ -33,8 +33,8 @@ mod bn254 {
         pairing::{EvaluatedLine, FinalExp, LineMulDType, MillerStep, MultiMillerLoop},
     };
     use openvm_pairing_transpiler::PairingTranspilerExtension;
-    use openvm_rv32im_transpiler::{
-        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+    use openvm_riscv_transpiler::{
+        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_stark_sdk::{
         openvm_stark_backend::{p3_field::PrimeCharacteristicRing, SystemParams},
@@ -47,15 +47,15 @@ mod bn254 {
     type F = BabyBear;
 
     #[cfg(test)]
-    pub fn get_testing_config() -> Rv32PairingConfig {
+    pub fn get_testing_config() -> Rv64PairingConfig {
         let primes = [BN254_MODULUS.clone()];
         let complex_struct_names = [BN254_COMPLEX_STRUCT_NAME.to_string()];
         let primes_with_names = complex_struct_names
             .into_iter()
             .zip(primes.clone())
             .collect::<Vec<_>>();
-        Rv32PairingConfig {
-            modular: Rv32ModularConfig::new(primes.to_vec()),
+        Rv64PairingConfig {
+            modular: Rv64ModularConfig::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes_with_names),
             weierstrass: WeierstrassExtension::new(vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bn254]),
@@ -63,8 +63,8 @@ mod bn254 {
     }
 
     #[cfg(test)]
-    fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
-        let mut config = Rv32WeierstrassConfig::new(curves);
+    fn test_rv64weierstrass_config(curves: Vec<CurveConfig>) -> Rv64WeierstrassConfig {
+        let mut config = Rv64WeierstrassConfig::new(curves);
         *config.as_mut() = test_system_config();
         config
     }
@@ -72,7 +72,7 @@ mod bn254 {
     #[test]
     fn test_bn_ec() -> Result<()> {
         let curve = PairingCurve::Bn254.curve_config();
-        let config = test_rv32weierstrass_config(vec![curve]);
+        let config = test_rv64weierstrass_config(vec![curve]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!("tests/programs"),
             "bn_ec",
@@ -82,13 +82,13 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -104,9 +104,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -124,7 +124,7 @@ mod bn254 {
             .map(F::from_u8)
             .collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io], 1);
+        air_test_with_min_segments(Rv64PairingBuilder, config, openvm_exe, vec![io], 1);
         Ok(())
     }
 
@@ -140,9 +140,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -182,7 +182,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv64PairingBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -198,9 +198,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -231,7 +231,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv64PairingBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -247,9 +247,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -284,7 +284,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv64PairingBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -300,9 +300,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -341,7 +341,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv64PairingBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -357,9 +357,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -400,7 +400,7 @@ mod bn254 {
         // Don't run debugger because it's slow
         air_test_impl::<Engine, _>(
             SystemParams::new_for_testing(22),
-            Rv32PairingBuilder,
+            Rv64PairingBuilder,
             get_testing_config(),
             openvm_exe,
             vec![io_all],
@@ -422,9 +422,9 @@ mod bn254 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -460,7 +460,7 @@ mod bn254 {
             .flat_map(|w| w.to_le_bytes())
             .map(F::from_u8)
             .collect();
-        air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io], 1);
+        air_test_with_min_segments(Rv64PairingBuilder, config, openvm_exe, vec![io], 1);
         Ok(())
     }
 }
@@ -474,7 +474,7 @@ mod bls12_381 {
     };
     use num_bigint::BigUint;
     use num_traits::{self, FromPrimitive};
-    use openvm_algebra_circuit::{Fp2Extension, Rv32ModularConfig};
+    use openvm_algebra_circuit::{Fp2Extension, Rv64ModularConfig};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::{
         arch::instructions::exe::VmExe,
@@ -484,7 +484,7 @@ mod bls12_381 {
         },
     };
     use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, WeierstrassExtension,
+        CurveConfig, Rv64WeierstrassBuilder, Rv64WeierstrassConfig, WeierstrassExtension,
     };
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
@@ -492,7 +492,7 @@ mod bls12_381 {
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_pairing_circuit::{
-        PairingCurve, PairingExtension, Rv32PairingBuilder, Rv32PairingConfig,
+        PairingCurve, PairingExtension, Rv64PairingBuilder, Rv64PairingConfig,
     };
     use openvm_pairing_guest::{
         bls12_381::{
@@ -503,8 +503,8 @@ mod bls12_381 {
         pairing::{EvaluatedLine, FinalExp, LineMulMType, MillerStep, MultiMillerLoop},
     };
     use openvm_pairing_transpiler::PairingTranspilerExtension;
-    use openvm_rv32im_transpiler::{
-        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+    use openvm_riscv_transpiler::{
+        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
     use openvm_stark_sdk::{
         openvm_stark_backend::{p3_field::PrimeCharacteristicRing, SystemParams},
@@ -517,15 +517,15 @@ mod bls12_381 {
     type F = BabyBear;
 
     #[cfg(test)]
-    pub fn get_testing_config() -> Rv32PairingConfig {
+    pub fn get_testing_config() -> Rv64PairingConfig {
         let primes = [BLS12_381_MODULUS.clone()];
         let complex_struct_names = [BLS12_381_COMPLEX_STRUCT_NAME.to_string()];
         let primes_with_names = complex_struct_names
             .into_iter()
             .zip(primes.clone())
             .collect::<Vec<_>>();
-        Rv32PairingConfig {
-            modular: Rv32ModularConfig::new(primes.to_vec()),
+        Rv64PairingConfig {
+            modular: Rv64ModularConfig::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes_with_names),
             weierstrass: WeierstrassExtension::new(vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bls12_381]),
@@ -533,8 +533,8 @@ mod bls12_381 {
     }
 
     #[cfg(test)]
-    fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
-        let mut config = Rv32WeierstrassConfig::new(curves);
+    fn test_rv64weierstrass_config(curves: Vec<CurveConfig>) -> Rv64WeierstrassConfig {
+        let mut config = Rv64WeierstrassConfig::new(curves);
         *config.as_mut() = test_system_config();
         config
     }
@@ -548,7 +548,7 @@ mod bls12_381 {
             a: BigUint::ZERO,
             b: BigUint::from_u8(4).unwrap(),
         };
-        let config = test_rv32weierstrass_config(vec![curve]);
+        let config = test_rv64weierstrass_config(vec![curve]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!("tests/programs"),
             "bls_ec",
@@ -558,13 +558,13 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
+        air_test(Rv64WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -580,9 +580,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -600,7 +600,7 @@ mod bls12_381 {
             .map(F::from_u8)
             .collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io], 1);
+        air_test_with_min_segments(Rv64PairingBuilder, config, openvm_exe, vec![io], 1);
         Ok(())
     }
 
@@ -616,9 +616,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -659,7 +659,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv64PairingBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -675,9 +675,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -708,7 +708,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv64PairingBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -724,9 +724,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -767,7 +767,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv64PairingBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -783,9 +783,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -823,7 +823,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv64PairingBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -840,9 +840,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -882,7 +882,7 @@ mod bls12_381 {
         // Don't run debugger because it's slow
         air_test_impl::<Engine, _>(
             SystemParams::new_for_testing(22),
-            Rv32PairingBuilder,
+            Rv64PairingBuilder,
             get_testing_config(),
             openvm_exe,
             vec![io_all],
@@ -904,9 +904,9 @@ mod bls12_381 {
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension),
@@ -942,7 +942,7 @@ mod bls12_381 {
             .flat_map(|w| w.to_le_bytes())
             .map(F::from_u8)
             .collect();
-        air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io], 1);
+        air_test_with_min_segments(Rv64PairingBuilder, config, openvm_exe, vec![io], 1);
         Ok(())
     }
 }

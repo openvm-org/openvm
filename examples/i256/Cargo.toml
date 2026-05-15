@@ -4,16 +4,16 @@ version = "0.0.0"
 edition = "2021"
 
 [workspace]
+resolver = "2"
 members = []
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
-    "std",
-] }
-alloy-primitives = "1.1.2"
+openvm = { git = "https://github.com/openvm-org/openvm.git" }
+alloy-primitives = { version = "1.1.2", default-features = false }
 
 [features]
 default = []
+std = ["openvm/std", "alloy-primitives/std"]
 
 [patch.crates-io]
 # alloy-primitives uses ruint:
@@ -25,3 +25,6 @@ openvm = { path = "../../crates/toolchain/openvm" }
 
 [profile.release]
 lto = "thin"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

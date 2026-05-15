@@ -1,5 +1,5 @@
 use getset::WithSetters;
-use openvm_instructions::riscv::RV32_IMM_AS;
+use openvm_instructions::riscv::RV64_IMM_AS;
 
 use crate::{
     arch::{
@@ -47,7 +47,7 @@ impl ExecutionCtxTrait for MeteredCostCtx {
     #[inline(always)]
     fn on_memory_operation(&mut self, address_space: u32, _ptr: u32, size: u32) {
         debug_assert!(
-            address_space != RV32_IMM_AS,
+            address_space != RV64_IMM_AS,
             "address space must not be immediate"
         );
         debug_assert!(size > 0, "size must be greater than 0, got {size}");

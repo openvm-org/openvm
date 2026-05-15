@@ -4,17 +4,14 @@ use embedded_alloc::LlffHeap as Heap;
 #[global_allocator]
 pub static HEAP: Heap = Heap::empty();
 
+// `embedded_alloc::LlffHeap` serializes allocator access via `critical_section`.
+// The guest is single-threaded, so the impl is a no-op.
 struct CriticalSection;
 critical_section::set_impl!(CriticalSection);
 
 unsafe impl critical_section::Impl for CriticalSection {
-    unsafe fn acquire() -> RawRestoreState {
-        // this is a no-op. we're in a single-threaded, non-preemptive context
-    }
-
-    unsafe fn release(_token: RawRestoreState) {
-        // this is a no-op. we're in a single-threaded, non-preemptive context
-    }
+    unsafe fn acquire() -> RawRestoreState {}
+    unsafe fn release(_token: RawRestoreState) {}
 }
 
 pub fn init() {
