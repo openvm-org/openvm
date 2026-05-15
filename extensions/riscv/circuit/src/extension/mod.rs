@@ -153,7 +153,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         )?;
 
         let lt =
-            Rv64LessThanExecutor::new(Rv64BaseAluAdapterU16Executor, LessThanOpcode::CLASS_OFFSET);
+            Rv64LessThanExecutor::new(Rv64BaseAluU16AdapterExecutor, LessThanOpcode::CLASS_OFFSET);
         inventory.add_executor(lt, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
         let shift = Rv64ShiftExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
@@ -268,7 +268,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(base_alu_w);
 
         let lt = Rv64LessThanAir::new(
-            Rv64BaseAluAdapterU16Air::new(exec_bridge, memory_bridge, range_checker),
+            Rv64BaseAluU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
             LessThanCoreAir::new(range_checker, LessThanOpcode::CLASS_OFFSET),
         );
         inventory.add_air(lt);
@@ -411,7 +411,7 @@ where
         inventory.next_air::<Rv64LessThanAir>()?;
         let lt = Rv64LessThanChip::new(
             LessThanFiller::new(
-                Rv64BaseAluAdapterU16Filler::new(range_checker.clone()),
+                Rv64BaseAluU16AdapterFiller::new(range_checker.clone()),
                 range_checker.clone(),
                 LessThanOpcode::CLASS_OFFSET,
             ),

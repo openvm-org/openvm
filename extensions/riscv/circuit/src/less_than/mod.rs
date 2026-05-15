@@ -1,7 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
 use crate::adapters::{
-    Rv64BaseAluAdapterU16Air, Rv64BaseAluAdapterU16Executor, Rv64BaseAluAdapterU16Filler,
+    Rv64BaseAluU16AdapterAir, Rv64BaseAluU16AdapterExecutor, Rv64BaseAluU16AdapterFiller,
 };
 
 mod core;
@@ -22,15 +22,15 @@ pub const RV64_LESS_THAN_NUM_LIMBS: usize = BLOCK_FE_WIDTH;
 pub const RV64_LESS_THAN_LIMB_BITS: usize = 16;
 
 pub type Rv64LessThanAir = VmAirWrapper<
-    Rv64BaseAluAdapterU16Air,
+    Rv64BaseAluU16AdapterAir,
     LessThanCoreAir<RV64_LESS_THAN_NUM_LIMBS, RV64_LESS_THAN_LIMB_BITS>,
 >;
 pub type Rv64LessThanExecutor = LessThanExecutor<
-    Rv64BaseAluAdapterU16Executor,
+    Rv64BaseAluU16AdapterExecutor,
     RV64_LESS_THAN_NUM_LIMBS,
     RV64_LESS_THAN_LIMB_BITS,
 >;
 pub type Rv64LessThanChip<F> = VmChipWrapper<
     F,
-    LessThanFiller<Rv64BaseAluAdapterU16Filler, RV64_LESS_THAN_NUM_LIMBS, RV64_LESS_THAN_LIMB_BITS>,
+    LessThanFiller<Rv64BaseAluU16AdapterFiller, RV64_LESS_THAN_NUM_LIMBS, RV64_LESS_THAN_LIMB_BITS>,
 >;

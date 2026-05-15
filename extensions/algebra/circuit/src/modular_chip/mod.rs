@@ -2,7 +2,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 use openvm_circuit_derive::PreflightExecutor;
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
 use openvm_riscv_adapters::{
-    Rv64IsEqualModAdapterU16Air, Rv64IsEqualModAdapterU16Executor, Rv64IsEqualModAdapterU16Filler,
+    Rv64IsEqualModU16AdapterAir, Rv64IsEqualModU16AdapterExecutor, Rv64IsEqualModU16AdapterFiller,
     Rv64VecHeapAdapterAir, Rv64VecHeapAdapterFiller,
 };
 
@@ -42,7 +42,7 @@ pub type ModularIsEqualU16Air<
     const LANE_SIZE: usize,
     const TOTAL_LIMBS: usize,
 > = VmAirWrapper<
-    Rv64IsEqualModAdapterU16Air<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+    Rv64IsEqualModU16AdapterAir<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
     ModularIsEqualCoreAir<TOTAL_LIMBS, BLOCK_FE_WIDTH, 16>,
 >;
 
@@ -53,7 +53,7 @@ pub struct VmModularIsEqualU16Executor<
     const TOTAL_LIMBS: usize,
 >(
     pub  ModularIsEqualExecutor<
-        Rv64IsEqualModAdapterU16Executor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        Rv64IsEqualModU16AdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         TOTAL_LIMBS,
         BLOCK_FE_WIDTH,
         16,
@@ -68,7 +68,7 @@ pub type ModularIsEqualU16Chip<
 > = VmChipWrapper<
     F,
     ModularIsEqualFiller<
-        Rv64IsEqualModAdapterU16Filler<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        Rv64IsEqualModU16AdapterFiller<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         TOTAL_LIMBS,
         BLOCK_FE_WIDTH,
         16,

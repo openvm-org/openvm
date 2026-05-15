@@ -105,7 +105,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         inventory.add_executor(alu, Rv64BaseAlu256Opcode::iter().map(|x| x.global_opcode()))?;
 
         let lt = Rv64LessThan256Executor::new(
-            crate::LtAluAdapterU16Executor::new(Rv64VecHeapU16AdapterExecutor::new(
+            crate::LtAluU16AdapterExecutor::new(Rv64VecHeapU16AdapterExecutor::new(
                 pointer_max_bits,
             )),
             Rv64LessThan256Opcode::CLASS_OFFSET,
@@ -205,7 +205,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
         inventory.add_air(alu);
 
         let lt = Rv64LessThan256Air::new(
-            crate::LtAluAdapterU16Air::new(Rv64VecHeapU16AdapterAir::new(
+            crate::LtAluU16AdapterAir::new(Rv64VecHeapU16AdapterAir::new(
                 exec_bridge,
                 memory_bridge,
                 bitwise_lu,

@@ -128,7 +128,7 @@ fn create_lt_harness_fields(
     Rv64LessThan256Chip<F>,
 ) {
     let air = Rv64LessThan256Air::new(
-        crate::LtAluAdapterU16Air::new(openvm_riscv_adapters::Rv64VecHeapU16AdapterAir::new(
+        crate::LtAluU16AdapterAir::new(openvm_riscv_adapters::Rv64VecHeapU16AdapterAir::new(
             execution_bridge,
             memory_bridge,
             bitwise_chip.bus(),
@@ -140,7 +140,7 @@ fn create_lt_harness_fields(
         ),
     );
     let executor = Rv64LessThan256Executor::new(
-        crate::LtAluAdapterU16Executor::new(
+        crate::LtAluU16AdapterExecutor::new(
             openvm_riscv_adapters::Rv64VecHeapU16AdapterExecutor::new(address_bits),
         ),
         Rv64LessThan256Opcode::CLASS_OFFSET,
@@ -759,7 +759,7 @@ fn run_lt_256_rand_test_cuda(opcode: LessThanOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, crate::LtAluAdapterU16Executor>::new(),
+            EmptyAdapterCoreLayout::<F, crate::LtAluU16AdapterExecutor>::new(),
         );
 
     tester

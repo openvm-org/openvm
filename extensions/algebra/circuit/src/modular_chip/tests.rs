@@ -29,8 +29,8 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_pairing_guest::{bls12_381::BLS12_381_MODULUS, bn254::BN254_MODULUS};
 use openvm_riscv_adapters::{
-    rv64_write_heap_default, write_ptr_reg, Rv64IsEqualModAdapterU16Air,
-    Rv64IsEqualModAdapterU16Executor, Rv64IsEqualModAdapterU16Filler,
+    rv64_write_heap_default, write_ptr_reg, Rv64IsEqualModU16AdapterAir,
+    Rv64IsEqualModU16AdapterExecutor, Rv64IsEqualModU16AdapterFiller,
 };
 use openvm_riscv_circuit::adapters::RV64_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::{
@@ -862,7 +862,7 @@ mod is_equal_tests {
         let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus));
 
         let air = ModularIsEqualU16Air::new(
-            Rv64IsEqualModAdapterU16Air::new(
+            Rv64IsEqualModU16AdapterAir::new(
                 tester.execution_bridge(),
                 tester.memory_bridge(),
                 bitwise_bus,
@@ -871,13 +871,13 @@ mod is_equal_tests {
             ModularIsEqualCoreAir::new(modulus.clone(), tester.range_checker().bus(), offset),
         );
         let executor = VmModularIsEqualU16Executor::new(
-            Rv64IsEqualModAdapterU16Executor::new(tester.address_bits()),
+            Rv64IsEqualModU16AdapterExecutor::new(tester.address_bits()),
             offset,
             modulus_limbs_u16,
         );
         let chip = ModularIsEqualU16Chip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
             ModularIsEqualFiller::new(
-                Rv64IsEqualModAdapterU16Filler::new(tester.address_bits(), bitwise_chip.clone()),
+                Rv64IsEqualModU16AdapterFiller::new(tester.address_bits(), bitwise_chip.clone()),
                 offset,
                 modulus_limbs_u16,
                 tester.range_checker(),

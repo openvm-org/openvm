@@ -26,8 +26,8 @@ use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_riscv_adapters::{
-    Rv64IsEqualModAdapterU16Cols, Rv64IsEqualModAdapterU16Executor, Rv64IsEqualModAdapterU16Filler,
-    Rv64IsEqualModAdapterU16Record, Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor,
+    Rv64IsEqualModU16AdapterCols, Rv64IsEqualModU16AdapterExecutor, Rv64IsEqualModU16AdapterFiller,
+    Rv64IsEqualModU16AdapterRecord, Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor,
 };
 use openvm_riscv_circuit::Rv64ImGpuProverExt;
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
@@ -109,10 +109,10 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
 {
     fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         let record_size = size_of::<(
-            Rv64IsEqualModAdapterU16Record<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            Rv64IsEqualModU16AdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             ModularIsEqualRecord<TOTAL_LIMBS>,
         )>();
-        let trace_width = Rv64IsEqualModAdapterU16Cols::<F, 2, NUM_LANES, LANE_SIZE>::width()
+        let trace_width = Rv64IsEqualModU16AdapterCols::<F, 2, NUM_LANES, LANE_SIZE>::width()
             + ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width();
         let records = arena.allocated();
         if records.is_empty() {
@@ -123,11 +123,11 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
         let num_records = records.len() / record_size;
         let height = num_records.next_power_of_two();
         let mut seeker = arena.get_record_seeker::<(
-            &mut Rv64IsEqualModAdapterU16Record<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            &mut Rv64IsEqualModU16AdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             &mut ModularIsEqualRecord<TOTAL_LIMBS>,
         ), EmptyAdapterCoreLayout<
             F,
-            Rv64IsEqualModAdapterU16Executor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            Rv64IsEqualModU16AdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         >>();
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, trace_width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, EmptyAdapterCoreLayout::new());
@@ -212,7 +212,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     NUM_LIMBS_32_U16,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModAdapterU16Filler::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModU16AdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs_u16_arr,
                         range_checker.clone(),
@@ -269,7 +269,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     NUM_LIMBS_48_U16,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModAdapterU16Filler::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModU16AdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs_u16_arr,
                         range_checker.clone(),

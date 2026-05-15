@@ -47,7 +47,7 @@ use openvm_stark_backend::{
 /// * `rs_val` holds `BLOCK_FE_WIDTH` u16 cells per register pointer.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
-pub struct Rv64IsEqualModAdapterU16Cols<
+pub struct Rv64IsEqualModU16AdapterCols<
     T,
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
@@ -66,8 +66,8 @@ pub struct Rv64IsEqualModAdapterU16Cols<
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64IsEqualModAdapterU16Cols<u8, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>)]
-pub struct Rv64IsEqualModAdapterU16Air<
+#[columns_via(Rv64IsEqualModU16AdapterCols<u8, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>)]
+pub struct Rv64IsEqualModU16AdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
@@ -86,10 +86,10 @@ impl<
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
     > BaseAir<F>
-    for Rv64IsEqualModAdapterU16Air<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    for Rv64IsEqualModU16AdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     fn width(&self) -> usize {
-        Rv64IsEqualModAdapterU16Cols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width()
+        Rv64IsEqualModU16AdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width()
     }
 }
 
@@ -100,7 +100,7 @@ impl<
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
     > VmAdapterAir<AB>
-    for Rv64IsEqualModAdapterU16Air<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    for Rv64IsEqualModU16AdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     type Interface = BasicAdapterInterface<
         AB::Expr,
@@ -117,7 +117,7 @@ impl<
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let cols: &Rv64IsEqualModAdapterU16Cols<_, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
+        let cols: &Rv64IsEqualModU16AdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
             local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -231,7 +231,7 @@ impl<
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64IsEqualModAdapterU16Cols<_, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
+        let cols: &Rv64IsEqualModU16AdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
             local.borrow();
         cols.from_state.pc
     }
@@ -239,7 +239,7 @@ impl<
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64IsEqualModAdapterU16Record<
+pub struct Rv64IsEqualModU16AdapterRecord<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
@@ -258,7 +258,7 @@ pub struct Rv64IsEqualModAdapterU16Record<
 }
 
 #[derive(Clone, Copy)]
-pub struct Rv64IsEqualModAdapterU16Executor<
+pub struct Rv64IsEqualModU16AdapterExecutor<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
@@ -268,7 +268,7 @@ pub struct Rv64IsEqualModAdapterU16Executor<
 }
 
 #[derive(derive_new::new)]
-pub struct Rv64IsEqualModAdapterU16Filler<
+pub struct Rv64IsEqualModU16AdapterFiller<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
@@ -283,7 +283,7 @@ impl<
         const BLOCKS_PER_READ: usize,
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > Rv64IsEqualModAdapterU16Executor<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    > Rv64IsEqualModU16AdapterExecutor<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     pub fn new(pointer_max_bits: usize) -> Self {
         assert!(NUM_READS <= 2);
@@ -307,15 +307,15 @@ impl<
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
     > AdapterTraceExecutor<F>
-    for Rv64IsEqualModAdapterU16Executor<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    for Rv64IsEqualModU16AdapterExecutor<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
     const WIDTH: usize =
-        Rv64IsEqualModAdapterU16Cols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
+        Rv64IsEqualModU16AdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
     type ReadData = [[u16; TOTAL_READ_SIZE]; NUM_READS];
     type WriteData = [u16; BLOCK_FE_WIDTH];
-    type RecordMut<'a> = &'a mut Rv64IsEqualModAdapterU16Record<
+    type RecordMut<'a> = &'a mut Rv64IsEqualModU16AdapterRecord<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCK_SIZE,
@@ -397,23 +397,23 @@ impl<
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
     > AdapterTraceFiller<F>
-    for Rv64IsEqualModAdapterU16Filler<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    for Rv64IsEqualModU16AdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     const WIDTH: usize =
-        Rv64IsEqualModAdapterU16Cols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
+        Rv64IsEqualModU16AdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
-        let record: &Rv64IsEqualModAdapterU16Record<
+        let record: &Rv64IsEqualModU16AdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,
             BLOCK_SIZE,
             TOTAL_READ_SIZE,
         > = unsafe { get_record_from_slice(&mut adapter_row, ()) };
 
-        let cols: &mut Rv64IsEqualModAdapterU16Cols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
+        let cols: &mut Rv64IsEqualModU16AdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
             adapter_row.borrow_mut();
 
         let mut timestamp = record.timestamp + (NUM_READS + NUM_READS * BLOCKS_PER_READ) as u32 + 1;

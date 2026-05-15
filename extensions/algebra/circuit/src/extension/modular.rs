@@ -25,7 +25,7 @@ use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_riscv_adapters::{
-    Rv64IsEqualModAdapterU16Air, Rv64IsEqualModAdapterU16Executor, Rv64IsEqualModAdapterU16Filler,
+    Rv64IsEqualModU16AdapterAir, Rv64IsEqualModU16AdapterExecutor, Rv64IsEqualModU16AdapterFiller,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 use rand::RngCore;
@@ -149,7 +149,7 @@ let config = ExprBuilderConfig {
                 });
 
                 let is_eq = VmModularIsEqualU16Executor::new(
-                    Rv64IsEqualModAdapterU16Executor::new(pointer_max_bits),
+                    Rv64IsEqualModU16AdapterExecutor::new(pointer_max_bits),
                     start_offset,
                     modulus_limbs_u16_arr,
                 );
@@ -203,7 +203,7 @@ let config = ExprBuilderConfig {
                 });
 
                 let is_eq = VmModularIsEqualU16Executor::new(
-                    Rv64IsEqualModAdapterU16Executor::new(pointer_max_bits),
+                    Rv64IsEqualModU16AdapterExecutor::new(pointer_max_bits),
                     start_offset,
                     modulus_limbs_u16_arr,
                 );
@@ -299,7 +299,7 @@ let config = ExprBuilderConfig {
                     BLOCK_FE_WIDTH,
                     NUM_LIMBS_32_U16,
                 >::new(
-                    Rv64IsEqualModAdapterU16Air::new(
+                    Rv64IsEqualModU16AdapterAir::new(
                         exec_bridge,
                         memory_bridge,
                         bitwise_lu,
@@ -342,7 +342,7 @@ let config = ExprBuilderConfig {
                     BLOCK_FE_WIDTH,
                     NUM_LIMBS_48_U16,
                 >::new(
-                    Rv64IsEqualModAdapterU16Air::new(
+                    Rv64IsEqualModU16AdapterAir::new(
                         exec_bridge,
                         memory_bridge,
                         bitwise_lu,
@@ -448,7 +448,7 @@ let config = ExprBuilderConfig {
                     NUM_LIMBS_32_U16,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModAdapterU16Filler::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModU16AdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs_u16_arr,
                         range_checker.clone(),
@@ -504,7 +504,7 @@ let config = ExprBuilderConfig {
                     NUM_LIMBS_48_U16,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModAdapterU16Filler::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModU16AdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs_u16_arr,
                         range_checker.clone(),

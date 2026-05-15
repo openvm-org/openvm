@@ -8,7 +8,7 @@ use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv64BaseAluAdapterU16Cols, Rv64BaseAluAdapterU16Record},
+    adapters::{Rv64BaseAluU16AdapterCols, Rv64BaseAluU16AdapterRecord},
     cuda_abi::less_than_cuda::tracegen,
     less_than::{RV64_LESS_THAN_LIMB_BITS, RV64_LESS_THAN_NUM_LIMBS},
     LessThanCoreCols, LessThanCoreRecord,
@@ -23,7 +23,7 @@ pub struct Rv64LessThanChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for Rv64LessThanChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv64BaseAluAdapterU16Record,
+            Rv64BaseAluU16AdapterRecord,
             LessThanCoreRecord<RV64_LESS_THAN_NUM_LIMBS, RV64_LESS_THAN_LIMB_BITS>,
         )>();
         let records = arena.allocated();
@@ -32,7 +32,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LessThanChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64BaseAluAdapterU16Cols::<F>::width()
+        let trace_width = Rv64BaseAluU16AdapterCols::<F>::width()
             + LessThanCoreCols::<F, RV64_LESS_THAN_NUM_LIMBS, RV64_LESS_THAN_LIMB_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;

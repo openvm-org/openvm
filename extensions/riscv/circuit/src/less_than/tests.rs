@@ -25,7 +25,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluAdapterU16Record, LessThanCoreRecord, Rv64LessThanChipGpu},
+    crate::{adapters::Rv64BaseAluU16AdapterRecord, LessThanCoreRecord, Rv64LessThanChipGpu},
     openvm_circuit::arch::{
         testing::{GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -40,7 +40,7 @@ use super::{
 };
 use crate::{
     adapters::{
-        Rv64BaseAluAdapterU16Air, Rv64BaseAluAdapterU16Executor, Rv64BaseAluAdapterU16Filler,
+        Rv64BaseAluU16AdapterAir, Rv64BaseAluU16AdapterExecutor, Rv64BaseAluU16AdapterFiller,
         RV64_REGISTER_NUM_LIMBS,
     },
     less_than::LessThanCoreCols,
@@ -64,14 +64,14 @@ fn create_harness_fields(
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64LessThanAir, Rv64LessThanExecutor, Rv64LessThanChip<F>) {
     let air = Rv64LessThanAir::new(
-        Rv64BaseAluAdapterU16Air::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
+        Rv64BaseAluU16AdapterAir::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
         LessThanCoreAir::new(range_checker_chip.bus(), LessThanOpcode::CLASS_OFFSET),
     );
     let executor =
-        Rv64LessThanExecutor::new(Rv64BaseAluAdapterU16Executor, LessThanOpcode::CLASS_OFFSET);
+        Rv64LessThanExecutor::new(Rv64BaseAluU16AdapterExecutor, LessThanOpcode::CLASS_OFFSET);
     let chip = Rv64LessThanChip::<F>::new(
         LessThanFiller::new(
-            Rv64BaseAluAdapterU16Filler::new(range_checker_chip.clone()),
+            Rv64BaseAluU16AdapterFiller::new(range_checker_chip.clone()),
             range_checker_chip,
             LessThanOpcode::CLASS_OFFSET,
         ),
@@ -618,7 +618,7 @@ fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut Rv64BaseAluAdapterU16Record,
+        &'a mut Rv64BaseAluU16AdapterRecord,
         &'a mut LessThanCoreRecord<RV64_LESS_THAN_NUM_LIMBS, RV64_LESS_THAN_LIMB_BITS>,
     );
     harness
@@ -626,7 +626,7 @@ fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluAdapterU16Executor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new(),
         );
 
     tester

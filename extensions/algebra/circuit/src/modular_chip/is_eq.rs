@@ -26,7 +26,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_adapters::Rv64IsEqualModAdapterU16Executor;
+use openvm_riscv_adapters::Rv64IsEqualModU16AdapterExecutor;
 use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -465,7 +465,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
     VmModularIsEqualU16Executor<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
 {
     pub fn new(
-        adapter: Rv64IsEqualModAdapterU16Executor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        adapter: Rv64IsEqualModU16AdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         offset: usize,
         modulus_limbs: [u16; TOTAL_LIMBS],
     ) -> Self {

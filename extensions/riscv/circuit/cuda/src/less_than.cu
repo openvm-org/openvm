@@ -22,12 +22,12 @@ using Rv64LessThanCoreCols =
     LessThanCoreCols<T, RV64_LESS_THAN_NUM_LIMBS, RV64_LESS_THAN_LIMB_BITS>;
 
 template <typename T> struct LessThanCols {
-    Rv64BaseAluAdapterU16Cols<T> adapter;
+    Rv64BaseAluU16AdapterCols<T> adapter;
     Rv64LessThanCoreCols<T> core;
 };
 
 struct LessThanRecord {
-    Rv64BaseAluAdapterU16Record adapter;
+    Rv64BaseAluU16AdapterRecord adapter;
     Rv64LessThanCoreRecord core;
 };
 
@@ -44,7 +44,7 @@ __global__ void rv64_less_than_tracegen(
     if (idx < records.len()) {
         auto const &record = records[idx];
 
-        auto adapter = Rv64BaseAluAdapterU16(
+        auto adapter = Rv64BaseAluU16Adapter(
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits
         );
