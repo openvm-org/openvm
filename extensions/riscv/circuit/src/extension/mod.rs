@@ -93,8 +93,11 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
     )
 )]
 pub enum Rv64IExecutor {
-    AddSub(Rv64AddSubExecutor),
-    XorOrAnd(Rv64XorOrAndExecutor),
+    Add(Rv64AddExecutor),
+    Sub(Rv64SubExecutor),
+    Xor(Rv64XorExecutor),
+    Or(Rv64OrExecutor),
+    And(Rv64AndExecutor),
     AddSubW(Rv64AddSubWExecutor),
     LessThan(Rv64LessThanExecutor),
     Shift(Rv64ShiftExecutor),
@@ -142,19 +145,20 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
 
-        let add_sub =
-            Rv64AddSubExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
-        inventory.add_executor(
-            add_sub,
-            [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|x| x.global_opcode()),
-        )?;
+        let add = Rv64AddExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+        inventory.add_executor(add, [BaseAluOpcode::ADD].map(|x| x.global_opcode()))?;
 
-        let xor_or_and =
-            Rv64XorOrAndExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
-        inventory.add_executor(
-            xor_or_and,
-            [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND].map(|x| x.global_opcode()),
-        )?;
+        let sub = Rv64SubExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+        inventory.add_executor(sub, [BaseAluOpcode::SUB].map(|x| x.global_opcode()))?;
+
+        let xor = Rv64XorExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+        inventory.add_executor(xor, [BaseAluOpcode::XOR].map(|x| x.global_opcode()))?;
+
+        let or = Rv64OrExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+        inventory.add_executor(or, [BaseAluOpcode::OR].map(|x| x.global_opcode()))?;
+
+        let and = Rv64AndExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+        inventory.add_executor(and, [BaseAluOpcode::AND].map(|x| x.global_opcode()))?;
 
         let add_sub_w =
             Rv64AddSubWExecutor::new(Rv64BaseAluWAdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
@@ -263,17 +267,35 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
             }
         };
 
-        let add_sub = Rv64AddSubAir::new(
+        let add = Rv64AddAir::new(
             Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            AddSubCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
+            AddCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
         );
-        inventory.add_air(add_sub);
+        inventory.add_air(add);
 
-        let xor_or_and = Rv64XorOrAndAir::new(
+        let sub = Rv64SubAir::new(
             Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            XorOrAndCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
+            SubCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
         );
-        inventory.add_air(xor_or_and);
+        inventory.add_air(sub);
+
+        let xor = Rv64XorAir::new(
+            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            XorCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(xor);
+
+        let or = Rv64OrAir::new(
+            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            OrCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(or);
+
+        let and = Rv64AndAir::new(
+            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            AndCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(and);
 
         let add_sub_w = Rv64AddSubWAir::new(
             Rv64BaseAluWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
@@ -396,27 +418,60 @@ where
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
-        inventory.next_air::<Rv64AddSubAir>()?;
-        let add_sub = Rv64AddSubChip::new(
-            AddSubFiller::new(
+        inventory.next_air::<Rv64AddAir>()?;
+        let add = Rv64AddChip::new(
+            AddFiller::new(
                 Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 BaseAluOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(add_sub);
+        inventory.add_executor_chip(add);
 
-        inventory.next_air::<Rv64XorOrAndAir>()?;
-        let xor_or_and = Rv64XorOrAndChip::new(
-            XorOrAndFiller::new(
+        inventory.next_air::<Rv64SubAir>()?;
+        let sub = Rv64SubChip::new(
+            SubFiller::new(
                 Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 BaseAluOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(xor_or_and);
+        inventory.add_executor_chip(sub);
+
+        inventory.next_air::<Rv64XorAir>()?;
+        let xor = Rv64XorChip::new(
+            XorFiller::new(
+                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                BaseAluOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(xor);
+
+        inventory.next_air::<Rv64OrAir>()?;
+        let or = Rv64OrChip::new(
+            OrFiller::new(
+                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                BaseAluOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(or);
+
+        inventory.next_air::<Rv64AndAir>()?;
+        let and = Rv64AndChip::new(
+            AndFiller::new(
+                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                BaseAluOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(and);
 
         inventory.next_air::<Rv64AddSubWAir>()?;
         let add_sub_w = Rv64AddSubWChip::new(
