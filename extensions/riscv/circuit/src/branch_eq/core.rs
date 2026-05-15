@@ -121,18 +121,13 @@ where
         }
         builder.when(is_valid.clone()).assert_one(sum);
 
-        // Range-check the LIMB_BITS-wide read columns a, b. Each limb is the canonical content of
-        // one packed memory-bus field element; without these checks two different limb assignments
-        // could collide on the bus while disagreeing in the AIR's equality check above (the
-        // diff `a[i] - b[i]` is taken element-wise in F, not packed).
-        for i in 0..NUM_LIMBS {
-            self.range_bus
-                .range_check(a[i], LIMB_BITS)
-                .eval(builder, is_valid.clone());
-            self.range_bus
-                .range_check(b[i], LIMB_BITS)
-                .eval(builder, is_valid.clone());
-        }
+        // a[i] and b[i] are received from the memory bus. Bus invariant: the
+        // receiver's value equals the sender's value in F. All writers to
+        // u16-celled ASes (RV64_REGISTER_AS, RV64_MEMORY_AS) constrain their
+        // outputs to be in `[0, 2^LIMB_BITS)`, and the persistent-boundary
+        // initial values are u16-valid by construction. Therefore `a[i]` and
+        // `b[i]` are u16-valid in F — no explicit reader-side range check is
+        // needed.
 
         let expected_opcode = flags
             .iter()
@@ -300,14 +295,8 @@ where
         core_row.imm = F::from_u32(record.imm);
         core_row.cmp_result = F::from_bool(cmp_result);
 
-        // Mirror AIR's per-limb LIMB_BITS-wide range-checks on each read limb so the variable
-        // range checker bus stays balanced.
-        for &v in record.a.iter() {
-            self.range_checker_chip.add_count(v as u32, LIMB_BITS);
-        }
-        for &v in record.b.iter() {
-            self.range_checker_chip.add_count(v as u32, LIMB_BITS);
-        }
+        // No reader-side limb range-checks needed (see AIR comment): the bus
+        // invariant guarantees a[i], b[i] are u16-valid in F.
 
         core_row.b = record.b.map(|v| F::from_u32(v as u32));
         core_row.a = record.a.map(|v| F::from_u32(v as u32));

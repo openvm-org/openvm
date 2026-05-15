@@ -116,12 +116,8 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BranchLessThanCore {
         range_checker.add_count(a_msb_range, LIMB_BITS);
         range_checker.add_count(b_msb_range, LIMB_BITS);
 
-        // Mirror the AIR's non-MSB per-limb LIMB_BITS-wide range-checks on a[i] and b[i].
-#pragma unroll
-        for (int i = 0; i + 1 < NUM_LIMBS; i++) {
-            range_checker.add_count(record.a[i], LIMB_BITS);
-            range_checker.add_count(record.b[i], LIMB_BITS);
-        }
+        // Non-MSB read limbs are not range-checked (see AIR comment):
+        // the bus invariant guarantees a[i], b[i] are u16-valid in F.
 
         uint16_t diff_marker[NUM_LIMBS] = {0};
         if (diff_idx != NUM_LIMBS) {

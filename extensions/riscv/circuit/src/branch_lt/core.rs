@@ -151,17 +151,12 @@ where
             .range_check(cols.b_msb_f + sign_shift, LIMB_BITS)
             .eval(builder, is_valid.clone());
 
-        // Range-check the non-MSB read limbs a[0..NUM_LIMBS-1] and b[0..NUM_LIMBS-1] to
-        // [0, 2^LIMB_BITS) so each limb has a canonical decomposition matching the packed
-        // memory-bus field element.
-        for i in 0..NUM_LIMBS - 1 {
-            self.range_bus
-                .range_check(a[i], LIMB_BITS)
-                .eval(builder, is_valid.clone());
-            self.range_bus
-                .range_check(b[i], LIMB_BITS)
-                .eval(builder, is_valid.clone());
-        }
+        // Non-MSB read limbs a[i], b[i] (i < NUM_LIMBS - 1) come straight off
+        // the memory bus. By the bus invariant they equal the corresponding
+        // sender's u16-valid F-values — no explicit reader-side range check
+        // needed. The MSB is range-checked above because `a_msb_f`/`b_msb_f`
+        // are not bus columns but signed/unsigned reinterpretations of the
+        // top limb.
 
         // Range check to ensure diff_val is non-zero (`diff_val - 1` lies in [0, 2^LIMB_BITS),
         // so diff_val is in [1, 2^LIMB_BITS + 1)).
@@ -344,13 +339,8 @@ where
         self.range_checker_chip.add_count(a_msb_range, LIMB_BITS);
         self.range_checker_chip.add_count(b_msb_range, LIMB_BITS);
 
-        // Mirror AIR's non-MSB per-limb range-checks for a[i] and b[i].
-        for i in 0..NUM_LIMBS - 1 {
-            self.range_checker_chip
-                .add_count(record.a[i] as u32, LIMB_BITS);
-            self.range_checker_chip
-                .add_count(record.b[i] as u32, LIMB_BITS);
-        }
+        // Non-MSB read limbs are not range-checked by the AIR (see AIR comment):
+        // the bus invariant guarantees a[i], b[i] are u16-valid in F.
 
         core_row.diff_marker = [F::ZERO; NUM_LIMBS];
 

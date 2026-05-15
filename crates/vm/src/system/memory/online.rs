@@ -670,15 +670,17 @@ impl TracingMemory {
     }
 
     /// Byte-view metadata slot lookup. The slot is at the
-    /// `MEMORY_BLOCK_BYTES`-aligned block containing `byte_ptr`. The relationship
-    /// `MEMORY_BLOCK_BYTES = BLOCK_FE_WIDTH * cell_size` holds across address
-    /// spaces (`cell_size = 1` for byte ASes and `cell_size = 2` for u16-celled
-    /// ASes), so `byte_ptr / (BLOCK_FE_WIDTH * cell_size)` is the canonical block
-    /// index used by `prev_access_time`.
+    /// `MEMORY_BLOCK_BYTES`-aligned block containing `byte_ptr`.
+    ///
+    /// The byte-view path is invoked against ASes whose
+    /// `BLOCK_FE_WIDTH * cell_size == MEMORY_BLOCK_BYTES` (enforced by
+    /// `assert_valid_byte_view_access` / `assert_valid_u8_access`), so the
+    /// block index is just `byte_ptr / MEMORY_BLOCK_BYTES` — no per-call
+    /// config lookup or non-constant runtime divide needed. This is the
+    /// preflight hot path (every guest memory access).
     #[inline(always)]
     fn byte_view_prev_access_time(&mut self, address_space: usize, byte_ptr: usize) -> u32 {
-        let cell_size = self.data.memory.config[address_space].layout.size();
-        let idx = byte_ptr / (BLOCK_FE_WIDTH * cell_size);
+        let idx = byte_ptr / MEMORY_BLOCK_BYTES;
         // SAFETY: address_space is validated during instruction decoding
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let prev = meta_page.get(idx);

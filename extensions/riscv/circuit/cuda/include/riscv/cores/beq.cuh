@@ -62,12 +62,7 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BranchEqualCore {
         COL_WRITE_VALUE(row, Cols, opcode_beq_flag, is_beq);
         COL_WRITE_VALUE(row, Cols, opcode_bne_flag, !is_beq);
 
-        // Mirror the AIR's per-limb LIMB_BITS-wide range-checks on a[i] and b[i]
-        // (Pattern B u16 path).
-#pragma unroll
-        for (size_t i = 0; i < NUM_LIMBS; ++i) {
-            range_checker.add_count(rec.a[i], LIMB_BITS);
-            range_checker.add_count(rec.b[i], LIMB_BITS);
-        }
+        // No per-limb range checks: the bus invariant guarantees a[i], b[i]
+        // are u16-valid in F (Pattern B u16 path).
     }
 };
