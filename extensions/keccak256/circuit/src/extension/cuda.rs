@@ -63,7 +63,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
         inventory.next_air::<KeccakfOpAir>()?;
         let op_chip = KeccakfOpChipGpu::new(
             range_checker,
-            bitwise_lu,
             pointer_max_bits,
             timestamp_max_bits as u32,
             shared_records,

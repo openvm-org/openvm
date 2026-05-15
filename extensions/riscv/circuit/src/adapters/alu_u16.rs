@@ -58,7 +58,7 @@ pub struct Rv64BaseAluU16AdapterCols<T> {
 /// U16 ALU adapter. Same shape as [`crate::adapters::Rv64BaseAluAdapterAir`] but the
 /// read/write data widths are `BLOCK_FE_WIDTH` u16 cells (= 8 bytes per register).
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64BaseAluU16AdapterCols<u16>)]
+#[columns_via(Rv64BaseAluU16AdapterCols<u8>)]
 pub struct Rv64BaseAluU16AdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,

@@ -54,7 +54,6 @@ const KECCAKF_STATE_BUS: BusIndex = 13;
 fn create_harness_fields(
     execution_bridge: ExecutionBridge,
     memory_bridge: MemoryBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
@@ -64,14 +63,12 @@ fn create_harness_fields(
     let op_air = KeccakfOpAir::new(
         execution_bridge,
         memory_bridge,
-        bitwise_chip.bus(),
         PermutationCheckBus::new(KECCAKF_STATE_BUS),
         range_checker_chip.bus(),
         address_bits,
         KeccakfOpcode::CLASS_OFFSET,
     );
     let op_chip = KeccakfOpChip::new(
-        bitwise_chip,
         range_checker_chip,
         address_bits,
         memory_helper,
@@ -98,7 +95,6 @@ fn create_test_harness<RA: Arena>(tester: &mut VmChipTestBuilder<F>) -> TestHarn
     let (op_air, executor, op_chip) = create_harness_fields(
         tester.execution_bridge(),
         tester.memory_bridge(),
-        bitwise_chip.clone(),
         tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
@@ -275,7 +271,6 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> CudaTestHarness {
 
     let gpu_chip = KeccakfOpChipGpu::new(
         tester.range_checker(),
-        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits() as u32,
         shared_records.clone(),

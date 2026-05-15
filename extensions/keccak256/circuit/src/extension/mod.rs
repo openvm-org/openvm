@@ -198,7 +198,6 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
         let op_air = KeccakfOpAir::new(
             exec_bridge,
             memory_bridge,
-            bitwise_lu,
             keccakf_state_bus,
             range_checker,
             pointer_max_bits,
@@ -264,7 +263,6 @@ where
 
         inventory.next_air::<KeccakfOpAir>()?;
         let op_chip = KeccakfOpChip::new(
-            bitwise_lu,
             range_checker.clone(),
             pointer_max_bits,
             mem_helper.clone(),

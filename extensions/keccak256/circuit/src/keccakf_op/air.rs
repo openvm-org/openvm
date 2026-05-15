@@ -5,9 +5,7 @@ use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
     system::memory::{offline_checker::MemoryBridge, MemoryAddress},
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus, var_range::VariableRangeCheckerBus, ColumnsAir,
-};
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir};
 use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::expand_to_rv64_block;
@@ -26,18 +24,12 @@ use crate::keccakf_op::columns::{KeccakfOpCols, BUFFER_PTR_NUM_LIMBS, NUM_KECCAK
 pub struct KeccakfOpAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
-    /// Kept for parity with the rest of the keccak256 extension's bus wiring; the chip
-    /// no longer emits any 8-bit bitwise-lookup messages now that `buffer_ptr` is stored
-    /// as u16 cells (the high-cell range check moved to `range_bus` to support 16-bit
-    /// cells).
-    #[allow(dead_code)]
-    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     /// Direct bus with keccakf pre- or post-state. Bus message is
     /// ```text
     /// is_post || timestamp || state_u16_limbs
     /// ```
     pub keccakf_state_bus: PermutationCheckBus,
-    /// Used to range-check the u16 high cell of `buffer_ptr` after scaling.
+    /// Range-checks the u16 high cell of `buffer_ptr` after scaling.
     pub range_bus: VariableRangeCheckerBus,
     pub ptr_max_bits: usize,
     pub(super) offset: usize,

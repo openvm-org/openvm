@@ -13,8 +13,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
-    AlignedBytesBorrow, Chip,
+    var_range::SharedVariableRangeCheckerChip, AlignedBytesBorrow, Chip,
 };
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
@@ -40,11 +39,6 @@ use crate::{
 
 #[derive(derive_new::new)]
 pub struct KeccakfOpChip<F> {
-    /// Kept for parity with the rest of the keccak256 extension's bus wiring; this chip
-    /// no longer emits any 8-bit bitwise-lookup messages now that `buffer_ptr` is stored
-    /// as u16 cells. The high-cell range check goes through `range_checker_chip` instead.
-    #[allow(dead_code)]
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub pointer_max_bits: usize,
     pub mem_helper: SharedMemoryHelper<F>,
