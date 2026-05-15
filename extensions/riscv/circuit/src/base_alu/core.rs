@@ -139,17 +139,19 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        // ADD/SUB only range-check `a` (the write) via the send_xor above. After
-        // the memory-bus pack to 4 u16, the read columns `b` and `c`
-        // would have decomposition freedom unless they're locally u8-range-
-        // checked. Add range checks for `b[i]` and `c[i]` gated on ADD or SUB —
-        // XOR/AND/OR already check b, c via the send_xor.
-        let add_or_sub = cols.opcode_add_flag + cols.opcode_sub_flag;
-        for i in 0..NUM_LIMBS {
-            self.bus
-                .send_range(b[i], c[i])
-                .eval(builder, add_or_sub.clone());
-        }
+        // Note: no explicit u8 range-check on the read columns `b` and `c` for
+        // ADD/SUB. The packed-bus pair contribution
+        // `256^(2i) * b[2i] + 256^(2i+1) * b[2i+1]` is invariant under the
+        // non-canonical decomposition `(b_low + 256m, b_high - m)` that the
+        // packed-bus equation allows, so the integer value of `b` (and `c`)
+        // is uniquely determined by the bus messages regardless of the
+        // prover's column decomposition. The ADD/SUB constraint chain
+        //   `(b[i] + c[i] + carry_prev - a[i]) / 256 ∈ {0, 1}` with
+        //   `a[i] ∈ [0, 256)` (enforced by the send_xor above)
+        // then pins `a[i]` to the canonical u8 limbs of the integer sum, so
+        // a non-canonical `b`/`c` cannot change the result. XOR/AND/OR
+        // continue to range-check `b`/`c` implicitly via the 3-arg send_xor
+        // table.
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
@@ -289,13 +291,9 @@ where
                 self.bitwise_lookup_chip
                     .request_xor(a_val as u32, a_val as u32);
             }
-            // Mirror the AIR's `send_range(b[i], c[i])` gated on ADD/SUB so the
-            // bitwise lookup bus stays balanced (the AIR send must match a
-            // tracegen request).
-            for (b_val, c_val) in zip(record.b, record.c) {
-                self.bitwise_lookup_chip
-                    .request_range(b_val as u32, c_val as u32);
-            }
+            // No `b`/`c` range request: the AIR no longer emits the
+            // `send_range(b[i], c[i])` interactions (see AIR comment — the
+            // packed-bus pair contribution is decomposition-invariant).
         } else {
             for (b_val, c_val) in zip(record.b, record.c) {
                 self.bitwise_lookup_chip
