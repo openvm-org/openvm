@@ -202,7 +202,7 @@ where
         inventory.next_air::<DeferralCallAir>()?;
         inventory.add_executor_chip(DeferralCallChip::new(
             DeferralCallCoreFiller::new(
-                DeferralCallAdapterFiller::new(bitwise_lu.clone(), address_bits),
+                DeferralCallAdapterFiller::new(range_checker.clone(), address_bits),
                 count_chip.clone(),
                 poseidon2_chip.clone(),
                 range_checker.clone(),

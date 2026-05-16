@@ -26,10 +26,7 @@ use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{
-        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
-        RV64_WORD_NUM_LIMBS,
-    },
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{
     memory_read, read_rv64_register_as_u32, rv64_bytes_to_u32, tracing_read, tracing_write,
@@ -343,19 +340,22 @@ where
                 cols.rs_ptr = F::from_u32(header.rs_ptr);
                 cols.deferral_idx = F::from_u32(header.deferral_idx);
 
-                cols.rd_val = header.rd_val.to_le_bytes().map(F::from_u8);
-                cols.rs_val = header.rs_val.to_le_bytes().map(F::from_u8);
+                // Pack the low 32 bits of each heap pointer into 2 u16 cells.
+                let pack_u16s = |v: u32| -> [F; 2] {
+                    let bytes = v.to_le_bytes();
+                    from_fn(|i| F::from_u16(u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]])))
+                };
+                cols.rd_val = pack_u16s(header.rd_val);
+                cols.rs_val = pack_u16s(header.rs_val);
 
                 if row_idx == 0 {
-                    debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
-                    let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
-
-                    self.bitwise_lookup_chip.request_range(
-                        (header.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32)
-                            << limb_shift_bits,
-                        (header.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32)
-                            << limb_shift_bits,
-                    );
+                    let u16_bits = RV64_CELL_BITS * 2;
+                    debug_assert!(u16_bits * 2 >= self.address_bits);
+                    let limb_shift_bits = u16_bits * 2 - self.address_bits;
+                    for &v in [header.rd_val, header.rs_val].iter() {
+                        self.range_checker_chip
+                            .add_count((v >> u16_bits) << limb_shift_bits, u16_bits);
+                    }
                     // `output_len` high-cell range check (16-bit, scaled to enforce
                     // `output_len < 2^address_bits`).
                     debug_assert!(self.address_bits >= 16);

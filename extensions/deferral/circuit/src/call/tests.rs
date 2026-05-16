@@ -291,7 +291,7 @@ fn create_cpu_harness(
     let executor = DeferralCallExecutor::new(DeferralCallAdapterExecutor, fns);
     let chip = DeferralCallChip::new(
         DeferralCallCoreFiller::new(
-            DeferralCallAdapterFiller::new(bitwise_chip.clone(), tester.address_bits()),
+            DeferralCallAdapterFiller::new(range_checker.clone(), tester.address_bits()),
             count_chip.clone(),
             poseidon2_chip.clone(),
             range_checker.clone(),
@@ -348,7 +348,7 @@ fn create_cuda_harness(
     let executor = DeferralCallExecutor::new(DeferralCallAdapterExecutor, fns);
     let cpu_chip = DeferralCallChip::new(
         DeferralCallCoreFiller::new(
-            DeferralCallAdapterFiller::new(dummy_bitwise_chip.clone(), tester.address_bits()),
+            DeferralCallAdapterFiller::new(dummy_range_checker.clone(), tester.address_bits()),
             count_chip_cpu,
             poseidon2_chip_cpu,
             dummy_range_checker,

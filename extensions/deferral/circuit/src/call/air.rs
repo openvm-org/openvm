@@ -7,7 +7,7 @@ use openvm_circuit::{
         VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH, BUS_PTR_SCALE, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
-        offline_checker::{pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
@@ -22,7 +22,6 @@ use openvm_instructions::{
     riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
     LocalOpcode, DEFERRAL_AS,
 };
-use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -38,7 +37,7 @@ use crate::{
     count::DeferralCircuitCountBus,
     poseidon2::DeferralPoseidon2Bus,
     utils::{
-        bytes_to_f, split_f_memory_ops, u16_commit_to_f, COMMIT_MEMORY_OPS, COMMIT_NUM_U16S,
+        split_f_memory_ops, u16_commit_to_f, u16s_to_f, COMMIT_MEMORY_OPS, COMMIT_NUM_U16S,
         DIGEST_F_MEMORY_OPS, F_NUM_U16S, OUTPUT_LEN_NUM_U16S, OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
@@ -262,9 +261,9 @@ pub struct DeferralCallAdapterCols<T> {
     pub rd_ptr: T,
     pub rs_ptr: T,
 
-    // Heap pointers and aux columns
-    pub rd_val: [T; RV64_WORD_NUM_LIMBS],
-    pub rs_val: [T; RV64_WORD_NUM_LIMBS],
+    /// Low 32 bits of heap pointers, packed as 2 u16 cells each (matches the memory bus payload).
+    pub rd_val: [T; RV64_WORD_NUM_LIMBS / 2],
+    pub rs_val: [T; RV64_WORD_NUM_LIMBS / 2],
     pub rd_aux: MemoryReadAuxCols<T>,
     pub rs_aux: MemoryReadAuxCols<T>,
 
@@ -322,17 +321,26 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         let d = AB::Expr::from_u32(RV64_REGISTER_AS);
         let e = AB::Expr::from_u32(RV64_MEMORY_AS);
 
-        // `rd_val` / `rs_val` remain byte-shaped to keep the existing pointer
-        // range-check + `bytes_to_f` decoding. Pad them to 8 bytes (upper 4
-        // limbs hardcoded zero) and pack to 4 u16 cells for the bus payload.
-        let rd_full = expand_to_rv64_register(&cols.rd_val);
-        let rs_full = expand_to_rv64_register(&cols.rs_val);
+        // `rd_val` / `rs_val` are the low 32 bits as 2 u16 cells. The bus payload zero-extends
+        // them to BLOCK_FE_WIDTH=4 cells.
+        let rd_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
+            cols.rd_val[0].into(),
+            cols.rd_val[1].into(),
+            AB::Expr::ZERO,
+            AB::Expr::ZERO,
+        ];
+        let rs_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
+            cols.rs_val[0].into(),
+            cols.rs_val[1].into(),
+            AB::Expr::ZERO,
+            AB::Expr::ZERO,
+        ];
 
         // Heap pointers are first read from their respective registers.
         self.memory_bridge
             .read(
                 MemoryAddress::new(d.clone(), cols.rd_ptr),
-                pack_u8_for_bus::<AB>(&rd_full),
+                rd_bus,
                 timestamp_pp(),
                 &cols.rd_aux,
             )
@@ -341,32 +349,31 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(d.clone(), cols.rs_ptr),
-                pack_u8_for_bus::<AB>(&rs_full),
+                rs_bus,
                 timestamp_pp(),
                 &cols.rs_aux,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
 
-        // We range check the top byte of both heap pointers to ensure that each
-        // access is in [0, 2^address_bits). The memory merkle argument ensures
-        // that each read/write pointer is less than 2^addr_bits, and this range
-        // check ensures the accesses don't wrap around P.
-        debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
-        let limb_shift =
-            AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
+        // We range check the high u16 of both heap pointers to ensure each access is in
+        // [0, 2^address_bits). The memory merkle argument ensures that each read/write pointer
+        // is less than 2^addr_bits, and this range check ensures the accesses don't wrap around P.
+        let u16_bits = RV64_CELL_BITS * 2;
+        debug_assert!(u16_bits * 2 >= self.address_bits);
+        let limb_shift = AB::F::from_u32(1 << (u16_bits * 2 - self.address_bits));
 
-        self.bitwise_bus
-            .send_range(
-                cols.rd_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
-                cols.rs_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
-            )
+        self.range_bus
+            .range_check(cols.rd_val[1] * limb_shift, u16_bits)
+            .eval(builder, ctx.instruction.is_valid.clone());
+        self.range_bus
+            .range_check(cols.rs_val[1] * limb_shift, u16_bits)
             .eval(builder, ctx.instruction.is_valid.clone());
 
         // Accumulators are read then updated in the deferral address space,
         // using deferral_idx (instruction immediate / operand c) to determine
         // the accumulator memory address.
-        let input_ptr = bytes_to_f(&cols.rs_val);
-        let output_ptr = bytes_to_f(&cols.rd_val);
+        let input_ptr = u16s_to_f(&cols.rs_val);
+        let output_ptr = u16s_to_f(&cols.rd_val);
 
         let deferral_idx = ctx.instruction.immediate;
         let deferral_as = AB::Expr::from_u32(DEFERRAL_AS);

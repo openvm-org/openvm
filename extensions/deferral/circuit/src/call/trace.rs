@@ -13,18 +13,12 @@ use openvm_circuit::{
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
-    AlignedBytesBorrow,
-};
+use openvm_circuit_primitives::{var_range::SharedVariableRangeCheckerChip, AlignedBytesBorrow};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{
-        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
-        RV64_WORD_NUM_LIMBS,
-    },
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, tracing_read, tracing_write};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -286,7 +280,7 @@ pub struct DeferralCallAdapterExecutor;
 
 #[derive(Clone, derive_new::new)]
 pub struct DeferralCallAdapterFiller {
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     address_bits: usize,
 }
 
@@ -440,13 +434,14 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
 
         // Range checks must happen before we start writing adapter columns,
         // since the record and columns share the same backing buffer.
-        debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
-        let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
+        let u16_bits = RV64_CELL_BITS * 2;
+        debug_assert!(u16_bits * 2 >= self.address_bits);
+        let limb_shift_bits = u16_bits * 2 - self.address_bits;
 
-        self.bitwise_lookup_chip.request_range(
-            (record.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
-            (record.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
-        );
+        for &v in [record.rd_val, record.rs_val].iter() {
+            self.range_checker_chip
+                .add_count((v >> u16_bits) << limb_shift_bits, u16_bits);
+        }
 
         // Timestamps in AIR are assigned in strict sequence starting from
         // `from_state.timestamp`; mirror that exact sequence in reverse here.
@@ -525,8 +520,13 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
             timestamp_mm(),
             adapter_row.rd_aux.as_mut(),
         );
-        adapter_row.rs_val = record.rs_val.to_le_bytes().map(F::from_u8);
-        adapter_row.rd_val = record.rd_val.to_le_bytes().map(F::from_u8);
+        // Pack the low 32 bits of each register pointer into 2 u16 cells.
+        let pack_u16s = |v: u32| -> [F; 2] {
+            let bytes = v.to_le_bytes();
+            from_fn(|i| F::from_u16(u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]])))
+        };
+        adapter_row.rs_val = pack_u16s(record.rs_val);
+        adapter_row.rd_val = pack_u16s(record.rd_val);
 
         adapter_row.rs_ptr = record.rs_ptr;
         adapter_row.rd_ptr = record.rd_ptr;

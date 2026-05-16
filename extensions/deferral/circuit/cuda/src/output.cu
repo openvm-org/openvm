@@ -78,9 +78,10 @@ template <typename T> struct DeferralOutputCols {
     T rs_ptr;
     T deferral_idx;
 
-    // Heap pointers + auxiliary read columns
-    T rd_val[RV64_WORD_NUM_LIMBS];
-    T rs_val[RV64_WORD_NUM_LIMBS];
+    // Heap pointers + auxiliary read columns.
+    // Low 32 bits of heap pointers, packed as 2 u16 cells each.
+    T rd_val[RV64_WORD_NUM_LIMBS / 2];
+    T rs_val[RV64_WORD_NUM_LIMBS / 2];
     MemoryReadAuxCols<T> rd_aux;
     MemoryReadAuxCols<T> rs_aux;
 
@@ -166,8 +167,21 @@ __global__ void deferral_output_tracegen(
     COL_WRITE_VALUE(row, DeferralOutputCols, rs_ptr, header.rs_ptr);
     COL_WRITE_VALUE(row, DeferralOutputCols, deferral_idx, header.deferral_idx);
 
-    COL_WRITE_ARRAY(row, DeferralOutputCols, rd_val, header.rd_val);
-    COL_WRITE_ARRAY(row, DeferralOutputCols, rs_val, header.rs_val);
+    // Pack the low 32 bits of each heap pointer into 2 u16 cells.
+    constexpr size_t PTR_U16S = RV64_WORD_NUM_LIMBS / 2;
+    Fp rd_val_u16s[PTR_U16S];
+    Fp rs_val_u16s[PTR_U16S];
+#pragma unroll
+    for (size_t k = 0; k < PTR_U16S; k++) {
+        rd_val_u16s[k] = Fp(
+            static_cast<uint32_t>(header.rd_val[2 * k]) + 256u * static_cast<uint32_t>(header.rd_val[2 * k + 1])
+        );
+        rs_val_u16s[k] = Fp(
+            static_cast<uint32_t>(header.rs_val[2 * k]) + 256u * static_cast<uint32_t>(header.rs_val[2 * k + 1])
+        );
+    }
+    COL_WRITE_ARRAY(row, DeferralOutputCols, rd_val, rd_val_u16s);
+    COL_WRITE_ARRAY(row, DeferralOutputCols, rs_val, rs_val_u16s);
 
     // Pack the byte-shaped output_commit record into u16 cells.
     uint16_t output_commit_u16s[COMMIT_NUM_U16S];
@@ -186,11 +200,13 @@ __global__ void deferral_output_tracegen(
     if (is_first) {
         count_buffer.add_count(header.deferral_idx);
 
-        const uint32_t limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - address_bits;
-        bitwise_buffer.add_range(
-            static_cast<uint32_t>(header.rd_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
-            static_cast<uint32_t>(header.rs_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits
-        );
+        constexpr size_t U16_BITS = RV64_CELL_BITS * 2;
+        const uint32_t limb_shift_bits = U16_BITS * 2 - address_bits;
+        auto hi_u16 = [](const uint8_t bytes[RV64_WORD_NUM_LIMBS]) {
+            return static_cast<uint32_t>(bytes[2]) + 256u * static_cast<uint32_t>(bytes[3]);
+        };
+        range_checker.add_count(hi_u16(header.rd_val) << limb_shift_bits, U16_BITS);
+        range_checker.add_count(hi_u16(header.rs_val) << limb_shift_bits, U16_BITS);
         // `output_len < 2^address_bits` enforced via scaled 16-bit range check
         // on the high u16 cell.
         const uint32_t output_len_high_lshift =

@@ -224,8 +224,9 @@ template <typename T> struct DeferralCallAdapterCols {
     T rd_ptr;
     T rs_ptr;
 
-    T rd_val[RV64_WORD_NUM_LIMBS];
-    T rs_val[RV64_WORD_NUM_LIMBS];
+    /// Low 32 bits of heap pointers, packed as 2 u16 cells each.
+    T rd_val[RV64_WORD_NUM_LIMBS / 2];
+    T rs_val[RV64_WORD_NUM_LIMBS / 2];
     MemoryReadAuxCols<T> rd_aux;
     MemoryReadAuxCols<T> rs_aux;
 
@@ -241,22 +242,38 @@ template <typename T> struct DeferralCallAdapterCols {
 __device__ __forceinline__ void deferral_call_adapter_tracegen(
     RowSlice row,
     const DeferralCallAdapterRecord<Fp> &record,
-    BitwiseOperationLookup &bitwise_buffer,
+    VariableRangeChecker &range_checker,
     MemoryAuxColsFactory &mem_helper,
     const size_t address_bits
 ) {
-    const uint32_t limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - address_bits;
-    bitwise_buffer.add_range(
-        static_cast<uint32_t>(record.rd_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
-        static_cast<uint32_t>(record.rs_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits
-    );
+    constexpr size_t U16_BITS = RV64_CELL_BITS * 2;
+    const uint32_t limb_shift_bits = U16_BITS * 2 - address_bits;
+    auto hi_u16 = [](const uint8_t bytes[RV64_WORD_NUM_LIMBS]) {
+        return static_cast<uint32_t>(bytes[2]) + 256u * static_cast<uint32_t>(bytes[3]);
+    };
+    range_checker.add_count(hi_u16(record.rd_val) << limb_shift_bits, U16_BITS);
+    range_checker.add_count(hi_u16(record.rs_val) << limb_shift_bits, U16_BITS);
 
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, from_state.pc, record.from_pc);
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, from_state.timestamp, record.from_timestamp);
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, rd_ptr, record.rd_ptr);
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, rs_ptr, record.rs_ptr);
-    COL_WRITE_ARRAY(row, DeferralCallAdapterCols, rd_val, record.rd_val);
-    COL_WRITE_ARRAY(row, DeferralCallAdapterCols, rs_val, record.rs_val);
+
+    // Pack the low 32 bits of each heap pointer into 2 u16 cells.
+    constexpr size_t PTR_U16S = RV64_WORD_NUM_LIMBS / 2;
+    Fp rd_val_u16s[PTR_U16S];
+    Fp rs_val_u16s[PTR_U16S];
+#pragma unroll
+    for (size_t k = 0; k < PTR_U16S; k++) {
+        rd_val_u16s[k] = Fp(
+            static_cast<uint32_t>(record.rd_val[2 * k]) + 256u * static_cast<uint32_t>(record.rd_val[2 * k + 1])
+        );
+        rs_val_u16s[k] = Fp(
+            static_cast<uint32_t>(record.rs_val[2 * k]) + 256u * static_cast<uint32_t>(record.rs_val[2 * k + 1])
+        );
+    }
+    COL_WRITE_ARRAY(row, DeferralCallAdapterCols, rd_val, rd_val_u16s);
+    COL_WRITE_ARRAY(row, DeferralCallAdapterCols, rs_val, rs_val_u16s);
 
     uint32_t timestamp = record.from_timestamp;
     constexpr size_t read_aux_stride = sizeof(MemoryReadAuxCols<uint8_t>);
@@ -394,7 +411,7 @@ __global__ void deferral_call_tracegen(
         poseidon2_records, poseidon2_counts, poseidon2_idx, poseidon2_capacity
     );
 
-    deferral_call_adapter_tracegen(row, record.adapter, bitwise_buffer, mem_helper, address_bits);
+    deferral_call_adapter_tracegen(row, record.adapter, range_checker, mem_helper, address_bits);
     deferral_call_core_tracegen(
         row.slice_from(COL_INDEX(DeferralCallCols, core)),
         record.core,

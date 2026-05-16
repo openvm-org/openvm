@@ -21,7 +21,6 @@ use openvm_instructions::{
     riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::expand_to_rv64_register;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -37,9 +36,9 @@ use crate::{
     count::DeferralCircuitCountBus,
     poseidon2::DeferralPoseidon2Bus,
     utils::{
-        bytes_to_f, split_byte_memory_ops, split_f_memory_ops, u16_commit_to_f, u16s_to_f,
-        COMMIT_MEMORY_OPS, COMMIT_NUM_U16S, DIGEST_BYTE_MEMORY_OPS, F_NUM_U16S,
-        OUTPUT_LEN_NUM_U16S, OUTPUT_TOTAL_MEMORY_OPS,
+        split_byte_memory_ops, split_f_memory_ops, u16_commit_to_f, u16s_to_f, COMMIT_MEMORY_OPS,
+        COMMIT_NUM_U16S, DIGEST_BYTE_MEMORY_OPS, F_NUM_U16S, OUTPUT_LEN_NUM_U16S,
+        OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
 
@@ -59,9 +58,10 @@ pub struct DeferralOutputCols<T> {
     pub rs_ptr: T,
     pub deferral_idx: T,
 
-    // Heap pointers + auxiliary read columns
-    pub rd_val: [T; RV64_WORD_NUM_LIMBS],
-    pub rs_val: [T; RV64_WORD_NUM_LIMBS],
+    // Heap pointers + auxiliary read columns.
+    // Low 32 bits of heap pointers, packed as 2 u16 cells each (matches the memory bus payload).
+    pub rd_val: [T; RV64_WORD_NUM_LIMBS / 2],
+    pub rs_val: [T; RV64_WORD_NUM_LIMBS / 2],
     pub rd_aux: MemoryReadAuxCols<T>,
     pub rs_aux: MemoryReadAuxCols<T>,
 
@@ -251,21 +251,21 @@ where
             .lookup(next.sponge_inputs, rhs, next.poseidon2_res, next.is_last)
             .eval(builder, next.is_valid);
 
-        // We range check the top byte of both heap pointers to ensure that each access
-        // is in [0, 2^address_bits). The memory merkle argument ensures each pointer
-        // is less than 2^addr_bits, and this range check ensures the decomposition is
-        // canonical. Note that constraining the starting output pointer is sufficient
-        // to constrain the entire write is in range - even if output_ptr + output_len
-        // wraps, there will be several written values in the middle that do not.
-        debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
-        let limb_shift =
-            AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
+        // We range check the high u16 of both heap pointers to ensure each access is in
+        // [0, 2^address_bits). The memory merkle argument ensures each pointer is less than
+        // 2^addr_bits, and this range check ensures the decomposition is canonical. Note that
+        // constraining the starting output pointer is sufficient to constrain the entire write
+        // is in range - even if output_ptr + output_len wraps, there will be several written
+        // values in the middle that do not.
+        let u16_bits = RV64_CELL_BITS * 2;
+        debug_assert!(u16_bits * 2 >= self.address_bits);
+        let limb_shift = AB::F::from_u32(1 << (u16_bits * 2 - self.address_bits));
 
-        self.bitwise_bus
-            .send_range(
-                local.rd_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
-                local.rs_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
-            )
+        self.range_bus
+            .range_check(local.rd_val[1] * limb_shift, u16_bits)
+            .eval(builder, local.is_first);
+        self.range_bus
+            .range_check(local.rs_val[1] * limb_shift, u16_bits)
             .eval(builder, local.is_first);
 
         // We also constrain output_len to be under 2^address_bits. `output_len`
@@ -284,14 +284,24 @@ where
         let d = AB::Expr::from_u32(RV64_REGISTER_AS);
         let e = AB::Expr::from_u32(RV64_MEMORY_AS);
 
-        // Build full 8-element data arrays with upper 4 limbs hardcoded to zero
-        let rd_full = expand_to_rv64_register(&local.rd_val);
-        let rs_full = expand_to_rv64_register(&local.rs_val);
+        // `rd_val` / `rs_val` are the low 32 bits as 2 u16 cells. Zero-extend on the bus payload.
+        let rd_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
+            local.rd_val[0].into(),
+            local.rd_val[1].into(),
+            AB::Expr::ZERO,
+            AB::Expr::ZERO,
+        ];
+        let rs_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
+            local.rs_val[0].into(),
+            local.rs_val[1].into(),
+            AB::Expr::ZERO,
+            AB::Expr::ZERO,
+        ];
 
         self.memory_bridge
             .read(
                 MemoryAddress::new(d.clone(), local.rd_ptr),
-                pack_u8_for_bus::<AB>(&rd_full),
+                rd_bus,
                 local.from_state.timestamp,
                 &local.rd_aux,
             )
@@ -300,7 +310,7 @@ where
         self.memory_bridge
             .read(
                 MemoryAddress::new(d.clone(), local.rs_ptr),
-                pack_u8_for_bus::<AB>(&rs_full),
+                rs_bus,
                 local.from_state.timestamp + AB::Expr::ONE,
                 &local.rs_aux,
             )
@@ -309,8 +319,8 @@ where
         // Constrain memory reads and writes using the MemoryBridge. a and b are
         // register pointers whose values are read first, then used as heap
         // pointers. c carries deferral_idx.
-        let input_ptr = bytes_to_f(&local.rs_val);
-        let output_ptr = bytes_to_f(&local.rd_val);
+        let input_ptr = u16s_to_f(&local.rs_val);
+        let output_ptr = u16s_to_f(&local.rd_val);
 
         // Zero-pad `output_len` to `BLOCK_FE_WIDTH` u16 cells for the bus
         // payload (the upper 4 bytes of the 8-byte memory block are zero).
