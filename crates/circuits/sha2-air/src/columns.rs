@@ -12,8 +12,8 @@ use crate::Sha2BlockHasherSubairConfig;
 /// - First C::ROUND_ROWS rows use Sha2RoundCols
 /// - Final row uses Sha2DigestCols
 ///
-/// Note that for soundness, we require that there is always a padding row after the last digest row
-/// in the trace. Right now, this is true because the unpadded height is a multiple of 17 (SHA-256)
+/// For soundness, the AIR enforces that the trace ends in padding rows after the last digest row.
+/// Honest traces already satisfy this because the unpadded height is a multiple of 17 (SHA-256)
 /// or 21 (SHA-512), and thus not a power of 2.
 ///
 /// Sha2RoundCols and Sha2DigestCols share the same first 3 fields:
