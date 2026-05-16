@@ -13,7 +13,7 @@ use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
 use super::{
     bridge::{map_rvr_compile_error, map_rvr_execute_error},
     compile::ChipMapping,
-    compile_metered, compile_metered_with_extensions, execute_metered,
+    compile_metered, execute_metered,
     state::{MeteredState, TracerPayload, TracerPtr},
 };
 use crate::{
@@ -709,12 +709,8 @@ where
         trace_config.is_constant = ctx.is_trace_height_constant.clone();
 
         let chips = trace_config.chip_mapping();
-        let compiled_metered = if self.extensions.is_empty() {
-            compile_metered(self.exe.as_ref(), &chips)
-        } else {
-            compile_metered_with_extensions(self.exe.as_ref(), &self.extensions, &chips)
-        }
-        .map_err(map_rvr_compile_error)?;
+        let compiled_metered = compile_metered(self.exe.as_ref(), &self.extensions, &chips)
+            .map_err(map_rvr_compile_error)?;
 
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();

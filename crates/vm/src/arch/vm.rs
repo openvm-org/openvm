@@ -294,8 +294,7 @@ where
         // execution can avoid passing `executor_idx_to_air_idx` altogether.
         let executor_idx_to_air_idx = vec![NO_CHIP as usize; self.inventory.executors.len()];
         let extensions = self.build_rvr_extensions(&executor_idx_to_air_idx);
-        let compiled =
-            rvr::compile_with_extensions(exe, &extensions).map_err(map_rvr_compile_error)?;
+        let compiled = rvr::compile(exe, &extensions).map_err(map_rvr_compile_error)?;
 
         Ok(RvrPureInstance {
             system_config: self.inventory.config().clone(),

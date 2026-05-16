@@ -232,14 +232,12 @@ pub fn execute<F: PrimeField32>(
     })
 }
 
-/// Execute a VmExe with metered cost tracking. If `num_insns` is `Some(n)`, the
-/// suspender is armed at `n` instructions and `Suspended` counts as success.
+/// Execute a VmExe with metered cost tracking.
 pub fn execute_metered_cost<F: PrimeField32>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
     vm_state: &mut VmState<F, GuestMemory>,
     metered_cost_config: MeteredCostConfig,
-    num_insns: Option<u64>,
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
     let pc = vm_state.pc();
     let initial_regs = read_rv32_registers(vm_state);
@@ -252,24 +250,17 @@ pub fn execute_metered_cost<F: PrimeField32>(
     let widths_u64 = prepare_metered_cost(&metered_cost_config);
     state.tracer.chip_widths = widths_u64.as_ptr();
     state.tracer.cost = 0;
-    if let Some(n) = num_insns {
-        state.suspender.set_target(n);
-    }
 
-    let status = run_and_finalize(
+    run_and_finalize(
         compiled,
         extensions,
         vm_state,
         &mut state,
-        num_insns.is_some(),
+        false,
         "metered-cost execution failed",
     )?;
     let cost = state.tracer.cost;
-    Ok(RvrMeteredCostResult {
-        state,
-        cost,
-        suspended: status == ExecutionStatus::Suspended,
-    })
+    Ok(RvrMeteredCostResult { state, cost })
 }
 
 /// Execute a VmExe with per-chip metered execution and segmentation.

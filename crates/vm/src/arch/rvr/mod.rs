@@ -12,10 +12,8 @@ pub mod pure;
 pub mod state;
 
 pub use compile::{
-    compile, compile_metered, compile_metered_cost, compile_metered_cost_with_extensions,
-    compile_metered_cost_with_limit, compile_metered_with_extensions, compile_with_extensions,
-    compile_with_limit, compile_with_options, load_compiled_from_path, ChipMapping, CompileError,
-    CompileOptions, RvrCompiled,
+    compile, compile_metered, compile_metered_cost, load_compiled_from_path, ChipMapping,
+    CompileError, RvrCompiled,
 };
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
 pub use execute::{

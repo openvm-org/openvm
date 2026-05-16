@@ -9,7 +9,7 @@ use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
 use super::{
     bridge::{map_rvr_compile_error, map_rvr_execute_error},
     compile::ChipMapping,
-    compile_metered_cost, compile_metered_cost_with_extensions, execute_metered_cost,
+    compile_metered_cost, execute_metered_cost,
     state::{MeteredCostState, TracerPayload, TracerPtr},
 };
 use crate::{
@@ -20,11 +20,9 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-/// `suspended` is `false` for unlimited runs.
 pub struct RvrMeteredCostResult {
     pub state: MeteredCostState,
     pub cost: u64,
-    pub suspended: bool,
 }
 
 /// Configuration for mapping PCs and memory operations to metering costs.
@@ -175,12 +173,8 @@ where
         );
         let chips = metered_cost_config.chip_mapping();
 
-        let compiled = if self.extensions.is_empty() {
-            compile_metered_cost(self.exe.as_ref(), &chips)
-        } else {
-            compile_metered_cost_with_extensions(self.exe.as_ref(), &self.extensions, &chips)
-        }
-        .map_err(map_rvr_compile_error)?;
+        let compiled = compile_metered_cost(self.exe.as_ref(), &self.extensions, &chips)
+            .map_err(map_rvr_compile_error)?;
 
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
@@ -191,7 +185,6 @@ where
                     &self.extensions,
                     &mut vm_state,
                     metered_cost_config,
-                    None,
                 )
             })
             .map_err(map_rvr_execute_error)?;
