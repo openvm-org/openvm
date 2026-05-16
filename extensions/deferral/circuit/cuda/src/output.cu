@@ -268,8 +268,7 @@ __global__ void deferral_output_tracegen(
             sponge_inputs[i] = Fp::zero();
         }
         sponge_inputs[0] = Fp(header.deferral_idx);
-        sponge_inputs[1] = Fp(static_cast<uint32_t>(output_len_u16s[0]));
-        sponge_inputs[2] = Fp(static_cast<uint32_t>(output_len_u16s[1]));
+        sponge_inputs[1] = Fp(output_len);
         COL_WRITE_ARRAY(row, DeferralOutputCols, sponge_inputs, sponge_inputs);
 
         COL_FILL_ZERO(row, DeferralOutputCols, write_bytes_aux);

@@ -12,8 +12,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus, var_range::VariableRangeCheckerBus, ColumnsAir,
-    StructReflection, StructReflectionHelper,
+    var_range::VariableRangeCheckerBus, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
@@ -109,7 +108,6 @@ pub struct DeferralCallCoreCols<T> {
 pub struct DeferralCallCoreAir {
     pub count_bus: DeferralCircuitCountBus,
     pub poseidon2_bus: DeferralPoseidon2Bus,
-    pub bitwise_bus: BitwiseOperationLookupBus,
     /// 16-bit range checker bus used for per-cell range checks on
     /// `input_commit` / `output_commit` / `output_len` u16 cells, and for the
     /// canonicity sub-AIR's `diff_val - 1` outputs (also 16-bit values).
@@ -286,7 +284,6 @@ pub struct DeferralCallAdapterCols<T> {
 pub struct DeferralCallAdapterAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
-    pub bitwise_bus: BitwiseOperationLookupBus,
     /// 16-bit range checker bus used for the `output_len` high-cell range
     /// check (scaled to enforce `output_len < 2^address_bits`).
     pub range_bus: VariableRangeCheckerBus,

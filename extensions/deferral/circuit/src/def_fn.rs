@@ -85,9 +85,7 @@ fn hash_output_raw<F: VmField>(
 
     let mut state = [F::ZERO; POSEIDON2_WIDTH];
     state[0] = F::from_u32(deferral_idx);
-    let output_len = output_ref.len() as u32;
-    state[1] = F::from_u16((output_len & 0xFFFF) as u16);
-    state[2] = F::from_u16(((output_len >> 16) & 0xFFFF) as u16);
+    state[1] = F::from_usize(output_ref.len());
 
     let (lhs, rhs) = state_to_chunks(&state);
     if output_ref.is_empty() {

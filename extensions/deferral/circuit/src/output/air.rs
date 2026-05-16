@@ -211,14 +211,13 @@ where
                 .eval(builder, local.is_first);
         }
 
-        // The initial sponge state is `[deferral_idx, output_len_lo_u16,
-        // output_len_hi_u16, 0, ...]`. The two output_len limbs are sourced
-        // from the already-canonicity-checked `output_len` column.
+        // The initial sponge state is `[deferral_idx, output_len, 0, ...]`.
+        // `sponge_inputs` cells are 16-bit range-checked only on data rows,
+        // so the init row may hold `output_len` as a single F element.
         let output_len = u16s_to_f(&local.output_len);
         let mut initial_state = [AB::Expr::ZERO; DIGEST_SIZE];
         initial_state[0] = local.deferral_idx.into();
-        initial_state[1] = local.output_len[0].into();
-        initial_state[2] = local.output_len[1].into();
+        initial_state[1] = output_len.clone();
 
         assert_array_eq(
             &mut builder.when(local.is_first),

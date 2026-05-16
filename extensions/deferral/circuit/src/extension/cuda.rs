@@ -6,9 +6,7 @@ use openvm_circuit::{
         VmChipComplex, VmProverExtension,
     },
     system::cuda::{
-        extensions::{
-            get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder,
-        },
+        extensions::{get_inventory_range_checker, SystemGpuBuilder},
         SystemChipInventoryGPU,
     },
 };
@@ -42,7 +40,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
-        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         let count = Arc::new(if num_deferral_circuits == 0 {
             DeviceBuffer::<u32>::new()
@@ -78,7 +75,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
         inventory.next_air::<DeferralCallAir>()?;
         let call_chip = DeferralCallChipGpu::new(
             range_checker.clone(),
-            bitwise_lu.clone(),
             address_bits,
             timestamp_max_bits,
             count.clone(),

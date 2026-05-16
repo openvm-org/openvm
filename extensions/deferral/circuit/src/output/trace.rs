@@ -318,11 +318,12 @@ where
             ];
             let output_len_f = output_len_u16s.map(F::from_u16);
 
-            // Initial sponge input: `[deferral_idx, output_len_lo, output_len_hi, 0, ...]`.
+            // Initial sponge input: `[deferral_idx, output_len_as_F, 0, ...]`. The
+            // init row's `sponge_inputs` are exempt from the 16-bit per-cell range
+            // check, so the full F value of `output_len` lives in one cell.
             let mut initial_sponge_input = [F::ZERO; DIGEST_SIZE];
             initial_sponge_input[0] = F::from_u32(header.deferral_idx);
-            initial_sponge_input[1] = output_len_f[0];
-            initial_sponge_input[2] = output_len_f[1];
+            initial_sponge_input[1] = F::from_u32(output_len_u32);
 
             for (row_idx, row) in section_chunk.chunks_exact_mut(width).enumerate() {
                 let cols: &mut DeferralOutputCols<F> = row.borrow_mut();

@@ -11,10 +11,6 @@ use openvm_circuit::{
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
-};
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::LocalOpcode;
@@ -110,17 +106,6 @@ where
 
         let count_bus = DeferralCircuitCountBus::new(inventory.new_bus_idx());
         let poseidon2_bus = DeferralPoseidon2Bus::new(inventory.new_bus_idx());
-        let bitwise_bus = {
-            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
-            if let Some(air) = existing_air {
-                air.bus
-            } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
-                let air = BitwiseOperationLookupAir::<8>::new(bus);
-                inventory.add_air(air);
-                air.bus
-            }
-        };
         let range_bus = inventory.range_checker().bus;
 
         let base_num_airs = inventory.num_airs();
@@ -133,14 +118,8 @@ where
 
         assert_eq!(inventory.num_airs() - base_num_airs, CALL_AIR_REL_IDX);
         inventory.add_air(DeferralCallAir::new(
-            DeferralCallAdapterAir::new(
-                execution_bridge,
-                memory_bridge,
-                bitwise_bus,
-                range_bus,
-                address_bits,
-            ),
-            DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus, range_bus),
+            DeferralCallAdapterAir::new(execution_bridge, memory_bridge, range_bus, address_bits),
+            DeferralCallCoreAir::new(count_bus, poseidon2_bus, range_bus),
         ));
 
         assert_eq!(inventory.num_airs() - base_num_airs, OUTPUT_AIR_REL_IDX);
@@ -176,18 +155,6 @@ where
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let address_bits = inventory.airs().pointer_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        // The Deferral call AIR still references the byte-bitwise lookup bus; ensure the
-        // matching chip is present in the inventory so the LogUp argument balances.
-        if inventory
-            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-            .next()
-            .is_none()
-        {
-            let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
-            let chip: SharedBitwiseOperationLookupChip<8> =
-                Arc::new(BitwiseOperationLookupChip::new(air.bus));
-            inventory.add_periphery_chip(chip);
-        }
         let count_chip = Arc::new(DeferralCircuitCountChip::new(extension.fns.len()));
         let poseidon2_chip = Arc::new(deferral_poseidon2_chip());
 
