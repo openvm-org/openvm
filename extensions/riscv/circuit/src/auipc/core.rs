@@ -5,7 +5,6 @@ use openvm_circuit::{
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
@@ -49,7 +48,6 @@ pub struct Rv64AuipcCoreCols<T> {
 #[derive(Debug, Clone, Copy, derive_new::new, ColumnsAir)]
 #[columns_via(Rv64AuipcCoreCols<u8>)]
 pub struct Rv64AuipcCoreAir {
-    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
 }
 
@@ -119,8 +117,8 @@ where
         self.range_bus
             .range_check(rd_data[1], 16)
             .eval(builder, is_valid);
-        self.bitwise_lookup_bus
-            .send_range(imm_low_8, imm_low_8)
+        self.range_bus
+            .range_check(imm_low_8, 8)
             .eval(builder, is_valid);
         self.range_bus
             .range_check(imm_high_16, 16)
@@ -170,7 +168,6 @@ pub struct Rv64AuipcExecutor<A = Rv64RdWriteAdapterExecutor> {
 #[derive(Clone, derive_new::new)]
 pub struct Rv64AuipcFiller<A = Rv64RdWriteAdapterFiller> {
     adapter: A,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
@@ -232,8 +229,7 @@ where
         let rd_u16 = [rd_block[0], rd_block[1]];
 
         // Range checks.
-        self.bitwise_lookup_chip
-            .request_range(imm_low_8 as u32, imm_low_8 as u32);
+        self.range_checker_chip.add_count(imm_low_8 as u32, 8);
         self.range_checker_chip.add_count(imm_high_16, 16);
         self.range_checker_chip.add_count(rd_u16[0] as u32, 16);
         self.range_checker_chip.add_count(rd_u16[1] as u32, 16);

@@ -341,7 +341,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let auipc = Rv64AuipcAir::new(
             Rv64RdWriteAdapterAir::new(memory_bridge, exec_bridge),
-            Rv64AuipcCoreAir::new(bitwise_lu, range_checker),
+            Rv64AuipcCoreAir::new(range_checker),
         );
         inventory.add_air(auipc);
 
@@ -505,11 +505,7 @@ where
 
         inventory.next_air::<Rv64AuipcAir>()?;
         let auipc = Rv64AuipcChip::new(
-            Rv64AuipcFiller::new(
-                Rv64RdWriteAdapterFiller,
-                bitwise_lu.clone(),
-                range_checker.clone(),
-            ),
+            Rv64AuipcFiller::new(Rv64RdWriteAdapterFiller, range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(auipc);
