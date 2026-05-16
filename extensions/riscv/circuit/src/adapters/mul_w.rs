@@ -11,8 +11,8 @@ use openvm_circuit::{
     },
     system::memory::{
         offline_checker::{
-            pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
-            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
+            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+            MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -34,7 +34,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::{tracing_read, tracing_write};
+use super::{alu_w::RS_HIGH_U16S, tracing_read, tracing_write};
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
@@ -43,10 +43,10 @@ pub struct Rv64MultWAdapterCols<T> {
     pub rd_ptr: T,
     pub rs1_ptr: T,
     pub rs2_ptr: T,
-    /// Upper 4 bytes of rs1 register read (kept in adapter to satisfy full-width memory read).
-    pub rs1_high: [T; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
-    /// Upper 4 bytes of rs2 register read.
-    pub rs2_high: [T; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
+    /// Upper 4 bytes of rs1 register read, packed as 2 u16 cells.
+    pub rs1_high: [T; RS_HIGH_U16S],
+    /// Upper 4 bytes of rs2 register read, packed as 2 u16 cells.
+    pub rs2_high: [T; RS_HIGH_U16S],
     /// Sign bit of the low-word core result used to build full-width sign-extended writes.
     pub result_sign: T,
     pub reads_aux: [MemoryReadAuxCols<T>; 2],
@@ -94,33 +94,32 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        let rs1_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                ctx.reads[0][i].clone()
-            } else {
-                local.rs1_high[i - RV64_WORD_NUM_LIMBS].into()
-            }
-        });
+        let pair = |lo: AB::Expr, hi: AB::Expr| lo + AB::Expr::from_u64(256) * hi;
+        let rs1_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
+            pair(ctx.reads[0][0].clone(), ctx.reads[0][1].clone()),
+            pair(ctx.reads[0][2].clone(), ctx.reads[0][3].clone()),
+            local.rs1_high[0].into(),
+            local.rs1_high[1].into(),
+        ];
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs1_ptr),
-                pack_u8_for_bus::<AB>(&rs1_data),
+                rs1_bus,
                 timestamp_pp(),
                 &local.reads_aux[0],
             )
             .eval(builder, ctx.instruction.is_valid.clone());
 
-        let rs2_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                ctx.reads[1][i].clone()
-            } else {
-                local.rs2_high[i - RV64_WORD_NUM_LIMBS].into()
-            }
-        });
+        let rs2_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
+            pair(ctx.reads[1][0].clone(), ctx.reads[1][1].clone()),
+            pair(ctx.reads[1][2].clone(), ctx.reads[1][3].clone()),
+            local.rs2_high[0].into(),
+            local.rs2_high[1].into(),
+        ];
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs2_ptr),
-                pack_u8_for_bus::<AB>(&rs2_data),
+                rs2_bus,
                 timestamp_pp(),
                 &local.reads_aux[1],
             )
@@ -138,18 +137,17 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
                     - AB::Expr::from_u32(2) * local.result_sign * sign_mask,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
-        let sign_extend_limb = AB::Expr::from_u32((1 << RV64_CELL_BITS) - 1) * local.result_sign;
-        let write_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                ctx.writes[0][i].clone()
-            } else {
-                sign_extend_limb.clone()
-            }
-        });
+        let sign_extend_u16 = AB::Expr::from_u32(0xFFFF) * local.result_sign;
+        let write_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
+            pair(ctx.writes[0][0].clone(), ctx.writes[0][1].clone()),
+            pair(ctx.writes[0][2].clone(), ctx.writes[0][3].clone()),
+            sign_extend_u16.clone(),
+            sign_extend_u16.clone(),
+        ];
         self.memory_bridge
             .write(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rd_ptr),
-                pack_u8_for_bus::<AB>(&write_data),
+                write_bus,
                 timestamp_pp(),
                 &local.writes_aux,
             )
@@ -323,9 +321,24 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64MultWAdapterFiller {
         self.bitwise_lookup_chip
             .request_xor(record.result_word_msl as u32, 1u32 << (RV64_CELL_BITS - 1));
 
+        // Pack `rs2_high`/`rs1_high` into u16 cells *before* writing neighboring columns:
+        // adapter columns overlap record bytes (see `repr(C)` layout), so the closures must
+        // observe the record values prior to any adapter-column write that clobbers them.
+        let rs2_high_packed = array::from_fn(|i| {
+            F::from_u16(u16::from_le_bytes([
+                record.rs2_high[2 * i],
+                record.rs2_high[2 * i + 1],
+            ]))
+        });
+        let rs1_high_packed = array::from_fn(|i| {
+            F::from_u16(u16::from_le_bytes([
+                record.rs1_high[2 * i],
+                record.rs1_high[2 * i + 1],
+            ]))
+        });
         adapter_row.result_sign = F::from_u8(record.result_sign);
-        adapter_row.rs2_high = record.rs2_high.map(F::from_u8);
-        adapter_row.rs1_high = record.rs1_high.map(F::from_u8);
+        adapter_row.rs2_high = rs2_high_packed;
+        adapter_row.rs1_high = rs1_high_packed;
         adapter_row.rs2_ptr = F::from_u32(record.rs2_ptr);
         adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
         adapter_row.rd_ptr = F::from_u32(record.rd_ptr);

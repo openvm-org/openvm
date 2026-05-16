@@ -7,15 +7,17 @@
 
 using namespace riscv;
 
+#include "alu_w.cuh" // for RS_HIGH_U16S
+
 template <typename T> struct Rv64MultWAdapterCols {
     ExecutionState<T> from_state;
     T rd_ptr;
     T rs1_ptr;
     T rs2_ptr;
-    /// Upper 4 bytes of rs1 register read (kept in adapter to satisfy full-width memory read).
-    T rs1_high[RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS];
-    /// Upper 4 bytes of rs2 register read.
-    T rs2_high[RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS];
+    /// Upper 4 bytes of rs1 register read, packed as 2 u16 cells.
+    T rs1_high[RS_HIGH_U16S];
+    /// Upper 4 bytes of rs2 register read, packed as 2 u16 cells.
+    T rs2_high[RS_HIGH_U16S];
     /// Sign bit of the low-word core result used to build full-width sign-extended writes.
     T result_sign;
     MemoryReadAuxCols<T> reads_aux[2];
@@ -78,9 +80,18 @@ struct Rv64MultWAdapter {
             static_cast<uint32_t>(record.result_word_msl), 1u << (RV64_CELL_BITS - 1)
         );
 
+        Fp rs2_high_packed[RS_HIGH_U16S];
+        Fp rs1_high_packed[RS_HIGH_U16S];
+#pragma unroll
+        for (size_t i = 0; i < RS_HIGH_U16S; i++) {
+            rs2_high_packed[i] =
+                Fp(uint32_t(record.rs2_high[2 * i]) + 256u * uint32_t(record.rs2_high[2 * i + 1]));
+            rs1_high_packed[i] =
+                Fp(uint32_t(record.rs1_high[2 * i]) + 256u * uint32_t(record.rs1_high[2 * i + 1]));
+        }
         COL_WRITE_VALUE(row, Rv64MultWAdapterCols, result_sign, record.result_sign);
-        COL_WRITE_ARRAY(row, Rv64MultWAdapterCols, rs2_high, record.rs2_high);
-        COL_WRITE_ARRAY(row, Rv64MultWAdapterCols, rs1_high, record.rs1_high);
+        COL_WRITE_ARRAY(row, Rv64MultWAdapterCols, rs2_high, rs2_high_packed);
+        COL_WRITE_ARRAY(row, Rv64MultWAdapterCols, rs1_high, rs1_high_packed);
         COL_WRITE_VALUE(row, Rv64MultWAdapterCols, rs2_ptr, record.rs2_ptr);
         COL_WRITE_VALUE(row, Rv64MultWAdapterCols, rs1_ptr, record.rs1_ptr);
         COL_WRITE_VALUE(row, Rv64MultWAdapterCols, rd_ptr, record.rd_ptr);

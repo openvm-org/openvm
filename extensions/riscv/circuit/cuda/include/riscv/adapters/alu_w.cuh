@@ -7,18 +7,21 @@
 
 using namespace riscv;
 
+/// Number of u16 cells needed to hold the upper 4 bytes of a 64-bit register on the memory bus.
+constexpr size_t RS_HIGH_U16S = (RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS) / 2;
+
 template <typename T> struct Rv64BaseAluWAdapterCols {
     ExecutionState<T> from_state;
     T rd_ptr;
     T rs1_ptr;
-    /// Upper 4 bytes of rs1 register read (kept in adapter to satisfy full-width memory read).
-    T rs1_high[RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS];
+    /// Upper 4 bytes of rs1 register read, packed as 2 u16 cells (matches the memory bus payload).
+    T rs1_high[RS_HIGH_U16S];
     /// Pointer if rs2 was a read, immediate value otherwise
     T rs2;
     /// 1 if rs2 was a read, 0 if an immediate
     T rs2_as;
-    /// Upper 4 bytes of rs2 register read (unused when rs2 is immediate).
-    T rs2_high[RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS];
+    /// Upper 4 bytes of rs2 register read, packed as 2 u16 cells (unused when rs2 is immediate).
+    T rs2_high[RS_HIGH_U16S];
     /// Sign bit of the low-word core result used to build full-width sign-extended writes.
     T result_sign;
     MemoryReadAuxCols<T> reads_aux[2];
@@ -102,11 +105,20 @@ struct Rv64BaseAluWAdapter {
             static_cast<uint32_t>(record.result_word_msl), 1u << (RV64_CELL_BITS - 1)
         );
 
+        Fp rs2_high_packed[RS_HIGH_U16S];
+        Fp rs1_high_packed[RS_HIGH_U16S];
+#pragma unroll
+        for (size_t i = 0; i < RS_HIGH_U16S; i++) {
+            rs2_high_packed[i] =
+                Fp(uint32_t(record.rs2_high[2 * i]) + 256u * uint32_t(record.rs2_high[2 * i + 1]));
+            rs1_high_packed[i] =
+                Fp(uint32_t(record.rs1_high[2 * i]) + 256u * uint32_t(record.rs1_high[2 * i + 1]));
+        }
         COL_WRITE_VALUE(row, Rv64BaseAluWAdapterCols, result_sign, record.result_sign);
-        COL_WRITE_ARRAY(row, Rv64BaseAluWAdapterCols, rs2_high, record.rs2_high);
+        COL_WRITE_ARRAY(row, Rv64BaseAluWAdapterCols, rs2_high, rs2_high_packed);
         COL_WRITE_VALUE(row, Rv64BaseAluWAdapterCols, rs2_as, record.rs2_as);
         COL_WRITE_VALUE(row, Rv64BaseAluWAdapterCols, rs2, record.rs2);
-        COL_WRITE_ARRAY(row, Rv64BaseAluWAdapterCols, rs1_high, record.rs1_high);
+        COL_WRITE_ARRAY(row, Rv64BaseAluWAdapterCols, rs1_high, rs1_high_packed);
         COL_WRITE_VALUE(row, Rv64BaseAluWAdapterCols, rs1_ptr, record.rs1_ptr);
         COL_WRITE_VALUE(row, Rv64BaseAluWAdapterCols, rd_ptr, record.rd_ptr);
         COL_WRITE_VALUE(row, Rv64BaseAluWAdapterCols, from_state.timestamp, record.from_timestamp);
