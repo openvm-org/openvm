@@ -16,4 +16,4 @@ num_enum = { workspace = true }
 
 [features]
 default = ["parallel"]
-parallel = ["openvm-stark-backend/parallel"]
+parallel = ["openvm-stark-backend/parallel", "openvm-circuit-primitives/parallel"]
