@@ -192,7 +192,7 @@ mod aot {
         // `start_block_id`: `chunk_idx + as_offset`
         asm_str += &format!("    add {ptr_reg}, {as_offset}\n");
         // `start_page_id`: `start_block_id >> PAGE_BITS`
-        // NOTE: This is DIRTY because PAGE_BITS is a generic parameter of E2 context.
+        // NOTE: AOT assumes PAGE_BITS == DEFAULT_PAGE_BITS (the generic default).
         asm_str += &format!("    shr {ptr_reg}, {DEFAULT_PAGE_BITS}\n");
 
         let memory_ctx_offset = offset_of!(VmExecState<F, GuestMemory, MeteredCtx>, ctx)
