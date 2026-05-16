@@ -13,18 +13,29 @@ use openvm_circuit::{
     system::{memory::SharedMemoryHelper, SystemPort},
     utils::get_random_message,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    encoder::Encoder,
+    ColumnsAir, SubAir,
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
-use openvm_sha2_air::{word_into_u8_limbs, Sha256Config, Sha384Config, Sha512Config};
+use openvm_sha2_air::{
+    get_flag_pt_array, set_arrayview_from_u32_slice, small_sig0, small_sig1, word_into_bits,
+    word_into_u16_limbs, word_into_u8_limbs, Sha256Config, Sha2BlockHasherSubAir,
+    Sha2BlockHasherSubairConfig, Sha2RoundColsRefMut, Sha384Config, Sha512Config, SHA256_K,
+};
 use openvm_sha2_transpiler::Rv32Sha2Opcode;
 use openvm_stark_backend::{
-    interaction::BusIndex,
+    interaction::{BusIndex, InteractionBuilder},
+    p3_air::{Air, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
+    prover::AirProvingContext,
     utils::disable_debug_builder,
+    AirRef, BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -561,6 +572,172 @@ fn negative_sha384_test_bad_final_hash() {
     negative_sha2_test_bad_final_hash::<Sha384Config>();
 }
 
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS - Missing Terminal Padding Row Enforcement
+//
+// Tests that the Sha2BlockHasherSubAir rejects traces where the last row is not a
+// padding row. Without the `when_last_row().assert_one(is_padding_row)` constraint,
+// a malicious prover could submit a truncated 2-row trace containing only round rows
+// with all-zero working state and W_t = -K_t, bypassing all digest, finalization,
+// and hash-chaining constraints.
+//
+// To verify that this test catches the vulnerability, temporarily remove the
+// `when_last_row()` assertion in `Sha2BlockHasherSubAir::eval_transitions` and
+// confirm the test fails (i.e., the prank trace is accepted).
+//////////////////////////////////////////////////////////////////////////////////////
+
+/// Standalone test wrapper that exposes `Sha2BlockHasherSubAir` as a top-level `Air`.
+struct Sha2SubAirTestWrapper<C: Sha2BlockHasherSubairConfig> {
+    sub_air: Sha2BlockHasherSubAir<C>,
+}
+
+impl<C: Sha2BlockHasherSubairConfig> ColumnsAir for Sha2SubAirTestWrapper<C> {}
+
+impl<F: Field, C: Sha2BlockHasherSubairConfig> BaseAirWithPublicValues<F>
+    for Sha2SubAirTestWrapper<C>
+{
+}
+impl<F: Field, C: Sha2BlockHasherSubairConfig> PartitionedBaseAir<F> for Sha2SubAirTestWrapper<C> {}
+impl<F: Field, C: Sha2BlockHasherSubairConfig> BaseAir<F> for Sha2SubAirTestWrapper<C> {
+    fn width(&self) -> usize {
+        C::SUBAIR_WIDTH
+    }
+}
+
+impl<AB: InteractionBuilder, C: Sha2BlockHasherSubairConfig> Air<AB> for Sha2SubAirTestWrapper<C> {
+    fn eval(&self, builder: &mut AB) {
+        self.sub_air.eval(builder, 0);
+    }
+}
+
+/// Builds a malicious 2-row trace for `Sha2BlockHasherSubAir<Sha256Config>` where both
+/// rows are round rows (row_idx 0 and 1) and no digest or padding row ever appears.
+///
+/// All working variables (a, e) are zero with W_t = -K_t mod 2^32, making compression
+/// constraints trivially satisfied. Helper columns are set to satisfy the unconditional
+/// message schedule constraints.
+fn build_sha256_round_only_trace() -> RowMajorMatrix<F> {
+    type C = Sha256Config;
+    let width = C::SUBAIR_WIDTH;
+    let round_w = C::SUBAIR_ROUND_WIDTH;
+    let mut values = vec![F::ZERO; 2 * width];
+    let encoder = Encoder::new(C::ROWS_PER_BLOCK + 1, 2, false);
+
+    let neg_k: Vec<u32> = (0..8).map(|i| 0u32.wrapping_sub(SHA256_K[i])).collect();
+    let limb_pair = |w: u32| -> [u32; 2] {
+        let l = word_into_u16_limbs::<C>(w);
+        [l[0], l[1]]
+    };
+
+    // Phase 1: flags, W bits, and work-variable carries. With (a, e) all zero and
+    // W = -K mod 2^32, the work-var addition reduces to K + W = 0 per limb, which
+    // (since every SHA-256 K has non-zero low 16 bits) gives carry_a = carry_e = [1, 1].
+    for row in 0..2 {
+        let start = row * width;
+        let mut cols = Sha2RoundColsRefMut::<F>::from::<C>(&mut values[start..start + round_w]);
+        *cols.flags.is_round_row = F::ONE;
+        *cols.flags.is_first_4_rows = F::ONE;
+        set_arrayview_from_u32_slice(&mut cols.flags.row_idx, get_flag_pt_array(&encoder, row));
+        *cols.flags.global_block_idx = F::ONE;
+        for i in 0..C::ROUNDS_PER_ROW {
+            set_arrayview_from_u32_slice(
+                &mut cols.message_schedule.w.row_mut(i),
+                word_into_bits::<C>(neg_k[row * 4 + i]),
+            );
+            for j in 0..C::WORD_U16S {
+                cols.work_vars.carry_a[[i, j]] = F::ONE;
+                cols.work_vars.carry_e[[i, j]] = F::ONE;
+            }
+        }
+    }
+
+    // Phases 2-4: helper-column values. Each (local, next) pair generates the same
+    // pattern, just with the rows swapped — one iteration covers the local->next
+    // transition (row 0 -> row 1) and the other covers the wrap-around (row 1 -> row 0).
+    for local in 0..2 {
+        let next = (local + 1) % 2;
+        // Concatenated W array seen by the local row: w[0..4] = local.w, w[4..8] = next.w.
+        let w: Vec<u32> = (0..8).map(|k| neg_k[(local * 4 + k) % 8]).collect();
+
+        // Constraints that bind the *next* row's helper columns:
+        //   next.w_3[i]       = u16_limbs(w[i+1])              for i in 0..3
+        //   next.intermed_4[i] = u16_limbs(w[i]) + u16_limbs(sig0(w[i+1]))
+        {
+            let start = next * width;
+            let mut cols = Sha2RoundColsRefMut::<F>::from::<C>(&mut values[start..start + round_w]);
+            for i in 0..C::ROUNDS_PER_ROW {
+                if i < C::ROUNDS_PER_ROW - 1 {
+                    set_arrayview_from_u32_slice(
+                        &mut cols.schedule_helper.w_3.row_mut(i),
+                        word_into_u16_limbs::<C>(w[i + 1]),
+                    );
+                }
+                let w_limbs = limb_pair(w[i]);
+                let sig_limbs = limb_pair(small_sig0::<C>(w[i + 1]));
+                for j in 0..C::WORD_U16S {
+                    cols.schedule_helper.intermed_4[[i, j]] =
+                        F::from_u32(w_limbs[j] + sig_limbs[j]);
+                }
+            }
+        }
+
+        // Constraint that binds the *local* row's intermed_12 (carry_or_buffer left at 0):
+        //   sig1(w[i+2]) + w_7 + intermed_12 == w[i+4]   (per u16 limb)
+        // where w_7 = local.w_3[i] for i < 3, else u16_limbs(w[i-3]).
+        // local.w_3[i] was constrained by the *other* iteration to equal u16_limbs(w[i+5])
+        // here, so we can read w[i+5] directly instead of round-tripping through the trace.
+        {
+            let start = local * width;
+            let mut cols = Sha2RoundColsRefMut::<F>::from::<C>(&mut values[start..start + round_w]);
+            for i in 0..C::ROUNDS_PER_ROW {
+                let w_t = limb_pair(w[i + 4]);
+                let sig1 = limb_pair(small_sig1::<C>(w[i + 2]));
+                let w_7 = if i < 3 {
+                    limb_pair(w[i + 5])
+                } else {
+                    limb_pair(w[i - 3])
+                };
+                for j in 0..C::WORD_U16S {
+                    cols.schedule_helper.intermed_12[[i, j]] =
+                        F::from_u32(w_t[j]) - F::from_u32(sig1[j]) - F::from_u32(w_7[j]);
+                }
+            }
+        }
+    }
+
+    RowMajorMatrix::new(values, width)
+}
+
+#[test]
+fn negative_sha256_round_only_trace_rejected() {
+    disable_debug_builder();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
+    // 2 rows × 4 rounds × 2 u16-limbs = 16 range checks, all (1, 1)
+    for _ in 0..16 {
+        bitwise_chip.request_range(1, 1);
+    }
+
+    let trace = build_sha256_round_only_trace();
+    let air = Sha2SubAirTestWrapper {
+        sub_air: Sha2BlockHasherSubAir::<Sha256Config>::new(bitwise_bus, SUBAIR_BUS_IDX),
+    };
+    let air_ctx = AirProvingContext::simple_no_pis(trace);
+
+    let tester = VmChipTestBuilder::default()
+        .build()
+        .load_air_proving_ctx((Arc::new(air) as AirRef<_>, air_ctx))
+        .load_periphery((bitwise_chip.air, bitwise_chip))
+        .finalize();
+
+    tester
+        .simple_test()
+        .expect_err("Round-only trace should be rejected by when_last_row constraint");
+}
+
 // ////////////////////////////////////////////////////////////////////////////////////
 //  CUDA TESTS
 //
@@ -769,7 +946,7 @@ fn test_cuda_sha512_known_vectors() {
             "eb576959c531f116842c0cc915a29c8f71d7a285c894c349b83469002ef093d51f9f14ce4248488bff143025e47ed27c12badb9cd43779cb147408eea062d583"
         ),
         (
-            "9ad198539e3160194f38ac076a782bd5210a007560d1fce9ef78f8a4a5e4d78c6b96c250cff3520009036e9c6087d5dab587394edda862862013de49a12072485a6c01165ec0f28ffddf1873fbd53e47fcd02fb6a5ccc9622d5588a92429c663ce298cb71b50022fc2ec4ba9f5bbd250974e1a607b165fee16e8f3f2be20d7348b91a2f518ce928491900d56d9f86970611580350cee08daea7717fe28a73b8dcfdea22a65ed9f5a09198de38e4e4f2cc05b0ba3dd787a5363ab6c9f39dcb66c1a29209b1d6b1152769395df8150b4316658ea6ab19af94903d643fcb0ae4d598035ebe73c8b1b687df1ab16504f633c929569c6d0e5fae6eea43838fbc8ce2c2b43161d0addc8ccf945a9c4e06294e56a67df0000f561f61b630b1983ba403e775aaeefa8d339f669d1e09ead7eae979383eda983321e1743e5404b4b328da656de79ff52d179833a6bd5129f49432d74d001996c37c68d9ab49fcff8061d193576f396c20e1f0d9ee83a51290ba60efa9c3cb2e15b756321a7ca668cdbf63f95ec33b1c450aa100101be059dc00077245b25a6a66698dee81953ed4a606944076e2858b1420de0095a7f60b08194d6d9a997009d345c71f63a7034b976e409af8a9a040ac7113664609a7adedb76b2fadf04b0348392a1650526eb2a4d6ed5e4bbcda8aabc8488b38f4f5d9a398103536bb8250ed82a9b9825f7703c263f9e", 
+            "9ad198539e3160194f38ac076a782bd5210a007560d1fce9ef78f8a4a5e4d78c6b96c250cff3520009036e9c6087d5dab587394edda862862013de49a12072485a6c01165ec0f28ffddf1873fbd53e47fcd02fb6a5ccc9622d5588a92429c663ce298cb71b50022fc2ec4ba9f5bbd250974e1a607b165fee16e8f3f2be20d7348b91a2f518ce928491900d56d9f86970611580350cee08daea7717fe28a73b8dcfdea22a65ed9f5a09198de38e4e4f2cc05b0ba3dd787a5363ab6c9f39dcb66c1a29209b1d6b1152769395df8150b4316658ea6ab19af94903d643fcb0ae4d598035ebe73c8b1b687df1ab16504f633c929569c6d0e5fae6eea43838fbc8ce2c2b43161d0addc8ccf945a9c4e06294e56a67df0000f561f61b630b1983ba403e775aaeefa8d339f669d1e09ead7eae979383eda983321e1743e5404b4b328da656de79ff52d179833a6bd5129f49432d74d001996c37c68d9ab49fcff8061d193576f396c20e1f0d9ee83a51290ba60efa9c3cb2e15b756321a7ca668cdbf63f95ec33b1c450aa100101be059dc00077245b25a6a66698dee81953ed4a606944076e2858b1420de0095a7f60b08194d6d9a997009d345c71f63a7034b976e409af8a9a040ac7113664609a7adedb76b2fadf04b0348392a1650526eb2a4d6ed5e4bbcda8aabc8488b38f4f5d9a398103536bb8250ed82a9b9825f7703c263f9e",
             "8d215ee6dc26757c210db0dd00c1c6ed16cc34dbd4bb0fa10c1edb6b62d5ab16aea88c881001b173d270676daf2d6381b5eab8711fa2f5589c477c1d4b84774f"
         ),
     ];
@@ -789,7 +966,7 @@ fn test_cuda_sha384_known_vectors() {
             "63e3061aab01f335ea3a4e617b9d14af9b63a5240229164ee962f6d5335ff25f0f0bf8e46723e83c41b9d17413b6a3c7",
         ),
         (
-            "9ad198539e3160194f38ac076a782bd5210a007560d1fce9ef78f8a4a5e4d78c6b96c250cff3520009036e9c6087d5dab587394edda862862013de49a12072485a6c01165ec0f28ffddf1873fbd53e47fcd02fb6a5ccc9622d5588a92429c663ce298cb71b50022fc2ec4ba9f5bbd250974e1a607b165fee16e8f3f2be20d7348b91a2f518ce928491900d56d9f86970611580350cee08daea7717fe28a73b8dcfdea22a65ed9f5a09198de38e4e4f2cc05b0ba3dd787a5363ab6c9f39dcb66c1a29209b1d6b1152769395df8150b4316658ea6ab19af94903d643fcb0ae4d598035ebe73c8b1b687df1ab16504f633c929569c6d0e5fae6eea43838fbc8ce2c2b43161d0addc8ccf945a9c4e06294e56a67df0000f561f61b630b1983ba403e775aaeefa8d339f669d1e09ead7eae979383eda983321e1743e5404b4b328da656de79ff52d179833a6bd5129f49432d74d001996c37c68d9ab49fcff8061d193576f396c20e1f0d9ee83a51290ba60efa9c3cb2e15b756321a7ca668cdbf63f95ec33b1c450aa100101be059dc00077245b25a6a66698dee81953ed4a606944076e2858b1420de0095a7f60b08194d6d9a997009d345c71f63a7034b976e409af8a9a040ac7113664609a7adedb76b2fadf04b0348392a1650526eb2a4d6ed5e4bbcda8aabc8488b38f4f5d9a398103536bb8250ed82a9b9825f7703c263f9e", 
+            "9ad198539e3160194f38ac076a782bd5210a007560d1fce9ef78f8a4a5e4d78c6b96c250cff3520009036e9c6087d5dab587394edda862862013de49a12072485a6c01165ec0f28ffddf1873fbd53e47fcd02fb6a5ccc9622d5588a92429c663ce298cb71b50022fc2ec4ba9f5bbd250974e1a607b165fee16e8f3f2be20d7348b91a2f518ce928491900d56d9f86970611580350cee08daea7717fe28a73b8dcfdea22a65ed9f5a09198de38e4e4f2cc05b0ba3dd787a5363ab6c9f39dcb66c1a29209b1d6b1152769395df8150b4316658ea6ab19af94903d643fcb0ae4d598035ebe73c8b1b687df1ab16504f633c929569c6d0e5fae6eea43838fbc8ce2c2b43161d0addc8ccf945a9c4e06294e56a67df0000f561f61b630b1983ba403e775aaeefa8d339f669d1e09ead7eae979383eda983321e1743e5404b4b328da656de79ff52d179833a6bd5129f49432d74d001996c37c68d9ab49fcff8061d193576f396c20e1f0d9ee83a51290ba60efa9c3cb2e15b756321a7ca668cdbf63f95ec33b1c450aa100101be059dc00077245b25a6a66698dee81953ed4a606944076e2858b1420de0095a7f60b08194d6d9a997009d345c71f63a7034b976e409af8a9a040ac7113664609a7adedb76b2fadf04b0348392a1650526eb2a4d6ed5e4bbcda8aabc8488b38f4f5d9a398103536bb8250ed82a9b9825f7703c263f9e",
             "904a90010d772a904a35572fdd4bdf1dd253742e47872c8a18e2255f66fa889e44781e65487a043f435daa53c496a53e",
         ),
     ];
