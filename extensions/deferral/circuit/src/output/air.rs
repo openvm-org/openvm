@@ -211,9 +211,9 @@ where
                 .eval(builder, local.is_first);
         }
 
-        // The initial sponge state is `[deferral_idx, output_len, 0, ...]`.
-        // `sponge_inputs` cells are 16-bit range-checked only on data rows,
-        // so the init row may hold `output_len` as a single F element.
+        // Init-row sponge state: `[deferral_idx, output_len_as_F, 0, ...]`. The
+        // per-cell 16-bit range check below is gated to data rows, so slot 1
+        // may hold the full F value of `output_len`.
         let output_len = u16s_to_f(&local.output_len);
         let mut initial_state = [AB::Expr::ZERO; DIGEST_SIZE];
         initial_state[0] = local.deferral_idx.into();
@@ -357,19 +357,17 @@ where
         }
         debug_assert!(combined_chunks_iter.next().is_none());
 
-        // Range-check each sponge_input cell to [0, 2^16) on data rows. The
-        // init-row encoding (`[deferral_idx, output_len_lo, output_len_hi, …]`)
-        // is constrained by `assert_array_eq` above and already canonicity-
-        // checked via `output_len`, so no per-cell range check there.
-        for &cell in local.sponge_inputs.iter() {
+        // Data-row sponge cells must be canonical u16s; init-row cells are
+        // pinned by `assert_array_eq` above against the already-canonical
+        // `deferral_idx` / `output_len` columns.
+        for &cell in &local.sponge_inputs {
             self.range_bus
                 .range_check(cell, 16)
                 .eval(builder, local.is_valid - local.is_first);
         }
 
-        // Each row writes `SPONGE_ROW_MEMORY_OPS` blocks of `BLOCK_FE_WIDTH`
-        // u16 cells. `sponge_inputs` is already u16-shaped, so each block is
-        // just the matching contiguous slice — no byte pack/unpack needed.
+        // Each data row writes `sponge_inputs` to memory as
+        // `SPONGE_ROW_MEMORY_OPS` `BLOCK_FE_WIDTH`-cell bus blocks.
         let section_idx_minus_one = local.section_idx - AB::Expr::ONE;
         for (chunk_idx, aux) in local.write_bytes_aux.iter().enumerate() {
             let data: [AB::Expr; BLOCK_FE_WIDTH] =

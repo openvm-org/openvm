@@ -92,7 +92,7 @@ impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for
 
         // SAFETY:
         // - The layout guarantees rest has sufficient length for write data
-        // - Each non-init row writes SPONGE_BYTES_PER_ROW bytes
+        // - Each row absorbed by Poseidon2 writes `SPONGE_BYTES_PER_ROW` bytes
         let num_write_rows = layout.metadata.num_rows.saturating_sub(1);
         let (write_bytes, rest) =
             unsafe { rest.split_at_mut_unchecked(num_write_rows * SPONGE_BYTES_PER_ROW) };
@@ -147,9 +147,9 @@ pub struct DeferralOutputExecutor;
 pub struct DeferralOutputFiller<F: VmField> {
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
-    /// Per-cell 16-bit range checks on `output_commit`, `output_len`,
-    /// `sponge_inputs` data rows, and the canonicity sub-AIR's `diff_val - 1`
-    /// outputs.
+    /// 16-bit range checker shared by the per-cell checks on `output_commit`,
+    /// `output_len`, the non-init `sponge_inputs` cells, and the canonicity
+    /// sub-AIR's `diff_val - 1` outputs.
     range_checker_chip: SharedVariableRangeCheckerChip,
     address_bits: usize,
 }
@@ -318,9 +318,6 @@ where
             ];
             let output_len_f = output_len_u16s.map(F::from_u16);
 
-            // Initial sponge input: `[deferral_idx, output_len_as_F, 0, ...]`. The
-            // init row's `sponge_inputs` are exempt from the 16-bit per-cell range
-            // check, so the full F value of `output_len` lives in one cell.
             let mut initial_sponge_input = [F::ZERO; DIGEST_SIZE];
             initial_sponge_input[0] = F::from_u32(header.deferral_idx);
             initial_sponge_input[1] = F::from_u32(output_len_u32);

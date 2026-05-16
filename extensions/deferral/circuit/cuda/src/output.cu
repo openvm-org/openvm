@@ -262,14 +262,14 @@ __global__ void deferral_output_tracegen(
             write_canonicity_aux(row, COL_INDEX(DeferralOutputCols, output_commit_lt_aux), i, aux);
         }
 
-        Fp sponge_inputs[DIGEST_SIZE];
+        Fp sponge_cells[DIGEST_SIZE];
 #pragma unroll
         for (size_t i = 0; i < DIGEST_SIZE; ++i) {
-            sponge_inputs[i] = Fp::zero();
+            sponge_cells[i] = Fp::zero();
         }
-        sponge_inputs[0] = Fp(header.deferral_idx);
-        sponge_inputs[1] = Fp(output_len);
-        COL_WRITE_ARRAY(row, DeferralOutputCols, sponge_inputs, sponge_inputs);
+        sponge_cells[0] = Fp(header.deferral_idx);
+        sponge_cells[1] = Fp(output_len);
+        COL_WRITE_ARRAY(row, DeferralOutputCols, sponge_inputs, sponge_cells);
 
         COL_FILL_ZERO(row, DeferralOutputCols, write_bytes_aux);
     } else {
@@ -290,15 +290,15 @@ __global__ void deferral_output_tracegen(
         COL_FILL_ZERO(row, DeferralOutputCols, output_commit_lt_aux);
 
         // Pack each byte pair into one u16 sponge cell and 16-bit range-check.
-        Fp sponge_inputs[DIGEST_SIZE];
+        Fp sponge_cells[DIGEST_SIZE];
 #pragma unroll
         for (size_t i = 0; i < DIGEST_SIZE; ++i) {
             const uint32_t cell = static_cast<uint32_t>(write_bytes_start[2 * i]) |
                 (static_cast<uint32_t>(write_bytes_start[2 * i + 1]) << 8);
-            sponge_inputs[i] = Fp(cell);
+            sponge_cells[i] = Fp(cell);
             range_checker.add_count(cell, 16);
         }
-        COL_WRITE_ARRAY(row, DeferralOutputCols, sponge_inputs, sponge_inputs);
+        COL_WRITE_ARRAY(row, DeferralOutputCols, sponge_inputs, sponge_cells);
 
         constexpr size_t write_aux_stride = sizeof(MemoryWriteAuxColsDef<uint8_t>);
 #pragma unroll

@@ -22,7 +22,6 @@ inline constexpr size_t OUTPUT_LEN_NUM_U16S = F_NUM_U16S;
 
 // Memory-op counts for byte-addressed AS (RV64_MEMORY_AS): each bus message
 // covers `MEMORY_BLOCK_BYTES` bytes.
-inline constexpr size_t DIGEST_BYTE_MEMORY_OPS = DIGEST_SIZE / MEMORY_BLOCK_BYTES;
 inline constexpr size_t COMMIT_MEMORY_OPS = COMMIT_NUM_BYTES / MEMORY_BLOCK_BYTES;
 inline constexpr size_t OUTPUT_TOTAL_MEMORY_OPS = OUTPUT_TOTAL_BYTES / MEMORY_BLOCK_BYTES;
 

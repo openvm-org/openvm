@@ -65,12 +65,14 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
                 u32::try_from(per_call.len()).expect("deferral output call index should fit u32");
             let header_offset_u32 =
                 u32::try_from(header_offset).expect("record byte offset should fit u32");
+            let output_len_u32 =
+                u32::try_from(output_len).expect("deferral output length should fit u32");
 
             for section_idx in 0..num_rows {
                 let sponge_inputs = if section_idx == 0 {
                     let mut input = [F::ZERO; DIGEST_SIZE];
                     input[0] = F::from_u32(header.deferral_idx);
-                    input[1] = F::from_usize(output_len);
+                    input[1] = F::from_u32(output_len_u32);
                     input
                 } else {
                     let base = (section_idx - 1) * SPONGE_BYTES_PER_ROW;
