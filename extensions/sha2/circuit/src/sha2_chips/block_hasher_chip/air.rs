@@ -107,10 +107,17 @@ impl<C: Sha2BlockHasherVmConfig> Sha2BlockHasherVmAir<C> {
             compose::<AB::Expr>(&word[byte_idx * 8..(byte_idx + 1) * 8], 1)
         };
 
-        let local_message = (0..C::WORD_U8S * C::ROUNDS_PER_ROW).map(|i| get_ith_byte(i, &local));
-        let next_message = (0..C::WORD_U8S * C::ROUNDS_PER_ROW).map(|i| get_ith_byte(i, &next));
+        // Pack consecutive bytes into u16 cells (`cell = byte[2k] + 256 * byte[2k+1]`),
+        // matching the sender's packing in `main_chip/air.rs` so the sha2 bus payload is
+        // halved.
+        let pack_pair = |k: usize, cols: &Sha2BlockHasherRoundColsRef<AB::Var>| -> AB::Expr {
+            get_ith_byte(2 * k, cols) + AB::Expr::from_u16(256) * get_ith_byte(2 * k + 1, cols)
+        };
+        let half_pairs = C::WORD_U8S * C::ROUNDS_PER_ROW / 2;
+        let local_message = (0..half_pairs).map(|k| pack_pair(k, &local));
+        let next_message = (0..half_pairs).map(|k| pack_pair(k, &next));
 
-        // Receive (MESSAGE_1, request_id, first_half_of_message) on the sha2 bus
+        // Receive (MESSAGE_1, request_id, first_half_of_message_as_u16s) on the sha2 bus
         self.sha2_bus.receive(
             builder,
             [
@@ -128,7 +135,7 @@ impl<C: Sha2BlockHasherVmConfig> Sha2BlockHasherVmAir<C> {
             .row_idx_encoder
             .contains_flag::<AB>(local.inner.flags.row_idx.to_slice().unwrap(), &[2]);
 
-        // Send (MESSAGE_2, request_id, second_half_of_message) to the sha2 bus
+        // Receive (MESSAGE_2, request_id, second_half_of_message_as_u16s) on the sha2 bus
         self.sha2_bus.receive(
             builder,
             [

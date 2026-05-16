@@ -156,7 +156,28 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             *local.instruction.is_enabled,
         );
 
-        // Send (MESSAGE_1, request_id, first_half_of_message) to the sha2 bus
+        // Pack consecutive byte pairs into u16 cells (`cell = byte[2k] + 256 * byte[2k+1]`),
+        // halving the sha2 bus payload width. The same pairing is used on the receiver, and
+        // matches the `pack_u8_for_bus` memory pack, so individual bytes are never observed
+        // outside of their packed-pair form.
+        let pack_pair = |i: usize| -> AB::Expr {
+            let lo: AB::Expr = (*local
+                .block
+                .message_bytes
+                .get(i)
+                .expect("message_bytes index out of bounds"))
+            .into();
+            let hi: AB::Expr = (*local
+                .block
+                .message_bytes
+                .get(i + 1)
+                .expect("message_bytes index out of bounds"))
+            .into();
+            lo + AB::Expr::from_u16(256) * hi
+        };
+        let half = C::BLOCK_BYTES / 2;
+
+        // Send (MESSAGE_1, request_id, first_half_of_message_as_u16s) to the sha2 bus
         self.sha2_bus.send(
             builder,
             [
@@ -164,18 +185,11 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 (*local.block.request_id).into(),
             ]
             .into_iter()
-            .chain(
-                local
-                    .block
-                    .message_bytes
-                    .iter()
-                    .take(C::BLOCK_BYTES / 2)
-                    .map(|x| (*x).into()),
-            ),
+            .chain((0..half / 2).map(|k| pack_pair(2 * k))),
             *local.instruction.is_enabled,
         );
 
-        // Send (MESSAGE_2, request_id, second_half_of_message) to the sha2 bus
+        // Send (MESSAGE_2, request_id, second_half_of_message_as_u16s) to the sha2 bus
         self.sha2_bus.send(
             builder,
             [
@@ -183,14 +197,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 (*local.block.request_id).into(),
             ]
             .into_iter()
-            .chain(
-                local
-                    .block
-                    .message_bytes
-                    .iter()
-                    .skip(C::BLOCK_BYTES / 2)
-                    .map(|x| (*x).into()),
-            ),
+            .chain((0..half / 2).map(|k| pack_pair(half + 2 * k))),
             *local.instruction.is_enabled,
         );
     }
