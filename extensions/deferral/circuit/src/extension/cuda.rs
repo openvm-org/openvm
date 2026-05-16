@@ -90,7 +90,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
         inventory.next_air::<DeferralOutputAir>()?;
         let output_chip = DeferralOutputChipGpu::new(
             range_checker,
-            bitwise_lu,
             address_bits,
             timestamp_max_bits,
             count,

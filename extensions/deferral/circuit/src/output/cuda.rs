@@ -5,12 +5,9 @@ use openvm_circuit::{
     arch::{DenseRecordArena, SizedRecord},
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
-};
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-use openvm_instructions::riscv::RV64_CELL_BITS;
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -27,7 +24,6 @@ use crate::{
 #[derive(new)]
 pub struct DeferralOutputChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
     pub address_bits: usize,
     pub timestamp_max_bits: usize,
     pub count: Arc<DeviceBuffer<u32>>,
@@ -141,7 +137,6 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
                 self.num_deferral_circuits,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
-                &self.bitwise_lookup.count,
                 self.address_bits,
                 &self.poseidon2.records,
                 &self.poseidon2.counts,
