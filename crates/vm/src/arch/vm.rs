@@ -18,6 +18,8 @@ use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     program::Program,
 };
+#[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
+use openvm_stark_backend::AirRef;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     memory_metering::ProvingMemoryConfig,
@@ -29,7 +31,7 @@ use openvm_stark_backend::{
         MatrixDimensions, ProverBackend, ProverDevice, ProvingContext, TraceCommitter,
     },
     verifier::VerifierError,
-    AirRef, Com, StarkEngine, StarkProtocolConfig, Val,
+    Com, StarkEngine, StarkProtocolConfig, Val,
 };
 use p3_baby_bear::BabyBear;
 #[cfg(feature = "rvr")]
