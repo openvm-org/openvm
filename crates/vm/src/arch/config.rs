@@ -115,8 +115,9 @@ pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 // =========================================================================
 // Memory layout source-of-truth constants
 //
-// Three independent constants; everything else is derived. Static
-// invariants below guarantee the derived constants are integer-valued.
+// Two independent constants (`MEMORY_BLOCK_BYTES`, `BUS_PTR_SCALE`);
+// everything else (e.g. `BLOCK_FE_WIDTH`) is derived. Static invariants
+// below guarantee the derived constants are integer-valued.
 // =========================================================================
 
 /// Bytes per logical guest-memory access (e.g. an RV64 8-byte block). Used in

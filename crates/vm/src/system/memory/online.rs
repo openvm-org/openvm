@@ -404,7 +404,7 @@ impl GuestMemory {
     /// AS's storage.
     #[inline(always)]
     pub unsafe fn read_bytes<const N: usize>(&self, addr_space: u32, byte_ptr: u32) -> [u8; N] {
-        self.debug_assert_byte_view_alignment(addr_space, byte_ptr, N);
+        self.assert_byte_view_alignment(addr_space, byte_ptr, N);
         self.memory
             .get_memory()
             .get_unchecked(addr_space as usize)
@@ -423,7 +423,7 @@ impl GuestMemory {
         byte_ptr: u32,
         values: [u8; N],
     ) {
-        self.debug_assert_byte_view_alignment(addr_space, byte_ptr, N);
+        self.assert_byte_view_alignment(addr_space, byte_ptr, N);
         self.memory
             .get_memory_mut()
             .get_unchecked_mut(addr_space as usize)
@@ -448,14 +448,16 @@ impl GuestMemory {
     }
 
     #[inline(always)]
-    fn debug_assert_byte_view_alignment(&self, addr_space: u32, byte_ptr: u32, n: usize) {
+    fn assert_byte_view_alignment(&self, addr_space: u32, byte_ptr: u32, n: usize) {
         let cell_size = self.memory.config[addr_space as usize].layout.size();
-        debug_assert_eq!(
+        // Hard-asserted (not debug) — a misaligned `byte_ptr` would silently compute a
+        // wrong cell index in release builds.
+        assert_eq!(
             (byte_ptr as usize) % cell_size,
             0,
             "byte_ptr={byte_ptr} not aligned to cell_size {cell_size}"
         );
-        debug_assert_eq!(
+        assert_eq!(
             n % cell_size,
             0,
             "N={n} not divisible by cell_size {cell_size}"
@@ -687,7 +689,10 @@ impl TracingMemory {
             n_bytes, block_bytes,
             "TracingMemory byte-view supports only {block_bytes}-byte (= BLOCK_FE_WIDTH * cell_size) accesses; got {n_bytes}"
         );
-        debug_assert_eq!(
+        // Mirror the cell-typed `assert_valid_access` alignment check — a misaligned
+        // `byte_ptr` would silently compute a wrong meta slot in release builds, so this
+        // stays a hard `assert_eq!`.
+        assert_eq!(
             byte_ptr as usize % block_bytes,
             0,
             "byte_ptr={byte_ptr} not aligned to block_bytes {block_bytes}"
