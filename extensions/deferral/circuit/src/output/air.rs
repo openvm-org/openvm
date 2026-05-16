@@ -4,12 +4,11 @@ use itertools::{izip, Itertools};
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
     system::memory::{
-        offline_checker::{pack_u8_for_bus, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus,
     utils::{assert_array_eq, not},
     var_range::VariableRangeCheckerBus,
     ColumnsAir, StructReflection, StructReflectionHelper,
@@ -36,9 +35,9 @@ use crate::{
     count::DeferralCircuitCountBus,
     poseidon2::DeferralPoseidon2Bus,
     utils::{
-        split_byte_memory_ops, split_f_memory_ops, u16_commit_to_f, u16s_to_f, COMMIT_MEMORY_OPS,
-        COMMIT_NUM_U16S, DIGEST_BYTE_MEMORY_OPS, F_NUM_U16S, OUTPUT_LEN_NUM_U16S,
-        OUTPUT_TOTAL_MEMORY_OPS,
+        split_f_memory_ops, u16_commit_to_f, u16s_to_f, COMMIT_MEMORY_OPS, COMMIT_NUM_U16S,
+        F_NUM_U16S, OUTPUT_LEN_NUM_U16S, OUTPUT_TOTAL_MEMORY_OPS, SPONGE_BYTES_PER_ROW,
+        SPONGE_ROW_MEMORY_OPS,
     },
 };
 
@@ -78,11 +77,12 @@ pub struct DeferralOutputCols<T> {
     // output_commit.
     pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
 
-    // Initial [def_idx, output_len, 0, ...] digest on the first row; on non-first
-    // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
-    // written to memory and auxiliary columns.
+    // Poseidon2 rate cells. On the first row this is `[deferral_idx,
+    // output_len_lo_u16, output_len_hi_u16, 0, ...]`. On non-first rows each
+    // cell holds a little-endian-packed pair of guest output bytes so a single
+    // sponge absorb covers `SPONGE_BYTES_PER_ROW = 2 * DIGEST_SIZE` bytes.
     pub sponge_inputs: [T; DIGEST_SIZE],
-    pub write_bytes_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_BYTE_MEMORY_OPS],
+    pub write_bytes_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; SPONGE_ROW_MEMORY_OPS],
 
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.
@@ -96,9 +96,8 @@ pub struct DeferralOutputAir {
     pub memory_bridge: MemoryBridge,
     pub count_bus: DeferralCircuitCountBus,
     pub poseidon2_bus: DeferralPoseidon2Bus,
-    pub bitwise_bus: BitwiseOperationLookupBus,
     /// 16-bit range checker bus used for per-cell range checks on
-    /// `output_commit` and `output_len` u16 cells, and for the
+    /// `output_commit`, `output_len`, and `sponge_inputs` u16 cells, plus the
     /// canonicity sub-AIR's `diff_val - 1` outputs.
     pub range_bus: VariableRangeCheckerBus,
     pub address_bits: usize,
@@ -212,13 +211,14 @@ where
                 .eval(builder, local.is_first);
         }
 
-        // Constrain the consistency of current_commit_state at each point in this
-        // section's rows. The initial state should be [deferral_idx, output_len,
-        // ..., 0].
+        // The initial sponge state is `[deferral_idx, output_len_lo_u16,
+        // output_len_hi_u16, 0, ...]`. The two output_len limbs are sourced
+        // from the already-canonicity-checked `output_len` column.
         let output_len = u16s_to_f(&local.output_len);
         let mut initial_state = [AB::Expr::ZERO; DIGEST_SIZE];
         initial_state[0] = local.deferral_idx.into();
-        initial_state[1] = output_len.clone();
+        initial_state[1] = local.output_len[0].into();
+        initial_state[2] = local.output_len[1].into();
 
         assert_array_eq(
             &mut builder.when(local.is_first),
@@ -236,7 +236,7 @@ where
 
         when_last.assert_eq(
             output_len,
-            local.section_idx * AB::Expr::from_usize(DIGEST_SIZE),
+            local.section_idx * AB::Expr::from_usize(SPONGE_BYTES_PER_ROW),
         );
         assert_array_eq(
             &mut when_last,
@@ -358,35 +358,37 @@ where
         }
         debug_assert!(combined_chunks_iter.next().is_none());
 
-        let write_bytes_chunks =
-            split_byte_memory_ops::<_, DIGEST_SIZE, DIGEST_BYTE_MEMORY_OPS>(local.sponge_inputs);
+        // Range-check each sponge_input cell to [0, 2^16) on data rows. The
+        // init-row encoding (`[deferral_idx, output_len_lo, output_len_hi, …]`)
+        // is constrained by `assert_array_eq` above and already canonicity-
+        // checked via `output_len`, so no per-cell range check there.
+        for &cell in local.sponge_inputs.iter() {
+            self.range_bus
+                .range_check(cell, 16)
+                .eval(builder, local.is_valid - local.is_first);
+        }
+
+        // Each row writes `SPONGE_ROW_MEMORY_OPS` blocks of `BLOCK_FE_WIDTH`
+        // u16 cells. `sponge_inputs` is already u16-shaped, so each block is
+        // just the matching contiguous slice — no byte pack/unpack needed.
         let section_idx_minus_one = local.section_idx - AB::Expr::ONE;
-
-        for (chunk_idx, (data, aux)) in write_bytes_chunks
-            .into_iter()
-            .zip(&local.write_bytes_aux)
-            .enumerate()
-        {
-            for bytes in data.chunks(2) {
-                self.bitwise_bus
-                    .send_range(bytes[0], bytes[1])
-                    .eval(builder, local.is_valid - local.is_first);
-            }
-
-            let data_expr: [AB::Expr; MEMORY_BLOCK_BYTES] = from_fn(|i| data[i].into());
+        for (chunk_idx, aux) in local.write_bytes_aux.iter().enumerate() {
+            let data: [AB::Expr; BLOCK_FE_WIDTH] =
+                from_fn(|i| local.sponge_inputs[chunk_idx * BLOCK_FE_WIDTH + i].into());
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
                         e.clone(),
                         output_ptr.clone()
-                            + (section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_SIZE))
+                            + (section_idx_minus_one.clone()
+                                * AB::Expr::from_usize(SPONGE_BYTES_PER_ROW))
                             + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
                     ),
-                    pack_u8_for_bus::<AB>(&data_expr),
+                    data,
                     local.from_state.timestamp
                         + AB::Expr::from_usize(2 + OUTPUT_TOTAL_MEMORY_OPS + chunk_idx)
                         + (section_idx_minus_one.clone()
-                            * AB::Expr::from_usize(DIGEST_BYTE_MEMORY_OPS)),
+                            * AB::Expr::from_usize(SPONGE_ROW_MEMORY_OPS)),
                     aux,
                 )
                 .eval(builder, local.is_valid - local.is_first);
@@ -405,7 +407,7 @@ where
                     e,
                 ],
                 local.from_state,
-                (local.section_idx * AB::Expr::from_usize(DIGEST_BYTE_MEMORY_OPS))
+                (local.section_idx * AB::Expr::from_usize(SPONGE_ROW_MEMORY_OPS))
                     + AB::Expr::from_usize(OUTPUT_TOTAL_MEMORY_OPS + 2),
                 (DEFAULT_PC_STEP, None),
             )

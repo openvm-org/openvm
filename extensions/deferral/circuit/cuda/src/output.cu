@@ -98,11 +98,12 @@ template <typename T> struct DeferralOutputCols {
     // output_commit.
     CanonicityAuxCols<T> output_commit_lt_aux[DIGEST_SIZE];
 
-    // Initial [def_idx, output_len, 0, ...] digest on the first row; on non-first
-    // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
-    // written to memory and auxiliary columns.
+    // Poseidon2 rate cells. On the first row this is `[deferral_idx,
+    // output_len_lo_u16, output_len_hi_u16, 0, ...]`. On non-first rows each
+    // cell holds a little-endian-packed pair of guest output bytes so each row
+    // absorbs `SPONGE_BYTES_PER_ROW = 2 * DIGEST_SIZE` bytes.
     T sponge_inputs[DIGEST_SIZE];
-    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_bytes_aux[DIGEST_BYTE_MEMORY_OPS];
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_bytes_aux[SPONGE_ROW_MEMORY_OPS];
 
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.
@@ -144,7 +145,7 @@ __global__ void deferral_output_tracegen(
     const DeferralOutputRecordHeader header =
         *reinterpret_cast<const DeferralOutputRecordHeader *>(record_start);
 
-    const uint32_t output_len = (header.num_rows - 1) * DIGEST_SIZE;
+    const uint32_t output_len = (header.num_rows - 1) * SPONGE_BYTES_PER_ROW;
     const bool is_first = section_idx == 0;
     const bool is_last = section_idx + 1 == header.num_rows;
 
@@ -269,13 +270,15 @@ __global__ void deferral_output_tracegen(
             sponge_inputs[i] = Fp::zero();
         }
         sponge_inputs[0] = Fp(header.deferral_idx);
-        sponge_inputs[1] = Fp(output_len);
+        sponge_inputs[1] = Fp(static_cast<uint32_t>(output_len_u16s[0]));
+        sponge_inputs[2] = Fp(static_cast<uint32_t>(output_len_u16s[1]));
         COL_WRITE_ARRAY(row, DeferralOutputCols, sponge_inputs, sponge_inputs);
 
         COL_FILL_ZERO(row, DeferralOutputCols, write_bytes_aux);
     } else {
         const uint8_t *header_end = record_start + sizeof(DeferralOutputRecordHeader);
-        const uint8_t *write_bytes_start = header_end + (section_idx - 1) * DIGEST_SIZE;
+        const uint8_t *write_bytes_start =
+            header_end + (section_idx - 1) * SPONGE_BYTES_PER_ROW;
         const size_t write_aux_offset = align_up(
             sizeof(DeferralOutputRecordHeader) + output_len,
             alignof(MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>)
@@ -289,17 +292,21 @@ __global__ void deferral_output_tracegen(
         COL_FILL_ZERO(row, DeferralOutputCols, output_commit_and_len_aux);
         COL_FILL_ZERO(row, DeferralOutputCols, output_commit_lt_aux);
 
-        COL_WRITE_ARRAY(row, DeferralOutputCols, sponge_inputs, write_bytes_start);
-
+        // Pack each byte pair into one u16 sponge cell and 16-bit range-check.
+        Fp sponge_inputs[DIGEST_SIZE];
 #pragma unroll
-        for (size_t i = 0; i < DIGEST_SIZE; i += 2) {
-            bitwise_buffer.add_range(write_bytes_start[i], write_bytes_start[i + 1]);
+        for (size_t i = 0; i < DIGEST_SIZE; ++i) {
+            const uint32_t cell = static_cast<uint32_t>(write_bytes_start[2 * i]) |
+                (static_cast<uint32_t>(write_bytes_start[2 * i + 1]) << 8);
+            sponge_inputs[i] = Fp(cell);
+            range_checker.add_count(cell, 16);
         }
+        COL_WRITE_ARRAY(row, DeferralOutputCols, sponge_inputs, sponge_inputs);
 
         constexpr size_t write_aux_stride = sizeof(MemoryWriteAuxColsDef<uint8_t>);
 #pragma unroll
-        for (size_t chunk_idx = 0; chunk_idx < DIGEST_BYTE_MEMORY_OPS; ++chunk_idx) {
-            const size_t aux_idx = (section_idx - 1) * DIGEST_BYTE_MEMORY_OPS + chunk_idx;
+        for (size_t chunk_idx = 0; chunk_idx < SPONGE_ROW_MEMORY_OPS; ++chunk_idx) {
+            const size_t aux_idx = (section_idx - 1) * SPONGE_ROW_MEMORY_OPS + chunk_idx;
             RowSlice aux_row = row.slice_from(
                 COL_INDEX(DeferralOutputCols, write_bytes_aux) + chunk_idx * write_aux_stride
             );

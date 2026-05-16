@@ -34,9 +34,11 @@ mod tests {
     const INPUT_COMMIT_1: [u8; 32] = [0x22; 32];
     const INPUT_COMMIT_2: [u8; 32] = [0x33; 32];
 
-    const INPUT_RAW_0: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
-    const INPUT_RAW_1: [u8; 8] = [8, 7, 6, 5, 4, 3, 2, 1];
-    const INPUT_RAW_2: [u8; 8] = [9, 9, 9, 9, 9, 9, 9, 9];
+    // 16-byte inputs so the 1:1-mapping deferral fns produce outputs that are
+    // multiples of SPONGE_BYTES_PER_ROW = 2 * DIGEST_SIZE = 16.
+    const INPUT_RAW_0: [u8; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+    const INPUT_RAW_1: [u8; 16] = [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+    const INPUT_RAW_2: [u8; 16] = [9; 16];
 
     fn make_config(num_deferrals: usize) -> Rv64DeferralConfig {
         let mut system = test_system_config();

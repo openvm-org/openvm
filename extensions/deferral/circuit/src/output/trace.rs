@@ -18,10 +18,7 @@ use openvm_circuit::{
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
-    AlignedBytesBorrow,
-};
+use openvm_circuit_primitives::{var_range::SharedVariableRangeCheckerChip, AlignedBytesBorrow};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
@@ -40,9 +37,9 @@ use crate::{
     output::DeferralOutputCols,
     poseidon2::DeferralPoseidon2Chip,
     utils::{
-        byte_memory_op_chunk, f_commit_to_u16s, join_byte_memory_ops, split_output,
-        DIGEST_BYTE_MEMORY_OPS, F_NUM_U16S, OUTPUT_LEN_NUM_U16S, OUTPUT_TOTAL_BYTES,
-        OUTPUT_TOTAL_MEMORY_OPS,
+        byte_memory_op_chunk, f_commit_to_u16s, join_byte_memory_ops, split_output, F_NUM_U16S,
+        OUTPUT_LEN_NUM_U16S, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS, SPONGE_BYTES_PER_ROW,
+        SPONGE_ROW_MEMORY_OPS,
     },
 };
 
@@ -95,10 +92,10 @@ impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for
 
         // SAFETY:
         // - The layout guarantees rest has sufficient length for write data
-        // - There are DIGEST_SIZE bytes written per row
+        // - Each non-init row writes SPONGE_BYTES_PER_ROW bytes
         let num_write_rows = layout.metadata.num_rows.saturating_sub(1);
         let (write_bytes, rest) =
-            unsafe { rest.split_at_mut_unchecked(num_write_rows * DIGEST_SIZE) };
+            unsafe { rest.split_at_mut_unchecked(num_write_rows * SPONGE_BYTES_PER_ROW) };
 
         // SAFETY:
         // - Valid mutable slice from the previous split
@@ -111,7 +108,7 @@ impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for
         DeferralOutputRecordMut {
             header: header_buf.borrow_mut(),
             write_bytes,
-            write_aux: &mut write_aux_buf[..num_write_rows * DIGEST_BYTE_MEMORY_OPS],
+            write_aux: &mut write_aux_buf[..num_write_rows * SPONGE_ROW_MEMORY_OPS],
         }
     }
 
@@ -129,11 +126,11 @@ impl<'a> SizedRecord<DeferralOutputLayout> for DeferralOutputRecordMut<'a> {
     fn size(layout: &DeferralOutputLayout) -> usize {
         let mut total_len = size_of::<DeferralOutputRecordHeader>();
         let num_write_rows = layout.metadata.num_rows.saturating_sub(1);
-        total_len += num_write_rows * DIGEST_SIZE;
+        total_len += num_write_rows * SPONGE_BYTES_PER_ROW;
         total_len =
             total_len.next_multiple_of(align_of::<MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>>());
         total_len += num_write_rows
-            * DIGEST_BYTE_MEMORY_OPS
+            * SPONGE_ROW_MEMORY_OPS
             * size_of::<MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>>();
         total_len
     }
@@ -150,11 +147,10 @@ pub struct DeferralOutputExecutor;
 pub struct DeferralOutputFiller<F: VmField> {
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
-    /// Per-cell range checks on `output_commit`, `output_len`, and on the
-    /// canonicity sub-AIR `diff_val - 1` outputs.
+    /// Per-cell 16-bit range checks on `output_commit`, `output_len`,
+    /// `sponge_inputs` data rows, and the canonicity sub-AIR's `diff_val - 1`
+    /// outputs.
     range_checker_chip: SharedVariableRangeCheckerChip,
-    /// Kept for write-bytes byte-pair range checks on the per-row payload.
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     address_bits: usize,
 }
 
@@ -193,8 +189,8 @@ where
         let (output_commit, output_len) = split_output(output_key);
 
         let output_len_val = rv64_bytes_to_u32(output_len) as usize;
-        let num_rows = output_len_val / DIGEST_SIZE + 1;
-        debug_assert!(output_len_val.is_multiple_of(DIGEST_SIZE));
+        let num_rows = output_len_val / SPONGE_BYTES_PER_ROW + 1;
+        debug_assert!(output_len_val.is_multiple_of(SPONGE_BYTES_PER_ROW));
 
         // We now have the layout and can write the record
         let record = state
@@ -241,10 +237,10 @@ where
             state.streams.deferrals[deferral_idx as usize].get_output(&output_commit.to_vec());
         debug_assert_eq!(output_raw.len(), output_len_val);
 
-        for (row_idx, output_chunk) in output_raw.chunks_exact(DIGEST_SIZE).enumerate() {
-            let row_output_ptr = output_ptr + (row_idx * DIGEST_SIZE) as u32;
-            for chunk_idx in 0..DIGEST_BYTE_MEMORY_OPS {
-                let aux_idx = row_idx * DIGEST_BYTE_MEMORY_OPS + chunk_idx;
+        for (row_idx, output_chunk) in output_raw.chunks_exact(SPONGE_BYTES_PER_ROW).enumerate() {
+            let row_output_ptr = output_ptr + (row_idx * SPONGE_BYTES_PER_ROW) as u32;
+            for chunk_idx in 0..SPONGE_ROW_MEMORY_OPS {
+                let aux_idx = row_idx * SPONGE_ROW_MEMORY_OPS + chunk_idx;
                 tracing_write(
                     state.memory,
                     RV64_MEMORY_AS,
@@ -254,7 +250,8 @@ where
                     &mut record.write_aux[aux_idx].prev_data,
                 );
             }
-            record.write_bytes[row_idx * DIGEST_SIZE..(row_idx + 1) * DIGEST_SIZE]
+            record.write_bytes
+                [row_idx * SPONGE_BYTES_PER_ROW..(row_idx + 1) * SPONGE_BYTES_PER_ROW]
                 .copy_from_slice(output_chunk);
         }
 
@@ -289,7 +286,7 @@ where
             let header: &DeferralOutputRecordHeader =
                 unsafe { get_record_from_slice(&mut trace, ()) };
             let num_rows = header.num_rows as usize;
-            let output_len = (num_rows - 1) * DIGEST_SIZE;
+            let output_len = (num_rows - 1) * SPONGE_BYTES_PER_ROW;
             let (mut section_chunk, rest) = trace.split_at_mut(width * num_rows);
 
             // Copy write data out first; row filling overwrites the record bytes in-place.
@@ -310,11 +307,6 @@ where
                 )
             };
 
-            // Initial sponge input is [deferral_idx, output_len, 0, ...].
-            let mut initial_sponge_input = [F::ZERO; DIGEST_SIZE];
-            initial_sponge_input[0] = F::from_u32(header.deferral_idx);
-            initial_sponge_input[1] = F::from_usize(output_len);
-
             let mut current_poseidon2_res = [F::ZERO; DIGEST_SIZE];
             self.count_chip.add_count(header.deferral_idx);
 
@@ -325,6 +317,12 @@ where
                 ((output_len_u32 >> 16) & 0xFFFF) as u16,
             ];
             let output_len_f = output_len_u16s.map(F::from_u16);
+
+            // Initial sponge input: `[deferral_idx, output_len_lo, output_len_hi, 0, ...]`.
+            let mut initial_sponge_input = [F::ZERO; DIGEST_SIZE];
+            initial_sponge_input[0] = F::from_u32(header.deferral_idx);
+            initial_sponge_input[1] = output_len_f[0];
+            initial_sponge_input[2] = output_len_f[1];
 
             for (row_idx, row) in section_chunk.chunks_exact_mut(width).enumerate() {
                 let cols: &mut DeferralOutputCols<F> = row.borrow_mut();
@@ -406,20 +404,23 @@ where
                         mem_helper.fill_zero(chunk_aux.as_mut());
                     }
                 } else {
+                    let chunk_start = (row_idx - 1) * SPONGE_BYTES_PER_ROW;
                     let output_chunk =
-                        &write_bytes[(row_idx - 1) * DIGEST_SIZE..row_idx * DIGEST_SIZE];
-                    for bytes in output_chunk.chunks_exact(2) {
-                        self.bitwise_lookup_chip
-                            .request_range(bytes[0] as u32, bytes[1] as u32);
+                        &write_bytes[chunk_start..chunk_start + SPONGE_BYTES_PER_ROW];
+                    let sponge_u16s: [u16; DIGEST_SIZE] = from_fn(|i| {
+                        u16::from_le_bytes([output_chunk[2 * i], output_chunk[2 * i + 1]])
+                    });
+                    cols.sponge_inputs = sponge_u16s.map(F::from_u16);
+                    for &cell in sponge_u16s.iter() {
+                        self.range_checker_chip.add_count(cell as u32, 16);
                     }
-                    cols.sponge_inputs = from_fn(|i| F::from_u8(output_chunk[i]));
                     current_poseidon2_res = self.poseidon2_chip.perm_and_record(
                         &cols.sponge_inputs,
                         &current_poseidon2_res,
                         row_idx + 1 == num_rows,
                     );
-                    for chunk_idx in 0..DIGEST_BYTE_MEMORY_OPS {
-                        let aux_idx = (row_idx - 1) * DIGEST_BYTE_MEMORY_OPS + chunk_idx;
+                    for chunk_idx in 0..SPONGE_ROW_MEMORY_OPS {
+                        let aux_idx = (row_idx - 1) * SPONGE_ROW_MEMORY_OPS + chunk_idx;
                         cols.write_bytes_aux[chunk_idx].set_prev_data(from_fn(|i| {
                             F::from_u32(
                                 write_aux[aux_idx].prev_data[2 * i] as u32

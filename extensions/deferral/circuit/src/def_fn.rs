@@ -7,7 +7,10 @@ use openvm_circuit::arch::{
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
-use crate::{poseidon2::DeferralPoseidon2Chip, utils::f_commit_to_bytes};
+use crate::{
+    poseidon2::DeferralPoseidon2Chip,
+    utils::{f_commit_to_bytes, SPONGE_BYTES_PER_ROW},
+};
 
 #[derive(Clone, Debug, derive_new::new)]
 pub struct RawDeferralResult {
@@ -78,11 +81,13 @@ fn hash_output_raw<F: VmField>(
     deferral_idx: u32,
     output_ref: &[u8],
 ) -> OutputCommit {
-    assert!(output_ref.len().is_multiple_of(DIGEST_SIZE));
+    assert!(output_ref.len().is_multiple_of(SPONGE_BYTES_PER_ROW));
 
     let mut state = [F::ZERO; POSEIDON2_WIDTH];
     state[0] = F::from_u32(deferral_idx);
-    state[1] = F::from_usize(output_ref.len());
+    let output_len = output_ref.len() as u32;
+    state[1] = F::from_u16((output_len & 0xFFFF) as u16);
+    state[2] = F::from_u16(((output_len >> 16) & 0xFFFF) as u16);
 
     let (lhs, rhs) = state_to_chunks(&state);
     if output_ref.is_empty() {
@@ -92,11 +97,15 @@ fn hash_output_raw<F: VmField>(
 
     state[DIGEST_SIZE..].copy_from_slice(&hasher.perm(&lhs, &rhs, false));
 
-    let mut output_chunks = output_ref.chunks_exact(DIGEST_SIZE);
+    let mut output_chunks = output_ref.chunks_exact(SPONGE_BYTES_PER_ROW);
     let last_chunk = output_chunks.next_back().unwrap();
 
+    let chunk_to_state = |chunk: &[u8]| -> [F; DIGEST_SIZE] {
+        from_fn(|i| F::from_u16(u16::from_le_bytes([chunk[2 * i], chunk[2 * i + 1]])))
+    };
+
     for chunk in output_chunks {
-        let f_chunk = chunk.iter().map(|b| F::from_u8(*b)).collect::<Vec<_>>();
+        let f_chunk = chunk_to_state(chunk);
         state[..DIGEST_SIZE].copy_from_slice(&f_chunk);
         let (lhs, rhs) = state_to_chunks(&state);
         let capacity = hasher.perm(&lhs, &rhs, false);
@@ -104,7 +113,7 @@ fn hash_output_raw<F: VmField>(
     }
 
     let (_, rhs) = state_to_chunks(&state);
-    let last_chunk_f = from_fn(|i| F::from_u8(last_chunk[i]));
+    let last_chunk_f = chunk_to_state(last_chunk);
     let res = hasher.perm(&last_chunk_f, &rhs, true);
     f_commit_to_bytes(&res).to_vec()
 }

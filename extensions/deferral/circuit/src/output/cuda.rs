@@ -21,7 +21,7 @@ use super::{
 use crate::{
     cuda_abi::output::{self, DeferralOutputPerCall, DeferralOutputPerRow},
     poseidon2::{deferral_poseidon2_chip, DeferralPoseidon2SharedBuffer},
-    utils::f_commit_to_bytes,
+    utils::{f_commit_to_bytes, SPONGE_BYTES_PER_ROW},
 };
 
 #[derive(new)]
@@ -54,7 +54,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
             };
 
             let num_rows = header.num_rows as usize;
-            let output_len = (num_rows - 1) * DIGEST_SIZE;
+            let output_len = (num_rows - 1) * SPONGE_BYTES_PER_ROW;
             let write_bytes = unsafe {
                 std::slice::from_raw_parts(
                     records
@@ -70,15 +70,24 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
             let header_offset_u32 =
                 u32::try_from(header_offset).expect("record byte offset should fit u32");
 
+            let output_len_u32 =
+                u32::try_from(output_len).expect("deferral output length should fit u32");
+
             for section_idx in 0..num_rows {
                 let sponge_inputs = if section_idx == 0 {
                     let mut input = [F::ZERO; DIGEST_SIZE];
                     input[0] = F::from_u32(header.deferral_idx);
-                    input[1] = F::from_usize(output_len);
+                    input[1] = F::from_u16((output_len_u32 & 0xFFFF) as u16);
+                    input[2] = F::from_u16(((output_len_u32 >> 16) & 0xFFFF) as u16);
                     input
                 } else {
-                    let base = (section_idx - 1) * DIGEST_SIZE;
-                    from_fn(|i| F::from_u8(write_bytes[base + i]))
+                    let base = (section_idx - 1) * SPONGE_BYTES_PER_ROW;
+                    from_fn(|i| {
+                        F::from_u16(u16::from_le_bytes([
+                            write_bytes[base + 2 * i],
+                            write_bytes[base + 2 * i + 1],
+                        ]))
+                    })
                 };
 
                 current_poseidon2_res = poseidon2_chip.perm(

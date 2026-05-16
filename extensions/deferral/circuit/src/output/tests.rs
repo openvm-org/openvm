@@ -18,9 +18,7 @@ use openvm_instructions::{
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::{interaction::BusIndex, p3_field::PrimeCharacteristicRing};
-use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::DIGEST_SIZE, p3_baby_bear::BabyBear, utils::create_seeded_rng,
-};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng, RngCore};
 #[cfg(feature = "cuda")]
 use {
@@ -41,7 +39,7 @@ use crate::{
         deferral_poseidon2_air, deferral_poseidon2_chip, DeferralPoseidon2Air,
         DeferralPoseidon2Bus, DeferralPoseidon2Chip,
     },
-    utils::{combine_output, COMMIT_NUM_BYTES, OUTPUT_TOTAL_BYTES},
+    utils::{combine_output, COMMIT_NUM_BYTES, OUTPUT_TOTAL_BYTES, SPONGE_BYTES_PER_ROW},
     RawDeferralResult,
 };
 
@@ -158,7 +156,7 @@ fn set_and_execute_output<RA, E>(
 
     let mut input_commit = [0u8; COMMIT_NUM_BYTES];
     rng.fill_bytes(&mut input_commit);
-    let output_len = rng.random_range(0..=4) * DIGEST_SIZE;
+    let output_len = rng.random_range(0..=4) * SPONGE_BYTES_PER_ROW;
     let mut output_raw = vec![0u8; output_len];
     rng.fill_bytes(&mut output_raw);
     let result = make_result(deferral_idx, input_commit, output_raw);
@@ -222,7 +220,6 @@ fn create_cpu_harness(tester: &VmChipTestBuilder<F>, num_deferrals: usize) -> Cp
         tester.memory_bridge(),
         count_bus,
         poseidon2_bus,
-        bitwise_bus,
         range_bus,
         tester.address_bits(),
     );
@@ -232,7 +229,6 @@ fn create_cpu_harness(tester: &VmChipTestBuilder<F>, num_deferrals: usize) -> Cp
             count_chip.clone(),
             poseidon2_chip.clone(),
             range_checker.clone(),
-            bitwise_chip.clone(),
             tester.address_bits(),
         ),
         tester.memory_helper(),
@@ -273,7 +269,6 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
         tester.memory_bridge(),
         count_bus,
         poseidon2_bus,
-        bitwise_bus,
         range_bus,
         tester.address_bits(),
     );
@@ -283,7 +278,6 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
             count_chip_cpu,
             poseidon2_chip_cpu,
             dummy_range_checker,
-            dummy_bitwise_chip,
             tester.address_bits(),
         ),
         tester.dummy_memory_helper(),

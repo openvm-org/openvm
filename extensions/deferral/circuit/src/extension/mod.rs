@@ -149,7 +149,6 @@ where
             memory_bridge,
             count_bus,
             poseidon2_bus,
-            bitwise_bus,
             range_bus,
             address_bits,
         ));
@@ -177,19 +176,18 @@ where
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let address_bits = inventory.airs().pointer_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
-                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
+        // The Deferral call AIR still references the byte-bitwise lookup bus; ensure the
+        // matching chip is present in the inventory so the LogUp argument balances.
+        if inventory
+            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
+            .next()
+            .is_none()
+        {
+            let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
+            let chip: SharedBitwiseOperationLookupChip<8> =
+                Arc::new(BitwiseOperationLookupChip::new(air.bus));
+            inventory.add_periphery_chip(chip);
+        }
         let count_chip = Arc::new(DeferralCircuitCountChip::new(extension.fns.len()));
         let poseidon2_chip = Arc::new(deferral_poseidon2_chip());
 
@@ -217,7 +215,6 @@ where
                 count_chip.clone(),
                 poseidon2_chip.clone(),
                 range_checker.clone(),
-                bitwise_lu,
                 address_bits,
             ),
             mem_helper,

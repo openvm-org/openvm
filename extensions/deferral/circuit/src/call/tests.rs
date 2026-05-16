@@ -50,7 +50,7 @@ use crate::{
     },
     utils::{
         byte_commit_to_f, join_f_memory_ops, COMMIT_NUM_BYTES, DIGEST_F_MEMORY_OPS,
-        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS, SPONGE_BYTES_PER_ROW,
     },
     DeferralFn,
 };
@@ -123,7 +123,7 @@ fn deferral_fns(num_deferrals: usize) -> Vec<Arc<DeferralFn>> {
                     .iter()
                     .fold(idx as u8, |acc, byte| acc.wrapping_add(*byte));
                 let num_chunks = (seed as usize % 4) + 1;
-                let len = num_chunks * DIGEST_SIZE;
+                let len = num_chunks * SPONGE_BYTES_PER_ROW;
                 (0..len)
                     .map(|i| seed.wrapping_add(i as u8))
                     .collect::<Vec<_>>()

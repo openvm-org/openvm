@@ -20,10 +20,12 @@ pub const COMMIT_NUM_U16S: usize = DIGEST_SIZE * F_NUM_U16S;
 /// Number of u16 cells representing `output_len` (one F element worth).
 pub const OUTPUT_LEN_NUM_U16S: usize = F_NUM_U16S;
 
-/// Number of memory bus messages to read/write a `DIGEST_SIZE`-byte chunk from a
-/// byte-addressed AS (RV64_MEMORY_AS). Each bus access covers `MEMORY_BLOCK_BYTES`
-/// bytes (one guest-visible block).
-pub const DIGEST_BYTE_MEMORY_OPS: usize = num_byte_memory_ops(DIGEST_SIZE);
+/// Guest bytes absorbed by Poseidon2 per deferral output row. Two bytes pack
+/// into each of the 8 rate-portion `sponge_inputs` cells.
+pub const SPONGE_BYTES_PER_ROW: usize = 2 * DIGEST_SIZE;
+/// Number of memory-bus messages required to write one row's `SPONGE_BYTES_PER_ROW`
+/// bytes back to `RV64_MEMORY_AS`.
+pub const SPONGE_ROW_MEMORY_OPS: usize = num_byte_memory_ops(SPONGE_BYTES_PER_ROW);
 /// Number of memory bus messages to read/write a `DIGEST_SIZE`-cell chunk from the
 /// F-celled DEFERRAL_AS. Each bus access covers `BLOCK_FE_WIDTH = 4` cells, so a
 /// `DIGEST_SIZE = 8` chunk takes two F bus messages (deferral chip emits two F bus
@@ -46,16 +48,6 @@ pub(crate) const fn num_byte_memory_ops(total_bytes: usize) -> usize {
 pub(crate) const fn num_f_memory_ops(total_cells: usize) -> usize {
     assert!(total_cells.is_multiple_of(BLOCK_FE_WIDTH));
     total_cells / BLOCK_FE_WIDTH
-}
-
-/// Split `TOTAL_BYTES` bytes of byte-addressed-AS data into `NUM_OPS` chunks of
-/// `MEMORY_BLOCK_BYTES` bytes each. Used for RV64_MEMORY_AS accesses.
-pub(crate) fn split_byte_memory_ops<T, const TOTAL_BYTES: usize, const NUM_OPS: usize>(
-    data: [T; TOTAL_BYTES],
-) -> [[T; MEMORY_BLOCK_BYTES]; NUM_OPS] {
-    assert_eq!(TOTAL_BYTES, NUM_OPS * MEMORY_BLOCK_BYTES);
-    let mut it = data.into_iter();
-    from_fn(|_| from_fn(|_| it.next().unwrap()))
 }
 
 pub(crate) fn join_byte_memory_ops<T, const TOTAL_BYTES: usize, const NUM_OPS: usize>(
