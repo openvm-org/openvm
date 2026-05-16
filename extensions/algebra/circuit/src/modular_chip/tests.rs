@@ -857,7 +857,9 @@ mod is_equal_tests {
             SharedBitwiseOperationLookupChip<LIMB_BITS>,
         ),
     ) {
-        // Bitwise lookup is still required for the u16 adapter's pointer-high-cell range check.
+        // Bitwise lookup chip is included for backwards compatibility with the periphery
+        // wiring, but the u16-shaped eq_mod adapter now uses the variable range checker for
+        // its high-u16 pointer check.
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
         let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus));
 
@@ -865,7 +867,7 @@ mod is_equal_tests {
             Rv64IsEqualModU16AdapterAir::new(
                 tester.execution_bridge(),
                 tester.memory_bridge(),
-                bitwise_bus,
+                tester.range_checker().bus(),
                 tester.address_bits(),
             ),
             ModularIsEqualCoreAir::new(modulus.clone(), tester.range_checker().bus(), offset),
@@ -877,7 +879,7 @@ mod is_equal_tests {
         );
         let chip = ModularIsEqualU16Chip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
             ModularIsEqualFiller::new(
-                Rv64IsEqualModU16AdapterFiller::new(tester.address_bits(), bitwise_chip.clone()),
+                Rv64IsEqualModU16AdapterFiller::new(tester.address_bits(), tester.range_checker()),
                 offset,
                 modulus_limbs_u16,
                 tester.range_checker(),

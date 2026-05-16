@@ -212,7 +212,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     NUM_LIMBS_32_U16,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModU16AdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModU16AdapterFiller::new(
+                            pointer_max_bits,
+                            range_checker.clone(),
+                        ),
                         start_offset,
                         modulus_limbs_u16_arr,
                         range_checker.clone(),
@@ -269,7 +272,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     NUM_LIMBS_48_U16,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModU16AdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModU16AdapterFiller::new(
+                            pointer_max_bits,
+                            range_checker.clone(),
+                        ),
                         start_offset,
                         modulus_limbs_u16_arr,
                         range_checker.clone(),

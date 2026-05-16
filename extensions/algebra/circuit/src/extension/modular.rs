@@ -302,7 +302,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                     Rv64IsEqualModU16AdapterAir::new(
                         exec_bridge,
                         memory_bridge,
-                        bitwise_lu,
+                        range_checker_bus,
                         pointer_max_bits,
                     ),
                     ModularIsEqualCoreAir::new(modulus.clone(), range_checker_bus, start_offset),
@@ -345,7 +345,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                     Rv64IsEqualModU16AdapterAir::new(
                         exec_bridge,
                         memory_bridge,
-                        bitwise_lu,
+                        range_checker_bus,
                         pointer_max_bits,
                     ),
                     ModularIsEqualCoreAir::new(modulus.clone(), range_checker_bus, start_offset),
@@ -448,7 +448,10 @@ where
                     NUM_LIMBS_32_U16,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModU16AdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModU16AdapterFiller::new(
+                            pointer_max_bits,
+                            range_checker.clone(),
+                        ),
                         start_offset,
                         modulus_limbs_u16_arr,
                         range_checker.clone(),
@@ -504,7 +507,10 @@ where
                     NUM_LIMBS_48_U16,
                 >::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModU16AdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModU16AdapterFiller::new(
+                            pointer_max_bits,
+                            range_checker.clone(),
+                        ),
                         start_offset,
                         modulus_limbs_u16_arr,
                         range_checker.clone(),

@@ -23,17 +23,17 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{
-    expand_to_rv64_block, tracing_read_reg_ptr, tracing_read_u16, tracing_write_u16, RV64_CELL_BITS,
+    tracing_read_reg_ptr, tracing_read_u16, tracing_write_u16, RV64_CELL_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -41,10 +41,17 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
+/// Number of u16 cells holding the low 32 bits of a register pointer.
+///
+/// Mirrors `vec_heap::REG_PTR_U16S` but kept private to avoid a duplicate `pub use` from the crate
+/// root.
+const REG_PTR_U16S: usize = RV64_WORD_NUM_LIMBS / 2;
+
 /// U16-shaped variant of [`Rv64IsEqualModAdapterCols`].
 ///
 /// * `BLOCK_SIZE` counts u16 cells per heap-read block and must equal [`BLOCK_FE_WIDTH`].
-/// * `rs_val` holds `BLOCK_FE_WIDTH` u16 cells per register pointer.
+/// * `rs_val` holds the low 32 bits of the register pointer as 2 u16 cells; the bus payload
+///   zero-extends to `BLOCK_FE_WIDTH` u16 cells.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct Rv64IsEqualModU16AdapterCols<
@@ -56,7 +63,8 @@ pub struct Rv64IsEqualModU16AdapterCols<
     pub from_state: ExecutionState<T>,
 
     pub rs_ptr: [T; NUM_READS],
-    pub rs_val: [[T; BLOCK_FE_WIDTH]; NUM_READS],
+    /// Low 32 bits of rs registers, packed as 2 u16 cells (matches the memory bus payload).
+    pub rs_val: [[T; REG_PTR_U16S]; NUM_READS],
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
     pub heap_read_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
 
@@ -75,7 +83,7 @@ pub struct Rv64IsEqualModU16AdapterAir<
 > {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
-    pub bus: BitwiseOperationLookupBus,
+    pub range_bus: VariableRangeCheckerBus,
     address_bits: usize,
 }
 
@@ -130,44 +138,30 @@ impl<
         let d = AB::F::from_u32(RV64_REGISTER_AS);
         let e = AB::F::from_u32(RV64_MEMORY_AS);
 
-        // Read register values for rs.
+        // Read register values for rs: low 32 bits as 2 u16 cells, zero-extended to 4 cells.
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
+            let bus_payload: [AB::Expr; BLOCK_FE_WIDTH] =
+                [val[0].into(), val[1].into(), AB::Expr::ZERO, AB::Expr::ZERO];
             self.memory_bridge
-                .read(
-                    MemoryAddress::new(d, ptr),
-                    expand_to_rv64_block(&val),
-                    timestamp_pp(),
-                    aux,
-                )
+                .read(MemoryAddress::new(d, ptr), bus_payload, timestamp_pp(), aux)
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Compose u16 cells into the heap base byte address.
-        let rs_val_f: [AB::Expr; NUM_READS] = from_fn(|i| {
-            let mut acc = AB::Expr::ZERO;
-            for j in 0..BLOCK_FE_WIDTH {
-                acc += cols.rs_val[i][j] * AB::F::from_u64(1u64 << (16 * j));
-            }
-            acc
-        });
+        // Compose the 2 u16 cells of each register value into a single field element used as the
+        // heap base byte address.
+        let u16_bits = RV64_CELL_BITS * 2;
+        let compose = |val: [AB::Var; REG_PTR_U16S]| -> AB::Expr {
+            val[0] + val[1] * AB::F::from_u32(1 << u16_bits)
+        };
+        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(compose);
 
-        let need_range_check: [_; 2] = from_fn(|i| {
-            if i < NUM_READS {
-                cols.rs_val[i][BLOCK_FE_WIDTH - 1].into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
-
-        // Range-check the high cell after shifting out unused pointer bits.
-        let limb_shift = AB::F::from_u64(1u64 << (16 * BLOCK_FE_WIDTH - self.address_bits));
-
-        self.bus
-            .send_range(
-                need_range_check[0].clone() * limb_shift,
-                need_range_check[1].clone() * limb_shift,
-            )
-            .eval(builder, ctx.instruction.is_valid.clone());
+        // Range-check the high u16 of each pointer.
+        let limb_shift = AB::F::from_u32(1 << (u16_bits * 2 - self.address_bits));
+        for val in cols.rs_val.iter() {
+            self.range_bus
+                .range_check(val[1] * limb_shift, u16_bits)
+                .eval(builder, ctx.instruction.is_valid.clone());
+        }
 
         // Reads from heap. `BLOCK_SIZE` counts u16 cells per block.
         assert_eq!(TOTAL_READ_SIZE, BLOCKS_PER_READ * BLOCK_SIZE);
@@ -275,7 +269,7 @@ pub struct Rv64IsEqualModU16AdapterFiller<
     const TOTAL_READ_SIZE: usize,
 > {
     pointer_max_bits: usize,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<
@@ -421,27 +415,15 @@ impl<
             timestamp -= 1;
             timestamp
         };
-        // Do range checks before writing anything: mirror the AIR side, which checks
-        //   top_u16_cell << (16 * BLOCK_FE_WIDTH - address_bits) < 2^8
-        // via the 8-bit bitwise lookup chip.
-        debug_assert!(self.pointer_max_bits <= 16 * BLOCK_FE_WIDTH);
-        let limb_shift_bits = 16 * BLOCK_FE_WIDTH - self.pointer_max_bits;
-        const MSL_SHIFT: usize = 16 * (BLOCK_FE_WIDTH - 1);
-        // Cast to `u64` end-to-end so that both `MSL_SHIFT >= 32` (right shift) and
-        // `limb_shift_bits >= 32` (left shift for small `pointer_max_bits`) are well-defined.
-        // The bitwise lookup chip only consumes the low byte; for valid pointers
-        // (< 2^pointer_max_bits with pointer_max_bits <= 48) the high u16 cell is 0 and the
-        // shift result is 0, but we still want this code to be well-defined for any
-        // `pointer_max_bits` configuration the AIR allows.
-        let rs_val_hi: [u32; 2] = from_fn(|i| {
-            if i < NUM_READS {
-                (((record.rs_val[i] as u64) >> MSL_SHIFT) << limb_shift_bits) as u32
-            } else {
-                0
-            }
-        });
-        self.bitwise_lookup_chip
-            .request_range(rs_val_hi[0], rs_val_hi[1]);
+        // Do range checks before writing anything: range-check the high u16 of each pointer
+        // shifted to fit in 16 bits.
+        let u16_bits = RV64_CELL_BITS * 2;
+        debug_assert!(self.pointer_max_bits <= u16_bits * 2);
+        let limb_shift_bits = u16_bits * 2 - self.pointer_max_bits;
+        for &v in record.rs_val.iter() {
+            self.range_checker_chip
+                .add_count((v >> u16_bits) << limb_shift_bits, u16_bits);
+        }
         // Writing in reverse order. `writes_aux.prev_data` is already u16-cell-shaped, so no
         // byte→u16 packing is needed (unlike the u8 adapter, which packs pairs of bytes).
         cols.writes_aux
@@ -476,11 +458,10 @@ impl<
                 mem_helper.fill(record.prev_timestamp, timestamp_mm(), col.as_mut());
             });
 
-        // Decompose the u32 pointer into BLOCK_FE_WIDTH u16 cells. Bytes 4..8 are zero by the
-        // `pointer_max_bits` constraint (always <= 32 in practice).
+        // Pack the low 32 bits of each register pointer into 2 u16 cells.
         cols.rs_val = record.rs_val.map(|val| {
-            let val_u64 = val as u64;
-            from_fn(|j| F::from_u32(((val_u64 >> (16 * j)) & 0xffff) as u32))
+            let bytes = val.to_le_bytes();
+            from_fn(|i| F::from_u16(u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]])))
         });
         cols.rs_ptr = record.rs_ptr.map(F::from_u32);
 
