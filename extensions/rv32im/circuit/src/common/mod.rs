@@ -8,13 +8,14 @@ mod aot {
     pub(crate) use openvm_circuit::arch::aot::common::*;
     use openvm_circuit::{
         arch::{
-            execution_mode::{metered::memory_ctx::MemoryCtx, MeteredCtx},
+            execution_mode::{
+                metered::{ctx::DEFAULT_PAGE_BITS, memory_ctx::MemoryCtx},
+                MeteredCtx,
+            },
             AotError, SystemConfig, VmExecState, ADDR_SPACE_OFFSET,
         },
         system::memory::{online::GuestMemory, CHUNK},
     };
-    /// This is DIRTY because PAGE_BITS is a generic parameter of E2 context.
-    const DEFAULT_PAGE_BITS: usize = 6;
 
     pub(crate) fn gpr_to_rv32_register(gpr: &str, rv32_reg: u8) -> String {
         let xmm_map_reg = rv32_reg / 2;

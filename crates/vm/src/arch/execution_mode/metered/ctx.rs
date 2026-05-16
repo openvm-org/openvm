@@ -14,7 +14,7 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-pub const DEFAULT_PAGE_BITS: usize = 6;
+pub const DEFAULT_PAGE_BITS: usize = 4;
 
 #[derive(Clone, Debug, Getters, Setters, WithSetters)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
