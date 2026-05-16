@@ -1,24 +1,18 @@
 use std::marker::PhantomData;
 
 use itertools::izip;
-use ndarray::s;
 use openvm_circuit::{
     arch::{ExecutionBridge, BLOCK_FE_WIDTH},
     system::{
-        memory::{
-            offline_checker::{pack_u8_for_bus, MemoryBridge},
-            MemoryAddress,
-        },
+        memory::{offline_checker::MemoryBridge, MemoryAddress},
         SystemPort,
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose, ColumnsAir,
+    bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose,
+    var_range::VariableRangeCheckerBus, ColumnsAir,
 };
-use openvm_instructions::riscv::{
-    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
-};
-use openvm_riscv_circuit::adapters::expand_to_rv64_register;
+use openvm_instructions::riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_sha2_air::Sha2BlockHasherSubairConfig;
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -36,6 +30,7 @@ pub struct Sha2MainAir<C: Sha2MainChipConfig> {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
+    pub range_bus: VariableRangeCheckerBus,
     pub sha2_bus: PermutationCheckBus,
     /// Maximum number of bits allowed for an address pointer
     /// Must be at least 24
@@ -56,6 +51,7 @@ impl<C: Sha2MainChipConfig> Sha2MainAir<C> {
             memory_bridge,
         }: SystemPort,
         bitwise_lookup_bus: BitwiseOperationLookupBus,
+        range_bus: VariableRangeCheckerBus,
         ptr_max_bits: usize,
         self_bus_idx: BusIndex,
         offset: usize,
@@ -64,6 +60,7 @@ impl<C: Sha2MainChipConfig> Sha2MainAir<C> {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
             bitwise_lookup_bus,
+            range_bus,
             sha2_bus: PermutationCheckBus::new(self_bus_idx),
             ptr_max_bits,
             offset,
@@ -199,6 +196,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
+        // Register reads: low 32 bits as 2 u16 cells, zero-extended to BLOCK_FE_WIDTH=4 cells.
         for (&ptr, val, aux) in izip!(
             [
                 local.instruction.dst_reg_ptr,
@@ -212,31 +210,32 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             ],
             &local.mem.register_aux,
         ) {
-            let val_arr: [AB::Var; RV64_WORD_NUM_LIMBS] =
-                std::array::from_fn(|i| *val.get(i).unwrap());
-            let data = expand_to_rv64_register(&val_arr);
+            let bus_payload: [AB::Expr; BLOCK_FE_WIDTH] = [
+                (*val.get(0).unwrap()).into(),
+                (*val.get(1).unwrap()).into(),
+                AB::Expr::ZERO,
+                AB::Expr::ZERO,
+            ];
             self.memory_bridge
                 .read(
                     MemoryAddress::new(AB::Expr::from_u32(RV64_REGISTER_AS), ptr),
-                    pack_u8_for_bus::<AB>(&data),
+                    bus_payload,
                     timestamp_pp(),
                     aux,
                 )
                 .eval(builder, *local.instruction.is_enabled);
         }
 
-        // range check the high byte of each 32-bit effective pointer
-        let shift =
-            AB::Expr::from_usize(1 << (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - self.ptr_max_bits));
-        let needs_range_check = [
-            local.instruction.dst_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-            local.instruction.state_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-            local.instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-            local.instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1], /* needs_range_check must have even length */
-        ];
-        for pair in needs_range_check.chunks_exact(2) {
-            self.bitwise_lookup_bus
-                .send_range(pair[0] * shift.clone(), pair[1] * shift.clone())
+        // Range-check the high u16 of each 32-bit effective pointer.
+        let u16_bits = RV64_CELL_BITS * 2;
+        let shift = AB::F::from_u32(1 << (u16_bits * 2 - self.ptr_max_bits));
+        for limbs in [
+            local.instruction.dst_ptr_limbs,
+            local.instruction.state_ptr_limbs,
+            local.instruction.input_ptr_limbs,
+        ] {
+            self.range_bus
+                .range_check(*limbs.get(1).unwrap() * shift, u16_bits)
                 .eval(builder, *local.instruction.is_enabled);
         }
 
@@ -262,16 +261,9 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
-        // Upper 4 bytes of each pointer are constrained to zero, so only compose the low 4 bytes
-        // to form the 32-bit effective address. Composing all 8 would overflow the field.
-        let input_ptr_val = compose(
-            &local
-                .instruction
-                .input_ptr_limbs
-                .slice(s![..RV64_WORD_NUM_LIMBS])
-                .to_vec(),
-            RV64_CELL_BITS,
-        );
+        // Compose the 2 u16 cells of each pointer (low 32 bits) into a single field element.
+        let u16_bits = RV64_CELL_BITS * 2;
+        let input_ptr_val = compose(&local.instruction.input_ptr_limbs.to_vec(), u16_bits);
         // `message_u16s` is u16-shaped: each `SHA2_READ_SIZE` (8-byte) memory read consumes
         // `BLOCK_FE_WIDTH` u16 cells. The bus payload is those cells directly (no byte→u16
         // packing helper needed).
@@ -297,14 +289,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .eval(builder, *local.instruction.is_enabled);
         }
 
-        let state_ptr_val = compose(
-            &local
-                .instruction
-                .state_ptr_limbs
-                .slice(s![..RV64_WORD_NUM_LIMBS])
-                .to_vec(),
-            RV64_CELL_BITS,
-        );
+        let state_ptr_val = compose(&local.instruction.state_ptr_limbs.to_vec(), u16_bits);
         // `prev_state` is u16-shaped, so each `SHA2_READ_SIZE` (8-byte) memory read corresponds
         // to `BLOCK_FE_WIDTH` u16 cells consumed from the column. The bus payload is just those
         // cells (no byte→u16 packing).
@@ -337,14 +322,8 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
-        let dst_ptr_val = compose(
-            &local
-                .instruction
-                .dst_ptr_limbs
-                .slice(s![..RV64_WORD_NUM_LIMBS])
-                .to_vec(),
-            RV64_CELL_BITS,
-        );
+        let u16_bits = RV64_CELL_BITS * 2;
+        let dst_ptr_val = compose(&local.instruction.dst_ptr_limbs.to_vec(), u16_bits);
         // `new_state` is u16-shaped, so each `SHA2_WRITE_SIZE` (8-byte) memory write consumes
         // `BLOCK_FE_WIDTH` u16 cells from the column. The bus payload is those cells (no
         // byte→u16 packing).

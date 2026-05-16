@@ -78,6 +78,7 @@ static __device__ __forceinline__ void sha2_main_row_body(
     SHA2_MAIN_WRITE_INSTR(V, row, state_reg_ptr, header->state_reg_ptr);
     SHA2_MAIN_WRITE_INSTR(V, row, input_reg_ptr, header->input_reg_ptr);
 
+    // Pack the low 32 bits of each register pointer into 2 u16 cells.
     uint8_t dst_ptr_bytes[RV64_WORD_NUM_LIMBS];
     uint8_t state_ptr_bytes[RV64_WORD_NUM_LIMBS];
     uint8_t input_ptr_bytes[RV64_WORD_NUM_LIMBS];
@@ -85,24 +86,39 @@ static __device__ __forceinline__ void sha2_main_row_body(
     memcpy(state_ptr_bytes, &header->state_ptr, sizeof(uint32_t));
     memcpy(input_ptr_bytes, &header->input_ptr, sizeof(uint32_t));
 
-    SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, dst_ptr_limbs, dst_ptr_bytes);
-    SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, state_ptr_limbs, state_ptr_bytes);
-    SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, input_ptr_limbs, input_ptr_bytes);
-
-    // Range checks on top limbs
-    uint8_t needs_range_check[4] = {
-        dst_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
-        state_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
-        input_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
-        input_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
-    };
-    uint32_t shift = 1u << (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - ptr_max_bits);
-    for (int i = 0; i < 4; i += 2) {
-        bitwise_lookup.add_range(
-            static_cast<uint32_t>(needs_range_check[i]) * shift,
-            static_cast<uint32_t>(needs_range_check[i + 1]) * shift
+    constexpr size_t PTR_U16S = RV64_WORD_NUM_LIMBS / 2;
+    Fp dst_ptr_u16s[PTR_U16S];
+    Fp state_ptr_u16s[PTR_U16S];
+    Fp input_ptr_u16s[PTR_U16S];
+#pragma unroll
+    for (size_t k = 0; k < PTR_U16S; k++) {
+        dst_ptr_u16s[k] = Fp(
+            static_cast<uint32_t>(dst_ptr_bytes[2 * k]) + 256u * static_cast<uint32_t>(dst_ptr_bytes[2 * k + 1])
+        );
+        state_ptr_u16s[k] = Fp(
+            static_cast<uint32_t>(state_ptr_bytes[2 * k]) + 256u * static_cast<uint32_t>(state_ptr_bytes[2 * k + 1])
+        );
+        input_ptr_u16s[k] = Fp(
+            static_cast<uint32_t>(input_ptr_bytes[2 * k]) + 256u * static_cast<uint32_t>(input_ptr_bytes[2 * k + 1])
         );
     }
+    SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, dst_ptr_limbs, dst_ptr_u16s);
+    SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, state_ptr_limbs, state_ptr_u16s);
+    SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, input_ptr_limbs, input_ptr_u16s);
+
+    // Range-check the high u16 of each pointer via the variable range checker.
+    constexpr size_t U16_BITS = RV64_CELL_BITS * 2;
+    uint32_t shift = 1u << (U16_BITS * 2 - ptr_max_bits);
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
+    uint32_t hi_dst =
+        static_cast<uint32_t>(dst_ptr_bytes[2]) + 256u * static_cast<uint32_t>(dst_ptr_bytes[3]);
+    uint32_t hi_state =
+        static_cast<uint32_t>(state_ptr_bytes[2]) + 256u * static_cast<uint32_t>(state_ptr_bytes[3]);
+    uint32_t hi_input =
+        static_cast<uint32_t>(input_ptr_bytes[2]) + 256u * static_cast<uint32_t>(input_ptr_bytes[3]);
+    range_checker.add_count(hi_dst * shift, U16_BITS);
+    range_checker.add_count(hi_state * shift, U16_BITS);
+    range_checker.add_count(hi_input * shift, U16_BITS);
 
     // Memory aux
     uint32_t timestamp = header->timestamp;

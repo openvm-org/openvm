@@ -7,6 +7,9 @@ use openvm_instructions::riscv::RV64_WORD_NUM_LIMBS;
 
 use crate::{Sha2MainChipConfig, SHA2_REGISTER_READS, SHA2_WRITE_SIZE};
 
+/// Number of u16 cells holding the low 32 bits of a register pointer.
+pub const PTR_LIMBS_U16S: usize = RV64_WORD_NUM_LIMBS / 2;
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
 #[config(Sha2MainChipConfig)]
@@ -58,12 +61,12 @@ pub struct Sha2InstructionCols<T> {
     pub state_reg_ptr: T,
     /// Pointer to address space 1 `input` register
     pub input_reg_ptr: T,
-    /// Low 4 bytes of \[dst_reg_ptr:8\]_1
-    pub dst_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
-    /// Low 4 bytes of \[state_reg_ptr:8\]_1
-    pub state_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
-    /// Low 4 bytes of \[input_reg_ptr:8\]_1
-    pub input_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
+    /// Low 4 bytes of \[dst_reg_ptr:8\]_1, packed as 2 u16 cells.
+    pub dst_ptr_limbs: [T; PTR_LIMBS_U16S],
+    /// Low 4 bytes of \[state_reg_ptr:8\]_1, packed as 2 u16 cells.
+    pub state_ptr_limbs: [T; PTR_LIMBS_U16S],
+    /// Low 4 bytes of \[input_reg_ptr:8\]_1, packed as 2 u16 cells.
+    pub input_ptr_limbs: [T; PTR_LIMBS_U16S],
 }
 
 #[repr(C)]

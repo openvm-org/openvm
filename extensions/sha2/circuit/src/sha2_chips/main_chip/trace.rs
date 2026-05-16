@@ -9,7 +9,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::Chip;
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::riscv::{RV64_CELL_BITS, RV64_WORD_NUM_LIMBS};
-use openvm_sha2_air::set_arrayview_from_u8_slice;
+use openvm_sha2_air::set_arrayview_from_u32_slice;
 use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -163,22 +163,25 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
         *cols.instruction.state_reg_ptr = F::from_u32(vm_record.state_reg_ptr);
         *cols.instruction.input_reg_ptr = F::from_u32(vm_record.input_reg_ptr);
 
-        let dst_ptr_limbs = vm_record.dst_ptr.to_le_bytes();
-        let state_ptr_limbs = vm_record.state_ptr.to_le_bytes();
-        let input_ptr_limbs = vm_record.input_ptr.to_le_bytes();
-        set_arrayview_from_u8_slice(&mut cols.instruction.dst_ptr_limbs, dst_ptr_limbs);
-        set_arrayview_from_u8_slice(&mut cols.instruction.state_ptr_limbs, state_ptr_limbs);
-        set_arrayview_from_u8_slice(&mut cols.instruction.input_ptr_limbs, input_ptr_limbs);
-        let needs_range_check = [
-            dst_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-            state_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-            input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-            input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-        ];
-        let shift: u32 = 1 << (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - self.pointer_max_bits);
-        for pair in needs_range_check.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32 * shift, pair[1] as u32 * shift);
+        // Pack low 32 bits of each pointer into 2 u16 cells.
+        let dst_ptr_bytes = vm_record.dst_ptr.to_le_bytes();
+        let state_ptr_bytes = vm_record.state_ptr.to_le_bytes();
+        let input_ptr_bytes = vm_record.input_ptr.to_le_bytes();
+        let pack_u16 = |bytes: &[u8; RV64_WORD_NUM_LIMBS], i: usize| -> u32 {
+            bytes[2 * i] as u32 + 256 * bytes[2 * i + 1] as u32
+        };
+        let dst_ptr_u16s: [u32; 2] = std::array::from_fn(|i| pack_u16(&dst_ptr_bytes, i));
+        let state_ptr_u16s: [u32; 2] = std::array::from_fn(|i| pack_u16(&state_ptr_bytes, i));
+        let input_ptr_u16s: [u32; 2] = std::array::from_fn(|i| pack_u16(&input_ptr_bytes, i));
+        set_arrayview_from_u32_slice(&mut cols.instruction.dst_ptr_limbs, dst_ptr_u16s);
+        set_arrayview_from_u32_slice(&mut cols.instruction.state_ptr_limbs, state_ptr_u16s);
+        set_arrayview_from_u32_slice(&mut cols.instruction.input_ptr_limbs, input_ptr_u16s);
+
+        // Range-check the high u16 of each pointer (the cell at index 1).
+        let u16_bits = RV64_CELL_BITS * 2;
+        let shift: u32 = 1 << (u16_bits * 2 - self.pointer_max_bits);
+        for hi_u16 in [dst_ptr_u16s[1], state_ptr_u16s[1], input_ptr_u16s[1]] {
+            self.range_checker_chip.add_count(hi_u16 * shift, u16_bits);
         }
 
         // fill in the register reads aux

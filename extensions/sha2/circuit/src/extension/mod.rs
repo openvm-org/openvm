@@ -182,6 +182,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
         let sha256_main_air = Sha2MainAir::<Sha256Config>::new(
             inventory.system().port(),
             bitwise_lu,
+            range_bus,
             inventory.pointer_max_bits(),
             sha2_bus_index,
             Rv64Sha2Opcode::CLASS_OFFSET,
@@ -200,6 +201,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
         let sha512_main_air = Sha2MainAir::<Sha512Config>::new(
             inventory.system().port(),
             bitwise_lu,
+            range_bus,
             inventory.pointer_max_bits(),
             sha2_bus_index,
             Rv64Sha2Opcode::CLASS_OFFSET,
@@ -266,6 +268,7 @@ where
         let sha256_main_chip = Sha2MainChip::<Val<SC>, Sha256Config>::new(
             records,
             bitwise_lu.clone(),
+            range_checker.clone(),
             pointer_max_bits,
             mem_helper.clone(),
         );
@@ -288,6 +291,7 @@ where
         let sha512_main_chip = Sha2MainChip::<Val<SC>, Sha512Config>::new(
             records,
             bitwise_lu.clone(),
+            range_checker.clone(),
             pointer_max_bits,
             mem_helper.clone(),
         );
