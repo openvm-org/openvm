@@ -961,24 +961,20 @@ fn expand_test_label_rebinding_attack() {
         vec![
             AddressSpaceHostConfig {
                 num_cells: 0,
-                min_block_size: 0,
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
                 layout: MemoryCellType::field32(),
             },
             AddressSpaceHostConfig {
                 num_cells: CHUNK << height,
-                min_block_size: 1,
                 layout: MemoryCellType::field32(),
             },
         ],
         height + 3,
         20,
         17,
-        32,
     );
     let md = mem_config.memory_dimensions();
 

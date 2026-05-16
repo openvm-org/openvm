@@ -223,6 +223,11 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
         builder
             .when_first_row()
             .assert_one(*local_cols.flags.is_round_row);
+        // Anchor the trace shape at the end so the wrapped evaluation window cannot
+        // cycle back from a round row without ever reaching digest/padding rows.
+        builder
+            .when_last_row()
+            .assert_one(local_is_padding_row.clone());
         // If we are in a padding row, the next row must also be a padding row
         builder
             .when_transition()
