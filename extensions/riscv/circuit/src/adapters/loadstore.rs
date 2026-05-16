@@ -7,7 +7,8 @@ use std::{
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, MEMORY_BLOCK_BYTES,
+        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{
@@ -39,9 +40,12 @@ use openvm_stark_backend::{
 
 use super::{RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS};
 use crate::adapters::{
-    expand_to_rv64_register, memory_read, memory_read_deferral, rv64_bytes_to_u32, timed_write,
-    timed_write_deferral, tracing_read, RV64_CELL_BITS,
+    memory_read, memory_read_deferral, rv64_bytes_to_u32, timed_write, timed_write_deferral,
+    tracing_read, RV64_CELL_BITS,
 };
+
+/// Number of u16 cells holding the low 32 bits of an 8-byte register read in this adapter.
+pub const RS1_DATA_U16S: usize = RV64_WORD_NUM_LIMBS / 2;
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
 /// of the instruction type, specifically whether it is a load or store.
@@ -84,7 +88,8 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64LoadStoreAdapt
 pub struct Rv64LoadStoreAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
-    pub rs1_data: [T; RV64_WORD_NUM_LIMBS],
+    /// Low 32 bits of the rs1 register, packed as 2 u16 cells (matches the memory bus payload).
+    pub rs1_data: [T; RS1_DATA_U16S],
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
 
     /// Will write to rd when Load and read from rs2 when Store
@@ -160,22 +165,25 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             .when(is_valid.clone() - write_count)
             .assert_zero(local_cols.rd_rs2_ptr);
 
-        // read rs1
-        let rs1_data = expand_to_rv64_register(&local_cols.rs1_data);
+        // read rs1: low 32 bits as 2 u16 cells, upper 4 bytes zero-extended on the bus.
+        let rs1_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
+            local_cols.rs1_data[0].into(),
+            local_cols.rs1_data[1].into(),
+            AB::Expr::ZERO,
+            AB::Expr::ZERO,
+        ];
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rs1_ptr),
-                pack_u8_for_bus::<AB>(&rs1_data),
+                rs1_bus,
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
             )
             .eval(builder, is_valid.clone());
 
-        // constrain mem_ptr = rs1 + imm as a u32 addition with 2 limbs
-        let limbs_01 =
-            local_cols.rs1_data[0] + local_cols.rs1_data[1] * AB::F::from_u32(1 << RV64_CELL_BITS);
-        let limbs_23 =
-            local_cols.rs1_data[2] + local_cols.rs1_data[3] * AB::F::from_u32(1 << RV64_CELL_BITS);
+        // constrain mem_ptr = rs1 + imm as a u32 addition with 2 u16 limbs (already u16-packed)
+        let limbs_01 = local_cols.rs1_data[0];
+        let limbs_23 = local_cols.rs1_data[1];
 
         let inv = AB::F::from_u32(1 << (RV64_CELL_BITS * 2)).inverse();
         let carry = (limbs_01 + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
@@ -551,7 +559,10 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
             adapter_row.rs1_aux_cols.as_mut(),
         );
 
-        adapter_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_u8);
+        let rs1_bytes = record.rs1_val.to_le_bytes();
+        adapter_row.rs1_data = std::array::from_fn(|i| {
+            F::from_u16(u16::from_le_bytes([rs1_bytes[2 * i], rs1_bytes[2 * i + 1]]))
+        });
         adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
 
         adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);

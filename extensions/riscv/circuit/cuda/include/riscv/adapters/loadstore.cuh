@@ -6,10 +6,14 @@
 
 using namespace riscv;
 
+/// Number of u16 cells holding the low 32 bits of an 8-byte register read in this adapter.
+constexpr size_t RS1_DATA_U16S = RV64_WORD_NUM_LIMBS / 2;
+
 template <typename T> struct Rv64LoadStoreAdapterCols {
     ExecutionState<T> from_state;
     T rs1_ptr;
-    T rs1_data[RV64_WORD_NUM_LIMBS];
+    /// Low 32 bits of the rs1 register, packed as 2 u16 cells (matches the memory bus payload).
+    T rs1_data[RS1_DATA_U16S];
     MemoryReadAuxCols<T> rs1_aux_cols;
 
     /// Will write to rd when Load and read from rs2 when Store
@@ -67,8 +71,14 @@ struct Rv64LoadStoreAdapter {
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, from_state.timestamp, record.from_timestamp);
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, rs1_ptr, record.rs1_ptr);
 
-        auto rs1_data = reinterpret_cast<uint8_t *>(&record.rs1_val);
-        COL_WRITE_ARRAY(row, Rv64LoadStoreAdapterCols, rs1_data, rs1_data);
+        auto rs1_bytes = reinterpret_cast<uint8_t *>(&record.rs1_val);
+        Fp rs1_data_packed[RS1_DATA_U16S];
+#pragma unroll
+        for (size_t i = 0; i < RS1_DATA_U16S; i++) {
+            rs1_data_packed[i] =
+                Fp(uint32_t(rs1_bytes[2 * i]) + 256u * uint32_t(rs1_bytes[2 * i + 1]));
+        }
+        COL_WRITE_ARRAY(row, Rv64LoadStoreAdapterCols, rs1_data, rs1_data_packed);
 
         bool needs_write = record.rd_rs2_ptr != UINT32_MAX;
 

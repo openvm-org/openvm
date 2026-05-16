@@ -424,7 +424,8 @@ fn run_negative_loadstore_test(
         let core_cols: &mut LoadStoreCoreCols<F, RV64_REGISTER_NUM_LIMBS> = core_row.borrow_mut();
 
         if let Some(rs1_data) = prank_vals.rs1_data {
-            adapter_cols.rs1_data = rs1_data.map(F::from_u32);
+            adapter_cols.rs1_data =
+                array::from_fn(|i| F::from_u32(rs1_data[2 * i] + 256 * rs1_data[2 * i + 1]));
         }
         if let Some(read_data) = prank_vals.read_data {
             core_cols.read_data = read_data.map(F::from_u32);
