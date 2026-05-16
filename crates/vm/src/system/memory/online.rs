@@ -450,8 +450,8 @@ impl GuestMemory {
     #[inline(always)]
     fn assert_byte_view_alignment(&self, addr_space: u32, byte_ptr: u32, n: usize) {
         let cell_size = self.memory.config[addr_space as usize].layout.size();
-        // Hard-asserted (not debug) — a misaligned `byte_ptr` would silently compute a
-        // wrong cell index in release builds.
+        // A misaligned `byte_ptr` would silently compute a wrong cell index in release
+        // builds, so this is asserted unconditionally.
         assert_eq!(
             (byte_ptr as usize) % cell_size,
             0,
@@ -689,9 +689,8 @@ impl TracingMemory {
             n_bytes, block_bytes,
             "TracingMemory byte-view supports only {block_bytes}-byte (= BLOCK_FE_WIDTH * cell_size) accesses; got {n_bytes}"
         );
-        // Mirror the cell-typed `assert_valid_access` alignment check — a misaligned
-        // `byte_ptr` would silently compute a wrong meta slot in release builds, so this
-        // stays a hard `assert_eq!`.
+        // A misaligned `byte_ptr` would silently compute a wrong meta slot in release
+        // builds, so this is asserted unconditionally.
         assert_eq!(
             byte_ptr as usize % block_bytes,
             0,

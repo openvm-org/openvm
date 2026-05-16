@@ -321,9 +321,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64MultWAdapterFiller {
         self.bitwise_lookup_chip
             .request_xor(record.result_word_msl as u32, 1u32 << (RV64_CELL_BITS - 1));
 
-        // Pack `rs2_high`/`rs1_high` into u16 cells *before* writing neighboring columns:
-        // adapter columns overlap record bytes (see `repr(C)` layout), so the closures must
-        // observe the record values prior to any adapter-column write that clobbers them.
+        // The u16-packed `rs{1,2}_high` columns overlap record bytes the closures below
+        // read; pack them up-front before any column write clobbers those bytes.
         let rs2_high_packed = array::from_fn(|i| {
             F::from_u16(u16::from_le_bytes([
                 record.rs2_high[2 * i],

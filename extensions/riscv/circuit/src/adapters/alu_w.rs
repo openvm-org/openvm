@@ -394,10 +394,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWAdapterFiller {
         self.bitwise_lookup_chip
             .request_xor(record.result_word_msl as u32, 1u32 << (RV64_CELL_BITS - 1));
 
-        // Write in reverse field order. The u16-packed `rs2_high` column overlaps with
-        // record bytes that include `record.rs2`/`record.rs2_as`/`record.result_sign`, so
-        // pack `rs2_high` *before* writing those neighboring columns. Same story for
-        // `rs1_high` vs. the upstream record bytes (`rs2`, `rs2_as`, …).
+        // The u16-packed `rs{1,2}_high` columns overlap record bytes the closures below
+        // read; pack them up-front before any column write clobbers those bytes.
         adapter_row.result_sign = F::from_u8(record.result_sign);
         let rs2_high_packed = array::from_fn(|i| {
             F::from_u16(u16::from_le_bytes([
