@@ -123,29 +123,6 @@ pub unsafe fn rv_execute(
     Ok(())
 }
 
-fn report_failure(prefix: &str, status: ExecutionStatus, pc: u32, instret: u64, exit_code: u8) {
-    if std::env::var_os("RVR_OPENVM_DEBUG_EXEC_FAILURE").is_some() {
-        eprintln!(
-            "[rvr-openvm] {prefix}: status={status:?}, pc={pc:#x}, instret={instret}, guest_exit_code={exit_code}"
-        );
-    }
-}
-
-fn execution_error(
-    prefix: &str,
-    status: ExecutionStatus,
-    pc: u32,
-    instret: u64,
-    exit_code: u8,
-) -> ExecuteError {
-    report_failure(prefix, status, pc, instret, exit_code);
-    if status == ExecutionStatus::Terminated && exit_code != 0 {
-        ExecuteError::GuestExit(exit_code)
-    } else {
-        ExecuteError::ExecutionFailed(status as i32)
-    }
-}
-
 /// Run the FFI execute against `vm_state` + `state`, validate the outcome,
 /// and on success write the final pc/regs back into `vm_state`.
 ///
@@ -157,7 +134,6 @@ fn run_and_finalize<F, T, S>(
     vm_state: &mut VmState<F, GuestMemory>,
     state: &mut RvState<Rv32, T, S>,
     allow_suspended: bool,
-    failure_prefix: &str,
 ) -> Result<ExecutionStatus, ExecuteError>
 where
     F: PrimeField32,
@@ -173,24 +149,23 @@ where
     }
 
     let status = state.execution_status();
-    let success = match status {
-        ExecutionStatus::Terminated => state.result_code() == 0,
-        ExecutionStatus::Suspended => allow_suspended,
-        ExecutionStatus::Running | ExecutionStatus::Trapped => false,
-    };
-
-    if success {
-        write_rv32_registers(vm_state, &state.regs);
-        vm_state.set_pc(state.pc);
-        Ok(status)
-    } else {
-        Err(execution_error(
-            failure_prefix,
-            status,
-            state.pc,
-            state.instret,
-            state.result_code(),
-        ))
+    let exit_code = state.result_code();
+    match status {
+        ExecutionStatus::Terminated if exit_code == 0 => {
+            write_rv32_registers(vm_state, &state.regs);
+            vm_state.set_pc(state.pc);
+            Ok(status)
+        }
+        ExecutionStatus::Suspended if allow_suspended => {
+            write_rv32_registers(vm_state, &state.regs);
+            vm_state.set_pc(state.pc);
+            Ok(status)
+        }
+        _ => Err(if status == ExecutionStatus::Terminated {
+            ExecuteError::GuestExit(exit_code)
+        } else {
+            ExecuteError::ExecutionFailed(status as i32)
+        }),
     }
 }
 
@@ -224,8 +199,8 @@ pub fn execute<F: PrimeField32>(
         vm_state,
         &mut state,
         num_insns.is_some(),
-        "execution failed",
-    )?;
+    )
+    .inspect_err(|e| eprintln!("rvr pure execution failed: {e}"))?;
     Ok(RvrPureResult {
         state,
         suspended: status == ExecutionStatus::Suspended,
@@ -251,14 +226,8 @@ pub fn execute_metered_cost<F: PrimeField32>(
     state.tracer.chip_widths = widths_u64.as_ptr();
     state.tracer.cost = 0;
 
-    run_and_finalize(
-        compiled,
-        extensions,
-        vm_state,
-        &mut state,
-        false,
-        "metered-cost execution failed",
-    )?;
+    run_and_finalize(compiled, extensions, vm_state, &mut state, false)
+        .inspect_err(|e| eprintln!("rvr metered-cost execution failed: {e}"))?;
     let cost = state.tracer.cost;
     Ok(RvrMeteredCostResult { state, cost })
 }
@@ -291,14 +260,8 @@ pub fn execute_metered<F: PrimeField32>(
     state.tracer.on_check = Some(metered_periodic_check);
     state.tracer.seg_state = &mut seg_state as *mut SegmentationState as *mut c_void;
 
-    run_and_finalize(
-        compiled,
-        extensions,
-        vm_state,
-        &mut state,
-        false,
-        "metered execution failed",
-    )?;
+    run_and_finalize(compiled, extensions, vm_state, &mut state, false)
+        .inspect_err(|e| eprintln!("rvr metered execution failed: {e}"))?;
 
     seg_state.on_termination(
         state.tracer.mem_page_buf_len,
