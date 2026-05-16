@@ -40,6 +40,8 @@ inline constexpr size_t U16_CELL_SIZE = 2;
 
 inline constexpr uint32_t DEFERRAL_AS = 4;
 
+static_assert((MEMORY_BLOCK_BYTES & (MEMORY_BLOCK_BYTES - 1)) == 0, "MEMORY_BLOCK_BYTES must be a power of two");
 static_assert(BLOCK_FE_WIDTH * BUS_PTR_SCALE == MEMORY_BLOCK_BYTES, "memory layout invariant");
 static_assert(BLOCK_FE_WIDTH * U16_CELL_SIZE == MEMORY_BLOCK_BYTES, "u16 byte-view invariant");
+static_assert(POSEIDON2_WIDTH == 2 * DIGEST_WIDTH, "POSEIDON2_WIDTH must be 2 * DIGEST_WIDTH");
 static_assert(BLOCKS_PER_LEAF * BLOCK_FE_WIDTH == DIGEST_WIDTH, "merkle layout invariant");

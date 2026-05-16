@@ -156,6 +156,10 @@ const _: () = assert!(
     "BUS_PTR_SCALE must be a power of two"
 );
 const _: () = assert!(
+    MEMORY_BLOCK_BYTES.is_power_of_two(),
+    "MEMORY_BLOCK_BYTES must be a power of two so byte-pointer / block-index arithmetic uses a shift"
+);
+const _: () = assert!(
     MEMORY_BLOCK_BYTES.is_multiple_of(BUS_PTR_SCALE),
     "MEMORY_BLOCK_BYTES must be divisible by BUS_PTR_SCALE so BLOCK_FE_WIDTH is integer-valued"
 );

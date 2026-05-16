@@ -99,9 +99,9 @@ template <typename T> struct DeferralOutputCols {
     CanonicityAuxCols<T> output_commit_lt_aux[DIGEST_SIZE];
 
     // Poseidon2 rate cells. On the first row this is `[deferral_idx,
-    // output_len_lo_u16, output_len_hi_u16, 0, ...]`. On non-first rows each
-    // cell holds a little-endian-packed pair of guest output bytes so each row
-    // absorbs `SPONGE_BYTES_PER_ROW = 2 * DIGEST_SIZE` bytes.
+    // output_len_as_F, 0, ...]`. On non-first rows each cell holds a
+    // little-endian-packed pair of guest output bytes so each row absorbs
+    // `SPONGE_BYTES_PER_ROW = 2 * DIGEST_SIZE` bytes.
     T sponge_inputs[DIGEST_SIZE];
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_bytes_aux[SPONGE_ROW_MEMORY_OPS];
 

@@ -78,9 +78,9 @@ pub struct DeferralOutputCols<T> {
     pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
 
     // Poseidon2 rate cells. On the first row this is `[deferral_idx,
-    // output_len_lo_u16, output_len_hi_u16, 0, ...]`. On non-first rows each
-    // cell holds a little-endian-packed pair of guest output bytes so a single
-    // sponge absorb covers `SPONGE_BYTES_PER_ROW = 2 * DIGEST_SIZE` bytes.
+    // output_len_as_F, 0, ...]`. On non-first rows each cell holds a
+    // little-endian-packed pair of guest output bytes so a single sponge
+    // absorb covers `SPONGE_BYTES_PER_ROW = 2 * DIGEST_SIZE` bytes.
     pub sponge_inputs: [T; DIGEST_SIZE],
     pub write_bytes_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; SPONGE_ROW_MEMORY_OPS],
 
@@ -230,7 +230,7 @@ where
             .eval(builder, local.is_first);
 
         // The final state should be output_commit, and output_len must be the final
-        // section_idx * DIGEST_SIZE.
+        // section_idx * SPONGE_BYTES_PER_ROW.
         let mut when_last = builder.when(local.is_last);
 
         when_last.assert_eq(

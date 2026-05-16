@@ -483,29 +483,17 @@ mod tests {
                     MemoryCellType::Null => {}
                     MemoryCellType::U8 => {
                         for i in 0..space.num_cells {
-                            initial_memory.write::<u8, 1>(
-                                idx as u32,
-                                i as u32,
-                                [rng.random_range(0..space.layout.size()) as u8],
-                            );
+                            initial_memory.write::<u8, 1>(idx as u32, i as u32, [rng.random()]);
                         }
                     }
                     MemoryCellType::U16 => {
                         for i in 0..space.num_cells {
-                            initial_memory.write::<u16, 1>(
-                                idx as u32,
-                                i as u32,
-                                [rng.random_range(0..space.layout.size()) as u16],
-                            );
+                            initial_memory.write::<u16, 1>(idx as u32, i as u32, [rng.random()]);
                         }
                     }
                     MemoryCellType::U32 => {
                         for i in 0..space.num_cells {
-                            initial_memory.write::<u32, 1>(
-                                idx as u32,
-                                i as u32,
-                                [rng.random_range(0..space.layout.size()) as u32],
-                            );
+                            initial_memory.write::<u32, 1>(idx as u32, i as u32, [rng.random()]);
                         }
                     }
                     MemoryCellType::F { .. } => {

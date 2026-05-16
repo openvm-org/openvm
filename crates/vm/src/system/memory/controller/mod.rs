@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use self::interface::MemoryInterface;
 use super::AddressMap;
 use crate::{
-    arch::{MemoryConfig, VmField, BLOCK_FE_WIDTH, BUS_PTR_SCALE},
+    arch::{MemoryConfig, VmField, BLOCK_FE_WIDTH, BUS_PTR_SCALE, POSEIDON2_WIDTH},
     system::{
         memory::{
             merkle::MemoryMerkleChip,
@@ -41,6 +41,10 @@ pub const DIGEST_WIDTH: usize = 8;
 /// Bus-pointer delta between consecutive merkle leaves.
 pub const BUS_LEAF_STRIDE: usize = BUS_PTR_SCALE * DIGEST_WIDTH;
 
+const _: () = assert!(
+    POSEIDON2_WIDTH == 2 * DIGEST_WIDTH,
+    "POSEIDON2_WIDTH must be 2 * DIGEST_WIDTH for the merkle compression layout"
+);
 const _: () = assert!(
     DIGEST_WIDTH.is_multiple_of(BLOCK_FE_WIDTH),
     "DIGEST_WIDTH must be divisible by BLOCK_FE_WIDTH so BLOCKS_PER_LEAF is integer-valued"

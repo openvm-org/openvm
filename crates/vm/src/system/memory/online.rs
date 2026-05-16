@@ -430,23 +430,6 @@ impl GuestMemory {
             .write(byte_ptr as usize, values);
     }
 
-    /// Non-traced single-byte extraction for tests / SDK / public-values /
-    /// state-comparison utilities that need to read individual bytes from
-    /// packed-cell storage without creating any memory-bus record. Does NOT
-    /// participate in tracegen.
-    ///
-    /// # Safety
-    /// `byte_ptr` must be within the AS's storage.
-    #[inline(always)]
-    pub unsafe fn extract_byte(&self, addr_space: u32, byte_ptr: u32) -> u8 {
-        let cell: [u8; 1] = self
-            .memory
-            .get_memory()
-            .get_unchecked(addr_space as usize)
-            .read(byte_ptr as usize);
-        cell[0]
-    }
-
     #[inline(always)]
     fn assert_byte_view_alignment(&self, addr_space: u32, byte_ptr: u32, n: usize) {
         // Misalignment silently corrupts the cell index in release builds.
