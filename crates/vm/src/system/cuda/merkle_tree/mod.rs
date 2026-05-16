@@ -422,9 +422,7 @@ mod tests {
     use std::sync::Arc;
 
     use openvm_circuit::{
-        arch::{
-            vm_poseidon2_config, MemoryCellType, MemoryConfig, BUS_PTR_SCALE, U16_CELL_SIZE,
-        },
+        arch::{vm_poseidon2_config, MemoryCellType, MemoryConfig, BUS_PTR_SCALE, U16_CELL_SIZE},
         system::{
             cuda::merkle_tree::MERKLE_TOUCHED_BLOCK_WIDTH,
             memory::{
