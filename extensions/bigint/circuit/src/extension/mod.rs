@@ -208,7 +208,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
             crate::LtAluU16AdapterAir::new(Rv64VecHeapU16AdapterAir::new(
                 exec_bridge,
                 memory_bridge,
-                bitwise_lu,
+                range_checker,
                 pointer_max_bits,
             )),
             LessThanCoreAir::new(range_checker, Rv64LessThan256Opcode::CLASS_OFFSET),
@@ -337,7 +337,7 @@ where
         inventory.next_air::<Rv64LessThan256Air>()?;
         let lt = Rv64LessThan256Chip::new(
             LessThanFiller::new(
-                Rv64VecHeapU16AdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                Rv64VecHeapU16AdapterFiller::new(pointer_max_bits, range_checker.clone()),
                 range_checker.clone(),
                 Rv64LessThan256Opcode::CLASS_OFFSET,
             ),

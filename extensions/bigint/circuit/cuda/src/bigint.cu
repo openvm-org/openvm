@@ -231,7 +231,6 @@ __global__ void less_than256_tracegen(
         Rv64VecHeapU16Adapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);

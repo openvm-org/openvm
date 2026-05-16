@@ -120,7 +120,7 @@ fn create_alu_harness_fields(
 fn create_lt_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    _bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
@@ -133,7 +133,7 @@ fn create_lt_harness_fields(
         crate::LtAluU16AdapterAir::new(openvm_riscv_adapters::Rv64VecHeapU16AdapterAir::new(
             execution_bridge,
             memory_bridge,
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             address_bits,
         )),
         LessThanCoreAir::new(
@@ -151,7 +151,7 @@ fn create_lt_harness_fields(
         LessThanFiller::new(
             openvm_riscv_adapters::Rv64VecHeapU16AdapterFiller::new(
                 address_bits,
-                bitwise_chip.clone(),
+                range_checker_chip.clone(),
             ),
             range_checker_chip,
             Rv64LessThan256Opcode::CLASS_OFFSET,

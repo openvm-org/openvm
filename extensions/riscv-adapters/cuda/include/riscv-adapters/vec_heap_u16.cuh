@@ -8,6 +8,9 @@
 
 using namespace riscv;
 
+/// Number of u16 cells holding the low 32 bits of a register pointer.
+constexpr size_t REG_PTR_U16S_U16 = RV64_WORD_NUM_LIMBS / 2;
+
 template <
     typename T,
     size_t NUM_READS,
@@ -21,8 +24,10 @@ struct Rv64VecHeapU16AdapterCols {
     T rs_ptr[NUM_READS];
     T rd_ptr;
 
-    T rs_val[NUM_READS][RV64_WORD_NUM_LIMBS];
-    T rd_val[RV64_WORD_NUM_LIMBS];
+    /// Low 32 bits of rs registers, packed as 2 u16 cells.
+    T rs_val[NUM_READS][REG_PTR_U16S_U16];
+    /// Low 32 bits of rd register, packed as 2 u16 cells.
+    T rd_val[REG_PTR_U16S_U16];
 
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
     MemoryReadAuxCols<T> rd_read_aux;
@@ -67,19 +72,18 @@ template <
     size_t WRITE_SIZE>
 struct Rv64VecHeapU16Adapter {
     size_t pointer_max_bits;
-    BitwiseOperationLookup bitwise_lookup;
+    VariableRangeChecker range_checker;
     MemoryAuxColsFactory mem_helper;
 
-    static constexpr size_t RV64_WORD_TOTAL_BITS = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS;
-    static constexpr size_t MSL_SHIFT = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
+    static constexpr size_t U16_BITS = RV64_CELL_BITS * 2;
+    static constexpr size_t RV64_WORD_TOTAL_BITS = U16_BITS * 2;
 
     __device__ Rv64VecHeapU16Adapter(
         size_t pointer_max_bits,
         VariableRangeChecker range_checker,
-        BitwiseOperationLookup bitwise_lookup,
         uint32_t timestamp_max_bits
     )
-        : pointer_max_bits(pointer_max_bits), bitwise_lookup(bitwise_lookup),
+        : pointer_max_bits(pointer_max_bits), range_checker(range_checker),
           mem_helper(range_checker, timestamp_max_bits) {}
 
     template <typename T>
@@ -100,25 +104,14 @@ struct Rv64VecHeapU16Adapter {
             READ_SIZE,
             WRITE_SIZE> record
     ) {
+        // Range-check the high u16 of each register pointer: `(reg >> 16) << shift_bits < 2^16`.
         const size_t limb_shift_bits = RV64_WORD_TOTAL_BITS - pointer_max_bits;
-
-        if (NUM_READS == 2) {
-            bitwise_lookup.add_range(
-                (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
-                (record.rs_vals[1] >> MSL_SHIFT) << limb_shift_bits
+        for (size_t i = 0; i < NUM_READS; i++) {
+            range_checker.add_count(
+                (record.rs_vals[i] >> U16_BITS) << limb_shift_bits, U16_BITS
             );
-            bitwise_lookup.add_range(
-                (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
-                (record.rd_val >> MSL_SHIFT) << limb_shift_bits
-            );
-        } else if (NUM_READS == 1) {
-            bitwise_lookup.add_range(
-                (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
-                (record.rd_val >> MSL_SHIFT) << limb_shift_bits
-            );
-        } else {
-            assert(false);
         }
+        range_checker.add_count((record.rd_val >> U16_BITS) << limb_shift_bits, U16_BITS);
 
         uint32_t timestamp =
             record.from_timestamp + NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;
@@ -167,10 +160,21 @@ struct Rv64VecHeapU16Adapter {
             );
         }
 
-        COL_WRITE_ARRAY(row, Cols, rd_val, (uint8_t *)&record.rd_val);
+        auto pack_u16s = [](uint32_t v, Fp out[REG_PTR_U16S_U16]) {
+            auto bytes = reinterpret_cast<uint8_t *>(&v);
+#pragma unroll
+            for (size_t k = 0; k < REG_PTR_U16S_U16; k++) {
+                out[k] = Fp(uint32_t(bytes[2 * k]) + 256u * uint32_t(bytes[2 * k + 1]));
+            }
+        };
+        Fp rd_val_packed[REG_PTR_U16S_U16];
+        pack_u16s(record.rd_val, rd_val_packed);
+        COL_WRITE_ARRAY(row, Cols, rd_val, rd_val_packed);
 
         for (int i = NUM_READS - 1; i >= 0; i--) {
-            COL_WRITE_ARRAY(row, Cols, rs_val[i], (uint8_t *)&record.rs_vals[i]);
+            Fp rs_val_packed[REG_PTR_U16S_U16];
+            pack_u16s(record.rs_vals[i], rs_val_packed);
+            COL_WRITE_ARRAY(row, Cols, rs_val[i], rs_val_packed);
         }
 
         COL_WRITE_VALUE(row, Cols, rd_ptr, record.rd_ptr);
