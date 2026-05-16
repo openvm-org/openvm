@@ -254,11 +254,12 @@ fn create_beq_harness_fields(
     Rv64BranchEqual256Executor,
     Rv64BranchEqual256Chip<F>,
 ) {
+    let _ = bitwise_chip;
     let air = Rv64BranchEqual256Air::new(
         BranchAdapterAir::new(Rv64VecHeapBranchAdapterAir::new(
             execution_bridge,
             memory_bridge,
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             address_bits,
         )),
         BranchEqualCoreAir::new(
@@ -274,7 +275,7 @@ fn create_beq_harness_fields(
     );
     let chip = Rv64BranchEqual256Chip::new(
         BranchEqualFiller::new(
-            Rv64VecHeapBranchAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            Rv64VecHeapBranchAdapterFiller::new(address_bits, range_checker_chip.clone()),
             range_checker_chip,
             Rv64BranchEqual256Opcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
@@ -297,11 +298,12 @@ fn create_blt_harness_fields(
     Rv64BranchLessThan256Executor,
     Rv64BranchLessThan256Chip<F>,
 ) {
+    let _ = bitwise_chip;
     let air = Rv64BranchLessThan256Air::new(
         BranchAdapterAir::new(Rv64VecHeapBranchAdapterAir::new(
             execution_bridge,
             memory_bridge,
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             address_bits,
         )),
         BranchLessThanCoreAir::new(
@@ -315,7 +317,7 @@ fn create_blt_harness_fields(
     );
     let chip = Rv64BranchLessThan256Chip::new(
         BranchLessThanFiller::new(
-            Rv64VecHeapBranchAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            Rv64VecHeapBranchAdapterFiller::new(address_bits, range_checker_chip.clone()),
             range_checker_chip,
             Rv64BranchLessThan256Opcode::CLASS_OFFSET,
         ),

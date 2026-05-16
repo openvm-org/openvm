@@ -219,7 +219,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
             BranchAdapterAir::new(Rv64VecHeapBranchAdapterAir::new(
                 exec_bridge,
                 memory_bridge,
-                bitwise_lu,
+                range_checker,
                 pointer_max_bits,
             )),
             BranchEqualCoreAir::new(
@@ -234,7 +234,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
             BranchAdapterAir::new(Rv64VecHeapBranchAdapterAir::new(
                 exec_bridge,
                 memory_bridge,
-                bitwise_lu,
+                range_checker,
                 pointer_max_bits,
             )),
             BranchLessThanCoreAir::new(range_checker, Rv64BranchLessThan256Opcode::CLASS_OFFSET),
@@ -348,7 +348,7 @@ where
         inventory.next_air::<Rv64BranchEqual256Air>()?;
         let beq = Rv64BranchEqual256Chip::new(
             BranchEqualFiller::new(
-                Rv64VecHeapBranchAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                Rv64VecHeapBranchAdapterFiller::new(pointer_max_bits, range_checker.clone()),
                 range_checker.clone(),
                 Rv64BranchEqual256Opcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
@@ -360,7 +360,7 @@ where
         inventory.next_air::<Rv64BranchLessThan256Air>()?;
         let blt = Rv64BranchLessThan256Chip::new(
             BranchLessThanFiller::new(
-                Rv64VecHeapBranchAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                Rv64VecHeapBranchAdapterFiller::new(pointer_max_bits, range_checker.clone()),
                 range_checker.clone(),
                 Rv64BranchLessThan256Opcode::CLASS_OFFSET,
             ),
