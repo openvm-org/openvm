@@ -71,18 +71,13 @@ pub fn get_fp2_addsub_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
-    bitwise_lookup_bus: BitwiseOperationLookupBus,
+    _bitwise_lookup_bus: BitwiseOperationLookupBus,
     pointer_max_bits: usize,
     offset: usize,
 ) -> Fp2Air<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
     Fp2Air::new(
-        Rv64VecHeapAdapterAir::new(
-            exec_bridge,
-            mem_bridge,
-            bitwise_lookup_bus,
-            pointer_max_bits,
-        ),
+        Rv64VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
         FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx),
     )
 }
@@ -110,13 +105,13 @@ pub fn get_fp2_addsub_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    _bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     pointer_max_bits: usize,
 ) -> Fp2Chip<F, BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
     Fp2Chip::new(
         FieldExpressionFiller::new(
-            Rv64VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
+            Rv64VecHeapAdapterFiller::new(pointer_max_bits, range_checker.clone()),
             expr,
             local_opcode_idx,
             opcode_flag_idx,

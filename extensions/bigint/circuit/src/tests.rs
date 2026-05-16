@@ -79,10 +79,12 @@ const RANGE_TUPLE_SIZES: [u32; 2] = [
     (INT256_NUM_LIMBS * (1 << RV64_CELL_BITS)) as u32,
 ];
 
+#[allow(clippy::too_many_arguments)]
 fn create_alu_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -94,7 +96,7 @@ fn create_alu_harness_fields(
         AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
             execution_bridge,
             memory_bridge,
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             address_bits,
         )),
         BaseAluCoreAir::new(bitwise_chip.bus(), Rv64BaseAlu256Opcode::CLASS_OFFSET),
@@ -105,7 +107,7 @@ fn create_alu_harness_fields(
     );
     let chip = Rv64BaseAlu256Chip::new(
         BaseAluFiller::new(
-            Rv64VecHeapAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            Rv64VecHeapAdapterFiller::new(address_bits, range_checker_chip),
             bitwise_chip,
             Rv64BaseAlu256Opcode::CLASS_OFFSET,
         ),
@@ -159,11 +161,13 @@ fn create_lt_harness_fields(
     (air, executor, chip)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_mul_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -175,7 +179,7 @@ fn create_mul_harness_fields(
         AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
             execution_bridge,
             memory_bridge,
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             address_bits,
         )),
         MultiplicationCoreAir::new(
@@ -190,7 +194,7 @@ fn create_mul_harness_fields(
     );
     let chip = Rv64Multiplication256Chip::<F>::new(
         MultiplicationFiller::new(
-            Rv64VecHeapAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            Rv64VecHeapAdapterFiller::new(address_bits, range_checker_chip),
             range_tuple_chip,
             bitwise_chip,
             Rv64Mul256Opcode::CLASS_OFFSET,
@@ -212,7 +216,7 @@ fn create_shift_harness_fields(
         AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
             execution_bridge,
             memory_bridge,
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             address_bits,
         )),
         ShiftCoreAir::new(
@@ -227,7 +231,7 @@ fn create_shift_harness_fields(
     );
     let chip = Rv64Shift256Chip::new(
         ShiftFiller::new(
-            Rv64VecHeapAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            Rv64VecHeapAdapterFiller::new(address_bits, range_checker_chip.clone()),
             bitwise_chip.clone(),
             range_checker_chip.clone(),
             Rv64Shift256Opcode::CLASS_OFFSET,
@@ -410,6 +414,7 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
         tester.memory_bridge(),
         tester.execution_bridge(),
         bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -492,6 +497,7 @@ fn run_mul_256_rand_test(opcode: MulOpcode, num_ops: usize) {
         tester.execution_bridge(),
         bitwise_chip.clone(),
         range_tuple_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -661,6 +667,7 @@ fn run_alu_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
         tester.memory_bridge(),
         tester.execution_bridge(),
         dummy_bitwise_chip,
+        tester.range_checker(),
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
@@ -791,6 +798,7 @@ fn run_mul_256_rand_test_cuda(opcode: MulOpcode, num_ops: usize) {
         tester.execution_bridge(),
         dummy_bitwise_chip,
         dummy_range_tuple_chip,
+        tester.range_checker(),
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
