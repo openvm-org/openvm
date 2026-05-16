@@ -38,12 +38,21 @@ static __device__ __forceinline__ void sha2_main_row_body(
         VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
 
-    // Block cols
+    // Block cols.
+    // `message_u16s`, `prev_state`, `new_state` are all u16-shaped: pack each pair of
+    // consecutive bytes into one cell.
     SHA2_MAIN_WRITE_BLOCK(V, row, request_id, Fp(row_idx));
-    SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, message_bytes, record.message_bytes);
-    // Both `prev_state` and `new_state` are u16-shaped: pack each pair of consecutive bytes
-    // into one cell.
     {
+        Fp message_u16s[V::BLOCK_U16S];
+#pragma unroll
+        for (size_t k = 0; k < V::BLOCK_U16S; k++) {
+            message_u16s[k] = Fp(
+                static_cast<uint32_t>(record.message_bytes[2 * k])
+                | (static_cast<uint32_t>(record.message_bytes[2 * k + 1]) << 8)
+            );
+        }
+        SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, message_u16s, message_u16s);
+
         Fp prev_state_u16s[V::STATE_U16S];
         Fp new_state_u16s[V::STATE_U16S];
 #pragma unroll

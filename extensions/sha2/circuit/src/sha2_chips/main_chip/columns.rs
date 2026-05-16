@@ -10,9 +10,14 @@ use crate::{Sha2MainChipConfig, SHA2_REGISTER_READS, SHA2_WRITE_SIZE};
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
 #[config(Sha2MainChipConfig)]
-pub struct Sha2Cols<T, const BLOCK_BYTES: usize, const STATE_BYTES: usize, const STATE_U16S: usize>
-{
-    pub block: Sha2BlockCols<T, BLOCK_BYTES, STATE_BYTES, STATE_U16S>,
+pub struct Sha2Cols<
+    T,
+    const BLOCK_BYTES: usize,
+    const BLOCK_U16S: usize,
+    const STATE_BYTES: usize,
+    const STATE_U16S: usize,
+> {
+    pub block: Sha2BlockCols<T, BLOCK_U16S, STATE_U16S>,
     pub instruction: Sha2InstructionCols<T>,
     pub mem: Sha2MemoryCols<T, BLOCK_BYTES, STATE_BYTES, SHA2_WRITE_SIZE>,
 }
@@ -20,16 +25,14 @@ pub struct Sha2Cols<T, const BLOCK_BYTES: usize, const STATE_BYTES: usize, const
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
 #[config(Sha2MainChipConfig)]
-pub struct Sha2BlockCols<
-    T,
-    const BLOCK_BYTES: usize,
-    const STATE_BYTES: usize,
-    const STATE_U16S: usize,
-> {
+pub struct Sha2BlockCols<T, const BLOCK_U16S: usize, const STATE_U16S: usize> {
     /// Identifier of this row in the interactions between the two chips
     pub request_id: T,
-    /// Input bytes for this block
-    pub message_bytes: [T; BLOCK_BYTES],
+    /// Input bytes for this block, packed as little-endian 16-bit cells (one cell per byte
+    /// pair, `lo | hi << 8`). The memory bus and sha2 bus both consume these cells directly,
+    /// so the individual bytes are never observed by the constraint system — there is no
+    /// information loss vs. the byte-shaped layout.
+    pub message_u16s: [T; BLOCK_U16S],
     /// Previous state of the SHA-2 hasher object, as little-endian 16-bit cells. Each cell
     /// holds two consecutive bytes packed `lo | hi << 8` to match the bus interaction with the
     /// block hasher and the underlying u16-celled memory.

@@ -156,26 +156,17 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             *local.instruction.is_enabled,
         );
 
-        // Pack consecutive byte pairs into u16 cells (`cell = byte[2k] + 256 * byte[2k+1]`),
-        // halving the sha2 bus payload width. The same pairing is used on the receiver, and
-        // matches the `pack_u8_for_bus` memory pack, so individual bytes are never observed
-        // outside of their packed-pair form.
-        let pack_pair = |i: usize| -> AB::Expr {
-            let lo: AB::Expr = (*local
+        // `message_u16s` is u16-shaped; the sha2 bus payload uses these cells directly. Split
+        // the column in half: MESSAGE_1 sends the first half, MESSAGE_2 the second half.
+        let half_u16s = C::BLOCK_U16S / 2;
+        let message_cell = |k: usize| -> AB::Expr {
+            (*local
                 .block
-                .message_bytes
-                .get(i)
-                .expect("message_bytes index out of bounds"))
-            .into();
-            let hi: AB::Expr = (*local
-                .block
-                .message_bytes
-                .get(i + 1)
-                .expect("message_bytes index out of bounds"))
-            .into();
-            lo + AB::Expr::from_u16(256) * hi
+                .message_u16s
+                .get(k)
+                .expect("message_u16s index out of bounds"))
+            .into()
         };
-        let half = C::BLOCK_BYTES / 2;
 
         // Send (MESSAGE_1, request_id, first_half_of_message_as_u16s) to the sha2 bus
         self.sha2_bus.send(
@@ -185,7 +176,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 (*local.block.request_id).into(),
             ]
             .into_iter()
-            .chain((0..half / 2).map(|k| pack_pair(2 * k))),
+            .chain((0..half_u16s).map(message_cell)),
             *local.instruction.is_enabled,
         );
 
@@ -197,7 +188,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 (*local.block.request_id).into(),
             ]
             .into_iter()
-            .chain((0..half / 2).map(|k| pack_pair(half + 2 * k))),
+            .chain((0..half_u16s).map(|k| message_cell(half_u16s + k))),
             *local.instruction.is_enabled,
         );
     }
@@ -281,24 +272,25 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .to_vec(),
             RV64_CELL_BITS,
         );
+        // `message_u16s` is u16-shaped: each `SHA2_READ_SIZE` (8-byte) memory read consumes
+        // `BLOCK_FE_WIDTH` u16 cells. The bus payload is those cells directly (no byte→u16
+        // packing helper needed).
         for i in 0..C::BLOCK_READS {
-            let chunk: [AB::Var; SHA2_READ_SIZE] = local
-                .block
-                .message_bytes
-                .slice(s![i * SHA2_READ_SIZE..(i + 1) * SHA2_READ_SIZE])
-                .to_vec()
-                .try_into()
-                .unwrap_or_else(|_| {
-                    panic!("message bytes is not the correct size");
-                });
-            let chunk_expr: [AB::Expr; SHA2_READ_SIZE] = chunk.map(Into::into);
+            let chunk: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|j| {
+                (*local
+                    .block
+                    .message_u16s
+                    .get(i * BLOCK_FE_WIDTH + j)
+                    .expect("message_u16s index out of bounds"))
+                .into()
+            });
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_MEMORY_AS),
                         input_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
                     ),
-                    pack_u8_for_bus::<AB>(&chunk_expr),
+                    chunk,
                     timestamp_pp(),
                     &local.mem.input_reads[i],
                 )

@@ -144,24 +144,17 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
         let mut cols = Sha2ColsRefMut::from::<C>(row_slice);
 
         *cols.block.request_id = F::from_usize(row_idx);
-        set_arrayview_from_u8_slice(&mut cols.block.message_bytes, message_bytes);
-        // Pack byte-pairs into u16-shaped `prev_state` and `new_state` columns.
-        let prev_state_u16s = prev_state
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]));
-        cols.block
-            .prev_state
-            .iter_mut()
-            .zip(prev_state_u16s)
-            .for_each(|(slot, v)| *slot = F::from_u16(v));
-        let new_state_u16s = new_state
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]));
-        cols.block
-            .new_state
-            .iter_mut()
-            .zip(new_state_u16s)
-            .for_each(|(slot, v)| *slot = F::from_u16(v));
+        // Pack byte-pairs into u16 cells for `message_u16s`, `prev_state`, and `new_state`.
+        for (cells, bytes) in [
+            (&mut cols.block.message_u16s, message_bytes.as_slice()),
+            (&mut cols.block.prev_state, prev_state.as_slice()),
+            (&mut cols.block.new_state, new_state.as_slice()),
+        ] {
+            cells
+                .iter_mut()
+                .zip(bytes.chunks_exact(2))
+                .for_each(|(slot, c)| *slot = F::from_u16(u16::from_le_bytes([c[0], c[1]])));
+        }
 
         *cols.instruction.is_enabled = F::ONE;
         cols.instruction.from_state.timestamp = F::from_u32(vm_record.timestamp);

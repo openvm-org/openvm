@@ -13,9 +13,9 @@ namespace sha2 {
 
 template <typename V, typename T> struct Sha2MainBlockCols {
     T request_id;
-    T message_bytes[V::BLOCK_U8S];
-    // Both `prev_state` and `new_state` are u16-shaped (one u16 cell per byte pair), matching
-    // the receiver-side `prev_hash` / `final_hash` shapes.
+    // `message_u16s`, `prev_state`, and `new_state` are all u16-shaped (one u16 cell per byte
+    // pair), matching the memory bus and the receiver-side `prev_hash` / `final_hash` shapes.
+    T message_u16s[V::BLOCK_U16S];
     T prev_state[V::STATE_U16S];
     T new_state[V::STATE_U16S];
 };
