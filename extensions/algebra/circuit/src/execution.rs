@@ -29,7 +29,6 @@ macro_rules! generate_field_dispatch {
         $field_type:expr,
         $op:expr,
         $blocks:expr,
-        $block_size:expr,
         $execute_fn:ident,
         [$(($curve:ident, $operation:ident)),* $(,)?]
     ) => {
@@ -39,7 +38,6 @@ macro_rules! generate_field_dispatch {
                     _,
                     _,
                     $blocks,
-                    $block_size,
                     false,
                     { FieldType::$curve as u8 },
                     { Operation::$operation as u8 },
@@ -54,7 +52,6 @@ macro_rules! generate_fp2_dispatch {
         $field_type:expr,
         $op:expr,
         $blocks:expr,
-        $block_size:expr,
         $execute_fn:ident,
         [$(($curve:ident, $operation:ident)),* $(,)?]
     ) => {
@@ -64,7 +61,6 @@ macro_rules! generate_fp2_dispatch {
                     _,
                     _,
                     $blocks,
-                    $block_size,
                     true,
                     { FieldType::$curve as u8 },
                     { Operation::$operation as u8 },
@@ -85,7 +81,6 @@ macro_rules! dispatch {
                         field_type,
                         op,
                         BLOCKS,
-                        BLOCK_SIZE,
                         $execute_impl,
                         [
                             (BN254Coordinate, Add),
@@ -99,14 +94,13 @@ macro_rules! dispatch {
                         ]
                     )
                 } else {
-                    Ok($execute_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+                    Ok($execute_generic_impl::<_, _, BLOCKS, IS_FP2>)
                 }
             } else if let Some(field_type) = get_field_type(modulus) {
                 generate_field_dispatch!(
                     field_type,
                     op,
                     BLOCKS,
-                    BLOCK_SIZE,
                     $execute_impl,
                     [
                         (K256Coordinate, Add),
@@ -144,10 +138,10 @@ macro_rules! dispatch {
                     ]
                 )
             } else {
-                Ok($execute_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+                Ok($execute_generic_impl::<_, _, BLOCKS, IS_FP2>)
             }
         } else {
-            Ok($execute_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+            Ok($execute_setup_impl::<_, _, BLOCKS, IS_FP2>)
         }
     };
 }
@@ -161,9 +155,7 @@ struct FieldExpressionPreCompute<'a> {
     flag_idx: u8,
 }
 
-impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
-{
+impl<'a, const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCKS, IS_FP2> {
     fn pre_compute_impl<F: PrimeField32>(
         &'a self,
         pc: u32,
@@ -252,8 +244,8 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    InterpreterExecutor<F> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
+impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterExecutor<F>
+    for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
@@ -306,13 +298,13 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    AotExecutor<F> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
+impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> AotExecutor<F>
+    for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
 {
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    InterpreterMeteredExecutor<F> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
+impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterMeteredExecutor<F>
+    for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
@@ -373,8 +365,8 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    AotMeteredExecutor<F> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
+impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> AotMeteredExecutor<F>
+    for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
 {
 }
 
@@ -383,7 +375,6 @@ unsafe fn execute_e12_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
     const IS_FP2: bool,
     const FIELD_TYPE: u8,
     const OP: u8,
@@ -395,22 +386,26 @@ unsafe fn execute_e12_impl<
         .rs_addrs
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
 
-    let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
-        debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
-        from_fn(|i| exec_state.vm_read(RV64_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
+    let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] = rs_vals.map(|address| {
+        debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+        from_fn(|i| exec_state.vm_read(RV64_MEMORY_AS, address + (i * MEMORY_BLOCK_BYTES) as u32))
     });
 
     let output_data = if IS_FP2 {
-        fp2_operation::<FIELD_TYPE, BLOCKS, BLOCK_SIZE, OP>(read_data)
+        fp2_operation::<FIELD_TYPE, BLOCKS, OP>(read_data)
     } else {
-        field_operation::<FIELD_TYPE, BLOCKS, BLOCK_SIZE, OP>(read_data)
+        field_operation::<FIELD_TYPE, BLOCKS, OP>(read_data)
     };
 
     let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
-    debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     for (i, block) in output_data.into_iter().enumerate() {
-        exec_state.vm_write(RV64_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
+        exec_state.vm_write(
+            RV64_MEMORY_AS,
+            rd_val + (i * MEMORY_BLOCK_BYTES) as u32,
+            &block,
+        );
     }
 
     let pc = exec_state.pc();
@@ -418,12 +413,7 @@ unsafe fn execute_e12_impl<
 }
 
 #[inline(always)]
-unsafe fn execute_e12_generic_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
->(
+unsafe fn execute_e12_generic_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const BLOCKS: usize>(
     pre_compute: &FieldExpressionPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -431,9 +421,9 @@ unsafe fn execute_e12_generic_impl<
         .rs_addrs
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
 
-    let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
-        debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
-        from_fn(|i| exec_state.vm_read(RV64_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
+    let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] = rs_vals.map(|address| {
+        debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+        from_fn(|i| exec_state.vm_read(RV64_MEMORY_AS, address + (i * MEMORY_BLOCK_BYTES) as u32))
     });
     let read_data_dyn: DynArray<u8> = read_data.into();
 
@@ -444,11 +434,15 @@ unsafe fn execute_e12_generic_impl<
     );
 
     let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
-    debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
-    let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();
+    let data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = writes.into();
     for (i, block) in data.into_iter().enumerate() {
-        exec_state.vm_write(RV64_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
+        exec_state.vm_write(
+            RV64_MEMORY_AS,
+            rd_val + (i * MEMORY_BLOCK_BYTES) as u32,
+            &block,
+        );
     }
 
     let pc = exec_state.pc();
@@ -460,7 +454,6 @@ unsafe fn execute_e12_setup_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
     const IS_FP2: bool,
 >(
     pre_compute: &FieldExpressionPreCompute,
@@ -471,9 +464,9 @@ unsafe fn execute_e12_setup_impl<
     let rs_vals = pre_compute
         .rs_addrs
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
-    let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
-        debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
-        from_fn(|i| exec_state.vm_read(RV64_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
+    let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] = rs_vals.map(|address| {
+        debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+        from_fn(|i| exec_state.vm_read(RV64_MEMORY_AS, address + (i * MEMORY_BLOCK_BYTES) as u32))
     });
 
     // Extract first field element as the prime
@@ -500,11 +493,15 @@ unsafe fn execute_e12_setup_impl<
     );
 
     let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
-    debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
-    let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();
+    let data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = writes.into();
     for (i, block) in data.into_iter().enumerate() {
-        exec_state.vm_write(RV64_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
+        exec_state.vm_write(
+            RV64_MEMORY_AS,
+            rd_val + (i * MEMORY_BLOCK_BYTES) as u32,
+            &block,
+        );
     }
 
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
@@ -518,7 +515,6 @@ unsafe fn execute_e1_setup_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
     const IS_FP2: bool,
 >(
     pre_compute: *const u8,
@@ -526,7 +522,7 @@ unsafe fn execute_e1_setup_impl<
 ) -> Result<(), ExecutionError> {
     let pre_compute: &FieldExpressionPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<FieldExpressionPreCompute>()).borrow();
-    execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>(pre_compute, exec_state)
+    execute_e12_setup_impl::<_, _, BLOCKS, IS_FP2>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -535,7 +531,6 @@ unsafe fn execute_e2_setup_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
     const IS_FP2: bool,
 >(
     pre_compute: *const u8,
@@ -549,7 +544,7 @@ unsafe fn execute_e2_setup_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>(&pre_compute.data, exec_state)
+    execute_e12_setup_impl::<_, _, BLOCKS, IS_FP2>(&pre_compute.data, exec_state)
 }
 
 #[create_handler]
@@ -558,7 +553,6 @@ unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
     const IS_FP2: bool,
     const FIELD_TYPE: u8,
     const OP: u8,
@@ -568,7 +562,7 @@ unsafe fn execute_e1_impl<
 ) {
     let pre_compute: &FieldExpressionPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<FieldExpressionPreCompute>()).borrow();
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2, FIELD_TYPE, OP>(pre_compute, exec_state);
+    execute_e12_impl::<_, _, BLOCKS, IS_FP2, FIELD_TYPE, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -577,7 +571,6 @@ unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
     const IS_FP2: bool,
     const FIELD_TYPE: u8,
     const OP: u8,
@@ -593,10 +586,7 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2, FIELD_TYPE, OP>(
-        &pre_compute.data,
-        exec_state,
-    );
+    execute_e12_impl::<_, _, BLOCKS, IS_FP2, FIELD_TYPE, OP>(&pre_compute.data, exec_state);
 }
 
 #[create_handler]
@@ -605,7 +595,6 @@ unsafe fn execute_e1_generic_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
     const IS_FP2: bool,
 >(
     pre_compute: *const u8,
@@ -613,7 +602,7 @@ unsafe fn execute_e1_generic_impl<
 ) {
     let pre_compute: &FieldExpressionPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<FieldExpressionPreCompute>()).borrow();
-    execute_e12_generic_impl::<_, _, BLOCKS, BLOCK_SIZE>(pre_compute, exec_state);
+    execute_e12_generic_impl::<_, _, BLOCKS>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -622,7 +611,6 @@ unsafe fn execute_e2_generic_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
     const IS_FP2: bool,
 >(
     pre_compute: *const u8,
@@ -636,5 +624,5 @@ unsafe fn execute_e2_generic_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_generic_impl::<_, _, BLOCKS, BLOCK_SIZE>(&pre_compute.data, exec_state);
+    execute_e12_generic_impl::<_, _, BLOCKS>(&pre_compute.data, exec_state);
 }

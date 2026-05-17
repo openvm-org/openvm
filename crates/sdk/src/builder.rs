@@ -384,7 +384,7 @@ where
                 .expect("validated `root_pk` dependency on `agg_pk`");
             let system_config = app_config.app_vm_config.as_ref();
             let memory_dimensions = system_config.memory_config.memory_dimensions();
-            let num_user_pvs = system_config.num_public_values;
+            let num_user_pvs = system_config.public_values_cell_count();
             let internal_recursive_vk_commit = agg_prover
                 .internal_recursive_prover
                 .get_self_vk_pcs_data()

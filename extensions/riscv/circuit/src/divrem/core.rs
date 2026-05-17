@@ -256,6 +256,17 @@ where
             )
             .eval(builder, signed.clone());
 
+        // Memory bus checks only packed u16 values; these read bytes need separate bounds.
+        // The signed path handles the MSB above; the unsigned path checks it below.
+        for i in 0..NUM_LIMBS - 1 {
+            self.bitwise_lookup_bus
+                .send_range(b[i], c[i])
+                .eval(builder, is_valid.clone());
+        }
+        self.bitwise_lookup_bus
+            .send_range(b[NUM_LIMBS - 1], c[NUM_LIMBS - 1])
+            .eval(builder, is_valid.clone() - signed.clone());
+
         // Constrain that 0 <= |r| < |c| by checking that r_prime < c (unsigned LT). By
         // definition, the sign of r must be b_sign. If c is negative then we want
         // to constrain c < r_prime. If c is positive, then we want to constrain r_prime < c.
@@ -519,6 +530,19 @@ where
             );
         }
 
+        // AIR range-checks these byte limbs; add matching lookup counts.
+        for i in 0..NUM_LIMBS - 1 {
+            self.bitwise_lookup_chip
+                .request_range(record.b[i] as u32, record.c[i] as u32);
+        }
+        // The unsigned path also range-checks the MSB pair.
+        if !is_signed {
+            self.bitwise_lookup_chip.request_range(
+                record.b[NUM_LIMBS - 1] as u32,
+                record.c[NUM_LIMBS - 1] as u32,
+            );
+        }
+
         // Write in a reverse order
         core_row.opcode_remu_flag = F::from_bool(opcode == DivRemOpcode::REMU);
         core_row.opcode_rem_flag = F::from_bool(opcode == DivRemOpcode::REM);
@@ -540,7 +564,7 @@ where
         }
 
         let r_prime_f = r_prime.map(F::from_u32);
-        core_row.r_inv = r_prime_f.map(|r| (r - F::from_u32(256)).inverse());
+        core_row.r_inv = r_prime_f.map(|r| (r - F::from_u32(1 << LIMB_BITS)).inverse());
         core_row.r_prime = r_prime_f;
 
         let r_sum_f = r.iter().fold(F::ZERO, |acc, r| acc + F::from_u32(*r));

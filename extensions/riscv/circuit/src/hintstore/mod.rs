@@ -4,8 +4,8 @@ use openvm_circuit::{
     arch::*,
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
+            pack_u8_block, pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols,
+            MemoryReadAuxRecord, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -79,7 +79,7 @@ pub struct Rv64HintStoreCols<T> {
     pub mem_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
     pub mem_ptr_aux_cols: MemoryReadAuxCols<T>,
 
-    pub write_aux: MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS>,
+    pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
     pub data: [T; RV64_REGISTER_NUM_LIMBS],
 
     // only buffer
@@ -173,7 +173,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.mem_ptr_ptr),
-                mem_ptr_data,
+                pack_u8_block::<AB>(&mem_ptr_data),
                 timestamp_pp(),
                 &local_cols.mem_ptr_aux_cols,
             )
@@ -184,7 +184,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.num_words_ptr),
-                num_words_data,
+                pack_u8_block::<AB>(&num_words_data),
                 timestamp_pp(),
                 &local_cols.num_words_aux_cols,
             )
@@ -194,7 +194,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), mem_ptr.clone()),
-                local_cols.data,
+                pack_u8_block::<AB>(&local_cols.data.map(Into::into)),
                 timestamp_pp(),
                 &local_cols.write_aux,
             )
@@ -225,10 +225,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             "MAX_HINT_BUFFER_DWORDS_BITS must be in [8, 16) for these constraints to work"
         );
 
-        // The mem_ptr range check below scales `mem_ptr_limbs[3]` into an 8-bit lookup. For the
-        // scaling factor to be in (1, 256] the bit width must straddle limb 3, i.e.
-        // `pointer_max_bits ∈ (24, 32]`. Outside this window the scaling either overflows a byte
-        // (forcing limb 3 to zero while limb 2 goes unchecked — a soundness gap) or underflows.
+        // This scaled-byte pointer check requires `pointer_max_bits` in (24, 32].
         debug_assert!(
             (25..=32).contains(&self.pointer_max_bits),
             "pointer_max_bits must be in (24, 32] for these constraints to work"
@@ -246,13 +243,6 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
                     ),
             )
             .eval(builder, is_start.clone());
-
-        // Checking that hint is bytes
-        for i in 0..RV64_REGISTER_NUM_LIMBS / 2 {
-            self.bitwise_operation_lookup_bus
-                .send_range(local_cols.data[2 * i], local_cols.data[(2 * i) + 1])
-                .eval(builder, is_valid.clone());
-        }
 
         // buffer transition
         // `is_end` implies that the next row belongs to a new instruction,
@@ -592,11 +582,6 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                     .rchunks_exact_mut(width)
                     .zip(record.var.iter().enumerate().rev())
                     .for_each(|(row, (idx, var))| {
-                        for pair in var.data.chunks_exact(2) {
-                            self.bitwise_lookup_chip
-                                .request_range(pair[0] as u32, pair[1] as u32);
-                        }
-
                         let cols: &mut Rv64HintStoreCols<F> = row.borrow_mut();
                         let is_single = record.inner.num_words_ptr == u32::MAX;
                         timestamp -= 3;
@@ -618,7 +603,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                         cols.data = var.data.map(|x| F::from_u8(x));
 
                         cols.write_aux
-                            .set_prev_data(var.data_write_aux.prev_data.map(|x| F::from_u8(x)));
+                            .set_prev_data(pack_u8_block_bytes(&var.data_write_aux.prev_data));
                         mem_helper.fill(
                             var.data_write_aux.prev_timestamp,
                             timestamp + 2,

@@ -8,23 +8,23 @@ use super::adapters::{RV64_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
 
 // Returns (instruction, rd)
 #[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
-pub fn rv64_rand_write_register_or_imm<const NUM_LIMBS: usize>(
+pub fn rv64_rand_write_register_or_imm(
     tester: &mut impl TestBuilder<BabyBear>,
-    rs1_writes: [u8; NUM_LIMBS],
-    rs2_writes: [u8; NUM_LIMBS],
+    rs1_writes: [u8; RV64_REGISTER_NUM_LIMBS],
+    rs2_writes: [u8; RV64_REGISTER_NUM_LIMBS],
     imm: Option<usize>,
     opcode_with_offset: usize,
     rng: &mut StdRng,
 ) -> (Instruction<BabyBear>, usize) {
     let rs2_is_imm = imm.is_some();
 
-    let rs1 = gen_pointer(rng, NUM_LIMBS);
-    let rs2 = imm.unwrap_or_else(|| gen_pointer(rng, NUM_LIMBS));
-    let rd = gen_pointer(rng, NUM_LIMBS);
+    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2 = imm.unwrap_or_else(|| gen_pointer(rng, RV64_REGISTER_NUM_LIMBS));
+    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-    tester.write::<NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_u8));
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_u8));
     if !rs2_is_imm {
-        tester.write::<NUM_LIMBS>(1, rs2, rs2_writes.map(BabyBear::from_u8));
+        tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, rs2_writes.map(BabyBear::from_u8));
     }
 
     (

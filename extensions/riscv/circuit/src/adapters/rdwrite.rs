@@ -7,9 +7,13 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
+        BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord},
+        offline_checker::{
+            pack_u8_block, pack_u8_block_bytes, MemoryBridge, MemoryWriteAuxCols,
+            MemoryWriteBytesAuxRecord,
+        },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
@@ -35,7 +39,7 @@ use crate::adapters::tracing_write;
 pub struct Rv64RdWriteAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
-    pub rd_aux_cols: MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS>,
+    pub rd_aux_cols: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
 
 #[repr(C)]
@@ -109,7 +113,7 @@ impl Rv64RdWriteAdapterAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rd_ptr),
-                ctx.writes[0].clone(),
+                pack_u8_block::<AB>(&ctx.writes[0].clone()),
                 timestamp,
                 &local_cols.rd_aux_cols,
             )
@@ -273,7 +277,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64RdWriteAdapterFiller {
 
         adapter_row
             .rd_aux_cols
-            .set_prev_data(record.rd_aux_record.prev_data.map(F::from_u8));
+            .set_prev_data(pack_u8_block_bytes(&record.rd_aux_record.prev_data));
         mem_helper.fill(
             record.rd_aux_record.prev_timestamp,
             record.from_timestamp,

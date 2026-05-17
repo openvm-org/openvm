@@ -1,4 +1,15 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
+
+/// Number of accumulator digests stored for each `deferral_idx`.
+pub(in crate::call) const NUM_ACCUMULATORS_PER_IDX: usize = 2;
+
+#[inline(always)]
+pub(in crate::call) const fn accumulator_cell_indices(deferral_idx: u32) -> (u32, u32) {
+    let digest_size = DIGEST_SIZE as u32;
+    let input_acc_cell_idx = (NUM_ACCUMULATORS_PER_IDX as u32) * deferral_idx * digest_size;
+    (input_acc_cell_idx, input_acc_cell_idx + digest_size)
+}
 
 mod air;
 pub use air::*;

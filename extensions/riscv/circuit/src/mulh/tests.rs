@@ -598,7 +598,11 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
 
 #[cfg(feature = "aot")]
 fn read_register(state: &VmState<F>, offset: usize) -> u32 {
-    let bytes = unsafe { state.memory.read::<u8, 4>(RV64_REGISTER_AS, offset as u32) };
+    let bytes = unsafe {
+        state
+            .memory
+            .read_bytes::<4>(RV64_REGISTER_AS, offset as u32)
+    };
     u32::from_le_bytes(bytes)
 }
 

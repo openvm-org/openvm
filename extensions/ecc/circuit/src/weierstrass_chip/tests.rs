@@ -7,7 +7,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, MatrixRecordArena, PreflightExecutor, DEFAULT_BLOCK_SIZE,
+    Arena, MatrixRecordArena, PreflightExecutor, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::{
     bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime},
@@ -104,19 +104,19 @@ mod ec_addne_tests {
     use super::*;
     use crate::EcAddNeExecutor;
 
-    type EcAddneHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = TestChipHarness<
+    type EcAddneHarness<const BLOCKS: usize> = TestChipHarness<
         F,
-        EcAddNeExecutor<BLOCKS, BLOCK_SIZE>,
-        WeierstrassAir<2, BLOCKS, BLOCK_SIZE>,
-        WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
+        EcAddNeExecutor<BLOCKS>,
+        WeierstrassAir<2, BLOCKS>,
+        WeierstrassChip<F, 2, BLOCKS>,
     >;
 
-    fn create_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    fn create_harness<const BLOCKS: usize>(
         tester: &VmChipTestBuilder<F>,
         config: ExprBuilderConfig,
         offset: usize,
     ) -> (
-        EcAddneHarness<BLOCKS, BLOCK_SIZE>,
+        EcAddneHarness<BLOCKS>,
         (
             BitwiseOperationLookupAir<RV64_CELL_BITS>,
             SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
@@ -127,7 +127,7 @@ mod ec_addne_tests {
             bitwise_bus,
         ));
 
-        let air = get_ec_addne_air::<BLOCKS, BLOCK_SIZE>(
+        let air = get_ec_addne_air::<BLOCKS>(
             tester.execution_bridge(),
             tester.memory_bridge(),
             config.clone(),
@@ -136,13 +136,13 @@ mod ec_addne_tests {
             tester.address_bits(),
             offset,
         );
-        let executor = get_ec_addne_step::<BLOCKS, BLOCK_SIZE>(
+        let executor = get_ec_addne_step::<BLOCKS>(
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),
             offset,
         );
-        let chip = get_ec_addne_chip::<F, BLOCKS, BLOCK_SIZE>(
+        let chip = get_ec_addne_chip::<F, BLOCKS>(
             config.clone(),
             tester.memory_helper(),
             tester.range_checker(),
@@ -156,20 +156,20 @@ mod ec_addne_tests {
     }
 
     #[cfg(feature = "cuda")]
-    type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = GpuTestChipHarness<
+    type GpuHarness<const BLOCKS: usize> = GpuTestChipHarness<
         F,
-        EcAddNeExecutor<BLOCKS, BLOCK_SIZE>,
-        WeierstrassAir<2, BLOCKS, BLOCK_SIZE>,
-        HybridWeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
-        WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
+        EcAddNeExecutor<BLOCKS>,
+        WeierstrassAir<2, BLOCKS>,
+        HybridWeierstrassChip<F, 2, BLOCKS>,
+        WeierstrassChip<F, 2, BLOCKS>,
     >;
 
     #[cfg(feature = "cuda")]
-    fn create_cuda_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    fn create_cuda_harness<const BLOCKS: usize>(
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
         offset: usize,
-    ) -> GpuHarness<BLOCKS, BLOCK_SIZE> {
+    ) -> GpuHarness<BLOCKS> {
         use openvm_circuit::arch::testing::{
             default_bitwise_lookup_bus, default_var_range_checker_bus,
         };
@@ -217,14 +217,9 @@ mod ec_addne_tests {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn set_and_execute_ec_addne<
-        const BLOCKS: usize,
-        const BLOCK_SIZE: usize,
-        const NUM_LIMBS: usize,
-        RA: Arena,
-    >(
+    fn set_and_execute_ec_addne<const BLOCKS: usize, const NUM_LIMBS: usize, RA: Arena>(
         tester: &mut impl TestBuilder<F>,
-        executor: &mut EcAddNeExecutor<BLOCKS, BLOCK_SIZE>,
+        executor: &mut EcAddNeExecutor<BLOCKS>,
         arena: &mut RA,
         rng: &mut StdRng,
         modulus: &BigUint,
@@ -233,7 +228,7 @@ mod ec_addne_tests {
         p1: Option<(BigUint, BigUint)>,
         p2: Option<(BigUint, BigUint)>,
     ) where
-        EcAddNeExecutor<BLOCKS, BLOCK_SIZE>: PreflightExecutor<F, RA>,
+        EcAddNeExecutor<BLOCKS>: PreflightExecutor<F, RA>,
     {
         let (x1, y1, x2, y2, op_local) = if is_setup {
             (
@@ -265,9 +260,9 @@ mod ec_addne_tests {
         let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
         let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-        let p1_base_addr = gen_pointer(rng, BLOCK_SIZE) as u64;
-        let p2_base_addr = gen_pointer(rng, BLOCK_SIZE) as u64;
-        let result_base_addr = gen_pointer(rng, BLOCK_SIZE) as u64;
+        let p1_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
+        let p2_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
+        let result_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
 
         tester.write::<RV64_REGISTER_NUM_LIMBS>(
             ptr_as,
@@ -302,29 +297,29 @@ mod ec_addne_tests {
             .map(F::from_u8)
             .collect();
 
-        for i in (0..NUM_LIMBS).step_by(BLOCK_SIZE) {
-            tester.write::<BLOCK_SIZE>(
+        for i in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
+            tester.write::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 p1_base_addr as usize + i,
-                x1_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+                x1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
 
-            tester.write::<BLOCK_SIZE>(
+            tester.write::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 (p1_base_addr + NUM_LIMBS as u64) as usize + i,
-                y1_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+                y1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
 
-            tester.write::<BLOCK_SIZE>(
+            tester.write::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 p2_base_addr as usize + i,
-                x2_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+                x2_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
 
-            tester.write::<BLOCK_SIZE>(
+            tester.write::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 (p2_base_addr + NUM_LIMBS as u64) as usize + i,
-                y2_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+                y2_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
         }
 
@@ -340,7 +335,7 @@ mod ec_addne_tests {
         tester.execute(executor, arena, &instruction);
     }
 
-    fn run_ec_addne_test<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
+    fn run_ec_addne_test<const BLOCKS: usize, const NUM_LIMBS: usize>(
         offset: usize,
         modulus: BigUint,
     ) {
@@ -352,9 +347,9 @@ mod ec_addne_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let (mut harness, bitwise) = create_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset);
+        let (mut harness, bitwise) = create_harness::<BLOCKS>(&tester, config, offset);
 
-        set_and_execute_ec_addne::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.arena,
@@ -366,7 +361,7 @@ mod ec_addne_tests {
             None,
         );
 
-        set_and_execute_ec_addne::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.arena,
@@ -378,7 +373,7 @@ mod ec_addne_tests {
             Some(SampleEcPoints[1].clone()),
         );
 
-        set_and_execute_ec_addne::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.arena,
@@ -401,7 +396,7 @@ mod ec_addne_tests {
 
     #[test]
     fn test_ec_addne_32limb() {
-        run_ec_addne_test::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
+        run_ec_addne_test::<{ ECC_BLOCKS_32 }, { NUM_LIMBS_32 }>(
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
         );
@@ -409,14 +404,14 @@ mod ec_addne_tests {
 
     #[test]
     fn test_ec_addne_48limb() {
-        run_ec_addne_test::<{ ECC_BLOCKS_48 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_48 }>(
+        run_ec_addne_test::<{ ECC_BLOCKS_48 }, { NUM_LIMBS_48 }>(
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
         );
     }
 
     #[cfg(feature = "cuda")]
-    fn run_cuda_ec_addne<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
+    fn run_cuda_ec_addne<const BLOCKS: usize, const NUM_LIMBS: usize>(
         offset: usize,
         modulus: BigUint,
     ) {
@@ -433,9 +428,9 @@ mod ec_addne_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let mut harness = create_cuda_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset);
+        let mut harness = create_cuda_harness::<BLOCKS>(&tester, config, offset);
 
-        set_and_execute_ec_addne::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.dense_arena,
@@ -447,7 +442,7 @@ mod ec_addne_tests {
             None,
         );
 
-        set_and_execute_ec_addne::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.dense_arena,
@@ -459,7 +454,7 @@ mod ec_addne_tests {
             Some(SampleEcPoints[1].clone()),
         );
 
-        set_and_execute_ec_addne::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.dense_arena,
@@ -473,7 +468,7 @@ mod ec_addne_tests {
 
         harness
             .dense_arena
-            .get_record_seeker::<EccRecord<2, BLOCKS, BLOCK_SIZE>, _>()
+            .get_record_seeker::<EccRecord<2, BLOCKS>, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
                 harness.executor.get_record_layout::<F>(),
@@ -490,7 +485,7 @@ mod ec_addne_tests {
     #[cfg(feature = "cuda")]
     #[test]
     fn test_weierstrass_addne_cuda_2x32() {
-        run_cuda_ec_addne::<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_cuda_ec_addne::<ECC_BLOCKS_32, NUM_LIMBS_32>(
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
         );
@@ -499,7 +494,7 @@ mod ec_addne_tests {
     #[cfg(feature = "cuda")]
     #[test]
     fn test_weierstrass_addne_cuda_6x16() {
-        run_cuda_ec_addne::<ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>(
+        run_cuda_ec_addne::<ECC_BLOCKS_48, NUM_LIMBS_48>(
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
         );
@@ -519,7 +514,7 @@ mod ec_addne_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let executor = get_ec_addne_step::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }>(
+        let executor = get_ec_addne_step::<{ ECC_BLOCKS_32 }>(
             config,
             tester.range_checker().bus(),
             tester.address_bits(),
@@ -549,21 +544,21 @@ mod ec_addne_tests {
 mod ec_double_tests {
     use super::*;
 
-    type EcDoubleHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = TestChipHarness<
+    type EcDoubleHarness<const BLOCKS: usize> = TestChipHarness<
         F,
-        EcDoubleExecutor<BLOCKS, BLOCK_SIZE>,
-        WeierstrassAir<1, BLOCKS, BLOCK_SIZE>,
-        WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE>,
+        EcDoubleExecutor<BLOCKS>,
+        WeierstrassAir<1, BLOCKS>,
+        WeierstrassChip<F, 1, BLOCKS>,
         MatrixRecordArena<F>,
     >;
 
-    fn create_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    fn create_harness<const BLOCKS: usize>(
         tester: &VmChipTestBuilder<F>,
         config: ExprBuilderConfig,
         offset: usize,
         a_biguint: BigUint,
     ) -> (
-        EcDoubleHarness<BLOCKS, BLOCK_SIZE>,
+        EcDoubleHarness<BLOCKS>,
         (
             BitwiseOperationLookupAir<RV64_CELL_BITS>,
             SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
@@ -604,21 +599,21 @@ mod ec_double_tests {
     }
 
     #[cfg(feature = "cuda")]
-    type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = GpuTestChipHarness<
+    type GpuHarness<const BLOCKS: usize> = GpuTestChipHarness<
         F,
-        EcDoubleExecutor<BLOCKS, BLOCK_SIZE>,
-        WeierstrassAir<1, BLOCKS, BLOCK_SIZE>,
-        HybridWeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE>,
-        WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE>,
+        EcDoubleExecutor<BLOCKS>,
+        WeierstrassAir<1, BLOCKS>,
+        HybridWeierstrassChip<F, 1, BLOCKS>,
+        WeierstrassChip<F, 1, BLOCKS>,
     >;
 
     #[cfg(feature = "cuda")]
-    fn create_cuda_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    fn create_cuda_harness<const BLOCKS: usize>(
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
         offset: usize,
         a_biguint: BigUint,
-    ) -> GpuHarness<BLOCKS, BLOCK_SIZE> {
+    ) -> GpuHarness<BLOCKS> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
         let bitwise_bus = default_bitwise_lookup_bus();
@@ -670,14 +665,9 @@ mod ec_double_tests {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn set_and_execute_ec_double<
-        const BLOCKS: usize,
-        const BLOCK_SIZE: usize,
-        const NUM_LIMBS: usize,
-        RA: Arena,
-    >(
+    fn set_and_execute_ec_double<const BLOCKS: usize, const NUM_LIMBS: usize, RA: Arena>(
         tester: &mut impl TestBuilder<F>,
-        executor: &mut EcDoubleExecutor<BLOCKS, BLOCK_SIZE>,
+        executor: &mut EcDoubleExecutor<BLOCKS>,
         arena: &mut RA,
         rng: &mut StdRng,
         modulus: &BigUint,
@@ -687,7 +677,7 @@ mod ec_double_tests {
         x: Option<BigUint>,
         y: Option<BigUint>,
     ) where
-        EcDoubleExecutor<BLOCKS, BLOCK_SIZE>: PreflightExecutor<F, RA>,
+        EcDoubleExecutor<BLOCKS>: PreflightExecutor<F, RA>,
     {
         let (x1, y1, op_local) = if is_setup {
             (
@@ -713,8 +703,8 @@ mod ec_double_tests {
         let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
         let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-        let p1_base_addr = gen_pointer(rng, BLOCK_SIZE) as u64;
-        let result_base_addr = gen_pointer(rng, BLOCK_SIZE) as u64;
+        let p1_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
+        let result_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
 
         tester.write::<RV64_REGISTER_NUM_LIMBS>(
             ptr_as,
@@ -736,17 +726,17 @@ mod ec_double_tests {
             .map(F::from_u8)
             .collect();
 
-        for i in (0..NUM_LIMBS).step_by(BLOCK_SIZE) {
-            tester.write::<BLOCK_SIZE>(
+        for i in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
+            tester.write::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 p1_base_addr as usize + i,
-                x1_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+                x1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
 
-            tester.write::<BLOCK_SIZE>(
+            tester.write::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 (p1_base_addr + NUM_LIMBS as u64) as usize + i,
-                y1_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+                y1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
         }
 
@@ -762,7 +752,7 @@ mod ec_double_tests {
         tester.execute(executor, arena, &instruction);
     }
 
-    fn run_ec_double_test<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
+    fn run_ec_double_test<const BLOCKS: usize, const NUM_LIMBS: usize>(
         offset: usize,
         modulus: BigUint,
         num_ops: usize,
@@ -776,11 +766,10 @@ mod ec_double_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let (mut harness, bitwise) =
-            create_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset, a.clone());
+        let (mut harness, bitwise) = create_harness::<BLOCKS>(&tester, config, offset, a.clone());
 
         for i in 0..num_ops {
-            set_and_execute_ec_double::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+            set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
                 &mut tester,
                 &mut harness.executor,
                 &mut harness.arena,
@@ -794,7 +783,7 @@ mod ec_double_tests {
             );
         }
 
-        set_and_execute_ec_double::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.arena,
@@ -807,7 +796,7 @@ mod ec_double_tests {
             Some(SampleEcPoints[0].1.clone()),
         );
 
-        set_and_execute_ec_double::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.arena,
@@ -832,7 +821,7 @@ mod ec_double_tests {
         )
         .unwrap();
 
-        set_and_execute_ec_double::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.arena,
@@ -856,7 +845,7 @@ mod ec_double_tests {
 
     #[test]
     fn test_ec_double_32limb() {
-        run_ec_double_test::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
+        run_ec_double_test::<{ ECC_BLOCKS_32 }, { NUM_LIMBS_32 }>(
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             50,
@@ -869,7 +858,7 @@ mod ec_double_tests {
         let coeff_a = (-secp256r1::Fp::from(3)).to_bytes();
         let a = BigUint::from_bytes_le(&coeff_a);
 
-        run_ec_double_test::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
+        run_ec_double_test::<{ ECC_BLOCKS_32 }, { NUM_LIMBS_32 }>(
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             secp256r1_coord_prime(),
             50,
@@ -879,7 +868,7 @@ mod ec_double_tests {
 
     #[test]
     fn test_ec_double_48limb() {
-        run_ec_double_test::<{ ECC_BLOCKS_48 }, { DEFAULT_BLOCK_SIZE }, { NUM_LIMBS_48 }>(
+        run_ec_double_test::<{ ECC_BLOCKS_48 }, { NUM_LIMBS_48 }>(
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             50,
@@ -888,11 +877,7 @@ mod ec_double_tests {
     }
 
     #[cfg(feature = "cuda")]
-    fn run_ec_double_cuda_test<
-        const BLOCKS: usize,
-        const BLOCK_SIZE: usize,
-        const NUM_LIMBS: usize,
-    >(
+    fn run_ec_double_cuda_test<const BLOCKS: usize, const NUM_LIMBS: usize>(
         offset: usize,
         modulus: BigUint,
         num_ops: usize,
@@ -911,12 +896,11 @@ mod ec_double_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let mut harness =
-            create_cuda_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset, a.clone());
+        let mut harness = create_cuda_harness::<BLOCKS>(&tester, config, offset, a.clone());
 
         // Run some operations
         for i in 0..num_ops {
-            set_and_execute_ec_double::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+            set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
                 &mut tester,
                 &mut harness.executor,
                 &mut harness.dense_arena,
@@ -930,7 +914,7 @@ mod ec_double_tests {
             );
         }
 
-        set_and_execute_ec_double::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.dense_arena,
@@ -943,7 +927,7 @@ mod ec_double_tests {
             Some(SampleEcPoints[0].1.clone()),
         );
 
-        set_and_execute_ec_double::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.dense_arena,
@@ -968,7 +952,7 @@ mod ec_double_tests {
         )
         .unwrap();
 
-        set_and_execute_ec_double::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.dense_arena,
@@ -983,7 +967,7 @@ mod ec_double_tests {
 
         harness
             .dense_arena
-            .get_record_seeker::<EccRecord<1, BLOCKS, BLOCK_SIZE>, _>()
+            .get_record_seeker::<EccRecord<1, BLOCKS>, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
                 harness.executor.get_record_layout::<F>(),
@@ -1000,7 +984,7 @@ mod ec_double_tests {
     #[cfg(feature = "cuda")]
     #[test]
     fn test_ec_double_cuda_2x32() {
-        run_ec_double_cuda_test::<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_ec_double_cuda_test::<ECC_BLOCKS_32, NUM_LIMBS_32>(
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             50,
@@ -1014,7 +998,7 @@ mod ec_double_tests {
         let coeff_a = (-secp256r1::Fp::from(3)).to_bytes();
         let a = BigUint::from_bytes_le(&coeff_a);
 
-        run_ec_double_cuda_test::<ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>(
+        run_ec_double_cuda_test::<ECC_BLOCKS_32, NUM_LIMBS_32>(
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             secp256r1_coord_prime(),
             50,
@@ -1025,7 +1009,7 @@ mod ec_double_tests {
     #[cfg(feature = "cuda")]
     #[test]
     fn test_ec_double_cuda_6x16() {
-        run_ec_double_cuda_test::<ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>(
+        run_ec_double_cuda_test::<ECC_BLOCKS_48, NUM_LIMBS_48>(
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             50,
@@ -1047,7 +1031,7 @@ mod ec_double_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let executor = get_ec_double_step::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }>(
+        let executor = get_ec_double_step::<{ ECC_BLOCKS_32 }>(
             config,
             tester.range_checker().bus(),
             tester.address_bits(),
@@ -1079,7 +1063,7 @@ mod ec_double_tests {
         )
         .unwrap();
 
-        let executor = get_ec_double_step::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }>(
+        let executor = get_ec_double_step::<{ ECC_BLOCKS_32 }>(
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),

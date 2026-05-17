@@ -3,6 +3,7 @@
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
 #include "system/memory/controller.cuh"
+#include "system/memory/offline_checker.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -31,7 +32,7 @@ template <typename T> struct Rv64HintStoreCols {
     T mem_ptr_limbs[RV64_WORD_NUM_LIMBS];
     MemoryReadAuxCols<T> mem_ptr_aux_cols;
 
-    MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS> write_aux;
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
     T data[RV64_REGISTER_NUM_LIMBS];
 
     // only buffer
@@ -143,7 +144,9 @@ struct Rv64HintStore {
             COL_WRITE_VALUE(row, Rv64HintStoreCols, num_words_ptr, 0);
         }
 
-        COL_WRITE_ARRAY(row, Rv64HintStoreCols, write_aux.prev_data, write.write_aux.prev_data);
+        Fp packed_prev[BLOCK_FE_WIDTH];
+        pack_u8_block_bytes(packed_prev, write.write_aux.prev_data);
+        COL_WRITE_ARRAY(row, Rv64HintStoreCols, write_aux.prev_data, packed_prev);
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64HintStoreCols, write_aux)),
             write.write_aux.prev_timestamp,
@@ -151,10 +154,6 @@ struct Rv64HintStore {
         );
 
         COL_WRITE_ARRAY(row, Rv64HintStoreCols, data, write.data);
-#pragma unroll
-        for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i += 2) {
-            bitwise_lookup.add_range(write.data[i], write.data[i + 1]);
-        }
     }
 };
 

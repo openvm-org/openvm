@@ -46,10 +46,10 @@ pub enum ExecutionError {
         num_words: u32,
         max_hint_buffer_words: u32,
     },
-    #[error("at pc {pc}, tried to publish into index {public_value_index} when num_public_values = {num_public_values}")]
+    #[error("at pc {pc}, tried to publish into index {public_value_index} when num_public_values_bytes = {num_public_values_bytes}")]
     PublicValueIndexOutOfBounds {
         pc: u32,
-        num_public_values: usize,
+        num_public_values_bytes: usize,
         public_value_index: usize,
     },
     #[error("at pc {pc}, tried to publish {new_value} into index {public_value_index} but already had {existing_value}")]

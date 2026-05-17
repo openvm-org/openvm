@@ -467,7 +467,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
-        adapter_cols.rd_aux_cols.prev_data[4] = F::from_u32(1);
+        adapter_cols.rd_aux_cols.prev_data[2] = F::from_u32(1);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -619,7 +619,11 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F
 
 #[cfg(feature = "aot")]
 fn read_register(state: &VmState<F>, offset: usize) -> u32 {
-    let bytes = unsafe { state.memory.read::<u8, 4>(RV64_REGISTER_AS, offset as u32) };
+    let bytes = unsafe {
+        state
+            .memory
+            .read_bytes::<4>(RV64_REGISTER_AS, offset as u32)
+    };
     u32::from_le_bytes(bytes)
 }
 

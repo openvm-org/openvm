@@ -105,13 +105,18 @@ fn create_harness_fields(
 ) -> (Rv64MulWAir, Rv64MulWExecutor, Rv64MulWChip<F>) {
     let air = Rv64MulWAir::new(
         Rv64MultWAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
-        MulWCoreAir::new(*range_tuple_chip.bus(), MulWOpcode::CLASS_OFFSET),
+        MulWCoreAir::new(
+            *range_tuple_chip.bus(),
+            bitwise_chip.bus(),
+            MulWOpcode::CLASS_OFFSET,
+        ),
     );
     let executor = Rv64MulWExecutor::new(Rv64MultWAdapterExecutor, MulWOpcode::CLASS_OFFSET);
     let chip = Rv64MulWChip::<F>::new(
         MulWFiller::new(
             Rv64MultWAdapterFiller::new(bitwise_chip.clone()),
             range_tuple_chip,
+            bitwise_chip,
             MulWOpcode::CLASS_OFFSET,
         ),
         memory_helper,
@@ -440,7 +445,11 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
 
 #[cfg(feature = "aot")]
 fn read_register(state: &VmState<F>, offset: usize) -> u32 {
-    let bytes = unsafe { state.memory.read::<u8, 4>(RV32_REGISTER_AS, offset as u32) };
+    let bytes = unsafe {
+        state
+            .memory
+            .read_bytes::<4>(RV32_REGISTER_AS, offset as u32)
+    };
     u32::from_le_bytes(bytes)
 }
 

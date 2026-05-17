@@ -135,8 +135,8 @@ fn assert_default_root_shape(
     let default_system_config = default_system_config.as_ref();
 
     assert_eq!(
-        actual_system_config.num_public_values, default_system_config.num_public_values,
-        "cargo openvm keygen only supports the default num_public_values"
+        actual_system_config.num_public_values_bytes, default_system_config.num_public_values_bytes,
+        "cargo openvm keygen only supports the default num_public_values_bytes"
     );
     let actual_memory_dimensions = actual_system_config.memory_config.memory_dimensions();
     let default_memory_dimensions = default_system_config.memory_config.memory_dimensions();
