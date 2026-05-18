@@ -426,6 +426,48 @@ impl SegmentationCtx {
         let should_seg = self.should_segment(instret, trace_heights, is_trace_height_constant);
 
         if should_seg {
+            let (total_memory, main_memory, interaction_memory) =
+                self.calculate_total_memory(trace_heights);
+            let total_interactions = self.calculate_total_interactions(trace_heights);
+            let trace_height_details = trace_heights
+                .iter()
+                .zip(self.air_names.iter())
+                .zip(self.widths.iter())
+                .zip(self.interactions.iter())
+                .zip(self.need_rot.iter())
+                .zip(is_trace_height_constant.iter())
+                .enumerate()
+                .map(
+                    |(
+                        i,
+                        (((((&height, air_name), &width), &interactions), &need_rot), &is_constant),
+                    )| {
+                        let padded_height = height.next_power_of_two();
+                        let main_cells = padded_height as usize * width;
+                        let interaction_cells = padded_height as usize * interactions;
+                        format!(
+                            "  chip={i:3} | width={width:5} | height={height:10} | padded_height={padded_height:10} | interactions/row={interactions:5} | interaction_cells={interaction_cells:10} | main_cells={main_cells:10} | need_rot={need_rot:5} | constant={is_constant:5} | {air_name}"
+                        )
+                    },
+                )
+                .collect::<Vec<_>>()
+                .join("\n");
+            tracing::info!(
+                "Segment threshold exceeded\n\
+                 instret={instret}\n\
+                 max_trace_height={}\n\
+                 max_memory={}\n\
+                 max_interactions={}\n\
+                 total_memory={} (main={}, interaction={})\n\
+                 total_interactions={total_interactions}\n\
+                 trace_heights=[\n{trace_height_details}\n]",
+                self.config.limits.max_trace_height,
+                ByteSize::b(self.config.limits.max_memory as u64),
+                self.config.limits.max_interactions,
+                ByteSize::b(total_memory as u64),
+                ByteSize::b(main_memory as u64),
+                ByteSize::b(interaction_memory as u64),
+            );
             self.create_segment_from_checkpoint(instret, trace_heights);
         }
         should_seg
