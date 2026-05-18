@@ -1,7 +1,7 @@
 //! Per-chip metered execution: page tracking and segmentation
 //! matching OpenVM's `MeteredCtx`.
 
-use std::sync::Arc;
+use std::{ffi::c_void, sync::Arc};
 
 use openvm_instructions::{
     exe::VmExe, riscv::RV32_MEMORY_AS, LocalOpcode, SystemOpcode, VmOpcode, DEFERRAL_AS,
@@ -14,21 +14,20 @@ use super::{
     bridge::{map_rvr_compile_error, map_rvr_execute_error},
     compile::ChipMapping,
     compile_metered, execute_metered,
-    state::{MeteredState, TracerPayload, TracerPtr},
+    state::{TracerPayload, TracerPtr},
 };
 use crate::{
     arch::{
         execution_mode::{
             metered::{
                 ctx::DEFAULT_PAGE_BITS,
-                segment_ctx::{
-                    SegmentationConfig, DEFAULT_INTERACTION_CONSTANT_OVERHEAD,
-                    DEFAULT_SEGMENT_CHECK_INSNS,
-                },
+                memory_ctx::BitSet,
+                segment_ctx::{Segment, SegmentationCtx},
             },
-            MeteredCtx, Segment,
+            MeteredCtx,
         },
         ExecutionError, ExecutorInventory, MeteredExecutor, Streams, SystemConfig, VmState,
+        BOUNDARY_AIR_ID, MERKLE_AIR_ID,
     },
     system::memory::{
         merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, CHUNK as MERKLE_CHUNK,
@@ -56,7 +55,7 @@ pub struct MeteredTracerData {
     pub pv_page_buf: *mut u32,
     pub deferral_page_buf: *mut u32,
     pub on_check: Option<unsafe extern "C" fn(*mut MeteredTracerData)>,
-    pub seg_state: *mut std::ffi::c_void,
+    pub seg_state: *mut c_void,
     pub mem_page_buf_len: u32,
     pub pv_page_buf_len: u32,
     pub deferral_page_buf_len: u32,
@@ -92,67 +91,19 @@ impl TracerPayload for MeteredTracerData {
 
 pub type MeteredTracer = TracerPtr<MeteredTracerData>;
 
-// ── Configuration ────────────────────────────────────────────────────────────
+// ── Chip mapping ─────────────────────────────────────────────────────────────
 
-/// Configuration for per-chip metered execution.
-#[derive(Clone)]
-pub struct MeteredConfig {
-    /// pc_index -> chip_idx (u32::MAX = no chip).
-    pub pc_to_chip: Vec<u32>,
-    pub pc_base: u32,
-    /// Per-AIR widths.
-    pub widths: Vec<usize>,
-    /// Per-AIR interaction counts (for max_interactions check).
-    pub interactions: Vec<usize>,
-    /// AIR index for boundary chip.
-    pub boundary_idx: usize,
-    /// AIR index for merkle tree chip.
-    pub merkle_tree_idx: usize,
-    /// Initial trace_heights (constants filled in, variables at 0).
-    pub initial_trace_heights: Vec<u32>,
-    /// Which heights are constant (never change across segments).
-    pub is_constant: Vec<bool>,
-    /// Segmentation config.
-    pub segmentation_config: SegmentationConfig,
-    /// Instructions between segmentation checks.
-    pub segment_check_insns: u64,
-    /// Memory dimensions for page computation.
-    pub address_height: u32,
-    pub addr_space_height: u32,
-    pub chunk_bits: u32,
-    /// Number of address spaces configured.
-    pub num_addr_spaces: usize,
-}
-
-impl MeteredConfig {
-    /// Extract chip mapping for compilation.
-    pub fn chip_mapping(&self) -> ChipMapping {
-        ChipMapping {
-            pc_to_chip: self.pc_to_chip.clone(),
-            chip_widths: None,
-        }
-    }
-}
-
-/// Build a [`MeteredConfig`] from OpenVM configuration.
-#[allow(clippy::too_many_arguments)]
-pub fn build_metered_config<F, E>(
+fn build_chip_mapping<F, E>(
     exe: &VmExe<F>,
     inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
-    widths: &[usize],
-    interactions: &[usize],
-    constant_trace_heights: &[Option<usize>],
-    system_config: &SystemConfig,
-) -> MeteredConfig
+) -> ChipMapping
 where
     F: PrimeField32,
 {
-    let program = &exe.program;
-    let pc_base = program.pc_base;
     let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
-
-    let pc_to_chip: Vec<u32> = program
+    let pc_to_chip: Vec<u32> = exe
+        .program
         .instructions_and_debug_infos
         .iter()
         .map(|slot| {
@@ -170,103 +121,21 @@ where
             }
         })
         .collect();
-
-    let boundary_idx = system_config.memory_boundary_air_id();
-    let merkle_tree_idx = system_config.memory_merkle_air_id();
-
-    let initial_trace_heights: Vec<u32> = constant_trace_heights
-        .iter()
-        .map(|opt| opt.map(|h| h as u32).unwrap_or(0))
-        .collect();
-    let is_constant: Vec<bool> = constant_trace_heights
-        .iter()
-        .map(|opt| opt.is_some())
-        .collect();
-
-    let segmentation_config = system_config.segmentation_config.clone();
-
-    let mem_config = &system_config.memory_config;
-    let chunk_bits = MERKLE_CHUNK.ilog2();
-    let memory_dimensions = mem_config.memory_dimensions();
-    let address_height = memory_dimensions.address_height as u32;
-    // addr_spaces has length (1 << addr_space_height) + 1 (index 0 is unused)
-    let num_addr_spaces = mem_config.addr_spaces.len();
-
-    let addr_space_height = mem_config.addr_space_height as u32;
-
-    MeteredConfig {
+    ChipMapping {
         pc_to_chip,
-        pc_base,
-        widths: widths.to_vec(),
-        interactions: interactions.to_vec(),
-        boundary_idx,
-        merkle_tree_idx,
-        initial_trace_heights,
-        is_constant,
-        segmentation_config,
-        segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
-        address_height,
-        addr_space_height,
-        chunk_bits,
-        num_addr_spaces,
-    }
-}
-
-// ── Page tracking ────────────────────────────────────────────────────────────
-
-/// Efficient bitset for tracking unique pages.
-pub struct BitSet {
-    words: Vec<u64>,
-}
-
-impl BitSet {
-    pub fn new(num_bits: usize) -> Self {
-        Self {
-            words: vec![0u64; num_bits.div_ceil(64)],
-        }
-    }
-
-    /// Insert a bit, returning true if it was NOT previously set (newly inserted).
-    pub fn insert(&mut self, index: usize) -> bool {
-        let word_idx = index >> 6;
-        let bit_idx = index & 63;
-        let mask = 1u64 << bit_idx;
-        let word = &mut self.words[word_idx];
-        let was_set = (*word & mask) != 0;
-        *word |= mask;
-        !was_set
-    }
-
-    pub fn clear(&mut self) {
-        self.words.fill(0);
+        chip_widths: None,
     }
 }
 
 // ── Segmentation runtime ─────────────────────────────────────────────────────
 
-/// A completed execution segment.
-#[derive(Clone, Debug)]
-pub struct RvrSegment {
-    pub instret_start: u64,
-    pub num_insns: u64,
-    pub trace_heights: Vec<u32>,
-}
-
-/// Result of per-chip metered execution.
-pub struct RvrMeteredResult {
-    pub segments: Vec<RvrSegment>,
-    pub instret: u64,
-    pub state: MeteredState,
-}
-
-/// Runtime state for metered segmentation.
 // TODO: generalize non-memory page buffers to a config-driven set of N
 // buffers (one per additional address space) instead of hardcoding
 // pv + deferral. The memory AS buffer stays separate as the hot path.
 pub struct SegmentationState {
-    config: MeteredConfig,
-    // Owned data arrays that C tracer points into
+    pub segmentation_ctx: SegmentationCtx,
     trace_heights: Vec<u32>,
+    is_trace_height_constant: Vec<bool>,
     /// Per-address-space page buffers. Each entry = 1 u32 page id.
     mem_page_buf: Vec<u32>,
     pv_page_buf: Vec<u32>,
@@ -274,54 +143,40 @@ pub struct SegmentationState {
     // Page tracking
     page_indices: BitSet,
     addr_space_access_count: Vec<u32>,
-    // Checkpoint for segmentation rollback
-    checkpoint_trace_heights: Vec<u32>,
-    checkpoint_instret: u64,
-    // Segments
-    segments: Vec<RvrSegment>,
-    instret: u64,
+    address_height: u32,
+    addr_space_height: u32,
+    chunk_bits: u32,
 }
 
 impl SegmentationState {
-    pub fn new(config: MeteredConfig) -> Self {
-        let trace_heights = config.initial_trace_heights.clone();
-        let checkpoint_trace_heights = trace_heights.clone();
+    pub fn new(ctx: MeteredCtx, system_config: &SystemConfig) -> Self {
+        let segmentation_ctx = ctx.segmentation_ctx;
+        let trace_heights = ctx.trace_heights;
+        let is_trace_height_constant = ctx.is_trace_height_constant;
 
-        // Compute total number of pages for BitSet sizing.
-        // BitSet covers pages for all address spaces in the merkle tree.
-        let overall_height = config.addr_space_height as usize + config.address_height as usize;
+        let mem_config = &system_config.memory_config;
+        let memory_dimensions = mem_config.memory_dimensions();
+        let address_height = memory_dimensions.address_height as u32;
+        let addr_space_height = mem_config.addr_space_height as u32;
+        let chunk_bits = MERKLE_CHUNK.ilog2();
+        let num_addr_spaces = mem_config.addr_spaces.len();
+
+        let overall_height = addr_space_height as usize + address_height as usize;
         let bitset_size = 1usize << overall_height.saturating_sub(DEFAULT_PAGE_BITS);
-        let page_indices = BitSet::new(bitset_size);
-        let addr_space_access_count = vec![0u32; config.num_addr_spaces];
 
-        let mem_page_buf = vec![0u32; MEM_PAGE_BUF_CAP];
-        let pv_page_buf = vec![0u32; PV_PAGE_BUF_CAP];
-        let deferral_page_buf = vec![0u32; DEFERRAL_PAGE_BUF_CAP];
-
-        let mut state = Self {
-            config,
+        Self {
+            segmentation_ctx,
             trace_heights,
-            mem_page_buf,
-            pv_page_buf,
-            deferral_page_buf,
-            page_indices,
-            addr_space_access_count,
-            checkpoint_trace_heights,
-            checkpoint_instret: 0,
-            segments: Vec::new(),
-            instret: 0,
-        };
-
-        // Match OpenVM: add initial register merkle height contributions
-        state.add_register_merkle_heights();
-        state.apply_height_updates();
-
-        // Update checkpoint to include initial heights
-        state
-            .checkpoint_trace_heights
-            .copy_from_slice(&state.trace_heights);
-
-        state
+            is_trace_height_constant,
+            mem_page_buf: vec![0u32; MEM_PAGE_BUF_CAP],
+            pv_page_buf: vec![0u32; PV_PAGE_BUF_CAP],
+            deferral_page_buf: vec![0u32; DEFERRAL_PAGE_BUF_CAP],
+            page_indices: BitSet::new(bitset_size),
+            addr_space_access_count: vec![0u32; num_addr_spaces],
+            address_height,
+            addr_space_height,
+            chunk_bits,
+        }
     }
 
     /// Get mutable pointer to trace_heights for the C tracer.
@@ -344,11 +199,6 @@ impl SegmentationState {
         self.deferral_page_buf.as_mut_ptr()
     }
 
-    /// Get the config reference.
-    pub fn config(&self) -> &MeteredConfig {
-        &self.config
-    }
-
     /// Add initial register merkle height contributions (matches OpenVM's
     /// `add_register_merkle_heights` + `update_boundary_merkle_heights`).
     ///
@@ -359,13 +209,11 @@ impl SegmentationState {
         const REG_AS: u32 = 1;
         const REG_SIZE: u32 = 32 * 4; // 128 bytes
 
-        let chunk_bits = self.config.chunk_bits;
-        let chunk = 1u32 << chunk_bits;
-        let num_blocks = (REG_SIZE + chunk - 1) >> chunk_bits;
+        let chunk = 1u32 << self.chunk_bits;
+        let num_blocks = (REG_SIZE + chunk - 1) >> self.chunk_bits;
         let start_chunk_id = 0u32; // ptr=0
                                    // label_to_index: ((addr_space - 1) << address_height) + chunk_id
-        let start_block_id =
-            ((REG_AS as u64 - 1) << self.config.address_height) + start_chunk_id as u64;
+        let start_block_id = ((REG_AS as u64 - 1) << self.address_height) + start_chunk_id as u64;
         let end_block_id = start_block_id + num_blocks as u64;
         let start_page_id = start_block_id >> DEFAULT_PAGE_BITS;
         let end_page_id = ((end_block_id - 1) >> DEFAULT_PAGE_BITS) + 1;
@@ -381,7 +229,7 @@ impl SegmentationState {
     /// via the BitSet, and update `addr_space_access_count` for each new page.
     fn flush_page_buffer(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
         let num_as = self.addr_space_access_count.len();
-        let page_shift = self.config.address_height as usize - DEFAULT_PAGE_BITS;
+        let page_shift = self.address_height as usize - DEFAULT_PAGE_BITS;
         for &(buf_len, addr_space) in &[
             (mem_len, RV32_MEMORY_AS),
             (pv_len, PUBLIC_VALUES_AS),
@@ -410,186 +258,85 @@ impl SegmentationState {
         let page_access_count: u32 = self.addr_space_access_count.iter().sum();
         let leaves = page_access_count << DEFAULT_PAGE_BITS;
 
-        // Boundary chip: 2 rows per leaf (init + final)
-        self.trace_heights[self.config.boundary_idx] += leaves * 2;
+        let trace_heights = &mut self.trace_heights;
+        let poseidon2_idx = trace_heights.len() - 2;
 
-        // Merkle tree + Poseidon2
-        let merkle_idx = self.config.merkle_tree_idx;
-        let poseidon2_idx = self.trace_heights.len() - 2;
-        self.trace_heights[poseidon2_idx] += leaves * 2;
-
-        let merkle_height =
-            self.config.addr_space_height as usize + self.config.address_height as usize;
-        let nodes =
+        let merkle_height = self.addr_space_height as usize + self.address_height as usize;
+        let nodes_per_page =
             (((1usize << DEFAULT_PAGE_BITS) - 1) + (merkle_height - DEFAULT_PAGE_BITS)) as u32;
-        self.trace_heights[poseidon2_idx] += nodes * page_access_count * 2;
-        self.trace_heights[merkle_idx] += nodes * page_access_count * 2;
+
+        // Boundary chip: 2 rows per leaf (init + final)
+        trace_heights[BOUNDARY_AIR_ID] += leaves * 2;
+        // Merkle tree + Poseidon2
+        trace_heights[MERKLE_AIR_ID] += nodes_per_page * page_access_count * 2;
+        trace_heights[poseidon2_idx] += leaves * 2 + nodes_per_page * page_access_count * 2;
 
         // Reset counts
         self.addr_space_access_count.fill(0);
     }
 
-    /// Check segmentation limits. Returns true if we should segment.
-    ///
-    /// Matches OpenVM's `SegmentationCtx::should_segment` with the new memory-based
-    /// calculation from v2.0.0-rc.1.
-    fn should_segment(&self) -> bool {
-        let instret_start = self
-            .segments
-            .last()
-            .map_or(0, |s| s.instret_start + s.num_insns);
-        let num_insns = self.instret - instret_start;
-        if num_insns == 0 {
-            return false;
-        }
-
-        let config = &self.config.segmentation_config;
-        let main_weight = config.main_cell_weight;
-        let main_secondary_weight = config.main_cell_secondary_weight;
-        let interaction_weight = config.interaction_cell_weight;
-        let base_field_size = config.base_field_size;
-
-        let mut main_cnt = 0usize;
-        let mut interaction_cnt = 0usize;
-        for i in 0..self.trace_heights.len() {
-            let h = self.trace_heights[i];
-            let padded = h.next_power_of_two();
-            if !self.config.is_constant[i] && padded > config.limits.max_trace_height {
-                return true;
-            }
-            let padded = padded as usize;
-            main_cnt += padded * self.config.widths[i];
-            interaction_cnt += padded * self.config.interactions[i];
-        }
-
-        let main_memory = main_cnt * main_weight * base_field_size;
-        let main_secondary_memory =
-            ((main_cnt * base_field_size) as f64 * main_secondary_weight).ceil() as usize;
-        let interaction_memory = (((interaction_cnt + 1).next_power_of_two() * base_field_size)
-            as f64
-            * interaction_weight)
-            .ceil() as usize
-            + DEFAULT_INTERACTION_CONSTANT_OVERHEAD;
-        let total_memory = main_memory + std::cmp::max(main_secondary_memory, interaction_memory);
-
-        if total_memory > config.limits.max_memory {
-            return true;
-        }
-
-        let total_interactions: usize = self
-            .trace_heights
-            .iter()
-            .zip(self.config.interactions.iter())
-            .map(|(&h, &i)| (h + 1) as usize * i)
-            .sum();
-        if total_interactions > config.limits.max_interactions {
-            return true;
-        }
-
-        false
-    }
-
-    /// Create a segment from checkpoint heights.
-    fn create_segment(&mut self) {
-        let instret_start = self
-            .segments
-            .last()
-            .map_or(0, |s| s.instret_start + s.num_insns);
-        let num_insns = self.checkpoint_instret - instret_start;
-        self.segments.push(RvrSegment {
-            instret_start,
-            num_insns,
-            trace_heights: self.checkpoint_trace_heights.clone(),
-        });
-    }
-
-    /// Initialize state for a new segment after segmentation.
-    ///
-    /// Matches OpenVM's `segment_ctx.initialize_segment` + `memory_ctx.initialize_segment`.
-    /// The page buffer contents from the batch that triggered segmentation are
-    /// still intact, so we replay them via `flush_page_buffer`.
-    fn initialize_new_segment(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
-        // Step 1: Subtract checkpoint heights from current to get the delta
-        // (matches OpenVM's segment_ctx.reset_trace_heights).
-        for i in 0..self.trace_heights.len() {
-            if !self.config.is_constant[i] {
-                self.trace_heights[i] =
-                    self.trace_heights[i].wrapping_sub(self.checkpoint_trace_heights[i]);
-            }
-        }
-
-        // Step 2: Reset memory-specific heights to 0 (will be recomputed from page replay).
-        self.trace_heights[self.config.boundary_idx] = 0;
-        self.trace_heights[self.config.merkle_tree_idx] = 0;
+    fn initialize_segment_memory(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
         let poseidon2_idx = self.trace_heights.len() - 2;
+        self.trace_heights[BOUNDARY_AIR_ID] = 0;
+        self.trace_heights[MERKLE_AIR_ID] = 0;
         self.trace_heights[poseidon2_idx] = 0;
 
-        // Step 3: Clear page tracking and replay current batch pages.
         self.page_indices.clear();
         self.addr_space_access_count.fill(0);
-        self.flush_page_buffer(mem_len, pv_len, deferral_len);
 
-        // Step 4: Apply height updates from replayed pages.
+        self.flush_page_buffer(mem_len, pv_len, deferral_len);
         self.apply_height_updates();
 
-        // Step 5: Add register merkle heights and apply.
         self.add_register_merkle_heights();
         self.apply_height_updates();
-    }
-
-    /// Validate that a freshly initialized segment is within limits.
-    ///
-    /// This mirrors OpenVM's post-initialization sanity check and surfaces
-    /// cases where the new segment already exceeds segmentation limits.
-    fn validate_initialized_segment_state(&self) {
-        if !self.should_segment() {
-            return;
-        }
-
-        let trace_heights_str = self
-            .trace_heights
-            .iter()
-            .enumerate()
-            .filter(|(_, &height)| height > 0)
-            .map(|(idx, &height)| format!("  [{idx}] = {height}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        tracing::warn!(
-            "Segment initialized with heights that exceed limits\n\
-             instret={}\n\
-             trace_heights=[\n{}\n]",
-            self.instret,
-            trace_heights_str
-        );
     }
 
     /// Called on each periodic check (approximately every `segment_check_insns` instructions).
     /// Invoked from the C tracer's `trace_block` callback when the block-level
     /// countdown crosses zero. Returns true if a segment boundary was created.
     pub fn on_periodic_check(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) -> bool {
-        self.instret += self.config().segment_check_insns;
+        let seg_check_insns = self.segmentation_ctx.segment_check_insns;
+        self.segmentation_ctx.instret += seg_check_insns;
+        self.segmentation_ctx.instrets_until_check = seg_check_insns;
 
-        // Flush all page buffers
         self.flush_page_buffer(mem_len, pv_len, deferral_len);
-
-        // Apply boundary height updates
         self.apply_height_updates();
 
-        // Check segmentation
-        let did_segment = if self.should_segment() {
-            self.create_segment();
-            self.initialize_new_segment(mem_len, pv_len, deferral_len);
-            self.validate_initialized_segment_state();
-            true
-        } else {
-            false
-        };
+        let instret = self.segmentation_ctx.instret;
+        let did_segment = self.segmentation_ctx.check_and_segment(
+            instret,
+            &mut self.trace_heights,
+            &self.is_trace_height_constant,
+        );
 
-        // Update checkpoint
-        self.checkpoint_trace_heights
-            .copy_from_slice(&self.trace_heights);
-        self.checkpoint_instret = self.instret;
+        if did_segment {
+            self.segmentation_ctx
+                .initialize_segment(&mut self.trace_heights, &self.is_trace_height_constant);
+            self.initialize_segment_memory(mem_len, pv_len, deferral_len);
+
+            if self.segmentation_ctx.should_segment(
+                instret,
+                &self.trace_heights,
+                &self.is_trace_height_constant,
+            ) {
+                let trace_heights_str = self
+                    .trace_heights
+                    .iter()
+                    .zip(self.segmentation_ctx.air_names.iter())
+                    .filter(|(&height, _)| height > 0)
+                    .map(|(&height, name)| format!("  {name} = {height}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                tracing::warn!(
+                    "Segment initialized with heights that exceed limits\n\
+                     instret={instret}\n\
+                     trace_heights=[\n{trace_heights_str}\n]"
+                );
+            }
+        }
+
+        self.segmentation_ctx
+            .update_checkpoint(instret, &self.trace_heights);
 
         did_segment
     }
@@ -604,34 +351,12 @@ impl SegmentationState {
         deferral_len: u32,
         remaining_counter: u32,
     ) {
-        // Compute exact instret: accumulate instructions elapsed since last check.
-        let elapsed = self.config().segment_check_insns - remaining_counter as u64;
-        self.instret += elapsed;
-
-        // Flush and apply remaining pages
         self.flush_page_buffer(mem_len, pv_len, deferral_len);
         self.apply_height_updates();
 
-        // Create final segment
-        let instret_start = self
-            .segments
-            .last()
-            .map_or(0, |s| s.instret_start + s.num_insns);
-        let num_insns = self.instret - instret_start;
-        self.segments.push(RvrSegment {
-            instret_start,
-            num_insns,
-            trace_heights: self.trace_heights.clone(),
-        });
-    }
-
-    /// Consume and return the result.
-    pub fn into_result(self, state: MeteredState) -> RvrMeteredResult {
-        RvrMeteredResult {
-            instret: self.instret,
-            segments: self.segments,
-            state,
-        }
+        self.segmentation_ctx.instrets_until_check = remaining_counter as u64;
+        self.segmentation_ctx
+            .create_final_segment(&self.trace_heights);
     }
 }
 
@@ -658,7 +383,7 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) {
     tracer.last_mem_page = NO_LAST_PAGE;
 
     // Reset the countdown for the next interval.
-    tracer.check_counter += seg_state.config().segment_check_insns as u32;
+    tracer.check_counter += seg_state.segmentation_ctx.segment_check_insns as u32;
 
     seg_state.on_periodic_check(mem_len, pv_len, deferral_len);
 }
@@ -687,63 +412,39 @@ where
         mut vm_state: VmState<F, GuestMemory>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let constant_trace_heights: Vec<Option<usize>> = ctx
-            .trace_heights
-            .iter()
-            .zip(ctx.is_trace_height_constant.iter())
-            .map(|(&height, &is_constant)| is_constant.then_some(height as usize))
-            .collect();
-
-        let mut trace_config = build_metered_config(
+        let chips = build_chip_mapping(
             self.exe.as_ref(),
             self.inventory.as_ref(),
             &self.executor_idx_to_air_idx,
-            &ctx.segmentation_ctx.widths,
-            &ctx.segmentation_ctx.interactions,
-            &constant_trace_heights,
-            &self.system_config,
         );
-        trace_config.segmentation_config = ctx.segmentation_ctx.config.clone();
-        trace_config.segment_check_insns = ctx.segmentation_ctx.segment_check_insns;
-        trace_config.initial_trace_heights = ctx.trace_heights.clone();
-        trace_config.is_constant = ctx.is_trace_height_constant.clone();
-
-        let chips = trace_config.chip_mapping();
         let compiled_metered = compile_metered(self.exe.as_ref(), &self.extensions, &chips)
             .map_err(map_rvr_compile_error)?;
 
+        let seg_state = SegmentationState::new(ctx, &self.system_config);
+
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
-        let metered_result = tracing::info_span!("execute_metered")
+        let result_seg_state = tracing::info_span!("execute_metered")
             .in_scope(|| {
                 execute_metered(
                     &compiled_metered,
                     &self.extensions,
                     &mut vm_state,
-                    trace_config,
+                    seg_state,
                 )
             })
             .map_err(map_rvr_execute_error)?;
+        let result_seg_ctx = result_seg_state.segmentation_ctx;
         #[cfg(feature = "metrics")]
         {
             let elapsed = start.elapsed();
-            let insns = metered_result.instret;
+            let insns = result_seg_ctx.instret;
             tracing::info!("instructions_executed={insns}");
             metrics::counter!("execute_metered_insns").absolute(insns);
             metrics::gauge!("execute_metered_insn_mi/s")
                 .set(insns as f64 / elapsed.as_micros() as f64);
         }
 
-        let segments = metered_result
-            .segments
-            .into_iter()
-            .map(|segment| Segment {
-                instret_start: segment.instret_start,
-                num_insns: segment.num_insns,
-                trace_heights: segment.trace_heights,
-            })
-            .collect();
-
-        Ok((segments, vm_state))
+        Ok((result_seg_ctx.segments, vm_state))
     }
 }
