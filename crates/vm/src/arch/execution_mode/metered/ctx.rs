@@ -250,7 +250,6 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         // be after the segment boundary because the segment happens in the previous checkpoint).
         // Otherwise, execute until termination.
         if exec_state.ctx.check_and_segment() && exec_state.ctx.suspend_on_segment {
-            exec_state.ctx.print_segment();
             true
         } else {
             exec_state.ctx.segmentation_ctx.instrets_until_check -= 1;
