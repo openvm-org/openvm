@@ -8,9 +8,25 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-rvr-openvm-ir.workspace = true
-rvr-openvm-lift.workspace = true
+rvr-openvm-ext-ffi-common = { workspace = true, optional = true }
+rvr-openvm-ir = { workspace = true, optional = true }
+rvr-openvm-lift = { workspace = true, optional = true }
 
-openvm-deferral-transpiler.workspace = true
-openvm-instructions.workspace = true
-openvm-stark-backend.workspace = true
+openvm-circuit = { workspace = true, features = ["rvr"], optional = true }
+openvm-deferral-transpiler = { workspace = true, optional = true }
+openvm-instructions = { workspace = true, optional = true }
+openvm-stark-backend = { workspace = true, optional = true }
+libloading = { workspace = true, optional = true }
+
+[features]
+default = []
+rvr = [
+    "dep:rvr-openvm-ext-ffi-common",
+    "dep:rvr-openvm-ir",
+    "dep:rvr-openvm-lift",
+    "dep:openvm-circuit",
+    "dep:openvm-deferral-transpiler",
+    "dep:openvm-instructions",
+    "dep:openvm-stark-backend",
+    "dep:libloading",
+]
