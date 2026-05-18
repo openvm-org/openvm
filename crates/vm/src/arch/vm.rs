@@ -12,8 +12,6 @@ use std::{any::TypeId, borrow::Borrow, collections::VecDeque, marker::PhantomDat
 use getset::{Getters, MutGetters, Setters, WithSetters};
 use itertools::{zip_eq, Itertools};
 use openvm_circuit::system::program::trace::compute_exe_commit;
-#[cfg(feature = "rvr")]
-use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     program::Program,
@@ -43,7 +41,10 @@ use tracing::{info_span, instrument};
 #[cfg(feature = "aot")]
 use super::aot::AotInstance;
 #[cfg(feature = "rvr")]
-use super::rvr::{self, RvrMeteredCostInstance, RvrMeteredInstance, RvrPureInstance};
+use super::rvr::{
+    self, bridge::map_rvr_compile_error, RvrMeteredCostInstance, RvrMeteredInstance,
+    RvrPureInstance,
+};
 use super::{
     execution_mode::{
         ExecutionCtx, MeteredCostCtx, MeteredCtx, MeteredCtxInputs, PreflightCtx, Segment,
@@ -62,8 +63,6 @@ use super::{
 use crate::metrics::emit_opcode_counts;
 #[cfg(feature = "perf-metrics")]
 use crate::metrics::end_segment_metrics;
-#[cfg(feature = "rvr")]
-use crate::system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::LinearMemory};
 use crate::{
     arch::deferral::DeferralState,
     execute_spanned,
@@ -119,10 +118,6 @@ pub struct Streams<F> {
     /// Cached deferred operation inputs and outputs. Each idx corresponds to a
     /// unique function that is constrained outside the VM in its own deferral circuit.
     pub deferrals: Vec<DeferralState>,
-    #[cfg(feature = "rvr")]
-    pub deferral_fns: Vec<rvr::io::DeferralFnPtr>,
-    #[cfg(feature = "rvr")]
-    pub deferral_hash: Option<rvr::io::DeferralHashFn>,
 }
 
 impl<F> Streams<F> {
@@ -131,10 +126,6 @@ impl<F> Streams<F> {
             input_stream: input_stream.into(),
             hint_stream: VecDeque::default(),
             deferrals: Vec::default(),
-            #[cfg(feature = "rvr")]
-            deferral_fns: Vec::default(),
-            #[cfg(feature = "rvr")]
-            deferral_hash: None,
         }
     }
 }
@@ -169,201 +160,6 @@ type RvrMeteredInstance2<F, VC> = RvrMeteredInstance<F, <VC as VmExecutionConfig
 #[cfg(feature = "rvr")]
 type RvrMeteredCostInstance2<F, VC> =
     RvrMeteredCostInstance<F, <VC as VmExecutionConfig<F>>::Executor>;
-
-#[cfg(feature = "rvr")]
-pub(crate) fn map_rvr_compile_error(err: rvr::CompileError) -> StaticProgramError {
-    StaticProgramError::FailToGenerateDynamicLibrary {
-        err: err.to_string(),
-    }
-}
-
-#[cfg(feature = "rvr")]
-pub(crate) fn map_rvr_execute_error(err: rvr::ExecuteError) -> ExecutionError {
-    match err {
-        rvr::ExecuteError::GuestExit(code) => ExecutionError::FailedWithExitCode(code as u32),
-        other => ExecutionError::RvrExecution(other.to_string()),
-    }
-}
-
-// TODO: Unify format of the VM state for rvr and interpreted execution.
-#[cfg(feature = "rvr")]
-pub(crate) fn state_from_rvr<F: PrimeField32>(
-    system_config: &SystemConfig,
-    exe: &VmExe<F>,
-    pc: u32,
-    regs: &[u32],
-    rvr_memory: &rvr_state::GuardedMemory,
-    public_values: &[u8],
-) -> VmState<F, GuestMemory> {
-    let mut guest_memory = create_memory_image(&system_config.memory_config, &exe.init_memory);
-    write_rvr_memory_to_guest_memory(&mut guest_memory, regs, rvr_memory, public_values);
-
-    VmState::new_with_defaults(pc, guest_memory, Streams::default(), 0)
-}
-
-#[cfg(feature = "rvr")]
-pub(crate) fn write_rvr_memory_to_guest_memory(
-    guest_memory: &mut GuestMemory,
-    regs: &[u32],
-    rvr_memory: &rvr_state::GuardedMemory,
-    public_values: &[u8],
-) {
-    let source_memory =
-        unsafe { std::slice::from_raw_parts(rvr_memory.as_ptr(), rvr_memory.size()) };
-    let memory_capacity = guest_memory.memory.config[RV32_MEMORY_AS as usize].num_cells;
-    let memory_len = std::cmp::min(memory_capacity, source_memory.len());
-    unsafe {
-        guest_memory
-            .memory
-            .copy_slice_nonoverlapping((RV32_MEMORY_AS, 0), &source_memory[..memory_len]);
-    }
-
-    let mut register_bytes = Vec::with_capacity(std::mem::size_of_val(regs));
-    for reg in regs {
-        register_bytes.extend_from_slice(&reg.to_le_bytes());
-    }
-    let register_capacity = guest_memory.memory.config[RV32_REGISTER_AS as usize].num_cells;
-    let register_len = std::cmp::min(register_capacity, register_bytes.len());
-    unsafe {
-        guest_memory
-            .memory
-            .copy_slice_nonoverlapping((RV32_REGISTER_AS, 0), &register_bytes[..register_len]);
-    }
-
-    if !public_values.is_empty() {
-        let pv_capacity = guest_memory.memory.mem[PUBLIC_VALUES_AS as usize].size();
-        let pv_len = std::cmp::min(pv_capacity, public_values.len());
-        unsafe {
-            guest_memory
-                .memory
-                .copy_slice_nonoverlapping((PUBLIC_VALUES_AS, 0), &public_values[..pv_len]);
-        }
-    }
-}
-
-#[cfg(feature = "rvr")]
-pub(crate) fn read_rv32_regs_from_guest_memory(guest_memory: &GuestMemory) -> [u32; 32] {
-    let reg_capacity = guest_memory.memory.config[RV32_REGISTER_AS as usize].num_cells;
-    let regs_u8 = unsafe {
-        guest_memory
-            .memory
-            .get_u8_slice(RV32_REGISTER_AS, 0, reg_capacity)
-    };
-    let mut regs = [0u32; 32];
-    for (i, chunk) in regs_u8.chunks_exact(4).take(32).enumerate() {
-        regs[i] = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-    }
-    regs
-}
-
-#[cfg(feature = "rvr")]
-pub(crate) fn copy_guest_memory_to_rvr_memory(
-    guest_memory: &GuestMemory,
-    rvr_memory: &mut rvr_state::GuardedMemory,
-) {
-    let memory_capacity = guest_memory.memory.config[RV32_MEMORY_AS as usize].num_cells;
-    let source_memory = unsafe {
-        guest_memory
-            .memory
-            .get_u8_slice(RV32_MEMORY_AS, 0, memory_capacity)
-    };
-    let dst = unsafe { std::slice::from_raw_parts_mut(rvr_memory.as_mut_ptr(), rvr_memory.size()) };
-    let len = std::cmp::min(dst.len(), source_memory.len());
-    dst[..len].copy_from_slice(&source_memory[..len]);
-}
-
-#[cfg(feature = "rvr")]
-pub(crate) fn read_public_values_from_guest_memory(guest_memory: &GuestMemory) -> Vec<u8> {
-    let pv_capacity = guest_memory.memory.config[PUBLIC_VALUES_AS as usize].num_cells;
-    unsafe {
-        guest_memory
-            .memory
-            .get_u8_slice(PUBLIC_VALUES_AS, 0, pv_capacity)
-            .to_vec()
-    }
-}
-
-#[cfg(feature = "rvr")]
-pub(crate) struct RvrIoSeed {
-    pub input_stream: VecDeque<Vec<u8>>,
-    pub hint_stream: Vec<u8>,
-    pub deferrals: Vec<DeferralState>,
-    pub deferral_fns: Vec<rvr::io::DeferralFnPtr>,
-    pub deferral_hash: Option<rvr::io::DeferralHashFn>,
-}
-
-#[cfg(feature = "rvr")]
-pub(crate) fn streams_to_io_seed<F: PrimeField32>(streams: Streams<F>) -> RvrIoSeed {
-    let mut input_stream = VecDeque::with_capacity(streams.input_stream.len());
-    for vec in streams.input_stream {
-        input_stream.push_back(
-            vec.into_iter()
-                .map(|f| f.as_canonical_u32() as u8)
-                .collect::<Vec<u8>>(),
-        );
-    }
-    let hint_stream = streams
-        .hint_stream
-        .into_iter()
-        .map(|f| f.as_canonical_u32() as u8)
-        .collect();
-    RvrIoSeed {
-        input_stream,
-        hint_stream,
-        deferrals: streams.deferrals,
-        deferral_fns: streams.deferral_fns,
-        deferral_hash: streams.deferral_hash,
-    }
-}
-
-#[cfg(feature = "rvr")]
-pub(crate) fn streams_from_io_state<F: PrimeField32>(
-    io_state: &rvr::io::OpenVmIoState,
-    deferrals: Vec<DeferralState>,
-    deferral_fns: Vec<rvr::io::DeferralFnPtr>,
-    deferral_hash: Option<rvr::io::DeferralHashFn>,
-) -> Streams<F> {
-    let input_stream = io_state
-        .input_stream
-        .iter()
-        .map(|vec| vec.iter().map(|&b| F::from_u8(b)).collect::<Vec<F>>())
-        .collect::<VecDeque<_>>();
-    let hint_stream = io_state
-        .hint_stream
-        .iter()
-        .skip(io_state.hint_pos)
-        .map(|&b| F::from_u8(b))
-        .collect::<VecDeque<_>>();
-    Streams {
-        input_stream,
-        hint_stream,
-        deferrals,
-        deferral_fns,
-        deferral_hash,
-    }
-}
-
-#[cfg(feature = "rvr")]
-pub(crate) fn ensure_rvr_outcome(
-    context: &str,
-    terminated: bool,
-    suspended: bool,
-    guest_exit_code: u8,
-    allow_suspended: bool,
-) -> Result<(), ExecutionError> {
-    if allow_suspended && suspended {
-        return Ok(());
-    }
-    if terminated {
-        if guest_exit_code == 0 {
-            return Ok(());
-        }
-        return Err(ExecutionError::FailedWithExitCode(guest_exit_code as u32));
-    }
-    Err(ExecutionError::RvrExecution(format!(
-        "{context} failed: terminated={terminated}, suspended={suspended}, guest_exit_code={guest_exit_code}"
-    )))
-}
 
 /// [VmExecutor] is the struct that can execute an _arbitrary_ program, provided in the form of a
 /// [VmExe], for a fixed set of OpenVM instructions corresponding to a [VmExecutionConfig].
@@ -494,13 +290,13 @@ where
         // execution can avoid passing `executor_idx_to_air_idx` altogether.
         let executor_idx_to_air_idx = vec![NO_CHIP as usize; self.inventory.executors.len()];
         let extensions = self.build_rvr_extensions(&executor_idx_to_air_idx);
-        let compiled =
-            rvr::compile_with_extensions(exe, &extensions).map_err(map_rvr_compile_error)?;
+        let compiled = rvr::compile(exe, &extensions).map_err(map_rvr_compile_error)?;
 
         Ok(RvrPureInstance {
             system_config: self.inventory.config().clone(),
             exe: Arc::new(exe.clone()),
             compiled,
+            extensions,
         })
     }
 }

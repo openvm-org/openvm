@@ -52,6 +52,7 @@ aot = ["openvm-circuit/aot"]
 rvr = [
     "dep:rvr-openvm-lift",
     "dep:rvr-openvm-ext-deferral",
+    "rvr-openvm-ext-deferral/rvr",
     "dep:rvr-openvm-ext-ffi-common",
     "openvm-rv32im-circuit/rvr",
 ]

@@ -323,6 +323,7 @@ where
 //
 // Same implementation as VmLocalProver, but we need to do something special to run the debug prover
 #[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 pub fn air_test_impl<E, VB>(
     params: SystemParams,
     builder: VB,
