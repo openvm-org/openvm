@@ -1,42 +1,40 @@
 //! Load .so, bridge state, call rv_execute.
+//!
+//! Each execution path takes `&mut VmState<F, GuestMemory>` directly: the
+//! transient `RvState` scratch struct aliases VmState's memory and registers,
+//! and `OpenVmIoState` borrows VmState's `Streams<F>` and rng. There is no
+//! separately-owned guest memory or stream conversion.
 
-use std::{collections::VecDeque, ffi::c_void};
+use std::ffi::c_void;
 
-use openvm_instructions::exe::VmExe;
-use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::p3_field::PrimeField32;
-use rand::{rngs::StdRng, SeedableRng};
-use rvr_state::GuardedMemory;
+use rvr_openvm_lift::{ExtensionError, ExtensionRegistry};
+use rvr_state::{ExecutionStatus, MemoryError, Rv32, RvState, SuspenderState, TracerState};
 
 use super::{
+    bridge::{public_values_slice, read_rv32_registers, rv32_memory_ptr, write_rv32_registers},
     compile::RvrCompiled,
     io::{
-        convert_input_stream, host_deferral_call_lookup, host_deferral_output_lookup,
         host_hint_buffer, host_hint_input, host_hint_random, host_hint_storew,
-        host_hint_stream_set, host_print_str, host_reveal, DeferralFnPtr, DeferralHashFn,
-        OpenVmHostCallbacks, OpenVmIoState,
+        host_hint_stream_set, host_print_str, host_reveal, OpenVmHostCallbacks, OpenVmIoState,
     },
     metered::{
-        metered_periodic_check, MeteredConfig, MeteredTracer, MeteredTracerData, RvrMeteredResult,
+        metered_periodic_check, MeteredConfig, MeteredTracerData, RvrMeteredResult,
         SegmentationState, NO_LAST_PAGE,
     },
     metered_cost::{
-        prepare_metered_cost, MeteredCostConfig, MeteredCostData, MeteredCostMeter, PureTracer,
-        PureTracerData,
+        prepare_metered_cost, MeteredCostConfig, MeteredCostData, PureTracerData,
+        RvrMeteredCostResult,
     },
+    pure::RvrPureResult,
     state::{
-        init_rvr_state, init_rvr_state_with_metered, init_rvr_state_with_metered_cost,
-        MeteredCostState, MeteredState, PureState,
+        init_rvr_state, init_rvr_state_with_metered, init_rvr_state_with_metered_cost, TracerPtr,
     },
 };
-use crate::arch::deferral::DeferralState;
+use crate::{arch::VmState, system::memory::online::GuestMemory};
 
-/// Result of executing via rvr.
-pub struct RvrExecutionResult {
-    pub state: PureState,
-    pub memory: GuardedMemory,
-    pub public_values: Vec<u8>,
-}
+type RegisterFn = unsafe extern "C" fn(*const OpenVmHostCallbacks);
+type ExecuteFn = unsafe extern "C" fn(*mut c_void);
 
 /// Error during execution.
 #[derive(Debug, thiserror::Error)]
@@ -48,91 +46,51 @@ pub enum ExecuteError {
     #[error("guest exited with non-zero exit code: {0}")]
     GuestExit(u8),
     #[error("memory allocation failed: {0}")]
-    MemoryAlloc(#[from] rvr_state::MemoryError),
-}
-
-/// Result of executing with an instruction limit via rvr.
-pub struct RvrLimitedResult {
-    pub state: PureState,
-    pub memory: GuardedMemory,
-    pub instret: u64,
-    pub suspended: bool,
-}
-
-/// Result of metered cost execution via rvr.
-pub struct RvrMeteredCostResult {
-    pub state: MeteredCostState,
-    pub memory: GuardedMemory,
-    pub cost: u64,
-    pub instret: u64,
-    pub suspended: bool,
-}
-
-/// Result of metered cost execution with an instruction limit via rvr.
-pub struct RvrMeteredCostLimitedResult {
-    pub state: MeteredCostState,
-    pub memory: GuardedMemory,
-    pub cost: u64,
-    pub instret: u64,
-    pub suspended: bool,
+    MemoryAlloc(#[from] MemoryError),
+    #[error("extension host callback registration failed: {0}")]
+    ExtensionRegistration(#[from] ExtensionError),
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ExecuteOutcome {
-    Running,
-    Terminated,
-    Suspended,
-}
-
-pub fn build_io_state(
-    input_stream: VecDeque<Vec<u8>>,
-    memory: *mut u8,
-    deferrals: Vec<DeferralState>,
-    deferral_fns: Vec<DeferralFnPtr>,
-    deferral_hash: Option<DeferralHashFn>,
-) -> OpenVmIoState {
-    OpenVmIoState {
-        input_stream,
-        hint_stream: Vec::new(),
-        hint_pos: 0,
-        public_values: Vec::new(),
-        memory,
-        rng: StdRng::seed_from_u64(0),
-        deferrals,
-        deferral_fns,
-        deferral_hash,
+pub fn build_callbacks<F: PrimeField32>(
+    io_state: &mut OpenVmIoState<'_, F>,
+) -> OpenVmHostCallbacks {
+    OpenVmHostCallbacks {
+        ctx: io_state as *mut OpenVmIoState<'_, F> as *mut c_void,
+        hint_input: host_hint_input::<F>,
+        print_str: host_print_str::<F>,
+        hint_random: host_hint_random::<F>,
+        hint_storew: host_hint_storew::<F>,
+        hint_buffer: host_hint_buffer::<F>,
+        reveal: host_reveal::<F>,
+        hint_stream_set: host_hint_stream_set::<F>,
     }
 }
 
-pub fn build_callbacks(io_state: &mut OpenVmIoState) -> OpenVmHostCallbacks {
-    OpenVmHostCallbacks {
-        ctx: io_state as *mut OpenVmIoState as *mut c_void,
-        hint_input: host_hint_input,
-        print_str: host_print_str,
-        hint_random: host_hint_random,
-        hint_storew: host_hint_storew,
-        hint_buffer: host_hint_buffer,
-        reveal: host_reveal,
-        hint_stream_set: host_hint_stream_set,
-        deferral_call_lookup: host_deferral_call_lookup,
-        deferral_output_lookup: host_deferral_output_lookup,
+fn build_io_state_borrowed<'a, F: PrimeField32>(
+    vm_state: &'a mut VmState<F, GuestMemory>,
+) -> OpenVmIoState<'a, F> {
+    let memory_ptr = rv32_memory_ptr(vm_state);
+    let streams = &mut vm_state.streams;
+    OpenVmIoState {
+        input_stream: &mut streams.input_stream,
+        hint_stream: &mut streams.hint_stream,
+        rng: &mut vm_state.rng,
+        memory_ptr,
+        public_values: public_values_slice(&mut vm_state.memory.memory),
+        deferrals: &mut streams.deferrals,
     }
 }
 
 /// # Safety
 ///
-/// - `compiled` must contain a valid rvr-compiled shared library with the expected ABI
-///   (`register_openvm_callbacks` and `rv_execute` symbols).
-/// - `state_ptr` must point to a valid, mutable RV32 state struct whose tracer variant matches the
-///   one compiled into the shared library.
-pub unsafe fn register_and_execute(
+/// `compiled` must contain a valid rvr-compiled shared library exporting the
+/// `register_openvm_callbacks` symbol with the expected ABI.
+pub unsafe fn register_openvm_callbacks(
     compiled: &RvrCompiled,
     callbacks: &OpenVmHostCallbacks,
-    state_ptr: *mut c_void,
 ) -> Result<(), ExecuteError> {
-    type RegisterFn = unsafe extern "C" fn(*const OpenVmHostCallbacks);
     let register_fn: RegisterFn = unsafe {
         let sym = compiled
             .lib
@@ -141,8 +99,18 @@ pub unsafe fn register_and_execute(
         *sym
     };
     unsafe { register_fn(callbacks) };
+    Ok(())
+}
 
-    type ExecuteFn = unsafe extern "C" fn(*mut c_void);
+/// # Safety
+///
+/// - `compiled` must contain a valid rvr-compiled shared library exporting the `rv_execute` symbol.
+/// - `state_ptr` must point to a valid, mutable RV32 state struct whose tracer variant matches the
+///   one compiled into the shared library.
+pub unsafe fn rv_execute(
+    compiled: &RvrCompiled,
+    state_ptr: *mut c_void,
+) -> Result<(), ExecuteError> {
     let execute_fn: ExecuteFn = unsafe {
         let sym = compiled
             .lib
@@ -155,318 +123,131 @@ pub unsafe fn register_and_execute(
     Ok(())
 }
 
-fn report_failure(prefix: &str, outcome: ExecuteOutcome, pc: u32, instret: u64, exit_code: u8) {
-    if std::env::var_os("RVR_OPENVM_DEBUG_EXEC_FAILURE").is_some() {
-        eprintln!(
-            "[rvr-openvm] {prefix}: outcome={outcome:?}, pc={pc:#x}, instret={instret}, guest_exit_code={exit_code}"
-        );
+/// Run the FFI execute against `vm_state` + `state`, validate the outcome,
+/// and on success write the final pc/regs back into `vm_state`.
+///
+/// `allow_suspended` permits `Suspended` as a successful outcome (the
+/// limit-armed callers pass `true`; unlimited callers pass `false`).
+fn run_and_finalize<F, T, S>(
+    compiled: &RvrCompiled,
+    extensions: &ExtensionRegistry<F>,
+    vm_state: &mut VmState<F, GuestMemory>,
+    state: &mut RvState<Rv32, T, S>,
+    allow_suspended: bool,
+) -> Result<ExecutionStatus, ExecuteError>
+where
+    F: PrimeField32,
+    T: TracerState,
+    S: SuspenderState,
+{
+    let mut io_state = build_io_state_borrowed(vm_state);
+    let callbacks = build_callbacks(&mut io_state);
+    unsafe {
+        register_openvm_callbacks(compiled, &callbacks)?;
+        extensions.register_host_callbacks(&compiled.lib)?;
+        rv_execute(compiled, state.as_void_ptr())?;
     }
-}
 
-fn execution_error(
-    prefix: &str,
-    outcome: ExecuteOutcome,
-    pc: u32,
-    instret: u64,
-    exit_code: u8,
-) -> ExecuteError {
-    report_failure(prefix, outcome, pc, instret, exit_code);
-    if outcome == ExecuteOutcome::Terminated && exit_code != 0 {
-        ExecuteError::GuestExit(exit_code)
-    } else {
-        ExecuteError::ExecutionFailed(match outcome {
-            ExecuteOutcome::Running => 0,
-            ExecuteOutcome::Terminated => 1,
-            ExecuteOutcome::Suspended => 2,
-        })
-    }
-}
-
-fn outcome_from_pure_state(state: &PureState) -> ExecuteOutcome {
-    if state.is_terminated() {
-        ExecuteOutcome::Terminated
-    } else if state.is_suspended() {
-        ExecuteOutcome::Suspended
-    } else {
-        ExecuteOutcome::Running
-    }
-}
-
-fn outcome_from_metered_cost_state(state: &MeteredCostState) -> ExecuteOutcome {
-    if state.is_terminated() {
-        ExecuteOutcome::Terminated
-    } else if state.is_suspended() {
-        ExecuteOutcome::Suspended
-    } else {
-        ExecuteOutcome::Running
-    }
-}
-
-fn outcome_from_metered_state(state: &MeteredState) -> ExecuteOutcome {
-    if state.is_terminated() {
-        ExecuteOutcome::Terminated
-    } else if state.is_suspended() {
-        ExecuteOutcome::Suspended
-    } else {
-        ExecuteOutcome::Running
+    let status = state.execution_status();
+    let exit_code = state.result_code();
+    match status {
+        ExecutionStatus::Terminated if exit_code == 0 => {
+            write_rv32_registers(vm_state, &state.regs);
+            vm_state.set_pc(state.pc);
+            Ok(status)
+        }
+        ExecutionStatus::Suspended if allow_suspended => {
+            write_rv32_registers(vm_state, &state.regs);
+            vm_state.set_pc(state.pc);
+            Ok(status)
+        }
+        _ => Err(if status == ExecutionStatus::Terminated {
+            ExecuteError::GuestExit(exit_code)
+        } else {
+            ExecuteError::ExecutionFailed(status as i32)
+        }),
     }
 }
 
 // ── Public execute functions ─────────────────────────────────────────────────
 
-/// Execute a VmExe using a compiled rvr shared library.
+/// Execute a VmExe using a compiled rvr shared library against `vm_state`.
+///
+/// If `num_insns` is `Some(n)`, the suspender is armed at `n` instructions and
+/// a `Suspended` outcome is accepted as success; otherwise only `Terminated`
+/// (with exit-code 0) succeeds.
 pub fn execute<F: PrimeField32>(
     compiled: &RvrCompiled,
-    exe: &VmExe<F>,
-    input_stream: VecDeque<Vec<F>>,
-    hint_stream: Vec<u8>,
-    deferrals: Vec<DeferralState>,
-    deferral_fns: Vec<DeferralFnPtr>,
-    deferral_hash: Option<DeferralHashFn>,
-) -> Result<RvrExecutionResult, ExecuteError> {
-    let mut memory = GuardedMemory::new(MEM_SIZE)?;
+    extensions: &ExtensionRegistry<F>,
+    vm_state: &mut VmState<F, GuestMemory>,
+    num_insns: Option<u64>,
+) -> Result<RvrPureResult, ExecuteError> {
+    let pc = vm_state.pc();
+    let initial_regs = read_rv32_registers(vm_state);
+
     let mut tracer_data = PureTracerData;
-    let mut state = init_rvr_state(exe, &mut memory);
-    state.tracer = PureTracer(&mut tracer_data);
-
-    let mut io_state = build_io_state(
-        convert_input_stream(&input_stream),
-        memory.as_mut_ptr(),
-        deferrals,
-        deferral_fns,
-        deferral_hash,
-    );
-    io_state.hint_stream = hint_stream;
-    io_state.hint_pos = 0;
-    let callbacks = build_callbacks(&mut io_state);
-    // SAFETY: state pointer is valid and matches the tracer variant.
-    unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }?;
-    let outcome = outcome_from_pure_state(&state);
-
-    if outcome == ExecuteOutcome::Terminated && state.is_terminated() && state.result_code() == 0 {
-        Ok(RvrExecutionResult {
-            state,
-            memory,
-            public_values: io_state.public_values,
-        })
-    } else {
-        Err(execution_error(
-            "execution failed",
-            outcome,
-            state.pc,
-            state.instret,
-            state.result_code(),
-        ))
+    let mut state = init_rvr_state(vm_state, pc);
+    state.regs = initial_regs;
+    state.tracer = TracerPtr(&mut tracer_data);
+    if let Some(n) = num_insns {
+        state.suspender.set_target(n);
     }
+
+    let status = run_and_finalize(
+        compiled,
+        extensions,
+        vm_state,
+        &mut state,
+        num_insns.is_some(),
+    )
+    .inspect_err(|e| eprintln!("rvr pure execution failed: {e}"))?;
+    Ok(RvrPureResult {
+        state,
+        suspended: status == ExecutionStatus::Suspended,
+    })
 }
 
-/// Execute a VmExe with metered cost tracking, tracking per-chip trace costs.
-#[allow(clippy::too_many_arguments)]
+/// Execute a VmExe with metered cost tracking.
 pub fn execute_metered_cost<F: PrimeField32>(
     compiled: &RvrCompiled,
-    exe: &VmExe<F>,
-    input_stream: VecDeque<Vec<F>>,
-    hint_stream: Vec<u8>,
+    extensions: &ExtensionRegistry<F>,
+    vm_state: &mut VmState<F, GuestMemory>,
     metered_cost_config: MeteredCostConfig,
-    deferrals: Vec<DeferralState>,
-    deferral_fns: Vec<DeferralFnPtr>,
-    deferral_hash: Option<DeferralHashFn>,
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
-    let mut memory = GuardedMemory::new(MEM_SIZE)?;
+    let pc = vm_state.pc();
+    let initial_regs = read_rv32_registers(vm_state);
+
     let mut tracer_data = MeteredCostData::default();
-    let mut state = init_rvr_state_with_metered_cost(exe, &mut memory);
-    state.tracer = MeteredCostMeter(&mut tracer_data);
+    let mut state = init_rvr_state_with_metered_cost(vm_state, pc);
+    state.regs = initial_regs;
+    state.tracer = TracerPtr(&mut tracer_data);
 
     let widths_u64 = prepare_metered_cost(&metered_cost_config);
-
     state.tracer.chip_widths = widths_u64.as_ptr();
     state.tracer.cost = 0;
 
-    let mut io_state = build_io_state(
-        convert_input_stream(&input_stream),
-        memory.as_mut_ptr(),
-        deferrals,
-        deferral_fns,
-        deferral_hash,
-    );
-    io_state.hint_stream = hint_stream;
-    io_state.hint_pos = 0;
-    let callbacks = build_callbacks(&mut io_state);
-    // SAFETY: state pointer is valid and matches the tracer variant.
-    unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }?;
-    let outcome = outcome_from_metered_cost_state(&state);
-
+    run_and_finalize(compiled, extensions, vm_state, &mut state, false)
+        .inspect_err(|e| eprintln!("rvr metered-cost execution failed: {e}"))?;
     let cost = state.tracer.cost;
-    let instret = state.instret;
-
-    if outcome == ExecuteOutcome::Terminated && state.is_terminated() && state.result_code() == 0 {
-        Ok(RvrMeteredCostResult {
-            state,
-            memory,
-            cost,
-            instret,
-            suspended: false,
-        })
-    } else {
-        Err(execution_error(
-            "metered-cost execution failed",
-            outcome,
-            state.pc,
-            instret,
-            state.result_code(),
-        ))
-    }
-}
-
-/// Execute a VmExe with an instruction limit.
-///
-/// Suspends via target_instret when instret reaches the limit.
-#[allow(clippy::too_many_arguments)]
-pub fn execute_with_limit<F: PrimeField32>(
-    compiled: &RvrCompiled,
-    exe: &VmExe<F>,
-    input_stream: VecDeque<Vec<F>>,
-    hint_stream: Vec<u8>,
-    instruction_limit: u64,
-    deferrals: Vec<DeferralState>,
-    deferral_fns: Vec<DeferralFnPtr>,
-    deferral_hash: Option<DeferralHashFn>,
-) -> Result<RvrLimitedResult, ExecuteError> {
-    let mut memory = GuardedMemory::new(MEM_SIZE)?;
-    let mut tracer_data = PureTracerData;
-    let mut state = init_rvr_state(exe, &mut memory);
-    state.tracer = PureTracer(&mut tracer_data);
-    state.suspender.set_target(instruction_limit);
-
-    let mut io_state = build_io_state(
-        convert_input_stream(&input_stream),
-        memory.as_mut_ptr(),
-        deferrals,
-        deferral_fns,
-        deferral_hash,
-    );
-    io_state.hint_stream = hint_stream;
-    io_state.hint_pos = 0;
-    let callbacks = build_callbacks(&mut io_state);
-    // SAFETY: state pointer is valid and matches the tracer variant.
-    unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }?;
-    let outcome = outcome_from_pure_state(&state);
-
-    let instret = state.instret;
-
-    match outcome {
-        ExecuteOutcome::Suspended => Ok(RvrLimitedResult {
-            state,
-            memory,
-            instret,
-            suspended: true,
-        }),
-        ExecuteOutcome::Terminated if state.is_terminated() && state.result_code() == 0 => {
-            Ok(RvrLimitedResult {
-                state,
-                memory,
-                instret,
-                suspended: false,
-            })
-        }
-        _ => Err(execution_error(
-            "limited execution failed",
-            outcome,
-            state.pc,
-            instret,
-            state.result_code(),
-        )),
-    }
-}
-
-/// Execute a VmExe with metered cost and an instruction limit.
-#[allow(clippy::too_many_arguments)]
-pub fn execute_metered_cost_with_limit<F: PrimeField32>(
-    compiled: &RvrCompiled,
-    exe: &VmExe<F>,
-    input_stream: VecDeque<Vec<F>>,
-    hint_stream: Vec<u8>,
-    metered_cost_config: MeteredCostConfig,
-    instruction_limit: u64,
-    deferrals: Vec<DeferralState>,
-    deferral_fns: Vec<DeferralFnPtr>,
-    deferral_hash: Option<DeferralHashFn>,
-) -> Result<RvrMeteredCostLimitedResult, ExecuteError> {
-    let mut memory = GuardedMemory::new(MEM_SIZE)?;
-    let mut tracer_data = MeteredCostData::default();
-    let mut state = init_rvr_state_with_metered_cost(exe, &mut memory);
-    state.tracer = MeteredCostMeter(&mut tracer_data);
-
-    let widths_u64 = prepare_metered_cost(&metered_cost_config);
-
-    state.tracer.chip_widths = widths_u64.as_ptr();
-    state.tracer.cost = 0;
-    state.suspender.set_target(instruction_limit);
-
-    let mut io_state = build_io_state(
-        convert_input_stream(&input_stream),
-        memory.as_mut_ptr(),
-        deferrals,
-        deferral_fns,
-        deferral_hash,
-    );
-    io_state.hint_stream = hint_stream;
-    io_state.hint_pos = 0;
-    let callbacks = build_callbacks(&mut io_state);
-    // SAFETY: state pointer is valid and matches the tracer variant.
-    unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }?;
-    let outcome = outcome_from_metered_cost_state(&state);
-
-    let cost = state.tracer.cost;
-    let instret = state.instret;
-
-    match outcome {
-        ExecuteOutcome::Suspended => Ok(RvrMeteredCostLimitedResult {
-            state,
-            memory,
-            cost,
-            instret,
-            suspended: true,
-        }),
-        ExecuteOutcome::Terminated if state.is_terminated() && state.result_code() == 0 => {
-            Ok(RvrMeteredCostLimitedResult {
-                state,
-                memory,
-                cost,
-                instret,
-                suspended: false,
-            })
-        }
-        _ => Err(execution_error(
-            "limited metered-cost execution failed",
-            outcome,
-            state.pc,
-            instret,
-            state.result_code(),
-        )),
-    }
+    Ok(RvrMeteredCostResult { state, cost })
 }
 
 /// Execute a VmExe with per-chip metered execution and segmentation.
-#[allow(clippy::too_many_arguments)]
 pub fn execute_metered<F: PrimeField32>(
     compiled: &RvrCompiled,
-    exe: &VmExe<F>,
-    input_stream: VecDeque<Vec<F>>,
-    hint_stream: Vec<u8>,
+    extensions: &ExtensionRegistry<F>,
+    vm_state: &mut VmState<F, GuestMemory>,
     trace_config: MeteredConfig,
-    deferrals: Vec<DeferralState>,
-    deferral_fns: Vec<DeferralFnPtr>,
-    deferral_hash: Option<DeferralHashFn>,
 ) -> Result<RvrMeteredResult, ExecuteError> {
-    let mut memory = GuardedMemory::new(MEM_SIZE)?;
+    let pc = vm_state.pc();
+    let initial_regs = read_rv32_registers(vm_state);
+
     let mut tracer_data = MeteredTracerData::default();
-    let mut state = init_rvr_state_with_metered(exe, &mut memory);
-    state.tracer = MeteredTracer(&mut tracer_data);
+    let mut state = init_rvr_state_with_metered(vm_state, pc);
+    state.regs = initial_regs;
+    state.tracer = TracerPtr(&mut tracer_data);
 
     let mut seg_state = SegmentationState::new(trace_config);
-
-    // Wire up the C tracer fields
     state.tracer.trace_heights = seg_state.trace_heights_ptr();
     state.tracer.mem_page_buf = seg_state.mem_page_buf_ptr();
     state.tracer.pv_page_buf = seg_state.pv_page_buf_ptr();
@@ -475,42 +256,18 @@ pub fn execute_metered<F: PrimeField32>(
     state.tracer.pv_page_buf_len = 0;
     state.tracer.deferral_page_buf_len = 0;
     state.tracer.last_mem_page = NO_LAST_PAGE;
-
-    // Wire up inline callback for periodic segmentation checks.
     state.tracer.check_counter = seg_state.config().segment_check_insns as u32;
     state.tracer.on_check = Some(metered_periodic_check);
     state.tracer.seg_state = &mut seg_state as *mut SegmentationState as *mut c_void;
 
-    let mut io_state = build_io_state(
-        convert_input_stream(&input_stream),
-        memory.as_mut_ptr(),
-        deferrals,
-        deferral_fns,
-        deferral_hash,
+    run_and_finalize(compiled, extensions, vm_state, &mut state, false)
+        .inspect_err(|e| eprintln!("rvr metered execution failed: {e}"))?;
+
+    seg_state.on_termination(
+        state.tracer.mem_page_buf_len,
+        state.tracer.pv_page_buf_len,
+        state.tracer.deferral_page_buf_len,
+        state.tracer.check_counter,
     );
-    io_state.hint_stream = hint_stream;
-    io_state.hint_pos = 0;
-    let callbacks = build_callbacks(&mut io_state);
-    // SAFETY: state pointer is valid and matches the tracer variant.
-    unsafe { register_and_execute(compiled, &callbacks, state.as_void_ptr()) }?;
-    let outcome = outcome_from_metered_state(&state);
-
-    if outcome == ExecuteOutcome::Terminated && state.is_terminated() && state.result_code() == 0 {
-        seg_state.on_termination(
-            state.tracer.mem_page_buf_len,
-            state.tracer.pv_page_buf_len,
-            state.tracer.deferral_page_buf_len,
-            state.tracer.check_counter,
-        );
-    } else {
-        return Err(execution_error(
-            "metered execution failed",
-            outcome,
-            state.pc,
-            state.instret,
-            state.result_code(),
-        ));
-    }
-
-    Ok(seg_state.into_result(state, memory, io_state.public_values))
+    Ok(seg_state.into_result(state))
 }
