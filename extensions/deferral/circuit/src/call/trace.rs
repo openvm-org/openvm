@@ -31,6 +31,7 @@ use crate::{
     call::{DeferralCallAdapterCols, DeferralCallCoreCols, DeferralCallReads, DeferralCallWrites},
     canonicity::CanonicityTraceGen,
     count::DeferralCircuitCountChip,
+    def_fn::execute_deferral_fn,
     poseidon2::{deferral_poseidon2_chip, DeferralPoseidon2Chip},
     utils::{
         byte_commit_to_f, combine_output, join_memory_ops, memory_op_chunk, COMMIT_MEMORY_OPS,
@@ -101,7 +102,8 @@ where
         let def_idx = instruction.c.as_canonical_u32();
         let poseidon2_chip = deferral_poseidon2_chip();
 
-        let (output_commit, output_len) = self.deferral_fns[def_idx as usize].execute(
+        let (output_commit, output_len) = execute_deferral_fn(
+            &self.deferral_fns[def_idx as usize],
             &read_data.input_commit.to_vec(),
             &mut state.streams.deferrals[def_idx as usize],
             def_idx,

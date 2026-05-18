@@ -9028,9 +9028,12 @@ dependencies = [
 name = "rvr-openvm-ext-deferral"
 version = "2.0.0-beta.2"
 dependencies = [
+ "libloading 0.8.8",
+ "openvm-circuit",
  "openvm-deferral-transpiler",
  "openvm-instructions",
  "openvm-stark-backend",
+ "rvr-openvm-ext-ffi-common",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
 ]
@@ -9155,6 +9158,7 @@ dependencies = [
 name = "rvr-openvm-lift"
 version = "2.0.0-beta.2"
 dependencies = [
+ "libloading 0.8.8",
  "openvm-instructions",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
