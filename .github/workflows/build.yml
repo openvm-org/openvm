@@ -25,6 +25,4 @@ jobs:
           cache-on-failure: true
 
       - name: Run build
-        run: |
-          cargo clean
-          cargo build --verbose
+        run: cargo build --verbose
