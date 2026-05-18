@@ -6,17 +6,15 @@ use std::sync::Arc;
 use openvm_instructions::{
     exe::VmExe, riscv::RV32_MEMORY_AS, LocalOpcode, SystemOpcode, VmOpcode, DEFERRAL_AS,
 };
-use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
-use rvr_state::{GuardedMemory, TracerState};
 
 use super::{
-    build_callbacks, build_io_state,
+    bridge::{map_rvr_compile_error, map_rvr_execute_error},
     compile::ChipMapping,
-    compile_metered, compile_metered_with_extensions, execute_metered, register_and_execute,
-    state::{init_rvr_state_with_metered, state_as_void_ptr, MeteredState},
+    compile_metered, execute_metered,
+    state::{MeteredState, TracerPayload, TracerPtr},
 };
 use crate::{
     arch::{
@@ -29,12 +27,6 @@ use crate::{
                 },
             },
             MeteredCtx, Segment,
-        },
-        vm::{
-            copy_guest_memory_to_rvr_memory, ensure_rvr_outcome, map_rvr_compile_error,
-            map_rvr_execute_error, read_public_values_from_guest_memory,
-            read_rv32_regs_from_guest_memory, state_from_rvr, streams_from_io_state,
-            streams_to_io_seed, write_rvr_memory_to_guest_memory,
         },
         ExecutionError, ExecutorInventory, MeteredExecutor, Streams, SystemConfig, VmState,
     },
@@ -94,33 +86,11 @@ impl Default for MeteredTracerData {
     }
 }
 
-/// Pointer wrapper stored in RvState's tracer field. Matches C `Tracer*` (8 bytes).
-#[repr(transparent)]
-#[derive(Clone, Copy)]
-pub struct MeteredTracer(pub *mut MeteredTracerData);
-
-impl Default for MeteredTracer {
-    fn default() -> Self {
-        Self(std::ptr::null_mut())
-    }
-}
-
-impl TracerState for MeteredTracer {
+impl TracerPayload for MeteredTracerData {
     const KIND: u32 = 11;
 }
 
-impl std::ops::Deref for MeteredTracer {
-    type Target = MeteredTracerData;
-    fn deref(&self) -> &MeteredTracerData {
-        unsafe { &*self.0 }
-    }
-}
-
-impl std::ops::DerefMut for MeteredTracer {
-    fn deref_mut(&mut self) -> &mut MeteredTracerData {
-        unsafe { &mut *self.0 }
-    }
-}
+pub type MeteredTracer = TracerPtr<MeteredTracerData>;
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
@@ -287,8 +257,6 @@ pub struct RvrMeteredResult {
     pub segments: Vec<RvrSegment>,
     pub instret: u64,
     pub state: MeteredState,
-    pub memory: GuardedMemory,
-    pub public_values: Vec<u8>,
 }
 
 /// Runtime state for metered segmentation.
@@ -658,18 +626,11 @@ impl SegmentationState {
     }
 
     /// Consume and return the result.
-    pub fn into_result(
-        self,
-        state: MeteredState,
-        memory: GuardedMemory,
-        public_values: Vec<u8>,
-    ) -> RvrMeteredResult {
+    pub fn into_result(self, state: MeteredState) -> RvrMeteredResult {
         RvrMeteredResult {
             instret: self.instret,
             segments: self.segments,
             state,
-            memory,
-            public_values,
         }
     }
 }
@@ -712,17 +673,20 @@ where
         inputs: impl Into<Streams<F>>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let inputs = inputs.into();
-        let input_stream = inputs.input_stream;
-        let hint_stream: Vec<u8> = inputs
-            .hint_stream
-            .into_iter()
-            .map(|f| f.as_canonical_u32() as u8)
-            .collect();
-        let deferrals = inputs.deferrals;
-        let deferral_fns = inputs.deferral_fns;
-        let deferral_hash = inputs.deferral_hash;
+        let vm_state = VmState::initial(
+            &self.system_config,
+            &self.exe.init_memory,
+            self.exe.pc_start,
+            inputs,
+        );
+        self.execute_metered_from_state(vm_state, ctx)
+    }
 
+    pub fn execute_metered_from_state(
+        &self,
+        mut vm_state: VmState<F, GuestMemory>,
+        ctx: MeteredCtx,
+    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
         let constant_trace_heights: Vec<Option<usize>> = ctx
             .trace_heights
             .iter()
@@ -744,15 +708,9 @@ where
         trace_config.initial_trace_heights = ctx.trace_heights.clone();
         trace_config.is_constant = ctx.is_trace_height_constant.clone();
 
-        // TODO: hoist compilation to instance construction; `ChipMapping` is independent of
-        // `MeteredCtx`.
         let chips = trace_config.chip_mapping();
-        let compiled_metered = if self.extensions.is_empty() {
-            compile_metered(self.exe.as_ref(), &chips)
-        } else {
-            compile_metered_with_extensions(self.exe.as_ref(), &self.extensions, &chips)
-        }
-        .map_err(map_rvr_compile_error)?;
+        let compiled_metered = compile_metered(self.exe.as_ref(), &self.extensions, &chips)
+            .map_err(map_rvr_compile_error)?;
 
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
@@ -760,13 +718,9 @@ where
             .in_scope(|| {
                 execute_metered(
                     &compiled_metered,
-                    self.exe.as_ref(),
-                    input_stream,
-                    hint_stream,
+                    &self.extensions,
+                    &mut vm_state,
                     trace_config,
-                    deferrals,
-                    deferral_fns,
-                    deferral_hash,
                 )
             })
             .map_err(map_rvr_execute_error)?;
@@ -790,156 +744,6 @@ where
             })
             .collect();
 
-        let final_state = state_from_rvr(
-            &self.system_config,
-            self.exe.as_ref(),
-            metered_result.state.pc,
-            &metered_result.state.regs,
-            &metered_result.memory,
-            &metered_result.public_values,
-        );
-
-        Ok((segments, final_state))
-    }
-
-    pub fn execute_metered_from_state(
-        &self,
-        from_state: VmState<F, GuestMemory>,
-        ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let pc = from_state.pc();
-        let mut guest_memory = from_state.memory;
-        let seed = streams_to_io_seed(from_state.streams);
-        let rng = from_state.rng;
-        #[cfg(feature = "metrics")]
-        let metrics = from_state.metrics;
-
-        let constant_trace_heights: Vec<Option<usize>> = ctx
-            .trace_heights
-            .iter()
-            .zip(ctx.is_trace_height_constant.iter())
-            .map(|(&height, &is_constant)| is_constant.then_some(height as usize))
-            .collect();
-
-        let mut trace_config = build_metered_config(
-            self.exe.as_ref(),
-            self.inventory.as_ref(),
-            &self.executor_idx_to_air_idx,
-            &ctx.segmentation_ctx.widths,
-            &ctx.segmentation_ctx.interactions,
-            &constant_trace_heights,
-            &self.system_config,
-        );
-        trace_config.segmentation_config = ctx.segmentation_ctx.config.clone();
-        trace_config.segment_check_insns = ctx.segmentation_ctx.segment_check_insns;
-        trace_config.initial_trace_heights = ctx.trace_heights.clone();
-        trace_config.is_constant = ctx.is_trace_height_constant.clone();
-
-        let chips = trace_config.chip_mapping();
-        let compiled_metered = if self.extensions.is_empty() {
-            compile_metered(self.exe.as_ref(), &chips)
-        } else {
-            compile_metered_with_extensions(self.exe.as_ref(), &self.extensions, &chips)
-        }
-        .map_err(map_rvr_compile_error)?;
-
-        let mut memory = GuardedMemory::new(MEM_SIZE)
-            .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
-        let mut tracer_data = MeteredTracerData::default();
-        let mut state = init_rvr_state_with_metered(self.exe.as_ref(), &mut memory);
-        state.tracer = MeteredTracer(&mut tracer_data);
-        state.pc = pc;
-        state
-            .regs
-            .copy_from_slice(&read_rv32_regs_from_guest_memory(&guest_memory));
-        copy_guest_memory_to_rvr_memory(&guest_memory, &mut memory);
-
-        let mut seg_state = SegmentationState::new(trace_config);
-        state.tracer.trace_heights = seg_state.trace_heights_ptr();
-        state.tracer.mem_page_buf = seg_state.mem_page_buf_ptr();
-        state.tracer.pv_page_buf = seg_state.pv_page_buf_ptr();
-        state.tracer.deferral_page_buf = seg_state.deferral_page_buf_ptr();
-        state.tracer.mem_page_buf_len = 0;
-        state.tracer.pv_page_buf_len = 0;
-        state.tracer.deferral_page_buf_len = 0;
-        state.tracer.last_mem_page = NO_LAST_PAGE;
-        state.tracer.check_counter = seg_state.config().segment_check_insns as u32;
-        state.tracer.on_check = Some(metered_periodic_check);
-        state.tracer.seg_state = &mut seg_state as *mut SegmentationState as *mut std::ffi::c_void;
-
-        let mut io_state = build_io_state(
-            seed.input_stream,
-            memory.as_mut_ptr(),
-            seed.deferrals,
-            seed.deferral_fns,
-            seed.deferral_hash,
-        );
-        io_state.hint_stream = seed.hint_stream;
-        io_state.hint_pos = 0;
-        io_state.public_values = read_public_values_from_guest_memory(&guest_memory);
-        io_state.rng = rng;
-        let callbacks = build_callbacks(&mut io_state);
-        #[cfg(feature = "metrics")]
-        let start = std::time::Instant::now();
-        tracing::info_span!("execute_metered")
-            .in_scope(|| unsafe {
-                register_and_execute(&compiled_metered, &callbacks, state_as_void_ptr(&mut state))
-            })
-            .map_err(map_rvr_execute_error)?;
-        #[cfg(feature = "metrics")]
-        {
-            let elapsed = start.elapsed();
-            let insns = state.instret;
-            tracing::info!("instructions_executed={insns}");
-            metrics::counter!("execute_metered_insns").absolute(insns);
-            metrics::gauge!("execute_metered_insn_mi/s")
-                .set(insns as f64 / elapsed.as_micros() as f64);
-        }
-        ensure_rvr_outcome(
-            "metered execution from state",
-            state.is_terminated(),
-            state.is_suspended(),
-            state.result_code(),
-            false,
-        )?;
-
-        seg_state.on_termination(
-            state.tracer.mem_page_buf_len,
-            state.tracer.pv_page_buf_len,
-            state.tracer.deferral_page_buf_len,
-            state.tracer.check_counter,
-        );
-        let public_values = std::mem::take(&mut io_state.public_values);
-        let deferrals = std::mem::take(&mut io_state.deferrals);
-        let deferral_fns = std::mem::take(&mut io_state.deferral_fns);
-        let deferral_hash = io_state.deferral_hash.take();
-        let metered_result = seg_state.into_result(state, memory, public_values);
-
-        let segments = metered_result
-            .segments
-            .into_iter()
-            .map(|segment| Segment {
-                instret_start: segment.instret_start,
-                num_insns: segment.num_insns,
-                trace_heights: segment.trace_heights,
-            })
-            .collect();
-
-        write_rvr_memory_to_guest_memory(
-            &mut guest_memory,
-            &metered_result.state.regs,
-            &metered_result.memory,
-            &metered_result.public_values,
-        );
-        let final_state = VmState::new(
-            metered_result.state.pc,
-            guest_memory,
-            streams_from_io_state(&io_state, deferrals, deferral_fns, deferral_hash),
-            io_state.rng,
-            #[cfg(feature = "metrics")]
-            metrics,
-        );
-
-        Ok((segments, final_state))
+        Ok((segments, vm_state))
     }
 }
