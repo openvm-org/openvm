@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 use serde::{Deserialize, Serialize};
 
@@ -6,6 +6,28 @@ pub type InputRaw = Vec<u8>;
 pub type OutputRaw = Vec<u8>;
 pub type InputCommit = Vec<u8>;
 pub type OutputCommit = Vec<u8>;
+
+/// A registered deferral closure: `input_raw → output_raw`.
+#[allow(clippy::type_complexity)]
+pub struct DeferralFn {
+    f: Box<dyn Fn(&[u8]) -> OutputRaw + Send + Sync + 'static>,
+}
+
+impl Debug for DeferralFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeferralFn").finish()
+    }
+}
+
+impl DeferralFn {
+    pub fn new<FN: Fn(&[u8]) -> OutputRaw + Send + Sync + 'static>(f: FN) -> Self {
+        Self { f: Box::new(f) }
+    }
+
+    pub fn call_raw(&self, input_raw: &[u8]) -> OutputRaw {
+        (self.f)(input_raw)
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum InputMapVal {

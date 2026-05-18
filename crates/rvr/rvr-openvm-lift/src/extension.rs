@@ -74,6 +74,8 @@ pub enum ExtensionError {
         opcode: VmOpcode,
         executor_idx: usize,
     },
+    #[error("failed to register host callbacks: {0}")]
+    HostCallbackRegistration(String),
 }
 
 /// Trait for an rvr-openvm extension. Each extension handles a range of opcodes
@@ -118,6 +120,20 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
     /// paths for submodule headers). Passed to the Makefile as EXT_CFLAGS.
     fn extra_cflags(&self) -> Vec<String> {
         vec![]
+    }
+
+    /// Register host-side callbacks for this extension with the loaded `.so`.
+    /// Called after `register_openvm_callbacks` and before `rv_execute`.
+    ///
+    /// # Safety
+    ///
+    /// `lib` must be the rvr-compiled shared library this extension was lifted
+    /// into.
+    unsafe fn register_host_callbacks(
+        &self,
+        _lib: &libloading::Library,
+    ) -> Result<(), ExtensionError> {
+        Ok(())
     }
 }
 
@@ -206,6 +222,21 @@ impl<F: PrimeField32> ExtensionRegistry<F> {
     /// Whether any extensions are registered.
     pub fn is_empty(&self) -> bool {
         self.extensions.is_empty()
+    }
+
+    /// Register host callbacks for every extension in the registry.
+    ///
+    /// # Safety
+    ///
+    /// Same requirements as [`RvrExtension::register_host_callbacks`].
+    pub unsafe fn register_host_callbacks(
+        &self,
+        lib: &libloading::Library,
+    ) -> Result<(), ExtensionError> {
+        for ext in &self.extensions {
+            unsafe { ext.register_host_callbacks(lib)? };
+        }
+        Ok(())
     }
 }
 

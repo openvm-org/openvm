@@ -74,55 +74,28 @@ pub struct CompileOptions<'a, F: PrimeField32> {
     pub native_debug_info: bool,
 }
 
-/// Compile with full options.
-pub fn compile_with_options<F: PrimeField32>(
-    exe: &VmExe<F>,
-    opts: &CompileOptions<'_, F>,
-) -> Result<RvrCompiled, CompileError> {
-    compile_impl(exe, opts)
-}
-
 /// Compile a VmExe into a shared library (pure execution, optional suspension).
-pub fn compile<F: PrimeField32>(exe: &VmExe<F>) -> Result<RvrCompiled, CompileError> {
+pub fn compile<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry<F>,
+) -> Result<RvrCompiled, CompileError> {
     compile_impl(
         exe,
         &CompileOptions {
             base_name: None,
             tracer_mode: TracerMode::Pure,
-            extensions: &ExtensionRegistry::new(),
+            extensions,
             chips: None,
             guest_debug_map: None,
             native_debug_info: false,
         },
     )
-}
-
-/// Compile a VmExe with inline metered cost tracer enabled.
-pub fn compile_metered_cost<F: PrimeField32>(
-    exe: &VmExe<F>,
-    chips: &ChipMapping,
-) -> Result<RvrCompiled, CompileError> {
-    compile_impl(
-        exe,
-        &CompileOptions {
-            base_name: None,
-            tracer_mode: TracerMode::MeteredCost,
-            extensions: &ExtensionRegistry::new(),
-            chips: Some(chips),
-            guest_debug_map: None,
-            native_debug_info: false,
-        },
-    )
-}
-
-/// Compile a VmExe with instruction-limit suspension support (same as `compile`).
-pub fn compile_with_limit<F: PrimeField32>(exe: &VmExe<F>) -> Result<RvrCompiled, CompileError> {
-    compile(exe)
 }
 
 /// Compile a VmExe with per-chip metered execution.
 pub fn compile_metered<F: PrimeField32>(
     exe: &VmExe<F>,
+    extensions: &ExtensionRegistry<F>,
     chips: &ChipMapping,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(
@@ -130,7 +103,7 @@ pub fn compile_metered<F: PrimeField32>(
         &CompileOptions {
             base_name: None,
             tracer_mode: TracerMode::Metered,
-            extensions: &ExtensionRegistry::new(),
+            extensions,
             chips: Some(chips),
             guest_debug_map: None,
             native_debug_info: false,
@@ -138,34 +111,8 @@ pub fn compile_metered<F: PrimeField32>(
     )
 }
 
-/// Compile a VmExe with both metered cost and instruction-limit suspension.
-pub fn compile_metered_cost_with_limit<F: PrimeField32>(
-    exe: &VmExe<F>,
-    chips: &ChipMapping,
-) -> Result<RvrCompiled, CompileError> {
-    compile_metered_cost(exe, chips)
-}
-
-/// Compile a VmExe with extensions into a shared library.
-pub fn compile_with_extensions<F: PrimeField32>(
-    exe: &VmExe<F>,
-    extensions: &ExtensionRegistry<F>,
-) -> Result<RvrCompiled, CompileError> {
-    compile_impl(
-        exe,
-        &CompileOptions {
-            base_name: None,
-            tracer_mode: TracerMode::Pure,
-            extensions,
-            chips: None,
-            guest_debug_map: None,
-            native_debug_info: false,
-        },
-    )
-}
-
-/// Compile a VmExe with extensions and metered cost tracer.
-pub fn compile_metered_cost_with_extensions<F: PrimeField32>(
+/// Compile a VmExe with metered cost tracer.
+pub fn compile_metered_cost<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry<F>,
     chips: &ChipMapping,
@@ -175,25 +122,6 @@ pub fn compile_metered_cost_with_extensions<F: PrimeField32>(
         &CompileOptions {
             base_name: None,
             tracer_mode: TracerMode::MeteredCost,
-            extensions,
-            chips: Some(chips),
-            guest_debug_map: None,
-            native_debug_info: false,
-        },
-    )
-}
-
-/// Compile a VmExe with extensions and per-chip metered execution.
-pub fn compile_metered_with_extensions<F: PrimeField32>(
-    exe: &VmExe<F>,
-    extensions: &ExtensionRegistry<F>,
-    chips: &ChipMapping,
-) -> Result<RvrCompiled, CompileError> {
-    compile_impl(
-        exe,
-        &CompileOptions {
-            base_name: None,
-            tracer_mode: TracerMode::Metered,
             extensions,
             chips: Some(chips),
             guest_debug_map: None,

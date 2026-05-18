@@ -3,31 +3,27 @@
 use std::sync::Arc;
 
 use openvm_instructions::{exe::VmExe, LocalOpcode, SystemOpcode, VmOpcode};
-use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
-use rvr_state::{GuardedMemory, TracerState};
 
 use super::{
-    build_callbacks, build_io_state,
+    bridge::{map_rvr_compile_error, map_rvr_execute_error},
     compile::ChipMapping,
-    compile_metered_cost, compile_metered_cost_with_extensions, execute_metered_cost,
-    register_and_execute,
-    state::{init_rvr_state_with_metered_cost, state_as_void_ptr},
+    compile_metered_cost, execute_metered_cost,
+    state::{MeteredCostState, TracerPayload, TracerPtr},
 };
 use crate::{
     arch::{
-        execution_mode::MeteredCostCtx,
-        vm::{
-            copy_guest_memory_to_rvr_memory, ensure_rvr_outcome, map_rvr_compile_error,
-            map_rvr_execute_error, read_public_values_from_guest_memory,
-            read_rv32_regs_from_guest_memory, state_from_rvr, streams_from_io_state,
-            streams_to_io_seed, write_rvr_memory_to_guest_memory,
-        },
-        ExecutionError, ExecutorInventory, MeteredExecutor, Streams, SystemConfig, VmState,
+        execution_mode::MeteredCostCtx, ExecutionError, ExecutorInventory, MeteredExecutor,
+        Streams, SystemConfig, VmState,
     },
     system::memory::online::GuestMemory,
 };
+
+pub struct RvrMeteredCostResult {
+    pub state: MeteredCostState,
+    pub cost: u64,
+}
 
 /// Configuration for mapping PCs and memory operations to metering costs.
 pub struct MeteredCostConfig {
@@ -118,33 +114,11 @@ impl Default for MeteredCostData {
     }
 }
 
-/// Pointer wrapper stored in RvState's tracer field. Matches C `Tracer*` (8 bytes).
-#[repr(transparent)]
-#[derive(Clone, Copy)]
-pub struct MeteredCostMeter(pub *mut MeteredCostData);
-
-impl Default for MeteredCostMeter {
-    fn default() -> Self {
-        Self(std::ptr::null_mut())
-    }
-}
-
-impl TracerState for MeteredCostMeter {
+impl TracerPayload for MeteredCostData {
     const KIND: u32 = 10;
 }
 
-impl std::ops::Deref for MeteredCostMeter {
-    type Target = MeteredCostData;
-    fn deref(&self) -> &MeteredCostData {
-        unsafe { &*self.0 }
-    }
-}
-
-impl std::ops::DerefMut for MeteredCostMeter {
-    fn deref_mut(&mut self) -> &mut MeteredCostData {
-        unsafe { &mut *self.0 }
-    }
-}
+pub type MeteredCostMeter = TracerPtr<MeteredCostData>;
 
 /// C-compatible pure tracer data.
 ///
@@ -154,33 +128,11 @@ impl std::ops::DerefMut for MeteredCostMeter {
 #[derive(Clone, Copy, Default)]
 pub struct PureTracerData;
 
-/// Pointer wrapper stored in RvState's tracer field. Matches C `Tracer*` (8 bytes).
-#[repr(transparent)]
-#[derive(Clone, Copy)]
-pub struct PureTracer(pub *mut PureTracerData);
-
-impl Default for PureTracer {
-    fn default() -> Self {
-        Self(std::ptr::null_mut())
-    }
-}
-
-impl TracerState for PureTracer {
+impl TracerPayload for PureTracerData {
     const KIND: u32 = 12;
 }
 
-impl std::ops::Deref for PureTracer {
-    type Target = PureTracerData;
-    fn deref(&self) -> &PureTracerData {
-        unsafe { &*self.0 }
-    }
-}
-
-impl std::ops::DerefMut for PureTracer {
-    fn deref_mut(&mut self) -> &mut PureTracerData {
-        unsafe { &mut *self.0 }
-    }
-}
+pub type PureTracer = TracerPtr<PureTracerData>;
 
 /// Prepare metering data from a `MeteredCostConfig`.
 ///
@@ -199,33 +151,30 @@ where
         inputs: impl Into<Streams<F>>,
         ctx: MeteredCostCtx,
     ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
-        let inputs = inputs.into();
-        let input_stream = inputs.input_stream;
-        let hint_stream: Vec<u8> = inputs
-            .hint_stream
-            .into_iter()
-            .map(|f| f.as_canonical_u32() as u8)
-            .collect();
-        let deferrals = inputs.deferrals;
-        let deferral_fns = inputs.deferral_fns;
-        let deferral_hash = inputs.deferral_hash;
+        let vm_state = VmState::initial(
+            &self.system_config,
+            &self.exe.init_memory,
+            self.exe.pc_start,
+            inputs,
+        );
+        self.execute_metered_cost_from_state(vm_state, ctx)
+    }
 
+    pub fn execute_metered_cost_from_state(
+        &self,
+        mut vm_state: VmState<F, GuestMemory>,
+        ctx: MeteredCostCtx,
+    ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
         let metered_cost_config = build_metered_cost_config(
             self.exe.as_ref(),
             self.inventory.as_ref(),
             &self.executor_idx_to_air_idx,
             &ctx.widths,
         );
-        // TODO: hoist compilation to instance construction; requires moving `ctx.widths` onto the
-        // instance.
         let chips = metered_cost_config.chip_mapping();
 
-        let compiled = if self.extensions.is_empty() {
-            compile_metered_cost(self.exe.as_ref(), &chips)
-        } else {
-            compile_metered_cost_with_extensions(self.exe.as_ref(), &self.extensions, &chips)
-        }
-        .map_err(map_rvr_compile_error)?;
+        let compiled = compile_metered_cost(self.exe.as_ref(), &self.extensions, &chips)
+            .map_err(map_rvr_compile_error)?;
 
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
@@ -233,20 +182,16 @@ where
             .in_scope(|| {
                 execute_metered_cost(
                     &compiled,
-                    self.exe.as_ref(),
-                    input_stream,
-                    hint_stream,
+                    &self.extensions,
+                    &mut vm_state,
                     metered_cost_config,
-                    deferrals,
-                    deferral_fns,
-                    deferral_hash,
                 )
             })
             .map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]
         {
             let elapsed = start.elapsed();
-            let insns = result.instret;
+            let insns = result.state.instret;
             tracing::info!("instructions_executed={insns}");
             metrics::counter!("execute_metered_cost_insns").absolute(insns);
             metrics::gauge!("execute_metered_cost_insn_mi/s")
@@ -254,121 +199,9 @@ where
         }
 
         let mut output_ctx = ctx;
-        output_ctx.instret = result.instret;
+        output_ctx.instret = result.state.instret;
         output_ctx.cost = result.cost;
 
-        let state = state_from_rvr(
-            &self.system_config,
-            self.exe.as_ref(),
-            result.state.pc,
-            &result.state.regs,
-            &result.memory,
-            &[],
-        );
-
-        Ok((output_ctx, state))
-    }
-
-    pub fn execute_metered_cost_from_state(
-        &self,
-        from_state: VmState<F, GuestMemory>,
-        ctx: MeteredCostCtx,
-    ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
-        let pc = from_state.pc();
-        let mut guest_memory = from_state.memory;
-        let seed = streams_to_io_seed(from_state.streams);
-        let rng = from_state.rng;
-        #[cfg(feature = "metrics")]
-        let metrics = from_state.metrics;
-
-        let metered_cost_config = build_metered_cost_config(
-            self.exe.as_ref(),
-            self.inventory.as_ref(),
-            &self.executor_idx_to_air_idx,
-            &ctx.widths,
-        );
-        let chips = metered_cost_config.chip_mapping();
-
-        let compiled = if self.extensions.is_empty() {
-            compile_metered_cost(self.exe.as_ref(), &chips)
-        } else {
-            compile_metered_cost_with_extensions(self.exe.as_ref(), &self.extensions, &chips)
-        }
-        .map_err(map_rvr_compile_error)?;
-
-        let mut memory = GuardedMemory::new(MEM_SIZE)
-            .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
-        let mut tracer_data = MeteredCostData::default();
-        let mut state = init_rvr_state_with_metered_cost(self.exe.as_ref(), &mut memory);
-        state.tracer = MeteredCostMeter(&mut tracer_data);
-        state.pc = pc;
-        state
-            .regs
-            .copy_from_slice(&read_rv32_regs_from_guest_memory(&guest_memory));
-        copy_guest_memory_to_rvr_memory(&guest_memory, &mut memory);
-
-        let widths_u64 = prepare_metered_cost(&metered_cost_config);
-        state.tracer.chip_widths = widths_u64.as_ptr();
-        state.tracer.cost = 0;
-
-        let mut io_state = build_io_state(
-            seed.input_stream,
-            memory.as_mut_ptr(),
-            seed.deferrals,
-            seed.deferral_fns,
-            seed.deferral_hash,
-        );
-        io_state.hint_stream = seed.hint_stream;
-        io_state.hint_pos = 0;
-        io_state.public_values = read_public_values_from_guest_memory(&guest_memory);
-        io_state.rng = rng;
-        let callbacks = build_callbacks(&mut io_state);
-        #[cfg(feature = "metrics")]
-        let start = std::time::Instant::now();
-        tracing::info_span!("execute_metered_cost")
-            .in_scope(|| unsafe {
-                register_and_execute(&compiled, &callbacks, state_as_void_ptr(&mut state))
-            })
-            .map_err(map_rvr_execute_error)?;
-        #[cfg(feature = "metrics")]
-        {
-            let elapsed = start.elapsed();
-            let insns = state.instret;
-            tracing::info!("instructions_executed={insns}");
-            metrics::counter!("execute_metered_cost_insns").absolute(insns);
-            metrics::gauge!("execute_metered_cost_insn_mi/s")
-                .set(insns as f64 / elapsed.as_micros() as f64);
-        }
-        ensure_rvr_outcome(
-            "metered-cost execution from state",
-            state.is_terminated(),
-            state.is_suspended(),
-            state.result_code(),
-            false,
-        )?;
-
-        let mut output_ctx = ctx;
-        output_ctx.instret = state.instret;
-        output_ctx.cost = state.tracer.cost;
-
-        write_rvr_memory_to_guest_memory(
-            &mut guest_memory,
-            &state.regs,
-            &memory,
-            &io_state.public_values,
-        );
-        let deferrals = std::mem::take(&mut io_state.deferrals);
-        let deferral_fns = std::mem::take(&mut io_state.deferral_fns);
-        let deferral_hash = io_state.deferral_hash.take();
-        let to_state = VmState::new(
-            state.pc,
-            guest_memory,
-            streams_from_io_state(&io_state, deferrals, deferral_fns, deferral_hash),
-            io_state.rng,
-            #[cfg(feature = "metrics")]
-            metrics,
-        );
-
-        Ok((output_ctx, to_state))
+        Ok((output_ctx, vm_state))
     }
 }
