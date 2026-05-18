@@ -1,5 +1,6 @@
-use std::{array::from_fn, fmt::Debug};
+use std::array::from_fn;
 
+pub use openvm_circuit::arch::deferral::DeferralFn;
 use openvm_circuit::arch::{
     deferral::{DeferralResult, DeferralState, InputCommit, InputMapVal, OutputCommit, OutputRaw},
     VmField,
@@ -15,46 +16,26 @@ pub struct RawDeferralResult {
     pub output_raw: OutputRaw,
 }
 
-#[allow(clippy::type_complexity)]
-pub struct DeferralFn {
-    f: Box<dyn Fn(&[u8]) -> OutputRaw + Send + Sync + 'static>,
-}
-
-impl Debug for DeferralFn {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DeferralFn").finish()
-    }
-}
-
-impl DeferralFn {
-    pub fn new<FN: Fn(&[u8]) -> OutputRaw + Send + Sync + 'static>(f: FN) -> Self {
-        Self { f: Box::new(f) }
-    }
-
-    pub fn call_raw(&self, input_raw: &[u8]) -> OutputRaw {
-        (self.f)(input_raw)
-    }
-
-    pub fn execute<F: VmField>(
-        &self,
-        input_commit: &InputCommit,
-        state: &mut DeferralState,
-        deferral_idx: u32,
-        hasher: &DeferralPoseidon2Chip<F>,
-    ) -> (OutputCommit, u64) {
-        let value = state.get_input(input_commit);
-        match value {
-            InputMapVal::Raw(input_raw) => {
-                let output_raw = self.f.as_ref()(input_raw);
-                let output_commit = hash_output_raw(hasher, deferral_idx, &output_raw);
-                let output_len = output_raw.len();
-                state.store_output(input_commit, output_commit.clone(), output_raw);
-                (output_commit, output_len as u64)
-            }
-            InputMapVal::Output(output_commit) => {
-                let output_raw = state.get_output(output_commit);
-                (output_commit.clone(), output_raw.len() as u64)
-            }
+/// Execute `def_fn` against `state`, hashing the output via `hasher` and
+/// caching the result.
+pub fn execute_deferral_fn<F: VmField>(
+    def_fn: &DeferralFn,
+    input_commit: &InputCommit,
+    state: &mut DeferralState,
+    deferral_idx: u32,
+    hasher: &DeferralPoseidon2Chip<F>,
+) -> (OutputCommit, u64) {
+    match state.get_input(input_commit).clone() {
+        InputMapVal::Raw(input_raw) => {
+            let output_raw = def_fn.call_raw(&input_raw);
+            let output_commit = hash_output_raw(hasher, deferral_idx, &output_raw);
+            let output_len = output_raw.len();
+            state.store_output(input_commit, output_commit.clone(), output_raw);
+            (output_commit, output_len as u64)
+        }
+        InputMapVal::Output(output_commit) => {
+            let output_len = state.get_output(&output_commit).len() as u64;
+            (output_commit, output_len)
         }
     }
 }

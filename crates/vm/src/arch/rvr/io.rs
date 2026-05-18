@@ -1,43 +1,32 @@
 //! OpenVM IO runtime: Rust-side IO state with FFI callbacks.
 //!
-//! All execution IO state (input streams and hint streams) lives in
-//! Rust. The generated C code calls back into Rust via function pointers
-//! registered through `register_openvm_callbacks`.
-//!
-//! Metering adjustments for IO instructions are handled entirely in the
-//! generated C code (via `trace_io_*` functions in tracer headers). These
-//! callbacks are pure IO logic.
+//! All execution IO state lives on the openvm `VmState<F>`; callbacks are
+//! generic over the openvm field `F` and read/write VmState directly.
+//! `Streams<F>` is consumed lazily — the F→u8 cast happens one byte at a
+//! time inside the storew/buffer callbacks rather than upfront. Metering
+//! adjustments for IO instructions are handled entirely in the generated C
+//! code; these callbacks are pure IO logic.
 
-use std::{collections::VecDeque, ffi::c_void, io::Write, sync::Arc};
+use std::{collections::VecDeque, ffi::c_void, io::Write};
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, Rng};
-use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_BYTES};
 
-use crate::arch::deferral::{DeferralState, InputMapVal};
+use crate::arch::deferral::DeferralState;
 
-/// `input_raw → output_raw`.
-pub type DeferralFnPtr = Arc<dyn Fn(&[u8]) -> Vec<u8> + Send + Sync>;
-
-/// `(def_idx, output_raw) → output_commit`.
-pub type DeferralHashFn = Arc<dyn Fn(u32, &[u8]) -> [u8; DEFERRAL_COMMIT_NUM_BYTES] + Send + Sync>;
-
-/// All IO execution state, owned by Rust.
-pub struct OpenVmIoState {
-    pub input_stream: VecDeque<Vec<u8>>,
-    pub hint_stream: Vec<u8>,
-    pub hint_pos: usize,
-    pub public_values: Vec<u8>,
-    /// Guest memory pointer (constant during execution).
-    pub memory: *mut u8,
-    /// Persistent RNG matching openvm's `StdRng::seed_from_u64(0)`.
-    pub rng: StdRng,
-    pub deferrals: Vec<DeferralState>,
-    pub deferral_fns: Vec<DeferralFnPtr>,
-    pub deferral_hash: Option<DeferralHashFn>,
+/// IO execution state borrowed from the host `VmState<F>` for the duration of
+/// one rvr call. Streams, rng, and the public-values byte slice are mutable
+/// borrows; `memory_ptr` is a raw alias of VmState's main memory buffer
+/// (raw because the C engine accesses it directly via pointer).
+pub struct OpenVmIoState<'a, F: PrimeField32> {
+    pub input_stream: &'a mut VecDeque<Vec<F>>,
+    pub hint_stream: &'a mut VecDeque<F>,
+    pub rng: &'a mut StdRng,
+    pub memory_ptr: *mut u8,
+    pub public_values: &'a mut [u8],
+    pub deferrals: &'a mut Vec<DeferralState>,
 }
 
-/// Function-pointer struct passed to C via `register_openvm_callbacks`.
 /// Must match the C `OpenVmHostCallbacks` layout exactly.
 #[repr(C)]
 pub struct OpenVmHostCallbacks {
@@ -49,97 +38,103 @@ pub struct OpenVmHostCallbacks {
     pub hint_buffer: extern "C" fn(*mut c_void, u32, u32),
     pub reveal: extern "C" fn(*mut c_void, u32, u32, u32),
     pub hint_stream_set: unsafe extern "C" fn(*mut c_void, *const u8, u32),
-    pub deferral_call_lookup: unsafe extern "C" fn(*mut c_void, u32, *const u8, *mut u8) -> i32,
-    pub deferral_output_lookup:
-        unsafe extern "C" fn(*mut c_void, u32, *const u8, *mut u8, u32) -> i32,
 }
 
 // ── Callback implementations ────────────────────────────────────────────────
 
-/// HintInput: pop next vector from input_stream, build hint buffer with
-/// 4-byte LE length prefix, padded to 4-byte alignment.
-pub extern "C" fn host_hint_input(ctx: *mut c_void) {
-    let io = unsafe { &mut *(ctx as *mut OpenVmIoState) };
-
+/// HintInput: pop next input record from VmState's input_stream and overwrite
+/// the active hint stream with `[len: u32 LE][data][padding to 4-byte align]`,
+/// each byte stored as one field element.
+pub extern "C" fn host_hint_input<F: PrimeField32>(ctx: *mut c_void) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+    io.hint_stream.clear();
     if let Some(vec) = io.input_stream.pop_front() {
-        let vec_len = vec.len() as u32;
-        let padded_len = (vec.len() + 3) & !3;
-        let total = 4 + padded_len;
-        let mut buf = vec![0u8; total];
-        buf[0..4].copy_from_slice(&vec_len.to_le_bytes());
-        buf[4..4 + vec.len()].copy_from_slice(&vec);
-        io.hint_stream = buf;
-    } else {
-        io.hint_stream = Vec::new();
+        let data_len = vec.len();
+        let padded_len = (data_len + 3) & !3;
+        let len_bytes = (data_len as u32).to_le_bytes();
+        for &b in &len_bytes {
+            io.hint_stream.push_back(F::from_u8(b));
+        }
+        io.hint_stream.extend(vec);
+        for _ in data_len..padded_len {
+            io.hint_stream.push_back(F::ZERO);
+        }
     }
-    io.hint_pos = 0;
 }
 
 /// PrintStr: read UTF-8 from guest memory and print to stdout.
-pub extern "C" fn host_print_str(ctx: *mut c_void, ptr: u32, len: u32) {
-    let io = unsafe { &*(ctx as *const OpenVmIoState) };
-    if len > 0 && !io.memory.is_null() {
+pub extern "C" fn host_print_str<F: PrimeField32>(ctx: *mut c_void, ptr: u32, len: u32) {
+    let io = unsafe { &*(ctx as *const OpenVmIoState<'_, F>) };
+    if len > 0 && !io.memory_ptr.is_null() {
         let slice =
-            unsafe { std::slice::from_raw_parts(io.memory.add(ptr as usize), len as usize) };
+            unsafe { std::slice::from_raw_parts(io.memory_ptr.add(ptr as usize), len as usize) };
         let _ = std::io::stdout().write_all(slice);
         let _ = std::io::stdout().flush();
     }
 }
 
-/// HintRandom: fill hint buffer with random bytes using persistent StdRng
-/// (matches openvm's `Rv32HintRandomSubEx`).
-pub extern "C" fn host_hint_random(ctx: *mut c_void, num_words: u32) {
-    let io = unsafe { &mut *(ctx as *mut OpenVmIoState) };
+/// HintRandom: refill the hint stream with `num_words * 4` random bytes drawn
+/// from VmState's persistent RNG (matches openvm's `Rv32HintRandomSubEx`).
+pub extern "C" fn host_hint_random<F: PrimeField32>(ctx: *mut c_void, num_words: u32) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
     let nbytes = num_words as usize * 4;
-    let mut buf = vec![0u8; nbytes];
-
-    for byte in buf.iter_mut() {
-        *byte = io.rng.random::<u8>();
-    }
-
-    io.hint_stream = buf;
-    io.hint_pos = 0;
-}
-
-/// HINT_STOREW: copy 4 bytes from hint buffer to guest memory.
-pub extern "C" fn host_hint_storew(ctx: *mut c_void, dest_addr: u32) {
-    let io = unsafe { &mut *(ctx as *mut OpenVmIoState) };
-    if io.hint_pos + 4 <= io.hint_stream.len() && !io.memory.is_null() {
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                io.hint_stream.as_ptr().add(io.hint_pos),
-                io.memory.add(dest_addr as usize),
-                4,
-            );
-        }
-        io.hint_pos += 4;
+    io.hint_stream.clear();
+    for _ in 0..nbytes {
+        io.hint_stream.push_back(F::from_u8(io.rng.random::<u8>()));
     }
 }
 
-/// HINT_BUFFER: copy num_words * 4 bytes from hint buffer to guest memory.
-pub extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u32, num_words: u32) {
-    let io = unsafe { &mut *(ctx as *mut OpenVmIoState) };
+/// HINT_STOREW: pop 4 field elements from the hint stream, cast each to a
+/// byte, and write them to guest memory at `dest_addr`.
+pub extern "C" fn host_hint_storew<F: PrimeField32>(ctx: *mut c_void, dest_addr: u32) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+    if io.hint_stream.len() < 4 || io.memory_ptr.is_null() {
+        return;
+    }
+    let mut bytes = [0u8; 4];
+    for byte in &mut bytes {
+        *byte = io.hint_stream.pop_front().unwrap().as_canonical_u32() as u8;
+    }
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), io.memory_ptr.add(dest_addr as usize), 4);
+    }
+}
+
+/// HINT_BUFFER: pop `num_words * 4` field elements from the hint stream and
+/// copy them as bytes into guest memory.
+pub extern "C" fn host_hint_buffer<F: PrimeField32>(
+    ctx: *mut c_void,
+    dest_addr: u32,
+    num_words: u32,
+) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
     let nbytes = num_words as usize * 4;
-    if io.hint_pos + nbytes <= io.hint_stream.len() && !io.memory.is_null() {
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                io.hint_stream.as_ptr().add(io.hint_pos),
-                io.memory.add(dest_addr as usize),
-                nbytes,
-            );
-        }
-        io.hint_pos += nbytes;
+    if io.hint_stream.len() < nbytes || io.memory_ptr.is_null() {
+        return;
+    }
+    let dst = unsafe { io.memory_ptr.add(dest_addr as usize) };
+    for i in 0..nbytes {
+        let byte = io.hint_stream.pop_front().unwrap().as_canonical_u32() as u8;
+        unsafe { *dst.add(i) = byte };
     }
 }
 
-/// REVEAL: capture public output bytes in host state. Cost corrections handled in C.
-pub extern "C" fn host_reveal(ctx: *mut c_void, src_val: u32, ptr: u32, offset: u32) {
-    let io = unsafe { &mut *(ctx as *mut OpenVmIoState) };
+/// REVEAL: write public output bytes directly into the guest's `PUBLIC_VALUES_AS`
+/// byte slice. Cost corrections handled in C.
+pub extern "C" fn host_reveal<F: PrimeField32>(
+    ctx: *mut c_void,
+    src_val: u32,
+    ptr: u32,
+    offset: u32,
+) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
     let start = ptr as usize + offset as usize;
     let end = start + 4;
-    if io.public_values.len() < end {
-        io.public_values.resize(end, 0);
-    }
+    assert!(
+        end <= io.public_values.len(),
+        "reveal out of bounds: writing bytes [{start}..{end}) but public_values size is {} (configured via SystemConfig::with_public_values)",
+        io.public_values.len(),
+    );
     io.public_values[start..end].copy_from_slice(&src_val.to_le_bytes());
 }
 
@@ -148,108 +143,17 @@ pub extern "C" fn host_reveal(ctx: *mut c_void, src_val: u32, ptr: u32, offset: 
 /// # Safety
 ///
 /// `ctx` must be a valid `OpenVmIoState` pointer. `data` must point to `len` bytes (or be null).
-pub unsafe extern "C" fn host_hint_stream_set(ctx: *mut c_void, data: *const u8, len: u32) {
-    let io = &mut *(ctx as *mut OpenVmIoState);
+pub unsafe extern "C" fn host_hint_stream_set<F: PrimeField32>(
+    ctx: *mut c_void,
+    data: *const u8,
+    len: u32,
+) {
+    let io = &mut *(ctx as *mut OpenVmIoState<'_, F>);
+    io.hint_stream.clear();
     if len > 0 && !data.is_null() {
-        io.hint_stream = std::slice::from_raw_parts(data, len as usize).to_vec();
-    } else {
-        io.hint_stream = Vec::new();
+        let slice = std::slice::from_raw_parts(data, len as usize);
+        for &b in slice {
+            io.hint_stream.push_back(F::from_u8(b));
+        }
     }
-    io.hint_pos = 0;
-}
-
-// ── Deferral callbacks ─────────────────────────────────────────────────────
-
-/// Deferral CALL lookup; same `Raw → Output` transition as `DeferralFn::execute`.
-/// Returns 1 on hit, 0 on miss.
-///
-/// # Safety
-///
-/// `input_commit_raw` must point to `DEFERRAL_COMMIT_NUM_BYTES` readable bytes.
-/// `output_key_out` must point to `DEFERRAL_OUTPUT_KEY_BYTES` writable bytes.
-pub unsafe extern "C" fn host_deferral_call_lookup(
-    ctx: *mut c_void,
-    def_idx: u32,
-    input_commit_raw: *const u8,
-    output_key_out: *mut u8,
-) -> i32 {
-    let io = &mut *(ctx as *mut OpenVmIoState);
-    let input_commit: Vec<u8> =
-        std::slice::from_raw_parts(input_commit_raw, DEFERRAL_COMMIT_NUM_BYTES).to_vec();
-
-    let Some(state) = io.deferrals.get_mut(def_idx as usize) else {
-        return 0;
-    };
-
-    let (output_commit, output_len) = match state.get_input(&input_commit).clone() {
-        InputMapVal::Output(commit) => {
-            let len = state.get_output(&commit).len() as u64;
-            let arr: [u8; DEFERRAL_COMMIT_NUM_BYTES] = commit.as_slice().try_into().unwrap();
-            (arr, len)
-        }
-        InputMapVal::Raw(input_raw) => {
-            let func = io
-                .deferral_fns
-                .get(def_idx as usize)
-                .expect("deferral CALL: def_idx has no closure registered")
-                .clone();
-            let hash = io
-                .deferral_hash
-                .as_ref()
-                .expect("deferral CALL: hash_output not configured")
-                .clone();
-            let output_raw = func(&input_raw);
-            let commit = hash(def_idx, &output_raw);
-            let len = output_raw.len() as u64;
-            io.deferrals[def_idx as usize].store_output(&input_commit, commit.to_vec(), output_raw);
-            (commit, len)
-        }
-    };
-
-    let mut output_key = [0u8; DEFERRAL_OUTPUT_KEY_BYTES];
-    output_key[..DEFERRAL_COMMIT_NUM_BYTES].copy_from_slice(&output_commit);
-    output_key[DEFERRAL_COMMIT_NUM_BYTES..].copy_from_slice(&output_len.to_le_bytes());
-    std::ptr::copy_nonoverlapping(
-        output_key.as_ptr(),
-        output_key_out,
-        DEFERRAL_OUTPUT_KEY_BYTES,
-    );
-    1
-}
-
-/// Deferral OUTPUT lookup: `deferrals[def_idx].output_map[output_commit]`.
-/// Returns 1 on hit, 0 on miss.
-///
-/// # Safety
-///
-/// `output_commit_raw` must point to `DEFERRAL_COMMIT_NUM_BYTES` readable bytes.
-/// `output_raw_out` must point to at least `expected_len` writable bytes.
-pub unsafe extern "C" fn host_deferral_output_lookup(
-    ctx: *mut c_void,
-    def_idx: u32,
-    output_commit_raw: *const u8,
-    output_raw_out: *mut u8,
-    expected_len: u32,
-) -> i32 {
-    let io = &*(ctx as *const OpenVmIoState);
-    let output_commit: Vec<u8> =
-        std::slice::from_raw_parts(output_commit_raw, DEFERRAL_COMMIT_NUM_BYTES).to_vec();
-    let Some(state) = io.deferrals.get(def_idx as usize) else {
-        return 0;
-    };
-    let raw = state.get_output(&output_commit);
-    // TODO: change these panics to something better to handle across the FFI boundary.
-    assert_eq!(raw.len(), expected_len as usize);
-    std::ptr::copy_nonoverlapping(raw.as_ptr(), output_raw_out, raw.len());
-    1
-}
-
-// ── Conversion helpers ──────────────────────────────────────────────────────
-
-/// Convert an OpenVM field-element input stream to byte-packed vectors.
-pub fn convert_input_stream<F: PrimeField32>(stream: &VecDeque<Vec<F>>) -> VecDeque<Vec<u8>> {
-    stream
-        .iter()
-        .map(|vec| vec.iter().map(|f| f.as_canonical_u32() as u8).collect())
-        .collect()
 }
