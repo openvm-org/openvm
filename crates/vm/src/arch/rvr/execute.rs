@@ -18,10 +18,7 @@ use super::{
         host_hint_buffer, host_hint_input, host_hint_random, host_hint_storew,
         host_hint_stream_set, host_print_str, host_reveal, OpenVmHostCallbacks, OpenVmIoState,
     },
-    metered::{
-        metered_periodic_check, MeteredConfig, MeteredTracerData, RvrMeteredResult,
-        SegmentationState, NO_LAST_PAGE,
-    },
+    metered::{metered_periodic_check, MeteredTracerData, SegmentationState, NO_LAST_PAGE},
     metered_cost::{
         prepare_metered_cost, MeteredCostConfig, MeteredCostData, PureTracerData,
         RvrMeteredCostResult,
@@ -237,8 +234,8 @@ pub fn execute_metered<F: PrimeField32>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
     vm_state: &mut VmState<F, GuestMemory>,
-    trace_config: MeteredConfig,
-) -> Result<RvrMeteredResult, ExecuteError> {
+    mut seg_state: SegmentationState,
+) -> Result<SegmentationState, ExecuteError> {
     let pc = vm_state.pc();
     let initial_regs = read_rv32_registers(vm_state);
 
@@ -247,7 +244,6 @@ pub fn execute_metered<F: PrimeField32>(
     state.regs = initial_regs;
     state.tracer = TracerPtr(&mut tracer_data);
 
-    let mut seg_state = SegmentationState::new(trace_config);
     state.tracer.trace_heights = seg_state.trace_heights_ptr();
     state.tracer.mem_page_buf = seg_state.mem_page_buf_ptr();
     state.tracer.pv_page_buf = seg_state.pv_page_buf_ptr();
@@ -256,7 +252,7 @@ pub fn execute_metered<F: PrimeField32>(
     state.tracer.pv_page_buf_len = 0;
     state.tracer.deferral_page_buf_len = 0;
     state.tracer.last_mem_page = NO_LAST_PAGE;
-    state.tracer.check_counter = seg_state.config().segment_check_insns as u32;
+    state.tracer.check_counter = seg_state.segmentation_ctx.segment_check_insns as u32;
     state.tracer.on_check = Some(metered_periodic_check);
     state.tracer.seg_state = &mut seg_state as *mut SegmentationState as *mut c_void;
 
@@ -269,5 +265,5 @@ pub fn execute_metered<F: PrimeField32>(
         state.tracer.deferral_page_buf_len,
         state.tracer.check_counter,
     );
-    Ok(seg_state.into_result(state))
+    Ok(seg_state)
 }
