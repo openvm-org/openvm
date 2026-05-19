@@ -320,25 +320,11 @@ impl SegmentationState {
                 .initialize_segment(&mut self.trace_heights, &self.is_trace_height_constant);
             self.initialize_segment_memory(mem_len, pv_len, deferral_len);
 
-            if self.segmentation_ctx.should_segment(
+            self.segmentation_ctx.warn_if_exceeds_limits(
                 instret,
                 &self.trace_heights,
                 &self.is_trace_height_constant,
-            ) {
-                let trace_heights_str = self
-                    .trace_heights
-                    .iter()
-                    .zip(self.segmentation_ctx.air_names.iter())
-                    .filter(|(&height, _)| height > 0)
-                    .map(|(&height, name)| format!("  {name} = {height}"))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                tracing::warn!(
-                    "Segment initialized with heights that exceed limits\n\
-                     instret={instret}\n\
-                     trace_heights=[\n{trace_heights_str}\n]"
-                );
-            }
+            );
         }
 
         self.segmentation_ctx
