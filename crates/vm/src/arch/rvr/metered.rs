@@ -11,10 +11,10 @@ use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
 
 use super::{
-    bridge::{map_rvr_compile_error, map_rvr_execute_error},
-    compile::ChipMapping,
-    compile_metered, execute_metered,
+    bridge::map_rvr_execute_error,
+    execute_metered,
     state::{TracerPayload, TracerPtr},
+    RvrCompiled,
 };
 use crate::{
     arch::{
@@ -26,20 +26,19 @@ use crate::{
             },
             MeteredCtx,
         },
-        ExecutionError, ExecutorInventory, MeteredExecutor, Streams, SystemConfig, VmState,
-        BOUNDARY_AIR_ID, MERKLE_AIR_ID,
+        ExecutionError, ExecutorInventory, Streams, SystemConfig, VmState, BOUNDARY_AIR_ID,
+        MERKLE_AIR_ID,
     },
     system::memory::{
         merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, CHUNK as MERKLE_CHUNK,
     },
 };
 
-pub struct RvrMeteredInstance<F: PrimeField32, E> {
+pub struct RvrMeteredInstance<F: PrimeField32> {
     pub(crate) system_config: SystemConfig,
     pub(crate) exe: Arc<VmExe<F>>,
-    pub(crate) inventory: Arc<ExecutorInventory<E>>,
-    pub(crate) executor_idx_to_air_idx: Vec<usize>,
     pub(crate) extensions: ExtensionRegistry<F>,
+    pub(crate) compiled: RvrCompiled,
 }
 
 // ── C-compatible tracer struct ───────────────────────────────────────────────
@@ -93,17 +92,16 @@ pub type MeteredTracer = TracerPtr<MeteredTracerData>;
 
 // ── Chip mapping ─────────────────────────────────────────────────────────────
 
-fn build_chip_mapping<F, E>(
+pub fn build_pc_to_chip<F, E>(
     exe: &VmExe<F>,
     inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
-) -> ChipMapping
+) -> Vec<u32>
 where
     F: PrimeField32,
 {
     let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
-    let pc_to_chip: Vec<u32> = exe
-        .program
+    exe.program
         .instructions_and_debug_infos
         .iter()
         .map(|slot| {
@@ -120,11 +118,7 @@ where
                 NO_CHIP
             }
         })
-        .collect();
-    ChipMapping {
-        pc_to_chip,
-        chip_widths: None,
-    }
+        .collect()
 }
 
 // ── Segmentation runtime ─────────────────────────────────────────────────────
@@ -380,11 +374,7 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) {
     tracer.check_counter += seg_state.segmentation_ctx.segment_check_insns as u32;
 }
 
-impl<F, E> RvrMeteredInstance<F, E>
-where
-    F: PrimeField32,
-    E: MeteredExecutor<F>,
-{
+impl<F: PrimeField32> RvrMeteredInstance<F> {
     pub fn execute_metered(
         &self,
         inputs: impl Into<Streams<F>>,
@@ -404,26 +394,13 @@ where
         mut vm_state: VmState<F, GuestMemory>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let chips = build_chip_mapping(
-            self.exe.as_ref(),
-            self.inventory.as_ref(),
-            &self.executor_idx_to_air_idx,
-        );
-        let compiled_metered = compile_metered(self.exe.as_ref(), &self.extensions, &chips)
-            .map_err(map_rvr_compile_error)?;
-
         let seg_state = SegmentationState::new(ctx, &self.system_config);
 
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         let result_seg_state = tracing::info_span!("execute_metered")
             .in_scope(|| {
-                execute_metered(
-                    &compiled_metered,
-                    &self.extensions,
-                    &mut vm_state,
-                    seg_state,
-                )
+                execute_metered(&self.compiled, &self.extensions, &mut vm_state, seg_state)
             })
             .map_err(map_rvr_execute_error)?;
         let result_seg_ctx = result_seg_state.segmentation_ctx;

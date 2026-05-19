@@ -2,15 +2,17 @@
 
 use std::sync::Arc;
 
-use openvm_instructions::{exe::VmExe, LocalOpcode, SystemOpcode, VmOpcode};
+use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
+use rvr_openvm_lift::ExtensionRegistry;
 
 use super::{
-    bridge::{map_rvr_compile_error, map_rvr_execute_error},
+    bridge::map_rvr_execute_error,
     compile::ChipMapping,
-    compile_metered_cost, execute_metered_cost,
+    execute_metered_cost,
+    metered::build_pc_to_chip,
     state::{MeteredCostState, TracerPayload, TracerPtr},
+    RvrCompiled,
 };
 use crate::{
     arch::{
@@ -51,6 +53,7 @@ pub struct RvrMeteredCostInstance<F: PrimeField32, E> {
     pub(crate) inventory: Arc<ExecutorInventory<E>>,
     pub(crate) executor_idx_to_air_idx: Vec<usize>,
     pub(crate) extensions: ExtensionRegistry<F>,
+    pub(crate) compiled: RvrCompiled,
 }
 
 /// Build a `MeteredCostConfig` from the program, executor inventory, AIR index mapping, and widths.
@@ -63,34 +66,9 @@ pub fn build_metered_cost_config<F, E>(
 where
     F: PrimeField32,
 {
-    let program = &exe.program;
-    let pc_base = program.pc_base;
-
-    let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
-
-    let pc_to_chip: Vec<u32> = program
-        .instructions_and_debug_infos
-        .iter()
-        .map(|slot| {
-            if let Some((inst, _)) = slot {
-                let opcode: VmOpcode = inst.opcode;
-                if opcode == terminate_opcode {
-                    NO_CHIP
-                } else if let Some(&executor_idx) = inventory.instruction_lookup.get(&opcode) {
-                    let air_idx = executor_idx_to_air_idx[executor_idx as usize];
-                    air_idx as u32
-                } else {
-                    NO_CHIP
-                }
-            } else {
-                NO_CHIP
-            }
-        })
-        .collect();
-
     MeteredCostConfig {
-        pc_to_chip,
-        pc_base,
+        pc_to_chip: build_pc_to_chip(exe, inventory, executor_idx_to_air_idx),
+        pc_base: exe.program.pc_base,
         widths: widths.to_vec(),
     }
 }
@@ -171,17 +149,13 @@ where
             &self.executor_idx_to_air_idx,
             &ctx.widths,
         );
-        let chips = metered_cost_config.chip_mapping();
-
-        let compiled = compile_metered_cost(self.exe.as_ref(), &self.extensions, &chips)
-            .map_err(map_rvr_compile_error)?;
 
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         let result = tracing::info_span!("execute_metered_cost")
             .in_scope(|| {
                 execute_metered_cost(
-                    &compiled,
+                    &self.compiled,
                     &self.extensions,
                     &mut vm_state,
                     metered_cost_config,
