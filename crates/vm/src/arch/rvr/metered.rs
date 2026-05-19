@@ -294,7 +294,13 @@ impl SegmentationState {
     /// Called on each periodic check (approximately every `segment_check_insns` instructions).
     /// Invoked from the C tracer's `trace_block` callback when the block-level
     /// countdown crosses zero. Returns true if a segment boundary was created.
-    pub fn on_periodic_check(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) -> bool {
+    pub fn on_periodic_check(
+        &mut self,
+        mem_len: u32,
+        pv_len: u32,
+        deferral_len: u32,
+        remaining_counter: u32,
+    ) -> bool {
         let seg_check_insns = self.segmentation_ctx.segment_check_insns;
         self.segmentation_ctx.instret += seg_check_insns;
         self.segmentation_ctx.instrets_until_check = seg_check_insns;
@@ -302,7 +308,7 @@ impl SegmentationState {
         self.flush_page_buffer(mem_len, pv_len, deferral_len);
         self.apply_height_updates();
 
-        let instret = self.segmentation_ctx.instret;
+        let instret = self.segmentation_ctx.instret - remaining_counter as u64;
         let did_segment = self.segmentation_ctx.check_and_segment(
             instret,
             &mut self.trace_heights,
@@ -382,10 +388,10 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) {
     // that clear the global BitSet.
     tracer.last_mem_page = NO_LAST_PAGE;
 
+    seg_state.on_periodic_check(mem_len, pv_len, deferral_len, tracer.check_counter);
+
     // Reset the countdown for the next interval.
     tracer.check_counter += seg_state.segmentation_ctx.segment_check_insns as u32;
-
-    seg_state.on_periodic_check(mem_len, pv_len, deferral_len);
 }
 
 impl<F, E> RvrMeteredInstance<F, E>
