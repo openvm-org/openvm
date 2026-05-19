@@ -74,7 +74,7 @@ fn make_deferral_prover(sdk: &Sdk, agg_params: &AggregationSystemParams) -> Defe
         .unwrap();
     let system_config = sdk.app_config().app_vm_config.as_ref().clone();
     let memory_dimensions = system_config.memory_config.memory_dimensions();
-    let num_user_pvs = system_config.num_public_values;
+    let num_user_pvs = system_config.public_values_cell_count();
     let def_circuit_params = internal_params_with_100_bits_security();
     let deferred_verify_prover = VerifyProver::new::<E>(
         ir_vk,
@@ -249,7 +249,7 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
         vs_ir_pcs_data.commitment.into(),
         internal_params_with_100_bits_security(),
         vs_system_config.memory_config.memory_dimensions(),
-        vs_system_config.num_public_values,
+        vs_system_config.public_values_cell_count(),
         Some(expected_def_hook_commit),
         0,
     );
@@ -457,7 +457,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
             let onion_commit = compute_dag_onion_commit(&ir_vk);
 
             let memory_dimensions = system_config.memory_config.memory_dimensions();
-            let num_user_pvs = system_config.num_public_values;
+            let num_user_pvs = system_config.public_values_cell_count();
 
             let root_prover = Arc::new(RootProver::from_pk(
                 ir_vk,

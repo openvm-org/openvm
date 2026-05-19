@@ -1,15 +1,13 @@
 use abi_stable::std_types::RVec;
-use openvm_instructions::riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS};
-
-use crate::{
-    arch::{SystemConfig, BOUNDARY_AIR_ID, MERKLE_AIR_ID},
-    system::memory::{dimensions::MemoryDimensions, CHUNK},
+use openvm_instructions::{
+    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    DEFERRAL_AS,
 };
 
-/// CHUNK granularity (merkle leaf size) for page fault tracking.
-/// Must match the CHUNK used to compute `MemoryDimensions::address_height`.
-const CHUNK_U32: u32 = CHUNK as u32;
-const CHUNK_BITS: u32 = CHUNK_U32.ilog2();
+use crate::{
+    arch::{SystemConfig, BOUNDARY_AIR_ID, MERKLE_AIR_ID, U16_CELL_SIZE},
+    system::memory::{dimensions::MemoryDimensions, DIGEST_WIDTH},
+};
 
 /// Upper bound on number of memory pages accessed per instruction. Used for buffer allocation.
 pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
@@ -151,9 +149,8 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         );
     }
 
-    /// For each memory access, record the minimal necessary data to update heights of
-    /// memory-related chips. The actual height updates happen during segment checks. The
-    /// implementation is in `lazy_update_boundary_heights`.
+    /// Records the memory-tree pages touched by the pointer range `[ptr, ptr + size)`.
+    /// The actual height updates happen during segment checks.
     #[inline(always)]
     pub(crate) fn update_boundary_merkle_heights(
         &mut self,
@@ -163,15 +160,24 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     ) {
         debug_assert!((address_space as usize) < self.addr_space_access_count.len());
 
-        let chunk_idx = ptr >> CHUNK_BITS;
-        let end_chunk_idx = (ptr + size - 1) >> CHUNK_BITS;
-        let num_blocks = end_chunk_idx - chunk_idx + 1;
-        let start_block_id = self
+        let end_ptr = ptr + size - 1;
+        // Convert the pointer range to merkle-leaf labels. DEFERRAL_AS pointers
+        // are cell indices; RV64 address spaces use byte pointers.
+        let leaf_ptr_span = if address_space == DEFERRAL_AS {
+            DIGEST_WIDTH as u32
+        } else {
+            (U16_CELL_SIZE * DIGEST_WIDTH) as u32
+        };
+        let leaf_bits = leaf_ptr_span.ilog2();
+        let leaf_label = ptr >> leaf_bits;
+        let end_leaf_label = end_ptr >> leaf_bits;
+        let num_leaves = end_leaf_label - leaf_label + 1;
+        let start_leaf_id = self
             .memory_dimensions
-            .label_to_index((address_space, chunk_idx)) as u32;
-        let end_block_id = start_block_id + num_blocks;
-        let start_page_id = start_block_id >> PAGE_BITS;
-        let end_page_id = ((end_block_id - 1) >> PAGE_BITS) + 1;
+            .label_to_index((address_space, leaf_label)) as u32;
+        let end_leaf_id = start_leaf_id + num_leaves;
+        let start_page_id = start_leaf_id >> PAGE_BITS;
+        let end_page_id = ((end_leaf_id - 1) >> PAGE_BITS) + 1;
         assert!(
             self.page_indices_since_checkpoint_len + (end_page_id - start_page_id) as usize
                 <= self.page_indices_since_checkpoint.len(),
@@ -253,7 +259,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
     /// Overestimates trace heights from page faults.
     ///
-    /// Memory leaves (CHUNK-sized) form a sparse merkle tree of height `h`. Each segment
+    /// Memory leaves (DIGEST_WIDTH-sized) form a sparse merkle tree of height `h`. Each segment
     /// maintains an initial and final tree, so all counts are doubled.
     ///
     /// On each page fault, we conservatively assume all `2^PAGE_BITS` leaves in the page

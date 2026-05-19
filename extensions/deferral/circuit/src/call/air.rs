@@ -4,10 +4,11 @@ use itertools::{izip, Itertools as _};
 use openvm_circuit::{
     arch::{
         AdapterAirContext, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
-        VmAdapterInterface, VmCoreAir, DEFAULT_BLOCK_SIZE,
+        VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH, BUS_BLOCK_STRIDE, BUS_PTR_SCALE,
+        MEMORY_BLOCK_BYTES,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
@@ -32,13 +33,14 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::PrimeField32;
 
+use super::NUM_ACCUMULATORS_PER_IDX;
 use crate::{
     canonicity::{CanonicityAuxCols, CanonicitySubAir},
     count::DeferralCircuitCountBus,
     poseidon2::DeferralPoseidon2Bus,
     utils::{
-        byte_commit_to_f, bytes_to_f, combine_output, split_memory_ops, COMMIT_MEMORY_OPS,
-        COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES,
+        byte_commit_to_f, bytes_to_f, combine_output, split_byte_memory_ops, split_f_memory_ops,
+        COMMIT_MEMORY_OPS, COMMIT_NUM_BYTES, DIGEST_F_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES,
         OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
@@ -237,16 +239,17 @@ pub struct DeferralCallAdapterCols<T> {
     pub rd_aux: MemoryReadAuxCols<T>,
     pub rs_aux: MemoryReadAuxCols<T>,
 
-    // Read auxiliary columns
+    // Heap commit reads use byte chunks; accumulator reads use DEFERRAL_AS
+    // cell chunks.
     pub input_commit_aux: [MemoryReadAuxCols<T>; COMMIT_MEMORY_OPS],
-    pub old_input_acc_aux: [MemoryReadAuxCols<T>; DIGEST_MEMORY_OPS],
-    pub old_output_acc_aux: [MemoryReadAuxCols<T>; DIGEST_MEMORY_OPS],
+    pub old_input_acc_aux: [MemoryReadAuxCols<T>; DIGEST_F_MEMORY_OPS],
+    pub old_output_acc_aux: [MemoryReadAuxCols<T>; DIGEST_F_MEMORY_OPS],
 
-    // Write auxiliary columns
-    pub output_commit_and_len_aux:
-        [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; OUTPUT_TOTAL_MEMORY_OPS],
-    pub new_input_acc_aux: [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
-    pub new_output_acc_aux: [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
+    // Heap output writes use byte chunks; accumulator writes use DEFERRAL_AS
+    // cell chunks.
+    pub output_commit_and_len_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; OUTPUT_TOTAL_MEMORY_OPS],
+    pub new_input_acc_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
+    pub new_output_acc_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
@@ -294,7 +297,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(d.clone(), cols.rd_ptr),
-                rd_full,
+                pack_u8_block::<AB>(&rd_full),
                 timestamp_pp(),
                 &cols.rd_aux,
             )
@@ -303,7 +306,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(d.clone(), cols.rs_ptr),
-                rs_full,
+                pack_u8_block::<AB>(&rs_full),
                 timestamp_pp(),
                 &cols.rs_aux,
             )
@@ -333,9 +336,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         let deferral_idx = ctx.instruction.immediate;
         let deferral_as = AB::Expr::from_u32(DEFERRAL_AS);
 
+        // Accumulators are consecutive DEFERRAL_AS cell ranges. Memory-bus
+        // addresses are scaled from cell indices by BUS_PTR_SCALE.
         let digest_size = AB::F::from_usize(DIGEST_SIZE);
-        let input_acc_ptr = deferral_idx.clone() * AB::Expr::TWO * digest_size;
-        let output_acc_ptr = input_acc_ptr.clone() + digest_size;
+        let bus_scale = AB::F::from_usize(BUS_PTR_SCALE);
+        let num_accumulators = AB::F::from_usize(NUM_ACCUMULATORS_PER_IDX);
+        let input_acc_ptr = deferral_idx.clone() * num_accumulators * digest_size * bus_scale;
+        let output_acc_ptr = input_acc_ptr.clone() + AB::Expr::from(digest_size * bus_scale);
 
         let DeferralCallReads {
             input_commit,
@@ -366,7 +373,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         });
 
         let input_commit_chunks =
-            split_memory_ops::<_, COMMIT_NUM_BYTES, COMMIT_MEMORY_OPS>(input_commit);
+            split_byte_memory_ops::<_, COMMIT_NUM_BYTES, COMMIT_MEMORY_OPS>(input_commit);
         for (chunk_idx, (data, aux)) in input_commit_chunks
             .into_iter()
             .zip(&cols.input_commit_aux)
@@ -376,9 +383,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 .read(
                     MemoryAddress::new(
                         e.clone(),
-                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
                     ),
-                    data,
+                    pack_u8_block::<AB>(&data),
                     timestamp_pp(),
                     aux,
                 )
@@ -386,7 +393,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         let old_input_acc_chunks =
-            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(old_input_acc);
+            split_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(old_input_acc);
         for (chunk_idx, (data, aux)) in old_input_acc_chunks
             .into_iter()
             .zip(&cols.old_input_acc_aux)
@@ -396,8 +403,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 .read(
                     MemoryAddress::new(
                         deferral_as.clone(),
-                        input_acc_ptr.clone()
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                        input_acc_ptr.clone() + AB::Expr::from_usize(chunk_idx * BUS_BLOCK_STRIDE),
                     ),
                     data,
                     timestamp_pp(),
@@ -407,7 +413,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         let old_output_acc_chunks =
-            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(old_output_acc);
+            split_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(old_output_acc);
         for (chunk_idx, (data, aux)) in old_output_acc_chunks
             .into_iter()
             .zip(&cols.old_output_acc_aux)
@@ -417,8 +423,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 .read(
                     MemoryAddress::new(
                         deferral_as.clone(),
-                        output_acc_ptr.clone()
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                        output_acc_ptr.clone() + AB::Expr::from_usize(chunk_idx * BUS_BLOCK_STRIDE),
                     ),
                     data,
                     timestamp_pp(),
@@ -429,7 +434,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
 
         let output_commit_and_len = combine_output(output_commit, output_len_full);
         let output_commit_and_len_chunks =
-            split_memory_ops::<_, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS>(
+            split_byte_memory_ops::<_, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS>(
                 output_commit_and_len,
             );
         for (chunk_idx, (data, aux)) in output_commit_and_len_chunks
@@ -441,9 +446,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 .write(
                     MemoryAddress::new(
                         e.clone(),
-                        output_ptr.clone() + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                        output_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
                     ),
-                    data,
+                    pack_u8_block::<AB>(&data),
                     timestamp_pp(),
                     aux,
                 )
@@ -451,7 +456,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         let new_input_acc_chunks =
-            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(new_input_acc);
+            split_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(new_input_acc);
         for (chunk_idx, (data, aux)) in new_input_acc_chunks
             .into_iter()
             .zip(&cols.new_input_acc_aux)
@@ -461,8 +466,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 .write(
                     MemoryAddress::new(
                         deferral_as.clone(),
-                        input_acc_ptr.clone()
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                        input_acc_ptr.clone() + AB::Expr::from_usize(chunk_idx * BUS_BLOCK_STRIDE),
                     ),
                     data,
                     timestamp_pp(),
@@ -472,7 +476,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         let new_output_acc_chunks =
-            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(new_output_acc);
+            split_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(new_output_acc);
         for (chunk_idx, (data, aux)) in new_output_acc_chunks
             .into_iter()
             .zip(&cols.new_output_acc_aux)
@@ -482,8 +486,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 .write(
                     MemoryAddress::new(
                         deferral_as.clone(),
-                        output_acc_ptr.clone()
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                        output_acc_ptr.clone() + AB::Expr::from_usize(chunk_idx * BUS_BLOCK_STRIDE),
                     ),
                     data,
                     timestamp_pp(),

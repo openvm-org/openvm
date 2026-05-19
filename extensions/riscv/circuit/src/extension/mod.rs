@@ -313,7 +313,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let beq = Rv64BranchEqualAir::new(
             Rv64BranchAdapterAir::new(exec_bridge, memory_bridge),
-            BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+            BranchEqualCoreAir::new(bitwise_lu, BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
         );
         inventory.add_air(beq);
 
@@ -463,6 +463,7 @@ where
         let beq = Rv64BranchEqualChip::new(
             BranchEqualFiller::new(
                 Rv64BranchAdapterFiller,
+                bitwise_lu.clone(),
                 BranchEqualOpcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
@@ -582,13 +583,17 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64M {
 
         let mult = Rv64MultiplicationAir::new(
             Rv64MultAdapterAir::new(exec_bridge, memory_bridge),
-            MultiplicationCoreAir::new(range_tuple_checker, MulOpcode::CLASS_OFFSET),
+            MultiplicationCoreAir::new(range_tuple_checker, bitwise_lu, MulOpcode::CLASS_OFFSET),
         );
         inventory.add_air(mult);
 
         let mul_w = Rv64MulWAir::new(
             Rv64MultWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            crate::mul_w::MulWCoreAir::new(range_tuple_checker, MulWOpcode::CLASS_OFFSET),
+            crate::mul_w::MulWCoreAir::new(
+                range_tuple_checker,
+                bitwise_lu,
+                MulWOpcode::CLASS_OFFSET,
+            ),
         );
         inventory.add_air(mul_w);
 
@@ -675,6 +680,7 @@ where
             MultiplicationFiller::new(
                 Rv64MultAdapterFiller,
                 range_tuple_checker.clone(),
+                bitwise_lu.clone(),
                 MulOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
@@ -686,6 +692,7 @@ where
             crate::mul_w::MulWFiller::new(
                 Rv64MultWAdapterFiller::new(bitwise_lu.clone()),
                 range_tuple_checker.clone(),
+                bitwise_lu.clone(),
                 MulWOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),

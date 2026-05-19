@@ -61,24 +61,17 @@ pub fn ec_double_ne_expr(
     FieldExpr::new_with_setup_values(builder, range_bus, true, vec![a_biguint])
 }
 
-/// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
-/// BLOCKS: how many blocks do we need to represent one input or output
-/// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
-/// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
+/// `BLOCKS` is the number of memory blocks needed to represent one input or output point.
 // Note: PreflightExecutor is implemented manually in preflight.rs with fast native arithmetic
 #[derive(Clone)]
-pub struct EcDoubleExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> {
-    pub(crate) inner: FieldExpressionExecutor<
-        Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-    >,
+pub struct EcDoubleExecutor<const BLOCKS: usize> {
+    pub(crate) inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS>>,
     pub(crate) cached_curve_type: Option<CurveType>,
 }
 
-impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
+impl<const BLOCKS: usize> EcDoubleExecutor<BLOCKS> {
     pub fn new(
-        inner: FieldExpressionExecutor<
-            Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        >,
+        inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS>>,
     ) -> Self {
         let cached_curve_type = inner
             .expr
@@ -92,19 +85,15 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, BLOC
     }
 }
 
-impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Deref for EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
-    type Target = FieldExpressionExecutor<
-        Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-    >;
+impl<const BLOCKS: usize> Deref for EcDoubleExecutor<BLOCKS> {
+    type Target = FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS>>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
 
-impl<const BLOCKS: usize, const BLOCK_SIZE: usize> DerefMut
-    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
-{
+impl<const BLOCKS: usize> DerefMut for EcDoubleExecutor<BLOCKS> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
@@ -126,7 +115,7 @@ fn gen_base_expr(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn get_ec_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_ec_double_air<const BLOCKS: usize>(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
@@ -135,7 +124,7 @@ pub fn get_ec_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pointer_max_bits: usize,
     offset: usize,
     a_biguint: BigUint,
-) -> WeierstrassAir<1, BLOCKS, BLOCK_SIZE> {
+) -> WeierstrassAir<1, BLOCKS> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     WeierstrassAir::new(
         Rv64VecHeapAdapterAir::new(
@@ -148,13 +137,13 @@ pub fn get_ec_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     )
 }
 
-pub fn get_ec_double_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_ec_double_step<const BLOCKS: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
     offset: usize,
     a_biguint: BigUint,
-) -> EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
+) -> EcDoubleExecutor<BLOCKS> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     EcDoubleExecutor::new(FieldExpressionExecutor::new(
         Rv64VecHeapAdapterExecutor::new(pointer_max_bits),
@@ -166,14 +155,14 @@ pub fn get_ec_double_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     ))
 }
 
-pub fn get_ec_double_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_ec_double_chip<F, const BLOCKS: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     pointer_max_bits: usize,
     a_biguint: BigUint,
-) -> WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE> {
+) -> WeierstrassChip<F, 1, BLOCKS> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker.bus(), a_biguint);
     WeierstrassChip::new(
         FieldExpressionFiller::new(

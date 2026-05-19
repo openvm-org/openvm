@@ -46,7 +46,7 @@ struct DeferralOutputPerRow {
     Fp poseidon2_res[DIGEST_SIZE];
 };
 
-template <typename T> using MemoryWriteAuxColsDef = MemoryWriteAuxCols<T, MEMORY_OP_SIZE>;
+template <typename T> using MemoryWriteAuxColsDef = MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>;
 
 __device__ __forceinline__ size_t align_up(size_t value, size_t alignment) {
     return ((value + alignment - 1) / alignment) * alignment;
@@ -84,10 +84,8 @@ template <typename T> struct DeferralOutputCols {
     MemoryReadAuxCols<T> rd_aux;
     MemoryReadAuxCols<T> rs_aux;
 
-    // Read data and auxiliary columns. output_commit and output_len are read
-    // contiguously from heap with layout [output_commit || output_len]. The
-    // onion hash of all bytes written by this opcode invocation is constrained
-    // to output_commit.
+    // First row reads [output_commit || output_len_le] from heap.
+    // `output_commit` is the onion hash of the output bytes.
     T output_commit[COMMIT_NUM_BYTES];
     T output_len[F_NUM_BYTES];
     MemoryReadAuxCols<T> output_commit_and_len_aux[OUTPUT_TOTAL_MEMORY_OPS];
@@ -96,14 +94,12 @@ template <typename T> struct DeferralOutputCols {
     // output_commit.
     CanonicityAuxCols<T> output_commit_lt_aux[DIGEST_SIZE];
 
-    // Initial [def_idx, output_len, 0, ...] digest on the first row; on non-first
-    // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
-    // written to memory and auxiliary columns.
+    // First row sponge input is [deferral_idx, output_len, 0, ...].
+    // Later rows sponge and write the next DIGEST_SIZE output bytes.
     T sponge_inputs[DIGEST_SIZE];
-    MemoryWriteAuxCols<T, MEMORY_OP_SIZE> write_bytes_aux[DIGEST_MEMORY_OPS];
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_bytes_aux[DIGEST_BYTE_MEMORY_OPS];
 
-    // Capacity of the permutation of write_bytes and the previous row's capacity on
-    // non-last rows, compression on the last row.
+    // Running Poseidon2 capacity on non-last rows; final compression on the last row.
     T poseidon2_res[DIGEST_SIZE];
 };
 
@@ -246,9 +242,9 @@ __global__ void deferral_output_tracegen(
         const uint8_t *write_bytes_start = header_end + (section_idx - 1) * DIGEST_SIZE;
         const size_t write_aux_offset = align_up(
             sizeof(DeferralOutputRecordHeader) + output_len,
-            alignof(MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>)
+            alignof(MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>)
         );
-        const auto *write_aux = reinterpret_cast<const MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE> *>(
+        const auto *write_aux = reinterpret_cast<const MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES> *>(
             record_start + write_aux_offset
         );
 
@@ -266,12 +262,14 @@ __global__ void deferral_output_tracegen(
 
         constexpr size_t write_aux_stride = sizeof(MemoryWriteAuxColsDef<uint8_t>);
 #pragma unroll
-        for (size_t chunk_idx = 0; chunk_idx < DIGEST_MEMORY_OPS; ++chunk_idx) {
-            const size_t aux_idx = (section_idx - 1) * DIGEST_MEMORY_OPS + chunk_idx;
+        for (size_t chunk_idx = 0; chunk_idx < DIGEST_BYTE_MEMORY_OPS; ++chunk_idx) {
+            const size_t aux_idx = (section_idx - 1) * DIGEST_BYTE_MEMORY_OPS + chunk_idx;
             RowSlice aux_row = row.slice_from(
                 COL_INDEX(DeferralOutputCols, write_bytes_aux) + chunk_idx * write_aux_stride
             );
-            COL_WRITE_ARRAY(aux_row, MemoryWriteAuxColsDef, prev_data, write_aux[aux_idx].prev_data);
+            Fp packed_prev[BLOCK_FE_WIDTH];
+            pack_u8_block_bytes(packed_prev, write_aux[aux_idx].prev_data);
+            COL_WRITE_ARRAY(aux_row, MemoryWriteAuxColsDef, prev_data, packed_prev);
             mem_helper.fill(
                 aux_row,
                 write_aux[aux_idx].prev_timestamp,

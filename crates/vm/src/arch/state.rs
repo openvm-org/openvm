@@ -1,5 +1,6 @@
 use std::{
     fmt::Debug,
+    mem::size_of,
     ops::{Deref, DerefMut},
 };
 
@@ -14,7 +15,7 @@ use super::{create_memory_image, ExecutionError, Streams};
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{execution_mode::ExecutionCtxTrait, SystemConfig, VmStateMut},
-    system::memory::online::GuestMemory,
+    system::memory::online::{GuestMemory, LinearMemory},
 };
 
 /// Represents the core state of a VM.
@@ -192,11 +193,12 @@ where
     pub fn vm_read_slice<T: Copy + Debug>(
         &mut self,
         addr_space: u32,
-        ptr: u32,
+        cell_idx: u32,
         len: usize,
     ) -> &[T] {
-        self.ctx.on_memory_operation(addr_space, ptr, len as u32);
-        self.host_read_slice(addr_space, ptr, len)
+        self.ctx
+            .on_memory_operation(addr_space, cell_idx, len as u32);
+        self.host_read_slice(addr_space, cell_idx, len)
     }
 
     #[inline(always)]
@@ -205,11 +207,19 @@ where
         addr_space: u32,
         ptr: u32,
     ) -> [T; BLOCK_SIZE] {
-        // SAFETY:
-        // - T is stack-allocated repr(C) or repr(transparent), usually u8 or F where F is the base
-        //   field
-        // - T is the exact memory cell type for this address space, satisfying the type requirement
-        unsafe { self.memory.read(addr_space, ptr) }
+        if size_of::<T>() == 1 {
+            // SAFETY: byte-sized VM operands address raw storage bytes.
+            unsafe {
+                self.memory
+                    .memory
+                    .get_memory()
+                    .get_unchecked(addr_space as usize)
+                    .read(ptr as usize)
+            }
+        } else {
+            // SAFETY: wider VM operands use AS-native cell indices.
+            unsafe { self.memory.read(addr_space, ptr) }
+        }
     }
 
     #[inline(always)]
@@ -219,20 +229,38 @@ where
         ptr: u32,
         data: &[T; BLOCK_SIZE],
     ) {
-        // SAFETY:
-        // - T is stack-allocated repr(C) or repr(transparent), usually u8 or F where F is the base
-        //   field
-        // - T is the exact memory cell type for this address space, satisfying the type requirement
-        unsafe { self.memory.write(addr_space, ptr, *data) }
+        if size_of::<T>() == 1 {
+            // SAFETY: byte-sized VM operands address raw storage bytes.
+            unsafe {
+                self.memory
+                    .memory
+                    .get_memory_mut()
+                    .get_unchecked_mut(addr_space as usize)
+                    .write(ptr as usize, *data);
+            }
+        } else {
+            // SAFETY: wider VM operands use AS-native cell indices.
+            unsafe { self.memory.write(addr_space, ptr, *data) }
+        }
     }
 
     #[inline(always)]
-    pub fn host_read_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
+    pub fn host_read_slice<T: Copy + Debug>(
+        &self,
+        addr_space: u32,
+        cell_idx: u32,
+        len: usize,
+    ) -> &[T] {
         // SAFETY:
-        // - T is stack-allocated repr(C) or repr(transparent), usually u8 or F where F is the base
-        //   field
-        // - T is the exact memory cell type for this address space, satisfying the type requirement
+        // - T must match the AS cell type.
         // - panics if the slice is out of bounds
-        unsafe { self.memory.get_slice(addr_space, ptr, len) }
+        unsafe { self.memory.get_slice(addr_space, cell_idx, len) }
+    }
+
+    #[inline(always)]
+    pub fn host_read_u8_slice(&self, addr_space: u32, byte_ptr: u32, len: usize) -> &[u8] {
+        // SAFETY:
+        // - panics if the byte range is out of bounds
+        unsafe { self.memory.get_u8_slice(addr_space, byte_ptr, len) }
     }
 }

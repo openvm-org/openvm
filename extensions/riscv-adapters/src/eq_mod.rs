@@ -8,11 +8,12 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
+            pack_u8_block, pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols,
+            MemoryReadAuxRecord, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -41,16 +42,11 @@ use openvm_stark_backend::{
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
 ///   (address space 1).
-/// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `BLOCK_SIZE` from the heap.
+/// * Reads take the form of `BLOCKS_PER_READ` consecutive heap reads.
 /// * Writes are to 64-bit register rd (8 bytes).
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
-pub struct Rv64IsEqualModAdapterCols<
-    T,
-    const NUM_READS: usize,
-    const BLOCKS_PER_READ: usize,
-    const BLOCK_SIZE: usize,
-> {
+pub struct Rv64IsEqualModAdapterCols<T, const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
     pub from_state: ExecutionState<T>,
 
     pub rs_ptr: [T; NUM_READS],
@@ -59,16 +55,15 @@ pub struct Rv64IsEqualModAdapterCols<
     pub heap_read_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
 
     pub rd_ptr: T,
-    pub writes_aux: MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS>,
+    pub writes_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64IsEqualModAdapterCols<u8, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>)]
+#[columns_via(Rv64IsEqualModAdapterCols<u8, NUM_READS, BLOCKS_PER_READ>)]
 pub struct Rv64IsEqualModAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
-    const BLOCK_SIZE: usize,
     const TOTAL_READ_SIZE: usize,
 > {
     pub(super) execution_bridge: ExecutionBridge,
@@ -81,13 +76,11 @@ impl<
         F: Field,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
-        const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > BaseAir<F>
-    for Rv64IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    > BaseAir<F> for Rv64IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, TOTAL_READ_SIZE>
 {
     fn width(&self) -> usize {
-        Rv64IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width()
+        Rv64IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ>::width()
     }
 }
 
@@ -95,10 +88,8 @@ impl<
         AB: InteractionBuilder,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
-        const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > VmAdapterAir<AB>
-    for Rv64IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    > VmAdapterAir<AB> for Rv64IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, TOTAL_READ_SIZE>
 {
     type Interface = BasicAdapterInterface<
         AB::Expr,
@@ -115,8 +106,7 @@ impl<
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let cols: &Rv64IsEqualModAdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
-            local.borrow();
+        let cols: &Rv64IsEqualModAdapterCols<_, NUM_READS, BLOCKS_PER_READ> = local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
@@ -133,7 +123,7 @@ impl<
             self.memory_bridge
                 .read(
                     MemoryAddress::new(d, ptr),
-                    expand_to_rv64_register(&val),
+                    pack_u8_block::<AB>(&expand_to_rv64_register(&val)),
                     timestamp_pp(),
                     aux,
                 )
@@ -163,20 +153,26 @@ impl<
             .eval(builder, ctx.instruction.is_valid.clone());
 
         // Reads from heap
-        assert_eq!(TOTAL_READ_SIZE, BLOCKS_PER_READ * BLOCK_SIZE);
-        let read_block_data: [[[_; BLOCK_SIZE]; BLOCKS_PER_READ]; NUM_READS] =
+        const {
+            assert!(
+                TOTAL_READ_SIZE == BLOCKS_PER_READ * MEMORY_BLOCK_BYTES,
+                "TOTAL_READ_SIZE must equal BLOCKS_PER_READ * MEMORY_BLOCK_BYTES"
+            )
+        };
+        let read_block_data: [[[_; MEMORY_BLOCK_BYTES]; BLOCKS_PER_READ]; NUM_READS] =
             ctx.reads.map(|r: [AB::Expr; TOTAL_READ_SIZE]| {
                 let mut r_it = r.into_iter();
                 from_fn(|_| from_fn(|_| r_it.next().unwrap()))
             });
-        let block_ptr_offset: [_; BLOCKS_PER_READ] = from_fn(|i| AB::F::from_usize(i * BLOCK_SIZE));
+        let block_ptr_offset: [_; BLOCKS_PER_READ] =
+            from_fn(|i| AB::F::from_usize(i * MEMORY_BLOCK_BYTES));
 
         for (ptr, block_data, block_aux) in izip!(rs_val_f, read_block_data, &cols.heap_read_aux) {
             for (offset, data, aux) in izip!(block_ptr_offset, block_data, block_aux) {
                 self.memory_bridge
                     .read(
                         MemoryAddress::new(e, ptr.clone() + offset),
-                        data,
+                        pack_u8_block::<AB>(&data),
                         timestamp_pp(),
                         aux,
                     )
@@ -188,7 +184,7 @@ impl<
         self.memory_bridge
             .write(
                 MemoryAddress::new(d, cols.rd_ptr),
-                ctx.writes[0].clone(),
+                pack_u8_block::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),
                 &cols.writes_aux,
             )
@@ -218,20 +214,14 @@ impl<
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64IsEqualModAdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
-            local.borrow();
+        let cols: &Rv64IsEqualModAdapterCols<_, NUM_READS, BLOCKS_PER_READ> = local.borrow();
         cols.from_state.pc
     }
 }
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64IsEqualModAdapterRecord<
-    const NUM_READS: usize,
-    const BLOCKS_PER_READ: usize,
-    const BLOCK_SIZE: usize,
-    const TOTAL_READ_SIZE: usize,
-> {
+pub struct Rv64IsEqualModAdapterRecord<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
     pub from_pc: u32,
     pub timestamp: u32,
 
@@ -248,33 +238,28 @@ pub struct Rv64IsEqualModAdapterRecord<
 pub struct Rv64IsEqualModAdapterExecutor<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
-    const BLOCK_SIZE: usize,
     const TOTAL_READ_SIZE: usize,
 > {
     pointer_max_bits: usize,
 }
 
 #[derive(derive_new::new)]
-pub struct Rv64IsEqualModAdapterFiller<
-    const NUM_READS: usize,
-    const BLOCKS_PER_READ: usize,
-    const BLOCK_SIZE: usize,
-    const TOTAL_READ_SIZE: usize,
-> {
+pub struct Rv64IsEqualModAdapterFiller<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
     pointer_max_bits: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
 }
 
-impl<
-        const NUM_READS: usize,
-        const BLOCKS_PER_READ: usize,
-        const BLOCK_SIZE: usize,
-        const TOTAL_READ_SIZE: usize,
-    > Rv64IsEqualModAdapterExecutor<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+impl<const NUM_READS: usize, const BLOCKS_PER_READ: usize, const TOTAL_READ_SIZE: usize>
+    Rv64IsEqualModAdapterExecutor<NUM_READS, BLOCKS_PER_READ, TOTAL_READ_SIZE>
 {
     pub fn new(pointer_max_bits: usize) -> Self {
-        assert!(NUM_READS <= 2);
-        assert_eq!(TOTAL_READ_SIZE, BLOCKS_PER_READ * BLOCK_SIZE);
+        const {
+            assert!(NUM_READS <= 2);
+            assert!(
+                TOTAL_READ_SIZE == BLOCKS_PER_READ * MEMORY_BLOCK_BYTES,
+                "TOTAL_READ_SIZE must equal BLOCKS_PER_READ * MEMORY_BLOCK_BYTES"
+            );
+        }
         assert!(
             RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - pointer_max_bits < RV64_CELL_BITS,
             "pointer_max_bits={pointer_max_bits} needs to be large enough for high limb range check"
@@ -287,23 +272,16 @@ impl<
         F: PrimeField32,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
-        const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
     > AdapterTraceExecutor<F>
-    for Rv64IsEqualModAdapterExecutor<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    for Rv64IsEqualModAdapterExecutor<NUM_READS, BLOCKS_PER_READ, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
-    const WIDTH: usize =
-        Rv64IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
+    const WIDTH: usize = Rv64IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ>::width();
     type ReadData = [[u8; TOTAL_READ_SIZE]; NUM_READS];
     type WriteData = [u8; RV64_REGISTER_NUM_LIMBS];
-    type RecordMut<'a> = &'a mut Rv64IsEqualModAdapterRecord<
-        NUM_READS,
-        BLOCKS_PER_READ,
-        BLOCK_SIZE,
-        TOTAL_READ_SIZE,
-    >;
+    type RecordMut<'a> = &'a mut Rv64IsEqualModAdapterRecord<NUM_READS, BLOCKS_PER_READ>;
 
     fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
@@ -339,10 +317,10 @@ where
                     < (1u64 << self.pointer_max_bits)
             );
             from_fn::<_, BLOCKS_PER_READ, _>(|j| {
-                tracing_read::<BLOCK_SIZE>(
+                tracing_read::<MEMORY_BLOCK_BYTES>(
                     memory,
                     RV64_MEMORY_AS,
-                    record.rs_val[i] + (j * BLOCK_SIZE) as u32,
+                    record.rs_val[i] + (j * MEMORY_BLOCK_BYTES) as u32,
                     &mut record.heap_read_aux[i][j].prev_timestamp,
                 )
             })
@@ -372,30 +350,19 @@ where
     }
 }
 
-impl<
-        F: PrimeField32,
-        const NUM_READS: usize,
-        const BLOCKS_PER_READ: usize,
-        const BLOCK_SIZE: usize,
-        const TOTAL_READ_SIZE: usize,
-    > AdapterTraceFiller<F>
-    for Rv64IsEqualModAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize> AdapterTraceFiller<F>
+    for Rv64IsEqualModAdapterFiller<NUM_READS, BLOCKS_PER_READ>
 {
-    const WIDTH: usize =
-        Rv64IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
+    const WIDTH: usize = Rv64IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ>::width();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
-        let record: &Rv64IsEqualModAdapterRecord<
-            NUM_READS,
-            BLOCKS_PER_READ,
-            BLOCK_SIZE,
-            TOTAL_READ_SIZE,
-        > = unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let record: &Rv64IsEqualModAdapterRecord<NUM_READS, BLOCKS_PER_READ> =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
 
-        let cols: &mut Rv64IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
+        let cols: &mut Rv64IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ> =
             adapter_row.borrow_mut();
 
         let mut timestamp = record.timestamp + (NUM_READS + NUM_READS * BLOCKS_PER_READ) as u32 + 1;
@@ -417,7 +384,7 @@ impl<
         );
         // Writing in reverse order
         cols.writes_aux
-            .set_prev_data(record.writes_aux.prev_data.map(F::from_u8));
+            .set_prev_data(pack_u8_block_bytes(&record.writes_aux.prev_data));
         mem_helper.fill(
             record.writes_aux.prev_timestamp,
             timestamp_mm(),

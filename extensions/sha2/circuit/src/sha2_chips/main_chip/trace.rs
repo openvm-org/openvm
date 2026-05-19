@@ -1,7 +1,7 @@
 use openvm_circuit::{
     arch::*,
     system::memory::{
-        offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
+        offline_checker::{pack_u8_block_bytes, MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
         MemoryAuxColsFactory,
     },
     utils::next_power_of_two_or_zero,
@@ -211,7 +211,7 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
             .iter()
             .zip(cols.mem.write_aux)
             .for_each(|(write_aux_record, write_aux_cols)| {
-                write_aux_cols.set_prev_data(write_aux_record.prev_data.map(F::from_u8));
+                write_aux_cols.set_prev_data(pack_u8_block_bytes(&write_aux_record.prev_data));
                 mem_helper.fill(
                     write_aux_record.prev_timestamp,
                     timestamp,

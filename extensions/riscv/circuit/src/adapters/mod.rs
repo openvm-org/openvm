@@ -120,10 +120,8 @@ pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr
             || address_space == PUBLIC_VALUES_AS,
     );
 
-    // SAFETY:
-    // - address space `RV64_REGISTER_AS` and `RV64_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV64_REGISTER_NUM_LIMBS`
-    unsafe { memory.read::<u8, N>(address_space, ptr) }
+    // SAFETY: reads raw storage bytes at VM byte pointers.
+    unsafe { memory.read_bytes::<N>(address_space, ptr) }
 }
 
 #[inline(always)]
@@ -139,15 +137,11 @@ pub fn memory_write<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // SAFETY:
-    // - address space `RV64_REGISTER_AS` and `RV64_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV64_REGISTER_NUM_LIMBS`
-    unsafe { memory.write::<u8, N>(address_space, ptr, data) }
+    // SAFETY: writes raw storage bytes at VM byte pointers.
+    unsafe { memory.write_bytes::<N>(address_space, ptr, data) }
 }
 
-/// Atomic read operation which increments the timestamp by 1.
-/// Returns `(t_prev, [ptr:N]_{address_space})` where `t_prev` is the timestamp of the last memory
-/// access.
+/// Timestamped raw-byte read at VM byte pointer `ptr`.
 #[inline(always)]
 pub fn timed_read<const N: usize>(
     memory: &mut TracingMemory,
@@ -160,19 +154,8 @@ pub fn timed_read<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // SAFETY:
-    // - address space `RV64_REGISTER_AS` and `RV64_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV64_REGISTER_NUM_LIMBS`
-    #[cfg(feature = "legacy-v1-3-mem-align")]
-    if address_space == RV64_MEMORY_AS {
-        unsafe { memory.read::<u8, N>(address_space, ptr) }
-    } else {
-        unsafe { memory.read::<u8, N>(address_space, ptr) }
-    }
-    #[cfg(not(feature = "legacy-v1-3-mem-align"))]
-    unsafe {
-        memory.read::<u8, N>(address_space, ptr)
-    }
+    // SAFETY: reads raw storage bytes at VM byte pointers.
+    unsafe { memory.read_bytes::<N>(address_space, ptr) }
 }
 
 #[inline(always)]
@@ -188,19 +171,8 @@ pub fn timed_write<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // SAFETY:
-    // - address space `RV64_REGISTER_AS` and `RV64_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV64_REGISTER_NUM_LIMBS`
-    #[cfg(feature = "legacy-v1-3-mem-align")]
-    if address_space == RV64_MEMORY_AS {
-        unsafe { memory.write::<u8, N>(address_space, ptr, data) }
-    } else {
-        unsafe { memory.write::<u8, N>(address_space, ptr, data) }
-    }
-    #[cfg(not(feature = "legacy-v1-3-mem-align"))]
-    unsafe {
-        memory.write::<u8, N>(address_space, ptr, data)
-    }
+    // SAFETY: writes raw storage bytes at VM byte pointers.
+    unsafe { memory.write_bytes::<N>(address_space, ptr, data) }
 }
 
 /// Reads register value at `reg_ptr` from memory and records the memory access in mutable buffer.
@@ -215,6 +187,68 @@ pub fn tracing_read<const N: usize>(
     let (t_prev, data) = timed_read(memory, address_space, ptr);
     *prev_timestamp = t_prev;
     data
+}
+
+/// Timestamped u16-cell read.
+#[inline(always)]
+pub fn timed_read_u16<const N: usize>(
+    memory: &mut TracingMemory,
+    address_space: u32,
+    cell_idx: u32,
+) -> (u32, [u16; N]) {
+    debug_assert!(
+        address_space == RV64_REGISTER_AS
+            || address_space == RV64_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS
+    );
+
+    // SAFETY: these address spaces are u16-celled.
+    unsafe { memory.read::<u16, N>(address_space, cell_idx) }
+}
+
+/// u16-typed counterpart to [`tracing_read`].
+#[inline(always)]
+pub fn tracing_read_u16<const N: usize>(
+    memory: &mut TracingMemory,
+    address_space: u32,
+    cell_idx: u32,
+    prev_timestamp: &mut u32,
+) -> [u16; N] {
+    let (t_prev, data) = timed_read_u16(memory, address_space, cell_idx);
+    *prev_timestamp = t_prev;
+    data
+}
+
+/// Timestamped u16-cell write.
+#[inline(always)]
+pub fn timed_write_u16<const N: usize>(
+    memory: &mut TracingMemory,
+    address_space: u32,
+    cell_idx: u32,
+    data: [u16; N],
+) -> (u32, [u16; N]) {
+    debug_assert!(
+        address_space == RV64_REGISTER_AS
+            || address_space == RV64_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS
+    );
+    // SAFETY: see `timed_read_u16`.
+    unsafe { memory.write::<u16, N>(address_space, cell_idx, data) }
+}
+
+/// u16-typed counterpart to [`tracing_write`].
+#[inline(always)]
+pub fn tracing_write_u16<const N: usize>(
+    memory: &mut TracingMemory,
+    address_space: u32,
+    cell_idx: u32,
+    data: [u16; N],
+    prev_timestamp: &mut u32,
+    prev_data: &mut [u16; N],
+) {
+    let (t_prev, data_prev) = timed_write_u16(memory, address_space, cell_idx, data);
+    *prev_timestamp = t_prev;
+    *prev_data = data_prev;
 }
 
 /// Reads an RV64 register, records the memory access, and returns the low 32 bits. Debug-asserts

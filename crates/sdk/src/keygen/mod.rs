@@ -79,8 +79,8 @@ where
         })
     }
 
-    pub fn num_public_values(&self) -> usize {
-        self.app_vm_pk.vm_config.as_ref().num_public_values
+    pub fn num_public_values_bytes(&self) -> usize {
+        self.app_vm_pk.vm_config.as_ref().num_public_values_bytes
     }
 
     pub fn get_app_vk(&self) -> AppVerifyingKey {

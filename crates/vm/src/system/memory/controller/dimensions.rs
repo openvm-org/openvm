@@ -1,10 +1,11 @@
 use derive_new::new;
-use openvm_stark_backend::p3_util::log2_strict_usize;
 use serde::{Deserialize, Serialize};
 
+#[cfg(test)]
+use crate::arch::pointer_max_bits_for_cell_index_bits;
 use crate::{
-    arch::{MemoryConfig, ADDR_SPACE_OFFSET},
-    system::memory::CHUNK,
+    arch::{cell_index_bits_from_pointer_max_bits, MemoryConfig, ADDR_SPACE_OFFSET},
+    system::memory::DIGEST_WIDTH_BITS,
 };
 
 // indicates that there are 2^`addr_space_height` address spaces numbered starting from 1,
@@ -46,11 +47,21 @@ impl MemoryDimensions {
     }
 }
 
+/// Merkle leaf-label bits available within each address space.
+pub(crate) const fn address_height_from_pointer_max_bits(pointer_max_bits: usize) -> usize {
+    cell_index_bits_from_pointer_max_bits(pointer_max_bits) - DIGEST_WIDTH_BITS
+}
+
+#[cfg(test)]
+pub(crate) const fn pointer_max_bits_for_address_height(address_height: usize) -> usize {
+    pointer_max_bits_for_cell_index_bits(address_height + DIGEST_WIDTH_BITS)
+}
+
 impl MemoryConfig {
     pub fn memory_dimensions(&self) -> MemoryDimensions {
         MemoryDimensions {
             addr_space_height: self.addr_space_height,
-            address_height: self.pointer_max_bits - log2_strict_usize(CHUNK),
+            address_height: address_height_from_pointer_max_bits(self.pointer_max_bits),
         }
     }
 }

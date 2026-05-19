@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
+    cell_index_bits_from_pointer_max_bits,
     deferral::{DeferralResult, DeferralState},
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, DEFAULT_BLOCK_SIZE,
+    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -97,7 +98,8 @@ struct CudaHarnessBundle {
 
 fn test_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
-    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells =
+        1 << cell_index_bits_from_pointer_max_bits(config.pointer_max_bits);
     config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     config
 }
@@ -111,11 +113,11 @@ fn write_output_key(
     input_ptr: usize,
     output_key: [u8; OUTPUT_TOTAL_BYTES],
 ) {
-    for (chunk_idx, chunk) in output_key.chunks_exact(DEFAULT_BLOCK_SIZE).enumerate() {
-        let chunk: [u8; DEFAULT_BLOCK_SIZE] = chunk.try_into().unwrap();
+    for (chunk_idx, chunk) in output_key.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
+        let chunk: [u8; MEMORY_BLOCK_BYTES] = chunk.try_into().unwrap();
         tester.write(
             RV64_MEMORY_AS as usize,
-            input_ptr + chunk_idx * DEFAULT_BLOCK_SIZE,
+            input_ptr + chunk_idx * MEMORY_BLOCK_BYTES,
             chunk.map(F::from_u8),
         );
     }
@@ -147,10 +149,10 @@ fn set_and_execute_output<RA, E>(
     RA: Arena,
     E: PreflightExecutor<F, RA>,
 {
-    let rd = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
-    let rs = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
-    let output_ptr = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
-    let input_ptr = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
+    let rd = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let rs = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let output_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let input_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = rng.random_range(0..num_deferrals);
 
     let mut input_commit = [0u8; COMMIT_NUM_BYTES];

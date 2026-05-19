@@ -2,9 +2,9 @@ use std::{borrow::Borrow, iter};
 
 use itertools::izip;
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState, DEFAULT_BLOCK_SIZE},
+    arch::{ExecutionBridge, ExecutionState, MEMORY_BLOCK_BYTES},
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryWriteAuxCols},
+        offline_checker::{pack_u8_block, MemoryBridge, MemoryWriteAuxInput},
         MemoryAddress,
     },
 };
@@ -73,13 +73,13 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), rd_ptr),
-                buffer_ptr_limbs,
+                pack_u8_block::<AB>(&buffer_ptr_limbs),
                 timestamp_pp(),
                 &local.rd_aux,
             )
             .eval(builder, is_valid);
 
-        // Range check that buffer_ptr_limbs fits in [0, 2^ptr_max_bits) as u32
+        // Bound the pointer MSB to the configured pointer width.
         {
             assert!(self.ptr_max_bits >= RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1));
             let limb_shift =
@@ -89,25 +89,21 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
                 .send_range(msb * limb_shift, msb * limb_shift)
                 .eval(builder, is_valid);
         }
+        // The memory read only bounds packed u16 cells; bound the pointer bytes before composing.
+        self.bitwise_lookup_bus
+            .send_range(local.buffer_ptr_limbs[0], local.buffer_ptr_limbs[1])
+            .eval(builder, is_valid);
+        self.bitwise_lookup_bus
+            .send_range(local.buffer_ptr_limbs[2], local.buffer_ptr_limbs[3])
+            .eval(builder, is_valid);
         // Now it is safe to cast buffer_ptr to F
         let buffer_ptr: AB::Expr = compose(&local.buffer_ptr_limbs[..], RV64_CELL_BITS);
 
-        // ======== Constrain that post-state consists of bytes =========
-        // We know that the pre-state buffer consists of bytes due to the invariant of Address Space
-        // 2 in memory. The keccakf_state_bus guarantees that the post-state consists of
-        // u16, but we still need to constrain that each pair actually consists of bytes.
-        // NOTE[jpw]: this can be removed if AS2 cells are changed to u16s
-        for pair in local.postimage.chunks_exact(2) {
-            self.bitwise_lookup_bus
-                .send_range(pair[0], pair[1])
-                .eval(builder, is_valid);
-        }
-
         // ======== Constrain new writes of `buffer` to memory =========
-        // NOTE: we use the _next_ row's `buffer` as the pre-state
+        // Keccak state and memory both consume these values as packed u16 cells.
         for (word_idx, (prev_word, post_word, base_aux)) in izip!(
-            local.preimage.chunks_exact(DEFAULT_BLOCK_SIZE),
-            local.postimage.chunks_exact(DEFAULT_BLOCK_SIZE),
+            local.preimage.chunks_exact(MEMORY_BLOCK_BYTES),
+            local.postimage.chunks_exact(MEMORY_BLOCK_BYTES),
             local.buffer_word_aux
         )
         .enumerate()
@@ -122,20 +118,19 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             //   a previous valid write at `ptr`. Assuming the invariant that all previous memory
             //   accesses are valid and timestamp always moves forward, the new write to `ptr` must
             //   be valid as well.
-            let ptr = buffer_ptr.clone() + AB::F::from_usize(word_idx * DEFAULT_BLOCK_SIZE);
-            let prev_data: &[_; DEFAULT_BLOCK_SIZE] = prev_word.try_into().unwrap();
-            // post_word consists of bytes due to range checks above
-            let data: &[_; DEFAULT_BLOCK_SIZE] = post_word.try_into().unwrap();
-            let write_aux = MemoryWriteAuxCols {
-                base: base_aux,
-                prev_data: *prev_data,
-            };
+            let ptr = buffer_ptr.clone() + AB::F::from_usize(word_idx * MEMORY_BLOCK_BYTES);
+            let prev_data: [AB::Expr; MEMORY_BLOCK_BYTES] =
+                std::array::from_fn(|i| prev_word[i].into());
+            let data: [AB::Expr; MEMORY_BLOCK_BYTES] = std::array::from_fn(|i| post_word[i].into());
             self.memory_bridge
                 .write(
                     MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), ptr),
-                    *data,
+                    pack_u8_block::<AB>(&data),
                     timestamp_pp(),
-                    &write_aux,
+                    MemoryWriteAuxInput::from_prev_data_exprs(
+                        &base_aux,
+                        pack_u8_block::<AB>(&prev_data),
+                    ),
                 )
                 .eval(builder, is_valid);
         }
