@@ -155,27 +155,11 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             self.memory_ctx.initialize_segment(&mut self.trace_heights);
 
             // Check if the new segment is within limits
-            if self.segmentation_ctx.should_segment(
+            self.segmentation_ctx.warn_if_exceeds_limits(
                 self.segmentation_ctx.instret,
                 &self.trace_heights,
                 &self.is_trace_height_constant,
-            ) {
-                let trace_heights_str = self
-                    .trace_heights
-                    .iter()
-                    .zip(self.segmentation_ctx.air_names.iter())
-                    .filter(|(&height, _)| height > 0)
-                    .map(|(&height, name)| format!("  {name} = {height}"))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                tracing::warn!(
-                    "Segment initialized with heights that exceed limits\n\
-                     instret={}\n\
-                     trace_heights=[\n{}\n]",
-                    self.segmentation_ctx.instret,
-                    trace_heights_str
-                );
-            }
+            );
         }
 
         // Update checkpoints

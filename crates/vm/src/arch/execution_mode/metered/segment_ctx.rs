@@ -431,6 +431,34 @@ impl SegmentationCtx {
     }
 
     #[inline(always)]
+    fn format_nonzero_trace_heights(&self, trace_heights: &[u32]) -> String {
+        trace_heights
+            .iter()
+            .zip(self.air_names.iter())
+            .filter(|(&height, _)| height > 0)
+            .map(|(&height, name)| format!("  {name} = {height}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[inline(always)]
+    pub(crate) fn warn_if_exceeds_limits(
+        &self,
+        instret: u64,
+        trace_heights: &[u32],
+        is_trace_height_constant: &[bool],
+    ) {
+        if self.should_segment(instret, trace_heights, is_trace_height_constant) {
+            let trace_heights_str = self.format_nonzero_trace_heights(trace_heights);
+            tracing::warn!(
+                "Segment initialized with heights that exceed limits\n\
+                 instret={instret}\n\
+                 trace_heights=[\n{trace_heights_str}\n]"
+            );
+        }
+    }
+
+    #[inline(always)]
     pub fn check_and_segment(
         &mut self,
         instret: u64,
@@ -466,13 +494,7 @@ impl SegmentationCtx {
                 self.checkpoint_trace_heights.clone(),
             )
         } else {
-            let trace_heights_str = trace_heights
-                .iter()
-                .zip(self.air_names.iter())
-                .filter(|(&height, _)| height > 0)
-                .map(|(&height, name)| format!("  {name} = {height}"))
-                .collect::<Vec<_>>()
-                .join("\n");
+            let trace_heights_str = self.format_nonzero_trace_heights(trace_heights);
             tracing::warn!(
                 "No valid checkpoint, creating segment using instret={instret}\ntrace_heights=[\n{trace_heights_str}\n]"
             );
