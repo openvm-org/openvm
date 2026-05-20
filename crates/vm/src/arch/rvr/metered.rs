@@ -3,9 +3,7 @@
 
 use std::{ffi::c_void, sync::Arc};
 
-use openvm_instructions::{
-    exe::VmExe, riscv::RV32_MEMORY_AS, LocalOpcode, SystemOpcode, VmOpcode, DEFERRAL_AS,
-};
+use openvm_instructions::{exe::VmExe, riscv::RV32_MEMORY_AS, DEFERRAL_AS};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 use rvr_openvm_lift::ExtensionRegistry;
@@ -26,8 +24,7 @@ use crate::{
             },
             MeteredCtx,
         },
-        ExecutionError, ExecutorInventory, Streams, SystemConfig, VmState, BOUNDARY_AIR_ID,
-        MERKLE_AIR_ID,
+        ExecutionError, Streams, SystemConfig, VmState, BOUNDARY_AIR_ID, MERKLE_AIR_ID,
     },
     system::memory::{
         merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, CHUNK as MERKLE_CHUNK,
@@ -89,37 +86,6 @@ impl TracerPayload for MeteredTracerData {
 }
 
 pub type MeteredTracer = TracerPtr<MeteredTracerData>;
-
-// ── Chip mapping ─────────────────────────────────────────────────────────────
-
-pub fn build_pc_to_chip<F, E>(
-    exe: &VmExe<F>,
-    inventory: &ExecutorInventory<E>,
-    executor_idx_to_air_idx: &[usize],
-) -> Vec<u32>
-where
-    F: PrimeField32,
-{
-    let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
-    exe.program
-        .instructions_and_debug_infos
-        .iter()
-        .map(|slot| {
-            if let Some((inst, _)) = slot {
-                let opcode: VmOpcode = inst.opcode;
-                if opcode == terminate_opcode {
-                    u32::MAX
-                } else if let Some(&executor_idx) = inventory.instruction_lookup.get(&opcode) {
-                    executor_idx_to_air_idx[executor_idx as usize] as u32
-                } else {
-                    u32::MAX
-                }
-            } else {
-                u32::MAX
-            }
-        })
-        .collect()
-}
 
 // ── Segmentation runtime ─────────────────────────────────────────────────────
 
