@@ -7,15 +7,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-use openvm_instructions::exe::VmExe;
+use openvm_instructions::{exe::VmExe, LocalOpcode, SystemOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{CProject, TracerMode};
 use rvr_openvm_lift::{
-    build_blocks, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers,
+    build_blocks, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers, AirIndex,
     ExtensionRegistry,
 };
 
 use super::debug::GuestDebugMap;
+use crate::arch::ExecutorInventory;
 
 /// A compiled rvr shared library ready for execution.
 pub struct RvrCompiled {
@@ -53,12 +54,41 @@ pub enum CompileError {
 #[derive(Clone)]
 pub struct ChipMapping {
     /// Per-PC chip index. Index i = chip for PC = pc_base + i*4.
-    pub pc_to_chip: Vec<u32>,
+    pub pc_to_chip: Vec<AirIndex>,
     /// Per-AIR widths (MeteredCost mode only). When present, the emitter
     /// precomputes `sum(width[chip] * count)` per block so the generated C
     /// increments `cost` by a single constant instead of loading from the
     /// `chip_widths` array at runtime.
     pub chip_widths: Option<Vec<u64>>,
+}
+
+pub fn build_pc_to_chip<F, E>(
+    exe: &VmExe<F>,
+    inventory: &ExecutorInventory<E>,
+    executor_idx_to_air_idx: &[usize],
+) -> Vec<AirIndex>
+where
+    F: PrimeField32,
+{
+    let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
+    exe.program
+        .instructions_and_debug_infos
+        .iter()
+        .map(|slot| {
+            if let Some((inst, _)) = slot {
+                let opcode: VmOpcode = inst.opcode;
+                if opcode == terminate_opcode {
+                    AirIndex::NoChip
+                } else if let Some(&executor_idx) = inventory.instruction_lookup.get(&opcode) {
+                    AirIndex::Chip(executor_idx_to_air_idx[executor_idx as usize] as u32)
+                } else {
+                    AirIndex::NoChip
+                }
+            } else {
+                AirIndex::NoChip
+            }
+        })
+        .collect()
 }
 
 /// Options for the compilation pipeline.

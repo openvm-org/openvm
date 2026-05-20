@@ -9,7 +9,9 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_sha2_transpiler::Rv32Sha2Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx, NO_CHIP};
+use rvr_openvm_lift::{
+    decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx,
+};
 
 /// IR node for a SHA-256 compress instruction.
 ///
@@ -24,9 +26,9 @@ pub struct Sha256Instr {
     /// Register index holding input pointer (message block).
     pub input_ptr_reg: Reg,
     /// SHA-256 main chip AIR index (1 row per instruction).
-    pub main_chip_idx: u32,
+    pub main_chip_idx: AirIndex,
     /// SHA-256 block hasher chip AIR index (ROWS_PER_BLOCK rows per instruction).
-    pub block_hasher_chip_idx: u32,
+    pub block_hasher_chip_idx: AirIndex,
 }
 
 impl ExtInstr for Sha256Instr {
@@ -38,9 +40,10 @@ impl ExtInstr for Sha256Instr {
         let dst = ctx.read_reg(self.dst_ptr_reg);
         let st = ctx.read_reg(self.state_ptr_reg);
         let inp = ctx.read_reg(self.input_ptr_reg);
+        let main = self.main_chip_idx.to_c_chip_idx();
+        let block = self.block_hasher_chip_idx.to_c_chip_idx();
         ctx.write_line(&format!(
-            "rvr_ext_sha256(state, {dst}, {st}, {inp}, {}u, {}u);",
-            self.main_chip_idx, self.block_hasher_chip_idx
+            "rvr_ext_sha256(state, {dst}, {st}, {inp}, {main}u, {block}u);"
         ));
     }
 
@@ -66,9 +69,9 @@ pub struct Sha512Instr {
     /// Register index holding input pointer (message block).
     pub input_ptr_reg: Reg,
     /// SHA-512 main chip AIR index (1 row per instruction).
-    pub main_chip_idx: u32,
+    pub main_chip_idx: AirIndex,
     /// SHA-512 block hasher chip AIR index (ROWS_PER_BLOCK rows per instruction).
-    pub block_hasher_chip_idx: u32,
+    pub block_hasher_chip_idx: AirIndex,
 }
 
 impl ExtInstr for Sha512Instr {
@@ -80,9 +83,10 @@ impl ExtInstr for Sha512Instr {
         let dst = ctx.read_reg(self.dst_ptr_reg);
         let st = ctx.read_reg(self.state_ptr_reg);
         let inp = ctx.read_reg(self.input_ptr_reg);
+        let main = self.main_chip_idx.to_c_chip_idx();
+        let block = self.block_hasher_chip_idx.to_c_chip_idx();
         ctx.write_line(&format!(
-            "rvr_ext_sha512(state, {dst}, {st}, {inp}, {}u, {}u);",
-            self.main_chip_idx, self.block_hasher_chip_idx
+            "rvr_ext_sha512(state, {dst}, {st}, {inp}, {main}u, {block}u);"
         ));
     }
 
@@ -98,52 +102,23 @@ impl ExtInstr for Sha512Instr {
 /// The SHA-2 extension (SHA-256 + SHA-512 opcodes).
 /// Register this with the `ExtensionRegistry`.
 pub struct Sha2Extension {
-    sha256_main_chip_idx: u32,
-    sha256_block_hasher_chip_idx: u32,
-    sha512_main_chip_idx: u32,
-    sha512_block_hasher_chip_idx: u32,
+    sha256_main_chip_idx: AirIndex,
+    sha256_block_hasher_chip_idx: AirIndex,
+    sha512_main_chip_idx: AirIndex,
+    sha512_block_hasher_chip_idx: AirIndex,
     staticlib_path: PathBuf,
 }
 
 impl Sha2Extension {
-    /// Create a `Sha2Extension` for pure execution where chip indices
-    /// don't matter (trace_chip is a no-op in pure mode).
-    pub fn new_pure() -> Self {
-        Self {
-            sha256_main_chip_idx: NO_CHIP,
-            sha256_block_hasher_chip_idx: NO_CHIP,
-            sha512_main_chip_idx: NO_CHIP,
-            sha512_block_hasher_chip_idx: NO_CHIP,
-            staticlib_path: default_staticlib_path(),
-        }
-    }
-
-    /// Create a new `Sha2Extension`, resolving chip indices from the VM config.
-    pub fn new(ctx: &RvrExtensionCtx) -> Result<Self, ExtensionError> {
-        // SHA-256 main chip AIR index
-        let sha256_main_chip_idx =
-            ctx.require_opcode_air_idx(Rv32Sha2Opcode::SHA256.global_opcode())?;
-
+    pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
+        let sha256_main_chip_idx = opcode_air_idx(ctx, Rv32Sha2Opcode::SHA256)?;
         // SHA-256 block hasher: in extend_circuit, the block hasher is added right before
         // the main chip. Due to reverse ordering of AIR indices,
-        // block_hasher_air_idx = main_air_idx + 1. Stay NO_CHIP-safe in case
-        // pure execution sneaks a NO_CHIP `main_chip_idx` through here.
-        let sha256_block_hasher_chip_idx = if sha256_main_chip_idx == NO_CHIP {
-            NO_CHIP
-        } else {
-            sha256_main_chip_idx + 1
-        };
+        // block_hasher_air_idx = main_air_idx + 1.
+        let sha256_block_hasher_chip_idx = sha256_main_chip_idx.next();
 
-        // SHA-512 main chip AIR index
-        let sha512_main_chip_idx =
-            ctx.require_opcode_air_idx(Rv32Sha2Opcode::SHA512.global_opcode())?;
-
-        // SHA-512 block hasher: same pattern as SHA-256.
-        let sha512_block_hasher_chip_idx = if sha512_main_chip_idx == NO_CHIP {
-            NO_CHIP
-        } else {
-            sha512_main_chip_idx + 1
-        };
+        let sha512_main_chip_idx = opcode_air_idx(ctx, Rv32Sha2Opcode::SHA512)?;
+        let sha512_block_hasher_chip_idx = sha512_main_chip_idx.next();
 
         Ok(Self {
             sha256_main_chip_idx,

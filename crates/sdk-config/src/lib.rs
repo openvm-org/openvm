@@ -327,7 +327,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    fn create_rvr_extensions(&self, air_idx: &[usize]) -> ExtensionRegistry<F>
+    fn create_rvr_extensions(&self, air_idx: Option<&[usize]>) -> ExtensionRegistry<F>
     where
         F: PrimeField32,
     {

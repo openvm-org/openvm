@@ -9,7 +9,7 @@ use std::{
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::*;
-use rvr_openvm_lift::ExtensionRegistry;
+use rvr_openvm_lift::{AirIndex, ExtensionRegistry};
 
 use super::{
     codegen::{emit_terminator, InstrCodegen, TermCtx},
@@ -65,8 +65,8 @@ pub struct CProject {
     /// Enable thin LTO for the generated C code.
     pub enable_lto: bool,
     /// Per-PC chip index for hardcoded trace_chip calls.
-    /// Index i = chip for PC = pc_base + i*4. u32::MAX means no chip.
-    pub pc_to_chip: Option<Vec<u32>>,
+    /// Index i = chip for PC = pc_base + i*4.
+    pub pc_to_chip: Option<Vec<AirIndex>>,
     /// Program PC base (used to compute pc_to_chip index).
     pub pc_base: u32,
     /// Per-AIR widths for MeteredCost precomputation. Indexed by chip index.
@@ -182,16 +182,16 @@ impl CProject {
     fn block_end_pc(&self, block: &Block) -> u32 {
         block.terminator_pc.saturating_add(4)
     }
-    /// Look up the chip index for a given PC. Returns u32::MAX if no mapping.
-    fn chip_idx_for_pc(&self, pc: u32) -> u32 {
+    /// Look up the chip index for a given PC.
+    fn chip_idx_for_pc(&self, pc: u32) -> AirIndex {
         if let Some(ref mapping) = self.pc_to_chip {
             let Some(offset) = pc.checked_sub(self.pc_base) else {
-                return u32::MAX;
+                return AirIndex::NoChip;
             };
             let idx = (offset / 4) as usize;
-            mapping.get(idx).copied().unwrap_or(u32::MAX)
+            mapping.get(idx).copied().unwrap_or(AirIndex::NoChip)
         } else {
-            u32::MAX
+            AirIndex::Uninitialized
         }
     }
 
@@ -522,22 +522,20 @@ impl CProject {
         if matches!(self.tracer_mode, TracerMode::Pure) {
             return;
         }
-        if self.pc_to_chip.is_none() {
-            return;
-        }
 
         let mut chip_counts: BTreeMap<u32, u32> = BTreeMap::new();
-        for instr_at in &block.instructions {
-            let chip = self.chip_idx_for_pc(instr_at.pc);
-            if chip != u32::MAX {
-                *chip_counts.entry(chip).or_insert(0) += 1;
+        let mut increment_chip_count = |pc: u32| match self.chip_idx_for_pc(pc) {
+            AirIndex::Chip(chip) => *chip_counts.entry(chip).or_insert(0) += 1,
+            AirIndex::NoChip => {}
+            AirIndex::Uninitialized => {
+                panic!("chip index for pc {pc:#x} is Uninitialized")
             }
+        };
+        for instr_at in &block.instructions {
+            increment_chip_count(instr_at.pc);
         }
         if !matches!(block.terminator, Terminator::FallThrough) {
-            let chip = self.chip_idx_for_pc(block.terminator_pc);
-            if chip != u32::MAX {
-                *chip_counts.entry(chip).or_insert(0) += 1;
-            }
+            increment_chip_count(block.terminator_pc);
         }
         if chip_counts.is_empty() {
             return;

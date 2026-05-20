@@ -12,7 +12,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
-    decode_imm_cg, decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx, NO_CHIP,
+    decode_imm_cg, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
+    RvrExtensionCtx,
 };
 
 /// HINT_STOREW: pop 4 bytes from the hint stream into `mem[reg[ptr_reg]]`.
@@ -45,7 +46,7 @@ impl ExtInstr for HintStoreWInstr {
 pub struct HintBufferInstr {
     pub ptr_reg: Reg,
     pub num_words_reg: Reg,
-    pub chip_idx: u32,
+    pub chip_idx: AirIndex,
 }
 
 impl ExtInstr for HintBufferInstr {
@@ -56,16 +57,12 @@ impl ExtInstr for HintBufferInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let ptr = ctx.read_reg(self.ptr_reg);
         let n = ctx.read_reg(self.num_words_reg);
-        if self.chip_idx != NO_CHIP {
-            // Block-entry already credits a static +1; emit the runtime
-            // `(n - 1)` correction only when there is more than one row.
-            ctx.write_line(&format!("if ({n} > 1) {{"));
-            ctx.write_line(&format!(
-                "  trace_chip(state, {}u, {n} - 1);",
-                self.chip_idx
-            ));
-            ctx.write_line("}");
-        }
+        // Block-entry already credits a static +1; emit the runtime
+        // `(n - 1)` correction only when there is more than one row.
+        let chip_idx = self.chip_idx.to_c_chip_idx();
+        ctx.write_line(&format!("if ({n} > 1) {{"));
+        ctx.write_line(&format!("  trace_chip(state, {chip_idx}u, {n} - 1);"));
+        ctx.write_line("}");
         ctx.write_line(&format!("if ({n} > 0) {{"));
         ctx.write_line(&format!(
             "  trace_mem_access_u32_range(state, {ptr}, {n}, {RV32_MEMORY_AS}u);"
@@ -113,22 +110,12 @@ impl ExtInstr for RevealInstr {
 /// rvr extension for the rv32im I/O instructions HINT_STOREW, HINT_BUFFER, and
 /// REVEAL.
 pub struct Rv32IoExtension {
-    hint_store_chip_idx: u32,
+    hint_store_chip_idx: AirIndex,
 }
 
 impl Rv32IoExtension {
-    pub fn new_pure() -> Self {
-        Self {
-            hint_store_chip_idx: NO_CHIP,
-        }
-    }
-
-    pub fn new(ctx: &RvrExtensionCtx) -> Result<Self, ExtensionError> {
-        let opcode = Rv32HintStoreOpcode::HINT_STOREW.global_opcode();
-        let hint_store_chip_idx = match ctx.resolve_opcode_air_idx(opcode) {
-            Some(idx) => idx,
-            None => NO_CHIP,
-        };
+    pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
+        let hint_store_chip_idx = opcode_air_idx(ctx, Rv32HintStoreOpcode::HINT_STOREW)?;
         Ok(Self {
             hint_store_chip_idx,
         })
