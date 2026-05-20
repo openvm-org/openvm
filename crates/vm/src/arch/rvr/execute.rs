@@ -19,10 +19,7 @@ use super::{
         host_hint_stream_set, host_print_str, host_reveal, OpenVmHostCallbacks, OpenVmIoState,
     },
     metered::{metered_periodic_check, MeteredTracerData, SegmentationState, NO_LAST_PAGE},
-    metered_cost::{
-        prepare_metered_cost, MeteredCostConfig, MeteredCostData, PureTracerData,
-        RvrMeteredCostResult,
-    },
+    metered_cost::{MeteredCostData, PureTracerData, RvrMeteredCostResult},
     pure::RvrPureResult,
     state::{
         init_rvr_state, init_rvr_state_with_metered, init_rvr_state_with_metered_cost, TracerPtr,
@@ -209,7 +206,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
     vm_state: &mut VmState<F, GuestMemory>,
-    metered_cost_config: MeteredCostConfig,
+    widths: &[u64],
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
     let pc = vm_state.pc();
     let initial_regs = read_rv32_registers(vm_state);
@@ -219,8 +216,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
     state.regs = initial_regs;
     state.tracer = TracerPtr(&mut tracer_data);
 
-    let widths_u64 = prepare_metered_cost(&metered_cost_config);
-    state.tracer.chip_widths = widths_u64.as_ptr();
+    state.tracer.chip_widths = widths.as_ptr();
     state.tracer.cost = 0;
 
     run_and_finalize(compiled, extensions, vm_state, &mut state, false)
