@@ -8,9 +8,13 @@ use derive_new::new;
 use getset::{Setters, WithSetters};
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS};
 use openvm_poseidon2_air::Poseidon2Config;
+#[cfg(feature = "rvr")]
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{
     p3_field::Field, EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Val,
 };
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::ExtensionRegistry;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
@@ -68,6 +72,11 @@ pub trait VmExecutionConfig<F> {
 
     fn create_executors(&self)
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_extensions(&self, air_idx: &[usize]) -> ExtensionRegistry<F>
+    where
+        F: PrimeField32;
 }
 
 pub trait VmCircuitConfig<SC: StarkProtocolConfig> {

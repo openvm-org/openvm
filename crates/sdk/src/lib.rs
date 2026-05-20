@@ -317,11 +317,10 @@ where
         inputs: StdIn,
     ) -> Result<Vec<u8>, SdkError> {
         let exe = self.convert_to_exe(app_exe)?;
-        let instance = self
+        let final_memory = self
             .executor
             .instance(&exe)
-            .map_err(VirtualMachineError::from)?;
-        let final_memory = instance
+            .map_err(VirtualMachineError::from)?
             .execute(inputs, None)
             .map_err(VirtualMachineError::from)?
             .memory;

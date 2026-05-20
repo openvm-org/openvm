@@ -19,7 +19,11 @@ use openvm_pairing_guest::{
     bn254::{BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::PairingPhantom;
+#[cfg(feature = "rvr")]
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig};
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 
@@ -62,6 +66,13 @@ impl PairingCurve {
 #[derive(Clone, Debug, From, derive_new::new, Serialize, Deserialize)]
 pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
+}
+
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for PairingExtension {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: &RvrExtensionCtx) {
+        registry.register(rvr_openvm_ext_pairing::PairingExtension::new());
+    }
 }
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]

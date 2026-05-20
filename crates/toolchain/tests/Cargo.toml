@@ -12,6 +12,7 @@ openvm-build.workspace = true
 openvm-circuit.workspace = true
 openvm-transpiler.workspace = true
 eyre.workspace = true
+rvr-openvm-lift = { workspace = true, optional = true }
 
 [dev-dependencies]
 openvm-stark-backend.workspace = true
@@ -44,6 +45,14 @@ aot = [
     "openvm-algebra-circuit/aot",
     "openvm-bigint-circuit/aot",
     "openvm-ecc-circuit/aot",
+]
+rvr = [
+    "dep:rvr-openvm-lift",
+    "openvm-circuit/rvr",
+    "openvm-rv32im-circuit/rvr",
+    "openvm-algebra-circuit/rvr",
+    "openvm-bigint-circuit/rvr",
+    "openvm-ecc-circuit/rvr",
 ]
 touchemall = [
     "cuda",

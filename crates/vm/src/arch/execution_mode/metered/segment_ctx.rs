@@ -52,7 +52,7 @@ const DEFAULT_INTERACTION_CELL_WEIGHT: f64 =
     (2 * D_EF) as f64 * (1.0 + 2.0 * (1.0 / 16.0 + 1.0 / 256.0));
 /// Constant overhead for interaction memory: sqrt-decomposed eq buffers, M matrix,
 /// and misc small buffers. Bounded by ~2 MB assuming fewer than 2^32 leaves.
-const DEFAULT_INTERACTION_CONSTANT_OVERHEAD: usize = 2 << 20; // 2 MiB
+pub const DEFAULT_INTERACTION_CONSTANT_OVERHEAD: usize = 2 << 20; // 2 MiB
 
 /// Returns `ceil(cell_count * base_field_size * weight)`.
 fn ceil_weighted_bytes(cell_count: usize, base_field_size: usize, weight: f64) -> usize {
@@ -153,12 +153,12 @@ pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
     pub(crate) air_names: Vec<String>,
     pub(crate) widths: Vec<usize>,
-    interactions: Vec<usize>,
-    need_rot: Vec<bool>,
+    pub(crate) interactions: Vec<usize>,
+    pub(crate) need_rot: Vec<bool>,
     pub(crate) config: SegmentationConfig,
     pub instret: u64,
     pub instrets_until_check: u64,
-    pub(super) segment_check_insns: u64,
+    pub segment_check_insns: u64,
     /// Checkpoint of trace heights at last known state where all thresholds satisfied
     pub(crate) checkpoint_trace_heights: Vec<u32>,
     /// Instruction count at the checkpoint
@@ -417,6 +417,34 @@ impl SegmentationCtx {
     }
 
     #[inline(always)]
+    fn format_nonzero_trace_heights(&self, trace_heights: &[u32]) -> String {
+        trace_heights
+            .iter()
+            .zip(self.air_names.iter())
+            .filter(|(&height, _)| height > 0)
+            .map(|(&height, name)| format!("  {name} = {height}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[inline(always)]
+    pub(crate) fn warn_if_exceeds_limits(
+        &self,
+        instret: u64,
+        trace_heights: &[u32],
+        is_trace_height_constant: &[bool],
+    ) {
+        if self.should_segment(instret, trace_heights, is_trace_height_constant) {
+            let trace_heights_str = self.format_nonzero_trace_heights(trace_heights);
+            tracing::warn!(
+                "Segment initialized with heights that exceed limits\n\
+                 instret={instret}\n\
+                 trace_heights=[\n{trace_heights_str}\n]"
+            );
+        }
+    }
+
+    #[inline(always)]
     pub fn check_and_segment(
         &mut self,
         instret: u64,
@@ -444,13 +472,7 @@ impl SegmentationCtx {
                 self.checkpoint_trace_heights.clone(),
             )
         } else {
-            let trace_heights_str = trace_heights
-                .iter()
-                .zip(self.air_names.iter())
-                .filter(|(&height, _)| height > 0)
-                .map(|(&height, name)| format!("  {name} = {height}"))
-                .collect::<Vec<_>>()
-                .join("\n");
+            let trace_heights_str = self.format_nonzero_trace_heights(trace_heights);
             tracing::warn!(
                 "No valid checkpoint, creating segment using instret={instret}\ntrace_heights=[\n{trace_heights_str}\n]"
             );

@@ -22,8 +22,14 @@ use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
+#[cfg(feature = "rvr")]
+use rvr_openvm_ext_deferral::DeferralRvrExtension;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "rvr")]
+use crate::runtime::make_deferral_hash;
 use crate::{
     call::{
         DeferralCallAdapterAir, DeferralCallAdapterExecutor, DeferralCallAdapterFiller,
@@ -63,6 +69,16 @@ pub struct DeferralExtension {
     #[serde(skip)]
     pub fns: Vec<Arc<DeferralFn>>,
     pub def_circuit_commits: Vec<[u8; COMMIT_NUM_BYTES]>,
+}
+
+#[cfg(feature = "rvr")]
+impl<F: VmField> VmRvrExtension<F> for DeferralExtension {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: &RvrExtensionCtx) {
+        let hash = make_deferral_hash::<F>();
+        let ext = DeferralRvrExtension::new(ctx, self.fns.clone(), hash)
+            .expect("failed to construct rvr DeferralRvrExtension");
+        registry.register(ext);
+    }
 }
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
