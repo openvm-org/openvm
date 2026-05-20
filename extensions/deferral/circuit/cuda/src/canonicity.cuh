@@ -12,36 +12,36 @@ namespace canonicity {
 using namespace deferral;
 
 template <typename T> struct CanonicityAuxCols {
-    T diff_marker[F_NUM_BYTES];
+    T diff_marker[F_NUM_U16S];
     T diff_val;
 };
 
 __device__ __forceinline__ uint32_t
-generate_subrow(const Fp x_le[F_NUM_BYTES], CanonicityAuxCols<Fp> &aux) {
+generate_subrow(const Fp x_le[F_NUM_U16S], CanonicityAuxCols<Fp> &aux) {
 #pragma unroll
-    for (size_t i = 0; i < F_NUM_BYTES; ++i) {
+    for (size_t i = 0; i < F_NUM_U16S; ++i) {
         aux.diff_marker[i] = Fp::zero();
     }
     aux.diff_val = Fp::zero();
 
-    Fp x_be[F_NUM_BYTES];
+    Fp x_be[F_NUM_U16S];
 #pragma unroll
-    for (size_t i = 0; i < F_NUM_BYTES; ++i) {
-        x_be[i] = x_le[F_NUM_BYTES - 1 - i];
+    for (size_t i = 0; i < F_NUM_U16S; ++i) {
+        x_be[i] = x_le[F_NUM_U16S - 1 - i];
     }
 
     bool found = false;
     uint32_t to_range_check = 0;
 
 #pragma unroll
-    for (size_t i = 0; i < F_NUM_BYTES; ++i) {
+    for (size_t i = 0; i < F_NUM_U16S; ++i) {
         const uint32_t x_u32 = x_be[i].asUInt32();
         const uint32_t y =
-            (BABY_BEAR_ORDER >> (8 * (F_NUM_BYTES - 1 - i))) & static_cast<uint32_t>(0xff);
+            (BABY_BEAR_ORDER >> (U16_BITS * (F_NUM_U16S - 1 - i))) & U16_MASK;
 
         if (!found && x_u32 != y) {
 #ifdef CUDA_DEBUG
-            assert(x_u32 < 256);
+            assert(x_u32 <= U16_MASK);
             assert(y > x_u32);
 #endif
             const uint32_t diff = y - x_u32;

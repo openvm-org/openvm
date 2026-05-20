@@ -19,28 +19,48 @@ using namespace deferral;
 using namespace canonicity;
 using namespace lookup;
 
-// Heap byte-write aux: `MEMORY_BLOCK_BYTES` bytes packed into `BLOCK_FE_WIDTH`
-// field cells per bus op.
+// Byte-AS write aux (RV64_MEMORY_AS): `MEMORY_BLOCK_BYTES` bytes packed into
+// `BLOCK_FE_WIDTH` field cells per bus op.
 template <typename T> using MemoryWriteAuxColsByte = MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>;
-// DEFERRAL_AS cell-write aux.
+// F-AS write aux (DEFERRAL_AS): `BLOCK_FE_WIDTH` cells per bus op.
 template <typename T> using MemoryWriteAuxColsF = MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>;
 
 __device__ __forceinline__ Fp bytes4_to_fp(const uint8_t *bytes) {
-    const uint32_t value =
-        static_cast<uint32_t>(bytes[0]) | (static_cast<uint32_t>(bytes[1]) << 8) |
-        (static_cast<uint32_t>(bytes[2]) << 16) | (static_cast<uint32_t>(bytes[3]) << 24);
+    uint32_t value = 0;
+#pragma unroll
+    for (size_t i = 0; i < F_NUM_U16S; ++i) {
+        const size_t offset = U16_CELL_SIZE * i;
+        value |= static_cast<uint32_t>(u16_from_bytes_le(bytes[offset], bytes[offset + 1]))
+                 << (U16_BITS * i);
+    }
     return Fp(value);
 }
 
+// Byte-shaped record siblings; tracegen packs byte pairs into u16 columns.
+template <typename F> struct DeferralCallReadsBytes {
+    uint8_t input_commit[COMMIT_NUM_BYTES];
+    F old_input_acc[DIGEST_SIZE];
+    F old_output_acc[DIGEST_SIZE];
+};
+
+template <typename F> struct DeferralCallWritesBytes {
+    uint8_t output_commit[COMMIT_NUM_BYTES];
+    // Low 32 bits of the output length; padded to the 8-byte OutputKey field when written.
+    uint8_t output_len[F_NUM_BYTES];
+    F new_input_acc[DIGEST_SIZE];
+    F new_output_acc[DIGEST_SIZE];
+};
+
+// u16-cell column shape.
 template <typename B, typename F> struct DeferralCallReads {
-    B input_commit[COMMIT_NUM_BYTES];
+    B input_commit[COMMIT_NUM_U16S];
     F old_input_acc[DIGEST_SIZE];
     F old_output_acc[DIGEST_SIZE];
 };
 
 template <typename B, typename F> struct DeferralCallWrites {
-    B output_commit[COMMIT_NUM_BYTES];
-    B output_len[F_NUM_BYTES];
+    B output_commit[COMMIT_NUM_U16S];
+    B output_len[F_NUM_U16S];
     F new_input_acc[DIGEST_SIZE];
     F new_output_acc[DIGEST_SIZE];
 };
@@ -49,8 +69,8 @@ template <typename B, typename F> struct DeferralCallWrites {
 
 template <typename T> struct DeferralCallCoreRecord {
     T deferral_idx;
-    DeferralCallReads<uint8_t, T> reads;
-    DeferralCallWrites<uint8_t, T> writes;
+    DeferralCallReadsBytes<T> reads;
+    DeferralCallWritesBytes<T> writes;
 };
 
 template <typename T> struct DeferralCallCoreCols {
@@ -67,24 +87,32 @@ __device__ __forceinline__ void deferral_call_core_tracegen(
     RowSlice row,
     const DeferralCallCoreRecord<Fp> &record,
     Histogram &count_buffer,
-    BitwiseOperationLookup &bitwise_buffer,
+    VariableRangeChecker &range_checker,
     DeferralPoseidon2Buffer &poseidon2_buffer,
     const size_t address_bits
 ) {
     COL_WRITE_VALUE(row, DeferralCallCoreCols, is_valid, Fp::one());
     COL_WRITE_VALUE(row, DeferralCallCoreCols, deferral_idx, record.deferral_idx);
 
-    COL_WRITE_ARRAY(row, DeferralCallCoreCols, reads.input_commit, record.reads.input_commit);
+    uint16_t input_commit_u16s[COMMIT_NUM_U16S];
+    uint16_t output_commit_u16s[COMMIT_NUM_U16S];
+    uint16_t output_len_u16s[F_NUM_U16S];
+    pack_u8_pairs_le(input_commit_u16s, record.reads.input_commit);
+    pack_u8_pairs_le(output_commit_u16s, record.writes.output_commit);
+    pack_u8_pairs_le(output_len_u16s, record.writes.output_len);
+
+    COL_WRITE_ARRAY(row, DeferralCallCoreCols, reads.input_commit, input_commit_u16s);
     COL_WRITE_ARRAY(row, DeferralCallCoreCols, reads.old_input_acc, record.reads.old_input_acc);
     COL_WRITE_ARRAY(row, DeferralCallCoreCols, reads.old_output_acc, record.reads.old_output_acc);
 
-    COL_WRITE_ARRAY(row, DeferralCallCoreCols, writes.output_commit, record.writes.output_commit);
-    COL_WRITE_ARRAY(row, DeferralCallCoreCols, writes.output_len, record.writes.output_len);
+    COL_WRITE_ARRAY(row, DeferralCallCoreCols, writes.output_commit, output_commit_u16s);
+    COL_WRITE_ARRAY(row, DeferralCallCoreCols, writes.output_len, output_len_u16s);
     COL_WRITE_ARRAY(row, DeferralCallCoreCols, writes.new_input_acc, record.writes.new_input_acc);
     COL_WRITE_ARRAY(row, DeferralCallCoreCols, writes.new_output_acc, record.writes.new_output_acc);
 
     count_buffer.add_count(record.deferral_idx.asUInt32());
 
+    // Compute F-level commits from the raw byte record.
     Fp input_f_commit[DIGEST_SIZE];
     Fp output_f_commit[DIGEST_SIZE];
 #pragma unroll
@@ -103,43 +131,35 @@ __device__ __forceinline__ void deferral_call_core_tracegen(
         true
     );
 
+    // Per-cell 16-bit range checks on `output_commit` and `output_len`.
 #pragma unroll
-    for (size_t i = 0; i < COMMIT_NUM_BYTES; i += 2) {
-        bitwise_buffer.add_range(
-            record.reads.input_commit[i], record.reads.input_commit[i + 1]
-        );
-        bitwise_buffer.add_range(
-            record.writes.output_commit[i], record.writes.output_commit[i + 1]
-        );
+    for (size_t i = 0; i < COMMIT_NUM_U16S; ++i) {
+        range_checker.add_count(static_cast<uint32_t>(output_commit_u16s[i]), U16_BITS);
     }
 #pragma unroll
-    for (size_t i = 0; i < F_NUM_BYTES; i += 2) {
-        bitwise_buffer.add_range(record.writes.output_len[i], record.writes.output_len[i + 1]);
+    for (size_t i = 0; i < F_NUM_U16S; ++i) {
+        range_checker.add_count(static_cast<uint32_t>(output_len_u16s[i]), U16_BITS);
     }
 
-    const uint32_t limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - address_bits;
-    bitwise_buffer.add_range(
-        static_cast<uint32_t>(record.writes.output_len[RV64_WORD_NUM_LIMBS - 1])
-            << limb_shift_bits,
-        0
+    range_checker.add_count(
+        scale_output_len(output_len_u16s, address_bits),
+        U16_BITS
     );
 
     constexpr size_t input_aux_offset = COL_INDEX(DeferralCallCoreCols, input_commit_lt_aux);
     constexpr size_t output_aux_offset = COL_INDEX(DeferralCallCoreCols, output_commit_lt_aux);
     constexpr size_t canonicity_aux_stride = sizeof(CanonicityAuxCols<uint8_t>);
 
-    uint32_t input_commit_rcs[DIGEST_SIZE];
-    uint32_t output_commit_rcs[DIGEST_SIZE];
-
 #pragma unroll
     for (size_t i = 0; i < DIGEST_SIZE; ++i) {
         CanonicityAuxCols<Fp> aux;
-        Fp x_le[F_NUM_BYTES];
+        Fp x_le[F_NUM_U16S];
 #pragma unroll
-        for (size_t j = 0; j < F_NUM_BYTES; ++j) {
-            x_le[j] = Fp(record.reads.input_commit[i * F_NUM_BYTES + j]);
+        for (size_t j = 0; j < F_NUM_U16S; ++j) {
+            x_le[j] = Fp(static_cast<uint32_t>(input_commit_u16s[i * F_NUM_U16S + j]));
         }
-        input_commit_rcs[i] = generate_subrow(x_le, aux);
+        uint32_t rc = generate_subrow(x_le, aux);
+        range_checker.add_count(rc, U16_BITS);
         RowSlice aux_row = row.slice_from(input_aux_offset + i * canonicity_aux_stride);
         COL_WRITE_ARRAY(aux_row, CanonicityAuxCols, diff_marker, aux.diff_marker);
         COL_WRITE_VALUE(aux_row, CanonicityAuxCols, diff_val, aux.diff_val);
@@ -148,21 +168,16 @@ __device__ __forceinline__ void deferral_call_core_tracegen(
 #pragma unroll
     for (size_t i = 0; i < DIGEST_SIZE; ++i) {
         CanonicityAuxCols<Fp> aux;
-        Fp x_le[F_NUM_BYTES];
+        Fp x_le[F_NUM_U16S];
 #pragma unroll
-        for (size_t j = 0; j < F_NUM_BYTES; ++j) {
-            x_le[j] = Fp(record.writes.output_commit[i * F_NUM_BYTES + j]);
+        for (size_t j = 0; j < F_NUM_U16S; ++j) {
+            x_le[j] = Fp(static_cast<uint32_t>(output_commit_u16s[i * F_NUM_U16S + j]));
         }
-        output_commit_rcs[i] = generate_subrow(x_le, aux);
+        uint32_t rc = generate_subrow(x_le, aux);
+        range_checker.add_count(rc, U16_BITS);
         RowSlice aux_row = row.slice_from(output_aux_offset + i * canonicity_aux_stride);
         COL_WRITE_ARRAY(aux_row, CanonicityAuxCols, diff_marker, aux.diff_marker);
         COL_WRITE_VALUE(aux_row, CanonicityAuxCols, diff_val, aux.diff_val);
-    }
-
-#pragma unroll
-    for (size_t i = 0; i < DIGEST_SIZE; i += 2) {
-        bitwise_buffer.add_range(input_commit_rcs[i], input_commit_rcs[i + 1]);
-        bitwise_buffer.add_range(output_commit_rcs[i], output_commit_rcs[i + 1]);
     }
 }
 
@@ -194,8 +209,9 @@ template <typename T> struct DeferralCallAdapterCols {
     T rd_ptr;
     T rs_ptr;
 
-    T rd_val[RV64_WORD_NUM_LIMBS];
-    T rs_val[RV64_WORD_NUM_LIMBS];
+    // Low 32 bits of heap pointers, packed as u16 cells.
+    T rd_val[RV64_PTR_U16S];
+    T rs_val[RV64_PTR_U16S];
     MemoryReadAuxCols<T> rd_aux;
     MemoryReadAuxCols<T> rs_aux;
 
@@ -211,27 +227,28 @@ template <typename T> struct DeferralCallAdapterCols {
 __device__ __forceinline__ void deferral_call_adapter_tracegen(
     RowSlice row,
     const DeferralCallAdapterRecord<Fp> &record,
-    BitwiseOperationLookup &bitwise_buffer,
+    VariableRangeChecker &range_checker,
     MemoryAuxColsFactory &mem_helper,
     const size_t address_bits
 ) {
-    const uint32_t limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - address_bits;
-    bitwise_buffer.add_range(
-        static_cast<uint32_t>(record.rd_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
-        static_cast<uint32_t>(record.rs_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits
+    range_checker.add_count(
+        scale_rv64_ptr_from_u32_bytes(record.rd_val, address_bits), U16_BITS
     );
-#pragma unroll
-    for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
-        bitwise_buffer.add_range(record.rd_val[i], record.rd_val[i + 1]);
-        bitwise_buffer.add_range(record.rs_val[i], record.rs_val[i + 1]);
-    }
+    range_checker.add_count(
+        scale_rv64_ptr_from_u32_bytes(record.rs_val, address_bits), U16_BITS
+    );
 
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, from_state.pc, record.from_pc);
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, from_state.timestamp, record.from_timestamp);
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, rd_ptr, record.rd_ptr);
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, rs_ptr, record.rs_ptr);
-    COL_WRITE_ARRAY(row, DeferralCallAdapterCols, rd_val, record.rd_val);
-    COL_WRITE_ARRAY(row, DeferralCallAdapterCols, rs_val, record.rs_val);
+
+    Fp rd_val_u16s[RV64_PTR_U16S];
+    Fp rs_val_u16s[RV64_PTR_U16S];
+    u32_bytes_to_le_u16_cells(rd_val_u16s, record.rd_val);
+    u32_bytes_to_le_u16_cells(rs_val_u16s, record.rs_val);
+    COL_WRITE_ARRAY(row, DeferralCallAdapterCols, rd_val, rd_val_u16s);
+    COL_WRITE_ARRAY(row, DeferralCallAdapterCols, rs_val, rs_val_u16s);
 
     uint32_t timestamp = record.from_timestamp;
     constexpr size_t read_aux_stride = sizeof(MemoryReadAuxCols<uint8_t>);
@@ -339,7 +356,6 @@ __global__ void deferral_call_tracegen(
     uint32_t *range_checker_ptr,
     const uint32_t range_checker_num_bins,
     const uint32_t timestamp_max_bits,
-    uint32_t *bitwise_ptr,
     FpArray<16> *poseidon2_records,
     DeferralPoseidon2Count *poseidon2_counts,
     uint32_t *poseidon2_idx,
@@ -356,20 +372,18 @@ __global__ void deferral_call_tracegen(
 
     DeferralCallRecord<Fp> record = records[row_idx];
     Histogram count_buffer(count_ptr, num_def_circuits);
-    MemoryAuxColsFactory mem_helper(
-        VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
-    );
-    BitwiseOperationLookup bitwise_buffer(bitwise_ptr);
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
+    MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
     DeferralPoseidon2Buffer poseidon2_buffer(
         poseidon2_records, poseidon2_counts, poseidon2_idx, poseidon2_capacity
     );
 
-    deferral_call_adapter_tracegen(row, record.adapter, bitwise_buffer, mem_helper, address_bits);
+    deferral_call_adapter_tracegen(row, record.adapter, range_checker, mem_helper, address_bits);
     deferral_call_core_tracegen(
         row.slice_from(COL_INDEX(DeferralCallCols, core)),
         record.core,
         count_buffer,
-        bitwise_buffer,
+        range_checker,
         poseidon2_buffer,
         address_bits
     );
@@ -388,7 +402,6 @@ extern "C" int _deferral_call_tracegen(
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits,
-    uint32_t *d_bitwise,
     Fp *d_poseidon2_records,
     DeferralPoseidon2Count *d_poseidon2_counts,
     uint32_t *d_poseidon2_idx,
@@ -413,7 +426,6 @@ extern "C" int _deferral_call_tracegen(
         d_range_checker,
         range_checker_num_bins,
         timestamp_max_bits,
-        d_bitwise,
         reinterpret_cast<FpArray<16> *>(d_poseidon2_records),
         d_poseidon2_counts,
         d_poseidon2_idx,

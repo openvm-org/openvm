@@ -14,7 +14,10 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::{circuit::root::memory::UserPvsInMemoryCols, utils::digests_to_poseidon2_input};
+use crate::{
+    circuit::root::{assert_user_pvs_shape, memory::UserPvsInMemoryCols},
+    utils::digests_to_poseidon2_input,
+};
 
 pub fn generate_proving_input<SC: StarkProtocolConfig<F = F>>(
     user_pv_commit: [F; DIGEST_SIZE],
@@ -36,6 +39,7 @@ pub fn generate_proving_input<SC: StarkProtocolConfig<F = F>>(
      * the memory merkle tree) from PUBLIC_VALUES_AS, the memory dimensions, and the
      * number of user public values.
      */
+    assert_user_pvs_shape(num_user_pvs);
     let pv_start_idx = memory_dimensions.label_to_index((PUBLIC_VALUES_AS, 0));
     let pv_height = log2_strict_usize(num_user_pvs / DIGEST_SIZE);
     let merkle_path_branch_bits = pv_start_idx >> pv_height;

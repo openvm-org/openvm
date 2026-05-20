@@ -9,10 +9,18 @@ use openvm_deferral_guest::{deferred_compute, get_deferred_output, Commit};
 
 openvm::entry!(main);
 
-const EXPECTED_OUTPUT_0_IDX1: [u8; 8] = [2, 4, 7, 11, 16, 22, 29, 37];
-const EXPECTED_OUTPUT_1_IDX1: [u8; 8] = [9, 16, 22, 27, 31, 34, 36, 37];
-const EXPECTED_OUTPUT_2_IDX1: [u8; 8] = [10, 19, 28, 37, 46, 55, 64, 73];
-const EXPECTED_OUTPUT_0_IDX2: [u8; 8] = [3, 5, 8, 12, 17, 23, 30, 38];
+const EXPECTED_OUTPUT_0_IDX1: [u8; 16] = [
+    2, 4, 7, 11, 16, 22, 29, 37, 46, 56, 67, 79, 92, 106, 121, 137,
+];
+const EXPECTED_OUTPUT_1_IDX1: [u8; 16] = [
+    17, 32, 46, 59, 71, 82, 92, 101, 109, 116, 122, 127, 131, 134, 136, 137,
+];
+const EXPECTED_OUTPUT_2_IDX1: [u8; 16] = [
+    10, 19, 28, 37, 46, 55, 64, 73, 82, 91, 100, 109, 118, 127, 136, 145,
+];
+const EXPECTED_OUTPUT_0_IDX2: [u8; 16] = [
+    3, 5, 8, 12, 17, 23, 30, 38, 47, 57, 68, 80, 93, 107, 122, 138,
+];
 
 pub fn main() {
     let input_commit_0: Commit = read();

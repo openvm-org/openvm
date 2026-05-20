@@ -13,13 +13,15 @@ use openvm_continuations::{
     },
     CommitBytes, VkCommitBytes,
 };
-use openvm_recursion_circuit::{prelude::F, system::AggregationSubCircuit};
+use openvm_recursion_circuit::{
+    prelude::F, primitives::range::RangeCheckerAir, system::AggregationSubCircuit,
+};
 use openvm_stark_backend::{AirRef, StarkProtocolConfig};
 
 use crate::{
     bus::{OutputCommitBus, OutputValBus},
     commit::UserPvsCommitValuesAir,
-    output::DeferralOutputCommitAir,
+    output::{DeferralOutputCommitAir, U16_BITS},
     verifier::DeferredVerifyPvsAir,
 };
 
@@ -103,6 +105,9 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
             output_commit_bus,
             def_idx: self.def_idx,
         };
+        let output_range_air = RangeCheckerAir::<U16_BITS> {
+            bus: bus_inventory.range_checker_bus,
+        };
 
         let acc_paths_air = self.def_hook_commit.map(|_| {
             Arc::new(DeferralAccMerklePathsAir::new(
@@ -119,6 +124,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
             .chain([Arc::new(user_pvs_memory_air) as AirRef<SC>])
             .chain(self.verifier_circuit.airs())
             .chain([Arc::new(output_commit_air) as AirRef<SC>])
+            .chain([Arc::new(output_range_air) as AirRef<SC>])
             .chain(acc_paths_air)
             .collect()
     }

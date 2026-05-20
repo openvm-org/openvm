@@ -1,7 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
-/// Number of accumulator digests stored for each `deferral_idx`.
+/// A deferral call manipulates two accumulators per `deferral_idx`: input + output.
 pub(in crate::call) const NUM_ACCUMULATORS_PER_IDX: usize = 2;
 
 #[inline(always)]
