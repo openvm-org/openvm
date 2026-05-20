@@ -37,12 +37,26 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}        # ensures workflow permissions are used
-          track_progress: true                     # forces tag mode → creates PR comment
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
           plugins: "code-review@claude-code-plugins"
-          prompt: "/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+          # `use_sticky_comment` is intentionally NOT set: it relies on author
+          # See https://github.com/anthropics/claude-code-action/issues/960.
+          # Workaround: instruct Claude to dedupe via a hidden HTML marker.
+          prompt: |
+            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+
+            When you post the review to the PR, dedupe using the hidden HTML
+            marker `<!-- claude-code-review:sticky -->` so re-runs update the
+            existing review instead of stacking new comments:
+
+            1. List the PR's issue comments and find one whose body contains
+               `<!-- claude-code-review:sticky -->`.
+            2. If found, edit that comment in place with the new review,
+               keeping the marker as the first line of the body.
+            3. If not found, create a new issue comment whose first line is
+               `<!-- claude-code-review:sticky -->`, followed by the review.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
 
           claude_args: |
-            --model claude-opus-4-6
+            --model claude-opus-4-7
