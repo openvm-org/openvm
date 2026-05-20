@@ -7,7 +7,7 @@ use openvm_circuit::{
         online::{GuestMemory, TracingMemory},
     },
 };
-use openvm_circuit_primitives::U16_BITS;
+pub use openvm_circuit_primitives::U16_BITS;
 use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS,
@@ -18,6 +18,7 @@ use openvm_stark_backend::{
 };
 
 mod alu;
+mod alu_u16;
 mod alu_w;
 mod branch;
 mod jalr;
@@ -27,6 +28,7 @@ mod mul_w;
 mod rdwrite;
 
 pub use alu::*;
+pub use alu_u16::*;
 pub use alu_w::*;
 pub use branch::*;
 pub use jalr::*;
@@ -100,11 +102,17 @@ pub fn byte_ptr_to_u16_ptr<AB: InteractionBuilder>(byte_ptr: impl Into<AB::Expr>
     byte_ptr.into() * AB::F::TWO.inverse()
 }
 
+/// Concrete-value form of [`byte_ptr_to_u16_ptr`].
+#[inline(always)]
+pub fn byte_ptr_to_u16_ptr_value(byte_ptr: u32) -> u32 {
+    debug_assert_eq!(byte_ptr & 1, 0, "u16 pointer conversion requires alignment");
+    byte_ptr >> 1
+}
+
 /// Converts a `u64` to `u32`, asserting in debug that the upper 32 bits are zero.
 #[inline(always)]
 pub fn u64_to_u32_checked(value: u64) -> u32 {
-    debug_assert_eq!(value >> 32, 0, "upper 4 bytes must be zero");
-    value as u32
+    u32::try_from(value).expect("upper 4 bytes must be zero")
 }
 
 /// Converts RV64 register bytes to a `u32`, asserting in debug that the upper 4 bytes are zero.
@@ -123,6 +131,17 @@ pub fn ptr_to_u16_limbs(ptr: u32) -> [u16; RV64_PTR_U16_LIMBS] {
 #[inline(always)]
 pub fn ptr_to_field_u16_limbs<F: PrimeCharacteristicRing>(value: u32) -> [F; RV64_PTR_U16_LIMBS] {
     ptr_to_u16_limbs(value).map(F::from_u16)
+}
+
+#[inline(always)]
+pub fn rv64_u16_block_to_bytes(block: [u16; BLOCK_FE_WIDTH]) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    let mut out = [0u8; RV64_REGISTER_NUM_LIMBS];
+    for (i, cell) in block.into_iter().enumerate() {
+        let [lo, hi] = cell.to_le_bytes();
+        out[2 * i] = lo;
+        out[2 * i + 1] = hi;
+    }
+    out
 }
 
 /// Left shift applied to the high u16 limb for the pointer-width range check.
@@ -160,12 +179,11 @@ where
 
 /// Composes low-to-high u16 pointer limbs into one field expression/value.
 #[inline(always)]
-pub fn u16_limbs_to_ptr<T, V>(limbs: &[V]) -> T
+pub fn u16_limbs_to_ptr<T, V>(limbs: &[V; RV64_PTR_U16_LIMBS]) -> T
 where
     T: PrimeCharacteristicRing,
     V: Copy + Into<T>,
 {
-    assert_eq!(limbs.len(), RV64_PTR_U16_LIMBS);
     limbs.iter().enumerate().fold(T::ZERO, |acc, (i, limb)| {
         acc + (*limb).into() * T::from_u64(1u64 << (i * U16_BITS))
     })
@@ -311,7 +329,7 @@ pub fn tracing_read<const N: usize>(
     data
 }
 
-/// Timestamped u16-cell read.
+/// Timestamped u16-cell read at an AS-native pointer.
 #[inline(always)]
 pub fn timed_read_u16<const N: usize>(
     memory: &mut TracingMemory,
@@ -341,7 +359,7 @@ pub fn tracing_read_u16<const N: usize>(
     data
 }
 
-/// Timestamped u16-cell write.
+/// Timestamped u16-cell write at an AS-native pointer.
 #[inline(always)]
 pub fn timed_write_u16<const N: usize>(
     memory: &mut TracingMemory,

@@ -7,9 +7,14 @@ use openvm_circuit::{
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+#[cfg(feature = "cuda")]
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::SharedVariableRangeCheckerChip,
 };
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_riscv_transpiler::Rv64AuipcOpcode::{self, *};
@@ -26,54 +31,49 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::{
-        adapters::{Rv64RdWriteAdapterRecord, RV64_REGISTER_NUM_LIMBS},
-        Rv64AuipcChipGpu, Rv64AuipcCoreRecord,
-    },
+    crate::{adapters::Rv64RdWriteAdapterRecord, Rv64AuipcChipGpu, Rv64AuipcCoreRecord},
     openvm_circuit::arch::{
-        testing::{
-            default_bitwise_lookup_bus, memory::gen_pointer, GpuChipTestBuilder, GpuTestChipHarness,
-        },
+        testing::{GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
     },
 };
 
-use super::{run_auipc, Rv64AuipcChip, Rv64AuipcCoreAir, Rv64AuipcCoreCols, Rv64AuipcExecutor};
 use crate::{
     adapters::{
-        Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols, Rv64RdWriteAdapterExecutor,
-        Rv64RdWriteAdapterFiller, RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS,
+        rv64_u16_block_to_bytes, Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols,
+        Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_BYTE_BITS,
     },
-    Rv64AuipcAir, Rv64AuipcFiller,
+    auipc::{run_auipc, Rv64AuipcCoreCols},
+    Rv64AuipcAir, Rv64AuipcChip, Rv64AuipcCoreAir, Rv64AuipcExecutor, Rv64AuipcFiller,
 };
 
 const IMM_BITS: usize = 24;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness<RA> = TestChipHarness<F, Rv64AuipcExecutor, Rv64AuipcAir, Rv64AuipcChip<F>, RA>;
+type Harness = TestChipHarness<F, Rv64AuipcExecutor, Rv64AuipcAir, Rv64AuipcChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64AuipcAir, Rv64AuipcExecutor, Rv64AuipcChip<F>) {
     let air = VmAirWrapper::new(
         Rv64RdWriteAdapterAir::new(memory_bridge, execution_bridge),
-        Rv64AuipcCoreAir::new(bitwise_chip.bus()),
+        Rv64AuipcCoreAir::new(range_checker_chip.bus()),
     );
     let executor = Rv64AuipcExecutor::new(Rv64RdWriteAdapterExecutor::new());
     let chip = VmChipWrapper::<F, _>::new(
-        Rv64AuipcFiller::new(Rv64RdWriteAdapterFiller::new(), bitwise_chip),
+        Rv64AuipcFiller::new(Rv64RdWriteAdapterFiller::new(), range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
 }
 
-fn create_harness<RA: Arena>(
+fn create_harness(
     tester: &VmChipTestBuilder<F>,
 ) -> (
-    Harness<RA>,
+    Harness,
     (
         BitwiseOperationLookupAir<RV64_BYTE_BITS>,
         SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
@@ -87,11 +87,10 @@ fn create_harness<RA: Arena>(
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
     );
-    let harness = Harness::<RA>::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
-
+    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
@@ -117,7 +116,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     let initial_pc = tester.last_from_pc().as_canonical_u32();
     let rd_data = run_auipc(initial_pc, imm as u32);
-    assert_eq!(rd_data.map(F::from_u8), tester.read_bytes::<8>(1, a));
+    let rd_bytes = rv64_u16_block_to_bytes(rd_data);
+    assert_eq!(rd_bytes.map(F::from_u8), tester.read_bytes::<8>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -163,9 +163,9 @@ fn rand_auipc_test() {
 #[derive(Clone, Copy, Default, PartialEq)]
 struct AuipcPrankValues {
     pub is_sign_extend: Option<u32>,
-    pub rd_data: Option<[u32; RV64_WORD_NUM_LIMBS]>,
-    pub imm_limbs: Option<[u32; RV64_WORD_NUM_LIMBS - 1]>,
-    pub pc_limbs: Option<[u32; RV64_WORD_NUM_LIMBS - 2]>,
+    pub rd_data: Option<[u32; 2]>,
+    pub imm_low_8: Option<u32>,
+    pub imm_high_16: Option<u32>,
 }
 
 fn run_negative_auipc_test(
@@ -201,11 +201,11 @@ fn run_negative_auipc_test(
         if let Some(data) = prank_vals.rd_data {
             core_cols.rd_data = data.map(F::from_u32);
         }
-        if let Some(data) = prank_vals.imm_limbs {
-            core_cols.imm_limbs = data.map(F::from_u32);
+        if let Some(val) = prank_vals.imm_low_8 {
+            core_cols.imm_low_8 = F::from_u32(val);
         }
-        if let Some(data) = prank_vals.pc_limbs {
-            core_cols.pc_limbs = data.map(F::from_u32);
+        if let Some(val) = prank_vals.imm_high_16 {
+            core_cols.imm_high_16 = F::from_u32(val);
         }
 
         *trace = RowMajorMatrix::new(trace_row, trace.width());
@@ -229,7 +229,8 @@ fn invalid_limb_negative_tests() {
         Some(9722891),
         None,
         AuipcPrankValues {
-            imm_limbs: Some([107, 46, 81]),
+            imm_low_8: Some(107),
+            imm_high_16: Some(0x512e),
             ..Default::default()
         },
         false,
@@ -239,8 +240,7 @@ fn invalid_limb_negative_tests() {
         Some(0),
         Some(2110400),
         AuipcPrankValues {
-            rd_data: Some([194, 51, 32, 240]),
-            pc_limbs: Some([51, 32]),
+            rd_data: Some([0x33c2, 0xf020]),
             ..Default::default()
         },
         true,
@@ -250,7 +250,7 @@ fn invalid_limb_negative_tests() {
         None,
         None,
         AuipcPrankValues {
-            pc_limbs: Some([206, 166]),
+            imm_high_16: Some(0xa6ce),
             ..Default::default()
         },
         false,
@@ -260,7 +260,7 @@ fn invalid_limb_negative_tests() {
         None,
         None,
         AuipcPrankValues {
-            rd_data: Some([30, 92, 82, 132]),
+            rd_data: Some([0x5c1e, 0x8452]),
             ..Default::default()
         },
         false,
@@ -270,12 +270,12 @@ fn invalid_limb_negative_tests() {
         None,
         Some(876487877),
         AuipcPrankValues {
-            rd_data: Some([197, 202, 49, 70]),
-            imm_limbs: Some([166, 243, 17]),
-            pc_limbs: Some([36, 62]),
+            rd_data: Some([0xcac5, 0x4631]),
+            imm_low_8: Some(166),
+            imm_high_16: Some(0x11f3),
             ..Default::default()
         },
-        true,
+        false,
     );
 }
 
@@ -305,7 +305,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64RdWriteAdapterCols<F> = adapter_row.borrow_mut();
-        adapter_cols.rd_aux_cols.prev_data[2] = F::from_u32(1);
+        adapter_cols.rd_aux_cols.prev_data[1] = F::from_u32(1);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -322,8 +322,8 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 
 #[test]
 fn sign_extend_flag_negative_tests() {
-    // is_sign_extend = 1 when the result fits in 32 bits (MSB of rd_data[3] is 0).
-    // pc=4, imm=0 ⟹ rd = 4 ⟹ rd_data = [4, 0, 0, 0, 0, 0, 0, 0].
+    // is_sign_extend = 1 when the result fits in 32 bits (MSB of rd_data[1] is 0).
+    // pc=4, imm=0 => rd = 4 => rd_data = [4, 0, 0, 0].
     run_negative_auipc_test(
         AUIPC,
         Some(0),
@@ -334,8 +334,8 @@ fn sign_extend_flag_negative_tests() {
         },
         true,
     );
-    // is_sign_extend = 0 when the result has bit 31 set (MSB of rd_data[3] is 1).
-    // pc=0, imm=2^23 ⟹ rd = 2^31 ⟹ rd_data = [0, 0, 0, 128, 255, 255, 255, 255].
+    // is_sign_extend = 0 when the result has bit 31 set (MSB of rd_data[1] is 1).
+    // pc=0, imm=2^23 => rd = 2^31 => rd_data = [0, 0x8000, 0xffff, 0xffff].
     run_negative_auipc_test(
         AUIPC,
         Some(1 << 23),
@@ -355,17 +355,18 @@ fn overflow_negative_tests() {
         Some(256264),
         None,
         AuipcPrankValues {
-            imm_limbs: Some([3592, 219, 3]),
+            imm_low_8: Some(3592),
+            imm_high_16: Some(0x03e9),
             ..Default::default()
         },
         false,
     );
     run_negative_auipc_test(
         AUIPC,
-        None,
-        None,
+        Some(0),
+        Some(0),
         AuipcPrankValues {
-            pc_limbs: Some([0, 0]),
+            rd_data: Some([1, 0]),
             ..Default::default()
         },
         false,
@@ -375,7 +376,8 @@ fn overflow_negative_tests() {
         Some(255),
         None,
         AuipcPrankValues {
-            imm_limbs: Some([F::NEG_ONE.as_canonical_u32(), 1, 0]),
+            imm_low_8: Some(F::NEG_ONE.as_canonical_u32()),
+            imm_high_16: Some(0),
             ..Default::default()
         },
         true,
@@ -385,9 +387,9 @@ fn overflow_negative_tests() {
         Some(0),
         Some(255),
         AuipcPrankValues {
-            rd_data: Some([F::NEG_ONE.as_canonical_u32(), 1, 0, 0]),
-            imm_limbs: Some([0, 0, 0]),
-            pc_limbs: Some([1, 0]),
+            rd_data: Some([F::NEG_ONE.as_canonical_u32(), 1]),
+            imm_low_8: Some(0),
+            imm_high_16: Some(0),
             ..Default::default()
         },
         true,
@@ -406,7 +408,10 @@ fn run_auipc_sanity_test() {
     let imm = 11302451;
     let rd_data = run_auipc(initial_pc, imm);
 
-    assert_eq!(rd_data, [210, 107, 113, 186, 255, 255, 255, 255]);
+    assert_eq!(
+        rv64_u16_block_to_bytes(rd_data),
+        [210, 107, 113, 186, 255, 255, 255, 255]
+    );
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////
@@ -421,46 +426,37 @@ type GpuHarness =
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
-    let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        openvm_circuit::arch::testing::default_var_range_checker_bus(),
     ));
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64AuipcChipGpu::new(
-        tester.range_checker(),
-        tester.bitwise_op_lookup(),
-        tester.timestamp_max_bits(),
-    );
-
+    let gpu_chip = Rv64AuipcChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }
 
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_rand_auipc_tracegen() {
-    let mut tester =
-        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let mut tester = GpuChipTestBuilder::default()
+        .with_bitwise_op_lookup(openvm_circuit::arch::testing::default_bitwise_lookup_bus());
     let mut rng = create_seeded_rng();
-
     let mut harness = create_cuda_harness(&tester);
-    let num_ops = 100;
 
-    for _ in 0..num_ops {
-        let imm = rng.random_range(0..(1 << IMM_BITS)) as usize;
-        let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-        let initial_pc = rng.random_range(0..(1 << PC_BITS));
-
-        tester.execute_with_pc(
+    for _ in 0..100 {
+        set_and_execute(
+            &mut tester,
             &mut harness.executor,
             &mut harness.dense_arena,
-            &Instruction::from_usize(AUIPC.global_opcode(), [a, 0, imm, 1, 0]),
-            initial_pc,
+            &mut rng,
+            AUIPC,
+            None,
+            None,
         );
     }
 

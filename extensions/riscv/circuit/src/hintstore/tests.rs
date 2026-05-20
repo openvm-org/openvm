@@ -6,13 +6,16 @@ use openvm_circuit::{
             memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, ExecutionBridge, MatrixRecordArena, PreflightExecutor,
+        Arena, ExecutionBridge, MatrixRecordArena, PreflightExecutor, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::SharedVariableRangeCheckerChip,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -39,6 +42,7 @@ use {
     openvm_circuit::arch::testing::{
         default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
+    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
 
 use super::{Rv64HintStoreAir, Rv64HintStoreChip, Rv64HintStoreCols, Rv64HintStoreExecutor};
@@ -52,7 +56,7 @@ type Harness<RA> =
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -63,13 +67,13 @@ fn create_harness_fields(
     let air = Rv64HintStoreAir::new(
         execution_bridge,
         memory_bridge,
-        bitwise_chip.bus(),
+        range_checker_chip.bus(),
         Rv64HintStoreOpcode::CLASS_OFFSET,
         address_bits,
     );
     let executor = Rv64HintStoreExecutor::new(address_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
     let chip = Rv64HintStoreChip::<F>::new(
-        Rv64HintStoreFiller::new(address_bits, bitwise_chip),
+        Rv64HintStoreFiller::new(address_bits, range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -92,7 +96,7 @@ fn create_harness<RA: Arena>(
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        bitwise_chip.clone(),
+        tester.range_checker().clone(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -268,14 +272,9 @@ fn test_hint_buffer_rem_words_range_check() {
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
-        // The AIR scales `rem_words_limbs[1]` by `1 << 6`, requiring the result to fit in a
-        // byte (so `limb[1] < 4` under `MAX_HINT_BUFFER_DWORDS_BITS = 10`). Setting limb 1 to
-        // 4 sends 256 to the byte-range lookup, which has no matching row. We compensate
-        // `limb[0]` with `1 − 1024` in F so the composed `rem_words` stays at 1; otherwise
-        // the end-row `assert_one(rem_words)` constraint would fail first and shadow the
-        // interaction error we want to observe.
-        cols.rem_words_limbs[1] = F::from_u32(4);
-        cols.rem_words_limbs[0] = F::ONE - F::from_u32(1024);
+        // `rem_words = 2^MAX_HINT_BUFFER_DWORDS_BITS` scales to 2^16, outside
+        // the 16-bit range-check table.
+        cols.rem_words = F::from_u32(1024);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -323,10 +322,9 @@ fn test_hint_buffer_mem_ptr_range_check() {
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
-        // For the default `pointer_max_bits = 29`, the AIR scales `mem_ptr_limbs[3]` by
-        // `1 << 3`, which forces `mem_ptr_limbs[3] < 32`. Setting the limb to 100 sends a
-        // scaled value of 800 to the byte-range bitwise lookup, which has no matching row.
-        cols.mem_ptr_limbs[3] = F::from_u32(100);
+        // With `pointer_max_bits = 29`, the high u16 cell must be < 2^13.
+        // Setting it to 2^13 scales to 2^16, outside the 16-bit table.
+        cols.mem_ptr_limbs[1] = F::from_u32(8192);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -373,7 +371,7 @@ fn test_hintstore_rs1_upper_bytes_non_zero() {
 #[allow(clippy::too_many_arguments)]
 fn run_negative_hintstore_test(
     opcode: Rv64HintStoreOpcode,
-    prank_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prank_data: Option<[u32; BLOCK_FE_WIDTH]>,
     _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
@@ -410,7 +408,9 @@ fn run_negative_hintstore_test(
 
 #[test]
 fn negative_hintstore_tests() {
-    run_negative_hintstore_test(HINT_STORED, Some([92, 187, 45, 280, 17, 211, 64, 5]), true);
+    // 4 u16-cell values; differ from the random hint-stream input so the bus interaction
+    // (which sends both the new and previous data) fails to balance.
+    run_negative_hintstore_test(HINT_STORED, Some([0x5c92, 0x182d, 0xd311, 0x0540]), true);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -454,23 +454,19 @@ type GpuHarness = GpuTestChipHarness<
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
-    // getting bus from tester since `gpu_chip` and `air` must use the same bus
-    let bitwise_bus = default_bitwise_lookup_bus();
-    // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        openvm_circuit::arch::testing::default_var_range_checker_bus(),
     ));
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        dummy_bitwise_chip.clone(),
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
     let gpu_chip = Rv64HintStoreChipGpu::new(
         tester.range_checker(),
-        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );

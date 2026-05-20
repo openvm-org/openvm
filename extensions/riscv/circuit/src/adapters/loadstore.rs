@@ -39,8 +39,8 @@ use openvm_stark_backend::{
 
 use super::{RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS};
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_register, memory_read, memory_read_deferral,
-    rv64_bytes_to_u32, timed_write, tracing_read, RV64_BYTE_BITS,
+    expand_to_rv64_register, memory_read, memory_read_deferral, rv64_bytes_to_u32, timed_write,
+    tracing_read, RV64_BYTE_BITS, U16_BITS,
 };
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
@@ -164,10 +164,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         let rs1_data = expand_to_rv64_register(&local_cols.rs1_data);
         self.memory_bridge
             .read(
-                MemoryAddress::new(
-                    AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
-                ),
+                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rs1_ptr),
                 pack_u8_block::<AB>(&rs1_data),
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
@@ -237,7 +234,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(read_as, byte_ptr_to_u16_ptr::<AB>(read_ptr)),
+                MemoryAddress::new(read_as, read_ptr),
                 pack_u8_block::<AB>(&ctx.reads.1),
                 timestamp_pp(),
                 &local_cols.read_data_aux,
@@ -258,7 +255,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         let prev_data_expr: [AB::Expr; MEMORY_BLOCK_BYTES] = ctx.reads.0.map(Into::into);
         self.memory_bridge
             .write(
-                MemoryAddress::new(write_as, byte_ptr_to_u16_ptr::<AB>(write_ptr)),
+                MemoryAddress::new(write_as, write_ptr),
                 pack_u8_block::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),
                 MemoryWriteAuxInput::from_prev_data_exprs(
@@ -526,11 +523,11 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
             .rs1_val
             .wrapping_add(record.imm as u32 + record.imm_sign as u32 * 0xffff0000);
 
-        let ptr_limbs = [ptr & 0xffff, ptr >> 16];
+        let ptr_limbs = [ptr & (u16::MAX as u32), ptr >> U16_BITS];
         self.range_checker_chip
-            .add_count(ptr_limbs[0] >> 3, RV64_BYTE_BITS * 2 - 3);
+            .add_count(ptr_limbs[0] >> 3, U16_BITS - 3);
         self.range_checker_chip
-            .add_count(ptr_limbs[1], self.pointer_max_bits - 16);
+            .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
         adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_u32);
 
         adapter_row.imm_sign = F::from_bool(record.imm_sign);

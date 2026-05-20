@@ -130,7 +130,7 @@ template <size_t NUM_LIMBS> struct MulHCore {
             );
         }
 
-        // AIR range-checks these byte limbs; add matching lookup counts.
+        // Multiplication uses byte limbs; range-check the read operands locally.
 #pragma unroll
         for (int i = 0; i < NUM_LIMBS; i++) {
             bitwise_lookup.add_range(b[i], c[i]);

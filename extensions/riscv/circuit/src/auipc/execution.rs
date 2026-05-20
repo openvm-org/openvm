@@ -11,6 +11,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{run_auipc, Rv64AuipcExecutor};
+use crate::adapters::rv64_u16_block_to_bytes;
 #[cfg(feature = "aot")]
 use crate::common::*;
 
@@ -191,7 +192,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 ) {
     let pc = exec_state.pc();
     let rd = run_auipc(pc, pre_compute.imm);
-    exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
+    let rd_bytes = rv64_u16_block_to_bytes(rd);
+    exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &rd_bytes);
 
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }

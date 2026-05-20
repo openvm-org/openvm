@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::{
-        to_byte_ptr_bits, ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension,
-    },
+    arch::{ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension},
     system::cuda::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
 };
 use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU};
@@ -31,7 +29,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         _: &Rv64I,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
-        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
@@ -56,11 +54,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.add_executor_chip(base_alu_w);
 
         inventory.next_air::<Rv64LessThanAir>()?;
-        let lt = Rv64LessThanChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            timestamp_max_bits,
-        );
+        let lt = Rv64LessThanChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(lt);
 
         inventory.next_air::<Rv64ShiftAir>()?;
@@ -81,55 +75,35 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
 
         inventory.next_air::<Rv64LoadStoreAir>()?;
         let load_store_chip =
-            Rv64LoadStoreChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
+            Rv64LoadStoreChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(load_store_chip);
 
         inventory.next_air::<Rv64LoadSignExtendAir>()?;
         let load_sign_extend = Rv64LoadSignExtendChipGpu::new(
             range_checker.clone(),
-            byte_ptr_max_bits,
+            pointer_max_bits,
             timestamp_max_bits,
         );
         inventory.add_executor_chip(load_sign_extend);
 
         inventory.next_air::<Rv64BranchEqualAir>()?;
-        let beq = Rv64BranchEqualChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            timestamp_max_bits,
-        );
+        let beq = Rv64BranchEqualChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(beq);
 
         inventory.next_air::<Rv64BranchLessThanAir>()?;
-        let blt = Rv64BranchLessThanChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            timestamp_max_bits,
-        );
+        let blt = Rv64BranchLessThanChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(blt);
 
         inventory.next_air::<Rv64JalLuiAir>()?;
-        let jal_lui = Rv64JalLuiChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            timestamp_max_bits,
-        );
+        let jal_lui = Rv64JalLuiChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(jal_lui);
 
         inventory.next_air::<Rv64JalrAir>()?;
-        let jalr = Rv64JalrChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            timestamp_max_bits,
-        );
+        let jalr = Rv64JalrChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(jalr);
 
         inventory.next_air::<Rv64AuipcAir>()?;
-        let auipc = Rv64AuipcChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            timestamp_max_bits,
-        );
+        let auipc = Rv64AuipcChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(auipc);
 
         Ok(())
@@ -144,7 +118,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
         extension: &Rv64M,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
-        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
@@ -204,7 +178,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             range_checker.clone(),
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
-            byte_ptr_max_bits,
+            pointer_max_bits,
             timestamp_max_bits,
         );
         inventory.add_executor_chip(div_rem);
@@ -214,7 +188,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             range_checker.clone(),
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
-            byte_ptr_max_bits,
+            pointer_max_bits,
             timestamp_max_bits,
         );
         inventory.add_executor_chip(divrem_w);
@@ -233,19 +207,14 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64Io>
         _: &Rv64Io,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
-        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
-        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         inventory.next_air::<Rv64HintStoreAir>()?;
-        let hint_store = Rv64HintStoreChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            byte_ptr_max_bits,
-            timestamp_max_bits,
-        );
+        let hint_store =
+            Rv64HintStoreChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(hint_store);
 
         Ok(())

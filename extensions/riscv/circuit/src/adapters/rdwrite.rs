@@ -10,10 +10,7 @@ use openvm_circuit::{
         BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{
-            pack_u8_block, pack_u8_block_bytes, MemoryBridge, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
-        },
+        offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteU16AuxRecord},
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
@@ -31,8 +28,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::RV64_REGISTER_NUM_LIMBS;
-use crate::adapters::{byte_ptr_to_u16_ptr, tracing_write};
+use crate::adapters::{byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_write_u16};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -49,7 +45,7 @@ pub struct Rv64CondRdWriteAdapterCols<T> {
     pub needs_write: T,
 }
 
-/// This adapter doesn't read anything, and writes to [a:8]_d, where d == 1
+/// This adapter doesn't read anything, and writes one RV64 register at \[a\]_d, where d == 1.
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(Rv64RdWriteAdapterCols<u8>)]
 pub struct Rv64RdWriteAdapterAir {
@@ -57,7 +53,8 @@ pub struct Rv64RdWriteAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
 }
 
-/// This adapter doesn't read anything, and **maybe** writes to [a:8]_d, where d == 1
+/// This adapter doesn't read anything, and **maybe** writes one RV64 register at \[a\]_d, where
+/// d == 1.
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(Rv64CondRdWriteAdapterCols<u8>)]
 pub struct Rv64CondRdWriteAdapterAir {
@@ -92,14 +89,7 @@ impl Rv64RdWriteAdapterAir {
         local_cols: &Rv64RdWriteAdapterCols<AB::Var>,
         ctx: AdapterAirContext<
             AB::Expr,
-            BasicAdapterInterface<
-                AB::Expr,
-                ImmInstruction<AB::Expr>,
-                0,
-                1,
-                0,
-                RV64_REGISTER_NUM_LIMBS,
-            >,
+            BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 0, BLOCK_FE_WIDTH>,
         >,
         needs_write: Option<AB::Expr>,
     ) {
@@ -116,7 +106,7 @@ impl Rv64RdWriteAdapterAir {
                     AB::F::from_u32(RV64_REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rd_ptr),
                 ),
-                pack_u8_block::<AB>(&ctx.writes[0].clone()),
+                ctx.writes[0].clone(),
                 timestamp,
                 &local_cols.rd_aux_cols,
             )
@@ -149,7 +139,7 @@ impl Rv64RdWriteAdapterAir {
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64RdWriteAdapterAir {
     type Interface =
-        BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 0, RV64_REGISTER_NUM_LIMBS>;
+        BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 0, BLOCK_FE_WIDTH>;
 
     fn eval(
         &self,
@@ -169,7 +159,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64RdWriteAdapterAir {
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64CondRdWriteAdapterAir {
     type Interface =
-        BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 0, RV64_REGISTER_NUM_LIMBS>;
+        BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 0, 1, 0, BLOCK_FE_WIDTH>;
 
     fn eval(
         &self,
@@ -198,7 +188,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64CondRdWriteAdapterAir {
     }
 }
 
-/// This adapter doesn't read anything, and writes to [a:8]_d, where d == 1
+/// This adapter doesn't read anything, and writes one RV64 register at \[a\]_d, where d == 1.
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug, Clone)]
 pub struct Rv64RdWriteAdapterRecord {
@@ -207,7 +197,7 @@ pub struct Rv64RdWriteAdapterRecord {
 
     // Will use u32::MAX to indicate no write
     pub rd_ptr: u32,
-    pub rd_aux_record: MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
+    pub rd_aux_record: MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>,
 }
 
 #[derive(Clone, Copy, derive_new::new)]
@@ -222,7 +212,7 @@ where
 {
     const WIDTH: usize = size_of::<Rv64RdWriteAdapterCols<u8>>();
     type ReadData = ();
-    type WriteData = [u8; RV64_REGISTER_NUM_LIMBS];
+    type WriteData = [u16; BLOCK_FE_WIDTH];
     type RecordMut<'a> = &'a mut Rv64RdWriteAdapterRecord;
 
     #[inline(always)]
@@ -254,10 +244,10 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
 
         record.rd_ptr = a.as_canonical_u32();
-        tracing_write(
+        tracing_write_u16(
             memory,
             RV64_REGISTER_AS,
-            record.rd_ptr,
+            byte_ptr_to_u16_ptr_value(record.rd_ptr),
             data,
             &mut record.rd_aux_record.prev_timestamp,
             &mut record.rd_aux_record.prev_data,
@@ -280,7 +270,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64RdWriteAdapterFiller {
 
         adapter_row
             .rd_aux_cols
-            .set_prev_data(pack_u8_block_bytes(&record.rd_aux_record.prev_data));
+            .set_prev_data(record.rd_aux_record.prev_data.map(F::from_u16));
         mem_helper.fill(
             record.rd_aux_record.prev_timestamp,
             record.from_timestamp,
@@ -292,7 +282,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64RdWriteAdapterFiller {
     }
 }
 
-/// This adapter doesn't read anything, and **maybe** writes to [a:8]_d, where d == 1
+/// This adapter doesn't read anything, and **maybe** writes one RV64 register at \[a\]_d, where
+/// d == 1.
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64CondRdWriteAdapterExecutor {
     inner: Rv64RdWriteAdapterExecutor,
@@ -309,7 +300,7 @@ where
 {
     const WIDTH: usize = size_of::<Rv64CondRdWriteAdapterCols<u8>>();
     type ReadData = ();
-    type WriteData = [u8; RV64_REGISTER_NUM_LIMBS];
+    type WriteData = [u16; BLOCK_FE_WIDTH];
     type RecordMut<'a> = &'a mut Rv64RdWriteAdapterRecord;
 
     #[inline(always)]

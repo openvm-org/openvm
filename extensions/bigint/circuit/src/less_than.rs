@@ -18,11 +18,11 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{self, read_int256, write_int256},
-    AluAdapterExecutor, Rv64LessThan256Executor, INT256_NUM_LIMBS,
+    AluU16AdapterExecutor, Rv64LessThan256Executor, INT256_NUM_U8_LIMBS,
 };
 
 impl Rv64LessThan256Executor {
-    pub fn new(adapter: AluAdapterExecutor, offset: usize) -> Self {
+    pub fn new(adapter: AluU16AdapterExecutor, offset: usize) -> Self {
         Self(LessThanExecutor::new(adapter, offset))
     }
 }
@@ -144,7 +144,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U25
     } else {
         common::i256_lt(rs1, rs2)
     };
-    let mut rd = [0u8; INT256_NUM_LIMBS];
+    let mut rd = [0u8; INT256_NUM_U8_LIMBS];
     rd[0] = cmp_result as u8;
     write_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rd_ptr), &rd);
 

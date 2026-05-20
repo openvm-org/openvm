@@ -8,8 +8,8 @@ use openvm_circuit::{
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -34,7 +34,8 @@ pub struct LessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode_sltu_flag: T,
 
     // Most significant limb of b and c respectively as a field element, will be range
-    // checked to be within [-128, 127) if signed, [0, 256) if unsigned.
+    // checked to be within [-2^(LIMB_BITS - 1), 2^(LIMB_BITS - 1)) if signed,
+    // [0, 2^LIMB_BITS) if unsigned.
     pub b_msb_f: T,
     pub c_msb_f: T,
 
@@ -47,7 +48,7 @@ pub struct LessThanCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(LessThanCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
 pub struct LessThanCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub bus: BitwiseOperationLookupBus,
+    pub range_bus: VariableRangeCheckerBus,
     offset: usize,
 }
 
@@ -119,27 +120,19 @@ where
             .when(not::<AB::Expr>(prefix_sum.clone()))
             .assert_zero(cols.cmp_result);
 
-        // Check if b_msb_f and c_msb_f are in [-128, 127) if signed, [0, 256) if unsigned.
-        self.bus
-            .send_range(
-                cols.b_msb_f + AB::Expr::from_u32(1 << (LIMB_BITS - 1)) * cols.opcode_slt_flag,
-                cols.c_msb_f + AB::Expr::from_u32(1 << (LIMB_BITS - 1)) * cols.opcode_slt_flag,
-            )
+        // Check if b_msb_f and c_msb_f are in
+        // [-2^(LIMB_BITS - 1), 2^(LIMB_BITS - 1)) if signed, [0, 2^LIMB_BITS) if unsigned.
+        let sign_shift = AB::Expr::from_u32(1 << (LIMB_BITS - 1)) * cols.opcode_slt_flag;
+        self.range_bus
+            .range_check(cols.b_msb_f + sign_shift.clone(), LIMB_BITS)
             .eval(builder, is_valid.clone());
-
-        // Memory bus checks only packed u16 values; these read bytes need separate bounds.
-        self.bus
-            .send_range(b[NUM_LIMBS - 1], c[NUM_LIMBS - 1])
+        self.range_bus
+            .range_check(cols.c_msb_f + sign_shift, LIMB_BITS)
             .eval(builder, is_valid.clone());
-        for i in 0..NUM_LIMBS - 1 {
-            self.bus
-                .send_range(b[i], c[i])
-                .eval(builder, is_valid.clone());
-        }
 
         // Range check to ensure diff_val is non-zero.
-        self.bus
-            .send_range(cols.diff_val - AB::Expr::ONE, AB::F::ZERO)
+        self.range_bus
+            .range_check(cols.diff_val - AB::Expr::ONE, LIMB_BITS)
             .eval(builder, prefix_sum);
 
         let expected_opcode = flags
@@ -172,8 +165,8 @@ where
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct LessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub b: [u8; NUM_LIMBS],
-    pub c: [u8; NUM_LIMBS],
+    pub b: [u16; NUM_LIMBS],
+    pub c: [u16; NUM_LIMBS],
     pub local_opcode: u8,
 }
 
@@ -186,7 +179,7 @@ pub struct LessThanExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 #[derive(Clone, derive_new::new)]
 pub struct LessThanFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub offset: usize,
 }
 
@@ -197,8 +190,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
+            ReadData: Into<[[u16; NUM_LIMBS]; 2]>,
+            WriteData: From<[[u16; NUM_LIMBS]; 1]>,
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -218,7 +211,6 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        debug_assert!(LIMB_BITS <= 8);
         let Instruction { opcode, .. } = instruction;
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
@@ -239,8 +231,8 @@ where
             &rs2,
         );
 
-        let mut output = [0u8; NUM_LIMBS];
-        output[0] = cmp_result as u8;
+        let mut output = [0u16; NUM_LIMBS];
+        output[0] = cmp_result as u16;
 
         self.adapter.write(
             state.memory,
@@ -277,28 +269,28 @@ where
         let (cmp_result, diff_idx, b_sign, c_sign) =
             run_less_than::<NUM_LIMBS, LIMB_BITS>(is_slt, &record.b, &record.c);
 
-        // We range check (b_msb_f + 128) and (c_msb_f + 128) if signed,
-        // b_msb_f and c_msb_f if not
+        // We range check (b_msb_f + 2^(LIMB_BITS - 1)) and
+        // (c_msb_f + 2^(LIMB_BITS - 1)) if signed, b_msb_f and c_msb_f if not
         let (b_msb_f, b_msb_range) = if b_sign {
             (
-                -F::from_u16((1u16 << LIMB_BITS) - record.b[NUM_LIMBS - 1] as u16),
-                record.b[NUM_LIMBS - 1] - (1u8 << (LIMB_BITS - 1)),
+                -F::from_u16(record.b[NUM_LIMBS - 1].wrapping_neg()),
+                record.b[NUM_LIMBS - 1] as u32 - (1u32 << (LIMB_BITS - 1)),
             )
         } else {
             (
-                F::from_u8(record.b[NUM_LIMBS - 1]),
-                record.b[NUM_LIMBS - 1] + ((is_slt as u8) << (LIMB_BITS - 1)),
+                F::from_u16(record.b[NUM_LIMBS - 1]),
+                record.b[NUM_LIMBS - 1] as u32 + ((is_slt as u32) << (LIMB_BITS - 1)),
             )
         };
         let (c_msb_f, c_msb_range) = if c_sign {
             (
-                -F::from_u16((1u16 << LIMB_BITS) - record.c[NUM_LIMBS - 1] as u16),
-                record.c[NUM_LIMBS - 1] - (1u8 << (LIMB_BITS - 1)),
+                -F::from_u16(record.c[NUM_LIMBS - 1].wrapping_neg()),
+                record.c[NUM_LIMBS - 1] as u32 - (1u32 << (LIMB_BITS - 1)),
             )
         } else {
             (
-                F::from_u8(record.c[NUM_LIMBS - 1]),
-                record.c[NUM_LIMBS - 1] + ((is_slt as u8) << (LIMB_BITS - 1)),
+                F::from_u16(record.c[NUM_LIMBS - 1]),
+                record.c[NUM_LIMBS - 1] as u32 + ((is_slt as u32) << (LIMB_BITS - 1)),
             )
         };
 
@@ -311,28 +303,18 @@ where
                 b_msb_f - c_msb_f
             }
         } else if cmp_result {
-            F::from_u8(record.c[diff_idx] - record.b[diff_idx])
+            F::from_u16((record.c[diff_idx] as u32 - record.b[diff_idx] as u32) as u16)
         } else {
-            F::from_u8(record.b[diff_idx] - record.c[diff_idx])
+            F::from_u16((record.b[diff_idx] as u32 - record.c[diff_idx] as u32) as u16)
         };
 
-        self.bitwise_lookup_chip
-            .request_range(b_msb_range as u32, c_msb_range as u32);
-
-        // AIR range-checks these byte limbs; add matching lookup counts.
-        self.bitwise_lookup_chip.request_range(
-            record.b[NUM_LIMBS - 1] as u32,
-            record.c[NUM_LIMBS - 1] as u32,
-        );
-        for i in 0..NUM_LIMBS - 1 {
-            self.bitwise_lookup_chip
-                .request_range(record.b[i] as u32, record.c[i] as u32);
-        }
+        self.range_checker_chip.add_count(b_msb_range, LIMB_BITS);
+        self.range_checker_chip.add_count(c_msb_range, LIMB_BITS);
 
         core_row.diff_marker = [F::ZERO; NUM_LIMBS];
         if diff_idx != NUM_LIMBS {
-            self.bitwise_lookup_chip
-                .request_range(core_row.diff_val.as_canonical_u32() - 1, 0);
+            self.range_checker_chip
+                .add_count(core_row.diff_val.as_canonical_u32() - 1, LIMB_BITS);
             core_row.diff_marker[diff_idx] = F::ONE;
         }
 
@@ -341,8 +323,8 @@ where
         core_row.opcode_sltu_flag = F::from_bool(!is_slt);
         core_row.opcode_slt_flag = F::from_bool(is_slt);
         core_row.cmp_result = F::from_bool(cmp_result);
-        core_row.c = record.c.map(F::from_u8);
-        core_row.b = record.b.map(F::from_u8);
+        core_row.c = record.c.map(F::from_u16);
+        core_row.b = record.b.map(F::from_u16);
     }
 }
 
@@ -350,8 +332,8 @@ where
 #[inline(always)]
 pub(super) fn run_less_than<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     is_slt: bool,
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
+    x: &[u16; NUM_LIMBS],
+    y: &[u16; NUM_LIMBS],
 ) -> (bool, usize, bool, bool) {
     let x_sign = (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1) && is_slt;
     let y_sign = (y[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1) && is_slt;

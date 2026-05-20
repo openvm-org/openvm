@@ -1,5 +1,5 @@
 use openvm_circuit::{
-    arch::{to_byte_ptr_bits, DenseRecordArena},
+    arch::DenseRecordArena,
     system::cuda::{
         extensions::{
             get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder,
@@ -26,7 +26,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         extension: &Int256,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
-        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
@@ -56,34 +56,25 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         let base_alu = BaseAlu256ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
-            byte_ptr_max_bits,
+            pointer_max_bits,
             timestamp_max_bits,
         );
         inventory.add_executor_chip(base_alu);
 
         inventory.next_air::<Rv64LessThan256Air>()?;
-        let lt = LessThan256ChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            byte_ptr_max_bits,
-            timestamp_max_bits,
-        );
+        let lt =
+            LessThan256ChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(lt);
 
         inventory.next_air::<Rv64BranchEqual256Air>()?;
-        let beq = BranchEqual256ChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            byte_ptr_max_bits,
-            timestamp_max_bits,
-        );
+        let beq =
+            BranchEqual256ChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(beq);
 
         inventory.next_air::<Rv64BranchLessThan256Air>()?;
         let blt = BranchLessThan256ChipGpu::new(
             range_checker.clone(),
-            bitwise_lu.clone(),
-            byte_ptr_max_bits,
+            pointer_max_bits,
             timestamp_max_bits,
         );
         inventory.add_executor_chip(blt);
@@ -93,7 +84,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
             range_checker.clone(),
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
-            byte_ptr_max_bits,
+            pointer_max_bits,
             timestamp_max_bits,
         );
         inventory.add_executor_chip(mult);
@@ -102,7 +93,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         let shift = Shift256ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
-            byte_ptr_max_bits,
+            pointer_max_bits,
             timestamp_max_bits,
         );
         inventory.add_executor_chip(shift);

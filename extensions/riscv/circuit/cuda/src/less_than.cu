@@ -3,24 +3,26 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv/adapters/alu.cuh"
+#include "riscv-adapters/constants.cuh"
+#include "riscv/adapters/alu_u16.cuh"
 #include "riscv/cores/less_than.cuh"
+#include "system/memory/params.cuh"
 
 using namespace riscv;
-using namespace program;
 
-// Concrete type aliases for 64-bit
-using Rv64LessThanCoreRecord = LessThanCoreRecord<RV64_REGISTER_NUM_LIMBS>;
-using Rv64LessThanCore = LessThanCore<RV64_REGISTER_NUM_LIMBS>;
-template <typename T> using Rv64LessThanCoreCols = LessThanCoreCols<T, RV64_REGISTER_NUM_LIMBS>;
+using Rv64LessThanCoreRecord = LessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>;
+using Rv64LessThanCore = LessThanCore<BLOCK_FE_WIDTH, U16_BITS>;
+template <typename T>
+using Rv64LessThanCoreCols =
+    LessThanCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct LessThanCols {
-    Rv64BaseAluAdapterCols<T> adapter;
+    Rv64BaseAluU16AdapterCols<T> adapter;
     Rv64LessThanCoreCols<T> core;
 };
 
 struct LessThanRecord {
-    Rv64BaseAluAdapterRecord adapter;
+    Rv64BaseAluU16AdapterRecord adapter;
     Rv64LessThanCoreRecord core;
 };
 
@@ -30,7 +32,6 @@ __global__ void rv64_less_than_tracegen(
     DeviceBufferConstView<LessThanRecord> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
-    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -38,14 +39,14 @@ __global__ void rv64_less_than_tracegen(
     if (idx < records.len()) {
         auto const &record = records[idx];
 
-        auto adapter = Rv64BaseAluAdapter(
+        auto adapter = Rv64BaseAluU16Adapter(
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
-            BitwiseOperationLookup(bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
 
-        auto core = Rv64LessThanCore(BitwiseOperationLookup(bitwise_lookup_ptr));
+        auto core =
+            Rv64LessThanCore(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
         core.fill_trace_row(row.slice_from(COL_INDEX(LessThanCols, core)), record.core);
     } else {
         row.fill_zero(0, sizeof(LessThanCols<uint8_t>));
@@ -59,7 +60,6 @@ extern "C" int _rv64_less_than_tracegen(
     DeviceBufferConstView<LessThanRecord> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -67,13 +67,7 @@ extern "C" int _rv64_less_than_tracegen(
     auto [grid, block] = kernel_launch_params(height);
 
     rv64_less_than_tracegen<<<grid, block, 0, stream>>>(
-        d_trace,
-        height,
-        d_records,
-        d_range_checker,
-        range_checker_num_bins,
-        d_bitwise_lookup,
-        timestamp_max_bits
+        d_trace, height, d_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
     );
     return CHECK_KERNEL();
 }
