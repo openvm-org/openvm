@@ -22,8 +22,8 @@ pub use execute::{
 };
 pub use metered::{build_pc_to_chip, RvrMeteredInstance};
 pub use metered_cost::{
-    build_metered_cost_config, MeteredCostConfig, MeteredCostData, MeteredCostMeter, PureTracer,
-    PureTracerData, RvrMeteredCostInstance, RvrMeteredCostResult,
+    MeteredCostData, MeteredCostMeter, PureTracer, PureTracerData, RvrMeteredCostInstance,
+    RvrMeteredCostResult,
 };
 pub use pure::{RvrPureInstance, RvrPureResult};
 pub use rvr_openvm::{

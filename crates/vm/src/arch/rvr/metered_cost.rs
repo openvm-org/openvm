@@ -8,17 +8,12 @@ use rvr_openvm_lift::ExtensionRegistry;
 
 use super::{
     bridge::map_rvr_execute_error,
-    compile::ChipMapping,
     execute_metered_cost,
-    metered::build_pc_to_chip,
     state::{MeteredCostState, TracerPayload, TracerPtr},
     RvrCompiled,
 };
 use crate::{
-    arch::{
-        execution_mode::MeteredCostCtx, ExecutionError, ExecutorInventory, MeteredExecutor,
-        Streams, SystemConfig, VmState,
-    },
+    arch::{execution_mode::MeteredCostCtx, ExecutionError, Streams, SystemConfig, VmState},
     system::memory::online::GuestMemory,
 };
 
@@ -27,50 +22,14 @@ pub struct RvrMeteredCostResult {
     pub cost: u64,
 }
 
-/// Configuration for mapping PCs and memory operations to metering costs.
-pub struct MeteredCostConfig {
-    /// pc_index -> chip_idx. pc_index = (pc - pc_base) / 4.
-    /// `u32::MAX` means no chip (e.g., TERMINATE).
-    pub pc_to_chip: Vec<u32>,
-    pub pc_base: u32,
-    /// Per-AIR widths (for cost = height * width).
-    pub widths: Vec<usize>,
-}
-
-impl MeteredCostConfig {
-    /// Extract chip mapping for compilation.
-    pub fn chip_mapping(&self) -> ChipMapping {
-        ChipMapping {
-            pc_to_chip: self.pc_to_chip.clone(),
-            chip_widths: Some(self.widths.iter().map(|&w| w as u64).collect()),
-        }
-    }
-}
-
-pub struct RvrMeteredCostInstance<F: PrimeField32, E> {
+pub struct RvrMeteredCostInstance<F: PrimeField32> {
     pub(crate) system_config: SystemConfig,
     pub(crate) exe: Arc<VmExe<F>>,
-    pub(crate) inventory: Arc<ExecutorInventory<E>>,
-    pub(crate) executor_idx_to_air_idx: Vec<usize>,
     pub(crate) extensions: ExtensionRegistry<F>,
     pub(crate) compiled: RvrCompiled,
-}
-
-/// Build a `MeteredCostConfig` from the program, executor inventory, AIR index mapping, and widths.
-pub fn build_metered_cost_config<F, E>(
-    exe: &VmExe<F>,
-    inventory: &ExecutorInventory<E>,
-    executor_idx_to_air_idx: &[usize],
-    widths: &[usize],
-) -> MeteredCostConfig
-where
-    F: PrimeField32,
-{
-    MeteredCostConfig {
-        pc_to_chip: build_pc_to_chip(exe, inventory, executor_idx_to_air_idx),
-        pc_base: exe.program.pc_base,
-        widths: widths.to_vec(),
-    }
+    /// Must match the widths baked into `compiled` so per-block constants and
+    /// extension `trace_chip` calls compute cost against the same values.
+    pub(crate) widths: Vec<u64>,
 }
 
 /// C-compatible metered cost meter data.
@@ -112,18 +71,7 @@ impl TracerPayload for PureTracerData {
 
 pub type PureTracer = TracerPtr<PureTracerData>;
 
-/// Prepare metering data from a `MeteredCostConfig`.
-///
-/// Returns `widths_u64` for the C tracer.
-pub fn prepare_metered_cost(config: &MeteredCostConfig) -> Vec<u64> {
-    config.widths.iter().map(|&w| w as u64).collect()
-}
-
-impl<F, E> RvrMeteredCostInstance<F, E>
-where
-    F: PrimeField32,
-    E: MeteredExecutor<F>,
-{
+impl<F: PrimeField32> RvrMeteredCostInstance<F> {
     pub fn execute_metered_cost(
         &self,
         inputs: impl Into<Streams<F>>,
@@ -143,13 +91,6 @@ where
         mut vm_state: VmState<F, GuestMemory>,
         ctx: MeteredCostCtx,
     ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
-        let metered_cost_config = build_metered_cost_config(
-            self.exe.as_ref(),
-            self.inventory.as_ref(),
-            &self.executor_idx_to_air_idx,
-            &ctx.widths,
-        );
-
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         let result = tracing::info_span!("execute_metered_cost")
@@ -158,7 +99,7 @@ where
                     &self.compiled,
                     &self.extensions,
                     &mut vm_state,
-                    metered_cost_config,
+                    &self.widths,
                 )
             })
             .map_err(map_rvr_execute_error)?;

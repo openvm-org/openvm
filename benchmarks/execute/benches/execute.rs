@@ -87,11 +87,9 @@ static METERED_AOT_CACHE: OnceLock<
     Mutex<HashMap<String, Arc<(AotInstance<BabyBear, MeteredCtx>, MeteredCtx)>>>,
 > = OnceLock::new();
 #[cfg(feature = "rvr")]
-type BenchExecutor = <ExecuteConfig as VmExecutionConfig<BabyBear>>::Executor;
-#[cfg(feature = "rvr")]
 type RvrMetered = (RvrMeteredInstance<BabyBear>, MeteredCtx);
 #[cfg(feature = "rvr")]
-type RvrMeteredCost = RvrMeteredCostInstance<BabyBear, BenchExecutor>;
+type RvrMeteredCost = RvrMeteredCostInstance<BabyBear>;
 #[cfg(feature = "rvr")]
 static RVR_CACHE: OnceLock<Mutex<HashMap<String, Arc<RvrPureInstance<BabyBear>>>>> =
     OnceLock::new();
@@ -423,9 +421,7 @@ fn create_metered_rvr_instance(program: &str) -> Arc<(RvrMeteredInstance<BabyBea
 }
 
 #[cfg(feature = "rvr")]
-fn create_metered_cost_rvr_instance(
-    program: &str,
-) -> Arc<RvrMeteredCostInstance<BabyBear, BenchExecutor>> {
+fn create_metered_cost_rvr_instance(program: &str) -> Arc<RvrMeteredCostInstance<BabyBear>> {
     let cache = METERED_COST_RVR_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     let mut cache = cache.lock().unwrap();
     cache
