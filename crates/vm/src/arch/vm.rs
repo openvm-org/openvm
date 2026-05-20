@@ -43,8 +43,8 @@ use tracing::{info_span, instrument};
 use super::aot::AotInstance;
 #[cfg(feature = "rvr")]
 use super::rvr::{
-    self, bridge::map_rvr_compile_error, RvrMeteredCostInstance, RvrMeteredInstance,
-    RvrPureInstance,
+    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
+    compile_metered_cost, ChipMapping, RvrMeteredCostInstance, RvrMeteredInstance, RvrPureInstance,
 };
 use super::{
     execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx, Segment},
@@ -145,15 +145,6 @@ impl<F> From<Vec<Vec<F>>> for Streams<F> {
 /// Typedef for [PreflightInterpretedInstance] that is generic in `VC: VmExecutionConfig<F>`
 type PreflightInterpretedInstance2<F, VC> =
     PreflightInterpretedInstance<F, <VC as VmExecutionConfig<F>>::Executor>;
-
-/// Typedef for [RvrMeteredInstance] that is generic in `VC: VmExecutionConfig<F>`
-#[cfg(feature = "rvr")]
-type RvrMeteredInstance2<F, VC> = RvrMeteredInstance<F, <VC as VmExecutionConfig<F>>::Executor>;
-
-/// Typedef for [RvrMeteredCostInstance] that is generic in `VC: VmExecutionConfig<F>`
-#[cfg(feature = "rvr")]
-type RvrMeteredCostInstance2<F, VC> =
-    RvrMeteredCostInstance<F, <VC as VmExecutionConfig<F>>::Executor>;
 
 /// [VmExecutor] is the struct that can execute an _arbitrary_ program, provided in the form of a
 /// [VmExe], for a fixed set of OpenVM instructions corresponding to a [VmExecutionConfig].
@@ -294,7 +285,7 @@ where
         // execution can avoid passing `executor_idx_to_air_idx` altogether.
         let executor_idx_to_air_idx = vec![NO_CHIP as usize; self.inventory.executors.len()];
         let extensions = self.build_rvr_extensions(&executor_idx_to_air_idx);
-        let compiled = rvr::compile(exe, &extensions).map_err(map_rvr_compile_error)?;
+        let compiled = compile(exe, &extensions).map_err(map_rvr_compile_error)?;
 
         Ok(RvrPureInstance {
             system_config: self.inventory.config().clone(),
@@ -396,23 +387,27 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<RvrMeteredInstance<F, VC::Executor>, StaticProgramError> {
-        Self::metered_rvr_instance(self, exe, executor_idx_to_air_idx)
+    ) -> Result<RvrMeteredInstance<F>, StaticProgramError> {
+        self.metered_rvr_instance(exe, executor_idx_to_air_idx)
     }
 
     pub fn metered_rvr_instance(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<RvrMeteredInstance<F, VC::Executor>, StaticProgramError> {
+    ) -> Result<RvrMeteredInstance<F>, StaticProgramError> {
         let extensions = self.build_rvr_extensions(executor_idx_to_air_idx);
+        let chips = ChipMapping {
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx),
+            chip_widths: None,
+        };
+        let compiled = compile_metered(exe, &extensions, &chips).map_err(map_rvr_compile_error)?;
 
         Ok(RvrMeteredInstance {
             system_config: self.inventory.config().clone(),
             exe: Arc::new(exe.clone()),
-            inventory: self.inventory.clone(),
-            executor_idx_to_air_idx: executor_idx_to_air_idx.to_vec(),
             extensions,
+            compiled,
         })
     }
 
@@ -420,23 +415,32 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<RvrMeteredCostInstance<F, VC::Executor>, StaticProgramError> {
-        Self::metered_cost_rvr_instance(self, exe, executor_idx_to_air_idx)
+        widths: &[usize],
+    ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError> {
+        self.metered_cost_rvr_instance(exe, executor_idx_to_air_idx, widths)
     }
 
     pub fn metered_cost_rvr_instance(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<RvrMeteredCostInstance<F, VC::Executor>, StaticProgramError> {
+        widths: &[usize],
+    ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError> {
         let extensions = self.build_rvr_extensions(executor_idx_to_air_idx);
+        let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
+        let chips = ChipMapping {
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx),
+            chip_widths: Some(widths.clone()),
+        };
+        let compiled =
+            compile_metered_cost(exe, &extensions, &chips).map_err(map_rvr_compile_error)?;
 
         Ok(RvrMeteredCostInstance {
             system_config: self.inventory.config().clone(),
             exe: Arc::new(exe.clone()),
-            inventory: self.inventory.clone(),
-            executor_idx_to_air_idx: executor_idx_to_air_idx.to_vec(),
             extensions,
+            compiled,
+            widths,
         })
     }
 }
@@ -666,7 +670,7 @@ where
     pub fn metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrMeteredInstance2<Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    ) -> Result<RvrMeteredInstance<Val<E::SC>>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -680,7 +684,7 @@ where
     pub fn get_metered_rvr_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrMeteredInstance2<Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    ) -> Result<RvrMeteredInstance<Val<E::SC>>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -751,7 +755,7 @@ where
     pub fn metered_cost_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrMeteredCostInstance2<Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    ) -> Result<RvrMeteredCostInstance<Val<E::SC>>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -763,14 +767,20 @@ where
     pub fn get_metered_cost_rvr_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrMeteredCostInstance2<Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    ) -> Result<RvrMeteredCostInstance<Val<E::SC>>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
     {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        let widths: Vec<usize> = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.total_width())
+            .collect();
         self.executor()
-            .metered_cost_rvr_instance(exe, &executor_idx_to_air_idx)
+            .metered_cost_rvr_instance(exe, &executor_idx_to_air_idx, &widths)
     }
 
     pub fn preflight_interpreter(
