@@ -53,6 +53,8 @@ pub trait Sha2BlockHasherSubairConfig: Send + Sync + Clone {
 
     /// Number of 16-bit limbs in a SHA word
     const WORD_U16S: usize = Self::WORD_BITS / 16;
+    /// Bit width of one u16 limb.
+    const WORD_U16_BITS: usize = Self::WORD_BITS / Self::WORD_U16S;
     /// Number of 8-bit limbs in a SHA word
     const WORD_U8S: usize = Self::WORD_BITS / 8;
     /// Number of cells in a SHA block

@@ -1,7 +1,7 @@
 use std::ops::Mul;
 
 use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtxTrait, VmStateMut, U16_CELL_SIZE_BITS},
+    arch::{execution_mode::ExecutionCtxTrait, VmStateMut, BLOCK_FE_WIDTH},
     system::memory::{
         merkle::public_values::PUBLIC_VALUES_AS,
         online::{GuestMemory, TracingMemory},
@@ -39,6 +39,12 @@ pub use rdwrite::*;
 
 /// 256-bit heap integer stored as 32 bytes (32 limbs of 8-bits)
 pub const INT256_NUM_LIMBS: usize = 32;
+/// Bit width of one u16 memory-bus cell.
+pub const RV64_U16_LIMB_BITS: usize = 2 * RV64_CELL_BITS;
+/// Number of u16 cells needed for a low-32-bit RV64 pointer.
+pub const RV64_PTR_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
+/// Bit width covered by [`RV64_PTR_U16_LIMBS`].
+pub const RV64_PTR_BITS: usize = RV64_U16_LIMB_BITS * RV64_PTR_U16_LIMBS;
 
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;
@@ -47,30 +53,6 @@ pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 pub const RV_B_TYPE_IMM_BITS: usize = 13;
 
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
-
-/// Converts an OpenVM u16-cell pointer bit width to a RISC-V byte-pointer bit width.
-pub const fn rv64_byte_ptr_bits_from_openvm_ptr_bits(openvm_ptr_bits: usize) -> usize {
-    openvm_ptr_bits + U16_CELL_SIZE_BITS
-}
-
-/// Converts a RISC-V byte-pointer bit width to an OpenVM u16-cell pointer bit width.
-pub const fn openvm_ptr_bits_from_rv64_byte_ptr_bits(byte_ptr_bits: usize) -> usize {
-    byte_ptr_bits - U16_CELL_SIZE_BITS
-}
-
-/// Converts an OpenVM u16-cell pointer to a RISC-V byte pointer.
-pub const fn rv64_byte_ptr_from_openvm_ptr(ptr: u32) -> u32 {
-    ptr << U16_CELL_SIZE_BITS
-}
-
-/// Converts an aligned RISC-V byte pointer to an OpenVM u16-cell pointer.
-pub const fn openvm_ptr_from_rv64_byte_ptr(byte_ptr: u32) -> u32 {
-    assert!(
-        byte_ptr & ((1 << U16_CELL_SIZE_BITS) - 1) == 0,
-        "RISC-V byte pointer must be u16-cell aligned"
-    );
-    byte_ptr >> U16_CELL_SIZE_BITS
-}
 
 /// Converts an aligned byte pointer expression to an OpenVM pointer expression.
 pub fn byte_ptr_to_u16_ptr<AB: InteractionBuilder>(byte_ptr: impl Into<AB::Expr>) -> AB::Expr {
@@ -391,6 +373,64 @@ pub fn rv64_bytes_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
     rv64_u64_to_u32(u64::from_le_bytes(bytes))
 }
 
+/// Split a u32 pointer into little-endian u16 cells.
+#[inline(always)]
+pub fn u32_to_le_u16_cells(value: u32) -> [u16; RV64_PTR_U16_LIMBS] {
+    std::array::from_fn(|i| (value >> (RV64_U16_LIMB_BITS * i)) as u16)
+}
+
+/// Field-element form of [`u32_to_le_u16_cells`].
+#[inline(always)]
+pub fn u32_to_le_u16_limbs<F: PrimeCharacteristicRing>(value: u32) -> [F; RV64_PTR_U16_LIMBS] {
+    u32_to_le_u16_cells(value).map(F::from_u16)
+}
+
+/// Shift needed to bound a low-32-bit RV64 pointer by `ptr_max_bits`.
+#[inline(always)]
+pub fn rv64_ptr_max_bits_shift(ptr_max_bits: usize) -> usize {
+    assert!(
+        (RV64_U16_LIMB_BITS..=RV64_PTR_BITS).contains(&ptr_max_bits),
+        "ptr_max_bits must be in [RV64_U16_LIMB_BITS, RV64_PTR_BITS]"
+    );
+    RV64_PTR_BITS - ptr_max_bits
+}
+
+/// Return the scaled high u16 pointer cell used by pointer-width range checks.
+#[inline(always)]
+pub fn scale_ptr_high_u16(high_u16: u16, ptr_max_bits: usize) -> u32 {
+    u32::from(high_u16) << rv64_ptr_max_bits_shift(ptr_max_bits)
+}
+
+/// Return the scaled high u16 cell from a full low-32-bit RV64 pointer.
+#[inline(always)]
+pub fn scale_ptr_high_u16_from_ptr(ptr: u32, ptr_max_bits: usize) -> u32 {
+    let high_u16 = u32_to_le_u16_cells(ptr)[RV64_PTR_U16_LIMBS - 1];
+    scale_ptr_high_u16(high_u16, ptr_max_bits)
+}
+
+/// Expression form of [`scale_ptr_high_u16`].
+#[inline(always)]
+pub fn scale_ptr_high_u16_expr<T, V>(high_u16: V, ptr_max_bits: usize) -> T
+where
+    T: PrimeCharacteristicRing,
+    V: Into<T>,
+{
+    high_u16.into() * T::from_u64(1u64 << rv64_ptr_max_bits_shift(ptr_max_bits))
+}
+
+/// Compose little-endian u16 pointer limbs into one field expression/value.
+#[inline(always)]
+pub fn compose_rv64_u16_limbs<T, V>(limbs: &[V]) -> T
+where
+    T: PrimeCharacteristicRing,
+    V: Copy + Into<T>,
+{
+    assert_eq!(limbs.len(), RV64_PTR_U16_LIMBS);
+    limbs.iter().enumerate().fold(T::ZERO, |acc, (i, limb)| {
+        acc + (*limb).into() * T::from_u64(1u64 << (i * RV64_U16_LIMB_BITS))
+    })
+}
+
 /// Expand `N` limbs to `RV64_REGISTER_NUM_LIMBS` (8) by zero-padding the upper limbs. Used for
 /// register bus reads where the register holds a value in fewer than 8 bytes.
 pub fn expand_to_rv64_register<V: Clone + Into<T>, T: PrimeCharacteristicRing, const N: usize>(
@@ -399,6 +439,32 @@ pub fn expand_to_rv64_register<V: Clone + Into<T>, T: PrimeCharacteristicRing, c
     const { assert!(N <= RV64_REGISTER_NUM_LIMBS) }
     std::array::from_fn(|i| {
         if i < N {
+            limbs[i].clone().into()
+        } else {
+            T::ZERO
+        }
+    })
+}
+
+/// Expand `N` u16 limbs to one RV64 register bus block by zero-padding.
+pub fn expand_to_rv64_block<V, T, const N: usize>(limbs: &[V; N]) -> [T; BLOCK_FE_WIDTH]
+where
+    V: Clone + Into<T>,
+    T: PrimeCharacteristicRing,
+{
+    const { assert!(N <= BLOCK_FE_WIDTH) }
+    expand_to_rv64_block_from_slice(limbs)
+}
+
+/// Expand a slice of u16 limbs to one RV64 register bus block by zero-padding.
+pub fn expand_to_rv64_block_from_slice<V, T>(limbs: &[V]) -> [T; BLOCK_FE_WIDTH]
+where
+    V: Clone + Into<T>,
+    T: PrimeCharacteristicRing,
+{
+    assert!(limbs.len() <= BLOCK_FE_WIDTH);
+    std::array::from_fn(|i| {
+        if i < limbs.len() {
             limbs[i].clone().into()
         } else {
             T::ZERO

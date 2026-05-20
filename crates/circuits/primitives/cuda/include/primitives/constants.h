@@ -6,8 +6,11 @@
 namespace riscv {
 inline constexpr size_t RV64_REGISTER_NUM_LIMBS = 8;
 inline constexpr size_t RV64_WORD_NUM_LIMBS = 4;
-inline constexpr size_t RV64_CELL_BITS = 8;
-inline constexpr uint32_t RV64_CELL_MASK = (1u << RV64_CELL_BITS) - 1;
+inline constexpr size_t RV64_BYTE_BITS = 8;
+inline constexpr uint32_t RV64_BYTE_MASK = (1u << RV64_BYTE_BITS) - 1;
+inline constexpr size_t RV64_U16_LIMB_BITS = 2 * RV64_BYTE_BITS;
+inline constexpr size_t RV64_PTR_U16_LIMBS = RV64_WORD_NUM_LIMBS / 2;
+inline constexpr size_t RV64_PTR_BITS = RV64_U16_LIMB_BITS * RV64_PTR_U16_LIMBS;
 } // namespace riscv
 
 namespace program {

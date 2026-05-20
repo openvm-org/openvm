@@ -5,6 +5,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
 
 #include <cassert>
@@ -23,22 +24,19 @@ using namespace riscv;
 // Fill the single trace row for one keccakf_op record.
 //
 // Marked __noinline__ so the large local working set (200 B keccak state union,
-// MemoryAuxColsFactory, BitwiseOperationLookup, plus per-call spills around
-// keccakf_permutation) lives in this helper's own stack frame instead of the
-// kernel's. The kernel itself only does the index/dummy-row plumbing.
+// MemoryAuxColsFactory, plus per-call spills around keccakf_permutation) lives in this
+// helper's own stack frame instead of the kernel's. The kernel itself only does the
+// index/dummy-row plumbing.
 static __device__ __noinline__ void fill_keccakf_op_row(
     RowSlice row,
     KeccakfOpRecord const &rec,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
-    uint32_t *d_bitwise_lookup_ptr,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
-    MemoryAuxColsFactory mem_helper(
-        VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins), timestamp_max_bits
-    );
-    BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr);
+    VariableRangeChecker range_checker(d_range_checker_ptr, range_checker_num_bins);
+    MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
 
     // CUDA is little-endian, so the u64 word and byte representations below are the same memory
     // layout.
@@ -56,18 +54,17 @@ static __device__ __noinline__ void fill_keccakf_op_row(
     KECCAKF_OP_WRITE(timestamp, rec.timestamp);
     KECCAKF_OP_WRITE(rd_ptr, rec.rd_ptr);
 
-    // Write buffer_ptr_limbs
-    uint8_t buffer_ptr_limbs[RV64_WORD_NUM_LIMBS];
-    buffer_ptr_limbs[0] = rec.buffer_ptr & 0xFF;
-    buffer_ptr_limbs[1] = (rec.buffer_ptr >> 8) & 0xFF;
-    buffer_ptr_limbs[2] = (rec.buffer_ptr >> 16) & 0xFF;
-    buffer_ptr_limbs[3] = (rec.buffer_ptr >> 24) & 0xFF;
+    // Store the low-32-bit buffer pointer as u16 cells.
+    uint16_t buffer_ptr_limbs[RV64_PTR_U16_LIMBS];
+    u32_to_le_u16_limbs(buffer_ptr_limbs, rec.buffer_ptr);
     KECCAKF_OP_WRITE_ARRAY(buffer_ptr_limbs, buffer_ptr_limbs);
 
-    // Write preimage buffer
-    KECCAKF_OP_WRITE_ARRAY(preimage, rec.preimage_buffer_bytes);
-    // Write postimage buffer
-    KECCAKF_OP_WRITE_ARRAY(postimage, state.bytes);
+    uint16_t preimage_u16s[KECCAK_WIDTH_U16S];
+    uint16_t postimage_u16s[KECCAK_WIDTH_U16S];
+    bytes_to_le_u16_limbs(preimage_u16s, rec.preimage_buffer_bytes);
+    bytes_to_le_u16_limbs(postimage_u16s, state.bytes);
+    KECCAKF_OP_WRITE_ARRAY(preimage, preimage_u16s);
+    KECCAKF_OP_WRITE_ARRAY(postimage, postimage_u16s);
 
     // Fill rd_aux - memory read for rd_ptr
     uint32_t ts = rec.timestamp;
@@ -82,15 +79,11 @@ static __device__ __noinline__ void fill_keccakf_op_row(
         ts++;
     }
 
-    // Range check for buffer pointer (scaled MSB limb)
-    constexpr uint32_t RV64_TOTAL_BITS = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS;
-    uint32_t scaled_limb = (buffer_ptr_limbs[RV64_WORD_NUM_LIMBS - 1])
-                           << (RV64_TOTAL_BITS - pointer_max_bits);
-    bitwise_lookup.add_range(scaled_limb, scaled_limb);
-
-    // AIR bounds the pointer bytes before composing them.
-    bitwise_lookup.add_range(buffer_ptr_limbs[0], buffer_ptr_limbs[1]);
-    bitwise_lookup.add_range(buffer_ptr_limbs[2], buffer_ptr_limbs[3]);
+    // Bound the high u16 cell so the low-32-bit buffer pointer fits in pointer_max_bits.
+    range_checker.add_count(
+        scale_ptr_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
+        RV64_U16_LIMB_BITS
+    );
 }
 
 // Main kernel for KeccakfOpChip trace generation
@@ -102,7 +95,6 @@ __global__ void keccakf_op_tracegen(
     DeviceBufferConstView<KeccakfOpRecord> d_records,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
-    uint32_t *d_bitwise_lookup_ptr,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -127,7 +119,6 @@ __global__ void keccakf_op_tracegen(
             d_records[record_idx],
             d_range_checker_ptr,
             range_checker_num_bins,
-            d_bitwise_lookup_ptr,
             pointer_max_bits,
             timestamp_max_bits
         );
@@ -147,7 +138,6 @@ extern "C" int _keccakf_op_tracegen(
     DeviceBufferConstView<KeccakfOpRecord> d_records,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
-    uint32_t *d_bitwise_lookup_ptr,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
@@ -165,7 +155,6 @@ extern "C" int _keccakf_op_tracegen(
         d_records,
         d_range_checker_ptr,
         range_checker_num_bins,
-        d_bitwise_lookup_ptr,
         pointer_max_bits,
         timestamp_max_bits
     );

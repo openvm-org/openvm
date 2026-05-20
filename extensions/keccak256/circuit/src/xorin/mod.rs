@@ -6,7 +6,9 @@ pub mod tests;
 pub mod trace;
 
 use openvm_circuit::arch::VmChipWrapper;
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
+};
 
 #[derive(derive_new::new, Clone, Copy)]
 pub struct XorinVmExecutor {
@@ -18,6 +20,8 @@ pub struct XorinVmExecutor {
 // number of bits = 8
 pub struct XorinVmFiller {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
+    /// Used to range-check the u16 high cells of `buffer_ptr` and `input_ptr`.
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub pointer_max_bits: usize,
 }
 

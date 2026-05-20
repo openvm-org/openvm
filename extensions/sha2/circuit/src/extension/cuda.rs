@@ -1,7 +1,7 @@
 use openvm_circuit::{
     arch::{
-        AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder,
-        VmChipComplex, VmProverExtension,
+        to_byte_ptr_bits, AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena,
+        VmBuilder, VmChipComplex, VmProverExtension,
     },
     system::cuda::{
         extensions::{
@@ -11,7 +11,7 @@ use openvm_circuit::{
     },
 };
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
-use openvm_riscv_circuit::{adapters::rv64_byte_ptr_bits_from_openvm_ptr_bits, Rv64ImGpuProverExt};
+use openvm_riscv_circuit::Rv64ImGpuProverExt;
 use openvm_sha2_air::{Sha256Config, Sha512Config};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
@@ -29,8 +29,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
         _: &Sha2,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
-        let pointer_max_bits =
-            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.airs().pointer_max_bits());
+        let pointer_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker_gpu = get_inventory_range_checker(inventory);
@@ -42,6 +41,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
         let sha256_block_gpu = Sha2BlockHasherChipGpu::<Sha256Config>::new(
             sha256_shared_records.clone(),
             bitwise_gpu.clone(),
+            range_checker_gpu.clone(),
         );
         inventory.add_periphery_chip(sha256_block_gpu);
 
@@ -49,7 +49,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
         let sha256_main_gpu = Sha2MainChipGpu::<Sha256Config>::new(
             sha256_shared_records,
             range_checker_gpu.clone(),
-            bitwise_gpu.clone(),
             pointer_max_bits as u32,
             timestamp_max_bits as u32,
         );
@@ -61,6 +60,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
         let sha512_block_gpu = Sha2BlockHasherChipGpu::<Sha512Config>::new(
             sha512_shared_records.clone(),
             bitwise_gpu.clone(),
+            range_checker_gpu.clone(),
         );
         inventory.add_periphery_chip(sha512_block_gpu);
 
@@ -68,7 +68,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
         let sha512_main_gpu = Sha2MainChipGpu::<Sha512Config>::new(
             sha512_shared_records,
             range_checker_gpu,
-            bitwise_gpu,
             pointer_max_bits as u32,
             timestamp_max_bits as u32,
         );

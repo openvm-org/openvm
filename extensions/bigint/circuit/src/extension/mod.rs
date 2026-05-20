@@ -7,10 +7,10 @@ use openvm_bigint_transpiler::{
 };
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, MatrixRecordArena, RowMajorMatrixArena,
-        VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmField,
-        VmProverExtension,
+        to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, MatrixRecordArena,
+        RowMajorMatrixArena, VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension,
+        VmField, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemPort},
 };
@@ -31,7 +31,7 @@ use openvm_riscv_adapters::{
     Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
     Rv64VecHeapBranchAdapterAir, Rv64VecHeapBranchAdapterExecutor, Rv64VecHeapBranchAdapterFiller,
 };
-use openvm_riscv_circuit::{adapters::rv64_byte_ptr_bits_from_openvm_ptr_bits, Rv64ImCpuProverExt};
+use openvm_riscv_circuit::Rv64ImCpuProverExt;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
 
@@ -96,8 +96,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Int256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits =
-            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
+        let pointer_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
         let alu = Rv64BaseAlu256Executor::new(
             AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(pointer_max_bits)),
@@ -159,8 +158,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker = inventory.range_checker().bus;
-        let pointer_max_bits =
-            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
+        let pointer_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
         let bitwise_lu = {
             // A trick to get around Rust's borrow rules
@@ -290,9 +288,8 @@ where
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let pointer_max_bits = rv64_byte_ptr_bits_from_openvm_ptr_bits(
-            inventory.airs().config().memory_config.pointer_max_bits,
-        );
+        let pointer_max_bits =
+            to_byte_ptr_bits(inventory.airs().config().memory_config.pointer_max_bits);
 
         let bitwise_lu = {
             let existing_chip = inventory
