@@ -244,8 +244,11 @@ where
 }
 
 pub(crate) fn asm_to_lib(asm_source: &str) -> Result<Library, StaticProgramError> {
-    let start = std::time::Instant::now();
+    let total_start = std::time::Instant::now();
+    let asm_bytes = asm_source.len();
+
     // Create a temporary file for the .s file.
+    let t_write_start = std::time::Instant::now();
     let src_file = tempfile::Builder::new()
         .prefix("asm_x86_run")
         .suffix(".s")
@@ -256,6 +259,7 @@ pub(crate) fn asm_to_lib(asm_source: &str) -> Result<Library, StaticProgramError
         .write(asm_source.as_bytes())
         .map_err(|e| StaticProgramError::FailToWriteTemporaryFile { err: e.to_string() })?;
     let src_path = src_file.into_temp_path();
+    let t_write_ms = t_write_start.elapsed().as_millis();
 
     // Create a temporary file for the .so file.
     let lib_path = tempfile::Builder::new()
@@ -266,6 +270,7 @@ pub(crate) fn asm_to_lib(asm_source: &str) -> Result<Library, StaticProgramError
         .into_temp_path();
 
     // gcc -fPIC -Wl,-z,noexecstack -shared asm_x86_run.s -o asm_x86_run.so
+    let t_gcc_start = std::time::Instant::now();
     let status = Command::new("gcc")
         .arg("-fPIC")
         .arg("-Wl,-z,noexecstack")
@@ -280,11 +285,20 @@ pub(crate) fn asm_to_lib(asm_source: &str) -> Result<Library, StaticProgramError
             err: status.to_string(),
         });
     }
+    let t_gcc_ms = t_gcc_start.elapsed().as_millis();
 
+    let t_dlopen_start = std::time::Instant::now();
     let lib = unsafe { Library::new(&lib_path).expect("Failed to load library") };
-    tracing::trace!(
-        "Time taken to build and load .so for AotInstance metered execution: {}ms",
-        start.elapsed().as_millis()
+    let t_dlopen_ms = t_dlopen_start.elapsed().as_millis();
+
+    tracing::info!(
+        target: "openvm::aot::timing",
+        "asm_to_lib: asm_bytes={} write_s={}ms gcc={}ms dlopen={}ms total={}ms",
+        asm_bytes,
+        t_write_ms,
+        t_gcc_ms,
+        t_dlopen_ms,
+        total_start.elapsed().as_millis()
     );
     Ok(lib)
 }

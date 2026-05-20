@@ -35,9 +35,11 @@ where
     where
         E: MeteredExecutor<F>,
     {
-        let start = std::time::Instant::now();
-
+        let total_start = std::time::Instant::now();
         let program = &exe.program;
+        let num_insns = program.len();
+
+        let t_buf_start = std::time::Instant::now();
         let pre_compute_max_size = get_metered_pre_compute_max_size(program, inventory);
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf =
@@ -48,19 +50,33 @@ where
             executor_idx_to_air_idx,
             &mut split_pre_compute_buf,
         )?;
+        let t_buf_ms = t_buf_start.elapsed().as_millis();
 
+        let t_asm_start = std::time::Instant::now();
         let asm_source = Self::create_metered_asm(
             exe,
             inventory,
             executor_idx_to_air_idx,
             pre_compute_insns.as_ptr(),
         )?;
+        let t_asm_ms = t_asm_start.elapsed().as_millis();
+        let asm_bytes = asm_source.len();
+
+        let t_lib_start = std::time::Instant::now();
         let lib = asm_to_lib(&asm_source)?;
+        let t_lib_ms = t_lib_start.elapsed().as_millis();
 
         let init_memory = exe.init_memory.clone();
-        tracing::trace!(
-            "Time taken to initialize AotInstance metered execution: {}ms",
-            start.elapsed().as_millis()
+
+        tracing::info!(
+            target: "openvm::aot::timing",
+            "AotInstance::new_metered: num_insns={} asm_bytes={} pre_compute={}ms create_asm={}ms asm_to_lib={}ms total={}ms",
+            num_insns,
+            asm_bytes,
+            t_buf_ms,
+            t_asm_ms,
+            t_lib_ms,
+            total_start.elapsed().as_millis(),
         );
         Ok(Self {
             system_config: inventory.config().clone(),
