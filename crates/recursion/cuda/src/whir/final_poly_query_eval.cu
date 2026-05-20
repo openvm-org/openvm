@@ -158,12 +158,13 @@ extern "C" int _final_poly_query_eval_tracegen(
     size_t rows_per_proof,
     const size_t *round_offsets_d,
     size_t log_final_poly_len,
-    const size_t *num_queries_per_round_d
+    const size_t *num_queries_per_round_d,
+    cudaStream_t stream
 ) {
     assert((height & (height - 1)) == 0);
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    final_poly_query_eval_tracegen<<<grid, block>>>(
+    final_poly_query_eval_tracegen<<<grid, block, 0, stream>>>(
         trace_d,
         num_valid_rows,
         height,

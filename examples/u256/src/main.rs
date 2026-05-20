@@ -3,6 +3,7 @@
 use core::array;
 
 use openvm as _;
+use openvm_bigint_guest as _;
 use openvm_ruint::aliases::U256;
 
 const N: usize = 16;

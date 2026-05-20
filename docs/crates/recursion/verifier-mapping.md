@@ -119,7 +119,7 @@ These checks are enforced at **circuit construction time** rather than by AIR co
 
 | Verifier Step | Recursion Circuit AIR(s) | Key Buses | Notes |
 |---|---|---|---|
-| Sample lambda (stacking batching) | OpeningClaimsAir | TranscriptBus | Lambda is sampled by OpeningClaimsAir (`stacking/opening/air.rs:500`, in `OpeningClaimsAir::eval`) for batching column opening claims with rotation |
+| Sample lambda (stacking batching) | OpeningClaimsAir | TranscriptBus | Lambda is sampled by OpeningClaimsAir (`stacking/opening/air.rs:554–563`, in `OpeningClaimsAir::eval`) for batching column opening claims with rotation |
 | Compute s_0 from column opening claims t_i | OpeningClaimsAir | ColumnClaimsBus, LiftedHeightsBus, AirShapeBus, ClaimCoefficientsBus | OpeningClaimsAir receives column openings from the batch constraint phase and computes the batched stacking claim coefficients |
 | Univariate sumcheck round | UnivariateRoundAir | TranscriptBus, SumcheckClaimsBus, EqRandValuesLookupBus, EqKernelLookupBus | Observes univariate coefficients, verifies sum over multiplicative domain matches s_0, samples u_0 |
 | Quadratic sumcheck rounds (n_stack rounds) | SumcheckRoundsAir | TranscriptBus, SumcheckClaimsBus, EqBaseBus, EqRandValuesLookupBus, ConstraintSumcheckRandomnessBus, WhirOpeningPointBus | Each round: observe s(1), s(2), sample u_i, interpolate. Also receives the batch constraint r values via ConstraintSumcheckRandomnessBus and sends u values via WhirOpeningPointBus |

@@ -5,6 +5,8 @@
 #include "trace_access.h"
 #include <cassert>
 
+/// Thread-safe append-only device buffer. `capacity` is the maximum number of
+/// `T` records that can be stored (not the byte size or field-element count).
 template <typename T> struct SharedBuffer {
     T *data;
     uint32_t *idx;
@@ -20,6 +22,8 @@ template <typename T> struct SharedBuffer {
     }
 };
 
+/// Poseidon2 record buffer backed by a SharedBuffer of FpArray<16> records.
+/// `capacity` is the number of FpArray<16> records, NOT the number of Fp elements.
 struct Poseidon2Buffer {
     SharedBuffer<FpArray<16>> state;
 

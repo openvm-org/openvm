@@ -535,14 +535,14 @@ extern "C" int _finalize_merkle_tree(
     return CHECK_KERNEL();
 }
 
-extern "C" int _calculate_zero_hash(digest_t *zero_hash, const size_t size) {
-    calculate_zero_hash<<<1, 1>>>(zero_hash, size);
+extern "C" int _calculate_zero_hash(digest_t *zero_hash, const size_t size, cudaStream_t stream) {
+    calculate_zero_hash<<<1, 1, 0, stream>>>(zero_hash, size);
     return CHECK_KERNEL();
 }
 
-extern "C" int _get_prefix_scan_temp_bytes(uint32_t *d_arr, size_t n, size_t *h_temp_n) {
+extern "C" int _get_prefix_scan_temp_bytes(uint32_t *d_arr, size_t n, size_t *h_temp_n, cudaStream_t stream) {
     size_t temp_bytes = 0;
-    cub::DeviceScan::InclusiveSum(nullptr, temp_bytes, d_arr, d_arr, n, cudaStreamPerThread);
+    cub::DeviceScan::InclusiveSum(nullptr, temp_bytes, d_arr, d_arr, n, stream);
     *h_temp_n = temp_bytes;
     return CHECK_KERNEL();
 }
@@ -573,9 +573,13 @@ extern "C" int _update_merkle_tree(
     size_t const *actual_subtree_heights,
     Fp *d_poseidon2_raw_buffer,
     uint32_t *d_poseidon2_buffer_idx,
-    size_t poseidon2_capacity
+    size_t poseidon2_capacity,
+    cudaStream_t stream
 ) {
     assert(num_leaves > 0);
+    // poseidon2_capacity arrives from Rust in units of Fp elements; convert to record count.
+    assert(poseidon2_capacity % 16 == 0 && "poseidon2_capacity must be a multiple of 16");
+    size_t poseidon2_record_capacity = poseidon2_capacity / 16;
     uint32_t num_children = num_leaves;
     size_t const trace_height = [](uint32_t x) {
         return x ? (1u << (32 - __builtin_clz(x - 1))) : 0;
@@ -583,11 +587,11 @@ extern "C" int _update_merkle_tree(
 
     {
         auto [grid, block] = kernel_launch_params(num_leaves, 256);
-        prepare_for_updating<<<grid, block>>>(child_buf, layer, num_children);
+        prepare_for_updating<<<grid, block, 0, stream>>>(child_buf, layer, num_children);
     }
     {
         auto [grid, block] = kernel_launch_params(num_subtrees);
-        initial_subtrees_advance<<<grid, block>>>(
+        initial_subtrees_advance<<<grid, block, 0, stream>>>(
             subtrees, actual_subtree_heights, num_subtrees, subtree_height
         );
     }
@@ -598,7 +602,7 @@ extern "C" int _update_merkle_tree(
         // First, find for each child whether it has a different parent from the previous one
         {
             auto [grid, block] = kernel_launch_params(num_children);
-            set_parent_id_adjacent_differences<<<grid, block>>>(child_buf, parent_ids, layer, num_children, h);
+            set_parent_id_adjacent_differences<<<grid, block, 0, stream>>>(child_buf, parent_ids, layer, num_children, h);
             if (int err = CHECK_KERNEL(); err) {
                 return err;
             }
@@ -609,7 +613,7 @@ extern "C" int _update_merkle_tree(
             cub::DeviceScan::InclusiveSum(
                 d_temp_storage, need_tmp_storage_bytes,
                 parent_ids, parent_ids, num_children,
-                cudaStreamPerThread
+                stream
             );
             if (int err = CHECK_KERNEL(); err) {
                 return err;
@@ -618,7 +622,7 @@ extern "C" int _update_merkle_tree(
         // Finally, reorder the children
         {
             auto [grid, block] = kernel_launch_params(num_children);
-            group_by_parent<<<grid, block>>>(
+            group_by_parent<<<grid, block, 0, stream>>>(
                 child_buf,
                 parent_ids,
                 tmp_buf,
@@ -636,22 +640,22 @@ extern "C" int _update_merkle_tree(
             parent_ids + (num_children - 1),
             sizeof(uint32_t),
             cudaMemcpyDeviceToHost,
-            cudaStreamPerThread
+            stream
         );
         if (int err = CHECK_KERNEL(); err) {
             return err;
         }
-        cudaStreamSynchronize(cudaStreamPerThread);
+        cudaStreamSynchronize(stream);
         ++num_parents;
         {
             auto [grid, block] = kernel_launch_params(num_subtrees);
-            adjust_subtrees_before_layer_update<<<grid, block>>>(
+            adjust_subtrees_before_layer_update<<<grid, block, 0, stream>>>(
                 subtrees, actual_subtree_heights, num_subtrees, h
             );
         }
         merkle_trace_offset -= 2 * num_parents;
         auto [grid, block] = kernel_launch_params(num_parents, 256);
-        update_merkle_layer<<<grid, block>>>(
+        update_merkle_layer<<<grid, block, 0, stream>>>(
             h,
             zero_hash,
             actual_subtree_heights,
@@ -664,11 +668,11 @@ extern "C" int _update_merkle_tree(
             trace_height,
             d_poseidon2_raw_buffer,
             d_poseidon2_buffer_idx,
-            poseidon2_capacity
+            poseidon2_record_capacity
         );
         num_children = num_parents;
     }
-    update_to_root<<<1, 1>>>(
+    update_to_root<<<1, 1, 0, stream>>>(
         child_buf,
         layer,
         num_children,
@@ -681,7 +685,7 @@ extern "C" int _update_merkle_tree(
         subtree_height + __builtin_ctz(num_subtrees),
         d_poseidon2_raw_buffer,
         d_poseidon2_buffer_idx,
-        poseidon2_capacity
+        poseidon2_record_capacity
     );
 
     return CHECK_KERNEL();

@@ -1,66 +1,20 @@
 # Big Integers
 
-The OpenVM BigInt extension (aka `Int256`) provides two structs: `U256` and `I256`. These structs can be used to perform 256 bit arithmetic operations. The functional part is provided by the `openvm-bigint-guest` crate, which is a guest library that can be used in any OpenVM program.
+The OpenVM BigInt extension (aka `Int256`) provides 256-bit integer instructions for both unsigned and signed arithmetic. The low-level guest-side interface is provided by the `openvm-bigint-guest` crate, which can be used in any OpenVM program.
 
 ## `U256`
 
-The `U256` struct is a 256-bit unsigned integer type.
-
-### Constants
-
-The `U256` struct has the following constants:
-
-- `MAX`: The maximum value of a `U256`.
-- `MIN`: The minimum value of a `U256`.
-- `ZERO`: The zero constant.
-
-### Constructors
-
-The `U256` struct implements the following constructors: `from_u8`, `from_u32`, and `from_u64`.
-
-### Binary Operations
-
-The `U256` struct implements the following binary operations: `addition`, `subtraction`, `multiplication`, `bitwise and`, `bitwise or`, `bitwise xor`, `bitwise shift right`, and `bitwise shift left`. All operations will wrap the result when the result is outside the range of the `U256` type.
-
-All of the operations can be used in 6 different ways:
-`U256 op U256` or `U256 op &U256` or `&U256 op U256` or `&U256 op &U256` or `U256 op= U256` or `&U256 op= U256`.
-
-### Other
-
-When using the `U256` struct with `target_os = "zkvm"`, the struct utilizes efficient implementations of comparison operators as well as the `clone` method.
+For a Rust `U256` type, use the [Ruint guest library](/book/guest-libraries/ruint). See the full example [here](https://github.com/openvm-org/openvm/blob/main/examples/u256/src/main.rs).
 
 ## `I256`
 
-The `I256` struct is a 256-bit signed integer type. The `I256` struct is very similar to the `U256` struct.
-
-### Constants
-
-The `I256` struct has the following constants:
-
-- `MAX`: The maximum value of a `I256`.
-- `MIN`: The minimum value of a `I256`.
-- `ZERO`: The zero constant.
-
-### Binary Operations
-
-The `I256` struct implements the following binary operations: `addition`, `subtraction`, `multiplication`, `bitwise and`, `bitwise or`, `bitwise xor`, `bitwise shift right`, and `bitwise shift left`. All operations will wrap the result when the result is outside the range of the `I256` type. Note that unlike the `U256`, when performing the shift right operation `I256` will perform an arithmetic shift right (i.e. sign extends the result).
-
-All of the operations can be used in 6 different ways:
-`I256 op I256` or `I256 op &I256` or `&I256 op I256` or `&I256 op &I256` or `I256 op= I256` or `&I256 op= I256`.
-
-### Constructors
-
-The `I256` struct implements the following constructors: `from_i8`, `from_i32`, and `from_i64`.
-
-### Other
-
-When using the `I256` struct with `target_os = "zkvm"`, the struct utilizes efficient implementations of comparison operators as well as the `clone` method.
+The extension also supports signed 256-bit arithmetic. The checked-in signed example uses `alloy_primitives::I256`, with `ruint` patched to the [OpenVM fork](https://github.com/openvm-org/uint) underneath. See the full example [here](https://github.com/openvm-org/openvm/blob/main/examples/i256/src/main.rs).
 
 
 
 ## External Linking
 
-The Bigint Guest extension provides another way to use the native implementation. It provides external functions that are meant to be linked to other external libraries. The external libraries can use these functions as a hook for the 256 bit integer native implementations. Enabled only when the `target_os = "zkvm"`. All of the functions are defined as `unsafe extern "C" fn`. Also, note that you must enable the feature `export-intrinsics` to make them globally linkable.
+The BigInt guest extension provides another way to use the native implementation. It exposes external functions that are meant to be linked from other libraries as hooks for the 256-bit integer intrinsics. This is enabled only when `target_os = "zkvm"`. All of the functions are defined as `unsafe extern "C" fn`. Also note that you must enable the `export-intrinsics` feature to make them globally linkable. The exported hooks are the `zkvm_u256_*` symbols listed below.
 
 - `zkvm_u256_wrapping_add_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a + b`.
 - `zkvm_u256_wrapping_sub_impl(result: *mut u8, a: *const u8, b: *const u8)`: takes in a pointer to the result, and two pointers to the inputs. `result = a - b`.
@@ -78,15 +32,21 @@ The Bigint Guest extension provides another way to use the native implementation
 And in the external library, you can do the following:
 
 ```rust
+use core::mem::MaybeUninit;
+
 extern "C" {
     fn zkvm_u256_wrapping_add_impl(result: *mut u8, a: *const u8, b: *const u8);
 }
 
-fn wrapping_add(a: &Custom_U256, b: &Custom_U256) -> Custom_U256 {
+fn wrapping_add(a: &CustomU256, b: &CustomU256) -> CustomU256 {
     #[cfg(target_os = "zkvm")] {
-        let mut result: MaybeUninit<Custom_U256> = MaybeUninit::uninit();
+        let mut result = MaybeUninit::<CustomU256>::uninit();
         unsafe {
-            zkvm_u256_wrapping_add_impl(result.as_mut_ptr() as *mut u8, a as *const u8, b as *const u8);
+            zkvm_u256_wrapping_add_impl(
+                result.as_mut_ptr() as *mut u8,
+                a as *const CustomU256 as *const u8,
+                b as *const CustomU256 as *const u8,
+            );
         }
         unsafe { result.assume_init() }
     }

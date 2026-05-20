@@ -35,7 +35,7 @@ We introduce two new opcodes as part of the [deferral extension](/specs/openvm/i
 - Reads an input commit (i.e. `input_i_commit: Digest`) from memory
 - Computes `output_i_raw` and `output_i_commit = h_i(output_i_raw)`
 - Sets `input_i_accumulator = π(input_i_accumulator, input_i_commit)` and `output_i_accumulator = π(output_i_accumulator, output_i_commit)`
-- Writes `(output_i_commit, output_i_len)` to memory, where `output_i_len: u64` is the byte-length of the raw output
+- Writes `(output_i_commit, output_i_len)` to memory, where `output_i_len` is stored as an 8-byte little-endian integer but is currently constrained to a zero-extended 32-bit byte length. The raw output length must be divisible by `DIGEST_SIZE`.
 
 | Operand | Meaning |
 |---------|---------|
@@ -67,6 +67,7 @@ The actual `input_i_raw` is entirely unconstrained in the VM. The validity of th
 We provide the following guarantees on the opcodes defined above:
 
 - Reading an invalid `input_i_commit` or `output_i_commit` will result in an invalid proof
+- Deferred outputs are only supported when `output_i_len` is divisible by `DIGEST_SIZE`
 - `OUTPUT` does not ensure the size of allocated write memory
 
 ### Extension Chips and Constraints

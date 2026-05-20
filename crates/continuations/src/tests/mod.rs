@@ -14,7 +14,7 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, proof::Proof, StarkEngine, SystemParams,
+    keygen::types::MultiStarkVerifyingKey, proof::Proof, AirRef, StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::{
     config::{
@@ -219,7 +219,13 @@ fn test_internal_recursive_vk_stabilization(def_hook_cached_commit_set: bool) ->
     let config = test_rv32im_config();
 
     let engine = Engine::new(app_system_params());
-    let (_, app_vk) = engine.keygen(&config.create_airs()?.into_airs().collect_vec());
+    let (_, app_vk) = engine.keygen(
+        &config
+            .create_airs()?
+            .into_airs()
+            .map(|a| a as AirRef<_>)
+            .collect_vec(),
+    );
     let def_hook_cached_commit = def_hook_cached_commit_set.then_some([F::ZERO; DIGEST_SIZE]);
 
     const MAX_LEAF_NUM_PROOFS: usize = 3;
@@ -290,14 +296,15 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
         None,
         None,
     );
-    let ctx = root_prover.generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
+    let engine = RootEngine::new(root_prover.get_vk().inner.params.clone());
+    let ctx = root_prover.generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB, _>(
         internal_recursive_proof,
         &user_pvs_proof,
+        &engine.device().device_ctx,
     );
     let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
 
     let vk = root_prover.get_vk();
-    let engine = RootEngine::new(vk.inner.params.clone());
     engine.verify(&vk, &root_proof)?;
     Ok(())
 }
@@ -325,10 +332,12 @@ fn test_root_prover_trace_heights() -> Result<()> {
         None,
     );
     let root_pk = root_base_prover.get_pk();
+    let engine = RootEngine::new(root_pk.params.clone());
     let ctx = root_base_prover
-        .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
+        .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB, _>(
             internal_recursive_proof.clone(),
             &user_pvs_proof,
+            &engine.device().device_ctx,
         )
         .unwrap();
     let mut trace_heights = ctx
@@ -349,10 +358,12 @@ fn test_root_prover_trace_heights() -> Result<()> {
         None,
         Some(trace_heights.clone()),
     );
+    let engine2 = RootEngine::new(root_prover.get_pk().params.clone());
     let ctx = root_prover
-        .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB>(
+        .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB, _>(
             internal_recursive_proof,
             &user_pvs_proof,
+            &engine2.device().device_ctx,
         )
         .unwrap();
 

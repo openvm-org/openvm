@@ -17,10 +17,10 @@ OpenVM is a modular zkVM (zero-knowledge virtual machine) framework built on STA
 
 ### Rust Toolchain
 
-- Rust 1.90.0 (stable), specified in `rust-toolchain.toml`
+- Rust 1.91.1 (stable), specified in `rust-toolchain.toml`
 - Nightly is only needed for:
   - `rustfmt` (unstable formatting options)
-  - guest program compilation / some integration tests (requires `rust-src`, pinned nightly: `nightly-2025-08-02`)
+  - guest program compilation / some integration tests (requires `rust-src`, pinned nightly: `nightly-2026-01-18`)
 
 ### Building
 
@@ -65,7 +65,7 @@ cargo nextest run --cargo-profile=fast -p openvm-circuit -- test_name
 cd extensions/rv32im/circuit && cargo nextest run --cargo-profile=fast
 
 # Integration tests for extensions (requires nightly rust-src for guest program compilation)
-rustup component add rust-src --toolchain nightly-2025-08-02
+rustup component add rust-src --toolchain nightly-2026-01-18
 cd extensions/rv32im/tests && cargo nextest run --cargo-profile=fast --profile=heavy
 
 # Run with parallelism (used in CI)

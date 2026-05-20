@@ -38,6 +38,10 @@ impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for DeferralCircuitCo
 where
     Val<SC>: PrimeCharacteristicRing,
 {
+    fn constant_trace_height(&self) -> Option<usize> {
+        Some(next_power_of_two_or_zero(self.count.len()))
+    }
+
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let width = DeferralCircuitCountCols::<u8>::width();
         let height = next_power_of_two_or_zero(self.count.len());

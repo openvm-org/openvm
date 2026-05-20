@@ -98,6 +98,8 @@ impl<'a, F: VmField, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
         state[..perm_preimage.len()].copy_from_slice(perm_preimage);
         let count = self.records.entry(state).or_insert(AtomicU32::new(0));
         count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.nonempty
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
 

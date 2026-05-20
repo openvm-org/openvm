@@ -131,10 +131,11 @@ extern "C" int _stacked_slice_data(
     uint32_t num_commits,
     uint32_t num_slices,
     uint32_t n_stack,
-    uint32_t l_skip
+    uint32_t l_skip,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(num_slices, 256);
-    stacked_slice_data_kernel<<<grid, block>>>(
+    stacked_slice_data_kernel<<<grid, block, 0, stream>>>(
         d_out,
         d_slice_offsets,
         d_stacked_trace_data,
@@ -154,7 +155,8 @@ extern "C" int _compute_coefficients_temp_bytes(
     uint64_t *d_coeff_keys,
     uint32_t num_slices,
     size_t *d_num_coeffs,
-    size_t *h_temp_bytes_out
+    size_t *h_temp_bytes_out,
+    cudaStream_t stream
 ) {
     size_t reduce_storage_bytes = 0;
     cub::DeviceReduce::ReduceByKey(
@@ -167,7 +169,7 @@ extern "C" int _compute_coefficients_temp_bytes(
         d_num_coeffs,
         FpExtAdd{},
         num_slices,
-        cudaStreamPerThread
+        stream
     );
     *h_temp_bytes_out = reduce_storage_bytes;
     return CHECK_KERNEL();
@@ -189,10 +191,11 @@ extern "C" int _compute_coefficients(
     uint32_t l_skip,
     void *d_temp_buffer,
     size_t temp_bytes,
-    size_t *d_num_coeffs
+    size_t *d_num_coeffs,
+    cudaStream_t stream
 ) {
     auto [grid, block] = kernel_launch_params(num_slices, 256);
-    compute_coefficients_kernel<<<grid, block>>>(
+    compute_coefficients_kernel<<<grid, block, 0, stream>>>(
         d_coeff_terms,
         d_coeff_term_keys,
         d_precomps,
@@ -221,7 +224,7 @@ extern "C" int _compute_coefficients(
         d_num_coeffs,
         FpExtAdd{},
         num_slices,
-        cudaStreamPerThread
+        stream
     );
     return CHECK_KERNEL();
 }

@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::SubAir;
+use openvm_circuit_primitives::{ColumnsAir, SubAir};
 use openvm_continuations::circuit::subair::{
     MerkleRootBus, MerkleTreeCols, MerkleTreeInternalBus, MerkleTreeSubAir,
 };
@@ -26,6 +26,8 @@ use crate::{
  * - root commitment is sent to `MerkleRootBus`
  * - leaf payload is sent on `OutputValBus` starting at OUTPUT_USER_PVS_START_IDX
  */
+#[derive(ColumnsAir)]
+#[columns_via(MerkleTreeCols<u8>)]
 pub struct UserPvsCommitValuesAir {
     pub subair: MerkleTreeSubAir,
     pub output_val_bus: OutputValBus,

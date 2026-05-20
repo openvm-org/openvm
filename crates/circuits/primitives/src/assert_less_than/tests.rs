@@ -23,6 +23,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::assert_less_than_dummy_tracegen,
+    crate::utils::test_device_ctx,
     openvm_cuda_backend::{
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
@@ -33,6 +34,7 @@ use super::*;
 use crate::{
     utils::test_engine_small,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 
 // We only create an Air for testing purposes
@@ -40,7 +42,7 @@ use crate::{
 // repr(C) is needed to make sure that the compiler does not reorder the fields
 // we assume the order of the fields when using borrow or borrow_mut
 #[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy, Debug, new)]
+#[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug, new)]
 pub struct AssertLessThanCols<T, const AUX_LEN: usize> {
     pub x: T,
     pub y: T,
@@ -48,7 +50,8 @@ pub struct AssertLessThanCols<T, const AUX_LEN: usize> {
     pub aux: LessThanAuxCols<T, AUX_LEN>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+#[columns_via(AssertLessThanCols<u8, AUX_LEN>)]
 pub struct AssertLtTestAir<const AUX_LEN: usize>(pub AssertLtSubAir);
 
 impl<F: Field, const AUX_LEN: usize> BaseAirWithPublicValues<F> for AssertLtTestAir<AUX_LEN> {}
@@ -262,17 +265,18 @@ fn test_cuda_assert_less_than_tracegen() {
     let decomp: usize = 8;
     const AUX_LEN: usize = 4;
 
+    let device_ctx = test_device_ctx();
     let num_pairs = 4;
-    let trace = DeviceMatrix::<F>::with_capacity(num_pairs, 3 + AUX_LEN);
+    let trace = DeviceMatrix::<F>::with_capacity_on(num_pairs, 3 + AUX_LEN, &device_ctx);
     let pairs = vec![[14321, 26883], [0, 1], [28, 120], [337, 456]]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>()
-        .to_device()
+        .to_device_on(&device_ctx)
         .unwrap();
 
     let rc_num_bins = (1 << (decomp + 1)) as usize;
-    let rc_histogram = DeviceBuffer::<u32>::with_capacity(rc_num_bins);
+    let rc_histogram = DeviceBuffer::<u32>::with_capacity_on(rc_num_bins, &device_ctx);
 
     unsafe {
         assert_less_than_dummy_tracegen(
@@ -282,6 +286,7 @@ fn test_cuda_assert_less_than_tracegen() {
             max_bits,
             AUX_LEN,
             &rc_histogram,
+            device_ctx.stream.as_raw(),
         )
         .unwrap();
     }
@@ -301,5 +306,5 @@ fn test_cuda_assert_less_than_tracegen() {
             .collect(),
         3 + AUX_LEN,
     ));
-    assert_eq_host_and_device_matrix(expected_cpu_matrix, &trace);
+    assert_eq_host_and_device_matrix(expected_cpu_matrix, &trace, &device_ctx);
 }

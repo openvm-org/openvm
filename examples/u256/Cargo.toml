@@ -10,7 +10,10 @@ members = []
 openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
 ] }
-openvm-ruint = { git = "https://github.com/openvm-org/openvm.git", package = "ruint" }
+openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git", features = [
+    "export-intrinsics",
+] }
+openvm-ruint = { git = "https://github.com/openvm-org/uint.git", branch = "v1.14.0-openvm", package = "ruint" }
 
 [features]
 default = []
@@ -18,4 +21,4 @@ default = []
 # remove this if copying example outside of monorepo
 [patch."https://github.com/openvm-org/openvm.git"]
 openvm = { path = "../../crates/toolchain/openvm" }
-ruint = { path = "../../guest-libs/ruint" }
+openvm-bigint-guest = { path = "../../extensions/bigint/guest" }

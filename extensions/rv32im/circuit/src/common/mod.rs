@@ -11,14 +11,8 @@ mod aot {
             execution_mode::{metered::memory_ctx::MemoryCtx, MeteredCtx},
             AotError, SystemConfig, VmExecState, ADDR_SPACE_OFFSET,
         },
-        system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, CHUNK},
+        system::memory::{online::GuestMemory, CHUNK},
     };
-    use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
-
-    /// The minimum block size is 4, but RISC-V `lb` only requires alignment of 1 and `lh` only
-    /// requires alignment of 2 because the instructions are implemented by doing an access of
-    /// block size 4.
-    const DEFAULT_U8_BLOCK_SIZE_BITS: u8 = 2;
     /// This is DIRTY because PAGE_BITS is a generic parameter of E2 context.
     const DEFAULT_PAGE_BITS: usize = 6;
 
@@ -99,69 +93,6 @@ mod aot {
             format!("   pinsrd xmm{xmm_map_reg}, {gpr}, 1\n")
         }
     }
-    pub(crate) fn update_adapter_heights_asm(
-        config: &SystemConfig,
-        _address_space: u32,
-    ) -> Result<String, AotError> {
-        let min_block_size_bits = config.memory_config.min_block_size_bits();
-        if min_block_size_bits[RV32_REGISTER_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
-            println!("RV32_REGISTER_AS must have a minimum block size of 4");
-            return Err(AotError::Other(String::from(
-                "RV32_REGISTER_AS must have a minimum block size of 4",
-            )));
-        }
-        if min_block_size_bits[RV32_MEMORY_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
-            println!("RV32_MEMORY_AS must have a minimum block size of 4");
-            return Err(AotError::Other(String::from(
-                "RV32_MEMORY_AS must have a minimum block size of 4",
-            )));
-        }
-        if min_block_size_bits[PUBLIC_VALUES_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
-            println!("PUBLIC_VALUES_AS must have a minimum block size of 4");
-            return Err(AotError::Other(String::from(
-                "PUBLIC_VALUES_AS must have a minimum block size of 4",
-            )));
-        }
-
-        // `update_adapter_heights_asm` rewrites the following code in ASM for
-        // `on_memory_operation`: ```
-        // pub fn update_adapter_heights_batch(
-        //     &self,
-        //     trace_heights: &mut [u32],
-        //     address_space: u32,
-        //     size_bits: u32,
-        //     num: u32,
-        // ) {
-        //     let align_bits = unsafe {
-        //         *self
-        //             .min_block_size_bits
-        //             .get_unchecked(address_space as usize)
-        //     };
-        //
-        //     for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {
-        //         let adapter_idx = self.adapter_offset + adapter_bits as usize - 1;
-        //         debug_assert!(adapter_idx < trace_heights.len());
-        //         unsafe {
-        //             *trace_heights.get_unchecked_mut(adapter_idx) +=
-        //                 num << (size_bits - adapter_bits + 1);
-        //         }
-        //     }
-        // }
-        // ```
-        // 
-        // For a specific RV32 instruction, the variables can be treated as constants at AOT
-        // compilation time:
-        // - `address_space`: always a constant because it is derived from an Instruction
-        // - `num`: always 1 in `on_memory_operation`
-        // - `align_bits`: always a constant because `address_space` is a constant
-        // - `size_bits`: RV32 instruction always read 4 bytes(in the AIR level). So `size` is
-        //   always 4 bytes. So `size_bits` is always 2.
-        //
-        // If we ignore the deferral address space, `min_block_size_bits`` is always
-        // `DEFAULT_U8_BLOCK_SIZE=4`. Therefore, `align_bits` is always 2. So the loop will
-        // never be executed and we can leave the function empty.
-        Ok("".to_string())
-    }
 
     /// Generate ASM code for updating the boundary merkle heights.
     ///
@@ -235,35 +166,29 @@ mod aot {
         // 
         // For a specific RV32 instruction, the variables can be treated as constants at AOT compilation time:
         // Inputs:
-        // - `chunk`: always 8(CHUNK) because we only support when continuation is enabled.
+        // - `chunk`: always CHUNK (8), the merkle leaf size.
         // - `address_space`: always a constant because it is derived from an Instruction
         // - `size`: RV32 instruction always read 4 bytes(in the AIR level).
         // - `self.memory_dimensions.address_height`: known at AOT compilation time because it is derived from the memory configuration.
         // Inside the function body:
-        // - `num_blocks`: `(size + self.chunk - 1) >> self.chunk_bits = (4 + 8 - 1) >> 3 = 1`
+        // - `num_blocks`: `(size + chunk - 1) >> chunk_bits = (4 + 8 - 1) >> 3 = 1`
         // - `as_offset = (addr_space - ADDR_SPACE_OFFSET) as u64) << self.address_height)`: constant because `address_space` and `address_height` constant
-        // - `start_chunk_id`: `ptr >> self.chunk_bits`
-        // - `start_block_id`: `start_chunk_id + as_offset`
+        // - `chunk_idx`: `ptr >> chunk_bits`
+        // - `start_block_id`: `chunk_idx + as_offset`
         // - `end_block_id`: `start_block_id + num_blocks = start_block_id +1`
         // - `start_page_id`: `start_block_id >> PAGE_BITS`
         // - `end_page_id`: ((end_block_id - 1) >> PAGE_BITS) + 1 = start_block_id >> PAGE_BITS + 1;
         //
         // Therefore the loop only iterates once for `page_id = start_page_id`.
 
-        let initial_block_size: usize = config.initial_block_size();
-        if initial_block_size != CHUNK {
-            return Err(AotError::Other(format!(
-                "initial_block_size must be {CHUNK}, got {initial_block_size}"
-            )));
-        }
         let chunk_bits = CHUNK.ilog2();
         let as_offset = ((address_space - ADDR_SPACE_OFFSET) as u64)
             << (config.memory_config.memory_dimensions().address_height);
 
         let mut asm_str = String::new();
-        // `start_chunk_id`: `ptr >> self.chunk_bits`
+        // `chunk_idx`: `ptr >> chunk_bits`
         asm_str += &format!("    shr {ptr_reg}, {chunk_bits}\n");
-        // `start_block_id`: `start_chunk_id + as_offset`
+        // `start_block_id`: `chunk_idx + as_offset`
         asm_str += &format!("    add {ptr_reg}, {as_offset}\n");
         // `start_page_id`: `start_block_id >> PAGE_BITS`
         // NOTE: This is DIRTY because PAGE_BITS is a generic parameter of E2 context.

@@ -1,9 +1,9 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
         testing::memory::air::{MemoryDummyAir, MemoryDummyChip},
-        MemoryConfig,
+        MemoryConfig, DEFAULT_BLOCK_SIZE,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryBus},
@@ -15,7 +15,8 @@ use openvm_circuit_primitives::{
     Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
+use openvm_cuda_common::{copy::MemCopyH2D, stream::GpuDeviceCtx};
+use openvm_instructions::DEFERRAL_AS;
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -28,7 +29,7 @@ use crate::{
 };
 
 pub struct DeviceMemoryTester {
-    pub chip_for_block: HashMap<usize, FixedSizeMemoryTester>,
+    pub(crate) chip: FixedSizeMemoryTester,
     pub memory: TracingMemory,
     pub inventory: MemoryInventoryGPU,
     pub hasher_chip: Option<Arc<Poseidon2PeripheryChipGPU>>,
@@ -40,54 +41,28 @@ pub struct DeviceMemoryTester {
 }
 
 impl DeviceMemoryTester {
-    pub fn volatile(
+    pub fn new(
         memory: TracingMemory,
         mem_bus: MemoryBus,
         mem_config: MemoryConfig,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
+        device_ctx: GpuDeviceCtx,
     ) -> Self {
-        let mut chip_for_block = HashMap::new();
-        for log_block_size in 0..6 {
-            let block_size = 1 << log_block_size;
-            chip_for_block.insert(block_size, FixedSizeMemoryTester::new(mem_bus, block_size));
-        }
-        let range_bus = range_checker.cpu_chip.as_ref().unwrap().bus();
-        Self {
-            chip_for_block,
-            memory,
-            inventory: MemoryInventoryGPU::volatile(mem_config.clone(), range_checker),
-            hasher_chip: None,
-            config: mem_config,
-            mem_bus,
-            range_bus,
-        }
-    }
-
-    pub fn persistent(
-        memory: TracingMemory,
-        mem_bus: MemoryBus,
-        mem_config: MemoryConfig,
-        range_checker: Arc<VariableRangeCheckerChipGPU>,
-    ) -> Self {
-        let mut chip_for_block = HashMap::new();
-        for log_block_size in 0..6 {
-            let block_size = 1 << log_block_size;
-            chip_for_block.insert(block_size, FixedSizeMemoryTester::new(mem_bus, block_size));
-        }
         let range_bus = range_checker.cpu_chip.as_ref().unwrap().bus();
         let sbox_regs = 1;
         let poseidon2_periphery = Arc::new(Poseidon2PeripheryChipGPU::new(
             1 << 20, // probably enough for our tests
             sbox_regs,
+            device_ctx.clone(),
         ));
-        let mut inventory = MemoryInventoryGPU::persistent(
+        let mut inventory = MemoryInventoryGPU::new(
             mem_config.clone(),
-            range_checker,
             poseidon2_periphery.clone(),
+            device_ctx.clone(),
         );
         inventory.set_initial_memory(&memory.data.memory);
         Self {
-            chip_for_block,
+            chip: FixedSizeMemoryTester::new(mem_bus, device_ctx),
             memory,
             inventory,
             hasher_chip: Some(poseidon2_periphery),
@@ -102,62 +77,43 @@ impl DeviceMemoryTester {
     }
 
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
+        const { assert!(N == DEFAULT_BLOCK_SIZE) };
         let t = self.memory.timestamp();
-        let (t_prev, data) = if addr_space <= 3 {
-            let (t_prev, data) =
-                unsafe { self.memory.read::<u8, N, 4>(addr_space as u32, ptr as u32) };
-            (t_prev, data.map(F::from_u8))
+        let (t_prev, data) = if addr_space as u32 == DEFERRAL_AS {
+            unsafe { self.memory.read::<F, N>(addr_space as u32, ptr as u32) }
         } else {
-            unsafe { self.memory.read::<F, N, 1>(addr_space as u32, ptr as u32) }
+            let (t_prev, data) =
+                unsafe { self.memory.read::<u8, N>(addr_space as u32, ptr as u32) };
+            (t_prev, data.map(F::from_u8))
         };
-        self.chip_for_block.get_mut(&N).unwrap().receive(
-            addr_space as u32,
-            ptr as u32,
-            &data,
-            t_prev,
-        );
-        self.chip_for_block
-            .get_mut(&N)
-            .unwrap()
-            .send(addr_space as u32, ptr as u32, &data, t);
+        self.chip
+            .receive(addr_space as u32, ptr as u32, &data, t_prev);
+        self.chip.send(addr_space as u32, ptr as u32, &data, t);
         data
     }
 
     pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
+        const { assert!(N == DEFAULT_BLOCK_SIZE) };
         let t = self.memory.timestamp();
-        let (t_prev, data_prev) = if addr_space <= 3 {
-            let (t_prev, data_prev) = unsafe {
-                self.memory.write::<u8, N, 4>(
-                    addr_space as u32,
-                    ptr as u32,
-                    data.map(|x| x.as_canonical_u32() as u8),
-                )
-            };
-            (t_prev, data_prev.map(F::from_u8))
-        } else {
-            unsafe {
-                self.memory
-                    .write::<F, N, 1>(addr_space as u32, ptr as u32, data)
-            }
+        let (t_prev, data_prev) = unsafe {
+            self.memory.write::<u8, N>(
+                addr_space as u32,
+                ptr as u32,
+                data.map(|x| x.as_canonical_u32() as u8),
+            )
         };
-        self.chip_for_block.get_mut(&N).unwrap().receive(
-            addr_space as u32,
-            ptr as u32,
-            &data_prev,
-            t_prev,
-        );
-        self.chip_for_block
-            .get_mut(&N)
-            .unwrap()
-            .send(addr_space as u32, ptr as u32, &data, t);
+        let data_prev = data_prev.map(F::from_u8);
+        self.chip
+            .receive(addr_space as u32, ptr as u32, &data_prev, t_prev);
+        self.chip.send(addr_space as u32, ptr as u32, &data, t);
     }
 }
 
-pub struct FixedSizeMemoryTester(pub(crate) MemoryDummyChip<F>);
+pub struct FixedSizeMemoryTester(pub(crate) MemoryDummyChip<F>, GpuDeviceCtx);
 
 impl FixedSizeMemoryTester {
-    pub fn new(bus: MemoryBus, block_size: usize) -> Self {
-        Self(MemoryDummyChip::new(MemoryDummyAir::new(bus, block_size)))
+    pub fn new(bus: MemoryBus, device_ctx: GpuDeviceCtx) -> Self {
+        Self(MemoryDummyChip::new(MemoryDummyAir::new(bus)), device_ctx)
     }
 
     pub fn send(&mut self, addr_space: u32, ptr: u32, data: &[F], timestamp: u32) {
@@ -182,15 +138,17 @@ impl<RA> Chip<RA, GpuBackend> for FixedSizeMemoryTester {
         records.resize(height * width, F::ZERO);
         let num_records = height;
 
-        let trace = DeviceMatrix::<F>::with_capacity(height, width);
+        let trace = DeviceMatrix::<F>::with_capacity_on(height, width, &self.1);
+        trace.buffer().fill_zero_on(&self.1).unwrap();
         unsafe {
             memory_testing::tracegen(
                 trace.buffer(),
                 height,
                 width,
-                &records.to_device().unwrap(),
+                &records.to_device_on(&self.1).unwrap(),
                 num_records,
-                self.0.air.block_size,
+                DEFAULT_BLOCK_SIZE,
+                self.1.stream.as_raw(),
             )
             .unwrap();
         }

@@ -2,7 +2,7 @@
 
 use derive_new::new;
 use openvm_cuda_backend::prelude::F;
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
 
 /// A struct that has the same memory layout as `uint2` to be used in FFI functions
 #[repr(C)]
@@ -24,6 +24,7 @@ pub mod bitwise_op_lookup {
             d_cpu_count: *const u32,
             d_trace: *mut F,
             num_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
 
         #[cfg(test)]
@@ -32,6 +33,7 @@ pub mod bitwise_op_lookup {
             records: DeviceBufferView,
             bitwise_count: *mut u32,
             bitwise_num_bits: u32,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -40,6 +42,7 @@ pub mod bitwise_op_lookup {
         d_cpu_count: &Option<DeviceBuffer<u32>>,
         d_trace: &DeviceBuffer<F>,
         num_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_bitwise_op_lookup_tracegen(
             d_count.as_ptr() as *const u32,
@@ -49,6 +52,7 @@ pub mod bitwise_op_lookup {
                 .unwrap_or(std::ptr::null()),
             d_trace.as_mut_ptr(),
             num_bits,
+            stream,
         ))
     }
 
@@ -58,12 +62,14 @@ pub mod bitwise_op_lookup {
         records: &DeviceBuffer<u32>,
         bitwise_count: &DeviceBuffer<F>,
         bitwise_num_bits: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_bitwise_dummy_tracegen(
             d_trace.as_mut_ptr(),
             records.view(),
             bitwise_count.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            stream,
         ))
     }
 }
@@ -79,6 +85,7 @@ pub mod range_tuple {
             d_sizes: *const u32,
             num_dims: u32,
             num_bins: usize,
+            stream: cudaStream_t,
         ) -> i32;
 
         #[cfg(test)]
@@ -89,6 +96,7 @@ pub mod range_tuple {
             data_height: usize,
             sizes: *const u32,
             num_sizes: usize,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -97,6 +105,7 @@ pub mod range_tuple {
         d_cpu_count: &Option<DeviceBuffer<u32>>,
         d_trace: &DeviceBuffer<F>,
         d_sizes: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_range_tuple_checker_tracegen(
             d_count.as_ptr() as *const u32,
@@ -108,6 +117,7 @@ pub mod range_tuple {
             d_sizes.as_ptr(),
             d_sizes.len() as u32,
             d_count.len(),
+            stream,
         ))
     }
 
@@ -117,6 +127,7 @@ pub mod range_tuple {
         d_trace: &DeviceBuffer<F>,
         d_rc_count: &DeviceBuffer<F>,
         sizes: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_range_tuple_dummy_tracegen(
             d_data.as_ptr(),
@@ -125,6 +136,7 @@ pub mod range_tuple {
             d_data.len() / sizes.len(),
             sizes.as_ptr(),
             sizes.len(),
+            stream,
         ))
     }
 }
@@ -138,6 +150,7 @@ pub mod var_range {
             d_cpu_count: *const u32,
             d_trace: *mut F,
             num_bins: usize,
+            stream: cudaStream_t,
         ) -> i32;
 
         #[cfg(test)]
@@ -147,6 +160,7 @@ pub mod var_range {
             d_rc_count: *mut u32,
             data_len: usize,
             range_max_bits: usize,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -154,6 +168,7 @@ pub mod var_range {
         d_count: &DeviceBuffer<F>,
         d_cpu_count: &Option<DeviceBuffer<u32>>,
         d_trace: &DeviceBuffer<F>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_range_checker_tracegen(
             d_count.as_ptr() as *const u32,
@@ -163,6 +178,7 @@ pub mod var_range {
                 .unwrap_or(std::ptr::null()),
             d_trace.as_mut_ptr(),
             d_count.len(),
+            stream,
         ))
     }
 
@@ -171,6 +187,7 @@ pub mod var_range {
         d_data: &DeviceBuffer<u32>,
         d_trace: &DeviceBuffer<F>,
         d_rc_count: &DeviceBuffer<F>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_var_range_dummy_tracegen(
             d_data.as_ptr(),
@@ -178,6 +195,7 @@ pub mod var_range {
             d_rc_count.as_mut_ptr() as *mut u32,
             d_data.len(),
             d_rc_count.len(),
+            stream,
         ))
     }
 }
@@ -193,6 +211,7 @@ pub mod encoder {
             max_degree: u32,
             reserve_invalid: bool,
             expected_k: u32,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -202,6 +221,7 @@ pub mod encoder {
         max_degree: u32,
         reserve_invalid: bool,
         expected_k: u32,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_encoder_tracegen(
             d_trace.as_mut_ptr(),
@@ -209,6 +229,7 @@ pub mod encoder {
             max_degree,
             reserve_invalid,
             expected_k,
+            stream,
         ))
     }
 }
@@ -218,7 +239,13 @@ pub mod is_equal {
     use super::*;
 
     extern "C" {
-        fn _isequal_tracegen(output: *mut F, inputs_x: *mut F, inputs_y: *mut F, n: u32) -> i32;
+        fn _isequal_tracegen(
+            output: *mut F,
+            inputs_x: *mut F,
+            inputs_y: *mut F,
+            n: u32,
+            stream: cudaStream_t,
+        ) -> i32;
 
         fn _isequal_array_tracegen(
             output: *mut F,
@@ -226,6 +253,7 @@ pub mod is_equal {
             inputs_y: *mut F,
             array_len: u32,
             n: u32,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -233,12 +261,14 @@ pub mod is_equal {
         d_output: &DeviceBuffer<F>,
         d_inputs_x: &DeviceBuffer<F>,
         d_inputs_y: &DeviceBuffer<F>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_isequal_tracegen(
             d_output.as_mut_ptr(),
             d_inputs_x.as_mut_ptr(),
             d_inputs_y.as_mut_ptr(),
             d_inputs_x.len() as u32,
+            stream,
         ))
     }
 
@@ -247,6 +277,7 @@ pub mod is_equal {
         d_inputs_x: &DeviceBuffer<F>,
         d_inputs_y: &DeviceBuffer<F>,
         array_len: usize,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_isequal_array_tracegen(
             d_output.as_mut_ptr(),
@@ -254,6 +285,7 @@ pub mod is_equal {
             d_inputs_y.as_mut_ptr(),
             array_len as u32,
             (d_inputs_x.len() / array_len) as u32,
+            stream,
         ))
     }
 }
@@ -263,17 +295,19 @@ pub mod is_zero {
     use super::*;
 
     extern "C" {
-        fn _iszero_tracegen(output: *mut F, inputs: *mut F, n: u32) -> i32;
+        fn _iszero_tracegen(output: *mut F, inputs: *mut F, n: u32, stream: cudaStream_t) -> i32;
     }
 
     pub unsafe fn dummy_tracegen(
         d_output: &DeviceBuffer<F>,
         d_inputs: &DeviceBuffer<F>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_iszero_tracegen(
             d_output.as_mut_ptr(),
             d_inputs.as_mut_ptr(),
             d_inputs.len() as u32,
+            stream,
         ))
     }
 }
@@ -291,6 +325,7 @@ pub mod less_than {
             aux_len: u32,
             rc_count: *mut u32,
             rc_num_bins: u32,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn _less_than_tracegen(
@@ -301,6 +336,7 @@ pub mod less_than {
             aux_len: u32,
             rc_count: *mut u32,
             rc_num_bins: u32,
+            stream: cudaStream_t,
         ) -> i32;
 
         fn _less_than_array_tracegen(
@@ -312,6 +348,7 @@ pub mod less_than {
             aux_len: u32,
             rc_count: *mut u32,
             rc_num_bins: u32,
+            stream: cudaStream_t,
         ) -> i32;
     }
 
@@ -322,6 +359,7 @@ pub mod less_than {
         max_bits: usize,
         aux_len: usize,
         rc_count: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_assert_less_than_tracegen(
             trace.as_mut_ptr(),
@@ -331,6 +369,7 @@ pub mod less_than {
             aux_len as u32,
             rc_count.as_mut_ptr(),
             rc_count.len() as u32,
+            stream,
         ))
     }
 
@@ -341,6 +380,7 @@ pub mod less_than {
         max_bits: usize,
         aux_len: usize,
         rc_count: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_less_than_tracegen(
             trace.as_mut_ptr(),
@@ -350,9 +390,11 @@ pub mod less_than {
             aux_len as u32,
             rc_count.as_mut_ptr(),
             rc_count.len() as u32,
+            stream,
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn less_than_array_dummy_tracegen(
         trace: &DeviceBuffer<F>,
         trace_height: usize,
@@ -361,6 +403,7 @@ pub mod less_than {
         array_len: usize,
         aux_len: usize,
         rc_count: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_less_than_array_tracegen(
             trace.as_mut_ptr(),
@@ -371,6 +414,7 @@ pub mod less_than {
             aux_len as u32,
             rc_count.as_mut_ptr(),
             rc_count.len() as u32,
+            stream,
         ))
     }
 }

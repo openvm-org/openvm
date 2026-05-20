@@ -26,7 +26,7 @@ use crate::{
     is_less_than::IsLtSubAir,
     utils::test_engine_small,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    SubAir, TraceSubRowGenerator,
+    ColumnsAir, SubAir, TraceSubRowGenerator,
 };
 
 /// Struct purely for testing purposes. We could make this have a const generic just like
@@ -45,6 +45,9 @@ pub struct IsLessThanCols<T> {
 #[derive(Clone, Copy)]
 pub struct IsLtTestAir(pub IsLtSubAir);
 
+// No columns provided: `IsLessThanCols` intentionally uses `Vec<T>` for `lower_decomp` (see comment
+// on the struct), so it can't derive `StructReflection`.
+impl ColumnsAir for IsLtTestAir {}
 impl<F: Field> BaseAirWithPublicValues<F> for IsLtTestAir {}
 impl<F: Field> PartitionedBaseAir<F> for IsLtTestAir {}
 impl<F: Field> BaseAir<F> for IsLtTestAir {
@@ -199,17 +202,18 @@ fn test_cuda_less_than_tracegen() {
     let decomp: usize = 8;
     const AUX_LEN: usize = 2;
 
+    let device_ctx = crate::utils::test_device_ctx();
     let num_pairs = 4;
-    let trace = DeviceMatrix::<F>::with_capacity(num_pairs, 3 + AUX_LEN);
+    let trace = DeviceMatrix::<F>::with_capacity_on(num_pairs, 3 + AUX_LEN, &device_ctx);
     let pairs = vec![[14321, 26883], [1, 0], [773, 773], [337, 456]]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>()
-        .to_device()
+        .to_device_on(&device_ctx)
         .unwrap();
 
     let rc_num_bins = (1 << (decomp + 1)) as usize;
-    let rc_histogram = DeviceBuffer::<u32>::with_capacity(rc_num_bins);
+    let rc_histogram = DeviceBuffer::<u32>::with_capacity_on(rc_num_bins, &device_ctx);
 
     unsafe {
         less_than_dummy_tracegen(
@@ -219,6 +223,7 @@ fn test_cuda_less_than_tracegen() {
             max_bits,
             AUX_LEN,
             &rc_histogram,
+            device_ctx.stream.as_raw(),
         )
         .unwrap();
     }
@@ -239,5 +244,5 @@ fn test_cuda_less_than_tracegen() {
         3 + AUX_LEN,
     ));
 
-    assert_eq_host_and_device_matrix(expected_cpu_matrix, &trace);
+    assert_eq_host_and_device_matrix(expected_cpu_matrix, &trace, &device_ctx);
 }

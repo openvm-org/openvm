@@ -62,8 +62,13 @@ Similar to `moduli_declare!`, this macro also creates extern functions for arith
 
 ```rust
 extern "C" {
-    fn sw_add_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize);
+    fn sw_add_ne_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize);
     fn sw_double_extern_func_Secp256k1Point(rd: usize, rs1: usize);
+    fn sw_setup_extern_func_Secp256k1Point(
+        uninit: *mut core::ffi::c_void,
+        p1: *const u8,
+        p2: *const u8,
+    );
 }
 ```
 
@@ -73,16 +78,20 @@ extern "C" {
 #[allow(non_snake_case)]
 #[cfg(target_os = "zkvm")]
 mod openvm_intrinsics_ffi_2 {
-    use :openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
+    use ::openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
 
     #[no_mangle]
-    extern "C" fn sw_add_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize) {
+    extern "C" fn sw_add_ne_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize) {
         // ...
     }
     // other externs
 
     #[no_mangle]
-    extern "C" fn sw_setup_extern_func_Secp256k1Point() {
+    extern "C" fn sw_setup_extern_func_Secp256k1Point(
+        uninit: *mut core::ffi::c_void,
+        p1: *const u8,
+        p2: *const u8,
+    ) {
         #[cfg(target_os = "zkvm")]
         {
             // ...
@@ -111,8 +120,8 @@ sw_init! {
 }
 ```
 
-The reason is that, for example, the function `sw_add_extern_func_Secp256k1Point` remains unimplemented, but we implement `sw_add_extern_func_Sw`.
+The reason is that, for example, the function `sw_add_ne_extern_func_Secp256k1Point` remains unimplemented, but we implement `sw_add_ne_extern_func_Sw`.
 
 6. `cargo openvm build` will automatically generate a call to `sw_init!` based on `openvm.toml`.
-Note that `openvm.toml` must contain the name of each struct created by `sw_declare!` as a string (in the example at the top of this document, its `"Secp256k1"`).
+Note that `openvm.toml` must contain the name of each struct created by `sw_declare!` as a string (in the example at the top of this document, its `"Secp256k1Point"`).
 The SDK also supports this feature.

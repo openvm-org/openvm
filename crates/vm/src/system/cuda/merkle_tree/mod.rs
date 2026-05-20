@@ -1,15 +1,15 @@
 use std::{ffi::c_void, sync::Arc};
 
 use openvm_circuit::{
-    arch::{MemoryConfig, ADDR_SPACE_OFFSET},
+    arch::{MemoryConfig, ADDR_SPACE_OFFSET, DEFAULT_BLOCK_SIZE},
     system::memory::{merkle::MemoryMerkleCols, TimestampedEquipartition},
     utils::next_power_of_two_or_zero,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
-    copy::{cuda_memcpy, MemCopyD2H, MemCopyH2D},
+    copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
-    stream::{cudaStreamPerThread, current_stream_sync, CudaEvent},
+    stream::{CudaEvent, GpuDeviceCtx},
 };
 use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
@@ -24,7 +24,12 @@ pub mod cuda;
 use cuda::merkle_tree::*;
 
 type H = [F; DIGEST_WIDTH];
-pub const TIMESTAMPED_BLOCK_WIDTH: usize = 11;
+/// Width of `((u32, u32), TimestampedValues<F, DEFAULT_BLOCK_SIZE>)` in u32 units.
+/// = 2 (key) + 1 (timestamp) + DEFAULT_BLOCK_SIZE (values)
+pub const TIMESTAMPED_BLOCK_WIDTH: usize = 3 + DEFAULT_BLOCK_SIZE;
+/// Width of `((u32, u32), TimestampedValues<F, DIGEST_WIDTH>)` in u32 units.
+/// = 2 (key) + 1 (timestamp) + DIGEST_WIDTH (values)
+pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + DIGEST_WIDTH;
 
 /// A Merkle subtree stored in a single flat buffer, combining a vertical path and a heap-ordered
 /// binary tree.
@@ -35,9 +40,9 @@ pub const TIMESTAMPED_BLOCK_WIDTH: usize = 11;
 /// - The remaining elements store the subtree nodes in heap-order (breadth-first), with `size`
 ///   leaves and `2 * size - 1` total nodes.
 ///
-/// All GPU work is issued on the per-thread default stream (`cudaStreamPerThread`).
-/// `build_completion_event` records when the build kernels finish so that downstream
-/// consumers can synchronize.
+/// All GPU work is issued on the subtree's `GpuDeviceCtx` stream.
+/// `build_completion_event` records when the build kernels finish so that downstream consumers can
+/// synchronize.
 pub struct MemoryMerkleSubTree {
     build_completion_event: Option<CudaEvent>,
     pub buf: DeviceBuffer<H>,
@@ -55,7 +60,7 @@ impl MemoryMerkleSubTree {
     ///
     /// `addr_space_size` must be a power of two or zero.
     /// `max_size` must be a power of two.
-    pub fn new(addr_space_size: usize, max_size: usize) -> Self {
+    pub fn new(addr_space_size: usize, max_size: usize, device_ctx: &GpuDeviceCtx) -> Self {
         assert!(
             addr_space_size == 0 || addr_space_size.is_power_of_two(),
             "The actual address space size must be a power of two"
@@ -76,7 +81,8 @@ impl MemoryMerkleSubTree {
             path_len + (2 * addr_space_size - 1),
             addr_space_size
         );
-        let buf = DeviceBuffer::<H>::with_capacity(path_len + (2 * addr_space_size - 1));
+        let buf =
+            DeviceBuffer::<H>::with_capacity_on(path_len + (2 * addr_space_size - 1), device_ctx);
 
         Self {
             build_completion_event: None,
@@ -95,7 +101,7 @@ impl MemoryMerkleSubTree {
         }
     }
 
-    /// Builds the Merkle subtree on the per-thread default stream (`cudaStreamPerThread`).
+    /// Builds the Merkle subtree on the provided `GpuDeviceCtx` stream.
     /// Also reconstructs the vertical path if `path_len > 0`, and records a completion event.
     ///
     /// Here `addr_space_idx` is the address space _shifted_ by ADDR_SPACE_OFFSET = 1
@@ -104,18 +110,20 @@ impl MemoryMerkleSubTree {
         d_data: &DeviceBuffer<u8>,
         addr_space_idx: usize,
         zero_hash: &DeviceBuffer<H>,
+        device_ctx: &GpuDeviceCtx,
     ) {
         let event = CudaEvent::new().unwrap();
         if self.buf.is_empty() {
-            self.buf = DeviceBuffer::with_capacity(1);
+            self.buf = DeviceBuffer::with_capacity_on(1, device_ctx);
             unsafe {
-                cuda_memcpy::<true, true>(
+                cuda_memcpy_on::<true, true>(
                     self.buf.as_mut_raw_ptr(),
                     zero_hash.as_ptr().add(self.height) as *mut c_void,
                     size_of::<H>(),
+                    device_ctx,
                 )
                 .unwrap();
-                event.record(cudaStreamPerThread).unwrap();
+                event.record(device_ctx.stream.as_raw()).unwrap();
             }
         } else {
             unsafe {
@@ -125,7 +133,7 @@ impl MemoryMerkleSubTree {
                     &self.buf,
                     self.path_len,
                     addr_space_idx as u32,
-                    cudaStreamPerThread,
+                    device_ctx.stream.as_raw(),
                 )
                 .unwrap();
 
@@ -135,11 +143,11 @@ impl MemoryMerkleSubTree {
                         zero_hash,
                         self.path_len,
                         self.height + self.path_len,
-                        cudaStreamPerThread,
+                        device_ctx.stream.as_raw(),
                     )
                     .unwrap();
                 }
-                event.record(cudaStreamPerThread).unwrap();
+                event.record(device_ctx.stream.as_raw()).unwrap();
             }
         }
         self.build_completion_event = Some(event);
@@ -178,9 +186,10 @@ impl MemoryMerkleSubTree {
 ///     - if we have > 4 address spaces, top_roots will be extended with the next hash, etc.
 ///
 /// Execution:
-/// - Subtrees are built on the per-thread default stream (`cudaStreamPerThread`).
-/// - The final root is computed after all subtrees complete, on the same default stream.
+/// - Subtrees are built on the tree's `GpuDeviceCtx` stream.
+/// - The final root is computed after all subtrees complete on that same stream.
 pub struct MemoryMerkleTree {
+    pub device_ctx: GpuDeviceCtx,
     pub subtrees: Vec<MemoryMerkleSubTree>,
     pub top_roots: DeviceBuffer<H>,
     zero_hash: DeviceBuffer<H>,
@@ -193,7 +202,11 @@ pub struct MemoryMerkleTree {
 impl MemoryMerkleTree {
     /// Creates a full Merkle tree with one subtree per address space.
     /// Initializes all buffers and precomputes the zero hash chain.
-    pub fn new(mem_config: MemoryConfig, hasher_chip: Arc<Poseidon2PeripheryChipGPU>) -> Self {
+    pub fn new(
+        mem_config: MemoryConfig,
+        hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
+        device_ctx: GpuDeviceCtx,
+    ) -> Self {
         let addr_space_sizes = mem_config
             .addr_spaces
             .iter()
@@ -221,13 +234,14 @@ impl MemoryMerkleTree {
 
         let label_max_bits = mem_config.pointer_max_bits - log2_ceil_usize(DIGEST_WIDTH);
 
-        let zero_hash = DeviceBuffer::<H>::with_capacity(label_max_bits + 1);
-        let top_roots = DeviceBuffer::<H>::with_capacity(2 * num_addr_spaces - 1);
+        let zero_hash = DeviceBuffer::<H>::with_capacity_on(label_max_bits + 1, &device_ctx);
+        let top_roots = DeviceBuffer::<H>::with_capacity_on(2 * num_addr_spaces - 1, &device_ctx);
         unsafe {
-            calculate_zero_hash(&zero_hash, label_max_bits).unwrap();
+            calculate_zero_hash(&zero_hash, label_max_bits, device_ctx.stream.as_raw()).unwrap();
         }
 
         Self {
+            device_ctx,
             subtrees: Vec::new(),
             top_roots,
             height: label_max_bits + log2_ceil_usize(num_addr_spaces),
@@ -243,7 +257,7 @@ impl MemoryMerkleTree {
     }
 
     /// Starts construction of the specified address space's Merkle subtree.
-    /// Uses internal zero hashes and launches kernels on `cudaStreamPerThread`.
+    /// Uses internal zero hashes and launches kernels on the tree's `GpuDeviceCtx` stream.
     ///
     /// Here `addr_space` is the _unshifted_ address space, so `addr_space = 0` is the immediate
     /// address space, which should be ignored.
@@ -259,8 +273,9 @@ impl MemoryMerkleTree {
             let mut subtree = MemoryMerkleSubTree::new(
                 self.mem_config.addr_spaces[addr_space].num_cells / DIGEST_WIDTH,
                 1 << (self.zero_hash.len() - 1), /* label_max_bits */
+                &self.device_ctx,
             );
-            subtree.build_async(d_data, addr_space_idx, &self.zero_hash);
+            subtree.build_async(d_data, addr_space_idx, &self.zero_hash, &self.device_ctx);
             self.subtrees.push(subtree);
         } else {
             panic!("Invalid address space index");
@@ -268,22 +283,22 @@ impl MemoryMerkleTree {
     }
 
     /// Finalizes the Merkle tree by collecting all subtree roots and computing the final root.
-    /// All subtree builds were issued on `cudaStreamPerThread`, so stream ordering guarantees
-    /// they are complete before the finalize kernel runs on the same stream.
+    /// All subtree builds were issued on the same `GpuDeviceCtx` stream, so stream ordering
+    /// guarantees they are complete before the finalize kernel runs.
     pub fn finalize(&mut self) {
         let roots: Vec<usize> = self
             .subtrees
             .iter()
             .map(|subtree| subtree.buf.as_ptr() as usize)
             .collect();
-        let d_roots = roots.to_device().unwrap();
+        let d_roots = roots.to_device_on(&self.device_ctx).unwrap();
 
         unsafe {
             finalize_merkle_tree(
                 &d_roots,
                 &self.top_roots,
                 self.subtrees.len(),
-                cudaStreamPerThread,
+                self.device_ctx.stream.as_raw(),
             )
             .unwrap();
         }
@@ -291,9 +306,10 @@ impl MemoryMerkleTree {
 
     /// Drops all massive buffers to free memory. Used at the end of an execution segment.
     ///
-    /// Synchronizes the default stream before deallocating buffers and destroying events.
+    /// Synchronizes the tree's `GpuDeviceCtx` stream before deallocating buffers and destroying
+    /// events.
     pub fn drop_subtrees(&mut self) {
-        current_stream_sync().unwrap();
+        self.device_ctx.stream.synchronize().unwrap();
         self.subtrees.clear();
     }
 
@@ -301,10 +317,10 @@ impl MemoryMerkleTree {
     pub fn update_with_touched_blocks(
         &mut self,
         unpadded_height: usize,
-        d_touched_blocks: &DeviceBuffer<u32>, // consists of (as, label, ts, [F; 8])
+        d_touched_blocks: &DeviceBuffer<u32>, // consists of (as, ptr, ts, [F; DIGEST_WIDTH])
         empty_touched_blocks: bool,
     ) -> AirProvingContext<GpuBackend> {
-        let mut public_values = self.top_roots.to_host().unwrap()[0].to_vec();
+        let mut public_values = self.top_roots.to_host_on(&self.device_ctx).unwrap()[0].to_vec();
         // .to_host() calls cudaEventSynchronize on the D2H memcpy, which also means all subtree
         // events are now completed, so we can clean up the events.
         for subtree in &mut self.subtrees {
@@ -313,8 +329,9 @@ impl MemoryMerkleTree {
         let merkle_trace = {
             let width = MemoryMerkleCols::<u8, DIGEST_WIDTH>::width();
             let padded_height = next_power_of_two_or_zero(unpadded_height);
-            let output = DeviceMatrix::<F>::with_capacity(padded_height, width);
-            output.buffer().fill_zero().unwrap();
+            let output =
+                DeviceMatrix::<F>::with_capacity_on(padded_height, width, &self.device_ctx);
+            output.buffer().fill_zero_on(&self.device_ctx).unwrap();
 
             let actual_heights = self.subtrees.iter().map(|s| s.height).collect::<Vec<_>>();
             let subtrees_pointers = self
@@ -322,7 +339,7 @@ impl MemoryMerkleTree {
                 .iter()
                 .map(|st| st.buf.as_ptr() as usize)
                 .collect::<Vec<_>>()
-                .to_device()
+                .to_device_on(&self.device_ctx)
                 .unwrap();
             unsafe {
                 update_merkle_tree(
@@ -335,17 +352,18 @@ impl MemoryMerkleTree {
                     &actual_heights,
                     unpadded_height,
                     &self.hasher_buffer,
+                    &self.device_ctx,
                 )
                 .unwrap();
             }
 
             if empty_touched_blocks {
                 // The trace is small then
-                let mut output_vec = output.to_host().unwrap();
+                let mut output_vec = output.buffer().to_host_on(&self.device_ctx).unwrap();
                 output_vec[unpadded_height - 1 + (width - 2) * padded_height] = F::ONE; // left_direction_different
                 output_vec[unpadded_height - 1 + (width - 1) * padded_height] = F::ONE; // right_direction_different
                 DeviceMatrix::new(
-                    Arc::new(output_vec.to_device().unwrap()),
+                    Arc::new(output_vec.to_device_on(&self.device_ctx).unwrap()),
                     padded_height,
                     width,
                 )
@@ -353,16 +371,17 @@ impl MemoryMerkleTree {
                 output
             }
         };
-        self.top_roots_host = self.top_roots.to_host().unwrap();
+        self.top_roots_host = self.top_roots.to_host_on(&self.device_ctx).unwrap();
         public_values.extend(self.top_roots_host[0]);
 
         AirProvingContext::new(Vec::new(), merkle_trace, public_values)
     }
 
     /// An auxiliary function to calculate the required number of rows for the merkle trace.
-    pub fn calculate_unpadded_height(
+    /// Generic over BLOCK_SIZE since only addresses are used, not values.
+    pub fn calculate_unpadded_height<const BLOCK_SIZE: usize>(
         &self,
-        touched_memory: &TimestampedEquipartition<F, DIGEST_WIDTH>,
+        touched_memory: &TimestampedEquipartition<F, BLOCK_SIZE>,
     ) -> usize {
         let md = self.mem_config.memory_dimensions();
         let tree_height = md.overall_height();
@@ -376,7 +395,12 @@ impl MemoryMerkleTree {
                     .map(|i| {
                         let x = md.label_to_index(shift_address(touched_memory[i].0));
                         let y = md.label_to_index(shift_address(touched_memory[i + 1].0));
-                        (x ^ y).ilog2() as usize
+                        let xor = x ^ y;
+                        if xor == 0 {
+                            0
+                        } else {
+                            xor.ilog2() as usize
+                        }
                     })
                     .sum::<usize>()
         }
@@ -396,6 +420,7 @@ mod tests {
     use openvm_circuit::{
         arch::{vm_poseidon2_config, AddressSpaceHostLayout, MemoryCellType, MemoryConfig},
         system::{
+            cuda::merkle_tree::MERKLE_TOUCHED_BLOCK_WIDTH,
             memory::{
                 merkle::MerkleTree,
                 online::{GuestMemory, LinearMemory},
@@ -406,8 +431,10 @@ mod tests {
     };
     use openvm_cuda_backend::prelude::F;
     use openvm_cuda_common::{
+        common::get_device,
         copy::{MemCopyD2H, MemCopyH2D},
         d_buffer::DeviceBuffer,
+        stream::{CudaStream, GpuDeviceCtx, StreamGuard},
     };
     use openvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
@@ -429,7 +456,7 @@ mod tests {
             addr_spaces[RV32_REGISTER_AS as usize].num_cells = 32 * size_of::<u32>();
             addr_spaces[RV32_MEMORY_AS as usize].num_cells = max_cells;
             addr_spaces[DEFERRAL_AS as usize].num_cells = max_cells;
-            MemoryConfig::new(2, addr_spaces, max_cells.ilog2() as usize, 29, 17, 32)
+            MemoryConfig::new(2, addr_spaces, max_cells.ilog2() as usize, 29, 17)
         };
 
         let mut initial_memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
@@ -477,6 +504,10 @@ mod tests {
             }
         }
 
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
         let gpu_hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
             (mem_config
                 .addr_spaces
@@ -488,8 +519,10 @@ mod tests {
                 * 2
                 * DIGEST_WIDTH, // max_buffer_size
             1, // sbox_regs
+            device_ctx.clone(),
         ));
-        let mut gpu_merkle_tree = MemoryMerkleTree::new(mem_config.clone(), gpu_hasher_chip);
+        let mut gpu_merkle_tree =
+            MemoryMerkleTree::new(mem_config.clone(), gpu_hasher_chip, device_ctx.clone());
         let mem_slices = initial_memory
             .memory
             .get_memory()
@@ -497,7 +530,7 @@ mod tests {
             .map(|mem| {
                 let mem_slice = mem.as_slice();
                 if !mem_slice.is_empty() {
-                    mem_slice.to_device().unwrap()
+                    mem_slice.to_device_on(&gpu_merkle_tree.device_ctx).unwrap()
                 } else {
                     DeviceBuffer::new()
                 }
@@ -517,10 +550,19 @@ mod tests {
 
         assert_eq!(
             cpu_merkle_tree.root(),
-            gpu_merkle_tree.top_roots.to_host().unwrap()[0]
+            gpu_merkle_tree
+                .top_roots
+                .to_host_on(&gpu_merkle_tree.device_ctx)
+                .unwrap()[0]
         );
         eprintln!("{:?}", cpu_merkle_tree.root());
-        eprintln!("{:?}", gpu_merkle_tree.top_roots.to_host().unwrap()[0]);
+        eprintln!(
+            "{:?}",
+            gpu_merkle_tree
+                .top_roots
+                .to_host_on(&gpu_merkle_tree.device_ctx)
+                .unwrap()[0]
+        );
 
         // Now we add some touched memory
         // We don't care about the memory layout and whatnot, because neither implementation uses
@@ -566,7 +608,20 @@ mod tests {
                 )
             })
             .collect::<Vec<_>>();
-        let d_touched_blocks = touched_blocks.to_device().unwrap().as_buffer::<u32>();
+        let mut merkle_records =
+            Vec::<u32>::with_capacity(touched_blocks.len() * MERKLE_TOUCHED_BLOCK_WIDTH);
+        for (address, ts_values) in &touched_blocks {
+            let (address_space, ptr) = *address;
+            merkle_records.push(address_space);
+            merkle_records.push(ptr);
+            merkle_records.push(ts_values.timestamp);
+            for &v in &ts_values.values {
+                merkle_records.push(unsafe { std::mem::transmute::<F, u32>(v) });
+            }
+        }
+        let d_touched_blocks = merkle_records
+            .to_device_on(&gpu_merkle_tree.device_ctx)
+            .unwrap();
 
         gpu_merkle_tree.update_with_touched_blocks(
             gpu_merkle_tree.calculate_unpadded_height(&touched_blocks),
@@ -576,9 +631,18 @@ mod tests {
 
         assert_eq!(
             cpu_merkle_tree.root(),
-            gpu_merkle_tree.top_roots.to_host().unwrap()[0]
+            gpu_merkle_tree
+                .top_roots
+                .to_host_on(&gpu_merkle_tree.device_ctx)
+                .unwrap()[0]
         );
         eprintln!("{:?}", cpu_merkle_tree.root());
-        eprintln!("{:?}", gpu_merkle_tree.top_roots.to_host().unwrap()[0]);
+        eprintln!(
+            "{:?}",
+            gpu_merkle_tree
+                .top_roots
+                .to_host_on(&gpu_merkle_tree.device_ctx)
+                .unwrap()[0]
+        );
     }
 }

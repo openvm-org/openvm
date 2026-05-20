@@ -21,15 +21,18 @@ jobs:
   cuda-backend:
     name: continuations cuda tests
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=test-gpu-nvidia/family=g6.*+g5+g6e
+      - runs-on=${{ github.run_id }}/runner=test-gpu-nvidia/family=g6.*+g5+g6e/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
+        with:
+          sccache: s3
       - uses: actions/checkout@v5
         with:
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: ./.github/actions/rust-cache-cuda
       - uses: taiki-e/install-action@nextest
       - name: Verify GPU setup
@@ -54,9 +57,13 @@ jobs:
       - name: Run continuations CUDA tests
         working-directory: crates/continuations
         run: |
-          rustup component add rust-src --toolchain nightly-2025-08-02
+          rustup component add rust-src --toolchain nightly-2026-01-18
           cargo nextest run --cargo-profile=fast --features cuda,root-prover --profile=heavy -E 'not test(e2e)'
 
       - name: Run continuations CUDA e2e test
         working-directory: crates/continuations
         run: cargo nextest run --cargo-profile=fast --features cuda,root-prover --test-threads=1 -E 'test(e2e)'
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

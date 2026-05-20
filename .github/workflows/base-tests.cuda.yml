@@ -24,14 +24,17 @@ env:
 jobs:
   tests-cuda:
     runs-on:
-      - runs-on=${{ github.run_id }}-base-tests-cuda-${{ github.run_attempt }}/runner=test-gpu-nvidia/family=g6.*+g5 # ensure 24G vram for async test
+      - runs-on=${{ github.run_id }}-base-tests-cuda-${{ github.run_attempt }}/runner=test-gpu-nvidia/family=g6.*+g5/extras=s3-cache # ensure 24G vram for async test
 
     steps:
       - uses: runs-on/action@v2
+        with:
+          sccache: s3
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
@@ -61,3 +64,7 @@ jobs:
       #   working-directory: benchmarks/prove
       #   run: |
       #     CUDA_OPT_LEVEL=3 MAX_CONCURRENCY=5 cargo run --bin async_regex --features cuda,async -- --max-segment-length $((1<<20)) --segment-max-memory 16106127360
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

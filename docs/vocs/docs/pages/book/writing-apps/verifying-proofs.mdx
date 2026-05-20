@@ -50,6 +50,10 @@ baseline is written. To ensure the correct baseline is being verified, keep the 
 
 ## Verifying EVM Proofs
 
+:::info
+The `cargo openvm verify evm` subcommand requires the `evm-verify` cargo feature on `cargo-openvm`. This feature is enabled by default.
+:::
+
 To verify an EVM proof, you can run the following command or call the `IOpenVmHalo2Verifier.verify()` function in the [OpenVM Solidity SDK](/book/writing-apps/solidity-sdk).
 
 ```bash
@@ -72,7 +76,7 @@ The EVM proof is written as a JSON of the following format:
   "proof_data": {
     "accumulator": "..",
     "proof": ".."
-  },
+  }
 }
 ```
 

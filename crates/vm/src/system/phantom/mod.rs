@@ -7,7 +7,9 @@ use std::{
     sync::Arc,
 };
 
-use openvm_circuit_primitives::AlignedBytesBorrow;
+use openvm_circuit_primitives::{
+    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
@@ -44,7 +46,8 @@ mod tests;
 /// discriminant.
 const NUM_PHANTOM_OPERANDS: usize = 3;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, ColumnsAir)]
+#[columns_via(PhantomCols<u8>)]
 pub struct PhantomAir {
     pub execution_bridge: ExecutionBridge,
     /// Global opcode for PhantomOpcode
@@ -52,7 +55,7 @@ pub struct PhantomAir {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow, Copy, Clone, Serialize, Deserialize)]
+#[derive(AlignedBorrow, StructReflection, Copy, Clone, Serialize, Deserialize)]
 pub struct PhantomCols<T> {
     pub pc: T,
     #[serde(with = "BigArray")]

@@ -347,10 +347,7 @@ __global__ void deferral_call_tracegen(
     );
     BitwiseOperationLookup bitwise_buffer(bitwise_ptr, bitwise_num_bits);
     DeferralPoseidon2Buffer poseidon2_buffer(
-        poseidon2_records,
-        poseidon2_counts,
-        poseidon2_idx,
-        poseidon2_capacity
+        poseidon2_records, poseidon2_counts, poseidon2_idx, poseidon2_capacity
     );
 
     deferral_call_adapter_tracegen(row, record.adapter, bitwise_buffer, mem_helper, address_bits);
@@ -383,12 +380,17 @@ extern "C" int _deferral_call_tracegen(
     DeferralPoseidon2Count *d_poseidon2_counts,
     uint32_t *d_poseidon2_idx,
     size_t poseidon2_capacity,
-    size_t address_bits
+    size_t address_bits,
+    cudaStream_t stream
 ) {
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
     assert(width == sizeof(DeferralCallCols<uint8_t>));
 
-    deferral_call_tracegen<<<grid, block>>>(
+    // poseidon2_capacity arrives from Rust in units of Fp elements; convert to record count.
+    assert(poseidon2_capacity % 16 == 0 && "poseidon2_capacity must be a multiple of 16");
+    size_t poseidon2_record_capacity = poseidon2_capacity / 16;
+
+    deferral_call_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         reinterpret_cast<const DeferralCallRecord<Fp> *>(d_records),
@@ -403,7 +405,7 @@ extern "C" int _deferral_call_tracegen(
         reinterpret_cast<FpArray<16> *>(d_poseidon2_records),
         d_poseidon2_counts,
         d_poseidon2_idx,
-        poseidon2_capacity,
+        poseidon2_record_capacity,
         address_bits
     );
     return CHECK_KERNEL();

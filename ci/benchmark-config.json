@@ -25,6 +25,18 @@
       ]
     },
     {
+      "name": "sha2_bench",
+      "id": "sha2_bench",
+      "working_directory": "benchmarks/prove",
+      "e2e_bench": false,
+      "run_params": [
+        {
+          "instance_type": "g6.2xlarge",
+          "memory_allocator": "jemalloc"
+        }
+      ]
+    },
+    {
       "name": "regex",
       "id": "regex",
       "working_directory": "benchmarks/prove",

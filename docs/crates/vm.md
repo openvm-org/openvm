@@ -13,10 +13,10 @@ There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which 
 
 Pure execution runs the program without any overhead and is used to obtain the final VM state at termination, or after executing a fixed number of instructions.
 
-The `Executor<F>` trait defines the interface for pure execution:
+The `InterpreterExecutor<F>` trait defines the interface for pure execution (aliased as `Executor<F>` via a supertrait):
 
 ```rust
-pub trait Executor<F> {
+pub trait InterpreterExecutor<F> {
     fn pre_compute_size(&self) -> usize;
 
     fn pre_compute<Ctx>(
@@ -34,7 +34,7 @@ where `ExecuteFunc<F, Ctx>` is a function pointer that contains the instruction 
 
 ```rust
 pub type ExecuteFunc<F, CTX> =
-    unsafe fn(pre_compute: &[u8], exec_state: &mut VmExecState<F, GuestMemory, CTX>);
+    unsafe fn(pre_compute: *const u8, exec_state: &mut VmExecState<F, GuestMemory, CTX>);
 ```
 
 Each executor pre-computes instruction-specific data during a preprocessing step and returns function pointers for direct instruction execution.
@@ -43,10 +43,10 @@ Each executor pre-computes instruction-specific data during a preprocessing step
 
 Metered execution tracks the trace heights for each chip along with normal execution. This mode divides the execution into segments, where each segment consists of an instruction range and an (over)estimate of the resulting trace heights for each chip in the segment. Segmentation is done based on configurable limits like maximum trace height, maximum trace cells etc.
 
-The `MeteredExecutor<F>` trait defines the interface for metered execution:
+The `InterpreterMeteredExecutor<F>` trait defines the interface for metered execution (aliased as `MeteredExecutor<F>` via a supertrait):
 
 ```rust
-pub trait MeteredExecutor<F> {
+pub trait InterpreterMeteredExecutor<F> {
     fn metered_pre_compute_size(&self) -> usize;
 
     fn metered_pre_compute<Ctx>(
@@ -211,7 +211,7 @@ A `VmConfig` should implement the `VmExecutionConfig` trait which provides execu
 
 ```rust
 pub trait VmExecutionConfig<F> {
-    type Executor: AnyEnum + Send + Sync;
+    type Executor: AnyEnum;
 
     fn create_executors(&self)
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
@@ -241,7 +241,7 @@ pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
 }
 ```
 
-The `AirInventory` contains a `keygen` method that generates the proving and verifying keys from the collected AIRs.
+The collected `AirInventory` can be converted into AIRs with `into_airs()`, which `VirtualMachine::new_with_keygen` passes to `MultiStarkKeygenBuilder` to generate the proving and verifying keys.
 
 #### Trace Generation
 
@@ -503,7 +503,7 @@ pub struct BasicAdapterInterface<
     const NUM_WRITES: usize,
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
->(PhantomData<T, PI>);
+>(PhantomData<T>, PhantomData<PI>);
 
 impl<..> VmAdapterInterface for BasicAdapterInterface<..> {
     type Reads = [[T; READ_SIZE]; NUM_READS];
@@ -521,6 +521,6 @@ pub struct ImmInstruction<T> {
     pub is_valid: T,
     /// Absolute opcode number
     pub opcode: T,
-    pub imm: T,
+    pub immediate: T,
 }
 ```

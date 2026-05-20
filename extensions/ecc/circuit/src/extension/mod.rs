@@ -18,9 +18,7 @@ pub use weierstrass::*;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        mod cuda;
         mod hybrid;
-        pub use cuda::*;
         pub use hybrid::*;
         pub use {
             EccHybridProverExt as EccProverExt,
@@ -84,12 +82,17 @@ where
         &self,
         config: &Self::VmConfig,
         circuit: AirInventory<SC>,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&Rv32ModularCpuBuilder, &config.modular, circuit)?;
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &Rv32ModularCpuBuilder,
+            &config.modular,
+            circuit,
+            device_ctx,
+        )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(
             &EccCpuProverExt,

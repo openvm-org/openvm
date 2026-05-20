@@ -45,13 +45,19 @@ We also have access to each of the specific functions that the pairing check uti
 
 ### Multi-Miller loop
 
-The multi-Miller loop requires the MultiMillerLoop trait can also be run separately via:
+The multi-Miller loop can also be run separately by importing the `MultiMillerLoop` trait. This trait currently comes from the `openvm-pairing-guest` crate, so add `openvm-pairing-guest` as a dependency alongside `openvm-pairing`.
 
 ```rust
-let f = Bls12_381::multi_miller_loop(
-    &[p0, p1],
-    &[q0, q1],
-);
+use openvm_pairing::bls12_381::Bls12_381;
+use openvm_pairing_guest::pairing::MultiMillerLoop;
+
+struct MillerLoopInput {
+    p: Vec<AffinePoint<Fp>>,   // G1 points
+    q: Vec<AffinePoint<Fp2>>,  // G2 points
+}
+
+let input: MillerLoopInput = /* ... */;
+let f = Bls12_381::multi_miller_loop(&input.p, &input.q);
 ```
 
 ## Running via CLI

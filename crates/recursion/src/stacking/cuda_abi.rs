@@ -1,7 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
 use openvm_cuda_backend::prelude::{EF, F};
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -80,6 +80,7 @@ extern "C" {
         num_slices: u32,
         n_stack: u32,
         l_skip: u32,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _compute_coefficients_temp_bytes(
@@ -90,6 +91,7 @@ extern "C" {
         num_slices: u32,
         d_num_coeffs: *mut usize,
         h_temp_bytes_out: *mut usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _compute_coefficients(
@@ -109,6 +111,7 @@ extern "C" {
         d_temp_buffer: *mut core::ffi::c_void,
         temp_bytes: usize,
         d_num_coeffs: *mut usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     // stacking/claims.cu
@@ -116,6 +119,7 @@ extern "C" {
         d_trace: *mut F,
         height: usize,
         h_temp_bytes_out: *mut usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _stacking_claims_tracegen(
@@ -130,6 +134,7 @@ extern "C" {
         num_proofs: u32,
         d_temp_buffer: *mut core::ffi::c_void,
         temp_bytes: usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     // stacking/opening.cu
@@ -138,6 +143,7 @@ extern "C" {
         height: usize,
         d_keys_buffer: *mut F,
         h_temp_bytes_out: *mut usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _opening_claims_tracegen(
@@ -155,6 +161,7 @@ extern "C" {
         d_keys_buffer: *mut F,
         d_temp_buffer: *mut core::ffi::c_void,
         temp_bytes: usize,
+        stream: cudaStream_t,
     ) -> i32;
 }
 
@@ -169,6 +176,7 @@ pub unsafe fn compute_coefficients_temp_bytes(
     d_coeff_keys: &DeviceBuffer<u64>,
     num_slices: u32,
     d_num_coeffs: &DeviceBuffer<usize>,
+    stream: cudaStream_t,
 ) -> Result<usize, CudaError> {
     let mut temp_bytes = 0usize;
     CudaError::from_result(_compute_coefficients_temp_bytes(
@@ -179,6 +187,7 @@ pub unsafe fn compute_coefficients_temp_bytes(
         num_slices,
         d_num_coeffs.as_mut_ptr(),
         &mut temp_bytes as *mut usize,
+        stream,
     ))?;
     Ok(temp_bytes)
 }
@@ -186,12 +195,14 @@ pub unsafe fn compute_coefficients_temp_bytes(
 pub unsafe fn stacking_claims_tracegen_temp_bytes(
     d_trace: &DeviceBuffer<F>,
     height: usize,
+    stream: cudaStream_t,
 ) -> Result<usize, CudaError> {
     let mut temp_bytes = 0usize;
     CudaError::from_result(_stacking_claims_tracegen_temp_bytes(
         d_trace.as_mut_ptr(),
         height,
         &mut temp_bytes as *mut usize,
+        stream,
     ))?;
     Ok(temp_bytes)
 }
@@ -200,6 +211,7 @@ pub unsafe fn opening_claims_tracegen_temp_bytes(
     d_trace: &DeviceBuffer<F>,
     height: usize,
     d_keys_buffer: &DeviceBuffer<F>,
+    stream: cudaStream_t,
 ) -> Result<usize, CudaError> {
     let mut temp_bytes = 0usize;
     CudaError::from_result(_opening_claims_tracegen_temp_bytes(
@@ -207,6 +219,7 @@ pub unsafe fn opening_claims_tracegen_temp_bytes(
         height,
         d_keys_buffer.as_mut_ptr(),
         &mut temp_bytes as *mut usize,
+        stream,
     ))?;
     Ok(temp_bytes)
 }
@@ -225,6 +238,7 @@ pub unsafe fn stacked_slice_data(
     num_slices: u32,
     n_stack: u32,
     l_skip: u32,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_stacked_slice_data(
         d_out.as_mut_ptr(),
@@ -235,6 +249,7 @@ pub unsafe fn stacked_slice_data(
         num_slices,
         n_stack,
         l_skip,
+        stream,
     ))
 }
 
@@ -256,6 +271,7 @@ pub unsafe fn compute_coefficients(
     d_temp_buffer: &DeviceBuffer<u8>,
     temp_bytes: usize,
     d_num_coeffs: &DeviceBuffer<usize>,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_compute_coefficients(
         d_coeff_terms.as_mut_ptr(),
@@ -274,6 +290,7 @@ pub unsafe fn compute_coefficients(
         d_temp_buffer.as_mut_ptr() as *mut core::ffi::c_void,
         temp_bytes,
         d_num_coeffs.as_mut_ptr(),
+        stream,
     ))
 }
 
@@ -290,6 +307,7 @@ pub unsafe fn stacking_claims_tracegen(
     num_proofs: u32,
     d_temp_buffer: &DeviceBuffer<u8>,
     temp_bytes: usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_stacking_claims_tracegen(
         d_trace.as_mut_ptr(),
@@ -303,6 +321,7 @@ pub unsafe fn stacking_claims_tracegen(
         num_proofs,
         d_temp_buffer.as_mut_ptr() as *mut core::ffi::c_void,
         temp_bytes,
+        stream,
     ))
 }
 
@@ -322,6 +341,7 @@ pub unsafe fn opening_claims_tracegen(
     d_keys_buffer: &DeviceBuffer<F>,
     d_temp_buffer: &DeviceBuffer<u8>,
     temp_bytes: usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_opening_claims_tracegen(
         d_trace.as_mut_ptr(),
@@ -338,5 +358,6 @@ pub unsafe fn opening_claims_tracegen(
         d_keys_buffer.as_mut_ptr(),
         d_temp_buffer.as_mut_ptr() as *mut core::ffi::c_void,
         temp_bytes,
+        stream,
     ))
 }

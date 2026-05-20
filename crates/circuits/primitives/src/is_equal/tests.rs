@@ -15,6 +15,7 @@ use test_case::test_matrix;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::is_equal,
+    crate::utils::test_device_ctx,
     openvm_cuda_backend::{
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
@@ -26,10 +27,13 @@ use {
 };
 
 use super::{IsEqSubAir, IsEqualIo};
-use crate::{utils::test_engine_small, SubAir, TraceSubRowGenerator};
+use crate::{
+    utils::test_engine_small, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+    TraceSubRowGenerator,
+};
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct IsEqualCols<T> {
     pub x: T,
     pub y: T,
@@ -37,7 +41,8 @@ pub struct IsEqualCols<T> {
     pub inv: T,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+#[columns_via(IsEqualCols<u8>)]
 pub struct IsEqTestAir(pub IsEqSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsEqTestAir {}
@@ -145,6 +150,7 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_is_equal_against_cpu_full() {
+    let device_ctx = test_device_ctx();
     let mut rng = create_seeded_rng();
 
     for log_height in 1..=16 {
@@ -164,12 +170,18 @@ fn test_cuda_is_equal_against_cpu_full() {
             })
             .collect();
 
-        let inputs_x = vec_x.as_slice().to_device().unwrap();
-        let inputs_y = vec_y.as_slice().to_device().unwrap();
+        let inputs_x = vec_x.as_slice().to_device_on(&device_ctx).unwrap();
+        let inputs_y = vec_y.as_slice().to_device_on(&device_ctx).unwrap();
 
-        let gpu_matrix = DeviceMatrix::<F>::with_capacity(n, 2);
+        let gpu_matrix = DeviceMatrix::<F>::with_capacity_on(n, 2, &device_ctx);
         unsafe {
-            is_equal::dummy_tracegen(gpu_matrix.buffer(), &inputs_x, &inputs_y).unwrap();
+            is_equal::dummy_tracegen(
+                gpu_matrix.buffer(),
+                &inputs_x,
+                &inputs_y,
+                device_ctx.stream.as_raw(),
+            )
+            .unwrap();
         }
 
         let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
@@ -188,6 +200,6 @@ fn test_cuda_is_equal_against_cpu_full() {
             2,
         ));
 
-        assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix);
+        assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix, &device_ctx);
     }
 }

@@ -52,38 +52,15 @@ where
                 )
             })?;
 
-        let enabled = !inst.f.is_zero();
-        let e_u32 = inst.e.as_canonical_u32();
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(
-            inst.opcode
-                .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-        );
-        let is_load = matches!(
-            local_opcode,
-            Rv32LoadStoreOpcode::LOADW | Rv32LoadStoreOpcode::LOADBU | Rv32LoadStoreOpcode::LOADHU
-        );
         asm_str += &update_height_change_asm(chip_idx, 1)?;
-        // [b:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-        // read or write [a:4]_1
-        if is_load {
-            // read [[b:4]_1]_e
-            asm_str += &update_adapter_heights_asm(config, e_u32)?;
-        } else {
-            // read [a:4]_1
-            asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-        }
-        if enabled {
-            if is_load {
-                // write [a:4]_1
-                asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-            } else {
-                // write [[b:4]_1]_e
-                asm_str += &update_adapter_heights_asm(config, e_u32)?;
-            }
-        }
         Ok(asm_str)
     }
+}
+
+fn is_aot_supported_impl<F: PrimeField32>(
+    _inst: &openvm_instructions::instruction::Instruction<F>,
+) -> bool {
+    true
 }
 
 // arguments of `update_boundary_merkle_heights_f`:
@@ -122,7 +99,6 @@ fn generate_x86_asm_impl<F: PrimeField32>(
     let imm = c.as_canonical_u32();
     let imm_sign = g.as_canonical_u32();
     let imm_extended = (imm + imm_sign * 0xffff0000) as i32;
-
     let a = a.as_canonical_u32() as u8;
     let b = b.as_canonical_u32() as u8;
     let a_reg = a / 4;

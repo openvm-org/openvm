@@ -31,10 +31,13 @@ use {
 };
 
 use super::{IsEqArrayAuxCols, IsEqArrayIo, IsEqArraySubAir};
-use crate::{utils::test_engine_small, SubAir, TraceSubRowGenerator};
+use crate::{
+    utils::test_engine_small, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+    TraceSubRowGenerator,
+};
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct IsEqArrayCols<T, const N: usize> {
     x: [T; N],
     y: [T; N],
@@ -42,7 +45,8 @@ pub struct IsEqArrayCols<T, const N: usize> {
     aux: IsEqArrayAuxCols<T, N>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, ColumnsAir)]
+#[columns_via(IsEqArrayCols<u8, N>)]
 pub struct IsEqArrayTestAir<const N: usize>(IsEqArraySubAir<N>);
 
 impl<F: Field, const N: usize> BaseAirWithPublicValues<F> for IsEqArrayTestAir<N> {}
@@ -211,8 +215,9 @@ fn test_is_eq_array_fail_rand() {
 #[test]
 fn test_cuda_simple_is_equal_array_tracegen() {
     const ARRAY_LEN: usize = 4;
+    let device_ctx = crate::utils::test_device_ctx();
     let n = 4;
-    let trace = DeviceMatrix::<F>::with_capacity(n, ARRAY_LEN + 1);
+    let trace = DeviceMatrix::<F>::with_capacity_on(n, ARRAY_LEN + 1, &device_ctx);
 
     let vec_x: Vec<F> = vec![1u32, 2, 3, 4, 5, 6, 7, 8, 9u32, 10, 11, 12, 13, 14, 15, 16]
         .into_iter()
@@ -226,11 +231,18 @@ fn test_cuda_simple_is_equal_array_tracegen() {
     .map(F::from_u32)
     .collect();
 
-    let inputs_x = vec_x.as_slice().to_device().unwrap();
-    let inputs_y = vec_y.as_slice().to_device().unwrap();
+    let inputs_x = vec_x.as_slice().to_device_on(&device_ctx).unwrap();
+    let inputs_y = vec_y.as_slice().to_device_on(&device_ctx).unwrap();
 
     unsafe {
-        is_equal::dummy_tracegen_array(trace.buffer(), &inputs_x, &inputs_y, ARRAY_LEN).unwrap()
+        is_equal::dummy_tracegen_array(
+            trace.buffer(),
+            &inputs_x,
+            &inputs_y,
+            ARRAY_LEN,
+            device_ctx.stream.as_raw(),
+        )
+        .unwrap()
     };
 
     let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
@@ -249,12 +261,13 @@ fn test_cuda_simple_is_equal_array_tracegen() {
         ARRAY_LEN + 1,
     ));
 
-    assert_eq_host_and_device_matrix(cpu_matrix, &trace);
+    assert_eq_host_and_device_matrix(cpu_matrix, &trace, &device_ctx);
 }
 
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_random_is_equal_array_tracegen() {
+    let device_ctx = crate::utils::test_device_ctx();
     let mut rng = create_seeded_rng();
     const ARRAY_LEN: usize = 64;
 
@@ -269,13 +282,19 @@ fn test_cuda_random_is_equal_array_tracegen() {
             .map(|_| F::from_u32(rng.random_range(0..F::ORDER_U32)))
             .collect();
 
-        let inputs_x = vec_x.as_slice().to_device().unwrap();
-        let inputs_y = vec_y.as_slice().to_device().unwrap();
+        let inputs_x = vec_x.as_slice().to_device_on(&device_ctx).unwrap();
+        let inputs_y = vec_y.as_slice().to_device_on(&device_ctx).unwrap();
 
-        let gpu_matrix = DeviceMatrix::<F>::with_capacity(n, ARRAY_LEN + 1);
+        let gpu_matrix = DeviceMatrix::<F>::with_capacity_on(n, ARRAY_LEN + 1, &device_ctx);
         unsafe {
-            is_equal::dummy_tracegen_array(gpu_matrix.buffer(), &inputs_x, &inputs_y, ARRAY_LEN)
-                .unwrap();
+            is_equal::dummy_tracegen_array(
+                gpu_matrix.buffer(),
+                &inputs_x,
+                &inputs_y,
+                ARRAY_LEN,
+                device_ctx.stream.as_raw(),
+            )
+            .unwrap();
         }
 
         let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
@@ -294,6 +313,6 @@ fn test_cuda_random_is_equal_array_tracegen() {
             ARRAY_LEN + 1,
         ));
 
-        assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix);
+        assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix, &device_ctx);
     }
 }

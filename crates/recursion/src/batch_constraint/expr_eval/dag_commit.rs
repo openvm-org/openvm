@@ -2,7 +2,7 @@ use core::borrow::Borrow;
 use std::{array::from_fn, sync::Arc};
 
 use itertools::{fold, Itertools};
-use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, SubAir};
+use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, ColumnsAir, SubAir};
 use openvm_poseidon2_air::{
     Poseidon2Config, Poseidon2SubAir, Poseidon2SubChip, Poseidon2SubCols,
     BABY_BEAR_POSEIDON2_SBOX_DEGREE, POSEIDON2_WIDTH,
@@ -47,6 +47,10 @@ pub struct DagCommitPvs<T> {
 pub struct DagCommitSubAir<F: Field> {
     pub subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
 }
+
+// No columns provided: `DagCommitCols` embeds external `Poseidon2SubCols` which doesn't derive
+// `StructReflection`.
+impl<F: Field> ColumnsAir for DagCommitSubAir<F> {}
 
 impl<F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>> DagCommitSubAir<F> {
     pub fn new() -> Self {

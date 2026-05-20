@@ -2,7 +2,7 @@ use std::{array::from_fn, borrow::Borrow};
 
 use itertools::{izip, Itertools};
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState},
+    arch::{ExecutionBridge, ExecutionState, DEFAULT_BLOCK_SIZE},
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
@@ -11,6 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
     utils::{assert_array_eq, not},
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
@@ -35,13 +36,12 @@ use crate::{
     poseidon2::DeferralPoseidon2Bus,
     utils::{
         byte_commit_to_f, bytes_to_f, combine_output, split_memory_ops, COMMIT_NUM_BYTES,
-        DIGEST_MEMORY_OPS, F_NUM_BYTES, MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES,
-        OUTPUT_TOTAL_MEMORY_OPS,
+        DIGEST_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct DeferralOutputCols<T> {
     // Indicates the status of this row, i.e. if it is valid and where it is in a
     // section of rows that correspond to a single opcode invocation
@@ -78,14 +78,15 @@ pub struct DeferralOutputCols<T> {
     // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
     // written to memory and auxiliary columns.
     pub sponge_inputs: [T; DIGEST_SIZE],
-    pub write_bytes_aux: [MemoryWriteAuxCols<T, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
+    pub write_bytes_aux: [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
 
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.
     pub poseidon2_res: [T; DIGEST_SIZE],
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(DeferralOutputCols<u8>)]
 pub struct DeferralOutputAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
@@ -304,7 +305,7 @@ where
                 .read(
                     MemoryAddress::new(
                         e.clone(),
-                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
+                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
                     ),
                     data,
                     local.from_state.timestamp + AB::Expr::from_usize(2 + chunk_idx),
@@ -334,7 +335,7 @@ where
                         e.clone(),
                         output_ptr.clone()
                             + (section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_SIZE))
-                            + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
+                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
                     ),
                     data,
                     local.from_state.timestamp

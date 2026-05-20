@@ -1,3 +1,4 @@
+use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use serde::{Deserialize, Serialize};
@@ -10,7 +11,9 @@ pub const CONSTRAINT_EVAL_AIR_ID: usize = 3;
 pub const CONSTRAINT_EVAL_CACHED_INDEX: usize = 0;
 
 #[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(
+    AlignedBorrow, StructReflection, Clone, Copy, Debug, Serialize, Deserialize, PartialEq,
+)]
 pub struct VkCommit<F> {
     /// Cached trace commit of this verifier circuit's SymbolicExpressionAir, which is derived
     /// from its child_vk.
@@ -20,7 +23,7 @@ pub struct VkCommit<F> {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy)]
+#[derive(AlignedBorrow, StructReflection, Clone, Copy)]
 pub struct VerifierBasePvs<F> {
     //////////////////////////////////////////////////////////////////////
     /// VERIFIER-SPECIFIC PVS
@@ -51,7 +54,7 @@ pub struct VerifierBasePvs<F> {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy)]
+#[derive(AlignedBorrow, StructReflection, Clone, Copy)]
 pub struct VerifierDefPvs<F> {
     //////////////////////////////////////////////////////////////////////
     /// DEFERRAL-SPECIFIC PVS
@@ -66,7 +69,7 @@ pub struct VerifierDefPvs<F> {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy)]
+#[derive(AlignedBorrow, StructReflection, Clone, Copy)]
 pub struct VmPvs<F> {
     //////////////////////////////////////////////////////////////////////
     /// PROGRAM COMMIT PVS
@@ -96,7 +99,7 @@ pub struct VmPvs<F> {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy)]
+#[derive(AlignedBorrow, StructReflection, Clone, Copy)]
 pub struct DeferralPvs<F> {
     /// Merkle root of all the initial hash accumulators for deferral circuit proofs that
     /// have been aggregated up to this point.

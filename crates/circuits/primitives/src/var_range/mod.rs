@@ -21,7 +21,7 @@ use openvm_stark_backend::{
 };
 use tracing::instrument;
 
-use crate::Chip;
+use crate::{Chip, ColumnsAir, StructReflection, StructReflectionHelper};
 
 mod bus;
 pub use bus::*;
@@ -34,7 +34,7 @@ pub use cuda::*;
 #[cfg(test)]
 pub mod tests;
 
-#[derive(Default, AlignedBorrow, Copy, Clone)]
+#[derive(Default, AlignedBorrow, StructReflection, Copy, Clone)]
 #[repr(C)]
 pub struct VariableRangeCols<T> {
     /// The value being range checked
@@ -49,7 +49,8 @@ pub struct VariableRangeCols<T> {
 
 pub const NUM_VARIABLE_RANGE_COLS: usize = size_of::<VariableRangeCols<u8>>();
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(VariableRangeCols<u8>)]
 pub struct VariableRangeCheckerAir {
     pub bus: VariableRangeCheckerBus,
 }
@@ -233,5 +234,9 @@ where
     fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
         let trace_row_maj = self.generate_trace::<Val<SC>>();
         AirProvingContext::simple_no_pis(trace_row_maj)
+    }
+
+    fn constant_trace_height(&self) -> Option<usize> {
+        Some(1 << (self.air.range_max_bits() + 1))
     }
 }

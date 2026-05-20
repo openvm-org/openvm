@@ -21,6 +21,10 @@ use openvm_cuda_backend::{
     prelude::{EF, F, SC},
     BabyBearPoseidon2GpuEngine, GpuBackend, ProverError,
 };
+use openvm_cuda_common::{
+    common::get_device,
+    stream::{device_synchronize, CudaStream, GpuDeviceCtx, StreamGuard},
+};
 use openvm_instructions::{program::PC_BITS, riscv::RV32_REGISTER_AS};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
@@ -48,10 +52,10 @@ use crate::{
             POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
         },
         Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState, MatrixRecordArena,
-        MemoryConfig, PreflightExecutor, Streams, VmStateMut,
+        MemoryConfig, PreflightExecutor, Streams, VmStateMut, DEFAULT_BLOCK_SIZE,
     },
     system::{
-        cuda::{poseidon2::Poseidon2PeripheryChipGPU, DIGEST_WIDTH},
+        cuda::poseidon2::Poseidon2PeripheryChipGPU,
         memory::{
             offline_checker::{MemoryBridge, MemoryBus},
             MemoryAirInventory, SharedMemoryHelper,
@@ -148,14 +152,6 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         self.execution.execute(initial_state, final_state);
     }
 
-    fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
-        self.read::<1>(address_space, pointer)[0]
-    }
-
-    fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
-        self.write(address_space, pointer, [value]);
-    }
-
     fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
         self.memory.read(address_space, pointer)
     }
@@ -210,7 +206,8 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        self.write(1, register, pointer.to_le_bytes().map(F::from_u8));
+        // Cast to u32 to ensure we write exactly 4 bytes (RV32 register size).
+        self.write(1, register, (pointer as u32).to_le_bytes().map(F::from_u8));
         (register, pointer)
     }
 
@@ -249,64 +246,35 @@ impl Default for GpuChipTestBuilder {
         let mut mem_config = MemoryConfig::default();
         // Currently tests still use gen_pointer for the full 1<<29 range of address space 1.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::volatile(mem_config, default_var_range_checker_bus())
+        Self::new(mem_config, default_var_range_checker_bus())
     }
 }
 
 impl GpuChipTestBuilder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn new_persistent() -> Self {
-        let mut mem_config = MemoryConfig::default();
-        // Currently tests still use gen_pointer for the full 1<<29 range of address space 1.
-        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::persistent(mem_config, default_var_range_checker_bus())
-    }
-
-    pub fn volatile(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
+    pub fn new(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
         setup_tracing_with_log_level(Level::INFO);
         let mem_bus = MemoryBus::new(MEMORY_BUS);
-        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
-            VariableRangeCheckerChip::new(bus),
-        )));
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(
+            Arc::new(VariableRangeCheckerChip::new(bus)),
+            device_ctx.clone(),
+        ));
         Self {
-            memory: DeviceMemoryTester::volatile(
-                default_tracing_memory(&mem_config, 1),
+            memory: DeviceMemoryTester::new(
+                default_tracing_memory(&mem_config),
                 mem_bus,
                 mem_config,
                 range_checker.clone(),
+                device_ctx.clone(),
             ),
-            execution: DeviceExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
-            program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
-            streams: Default::default(),
-            var_range_checker: range_checker,
-            bitwise_op_lookup: None,
-            range_tuple_checker: None,
-            rng: StdRng::seed_from_u64(0),
-            default_register: 0,
-            default_pointer: 0,
-            #[cfg(feature = "metrics")]
-            metrics: VmMetrics::default(),
-        }
-    }
-
-    pub fn persistent(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
-        setup_tracing_with_log_level(Level::INFO);
-        let mem_bus = MemoryBus::new(MEMORY_BUS);
-        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
-            VariableRangeCheckerChip::new(bus),
-        )));
-        Self {
-            memory: DeviceMemoryTester::persistent(
-                default_tracing_memory(&mem_config, DIGEST_WIDTH),
-                mem_bus,
-                mem_config,
-                range_checker.clone(),
+            execution: DeviceExecutionTester::new(
+                ExecutionBus::new(EXECUTION_BUS),
+                device_ctx.clone(),
             ),
-            execution: DeviceExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
-            program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
+            program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS), device_ctx),
             streams: Default::default(),
             var_range_checker: range_checker,
             bitwise_op_lookup: None,
@@ -320,16 +288,20 @@ impl GpuChipTestBuilder {
     }
 
     pub fn with_bitwise_op_lookup(mut self, bus: BitwiseOperationLookupBus) -> Self {
-        self.bitwise_op_lookup = Some(Arc::new(BitwiseOperationLookupChipGPU::hybrid(Arc::new(
-            BitwiseOperationLookupChip::new(bus),
-        ))));
+        let device_ctx = self.var_range_checker.device_ctx.clone();
+        self.bitwise_op_lookup = Some(Arc::new(BitwiseOperationLookupChipGPU::hybrid(
+            Arc::new(BitwiseOperationLookupChip::new(bus)),
+            device_ctx,
+        )));
         self
     }
 
     pub fn with_range_tuple_checker(mut self, bus: RangeTupleCheckerBus<2>) -> Self {
-        self.range_tuple_checker = Some(Arc::new(RangeTupleCheckerChipGPU::hybrid(Arc::new(
-            RangeTupleCheckerChip::new(bus),
-        ))));
+        let device_ctx = self.var_range_checker.device_ctx.clone();
+        self.range_tuple_checker = Some(Arc::new(RangeTupleCheckerChipGPU::hybrid(
+            Arc::new(RangeTupleCheckerChip::new(bus)),
+            device_ctx,
+        )));
         self
     }
 
@@ -365,17 +337,21 @@ impl GpuChipTestBuilder {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        self.write(1usize, register, pointer.to_le_bytes().map(F::from_u8));
-        if NUM_LIMBS.is_power_of_two() {
-            for (i, &write) in writes.iter().enumerate() {
-                self.write(2usize, pointer + i * NUM_LIMBS, write);
-            }
-        } else {
-            for (i, &write) in writes.iter().enumerate() {
-                let ptr = pointer + i * NUM_LIMBS;
-                for j in (0..NUM_LIMBS).step_by(4) {
-                    self.write::<4>(2usize, ptr + j, write[j..j + 4].try_into().unwrap());
-                }
+        // Cast to u32 to ensure we write exactly 4 bytes (RV32 register size).
+        self.write(
+            1usize,
+            register,
+            (pointer as u32).to_le_bytes().map(F::from_u8),
+        );
+        // Always write in DEFAULT_BLOCK_SIZE-byte chunks to match the fixed block size.
+        for (i, &write) in writes.iter().enumerate() {
+            let ptr = pointer + i * NUM_LIMBS;
+            for j in (0..NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
+                self.write::<DEFAULT_BLOCK_SIZE>(
+                    2usize,
+                    ptr + j,
+                    write[j..j + DEFAULT_BLOCK_SIZE].try_into().unwrap(),
+                );
             }
         }
     }
@@ -573,7 +549,16 @@ impl GpuChipTester {
             check_trace_validity(&proving_ctx, &air.name());
         }
         let expected_trace_cm = ColMajorMatrix::from_row_major(&expected_trace);
-        assert_eq_host_and_device_matrix_col_maj(&expected_trace_cm, &proving_ctx.common_main);
+        device_synchronize().unwrap();
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        assert_eq_host_and_device_matrix_col_maj(
+            &expected_trace_cm,
+            &proving_ctx.common_main,
+            &device_ctx,
+        );
         self.airs.push(Arc::new(air) as AirRef<SC>);
         self.ctxs.push(proving_ctx);
         self
@@ -598,28 +583,28 @@ impl GpuChipTester {
     }
 
     pub fn finalize(mut self) -> Self {
-        if let Some(mut memory_tester) = self.memory.take() {
-            let is_persistent = memory_tester.inventory.continuation_enabled();
-            let touched_memory = memory_tester.memory.finalize::<F>(is_persistent);
-            let memory_bridge = memory_tester.memory_bridge();
+        if let Some(memory_tester) = self.memory.take() {
+            let DeviceMemoryTester {
+                chip,
+                mut memory,
+                mut inventory,
+                hasher_chip,
+                config,
+                mem_bus,
+                range_bus,
+            } = memory_tester;
+            let touched_memory = memory.finalize::<F>();
+            let memory_bridge = MemoryBridge::new(mem_bus, config.timestamp_max_bits, range_bus);
+            self = self.load_periphery(chip.0.air, chip);
 
-            for chip in memory_tester.chip_for_block.into_values() {
-                self = self.load_periphery(chip.0.air, chip);
-            }
-
-            let airs = MemoryAirInventory::<SC>::new(
+            let airs = MemoryAirInventory::new(
                 memory_bridge,
-                &memory_tester.config,
-                memory_tester.range_bus,
-                is_persistent.then_some((
-                    PermutationCheckBus::new(MEMORY_MERKLE_BUS),
-                    PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
-                )),
+                &config,
+                PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+                PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
             )
             .into_airs();
-            let ctxs = memory_tester
-                .inventory
-                .generate_proving_ctxs(memory_tester.memory.access_adapter_records, touched_memory);
+            let ctxs = inventory.generate_proving_ctxs(touched_memory);
             for (air, ctx) in airs
                 .into_iter()
                 .zip(ctxs)
@@ -628,7 +613,7 @@ impl GpuChipTester {
                 self = self.load_air_proving_ctx(air, ctx);
             }
 
-            if let Some(hasher_chip) = memory_tester.hasher_chip {
+            if let Some(hasher_chip) = hasher_chip {
                 let air: AirRef<SC> = match hasher_chip.as_ref() {
                     Poseidon2PeripheryChipGPU::Register0(_) => {
                         let config = Poseidon2Config::default();

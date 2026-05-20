@@ -72,7 +72,6 @@ impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
         let imm = c.as_canonical_u32();
         let imm_sign = g.as_canonical_u32();
         let imm_extended = imm + imm_sign * 0xffff0000;
-
         *data = LoadStorePreCompute {
             imm_extended,
             a: a.as_canonical_u32() as u8,

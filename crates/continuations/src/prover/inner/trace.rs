@@ -18,22 +18,26 @@ use crate::{
     SC,
 };
 
-impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
-        T: InnerTraceGen<PB>,
-    > InnerAggregationProver<PB, S, T>
+impl<PB, S, T> InnerAggregationProver<PB, S, T>
 where
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    S: AggregationSubCircuit,
     PB::Matrix: Clone,
 {
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx(
+    pub fn generate_proving_ctx<DC>(
         &self,
         proofs: &[Proof<SC>],
         child_vk_kind: ChildVkKind,
         proofs_type: ProofsType,
         absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
-    ) -> ProvingContext<PB> {
+        device_ctx: &DC,
+    ) -> ProvingContext<PB>
+    where
+        S: VerifierTraceGen<PB, SC, DC>,
+        T: InnerTraceGen<PB, DC>,
+        DC: Clone + Send + Sync,
+    {
         assert!(proofs.len() <= self.circuit.verifier_circuit.max_num_proofs());
 
         let (child_vk, child_vk_pcs_data) = match child_vk_kind {
@@ -54,6 +58,7 @@ where
                 absent_trace_pvs,
                 child_is_app,
                 child_vk_commit,
+                device_ctx,
             );
 
         let range_check_inputs = vec![];
@@ -73,12 +78,13 @@ where
                 CachedTraceCtx::PcsData(child_vk_pcs_data),
                 proofs,
                 &mut external_data,
+                device_ctx,
                 default_duplex_sponge_recorder(),
             )
             .unwrap();
         let post_ctxs = self
             .agg_node_tracegen
-            .generate_post_verifier_subcircuit_ctxs(proofs, proofs_type, child_is_app);
+            .generate_post_verifier_subcircuit_ctxs(proofs, proofs_type, child_is_app, device_ctx);
 
         ProvingContext {
             per_trace: pre_data

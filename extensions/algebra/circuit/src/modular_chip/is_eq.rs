@@ -16,7 +16,8 @@ use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     is_equal_array::{IsEqArrayIo, IsEqArraySubAir},
-    AlignedBytesBorrow, SubAir, TraceSubRowGenerator,
+    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+    TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -39,7 +40,7 @@ use crate::modular_chip::VmModularIsEqualExecutor;
 // at runtime (i.e. when chip is instantiated).
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct ModularIsEqualCoreCols<T, const READ_LIMBS: usize> {
     pub is_valid: T,
     pub is_setup: T,
@@ -67,7 +68,8 @@ pub struct ModularIsEqualCoreCols<T, const READ_LIMBS: usize> {
     pub c_lt_mark: T,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, ColumnsAir)]
+#[columns_via(ModularIsEqualCoreCols<u8, READ_LIMBS>)]
 pub struct ModularIsEqualCoreAir<
     const READ_LIMBS: usize,
     const WRITE_LIMBS: usize,

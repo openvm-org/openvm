@@ -55,7 +55,6 @@ cuda = [
     "dep:openvm-cuda-backend",
     "dep:openvm-stark-sdk",
     "openvm-circuit-primitives/cuda",
-    "openvm-mod-circuit-builder/cuda",
     "openvm-circuit/cuda",
     "openvm-algebra-circuit/cuda",
 ]

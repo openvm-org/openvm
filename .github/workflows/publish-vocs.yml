@@ -8,6 +8,8 @@ on:
         required: true
         type: string
         default: "main"
+  release:
+    types: [released]
 
 permissions:
   contents: write
@@ -20,7 +22,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ github.event.inputs.branch || github.event.release.tag_name }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

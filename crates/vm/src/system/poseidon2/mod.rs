@@ -1,5 +1,7 @@
-//! Chip to handle Poseidon2 instructions `compress` and `permute`. It is used as a system chip
-//! for persistent memory.
+//! Chip to handle **native kernel** instructions for Poseidon2 `compress` and `permute`.
+//! This chip is put in `intrinsics` for organizational convenience, but
+//! it is used as a system chip for the memory merkle tree and as a native kernel chip for
+//! aggregation.
 //!
 //! Note that neither `compress` nor `permute` on its own
 //! is a cryptographic hash. `permute` is a cryptographic permutation, which can be made
@@ -11,7 +13,7 @@ use std::sync::Arc;
 
 use openvm_circuit_primitives::Chip;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
-use openvm_stark_backend::{interaction::LookupBus, AirRef, StarkProtocolConfig, Val};
+use openvm_stark_backend::{interaction::LookupBus, StarkProtocolConfig, Val};
 
 #[cfg(test)]
 pub mod tests;
@@ -23,7 +25,7 @@ pub use chip::*;
 use crate::{
     arch::{
         hasher::{Hasher, HasherChip},
-        VmField,
+        AirRefWithColumns, VmField,
     },
     system::poseidon2::air::Poseidon2PeripheryAir,
 };
@@ -53,7 +55,7 @@ pub fn new_poseidon2_periphery_air<SC>(
     poseidon2_config: Poseidon2Config<Val<SC>>,
     direct_bus: LookupBus,
     max_constraint_degree: usize,
-) -> AirRef<SC>
+) -> AirRefWithColumns<SC>
 where
     SC: StarkProtocolConfig,
     Val<SC>: VmField,

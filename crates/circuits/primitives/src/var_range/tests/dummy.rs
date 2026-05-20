@@ -6,12 +6,14 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
-use crate::var_range::bus::VariableRangeCheckerBus;
+use crate::{var_range::bus::VariableRangeCheckerBus, ColumnsAir};
 
 // dummy AIR for testing VariableRangeCheckerBus::send
 pub struct TestSendAir {
     bus: VariableRangeCheckerBus,
 }
+// No columns provided: test dummy whose 2-element row `[value, max_bits]` has no `Cols` struct.
+impl ColumnsAir for TestSendAir {}
 
 impl TestSendAir {
     pub fn new(bus: VariableRangeCheckerBus) -> Self {
@@ -45,6 +47,8 @@ pub struct TestRangeCheckAir {
     bus: VariableRangeCheckerBus,
     max_bits: usize,
 }
+// No columns provided: test dummy whose single-column row `[value]` has no `Cols` struct.
+impl ColumnsAir for TestRangeCheckAir {}
 
 impl TestRangeCheckAir {
     pub fn new(bus: VariableRangeCheckerBus, max_bits: usize) -> Self {
@@ -100,9 +104,10 @@ pub mod cuda {
     impl DummyInteractionChipGPU {
         pub fn new(range_checker: Arc<VariableRangeCheckerChipGPU>, data: Vec<u32>) -> Self {
             assert!(!data.is_empty());
+            let data = data.to_device_on(&range_checker.device_ctx).unwrap();
             Self {
                 range_checker,
-                data: data.to_device().unwrap(),
+                data,
             }
         }
     }
@@ -110,9 +115,16 @@ pub mod cuda {
     impl<RA> Chip<RA, GpuBackend> for DummyInteractionChipGPU {
         fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
             let height = self.data.len();
-            let trace = DeviceMatrix::<F>::with_capacity(height, DUMMY_TRACE_WIDTH);
+            let device_ctx = &self.range_checker.device_ctx;
+            let trace = DeviceMatrix::<F>::with_capacity_on(height, DUMMY_TRACE_WIDTH, device_ctx);
             unsafe {
-                dummy_tracegen(&self.data, trace.buffer(), &self.range_checker.count).unwrap();
+                dummy_tracegen(
+                    &self.data,
+                    trace.buffer(),
+                    &self.range_checker.count,
+                    device_ctx.stream.as_raw(),
+                )
+                .unwrap();
             }
             AirProvingContext::simple_no_pis(trace)
         }

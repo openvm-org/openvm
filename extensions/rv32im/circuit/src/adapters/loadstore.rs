@@ -20,7 +20,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     utils::{not, select},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow,
+    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -75,7 +75,7 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapt
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, AlignedBorrow)]
+#[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv32LoadStoreAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
@@ -101,7 +101,8 @@ pub struct Rv32LoadStoreAdapterCols<T> {
     pub needs_write: T,
 }
 
-#[derive(Clone, Copy, Debug, derive_new::new)]
+#[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32LoadStoreAdapterCols<u8>)]
 pub struct Rv32LoadStoreAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
@@ -456,6 +457,7 @@ where
                 STOREW | STOREH | STOREB => {
                     let imm_extended = record.imm as u32 + record.imm_sign as u32 * 0xffff0000;
                     let ptr = record.rs1_val.wrapping_add(imm_extended) & !3;
+
                     timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {

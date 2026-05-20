@@ -33,10 +33,9 @@ impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV32_REGISTER_NUM_LI
         inst: &Instruction<F>,
         data: &mut MultiPreCompute,
     ) -> Result<(), StaticProgramError> {
-        assert_eq!(
-            MulOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset)),
-            MulOpcode::MUL
-        );
+        if MulOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset)) != MulOpcode::MUL {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
         if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
@@ -205,12 +204,6 @@ where
         let mut asm_str = self.generate_x86_asm(inst, pc)?;
 
         asm_str += &update_height_change_asm(chip_idx, 1)?;
-        // read [b:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-        // read [c:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
-        // write [a:4]_1
-        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
 
         Ok(asm_str)
     }

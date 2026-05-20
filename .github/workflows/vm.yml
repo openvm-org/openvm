@@ -32,11 +32,14 @@ jobs:
 
     steps:
       - uses: runs-on/action@v2
+        with:
+          sccache: s3
       - uses: actions/checkout@v5
       - run: | # avoid cross-device link error
           rustup component remove clippy || true
           rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
       - uses: dtolnay/rust-toolchain@stable
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -63,3 +66,7 @@ jobs:
         working-directory: crates/vm
         run: |
           cargo nextest run --cargo-profile=fast --features parallel,basic-memory
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

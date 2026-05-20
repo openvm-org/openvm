@@ -1,7 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
 use openvm_cuda_backend::prelude::F;
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
 
 extern "C" {
     fn _merkle_precomputation_hash_vectors(
@@ -10,6 +10,7 @@ extern "C" {
         num_vectors: usize,
         d_pre_states: *mut F,
         d_post_states: *mut F,
+        stream: cudaStream_t,
     ) -> i32;
 }
 
@@ -27,6 +28,7 @@ pub unsafe fn merkle_precomputation_hash_vectors(
     num_vectors: usize,
     d_pre_states: &DeviceBuffer<F>,
     d_post_states: &DeviceBuffer<F>,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_merkle_precomputation_hash_vectors(
         d_data.as_ptr(),
@@ -34,5 +36,6 @@ pub unsafe fn merkle_precomputation_hash_vectors(
         num_vectors,
         d_pre_states.as_mut_ptr(),
         d_post_states.as_mut_ptr(),
+        stream,
     ))
 }

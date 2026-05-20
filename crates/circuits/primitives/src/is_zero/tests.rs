@@ -28,17 +28,21 @@ use {
 };
 
 use super::{IsZeroIo, IsZeroSubAir};
-use crate::{utils::test_engine_small, SubAir, TraceSubRowGenerator};
+use crate::{
+    utils::test_engine_small, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+    TraceSubRowGenerator,
+};
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct IsZeroCols<T> {
     pub x: T,
     pub out: T,
     pub inv: T,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, ColumnsAir)]
+#[columns_via(IsZeroCols<u8>)]
 pub struct IsZeroTestAir(IsZeroSubAir);
 
 impl<F: Field> BaseAirWithPublicValues<F> for IsZeroTestAir {}
@@ -180,6 +184,7 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], _expected: [u32; 4]) {
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_is_zero_against_cpu_full() {
+    let device_ctx = crate::utils::test_device_ctx();
     let mut rng = create_seeded_rng();
     for log_height in 1..=16 {
         let n = 1 << log_height;
@@ -194,10 +199,11 @@ fn test_cuda_is_zero_against_cpu_full() {
             .map(F::from_u32)
             .collect();
 
-        let input_buffer = vec_x.as_slice().to_device().unwrap();
-        let output = DeviceMatrix::<F>::with_capacity(n, 2);
+        let input_buffer = vec_x.as_slice().to_device_on(&device_ctx).unwrap();
+        let output = DeviceMatrix::<F>::with_capacity_on(n, 2, &device_ctx);
         unsafe {
-            is_zero::dummy_tracegen(output.buffer(), &input_buffer).unwrap();
+            is_zero::dummy_tracegen(output.buffer(), &input_buffer, device_ctx.stream.as_raw())
+                .unwrap();
         };
 
         let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
@@ -214,6 +220,6 @@ fn test_cuda_is_zero_against_cpu_full() {
             2,
         ));
 
-        assert_eq_host_and_device_matrix(cpu_matrix, &output);
+        assert_eq_host_and_device_matrix(cpu_matrix, &output, &device_ctx);
     }
 }

@@ -39,9 +39,15 @@ fn deferral_merkle_proof_from_tree(
 
     // Leaf index for DEFERRAL_AS, block_id=0 in the full tree (1-indexed).
     let leaf_idx = (1u64 << overall_height) + memory_dimensions.label_to_index((DEFERRAL_AS, 0));
+    debug_assert_eq!(leaf_idx % 2, 0);
 
-    // Start at level `depth` above the leaf.
-    let mut node_idx = leaf_idx >> depth;
+    // Start at level `depth` above the leaf. When `depth == 0`, the first node in the
+    // path is the right sibling of the node at `leaf_idx`.
+    let mut node_idx = if depth == 0 {
+        leaf_idx + 1
+    } else {
+        leaf_idx >> depth
+    };
 
     // Pad the first `depth` entries with zeros (skipped levels).
     let mut proof = vec![[F::ZERO; DIGEST_SIZE]; depth];

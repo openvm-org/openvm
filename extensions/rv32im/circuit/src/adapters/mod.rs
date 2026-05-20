@@ -70,8 +70,8 @@ pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr
     );
 
     // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    // - address spaces `RV32_REGISTER_AS`, `RV32_MEMORY_AS`, `PUBLIC_VALUES_AS` have cell type `u8`
+    //   and use the fixed 4-byte VM memory access granularity
     unsafe { memory.read::<u8, N>(address_space, ptr) }
 }
 
@@ -89,8 +89,8 @@ pub fn memory_write<const N: usize>(
     );
 
     // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    // - address spaces `RV32_REGISTER_AS`, `RV32_MEMORY_AS`, `PUBLIC_VALUES_AS` have cell type `u8`
+    //   and use the fixed 4-byte VM memory access granularity
     unsafe { memory.write::<u8, N>(address_space, ptr, data) }
 }
 
@@ -110,18 +110,9 @@ pub fn timed_read<const N: usize>(
     );
 
     // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
-    #[cfg(feature = "legacy-v1-3-mem-align")]
-    if address_space == RV32_MEMORY_AS {
-        unsafe { memory.read::<u8, N, 1>(address_space, ptr) }
-    } else {
-        unsafe { memory.read::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr) }
-    }
-    #[cfg(not(feature = "legacy-v1-3-mem-align"))]
-    unsafe {
-        memory.read::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr)
-    }
+    // - address spaces `RV32_REGISTER_AS`, `RV32_MEMORY_AS`, `PUBLIC_VALUES_AS` have cell type `u8`
+    //   and use the fixed 4-byte VM memory access granularity
+    unsafe { memory.read::<u8, N>(address_space, ptr) }
 }
 
 #[inline(always)]
@@ -138,18 +129,9 @@ pub fn timed_write<const N: usize>(
     );
 
     // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
-    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
-    #[cfg(feature = "legacy-v1-3-mem-align")]
-    if address_space == RV32_MEMORY_AS {
-        unsafe { memory.write::<u8, N, 1>(address_space, ptr, data) }
-    } else {
-        unsafe { memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
-    }
-    #[cfg(not(feature = "legacy-v1-3-mem-align"))]
-    unsafe {
-        memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data)
-    }
+    // - address spaces `RV32_REGISTER_AS`, `RV32_MEMORY_AS`, `PUBLIC_VALUES_AS` have cell type `u8`
+    //   and use the fixed 4-byte VM memory access granularity
+    unsafe { memory.write::<u8, N>(address_space, ptr, data) }
 }
 
 /// Reads register value at `reg_ptr` from memory and records the memory access in mutable buffer.

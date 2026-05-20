@@ -21,14 +21,14 @@ use openvm_stark_backend::{
         MultiStarkKeygenBuilder,
     },
     p3_field::{InjectiveMonomial, PrimeCharacteristicRing, PrimeField32, TwoAdicField},
-    p3_util::{log2_ceil_usize, log2_strict_usize},
+    p3_util::log2_ceil_usize,
     proof::Proof,
     prover::{
         ColMajorMatrix, CommittedTraceData, DeviceDataTransporter, DeviceMultiStarkProvingKey,
-        MatrixDimensions, ProverBackend, ProvingContext, TraceCommitter,
+        MatrixDimensions, ProverBackend, ProverDevice, ProvingContext, TraceCommitter,
     },
     verifier::VerifierError,
-    Com, StarkEngine, StarkProtocolConfig, Val,
+    AirRef, Com, StarkEngine, StarkProtocolConfig, Val,
 };
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
@@ -54,7 +54,6 @@ use crate::{
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{
-            adapter::records,
             merkle::{
                 public_values::{UserPublicValuesProof, UserPublicValuesProofError},
                 MemoryMerklePvs,
@@ -193,18 +192,20 @@ where
         air_names: &[String],
         widths: &[usize],
         interactions: &[usize],
+        need_rot: &[bool],
     ) -> MeteredCtx {
         MeteredCtx::new(
             constant_trace_heights.to_vec(),
             air_names.to_vec(),
             widths.to_vec(),
             interactions.to_vec(),
+            need_rot.to_vec(),
             self.config.as_ref(),
         )
     }
 
     pub fn build_metered_cost_ctx(&self, widths: &[usize]) -> MeteredCostCtx {
-        MeteredCostCtx::new(widths.to_vec(), self.config.as_ref())
+        MeteredCostCtx::new(widths.to_vec())
     }
 }
 
@@ -407,7 +408,8 @@ where
         d_pk: DeviceMultiStarkProvingKey<E::PB>,
     ) -> Result<Self, VirtualMachineError> {
         let circuit = config.create_airs()?;
-        let chip_complex = builder.create_chip_complex(&config, circuit)?;
+        let chip_complex =
+            builder.create_chip_complex(&config, circuit, engine.device().device_ctx())?;
         let executor = VmExecutor::<Val<E::SC>, _>::new(config)?;
         Ok(Self {
             engine,
@@ -612,20 +614,8 @@ where
             .collect::<Vec<_>>();
         let ctx = PreflightCtx::new_with_capacity(&capacities, num_insns);
 
-        let system_config: &SystemConfig = self.config().as_ref();
-        let adapter_offset = system_config.access_adapter_air_id_offset();
-        // ATTENTION: this must agree with `num_memory_airs`
-        let num_adapters = log2_strict_usize(system_config.memory_config.max_access_adapter_n);
-        assert_eq!(adapter_offset + num_adapters, system_config.num_airs());
-        let access_adapter_arena_size_bound = records::arena_size_bound(
-            &trace_heights[adapter_offset..adapter_offset + num_adapters],
-        );
         let pc = state.pc();
-        let memory = TracingMemory::from_image(
-            state.memory,
-            system_config.initial_block_size(),
-            access_adapter_arena_size_bound,
-        );
+        let memory = TracingMemory::from_image(state.memory);
         let from_state = ExecutionState::new(pc, memory.timestamp());
         let vm_state = VmState::new(
             pc,
@@ -639,10 +629,7 @@ where
         interpreter.reset_execution_frequencies();
         execute_spanned!("execute_preflight", interpreter, &mut exec_state)?;
         let filtered_exec_frequencies = interpreter.filtered_execution_frequencies();
-        let touched_memory = exec_state
-            .vm_state
-            .memory
-            .finalize::<Val<E::SC>>(system_config.continuation_enabled);
+        let touched_memory = exec_state.vm_state.memory.finalize::<Val<E::SC>>();
         #[cfg(feature = "perf-metrics")]
         crate::metrics::end_segment_metrics(&mut exec_state);
 
@@ -655,7 +642,6 @@ where
             to_state,
             exit_code,
             filtered_exec_frequencies,
-            access_adapter_records: memory.access_adapter_records,
             touched_memory,
         };
         let record_arenas = exec_state.ctx.arenas;
@@ -701,8 +687,6 @@ where
         {
             state.metrics.set_pk_info(&self.pk);
             state.metrics.num_sys_airs = self.config().as_ref().num_airs();
-            state.metrics.access_adapter_offset =
-                self.config().as_ref().access_adapter_air_id_offset();
         }
         state
     }
@@ -718,9 +702,6 @@ where
         system_records: SystemRecords<Val<E::SC>>,
         record_arenas: Vec<VB::RecordArena>,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
-        #[cfg(all(feature = "metrics", not(feature = "cuda")))]
-        let mut current_trace_heights =
-            self.get_trace_heights_from_arenas(&system_records, &record_arenas);
         // main tracegen call:
         let ctx = self
             .chip_complex
@@ -778,8 +759,6 @@ where
                 });
             }
         }
-        #[cfg(all(feature = "metrics", not(feature = "cuda")))]
-        self.finalize_metrics(&mut current_trace_heights);
         #[cfg(feature = "stark-debug")]
         self.debug_proving_ctx(&ctx);
 
@@ -822,28 +801,6 @@ where
         let proof = self.engine.prove(&self.pk, ctx).unwrap();
 
         Ok((proof, final_memory))
-    }
-
-    /// Verify segment proofs, checking continuation boundary conditions between segments if VM
-    /// memory is persistent. The behavior of this function differs depending on whether
-    /// continuations is enabled or not.
-    pub fn verify(
-        &self,
-        vk: &MultiStarkVerifyingKey<E::SC>,
-        proofs: &[Proof<E::SC>],
-    ) -> Result<(), VmVerificationError<E::SC>>
-    where
-        Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
-        Val<E::SC>: PrimeField32,
-    {
-        if self.config().as_ref().continuation_enabled {
-            verify_segments(&self.engine, vk, proofs).map(|_| ())
-        } else {
-            assert_eq!(proofs.len(), 1);
-            self.engine
-                .verify(vk, &proofs[0])
-                .map_err(VmVerificationError::StarkError)
-        }
     }
 
     /// Transforms the program into a cached trace and commits it _on device_ using the proof system
@@ -898,7 +855,8 @@ where
     pub fn build_metered_ctx(&self, exe: &VmExe<Val<E::SC>>) -> MeteredCtx {
         let program_len = exe.program.num_defined_instructions();
 
-        let (mut constant_trace_heights, air_names, widths, interactions): (
+        let (mut constant_trace_heights, air_names, widths, interactions, need_rot): (
+            Vec<_>,
             Vec<_>,
             Vec<_>,
             Vec<_>,
@@ -912,18 +870,40 @@ where
                 let air_names = pk.air_name.clone();
                 let width = pk.vk.params.width.total_width();
                 let num_interactions = pk.vk.symbolic_constraints.interactions.len();
-                (constant_trace_height, air_names, width, num_interactions)
+                let need_rot = pk.vk.params.need_rot;
+                (
+                    constant_trace_height,
+                    air_names,
+                    width,
+                    num_interactions,
+                    need_rot,
+                )
             })
             .multiunzip();
 
         // Program trace is the same for all segments
         constant_trace_heights[PROGRAM_AIR_ID] = Some(program_len);
+        // VmConnectorAir always has a constant trace height of 2
+        constant_trace_heights[CONNECTOR_AIR_ID] = Some(2);
+        // Merge in constant heights reported by chips (e.g., lookup table chips).
+        for (air_id, chip_height) in self
+            .chip_complex
+            .inventory
+            .constant_trace_heights()
+            .into_iter()
+            .enumerate()
+        {
+            if constant_trace_heights[air_id].is_none() {
+                constant_trace_heights[air_id] = chip_height;
+            }
+        }
 
         self.executor().build_metered_ctx(
             &constant_trace_heights,
             &air_names,
             &widths,
             &interactions,
+            &need_rot,
         )
     }
 
@@ -964,10 +944,8 @@ mod tests {
     #[test]
     fn keygen_marks_required_airs_for_continuations() {
         let engine = test_cpu_engine();
-        let config = SystemConfig::default().with_continuations();
-        let merkle_air_id = config
-            .memory_merkle_air_id()
-            .expect("continuations should have a merkle AIR");
+        let config = SystemConfig::default();
+        let merkle_air_id = config.memory_merkle_air_id();
         let boundary_air_id = config.memory_boundary_air_id();
 
         let (_vm, pk) = VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, config).unwrap();
@@ -1365,77 +1343,6 @@ where
     VB: VmBuilder<E>,
 {
     let air_inv = vm.config().create_airs().unwrap();
-    let global_airs = air_inv.into_airs().collect_vec();
+    let global_airs: Vec<AirRef<E::SC>> = air_inv.into_airs().map(|a| a as AirRef<_>).collect();
     vm.engine.debug(&global_airs, ctx);
-}
-
-#[cfg(all(feature = "metrics", not(feature = "cuda")))]
-mod vm_metrics {
-    use std::iter::zip;
-
-    use metrics::counter;
-
-    use super::*;
-    use crate::arch::Arena;
-
-    impl<E, VB> VirtualMachine<E, VB>
-    where
-        E: StarkEngine,
-        VB: VmBuilder<E>,
-    {
-        /// Assumed that `record_arenas` has length equal to number of AIRs.
-        ///
-        /// Best effort calculation of the used trace heights per chip without padding to powers of
-        /// two. This is best effort because some periphery chips may not have record arenas to
-        /// instrument. This function includes the constant trace heights, and the used height of
-        /// the program trace. It does not include the memory access adapter trace heights,
-        /// which is included in `SystemChipComplex::finalize_trace_heights`.
-        pub(crate) fn get_trace_heights_from_arenas(
-            &self,
-            system_records: &SystemRecords<Val<E::SC>>,
-            record_arenas: &[VB::RecordArena],
-        ) -> Vec<usize> {
-            let num_airs = self.num_airs();
-            assert_eq!(num_airs, record_arenas.len());
-            let mut heights: Vec<usize> = record_arenas
-                .iter()
-                .map(|arena| arena.current_trace_height())
-                .collect();
-            // If there are any constant trace heights, set them
-            for (pk, height) in zip(&self.pk.per_air, &mut heights) {
-                if let Some(constant_height) = pk.preprocessed_data.as_ref().map(|pd| pd.height()) {
-                    *height = constant_height;
-                }
-            }
-            // Program chip used height
-            heights[PROGRAM_AIR_ID] = system_records.filtered_exec_frequencies.len();
-
-            heights
-        }
-
-        /// Update used trace heights after tracegen is done (primarily updating memory-related
-        /// metrics) and then emit the final metrics.
-        pub(crate) fn finalize_metrics(&self, heights: &mut [usize]) {
-            self.chip_complex.system.finalize_trace_heights(heights);
-            let mut main_cells_used = 0usize;
-            let mut total_cells_used = 0usize;
-            for (pk, height) in zip(&self.pk.per_air, heights.iter()) {
-                let width = &pk.vk.params.width;
-                main_cells_used += width.main_width() * *height;
-                total_cells_used += width.total_width() * *height;
-            }
-            tracing::debug!(?heights);
-            tracing::info!(main_cells_used, total_cells_used);
-            counter!("main_cells_used").absolute(main_cells_used as u64);
-            counter!("total_cells_used").absolute(total_cells_used as u64);
-
-            #[cfg(feature = "perf-metrics")]
-            {
-                for (name, value) in zip(self.air_names(), heights) {
-                    let labels = [("air_name", name.to_string())];
-                    counter!("rows_used", &labels).absolute(*value as u64);
-                }
-            }
-        }
-    }
 }

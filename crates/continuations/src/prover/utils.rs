@@ -1,13 +1,21 @@
 use openvm_recursion_circuit::prelude::F;
 use openvm_stark_backend::{
-    prover::{AirProvingContext, MatrixDimensions, ProverBackend, ProvingContext},
-    AirRef, StarkEngine, StarkProtocolConfig,
+    prover::{AirProvingContext, MatrixDimensions, ProverBackend, ProverDevice, ProvingContext},
+    AirRef, EngineDeviceCtx, StarkEngine, StarkProtocolConfig,
 };
 
 use crate::circuit::Circuit;
 
+#[cfg(debug_assertions)]
 pub(crate) fn debug_checks_enabled() -> bool {
     std::env::var("OPENVM_SKIP_DEBUG") != Ok(String::from("1"))
+}
+
+pub fn engine_device_ctx<E>(engine: &E) -> &EngineDeviceCtx<E>
+where
+    E: StarkEngine,
+{
+    engine.device().device_ctx()
 }
 
 pub fn debug_constraints<SC, C, E>(circuit: &C, ctx: &ProvingContext<E::PB>, engine: &E)

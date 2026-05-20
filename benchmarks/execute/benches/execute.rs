@@ -39,14 +39,14 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
-use openvm_sha256_transpiler::Sha256TranspilerExtension;
+use openvm_sha2_circuit::{Sha2, Sha2CpuProverExt, Sha2Executor};
+use openvm_sha2_transpiler::Sha2TranspilerExtension;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine,
     openvm_cpu_backend::{CpuBackend, CpuDevice},
     openvm_stark_backend::{
-        self, keygen::types::MultiStarkProvingKey, prover::DeviceDataTransporter, StarkEngine,
-        StarkProtocolConfig, SystemParams, Val,
+        self, keygen::types::MultiStarkProvingKey, prover::DeviceDataTransporter, EngineDeviceCtx,
+        StarkEngine, StarkProtocolConfig, SystemParams, Val,
     },
     p3_baby_bear::BabyBear,
 };
@@ -58,7 +58,6 @@ const APP_PROGRAMS: &[&str] = &[
     "fibonacci_iterative",
     "quicksort",
     "bubblesort",
-    "factorial_iterative_u256",
     "revm_snailtracer",
     "keccak256",
     "keccak256_iter",
@@ -127,7 +126,7 @@ pub struct ExecuteConfig {
     #[extension]
     pub keccak: Keccak256,
     #[extension]
-    pub sha256: Sha256,
+    pub sha2: Sha2,
     #[extension]
     pub modular: ModularExtension,
     #[extension]
@@ -148,7 +147,7 @@ impl Default for ExecuteConfig {
             io: Rv32Io,
             bigint: Int256::default(),
             keccak: Keccak256,
-            sha256: Sha256,
+            sha2: Sha2,
             modular: ModularExtension::new(vec![
                 bn_config.modulus.clone(),
                 bn_config.scalar.clone(),
@@ -189,12 +188,17 @@ where
         &self,
         config: &ExecuteConfig,
         circuit: AirInventory<SC>,
+        device_ctx: &EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &SystemCpuBuilder,
+            &config.system,
+            circuit,
+            device_ctx,
+        )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
@@ -209,7 +213,7 @@ where
             &config.keccak,
             inventory,
         )?;
-        VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha256, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha2, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &AlgebraCpuProverExt,
             &config.modular,
@@ -237,7 +241,7 @@ fn create_default_transpiler() -> Transpiler<BabyBear> {
         .with_extension(Rv32MTranspilerExtension)
         .with_extension(Int256TranspilerExtension)
         .with_extension(Keccak256TranspilerExtension)
-        .with_extension(Sha256TranspilerExtension)
+        .with_extension(Sha2TranspilerExtension)
         .with_extension(ModularTranspilerExtension)
         .with_extension(Fp2TranspilerExtension)
         .with_extension(EccTranspilerExtension)

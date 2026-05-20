@@ -17,8 +17,10 @@ use p3_field::{Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
 use strum::{EnumCount, EnumDiscriminants};
 
+#[cfg(feature = "cuda")]
+use crate::primitives::exp_bits_len::ExpBitsLenTraceGenerator as GpuExpBitsLenTraceGenerator;
 use crate::{
-    primitives::exp_bits_len::ExpBitsLenTraceGenerator,
+    primitives::exp_bits_len::ExpBitsLenCpuTraceGenerator,
     system::{
         AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, Preflight, TraceGenModule,
         WhirPreflight,
@@ -934,8 +936,8 @@ impl WhirModule {
                         let width = opened_rows[0].len();
                         for c in 0..width {
                             let mu_pow = mu_pow_iter.next().unwrap();
-                            for j in 0..(1 << k_whir) {
-                                codeword_vals[j] += *mu_pow * opened_rows[j][c];
+                            for (cv, row) in codeword_vals.iter_mut().zip(opened_rows.iter()) {
+                                *cv += *mu_pow * row[c];
                             }
                         }
                     }
@@ -983,7 +985,7 @@ impl WhirModule {
     }
 
     fn enqueue_pow_requests_for_proof(
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
         preflight: &Preflight,
         params: &SystemParams,
         query_layout: &WhirQueryLayout,
@@ -1104,7 +1106,7 @@ impl WhirModule {
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[&Proof<BabyBearPoseidon2Config>],
         preflights: &[&Preflight],
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
     ) -> WhirBlobCpu {
         let params = &child_vk.inner.params;
         let k_whir = params.k_whir();
@@ -1203,7 +1205,7 @@ impl WhirModule {
 }
 
 impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>> for WhirModule {
-    type ModuleSpecificCtx<'a> = ExpBitsLenTraceGenerator;
+    type ModuleSpecificCtx<'a> = ExpBitsLenCpuTraceGenerator;
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
@@ -1211,7 +1213,7 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
-        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        exp_bits_len_gen: &ExpBitsLenCpuTraceGenerator,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         let proofs = proofs.iter().collect_vec();
@@ -1383,7 +1385,7 @@ mod cuda_tracegen {
     use std::cmp;
 
     use openvm_cuda_backend::{data_transporter::transport_matrix_h2d_row, GpuBackend};
-    use openvm_cuda_common::d_buffer::DeviceBuffer;
+    use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
     use openvm_poseidon2_air::POSEIDON2_WIDTH;
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
     use openvm_stark_sdk::config::baby_bear_poseidon2::CHUNK;
@@ -1391,7 +1393,7 @@ mod cuda_tracegen {
     use super::*;
     use crate::{
         cuda::{
-            preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr, vk::VerifyingKeyGpu,
+            preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr_on, vk::VerifyingKeyGpu,
             GlobalCtxGpu,
         },
         tracegen::{cuda::StandardTracegenGpuCtx, RowMajorChip, StandardTracegenCtx},
@@ -1474,42 +1476,48 @@ mod cuda_tracegen {
             proofs: &[&Proof<BabyBearPoseidon2Config>],
             preflights: &[&Preflight],
             blob: &WhirBlobCpu,
+            device_ctx: &GpuDeviceCtx,
         ) -> Self {
-            let mus = to_device_or_nullptr(
+            let mus = to_device_or_nullptr_on(
                 &preflights
                     .iter()
                     .map(|preflight| preflight.stacking.stacking_batching_challenge)
                     .collect_vec(),
+                device_ctx,
             )
             .unwrap();
-            let zis = to_device_or_nullptr(blob.zis.as_slice()).unwrap();
-            let zi_roots = to_device_or_nullptr(blob.zi_roots.as_slice()).unwrap();
-            let yis = to_device_or_nullptr(blob.yis.as_slice()).unwrap();
-            let raw_queries = to_device_or_nullptr(
+            let zis = to_device_or_nullptr_on(blob.zis.as_slice(), device_ctx).unwrap();
+            let zi_roots = to_device_or_nullptr_on(blob.zi_roots.as_slice(), device_ctx).unwrap();
+            let yis = to_device_or_nullptr_on(blob.yis.as_slice(), device_ctx).unwrap();
+            let raw_queries = to_device_or_nullptr_on(
                 &preflights
                     .iter()
                     .flat_map(|preflight| preflight.whir.queries.iter().copied())
                     .collect_vec(),
+                device_ctx,
             )
             .unwrap();
             let accs_layout = blob.codeword_value_accs.layout();
             let rows_per_proof_offsets =
-                to_device_or_nullptr(accs_layout.rows_per_proof_offsets()).unwrap();
+                to_device_or_nullptr_on(accs_layout.rows_per_proof_offsets(), device_ctx).unwrap();
             let commits_per_proof_offsets =
-                to_device_or_nullptr(accs_layout.commits_per_proof_offsets()).unwrap();
+                to_device_or_nullptr_on(accs_layout.commits_per_proof_offsets(), device_ctx)
+                    .unwrap();
             let stacking_chunks_offsets =
-                to_device_or_nullptr(accs_layout.stacking_chunks_offsets()).unwrap();
+                to_device_or_nullptr_on(accs_layout.stacking_chunks_offsets(), device_ctx).unwrap();
             let stacking_widths_offsets =
-                to_device_or_nullptr(accs_layout.stacking_widths_offsets()).unwrap();
-            let mu_pows = to_device_or_nullptr(blob.mu_pows.as_slice()).unwrap();
+                to_device_or_nullptr_on(accs_layout.stacking_widths_offsets(), device_ctx).unwrap();
+            let mu_pows = to_device_or_nullptr_on(blob.mu_pows.as_slice(), device_ctx).unwrap();
             let codeword_value_accs =
-                to_device_or_nullptr(blob.codeword_value_accs.as_slice()).unwrap();
+                to_device_or_nullptr_on(blob.codeword_value_accs.as_slice(), device_ctx).unwrap();
 
             // Build poseidon state pairs in kernel order: [query][coset][commit][chunk]
             let poseidon_states_host = build_initial_poseidon_state_pairs(proofs, preflights);
-            let poseidon_states = to_device_or_nullptr(&poseidon_states_host).unwrap();
+            let poseidon_states =
+                to_device_or_nullptr_on(&poseidon_states_host, device_ctx).unwrap();
 
-            let folding_records = to_device_or_nullptr(blob.fold_records.as_slice()).unwrap();
+            let folding_records =
+                to_device_or_nullptr_on(blob.fold_records.as_slice(), device_ctx).unwrap();
 
             let codeword_opened_values_cap: usize = proofs
                 .iter()
@@ -1530,7 +1538,7 @@ mod cuda_tracegen {
                 }
             }
             let codeword_opened_values =
-                to_device_or_nullptr(&codeword_opened_values_host).unwrap();
+                to_device_or_nullptr_on(&codeword_opened_values_host, device_ctx).unwrap();
 
             // Must be in same order as codeword_opened_values
             let mut codeword_states_host =
@@ -1544,7 +1552,8 @@ mod cuda_tracegen {
                     }
                 }
             }
-            let codeword_states = to_device_or_nullptr(&codeword_states_host).unwrap();
+            let codeword_states =
+                to_device_or_nullptr_on(&codeword_states_host, device_ctx).unwrap();
 
             WhirBlobGpu {
                 zis,
@@ -1582,6 +1591,7 @@ mod cuda_tracegen {
                                 num_proofs: ctx.0.proofs.len(),
                                 blob: ctx.1,
                                 params: &ctx.0.vk.system_params,
+                                device_ctx: ctx.0.device_ctx,
                             },
                             required_height,
                         )
@@ -1592,6 +1602,7 @@ mod cuda_tracegen {
                             &non_initial_opened_values::cuda::NonInitialOpenedValuesGpuCtx {
                                 blob: ctx.1,
                                 params: &ctx.0.vk.system_params,
+                                device_ctx: ctx.0.device_ctx,
                             },
                             required_height,
                         )
@@ -1616,6 +1627,7 @@ mod cuda_tracegen {
                                 records: records.as_slice(),
                                 params: &ctx.0.vk.system_params,
                                 preflights: ctx.0.preflights,
+                                device_ctx: ctx.0.device_ctx,
                             },
                             required_height,
                         )
@@ -1626,6 +1638,7 @@ mod cuda_tracegen {
                             blob: ctx.1,
                             params: &ctx.0.vk.system_params,
                             num_proofs: ctx.0.proofs.len(),
+                            device_ctx: ctx.0.device_ctx,
                         },
                         required_height,
                     ),
@@ -1642,7 +1655,9 @@ mod cuda_tracegen {
                     );
                     let trace = RowMajorChip::generate_trace(self, &cpu_ctx, required_height);
                     trace.map(|m| {
-                        AirProvingContext::simple_no_pis(transport_matrix_h2d_row(&m).unwrap())
+                        AirProvingContext::simple_no_pis(
+                            transport_matrix_h2d_row(&m, ctx.0.device_ctx).unwrap(),
+                        )
                     })
                 }
             }
@@ -1650,7 +1665,10 @@ mod cuda_tracegen {
     }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for WhirModule {
-        type ModuleSpecificCtx<'a> = ExpBitsLenTraceGenerator;
+        type ModuleSpecificCtx<'a> = (
+            &'a GpuExpBitsLenTraceGenerator,
+            &'a openvm_cuda_common::stream::GpuDeviceCtx,
+        );
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
@@ -1658,9 +1676,11 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+            module_ctx: &Self::ModuleSpecificCtx<'_>,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
+            let exp_bits_len_gen = module_ctx.0;
+            let device_ctx = module_ctx.1;
             let proofs_cpu = proofs.iter().map(|proof| &proof.cpu).collect_vec();
             let preflights_cpu = preflights
                 .iter()
@@ -1673,12 +1693,13 @@ mod cuda_tracegen {
                 &preflights_cpu,
                 exp_bits_len_gen,
             );
-            let blob_gpu = WhirBlobGpu::new(&proofs_cpu, &preflights_cpu, &blob);
+            let blob_gpu = WhirBlobGpu::new(&proofs_cpu, &preflights_cpu, &blob, device_ctx);
             let ctx = (
                 StandardTracegenGpuCtx {
                     vk: child_vk,
                     proofs,
                     preflights,
+                    device_ctx,
                 },
                 &blob_gpu,
                 &blob,
@@ -1698,7 +1719,7 @@ mod cuda_tracegen {
             ];
 
             // Launch all CUDA tracegen kernels serially first (default stream).
-            let indexed_gpu_ctxs = gpu_chips
+            let indexed_gpu_proving_ctxs = gpu_chips
                 .iter()
                 .map(|chip| {
                     (
@@ -1739,21 +1760,23 @@ mod cuda_tracegen {
                 .collect::<Vec<_>>();
 
             // Phase 2: H2D transfer serially on main thread
-            let indexed_cpu_gpu_ctxs = indexed_cpu_rm_traces
+            let indexed_cpu_gpu_proving_ctxs = indexed_cpu_rm_traces
                 .into_iter()
                 .map(|(idx, trace)| {
                     (
                         idx,
                         trace.map(|m| {
-                            AirProvingContext::simple_no_pis(transport_matrix_h2d_row(&m).unwrap())
+                            AirProvingContext::simple_no_pis(
+                                transport_matrix_h2d_row(&m, device_ctx).unwrap(),
+                            )
                         }),
                     )
                 })
                 .collect::<Vec<_>>();
 
-            indexed_gpu_ctxs
+            indexed_gpu_proving_ctxs
                 .into_iter()
-                .chain(indexed_cpu_gpu_ctxs)
+                .chain(indexed_cpu_gpu_proving_ctxs)
                 .sorted_by(|a, b| a.0.cmp(&b.0))
                 .map(|(_idx, ctx)| ctx)
                 .collect()

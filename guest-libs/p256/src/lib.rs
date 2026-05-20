@@ -35,7 +35,6 @@ impl Curve for NistP256 {
     /// 32-byte serialized field elements.
     type FieldBytesSize = U32;
 
-    // Perf: Use the U256 type from openvm_ruint here
     type Uint = U256;
 
     /// Curve order.

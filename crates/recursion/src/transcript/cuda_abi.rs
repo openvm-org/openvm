@@ -1,7 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::prover::MatrixDimensions;
 
@@ -19,6 +19,7 @@ extern "C" {
         d_counts: *mut Poseidon2Count,
         num_records: usize,
         sbox_regs: usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _poseidon2_deduplicate_records_get_temp_bytes(
@@ -27,11 +28,14 @@ extern "C" {
         num_records: usize,
         d_num_records: *mut usize,
         h_temp_bytes_out: *mut usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _poseidon2_deduplicate_records(
         d_records: *mut F,
         d_counts: *mut Poseidon2Count,
+        d_records_out: *mut F,
+        d_counts_out: *mut Poseidon2Count,
         num_records: usize,
         d_num_records: *mut usize,
         num_prefix_perms: usize,
@@ -39,6 +43,7 @@ extern "C" {
         num_suffix_perms: usize,
         d_temp_storage: *mut std::ffi::c_void,
         temp_storage_bytes: usize,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _merkle_verify_tracegen(
@@ -56,6 +61,7 @@ extern "C" {
         d_proof_start_rows: *const usize,
         num_proofs: usize,
         d_leaf_scratch: *mut F,
+        stream: cudaStream_t,
     ) -> i32;
 
     fn _transcript_air_tracegen(
@@ -69,9 +75,11 @@ extern "C" {
         d_poseidon2_buffer: *mut F,
         h_poseidon2_offsets: *const u32,
         num_proofs: u32,
+        stream: cudaStream_t,
     ) -> i32;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub unsafe fn poseidon2_tracegen(
     d_trace: &DeviceBuffer<F>,
     height: usize,
@@ -80,6 +88,7 @@ pub unsafe fn poseidon2_tracegen(
     d_counts: &DeviceBuffer<Poseidon2Count>,
     num_records: usize,
     sbox_regs: usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_poseidon2_tracegen(
         d_trace.as_mut_ptr(),
@@ -89,6 +98,7 @@ pub unsafe fn poseidon2_tracegen(
         d_counts.as_mut_ptr(),
         num_records,
         sbox_regs,
+        stream,
     ))
 }
 
@@ -98,6 +108,7 @@ pub unsafe fn poseidon2_deduplicate_records_get_temp_bytes(
     num_records: usize,
     d_num_records: &DeviceBuffer<usize>,
     h_temp_bytes_out: &mut usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_poseidon2_deduplicate_records_get_temp_bytes(
         d_records.as_mut_ptr(),
@@ -105,6 +116,7 @@ pub unsafe fn poseidon2_deduplicate_records_get_temp_bytes(
         num_records,
         d_num_records.as_mut_ptr(),
         h_temp_bytes_out,
+        stream,
     ))
 }
 
@@ -112,6 +124,8 @@ pub unsafe fn poseidon2_deduplicate_records_get_temp_bytes(
 pub unsafe fn poseidon2_deduplicate_records(
     d_records: &DeviceBuffer<F>,
     d_counts: &DeviceBuffer<Poseidon2Count>,
+    d_records_out: &DeviceBuffer<F>,
+    d_counts_out: &DeviceBuffer<Poseidon2Count>,
     num_records: usize,
     d_num_records: &DeviceBuffer<usize>,
     num_prefix_perms: usize,
@@ -119,10 +133,13 @@ pub unsafe fn poseidon2_deduplicate_records(
     num_suffix_perms: usize,
     d_temp_storage: &DeviceBuffer<u8>,
     temp_storage_bytes: usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_poseidon2_deduplicate_records(
         d_records.as_mut_ptr(),
         d_counts.as_mut_ptr(),
+        d_records_out.as_mut_ptr(),
+        d_counts_out.as_mut_ptr(),
         num_records,
         d_num_records.as_mut_ptr(),
         num_prefix_perms,
@@ -130,6 +147,7 @@ pub unsafe fn poseidon2_deduplicate_records(
         num_suffix_perms,
         d_temp_storage.as_mut_ptr() as *mut std::ffi::c_void,
         temp_storage_bytes,
+        stream,
     ))
 }
 
@@ -147,6 +165,7 @@ pub unsafe fn merkle_verify_tracegen(
     d_proof_start_rows: &DeviceBuffer<usize>,
     num_proofs: usize,
     d_leaf_scratch: &DeviceBuffer<F>,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_merkle_verify_tracegen(
         d_trace.buffer().as_mut_ptr(),
@@ -165,6 +184,7 @@ pub unsafe fn merkle_verify_tracegen(
         d_proof_start_rows.as_ptr(),
         num_proofs,
         d_leaf_scratch.as_mut_ptr(),
+        stream,
     ))
 }
 
@@ -180,6 +200,7 @@ pub unsafe fn transcript_air_tracegen(
     d_poseidon2_buffer: &DeviceBuffer<F>,
     h_poseidon2_offsets: &[u32],
     num_proofs: usize,
+    stream: cudaStream_t,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_transcript_air_tracegen(
         d_trace.as_mut_ptr(),
@@ -192,5 +213,6 @@ pub unsafe fn transcript_air_tracegen(
         d_poseidon2_buffer.as_mut_ptr(),
         h_poseidon2_offsets.as_ptr(),
         num_proofs as u32,
+        stream,
     ))
 }

@@ -10,6 +10,13 @@ use openvm_stark_backend::prover::{AirProvingContext, ProverBackend};
 pub trait Chip<R, PB: ProverBackend> {
     /// Generate all necessary context for proving a single AIR.
     fn generate_proving_ctx(&self, records: R) -> AirProvingContext<PB>;
+
+    /// If this chip always produces a trace with a fixed number of rows (independent of execution),
+    /// return that height. Used by metered execution to avoid resetting constant-height chips
+    /// on segment boundaries.
+    fn constant_trace_height(&self) -> Option<usize> {
+        None
+    }
 }
 
 /// Auto-implemented trait for downcasting of trait objects.
@@ -26,5 +33,9 @@ impl<R, PB: ProverBackend, C: Chip<R, PB> + 'static> AnyChip<R, PB> for C {
 impl<R, PB: ProverBackend, C: Chip<R, PB> + ?Sized> Chip<R, PB> for std::sync::Arc<C> {
     fn generate_proving_ctx(&self, records: R) -> AirProvingContext<PB> {
         (**self).generate_proving_ctx(records)
+    }
+
+    fn constant_trace_height(&self) -> Option<usize> {
+        (**self).constant_trace_height()
     }
 }

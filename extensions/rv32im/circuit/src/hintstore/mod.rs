@@ -14,6 +14,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
+    ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
 use openvm_instructions::{
@@ -51,7 +52,7 @@ mod tests;
 const REM_WORD_NUM_ZERO_LIMBS: usize = 2;
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct Rv32HintStoreCols<T> {
     // common
     pub is_single: T,
@@ -73,7 +74,8 @@ pub struct Rv32HintStoreCols<T> {
     pub num_words_aux_cols: MemoryReadAuxCols<T>,
 }
 
-#[derive(Copy, Clone, Debug, derive_new::new)]
+#[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
+#[columns_via(Rv32HintStoreCols<u8>)]
 pub struct Rv32HintStoreAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,

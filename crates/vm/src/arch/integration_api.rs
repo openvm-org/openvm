@@ -1,5 +1,6 @@
 use std::{array::from_fn, borrow::Borrow, marker::PhantomData};
 
+use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
@@ -243,6 +244,18 @@ where
 {
 }
 
+impl<A, M> ColumnsAir for VmAirWrapper<A, M>
+where
+    A: ColumnsAir,
+    M: ColumnsAir,
+{
+    fn columns(&self) -> Option<Vec<String>> {
+        let adapter_cols = self.adapter.columns()?;
+        let core_cols = self.core.columns()?;
+        Some(adapter_cols.into_iter().chain(core_cols).collect())
+    }
+}
+
 impl<AB, A, M> Air<AB> for VmAirWrapper<A, M>
 where
     AB: AirBuilder,
@@ -324,6 +337,24 @@ impl<
     type ProcessedInstruction = MinimalInstruction<T>;
 }
 
+/// Adapter interface for branch operations that read from heap via vec-style blocks.
+/// Similar to `VecHeapAdapterInterface` but without writes (branch operations only compare values).
+pub struct VecHeapBranchAdapterInterface<
+    T,
+    const NUM_READS: usize,
+    const BLOCKS_PER_READ: usize,
+    const READ_SIZE: usize,
+>(PhantomData<T>);
+
+impl<T, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const READ_SIZE: usize>
+    VmAdapterInterface<T>
+    for VecHeapBranchAdapterInterface<T, NUM_READS, BLOCKS_PER_READ, READ_SIZE>
+{
+    type Reads = [[[T; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
+    type Writes = ();
+    type ProcessedInstruction = ImmInstruction<T>;
+}
+
 /// Similar to `BasicAdapterInterface`, but it flattens the reads and writes into a single flat
 /// array for each
 pub struct FlatInterface<T, PI, const READ_CELLS: usize, const WRITE_CELLS: usize>(
@@ -362,7 +393,7 @@ pub struct DynArray<T>(pub Vec<T>);
 // =================================================================================================
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct MinimalInstruction<T> {
     pub is_valid: T,
     /// Absolute opcode number
@@ -371,7 +402,7 @@ pub struct MinimalInstruction<T> {
 
 // This ProcessedInstruction is used by rv32_rdwrite
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct ImmInstruction<T> {
     pub is_valid: T,
     /// Absolute opcode number
@@ -381,7 +412,7 @@ pub struct ImmInstruction<T> {
 
 // This ProcessedInstruction is used by rv32_jalr
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct SignedImmInstruction<T> {
     pub is_valid: T,
     /// Absolute opcode number
@@ -814,6 +845,43 @@ mod conversions {
                 instruction.opcode,
                 instruction.immediate,
             ])
+        }
+    }
+
+    // AdapterAirContext: BasicInterface -> VecHeapBranchAdapterInterface
+    impl<
+            T,
+            const BASIC_NUM_READS: usize,
+            const NUM_READS: usize,
+            const BLOCKS_PER_READ: usize,
+            const READ_SIZE: usize,
+        >
+        From<
+            AdapterAirContext<
+                T,
+                BasicAdapterInterface<T, ImmInstruction<T>, BASIC_NUM_READS, 0, READ_SIZE, 0>,
+            >,
+        >
+        for AdapterAirContext<
+            T,
+            VecHeapBranchAdapterInterface<T, NUM_READS, BLOCKS_PER_READ, READ_SIZE>,
+        >
+    {
+        fn from(
+            ctx: AdapterAirContext<
+                T,
+                BasicAdapterInterface<T, ImmInstruction<T>, BASIC_NUM_READS, 0, READ_SIZE, 0>,
+            >,
+        ) -> Self {
+            assert_eq!(BASIC_NUM_READS, NUM_READS * BLOCKS_PER_READ);
+            let mut reads_it = ctx.reads.into_iter();
+            let reads = from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads,
+                writes: (),
+                instruction: ctx.instruction,
+            }
         }
     }
 }

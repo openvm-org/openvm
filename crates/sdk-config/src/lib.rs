@@ -19,8 +19,8 @@ use openvm_pairing_circuit::*;
 use openvm_pairing_transpiler::*;
 use openvm_rv32im_circuit::*;
 use openvm_rv32im_transpiler::*;
-use openvm_sha256_circuit::*;
-use openvm_sha256_transpiler::*;
+use openvm_sha2_circuit::*;
+use openvm_sha2_transpiler::*;
 use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig, Val};
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use openvm_transpiler::transpiler::Transpiler;
@@ -36,7 +36,7 @@ cfg_if::cfg_if! {
         use openvm_ecc_circuit::EccProverExt;
         use openvm_keccak256_circuit::Keccak256GpuProverExt;
         use openvm_rv32im_circuit::Rv32ImGpuProverExt;
-        use openvm_sha256_circuit::Sha256GpuProverExt;
+        use openvm_sha2_circuit::Sha2GpuProverExt;
         pub use SdkVmGpuBuilder as SdkVmBuilder;
     } else {
         pub use SdkVmCpuBuilder as SdkVmBuilder;
@@ -61,7 +61,7 @@ pub struct SdkVmConfig {
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
-    pub sha256: Option<UnitStruct>,
+    pub sha2: Option<UnitStruct>,
 
     /// NOTE: if enabling this together with the [Int256] extension, you should set the `rv32m`
     /// field to have the same `range_tuple_checker_sizes` as the `bigint` field for best
@@ -100,7 +100,7 @@ impl SdkVmConfig {
             .rv32m(Default::default())
             .io(Default::default())
             .keccak(Default::default())
-            .sha256(Default::default())
+            .sha2(Default::default())
             .bigint(Default::default())
             .modular(ModularExtension::new(vec![
                 bn_config.modulus.clone(),
@@ -176,8 +176,8 @@ impl TranspilerConfig<F> for SdkVmConfig {
         if self.keccak.is_some() {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
         }
-        if self.sha256.is_some() {
-            transpiler = transpiler.with_extension(Sha256TranspilerExtension);
+        if self.sha2.is_some() {
+            transpiler = transpiler.with_extension(Sha2TranspilerExtension);
         }
         if self.rv32m.is_some() {
             transpiler = transpiler.with_extension(Rv32MTranspilerExtension);
@@ -243,7 +243,7 @@ impl SdkVmConfig {
         let rv32i = config.rv32i.map(|_| Rv32I);
         let io = config.io.map(|_| Rv32Io);
         let keccak = config.keccak.map(|_| Keccak256);
-        let sha256 = config.sha256.map(|_| Sha256);
+        let sha2 = config.sha2.map(|_| Sha2);
         let rv32m = config.rv32m;
         let bigint = config.bigint;
         let modular = config.modular.clone();
@@ -257,7 +257,7 @@ impl SdkVmConfig {
             rv32i,
             io,
             keccak,
-            sha256,
+            sha2,
             rv32m,
             bigint,
             modular,
@@ -287,8 +287,8 @@ pub struct SdkVmConfigInner {
     pub io: Option<Rv32Io>,
     #[extension(executor = "Keccak256Executor")]
     pub keccak: Option<Keccak256>,
-    #[extension(executor = "Sha256Executor")]
-    pub sha256: Option<Sha256>,
+    #[extension(executor = "Sha2Executor")]
+    pub sha2: Option<Sha2>,
 
     #[extension(executor = "Rv32MExecutor")]
     pub rv32m: Option<Rv32M>,
@@ -346,13 +346,18 @@ where
         &self,
         config: &SdkVmConfig,
         circuit: AirInventory<SC>,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
         let config = config.to_inner();
-        let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &SystemCpuBuilder,
+            &config.system,
+            circuit,
+            device_ctx,
+        )?;
         let inventory = &mut chip_complex.inventory;
         if let Some(rv32i) = &config.rv32i {
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, rv32i, inventory)?;
@@ -363,8 +368,8 @@ where
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
         }
-        if let Some(sha256) = &config.sha256 {
-            VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha256, inventory)?;
+        if let Some(sha2) = &config.sha2 {
+            VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha2, inventory)?;
         }
         if let Some(rv32m) = &config.rv32m {
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, rv32m, inventory)?;
@@ -409,6 +414,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         &self,
         config: &SdkVmConfig,
         circuit: AirInventory<SC>,
+        device_ctx: &openvm_stark_backend::EngineDeviceCtx<BabyBearPoseidon2GpuEngine>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
@@ -416,8 +422,12 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         type E = BabyBearPoseidon2GpuEngine;
 
         let config = config.to_inner();
-        let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+            &SystemGpuBuilder,
+            &config.system,
+            circuit,
+            device_ctx,
+        )?;
         let inventory = &mut chip_complex.inventory;
         if let Some(rv32i) = &config.rv32i {
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, rv32i, inventory)?;
@@ -428,8 +438,8 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;
         }
-        if let Some(sha256) = &config.sha256 {
-            VmProverExtension::<E, _, _>::extend_prover(&Sha256GpuProverExt, sha256, inventory)?;
+        if let Some(sha2) = &config.sha2 {
+            VmProverExtension::<E, _, _>::extend_prover(&Sha2GpuProverExt, sha2, inventory)?;
         }
         if let Some(rv32m) = &config.rv32m {
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, rv32m, inventory)?;
@@ -535,8 +545,8 @@ impl From<Keccak256> for UnitStruct {
     }
 }
 
-impl From<Sha256> for UnitStruct {
-    fn from(_: Sha256) -> Self {
+impl From<Sha2> for UnitStruct {
+    fn from(_: Sha2) -> Self {
         UnitStruct {}
     }
 }
@@ -549,7 +559,7 @@ struct SdkVmConfigWithDefaultDeser {
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
-    pub sha256: Option<UnitStruct>,
+    pub sha2: Option<UnitStruct>,
 
     pub rv32m: Option<Rv32M>,
     pub bigint: Option<Int256>,
@@ -568,7 +578,7 @@ impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
             rv32i: config.rv32i,
             io: config.io,
             keccak: config.keccak,
-            sha256: config.sha256,
+            sha2: config.sha2,
             rv32m: config.rv32m,
             bigint: config.bigint,
             modular: config.modular,

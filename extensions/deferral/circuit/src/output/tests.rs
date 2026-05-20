@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor,
+    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, DEFAULT_BLOCK_SIZE,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -25,10 +25,7 @@ use rand::{rngs::StdRng, Rng, RngCore};
 #[cfg(feature = "cuda")]
 use {
     super::{DeferralOutputChipGpu, DeferralOutputRecordMut},
-    crate::{
-        count::DeferralCircuitCountChipGpu,
-        poseidon2::{poseidon2_buffer_capacity, DeferralPoseidon2ChipGpu},
-    },
+    crate::{count::DeferralCircuitCountChipGpu, poseidon2::DeferralPoseidon2ChipGpu},
     openvm_circuit::arch::{
         testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
         DenseRecordArena,
@@ -44,7 +41,7 @@ use crate::{
         deferral_poseidon2_air, deferral_poseidon2_chip, DeferralPoseidon2Air,
         DeferralPoseidon2Bus, DeferralPoseidon2Chip,
     },
-    utils::{combine_output, COMMIT_NUM_BYTES, MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES},
+    utils::{combine_output, COMMIT_NUM_BYTES, OUTPUT_TOTAL_BYTES},
     RawDeferralResult,
 };
 
@@ -114,11 +111,11 @@ fn write_output_key(
     input_ptr: usize,
     output_key: [u8; OUTPUT_TOTAL_BYTES],
 ) {
-    for (chunk_idx, chunk) in output_key.chunks_exact(MEMORY_OP_SIZE).enumerate() {
-        let chunk: [u8; MEMORY_OP_SIZE] = chunk.try_into().unwrap();
+    for (chunk_idx, chunk) in output_key.chunks_exact(DEFAULT_BLOCK_SIZE).enumerate() {
+        let chunk: [u8; DEFAULT_BLOCK_SIZE] = chunk.try_into().unwrap();
         tester.write(
             RV32_MEMORY_AS as usize,
-            input_ptr + chunk_idx * MEMORY_OP_SIZE,
+            input_ptr + chunk_idx * DEFAULT_BLOCK_SIZE,
             chunk.map(F::from_u8),
         );
     }
@@ -150,10 +147,10 @@ fn set_and_execute_output<RA, E>(
     RA: Arena,
     E: PreflightExecutor<F, RA>,
 {
-    let rd = gen_pointer(rng, MEMORY_OP_SIZE);
-    let rs = gen_pointer(rng, MEMORY_OP_SIZE);
-    let output_ptr = gen_pointer(rng, MEMORY_OP_SIZE);
-    let input_ptr = gen_pointer(rng, MEMORY_OP_SIZE);
+    let rd = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
+    let rs = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
+    let output_ptr = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
+    let input_ptr = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
     let deferral_idx = rng.random_range(0..num_deferrals);
 
     let mut input_commit = [0u8; COMMIT_NUM_BYTES];
@@ -174,12 +171,12 @@ fn set_and_execute_output<RA, E>(
     tester.write(
         RV32_REGISTER_AS as usize,
         rd,
-        output_ptr.to_le_bytes().map(F::from_u8),
+        (output_ptr as u32).to_le_bytes().map(F::from_u8),
     );
     tester.write(
         RV32_REGISTER_AS as usize,
         rs,
-        input_ptr.to_le_bytes().map(F::from_u8),
+        (input_ptr as u32).to_le_bytes().map(F::from_u8),
     );
 
     let output_commit: [u8; COMMIT_NUM_BYTES] = result.output_commit.try_into().unwrap();
@@ -277,10 +274,14 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
         tester.dummy_memory_helper(),
     );
 
-    let count = Arc::new(DeviceBuffer::<u32>::with_capacity(num_deferrals));
-    count.fill_zero().unwrap();
+    let device_ctx = tester.range_checker().device_ctx.clone();
+    let count = Arc::new(DeviceBuffer::<u32>::with_capacity_on(
+        num_deferrals,
+        &device_ctx,
+    ));
+    count.fill_zero_on(&device_ctx).unwrap();
     let poseidon2_chip_gpu =
-        DeferralPoseidon2ChipGpu::new(poseidon2_buffer_capacity(MAX_INS_CAPACITY.max(1)), 1);
+        DeferralPoseidon2ChipGpu::new(MAX_INS_CAPACITY.max(1), 1, device_ctx.clone());
     let gpu_chip = DeferralOutputChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
@@ -296,7 +297,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
         harness,
         count: (
             DeferralCircuitCountAir::new(count_bus, num_deferrals),
-            DeferralCircuitCountChipGpu::new(count, num_deferrals),
+            DeferralCircuitCountChipGpu::new(count, num_deferrals, device_ctx),
             DenseRecordArena::with_byte_capacity(0),
         ),
         poseidon2: (
@@ -310,7 +311,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
 #[test]
 fn rand_deferral_output_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::<F>::volatile(test_memory_config());
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
     let CpuHarnessBundle {
         mut harness,
         bitwise,
@@ -345,7 +346,7 @@ fn rand_deferral_output_test() {
 #[test]
 fn test_cuda_rand_deferral_output_tracegen() {
     let mut rng = create_seeded_rng();
-    let mut tester = GpuChipTestBuilder::volatile(
+    let mut tester = GpuChipTestBuilder::new(
         test_memory_config(),
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
     )
