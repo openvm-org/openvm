@@ -4,14 +4,12 @@ use derive_new::new;
 use openvm_circuit::arch::cuda::postflight::{
     GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
-};
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::d_buffer::DeviceBuffer;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::prover::AirProvingContext;
@@ -25,7 +23,6 @@ use crate::{
 #[derive(new)]
 pub struct DeferralCallChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub address_bits: usize,
     pub timestamp_max_bits: usize,
     pub count: Arc<DeviceBuffer<u32>>,
@@ -102,7 +99,6 @@ impl DeferralCallChipGpu {
                 self.num_deferral_circuits,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
-                &self.bitwise_lookup.count,
                 &poseidon2.records,
                 &poseidon2.counts,
                 &poseidon2.idx,

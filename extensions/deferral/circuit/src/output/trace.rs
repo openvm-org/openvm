@@ -6,14 +6,16 @@ use openvm_circuit::{
     system::memory::MemoryAuxColsFactory,
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
+use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::rv64_u16_block_to_bytes;
+use openvm_riscv_circuit::adapters::{
+    ptr_bound_from_ptr, ptr_to_field_u16_limbs, rv64_u16_block_to_bytes,
+};
 use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -23,9 +25,10 @@ use crate::{
     output::{DeferralOutputChip, DeferralOutputCols},
     poseidon2::DeferralPoseidon2Chip,
     utils::{
-        checked_pointer_offset, checked_u16_pointer, f_commit_to_bytes, logged_u32_pointer,
-        require_block_alignment, split_output, DIGEST_BYTE_MEMORY_OPS, F_NUM_BYTES,
-        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        checked_pointer_offset, checked_u16_pointer, f_commit_to_bytes, le_bytes_to_u16_cells,
+        logged_u32_pointer, require_block_alignment, split_output, COMMIT_NUM_U16S, F_NUM_U16S,
+        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS, SPONGE_BYTES_PER_ROW, SPONGE_ROW_MEMORY_OPS,
+        U16_BITS,
     },
 };
 
@@ -42,7 +45,7 @@ struct DeferralOutputReplay {
     output_commit: [u8; crate::utils::COMMIT_NUM_BYTES],
     output_len: u32,
     output_key_accesses: Vec<U16Access>,
-    output_chunks: Vec<[u8; DIGEST_SIZE]>,
+    output_chunks: Vec<[u8; SPONGE_BYTES_PER_ROW]>,
     output_write_accesses: Vec<U16Access>,
 }
 
@@ -115,12 +118,12 @@ pub fn generate_trace_from_postflight<F: VmField>(
         let output_len_u64 = u64::from_le_bytes(output_len_bytes);
         let output_len = u32::try_from(output_len_u64)
             .map_err(|_| PostflightError::new("Deferral OUTPUT length exceeds u32"))?;
-        if !output_len.is_multiple_of(DIGEST_SIZE as u32) {
+        if !output_len.is_multiple_of(SPONGE_BYTES_PER_ROW as u32) {
             return Err(PostflightError::new(
                 "Deferral OUTPUT length is not a whole sponge row",
             ));
         }
-        let output_rows = usize::try_from(output_len / DIGEST_SIZE as u32)
+        let output_rows = usize::try_from(output_len / SPONGE_BYTES_PER_ROW as u32)
             .map_err(|_| PostflightError::new("Deferral OUTPUT row count exceeds usize"))?;
         let num_rows = output_rows
             .checked_add(1)
@@ -129,19 +132,19 @@ pub fn generate_trace_from_postflight<F: VmField>(
             .checked_add(num_rows)
             .ok_or_else(|| PostflightError::new("Deferral OUTPUT trace height overflow"))?;
 
-        let mut output_chunks: Vec<[u8; DIGEST_SIZE]> = Vec::with_capacity(output_rows);
+        let mut output_chunks: Vec<[u8; SPONGE_BYTES_PER_ROW]> = Vec::with_capacity(output_rows);
         let write_capacity = output_rows
-            .checked_mul(DIGEST_BYTE_MEMORY_OPS)
+            .checked_mul(SPONGE_ROW_MEMORY_OPS)
             .ok_or_else(|| PostflightError::new("Deferral OUTPUT write count overflow"))?;
         let mut output_write_accesses = Vec::with_capacity(write_capacity);
         for row_idx in 0..output_rows {
             let row_pointer = checked_pointer_offset(
                 rd_val,
-                row_idx * DIGEST_SIZE,
+                row_idx * SPONGE_BYTES_PER_ROW,
                 "Deferral OUTPUT row pointer overflow",
             )?;
-            let mut row_bytes = Vec::with_capacity(DIGEST_SIZE);
-            for chunk_idx in 0..DIGEST_BYTE_MEMORY_OPS {
+            let mut row_bytes = Vec::with_capacity(SPONGE_BYTES_PER_ROW);
+            for chunk_idx in 0..SPONGE_ROW_MEMORY_OPS {
                 let byte_pointer = checked_pointer_offset(
                     row_pointer,
                     chunk_idx * MEMORY_BLOCK_BYTES,
@@ -157,7 +160,7 @@ pub fn generate_trace_from_postflight<F: VmField>(
             output_chunks.push(
                 row_bytes
                     .try_into()
-                    .expect("DIGEST_BYTE_MEMORY_OPS covers DIGEST_SIZE"),
+                    .expect("SPONGE_ROW_MEMORY_OPS covers SPONGE_BYTES_PER_ROW"),
             );
         }
 
@@ -170,7 +173,7 @@ pub fn generate_trace_from_postflight<F: VmField>(
                 .perm(&initial, &[F::ZERO; DIGEST_SIZE], num_rows == 1);
         for (row_idx, output_chunk) in output_chunks.iter().enumerate() {
             current = chip.inner.poseidon2_chip.perm(
-                &output_chunk.map(F::from_u8),
+                &le_bytes_to_u16_cells(output_chunk),
                 &current,
                 row_idx + 1 == output_rows,
             );
@@ -232,9 +235,8 @@ fn fill_output_section<F: VmField>(
     let mut initial_sponge_input = [F::ZERO; DIGEST_SIZE];
     initial_sponge_input[0] = F::from_u32(section.deferral_idx);
     initial_sponge_input[1] = F::from_u32(section.output_len);
-    let output_len_bytes = section.output_len.to_le_bytes();
-    let output_len_f = output_len_bytes.map(F::from_u8);
-    let output_commit_f = section.output_commit.map(F::from_u8);
+    let output_len_f: [F; F_NUM_U16S] = le_bytes_to_u16_cells(&section.output_len.to_le_bytes());
+    let output_commit_f: [F; COMMIT_NUM_U16S] = le_bytes_to_u16_cells(&section.output_commit);
     let mut current_poseidon2_res = [F::ZERO; DIGEST_SIZE];
     filler.count_chip.add_count(section.deferral_idx);
 
@@ -252,33 +254,25 @@ fn fill_output_section<F: VmField>(
         cols.rd_ptr = F::from_u32(section.rd_ptr);
         cols.rs_ptr = F::from_u32(section.rs_ptr);
         cols.deferral_idx = F::from_u32(section.deferral_idx);
-        cols.rd_val = section.rd_val.to_le_bytes().map(F::from_u8);
-        cols.rs_val = section.rs_val.to_le_bytes().map(F::from_u8);
+        cols.rd_val = ptr_to_field_u16_limbs(section.rd_val);
+        cols.rs_val = ptr_to_field_u16_limbs(section.rs_val);
         cols.output_len = output_len_f;
         cols.output_commit = output_commit_f;
 
         if row_idx == 0 {
-            debug_assert!(RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS >= filler.address_bits);
-            let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - filler.address_bits;
-            filler.bitwise_lookup_chip.request_range(
-                (section.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
-                (section.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
-            );
             for pointer in [section.rd_val, section.rs_val] {
-                for bytes in pointer.to_le_bytes().chunks_exact(2) {
-                    filler
-                        .bitwise_lookup_chip
-                        .request_range(bytes[0] as u32, bytes[1] as u32);
-                }
-            }
-            for bytes in output_len_bytes.chunks_exact(2) {
                 filler
-                    .bitwise_lookup_chip
-                    .request_range(bytes[0] as u32, bytes[1] as u32);
+                    .range_checker_chip
+                    .add_count(ptr_bound_from_ptr(pointer, filler.address_bits), U16_BITS);
             }
-            filler.bitwise_lookup_chip.request_range(
-                (output_len_bytes[F_NUM_BYTES - 1] as u32) << limb_shift_bits,
-                0,
+            for &cell in output_commit_f.iter().chain(output_len_f.iter()) {
+                filler
+                    .range_checker_chip
+                    .add_count(cell.as_canonical_u32(), U16_BITS);
+            }
+            filler.range_checker_chip.add_count(
+                ptr_bound_from_ptr(section.output_len, filler.address_bits),
+                U16_BITS,
             );
             mem_helper.fill(
                 section.rd.previous_timestamp,
@@ -305,20 +299,21 @@ fn fill_output_section<F: VmField>(
             );
         } else {
             let output_chunk = section.output_chunks[row_idx - 1];
-            for bytes in output_chunk.chunks_exact(2) {
+            let sponge_inputs: [F; DIGEST_SIZE] = le_bytes_to_u16_cells(&output_chunk);
+            for &cell in &sponge_inputs {
                 filler
-                    .bitwise_lookup_chip
-                    .request_range(bytes[0] as u32, bytes[1] as u32);
+                    .range_checker_chip
+                    .add_count(cell.as_canonical_u32(), U16_BITS);
             }
-            cols.sponge_inputs = output_chunk.map(F::from_u8);
+            cols.sponge_inputs = sponge_inputs;
             current_poseidon2_res = filler.poseidon2_chip.perm_and_record(
                 &cols.sponge_inputs,
                 &current_poseidon2_res,
                 row_idx + 1 == num_rows,
             );
-            let write_start = (row_idx - 1) * DIGEST_BYTE_MEMORY_OPS;
+            let write_start = (row_idx - 1) * SPONGE_ROW_MEMORY_OPS;
             for (aux, access) in cols.write_bytes_aux.iter_mut().zip(
-                &section.output_write_accesses[write_start..write_start + DIGEST_BYTE_MEMORY_OPS],
+                &section.output_write_accesses[write_start..write_start + SPONGE_ROW_MEMORY_OPS],
             ) {
                 aux.set_prev_data(access.previous_value.map(F::from_u16));
                 mem_helper.fill(access.previous_timestamp, access.timestamp, aux.as_mut());
@@ -330,23 +325,18 @@ fn fill_output_section<F: VmField>(
         f_commit_to_bytes(&current_poseidon2_res),
         section.output_commit
     );
-    for bytes in output_commit_f.chunks_exact(2) {
-        filler
-            .bitwise_lookup_chip
-            .request_range(bytes[0].as_canonical_u32(), bytes[1].as_canonical_u32());
-    }
     let first_row = (*trace_row - num_rows) * width;
     let cols: &mut DeferralOutputCols<F> = trace.values[first_row..first_row + width].borrow_mut();
     let output_commit_rcs = output_commit_f
-        .chunks_exact(F_NUM_BYTES)
+        .chunks_exact(F_NUM_U16S)
         .zip(cols.output_commit_lt_aux.iter_mut())
         .map(|(bytes, aux)| {
             let x_le = from_fn(|i| bytes[i]);
             CanonicityTraceGen::generate_subrow(&x_le, aux)
         })
         .collect_vec();
-    for pair in output_commit_rcs.chunks_exact(2) {
-        filler.bitwise_lookup_chip.request_range(pair[0], pair[1]);
+    for rc in output_commit_rcs {
+        filler.range_checker_chip.add_count(rc, U16_BITS);
     }
 }
 
@@ -357,6 +347,6 @@ pub struct DeferralOutputExecutor;
 pub struct DeferralOutputFiller<F: VmField> {
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     address_bits: usize,
 }

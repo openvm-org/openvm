@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, iter::once};
+use std::borrow::Borrow;
 
 use itertools::Itertools;
 use openvm_circuit::system::memory::{
@@ -99,8 +99,8 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>, ()> for DeferredVerifyTraceGenImpl {
         );
         let DeferralOutputCtx {
             proving_ctx: output_ctx,
+            range_ctx: output_range_ctx,
             poseidon2_inputs: output_p2_inputs,
-            range_inputs,
             output_commit,
         } = super::output::generate_proving_ctx(
             verifier_pvs_record.app_exe_commit,
@@ -133,7 +133,10 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>, ()> for DeferredVerifyTraceGenImpl {
 
         PreVerifierData {
             pre_verifier_ctxs: [commit_ctx, memory_ctx],
-            post_verifier_ctxs: once(output_ctx).chain(paths_ctx).collect_vec(),
+            post_verifier_ctxs: [output_ctx, output_range_ctx]
+                .into_iter()
+                .chain(paths_ctx)
+                .collect_vec(),
             poseidon2_compress_inputs: verifier_p2_compress_inputs
                 .into_iter()
                 .chain(commit_p2_inputs)
@@ -144,10 +147,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>, ()> for DeferredVerifyTraceGenImpl {
                 .into_iter()
                 .chain(output_p2_inputs)
                 .collect_vec(),
-            range_inputs: verifier_range_inputs
-                .into_iter()
-                .chain(range_inputs)
-                .collect_vec(),
+            range_inputs: verifier_range_inputs,
             verifier_pvs_record,
             output_commit,
         }

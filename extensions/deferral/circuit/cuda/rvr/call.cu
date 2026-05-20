@@ -198,7 +198,6 @@ __global__ void deferral_call_replay_tracegen(
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits,
-    uint32_t *bitwise_ptr,
     FpArray<16> *poseidon2_records,
     DeferralPoseidon2Count *poseidon2_counts,
     uint32_t *poseidon2_idx,
@@ -500,19 +499,17 @@ __global__ void deferral_call_replay_tracegen(
     }
 
     Histogram count_buffer(count_ptr, num_def_circuits);
-    MemoryAuxColsFactory mem_helper(
-        VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
-    );
-    BitwiseOperationLookup bitwise_buffer(bitwise_ptr);
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
+    MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
     DeferralPoseidon2Buffer poseidon2_buffer(
         poseidon2_records, poseidon2_counts, poseidon2_idx, poseidon2_capacity
     );
-    deferral_call_adapter_tracegen(row, record.adapter, bitwise_buffer, mem_helper, address_bits);
+    deferral_call_adapter_tracegen(row, record.adapter, range_checker, mem_helper, address_bits);
     deferral_call_core_tracegen(
         row.slice_from(COL_INDEX(DeferralCallCols, core)),
         record.core,
         count_buffer,
-        bitwise_buffer,
+        range_checker,
         poseidon2_buffer,
         address_bits
     );
@@ -543,7 +540,6 @@ extern "C" int _deferral_call_replay_tracegen(
     uint32_t *range_checker,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits,
-    uint32_t *bitwise,
     FpArray<16> *poseidon2_records,
     DeferralPoseidon2Count *poseidon2_counts,
     uint32_t *poseidon2_idx,
@@ -580,7 +576,6 @@ extern "C" int _deferral_call_replay_tracegen(
         range_checker,
         range_checker_num_bins,
         timestamp_max_bits,
-        bitwise,
         poseidon2_records,
         poseidon2_counts,
         poseidon2_idx,

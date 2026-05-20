@@ -15,13 +15,12 @@ use openvm_instructions::{
 };
 use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use super::{checked_deferral_index, DeferralOutputExecutor};
 use crate::{
     utils::{
-        byte_memory_op_chunk, join_byte_memory_ops, split_output, DIGEST_BYTE_MEMORY_OPS,
-        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        byte_memory_op_chunk, join_byte_memory_ops, split_output, OUTPUT_TOTAL_BYTES,
+        OUTPUT_TOTAL_MEMORY_OPS, SPONGE_BYTES_PER_ROW, SPONGE_ROW_MEMORY_OPS,
     },
     OUTPUT_AIR_REL_IDX, POSEIDON2_AIR_REL_IDX,
 };
@@ -41,7 +40,7 @@ fn checked_output_len(pc: u32, output_len: [u8; 8]) -> Result<u32, ExecutionErro
             pc,
             msg: "deferral output length exceeds u32",
         })?;
-    if !output_len.is_multiple_of(DIGEST_SIZE as u32) {
+    if !output_len.is_multiple_of(SPONGE_BYTES_PER_ROW as u32) {
         return Err(ExecutionError::Fail {
             pc,
             msg: "deferral output length must be a whole sponge row",
@@ -202,9 +201,9 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
 
     let output_len_val = checked_output_len(pc, output_len)? as usize;
 
-    // Bytes are sponge-hashed and constrained against output_commit. The
-    // sponge rate is DIGEST_SIZE.
-    let num_rows = output_len_val / DIGEST_SIZE + 1;
+    // Each non-init row absorbs `SPONGE_BYTES_PER_ROW` bytes into Poseidon2 and writes them back
+    // to memory in `SPONGE_ROW_MEMORY_OPS` bus blocks.
+    let num_rows = output_len_val / SPONGE_BYTES_PER_ROW + 1;
     let output_raw = exec_state.streams.deferrals[deferral_idx]
         .try_get_output(&output_commit.to_vec())
         .filter(|output| output.len() == output_len_val)
@@ -214,9 +213,9 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
             msg: "deferral output advice is missing or has the wrong length",
         })?;
 
-    for (row_idx, output_chunk) in output_raw.chunks_exact(DIGEST_SIZE).enumerate() {
-        let row_output_ptr = output_ptr + (row_idx * DIGEST_SIZE) as u32;
-        for chunk_idx in 0..DIGEST_BYTE_MEMORY_OPS {
+    for (row_idx, output_chunk) in output_raw.chunks_exact(SPONGE_BYTES_PER_ROW).enumerate() {
+        let row_output_ptr = output_ptr + (row_idx * SPONGE_BYTES_PER_ROW) as u32;
+        for chunk_idx in 0..SPONGE_ROW_MEMORY_OPS {
             exec_state.vm_write_bytes::<MEMORY_BLOCK_BYTES>(
                 RV64_MEMORY_AS,
                 row_output_ptr + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
@@ -231,11 +230,11 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_output_len, DIGEST_SIZE};
+    use super::{checked_output_len, SPONGE_BYTES_PER_ROW};
 
     #[test]
     fn output_length_accepts_u32_boundary_and_rejects_high_word() {
-        let max_aligned = u32::MAX - (DIGEST_SIZE as u32 - 1);
+        let max_aligned = u32::MAX - (SPONGE_BYTES_PER_ROW as u32 - 1);
         assert_eq!(
             checked_output_len(7, u64::from(max_aligned).to_le_bytes()).unwrap(),
             max_aligned

@@ -117,7 +117,7 @@ static __device__ bool deferral_output_resolve_step(
     }
     uint32_t len = deferral_output_replay_u32(len_event.value);
     uint32_t words = len / MEMORY_BLOCK_BYTES;
-    if (len % DIGEST_SIZE != 0 || from.timestamp > UINT32_MAX - 7u - words ||
+    if (len % SPONGE_BYTES_PER_ROW != 0 || from.timestamp > UINT32_MAX - 7u - words ||
         from.pc > UINT32_MAX - ::program::DEFAULT_PC_STEP ||
         to.timestamp != from.timestamp + 7u + words ||
         to.pc != from.pc + ::program::DEFAULT_PC_STEP ||
@@ -175,7 +175,7 @@ __global__ void deferral_output_replay_count_rows(
         counts[idx] = 0;
         return;
     }
-    counts[idx] = output_len / DIGEST_SIZE + 1;
+    counts[idx] = output_len / SPONGE_BYTES_PER_ROW + 1;
 }
 
 using DeferralPoseidonParams = Poseidon2ParamsS1;
@@ -225,7 +225,7 @@ __global__ void deferral_output_replay_poseidon(
             error
         )) return;
     auto const &call = calls[call_idx];
-    if (call.num_rows != output_len / DIGEST_SIZE + 1) {
+    if (call.num_rows != output_len / SPONGE_BYTES_PER_ROW + 1) {
         preflight_set_error(error, DEFERRAL_OUTPUT_REPLAY_ERROR);
         return;
     }
@@ -237,15 +237,20 @@ __global__ void deferral_output_replay_poseidon(
             state[0] = Fp(deferral_idx);
             state[1] = Fp(output_len);
         } else {
-            auto const &event = memory[memory_start + 7 + section - 1];
-            if (!preflight_is_write(event)) {
-                preflight_set_error(error, DEFERRAL_OUTPUT_REPLAY_ERROR);
-                return;
-            }
-            uint8_t bytes[MEMORY_BLOCK_BYTES];
-            deferral_output_replay_bytes(event.value, bytes);
+            size_t write_start = memory_start + 7 +
+                                 (section - 1) * SPONGE_ROW_MEMORY_OPS;
 #pragma unroll
-            for (size_t i = 0; i < DIGEST_SIZE; i++) state[i] = Fp(bytes[i]);
+            for (size_t block = 0; block < SPONGE_ROW_MEMORY_OPS; block++) {
+                auto const &event = memory[write_start + block];
+                if (!preflight_is_write(event)) {
+                    preflight_set_error(error, DEFERRAL_OUTPUT_REPLAY_ERROR);
+                    return;
+                }
+#pragma unroll
+                for (size_t lane = 0; lane < BLOCK_FE_WIDTH; lane++) {
+                    state[block * BLOCK_FE_WIDTH + lane] = Fp(event.value[lane]);
+                }
+            }
         }
 #pragma unroll
         for (size_t i = 0; i < DIGEST_SIZE; i++) state[DIGEST_SIZE + i] = capacity[i];
@@ -287,7 +292,6 @@ __global__ void deferral_output_replay_tracegen(
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits,
-    uint32_t *bitwise_ptr,
     size_t address_bits,
     FpArray<16> *poseidon2_records,
     DeferralPoseidon2Count *poseidon2_counts,
@@ -370,10 +374,6 @@ __global__ void deferral_output_replay_tracegen(
         )) return;
     uint32_t output_ptr = deferral_output_replay_u32(memory[event_start].value);
     uint32_t input_ptr = deferral_output_replay_u32(memory[event_start + 1].value);
-    uint8_t rd_bytes[MEMORY_BLOCK_BYTES];
-    uint8_t rs_bytes[MEMORY_BLOCK_BYTES];
-    deferral_output_replay_bytes(memory[event_start].value, rd_bytes);
-    deferral_output_replay_bytes(memory[event_start + 1].value, rs_bytes);
     if (memory[event_start].value[2] != 0 || memory[event_start].value[3] != 0 ||
         memory[event_start + 1].value[2] != 0 ||
         memory[event_start + 1].value[3] != 0 ||
@@ -422,7 +422,7 @@ __global__ void deferral_output_replay_tracegen(
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
-    BitwiseOperationLookup bitwise_buffer(bitwise_ptr);
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
     DeferralPoseidon2Buffer poseidon2_buffer(
         poseidon2_records, poseidon2_counts, poseidon2_idx, poseidon2_capacity
     );
@@ -436,32 +436,53 @@ __global__ void deferral_output_replay_tracegen(
     COL_WRITE_VALUE(row, DeferralOutputCols, rd_ptr, rd_ptr);
     COL_WRITE_VALUE(row, DeferralOutputCols, rs_ptr, rs_ptr);
     COL_WRITE_VALUE(row, DeferralOutputCols, deferral_idx, deferral_idx);
-    COL_WRITE_ARRAY(row, DeferralOutputCols, rd_val, rd_bytes);
-    COL_WRITE_ARRAY(row, DeferralOutputCols, rs_val, rs_bytes);
-    COL_WRITE_ARRAY(row, DeferralOutputCols, output_commit, output_key);
-    COL_WRITE_ARRAY(
-        row, DeferralOutputCols, output_len, output_key + COMMIT_NUM_BYTES
-    );
+    Fp rd_u16s[RV64_PTR_U16S];
+    Fp rs_u16s[RV64_PTR_U16S];
+#pragma unroll
+    for (size_t i = 0; i < RV64_PTR_U16S; i++) {
+        rd_u16s[i] = Fp(memory[event_start].value[i]);
+        rs_u16s[i] = Fp(memory[event_start + 1].value[i]);
+    }
+    uint16_t output_commit_u16s[COMMIT_NUM_U16S];
+    uint16_t output_len_u16s[F_NUM_U16S];
+    uint8_t output_commit_bytes[COMMIT_NUM_BYTES];
+    uint8_t output_len_bytes[F_NUM_BYTES];
+#pragma unroll
+    for (size_t i = 0; i < COMMIT_NUM_BYTES; i++) {
+        output_commit_bytes[i] = output_key[i];
+    }
+#pragma unroll
+    for (size_t i = 0; i < F_NUM_BYTES; i++) {
+        output_len_bytes[i] = output_key[COMMIT_NUM_BYTES + i];
+    }
+    pack_u8_pairs_le(output_commit_u16s, output_commit_bytes);
+    pack_u8_pairs_le(output_len_u16s, output_len_bytes);
+    COL_WRITE_ARRAY(row, DeferralOutputCols, rd_val, rd_u16s);
+    COL_WRITE_ARRAY(row, DeferralOutputCols, rs_val, rs_u16s);
+    COL_WRITE_ARRAY(row, DeferralOutputCols, output_commit, output_commit_u16s);
+    COL_WRITE_ARRAY(row, DeferralOutputCols, output_len, output_len_u16s);
 
     if (is_first) {
         count_buffer.add_count(deferral_idx);
-        uint32_t limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - address_bits;
-        bitwise_buffer.add_range(static_cast<uint32_t>(rd_bytes[3]) << limb_shift_bits,
-                                 static_cast<uint32_t>(rs_bytes[3]) << limb_shift_bits);
+        range_checker.add_count(
+            scale_u16_high_cell<RV64_PTR_U16S>(memory[event_start].value[1], address_bits),
+            U16_BITS
+        );
+        range_checker.add_count(
+            scale_u16_high_cell<RV64_PTR_U16S>(
+                memory[event_start + 1].value[1], address_bits
+            ),
+            U16_BITS
+        );
 #pragma unroll
-        for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
-            bitwise_buffer.add_range(rd_bytes[i], rd_bytes[i + 1]);
-            bitwise_buffer.add_range(rs_bytes[i], rs_bytes[i + 1]);
+        for (size_t i = 0; i < COMMIT_NUM_U16S; i++) {
+            range_checker.add_count(output_commit_u16s[i], U16_BITS);
         }
 #pragma unroll
-        for (size_t i = 0; i < COMMIT_NUM_BYTES; i += 2)
-            bitwise_buffer.add_range(output_key[i], output_key[i + 1]);
-#pragma unroll
-        for (size_t i = 0; i < F_NUM_BYTES; i += 2)
-            bitwise_buffer.add_range(output_key[COMMIT_NUM_BYTES + i],
-                                     output_key[COMMIT_NUM_BYTES + i + 1]);
-        bitwise_buffer.add_range(output_key[COMMIT_NUM_BYTES + F_NUM_BYTES - 1]
-                                     << limb_shift_bits, 0);
+        for (size_t i = 0; i < F_NUM_U16S; i++) {
+            range_checker.add_count(output_len_u16s[i], U16_BITS);
+        }
+        range_checker.add_count(scale_output_len(output_len_u16s, address_bits), U16_BITS);
         mem_helper.fill(row.slice_from(COL_INDEX(DeferralOutputCols, rd_aux)),
                         rd_previous.timestamp, from.timestamp);
         mem_helper.fill(row.slice_from(COL_INDEX(DeferralOutputCols, rs_aux)),
@@ -476,16 +497,16 @@ __global__ void deferral_output_replay_tracegen(
 #pragma unroll
         for (size_t i = 0; i < DIGEST_SIZE; i++) {
             CanonicityAuxCols<Fp> aux;
-            Fp x_le[F_NUM_BYTES];
+            Fp x_le[F_NUM_U16S];
 #pragma unroll
-            for (size_t j = 0; j < F_NUM_BYTES; j++)
-                x_le[j] = Fp(output_key[i * F_NUM_BYTES + j]);
+            for (size_t j = 0; j < F_NUM_U16S; j++)
+                x_le[j] = Fp(output_commit_u16s[i * F_NUM_U16S + j]);
             output_commit_rcs[i] = generate_subrow(x_le, aux);
             write_canonicity_aux(row, COL_INDEX(DeferralOutputCols, output_commit_lt_aux), i, aux);
         }
 #pragma unroll
-        for (size_t i = 0; i < DIGEST_SIZE; i += 2)
-            bitwise_buffer.add_range(output_commit_rcs[i], output_commit_rcs[i + 1]);
+        for (size_t i = 0; i < DIGEST_SIZE; i++)
+            range_checker.add_count(output_commit_rcs[i], U16_BITS);
         Fp sponge_inputs[DIGEST_SIZE] = {};
         sponge_inputs[0] = Fp(deferral_idx);
         sponge_inputs[1] = Fp(output_len);
@@ -495,33 +516,43 @@ __global__ void deferral_output_replay_tracegen(
         COL_FILL_ZERO(row, DeferralOutputCols, rs_aux);
         COL_FILL_ZERO(row, DeferralOutputCols, output_commit_and_len_aux);
         COL_FILL_ZERO(row, DeferralOutputCols, output_commit_lt_aux);
-        size_t write_idx = event_start + 7 + section_idx - 1;
-        ReplayPreviousValue write_previous;
-        if (!deferral_output_replay_event(
-                write_idx,
-                from.timestamp + 7 + section_idx - 1,
-                memory_as,
-                output_ptr / 2 + (section_idx - 1) * BLOCK_FE_WIDTH,
-                true,
-                memory,
-                seeds,
-                predecessors,
-                write_previous,
-                error
-            )) return;
-        uint8_t write_bytes[MEMORY_BLOCK_BYTES];
-        deferral_output_replay_bytes(memory[write_idx].value, write_bytes);
-        COL_WRITE_ARRAY(row, DeferralOutputCols, sponge_inputs, write_bytes);
-        for (size_t i = 0; i < DIGEST_SIZE; i += 2)
-            bitwise_buffer.add_range(write_bytes[i], write_bytes[i + 1]);
-        RowSlice aux = row.slice_from(COL_INDEX(DeferralOutputCols, write_bytes_aux));
-        Fp packed_previous[BLOCK_FE_WIDTH];
-        uint8_t previous_bytes[MEMORY_BLOCK_BYTES];
-        deferral_output_replay_bytes(write_previous.value, previous_bytes);
-        pack_u8_block_bytes(packed_previous, previous_bytes);
-        COL_WRITE_ARRAY(aux, MemoryWriteAuxColsDef, prev_data, packed_previous);
-        mem_helper.fill(aux, write_previous.timestamp,
-                        from.timestamp + 7 + section_idx - 1);
+        Fp sponge_inputs[DIGEST_SIZE];
+        constexpr size_t write_aux_stride = sizeof(MemoryWriteAuxColsDef<uint8_t>);
+#pragma unroll
+        for (size_t block = 0; block < SPONGE_ROW_MEMORY_OPS; block++) {
+            size_t write_idx = event_start + 7 +
+                               (section_idx - 1) * SPONGE_ROW_MEMORY_OPS + block;
+            ReplayPreviousValue write_previous;
+            uint32_t write_timestamp = from.timestamp + 7 +
+                                       (section_idx - 1) * SPONGE_ROW_MEMORY_OPS + block;
+            if (!deferral_output_replay_event(
+                    write_idx,
+                    write_timestamp,
+                    memory_as,
+                    output_ptr / 2 +
+                        (section_idx - 1) * DIGEST_SIZE + block * BLOCK_FE_WIDTH,
+                    true,
+                    memory,
+                    seeds,
+                    predecessors,
+                    write_previous,
+                    error
+                )) return;
+            Fp previous_u16s[BLOCK_FE_WIDTH];
+#pragma unroll
+            for (size_t lane = 0; lane < BLOCK_FE_WIDTH; lane++) {
+                Fp value(memory[write_idx].value[lane]);
+                sponge_inputs[block * BLOCK_FE_WIDTH + lane] = value;
+                previous_u16s[lane] = Fp(write_previous.value[lane]);
+                range_checker.add_count(memory[write_idx].value[lane], U16_BITS);
+            }
+            RowSlice aux = row.slice_from(
+                COL_INDEX(DeferralOutputCols, write_bytes_aux) + block * write_aux_stride
+            );
+            COL_WRITE_ARRAY(aux, MemoryWriteAuxColsDef, prev_data, previous_u16s);
+            mem_helper.fill(aux, write_previous.timestamp, write_timestamp);
+        }
+        COL_WRITE_ARRAY(row, DeferralOutputCols, sponge_inputs, sponge_inputs);
     }
 
     Fp prev_capacity[DIGEST_SIZE] = {};
@@ -583,7 +614,6 @@ extern "C" int _deferral_output_replay_tracegen(
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits,
-    uint32_t *d_bitwise,
     size_t address_bits,
     Fp *d_poseidon2_records,
     DeferralPoseidon2Count *d_poseidon2_counts,
@@ -607,7 +637,7 @@ extern "C" int _deferral_output_replay_tracegen(
         d_predecessors, d_steps, step_start, num_steps, d_calls, rows_used,
         expected_opcode, register_as, memory_as, byte_pointer_bits,
         d_count, num_def_circuits, d_range_checker, range_checker_num_bins,
-        timestamp_max_bits, d_bitwise, address_bits,
+        timestamp_max_bits, address_bits,
         reinterpret_cast<FpArray<16> *>(d_poseidon2_records), d_poseidon2_counts,
         d_poseidon2_idx, poseidon2_capacity / 16, d_error);
     return CHECK_KERNEL();

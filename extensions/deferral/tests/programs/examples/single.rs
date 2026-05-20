@@ -11,9 +11,15 @@ openvm::entry!(main);
 const INPUT_COMMIT_0: Commit = [0x11; 32];
 const INPUT_COMMIT_1: Commit = [0x22; 32];
 const INPUT_COMMIT_2: Commit = [0x33; 32];
-const EXPECTED_OUTPUT_0: [u8; 8] = [1, 3, 6, 10, 15, 21, 28, 36];
-const EXPECTED_OUTPUT_1: [u8; 8] = [8, 15, 21, 26, 30, 33, 35, 36];
-const EXPECTED_OUTPUT_2: [u8; 8] = [9, 18, 27, 36, 45, 54, 63, 72];
+const EXPECTED_OUTPUT_0: [u8; 16] = [
+    1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 91, 105, 120, 136,
+];
+const EXPECTED_OUTPUT_1: [u8; 16] = [
+    16, 31, 45, 58, 70, 81, 91, 100, 108, 115, 121, 126, 130, 133, 135, 136,
+];
+const EXPECTED_OUTPUT_2: [u8; 16] = [
+    9, 18, 27, 36, 45, 54, 63, 72, 81, 90, 99, 108, 117, 126, 135, 144,
+];
 
 pub fn main() {
     let output_key_0 = deferred_compute::<0>(&INPUT_COMMIT_0);

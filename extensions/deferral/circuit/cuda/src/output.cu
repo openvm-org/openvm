@@ -47,29 +47,24 @@ template <typename T> struct DeferralOutputCols {
     T rs_ptr;
     T deferral_idx;
 
-    // Heap pointers + auxiliary read columns
-    T rd_val[RV64_WORD_NUM_LIMBS];
-    T rs_val[RV64_WORD_NUM_LIMBS];
+    // Low 32 bits of heap pointers, packed as u16 cells.
+    T rd_val[RV64_PTR_U16S];
+    T rs_val[RV64_PTR_U16S];
     MemoryReadAuxCols<T> rd_aux;
     MemoryReadAuxCols<T> rs_aux;
 
-    // Read data and auxiliary columns. output_commit and output_len are read
-    // contiguously from heap with layout [output_commit || output_len]. The
-    // onion hash of all bytes written by this opcode invocation is constrained
-    // to output_commit.
-    T output_commit[COMMIT_NUM_BYTES];
-    T output_len[F_NUM_BYTES];
+    // First row reads [output_commit || output_len_le] from heap as u16 cells.
+    T output_commit[COMMIT_NUM_U16S];
+    T output_len[F_NUM_U16S];
     MemoryReadAuxCols<T> output_commit_and_len_aux[OUTPUT_TOTAL_MEMORY_OPS];
 
-    // Auxiliary columns to ensure the canonicity of each F byte decomposition in
-    // output_commit.
+    // Auxiliary columns to ensure canonicity of output_commit cells.
     CanonicityAuxCols<T> output_commit_lt_aux[DIGEST_SIZE];
 
-    // Initial [def_idx, output_len, 0, ...] digest on the first row; on non-first
-    // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
-    // written to memory and auxiliary columns.
+    // First row sponge input is [deferral_idx, output_len, 0, ...]. Later rows absorb and write
+    // SPONGE_BYTES_PER_ROW bytes as DIGEST_SIZE u16 cells.
     T sponge_inputs[DIGEST_SIZE];
-    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_bytes_aux[DIGEST_BYTE_MEMORY_OPS];
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_bytes_aux[SPONGE_ROW_MEMORY_OPS];
 
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.

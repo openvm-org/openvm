@@ -1,4 +1,4 @@
-use itertools::{izip, Itertools};
+use itertools::izip;
 use openvm_circuit_primitives::{utils::not, SubAir};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -7,10 +7,11 @@ use openvm_stark_backend::{
 };
 
 use super::{CanonicityAuxCols, CanonicityIo};
+use crate::utils::{F_NUM_U16S, U16_BITS, U16_MASK};
 
-/// Sub-AIR to constrain that a field byte decomposition is canonical. Note:
-/// - It is assumed that each value has been range checked
-/// - eval returns a value to be range check
+/// Sub-AIR to constrain that a field limb decomposition is canonical. Note:
+/// - It is assumed that each limb has been range checked to `U16_BITS`.
+/// - `eval` returns a value to be range checked (in `[0, 2^U16_BITS)`).
 pub struct CanonicitySubAir;
 
 impl<AB: InteractionBuilder> SubAir<AB> for CanonicitySubAir
@@ -40,11 +41,14 @@ where
         AB::Var: 'a,
         AB::Expr: 'a,
     {
-        let order_be = AB::F::ORDER_U32
-            .to_le_bytes()
-            .into_iter()
+        // Decompose `F::ORDER_U32` into the configured MSL-first limb shape.
+        debug_assert!(
+            (F_NUM_U16S as u32) * (U16_BITS as u32) >= 32 - (AB::F::ORDER_U32.leading_zeros()),
+            "F_NUM_U16S * U16_BITS must cover F::ORDER_U32"
+        );
+        let order_be = (0..F_NUM_U16S)
             .rev()
-            .map(AB::Expr::from_u8);
+            .map(|i| AB::Expr::from_u32((AB::F::ORDER_U32 >> (i * U16_BITS)) & U16_MASK));
 
         let mut prefix_sum = AB::Expr::ZERO;
 
@@ -67,18 +71,22 @@ where
 }
 
 impl CanonicitySubAir {
+    /// Constrain canonicity of the `F_NUM_U16S` LE u16-cell limbs in `x`.
+    /// `x` is given LE; the sub-AIR consumes MSL-first, so we reverse here.
     pub fn assert_canonicity<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        x: &[AB::Var],
+        x: [AB::Expr; F_NUM_U16S],
         aux: &CanonicityAuxCols<AB::Var>,
         enabled: AB::Expr,
     ) -> AB::Expr
     where
         AB::F: PrimeField32,
     {
+        let mut x_be = x;
+        x_be.reverse();
         let io = CanonicityIo {
-            x: x.iter().rev().map(|b| (*b).into()).collect_array().unwrap(),
+            x: x_be,
             count: enabled,
         };
         let mut ret = AB::Expr::ZERO;

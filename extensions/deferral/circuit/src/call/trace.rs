@@ -6,14 +6,16 @@ use openvm_circuit::{
     system::memory::MemoryAuxColsFactory,
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
+use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode, DEFERRAL_AS,
 };
-use openvm_riscv_circuit::adapters::rv64_u16_block_to_bytes;
+use openvm_riscv_circuit::adapters::{
+    ptr_bound_from_ptr, ptr_to_field_u16_limbs, rv64_u16_block_to_bytes,
+};
 use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -25,8 +27,9 @@ use crate::{
     poseidon2::DeferralPoseidon2Chip,
     utils::{
         byte_commit_to_f, checked_pointer_offset, checked_u16_pointer, f_memory_op_chunk,
-        logged_u32_pointer, require_block_alignment, COMMIT_MEMORY_OPS, COMMIT_NUM_BYTES,
-        DIGEST_F_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        le_bytes_to_u16_cells, logged_u32_pointer, require_block_alignment, COMMIT_MEMORY_OPS,
+        COMMIT_NUM_BYTES, COMMIT_NUM_U16S, DIGEST_F_MEMORY_OPS, F_NUM_BYTES, F_NUM_U16S,
+        OUTPUT_TOTAL_MEMORY_OPS, U16_BITS,
     },
     DeferralFn,
 };
@@ -296,18 +299,10 @@ fn fill_call_adapter<F: VmField>(
     cols: &mut DeferralCallAdapterCols<F>,
     replay: &DeferralCallReplay<F>,
 ) {
-    debug_assert!(RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS >= filler.address_bits);
-    let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - filler.address_bits;
-    filler.bitwise_lookup_chip.request_range(
-        (replay.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
-        (replay.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
-    );
     for pointer in [replay.rd_val, replay.rs_val] {
-        for bytes in pointer.to_le_bytes().chunks_exact(2) {
-            filler
-                .bitwise_lookup_chip
-                .request_range(bytes[0] as u32, bytes[1] as u32);
-        }
+        filler
+            .range_checker_chip
+            .add_count(ptr_bound_from_ptr(pointer, filler.address_bits), U16_BITS);
     }
 
     for (aux, access) in cols
@@ -365,8 +360,8 @@ fn fill_call_adapter<F: VmField>(
         replay.rd.timestamp,
         cols.rd_aux.as_mut(),
     );
-    cols.rs_val = replay.rs_val.to_le_bytes().map(F::from_u8);
-    cols.rd_val = replay.rd_val.to_le_bytes().map(F::from_u8);
+    cols.rs_val = ptr_to_field_u16_limbs(replay.rs_val);
+    cols.rd_val = ptr_to_field_u16_limbs(replay.rd_val);
     cols.rs_ptr = F::from_u32(replay.rs_ptr);
     cols.rd_ptr = F::from_u32(replay.rd_ptr);
     cols.from_state.timestamp = F::from_u32(replay.from_timestamp);
@@ -391,51 +386,42 @@ fn fill_call_core<F: VmField>(
         true,
     );
     debug_assert_eq!(recorded_output_acc, replay.new_output_acc);
-    for bytes in replay.output_commit.chunks_exact(2) {
+    let input_commit_f: [F; COMMIT_NUM_U16S] = le_bytes_to_u16_cells(&replay.input_commit);
+    let output_commit_f: [F; COMMIT_NUM_U16S] = le_bytes_to_u16_cells(&replay.output_commit);
+    let output_len_f: [F; F_NUM_U16S] = le_bytes_to_u16_cells(&replay.output_len);
+
+    for &cell in output_commit_f.iter().chain(output_len_f.iter()) {
         filler
-            .bitwise_lookup_chip
-            .request_range(bytes[0] as u32, bytes[1] as u32);
+            .range_checker_chip
+            .add_count(cell.as_canonical_u32(), U16_BITS);
     }
-    for bytes in replay.input_commit.chunks_exact(2) {
-        filler
-            .bitwise_lookup_chip
-            .request_range(bytes[0] as u32, bytes[1] as u32);
-    }
-    for bytes in replay.output_len.chunks_exact(2) {
-        filler
-            .bitwise_lookup_chip
-            .request_range(bytes[0] as u32, bytes[1] as u32);
-    }
-    debug_assert!(RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS >= filler.address_bits);
-    let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - filler.address_bits;
-    filler.bitwise_lookup_chip.request_range(
-        (replay.output_len[F_NUM_BYTES - 1] as u32) << limb_shift_bits,
-        0,
+    let output_len = u32::from_le_bytes(replay.output_len);
+    filler.range_checker_chip.add_count(
+        ptr_bound_from_ptr(output_len, filler.address_bits),
+        U16_BITS,
     );
 
-    let input_commit_f = replay.input_commit.map(F::from_u8);
-    let output_commit_f = replay.output_commit.map(F::from_u8);
     let input_commit_rcs = input_commit_f
-        .chunks_exact(F_NUM_BYTES)
+        .chunks_exact(F_NUM_U16S)
         .zip(cols.input_commit_lt_aux.iter_mut())
         .map(|(bytes, aux)| {
             let x_le = from_fn(|i| bytes[i]);
             CanonicityTraceGen::generate_subrow(&x_le, aux)
         })
         .collect_vec();
-    for pair in input_commit_rcs.chunks_exact(2) {
-        filler.bitwise_lookup_chip.request_range(pair[0], pair[1]);
+    for rc in input_commit_rcs {
+        filler.range_checker_chip.add_count(rc, U16_BITS);
     }
     let output_commit_rcs = output_commit_f
-        .chunks_exact(F_NUM_BYTES)
+        .chunks_exact(F_NUM_U16S)
         .zip(cols.output_commit_lt_aux.iter_mut())
         .map(|(bytes, aux)| {
             let x_le = from_fn(|i| bytes[i]);
             CanonicityTraceGen::generate_subrow(&x_le, aux)
         })
         .collect_vec();
-    for pair in output_commit_rcs.chunks_exact(2) {
-        filler.bitwise_lookup_chip.request_range(pair[0], pair[1]);
+    for rc in output_commit_rcs {
+        filler.range_checker_chip.add_count(rc, U16_BITS);
     }
     cols.is_valid = F::ONE;
     cols.deferral_idx = F::from_u32(replay.deferral_idx);
@@ -443,7 +429,7 @@ fn fill_call_core<F: VmField>(
     cols.reads.old_input_acc = replay.old_input_acc;
     cols.reads.old_output_acc = replay.old_output_acc;
     cols.writes.output_commit = output_commit_f;
-    cols.writes.output_len = replay.output_len.map(F::from_u8);
+    cols.writes.output_len = output_len_f;
     cols.writes.new_input_acc = replay.new_input_acc;
     cols.writes.new_output_acc = replay.new_output_acc;
 }
@@ -460,7 +446,7 @@ pub struct DeferralCallCoreFiller<A, F: VmField> {
     adapter: A,
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     address_bits: usize,
 }
 
@@ -468,6 +454,6 @@ pub struct DeferralCallCoreFiller<A, F: VmField> {
 
 #[derive(Clone, derive_new::new)]
 pub struct DeferralCallAdapterFiller {
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     address_bits: usize,
 }

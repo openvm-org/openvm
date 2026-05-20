@@ -12,13 +12,7 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, VmConfig};
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::{
-        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-        SharedBitwiseOperationLookupChip,
-    },
-    Chip,
-};
+use openvm_circuit_primitives::Chip;
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::LocalOpcode;
@@ -128,17 +122,7 @@ where
 
         let count_bus = DeferralCircuitCountBus::new(inventory.new_bus_idx());
         let poseidon2_bus = DeferralPoseidon2Bus::new(inventory.new_bus_idx());
-        let bitwise_bus = {
-            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
-            if let Some(air) = existing_air {
-                air.bus
-            } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
-                let air = BitwiseOperationLookupAir::<8>::new(bus);
-                inventory.add_air(air);
-                air.bus
-            }
-        };
+        let range_bus = inventory.range_checker().bus;
 
         let base_num_airs = inventory.num_airs();
         let address_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
@@ -150,8 +134,8 @@ where
 
         assert_eq!(inventory.num_airs() - base_num_airs, CALL_AIR_REL_IDX);
         inventory.add_air(DeferralCallAir::new(
-            DeferralCallAdapterAir::new(execution_bridge, memory_bridge, bitwise_bus, address_bits),
-            DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus),
+            DeferralCallAdapterAir::new(execution_bridge, memory_bridge, range_bus, address_bits),
+            DeferralCallCoreAir::new(count_bus, poseidon2_bus, range_bus),
         ));
 
         assert_eq!(inventory.num_airs() - base_num_airs, OUTPUT_AIR_REL_IDX);
@@ -160,7 +144,7 @@ where
             memory_bridge,
             count_bus,
             poseidon2_bus,
-            bitwise_bus,
+            range_bus,
             address_bits,
         ));
 
@@ -186,21 +170,6 @@ where
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let address_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
-                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip_with_tracegen(chip.clone(), |chip, _| {
-                    Ok(chip.generate_proving_ctx())
-                });
-                chip
-            }
-        };
         let count_chip = Arc::new(DeferralCircuitCountChip::new(extension.fns.len()));
         let poseidon2_chip = Arc::new(deferral_poseidon2_chip());
 
@@ -220,10 +189,10 @@ where
         inventory.add_executor_chip_with_tracegen(
             DeferralCallChip::new(
                 DeferralCallCoreFiller::new(
-                    DeferralCallAdapterFiller::new(bitwise_lu.clone(), address_bits),
+                    DeferralCallAdapterFiller::new(range_checker.clone(), address_bits),
                     count_chip.clone(),
                     poseidon2_chip.clone(),
-                    bitwise_lu.clone(),
+                    range_checker.clone(),
                     address_bits,
                 ),
                 mem_helper.clone(),
@@ -240,7 +209,7 @@ where
                 DeferralOutputFiller::new(
                     count_chip.clone(),
                     poseidon2_chip.clone(),
-                    bitwise_lu,
+                    range_checker,
                     address_bits,
                 ),
                 mem_helper,

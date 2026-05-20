@@ -4,9 +4,7 @@ use derive_new::new;
 use openvm_circuit::arch::cuda::postflight::{
     GpuPostflightError, GpuPostflightPlan, GpuPostflightProgram, GpuPostflightTranscript,
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
-};
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
@@ -14,7 +12,7 @@ use openvm_cuda_common::{
 };
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode,
 };
 use openvm_stark_backend::prover::AirProvingContext;
@@ -24,12 +22,12 @@ use super::DeferralOutputCols;
 use crate::{
     cuda_abi::output::{self, DeferralOutputReplayCall},
     poseidon2::{DeferralPoseidon2ProducerBuffer, DeferralPoseidon2SharedBuffer},
+    utils::SPONGE_BYTES_PER_ROW,
 };
 
 #[derive(new)]
 pub struct DeferralOutputChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub address_bits: usize,
     pub timestamp_max_bits: usize,
     pub count: Arc<DeviceBuffer<u32>>,
@@ -181,7 +179,6 @@ impl DeferralOutputChipGpu {
                 self.num_deferral_circuits,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
-                &self.bitwise_lookup.count,
                 self.address_bits,
                 &poseidon2.records,
                 &poseidon2.counts,
@@ -233,7 +230,7 @@ mod tests {
             timestamp: 7,
             address_space_and_kind: RV64_MEMORY_AS,
             pointer: 0,
-            value: [DIGEST_SIZE as u16, 0, 0, 0],
+            value: [SPONGE_BYTES_PER_ROW as u16, 0, 0, 0],
         };
         let steps = [[program_index, 0u32]];
         let instructions = [instruction].to_device_on(device_ctx).unwrap();
