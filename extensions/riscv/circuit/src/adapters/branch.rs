@@ -4,9 +4,10 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
+        BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord},
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord},
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
@@ -24,8 +25,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::RV64_REGISTER_NUM_LIMBS;
-use crate::adapters::tracing_read;
+use crate::adapters::tracing_read_u16;
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
@@ -51,7 +51,7 @@ impl<F: Field> BaseAir<F> for Rv64BranchAdapterAir {
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
     type Interface =
-        BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 2, 0, RV64_REGISTER_NUM_LIMBS, 0>;
+        BasicAdapterInterface<AB::Expr, ImmInstruction<AB::Expr>, 2, 0, BLOCK_FE_WIDTH, 0>;
 
     fn eval(
         &self,
@@ -70,7 +70,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs1_ptr),
-                pack_u8_block::<AB>(&ctx.reads[0].clone()),
+                ctx.reads[0].clone(),
                 timestamp_pp(),
                 &local.reads_aux[0],
             )
@@ -79,7 +79,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs2_ptr),
-                pack_u8_block::<AB>(&ctx.reads[1].clone()),
+                ctx.reads[1].clone(),
                 timestamp_pp(),
                 &local.reads_aux[1],
             )
@@ -131,7 +131,7 @@ where
     F: PrimeField32,
 {
     const WIDTH: usize = size_of::<Rv64BranchAdapterCols<u8>>();
-    type ReadData = [[u8; RV64_REGISTER_NUM_LIMBS]; 2];
+    type ReadData = [[u16; BLOCK_FE_WIDTH]; 2];
     type WriteData = ();
     type RecordMut<'a> = &'a mut Rv64BranchAdapterRecord;
 
@@ -154,14 +154,14 @@ where
         debug_assert_eq!(e.as_canonical_u32(), RV64_REGISTER_AS);
 
         record.rs1_ptr = a.as_canonical_u32();
-        let rs1 = tracing_read(
+        let rs1 = tracing_read_u16::<BLOCK_FE_WIDTH>(
             memory,
             RV64_REGISTER_AS,
             a.as_canonical_u32(),
             &mut record.reads_aux[0].prev_timestamp,
         );
         record.rs2_ptr = b.as_canonical_u32();
-        let rs2 = tracing_read(
+        let rs2 = tracing_read_u16::<BLOCK_FE_WIDTH>(
             memory,
             RV64_REGISTER_AS,
             b.as_canonical_u32(),

@@ -4,26 +4,23 @@ use openvm_circuit::{
     arch::*,
     system::memory::{
         offline_checker::{
-            pack_u8_block, pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols,
-            MemoryReadAuxRecord, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
+            pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{
-        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
-        RV64_WORD_NUM_LIMBS,
-    },
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{
@@ -41,8 +38,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    expand_to_rv64_register, read_rv64_register_as_u32, tracing_read, tracing_read_reg_ptr,
-    tracing_write,
+    expand_to_rv64_block, read_rv64_register_as_u32, tracing_read, tracing_read_reg_ptr,
+    tracing_write, u32_to_u16_cells, RV64_LOW32_BITS, RV64_LOW32_U16_LIMBS, RV64_U16_LIMB_BITS,
 };
 
 mod execution;
@@ -55,10 +52,10 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-/// `rem_words` is bounded by `2^MAX_HINT_BUFFER_DWORDS_BITS` (= 2^10), so only the low
-/// 2 bytes of the 8-byte RV64 register carry information. We materialize only 2 columns
-/// and hardcode the upper 6 bytes to zero in the memory bus interaction.
-const REM_WORDS_NUM_LIMBS: usize = 2;
+const _: () = assert!(
+    MAX_HINT_BUFFER_DWORDS_BITS <= RV64_U16_LIMB_BITS,
+    "MAX_HINT_BUFFER_DWORDS_BITS must fit in one u16 cell"
+);
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
@@ -66,21 +63,18 @@ pub struct Rv64HintStoreCols<T> {
     // common
     pub is_single: T,
     pub is_buffer: T,
-    /// Low 2 bytes of the 8-byte RV64 register that holds `rem_words`. `rem_words` is
-    /// bounded by `2^MAX_HINT_BUFFER_DWORDS_BITS` (= 2^10), so the upper 6 bytes are
-    /// known to be zero and are not materialized as columns.
-    pub rem_words_limbs: [T; REM_WORDS_NUM_LIMBS],
+    /// Single u16 cell holding `rem_words`.
+    pub rem_words: T,
 
     pub from_state: ExecutionState<T>,
     pub mem_ptr_ptr: T,
-    /// Low 4 bytes of the 8-byte RV64 register that holds `mem_ptr`. `mem_ptr` is a u32
-    /// memory address, so the upper 4 bytes are known to be zero and are hardcoded in
-    /// the memory bus interaction rather than materialized as columns.
-    pub mem_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
+    /// Low 32 bits of `mem_ptr` as u16 cells.
+    pub mem_ptr_limbs: [T; RV64_LOW32_U16_LIMBS],
     pub mem_ptr_aux_cols: MemoryReadAuxCols<T>,
 
     pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
-    pub data: [T; RV64_REGISTER_NUM_LIMBS],
+    /// One hint word as `BLOCK_FE_WIDTH` u16 cells.
+    pub data: [T; BLOCK_FE_WIDTH],
 
     // only buffer
     pub is_buffer_start: T,
@@ -93,7 +87,7 @@ pub struct Rv64HintStoreCols<T> {
 pub struct Rv64HintStoreAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
-    pub bitwise_operation_lookup_bus: BitwiseOperationLookupBus,
+    pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
     pointer_max_bits: usize,
 }
@@ -137,21 +131,16 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         // Note: every non-valid row has `is_end == 1`
         let is_end = not::<AB::Expr>(next_cols.is_buffer) + next_cols.is_buffer_start;
 
-        let mut rem_words = AB::Expr::ZERO;
-        let mut next_rem_words = AB::Expr::ZERO;
-        for i in (0..REM_WORDS_NUM_LIMBS).rev() {
-            rem_words =
-                rem_words * AB::F::from_u32(1 << RV64_CELL_BITS) + local_cols.rem_words_limbs[i];
-            next_rem_words = next_rem_words * AB::F::from_u32(1 << RV64_CELL_BITS)
-                + next_cols.rem_words_limbs[i];
-        }
+        let rem_words: AB::Expr = local_cols.rem_words.into();
+        let next_rem_words: AB::Expr = next_cols.rem_words.into();
 
         let mut mem_ptr = AB::Expr::ZERO;
         let mut next_mem_ptr = AB::Expr::ZERO;
-        for i in (0..RV64_WORD_NUM_LIMBS).rev() {
-            mem_ptr = mem_ptr * AB::F::from_u32(1 << RV64_CELL_BITS) + local_cols.mem_ptr_limbs[i];
-            next_mem_ptr =
-                next_mem_ptr * AB::F::from_u32(1 << RV64_CELL_BITS) + next_cols.mem_ptr_limbs[i];
+        for i in (0..RV64_LOW32_U16_LIMBS).rev() {
+            mem_ptr =
+                mem_ptr * AB::F::from_u32(1 << RV64_U16_LIMB_BITS) + local_cols.mem_ptr_limbs[i];
+            next_mem_ptr = next_mem_ptr * AB::F::from_u32(1 << RV64_U16_LIMB_BITS)
+                + next_cols.mem_ptr_limbs[i];
         }
 
         // Constrain that if local is invalid, then the next state is invalid as well
@@ -169,22 +158,28 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .assert_one(not::<AB::Expr>(local_cols.is_buffer) + local_cols.is_buffer_start);
 
         // read mem_ptr
-        let mem_ptr_data = expand_to_rv64_register(&local_cols.mem_ptr_limbs);
+        let mem_ptr_data: [AB::Expr; BLOCK_FE_WIDTH] =
+            expand_to_rv64_block(&local_cols.mem_ptr_limbs);
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.mem_ptr_ptr),
-                pack_u8_block::<AB>(&mem_ptr_data),
+                mem_ptr_data,
                 timestamp_pp(),
                 &local_cols.mem_ptr_aux_cols,
             )
             .eval(builder, is_start.clone());
 
         // read num_words
-        let num_words_data = expand_to_rv64_register(&local_cols.rem_words_limbs);
+        let num_words_data: [AB::Expr; BLOCK_FE_WIDTH] = [
+            local_cols.rem_words.into(),
+            AB::Expr::ZERO,
+            AB::Expr::ZERO,
+            AB::Expr::ZERO,
+        ];
         self.memory_bridge
             .read(
                 MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.num_words_ptr),
-                pack_u8_block::<AB>(&num_words_data),
+                num_words_data,
                 timestamp_pp(),
                 &local_cols.num_words_aux_cols,
             )
@@ -194,7 +189,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), mem_ptr.clone()),
-                pack_u8_block::<AB>(&local_cols.data.map(Into::into)),
+                local_cols.data.map(Into::into),
                 timestamp_pp(),
                 &local_cols.write_aux,
             )
@@ -218,29 +213,25 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             )
             .eval(builder, is_start.clone());
 
-        // Preventing rem_words overflow: rem_words < 2^MAX_HINT_BUFFER_DWORDS_BITS
-        // These constraints only work for MAX_HINT_BUFFER_DWORDS_BITS in [8, 16)
         debug_assert!(
-            (8..16).contains(&MAX_HINT_BUFFER_DWORDS_BITS),
-            "MAX_HINT_BUFFER_DWORDS_BITS must be in [8, 16) for these constraints to work"
+            (RV64_U16_LIMB_BITS..=RV64_LOW32_BITS).contains(&self.pointer_max_bits),
+            "pointer_max_bits must fit in the low 32-bit mem_ptr view"
         );
 
-        // This scaled-byte pointer check requires `pointer_max_bits` in (24, 32].
-        debug_assert!(
-            (25..=32).contains(&self.pointer_max_bits),
-            "pointer_max_bits must be in (24, 32] for these constraints to work"
-        );
-
-        // Preventing mem_ptr overflow: mem_ptr < 2^pointer_max_bits
-        // (rem_words overflow is handled below with the stricter MAX_HINT_BUFFER_DWORDS_BITS bound)
-        self.bitwise_operation_lookup_bus
-            .send_range(
-                local_cols.mem_ptr_limbs[3]
-                    * AB::F::from_usize(1 << (4 * RV64_CELL_BITS - self.pointer_max_bits)),
-                local_cols.rem_words_limbs[REM_WORDS_NUM_LIMBS - 1]
-                    * AB::F::from_usize(
-                        1 << (REM_WORDS_NUM_LIMBS * RV64_CELL_BITS - MAX_HINT_BUFFER_DWORDS_BITS),
-                    ),
+        // Constrain mem_ptr < 2^pointer_max_bits by narrowing its high u16 limb.
+        self.range_bus
+            .range_check(
+                local_cols.mem_ptr_limbs[RV64_LOW32_U16_LIMBS - 1]
+                    * AB::F::from_usize(1 << (RV64_LOW32_BITS - self.pointer_max_bits)),
+                RV64_U16_LIMB_BITS,
+            )
+            .eval(builder, is_start.clone());
+        // Constrain rem_words < 2^MAX_HINT_BUFFER_DWORDS_BITS.
+        self.range_bus
+            .range_check(
+                local_cols.rem_words
+                    * AB::F::from_usize(1 << (RV64_U16_LIMB_BITS - MAX_HINT_BUFFER_DWORDS_BITS)),
+                RV64_U16_LIMB_BITS,
             )
             .eval(builder, is_start.clone());
 
@@ -385,7 +376,7 @@ pub struct Rv64HintStoreExecutor {
 #[derive(Clone, derive_new::new)]
 pub struct Rv64HintStoreFiller {
     pointer_max_bits: usize,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<F, RA> PreflightExecutor<F, RA> for Rv64HintStoreExecutor
@@ -530,14 +521,9 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
             trace = rest;
         }
 
-        // `mem_ptr` is a 4-limb value; the range-check packs the most-significant of those
-        // 4 limbs into a single byte along with the `rem_words` scaled limb.
-        let msl_rshift: u32 = (3 * RV64_CELL_BITS) as u32;
-        let msl_lshift: u32 = (4 * RV64_CELL_BITS - self.pointer_max_bits) as u32;
-
-        // Scale factors for rem_words range check (using MAX_HINT_BUFFER_DWORDS_BITS)
-        let rem_words_msl_lshift: u32 =
-            (REM_WORDS_NUM_LIMBS * RV64_CELL_BITS - MAX_HINT_BUFFER_DWORDS_BITS) as u32;
+        // Scale factors for mem_ptr and rem_words range checks.
+        let mem_ptr_msl_lshift: u32 = (RV64_LOW32_BITS - self.pointer_max_bits) as u32;
+        let rem_words_msl_lshift: u32 = (RV64_U16_LIMB_BITS - MAX_HINT_BUFFER_DWORDS_BITS) as u32;
 
         chunks
             .par_iter_mut()
@@ -557,19 +543,17 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                         }),
                     )
                 };
-                // Range check for mem_ptr (using pointer_max_bits)
-                // (num_words overflow check is handled below with the stricter
-                // MAX_HINT_BUFFER_DWORDS_BITS bound)
-                // Range check for num_words (using MAX_HINT_BUFFER_DWORDS_BITS)
                 debug_assert!(
                     num_words <= MAX_HINT_BUFFER_DWORDS as u32,
                     "num_words must be <= MAX_HINT_BUFFER_DWORDS"
                 );
-                self.bitwise_lookup_chip.request_range(
-                    (record.inner.mem_ptr >> msl_rshift) << msl_lshift,
-                    ((num_words >> (RV64_CELL_BITS * (REM_WORDS_NUM_LIMBS - 1))) & 0xFF)
-                        << rem_words_msl_lshift,
-                );
+                // Range check for mem_ptr (using pointer_max_bits) and num_words (using
+                // MAX_HINT_BUFFER_DWORDS_BITS).
+                let mem_ptr_high_u16 = record.inner.mem_ptr >> RV64_U16_LIMB_BITS;
+                self.range_checker_chip
+                    .add_count(mem_ptr_high_u16 << mem_ptr_msl_lshift, RV64_U16_LIMB_BITS);
+                self.range_checker_chip
+                    .add_count(num_words << rem_words_msl_lshift, RV64_U16_LIMB_BITS);
 
                 let mut timestamp = record.inner.timestamp + num_words * 3;
                 let mut mem_ptr = record.inner.mem_ptr + num_words * RV64_REGISTER_NUM_LIMBS as u32;
@@ -599,9 +583,8 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
 
                         cols.is_buffer_start = F::from_bool(idx == 0 && !is_single);
 
-                        // Note: writing in reverse
-                        cols.data = var.data.map(|x| F::from_u8(x));
-
+                        // Note: writing in reverse.
+                        cols.data = pack_u8_block_bytes(&var.data);
                         cols.write_aux
                             .set_prev_data(pack_u8_block_bytes(&var.data_write_aux.prev_data));
                         mem_helper.fill(
@@ -621,15 +604,13 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                         }
 
                         mem_ptr -= RV64_REGISTER_NUM_LIMBS as u32;
-                        cols.mem_ptr_limbs = mem_ptr.to_le_bytes().map(F::from_u8);
+                        cols.mem_ptr_limbs = u32_to_u16_cells(mem_ptr);
                         cols.mem_ptr_ptr = F::from_u32(record.inner.mem_ptr_ptr);
 
                         cols.from_state.timestamp = F::from_u32(timestamp);
                         cols.from_state.pc = F::from_u32(record.inner.from_pc);
 
-                        cols.rem_words_limbs = ((num_words - idx as u32) as u16)
-                            .to_le_bytes()
-                            .map(F::from_u8);
+                        cols.rem_words = F::from_u32(num_words - idx as u32);
                         cols.is_buffer = F::from_bool(!is_single);
                         cols.is_single = F::from_bool(is_single);
                     });

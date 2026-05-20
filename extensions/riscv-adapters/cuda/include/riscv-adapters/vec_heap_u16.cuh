@@ -1,7 +1,9 @@
 #pragma once
 
 #include "primitives/execution.h"
+#include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "riscv-adapters/constants.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -12,14 +14,16 @@ template <
     size_t NUM_READS,
     size_t BLOCKS_PER_READ,
     size_t BLOCKS_PER_WRITE>
-struct Rv64VecHeapAdapterCols {
+struct Rv64VecHeapU16AdapterCols {
     ExecutionState<T> from_state;
 
     T rs_ptr[NUM_READS];
     T rd_ptr;
 
-    T rs_val[NUM_READS][RV64_WORD_NUM_LIMBS];
-    T rd_val[RV64_WORD_NUM_LIMBS];
+    // Low 32 bits of rs registers as u16 limbs.
+    T rs_val[NUM_READS][RV64_LOW32_U16_LIMBS];
+    // Low 32 bits of rd register as u16 limbs.
+    T rd_val[RV64_LOW32_U16_LIMBS];
 
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
     MemoryReadAuxCols<T> rd_read_aux;
@@ -32,7 +36,7 @@ template <
     size_t NUM_READS,
     size_t BLOCKS_PER_READ,
     size_t BLOCKS_PER_WRITE>
-struct Rv64VecHeapAdapterRecord {
+struct Rv64VecHeapU16AdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
 
@@ -46,32 +50,28 @@ struct Rv64VecHeapAdapterRecord {
     MemoryReadAuxRecord rd_read_aux;
 
     MemoryReadAuxRecord reads_aux[NUM_READS][BLOCKS_PER_READ];
-    MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES> writes_aux[BLOCKS_PER_WRITE];
+    MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH> writes_aux[BLOCKS_PER_WRITE];
 };
 
 template <
     size_t NUM_READS,
     size_t BLOCKS_PER_READ,
     size_t BLOCKS_PER_WRITE>
-struct Rv64VecHeapAdapter {
+struct Rv64VecHeapU16Adapter {
     size_t pointer_max_bits;
-    BitwiseOperationLookup bitwise_lookup;
+    VariableRangeChecker range_checker;
     MemoryAuxColsFactory mem_helper;
 
-    static constexpr size_t RV64_WORD_TOTAL_BITS = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS;
-    static constexpr size_t MSL_SHIFT = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
-
-    __device__ Rv64VecHeapAdapter(
+    __device__ Rv64VecHeapU16Adapter(
         size_t pointer_max_bits,
         VariableRangeChecker range_checker,
-        BitwiseOperationLookup bitwise_lookup,
         uint32_t timestamp_max_bits
     )
-        : pointer_max_bits(pointer_max_bits), bitwise_lookup(bitwise_lookup),
+        : pointer_max_bits(pointer_max_bits), range_checker(range_checker),
           mem_helper(range_checker, timestamp_max_bits) {}
 
     template <typename T>
-    using Cols = Rv64VecHeapAdapterCols<
+    using Cols = Rv64VecHeapU16AdapterCols<
         T,
         NUM_READS,
         BLOCKS_PER_READ,
@@ -79,39 +79,30 @@ struct Rv64VecHeapAdapter {
 
     __device__ void fill_trace_row(
         RowSlice row,
-        Rv64VecHeapAdapterRecord<
+        Rv64VecHeapU16AdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE> record
     ) {
-        const size_t limb_shift_bits = RV64_WORD_TOTAL_BITS - pointer_max_bits;
-
-        if (NUM_READS == 2) {
-            bitwise_lookup.add_range(
-                (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
-                (record.rs_vals[1] >> MSL_SHIFT) << limb_shift_bits
+        // Bound each register pointer to pointer_max_bits by narrowing the high u16 limb.
+        const size_t limb_shift_bits = RV64_LOW32_BITS - pointer_max_bits;
+        for (size_t i = 0; i < NUM_READS; i++) {
+            range_checker.add_count(
+                (record.rs_vals[i] >> RV64_U16_LIMB_BITS) << limb_shift_bits, RV64_U16_LIMB_BITS
             );
-            bitwise_lookup.add_range(
-                (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
-                (record.rd_val >> MSL_SHIFT) << limb_shift_bits
-            );
-        } else if (NUM_READS == 1) {
-            bitwise_lookup.add_range(
-                (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
-                (record.rd_val >> MSL_SHIFT) << limb_shift_bits
-            );
-        } else {
-            assert(false);
         }
+        range_checker.add_count(
+            (record.rd_val >> RV64_U16_LIMB_BITS) << limb_shift_bits, RV64_U16_LIMB_BITS
+        );
 
         uint32_t timestamp =
             record.from_timestamp + NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;
 
         for (int i = BLOCKS_PER_WRITE - 1; i >= 0; i--) {
             timestamp--;
-            Fp packed_prev[BLOCK_FE_WIDTH];
-            pack_u8_block_bytes(packed_prev, record.writes_aux[i].prev_data);
-            COL_WRITE_ARRAY(row, Cols, writes_aux[i].prev_data, packed_prev);
+            Fp prev[BLOCK_FE_WIDTH];
+            copy_u16_cells(prev, record.writes_aux[i].prev_data);
+            COL_WRITE_ARRAY(row, Cols, writes_aux[i].prev_data, prev);
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Cols, writes_aux[i])),
                 record.writes_aux[i].prev_timestamp,
@@ -146,10 +137,14 @@ struct Rv64VecHeapAdapter {
             );
         }
 
-        COL_WRITE_ARRAY(row, Cols, rd_val, (uint8_t *)&record.rd_val);
+        Fp rd_val_packed[RV64_LOW32_U16_LIMBS];
+        pack_u32_to_u16_cells_le(rd_val_packed, record.rd_val);
+        COL_WRITE_ARRAY(row, Cols, rd_val, rd_val_packed);
 
         for (int i = NUM_READS - 1; i >= 0; i--) {
-            COL_WRITE_ARRAY(row, Cols, rs_val[i], (uint8_t *)&record.rs_vals[i]);
+            Fp rs_val_packed[RV64_LOW32_U16_LIMBS];
+            pack_u32_to_u16_cells_le(rs_val_packed, record.rs_vals[i]);
+            COL_WRITE_ARRAY(row, Cols, rs_val[i], rs_val_packed);
         }
 
         COL_WRITE_VALUE(row, Cols, rd_ptr, record.rd_ptr);
@@ -162,13 +157,3 @@ struct Rv64VecHeapAdapter {
         COL_WRITE_VALUE(row, Cols, from_state.pc, record.from_pc);
     }
 };
-
-// Type aliases for the simple case with BLOCKS_PER_READ=1, BLOCKS_PER_WRITE=1
-template <typename T, size_t NUM_READS>
-using Rv64HeapAdapterCols = Rv64VecHeapAdapterCols<T, NUM_READS, 1, 1>;
-
-template <size_t NUM_READS>
-using Rv64HeapAdapterRecord = Rv64VecHeapAdapterRecord<NUM_READS, 1, 1>;
-
-template <size_t NUM_READS>
-using Rv64HeapAdapterExecutor = Rv64VecHeapAdapter<NUM_READS, 1, 1>;

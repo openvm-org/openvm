@@ -60,7 +60,7 @@ template <size_t NUM_LIMBS> struct MultiplicationCore {
             range_tuple_checker.add_count(vals);
         }
 
-        // AIR range-checks these byte limbs; add matching lookup counts.
+        // Multiplication uses byte limbs; range-check the read operands locally.
 #pragma unroll
         for (size_t i = 0; i < NUM_LIMBS; i++) {
             bitwise_lookup.add_range(record.b[i], record.c[i]);
