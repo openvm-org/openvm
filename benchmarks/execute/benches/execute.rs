@@ -87,11 +87,9 @@ static METERED_AOT_CACHE: OnceLock<
     Mutex<HashMap<String, Arc<(AotInstance<BabyBear, MeteredCtx>, MeteredCtx)>>>,
 > = OnceLock::new();
 #[cfg(feature = "rvr")]
-type BenchExecutor = <ExecuteConfig as VmExecutionConfig<BabyBear>>::Executor;
+type RvrMetered = (RvrMeteredInstance<BabyBear>, MeteredCtx);
 #[cfg(feature = "rvr")]
-type RvrMetered = (RvrMeteredInstance<BabyBear, BenchExecutor>, MeteredCtx);
-#[cfg(feature = "rvr")]
-type RvrMeteredCost = RvrMeteredCostInstance<BabyBear, BenchExecutor>;
+type RvrMeteredCost = RvrMeteredCostInstance<BabyBear>;
 #[cfg(feature = "rvr")]
 static RVR_CACHE: OnceLock<Mutex<HashMap<String, Arc<RvrPureInstance<BabyBear>>>>> =
     OnceLock::new();
@@ -396,9 +394,7 @@ fn create_rvr_instance(program: &str) -> Arc<RvrPureInstance<BabyBear>> {
 }
 
 #[cfg(feature = "rvr")]
-fn create_metered_rvr_instance(
-    program: &str,
-) -> Arc<(RvrMeteredInstance<BabyBear, BenchExecutor>, MeteredCtx)> {
+fn create_metered_rvr_instance(program: &str) -> Arc<(RvrMeteredInstance<BabyBear>, MeteredCtx)> {
     let cache = METERED_RVR_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     let mut cache = cache.lock().unwrap();
     cache
@@ -425,9 +421,7 @@ fn create_metered_rvr_instance(
 }
 
 #[cfg(feature = "rvr")]
-fn create_metered_cost_rvr_instance(
-    program: &str,
-) -> Arc<RvrMeteredCostInstance<BabyBear, BenchExecutor>> {
+fn create_metered_cost_rvr_instance(program: &str) -> Arc<RvrMeteredCostInstance<BabyBear>> {
     let cache = METERED_COST_RVR_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     let mut cache = cache.lock().unwrap();
     cache
@@ -435,10 +429,10 @@ fn create_metered_cost_rvr_instance(
         .or_insert_with(|| {
             let exe = load_program_executable(program)
                 .expect("Failed to load program executable for metered cost RVR cache");
-            let (_, executor_idx_to_air_idx) = metered_cost_setup();
+            let (ctx, executor_idx_to_air_idx) = metered_cost_setup();
             Arc::new(
                 executor()
-                    .metered_cost_instance(&exe, executor_idx_to_air_idx)
+                    .metered_cost_instance(&exe, executor_idx_to_air_idx, &ctx.widths)
                     .unwrap_or_else(|err| {
                         panic!("Failed to create metered cost RVR instance for {program}: {err}")
                     }),
