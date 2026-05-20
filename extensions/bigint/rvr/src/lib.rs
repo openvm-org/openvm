@@ -18,7 +18,7 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg, Terminator};
-use rvr_openvm_lift::{ExtensionError, RvrExtension, RvrExtensionCtx, NO_CHIP};
+use rvr_openvm_lift::{opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx};
 use strum::EnumCount;
 
 // ── ALU / branch opcode enums ───────────────────────────────────────────────
@@ -99,7 +99,7 @@ pub struct Int256AluInstr {
     /// instruction is one row already counted by the per-block chip update
     /// emitted at block entry), kept on the IR for parity with other
     /// extensions and future trace-chip use.
-    pub chip_idx: u32,
+    pub chip_idx: AirIndex,
 }
 
 impl ExtInstr for Int256AluInstr {
@@ -140,7 +140,7 @@ pub struct Int256BranchEqInstr {
     /// If true, branch on *not* equal (BNE); otherwise branch on equal (BEQ).
     pub is_ne: bool,
     /// Chip index for metering. See [`Int256AluInstr::chip_idx`].
-    pub chip_idx: u32,
+    pub chip_idx: AirIndex,
 }
 
 impl ExtInstr for Int256BranchEqInstr {
@@ -194,7 +194,7 @@ pub struct Int256BranchLtInstr {
     /// The branch-less-than variant (selects the FFI function at codegen time).
     pub op: Int256BranchLtOp,
     /// Chip index for metering. See [`Int256AluInstr::chip_idx`].
-    pub chip_idx: u32,
+    pub chip_idx: AirIndex,
 }
 
 impl ExtInstr for Int256BranchLtInstr {
@@ -236,46 +236,25 @@ impl ExtInstr for Int256BranchLtInstr {
 
 /// The Int256 extension. Register this with the `ExtensionRegistry`.
 pub struct Int256Extension {
-    base_alu_chip_idx: u32,
-    shift_chip_idx: u32,
-    less_than_chip_idx: u32,
-    mul_chip_idx: u32,
-    branch_eq_chip_idx: u32,
-    branch_lt_chip_idx: u32,
+    base_alu_chip_idx: AirIndex,
+    shift_chip_idx: AirIndex,
+    less_than_chip_idx: AirIndex,
+    mul_chip_idx: AirIndex,
+    branch_eq_chip_idx: AirIndex,
+    branch_lt_chip_idx: AirIndex,
     staticlib_path: PathBuf,
 }
 
 impl Int256Extension {
-    /// Create a `Int256Extension` for pure execution where chip indices
-    /// don't matter (trace_chip is a no-op in pure mode).
-    pub fn new_pure() -> Self {
-        Self {
-            base_alu_chip_idx: NO_CHIP,
-            shift_chip_idx: NO_CHIP,
-            less_than_chip_idx: NO_CHIP,
-            mul_chip_idx: NO_CHIP,
-            branch_eq_chip_idx: NO_CHIP,
-            branch_lt_chip_idx: NO_CHIP,
-            staticlib_path: default_staticlib_path(),
-        }
-    }
-
-    /// Create a new `Int256Extension`, resolving chip indices from the VM config.
-    pub fn new(ctx: &RvrExtensionCtx) -> Result<Self, ExtensionError> {
-        let base_alu_chip_idx =
-            ctx.require_opcode_air_idx(Rv32BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode())?;
-        let shift_chip_idx =
-            ctx.require_opcode_air_idx(Rv32Shift256Opcode(ShiftOpcode::SLL).global_opcode())?;
-        let less_than_chip_idx =
-            ctx.require_opcode_air_idx(Rv32LessThan256Opcode(LessThanOpcode::SLT).global_opcode())?;
-        let mul_chip_idx =
-            ctx.require_opcode_air_idx(Rv32Mul256Opcode(MulOpcode::MUL).global_opcode())?;
-        let branch_eq_chip_idx = ctx.require_opcode_air_idx(
-            Rv32BranchEqual256Opcode(BranchEqualOpcode::BEQ).global_opcode(),
-        )?;
-        let branch_lt_chip_idx = ctx.require_opcode_air_idx(
-            Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BLT).global_opcode(),
-        )?;
+    pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
+        let base_alu_chip_idx = opcode_air_idx(ctx, Rv32BaseAlu256Opcode(BaseAluOpcode::ADD))?;
+        let shift_chip_idx = opcode_air_idx(ctx, Rv32Shift256Opcode(ShiftOpcode::SLL))?;
+        let less_than_chip_idx = opcode_air_idx(ctx, Rv32LessThan256Opcode(LessThanOpcode::SLT))?;
+        let mul_chip_idx = opcode_air_idx(ctx, Rv32Mul256Opcode(MulOpcode::MUL))?;
+        let branch_eq_chip_idx =
+            opcode_air_idx(ctx, Rv32BranchEqual256Opcode(BranchEqualOpcode::BEQ))?;
+        let branch_lt_chip_idx =
+            opcode_air_idx(ctx, Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BLT))?;
 
         Ok(Self {
             base_alu_chip_idx,
@@ -289,7 +268,7 @@ impl Int256Extension {
     }
 
     /// Map a global opcode to the chip index for that operation.
-    fn chip_idx_for_opcode(&self, opcode: usize) -> u32 {
+    fn chip_idx_for_opcode(&self, opcode: usize) -> AirIndex {
         let base_alu_start = Rv32BaseAlu256Opcode::CLASS_OFFSET;
         let shift_start = Rv32Shift256Opcode::CLASS_OFFSET;
         let lt_start = Rv32LessThan256Opcode::CLASS_OFFSET;

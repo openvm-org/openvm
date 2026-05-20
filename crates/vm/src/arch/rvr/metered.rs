@@ -8,7 +8,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
-use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
+use rvr_openvm_lift::ExtensionRegistry;
 
 use super::{
     bridge::map_rvr_execute_error,
@@ -108,14 +108,14 @@ where
             if let Some((inst, _)) = slot {
                 let opcode: VmOpcode = inst.opcode;
                 if opcode == terminate_opcode {
-                    NO_CHIP
+                    u32::MAX
                 } else if let Some(&executor_idx) = inventory.instruction_lookup.get(&opcode) {
                     executor_idx_to_air_idx[executor_idx as usize] as u32
                 } else {
-                    NO_CHIP
+                    u32::MAX
                 }
             } else {
-                NO_CHIP
+                u32::MAX
             }
         })
         .collect()

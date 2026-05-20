@@ -5,15 +5,44 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use openvm_instructions::{instruction::Instruction, VmOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::LiftedInstr;
 
-/// Sentinel air index meaning "no chip" — used for opcodes/instructions that do
-/// not contribute to a chip's trace (e.g. `TERMINATE`) and to fill placeholder
-/// `executor_idx_to_air_idx` arrays in pure execution where air indices are
-/// irrelevant.
-pub const NO_CHIP: u32 = u32::MAX;
+/// Index of an AIR in the trace.
+///
+/// - `Uninitialized` is a placeholder used only during pure execution where air indices are
+///   irrelevant. Metered execution panics when it encounters this variant.
+/// - `NoChip` marks opcodes/instructions that do not contribute to any chip's trace (e.g.
+///   `TERMINATE`).
+/// - `Chip(u32)` is a real AIR index.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum AirIndex {
+    Uninitialized,
+    NoChip,
+    Chip(u32),
+}
+
+impl AirIndex {
+    #[inline]
+    pub fn next(self) -> AirIndex {
+        match self {
+            AirIndex::Chip(n) => AirIndex::Chip(n + 1),
+            other => other,
+        }
+    }
+
+    /// Lower to the `u32` chip index baked into generated C source. Both
+    /// `NoChip` and `Uninitialized` become `u32::MAX` (the `NO_CHIP` sentinel
+    /// on the C side, where `trace_chip` is a no-op for that value).
+    #[inline]
+    pub fn to_c_chip_idx(self) -> u32 {
+        match self {
+            AirIndex::Chip(n) => n,
+            AirIndex::NoChip | AirIndex::Uninitialized => u32::MAX,
+        }
+    }
+}
 
 /// Data needed by extension crates to resolve opcode/chip metadata when
 /// registering rvr extension handlers.
@@ -39,26 +68,29 @@ impl RvrExtensionCtx {
     pub fn resolve_opcode_executor_idx(&self, opcode: VmOpcode) -> Option<usize> {
         self.opcode_to_executor_idx.get(&opcode).copied()
     }
+}
 
-    pub fn resolve_opcode_air_idx(&self, opcode: VmOpcode) -> Option<u32> {
-        let executor_idx = self.resolve_opcode_executor_idx(opcode)?;
-        self.executor_idx_to_air_idx
-            .get(executor_idx)
-            .map(|air_idx| *air_idx as u32)
-    }
-
-    pub fn require_opcode_air_idx(&self, opcode: VmOpcode) -> Result<u32, ExtensionError> {
-        let executor_idx = self
-            .resolve_opcode_executor_idx(opcode)
-            .ok_or(ExtensionError::UnknownOpcode(opcode))?;
-        let air_idx = self.executor_idx_to_air_idx.get(executor_idx).ok_or(
-            ExtensionError::ExecutorIndexOutOfBounds {
-                opcode,
-                executor_idx,
-            },
-        )?;
-        Ok(*air_idx as u32)
-    }
+/// Resolve the AIR index for `opcode`. In pure mode (`ctx = None`) returns
+/// `Ok(Uninitialized)`; in metered mode returns `Ok(Chip(n))` for the
+/// registered opcode and errors if the opcode is unknown.
+pub fn opcode_air_idx(
+    ctx: Option<&RvrExtensionCtx>,
+    opcode: impl LocalOpcode,
+) -> Result<AirIndex, ExtensionError> {
+    let opcode = opcode.global_opcode();
+    let Some(ctx) = ctx else {
+        return Ok(AirIndex::Uninitialized);
+    };
+    let executor_idx = ctx
+        .resolve_opcode_executor_idx(opcode)
+        .ok_or(ExtensionError::UnknownOpcode(opcode))?;
+    let raw = ctx.executor_idx_to_air_idx.get(executor_idx).ok_or(
+        ExtensionError::ExecutorIndexOutOfBounds {
+            opcode,
+            executor_idx,
+        },
+    )?;
+    Ok(AirIndex::Chip(*raw as u32))
 }
 
 /// Errors raised when resolving extension metadata from a `RvrExtensionCtx`.
@@ -140,11 +172,11 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
 /// Trait implemented by OpenVM extension owner types to contribute their rvr
 /// lifting/codegen extensions during config assembly.
 pub trait VmRvrExtension<F: PrimeField32> {
-    fn extend_rvr(&self, _registry: &mut ExtensionRegistry<F>, _ctx: &RvrExtensionCtx) {}
+    fn extend_rvr(&self, _registry: &mut ExtensionRegistry<F>, _ctx: Option<&RvrExtensionCtx>) {}
 }
 
 impl<F: PrimeField32, EXT: VmRvrExtension<F>> VmRvrExtension<F> for Option<EXT> {
-    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: &RvrExtensionCtx) {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: Option<&RvrExtensionCtx>) {
         if let Some(ext) = self {
             ext.extend_rvr(registry, ctx);
         }
