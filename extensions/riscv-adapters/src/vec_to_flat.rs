@@ -7,7 +7,7 @@ use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterTraceExecutor, BasicAdapterInterface, ImmInstruction,
         MinimalInstruction, VecHeapAdapterInterface, VecHeapBranchAdapterInterface, VmAdapterAir,
-        VmAdapterInterface, MEMORY_BLOCK_BYTES,
+        VmAdapterInterface,
     },
     system::memory::online::TracingMemory,
 };
@@ -32,14 +32,16 @@ use openvm_stark_backend::{
 /// - `NUM_READS`: Number of read operands
 /// - `BLOCKS_PER_READ`: Number of blocks per read operand
 /// - `BLOCKS_PER_WRITE`: Number of blocks per write operand
-/// - `TOTAL_READ_SIZE`: Total read size per operand (`BLOCKS_PER_READ * MEMORY_BLOCK_BYTES`)
-/// - `TOTAL_WRITE_SIZE`: Total write size per operand (`BLOCKS_PER_WRITE * MEMORY_BLOCK_BYTES`)
+/// - `BLOCK_VALUE_WIDTH`: Number of values in each block
+/// - `TOTAL_READ_SIZE`: Total read size per operand (`BLOCKS_PER_READ * BLOCK_VALUE_WIDTH`)
+/// - `TOTAL_WRITE_SIZE`: Total write size per operand (`BLOCKS_PER_WRITE * BLOCK_VALUE_WIDTH`)
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct VecToFlatAluAdapterAir<
     A,
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
+    const BLOCK_VALUE_WIDTH: usize,
     const TOTAL_READ_SIZE: usize,
     const TOTAL_WRITE_SIZE: usize,
 >(pub A);
@@ -50,6 +52,7 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
+        const BLOCK_VALUE_WIDTH: usize,
         const TOTAL_READ_SIZE: usize,
         const TOTAL_WRITE_SIZE: usize,
     > BaseAir<F>
@@ -58,6 +61,7 @@ impl<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
+        BLOCK_VALUE_WIDTH,
         TOTAL_READ_SIZE,
         TOTAL_WRITE_SIZE,
     >
@@ -74,6 +78,7 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
+        const BLOCK_VALUE_WIDTH: usize,
         const TOTAL_READ_SIZE: usize,
         const TOTAL_WRITE_SIZE: usize,
     > ColumnsAir
@@ -82,6 +87,7 @@ impl<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
+        BLOCK_VALUE_WIDTH,
         TOTAL_READ_SIZE,
         TOTAL_WRITE_SIZE,
     >
@@ -99,6 +105,7 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
+        const BLOCK_VALUE_WIDTH: usize,
         const TOTAL_READ_SIZE: usize,
         const TOTAL_WRITE_SIZE: usize,
     > VmAdapterAir<AB>
@@ -107,6 +114,7 @@ impl<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
+        BLOCK_VALUE_WIDTH,
         TOTAL_READ_SIZE,
         TOTAL_WRITE_SIZE,
     >
@@ -119,8 +127,8 @@ where
             NUM_READS,
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE,
-            MEMORY_BLOCK_BYTES,
-            MEMORY_BLOCK_BYTES,
+            BLOCK_VALUE_WIDTH,
+            BLOCK_VALUE_WIDTH,
         >,
     >,
 {
@@ -140,29 +148,24 @@ where
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
         const {
-            assert!(
-                TOTAL_READ_SIZE == BLOCKS_PER_READ * MEMORY_BLOCK_BYTES,
-                "TOTAL_READ_SIZE must equal BLOCKS_PER_READ * MEMORY_BLOCK_BYTES"
-            );
-            assert!(
-                TOTAL_WRITE_SIZE == BLOCKS_PER_WRITE * MEMORY_BLOCK_BYTES,
-                "TOTAL_WRITE_SIZE must equal BLOCKS_PER_WRITE * MEMORY_BLOCK_BYTES"
-            );
-        }
+            assert!(TOTAL_READ_SIZE == BLOCKS_PER_READ * BLOCK_VALUE_WIDTH);
+            assert!(TOTAL_WRITE_SIZE == BLOCKS_PER_WRITE * BLOCK_VALUE_WIDTH);
+        };
 
-        type InnerI<T, const NR: usize, const BPR: usize, const BPW: usize> =
-            VecHeapAdapterInterface<T, NR, BPR, BPW, MEMORY_BLOCK_BYTES, MEMORY_BLOCK_BYTES>;
+        type InnerI<T, const NR: usize, const BPR: usize, const BPW: usize, const BS: usize> =
+            VecHeapAdapterInterface<T, NR, BPR, BPW, BS, BS>;
 
         let inner_reads: <InnerI<
             AB::Expr,
             NUM_READS,
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE,
+            BLOCK_VALUE_WIDTH,
         > as VmAdapterInterface<AB::Expr>>::Reads = core::array::from_fn(|read_i| {
             core::array::from_fn(|block_i| {
                 core::array::from_fn(|in_block_i| {
-                    let byte_i = block_i * MEMORY_BLOCK_BYTES + in_block_i;
-                    ctx.reads[read_i][byte_i].clone()
+                    let flat_i = block_i * BLOCK_VALUE_WIDTH + in_block_i;
+                    ctx.reads[read_i][flat_i].clone()
                 })
             })
         });
@@ -172,16 +175,17 @@ where
             NUM_READS,
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE,
+            BLOCK_VALUE_WIDTH,
         > as VmAdapterInterface<AB::Expr>>::Writes = core::array::from_fn(|block_i| {
             core::array::from_fn(|in_block_i| {
-                let byte_i = block_i * MEMORY_BLOCK_BYTES + in_block_i;
-                ctx.writes[0][byte_i].clone()
+                let flat_i = block_i * BLOCK_VALUE_WIDTH + in_block_i;
+                ctx.writes[0][flat_i].clone()
             })
         });
 
         let inner_ctx: AdapterAirContext<
             AB::Expr,
-            InnerI<AB::Expr, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>,
+            InnerI<AB::Expr, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, BLOCK_VALUE_WIDTH>,
         > = AdapterAirContext {
             to_pc: ctx.to_pc,
             reads: inner_reads,
@@ -203,6 +207,7 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
+        const BLOCK_VALUE_WIDTH: usize,
         const TOTAL_READ_SIZE: usize,
         const TOTAL_WRITE_SIZE: usize,
     > BaseAirWithPublicValues<F>
@@ -211,6 +216,7 @@ impl<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
+        BLOCK_VALUE_WIDTH,
         TOTAL_READ_SIZE,
         TOTAL_WRITE_SIZE,
     >
@@ -229,6 +235,7 @@ pub struct VecToFlatAluAdapterExecutor<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
+    const BLOCK_VALUE_WIDTH: usize,
     const TOTAL_READ_SIZE: usize,
     const TOTAL_WRITE_SIZE: usize,
 >(pub A);
@@ -239,6 +246,7 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
+        const BLOCK_VALUE_WIDTH: usize,
         const TOTAL_READ_SIZE: usize,
         const TOTAL_WRITE_SIZE: usize,
     > AdapterTraceExecutor<F>
@@ -247,6 +255,7 @@ impl<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
+        BLOCK_VALUE_WIDTH,
         TOTAL_READ_SIZE,
         TOTAL_WRITE_SIZE,
     >
@@ -254,8 +263,8 @@ where
     F: PrimeField32,
     A: AdapterTraceExecutor<
         F,
-        ReadData = [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS_PER_READ]; NUM_READS],
-        WriteData = [[u8; MEMORY_BLOCK_BYTES]; BLOCKS_PER_WRITE],
+        ReadData = [[[u8; BLOCK_VALUE_WIDTH]; BLOCKS_PER_READ]; NUM_READS],
+        WriteData = [[u8; BLOCK_VALUE_WIDTH]; BLOCKS_PER_WRITE],
     >,
 {
     const WIDTH: usize = A::WIDTH;
@@ -283,8 +292,8 @@ where
         core::array::from_fn(|i| {
             let mut out = [0u8; TOTAL_READ_SIZE];
             for (block_idx, block) in data_inner[i].iter().enumerate() {
-                let start = block_idx * MEMORY_BLOCK_BYTES;
-                out[start..start + MEMORY_BLOCK_BYTES].copy_from_slice(&block[..]);
+                let start = block_idx * BLOCK_VALUE_WIDTH;
+                out[start..start + BLOCK_VALUE_WIDTH].copy_from_slice(&block[..]);
             }
             out
         })
@@ -299,10 +308,96 @@ where
         record: &mut Self::RecordMut<'_>,
     ) {
         let data_inner: <A as AdapterTraceExecutor<F>>::WriteData = core::array::from_fn(|i| {
-            let start = i * MEMORY_BLOCK_BYTES;
-            data[0][start..start + MEMORY_BLOCK_BYTES]
-                .try_into()
-                .expect("slice length matches MEMORY_BLOCK_BYTES")
+            let start = i * BLOCK_VALUE_WIDTH;
+            core::array::from_fn(|j| data[0][start + j])
+        });
+
+        <A as AdapterTraceExecutor<F>>::write(&self.0, memory, instruction, data_inner, record);
+    }
+}
+
+/// U16 counterpart of [`VecToFlatAluAdapterExecutor`].
+#[derive(Clone, Copy, Debug, derive_new::new)]
+pub struct VecToFlatAluU16AdapterExecutor<
+    A,
+    const NUM_READS: usize,
+    const BLOCKS_PER_READ: usize,
+    const BLOCKS_PER_WRITE: usize,
+    const BLOCK_VALUE_WIDTH: usize,
+    const TOTAL_READ_SIZE: usize,
+    const TOTAL_WRITE_SIZE: usize,
+>(pub A);
+
+impl<
+        F,
+        A,
+        const NUM_READS: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCKS_PER_WRITE: usize,
+        const BLOCK_VALUE_WIDTH: usize,
+        const TOTAL_READ_SIZE: usize,
+        const TOTAL_WRITE_SIZE: usize,
+    > AdapterTraceExecutor<F>
+    for VecToFlatAluU16AdapterExecutor<
+        A,
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCKS_PER_WRITE,
+        BLOCK_VALUE_WIDTH,
+        TOTAL_READ_SIZE,
+        TOTAL_WRITE_SIZE,
+    >
+where
+    F: PrimeField32,
+    A: AdapterTraceExecutor<
+        F,
+        ReadData = [[[u16; BLOCK_VALUE_WIDTH]; BLOCKS_PER_READ]; NUM_READS],
+        WriteData = [[u16; BLOCK_VALUE_WIDTH]; BLOCKS_PER_WRITE],
+    >,
+{
+    const WIDTH: usize = A::WIDTH;
+    type ReadData = [[u16; TOTAL_READ_SIZE]; NUM_READS];
+    type WriteData = [[u16; TOTAL_WRITE_SIZE]; 1];
+    type RecordMut<'a>
+        = A::RecordMut<'a>
+    where
+        Self: 'a;
+
+    #[inline(always)]
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
+        A::start(pc, memory, record);
+    }
+
+    #[inline(always)]
+    fn read(
+        &self,
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        record: &mut Self::RecordMut<'_>,
+    ) -> Self::ReadData {
+        let data_inner = <A as AdapterTraceExecutor<F>>::read(&self.0, memory, instruction, record);
+
+        core::array::from_fn(|i| {
+            let mut out = [0u16; TOTAL_READ_SIZE];
+            for (block_idx, block) in data_inner[i].iter().enumerate() {
+                let start = block_idx * BLOCK_VALUE_WIDTH;
+                out[start..start + BLOCK_VALUE_WIDTH].copy_from_slice(&block[..]);
+            }
+            out
+        })
+    }
+
+    #[inline(always)]
+    fn write(
+        &self,
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        data: Self::WriteData,
+        record: &mut Self::RecordMut<'_>,
+    ) {
+        let data_inner: <A as AdapterTraceExecutor<F>>::WriteData = core::array::from_fn(|i| {
+            let start = i * BLOCK_VALUE_WIDTH;
+            core::array::from_fn(|j| data[0][start + j])
         });
 
         <A as AdapterTraceExecutor<F>>::write(&self.0, memory, instruction, data_inner, record);
@@ -323,17 +418,26 @@ where
 /// - `A`: The inner adapter AIR (e.g., `Rv64VecHeapBranchAdapterAir`)
 /// - `NUM_READS`: Number of read operands
 /// - `BLOCKS_PER_READ`: Number of blocks per read operand
-/// - `TOTAL_READ_SIZE`: Total read size per operand (`BLOCKS_PER_READ * MEMORY_BLOCK_BYTES`)
+/// - `BLOCK_VALUE_WIDTH`: Number of values in each block
+/// - `TOTAL_READ_SIZE`: Total read size per operand (`BLOCKS_PER_READ * BLOCK_VALUE_WIDTH`)
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct VecToFlatBranchAdapterAir<
     A,
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
+    const BLOCK_VALUE_WIDTH: usize,
     const TOTAL_READ_SIZE: usize,
 >(pub A);
 
-impl<F, A, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const TOTAL_READ_SIZE: usize>
-    BaseAir<F> for VecToFlatBranchAdapterAir<A, NUM_READS, BLOCKS_PER_READ, TOTAL_READ_SIZE>
+impl<
+        F,
+        A,
+        const NUM_READS: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCK_VALUE_WIDTH: usize,
+        const TOTAL_READ_SIZE: usize,
+    > BaseAir<F>
+    for VecToFlatBranchAdapterAir<A, NUM_READS, BLOCKS_PER_READ, BLOCK_VALUE_WIDTH, TOTAL_READ_SIZE>
 where
     A: BaseAir<F>,
 {
@@ -342,8 +446,14 @@ where
     }
 }
 
-impl<A, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const TOTAL_READ_SIZE: usize>
-    ColumnsAir for VecToFlatBranchAdapterAir<A, NUM_READS, BLOCKS_PER_READ, TOTAL_READ_SIZE>
+impl<
+        A,
+        const NUM_READS: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCK_VALUE_WIDTH: usize,
+        const TOTAL_READ_SIZE: usize,
+    > ColumnsAir
+    for VecToFlatBranchAdapterAir<A, NUM_READS, BLOCKS_PER_READ, BLOCK_VALUE_WIDTH, TOTAL_READ_SIZE>
 where
     A: ColumnsAir,
 {
@@ -352,8 +462,15 @@ where
     }
 }
 
-impl<AB, A, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const TOTAL_READ_SIZE: usize>
-    VmAdapterAir<AB> for VecToFlatBranchAdapterAir<A, NUM_READS, BLOCKS_PER_READ, TOTAL_READ_SIZE>
+impl<
+        AB,
+        A,
+        const NUM_READS: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCK_VALUE_WIDTH: usize,
+        const TOTAL_READ_SIZE: usize,
+    > VmAdapterAir<AB>
+    for VecToFlatBranchAdapterAir<A, NUM_READS, BLOCKS_PER_READ, BLOCK_VALUE_WIDTH, TOTAL_READ_SIZE>
 where
     AB: InteractionBuilder,
     A: VmAdapterAir<
@@ -362,7 +479,7 @@ where
             AB::Expr,
             NUM_READS,
             BLOCKS_PER_READ,
-            MEMORY_BLOCK_BYTES,
+            BLOCK_VALUE_WIDTH,
         >,
     >,
 {
@@ -375,34 +492,30 @@ where
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        const {
-            assert!(
-                TOTAL_READ_SIZE == BLOCKS_PER_READ * MEMORY_BLOCK_BYTES,
-                "TOTAL_READ_SIZE must equal BLOCKS_PER_READ * MEMORY_BLOCK_BYTES"
-            )
-        };
+        const { assert!(TOTAL_READ_SIZE == BLOCKS_PER_READ * BLOCK_VALUE_WIDTH) };
 
-        type InnerI<T, const NR: usize, const BPR: usize> =
-            VecHeapBranchAdapterInterface<T, NR, BPR, MEMORY_BLOCK_BYTES>;
+        type InnerI<T, const NR: usize, const BPR: usize, const BS: usize> =
+            VecHeapBranchAdapterInterface<T, NR, BPR, BS>;
 
-        let inner_reads: <InnerI<AB::Expr, NUM_READS, BLOCKS_PER_READ> as VmAdapterInterface<
-            AB::Expr,
-        >>::Reads = core::array::from_fn(|read_i| {
-            core::array::from_fn(|block_i| {
-                core::array::from_fn(|in_block_i| {
-                    let byte_i = block_i * MEMORY_BLOCK_BYTES + in_block_i;
-                    ctx.reads[read_i][byte_i].clone()
+        let inner_reads: <InnerI<AB::Expr, NUM_READS, BLOCKS_PER_READ, BLOCK_VALUE_WIDTH> as VmAdapterInterface<AB::Expr>>::Reads =
+            core::array::from_fn(|read_i| {
+                core::array::from_fn(|block_i| {
+                    core::array::from_fn(|in_block_i| {
+                        let flat_i = block_i * BLOCK_VALUE_WIDTH + in_block_i;
+                        ctx.reads[read_i][flat_i].clone()
+                    })
                 })
-            })
-        });
+            });
 
-        let inner_ctx: AdapterAirContext<AB::Expr, InnerI<AB::Expr, NUM_READS, BLOCKS_PER_READ>> =
-            AdapterAirContext {
-                to_pc: ctx.to_pc,
-                reads: inner_reads,
-                writes: (),
-                instruction: ctx.instruction,
-            };
+        let inner_ctx: AdapterAirContext<
+            AB::Expr,
+            InnerI<AB::Expr, NUM_READS, BLOCKS_PER_READ, BLOCK_VALUE_WIDTH>,
+        > = AdapterAirContext {
+            to_pc: ctx.to_pc,
+            reads: inner_reads,
+            writes: (),
+            instruction: ctx.instruction,
+        };
 
         self.0.eval(builder, local, inner_ctx)
     }
@@ -412,9 +525,15 @@ where
     }
 }
 
-impl<F, A, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const TOTAL_READ_SIZE: usize>
-    BaseAirWithPublicValues<F>
-    for VecToFlatBranchAdapterAir<A, NUM_READS, BLOCKS_PER_READ, TOTAL_READ_SIZE>
+impl<
+        F,
+        A,
+        const NUM_READS: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCK_VALUE_WIDTH: usize,
+        const TOTAL_READ_SIZE: usize,
+    > BaseAirWithPublicValues<F>
+    for VecToFlatBranchAdapterAir<A, NUM_READS, BLOCKS_PER_READ, BLOCK_VALUE_WIDTH, TOTAL_READ_SIZE>
 where
     A: BaseAirWithPublicValues<F>,
 {
@@ -430,22 +549,35 @@ pub struct VecToFlatBranchAdapterExecutor<
     A,
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
+    const BLOCK_VALUE_WIDTH: usize,
     const TOTAL_READ_SIZE: usize,
 >(pub A);
 
-impl<F, A, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const TOTAL_READ_SIZE: usize>
-    AdapterTraceExecutor<F>
-    for VecToFlatBranchAdapterExecutor<A, NUM_READS, BLOCKS_PER_READ, TOTAL_READ_SIZE>
+impl<
+        F,
+        A,
+        const NUM_READS: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCK_VALUE_WIDTH: usize,
+        const TOTAL_READ_SIZE: usize,
+    > AdapterTraceExecutor<F>
+    for VecToFlatBranchAdapterExecutor<
+        A,
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCK_VALUE_WIDTH,
+        TOTAL_READ_SIZE,
+    >
 where
     F: PrimeField32,
     A: AdapterTraceExecutor<
         F,
-        ReadData = [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS_PER_READ]; NUM_READS],
+        ReadData = [[[u16; BLOCK_VALUE_WIDTH]; BLOCKS_PER_READ]; NUM_READS],
         WriteData = (),
     >,
 {
     const WIDTH: usize = A::WIDTH;
-    type ReadData = [[u8; TOTAL_READ_SIZE]; NUM_READS];
+    type ReadData = [[u16; TOTAL_READ_SIZE]; NUM_READS];
     type WriteData = ();
     type RecordMut<'a>
         = A::RecordMut<'a>
@@ -467,10 +599,10 @@ where
         let data_inner = <A as AdapterTraceExecutor<F>>::read(&self.0, memory, instruction, record);
 
         core::array::from_fn(|i| {
-            let mut out = [0u8; TOTAL_READ_SIZE];
+            let mut out = [0u16; TOTAL_READ_SIZE];
             for (block_idx, block) in data_inner[i].iter().enumerate() {
-                let start = block_idx * MEMORY_BLOCK_BYTES;
-                out[start..start + MEMORY_BLOCK_BYTES].copy_from_slice(&block[..]);
+                let start = block_idx * BLOCK_VALUE_WIDTH;
+                out[start..start + BLOCK_VALUE_WIDTH].copy_from_slice(&block[..]);
             }
             out
         })

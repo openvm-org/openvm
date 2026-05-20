@@ -1,17 +1,14 @@
-use std::{array, borrow::BorrowMut, sync::Arc};
+use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, PreflightExecutor,
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
+        Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::i32_to_f,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
-};
+use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::LessThanOpcode::{self, *};
 use openvm_stark_backend::{
@@ -28,18 +25,20 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluAdapterRecord, LessThanCoreRecord, Rv64LessThanChipGpu},
+    crate::{adapters::Rv64BaseAluU16AdapterRecord, LessThanCoreRecord, Rv64LessThanChipGpu},
     openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
+        testing::{GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
     },
 };
+#[cfg(feature = "cuda")]
+use {openvm_circuit_primitives::var_range::VariableRangeCheckerChip, std::sync::Arc};
 
 use super::{core::run_less_than, LessThanCoreAir, Rv64LessThanChip};
 use crate::{
     adapters::{
-        Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
-        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+        Rv64BaseAluU16AdapterAir, Rv64BaseAluU16AdapterExecutor, Rv64BaseAluU16AdapterFiller,
+        RV64_REGISTER_NUM_LIMBS, RV64_U16_LIMB_BITS,
     },
     less_than::LessThanCoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
@@ -50,22 +49,27 @@ type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 type Harness = TestChipHarness<F, Rv64LessThanExecutor, Rv64LessThanAir, Rv64LessThanChip<F>>;
 
+#[inline]
+fn bytes_to_u16(bytes: &[u8; RV64_REGISTER_NUM_LIMBS]) -> [u16; BLOCK_FE_WIDTH] {
+    array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
+}
+
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64LessThanAir, Rv64LessThanExecutor, Rv64LessThanChip<F>) {
     let air = Rv64LessThanAir::new(
-        Rv64BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
-        LessThanCoreAir::new(bitwise_chip.bus(), LessThanOpcode::CLASS_OFFSET),
+        Rv64BaseAluU16AdapterAir::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
+        LessThanCoreAir::new(range_checker_chip.bus(), LessThanOpcode::CLASS_OFFSET),
     );
     let executor =
-        Rv64LessThanExecutor::new(Rv64BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
+        Rv64LessThanExecutor::new(Rv64BaseAluU16AdapterExecutor, LessThanOpcode::CLASS_OFFSET);
     let chip = Rv64LessThanChip::<F>::new(
         LessThanFiller::new(
-            Rv64BaseAluAdapterFiller::new(bitwise_chip.clone()),
-            bitwise_chip,
+            Rv64BaseAluU16AdapterFiller::new(range_checker_chip.clone()),
+            range_checker_chip,
             LessThanOpcode::CLASS_OFFSET,
         ),
         memory_helper,
@@ -73,28 +77,15 @@ fn create_harness_fields(
     (air, executor, chip)
 }
 
-fn create_test_chip(
-    tester: &VmChipTestBuilder<F>,
-) -> (
-    Harness,
-    (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
-    ),
-) {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
-        bitwise_bus,
-    ));
-
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
+    let range_checker = tester.range_checker();
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        bitwise_chip.clone(),
+        range_checker,
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
-    (harness, (bitwise_chip.air, bitwise_chip))
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -133,8 +124,10 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(executor, arena, &instruction);
 
+    let b_u16 = bytes_to_u16(&b);
+    let c_u16 = bytes_to_u16(&c);
     let (cmp, _, _, _) =
-        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode == SLT, &b, &c);
+        run_less_than::<BLOCK_FE_WIDTH, RV64_U16_LIMB_BITS>(opcode == SLT, &b_u16, &c_u16);
     let mut a = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
     a[0] = F::from_bool(cmp);
     assert_eq!(a, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd));
@@ -152,7 +145,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 fn run_rv64_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -192,11 +185,7 @@ fn run_rv64_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
         Some(b),
     );
 
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -221,12 +210,12 @@ fn run_negative_less_than_test(
     b: [u8; RV64_REGISTER_NUM_LIMBS],
     c: [u8; RV64_REGISTER_NUM_LIMBS],
     prank_cmp_result: bool,
-    prank_vals: LessThanPrankValues<RV64_REGISTER_NUM_LIMBS>,
+    prank_vals: LessThanPrankValues<BLOCK_FE_WIDTH>,
     _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
 
     set_and_execute(
         &mut tester,
@@ -242,7 +231,7 @@ fn run_negative_less_than_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut LessThanCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
+        let cols: &mut LessThanCoreCols<F, BLOCK_FE_WIDTH, RV64_U16_LIMB_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
         if let Some(b_msb) = prank_vals.b_msb {
@@ -266,7 +255,6 @@ fn run_negative_less_than_test(
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
         .finalize();
     tester
         .simple_test()
@@ -317,7 +305,7 @@ fn rv64_lt_zero_diff_val_negative_test() {
     let b = [145, 34, 25, 205, 255, 255, 255, 255];
     let c = [73, 35, 25, 205, 255, 255, 255, 255];
     let prank_vals = LessThanPrankValues {
-        diff_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
+        diff_marker: Some([0, 1, 0, 0]),
         diff_val: Some(0),
         ..Default::default()
     };
@@ -330,7 +318,7 @@ fn rv64_lt_fake_diff_marker_negative_test() {
     let b = [145, 34, 25, 205, 255, 255, 255, 255];
     let c = [73, 35, 25, 205, 255, 255, 255, 255];
     let prank_vals = LessThanPrankValues {
-        diff_marker: Some([1, 0, 0, 0, 0, 0, 0, 0]),
+        diff_marker: Some([1, 0, 0, 0]),
         diff_val: Some(72),
         ..Default::default()
     };
@@ -343,7 +331,7 @@ fn rv64_lt_zero_diff_marker_negative_test() {
     let b = [145, 34, 25, 205, 255, 255, 255, 255];
     let c = [73, 35, 25, 205, 255, 255, 255, 255];
     let prank_vals = LessThanPrankValues {
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 0]),
+        diff_marker: Some([0, 0, 0, 0]),
         diff_val: Some(0),
         ..Default::default()
     };
@@ -353,12 +341,12 @@ fn rv64_lt_zero_diff_marker_negative_test() {
 
 #[test]
 fn rv64_slt_wrong_b_msb_negative_test() {
-    // b[7]=c[7]=205, actual diff at byte 1. Prank b_msb to 206 → b_diff constraint fails.
+    // b[7]=c[7]=205, actual diff at byte 1. Prank b_msb to 206.
     let b = [145, 34, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         b_msb: Some(206),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
+        diff_marker: Some([0, 0, 0, 1]),
         diff_val: Some(1),
         ..Default::default()
     };
@@ -368,12 +356,12 @@ fn rv64_slt_wrong_b_msb_negative_test() {
 #[test]
 fn rv64_slt_wrong_b_msb_sign_negative_test() {
     // b[7]=c[7]=205 (negative). Prank b_msb_f to 205 (raw byte instead of 205-256=-51).
-    // b_diff=0 so constraint passes, but range check sends 205+128=333 → interaction error.
+    // b_diff=0 so constraint passes, but range check sends 205+128=333.
     let b = [145, 34, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         b_msb: Some(205),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
+        diff_marker: Some([0, 0, 0, 1]),
         diff_val: Some(256),
         ..Default::default()
     };
@@ -382,12 +370,12 @@ fn rv64_slt_wrong_b_msb_sign_negative_test() {
 
 #[test]
 fn rv64_slt_wrong_c_msb_negative_test() {
-    // b[7]=c[7]=205, actual diff at byte 1. Prank c_msb to 204 → c_diff constraint fails.
+    // b[7]=c[7]=205, actual diff at byte 1. Prank c_msb to 204.
     let b = [145, 36, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         c_msb: Some(204),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
+        diff_marker: Some([0, 0, 0, 1]),
         diff_val: Some(1),
         ..Default::default()
     };
@@ -397,12 +385,12 @@ fn rv64_slt_wrong_c_msb_negative_test() {
 #[test]
 fn rv64_slt_wrong_c_msb_sign_negative_test() {
     // c[7]=205 (negative). Prank c_msb_f to 205 (raw byte instead of -51).
-    // c_diff=0 so constraint passes, but range check sends 205+128=333 → interaction error.
+    // c_diff=0 so constraint passes, but range check sends 205+128=333.
     let b = [145, 36, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         c_msb: Some(205),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
+        diff_marker: Some([0, 0, 0, 1]),
         diff_val: Some(256),
         ..Default::default()
     };
@@ -411,12 +399,12 @@ fn rv64_slt_wrong_c_msb_sign_negative_test() {
 
 #[test]
 fn rv64_sltu_wrong_b_msb_negative_test() {
-    // b[7]=c[7]=205. Prank b_msb to 204 → b_diff constraint fails.
+    // b[7]=c[7]=205. Prank b_msb to 204.
     let b = [145, 36, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         b_msb: Some(204),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
+        diff_marker: Some([0, 0, 0, 1]),
         diff_val: Some(1),
         ..Default::default()
     };
@@ -426,12 +414,12 @@ fn rv64_sltu_wrong_b_msb_negative_test() {
 #[test]
 fn rv64_sltu_wrong_b_msb_sign_negative_test() {
     // b[7]=205. Prank b_msb_f to -51 (=205-256). b_diff=205-(-51)=256, 256*(256-256)=0
-    // so constraint passes, but range check sends -51 which is out of range → interaction error.
+    // so constraint passes, but range check sends -51, which is out of range.
     let b = [145, 36, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         b_msb: Some(-51),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
+        diff_marker: Some([0, 0, 0, 1]),
         diff_val: Some(256),
         ..Default::default()
     };
@@ -440,12 +428,12 @@ fn rv64_sltu_wrong_b_msb_sign_negative_test() {
 
 #[test]
 fn rv64_sltu_wrong_c_msb_negative_test() {
-    // c[7]=205. Prank c_msb to 204 → c_diff constraint fails.
+    // c[7]=205. Prank c_msb to 204.
     let b = [145, 34, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         c_msb: Some(204),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
+        diff_marker: Some([0, 0, 0, 1]),
         diff_val: Some(1),
         ..Default::default()
     };
@@ -455,12 +443,12 @@ fn rv64_sltu_wrong_c_msb_negative_test() {
 #[test]
 fn rv64_sltu_wrong_c_msb_sign_negative_test() {
     // c[7]=205. Prank c_msb_f to -51 (=205-256). c_diff=205-(-51)=256, 256*(256-256)=0
-    // so constraint passes, but range check sends -51 which is out of range → interaction error.
+    // so constraint passes, but range check sends -51, which is out of range.
     let b = [145, 34, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         c_msb: Some(-51),
-        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
+        diff_marker: Some([0, 0, 0, 1]),
         diff_val: Some(256),
         ..Default::default()
     };
@@ -469,15 +457,18 @@ fn rv64_sltu_wrong_c_msb_sign_negative_test() {
 
 #[test]
 fn rv64_lt_adapter_imm_sign_extension_negative_test() {
-    // Execute SLTU with an immediate, then prank c[4] to violate sign extension.
-    // b[4] is set to match the pranked c[4] so the core's diff constraints still hold.
-    // Original execution: b=[10,0,0,0,1,0,0,0], c(imm=5)=[5,0,0,0,0,0,0,0]
-    //   Most significant diff at limb 4 (b[4]=1, c[4]=0), cmp_result=0, diff_val=1
-    // After prank: c[4]=1, so b[4]==c[4], diff moves to limb 0 (b[0]=10, c[0]=5)
-    //   Need to also prank diff_marker and diff_val to keep core happy.
+    // Execute SLTU with a positive immediate, then prank c[2] (u16 cell 2 = bytes 4..6)
+    // to violate the imm sign-extension constraint. The four u16 cells of
+    // an imm rs2 are [imm_low_u16, sign_u16, sign_u16, sign_u16]; for positive imm sign_u16 = 0.
+    //
+    // Original execution: b bytes=[10,0,0,0,1,0,0,0] => b_u16=[10,0,1,0].
+    //   Most significant diff at cell 2 (b[2]=1, c[2]=0), cmp_result=0, diff_val=1.
+    // After prank: c[2]=1, so b[2]==c[2]; the canonical diff moves to cell 0
+    //   (b[0]=10, c[0]=5). Re-prank diff_marker / diff_val so the core's diff chain still passes,
+    //   isolating the failure to the adapter-side imm sign-extension check.
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
 
     set_and_execute(
         &mut tester,
@@ -493,12 +484,12 @@ fn rv64_lt_adapter_imm_sign_extension_negative_test() {
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut LessThanCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
+        let cols: &mut LessThanCoreCols<F, BLOCK_FE_WIDTH, RV64_U16_LIMB_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
-        // Prank c[4] = 1 (matches b[4], so no diff at limb 4)
-        cols.c[4] = F::ONE;
-        // Move diff_marker from limb 4 to limb 0 and update diff_val
-        cols.diff_marker = [0, 0, 0, 0, 0, 0, 0, 0].map(F::from_u32);
+        // Prank c[2] = 1 (matches b[2], so no diff at cell 2).
+        cols.c[2] = F::ONE;
+        // Move diff_marker from cell 2 to cell 0 and update diff_val accordingly.
+        cols.diff_marker = [F::ZERO; BLOCK_FE_WIDTH];
         cols.diff_marker[0] = F::ONE;
         // diff = (c[0] - b[0]) * (2*cmp_result - 1) = (5 - 10) * (-1) = 5
         cols.diff_val = F::from_u32(5);
@@ -509,7 +500,6 @@ fn rv64_lt_adapter_imm_sign_extension_negative_test() {
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
         .finalize();
     tester
         .simple_test()
@@ -524,49 +514,48 @@ fn rv64_lt_adapter_imm_sign_extension_negative_test() {
 
 #[test]
 fn run_sltu_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [145, 34, 25, 205, 91, 77, 88, 120];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [73, 35, 25, 205, 91, 77, 88, 120];
+    let x: [u16; BLOCK_FE_WIDTH] = [0x2291, 0xcd19, 0x4d5b, 0x7858];
+    let y: [u16; BLOCK_FE_WIDTH] = [0x2349, 0xcd19, 0x4d5b, 0x7858];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(false, &x, &y);
+        run_less_than::<BLOCK_FE_WIDTH, RV64_U16_LIMB_BITS>(false, &x, &y);
     assert!(cmp_result);
-    assert_eq!(diff_idx, 1);
+    assert_eq!(diff_idx, 0);
     assert!(!x_sign); // unsigned
     assert!(!y_sign); // unsigned
 }
 
 #[test]
 fn run_slt_same_sign_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [145, 34, 25, 205, 91, 77, 88, 205];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [73, 35, 25, 205, 91, 77, 88, 205];
+    let x: [u16; BLOCK_FE_WIDTH] = [0x2291, 0xcd19, 0x4d5b, 0xcd58];
+    let y: [u16; BLOCK_FE_WIDTH] = [0x2349, 0xcd19, 0x4d5b, 0xcd58];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+        run_less_than::<BLOCK_FE_WIDTH, RV64_U16_LIMB_BITS>(true, &x, &y);
     assert!(cmp_result);
-    assert_eq!(diff_idx, 1);
-    assert!(x_sign); // negative
-    assert!(y_sign); // negative
+    assert_eq!(diff_idx, 0);
+    assert!(x_sign); // negative (MSB cell has high bit set)
+    assert!(y_sign);
 }
 
 #[test]
 fn run_slt_diff_sign_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 35, 25, 55, 61, 90, 77, 74];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [173, 34, 25, 205, 61, 90, 77, 182];
+    let x: [u16; BLOCK_FE_WIDTH] = [0x232d, 0x3719, 0x5a3d, 0x4a4d];
+    let y: [u16; BLOCK_FE_WIDTH] = [0x22ad, 0xcd19, 0x5a3d, 0xb64d];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+        run_less_than::<BLOCK_FE_WIDTH, RV64_U16_LIMB_BITS>(true, &x, &y);
     assert!(!cmp_result);
-    assert_eq!(diff_idx, 7);
+    assert_eq!(diff_idx, BLOCK_FE_WIDTH - 1);
     assert!(!x_sign); // positive
     assert!(y_sign); // negative
 }
 
 #[test]
 fn run_less_than_equal_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 35, 25, 55, 61, 90, 77, 74];
+    let x: [u16; BLOCK_FE_WIDTH] = [0x232d, 0x3719, 0x5a3d, 0x4a4d];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &x);
+        run_less_than::<BLOCK_FE_WIDTH, RV64_U16_LIMB_BITS>(true, &x, &x);
     assert!(!cmp_result);
-    assert_eq!(diff_idx, RV64_REGISTER_NUM_LIMBS);
-    assert!(!x_sign); // positive
-    assert!(!y_sign); // negative
+    assert_eq!(diff_idx, BLOCK_FE_WIDTH);
+    assert_eq!(x_sign, y_sign);
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////
@@ -586,22 +575,17 @@ type GpuHarness = GpuTestChipHarness<
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
-    let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
-        bitwise_bus,
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        openvm_circuit::arch::testing::default_var_range_checker_bus(),
     ));
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64LessThanChipGpu::new(
-        tester.range_checker(),
-        tester.bitwise_op_lookup(),
-        tester.timestamp_max_bits(),
-    );
+    let gpu_chip = Rv64LessThanChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }
@@ -610,8 +594,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[test_case(LessThanOpcode::SLT, 100)]
 #[test_case(LessThanOpcode::SLTU, 100)]
 fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
-    let mut tester =
-        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let mut tester = GpuChipTestBuilder::default();
     let mut rng = create_seeded_rng();
 
     let mut harness = create_cuda_harness(&tester);
@@ -629,15 +612,15 @@ fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut Rv64BaseAluAdapterRecord,
-        &'a mut LessThanCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
+        &'a mut Rv64BaseAluU16AdapterRecord,
+        &'a mut LessThanCoreRecord<BLOCK_FE_WIDTH, RV64_U16_LIMB_BITS>,
     );
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluAdapterExecutor<RV64_CELL_BITS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new(),
         );
 
     tester

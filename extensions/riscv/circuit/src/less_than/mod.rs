@@ -1,8 +1,8 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
-use super::adapters::{
-    Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller, RV64_CELL_BITS,
-    RV64_REGISTER_NUM_LIMBS,
+use crate::adapters::{
+    Rv64BaseAluU16AdapterAir, Rv64BaseAluU16AdapterExecutor, Rv64BaseAluU16AdapterFiller,
+    RV64_U16_LIMB_BITS,
 };
 
 mod core;
@@ -18,17 +18,10 @@ pub use cuda::*;
 mod tests;
 
 pub type Rv64LessThanAir =
-    VmAirWrapper<Rv64BaseAluAdapterAir, LessThanCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>>;
-pub type Rv64LessThanExecutor = LessThanExecutor<
-    Rv64BaseAluAdapterExecutor<RV64_CELL_BITS>,
-    RV64_REGISTER_NUM_LIMBS,
-    RV64_CELL_BITS,
->;
+    VmAirWrapper<Rv64BaseAluU16AdapterAir, LessThanCoreAir<BLOCK_FE_WIDTH, RV64_U16_LIMB_BITS>>;
+pub type Rv64LessThanExecutor =
+    LessThanExecutor<Rv64BaseAluU16AdapterExecutor, BLOCK_FE_WIDTH, RV64_U16_LIMB_BITS>;
 pub type Rv64LessThanChip<F> = VmChipWrapper<
     F,
-    LessThanFiller<
-        Rv64BaseAluAdapterFiller<RV64_CELL_BITS>,
-        RV64_REGISTER_NUM_LIMBS,
-        RV64_CELL_BITS,
-    >,
+    LessThanFiller<Rv64BaseAluU16AdapterFiller, BLOCK_FE_WIDTH, RV64_U16_LIMB_BITS>,
 >;

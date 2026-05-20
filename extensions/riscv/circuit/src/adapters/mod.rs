@@ -1,7 +1,7 @@
-use std::ops::Mul;
+use std::{mem::size_of, ops::Mul};
 
 use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtxTrait, VmStateMut},
+    arch::{execution_mode::ExecutionCtxTrait, VmStateMut, BLOCK_FE_WIDTH},
     system::memory::{
         merkle::public_values::PUBLIC_VALUES_AS,
         online::{GuestMemory, TracingMemory},
@@ -14,6 +14,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 mod alu;
+mod alu_u16;
 mod alu_w;
 mod branch;
 mod jalr;
@@ -23,6 +24,7 @@ mod mul_w;
 mod rdwrite;
 
 pub use alu::*;
+pub use alu_u16::*;
 pub use alu_w::*;
 pub use branch::*;
 pub use jalr::*;
@@ -34,8 +36,21 @@ pub use openvm_instructions::riscv::{
 };
 pub use rdwrite::*;
 
-/// 256-bit heap integer stored as 32 bytes (32 limbs of 8-bits)
-pub const INT256_NUM_LIMBS: usize = 32;
+/// Low 32-bit view of an RV64 register as u16 limbs.
+pub const RV64_LOW32_U16_LIMBS: usize = size_of::<u32>() / size_of::<u16>();
+pub const RV64_LOW32_HIGH_U16_LIMBS: usize = RV64_LOW32_U16_LIMBS - 1;
+pub const RV64_U16_LIMB_BITS: usize = u16::BITS as usize;
+pub const RV64_U16_LIMB_BASE: u32 = 1 << RV64_U16_LIMB_BITS;
+pub const RV64_U16_LIMB_MASK: u32 = RV64_U16_LIMB_BASE - 1;
+pub const RV64_U16_SIGN_BIT: usize = RV64_U16_LIMB_BITS - 1;
+pub const RV64_LOW32_BITS: usize = RV64_LOW32_U16_LIMBS * RV64_U16_LIMB_BITS;
+
+#[inline(always)]
+pub fn u32_to_u16_cells<T: PrimeCharacteristicRing>(value: u32) -> [T; RV64_LOW32_U16_LIMBS] {
+    std::array::from_fn(|i| {
+        T::from_u16(((value >> (RV64_U16_LIMB_BITS * i)) & RV64_U16_LIMB_MASK) as u16)
+    })
+}
 
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;
@@ -58,7 +73,7 @@ pub fn compose<F: PrimeField32>(ptr_data: [F; RV64_REGISTER_NUM_LIMBS]) -> u64 {
 /// inverse of `compose`
 pub fn decompose<F: PrimeField32>(value: u64) -> [F; RV64_REGISTER_NUM_LIMBS] {
     std::array::from_fn(|i| {
-        F::from_u32(((value >> (RV64_CELL_BITS * i)) & ((1 << RV64_CELL_BITS) - 1)) as u32)
+        F::from_u8(((value >> (RV64_CELL_BITS * i)) & ((1 << RV64_CELL_BITS) - 1)) as u8)
     })
 }
 
@@ -189,12 +204,12 @@ pub fn tracing_read<const N: usize>(
     data
 }
 
-/// Timestamped u16-cell read.
+/// Timestamped u16-cell read at an RV64 byte pointer.
 #[inline(always)]
 pub fn timed_read_u16<const N: usize>(
     memory: &mut TracingMemory,
     address_space: u32,
-    cell_idx: u32,
+    byte_ptr: u32,
 ) -> (u32, [u16; N]) {
     debug_assert!(
         address_space == RV64_REGISTER_AS
@@ -202,8 +217,14 @@ pub fn timed_read_u16<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // SAFETY: these address spaces are u16-celled.
-    unsafe { memory.read::<u16, N>(address_space, cell_idx) }
+    debug_assert_eq!(
+        byte_ptr & 1,
+        0,
+        "u16 typed read requires 2-byte aligned ptr"
+    );
+    let cell_ptr = byte_ptr >> 1;
+    // SAFETY: these address spaces are u16-celled; `cell_ptr` is the AS-native cell index.
+    unsafe { memory.read::<u16, N>(address_space, cell_ptr) }
 }
 
 /// u16-typed counterpart to [`tracing_read`].
@@ -211,20 +232,20 @@ pub fn timed_read_u16<const N: usize>(
 pub fn tracing_read_u16<const N: usize>(
     memory: &mut TracingMemory,
     address_space: u32,
-    cell_idx: u32,
+    byte_ptr: u32,
     prev_timestamp: &mut u32,
 ) -> [u16; N] {
-    let (t_prev, data) = timed_read_u16(memory, address_space, cell_idx);
+    let (t_prev, data) = timed_read_u16(memory, address_space, byte_ptr);
     *prev_timestamp = t_prev;
     data
 }
 
-/// Timestamped u16-cell write.
+/// Timestamped u16-cell write at an RV64 byte pointer.
 #[inline(always)]
 pub fn timed_write_u16<const N: usize>(
     memory: &mut TracingMemory,
     address_space: u32,
-    cell_idx: u32,
+    byte_ptr: u32,
     data: [u16; N],
 ) -> (u32, [u16; N]) {
     debug_assert!(
@@ -232,8 +253,14 @@ pub fn timed_write_u16<const N: usize>(
             || address_space == RV64_MEMORY_AS
             || address_space == PUBLIC_VALUES_AS
     );
+    debug_assert_eq!(
+        byte_ptr & 1,
+        0,
+        "u16 typed write requires 2-byte aligned ptr"
+    );
+    let cell_ptr = byte_ptr >> 1;
     // SAFETY: see `timed_read_u16`.
-    unsafe { memory.write::<u16, N>(address_space, cell_idx, data) }
+    unsafe { memory.write::<u16, N>(address_space, cell_ptr, data) }
 }
 
 /// u16-typed counterpart to [`tracing_write`].
@@ -241,12 +268,12 @@ pub fn timed_write_u16<const N: usize>(
 pub fn tracing_write_u16<const N: usize>(
     memory: &mut TracingMemory,
     address_space: u32,
-    cell_idx: u32,
+    byte_ptr: u32,
     data: [u16; N],
     prev_timestamp: &mut u32,
     prev_data: &mut [u16; N],
 ) {
-    let (t_prev, data_prev) = timed_write_u16(memory, address_space, cell_idx, data);
+    let (t_prev, data_prev) = timed_write_u16(memory, address_space, byte_ptr, data);
     *prev_timestamp = t_prev;
     *prev_data = data_prev;
 }
@@ -359,12 +386,45 @@ pub fn rv64_bytes_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
     rv64_u64_to_u32(u64::from_le_bytes(bytes))
 }
 
+/// Convert an RV64 register value to its low 32 bits without checking the upper half.
+#[inline(always)]
+pub fn rv64_bytes_to_u32_wrapping(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
+    u64::from_le_bytes(bytes) as u32
+}
+
+#[inline(always)]
+pub fn rv64_u16_block_to_bytes(block: [u16; BLOCK_FE_WIDTH]) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    let mut out = [0u8; RV64_REGISTER_NUM_LIMBS];
+    for (i, cell) in block.into_iter().enumerate() {
+        let [lo, hi] = cell.to_le_bytes();
+        out[2 * i] = lo;
+        out[2 * i + 1] = hi;
+    }
+    out
+}
+
 /// Expand `N` limbs to `RV64_REGISTER_NUM_LIMBS` (8) by zero-padding the upper limbs. Used for
 /// register bus reads where the register holds a value in fewer than 8 bytes.
 pub fn expand_to_rv64_register<V: Clone + Into<T>, T: PrimeCharacteristicRing, const N: usize>(
     limbs: &[V; N],
 ) -> [T; RV64_REGISTER_NUM_LIMBS] {
     const { assert!(N <= RV64_REGISTER_NUM_LIMBS) }
+    std::array::from_fn(|i| {
+        if i < N {
+            limbs[i].clone().into()
+        } else {
+            T::ZERO
+        }
+    })
+}
+
+/// Expand `N` u16 limbs to one RV64 register bus block by zero-padding.
+pub fn expand_to_rv64_block<V, T, const N: usize>(limbs: &[V; N]) -> [T; BLOCK_FE_WIDTH]
+where
+    V: Clone + Into<T>,
+    T: PrimeCharacteristicRing,
+{
+    const { assert!(N <= BLOCK_FE_WIDTH) }
     std::array::from_fn(|i| {
         if i < N {
             limbs[i].clone().into()

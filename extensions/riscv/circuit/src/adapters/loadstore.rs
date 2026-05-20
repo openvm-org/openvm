@@ -40,7 +40,7 @@ use openvm_stark_backend::{
 use super::{RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS};
 use crate::adapters::{
     expand_to_rv64_register, memory_read, memory_read_deferral, rv64_bytes_to_u32, timed_write,
-    tracing_read, RV64_CELL_BITS,
+    tracing_read, RV64_CELL_BITS, RV64_U16_LIMB_BITS, RV64_U16_LIMB_MASK,
 };
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
@@ -523,11 +523,11 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
             .rs1_val
             .wrapping_add(record.imm as u32 + record.imm_sign as u32 * 0xffff0000);
 
-        let ptr_limbs = [ptr & 0xffff, ptr >> 16];
+        let ptr_limbs = [ptr & RV64_U16_LIMB_MASK, ptr >> RV64_U16_LIMB_BITS];
         self.range_checker_chip
-            .add_count(ptr_limbs[0] >> 3, RV64_CELL_BITS * 2 - 3);
+            .add_count(ptr_limbs[0] >> 3, RV64_U16_LIMB_BITS - 3);
         self.range_checker_chip
-            .add_count(ptr_limbs[1], self.pointer_max_bits - 16);
+            .add_count(ptr_limbs[1], self.pointer_max_bits - RV64_U16_LIMB_BITS);
         adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_u32);
 
         adapter_row.imm_sign = F::from_bool(record.imm_sign);

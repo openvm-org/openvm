@@ -62,27 +62,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         inventory.add_executor_chip(base_alu);
 
         inventory.next_air::<Rv64LessThan256Air>()?;
-        let lt = LessThan256ChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            pointer_max_bits,
-            timestamp_max_bits,
-        );
+        let lt =
+            LessThan256ChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(lt);
 
         inventory.next_air::<Rv64BranchEqual256Air>()?;
-        let beq = BranchEqual256ChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            pointer_max_bits,
-            timestamp_max_bits,
-        );
+        let beq =
+            BranchEqual256ChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(beq);
 
         inventory.next_air::<Rv64BranchLessThan256Air>()?;
         let blt = BranchLessThan256ChipGpu::new(
             range_checker.clone(),
-            bitwise_lu.clone(),
             pointer_max_bits,
             timestamp_max_bits,
         );

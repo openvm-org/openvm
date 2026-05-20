@@ -18,7 +18,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
-    AluAdapterExecutor, Rv64BaseAlu256Executor, INT256_NUM_LIMBS, INT256_NUM_U64_LIMBS,
+    AluAdapterExecutor, Rv64BaseAlu256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
 };
 
 impl Rv64BaseAlu256Executor {
@@ -208,7 +208,10 @@ impl Rv64BaseAlu256Executor {
 }
 
 trait AluOp {
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS];
+    fn compute(
+        rs1: [u8; INT256_NUM_U8_LIMBS],
+        rs2: [u8; INT256_NUM_U8_LIMBS],
+    ) -> [u8; INT256_NUM_U8_LIMBS];
 }
 struct AddOp;
 struct SubOp;
@@ -217,7 +220,10 @@ struct OrOp;
 struct AndOp;
 impl AluOp for AddOp {
     #[inline(always)]
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
+    fn compute(
+        rs1: [u8; INT256_NUM_U8_LIMBS],
+        rs2: [u8; INT256_NUM_U8_LIMBS],
+    ) -> [u8; INT256_NUM_U8_LIMBS] {
         let rs1_u64 = bytes_to_u64_array(rs1);
         let rs2_u64 = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; INT256_NUM_U64_LIMBS];
@@ -234,7 +240,10 @@ impl AluOp for AddOp {
 }
 impl AluOp for SubOp {
     #[inline(always)]
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
+    fn compute(
+        rs1: [u8; INT256_NUM_U8_LIMBS],
+        rs2: [u8; INT256_NUM_U8_LIMBS],
+    ) -> [u8; INT256_NUM_U8_LIMBS] {
         let rs1_u64 = bytes_to_u64_array(rs1);
         let rs2_u64 = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; INT256_NUM_U64_LIMBS];
@@ -251,7 +260,10 @@ impl AluOp for SubOp {
 }
 impl AluOp for XorOp {
     #[inline(always)]
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
+    fn compute(
+        rs1: [u8; INT256_NUM_U8_LIMBS],
+        rs2: [u8; INT256_NUM_U8_LIMBS],
+    ) -> [u8; INT256_NUM_U8_LIMBS] {
         let rs1_u64 = bytes_to_u64_array(rs1);
         let rs2_u64 = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; INT256_NUM_U64_LIMBS];
@@ -264,7 +276,10 @@ impl AluOp for XorOp {
 }
 impl AluOp for OrOp {
     #[inline(always)]
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
+    fn compute(
+        rs1: [u8; INT256_NUM_U8_LIMBS],
+        rs2: [u8; INT256_NUM_U8_LIMBS],
+    ) -> [u8; INT256_NUM_U8_LIMBS] {
         let rs1_u64 = bytes_to_u64_array(rs1);
         let rs2_u64 = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; INT256_NUM_U64_LIMBS];
@@ -277,7 +292,10 @@ impl AluOp for OrOp {
 }
 impl AluOp for AndOp {
     #[inline(always)]
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
+    fn compute(
+        rs1: [u8; INT256_NUM_U8_LIMBS],
+        rs2: [u8; INT256_NUM_U8_LIMBS],
+    ) -> [u8; INT256_NUM_U8_LIMBS] {
         let rs1_u64 = bytes_to_u64_array(rs1);
         let rs2_u64 = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; INT256_NUM_U64_LIMBS];
