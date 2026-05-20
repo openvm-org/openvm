@@ -18,9 +18,12 @@ struct XorinInstructionCols {
     T input_reg_ptr;
     T len_reg_ptr;
     T buffer_ptr;
-    T buffer_ptr_limbs[riscv::RV64_WORD_NUM_LIMBS];
+    // Low 32 bits of `buffer_ptr` packed into 2 u16 cells; the high 32 bits of the
+    // RV64 register are zero and hardcoded in the memory bus interaction.
+    T buffer_ptr_limbs[RV64_PTR_U16_LIMBS];
     T input_ptr;
-    T input_ptr_limbs[riscv::RV64_WORD_NUM_LIMBS];
+    // See `buffer_ptr_limbs`.
+    T input_ptr_limbs[RV64_PTR_U16_LIMBS];
     T len;
     T len_limb;
     T start_timestamp;

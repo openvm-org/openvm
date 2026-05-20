@@ -23,6 +23,13 @@ __device__ __forceinline__ uint32_t u32_from_bytes_le(const uint8_t *b) {
     return (uint32_t)b[0] | ((uint32_t)b[1] << 8) | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
 }
 
+template <typename T, size_t NUM_LIMBS>
+__device__ __forceinline__ void u32_to_le_u16_limbs(T (&out)[NUM_LIMBS], uint32_t value) {
+    static_assert(NUM_LIMBS == 2, "u32_to_le_u16_limbs expects two u16 cells");
+    out[0] = T(uint16_t(value));
+    out[1] = T(uint16_t(value >> 16));
+}
+
 // Convert 4 bytes to a u32 in big endian order
 // **SAFETY**: b has to be at least 4 bytes long
 __device__ __forceinline__ uint32_t u32_from_bytes_be(const uint8_t *b) {

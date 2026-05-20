@@ -35,6 +35,8 @@ struct Sha2VariantBase {
     static constexpr size_t WORD_BYTES = WORD_U8S;
     static constexpr size_t BLOCK_U8S = BLOCK_WORDS * WORD_U8S;
     static constexpr size_t BLOCK_BYTES = BLOCK_U8S;
+    // `message_u16s` is stored as u16 cells in the main chip (one u16 per byte pair).
+    static constexpr size_t BLOCK_U16S = BLOCK_U8S / 2;
     static constexpr size_t BLOCK_BITS = BLOCK_WORDS * WORD_BITS;
     static constexpr size_t ROUND_ROWS = ROUNDS_PER_BLOCK / ROUNDS_PER_ROW;
     static constexpr size_t MESSAGE_ROWS = BLOCK_WORDS / ROUNDS_PER_ROW;
@@ -42,6 +44,8 @@ struct Sha2VariantBase {
 
     static constexpr size_t NUM_READ_ROWS = BLOCK_U8S / SHA2_READ_SIZE;
     static constexpr size_t STATE_BYTES = HASH_WORDS * WORD_U8S;
+    // `prev_state` is stored as u16 cells in the main chip (one u16 per byte pair).
+    static constexpr size_t STATE_U16S = STATE_BYTES / 2;
     static constexpr size_t BLOCK_READS = BLOCK_U8S / SHA2_READ_SIZE;
     static constexpr size_t STATE_READS = STATE_BYTES / SHA2_READ_SIZE;
     static constexpr size_t STATE_WRITES = STATE_BYTES / SHA2_WRITE_SIZE;

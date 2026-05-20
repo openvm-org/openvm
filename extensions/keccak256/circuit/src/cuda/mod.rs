@@ -85,7 +85,6 @@ pub type SharedKeccakfRecordsGpu = Arc<Mutex<SharedKeccakfRecords>>;
 #[derive(new)]
 pub struct KeccakfOpChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: u32,
     pub shared_records: SharedKeccakfRecordsGpu,
@@ -119,7 +118,6 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
                 trace_height,
                 &d_records,
                 &self.range_checker.count,
-                &self.bitwise_lookup.count,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits,
                 device_ctx.stream.as_raw(),

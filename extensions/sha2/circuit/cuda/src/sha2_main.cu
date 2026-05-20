@@ -6,6 +6,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 #include <cassert>
@@ -28,21 +29,45 @@ static __device__ __forceinline__ void sha2_main_row_body(
     uint32_t ptr_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
-    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     Sha2RecordHeader<V> *header = record.header;
 
-    BitwiseOperationLookup bitwise_lookup(bitwise_lookup_ptr);
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
 
-    // Block cols
+    // Block cols.
+    // `message_u16s`, `prev_state`, `new_state` are all u16-shaped: pack each pair of
+    // consecutive bytes into one cell.
     SHA2_MAIN_WRITE_BLOCK(V, row, request_id, Fp(row_idx));
-    SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, message_bytes, record.message_bytes);
-    SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, prev_state, record.prev_state);
-    SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, new_state, record.new_state);
+    {
+        Fp message_u16s[V::BLOCK_U16S];
+#pragma unroll
+        for (size_t k = 0; k < V::BLOCK_U16S; k++) {
+            message_u16s[k] = Fp(
+                static_cast<uint32_t>(record.message_bytes[2 * k])
+                | (static_cast<uint32_t>(record.message_bytes[2 * k + 1]) << 8)
+            );
+        }
+        SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, message_u16s, message_u16s);
+
+        Fp prev_state_u16s[V::STATE_U16S];
+        Fp new_state_u16s[V::STATE_U16S];
+#pragma unroll
+        for (size_t k = 0; k < V::STATE_U16S; k++) {
+            prev_state_u16s[k] = Fp(
+                static_cast<uint32_t>(record.prev_state[2 * k])
+                | (static_cast<uint32_t>(record.prev_state[2 * k + 1]) << 8)
+            );
+            new_state_u16s[k] = Fp(
+                static_cast<uint32_t>(record.new_state[2 * k])
+                | (static_cast<uint32_t>(record.new_state[2 * k + 1]) << 8)
+            );
+        }
+        SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, prev_state, prev_state_u16s);
+        SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, new_state, new_state_u16s);
+    }
 
     // Instruction cols
     SHA2_MAIN_WRITE_INSTR(V, row, is_enabled, Fp::one());
@@ -52,31 +77,26 @@ static __device__ __forceinline__ void sha2_main_row_body(
     SHA2_MAIN_WRITE_INSTR(V, row, state_reg_ptr, header->state_reg_ptr);
     SHA2_MAIN_WRITE_INSTR(V, row, input_reg_ptr, header->input_reg_ptr);
 
-    uint8_t dst_ptr_bytes[RV64_WORD_NUM_LIMBS];
-    uint8_t state_ptr_bytes[RV64_WORD_NUM_LIMBS];
-    uint8_t input_ptr_bytes[RV64_WORD_NUM_LIMBS];
-    memcpy(dst_ptr_bytes, &header->dst_ptr, sizeof(uint32_t));
-    memcpy(state_ptr_bytes, &header->state_ptr, sizeof(uint32_t));
-    memcpy(input_ptr_bytes, &header->input_ptr, sizeof(uint32_t));
+    // Pack the low 32 bits of each register pointer into 2 u16 cells.
+    Fp dst_ptr_u16s[RV64_PTR_U16_LIMBS];
+    Fp state_ptr_u16s[RV64_PTR_U16_LIMBS];
+    Fp input_ptr_u16s[RV64_PTR_U16_LIMBS];
+    u32_to_le_u16_limbs(dst_ptr_u16s, header->dst_ptr);
+    u32_to_le_u16_limbs(state_ptr_u16s, header->state_ptr);
+    u32_to_le_u16_limbs(input_ptr_u16s, header->input_ptr);
+    SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, dst_ptr_limbs, dst_ptr_u16s);
+    SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, state_ptr_limbs, state_ptr_u16s);
+    SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, input_ptr_limbs, input_ptr_u16s);
 
-    SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, dst_ptr_limbs, dst_ptr_bytes);
-    SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, state_ptr_limbs, state_ptr_bytes);
-    SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, input_ptr_limbs, input_ptr_bytes);
-
-    // Range checks on top limbs
-    uint8_t needs_range_check[4] = {
-        dst_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
-        state_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
-        input_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
-        input_ptr_bytes[RV64_WORD_NUM_LIMBS - 1],
-    };
-    uint32_t shift = 1u << (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - ptr_max_bits);
-    for (int i = 0; i < 4; i += 2) {
-        bitwise_lookup.add_range(
-            static_cast<uint32_t>(needs_range_check[i]) * shift,
-            static_cast<uint32_t>(needs_range_check[i + 1]) * shift
-        );
-    }
+    // Range-check the high u16 of each pointer via the variable range checker.
+    uint32_t shift = 1u << (RV64_U16_LIMB_BITS * RV64_PTR_U16_LIMBS - ptr_max_bits);
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
+    uint32_t hi_dst = static_cast<uint32_t>(dst_ptr_u16s[RV64_PTR_U16_LIMBS - 1].asUInt32());
+    uint32_t hi_state = static_cast<uint32_t>(state_ptr_u16s[RV64_PTR_U16_LIMBS - 1].asUInt32());
+    uint32_t hi_input = static_cast<uint32_t>(input_ptr_u16s[RV64_PTR_U16_LIMBS - 1].asUInt32());
+    range_checker.add_count(hi_dst * shift, RV64_U16_LIMB_BITS);
+    range_checker.add_count(hi_state * shift, RV64_U16_LIMB_BITS);
+    range_checker.add_count(hi_input * shift, RV64_U16_LIMB_BITS);
 
     // Memory aux
     uint32_t timestamp = header->timestamp;
@@ -128,7 +148,6 @@ static __device__ __noinline__ void sha2_main_row_outlined(
     uint32_t ptr_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
-    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     sha2_main_row_body<V>(
@@ -138,7 +157,6 @@ static __device__ __noinline__ void sha2_main_row_outlined(
         ptr_max_bits,
         range_checker_ptr,
         range_checker_num_bins,
-        bitwise_lookup_ptr,
         timestamp_max_bits
     );
 }
@@ -154,7 +172,6 @@ __global__ void sha2_main_tracegen(
     uint32_t ptr_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
-    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -181,7 +198,6 @@ __global__ void sha2_main_tracegen(
             ptr_max_bits,
             range_checker_ptr,
             range_checker_num_bins,
-            bitwise_lookup_ptr,
             timestamp_max_bits
         );
     } else {
@@ -192,7 +208,6 @@ __global__ void sha2_main_tracegen(
             ptr_max_bits,
             range_checker_ptr,
             range_checker_num_bins,
-            bitwise_lookup_ptr,
             timestamp_max_bits
         );
     }
@@ -210,7 +225,6 @@ int launch_sha2_main_tracegen(
     uint32_t ptr_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -224,7 +238,6 @@ int launch_sha2_main_tracegen(
         ptr_max_bits,
         d_range_checker,
         range_checker_num_bins,
-        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();
@@ -241,7 +254,6 @@ int launch_sha256_main_tracegen(
     uint32_t ptr_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -254,7 +266,6 @@ int launch_sha256_main_tracegen(
         ptr_max_bits,
         d_range_checker,
         range_checker_num_bins,
-        d_bitwise_lookup,
         timestamp_max_bits,
         stream
     );
@@ -269,7 +280,6 @@ int launch_sha512_main_tracegen(
     uint32_t ptr_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -282,7 +292,6 @@ int launch_sha512_main_tracegen(
         ptr_max_bits,
         d_range_checker,
         range_checker_num_bins,
-        d_bitwise_lookup,
         timestamp_max_bits,
         stream
     );

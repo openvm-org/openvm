@@ -4,6 +4,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "xorin.cuh"
 #include <cassert>
@@ -66,13 +67,12 @@ __global__ void xorin_tracegen(
         XORIN_WRITE(instruction.len, rec.len);
         XORIN_WRITE(instruction.start_timestamp, rec.timestamp);
 
-        // Fill buffer/input/len limbs
-        XORIN_WRITE_ARRAY(
-            instruction.buffer_ptr_limbs, reinterpret_cast<const uint8_t *>(&rec.buffer)
-        );
-        XORIN_WRITE_ARRAY(
-            instruction.input_ptr_limbs, reinterpret_cast<const uint8_t *>(&rec.input)
-        );
+        uint32_t buffer_ptr_limbs[RV64_PTR_U16_LIMBS];
+        uint32_t input_ptr_limbs[RV64_PTR_U16_LIMBS];
+        u32_to_le_u16_limbs(buffer_ptr_limbs, rec.buffer);
+        u32_to_le_u16_limbs(input_ptr_limbs, rec.input);
+        XORIN_WRITE_ARRAY(instruction.buffer_ptr_limbs, buffer_ptr_limbs);
+        XORIN_WRITE_ARRAY(instruction.input_ptr_limbs, input_ptr_limbs);
         XORIN_WRITE(instruction.len_limb, static_cast<uint8_t>(rec.len));
 
         // Fill is_padding_bytes
@@ -157,12 +157,13 @@ __global__ void xorin_tracegen(
             XORIN_FILL_ZERO(mem_oc.buffer_bytes_write_aux_cols[t]);
         }
 
-        // Range check for pointer bounds
-        constexpr uint32_t MSL_RSHIFT = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
-        constexpr uint32_t RV64_TOTAL_BITS = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS;
-        bitwise_lookup.add_range(
-            (rec.buffer >> MSL_RSHIFT) << (RV64_TOTAL_BITS - pointer_max_bits),
-            (rec.input >> MSL_RSHIFT) << (RV64_TOTAL_BITS - pointer_max_bits)
+        uint32_t ptr_msl_lshift = RV64_PTR_BITS - pointer_max_bits;
+        VariableRangeChecker range_checker(d_range_checker_ptr, range_checker_num_bins);
+        range_checker.add_count(
+            (rec.buffer >> RV64_U16_LIMB_BITS) << ptr_msl_lshift, RV64_U16_LIMB_BITS
+        );
+        range_checker.add_count(
+            (rec.input >> RV64_U16_LIMB_BITS) << ptr_msl_lshift, RV64_U16_LIMB_BITS
         );
 
     } else {

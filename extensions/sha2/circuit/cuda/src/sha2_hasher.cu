@@ -593,7 +593,9 @@ __global__ void sha2_first_pass_phase2(
     uint32_t total_num_blocks, size_t num_records,
     typename V::Word *prev_hashes,
     typename V::Word const *__restrict__ d_scratch,
-    uint32_t *bitwise_lookup_ptr
+    uint32_t *bitwise_lookup_ptr,
+    uint32_t *range_checker_ptr,
+    uint32_t range_checker_num_bins
 ) {
     size_t absolute_row = blockIdx.x * blockDim.x + threadIdx.x;
     if (absolute_row >= trace_height) return;
@@ -760,19 +762,17 @@ __global__ void sha2_first_pass_phase2(
         }
 
         typename V::Word work_vars[8] = {a, b, c, d, e, f, g, h};
+        VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
         for (int i = 0; i < static_cast<int>(V::HASH_WORDS); i++) {
             typename V::Word fh_val = prev_hash[i] + work_vars[i];
-            for (uint32_t limb = 0; limb < V::WORD_U8S; limb++) {
-                SHA2INNER_WRITE_DIGEST(V, inner_row, final_hash[i][limb],
-                    Fp(word_to_u8_limb<V>(fh_val, limb)));
+            for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
+                uint32_t fh_limb = word_to_u16_limb<V>(fh_val, limb);
+                SHA2INNER_WRITE_DIGEST(V, inner_row, final_hash[i][limb], Fp(fh_limb));
+                range_checker.add_count(fh_limb, V::WORD_BITS / V::WORD_U16S);
             }
             for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
                 SHA2INNER_WRITE_DIGEST(V, inner_row, prev_hash[i][limb],
                     Fp(word_to_u16_limb<V>(prev_hash[i], limb)));
-            }
-            for (uint32_t limb = 0; limb < V::WORD_U8S; limb += 2) {
-                bitwise_lookup.add_range(
-                    word_to_u8_limb<V>(fh_val, limb), word_to_u8_limb<V>(fh_val, limb + 1));
             }
         }
 
@@ -1018,6 +1018,8 @@ int launch_sha2_first_pass_tracegen(
     uint32_t *d_bitwise_lookup,
     typename V::Word *d_scratch,
     size_t scratch_words,
+    uint32_t *d_range_checker,
+    uint32_t range_checker_num_bins,
     cudaStream_t stream
 ) {
     using SL = Sha2ScratchLayout<V>;
@@ -1039,7 +1041,8 @@ int launch_sha2_first_pass_tracegen(
         auto [grid_size, block_size] = kernel_launch_params(rows_used, 256);
         sha2_first_pass_phase2<V><<<grid_size, block_size, 0, stream>>>(
             d_trace, trace_height, total_num_blocks, num_records,
-            d_prev_hashes, d_scratch, d_bitwise_lookup);
+            d_prev_hashes, d_scratch, d_bitwise_lookup,
+            d_range_checker, range_checker_num_bins);
         if (int r = CHECK_KERNEL()) return r;
     }
 
@@ -1129,12 +1132,14 @@ int launch_sha256_first_pass_tracegen(
     uint32_t *d_bitwise_lookup,
     uint32_t *d_scratch,
     size_t scratch_words,
+    uint32_t *d_range_checker,
+    uint32_t range_checker_num_bins,
     cudaStream_t stream
 ) {
     return launch_sha2_first_pass_tracegen<Sha256Variant>(
         d_trace, trace_height, d_records, num_records, d_record_offsets,
         total_num_blocks, d_prev_hashes, d_bitwise_lookup,
-        d_scratch, scratch_words, stream
+        d_scratch, scratch_words, d_range_checker, range_checker_num_bins, stream
     );
 }
 
@@ -1149,12 +1154,14 @@ int launch_sha512_first_pass_tracegen(
     uint32_t *d_bitwise_lookup,
     uint64_t *d_scratch,
     size_t scratch_words,
+    uint32_t *d_range_checker,
+    uint32_t range_checker_num_bins,
     cudaStream_t stream
 ) {
     return launch_sha2_first_pass_tracegen<Sha512Variant>(
         d_trace, trace_height, d_records, num_records, d_record_offsets,
         total_num_blocks, d_prev_hashes, d_bitwise_lookup,
-        d_scratch, scratch_words, stream
+        d_scratch, scratch_words, d_range_checker, range_checker_num_bins, stream
     );
 }
 

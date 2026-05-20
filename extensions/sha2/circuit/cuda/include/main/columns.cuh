@@ -13,9 +13,11 @@ namespace sha2 {
 
 template <typename V, typename T> struct Sha2MainBlockCols {
     T request_id;
-    T message_bytes[V::BLOCK_U8S];
-    T prev_state[V::STATE_BYTES];
-    T new_state[V::STATE_BYTES];
+    // `message_u16s`, `prev_state`, and `new_state` are all u16-shaped (one u16 cell per byte
+    // pair), matching the memory bus and the receiver-side `prev_hash` / `final_hash` shapes.
+    T message_u16s[V::BLOCK_U16S];
+    T prev_state[V::STATE_U16S];
+    T new_state[V::STATE_U16S];
 };
 
 template <typename T> struct Sha2MainInstructionCols {
@@ -24,9 +26,10 @@ template <typename T> struct Sha2MainInstructionCols {
     T dst_reg_ptr;
     T state_reg_ptr;
     T input_reg_ptr;
-    T dst_ptr_limbs[RV64_WORD_NUM_LIMBS];
-    T state_ptr_limbs[RV64_WORD_NUM_LIMBS];
-    T input_ptr_limbs[RV64_WORD_NUM_LIMBS];
+    /// Low 32 bits of each register pointer, packed as 2 u16 cells.
+    T dst_ptr_limbs[RV64_PTR_U16_LIMBS];
+    T state_ptr_limbs[RV64_PTR_U16_LIMBS];
+    T input_ptr_limbs[RV64_PTR_U16_LIMBS];
 };
 
 template <typename V, typename T> struct Sha2MainMemoryCols {

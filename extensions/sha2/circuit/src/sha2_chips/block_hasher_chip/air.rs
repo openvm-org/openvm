@@ -1,4 +1,7 @@
-use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, ColumnsAir, SubAir};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupBus, var_range::VariableRangeCheckerBus, ColumnsAir,
+    SubAir,
+};
 use openvm_sha2_air::{compose, Sha2BlockHasherSubAir};
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -17,6 +20,32 @@ pub struct Sha2BlockHasherVmAir<C: Sha2BlockHasherVmConfig> {
     pub inner: Sha2BlockHasherSubAir<C>,
     pub sha2_bus: PermutationCheckBus,
 }
+
+fn message_byte<AB, C>(i: usize, cols: &Sha2BlockHasherRoundColsRef<AB::Var>) -> AB::Expr
+where
+    AB: InteractionBuilder,
+    C: Sha2BlockHasherVmConfig,
+{
+    debug_assert!(i < C::WORD_U8S * C::ROUNDS_PER_ROW);
+    let row_idx = i / C::WORD_U8S;
+    let word = cols.inner.message_schedule.w.row(row_idx);
+    // Reverse byte order to match memory endianness.
+    let byte_idx = C::WORD_U8S - i % C::WORD_U8S - 1;
+    compose::<AB::Expr>(
+        &word.as_slice().unwrap()[byte_idx * 8..(byte_idx + 1) * 8],
+        1,
+    )
+}
+
+fn message_u16<AB, C>(k: usize, cols: &Sha2BlockHasherRoundColsRef<AB::Var>) -> AB::Expr
+where
+    AB: InteractionBuilder,
+    C: Sha2BlockHasherVmConfig,
+{
+    message_byte::<AB, C>(2 * k, cols)
+        + AB::Expr::from_u32(1u32 << u8::BITS) * message_byte::<AB, C>(2 * k + 1, cols)
+}
+
 // No columns provided: width is the config-dependent `C::BLOCK_HASHER_WIDTH` and rows are accessed
 // via `Sha2BlockHasher{Round,Digest}ColsRef` (slice-borrowing ref structs, no static `Cols`).
 impl<C: Sha2BlockHasherVmConfig> ColumnsAir for Sha2BlockHasherVmAir<C> {}
@@ -24,11 +53,12 @@ impl<C: Sha2BlockHasherVmConfig> ColumnsAir for Sha2BlockHasherVmAir<C> {}
 impl<C: Sha2BlockHasherVmConfig> Sha2BlockHasherVmAir<C> {
     pub fn new(
         bitwise_lookup_bus: BitwiseOperationLookupBus,
+        range_bus: VariableRangeCheckerBus,
         inner_bus_idx: BusIndex,
         sha2_bus_idx: BusIndex,
     ) -> Self {
         Self {
-            inner: Sha2BlockHasherSubAir::new(bitwise_lookup_bus, inner_bus_idx),
+            inner: Sha2BlockHasherSubAir::new(bitwise_lookup_bus, range_bus, inner_bus_idx),
             sha2_bus: PermutationCheckBus::new(sha2_bus_idx),
         }
     }
@@ -85,28 +115,11 @@ impl<C: Sha2BlockHasherVmConfig> Sha2BlockHasherVmAir<C> {
             .row_idx_encoder
             .contains_flag::<AB>(local.inner.flags.row_idx.to_slice().unwrap(), &[0]);
 
-        // Taken from old Sha256VmChip:
-        // https://github.com/openvm-org/openvm/blob/c2e376e6059c8bbf206736cf01d04cda43dfc42d/extensions/sha256/circuit/src/sha256_chip/air.rs#L310C1-L318C1
-        let get_ith_byte = |i: usize, cols: &Sha2BlockHasherRoundColsRef<AB::Var>| {
-            debug_assert!(i < C::WORD_U8S * C::ROUNDS_PER_ROW);
-            let row_idx = i / C::WORD_U8S;
-            let word: Vec<AB::Var> = cols
-                .inner
-                .message_schedule
-                .w
-                .row(row_idx)
-                .into_iter()
-                .copied()
-                .collect::<Vec<_>>();
-            // Need to reverse the byte order to match the endianness of the memory
-            let byte_idx = C::WORD_U8S - i % C::WORD_U8S - 1;
-            compose::<AB::Expr>(&word[byte_idx * 8..(byte_idx + 1) * 8], 1)
-        };
+        let half_pairs = C::WORD_U8S * C::ROUNDS_PER_ROW / 2;
+        let local_message = (0..half_pairs).map(|k| message_u16::<AB, C>(k, &local));
+        let next_message = (0..half_pairs).map(|k| message_u16::<AB, C>(k, &next));
 
-        let local_message = (0..C::WORD_U8S * C::ROUNDS_PER_ROW).map(|i| get_ith_byte(i, &local));
-        let next_message = (0..C::WORD_U8S * C::ROUNDS_PER_ROW).map(|i| get_ith_byte(i, &next));
-
-        // Receive (MESSAGE_1, request_id, first_half_of_message) on the sha2 bus
+        // Receive (MESSAGE_1, request_id, first_half_of_message_as_u16s) on the sha2 bus
         self.sha2_bus.receive(
             builder,
             [
@@ -124,7 +137,7 @@ impl<C: Sha2BlockHasherVmConfig> Sha2BlockHasherVmAir<C> {
             .row_idx_encoder
             .contains_flag::<AB>(local.inner.flags.row_idx.to_slice().unwrap(), &[2]);
 
-        // Send (MESSAGE_2, request_id, second_half_of_message) to the sha2 bus
+        // Receive (MESSAGE_2, request_id, second_half_of_message_as_u16s) on the sha2 bus
         self.sha2_bus.receive(
             builder,
             [

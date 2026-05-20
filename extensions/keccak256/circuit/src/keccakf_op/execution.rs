@@ -158,7 +158,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     let rd_ptr = pre_compute.a as u32;
     let buffer_ptr = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, rd_ptr));
 
-    let preimage = exec_state.host_read_u8_slice(RV64_MEMORY_AS, buffer_ptr, KECCAK_WIDTH_BYTES);
+    let preimage: &[u8] =
+        exec_state.host_read_slice(RV64_MEMORY_AS, buffer_ptr, KECCAK_WIDTH_BYTES);
     let postimage = keccakf_postimage_bytes(preimage.try_into().unwrap());
 
     if IS_E1 {
