@@ -7,6 +7,7 @@ use openvm_circuit::arch::{
 };
 use openvm_continuations::RootSC;
 use openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, StarkEngine, Val};
+use openvm_verify_stark_host::VmStarkProof;
 
 #[cfg(feature = "evm-prove")]
 use crate::prover::Halo2Prover;
@@ -54,11 +55,11 @@ where
         })
     }
 
-    pub fn prove_unwrapped(
+    pub fn prove_unwrapped_with_stark(
         &mut self,
         input: StdIn<Val<SC>>,
         def_inputs: &[DeferralInput],
-    ) -> Result<Proof<RootSC>>
+    ) -> Result<(Proof<RootSC>, VmStarkProof)>
     where
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
             + MeteredExecutor<Val<SC>>
@@ -112,7 +113,20 @@ where
         }
 
         let root_proof = self.root_prover.prove_from_ctx(root_ctx)?;
-        Ok(root_proof)
+        Ok((root_proof, stark_proof))
+    }
+
+    pub fn prove_unwrapped(
+        &mut self,
+        input: StdIn<Val<SC>>,
+        def_inputs: &[DeferralInput],
+    ) -> Result<Proof<RootSC>>
+    where
+        <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
+            + MeteredExecutor<Val<SC>>
+            + PreflightExecutor<Val<SC>, VB::RecordArena>,
+    {
+        Ok(self.prove_unwrapped_with_stark(input, def_inputs)?.0)
     }
 
     #[cfg(feature = "evm-prove")]

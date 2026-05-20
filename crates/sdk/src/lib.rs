@@ -471,7 +471,7 @@ where
 
     #[cfg(feature = "root-prover")]
     /// Constructs an [`EvmProver`] for the given executable, generating prerequisite keys lazily.
-    pub fn evm_prover(
+    pub fn evm_prover_no_halo(
         &self,
         app_exe: impl Into<ExecutableFormat>,
     ) -> Result<EvmProver<E, VB>, SdkError> {
@@ -485,8 +485,19 @@ where
             self.def_path_prover.clone(),
             self.root_prover(),
             #[cfg(feature = "evm-prove")]
-            Some(self.halo2_prover()),
+            None,
         )?;
+        Ok(evm_prover)
+    }
+
+    #[cfg(feature = "evm-prove")]
+    /// Constructs an [`EvmProver`] for the given executable, generating prerequisite keys lazily.
+    pub fn evm_prover(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<EvmProver<E, VB>, SdkError> {
+        let mut evm_prover = self.evm_prover_no_halo(app_exe)?;
+        evm_prover.halo2_prover = Some(self.halo2_prover());
         Ok(evm_prover)
     }
 
