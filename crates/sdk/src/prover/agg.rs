@@ -5,7 +5,10 @@ use openvm_circuit::arch::ContinuationVmProof;
 use openvm_continuations::{circuit::inner::ProofsType, prover::ChildVkKind};
 use openvm_recursion_circuit::prelude::Digest;
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeCharacteristicRing, proof::Proof,
+    codec::{Decode, Encode},
+    keygen::types::MultiStarkVerifyingKey,
+    p3_field::PrimeCharacteristicRing,
+    proof::Proof,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, F};
 use openvm_verify_stark_host::{pvs::DeferralPvs, VmStarkProof};
@@ -422,4 +425,42 @@ fn reduce_def_round<const N: usize>(
         }
     }
     Ok(next)
+}
+
+impl Encode for InternalLayerMetadata {
+    fn encode<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        self.internal_recursive_layer.encode(writer)?;
+        self.internal_node_idx.encode(writer)?;
+        let proofs_type_byte: u8 = match self.proofs_type {
+            ProofsType::Vm => 0,
+            ProofsType::Deferral => 1,
+            ProofsType::Mix => 2,
+            ProofsType::Combined => 3,
+        };
+        proofs_type_byte.encode(writer)
+    }
+}
+
+impl Decode for InternalLayerMetadata {
+    fn decode<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+        let internal_recursive_layer = u32::decode(reader)?;
+        let internal_node_idx = u32::decode(reader)?;
+        let proofs_type = match u8::decode(reader)? {
+            0 => ProofsType::Vm,
+            1 => ProofsType::Deferral,
+            2 => ProofsType::Mix,
+            3 => ProofsType::Combined,
+            b => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("invalid ProofsType byte: {b}"),
+                ))
+            }
+        };
+        Ok(Self {
+            internal_recursive_layer,
+            internal_node_idx,
+            proofs_type,
+        })
+    }
 }
