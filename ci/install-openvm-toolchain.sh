@@ -26,6 +26,10 @@ echo "Downloading $URL"
 rm -rf "$DIR"
 mkdir -p "$DIR"
 curl -fL "$URL" | tar -xz -C "$DIR"
+if [ ! -f "$DIR/bin/rustc" ] || [ ! -d "$DIR/lib/rustlib/riscv64im-unknown-openvm-elf/lib" ]; then
+  echo "downloaded toolchain has an unexpected layout under $DIR" >&2
+  exit 1
+fi
 
 rustup toolchain uninstall "$TAG" >/dev/null 2>&1 || true
 rustup toolchain link "$TAG" "$DIR"

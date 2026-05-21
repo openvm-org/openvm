@@ -111,8 +111,7 @@ unsafe extern "C" fn __start() -> ! {
         main()
     }
 
-    process::exit();
-    unreachable!()
+    process::exit()
 }
 
 // Entry point; sets up global pointer and stack pointer and passes to `__start`.
@@ -155,8 +154,7 @@ fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
     use core::fmt::Write;
     let mut writer = crate::io::Writer;
     let _ = write!(writer, "{}\n", panic_info);
-    openvm_platform::rust_rt::terminate::<1>();
-    unreachable!()
+    openvm_platform::rust_rt::terminate::<1>()
 }
 
 // Includes the openvm_init.rs file generated at build time

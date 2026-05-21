@@ -23,8 +23,7 @@ pub mod exit_code {
 #[inline(never)]
 #[no_mangle]
 pub extern "C" fn sys_halt() -> ! {
-    terminate::<{ exit_code::HALT }>();
-    unreachable!()
+    terminate::<{ exit_code::HALT }>()
 }
 
 /// Fill `nbytes` of `recv_buf` with random bytes from the openvm host hint stream.
@@ -47,8 +46,7 @@ pub unsafe extern "C" fn sys_rand(recv_buf: *mut u8, nbytes: usize) {
 #[no_mangle]
 unsafe extern "C" fn sys_panic(msg_ptr: *const u8, len: usize) -> ! {
     raw_print_str_from_bytes(msg_ptr, len);
-    terminate::<{ exit_code::PANIC }>();
-    unreachable!()
+    terminate::<{ exit_code::PANIC }>()
 }
 
 /// # Safety
@@ -68,8 +66,7 @@ pub unsafe extern "C" fn sys_log(msg_ptr: *const u8, len: usize) {
 #[no_mangle]
 pub unsafe extern "C" fn sys_read(_fd: i32, _recv_ptr: *mut u8, _nread: usize) -> usize {
     crate::io::println("unsupported OpenVM syscall: sys_read");
-    terminate::<{ exit_code::UNIMP }>();
-    unreachable!()
+    terminate::<{ exit_code::UNIMP }>()
 }
 
 /// # Safety
@@ -84,8 +81,7 @@ pub unsafe extern "C" fn sys_write(fd: i32, write_ptr: *const u8, nbytes: usize)
         use core::fmt::Write;
         let mut writer = crate::io::Writer;
         let _ = writeln!(writer, "sys_write to fd={fd} not supported.");
-        terminate::<{ exit_code::UNIMP }>();
-        unreachable!()
+        terminate::<{ exit_code::UNIMP }>()
     }
 }
 
@@ -146,6 +142,5 @@ pub unsafe extern "C" fn sys_argv(
     // sys_argc returns 0 so any call here is for an out-of-range index, which the
     // ABI documents as "does not return". Terminate explicitly.
     crate::io::println("unsupported OpenVM syscall: sys_argv");
-    terminate::<{ exit_code::UNIMP }>();
-    unreachable!()
+    terminate::<{ exit_code::UNIMP }>()
 }

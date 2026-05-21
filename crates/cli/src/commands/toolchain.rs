@@ -231,6 +231,24 @@ fn extract_tarball(archive: &Path, dest: &Path) -> Result<()> {
     ar.set_preserve_permissions(true);
     ar.unpack(dest)
         .with_context(|| format!("failed to unpack archive into {}", dest.display()))?;
+    ensure_toolchain_layout(dest)?;
+    Ok(())
+}
+
+fn ensure_toolchain_layout(dir: &Path) -> Result<()> {
+    let rustc = dir.join("bin").join("rustc");
+    let target_lib = dir
+        .join("lib")
+        .join("rustlib")
+        .join(DEFAULT_RUSTC_TARGET)
+        .join("lib");
+    if !rustc.is_file() || !target_lib.is_dir() {
+        bail!(
+            "downloaded toolchain has an unexpected layout: expected {} and {}",
+            rustc.display(),
+            target_lib.display()
+        );
+    }
     Ok(())
 }
 
