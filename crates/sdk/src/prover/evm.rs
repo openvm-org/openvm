@@ -7,17 +7,23 @@ use openvm_circuit::arch::{
 };
 use openvm_continuations::RootSC;
 use openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, StarkEngine, Val};
+use openvm_verify_stark_host::VmStarkProof;
 
 #[cfg(feature = "evm-prove")]
 use crate::prover::Halo2Prover;
 use crate::{
-    prover::{vm::types::VmProvingKey, AggProver, DeferralPathProver, RootProver, StarkProver},
+    prover::{
+        vm::types::VmProvingKey, AggProver, DeferralPathProver, InternalLayerMetadata, RootProver,
+        StarkProver,
+    },
     DeferralInput, StdIn, SC,
 };
 
 /// EVM prover that produces a root STARK proof with Halo2 wrapping.
 ///
 /// [`EvmProver::prove_unwrapped`] outputs the unwrapped root STARK, while
+/// [`EvmProver::prove_unwrapped_with_stark_proof`] outputs the unwrapped root STARK from an
+/// intermediate STARK proof, for more finegrained separation of work
 /// [`EvmProver::prove_evm`] produces an [`EvmProof`](crate::types::EvmProof)
 /// suitable for on-chain verification.
 pub struct EvmProver<E, VB>
@@ -54,19 +60,16 @@ where
         })
     }
 
-    pub fn prove_unwrapped(
+    pub fn prove_unwrapped_with_stark_proof(
         &mut self,
-        input: StdIn<Val<SC>>,
-        def_inputs: &[DeferralInput],
+        mut stark_proof: VmStarkProof,
+        metadata: &mut InternalLayerMetadata,
     ) -> Result<Proof<RootSC>>
     where
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
-        let (mut stark_proof, mut internal_metadata) =
-            self.stark_prover.prove(input, def_inputs)?;
-
         let root_ctx = {
             const MAX_ROOT_TRACEGEN_RETRIES: usize = 8;
             let mut attempt = 0usize;
@@ -82,7 +85,7 @@ where
                 stark_proof = self
                     .stark_prover
                     .agg_prover
-                    .wrap_proof(stark_proof, &mut internal_metadata)?;
+                    .wrap_proof(stark_proof, metadata)?;
                 attempt += 1;
             }
         };
@@ -113,6 +116,20 @@ where
 
         let root_proof = self.root_prover.prove_from_ctx(root_ctx)?;
         Ok(root_proof)
+    }
+
+    pub fn prove_unwrapped(
+        &mut self,
+        input: StdIn<Val<SC>>,
+        def_inputs: &[DeferralInput],
+    ) -> Result<Proof<RootSC>>
+    where
+        <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
+            + MeteredExecutor<Val<SC>>
+            + PreflightExecutor<Val<SC>, VB::RecordArena>,
+    {
+        let (stark_proof, mut internal_metadata) = self.stark_prover.prove(input, def_inputs)?;
+        self.prove_unwrapped_with_stark_proof(stark_proof, &mut internal_metadata)
     }
 
     #[cfg(feature = "evm-prove")]
