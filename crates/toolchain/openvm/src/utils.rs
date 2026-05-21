@@ -1,8 +1,8 @@
-#[cfg(not(openvm_intrinsics))]
+#[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 use num_bigint::BigUint;
 
 #[inline]
-#[cfg(not(openvm_intrinsics))]
+#[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 #[allow(dead_code)]
 /// Convert a `BigUint` to a `[u8; NUM_LIMBS]` in little-endian format.
 pub fn biguint_to_limbs<const NUM_LIMBS: usize>(x: &BigUint) -> [u8; NUM_LIMBS] {

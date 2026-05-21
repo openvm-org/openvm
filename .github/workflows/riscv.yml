@@ -119,7 +119,7 @@ jobs:
       - name: Run RISC-V test vector tests
         working-directory: crates/toolchain/tests
         run: |
-          rustup component add rust-src --toolchain nightly-2026-01-18
+          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
           if [[ "${{ matrix.platform.features }}" == *"cuda"* ]]; then
             TEST_NAME=test_rv64im_riscv_vector_prove
           else
