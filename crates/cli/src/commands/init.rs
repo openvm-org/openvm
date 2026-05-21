@@ -188,6 +188,7 @@ fn add_openvm_dependency(path: &Path, features: &[&str]) -> Result<()> {
         unexpected_cfgs.insert("level", Value::from("warn"));
         let mut check_cfg = Array::new();
         check_cfg.push(Value::from("cfg(openvm_intrinsics)"));
+        check_cfg.push(Value::from("cfg(target_os, values(\"openvm\"))"));
         unexpected_cfgs.insert("check-cfg", Value::Array(check_cfg));
         rust_table.insert(
             "unexpected_cfgs",

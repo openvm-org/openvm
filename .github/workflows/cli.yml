@@ -17,6 +17,7 @@ on:
   pull_request:
     branches: ["**"]
     paths:
+      - "crates/toolchain/build/**"
       - "crates/cli/**"
       - ".github/workflows/cli.yml"
   workflow_call:
@@ -71,6 +72,9 @@ jobs:
         run: |
           cargo build --locked --profile fast -p cargo-openvm
           echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
+
+      - name: Install openvm rust toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
       - name: Build and run book examples
         working-directory: examples
@@ -129,6 +133,58 @@ jobs:
         env:
           SKIP_INSTALL: "1"
         run: cargo nextest run --cargo-profile=fast --test-threads=1 --run-ignored=only -- test_cli_evm_e2e_simplified
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+  # Smoke-test the stock tier-3 `riscv64im-unknown-none-elf` path.
+  app-level-cli-none-elf:
+    name: app-level-cli (riscv64im-unknown-none-elf)
+    runs-on:
+      - runs-on=${{ github.run_id }}/disk=large/runner=8cpu-linux-x64/image=ubuntu24-full-x64/extras=s3-cache
+    env:
+      OPENVM_RUST_TOOLCHAIN: nightly-2026-01-18
+      OPENVM_RUSTC_TARGET: riscv64im-unknown-none-elf
+
+    steps:
+      - uses: runs-on/action@v2
+        with:
+          sccache: s3
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: none-elf
+
+      - name: Install stock nightly + rust-src
+        # Needed for the `-Z build-std` path.
+        run: |
+          rustup toolchain install "$OPENVM_RUST_TOOLCHAIN" --component rust-src --profile minimal
+          rustup run "$OPENVM_RUST_TOOLCHAIN" rustc --version --verbose
+
+      - name: Build cargo-openvm
+        run: |
+          cargo build --locked --profile fast -p cargo-openvm
+          echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
+
+      - name: cargo openvm init + build + run (smoke)
+        run: |
+          set -e
+          mkdir -p /tmp/openvm-none-elf-smoke
+          cd /tmp/openvm-none-elf-smoke
+          export OPENVM_GUEST_LOGFILE="$PWD/openvm-build.log"
+          cargo openvm init smoke-fib
+          cd smoke-fib
+          # Exercise this checkout's openvm crate, not the version pinned by the template.
+          local_openvm_path="${{ github.workspace }}/crates/toolchain/openvm"
+          perl -0pi -e 's#openvm = \{ git = "https://github.com/openvm-org/openvm\.git".*?\}#openvm = { path = "'"$local_openvm_path"'" }#' Cargo.toml
+          grep -Fq "openvm = { path = \"$local_openvm_path\" }" Cargo.toml
+          cargo openvm build || { cat "$OPENVM_GUEST_LOGFILE"; exit 1; }
+          fib_10_input="0x010A00000000000000"
+          cargo openvm run --input "$fib_10_input"
 
       - name: sccache stats
         if: always()

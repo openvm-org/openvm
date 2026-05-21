@@ -1,6 +1,6 @@
 #![no_std]
 
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 use openvm_platform::alloc::AlignedBuf;
 
 pub const OPCODE: u8 = 0x0b;
@@ -25,7 +25,7 @@ pub const MIN_ALIGN: usize = 8;
 ///
 /// - `buffer` must point to a buffer of at least `len` bytes.
 /// - `input` must point to a buffer of at least `len` bytes.
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[no_mangle]
 pub unsafe extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
     assert!(
@@ -79,7 +79,7 @@ pub unsafe extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: us
 /// # Safety
 ///
 /// - `buffer` must point to a buffer of at least `KECCAK_WIDTH_BYTES` (200) bytes.
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[no_mangle]
 pub unsafe extern "C" fn native_keccakf(buffer: *mut u8) {
     unsafe {
@@ -97,7 +97,7 @@ pub unsafe extern "C" fn native_keccakf(buffer: *mut u8) {
     }
 }
 
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[inline(always)]
 fn __native_xorin(mut buffer: *mut u8, input: *const u8, len: usize) {
     openvm_platform::custom_insn_r!(
@@ -110,7 +110,7 @@ fn __native_xorin(mut buffer: *mut u8, input: *const u8, len: usize) {
     );
 }
 
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[inline(always)]
 fn __native_keccakf(mut buffer: *mut u8) {
     openvm_platform::custom_insn_r!(
