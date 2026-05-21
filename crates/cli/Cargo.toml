@@ -42,6 +42,12 @@ itertools.workspace = true
 toml_edit = "0.22"
 include_dir = "0.7"
 
+# Used by `cargo openvm toolchain {install,uninstall,list}`.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+indicatif = "0.17"
+flate2 = "1"
+tar = "0.4"
+
 # TODO: Remove these after bumping the Rust MSRV to 1.94.1.
 aws-credential-types = { version = "=1.2.14", default-features = false }
 aws-runtime = { version = "=1.7.5", default-features = false }
