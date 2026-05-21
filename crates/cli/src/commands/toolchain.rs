@@ -11,7 +11,6 @@ use eyre::{bail, Context, Result};
 use flate2::read::GzDecoder;
 use indicatif::{ProgressBar, ProgressStyle};
 use openvm_build::DEFAULT_RUSTUP_TOOLCHAIN_NAME;
-use serde::Deserialize;
 use tar::Archive;
 
 use crate::get_target;
@@ -47,7 +46,7 @@ pub enum ToolchainAction {
 #[derive(Parser)]
 pub struct InstallArgs {
     /// Release tag to install (e.g. `openvm-nightly-2026-05-13`).
-    /// Defaults to the latest published release.
+    /// Defaults to `DEFAULT_RUSTUP_TOOLCHAIN_NAME`.
     #[arg(long)]
     pub version: Option<String>,
     /// Replace an existing link with the same name.
@@ -75,7 +74,7 @@ fn install(args: &InstallArgs) -> Result<()> {
     let host = host_triple()?;
     let tag = match args.version.as_deref() {
         Some(v) => v.to_string(),
-        None => latest_release_tag()?,
+        None => DEFAULT_RUSTUP_TOOLCHAIN_NAME.to_string(),
     };
 
     let dest_dir = toolchains_root()?.join(&tag);
@@ -183,31 +182,12 @@ fn toolchains_root() -> Result<PathBuf> {
     Ok(PathBuf::from(home).join(".openvm").join("toolchains"))
 }
 
-#[derive(Deserialize)]
-struct Release {
-    tag_name: String,
-}
-
 fn http_client() -> Result<reqwest::blocking::Client> {
     reqwest::blocking::Client::builder()
         .user_agent("cargo-openvm")
         .timeout(Duration::from_secs(60 * 30))
         .build()
         .context("failed to build HTTP client")
-}
-
-fn latest_release_tag() -> Result<String> {
-    let url = format!("https://api.github.com/repos/{RUSTC_FORK_REPO}/releases/latest");
-    let release: Release = http_client()?
-        .get(&url)
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .with_context(|| format!("failed to query {url}"))?
-        .error_for_status()
-        .with_context(|| format!("GitHub API request to {url} failed"))?
-        .json()
-        .context("failed to parse releases JSON")?;
-    Ok(release.tag_name)
 }
 
 fn download_with_progress(url: &str, dest: &Path) -> Result<()> {

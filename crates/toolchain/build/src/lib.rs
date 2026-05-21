@@ -26,11 +26,13 @@ pub const DEFAULT_RUSTC_TARGET: &str = "riscv64im-unknown-openvm-elf";
 /// Default rustup toolchain name. Format: `openvm-<rustup-name>` —
 /// `openvm-` prefix plus whatever rustup itself calls the upstream
 /// toolchain (`X.Y.Z` for stable, `nightly-YYYY-MM-DD` for nightly,
-/// `beta-YYYY-MM-DD` for beta). Bumped per release. Override with
-/// `OPENVM_RUST_TOOLCHAIN`.
+/// `beta-YYYY-MM-DD` for beta). Defaults to a stable OpenVM release for
+/// predictability; published nightly variants can be installed explicitly
+/// with `--version openvm-nightly-…`.
+/// Override with `OPENVM_RUST_TOOLCHAIN`.
 //
 // Keep in sync with the default `TAG` in `ci/install-openvm-toolchain.sh`.
-pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "openvm-nightly-2026-01-18";
+pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "openvm-1.94.0";
 
 const BUILD_LOCKED_ENV: &str = "OPENVM_BUILD_LOCKED";
 const SKIP_BUILD_ENV: &str = "OPENVM_SKIP_BUILD";
