@@ -109,7 +109,7 @@ impl SetupCmd {
             // halo2 keygen does not depend on the app config
             let sdk = Sdk::standard();
 
-            let agg_vk = if !self.force_agg_keygen
+            if !self.force_agg_keygen
                 && PathBuf::from(&default_agg_stark_pk_path).exists()
                 && PathBuf::from(&default_agg_stark_vk_path).exists()
                 && PathBuf::from(&default_agg_halo2_pk_path).exists()
@@ -119,28 +119,28 @@ impl SetupCmd {
                     .map_err(|_| eyre!("agg_pk already existed"))?;
                 sdk.set_halo2_pk(halo2_pk)
                     .map_err(|_| eyre!("halo2_pk already existed"))?;
-                read_object_from_file(&default_agg_stark_vk_path)?
+                let _: openvm_sdk::keygen::AggVerifyingKey =
+                    read_object_from_file(&default_agg_stark_vk_path)?;
             } else {
                 println!("Generating proving key...");
                 let (_agg_pk, agg_vk) = sdk.agg_keygen()?;
                 let _halo2_pk = sdk.halo2_pk();
-                agg_vk
-            };
+
+                println!("Writing stark proving key to file...");
+                write_object_to_file(&default_agg_stark_pk_path, sdk.agg_pk())?;
+
+                println!("Writing stark verifying key to file...");
+                write_object_to_file(&default_agg_stark_vk_path, &agg_vk)?;
+
+                println!("Writing halo2 proving key to file...");
+                write_object_to_file(&default_agg_halo2_pk_path, sdk.halo2_pk())?;
+            }
 
             println!("Generating root verifier ASM...");
             let root_verifier_asm = sdk.generate_root_verifier_asm();
 
             println!("Generating verifier contract...");
             let verifier = sdk.generate_halo2_verifier_solidity()?;
-
-            println!("Writing stark proving key to file...");
-            write_object_to_file(&default_agg_stark_pk_path, sdk.agg_pk())?;
-
-            println!("Writing stark verifying key to file...");
-            write_object_to_file(&default_agg_stark_vk_path, agg_vk)?;
-
-            println!("Writing halo2 proving key to file...");
-            write_object_to_file(&default_agg_halo2_pk_path, sdk.halo2_pk())?;
 
             println!("Writing root verifier ASM to file...");
             write(&default_asm_path, root_verifier_asm)?;
