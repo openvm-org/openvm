@@ -297,7 +297,7 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
         args.push("--locked");
     }
 
-    // Stock tier-3 targets do not ship target rlibs, so build std from rust-src.
+    // Upstream tier-3 targets do not ship target rlibs, so build std from rust-src.
     if !target_has_prebuilt_std(rustc, &target) {
         args.extend_from_slice(&[
             "-Z",
@@ -598,16 +598,40 @@ fn ensure_openvm_toolchain_linked(toolchain: &str) -> Result<(), i32> {
             return Ok(());
         }
 
+        if is_openvm {
+            tty_println(&format!(
+                "error: OpenVM toolchain `{toolchain}` does not contain prebuilt rlibs for target \
+                 `{target}`.\n\nFix with:\n\n    cargo openvm toolchain install --force\n",
+            ));
+            return Err(1);
+        }
+
+        let rustc_version = Command::new("rustup")
+            .args([&format!("+{toolchain}"), "rustc", "--version"])
+            .output()
+            .map_err(|e| {
+                tty_println(&format!("Failed to check {toolchain} rustc version: {e}"));
+                e.raw_os_error().unwrap_or(1)
+            })?;
+        if !rustc_version.status.success() {
+            return Err(rustc_version.status.code().unwrap_or(1));
+        }
+        let rustc_version = String::from_utf8_lossy(&rustc_version.stdout);
+        if !rustc_version.contains("nightly") {
+            tty_println(&format!(
+                "error: target `{target}` has no prebuilt rlibs in toolchain `{toolchain}`. \
+                 Building it from `rust-src` uses Cargo's `-Z build-std`, which requires a nightly \
+                 Rust toolchain.\n\nUse a nightly toolchain, for example:\n\n    rustup toolchain install nightly --component rust-src\n    OPENVM_RUST_TOOLCHAIN=nightly OPENVM_RUSTC_TARGET={target} cargo openvm build\n",
+            ));
+            return Err(1);
+        }
+
         let rust_src_dir = root.join("lib/rustlib/src/rust/library");
         if !rust_src_dir.exists() {
-            let hint = if is_openvm {
-                "cargo openvm toolchain install --force".to_string()
-            } else {
-                format!(
-                    "rustup component add rust-src --toolchain {toolchain}\n\
-                     (target `{target}` has no prebuilt rlibs in rustup; the build will use -Z build-std)"
-                )
-            };
+            let hint = format!(
+                "rustup component add rust-src --toolchain {toolchain}\n\
+                 (target `{target}` has no prebuilt rlibs in rustup; the build will use -Z build-std)"
+            );
             tty_println(&format!(
                 "error: toolchain `{toolchain}` ships neither prebuilt rlibs for target `{target}` \
                  nor the `rust-src` component needed for -Z build-std.\n\nFix with:\n\n    {hint}\n",

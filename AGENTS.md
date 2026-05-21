@@ -77,7 +77,7 @@ cargo nextest run --cargo-profile=fast --features parallel
 
 - `OPENVM_SKIP_DEBUG=1`: Skips debug-mode constraint checking in `air_test` (faster CI runs)
 - `OPENVM_RUST_TOOLCHAIN`: Override the rustup toolchain name used by `cargo openvm build`. Default is the `openvm-<rustup-name>` compiled into `cargo-openvm`. Set this to swap in a custom rustc fork.
-- `OPENVM_RUSTC_TARGET`: Override the rustc target triple used by `cargo openvm build`. Default is `riscv64im-unknown-openvm-elf`, the tier-3 target defined in the [openvm-org/rust](https://github.com/openvm-org/rust) fork. Any rv64im-flavored target works, but the chosen toolchain must either ship prebuilt target rlibs or have the `rust-src` component installed.
+- `OPENVM_RUSTC_TARGET`: Override the rustc target triple used by `cargo openvm build`. Default is `riscv64im-unknown-openvm-elf`, the tier-3 target defined in the [openvm-org/rust](https://github.com/openvm-org/rust) fork. Any rv64im-flavored target works. If the chosen toolchain does not ship prebuilt target rlibs, it must be a nightly toolchain with the `rust-src` component installed so Cargo can use `-Z build-std`.
 
 ### Nextest Profiles
 

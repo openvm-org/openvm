@@ -64,7 +64,7 @@ pub unsafe extern "C" fn sys_log(msg_ptr: *const u8, len: usize) {
 /// `recv_ptr` must be dereferenceable for `nread` bytes.
 #[no_mangle]
 pub unsafe extern "C" fn sys_read(_fd: i32, _recv_ptr: *mut u8, _nread: usize) -> usize {
-    crate::io::println("sys_read is todo");
+    crate::io::println("unsupported OpenVM syscall: sys_read");
     terminate::<{ exit_code::UNIMP }>();
     unreachable!()
 }
@@ -80,7 +80,7 @@ pub unsafe extern "C" fn sys_write(fd: i32, write_ptr: *const u8, nbytes: usize)
     } else {
         use core::fmt::Write;
         let mut writer = crate::io::Writer;
-        let _ = write!(writer, "sys_write to fd={fd} not supported.\n");
+        let _ = writeln!(writer, "sys_write to fd={fd} not supported.");
         terminate::<{ exit_code::UNIMP }>();
     }
 }
@@ -117,7 +117,6 @@ pub unsafe extern "C" fn sys_getenv(
 /// data being returned. Returned data is entirely in the control of the host.
 #[no_mangle]
 pub extern "C" fn sys_argc() -> usize {
-    crate::io::println("sys_argc is todo; returning 0");
     0
 }
 
@@ -142,7 +141,7 @@ pub unsafe extern "C" fn sys_argv(
 ) -> usize {
     // sys_argc returns 0 so any call here is for an out-of-range index, which the
     // ABI documents as "does not return". Terminate explicitly.
-    crate::io::println("sys_argv is todo");
+    crate::io::println("unsupported OpenVM syscall: sys_argv");
     terminate::<{ exit_code::UNIMP }>();
     unreachable!()
 }
