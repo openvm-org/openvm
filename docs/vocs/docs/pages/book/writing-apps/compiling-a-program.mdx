@@ -14,7 +14,7 @@ it to a format natively supported by OpenVM.  We provide the following CLI comma
 cargo openvm build
 ```
 
-The presently supported guest target is `riscv64im-unknown-none-elf`. More details about how cross-compilation works in Rust can be found in the [Rust docs](https://rust-lang.github.io/rustup/cross-compilation.html).
+The presently supported guest target is `riscv64im-unknown-openvm-elf` — a tier-3 built-in target in the [openvm-org/rust](https://github.com/openvm-org/rust) fork, installed via `cargo openvm toolchain install` (see [Install](/book/getting-started/install#install-the-openvm-rust-toolchain)). More details about how cross-compilation works in Rust can be found in the [Rust docs](https://rust-lang.github.io/rustup/cross-compilation.html).
 
 ## Build Flags
 

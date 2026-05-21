@@ -75,7 +75,7 @@ jobs:
       - name: Run ${{ matrix.crate.name }} guest library tests
         working-directory: guest-libs/${{ matrix.crate.path }}
         run: |
-          rustup component add rust-src --toolchain nightly-2026-01-18
+          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
           EXTRA_ARGS=()
           # TODO(aot): re-add --features=aot (and ,aot for pairing)
           if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then

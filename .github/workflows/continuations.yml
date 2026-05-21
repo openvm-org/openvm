@@ -40,7 +40,7 @@ jobs:
       - name: Run tests
         working-directory: crates/continuations
         run: |
-          rustup component add rust-src --toolchain nightly-2026-01-18
+          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
           cargo nextest run
 
       - name: sccache stats
