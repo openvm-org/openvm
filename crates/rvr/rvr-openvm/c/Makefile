@@ -5,6 +5,8 @@ DEBUG ?=
 CFLAGS = -std=c23 $(OPT) $(DEBUG) -Wall -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -fPIC -march=native -falign-functions=32
 LTO ?=
 CFLAGS += $(LTO)
+RVR_CFLAGS ?=
+CFLAGS += $(RVR_CFLAGS)
 LDFLAGS ?=
 LDFLAGS += -fuse-ld=$(LINKER)
 LDLIBS ?=

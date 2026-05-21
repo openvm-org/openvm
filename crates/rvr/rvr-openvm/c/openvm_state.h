@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "openvm_constants.h"
 
@@ -77,6 +78,17 @@ static __attribute__((always_inline)) inline uint8_t* mem_ptr(RvState* restrict 
   return state->memory + addr;
 }
 
+/* ── Memory bounds checker ────────────────────────────────────────── */
+
+static __attribute__((always_inline)) inline void check_mem_bounds(RvState* restrict state, uint32_t start, size_t size) {
+  const size_t mem_size = MEMORY_MASK + 1u;
+  if (unlikely(start > mem_size || size > mem_size - start)) {
+    fprintf(stderr, "Memory access out of bounds: start=%u size=%zu memory_size=%zu\n",
+            start, size, mem_size);
+    fflush(stderr);
+  }
+}
+
 /* ── Register access ─────────────────────────────────────────────── */
 
 static __attribute__((always_inline)) inline uint32_t reg_read(RvState* restrict state, uint8_t idx) { return state->regs[idx]; }
@@ -88,14 +100,26 @@ static __attribute__((always_inline)) inline void reg_write(RvState* restrict st
 /* ── Per-width memory reads ──────────────────────────────────────── */
 
 static __attribute__((always_inline)) inline uint8_t rd_mem_u8(RvState* restrict state, uint32_t addr) {
+  #ifndef OPENVM_UNPROTECTED
+  check_mem_bounds(state, addr, sizeof(uint8_t));
+  #endif
+  
   return *mem_ptr(state, addr);
 }
 
 static __attribute__((always_inline)) inline int8_t rd_mem_i8(RvState* restrict state, uint32_t addr) {
+  #ifndef OPENVM_UNPROTECTED
+  check_mem_bounds(state, addr, sizeof(int8_t));
+  #endif
+  
   return (int8_t)*mem_ptr(state, addr);
 }
 
 static __attribute__((always_inline)) inline uint16_t rd_mem_u16(RvState* restrict state, uint32_t addr) {
+  #ifndef OPENVM_UNPROTECTED
+  check_mem_bounds(state, addr, sizeof(uint16_t));
+  #endif
+  
   uint16_t v;
   const void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(v));
   memcpy(&v, p, sizeof(v));
@@ -103,6 +127,10 @@ static __attribute__((always_inline)) inline uint16_t rd_mem_u16(RvState* restri
 }
 
 static __attribute__((always_inline)) inline int16_t rd_mem_i16(RvState* restrict state, uint32_t addr) {
+  #ifndef OPENVM_UNPROTECTED
+  check_mem_bounds(state, addr, sizeof(int16_t));
+  #endif
+  
   int16_t v;
   const void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(v));
   memcpy(&v, p, sizeof(v));
@@ -110,6 +138,10 @@ static __attribute__((always_inline)) inline int16_t rd_mem_i16(RvState* restric
 }
 
 static __attribute__((always_inline)) inline uint32_t rd_mem_u32(RvState* restrict state, uint32_t addr) {
+  #ifndef OPENVM_UNPROTECTED
+  check_mem_bounds(state, addr, sizeof(uint32_t));
+  #endif
+  
   uint32_t v;
   const void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(v));
   memcpy(&v, p, sizeof(v));
@@ -119,15 +151,27 @@ static __attribute__((always_inline)) inline uint32_t rd_mem_u32(RvState* restri
 /* ── Per-width memory writes ─────────────────────────────────────── */
 
 static __attribute__((always_inline)) inline void wr_mem_u8(RvState* restrict state, uint32_t addr, uint8_t val) {
+  #ifndef OPENVM_UNPROTECTED
+  check_mem_bounds(state, addr, sizeof(uint8_t));
+  #endif
+  
   *mem_ptr(state, addr) = val;
 }
 
 static __attribute__((always_inline)) inline void wr_mem_u16(RvState* restrict state, uint32_t addr, uint16_t val) {
+  #ifndef OPENVM_UNPROTECTED
+  check_mem_bounds(state, addr, sizeof(uint16_t));
+  #endif
+  
   void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(val));
   memcpy(p, &val, sizeof(val));
 }
 
 static __attribute__((always_inline)) inline void wr_mem_u32(RvState* restrict state, uint32_t addr, uint32_t val) {
+  #ifndef OPENVM_UNPROTECTED
+  check_mem_bounds(state, addr, sizeof(uint32_t));
+  #endif
+  
   void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(val));
   memcpy(p, &val, sizeof(val));
 }
@@ -138,12 +182,20 @@ static __attribute__((always_inline)) inline void wr_mem_u32(RvState* restrict s
  * so these lower to a single memcpy. */
 static __attribute__((always_inline)) inline void rd_mem_u32_range(RvState* restrict state, uint32_t base_addr,
                                                                    uint32_t* restrict out, uint32_t num_words) {
+  #ifndef OPENVM_UNPROTECTED
+  check_mem_bounds(state, base_addr, (size_t)num_words * sizeof(uint32_t));
+  #endif
+
   const void* p = __builtin_assume_aligned(mem_ptr(state, base_addr), WORD_SIZE);
   memcpy(out, p, (size_t)num_words * sizeof(uint32_t));
 }
 
 static __attribute__((always_inline)) inline void wr_mem_u32_range(RvState* restrict state, uint32_t base_addr,
                                                                    const uint32_t* restrict vals, uint32_t num_words) {
+  #ifndef OPENVM_UNPROTECTED
+  check_mem_bounds(state, base_addr, (size_t)num_words * sizeof(uint32_t));
+  #endif
+
   void* p = __builtin_assume_aligned(mem_ptr(state, base_addr), WORD_SIZE);
   memcpy(p, vals, (size_t)num_words * sizeof(uint32_t));
 }
