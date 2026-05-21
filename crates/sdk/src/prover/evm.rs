@@ -12,7 +12,10 @@ use openvm_verify_stark_host::VmStarkProof;
 #[cfg(feature = "evm-prove")]
 use crate::prover::Halo2Prover;
 use crate::{
-    prover::{vm::types::VmProvingKey, AggProver, DeferralPathProver, RootProver, StarkProver},
+    prover::{
+        vm::types::VmProvingKey, AggProver, DeferralPathProver, InternalLayerMetadata, RootProver,
+        StarkProver,
+    },
     DeferralInput, StdIn, SC,
 };
 
@@ -55,19 +58,16 @@ where
         })
     }
 
-    pub fn prove_unwrapped_with_agg_proof(
+    pub fn prove_unwrapped_with_stark_proof(
         &mut self,
-        input: StdIn<Val<SC>>,
-        def_inputs: &[DeferralInput],
-    ) -> Result<(Proof<RootSC>, VmStarkProof)>
+        mut stark_proof: VmStarkProof,
+        metadata: &mut InternalLayerMetadata,
+    ) -> Result<Proof<RootSC>>
     where
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
-        let (mut stark_proof, mut internal_metadata) =
-            self.stark_prover.prove(input, def_inputs)?;
-
         let root_ctx = {
             const MAX_ROOT_TRACEGEN_RETRIES: usize = 8;
             let mut attempt = 0usize;
@@ -83,7 +83,7 @@ where
                 stark_proof = self
                     .stark_prover
                     .agg_prover
-                    .wrap_proof(stark_proof, &mut internal_metadata)?;
+                    .wrap_proof(stark_proof, metadata)?;
                 attempt += 1;
             }
         };
@@ -113,7 +113,7 @@ where
         }
 
         let root_proof = self.root_prover.prove_from_ctx(root_ctx)?;
-        Ok((root_proof, stark_proof))
+        Ok(root_proof)
     }
 
     pub fn prove_unwrapped(
@@ -126,7 +126,8 @@ where
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
-        Ok(self.prove_unwrapped_with_agg_proof(input, def_inputs)?.0)
+        let (stark_proof, mut internal_metadata) = self.stark_prover.prove(input, def_inputs)?;
+        self.prove_unwrapped_with_stark_proof(stark_proof, &mut internal_metadata)
     }
 
     #[cfg(feature = "evm-prove")]
