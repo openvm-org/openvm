@@ -319,7 +319,7 @@ fn compile_impl<F: PrimeField32>(
     // bounds check in `openvm_state.h` (mirrors the interpreter's matching
     // feature; see `MmapMemory::check_bounds`).
     if cfg!(feature = "unprotected") {
-        make_args.push("RVR_CFLAGS=-DOPENVM_UNPROTECTED".to_string());
+        make_args.push("OPENVM_UNPROTECTED=1".to_string());
     }
     compile_generated_project(output_dir, &make_args, &toolchain)?;
 

@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "openvm_constants.h"
 
@@ -86,6 +87,7 @@ static __attribute__((always_inline)) inline void check_mem_bounds(RvState* rest
     fprintf(stderr, "Memory access out of bounds: start=%u size=%zu memory_size=%zu\n",
             start, size, mem_size);
     fflush(stderr);
+    abort();
   }
 }
 
@@ -103,7 +105,7 @@ static __attribute__((always_inline)) inline uint8_t rd_mem_u8(RvState* restrict
   #ifndef OPENVM_UNPROTECTED
   check_mem_bounds(state, addr, sizeof(uint8_t));
   #endif
-  
+
   return *mem_ptr(state, addr);
 }
 
@@ -111,7 +113,7 @@ static __attribute__((always_inline)) inline int8_t rd_mem_i8(RvState* restrict 
   #ifndef OPENVM_UNPROTECTED
   check_mem_bounds(state, addr, sizeof(int8_t));
   #endif
-  
+
   return (int8_t)*mem_ptr(state, addr);
 }
 
@@ -119,7 +121,7 @@ static __attribute__((always_inline)) inline uint16_t rd_mem_u16(RvState* restri
   #ifndef OPENVM_UNPROTECTED
   check_mem_bounds(state, addr, sizeof(uint16_t));
   #endif
-  
+
   uint16_t v;
   const void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(v));
   memcpy(&v, p, sizeof(v));
@@ -130,7 +132,7 @@ static __attribute__((always_inline)) inline int16_t rd_mem_i16(RvState* restric
   #ifndef OPENVM_UNPROTECTED
   check_mem_bounds(state, addr, sizeof(int16_t));
   #endif
-  
+
   int16_t v;
   const void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(v));
   memcpy(&v, p, sizeof(v));
@@ -141,7 +143,7 @@ static __attribute__((always_inline)) inline uint32_t rd_mem_u32(RvState* restri
   #ifndef OPENVM_UNPROTECTED
   check_mem_bounds(state, addr, sizeof(uint32_t));
   #endif
-  
+
   uint32_t v;
   const void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(v));
   memcpy(&v, p, sizeof(v));
@@ -154,7 +156,7 @@ static __attribute__((always_inline)) inline void wr_mem_u8(RvState* restrict st
   #ifndef OPENVM_UNPROTECTED
   check_mem_bounds(state, addr, sizeof(uint8_t));
   #endif
-  
+
   *mem_ptr(state, addr) = val;
 }
 
@@ -162,7 +164,7 @@ static __attribute__((always_inline)) inline void wr_mem_u16(RvState* restrict s
   #ifndef OPENVM_UNPROTECTED
   check_mem_bounds(state, addr, sizeof(uint16_t));
   #endif
-  
+
   void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(val));
   memcpy(p, &val, sizeof(val));
 }
@@ -171,7 +173,7 @@ static __attribute__((always_inline)) inline void wr_mem_u32(RvState* restrict s
   #ifndef OPENVM_UNPROTECTED
   check_mem_bounds(state, addr, sizeof(uint32_t));
   #endif
-  
+
   void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(val));
   memcpy(p, &val, sizeof(val));
 }
