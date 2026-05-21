@@ -2,10 +2,10 @@
 extern crate alloc;
 
 /// Library functions for user input/output.
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 mod io;
 
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 pub use io::*;
 use strum_macros::FromRepr;
 

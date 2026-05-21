@@ -22,7 +22,7 @@ pub fn is_guest_memory(addr: u64) -> bool {
 pub unsafe extern "C" fn sys_alloc_aligned(bytes: usize, align: usize) -> *mut u8 {
     use crate::print::println;
 
-    #[cfg(openvm_intrinsics)]
+    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
     extern "C" {
         // This symbol is defined by the loader and marks the end
         // of all elf sections, so this is where we start our
@@ -40,7 +40,7 @@ pub unsafe extern "C" fn sys_alloc_aligned(bytes: usize, align: usize) -> *mut u
     // SAFETY: Single threaded, so nothing else can touch this while we're working.
     let mut heap_pos = unsafe { HEAP_POS };
 
-    #[cfg(openvm_intrinsics)]
+    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
     if heap_pos == 0 {
         heap_pos = unsafe { (&_end) as *const u8 as usize };
     }

@@ -151,10 +151,11 @@ mod tests {
         Ok(())
     }
 
-    // TODO(rv64-std): re-enable when guest is updated to no_std
-    #[ignore]
+    // Exercises the std path: guest is built with --features std, which pulls in
+    // libstd compiled for riscv64im-unknown-openvm-elf and links against our PAL.
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
+    #[test_case("std_collections", 1)]
     fn test_rv64im_std(example_name: &str, min_segments: usize) -> Result<()> {
         let config = test_rv64im_config();
         let elf = build_example_program_at_path_with_features(
