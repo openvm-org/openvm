@@ -22,6 +22,8 @@ use crate::{
 /// EVM prover that produces a root STARK proof with Halo2 wrapping.
 ///
 /// [`EvmProver::prove_unwrapped`] outputs the unwrapped root STARK, while
+/// [`EvmProver::prove_unwrapped_with_stark_proof`] outputs the unwrapped root STARK from an
+/// intermediate STARK proof, for more finegrained separation of work
 /// [`EvmProver::prove_evm`] produces an [`EvmProof`](crate::types::EvmProof)
 /// suitable for on-chain verification.
 pub struct EvmProver<E, VB>
