@@ -10,7 +10,7 @@ use clap::{Parser, Subcommand};
 use eyre::{bail, Context, Result};
 use flate2::read::GzDecoder;
 use indicatif::{ProgressBar, ProgressStyle};
-use openvm_build::DEFAULT_RUSTUP_TOOLCHAIN_NAME;
+use openvm_build::{DEFAULT_RUSTC_TARGET, DEFAULT_RUSTUP_TOOLCHAIN_NAME};
 use tar::Archive;
 
 use crate::get_target;
@@ -286,7 +286,7 @@ fn print_post_install_hint(tag: &str) {
     println!();
     println!("Or invoke the linked toolchain directly with atomic lowering:");
     println!("    RUSTFLAGS=\"-Cpasses=lower-atomic\" \\");
-    println!("      cargo +{tag} build --target riscv64im-unknown-openvm-elf");
+    println!("      cargo +{tag} build --target {DEFAULT_RUSTC_TARGET}");
     if tag != DEFAULT_RUSTUP_TOOLCHAIN_NAME {
         println!();
         println!("Note: this cargo-openvm defaults to `{DEFAULT_RUSTUP_TOOLCHAIN_NAME}`.");
