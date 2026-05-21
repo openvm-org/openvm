@@ -95,7 +95,7 @@ jobs:
       - name: Run ${{ format('{0}{1}', matrix.crate.name, matrix.crate.rvr && '-rvr' || '') }} guest library tests
         working-directory: guest-libs/${{ matrix.crate.path }}
         run: |
-          rustup component add rust-src --toolchain nightly-2026-01-18
+          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
           EXTRA_ARGS=()
           # TODO(rvr): restore this branch when the rvr matrix entries above are re-enabled.
           # if [[ "${{ matrix.crate.rvr }}" == 'true' ]]; then

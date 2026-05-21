@@ -98,7 +98,11 @@ pub fn read_u64() -> u64 {
     u64::from_le_bytes(bytes.try_into().unwrap())
 }
 
-#[cfg(all(feature = "std", test, not(openvm_intrinsics)))]
+#[cfg(all(
+    feature = "std",
+    test,
+    not(any(openvm_intrinsics, target_os = "openvm"))
+))]
 mod tests {
     use alloc::vec;
 
