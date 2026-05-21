@@ -81,14 +81,19 @@ static __attribute__((always_inline)) inline uint8_t* mem_ptr(RvState* restrict 
 
 /* ── Memory bounds checker ────────────────────────────────────────── */
 
-static __attribute__((always_inline)) inline void check_mem_bounds(RvState* restrict state, uint32_t start, size_t size) {
-  const size_t mem_size = MEMORY_MASK + 1u;
-  if (unlikely(start > mem_size || size > mem_size - start)) {
+/* Cold error path: out-of-lined so the inlined check stays tight. */
+static __attribute__((noinline, cold)) void abort_oob(uint32_t start, size_t size, size_t mem_size) {
     fprintf(stderr, "Memory access out of bounds: start=%u size=%zu memory_size=%zu\n",
             start, size, mem_size);
     fflush(stderr);
     abort();
-  }
+}
+
+static __attribute__((always_inline)) inline void check_mem_bounds(RvState* restrict state, uint32_t start, size_t size) {
+    const size_t mem_size = (size_t)MEMORY_MASK + 1u;
+    if (unlikely(start > mem_size || size > mem_size - start)) {
+        abort_oob(start, size, mem_size);
+    }
 }
 
 /* ── Register access ─────────────────────────────────────────────── */
