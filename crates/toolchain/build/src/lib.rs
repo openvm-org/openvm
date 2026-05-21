@@ -607,7 +607,7 @@ fn ensure_openvm_toolchain_linked(toolchain: &str) -> Result<(), i32> {
         }
 
         let rustc_version = Command::new("rustup")
-            .args([&format!("+{toolchain}"), "rustc", "--version"])
+            .args(["run", toolchain, "rustc", "--version"])
             .output()
             .map_err(|e| {
                 tty_println(&format!("Failed to check {toolchain} rustc version: {e}"));

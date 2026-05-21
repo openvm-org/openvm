@@ -142,13 +142,14 @@ jobs:
           set -e
           mkdir -p /tmp/openvm-none-elf-smoke
           cd /tmp/openvm-none-elf-smoke
+          export OPENVM_GUEST_LOGFILE="$PWD/openvm-build.log"
           cargo openvm init smoke-fib
           cd smoke-fib
           # Exercise this checkout's openvm crate, not the version pinned by the template.
           local_openvm_path="${{ github.workspace }}/crates/toolchain/openvm"
           perl -0pi -e 's#openvm = \{ git = "https://github.com/openvm-org/openvm\.git".*?\}#openvm = { path = "'"$local_openvm_path"'" }#' Cargo.toml
           grep -Fq "openvm = { path = \"$local_openvm_path\" }" Cargo.toml
-          cargo openvm build
+          cargo openvm build || { cat "$OPENVM_GUEST_LOGFILE"; exit 1; }
           fib_10_input="0x010A00000000000000"
           cargo openvm run --input "$fib_10_input"
 
