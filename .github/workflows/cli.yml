@@ -149,7 +149,8 @@ jobs:
           perl -0pi -e 's#openvm = \{ git = "https://github.com/openvm-org/openvm\.git".*?\}#openvm = { path = "'"$local_openvm_path"'" }#' Cargo.toml
           grep -Fq "openvm = { path = \"$local_openvm_path\" }" Cargo.toml
           cargo openvm build
-          cargo openvm run
+          fib_10_input="0x010A00000000000000"
+          cargo openvm run --input "$fib_10_input"
 
       - name: sccache stats
         if: always()
