@@ -1,25 +1,19 @@
-use std::{str::FromStr, sync::Arc};
+use std::str::FromStr;
+#[cfg(feature = "cuda")]
+use std::sync::Arc;
 
 use derive_new::new;
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::arch::{
-    testing::{
-        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
-    },
+    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, PreflightExecutor, MEMORY_BLOCK_BYTES,
 };
-use openvm_circuit_primitives::{
-    bigint::utils::secp256k1_coord_prime,
-    bitwise_op_lookup::{
-        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-        SharedBitwiseOperationLookupChip,
-    },
-};
+use openvm_circuit_primitives::bigint::utils::secp256k1_coord_prime;
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, VmOpcode,
 };
 use openvm_mod_circuit_builder::{
@@ -49,24 +43,12 @@ fn create_addsub_test_chips<const BLOCKS: usize>(
     tester: &mut VmChipTestBuilder<F>,
     config: ExprBuilderConfig,
     offset: usize,
-) -> (
-    Harness<BLOCKS>,
-    (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-    ),
-) {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
-
+) -> Harness<BLOCKS> {
     let air = get_fp2_addsub_air(
         tester.execution_bridge(),
         tester.memory_bridge(),
         config.clone(),
         tester.range_checker().bus(),
-        bitwise_bus,
         tester.address_bits(),
         offset,
     );
@@ -80,36 +62,21 @@ fn create_addsub_test_chips<const BLOCKS: usize>(
         config,
         tester.memory_helper(),
         tester.range_checker(),
-        bitwise_chip.clone(),
         tester.address_bits(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
-
-    (harness, (bitwise_chip.air, bitwise_chip))
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 fn create_muldiv_test_chips<const BLOCKS: usize>(
     tester: &mut VmChipTestBuilder<F>,
     config: ExprBuilderConfig,
     offset: usize,
-) -> (
-    Harness<BLOCKS>,
-    (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-    ),
-) {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
-
+) -> Harness<BLOCKS> {
     let air = get_fp2_muldiv_air(
         tester.execution_bridge(),
         tester.memory_bridge(),
         config.clone(),
         tester.range_checker().bus(),
-        bitwise_bus,
         tester.address_bits(),
         offset,
     );
@@ -123,12 +90,9 @@ fn create_muldiv_test_chips<const BLOCKS: usize>(
         config,
         tester.memory_helper(),
         tester.range_checker(),
-        bitwise_chip.clone(),
         tester.address_bits(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
-
-    (harness, (bitwise_chip.air, bitwise_chip))
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -322,7 +286,7 @@ fn run_test_with_config<const BLOCKS: usize, const NUM_LIMBS: usize>(
 
     let offset = Fp2Opcode::CLASS_OFFSET;
 
-    let (mut harness, bitwise) = if test_config.is_addsub {
+    let mut harness = if test_config.is_addsub {
         create_addsub_test_chips::<BLOCKS>(&mut tester, config, offset)
     } else {
         create_muldiv_test_chips::<BLOCKS>(&mut tester, config, offset)
@@ -344,7 +308,6 @@ fn run_test_with_config<const BLOCKS: usize, const NUM_LIMBS: usize>(
     tester
         .build()
         .load(harness)
-        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .unwrap();
@@ -353,10 +316,7 @@ fn run_test_with_config<const BLOCKS: usize, const NUM_LIMBS: usize>(
 #[cfg(feature = "cuda")]
 mod cuda_tests {
     use openvm_circuit::arch::{
-        testing::{
-            default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-            GpuTestChipHarness,
-        },
+        testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness},
         DenseRecordArena,
     };
     use openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, Chip};
@@ -376,19 +336,14 @@ mod cuda_tests {
     ) -> GpuHarness<BLOCKS, HybridFp2Chip<F, BLOCKS>> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
-        let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-            bitwise_bus,
-        ));
 
         let air = get_fp2_addsub_air(
             tester.execution_bridge(),
             tester.memory_bridge(),
             config.clone(),
             range_bus,
-            bitwise_bus,
             tester.address_bits(),
             offset,
         );
@@ -399,7 +354,6 @@ mod cuda_tests {
             config.clone(),
             tester.dummy_memory_helper(),
             dummy_range_checker_chip,
-            dummy_bitwise_chip,
             tester.address_bits(),
         );
         let hybrid_chip = HybridFp2Chip::new(
@@ -407,7 +361,6 @@ mod cuda_tests {
                 config,
                 tester.cpu_memory_helper(),
                 tester.cpu_range_checker(),
-                tester.cpu_bitwise_op_lookup(),
                 tester.address_bits(),
             ),
             tester.range_checker().device_ctx.clone(),
@@ -423,19 +376,14 @@ mod cuda_tests {
     ) -> GpuHarness<BLOCKS, HybridFp2Chip<F, BLOCKS>> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
-        let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-            bitwise_bus,
-        ));
 
         let air = get_fp2_muldiv_air(
             tester.execution_bridge(),
             tester.memory_bridge(),
             config.clone(),
             range_bus,
-            bitwise_bus,
             tester.address_bits(),
             offset,
         );
@@ -446,7 +394,6 @@ mod cuda_tests {
             config.clone(),
             tester.dummy_memory_helper(),
             dummy_range_checker_chip,
-            dummy_bitwise_chip,
             tester.address_bits(),
         );
         let hybrid_chip = HybridFp2Chip::new(
@@ -454,7 +401,6 @@ mod cuda_tests {
                 config,
                 tester.cpu_memory_helper(),
                 tester.cpu_range_checker(),
-                tester.cpu_bitwise_op_lookup(),
                 tester.address_bits(),
             ),
             tester.range_checker().device_ctx.clone(),
@@ -527,8 +473,7 @@ mod cuda_tests {
 
         let mut rng = create_seeded_rng();
 
-        let mut tester =
-            GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+        let mut tester = GpuChipTestBuilder::default();
 
         let offset = Fp2Opcode::CLASS_OFFSET;
         let config = ExprBuilderConfig {

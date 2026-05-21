@@ -37,8 +37,9 @@ use {
 use super::{BaseAluWCoreAir, BaseAluWFiller, Rv64BaseAluWChip, Rv64BaseAluWExecutor};
 use crate::{
     adapters::{
-        Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterCols, Rv64BaseAluWAdapterExecutor,
-        Rv64BaseAluWAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        pack_u8_pair_u32, Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterCols,
+        Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller, RV64_BYTE_BITS,
+        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     base_alu::BaseAluCoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
@@ -177,12 +178,12 @@ fn rand_rv64w_alu_test(opcode: BaseAluWOpcode, num_ops: usize) {
     let (mut harness, bitwise) = create_harness(&tester);
 
     // TODO(AG): make a more meaningful test for memory accesses
-    tester.write_bytes(2, 1024, [F::ONE; 8]);
-    tester.write_bytes(2, 1032, [F::ONE; 8]);
-    let sm_lo: [F; 8] = tester.read_bytes(2, 1024);
-    let sm_hi: [F; 8] = tester.read_bytes(2, 1032);
-    assert_eq!(sm_lo, [F::ONE; 8]);
-    assert_eq!(sm_hi, [F::ONE; 8]);
+    tester.write_bytes(2, 1024, [F::ONE; RV64_REGISTER_NUM_LIMBS]);
+    tester.write_bytes(2, 1032, [F::ONE; RV64_REGISTER_NUM_LIMBS]);
+    let sm_lo: [F; RV64_REGISTER_NUM_LIMBS] = tester.read_bytes(2, 1024);
+    let sm_hi: [F; RV64_REGISTER_NUM_LIMBS] = tester.read_bytes(2, 1032);
+    assert_eq!(sm_lo, [F::ONE; RV64_REGISTER_NUM_LIMBS]);
+    assert_eq!(sm_hi, [F::ONE; RV64_REGISTER_NUM_LIMBS]);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -214,12 +215,12 @@ fn rand_rv64w_alu_test_persistent(opcode: BaseAluWOpcode, num_ops: usize) {
     let (mut harness, bitwise) = create_harness(&tester);
 
     // TODO(AG): make a more meaningful test for memory accesses
-    tester.write_bytes(2, 1024, [F::ONE; 8]);
-    tester.write_bytes(2, 1032, [F::ONE; 8]);
-    let sm_lo: [F; 8] = tester.read_bytes(2, 1024);
-    let sm_hi: [F; 8] = tester.read_bytes(2, 1032);
-    assert_eq!(sm_lo, [F::ONE; 8]);
-    assert_eq!(sm_hi, [F::ONE; 8]);
+    tester.write_bytes(2, 1024, [F::ONE; RV64_REGISTER_NUM_LIMBS]);
+    tester.write_bytes(2, 1032, [F::ONE; RV64_REGISTER_NUM_LIMBS]);
+    let sm_lo: [F; RV64_REGISTER_NUM_LIMBS] = tester.read_bytes(2, 1024);
+    let sm_hi: [F; RV64_REGISTER_NUM_LIMBS] = tester.read_bytes(2, 1032);
+    assert_eq!(sm_lo, [F::ONE; RV64_REGISTER_NUM_LIMBS]);
+    assert_eq!(sm_hi, [F::ONE; RV64_REGISTER_NUM_LIMBS]);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -290,7 +291,9 @@ fn run_negative_alu_test(
             cols.b = prank_b_word.map(F::from_u32);
             let prank_rs1_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 prank_b[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
-            adapter_cols.rs1_high = prank_rs1_high.map(F::from_u32);
+            adapter_cols.rs1_high = array::from_fn(|i| {
+                pack_u8_pair_u32(prank_rs1_high[2 * i], prank_rs1_high[2 * i + 1])
+            });
         }
         if let Some(prank_c) = prank_c {
             let prank_c_word: [u32; RV64_WORD_NUM_LIMBS] =
@@ -298,7 +301,9 @@ fn run_negative_alu_test(
             cols.c = prank_c_word.map(F::from_u32);
             let prank_rs2_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 prank_c[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
-            adapter_cols.rs2_high = prank_rs2_high.map(F::from_u32);
+            adapter_cols.rs2_high = array::from_fn(|i| {
+                pack_u8_pair_u32(prank_rs2_high[2 * i], prank_rs2_high[2 * i + 1])
+            });
         }
         if let Some(prank_opcode_flags) = prank_opcode_flags {
             cols.opcode_add_flag = F::from_bool(prank_opcode_flags[0]);

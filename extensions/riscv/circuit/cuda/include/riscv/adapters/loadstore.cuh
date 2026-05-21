@@ -2,15 +2,16 @@
 
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
-#include "primitives/constants.h"
+#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
+#include "system/memory/offline_checker.cuh"
 
 using namespace riscv;
 
 template <typename T> struct Rv64LoadStoreAdapterCols {
     ExecutionState<T> from_state;
     T rs1_ptr;
-    T rs1_data[RV64_WORD_NUM_LIMBS];
+    T rs1_data[RV64_PTR_U16_LIMBS];
     MemoryReadAuxCols<T> rs1_aux_cols;
 
     /// Will write to rd when Load and read from rs2 when Store
@@ -68,7 +69,8 @@ struct Rv64LoadStoreAdapter {
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, from_state.timestamp, record.from_timestamp);
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, rs1_ptr, record.rs1_ptr);
 
-        auto rs1_data = reinterpret_cast<uint8_t *>(&record.rs1_val);
+        Fp rs1_data[RV64_PTR_U16_LIMBS];
+        ptr_to_u16_limbs(rs1_data, record.rs1_val);
         COL_WRITE_ARRAY(row, Rv64LoadStoreAdapterCols, rs1_data, rs1_data);
 
         bool needs_write = record.rd_rs2_ptr != UINT32_MAX;
@@ -94,9 +96,10 @@ struct Rv64LoadStoreAdapter {
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, imm, record.imm);
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, imm_sign, record.imm_sign);
 
-        uint32_t ptr = record.rs1_val + ((uint32_t)record.imm + record.imm_sign * 0xffff0000);
+        uint32_t ptr = record.rs1_val + uint32_t(record.imm) +
+                       uint32_t(record.imm_sign) * (UINT32_MAX << U16_BITS);
         uint32_t ptr_limbs[RV64_PTR_U16_LIMBS];
-        pack_u32_to_u16_limbs(ptr_limbs, ptr);
+        ptr_to_u16_limbs(ptr_limbs, ptr);
         COL_WRITE_ARRAY(row, Rv64LoadStoreAdapterCols, mem_ptr_limbs, ptr_limbs);
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, mem_as, record.mem_as);
 

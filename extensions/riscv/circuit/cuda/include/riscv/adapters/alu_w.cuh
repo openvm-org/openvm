@@ -2,6 +2,7 @@
 
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -11,15 +12,17 @@ template <typename T> struct Rv64BaseAluWAdapterCols {
     ExecutionState<T> from_state;
     T rd_ptr;
     T rs1_ptr;
-    /// Upper 4 bytes of rs1 register read (kept in adapter to satisfy full-width memory read).
-    T rs1_high[RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS];
-    /// Pointer if rs2 was a read, immediate value otherwise
+    // Upper 4 bytes of rs1 register read, packed as two u16 cells.
+    // Kept in the adapter to constrain the full-width memory read.
+    T rs1_high[RV64_PTR_U16_LIMBS];
+    // Pointer if rs2 was a read, immediate value otherwise.
     T rs2;
-    /// 1 if rs2 was a read, 0 if an immediate
+    // 1 if rs2 was a read, 0 if an immediate.
     T rs2_as;
-    /// Upper 4 bytes of rs2 register read (unused when rs2 is immediate).
-    T rs2_high[RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS];
-    /// Sign bit of the low-word core result used to build full-width sign-extended writes.
+    // Upper 4 bytes of rs2 register read, packed as two u16 cells.
+    // Kept in the adapter to constrain the full-width memory read; unused when rs2 is immediate.
+    T rs2_high[RV64_PTR_U16_LIMBS];
+    // Sign bit of the low-word core result used to build full-width sign-extended writes.
     T result_sign;
     MemoryReadAuxCols<T> reads_aux[2];
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> writes_aux;
@@ -31,11 +34,14 @@ struct Rv64BaseAluWAdapterRecord {
 
     uint32_t rd_ptr;
     uint32_t rs1_ptr;
+    // Upper 4 bytes of rs1 register read, kept to satisfy the full-width memory read.
     uint8_t rs1_high[RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS];
-    /// Pointer if rs2 was a read, immediate value otherwise
+    // Pointer if rs2 was a read, immediate value otherwise.
     uint32_t rs2;
-    /// 1 if rs2 was a read, 0 if an immediate
+    // 1 if rs2 was a read, 0 if an immediate.
     uint8_t rs2_as;
+    // Upper 4 bytes of rs2 register read, kept to satisfy the full-width memory read
+    // (unused when rs2 is immediate).
     uint8_t rs2_high[RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS];
     uint8_t result_sign;
     uint8_t result_word_msl;
@@ -96,11 +102,16 @@ struct Rv64BaseAluWAdapter {
             static_cast<uint32_t>(record.result_word_msl), 1u << (RV64_BYTE_BITS - 1)
         );
 
+        Fp rs2_high[RV64_PTR_U16_LIMBS];
+        Fp rs1_high[RV64_PTR_U16_LIMBS];
+        pack_u8_pairs_le(rs2_high, record.rs2_high);
+        pack_u8_pairs_le(rs1_high, record.rs1_high);
+
         COL_WRITE_VALUE(row, Rv64BaseAluWAdapterCols, result_sign, record.result_sign);
-        COL_WRITE_ARRAY(row, Rv64BaseAluWAdapterCols, rs2_high, record.rs2_high);
+        COL_WRITE_ARRAY(row, Rv64BaseAluWAdapterCols, rs2_high, rs2_high);
         COL_WRITE_VALUE(row, Rv64BaseAluWAdapterCols, rs2_as, record.rs2_as);
         COL_WRITE_VALUE(row, Rv64BaseAluWAdapterCols, rs2, record.rs2);
-        COL_WRITE_ARRAY(row, Rv64BaseAluWAdapterCols, rs1_high, record.rs1_high);
+        COL_WRITE_ARRAY(row, Rv64BaseAluWAdapterCols, rs1_high, rs1_high);
         COL_WRITE_VALUE(row, Rv64BaseAluWAdapterCols, rs1_ptr, record.rs1_ptr);
         COL_WRITE_VALUE(row, Rv64BaseAluWAdapterCols, rd_ptr, record.rd_ptr);
         COL_WRITE_VALUE(row, Rv64BaseAluWAdapterCols, from_state.timestamp, record.from_timestamp);

@@ -45,6 +45,30 @@ pub const RV64_PTR_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 /// Bit width covered by [`RV64_PTR_U16_LIMBS`].
 pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 
+/// Packs two little-endian u8 limbs into one u16-shaped field element.
+#[inline(always)]
+pub fn pack_u8_pair<T: PrimeCharacteristicRing>(lo: T, hi: T) -> T {
+    lo + hi * T::from_u32(1 << RV64_BYTE_BITS)
+}
+
+#[inline(always)]
+pub fn pack_u8_pair_u32<T: PrimeCharacteristicRing>(lo: u32, hi: u32) -> T {
+    pack_u8_pair(T::from_u32(lo), T::from_u32(hi))
+}
+
+#[inline(always)]
+pub(crate) fn pack_high_u16<T: PrimeCharacteristicRing>(
+    bytes: &[u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
+) -> [T; RV64_PTR_U16_LIMBS] {
+    std::array::from_fn(|i| T::from_u16(u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]])))
+}
+
+/// Sign-extends a 16-bit immediate represented by `(imm, sign)` into a u32.
+#[inline(always)]
+pub fn sign_extend_imm16(imm: u32, sign: u32) -> u32 {
+    imm + sign * (u32::MAX << U16_BITS)
+}
+
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 

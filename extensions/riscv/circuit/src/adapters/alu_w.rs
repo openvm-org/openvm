@@ -11,8 +11,8 @@ use openvm_circuit::{
     },
     system::memory::{
         offline_checker::{
-            pack_u8_block, pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols,
-            MemoryReadAuxRecord, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
+            pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -37,7 +37,10 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::{byte_ptr_to_u16_ptr, tracing_read, tracing_read_imm, tracing_write};
+use super::{
+    byte_ptr_to_u16_ptr, pack_high_u16, pack_u8_pair, tracing_read, tracing_read_imm,
+    tracing_write, RV64_PTR_U16_LIMBS,
+};
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
@@ -45,14 +48,16 @@ pub struct Rv64BaseAluWAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
     pub rs1_ptr: T,
-    /// Upper 4 bytes of rs1 register read (kept in adapter to satisfy full-width memory read).
-    pub rs1_high: [T; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
+    /// Upper 4 bytes of rs1 register read, packed as two u16 cells.
+    /// Kept in the adapter to constrain the full-width memory read.
+    pub rs1_high: [T; RV64_PTR_U16_LIMBS],
     /// Pointer if rs2 was a read, immediate value otherwise
     pub rs2: T,
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: T,
-    /// Upper 4 bytes of rs2 register read (unused when rs2 is immediate).
-    pub rs2_high: [T; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
+    /// Upper 4 bytes of rs2 register read, packed as two u16 cells.
+    /// Kept in the adapter to constrain the full-width memory read; unused when rs2 is immediate.
+    pub rs2_high: [T; RV64_PTR_U16_LIMBS],
     /// Sign bit of the low-word core result used to build full-width sign-extended writes.
     pub result_sign: T,
     pub reads_aux: [MemoryReadAuxCols<T>; 2],
@@ -123,20 +128,19 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
             .send_range(rs2_limbs[0].clone(), rs2_limbs[1].clone())
             .eval(builder, ctx.instruction.is_valid.clone() - local.rs2_as);
 
-        let rs1_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                ctx.reads[0][i].clone()
-            } else {
-                local.rs1_high[i - RV64_WORD_NUM_LIMBS].into()
-            }
-        });
+        let rs1_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
+            pack_u8_pair(ctx.reads[0][0].clone(), ctx.reads[0][1].clone()),
+            pack_u8_pair(ctx.reads[0][2].clone(), ctx.reads[0][3].clone()),
+            local.rs1_high[0].into(),
+            local.rs1_high[1].into(),
+        ];
         self.memory_bridge
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
                 ),
-                pack_u8_block::<AB>(&rs1_data),
+                rs1_bus,
                 timestamp_pp(),
                 &local.reads_aux[0],
             )
@@ -146,17 +150,16 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
         builder
             .when(local.rs2_as)
             .assert_one(ctx.instruction.is_valid.clone());
-        let rs2_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                ctx.reads[1][i].clone()
-            } else {
-                local.rs2_high[i - RV64_WORD_NUM_LIMBS].into()
-            }
-        });
+        let rs2_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
+            pack_u8_pair(ctx.reads[1][0].clone(), ctx.reads[1][1].clone()),
+            pack_u8_pair(ctx.reads[1][2].clone(), ctx.reads[1][3].clone()),
+            local.rs2_high[0].into(),
+            local.rs2_high[1].into(),
+        ];
         self.memory_bridge
             .read(
                 MemoryAddress::new(local.rs2_as, byte_ptr_to_u16_ptr::<AB>(local.rs2)),
-                pack_u8_block::<AB>(&rs2_data),
+                rs2_bus,
                 timestamp_pp(),
                 &local.reads_aux[1],
             )
@@ -176,21 +179,20 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
                     - AB::Expr::from_u32(2) * local.result_sign * sign_mask,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
-        let sign_extend_limb = AB::Expr::from_u32((1 << RV64_BYTE_BITS) - 1) * local.result_sign;
-        let write_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
-            if i < RV64_WORD_NUM_LIMBS {
-                ctx.writes[0][i].clone()
-            } else {
-                sign_extend_limb.clone()
-            }
-        });
+        let sign_extend_u16 = AB::Expr::from_u32(u16::MAX as u32) * local.result_sign;
+        let write_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
+            pack_u8_pair(ctx.writes[0][0].clone(), ctx.writes[0][1].clone()),
+            pack_u8_pair(ctx.writes[0][2].clone(), ctx.writes[0][3].clone()),
+            sign_extend_u16.clone(),
+            sign_extend_u16.clone(),
+        ];
         self.memory_bridge
             .write(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local.rd_ptr),
                 ),
-                pack_u8_block::<AB>(&write_data),
+                write_bus,
                 timestamp_pp(),
                 &local.writes_aux,
             )
@@ -235,11 +237,14 @@ pub struct Rv64BaseAluWAdapterRecord {
 
     pub rd_ptr: u32,
     pub rs1_ptr: u32,
+    /// Upper 4 bytes of rs1 register read, kept to satisfy the full-width memory read.
     pub rs1_high: [u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
     /// Pointer if rs2 was a read, immediate value otherwise
     pub rs2: u32,
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: u8,
+    /// Upper 4 bytes of rs2 register read, kept to satisfy the full-width memory read
+    /// (unused when rs2 is immediate).
     pub rs2_high: [u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
     pub result_sign: u8,
     pub result_word_msl: u8,
@@ -396,11 +401,14 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWAdapterFiller {
         self.bitwise_lookup_chip
             .request_xor(record.result_word_msl as u32, 1u32 << (RV64_BYTE_BITS - 1));
 
+        // Pack before overwriting the row; the source bytes live in the overlaid record buffer.
         adapter_row.result_sign = F::from_u8(record.result_sign);
+        let rs2_high_packed = pack_high_u16(&record.rs2_high);
+        let rs1_high_packed = pack_high_u16(&record.rs1_high);
+        adapter_row.rs2_high = rs2_high_packed;
         adapter_row.rs2_as = F::from_u8(record.rs2_as);
         adapter_row.rs2 = F::from_u32(record.rs2);
-        adapter_row.rs2_high = record.rs2_high.map(F::from_u8);
-        adapter_row.rs1_high = record.rs1_high.map(F::from_u8);
+        adapter_row.rs1_high = rs1_high_packed;
         adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
         adapter_row.rd_ptr = F::from_u32(record.rd_ptr);
         adapter_row.from_state.timestamp = F::from_u32(timestamp);

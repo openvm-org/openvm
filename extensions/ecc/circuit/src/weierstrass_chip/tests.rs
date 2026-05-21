@@ -1,25 +1,19 @@
-use std::{str::FromStr, sync::Arc};
+use std::str::FromStr;
+#[cfg(feature = "cuda")]
+use std::sync::Arc;
 
 use halo2curves_axiom::secp256r1;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};
 use openvm_circuit::arch::{
-    testing::{
-        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
-    },
+    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, MatrixRecordArena, PreflightExecutor, MEMORY_BLOCK_BYTES,
 };
-use openvm_circuit_primitives::{
-    bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime},
-    bitwise_op_lookup::{
-        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-        SharedBitwiseOperationLookupChip,
-    },
-};
+use openvm_circuit_primitives::bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime};
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, VmOpcode,
 };
 use openvm_mod_circuit_builder::{
@@ -33,8 +27,7 @@ use rand::{rngs::StdRng, Rng};
 use {
     crate::extension::HybridWeierstrassChip,
     openvm_circuit::arch::testing::{
-        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-        GpuTestChipHarness,
+        default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
@@ -115,24 +108,12 @@ mod ec_addne_tests {
         tester: &VmChipTestBuilder<F>,
         config: ExprBuilderConfig,
         offset: usize,
-    ) -> (
-        EcAddneHarness<BLOCKS>,
-        (
-            BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-            SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-        ),
-    ) {
-        let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-            bitwise_bus,
-        ));
-
+    ) -> EcAddneHarness<BLOCKS> {
         let air = get_ec_addne_air::<BLOCKS>(
             tester.execution_bridge(),
             tester.memory_bridge(),
             config.clone(),
             tester.range_checker().bus(),
-            bitwise_bus,
             tester.address_bits(),
             offset,
         );
@@ -146,13 +127,10 @@ mod ec_addne_tests {
             config.clone(),
             tester.memory_helper(),
             tester.range_checker(),
-            bitwise_chip.clone(),
             tester.address_bits(),
         );
 
-        let harness = EcAddneHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
-
-        (harness, (bitwise_chip.air, bitwise_chip))
+        EcAddneHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
     }
 
     #[cfg(feature = "cuda")]
@@ -170,25 +148,16 @@ mod ec_addne_tests {
         config: ExprBuilderConfig,
         offset: usize,
     ) -> GpuHarness<BLOCKS> {
-        use openvm_circuit::arch::testing::{
-            default_bitwise_lookup_bus, default_var_range_checker_bus,
-        };
-
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
-        let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-            bitwise_bus,
-        ));
 
         let air = get_ec_addne_air(
             tester.execution_bridge(),
             tester.memory_bridge(),
             config.clone(),
             range_bus,
-            bitwise_bus,
             tester.address_bits(),
             offset,
         );
@@ -198,7 +167,6 @@ mod ec_addne_tests {
             config.clone(),
             tester.dummy_memory_helper(),
             dummy_range_checker_chip,
-            dummy_bitwise_chip,
             tester.address_bits(),
         );
 
@@ -207,7 +175,6 @@ mod ec_addne_tests {
                 config,
                 tester.cpu_memory_helper(),
                 tester.cpu_range_checker(),
-                tester.cpu_bitwise_op_lookup(),
                 tester.address_bits(),
             ),
             tester.range_checker().device_ctx.clone(),
@@ -347,7 +314,7 @@ mod ec_addne_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let (mut harness, bitwise) = create_harness::<BLOCKS>(&tester, config, offset);
+        let mut harness = create_harness::<BLOCKS>(&tester, config, offset);
 
         set_and_execute_ec_addne::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
@@ -385,11 +352,7 @@ mod ec_addne_tests {
             Some(SampleEcPoints[3].clone()),
         );
 
-        let tester = tester
-            .build()
-            .load(harness)
-            .load_periphery(bitwise)
-            .finalize();
+        let tester = tester.build().load(harness).finalize();
 
         tester.simple_test().expect("Verification failed");
     }
@@ -419,8 +382,7 @@ mod ec_addne_tests {
 
         let mut rng = create_seeded_rng();
 
-        let mut tester =
-            GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+        let mut tester = GpuChipTestBuilder::default();
 
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
@@ -557,23 +519,12 @@ mod ec_double_tests {
         config: ExprBuilderConfig,
         offset: usize,
         a_biguint: BigUint,
-    ) -> (
-        EcDoubleHarness<BLOCKS>,
-        (
-            BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-            SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-        ),
-    ) {
-        let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-            bitwise_bus,
-        ));
+    ) -> EcDoubleHarness<BLOCKS> {
         let air = get_ec_double_air(
             tester.execution_bridge(),
             tester.memory_bridge(),
             config.clone(),
             tester.range_checker().bus(),
-            bitwise_bus,
             tester.address_bits(),
             offset,
             a_biguint.clone(),
@@ -589,13 +540,10 @@ mod ec_double_tests {
             config.clone(),
             tester.memory_helper(),
             tester.range_checker(),
-            bitwise_chip.clone(),
             tester.address_bits(),
             a_biguint,
         );
-        let harness = EcDoubleHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
-
-        (harness, (bitwise_chip.air, bitwise_chip))
+        EcDoubleHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
     }
 
     #[cfg(feature = "cuda")]
@@ -616,19 +564,14 @@ mod ec_double_tests {
     ) -> GpuHarness<BLOCKS> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
-        let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-            bitwise_bus,
-        ));
 
         let air = get_ec_double_air(
             tester.execution_bridge(),
             tester.memory_bridge(),
             config.clone(),
             range_bus,
-            bitwise_bus,
             tester.address_bits(),
             offset,
             a_biguint.clone(),
@@ -645,7 +588,6 @@ mod ec_double_tests {
             config.clone(),
             tester.dummy_memory_helper(),
             dummy_range_checker_chip,
-            dummy_bitwise_chip,
             tester.address_bits(),
             a_biguint.clone(),
         );
@@ -654,7 +596,6 @@ mod ec_double_tests {
                 config,
                 tester.cpu_memory_helper(),
                 tester.cpu_range_checker(),
-                tester.cpu_bitwise_op_lookup(),
                 tester.address_bits(),
                 a_biguint,
             ),
@@ -766,7 +707,7 @@ mod ec_double_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let (mut harness, bitwise) = create_harness::<BLOCKS>(&tester, config, offset, a.clone());
+        let mut harness = create_harness::<BLOCKS>(&tester, config, offset, a.clone());
 
         for i in 0..num_ops {
             set_and_execute_ec_double::<BLOCKS, NUM_LIMBS, _>(
@@ -834,11 +775,7 @@ mod ec_double_tests {
             Some(p1_y),
         );
 
-        let tester = tester
-            .build()
-            .load(harness)
-            .load_periphery(bitwise)
-            .finalize();
+        let tester = tester.build().load(harness).finalize();
 
         tester.simple_test().expect("Verification failed");
     }
@@ -887,8 +824,7 @@ mod ec_double_tests {
 
         let mut rng = create_seeded_rng();
 
-        let mut tester =
-            GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+        let mut tester = GpuChipTestBuilder::default();
 
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),

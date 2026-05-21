@@ -7,7 +7,8 @@ use std::{
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, MEMORY_BLOCK_BYTES,
+        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{
@@ -37,11 +38,11 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::{RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS};
-use crate::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_register, memory_read, memory_read_deferral,
-    ptr_to_u16_limbs, rv64_bytes_to_u32, timed_write, tracing_read, RV64_BYTE_BITS, U16_BITS,
+use super::{
+    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
+    sign_extend_imm16, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
+use crate::adapters::{memory_read, rv64_bytes_to_u32, timed_write, tracing_read};
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
 /// of the instruction type, specifically whether it is a load or store.
@@ -84,7 +85,8 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64LoadStoreAdapt
 pub struct Rv64LoadStoreAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
-    pub rs1_data: [T; RV64_WORD_NUM_LIMBS],
+    /// Low 32 bits of the rs1 register, packed as two u16 cells.
+    pub rs1_data: [T; RV64_PTR_U16_LIMBS],
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
 
     /// Will write to rd when Load and read from rs2 when Store
@@ -95,7 +97,7 @@ pub struct Rv64LoadStoreAdapterCols<T> {
     /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
     pub mem_ptr_limbs: [T; 2],
     pub mem_as: T,
-    /// Timestamp aux for the write; previous data is provided by the core chip.
+    /// prev_data will be provided by the core chip to make a complete MemoryWriteAuxCols
     pub write_base_aux: MemoryBaseAuxCols<T>,
     /// Only writes if `needs_write`.
     /// If the instruction is a Load:
@@ -160,27 +162,25 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             .when(is_valid.clone() - write_count)
             .assert_zero(local_cols.rd_rs2_ptr);
 
-        // read rs1
-        let rs1_data = expand_to_rv64_register(&local_cols.rs1_data);
+        // Read rs1 as a low 32-bit pointer value; the upper register cells are zero on the bus.
+        let rs1_bus: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&local_cols.rs1_data);
         self.memory_bridge
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
                 ),
-                pack_u8_block::<AB>(&rs1_data),
+                rs1_bus,
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
             )
             .eval(builder, is_valid.clone());
 
-        // constrain mem_ptr = rs1 + imm as a u32 addition with 2 limbs
-        let limbs_01 =
-            local_cols.rs1_data[0] + local_cols.rs1_data[1] * AB::F::from_u32(1 << RV64_BYTE_BITS);
-        let limbs_23 =
-            local_cols.rs1_data[2] + local_cols.rs1_data[3] * AB::F::from_u32(1 << RV64_BYTE_BITS);
+        // Constrain mem_ptr = rs1 + sign_extend(imm) as a 32-bit addition.
+        let limbs_01 = local_cols.rs1_data[0];
+        let limbs_23 = local_cols.rs1_data[1];
 
-        let inv = AB::F::from_u32(1 << (RV64_BYTE_BITS * 2)).inverse();
+        let inv = AB::F::from_u32((1 << U16_BITS) as u32).inverse();
         let carry = (limbs_01 + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
 
         builder.when(is_valid.clone()).assert_bool(carry.clone());
@@ -188,12 +188,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         builder
             .when(is_valid.clone())
             .assert_bool(local_cols.imm_sign);
-        let imm_extend_limb =
-            local_cols.imm_sign * AB::F::from_u32((1 << (RV64_BYTE_BITS * 2)) - 1);
+        let imm_extend_limb = local_cols.imm_sign * AB::F::from_u32(u16::MAX as u32);
         let carry = (limbs_23 + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
         builder.when(is_valid.clone()).assert_bool(carry.clone());
 
-        // preventing mem_ptr overflow
+        // Prevent mem_ptr overflow.
         self.range_bus
             .range_check(
                 // (limb[0] - shift_amount) / 8 < 2^13 => limb[0] - shift_amount < 2^16
@@ -210,7 +209,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             .eval(builder, is_valid.clone());
 
         let mem_ptr = local_cols.mem_ptr_limbs[0]
-            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1 << U16_BITS);
+            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32((1 << U16_BITS) as u32);
 
         let is_store = is_valid.clone() - is_load.clone();
         // constrain mem_as to be in {0, 1, 2} if the instruction is a load,
@@ -255,6 +254,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         let write_ptr = select::<AB::Expr>(is_load.clone(), local_cols.rd_rs2_ptr, mem_ptr.clone())
             - store_shift_amount;
 
+        // The core supplies the previous write bytes; this adapter stores only the base aux
+        // columns.
         let prev_data_expr: [AB::Expr; MEMORY_BLOCK_BYTES] = ctx.reads.0.map(Into::into);
         self.memory_bridge
             .write(
@@ -387,7 +388,7 @@ where
 
         record.imm = c.as_canonical_u32() as u16;
         record.imm_sign = g.is_one();
-        let imm_extended = record.imm as u32 + record.imm_sign as u32 * 0xffff0000;
+        let imm_extended = sign_extend_imm16(record.imm as u32, record.imm_sign as u32);
 
         let ptr_val = rs1_val.wrapping_add(imm_extended);
         let shift_amount = ptr_val & (RV64_REGISTER_NUM_LIMBS as u32 - 1);
@@ -415,6 +416,10 @@ where
                 let e = e.as_canonical_u32();
                 debug_assert_ne!(e, RV64_IMM_AS);
                 debug_assert_ne!(e, RV64_REGISTER_AS);
+                if e == DEFERRAL_AS {
+                    // TODO: Remove loadstore read/write support for DEFERRAL_AS.
+                    unreachable!("STORE to DEFERRAL_AS is unsupported");
+                }
                 record.mem_as = e as u8;
                 let read_data = tracing_read(
                     memory,
@@ -422,11 +427,7 @@ where
                     a.as_canonical_u32(),
                     &mut record.read_data_aux.prev_timestamp,
                 );
-                let prev_data = if e == DEFERRAL_AS {
-                    memory_read_deferral(memory.data(), ptr_val).map(|x: F| x.as_canonical_u32())
-                } else {
-                    memory_read(memory.data(), e, ptr_val).map(u32::from)
-                };
+                let prev_data = memory_read(memory.data(), e, ptr_val).map(u32::from);
                 (read_data, prev_data)
             }
         };
@@ -464,16 +465,14 @@ where
 
             record.write_prev_timestamp = match local_opcode {
                 STORED | STOREW | STOREH | STOREB => {
-                    let imm_extended = record.imm as u32 + record.imm_sign as u32 * 0xffff0000;
+                    let imm_extended = sign_extend_imm16(record.imm as u32, record.imm_sign as u32);
                     let ptr = record.rs1_val.wrapping_add(imm_extended)
                         & !(RV64_REGISTER_NUM_LIMBS as u32 - 1);
-
                     if record.mem_as == DEFERRAL_AS as u8 {
-                        // TODO: Remove STORED-to-DEFERRAL_AS support from loadstore.
-                        unreachable!("STORED to DEFERRAL_AS is unsupported")
-                    } else {
-                        timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
+                        // TODO: Remove loadstore read/write support for DEFERRAL_AS.
+                        unreachable!("STORE to DEFERRAL_AS is unsupported");
                     }
+                    timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
                 }
                 LOADD | LOADW | LOADB | LOADH | LOADWU | LOADBU | LOADHU => {
                     timed_write(
@@ -524,14 +523,14 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
         adapter_row.mem_as = F::from_u8(record.mem_as);
         let ptr = record
             .rs1_val
-            .wrapping_add(record.imm as u32 + record.imm_sign as u32 * 0xffff0000);
+            .wrapping_add(sign_extend_imm16(record.imm as u32, record.imm_sign as u32));
 
-        let ptr_limbs = ptr_to_u16_limbs(ptr);
+        let ptr_limbs = ptr_to_u16_limbs(ptr).map(u32::from);
         self.range_checker_chip
-            .add_count(u32::from(ptr_limbs[0]) >> 3, U16_BITS - 3);
+            .add_count(ptr_limbs[0] >> 3, U16_BITS - 3);
         self.range_checker_chip
-            .add_count(u32::from(ptr_limbs[1]), self.pointer_max_bits - U16_BITS);
-        adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_u16);
+            .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
+        adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_u32);
 
         adapter_row.imm_sign = F::from_bool(record.imm_sign);
         adapter_row.imm = F::from_u16(record.imm);
@@ -553,7 +552,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
             adapter_row.rs1_aux_cols.as_mut(),
         );
 
-        adapter_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_u8);
+        adapter_row.rs1_data = ptr_to_field_u16_limbs(record.rs1_val);
         adapter_row.rs1_ptr = F::from_u32(record.rs1_ptr);
 
         adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);

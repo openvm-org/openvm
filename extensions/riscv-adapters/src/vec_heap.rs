@@ -21,18 +21,19 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    abstract_compose, byte_ptr_to_u16_ptr, expand_to_rv64_register, tracing_read,
-    tracing_read_reg_ptr, tracing_write, RV64_BYTE_BITS,
+    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, ptr_bound_from_ptr,
+    ptr_to_field_u16_limbs, tracing_read, tracing_read_reg_ptr, tracing_write, u16_limbs_to_ptr,
+    RV64_PTR_U16_LIMBS, U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -60,8 +61,8 @@ pub struct Rv64VecHeapAdapterCols<
     pub rs_ptr: [T; NUM_READS],
     pub rd_ptr: T,
 
-    pub rs_val: [[T; RV64_WORD_NUM_LIMBS]; NUM_READS],
-    pub rd_val: [T; RV64_WORD_NUM_LIMBS],
+    pub rs_val: [[T; RV64_PTR_U16_LIMBS]; NUM_READS],
+    pub rd_val: [T; RV64_PTR_U16_LIMBS],
 
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
     pub rd_read_aux: MemoryReadAuxCols<T>,
@@ -80,7 +81,7 @@ pub struct Rv64VecHeapAdapterAir<
 > {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
-    pub bus: BitwiseOperationLookupBus,
+    pub range_bus: VariableRangeCheckerBus,
     /// The max number of bits for an address in memory
     address_bits: usize,
 }
@@ -128,7 +129,7 @@ impl<
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Read register values for rs, rd
+        // Read register values for rs, rd.
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux).chain(once((
             cols.rd_ptr,
             cols.rd_val,
@@ -140,50 +141,27 @@ impl<
                         AB::F::from_u32(RV64_REGISTER_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
-                    pack_u8_block::<AB>(&expand_to_rv64_register(&val)),
+                    expand_to_rv64_block(&val),
                     timestamp_pp(),
                     aux,
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // We constrain the highest limb of each materialized pointer (limb 3, i.e. the most
-        // significant of the low 4 bytes) to be less than 2^(addr_bits - RV64_BYTE_BITS * 3).
-        // Combined with the zero padding on bytes 4..8 in the memory bus interaction above and
-        // the memory argument, this ensures that every heap address accessed below is less than
-        // 2^addr_bits without any extra explicit assertion.
-        let need_range_check: Vec<AB::Var> = cols
-            .rs_val
-            .iter()
-            .chain(std::iter::repeat_n(&cols.rd_val, 2))
-            .map(|val| val[RV64_WORD_NUM_LIMBS - 1])
-            .collect();
-
-        // Range checks constrain to RV64_BYTE_BITS bits, so we need to shift the limbs to
-        // constrain the correct amount of bits
-        let limb_shift =
-            AB::F::from_usize(1 << (RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
-
-        // Note: since limbs are read from memory we already know that limb[i] < 2^RV64_BYTE_BITS
-        //       thus range checking limb[i] * shift < 2^RV64_BYTE_BITS, gives us that
-        //       limb[i] < 2^(addr_bits - (RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1)))
-        for pair in need_range_check.chunks_exact(2) {
-            self.bus
-                .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
+        // Each materialized pointer is stored as two u16 cells. Bound the high
+        // cell so `lo + 2^16 * hi < 2^address_bits`.
+        for val in cols.rs_val.iter().chain(once(&cols.rd_val)) {
+            self.range_bus
+                .range_check(
+                    ptr_bound_from_high_u16_expr(val[1], self.address_bits),
+                    U16_BITS,
+                )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
-        for val in cols.rs_val.iter().chain(std::iter::once(&cols.rd_val)) {
-            for bytes in val.chunks_exact(2) {
-                self.bus
-                    .send_range(bytes[0], bytes[1])
-                    .eval(builder, ctx.instruction.is_valid.clone());
-            }
-        }
 
-        // Compose the 4 materialized bytes of each register value into a single field element
-        // used as a memory address.
-        let rd_val_f: AB::Expr = abstract_compose(cols.rd_val);
-        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(abstract_compose);
+        // Compose the two u16 cells into low 32-bit heap/register pointers.
+        let rd_val_f: AB::Expr = u16_limbs_to_ptr(&cols.rd_val);
+        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(|limbs| u16_limbs_to_ptr(&limbs));
 
         let e = AB::F::from_u32(RV64_MEMORY_AS);
         // Reads from heap
@@ -292,7 +270,7 @@ pub struct Rv64VecHeapAdapterFiller<
     const BLOCKS_PER_WRITE: usize,
 > {
     pointer_max_bits: usize,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<
@@ -412,36 +390,9 @@ impl<
         let cols: &mut Rv64VecHeapAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
             adapter_row.borrow_mut();
 
-        // Range checks:
-        // **NOTE**: Must do the range checks before overwriting the records
-        debug_assert!(self.pointer_max_bits <= RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS);
-        let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits;
-        const MSL_SHIFT: usize = RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1);
-        if NUM_READS > 1 {
-            self.bitwise_lookup_chip.request_range(
-                (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
-                (record.rs_vals[1] >> MSL_SHIFT) << limb_shift_bits,
-            );
-            self.bitwise_lookup_chip.request_range(
-                (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
-                (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
-            );
-        } else {
-            self.bitwise_lookup_chip.request_range(
-                (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
-                (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
-            );
-        }
-        for val in record
-            .rs_vals
-            .iter()
-            .copied()
-            .chain(std::iter::once(record.rd_val))
-        {
-            for bytes in val.to_le_bytes().chunks_exact(2) {
-                self.bitwise_lookup_chip
-                    .request_range(bytes[0] as u32, bytes[1] as u32);
-            }
+        for &ptr in record.rs_vals.iter().chain(once(&record.rd_val)) {
+            self.range_checker_chip
+                .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
         }
 
         let timestamp_delta = NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;
@@ -492,13 +443,13 @@ impl<
                 mem_helper.fill(aux.prev_timestamp, timestamp_mm(), cols_aux.as_mut());
             });
 
-        cols.rd_val = record.rd_val.to_le_bytes().map(F::from_u8);
+        cols.rd_val = ptr_to_field_u16_limbs(record.rd_val);
         cols.rs_val
             .iter_mut()
             .rev()
             .zip(record.rs_vals.iter().rev())
             .for_each(|(cols_val, val)| {
-                *cols_val = val.to_le_bytes().map(F::from_u8);
+                *cols_val = ptr_to_field_u16_limbs(*val);
             });
         cols.rd_ptr = F::from_u32(record.rd_ptr);
         cols.rs_ptr

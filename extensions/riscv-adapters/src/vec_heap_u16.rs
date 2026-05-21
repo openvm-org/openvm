@@ -31,8 +31,9 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, ptr_to_u16_limbs, tracing_read_reg_ptr,
-    tracing_read_u16, tracing_write_u16, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block,
+    ptr_bound_from_high_u16_expr, ptr_bound_from_ptr, ptr_to_u16_limbs, tracing_read_reg_ptr,
+    tracing_read_u16, tracing_write_u16, u16_limbs_to_ptr, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -136,8 +137,7 @@ impl<
             cols.rd_val,
             &cols.rd_read_aux,
         ))) {
-            let bus_payload: [AB::Expr; BLOCK_FE_WIDTH] =
-                [val[0].into(), val[1].into(), AB::Expr::ZERO, AB::Expr::ZERO];
+            let bus_payload: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&val);
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
@@ -151,20 +151,20 @@ impl<
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Constrain the high u16 limb of each materialized pointer.
-        let limb_shift = AB::F::from_u32(1 << (RV64_PTR_BITS - self.address_bits));
+        // Each materialized pointer is stored as two u16 cells. Bound the high
+        // cell so `lo + 2^16 * hi < 2^address_bits`.
         for val in cols.rs_val.iter().chain(once(&cols.rd_val)) {
             self.range_bus
-                .range_check(val[1] * limb_shift, U16_BITS)
+                .range_check(
+                    ptr_bound_from_high_u16_expr(val[1], self.address_bits),
+                    U16_BITS,
+                )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Compose the materialized u16 cells of each register value into a memory address.
-        let compose = |val: [AB::Var; RV64_PTR_U16_LIMBS]| -> AB::Expr {
-            val[0] + val[1] * AB::F::from_u32(1 << U16_BITS)
-        };
-        let rd_val_f: AB::Expr = compose(cols.rd_val);
-        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(compose);
+        // Compose the two u16 cells into low 32-bit heap/register pointers.
+        let rd_val_f: AB::Expr = u16_limbs_to_ptr(&cols.rd_val);
+        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(|limbs| u16_limbs_to_ptr(&limbs));
 
         let e = AB::F::from_u32(RV64_MEMORY_AS);
         // Reads from heap
@@ -393,11 +393,9 @@ impl<
 
         // Range checks:
         // **NOTE**: Must do the range checks before overwriting the records
-        debug_assert!(self.pointer_max_bits <= RV64_PTR_BITS);
-        let limb_shift_bits = RV64_PTR_BITS - self.pointer_max_bits;
         for &v in record.rs_vals.iter().chain(once(&record.rd_val)) {
             self.range_checker_chip
-                .add_count((v >> U16_BITS) << limb_shift_bits, U16_BITS);
+                .add_count(ptr_bound_from_ptr(v, self.pointer_max_bits), U16_BITS);
         }
 
         let timestamp_delta = NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;

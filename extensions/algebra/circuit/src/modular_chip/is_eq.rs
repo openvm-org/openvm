@@ -9,13 +9,13 @@ use openvm_circuit::{
     arch::*,
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
+        MemoryAuxColsFactory, POINTER_MAX_BITS,
     },
 };
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     is_equal_array::{IsEqArrayIo, IsEqArraySubAir},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
     TraceSubRowGenerator,
 };
@@ -26,7 +26,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_adapters::Rv64IsEqualModAdapterExecutor;
+use openvm_riscv_adapters::Rv64IsEqualModU16AdapterExecutor;
 use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -35,7 +35,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues,
 };
 
-use crate::modular_chip::VmModularIsEqualExecutor;
+use crate::modular_chip::VmModularIsEqualU16Executor;
 // Given two numbers b and c, we want to prove that a) b == c or b != c, depending on
 // result of cmp_result and b) b, c < N for some modulus N that is passed into the AIR
 // at runtime (i.e. when chip is instantiated).
@@ -76,7 +76,7 @@ pub struct ModularIsEqualCoreAir<
     const WRITE_LIMBS: usize,
     const LIMB_BITS: usize,
 > {
-    pub bus: BitwiseOperationLookupBus,
+    pub range_bus: VariableRangeCheckerBus,
     pub subair: IsEqArraySubAir<READ_LIMBS>,
     pub modulus_limbs: [u32; READ_LIMBS],
     pub offset: usize,
@@ -85,7 +85,7 @@ pub struct ModularIsEqualCoreAir<
 impl<const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
     ModularIsEqualCoreAir<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 {
-    pub fn new(modulus: BigUint, bus: BitwiseOperationLookupBus, offset: usize) -> Self {
+    pub fn new(modulus: BigUint, range_bus: VariableRangeCheckerBus, offset: usize) -> Self {
         let mod_vec = big_uint_to_limbs(&modulus, LIMB_BITS);
         assert!(mod_vec.len() <= READ_LIMBS);
         let modulus_limbs = array::from_fn(|i| {
@@ -96,7 +96,7 @@ impl<const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
             }
         });
         Self {
-            bus,
+            range_bus,
             subair: IsEqArraySubAir::<READ_LIMBS>,
             modulus_limbs,
             offset,
@@ -146,15 +146,6 @@ where
             condition: cols.is_valid - cols.is_setup,
         };
         self.subair.eval(builder, (eq_subair_io, cols.eq_marker));
-
-        for (b_pair, c_pair) in cols.b.chunks_exact(2).zip(cols.c.chunks_exact(2)) {
-            self.bus
-                .send_range(b_pair[0], b_pair[1])
-                .eval(builder, cols.is_valid);
-            self.bus
-                .send_range(c_pair[0], c_pair[1])
-                .eval(builder, cols.is_valid);
-        }
 
         // Constrain that auxiliary columns lt_columns and c_lt_mark are as defined above.
         // When c_lt_mark is 1, lt_marker should have exactly one index i where lt_marker[i]
@@ -261,12 +252,14 @@ where
                 .assert_eq(AB::Expr::from(modulus[i]) - cols.c[i], cols.c_lt_diff);
         }
 
-        // Check that b_lt_diff and c_lt_diff are positive
-        self.bus
-            .send_range(
-                cols.b_lt_diff - AB::Expr::ONE,
-                cols.c_lt_diff - AB::Expr::ONE,
-            )
+        // Check that b_lt_diff and c_lt_diff are positive: each is in [1, 2^LIMB_BITS], so
+        // (b_lt_diff - 1) and (c_lt_diff - 1) lie in [0, 2^LIMB_BITS), which we enforce via two
+        // LIMB_BITS-bit range checks on the variable range checker.
+        self.range_bus
+            .range_check(cols.b_lt_diff - AB::Expr::ONE, LIMB_BITS)
+            .eval(builder, cols.is_valid - cols.is_setup);
+        self.range_bus
+            .range_check(cols.c_lt_diff - AB::Expr::ONE, LIMB_BITS)
             .eval(builder, cols.is_valid - cols.is_setup);
 
         let expected_opcode = AB::Expr::from_usize(self.offset)
@@ -298,8 +291,8 @@ where
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct ModularIsEqualRecord<const READ_LIMBS: usize> {
     pub is_setup: bool,
-    pub b: [u8; READ_LIMBS],
-    pub c: [u8; READ_LIMBS],
+    pub b: [u16; READ_LIMBS],
+    pub c: [u16; READ_LIMBS],
 }
 
 #[derive(derive_new::new, Clone)]
@@ -311,7 +304,7 @@ pub struct ModularIsEqualExecutor<
 > {
     adapter: A,
     pub offset: usize,
-    pub modulus_limbs: [u8; READ_LIMBS],
+    pub modulus_limbs: [u16; READ_LIMBS],
 }
 
 #[derive(derive_new::new, Clone)]
@@ -323,8 +316,8 @@ pub struct ModularIsEqualFiller<
 > {
     adapter: A,
     pub offset: usize,
-    pub modulus_limbs: [u8; READ_LIMBS],
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    pub modulus_limbs: [u16; READ_LIMBS],
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<F, A, RA, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
@@ -334,8 +327,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData: Into<[[u8; READ_LIMBS]; 2]>,
-            WriteData: From<[u8; WRITE_LIMBS]>,
+            ReadData: Into<[[u16; READ_LIMBS]; 2]>,
+            WriteData: From<[u16; WRITE_LIMBS]>,
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -371,8 +364,8 @@ where
         core_record.is_setup = instruction.opcode.local_opcode_idx(self.offset)
             == Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize;
 
-        let mut write_data = [0u8; WRITE_LIMBS];
-        write_data[0] = (core_record.b == core_record.c) as u8;
+        let mut write_data = [0u16; WRITE_LIMBS];
+        write_data[0] = (core_record.b == core_record.c) as u16;
 
         self.adapter.write(
             state.memory,
@@ -416,13 +409,6 @@ where
         let (c_cmp, c_diff_idx) =
             run_unsigned_less_than::<READ_LIMBS>(&record.c, &self.modulus_limbs);
 
-        for (b_pair, c_pair) in record.b.chunks_exact(2).zip(record.c.chunks_exact(2)) {
-            self.bitwise_lookup_chip
-                .request_range(b_pair[0] as u32, b_pair[1] as u32);
-            self.bitwise_lookup_chip
-                .request_range(c_pair[0] as u32, c_pair[1] as u32);
-        }
-
         if !record.is_setup {
             assert!(b_cmp, "{:?} >= {:?}", record.b, self.modulus_limbs);
         }
@@ -435,12 +421,18 @@ where
             F::TWO
         };
 
-        cols.c_lt_diff = F::from_u8(self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx]);
+        cols.c_lt_diff = F::from_u16(self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx]);
         if !record.is_setup {
-            cols.b_lt_diff = F::from_u8(self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx]);
-            self.bitwise_lookup_chip.request_range(
+            cols.b_lt_diff = F::from_u16(self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx]);
+            // Mirror the AIR's two LIMB_BITS-wide range checks on (b_lt_diff - 1) and
+            // (c_lt_diff - 1) via the variable range checker.
+            self.range_checker_chip.add_count(
                 (self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx] - 1) as u32,
+                LIMB_BITS,
+            );
+            self.range_checker_chip.add_count(
                 (self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx] - 1) as u32,
+                LIMB_BITS,
             );
         } else {
             cols.b_lt_diff = F::ZERO;
@@ -456,8 +448,8 @@ where
             }
         });
 
-        cols.c = record.c.map(F::from_u8);
-        cols.b = record.b.map(F::from_u8);
+        cols.c = record.c.map(F::from_u16);
+        cols.b = record.b.map(F::from_u16);
         let sub_air = IsEqArraySubAir::<READ_LIMBS>;
         sub_air.generate_subrow(
             (&cols.b, &cols.c),
@@ -470,27 +462,29 @@ where
 }
 
 impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
-    VmModularIsEqualExecutor<NUM_LANES, TOTAL_LIMBS>
+    VmModularIsEqualU16Executor<NUM_LANES, TOTAL_LIMBS>
 {
     pub fn new(
-        adapter: Rv64IsEqualModAdapterExecutor<2, NUM_LANES, TOTAL_LIMBS>,
+        adapter: Rv64IsEqualModU16AdapterExecutor<2, NUM_LANES, TOTAL_LIMBS>,
         offset: usize,
-        modulus_limbs: [u8; TOTAL_LIMBS],
+        modulus_limbs: [u16; TOTAL_LIMBS],
     ) -> Self {
         Self(ModularIsEqualExecutor::new(adapter, offset, modulus_limbs))
     }
 }
 
+// Host-side fast execute precompute. The trace uses u16 limbs, while the host fast path reads the
+// same memory as bytes to preserve the existing VM memory API.
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-struct ModularIsEqualPreCompute<const READ_LIMBS: usize> {
+struct ModularIsEqualPreCompute<const TOTAL_READ_SIZE: usize> {
     a: u8,
     rs_addrs: [u8; 2],
-    modulus_limbs: [u8; READ_LIMBS],
+    modulus_limbs: [u16; TOTAL_READ_SIZE],
 }
 
 impl<const NUM_LANES: usize, const TOTAL_READ_SIZE: usize>
-    VmModularIsEqualExecutor<NUM_LANES, TOTAL_READ_SIZE>
+    VmModularIsEqualU16Executor<NUM_LANES, TOTAL_READ_SIZE>
 {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -552,7 +546,7 @@ macro_rules! dispatch {
 }
 
 impl<F, const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterExecutor<F>
-    for VmModularIsEqualExecutor<NUM_LANES, TOTAL_READ_SIZE>
+    for VmModularIsEqualU16Executor<NUM_LANES, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
@@ -593,14 +587,14 @@ where
 
 #[cfg(feature = "aot")]
 impl<F, const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> AotExecutor<F>
-    for VmModularIsEqualExecutor<NUM_LANES, TOTAL_READ_SIZE>
+    for VmModularIsEqualU16Executor<NUM_LANES, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
 }
 
 impl<F, const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterMeteredExecutor<F>
-    for VmModularIsEqualExecutor<NUM_LANES, TOTAL_READ_SIZE>
+    for VmModularIsEqualU16Executor<NUM_LANES, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
@@ -646,7 +640,7 @@ where
 
 #[cfg(feature = "aot")]
 impl<F, const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> AotMeteredExecutor<F>
-    for VmModularIsEqualExecutor<NUM_LANES, TOTAL_READ_SIZE>
+    for VmModularIsEqualU16Executor<NUM_LANES, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
@@ -710,46 +704,82 @@ unsafe fn execute_e12_impl<
     // Read register values (RV64: read 8 bytes, assert upper 4 are zero, cast to u32)
     let rs_vals = pre_compute
         .rs_addrs
-        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
+        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
 
-    // Read memory values
-    let [b, c]: [[u8; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
-        debug_assert!(address as usize + TOTAL_READ_SIZE - 1 < RV64_MEMORY_BYTES);
-        from_fn::<_, NUM_LANES, _>(|i| {
-            exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
-                RV64_MEMORY_AS,
-                address + (i * MEMORY_BLOCK_BYTES) as u32,
-            )
-        })
-        .concat()
-        .try_into()
-        .unwrap()
-    });
+    // On-chip limbs are u16 cells; read the same BLOCK_FE_WIDTH-cell chunks as bytes.
+    let total_bytes: usize = TOTAL_READ_SIZE * size_of::<u16>();
+    let mut b_bytes: Vec<u8> = Vec::with_capacity(total_bytes);
+    let mut c_bytes: Vec<u8> = Vec::with_capacity(total_bytes);
+    debug_assert!(rs_vals[0] as usize + total_bytes - 1 < (1 << POINTER_MAX_BITS));
+    debug_assert!(rs_vals[1] as usize + total_bytes - 1 < (1 << POINTER_MAX_BITS));
+    for i in 0..NUM_LANES {
+        let bb: [u8; MEMORY_BLOCK_BYTES] = exec_state.vm_read::<u8, MEMORY_BLOCK_BYTES>(
+            RV64_MEMORY_AS,
+            rs_vals[0] + (i * MEMORY_BLOCK_BYTES) as u32,
+        );
+        let cc: [u8; MEMORY_BLOCK_BYTES] = exec_state.vm_read::<u8, MEMORY_BLOCK_BYTES>(
+            RV64_MEMORY_AS,
+            rs_vals[1] + (i * MEMORY_BLOCK_BYTES) as u32,
+        );
+        b_bytes.extend_from_slice(&bb);
+        c_bytes.extend_from_slice(&cc);
+    }
+    let b_bytes: &[u8] = &b_bytes;
+    let c_bytes: &[u8] = &c_bytes;
 
     if !IS_SETUP {
-        let (b_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&b, &pre_compute.modulus_limbs);
-        debug_assert!(b_cmp, "{:?} >= {:?}", b, pre_compute.modulus_limbs);
+        debug_assert!(
+            bytes_lt_u16_modulus(b_bytes, &pre_compute.modulus_limbs),
+            "{:?} >= modulus {:?}",
+            b_bytes,
+            pre_compute.modulus_limbs
+        );
     }
-
-    let (c_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&c, &pre_compute.modulus_limbs);
-    debug_assert!(c_cmp, "{:?} >= {:?}", c, pre_compute.modulus_limbs);
+    debug_assert!(
+        bytes_lt_u16_modulus(c_bytes, &pre_compute.modulus_limbs),
+        "{:?} >= modulus {:?}",
+        c_bytes,
+        pre_compute.modulus_limbs
+    );
 
     // Compute result (RV64: 8-byte result register)
     let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-    write_data[0] = (b == c) as u8;
+    write_data[0] = (b_bytes == c_bytes) as u8;
 
     // Write result to register
-    exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
+    exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
+#[inline(always)]
+fn u16_modulus_byte<const NUM_LIMBS: usize>(modulus: &[u16; NUM_LIMBS], byte_idx: usize) -> u8 {
+    let cell = modulus[byte_idx / 2];
+    if byte_idx.is_multiple_of(2) {
+        cell as u8
+    } else {
+        (cell >> 8) as u8
+    }
+}
+
+#[inline(always)]
+fn bytes_lt_u16_modulus<const NUM_LIMBS: usize>(bytes: &[u8], modulus: &[u16; NUM_LIMBS]) -> bool {
+    debug_assert_eq!(bytes.len(), NUM_LIMBS * size_of::<u16>());
+    for i in (0..bytes.len()).rev() {
+        let m = u16_modulus_byte(modulus, i);
+        if bytes[i] != m {
+            return bytes[i] < m;
+        }
+    }
+    false
+}
+
 // Returns (cmp_result, diff_idx)
 #[inline(always)]
 pub(super) fn run_unsigned_less_than<const NUM_LIMBS: usize>(
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
+    x: &[u16; NUM_LIMBS],
+    y: &[u16; NUM_LIMBS],
 ) -> (bool, usize) {
     for i in (0..NUM_LIMBS).rev() {
         if x[i] != y[i] {
