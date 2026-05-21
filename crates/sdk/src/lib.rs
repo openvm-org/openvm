@@ -470,7 +470,8 @@ where
     }
 
     #[cfg(feature = "root-prover")]
-    /// Constructs an [`EvmProver`] for the given executable with only the root prover
+    /// Constructs an [`EvmProver`] for the given executable with only the root prover, generating
+    /// prerequisite keys, lazily
     pub fn evm_prover_without_halo2(
         &self,
         app_exe: impl Into<ExecutableFormat>,
