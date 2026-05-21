@@ -174,8 +174,8 @@ jobs:
       - name: Smoke test binary
         run: ./target/x86_64-unknown-linux-gnu/release/${BINARY_NAME} openvm --version
 
-      - name: Install guest rust-src
-        run: rustup component add rust-src --toolchain nightly-2026-01-18
+      - name: Install openvm rust toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
       - name: Smoke test CUDA proving
         working-directory: crates/cli

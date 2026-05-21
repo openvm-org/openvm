@@ -1,4 +1,7 @@
-#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(
+    all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")),
+    no_main
+)]
 #![cfg_attr(not(feature = "std"), no_std)]
 #[cfg(feature = "getrandom")]
 compile_error!("this program is not compatible with getrandom v0.2");

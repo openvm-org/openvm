@@ -94,8 +94,8 @@ jobs:
           cargo build --locked --profile fast -p cargo-openvm --features cuda,halo2-gpu
           echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
 
-      - name: Install guest rust-src
-        run: rustup component add rust-src --toolchain nightly-2026-01-18
+      - name: Install openvm rust toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
       - name: Run CLI proving tests (CUDA)
         # SKIP_INSTALL=1 so the tests reuse the CUDA-built cargo-openvm on PATH
@@ -168,8 +168,8 @@ jobs:
           cargo build --locked --profile fast -p cargo-openvm --features cuda,halo2-gpu
           echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
 
-      - name: Install guest rust-src
-        run: rustup component add rust-src --toolchain nightly-2026-01-18
+      - name: Install openvm rust toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
       - name: Verify book examples with verify-stark
         run: |

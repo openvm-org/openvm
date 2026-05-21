@@ -24,4 +24,4 @@ openvm = { path = "../../crates/toolchain/openvm" }
 openvm-bigint-guest = { path = "../../extensions/bigint/guest" }
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(target_os, values("openvm"))'] }

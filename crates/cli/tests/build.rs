@@ -5,7 +5,7 @@ use cargo_openvm::{
     commands::{build, BuildArgs, BuildCargoArgs},
 };
 use eyre::Result;
-use openvm_build::RUSTC_TARGET;
+use openvm_build::get_rustc_target;
 
 fn default_build_test_args(example: &str) -> BuildArgs {
     BuildArgs {
@@ -51,7 +51,7 @@ fn test_build_with_profile() -> Result<()> {
 
     build(&build_args, &cargo_args)?;
     assert!(
-        target_dir.join(RUSTC_TARGET).join("debug").exists(),
+        target_dir.join(get_rustc_target()).join("debug").exists(),
         "did not build with dev profile"
     );
     temp_dir.close()?;

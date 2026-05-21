@@ -17,10 +17,10 @@ The OpenVM Rust frontend supports the following host and guest target and toolch
 
 - **Host**: We support `aarch64-apple-darwin` and `x86_64-unknown-linux-gnu` with Rust 1.91.1.
 For reproducible builds, we recommend using the `x86_64-unknown-linux-gnu` platform.
-- **Guest**: `riscv64im-unknown-none-elf` with Rust `nightly-2026-01-18`: `rustc 1.94.0-nightly (fe98ddcfc 2026-01-17)`.
+- **Guest**: `riscv64im-unknown-openvm-elf` with the prebuilt `openvm-1.94.0` (stable) toolchain from the [openvm-org/rust](https://github.com/openvm-org/rust) fork. Published nightly tarballs (`openvm-nightly-YYYY-MM-DD`) are available for guest code that requires nightly Rust features.
 
 :::info
-We use a nightly Rust toolchain for the guest target in order to compile the Rust standard library for this target because it is a [Tier 3](https://doc.rust-lang.org/beta/rustc/target-tier-policy.html#tier-3-target-policy) target.
+The guest target is a [Tier 3](https://doc.rust-lang.org/beta/rustc/target-tier-policy.html#tier-3-target-policy) target built into the openvm-org/rust fork. The toolchain ships prebuilt `std`/`core`/`alloc`/`panic_abort` rlibs for the target. Install it via `cargo openvm toolchain install`.
 :::
 
 ## Guest Runtime

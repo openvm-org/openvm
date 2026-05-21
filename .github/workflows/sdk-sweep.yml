@@ -161,7 +161,7 @@ jobs:
         if: ${{ matrix.mode == 'cuda' }}
         working-directory: crates/sdk
         run: |
-          rustup component add rust-src --toolchain nightly-2026-01-18
+          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
           TEST_FILTERS=()
           if [[ -n "${{ inputs.test_name }}" ]]; then
