@@ -60,8 +60,8 @@ jobs:
           cargo build --locked --profile fast -p cargo-openvm --features certified-verifier
           echo "${{ github.workspace }}/target/fast" >> "$GITHUB_PATH"
 
-      - name: Install guest rust-src
-        run: rustup component add rust-src --toolchain nightly-2026-01-18
+      - name: Install openvm rust toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
       - name: Run certified verifier tests
         run: |

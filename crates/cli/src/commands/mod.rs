@@ -19,5 +19,8 @@ pub use run::*;
 mod setup;
 pub use setup::*;
 
+mod toolchain;
+pub use toolchain::*;
+
 mod verify;
 pub use verify::*;

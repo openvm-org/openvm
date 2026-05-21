@@ -82,8 +82,8 @@ jobs:
           nvcc --version
           echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
 
-      - name: Install guest rust-src
-        run: rustup component add rust-src --toolchain nightly-2026-01-18
+      - name: Install openvm rust toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
       - name: Run guest library tests
         env:
