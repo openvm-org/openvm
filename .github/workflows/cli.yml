@@ -144,6 +144,10 @@ jobs:
           cd /tmp/openvm-none-elf-smoke
           cargo openvm init smoke-fib
           cd smoke-fib
+          # Exercise this checkout's openvm crate, not the version pinned by the template.
+          local_openvm_path="${{ github.workspace }}/crates/toolchain/openvm"
+          perl -0pi -e 's#openvm = \{ git = "https://github.com/openvm-org/openvm\.git".*?\}#openvm = { path = "'"$local_openvm_path"'" }#' Cargo.toml
+          grep -Fq "openvm = { path = \"$local_openvm_path\" }" Cargo.toml
           cargo openvm build
           cargo openvm run
 
