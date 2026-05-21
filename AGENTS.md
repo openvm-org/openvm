@@ -20,7 +20,8 @@ OpenVM is a modular zkVM (zero-knowledge virtual machine) framework built on STA
 - Rust 1.91.1 (stable), specified in `rust-toolchain.toml`
 - Nightly is only needed for:
   - `rustfmt` (unstable formatting options)
-  - guest program compilation / some integration tests (requires `rust-src`, pinned nightly: `nightly-2026-01-18`)
+  - some workflows that build `cargo-openvm` with experimental features (pinned nightly: `nightly-2026-01-18`)
+- Guest program compilation uses the prebuilt `openvm-nightly-2026-01-18` toolchain from the [openvm-org/rust](https://github.com/openvm-org/rust) fork, installed via `cargo openvm toolchain install` (or `ci/install-openvm-toolchain.sh` in CI). The fork's tarball ships `std`/`core`/`alloc`/`panic_abort` rlibs for `riscv64im-unknown-openvm-elf`.
 
 ### Building
 
@@ -64,8 +65,8 @@ cargo nextest run --cargo-profile=fast -p openvm-circuit -- test_name
 # Run tests in a working directory (as CI does)
 cd extensions/riscv/circuit && cargo nextest run --cargo-profile=fast
 
-# Integration tests for extensions (requires nightly rust-src for guest program compilation)
-rustup component add rust-src --toolchain nightly-2026-01-18
+# Integration tests for extensions (requires the openvm rust toolchain)
+cargo openvm toolchain install
 cd extensions/riscv/tests && cargo nextest run --cargo-profile=fast --profile=heavy
 
 # Run with parallelism (used in CI)
@@ -75,6 +76,8 @@ cargo nextest run --cargo-profile=fast --features parallel
 ### Environment Variables for Tests
 
 - `OPENVM_SKIP_DEBUG=1`: Skips debug-mode constraint checking in `air_test` (faster CI runs)
+- `OPENVM_RUST_TOOLCHAIN`: Override the rustup toolchain name used by `cargo openvm build`. Default is the `openvm-<rustup-name>` compiled into `cargo-openvm`. Set this to swap in a custom rustc fork.
+- `OPENVM_TARGET`: Override the rustc target triple used by `cargo openvm build`. Default is `riscv64im-unknown-openvm-elf`, the tier-3 target defined in the [openvm-org/rust](https://github.com/openvm-org/rust) fork. Any rv64im-flavored target works, but the user is responsible for ensuring the chosen toolchain supports it (i.e. ships the corresponding prebuilt rlibs in its sysroot).
 
 ### Nextest Profiles
 
@@ -148,7 +151,7 @@ Naming convention: `FooExecutor`, `FooFiller`, `FooCoreAir` for a chip named `Fo
 Guest programs (run inside the VM) use `#![no_main]` / `#![no_std]` with `openvm::entry!(main)`:
 
 ```rust
-#![cfg_attr(target_os = "none", no_main)]
+#![cfg_attr(all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 openvm::entry!(main);
@@ -160,13 +163,31 @@ Guest programs are compiled to RISC-V ELF, then transpiled to OpenVM instruction
 
 ### Cfg conventions
 
-Guest code gates on three independent axes — keep them separate:
+Guest code is gated on **two predicates**:
 
-- `cfg(openvm_intrinsics)` — set by `cargo openvm build` rustflags; selects guest-specific codegen. Unset under host `cargo check`/`clippy`.
-- `cfg(not(feature = "std"))` — gates `#![no_std]`. The `std` feature forwards to `openvm/std`.
-- `cfg(target_os = "none")` — gates `#![no_main]` and `openvm::entry!(main)` registration.
+1. **`cfg(any(openvm_intrinsics, target_os = "openvm"))`** — "we are building for the openvm runtime". True when either:
+   - the target is `riscv64im-unknown-openvm-elf` (the openvm-fork's built-in target spec sets `target_os = "openvm"`), or
+   - the `openvm_intrinsics` cfg is set explicitly — `cargo openvm build` sets this rustflag; an opt-in path for using openvm runtime on a generic rv64im target (e.g. `riscv64im-unknown-none-elf`) would also set it.
 
-For host `cargo check`/`clippy`, guest crates need `[lints.rust] unexpected_cfgs = { check-cfg = ['cfg(openvm_intrinsics)'] }` in their `Cargo.toml` (or `[lints] workspace = true`). `cargo openvm init` adds this automatically.
+   All openvm-specific codegen — custom RISC-V opcodes via inline asm, the custom `_start`, memset/memcpy, the `entry!` wrapper that exposes `main` — gates on this. Host `cargo check`/`clippy` matches neither cfg and excludes guest code cleanly.
+
+2. **`cfg(feature = "std")`** — std is being linked. Orthogonal to the runtime predicate. The `openvm` crate's `std` feature forwards to std-linking deps.
+
+Combined gates appear in a handful of places:
+
+- `all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm"))` — gates `#![no_main]` in guest programs and the `entry!` wrapper definition (the variant that emits `#[no_mangle] fn main()` so the custom `_start` can call it). In std mode, Rust's runtime emits `main`; we must not duplicate it.
+- `all(feature = "std", target_os = "openvm")` — gates the `pal_abi` module. The std PAL only exists for `target_os = "openvm"` (it ships in the openvm-fork's `library/std/src/sys/pal/openvm/`); a generic `target_os = "none"` build cannot link std regardless of `openvm_intrinsics`, so `pal_abi` would be dead code there.
+
+**Cargo.toml target-specific dependency tables** can only see target cfgs (Cargo doesn't pass `--cfg` flags to manifest evaluation), so use the target-only form: `[target.'cfg(all(target_arch = "riscv64", any(target_os = "none", target_os = "openvm")))'.dependencies]` for guest-only deps, `[target.'cfg(not(any(target_os = "none", target_os = "openvm")))'.dependencies]` for host-only deps. Including the `target_os = "none"` term lets a future generic rv64im opt-in (via `openvm_intrinsics`) still pick up the right deps without further Cargo.toml edits.
+
+**check-cfg** — guest crates need both names declared so stable-rustc host checks don't warn on them:
+
+```toml
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(target_os, values("openvm"))'] }
+```
+
+`cargo openvm init` adds this automatically.
 
 ### Integration Test Pattern
 

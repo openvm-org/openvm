@@ -52,13 +52,13 @@ use core::{
 };
 
 pub use field::Field;
-#[cfg(not(openvm_intrinsics))]
+#[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 use num_bigint::BigUint;
 pub use openvm_algebra_complex_macros as complex_macros;
 pub use openvm_algebra_moduli_macros as moduli_macros;
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 pub use openvm_custom_insn;
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 pub use openvm_riscv_guest;
 pub use serde_big_array::BigArray;
 use strum_macros::FromRepr;
@@ -66,7 +66,10 @@ use strum_macros::FromRepr;
 /// Implementation of this library's traits on halo2curves types.
 /// Used for testing and also VM runtime execution.
 /// These should **only** be importable on a host machine.
-#[cfg(all(not(openvm_intrinsics), feature = "halo2curves"))]
+#[cfg(all(
+    not(any(openvm_intrinsics, target_os = "openvm")),
+    feature = "halo2curves"
+))]
 mod halo2curves;
 
 /// Exponentiation by bytes
@@ -188,15 +191,15 @@ pub trait IntMod:
     fn to_be_bytes(&self) -> Self::Repr;
 
     /// Modulus N as a BigUint.
-    #[cfg(not(openvm_intrinsics))]
+    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
     fn modulus_biguint() -> BigUint;
 
     /// Creates a new IntMod from a BigUint.
-    #[cfg(not(openvm_intrinsics))]
+    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
     fn from_biguint(biguint: BigUint) -> Self;
 
     /// Value of this IntMod as a BigUint.
-    #[cfg(not(openvm_intrinsics))]
+    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
     fn as_biguint(&self) -> BigUint;
 
     fn neg_assign(&mut self);

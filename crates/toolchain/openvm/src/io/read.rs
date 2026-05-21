@@ -1,7 +1,7 @@
 use core::mem::MaybeUninit;
 
 use openvm_platform::WORD_SIZE;
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 use openvm_riscv_guest::hint_buffer_chunked;
 
 use super::hint_store_word;
@@ -30,9 +30,13 @@ impl WordRead for Reader {
     fn read_words(&mut self, words: &mut [u64]) -> crate::serde::Result<()> {
         let num_words = words.len();
         if let Some(new_remaining) = self.bytes_remaining.checked_sub(num_words * WORD_SIZE) {
-            #[cfg(openvm_intrinsics)]
-            hint_buffer_chunked(words.as_mut_ptr() as *mut u8, words.len());
-            #[cfg(not(openvm_intrinsics))]
+            // SAFETY: `words` is a valid `&mut [u64]` of `num_words` elements, so its
+            // pointer is valid for `num_words * WORD_SIZE` bytes of writes.
+            #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+            unsafe {
+                hint_buffer_chunked(words.as_mut_ptr() as *mut u8, words.len());
+            }
+            #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
             {
                 for w in words.iter_mut() {
                     hint_store_word(w);
@@ -50,9 +54,13 @@ impl WordRead for Reader {
             return Err(crate::serde::Error::DeserializeUnexpectedEnd);
         }
         let mut num_padded_bytes = bytes.len();
-        #[cfg(openvm_intrinsics)]
-        hint_buffer_chunked(bytes.as_mut_ptr(), num_padded_bytes / WORD_SIZE);
-        #[cfg(not(openvm_intrinsics))]
+        // SAFETY: `bytes` is a valid `&mut [u8]`, and we only write `(num_padded_bytes /
+        // WORD_SIZE) * WORD_SIZE` bytes — which is at most `bytes.len()`.
+        #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+        unsafe {
+            hint_buffer_chunked(bytes.as_mut_ptr(), num_padded_bytes / WORD_SIZE);
+        }
+        #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
         {
             let mut words = bytes.chunks_exact_mut(WORD_SIZE);
             for word in &mut words {

@@ -36,13 +36,46 @@ macro_rules! hint_buffer_u64 {
 
 /// Read hint buffer with automatic chunking for large reads.
 /// Splits reads larger than MAX_HINT_BUFFER_DWORDS into multiple instructions.
+///
+/// # Safety
+///
+/// `ptr` must be valid for writes of `num_dwords * HINT_WORD_BYTES` bytes.
 #[inline(always)]
-pub fn hint_buffer_chunked(mut ptr: *mut u8, mut num_dwords: usize) {
+pub unsafe fn hint_buffer_chunked(mut ptr: *mut u8, mut num_dwords: usize) {
     while num_dwords > 0 {
         let chunk = core::cmp::min(num_dwords, MAX_HINT_BUFFER_DWORDS);
         hint_buffer_u64!(ptr, chunk);
         ptr = ptr.wrapping_add(chunk * 8);
         num_dwords -= chunk;
+    }
+}
+
+/// Read `nbytes` from the hint stream into `ptr`. The underlying instruction is
+/// `HINT_WORD_BYTES`-granular; any trailing bytes (0..HINT_WORD_BYTES) are written
+/// via a stack scratch dword so the caller's buffer isn't over-written.
+///
+/// # Safety
+///
+/// `ptr` must be valid for writes of `nbytes` bytes.
+#[inline]
+pub unsafe fn hint_buffer_bytes(ptr: *mut u8, nbytes: usize) {
+    if nbytes == 0 {
+        return;
+    }
+    let full_dwords = nbytes / HINT_WORD_BYTES;
+    let trailing = nbytes & (HINT_WORD_BYTES - 1);
+    if full_dwords > 0 {
+        hint_buffer_chunked(ptr, full_dwords);
+    }
+    if trailing != 0 {
+        let mut scratch: u64 = 0;
+        hint_buffer_chunked(&mut scratch as *mut u64 as *mut u8, 1);
+        let bytes = scratch.to_ne_bytes();
+        core::ptr::copy_nonoverlapping(
+            bytes.as_ptr(),
+            ptr.wrapping_add(full_dwords * HINT_WORD_BYTES),
+            trailing,
+        );
     }
 }
 

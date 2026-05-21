@@ -1,32 +1,19 @@
-To see list of all available built-in targets:
+Integration tests for the OpenVM toolchain: builds guest programs and exercises the transpiler/ELF decoder on the resulting binaries.
+
+Guest builds in these tests go through `openvm-build`'s `build_guest_package`, which invokes `cargo build` under the prebuilt `openvm-nightly-2026-01-18` toolchain for the `riscv64im-unknown-openvm-elf` target. Install the toolchain first:
 
 ```bash
-rustc --print target-list
+cargo openvm toolchain install
 ```
 
-We will currently use the risc0 target until we contribute our own RISC-V target to Rust.
-
-WARNING: to prevent from building for your host machine, make sure you do not have `rustflags = ["-Ctarget-cpu=native"]` in your `~/.cargo/config.toml`.
-
-Build example with full command:
+Then run the tests as usual:
 
 ```bash
-cargo +nightly build -Z build-std=alloc,core,proc_macro,panic_abort --target riscv32im-risc0-zkvm-elf --example fibonacci
+cargo nextest run --cargo-profile=fast -p openvm-toolchain-tests
 ```
 
-Also works with just `cargo +nightly build` because we have a `.cargo/config.toml` that specifies the target and unstable build features (if uncommented).
-
-After this the ELF will be found via
+To inspect a built guest ELF directly, the binary lives under `target/riscv64im-unknown-openvm-elf/release/`. Disassemble with [cargo-binutils](https://github.com/rust-embedded/cargo-binutils):
 
 ```bash
-file target/riscv32im-risc0-zkvm-elf/debug/examples/openvm-fibonacci-program
-target/riscv32im-risc0-zkvm-elf/debug/examples/openvm-fibonacci-program: ELF 32-bit LSB executable, UCB RISC-V, soft-float ABI, version 1 (SYSV), statically linked, with debug_info, not stripped
+rust-objdump -d target/riscv64im-unknown-openvm-elf/release/<example-name>
 ```
-
-To disassemble the ELF to read the instructions, [install cargo-binutils](https://github.com/rust-embedded/cargo-binutils) and run
-
-```bash
-rust-objdump -d target/riscv32im-risc0-zkvm-elf/debug/examples/openvm-fibonacci-program
-```
-
-where `-d` is short for `--disassemble`.

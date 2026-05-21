@@ -8,35 +8,37 @@
 extern crate alloc;
 
 // always include rust_rt so the memory allocator is enabled
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 use core::arch::asm;
 
 pub use openvm_platform as platform;
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[allow(unused_imports)]
 use openvm_platform::rust_rt;
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 pub use openvm_riscv_guest::*;
 
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 mod getrandom;
 pub mod io;
+#[cfg(all(feature = "std", target_os = "openvm"))]
+pub mod pal_abi;
 pub mod process;
 pub mod serde;
 
-#[cfg(not(openvm_intrinsics))]
+#[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 pub mod utils;
 
-#[cfg(not(openvm_intrinsics))]
+#[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 pub mod host;
 
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 core::arch::global_asm!(include_str!("memset.s"));
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 core::arch::global_asm!(include_str!("memcpy.s"));
 
 fn _fault() -> ! {
-    #[cfg(openvm_intrinsics)]
+    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
     unsafe {
         asm!("sd x0, 1(x0)")
     };
@@ -54,7 +56,7 @@ fn _fault() -> ! {
 
 /// Used for defining the guest's entrypoint and main function.
 ///
-/// When `#![no_main]` is used, the programs entrypoint and main function is left undefined. The
+/// When `#![no_main]` is used, the program's entrypoint and main function are left undefined. The
 /// `entry` macro is required to indicate the main function and link it to an entrypoint provided
 /// by the `openvm` crate.
 ///
@@ -71,7 +73,7 @@ fn _fault() -> ! {
 ///
 /// fn main() { }
 /// ```
-#[cfg(all(not(feature = "std"), openvm_intrinsics))]
+#[cfg(all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")))]
 #[macro_export]
 macro_rules! entry {
     ($path:path) => {
@@ -90,13 +92,13 @@ macro_rules! entry {
 }
 /// This macro does nothing. You should name the function `main` so that the normal rust main
 /// function setup is used.
-#[cfg(any(feature = "std", not(openvm_intrinsics)))]
+#[cfg(any(feature = "std", not(any(openvm_intrinsics, target_os = "openvm"))))]
 #[macro_export]
 macro_rules! entry {
     ($path:path) => {};
 }
 
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[no_mangle]
 unsafe extern "C" fn __start() -> ! {
     #[cfg(feature = "heap-embedded-alloc")]
@@ -113,13 +115,8 @@ unsafe extern "C" fn __start() -> ! {
     unreachable!()
 }
 
-#[cfg(openvm_intrinsics)]
-static STACK_TOP: u64 = openvm_platform::memory::STACK_TOP;
-
-// Entry point; sets up global pointer and stack pointer and passes
-// to zkvm_start.  TODO: when asm_const is stabilized, use that here
-// instead of defining a symbol and dereferencing it.
-#[cfg(openvm_intrinsics)]
+// Entry point; sets up global pointer and stack pointer and passes to `__start`.
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 core::arch::global_asm!(
     r#"
 .section .text._start;
@@ -129,11 +126,10 @@ _start:
     .option norelax;
     la gp, __global_pointer$;
     .option pop;
-    la sp, {0};
-    ld sp, 0(sp);
+    li sp, {STACK_TOP};
     call __start;
 "#,
-    sym STACK_TOP
+    STACK_TOP = const openvm_platform::memory::STACK_TOP,
 );
 
 /// Require that accesses to behind the given pointer before the memory
@@ -142,18 +138,18 @@ _start:
 #[allow(unused_variables)]
 pub fn memory_barrier<T>(ptr: *const T) {
     // SAFETY: This passes a pointer in, but does nothing with it.
-    #[cfg(openvm_intrinsics)]
+    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
     unsafe {
         asm!("/* {0} */", in(reg) (ptr))
     }
-    #[cfg(not(openvm_intrinsics))]
+    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
     core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst)
 }
 
 // When std is not linked, register a panic handler here so the user does not
 // have to. If std is linked, it will define the panic handler instead. This
 // panic handler must not be included.
-#[cfg(all(openvm_intrinsics, not(feature = "std")))]
+#[cfg(all(any(openvm_intrinsics, target_os = "openvm"), not(feature = "std")))]
 #[panic_handler]
 fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
     use core::fmt::Write;
