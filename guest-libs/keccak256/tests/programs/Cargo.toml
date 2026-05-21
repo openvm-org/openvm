@@ -26,4 +26,4 @@ lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes 
 # strip = "symbols"
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(target_os, values("openvm"))'] }

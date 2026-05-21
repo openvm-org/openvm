@@ -4,13 +4,13 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 pub use openvm_custom_insn::{custom_insn_i, custom_insn_r};
-#[cfg(openvm_intrinsics)]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 pub mod alloc;
-#[cfg(all(feature = "rust-runtime", openvm_intrinsics))]
+#[cfg(all(feature = "rust-runtime", any(openvm_intrinsics, target_os = "openvm")))]
 pub mod heap;
-#[cfg(all(feature = "export-libm", openvm_intrinsics))]
+#[cfg(all(feature = "export-libm", any(openvm_intrinsics, target_os = "openvm")))]
 mod libm_extern;
 
 pub mod memory;
@@ -24,10 +24,9 @@ pub const WORD_SIZE: usize = core::mem::size_of::<u64>();
 
 /// Standard IO file descriptors for use with sys_read and sys_write.
 pub mod fileno {
-    pub const STDIN: u32 = 0;
-    pub const STDOUT: u32 = 1;
-    pub const STDERR: u32 = 2;
-    pub const JOURNAL: u32 = 3;
+    pub const STDIN: i32 = 0;
+    pub const STDOUT: i32 = 1;
+    pub const STDERR: i32 = 2;
 }
 
 /// Align address upwards.

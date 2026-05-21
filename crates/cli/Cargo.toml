@@ -42,6 +42,12 @@ itertools.workspace = true
 toml_edit = "0.22"
 include_dir = "0.7"
 
+# Used by `cargo openvm toolchain {install,uninstall,list}`.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+indicatif = "0.17"
+flate2 = "1"
+tar = "0.4"
+
 [features]
 default = ["parallel", "jemalloc", "evm-verify", "metrics"]
 evm-prove = ["openvm-sdk/evm-prove"]
