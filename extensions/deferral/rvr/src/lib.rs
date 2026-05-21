@@ -18,7 +18,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_BYTES};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
-    decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx,
+    air_index_to_c, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
+    RvrExtensionCtx,
 };
 
 /// `(def_idx, output_raw) → output_commit` hasher registered by the host.
@@ -43,7 +44,7 @@ pub struct DeferralCallInstr {
     pub rd_reg: Reg,
     pub rs_reg: Reg,
     pub def_idx: u32,
-    pub poseidon2_chip_idx: AirIndex,
+    pub poseidon2_chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for DeferralCallInstr {
@@ -54,7 +55,7 @@ impl ExtInstr for DeferralCallInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rd = ctx.read_reg(self.rd_reg);
         let rs = ctx.read_reg(self.rs_reg);
-        let poseidon2 = self.poseidon2_chip_idx.to_c_chip_idx();
+        let poseidon2 = air_index_to_c(self.poseidon2_chip_idx);
         ctx.write_line(&format!(
             "rvr_ext_deferral_call(state, {rd}, {rs}, {}u, {poseidon2}u);",
             self.def_idx
@@ -76,8 +77,8 @@ pub struct DeferralOutputInstr {
     pub rd_reg: Reg,
     pub rs_reg: Reg,
     pub def_idx: u32,
-    pub output_chip_idx: AirIndex,
-    pub poseidon2_chip_idx: AirIndex,
+    pub output_chip_idx: Option<AirIndex>,
+    pub poseidon2_chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for DeferralOutputInstr {
@@ -88,8 +89,8 @@ impl ExtInstr for DeferralOutputInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rd = ctx.read_reg(self.rd_reg);
         let rs = ctx.read_reg(self.rs_reg);
-        let output = self.output_chip_idx.to_c_chip_idx();
-        let poseidon2 = self.poseidon2_chip_idx.to_c_chip_idx();
+        let output = air_index_to_c(self.output_chip_idx);
+        let poseidon2 = air_index_to_c(self.poseidon2_chip_idx);
         ctx.write_line(&format!(
             "rvr_ext_deferral_output(state, {rd}, {rs}, {}u, {output}u, {poseidon2}u);",
             self.def_idx
@@ -110,9 +111,9 @@ impl ExtInstr for DeferralOutputInstr {
 /// The Deferral extension (CALL + OUTPUT opcodes).
 pub struct DeferralRvrExtension {
     #[allow(dead_code)]
-    call_chip_idx: AirIndex,
-    output_chip_idx: AirIndex,
-    poseidon2_chip_idx: AirIndex,
+    call_chip_idx: Option<AirIndex>,
+    output_chip_idx: Option<AirIndex>,
+    poseidon2_chip_idx: Option<AirIndex>,
     staticlib_path: PathBuf,
     deferral_ctx: DeferralCtx,
 }
@@ -128,7 +129,7 @@ impl DeferralRvrExtension {
         // Poseidon2 periphery chip: in extend_circuit, the hasher is added
         // right before the CALL chip. Due to reverse ordering of AIR indices,
         // poseidon2_air_idx = call_air_idx + 1.
-        let poseidon2_chip_idx = call_chip_idx.next();
+        let poseidon2_chip_idx = call_chip_idx.map(AirIndex::next);
 
         Ok(Self {
             call_chip_idx,

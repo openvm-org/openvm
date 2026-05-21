@@ -9,39 +9,45 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::LiftedInstr;
 
-/// Index of an AIR in the trace.
+/// Real AIR index in the trace.
 ///
-/// - `Uninitialized` is a placeholder used only during pure execution where air indices are
-///   irrelevant. Metered execution panics when it encounters this variant.
-/// - `NoChip` marks opcodes/instructions that do not contribute to any chip's trace (e.g.
-///   `TERMINATE`).
-/// - `Chip(u32)` is a real AIR index.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum AirIndex {
-    Uninitialized,
-    NoChip,
-    Chip(u32),
-}
+/// `Option<AirIndex>` represents an extension's dynamic tracing metadata: `None`
+/// in pure mode (AIR metadata was not requested), `Some(idx)` in metered modes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct AirIndex(u32);
 
 impl AirIndex {
     #[inline]
-    pub fn next(self) -> AirIndex {
-        match self {
-            AirIndex::Chip(n) => AirIndex::Chip(n + 1),
-            other => other,
-        }
+    pub const fn new(idx: u32) -> Self {
+        Self(idx)
     }
 
-    /// Lower to the `u32` chip index baked into generated C source. Both
-    /// `NoChip` and `Uninitialized` become `u32::MAX` (the `NO_CHIP` sentinel
-    /// on the C side, where `trace_chip` is a no-op for that value).
     #[inline]
-    pub fn to_c_chip_idx(self) -> u32 {
-        match self {
-            AirIndex::Chip(n) => n,
-            AirIndex::NoChip | AirIndex::Uninitialized => u32::MAX,
-        }
+    pub const fn as_u32(self) -> u32 {
+        self.0
     }
+
+    #[inline]
+    pub fn next(self) -> AirIndex {
+        AirIndex(self.0 + 1)
+    }
+}
+
+/// PC-to-chip mapping entry. `NoChip` means the instruction at this PC
+/// intentionally does not contribute to any chip's trace (e.g. `TERMINATE` or
+/// unmapped slots).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TraceChipIndex {
+    Chip(AirIndex),
+    NoChip,
+}
+
+/// Lower an extension's `Option<AirIndex>` to the `u32` chip index baked into
+/// generated C source. `None` (pure mode) becomes `u32::MAX` (the `NO_CHIP`
+/// sentinel on the C side, where `trace_chip` is a no-op for that value).
+#[inline]
+pub fn air_index_to_c(idx: Option<AirIndex>) -> u32 {
+    idx.map_or(u32::MAX, AirIndex::as_u32)
 }
 
 /// Data needed by extension crates to resolve opcode/chip metadata when
@@ -71,15 +77,15 @@ impl RvrExtensionCtx {
 }
 
 /// Resolve the AIR index for `opcode`. In pure mode (`ctx = None`) returns
-/// `Ok(Uninitialized)`; in metered mode returns `Ok(Chip(n))` for the
-/// registered opcode and errors if the opcode is unknown.
+/// `Ok(None)`; in metered mode returns `Ok(Some(idx))` for the registered
+/// opcode and errors if the opcode is unknown.
 pub fn opcode_air_idx(
     ctx: Option<&RvrExtensionCtx>,
     opcode: impl LocalOpcode,
-) -> Result<AirIndex, ExtensionError> {
+) -> Result<Option<AirIndex>, ExtensionError> {
     let opcode = opcode.global_opcode();
     let Some(ctx) = ctx else {
-        return Ok(AirIndex::Uninitialized);
+        return Ok(None);
     };
     let executor_idx = ctx
         .resolve_opcode_executor_idx(opcode)
@@ -90,7 +96,7 @@ pub fn opcode_air_idx(
             executor_idx,
         },
     )?;
-    Ok(AirIndex::Chip(*raw as u32))
+    Ok(Some(AirIndex::new(*raw as u32)))
 }
 
 /// Errors raised when resolving extension metadata from a `RvrExtensionCtx`.

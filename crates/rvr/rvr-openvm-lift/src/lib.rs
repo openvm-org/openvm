@@ -21,7 +21,7 @@ pub use convert::{
     ConvertError,
 };
 pub use extension::{
-    opcode_air_idx, AirIndex, ExtensionError, ExtensionRegistry, RvrExtension, RvrExtensionCtx,
-    VmRvrExtension,
+    air_index_to_c, opcode_air_idx, AirIndex, ExtensionError, ExtensionRegistry, RvrExtension,
+    RvrExtensionCtx, TraceChipIndex, VmRvrExtension,
 };
 pub use helpers::{decode_imm_cg, decode_reg};

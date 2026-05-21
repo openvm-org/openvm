@@ -394,7 +394,8 @@ where
     ) -> Result<RvrMeteredInstance<F>, StaticProgramError> {
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let chips = ChipMapping {
-            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx),
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                .map_err(map_rvr_compile_error)?,
             chip_widths: None,
         };
         let compiled = compile_metered(exe, &extensions, &chips).map_err(map_rvr_compile_error)?;
@@ -425,7 +426,8 @@ where
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
         let chips = ChipMapping {
-            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx),
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                .map_err(map_rvr_compile_error)?,
             chip_widths: Some(widths.clone()),
         };
         let compiled =

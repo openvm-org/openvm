@@ -12,7 +12,8 @@ use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
-    decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx,
+    air_index_to_c, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
+    RvrExtensionCtx,
 };
 
 /// keccak-f[1600]: read 200 bytes via `buffer_ptr_reg`, permute in place.
@@ -20,9 +21,9 @@ use rvr_openvm_lift::{
 pub struct KeccakfInstr {
     pub buffer_ptr_reg: Reg,
     /// KeccakfOp chip (1 row per instruction).
-    pub op_chip_idx: AirIndex,
+    pub op_chip_idx: Option<AirIndex>,
     /// KeccakfPerm chip (24 rows per instruction).
-    pub perm_chip_idx: AirIndex,
+    pub perm_chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for KeccakfInstr {
@@ -32,8 +33,8 @@ impl ExtInstr for KeccakfInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let buf = ctx.read_reg(self.buffer_ptr_reg);
-        let op = self.op_chip_idx.to_c_chip_idx();
-        let perm = self.perm_chip_idx.to_c_chip_idx();
+        let op = air_index_to_c(self.op_chip_idx);
+        let perm = air_index_to_c(self.perm_chip_idx);
         ctx.write_line(&format!("rvr_ext_keccakf(state, {buf}, {op}u, {perm}u);"));
     }
 
@@ -53,7 +54,7 @@ pub struct XorinInstr {
     pub input_ptr_reg: Reg,
     pub len_reg: Reg,
     /// Xorin chip (1 row per instruction).
-    pub chip_idx: AirIndex,
+    pub chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for XorinInstr {
@@ -65,7 +66,7 @@ impl ExtInstr for XorinInstr {
         let buf_ptr = ctx.read_reg(self.buffer_ptr_reg);
         let input = ctx.read_reg(self.input_ptr_reg);
         let len = ctx.read_reg(self.len_reg);
-        let chip = self.chip_idx.to_c_chip_idx();
+        let chip = air_index_to_c(self.chip_idx);
         ctx.write_line(&format!(
             "rvr_ext_xorin(state, {buf_ptr}, {input}, {len}, {chip}u);"
         ));
@@ -82,9 +83,9 @@ impl ExtInstr for XorinInstr {
 
 /// Keccak-256 extension. Register with the `ExtensionRegistry`.
 pub struct KeccakExtension {
-    xorin_chip_idx: AirIndex,
-    keccakf_op_chip_idx: AirIndex,
-    keccakf_perm_chip_idx: AirIndex,
+    xorin_chip_idx: Option<AirIndex>,
+    keccakf_op_chip_idx: Option<AirIndex>,
+    keccakf_perm_chip_idx: Option<AirIndex>,
     /// Path to the keccak-ffi staticlib that exports `rvr_keccak_f1600`.
     asm_staticlib_path: PathBuf,
 }
@@ -96,7 +97,7 @@ impl KeccakExtension {
         // KeccakfPermAir is inserted right before KeccakfOpAir in
         // Keccak256Rv32::extend_circuit, and the chip indices are set in
         // reverse order.
-        let keccakf_perm_chip_idx = keccakf_op_chip_idx.next();
+        let keccakf_perm_chip_idx = keccakf_op_chip_idx.map(AirIndex::next);
 
         Ok(Self {
             xorin_chip_idx,

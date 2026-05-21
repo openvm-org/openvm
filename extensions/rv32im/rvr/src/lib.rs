@@ -12,8 +12,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
-    decode_imm_cg, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
-    RvrExtensionCtx,
+    air_index_to_c, decode_imm_cg, decode_reg, opcode_air_idx, AirIndex, ExtensionError,
+    RvrExtension, RvrExtensionCtx,
 };
 
 /// HINT_STOREW: pop 4 bytes from the hint stream into `mem[reg[ptr_reg]]`.
@@ -46,7 +46,7 @@ impl ExtInstr for HintStoreWInstr {
 pub struct HintBufferInstr {
     pub ptr_reg: Reg,
     pub num_words_reg: Reg,
-    pub chip_idx: AirIndex,
+    pub chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for HintBufferInstr {
@@ -59,7 +59,7 @@ impl ExtInstr for HintBufferInstr {
         let n = ctx.read_reg(self.num_words_reg);
         // Block-entry already credits a static +1; emit the runtime
         // `(n - 1)` correction only when there is more than one row.
-        let chip_idx = self.chip_idx.to_c_chip_idx();
+        let chip_idx = air_index_to_c(self.chip_idx);
         ctx.write_line(&format!("if ({n} > 1) {{"));
         ctx.write_line(&format!("  trace_chip(state, {chip_idx}u, {n} - 1);"));
         ctx.write_line("}");
@@ -110,7 +110,7 @@ impl ExtInstr for RevealInstr {
 /// rvr extension for the rv32im I/O instructions HINT_STOREW, HINT_BUFFER, and
 /// REVEAL.
 pub struct Rv32IoExtension {
-    hint_store_chip_idx: AirIndex,
+    hint_store_chip_idx: Option<AirIndex>,
 }
 
 impl Rv32IoExtension {

@@ -99,7 +99,7 @@ pub struct Int256AluInstr {
     /// instruction is one row already counted by the per-block chip update
     /// emitted at block entry), kept on the IR for parity with other
     /// extensions and future trace-chip use.
-    pub chip_idx: AirIndex,
+    pub chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for Int256AluInstr {
@@ -140,7 +140,7 @@ pub struct Int256BranchEqInstr {
     /// If true, branch on *not* equal (BNE); otherwise branch on equal (BEQ).
     pub is_ne: bool,
     /// Chip index for metering. See [`Int256AluInstr::chip_idx`].
-    pub chip_idx: AirIndex,
+    pub chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for Int256BranchEqInstr {
@@ -194,7 +194,7 @@ pub struct Int256BranchLtInstr {
     /// The branch-less-than variant (selects the FFI function at codegen time).
     pub op: Int256BranchLtOp,
     /// Chip index for metering. See [`Int256AluInstr::chip_idx`].
-    pub chip_idx: AirIndex,
+    pub chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for Int256BranchLtInstr {
@@ -236,12 +236,12 @@ impl ExtInstr for Int256BranchLtInstr {
 
 /// The Int256 extension. Register this with the `ExtensionRegistry`.
 pub struct Int256Extension {
-    base_alu_chip_idx: AirIndex,
-    shift_chip_idx: AirIndex,
-    less_than_chip_idx: AirIndex,
-    mul_chip_idx: AirIndex,
-    branch_eq_chip_idx: AirIndex,
-    branch_lt_chip_idx: AirIndex,
+    base_alu_chip_idx: Option<AirIndex>,
+    shift_chip_idx: Option<AirIndex>,
+    less_than_chip_idx: Option<AirIndex>,
+    mul_chip_idx: Option<AirIndex>,
+    branch_eq_chip_idx: Option<AirIndex>,
+    branch_lt_chip_idx: Option<AirIndex>,
     staticlib_path: PathBuf,
 }
 
@@ -268,7 +268,7 @@ impl Int256Extension {
     }
 
     /// Map a global opcode to the chip index for that operation.
-    fn chip_idx_for_opcode(&self, opcode: usize) -> AirIndex {
+    fn chip_idx_for_opcode(&self, opcode: usize) -> Option<AirIndex> {
         let base_alu_start = Rv32BaseAlu256Opcode::CLASS_OFFSET;
         let shift_start = Rv32Shift256Opcode::CLASS_OFFSET;
         let lt_start = Rv32LessThan256Opcode::CLASS_OFFSET;
