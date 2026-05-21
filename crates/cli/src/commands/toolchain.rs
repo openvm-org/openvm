@@ -304,8 +304,9 @@ fn print_post_install_hint(tag: &str) {
     println!("Build guests with:");
     println!("    cargo openvm build");
     println!();
-    println!("Or invoke the linked toolchain directly:");
-    println!("    cargo +{tag} build --target riscv64im-unknown-openvm-elf");
+    println!("Or invoke the linked toolchain directly with atomic lowering:");
+    println!("    RUSTFLAGS=\"-Cpasses=lower-atomic\" \\");
+    println!("      cargo +{tag} build --target riscv64im-unknown-openvm-elf");
     if tag != DEFAULT_RUSTUP_TOOLCHAIN_NAME {
         println!();
         println!("Note: this cargo-openvm defaults to `{DEFAULT_RUSTUP_TOOLCHAIN_NAME}`.");

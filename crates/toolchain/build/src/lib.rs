@@ -20,14 +20,8 @@ pub use self::config::GuestOptions;
 mod config;
 
 /// Default rustc target for the openvm guest. Built-in to the openvm rust
-/// fork. Override with `OPENVM_TARGET` to use a different rv64im target
-/// (e.g. an upstream `riscv64imac-unknown-none-elf` or future custom spec).
+/// fork. Override with `OPENVM_RUSTC_TARGET` to use a different rv64im target.
 pub const DEFAULT_RUSTC_TARGET: &str = "riscv64im-unknown-openvm-elf";
-
-/// Get the target triple from environment variable or default.
-pub fn get_rustc_target() -> String {
-    env::var("OPENVM_TARGET").unwrap_or_else(|_| DEFAULT_RUSTC_TARGET.to_string())
-}
 
 /// Default rustup toolchain name. Format: `openvm-<rustup-name>` —
 /// `openvm-` prefix plus whatever rustup itself calls the upstream
@@ -38,14 +32,35 @@ pub fn get_rustc_target() -> String {
 // Keep in sync with the default `TAG` in `ci/install-openvm-toolchain.sh`.
 pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "openvm-nightly-2026-01-18";
 
-/// Get the Rust toolchain name from environment variable or default.
-pub fn get_rustup_toolchain_name() -> String {
-    env::var("OPENVM_RUST_TOOLCHAIN").unwrap_or_else(|_| DEFAULT_RUSTUP_TOOLCHAIN_NAME.to_string())
-}
 const BUILD_LOCKED_ENV: &str = "OPENVM_BUILD_LOCKED";
 const SKIP_BUILD_ENV: &str = "OPENVM_SKIP_BUILD";
 const GUEST_LOGFILE_ENV: &str = "OPENVM_GUEST_LOGFILE";
 const ALLOWED_CARGO_ENVS: &[&str] = &["CARGO_HOME"];
+
+/// Get the target triple from environment variable or default.
+pub fn get_rustc_target() -> String {
+    env::var("OPENVM_RUSTC_TARGET").unwrap_or_else(|_| DEFAULT_RUSTC_TARGET.to_string())
+}
+
+/// Get the Rust toolchain name from environment variable or default.
+pub fn get_rustup_toolchain_name() -> String {
+    env::var("OPENVM_RUST_TOOLCHAIN").unwrap_or_else(|_| DEFAULT_RUSTUP_TOOLCHAIN_NAME.to_string())
+}
+
+/// Returns `true` for toolchains installed by `cargo openvm toolchain install`.
+pub fn is_openvm_toolchain(toolchain: &str) -> bool {
+    toolchain.starts_with("openvm-")
+}
+
+/// Returns `true` if the toolchain's sysroot contains prebuilt rlibs for
+/// `target`.
+pub fn target_has_prebuilt_std(rustc_path: &str, target: &str) -> bool {
+    Path::new(rustc_path)
+        .parent()
+        .and_then(Path::parent)
+        .map(|root| root.join("lib/rustlib").join(target).join("lib").exists())
+        .unwrap_or(false)
+}
 
 /// Returns the given cargo Package from the metadata in the Cargo.toml manifest
 /// within the provided `manifest_dir`.
@@ -278,6 +293,16 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
 
     if std::env::var(BUILD_LOCKED_ENV).is_ok() {
         args.push("--locked");
+    }
+
+    // Stock tier-3 targets do not ship target rlibs, so build std from rust-src.
+    if !target_has_prebuilt_std(rustc, &target) {
+        args.extend_from_slice(&[
+            "-Z",
+            "build-std=core,alloc,panic_abort",
+            "-Z",
+            "build-std-features=compiler-builtins-mem",
+        ]);
     }
 
     println!("Building guest package: cargo {}", args.join(" "));
@@ -517,13 +542,10 @@ pub fn detect_toolchain(name: &str) {
     }
 }
 
-/// Verify that the openvm rustup toolchain is linked and ships prebuilt rlibs
-/// for the guest target.
-///
-/// The openvm toolchain is a `rustup toolchain link <name> <dir>`-linked
-/// toolchain, not a normal rustup channel — `rustup toolchain install` cannot
-/// install it. The user must run `cargo openvm toolchain install` first.
+/// Verify that the configured rustup toolchain can build the guest target.
 fn ensure_openvm_toolchain_linked(toolchain: &str) -> Result<(), i32> {
+    let is_openvm = is_openvm_toolchain(toolchain);
+
     let output = Command::new("rustup")
         .args(["toolchain", "list"])
         .output()
@@ -537,13 +559,18 @@ fn ensure_openvm_toolchain_linked(toolchain: &str) -> Result<(), i32> {
         .any(|line| line.trim().starts_with(toolchain));
 
     if !installed {
+        let hint = if is_openvm {
+            "cargo openvm toolchain install".to_string()
+        } else {
+            format!("rustup toolchain install {toolchain}")
+        };
         tty_println(&format!(
-            "error: rustup toolchain `{toolchain}` is not installed.\n\nInstall it with:\n\n    cargo openvm toolchain install\n"
+            "error: rustup toolchain `{toolchain}` is not installed.\n\nInstall it with:\n\n    {hint}\n"
         ));
         return Err(1);
     }
 
-    // Resolve the toolchain's sysroot to verify it ships the guest target's prebuilt rlibs.
+    // Resolve the sysroot to check for either prebuilt target rlibs or rust-src.
     let which_rustc = Command::new("rustup")
         .args([&format!("+{toolchain}"), "which", "rustc"])
         .output()
@@ -561,16 +588,27 @@ fn ensure_openvm_toolchain_linked(toolchain: &str) -> Result<(), i32> {
         .parent()
         .and_then(Path::parent)
         .map(Path::to_path_buf);
+
     if let Some(root) = toolchain_root {
-        // The built-in guest target's rlibs must be present. If they aren't, either the
-        // toolchain wasn't built for this target or the tarball was truncated.
         let target = get_rustc_target();
-        let target_libdir = root.join("lib/rustlib").join(&target).join("lib");
-        if !target_libdir.exists() {
+
+        if target_has_prebuilt_std(&rustc_path, &target) {
+            return Ok(());
+        }
+
+        let rust_src_dir = root.join("lib/rustlib/src/rust/library");
+        if !rust_src_dir.exists() {
+            let hint = if is_openvm {
+                "cargo openvm toolchain install --force".to_string()
+            } else {
+                format!(
+                    "rustup component add rust-src --toolchain {toolchain}\n\
+                     (target `{target}` has no prebuilt rlibs in rustup; the build will use -Z build-std)"
+                )
+            };
             tty_println(&format!(
-                "error: toolchain `{toolchain}` does not ship target `{target}` (no {}). \n\
-                 Reinstall with: cargo openvm toolchain install --force",
-                target_libdir.display()
+                "error: toolchain `{toolchain}` ships neither prebuilt rlibs for target `{target}` \
+                 nor the `rust-src` component needed for -Z build-std.\n\nFix with:\n\n    {hint}\n",
             ));
             return Err(1);
         }
