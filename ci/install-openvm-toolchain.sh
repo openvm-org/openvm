@@ -16,7 +16,7 @@ case "$(uname -s)-$(uname -m)" in
 esac
 
 DIR="$HOME/.openvm/toolchains/$TAG"
-if [ -d "$DIR/lib/rustlib/riscv64im-unknown-openvm-elf/lib" ] && rustup toolchain list | grep -q "^${TAG}\b"; then
+if [ -d "$DIR/lib/rustlib/riscv64im-unknown-openvm-elf/lib" ] && rustup toolchain list | awk -v tag="$TAG" '$1 == tag { found = 1 } END { exit !found }'; then
   echo "openvm toolchain $TAG already installed at $DIR"
   exit 0
 fi

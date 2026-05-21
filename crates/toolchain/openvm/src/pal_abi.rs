@@ -34,6 +34,9 @@ pub extern "C" fn sys_halt() -> ! {
 /// `recv_buf` must be dereferenceable for `nbytes` bytes (no alignment required).
 #[no_mangle]
 pub unsafe extern "C" fn sys_rand(recv_buf: *mut u8, nbytes: usize) {
+    if nbytes == 0 {
+        return;
+    }
     hint_random(nbytes.div_ceil(HINT_WORD_BYTES));
     hint_buffer_bytes(recv_buf, nbytes);
 }
@@ -82,6 +85,7 @@ pub unsafe extern "C" fn sys_write(fd: i32, write_ptr: *const u8, nbytes: usize)
         let mut writer = crate::io::Writer;
         let _ = writeln!(writer, "sys_write to fd={fd} not supported.");
         terminate::<{ exit_code::UNIMP }>();
+        unreachable!()
     }
 }
 

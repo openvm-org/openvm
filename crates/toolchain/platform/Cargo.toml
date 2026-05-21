@@ -22,7 +22,7 @@ libm = { version = "0.2", optional = true }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
-features = ["rust-runtime", "panic-handler", "export-libm", "export-pal-abi"]
+features = ["rust-runtime", "panic-handler", "export-libm"]
 
 [features]
 default = []
