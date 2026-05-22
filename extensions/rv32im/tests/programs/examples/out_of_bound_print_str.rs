@@ -2,6 +2,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::hint::black_box;
+
 use openvm::io::reveal_u32;
 use openvm_rv32im_guest::raw_print_str_from_bytes;
 

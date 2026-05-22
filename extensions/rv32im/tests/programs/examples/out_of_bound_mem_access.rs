@@ -2,6 +2,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::hint::black_box;
+
 use openvm::io::reveal_u32;
 
 openvm::entry!(main);
