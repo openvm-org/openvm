@@ -35,11 +35,14 @@ jobs:
       - uses: actions/checkout@v5
       - name: Init rvr FFI submodules
         run: |
-          git submodule update --init extensions/keccak256/rvr/ffi/openssl
-          git submodule update --init extensions/keccak256/rvr/ffi/xkcp
-          git submodule update --init --recursive extensions/algebra/rvr/ffi/modular/secp256k1
+          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
+      - name: Configure sccache startup timeout
+        run: |
+          mkdir -p ~/.config/sccache
+          echo "server_startup_timeout_ms = 60000" > ~/.config/sccache/config
       - uses: mozilla-actions/sccache-action@v0.0.9
       - name: Verify GPU setup
         run: |

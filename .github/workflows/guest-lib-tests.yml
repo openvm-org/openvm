@@ -58,9 +58,8 @@ jobs:
       - name: Init rvr FFI submodules
         if: matrix.crate.rvr == true
         run: |
-          git submodule update --init extensions/keccak256/rvr/ffi/openssl
-          git submodule update --init extensions/keccak256/rvr/ffi/xkcp
-          git submodule update --init --recursive extensions/algebra/rvr/ffi/modular/secp256k1
+          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -78,6 +77,10 @@ jobs:
           exit 0
 
       - uses: dtolnay/rust-toolchain@stable
+      - name: Configure sccache startup timeout
+        run: |
+          mkdir -p ~/.config/sccache
+          echo "server_startup_timeout_ms = 60000" > ~/.config/sccache/config
       - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
