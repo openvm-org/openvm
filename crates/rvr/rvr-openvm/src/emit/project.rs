@@ -288,6 +288,29 @@ impl CProject {
         let muldiv_path = self.output_dir.join("rv_muldiv.h");
         fs::write(&muldiv_path, include_str!("../../c/rv_muldiv.h"))?;
 
+        // Memory-bounds check: header declares per-width helpers; the
+        // Makefile picks which .c definition to compile via the
+        // OPENVM_UNPROTECTED filter-out.
+        let bounds_h_path = self.output_dir.join("openvm_check_mem_bounds.h");
+        fs::write(
+            &bounds_h_path,
+            include_str!("../../c/openvm_check_mem_bounds.h"),
+        )?;
+        let bounds_prot_path = self
+            .output_dir
+            .join("openvm_check_mem_bounds_protected.c");
+        fs::write(
+            &bounds_prot_path,
+            include_str!("../../c/openvm_check_mem_bounds_protected.c"),
+        )?;
+        let bounds_unprot_path = self
+            .output_dir
+            .join("openvm_check_mem_bounds_unprotected.c");
+        fs::write(
+            &bounds_unprot_path,
+            include_str!("../../c/openvm_check_mem_bounds_unprotected.c"),
+        )?;
+
         // IO implementation.
         fs::write(
             self.output_dir.join("openvm_io.c"),

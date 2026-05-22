@@ -9,11 +9,6 @@ LDFLAGS ?=
 LDFLAGS += -fuse-ld=$(LINKER)
 LDLIBS ?=
 
-OPENVM_UNPROTECTED ?=
-ifeq ($(OPENVM_UNPROTECTED),1)
-CFLAGS += -DOPENVM_UNPROTECTED
-endif
-
 # On ELF platforms, force eager symbol binding to prevent the PLT lazy
 # resolver from clobbering preserve_none argument registers (r11 on x86_64).
 HOST_OS ?= $(shell uname -s)
@@ -23,7 +18,15 @@ CFLAGS += -fno-plt -fno-semantic-interposition
 LDLIBS += -lm
 endif
 
-SRCS = $(wildcard *.c)
+# include the right check_mem_bounds source file based on OPENVM_UNPROTECTED flag
+OPENVM_UNPROTECTED ?=
+ALL_SRCS = $(wildcard *.c)
+ifeq ($(OPENVM_UNPROTECTED),1)
+SRCS = $(filter-out openvm_check_mem_bounds_protected.c, $(ALL_SRCS))
+else
+SRCS = $(filter-out openvm_check_mem_bounds_unprotected.c, $(ALL_SRCS))
+endif
+
 OBJS = $(SRCS:.c=.o)
 
 LIB ?= libout.so
