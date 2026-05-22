@@ -11,8 +11,8 @@ LDLIBS ?=
 
 # On ELF platforms, force eager symbol binding to prevent the PLT lazy
 # resolver from clobbering preserve_none argument registers (r11 on x86_64).
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Linux)
+HOST_OS ?= $(shell uname -s)
+ifeq ($(HOST_OS),Linux)
 LDFLAGS += -Wl,-z,now
 CFLAGS += -fno-plt -fno-semantic-interposition
 LDLIBS += -lm

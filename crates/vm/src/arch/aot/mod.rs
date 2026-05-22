@@ -302,7 +302,7 @@ unsafe extern "C" fn set_instret_left_shim<F>(state_ptr: *mut c_void, instret_le
     state.ctx.instret_left = instret_left;
 }
 
-pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const E1: bool>(
+pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const PURE_EXECUTION: bool>(
     state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
     cur_pc: u32,
