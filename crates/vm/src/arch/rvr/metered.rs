@@ -281,6 +281,9 @@ impl SegmentationState {
 
         self.memory_ctx.page_indices.clear();
         self.memory_ctx.addr_space_access_count.fill(0);
+        // RVR only suspends at segment boundaries today, after flushing the
+        // boundary-crossing page buffers below. Mid-segment suspension would
+        // need to preserve this checkpoint buffer instead of resetting it.
         self.memory_ctx.page_indices_since_checkpoint_len = 0;
 
         self.flush_page_buffer(mem_len, pv_len, deferral_len);
