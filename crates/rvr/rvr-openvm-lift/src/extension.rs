@@ -150,9 +150,10 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
         vec![]
     }
 
-    /// Additional embedded C support files to write alongside the generated
-    /// project but not compile directly as translation units.
-    fn extra_c_files(&self) -> Vec<(&'static str, &'static str)> {
+    /// Additional embedded C files to write alongside the generated project
+    /// because they are included by extension sources, but not compiled
+    /// directly as translation units.
+    fn extra_c_include_files(&self) -> Vec<(&'static str, &'static str)> {
         vec![]
     }
 
@@ -251,11 +252,11 @@ impl<F: PrimeField32> ExtensionRegistry<F> {
             .collect()
     }
 
-    /// Collect extra embedded C support files from all extensions.
-    pub fn extra_c_files(&self) -> Vec<(&'static str, &'static str)> {
+    /// Collect extra embedded C include files from all extensions.
+    pub fn extra_c_include_files(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
             .iter()
-            .flat_map(|ext| ext.extra_c_files())
+            .flat_map(|ext| ext.extra_c_include_files())
             .collect()
     }
 

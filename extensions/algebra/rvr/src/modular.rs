@@ -1,8 +1,6 @@
 //! Modular arithmetic IR nodes, phantom hints, and the
 //! [`ModularRvrExtension`] lifter.
 
-use std::path::{Path, PathBuf};
-
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::{ModularPhantom, Rv32ModularArithmeticOpcode};
 use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
@@ -14,6 +12,8 @@ use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
 use strum::EnumCount;
 
 use crate::{detect_known_field, format_c_byte_array, ModOp};
+
+include!(concat!(env!("OUT_DIR"), "/secp256k1_files.rs"));
 
 /// Per-modulus info for the modular extension. Includes a precomputed non-QR
 /// for the `HintNonQr` / `HintSqrt` phantoms.
@@ -255,18 +255,6 @@ impl ExtInstr for HintSqrtInstr {
 
 // ── Modular extension ────────────────────────────────────────────────────────
 
-/// Path to the secp256k1 submodule, consumed by `ModularRvrExtension`'s
-/// lift-time C registration.
-fn secp256k1_dir() -> PathBuf {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("ffi/modular/secp256k1");
-    assert!(
-        dir.join("src/secp256k1.c").exists(),
-        "missing secp256k1 submodule at {}. Run `git submodule update --init extensions/algebra/rvr/ffi/modular/secp256k1`.",
-        dir.display()
-    );
-    dir
-}
-
 /// Modular arithmetic + phantom hints. Owns the modular Rust FFI staticlib
 /// (built at repo build time) and registers `rvr_ext_modular.c` plus its
 /// libsecp256k1 inputs for lift-time compilation. Independent of
@@ -331,11 +319,14 @@ impl<F: PrimeField32> RvrExtension<F> for ModularRvrExtension {
         ]
     }
 
+    fn extra_c_include_files(&self) -> Vec<(&'static str, &'static str)> {
+        SECP256K1_C_FILES.to_vec()
+    }
+
     fn extra_cflags(&self) -> Vec<String> {
-        let dir = secp256k1_dir();
         vec![
-            format!("-I{}", dir.join("src").display()),
-            format!("-I{}", dir.display()),
+            "-Isecp256k1/src".to_string(),
+            "-Isecp256k1".to_string(),
             // ENABLE_MODULE_RECOVERY keeps the ECC modules compiled in so the
             // k256 EC ops in rvr_ext_modular.c can call into libsecp256k1.
             // (-DSECP256K1_BUILD is not set here — secp256k1.c defines it

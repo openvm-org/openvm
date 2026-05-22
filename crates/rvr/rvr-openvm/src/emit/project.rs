@@ -319,47 +319,35 @@ impl CProject {
         &self,
         extensions: &ExtensionRegistry<F>,
     ) -> io::Result<()> {
-        // Write extension C headers
-        for (filename, content) in extensions.c_headers() {
-            let path = self.output_dir.join(filename);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(&path, content)?;
-        }
-
-        // Write extension C source files (compiled by the Makefile)
-        for (filename, content) in extensions.c_sources() {
-            let path = self.output_dir.join(filename);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(&path, content)?;
-        }
-
-        // Write embedded extra C source files (e.g., precomputed tables).
-        for (filename, content) in extensions.extra_c_sources() {
-            let path = self.output_dir.join(filename);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(&path, content)?;
-        }
-
-        // Write embedded C support files that are included by extension sources.
-        for (filename, content) in extensions.extra_c_files() {
-            let path = self.output_dir.join(filename);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(&path, content)?;
-        }
+        let mut created_dirs = HashSet::new();
+        self.write_embedded_files(extensions.c_headers(), &mut created_dirs)?;
+        self.write_embedded_files(extensions.c_sources(), &mut created_dirs)?;
+        self.write_embedded_files(extensions.extra_c_sources(), &mut created_dirs)?;
+        self.write_embedded_files(extensions.extra_c_include_files(), &mut created_dirs)?;
 
         // Write wrapper functions if any extensions are registered
         if !extensions.is_empty() {
             self.write_ext_wrappers()?;
         }
 
+        Ok(())
+    }
+
+    fn write_embedded_files(
+        &self,
+        files: impl IntoIterator<Item = (&'static str, &'static str)>,
+        created_dirs: &mut HashSet<PathBuf>,
+    ) -> io::Result<()> {
+        for (filename, content) in files {
+            let path = self.output_dir.join(filename);
+            if let Some(parent) = path.parent() {
+                let parent = parent.to_path_buf();
+                if created_dirs.insert(parent.clone()) {
+                    fs::create_dir_all(parent)?;
+                }
+            }
+            fs::write(&path, content)?;
+        }
         Ok(())
     }
 
