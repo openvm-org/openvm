@@ -1,9 +1,13 @@
+#[cfg(feature = "metrics")]
+pub(crate) mod compilation_metrics;
 mod config;
 /// Streams-like deferral state
 pub mod deferral;
 /// Instruction execution traits and types.
 /// Execution bus and interface.
 pub mod execution;
+#[cfg(feature = "metrics")]
+pub(crate) mod execution_metrics;
 /// Execution context types for different execution modes.
 pub mod execution_mode;
 mod extensions;

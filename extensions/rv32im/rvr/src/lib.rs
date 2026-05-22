@@ -4,8 +4,6 @@
 //! TODO: check if other RV32IM instructions/opcodes can be separated into
 //! extensions.
 
-use std::path::Path;
-
 use openvm_instructions::{instruction::Instruction, riscv::RV32_MEMORY_AS, LocalOpcode};
 use openvm_rv32im_transpiler::{Rv32HintStoreOpcode, Rv32LoadStoreOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -93,8 +91,13 @@ impl ExtInstr for RevealInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let src = ctx.read_reg(self.src_reg);
         let ptr = ctx.read_reg(self.ptr_reg);
+        let addr = if self.offset == 0 {
+            ptr.clone()
+        } else {
+            format!("({ptr} + 0x{:08x}u)", self.offset)
+        };
         ctx.write_line(&format!(
-            "trace_mem_access(state, {ptr}, {AS_PUBLIC_VALUES}u);"
+            "trace_mem_access(state, {addr}, {AS_PUBLIC_VALUES}u);"
         ));
         ctx.write_line(&format!(
             "openvm_reveal({src}, {ptr}, 0x{:08x}u);",
@@ -170,17 +173,62 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IoExtension {
         None
     }
 
-    fn c_headers(&self) -> Vec<(&str, &str)> {
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         Vec::new()
     }
 
-    fn staticlib_paths(&self) -> Vec<&Path> {
+    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
         Vec::new()
     }
 
-    fn staticlib_path(&self) -> &Path {
-        // Unused: we override `staticlib_paths()` to return an empty list
+    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
+        // Unused: we override `staticlib_files()` to return an empty list
         // because this extension has no native side-car library.
-        Path::new("")
+        ("", &[])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Default)]
+    struct TestEmitCtx {
+        lines: Vec<String>,
+    }
+
+    impl ExtEmitCtx for TestEmitCtx {
+        fn read_reg(&mut self, idx: u8) -> String {
+            format!("r{idx}")
+        }
+
+        fn read_reg_raw(&mut self, idx: u8) -> String {
+            format!("r{idx}")
+        }
+
+        fn write_reg(&mut self, _idx: u8, _val: &str) {}
+
+        fn write_reg_raw(&mut self, _idx: u8, _val: &str) {}
+
+        fn write_line(&mut self, s: &str) {
+            self.lines.push(s.to_string());
+        }
+    }
+
+    #[test]
+    fn reveal_traces_the_offset_public_values_address() {
+        let mut ctx = TestEmitCtx::default();
+        RevealInstr {
+            src_reg: 5,
+            ptr_reg: 10,
+            offset: 12,
+        }
+        .emit_c(&mut ctx);
+
+        assert_eq!(
+            ctx.lines[0],
+            format!("trace_mem_access(state, (r10 + 0x0000000cu), {AS_PUBLIC_VALUES}u);")
+        );
+        assert_eq!(ctx.lines[1], "openvm_reveal(r5, r10, 0x0000000cu);");
     }
 }

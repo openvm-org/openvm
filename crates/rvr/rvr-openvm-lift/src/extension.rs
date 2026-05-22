@@ -1,9 +1,6 @@
 //! Extension registry for plugging in new opcode families.
 
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::collections::HashMap;
 
 use openvm_instructions::{instruction::Instruction, LocalOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -126,31 +123,37 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
 
     /// C header files for this extension, as `(filename, content)` pairs.
     /// Written to the output directory and `#include`d in the generated code.
-    fn c_headers(&self) -> Vec<(&str, &str)>;
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)>;
 
     /// C source files for this extension, as `(filename, content)` pairs.
     /// Written to the output directory and compiled alongside the generated
     /// code by the Makefile (`$(wildcard *.c)`). This lets extension code
     /// call static inline tracer helpers directly instead of routing through
     /// separate Rust FFI wrappers.
-    fn c_sources(&self) -> Vec<(&str, &str)> {
+    fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![]
     }
 
-    /// Paths to pre-built static libraries (.a) for this extension.
-    /// These are linked into the final .so/.dylib.
-    /// Default delegates to `staticlib_path()`.
-    fn staticlib_paths(&self) -> Vec<&Path> {
-        vec![self.staticlib_path()]
+    /// Embedded pre-built static libraries (.a) for this extension.
+    /// These are written to the generated project and linked into the final
+    /// .so/.dylib. Default delegates to `staticlib_file()`.
+    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
+        vec![self.staticlib_file()]
     }
 
-    /// Path to a single pre-built static library (.a) for this extension.
-    fn staticlib_path(&self) -> &Path;
+    /// A single embedded pre-built static library (.a) for this extension.
+    fn staticlib_file(&self) -> (&'static str, &'static [u8]);
 
-    /// Additional C source file paths to compile alongside the generated
-    /// code. Unlike `c_sources()` which provides inline content, these are
-    /// paths to files on disk (e.g., precomputed tables in a submodule).
-    fn extra_c_source_paths(&self) -> Vec<PathBuf> {
+    /// Additional embedded C source files to compile alongside the generated
+    /// code (e.g., precomputed tables).
+    fn extra_c_sources(&self) -> Vec<(&'static str, &'static str)> {
+        vec![]
+    }
+
+    /// Additional embedded C files to write alongside the generated project
+    /// because they are included by extension sources, but not compiled
+    /// directly as translation units.
+    fn extra_c_include_files(&self) -> Vec<(&'static str, &'static str)> {
         vec![]
     }
 
@@ -218,7 +221,7 @@ impl<F: PrimeField32> ExtensionRegistry<F> {
     }
 
     /// Collect all C headers from all registered extensions.
-    pub fn c_headers(&self) -> Vec<(&str, &str)> {
+    pub fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
             .iter()
             .flat_map(|ext| ext.c_headers())
@@ -226,26 +229,34 @@ impl<F: PrimeField32> ExtensionRegistry<F> {
     }
 
     /// Collect all C source files from all registered extensions.
-    pub fn c_sources(&self) -> Vec<(&str, &str)> {
+    pub fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
             .iter()
             .flat_map(|ext| ext.c_sources())
             .collect()
     }
 
-    /// Collect all staticlib paths for linking.
-    pub fn staticlib_paths(&self) -> Vec<&Path> {
+    /// Collect all embedded static libraries for linking.
+    pub fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
         self.extensions
             .iter()
-            .flat_map(|ext| ext.staticlib_paths())
+            .flat_map(|ext| ext.staticlib_files())
             .collect()
     }
 
-    /// Collect extra C source file paths from all extensions.
-    pub fn extra_c_source_paths(&self) -> Vec<PathBuf> {
+    /// Collect extra embedded C source files from all extensions.
+    pub fn extra_c_sources(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
             .iter()
-            .flat_map(|ext| ext.extra_c_source_paths())
+            .flat_map(|ext| ext.extra_c_sources())
+            .collect()
+    }
+
+    /// Collect extra embedded C include files from all extensions.
+    pub fn extra_c_include_files(&self) -> Vec<(&'static str, &'static str)> {
+        self.extensions
+            .iter()
+            .flat_map(|ext| ext.extra_c_include_files())
             .collect()
     }
 

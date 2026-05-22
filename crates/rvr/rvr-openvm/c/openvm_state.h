@@ -40,6 +40,9 @@ typedef struct RvState {
   uint32_t regs[32];
   uint32_t pc;
   uint64_t instret;
+  /* TODO(rvr-suspender): this generated ABI is currently hard-coded to
+   * InstretSuspender. Replace this flattened field with a generated suspender
+   * state layout once non-instret suspenders need runtime state. */
   uint64_t target_instret;
   uint32_t reservation_addr;
   uint8_t reservation_valid;
