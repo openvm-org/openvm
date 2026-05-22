@@ -500,6 +500,9 @@ extern "C" int _build_merkle_subtree(
         case 3:
             merkle_tree_init<3><<<grid, block, 0, stream>>>(data, tree + (size - 1));
             break;
+        case 4:
+            merkle_tree_init<4><<<grid, block, 0, stream>>>(data, tree + (size - 1));
+            break;
         default:
             return -1;
         }
