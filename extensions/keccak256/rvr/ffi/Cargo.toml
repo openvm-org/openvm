@@ -10,11 +10,6 @@ repository.workspace = true
 [lib]
 crate-type = ["staticlib"]
 
-[features]
-# TODO: delete the xkcp backend and keep only openssl.
-default = ["backend-openssl"]
-backend-openssl = []
-backend-xkcp = []
-
 [build-dependencies]
 cc = "1"
+rvr-openvm-build.workspace = true

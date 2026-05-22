@@ -296,11 +296,14 @@ fn compile_generated_project(output_dir: &Path, make_args: &[String]) -> Result<
     let jobs = std::thread::available_parallelism()
         .map_or(4, |n| n.get().saturating_sub(2).max(1))
         .to_string();
+    let compiler = rvr_openvm::default_compiler_command();
     let linker = rvr_openvm::default_linker_or_lld();
 
     eprintln!(
         "[rvr-openvm] Building native library: {total_objects} translation units with make -j{jobs}"
     );
+
+    rvr_openvm::ensure_clang_compiler(&compiler).map_err(CompileError::Toolchain)?;
 
     if !rvr_openvm::linker_exists(&linker) {
         return Err(CompileError::Toolchain(format!(
@@ -316,7 +319,7 @@ fn compile_generated_project(output_dir: &Path, make_args: &[String]) -> Result<
         .arg("-s")
         .arg("shared")
         .args(make_args)
-        .env("CC", rvr_openvm::default_compiler_command())
+        .env("CC", compiler)
         .env("LINKER", linker)
         .stdout(Stdio::from(stdout_file))
         .stderr(Stdio::from(stderr_file))
