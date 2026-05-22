@@ -313,14 +313,8 @@ fn compile_impl<F: PrimeField32>(
         .collect();
     let ext_cflags = opts.extensions.extra_cflags();
 
-    let mut make_args =
+    let make_args =
         project.make_args_with_extensions(&ext_staticlibs, &ext_sources, &ext_cflags);
-    // The `unprotected` Cargo feature on `openvm-circuit` opts out of the
-    // memory bounds check in `openvm_state.h` (mirrors the interpreter's matching
-    // feature; see `MmapMemory::check_bounds`).
-    #[cfg(feature = "unprotected")]
-    make_args.push("OPENVM_UNPROTECTED=1".to_string());
-
     compile_generated_project(output_dir, &make_args, &toolchain)?;
 
     let lib_path = find_shared_lib(output_dir)?;

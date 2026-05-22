@@ -18,15 +18,7 @@ CFLAGS += -fno-plt -fno-semantic-interposition
 LDLIBS += -lm
 endif
 
-# include the right check_mem_bounds source file based on OPENVM_UNPROTECTED flag
-OPENVM_UNPROTECTED ?=
-ALL_SRCS = $(wildcard *.c)
-ifeq ($(OPENVM_UNPROTECTED),1)
-SRCS = $(filter-out openvm_check_mem_bounds_protected.c, $(ALL_SRCS))
-else
-SRCS = $(filter-out openvm_check_mem_bounds_unprotected.c, $(ALL_SRCS))
-endif
-
+SRCS = $(wildcard *.c)
 OBJS = $(SRCS:.c=.o)
 
 LIB ?= libout.so

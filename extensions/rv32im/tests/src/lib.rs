@@ -348,6 +348,25 @@ mod tests {
         instance.execute(vec![], None).unwrap();
     }
 
+    #[test]
+    #[should_panic]
+    #[cfg(feature = "rvr")]
+    fn test_out_of_bound_mem_access() {
+        let config = test_rv32im_config();
+        let elf = build_example_program_at_path(get_programs_dir!(), "out_of_bound_mem_access", &config).unwrap();
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )
+        .unwrap();
+        let executor = VmExecutor::new(config).unwrap();
+        let instance = executor.instance(&exe).unwrap();
+        instance.execute(vec![], None).unwrap();
+    }
+
     #[test_case("getrandom", vec!["getrandom", "getrandom-unsupported"])]
     #[test_case("getrandom", vec!["getrandom"])]
     #[test_case("getrandom_v02", vec!["getrandom-v02", "getrandom-unsupported"])]
