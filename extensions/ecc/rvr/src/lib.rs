@@ -166,15 +166,6 @@ impl EccExtension {
         }
     }
 
-    /// Create for pure execution (chip indices are unused).
-    pub fn new_pure(curves: Vec<u32>) -> Self {
-        Self::from_curve_ids(curves, default_staticlib_path())
-    }
-
-    pub fn new_pure_from_struct_names(struct_names: Vec<String>) -> Self {
-        Self::from_struct_names(struct_names, default_staticlib_path())
-    }
-
     pub fn new(curves_info: Vec<u32>) -> Self {
         Self::from_curve_ids(curves_info, default_staticlib_path())
     }

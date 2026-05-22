@@ -7,15 +7,18 @@ use std::{
     time::{Duration, Instant},
 };
 
-use openvm_instructions::exe::VmExe;
+use openvm_instructions::{
+    exe::VmExe, program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode, VmOpcode,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{CProject, TracerMode};
 use rvr_openvm_lift::{
-    build_blocks, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers,
-    ExtensionRegistry,
+    build_blocks, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers, AirIndex,
+    ExtensionRegistry, TraceChipIndex,
 };
 
 use super::debug::GuestDebugMap;
+use crate::arch::ExecutorInventory;
 
 /// A compiled rvr shared library ready for execution.
 pub struct RvrCompiled {
@@ -47,18 +50,56 @@ pub enum CompileError {
     Toolchain(String),
     #[error("library load failed: {0}")]
     LibLoad(String),
+    #[error("unknown opcode {opcode:?} at pc {pc:#x}")]
+    UnknownOpcode { pc: u32, opcode: VmOpcode },
+    #[error("invalid compile options: {0}")]
+    InvalidOptions(&'static str),
 }
 
 /// Chip mapping information for hardcoding chip indices into generated code.
 #[derive(Clone)]
 pub struct ChipMapping {
     /// Per-PC chip index. Index i = chip for PC = pc_base + i*4.
-    pub pc_to_chip: Vec<u32>,
+    pub pc_to_chip: Vec<TraceChipIndex>,
     /// Per-AIR widths (MeteredCost mode only). When present, the emitter
     /// precomputes `sum(width[chip] * count)` per block so the generated C
     /// increments `cost` by a single constant instead of loading from the
     /// `chip_widths` array at runtime.
     pub chip_widths: Option<Vec<u64>>,
+}
+
+pub fn build_pc_to_chip<F, E>(
+    exe: &VmExe<F>,
+    inventory: &ExecutorInventory<E>,
+    executor_idx_to_air_idx: &[usize],
+) -> Result<Vec<TraceChipIndex>, CompileError>
+where
+    F: PrimeField32,
+{
+    let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
+    exe.program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .map(|(i, slot)| {
+            let Some((inst, _)) = slot else {
+                return Ok(TraceChipIndex::NoChip);
+            };
+            let opcode: VmOpcode = inst.opcode;
+            if opcode == terminate_opcode {
+                return Ok(TraceChipIndex::NoChip);
+            }
+            let &executor_idx = inventory.instruction_lookup.get(&opcode).ok_or_else(|| {
+                CompileError::UnknownOpcode {
+                    pc: exe.program.pc_base + (i as u32) * DEFAULT_PC_STEP,
+                    opcode,
+                }
+            })?;
+            Ok(TraceChipIndex::Chip(AirIndex::new(
+                executor_idx_to_air_idx[executor_idx as usize] as u32,
+            )))
+        })
+        .collect()
 }
 
 /// Options for the compilation pipeline.
@@ -161,10 +202,16 @@ fn compile_impl<F: PrimeField32>(
 
     let mut project = CProject::new(output_dir, &base_name, opts.tracer_mode);
 
-    if let Some(chips) = opts.chips {
-        project.pc_to_chip = Some(chips.pc_to_chip.clone());
-        project.pc_base = exe.program.pc_base;
-        project.chip_widths = chips.chip_widths.clone();
+    match opts.tracer_mode {
+        TracerMode::Pure => {}
+        TracerMode::Metered | TracerMode::MeteredCost => {
+            let chips = opts.chips.ok_or(CompileError::InvalidOptions(
+                "metered rvr compile requires ChipMapping",
+            ))?;
+            project.pc_to_chip = Some(chips.pc_to_chip.clone());
+            project.pc_base = exe.program.pc_base;
+            project.chip_widths = chips.chip_widths.clone();
+        }
     }
 
     if cfg!(target_os = "macos") {
