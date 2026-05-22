@@ -84,7 +84,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for Rv32I {}
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for Rv32Io {
-    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: &RvrExtensionCtx) {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: Option<&RvrExtensionCtx>) {
         registry
             .register(Rv32IoExtension::new(ctx).expect("Rv32IoExtension chip resolution failed"));
     }
