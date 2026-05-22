@@ -199,7 +199,7 @@ pub fn execute<F: PrimeField32>(
         &mut state,
         num_insns.is_some(),
     )
-    .inspect_err(|e| eprintln!("rvr pure execution failed: {e}"))?;
+    .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"))?;
     Ok(RvrPureResult {
         state,
         suspended: status == ExecutionStatus::Suspended,
@@ -225,7 +225,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
     state.tracer.cost = 0;
 
     run_and_finalize(compiled, extensions, vm_state, &mut state, false)
-        .inspect_err(|e| eprintln!("rvr metered-cost execution failed: {e}"))?;
+        .inspect_err(|error| tracing::warn!(%error, "rvr metered-cost execution failed"))?;
     let cost = state.tracer.cost;
     Ok(RvrMeteredCostResult { state, cost })
 }
@@ -300,7 +300,7 @@ fn execute_metered_impl<F: PrimeField32>(
     state.tracer.seg_state = &mut seg_state as *mut SegmentationState as *mut c_void;
 
     let status = run_and_finalize(compiled, extensions, vm_state, &mut state, allow_suspended)
-        .inspect_err(|e| eprintln!("rvr metered execution failed: {e}"))?;
+        .inspect_err(|error| tracing::warn!(%error, "rvr metered execution failed"))?;
 
     debug_assert!(matches!(
         status,
