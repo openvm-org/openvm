@@ -46,6 +46,8 @@ pub enum ExecuteError {
     MemoryAlloc(#[from] MemoryError),
     #[error("extension host callback registration failed: {0}")]
     ExtensionRegistration(#[from] ExtensionError),
+    #[error("invalid metered context: {0}")]
+    InvalidMeteredContext(String),
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -266,6 +268,20 @@ fn execute_metered_impl<F: PrimeField32>(
     state.regs = initial_regs;
     state.tracer = TracerPtr(&mut tracer_data);
 
+    let check_counter =
+        u32::try_from(seg_state.segmentation_ctx.instrets_until_check).map_err(|_| {
+            ExecuteError::InvalidMeteredContext(format!(
+                "instrets_until_check {} exceeds rvr tracer u32 counter",
+                seg_state.segmentation_ctx.instrets_until_check
+            ))
+        })?;
+    let _ = u32::try_from(seg_state.segmentation_ctx.segment_check_insns).map_err(|_| {
+        ExecuteError::InvalidMeteredContext(format!(
+            "segment_check_insns {} exceeds rvr tracer u32 counter",
+            seg_state.segmentation_ctx.segment_check_insns
+        ))
+    })?;
+
     state.tracer.trace_heights = seg_state.trace_heights_ptr();
     state.tracer.mem_page_buf = seg_state.mem_page_buf_ptr();
     state.tracer.pv_page_buf = seg_state.pv_page_buf_ptr();
@@ -274,7 +290,7 @@ fn execute_metered_impl<F: PrimeField32>(
     state.tracer.pv_page_buf_len = 0;
     state.tracer.deferral_page_buf_len = 0;
     state.tracer.last_mem_page = NO_LAST_PAGE;
-    state.tracer.check_counter = seg_state.segmentation_ctx.segment_check_insns as u32;
+    state.tracer.check_counter = check_counter;
     state.tracer.on_check = Some(metered_periodic_check);
     state.tracer.seg_state = &mut seg_state as *mut SegmentationState as *mut c_void;
 
@@ -293,6 +309,11 @@ fn execute_metered_impl<F: PrimeField32>(
             state.tracer.deferral_page_buf_len,
             state.tracer.check_counter,
         );
+    } else {
+        // The segment-boundary suspender exits before executing the triggering block.
+        // The periodic check already flushed page buffers and initialized the next
+        // segment; carry the bumped countdown forward for resume.
+        seg_state.segmentation_ctx.instrets_until_check = state.tracer.check_counter as u64;
     }
     Ok(RvrMeteredResult {
         seg_state,

@@ -50,8 +50,9 @@ impl ExecutionMetricTimer {
 
     pub(crate) fn record(self, insns: u64) {
         let elapsed = self.start.elapsed();
+        let elapsed_micros = elapsed.as_nanos().max(1) as f64 / 1_000.0;
         tracing::info!("instructions_executed={insns}");
         metrics::counter!(self.counter_name).absolute(insns);
-        metrics::gauge!(self.gauge_name).set(insns as f64 / elapsed.as_micros() as f64);
+        metrics::gauge!(self.gauge_name).set(insns as f64 / elapsed_micros);
     }
 }

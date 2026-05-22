@@ -266,10 +266,7 @@ impl SegmentationState {
         trace_heights[MERKLE_AIR_ID] += nodes_per_page * page_access_count * 2;
         trace_heights[poseidon2_idx] += leaves * 2 + nodes_per_page * page_access_count * 2;
 
-        // Reset counts
-        for count in self.memory_ctx.addr_space_access_count.iter_mut() {
-            *count = 0;
-        }
+        self.memory_ctx.addr_space_access_count.fill(0);
     }
 
     fn initialize_segment_memory(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
@@ -279,9 +276,7 @@ impl SegmentationState {
         self.trace_heights[poseidon2_idx] = 0;
 
         self.memory_ctx.page_indices.clear();
-        for count in self.memory_ctx.addr_space_access_count.iter_mut() {
-            *count = 0;
-        }
+        self.memory_ctx.addr_space_access_count.fill(0);
         self.memory_ctx.page_indices_since_checkpoint_len = 0;
 
         self.flush_page_buffer(mem_len, pv_len, deferral_len);
@@ -377,8 +372,14 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) -> u8
     let did_segment =
         seg_state.on_periodic_check(mem_len, pv_len, deferral_len, tracer.check_counter);
 
+    let segment_check_insns = seg_state.segmentation_ctx.segment_check_insns as u32;
+    debug_assert_eq!(
+        u64::from(segment_check_insns),
+        seg_state.segmentation_ctx.segment_check_insns
+    );
+
     // Reset the countdown for the next interval.
-    tracer.check_counter += seg_state.segmentation_ctx.segment_check_insns as u32;
+    tracer.check_counter += segment_check_insns;
     did_segment as u8
 }
 
