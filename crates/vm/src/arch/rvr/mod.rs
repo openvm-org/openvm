@@ -32,7 +32,8 @@ pub use metered_cost::{
 pub use pure::{RvrPureInstance, RvrPureResult};
 pub use rvr_openvm::{
     default_compiler as default_native_compiler, default_compiler_command, default_dwarfdump_cmd,
-    default_linker, SuspendPolicy, TracerMode,
+    default_linker, runtime_toolchain, RuntimeToolchain, RuntimeToolchainError, SuspendPolicy,
+    TracerMode,
 };
 
 pub use crate::arch::execution_mode::metered::segment_ctx::{

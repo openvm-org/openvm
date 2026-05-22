@@ -11,10 +11,7 @@ use openvm_instructions::{
     exe::VmExe, program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm::{
-    default_compiler_command, default_linker_or_lld, ensure_clang_compiler, linker_exists,
-    CProject, SuspendPolicy, TracerMode,
-};
+use rvr_openvm::{CProject, SuspendPolicy, TracerMode};
 use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers, AirIndex,
     ExtensionRegistry, TraceChipIndex,
@@ -45,12 +42,22 @@ impl RvrCompiled {
 pub enum CompileError {
     #[error("IR conversion failed: {0}")]
     Convert(#[from] rvr_openvm_lift::ConvertError),
-    #[error("C project write failed: {0}")]
-    CProject(#[from] std::io::Error),
+    #[error("C project write failed under {}: {source}", path.display())]
+    CProject {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("make failed: {stderr}")]
     Make { stderr: String },
-    #[error("toolchain error: {0}")]
-    Toolchain(String),
+    #[error("toolchain unavailable: {0}")]
+    Toolchain(#[from] rvr_openvm::RuntimeToolchainError),
+    #[error("failed to run build tool '{command}': {source}")]
+    ToolchainCommand {
+        command: String,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("library load failed: {0}")]
     LibLoad(String),
     #[error("unknown opcode {opcode:?} at pc {pc:#x}")]
@@ -213,6 +220,8 @@ fn compile_impl<F: PrimeField32>(
     exe: &VmExe<F>,
     opts: &CompileOptions<'_, F>,
 ) -> Result<RvrCompiled, CompileError> {
+    let toolchain = ensure_toolchain_available()?;
+
     let base_name = sanitize_base_name(opts.base_name.unwrap_or("openvm"));
 
     let ir = convert_vmexe_to_ir_with_debug(exe, opts.extensions, |pc| {
@@ -224,7 +233,14 @@ fn compile_impl<F: PrimeField32>(
     let extra_targets = scan_init_memory_for_code_pointers(exe, &valid_pcs);
     let blocks = build_blocks(&ir, &extra_targets);
 
-    let temp_dir = tempfile::tempdir()?;
+    let temp_root = std::env::temp_dir();
+    let temp_dir = tempfile::Builder::new()
+        .prefix("openvm-rvr-")
+        .tempdir_in(&temp_root)
+        .map_err(|source| CompileError::CProject {
+            path: temp_root,
+            source,
+        })?;
     let output_dir = temp_dir.path();
 
     let mut project = CProject::new(output_dir, &base_name, opts.tracer_mode);
@@ -264,7 +280,12 @@ fn compile_impl<F: PrimeField32>(
 
     let entry_point = exe.pc_start;
     let text_start = exe.program.pc_base;
-    project.write_all(&blocks, entry_point, text_start, opts.extensions)?;
+    project
+        .write_all(&blocks, entry_point, text_start, opts.extensions)
+        .map_err(|source| CompileError::CProject {
+            path: output_dir.to_path_buf(),
+            source,
+        })?;
 
     let ext_staticlibs = write_extension_staticlibs(output_dir, opts.extensions)?;
     if let Some(path) = ext_staticlibs
@@ -295,6 +316,7 @@ fn compile_impl<F: PrimeField32>(
     compile_generated_project(
         output_dir,
         &project.make_args_with_extensions(&ext_staticlibs, &ext_sources, &ext_cflags),
+        &toolchain,
     )?;
 
     let lib_path = find_shared_lib(output_dir)?;
@@ -309,6 +331,10 @@ fn compile_impl<F: PrimeField32>(
     })
 }
 
+pub fn ensure_toolchain_available() -> Result<rvr_openvm::RuntimeToolchain, CompileError> {
+    Ok(rvr_openvm::runtime_toolchain()?)
+}
+
 fn write_extension_staticlibs<F: PrimeField32>(
     output_dir: &Path,
     extensions: &ExtensionRegistry<F>,
@@ -317,9 +343,15 @@ fn write_extension_staticlibs<F: PrimeField32>(
     for (filename, content) in extensions.staticlib_files() {
         let path = output_dir.join(filename);
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).map_err(|source| CompileError::CProject {
+                path: parent.to_path_buf(),
+                source,
+            })?;
         }
-        fs::write(&path, content)?;
+        fs::write(&path, content).map_err(|source| CompileError::CProject {
+            path: path.clone(),
+            source,
+        })?;
         paths.push(path);
     }
     Ok(paths)
@@ -341,31 +373,31 @@ fn sanitize_base_name(name: &str) -> String {
     }
 }
 
-fn compile_generated_project(output_dir: &Path, make_args: &[String]) -> Result<(), CompileError> {
+fn compile_generated_project(
+    output_dir: &Path,
+    make_args: &[String],
+    toolchain: &rvr_openvm::RuntimeToolchain,
+) -> Result<(), CompileError> {
     let stdout_path = output_dir.join("make.stdout.log");
     let stderr_path = output_dir.join("make.stderr.log");
-    let stdout_file = File::create(&stdout_path)?;
-    let stderr_file = File::create(&stderr_path)?;
+    let stdout_file = File::create(&stdout_path).map_err(|source| CompileError::CProject {
+        path: stdout_path.clone(),
+        source,
+    })?;
+    let stderr_file = File::create(&stderr_path).map_err(|source| CompileError::CProject {
+        path: stderr_path.clone(),
+        source,
+    })?;
     let total_objects = count_outputs(output_dir, "c");
     let jobs = std::thread::available_parallelism()
         .map_or(4, |n| n.get().saturating_sub(2).max(1))
         .to_string();
-    let compiler = default_compiler_command();
-    let linker = default_linker_or_lld();
-
     eprintln!(
-        "[rvr-openvm] Building native library: {total_objects} translation units with make -j{jobs}"
+        "[rvr-openvm] Building native library: {total_objects} translation units with {} -j{jobs}",
+        toolchain.make
     );
 
-    ensure_clang_compiler(&compiler).map_err(CompileError::Toolchain)?;
-
-    if !linker_exists(&linker) {
-        return Err(CompileError::Toolchain(format!(
-            "required linker '{linker}' not found in PATH; install lld or set RVR_LD/LD"
-        )));
-    }
-
-    let mut child = Command::new("make")
+    let mut child = Command::new(&toolchain.make)
         .arg("-C")
         .arg(output_dir)
         .arg("-j")
@@ -373,11 +405,16 @@ fn compile_generated_project(output_dir: &Path, make_args: &[String]) -> Result<
         .arg("-s")
         .arg("shared")
         .args(make_args)
-        .env("CC", compiler)
-        .env("LINKER", linker)
+        .arg(format!("HOST_OS={}", toolchain.host_os))
+        .env("CC", &toolchain.compiler)
+        .env("LINKER", &toolchain.linker)
         .stdout(Stdio::from(stdout_file))
         .stderr(Stdio::from(stderr_file))
-        .spawn()?;
+        .spawn()
+        .map_err(|source| CompileError::ToolchainCommand {
+            command: toolchain.make.clone(),
+            source,
+        })?;
 
     let progress_delay = Duration::from_secs(10);
     let progress_interval = Duration::from_secs(10);
@@ -403,7 +440,13 @@ fn compile_generated_project(output_dir: &Path, make_args: &[String]) -> Result<
             last_report_at = Instant::now();
         }
 
-        if let Some(status) = child.try_wait()? {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|source| CompileError::ToolchainCommand {
+                command: toolchain.make.clone(),
+                source,
+            })?
+        {
             if status.success() {
                 return Ok(());
             }
@@ -450,7 +493,11 @@ fn read_make_failure(stdout_path: &Path, stderr_path: &Path) -> String {
 }
 
 fn find_shared_lib(dir: &Path) -> Result<PathBuf, CompileError> {
-    fs::read_dir(dir)?
+    fs::read_dir(dir)
+        .map_err(|source| CompileError::CProject {
+            path: dir.to_path_buf(),
+            source,
+        })?
         .flatten()
         .map(|entry| entry.path())
         .find(|path| {
