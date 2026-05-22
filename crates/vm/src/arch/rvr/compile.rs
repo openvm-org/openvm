@@ -11,7 +11,10 @@ use openvm_instructions::{
     exe::VmExe, program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm::{CProject, TracerMode};
+use rvr_openvm::{
+    default_compiler_command, default_linker_or_lld, ensure_clang_compiler, linker_exists,
+    CProject, TracerMode,
+};
 use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers, AirIndex,
     ExtensionRegistry, TraceChipIndex,
@@ -296,16 +299,16 @@ fn compile_generated_project(output_dir: &Path, make_args: &[String]) -> Result<
     let jobs = std::thread::available_parallelism()
         .map_or(4, |n| n.get().saturating_sub(2).max(1))
         .to_string();
-    let compiler = rvr_openvm::default_compiler_command();
-    let linker = rvr_openvm::default_linker_or_lld();
+    let compiler = default_compiler_command();
+    let linker = default_linker_or_lld();
 
     eprintln!(
         "[rvr-openvm] Building native library: {total_objects} translation units with make -j{jobs}"
     );
 
-    rvr_openvm::ensure_clang_compiler(&compiler).map_err(CompileError::Toolchain)?;
+    ensure_clang_compiler(&compiler).map_err(CompileError::Toolchain)?;
 
-    if !rvr_openvm::linker_exists(&linker) {
+    if !linker_exists(&linker) {
         return Err(CompileError::Toolchain(format!(
             "required linker '{linker}' not found in PATH; install lld or set RVR_LD/LD"
         )));

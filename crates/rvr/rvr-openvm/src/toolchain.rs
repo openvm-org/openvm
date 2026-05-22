@@ -1,5 +1,6 @@
 use std::process::Command;
 
+use rvr_openvm_build::{clang_version_suffix, is_clang_command};
 pub use rvr_openvm_build::{
     command_exists, default_compiler_command, ensure_clang_compiler, DEFAULT_CLANG_COMMAND,
 };
@@ -46,7 +47,7 @@ impl Compiler {
     /// Check if this is a clang-based compiler (for flag selection).
     #[must_use]
     pub fn is_clang(&self) -> bool {
-        self.command.contains("clang")
+        is_clang_command(&self.command)
     }
 
     /// Get the linker to use with `-fuse-ld=`. Returns the linker (explicit
@@ -70,11 +71,7 @@ impl Compiler {
 
     /// Extract version suffix from compiler command (e.g., "clang-20" → "-20").
     fn version_suffix(&self) -> &str {
-        if !self.is_clang() {
-            return "";
-        }
-        let basename = self.command.rsplit('/').next().unwrap_or(&self.command);
-        basename.strip_prefix("clang").unwrap_or("")
+        clang_version_suffix(&self.command).unwrap_or("")
     }
 }
 
@@ -151,8 +148,7 @@ fn resolve_llvm_tool(base_name: &str, preferred: Option<String>) -> Option<Strin
 
 fn derive_llvm_tool_from_compiler(base_name: &str) -> Option<String> {
     let compiler = default_compiler_command();
-    let basename = compiler.rsplit('/').next().unwrap_or(&compiler);
-    let version_suffix = basename.strip_prefix("clang")?;
+    let version_suffix = clang_version_suffix(&compiler)?;
     if version_suffix.is_empty() {
         detect_clang_major(&compiler).map(|major| format!("{base_name}-{major}"))
     } else {

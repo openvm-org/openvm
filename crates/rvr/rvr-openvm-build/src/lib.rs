@@ -15,6 +15,9 @@ pub const DEFAULT_CLANG_COMMAND: &str = "clang-22";
 /// [`ensure_clang_compiler`]. Otherwise prefer `clang-22`, then a clang-valued
 /// `CC`, then plain `clang`. Non-clang `CC` values are ignored so ambient Cargo
 /// C compiler settings do not make RVR use GCC by accident.
+///
+/// Only the first whitespace-delimited token from `RVR_CC` or `CC` is used;
+/// pass compiler flags through `CFLAGS`.
 pub fn default_compiler_command() -> String {
     if let Some(compiler) = env_command("RVR_CC") {
         return compiler;
@@ -65,6 +68,19 @@ pub fn command_exists(command: &str) -> bool {
     std::env::split_paths(&path_var).any(|dir| is_executable_file(&dir.join(command)))
 }
 
+pub fn is_clang_command(command: &str) -> bool {
+    clang_version_suffix(command).is_some()
+}
+
+pub fn clang_version_suffix(command: &str) -> Option<&str> {
+    let basename = command_basename(command);
+    if basename == "clang" || basename.starts_with("clang-") {
+        basename.strip_prefix("clang")
+    } else {
+        None
+    }
+}
+
 /// Build a Rust staticlib crate in a private target directory and return the
 /// expected archive path.
 pub fn build_rust_staticlib(
@@ -110,11 +126,11 @@ fn env_command(name: &str) -> Option<String> {
         .and_then(|value| value.split_whitespace().next().map(str::to_string))
 }
 
-fn is_clang_command(command: &str) -> bool {
+fn command_basename(command: &str) -> &str {
     Path::new(command)
         .file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| name == "clang" || name.starts_with("clang-"))
+        .unwrap_or(command)
 }
 
 #[cfg(unix)]

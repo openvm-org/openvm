@@ -17,7 +17,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=PATH");
 
     let ctx = BuildCtx::from_env();
-    let native_entry = openssl::build(&ctx);
+    let native_entry = build_openssl(&ctx);
 
     let shim_path = ctx.out_dir.join("rvr_keccak_shim.c");
     fs::write(&shim_path, shim_c(&native_entry)).expect("write shim");
@@ -130,63 +130,59 @@ fn run_perl(script: &Path, flavor: &str, out_path: &Path) {
     assert!(out_path.exists(), "asm not generated at {out_path:?}");
 }
 
-mod openssl {
-    use super::*;
+fn build_openssl(ctx: &BuildCtx) -> String {
+    let openssl = ctx.manifest_dir.join("openssl");
+    let armv8 = openssl.join("crypto/sha/asm/keccak1600-armv8.pl");
+    let x86_64 = openssl.join("crypto/sha/asm/keccak1600-x86_64.pl");
+    assert!(
+        armv8.exists() && x86_64.exists(),
+        "openssl submodule missing. Run: git submodule update --init extensions/keccak256/rvr/ffi/openssl"
+    );
 
-    pub fn build(ctx: &BuildCtx) -> String {
-        let openssl = ctx.manifest_dir.join("openssl");
-        let armv8 = openssl.join("crypto/sha/asm/keccak1600-armv8.pl");
-        let x86_64 = openssl.join("crypto/sha/asm/keccak1600-x86_64.pl");
-        assert!(
-            armv8.exists() && x86_64.exists(),
-            "openssl submodule missing. Run: git submodule update --init extensions/keccak256/rvr/ffi/openssl"
-        );
+    // `+sha3` flavor enables ARMv8.2 SHA3-ext (`KeccakF1600_cext`); we use
+    // it on Apple Silicon (always SHA3-capable) and skip it on Linux aarch64
+    // to avoid emitting unreachable code.
+    let (script, flavor, extra_globals, native_entry) =
+        match (ctx.target_arch.as_str(), ctx.target_os.as_str()) {
+            ("x86_64", "macos") => (x86_64.as_path(), "macosx", &[] as &[&str], "KeccakF1600"),
+            ("x86_64", "linux") => (x86_64.as_path(), "linux64", &[] as &[&str], "KeccakF1600"),
+            ("aarch64", "macos") => (
+                armv8.as_path(),
+                "ios64+sha3",
+                &["KeccakF1600_cext"][..],
+                "KeccakF1600_cext",
+            ),
+            ("aarch64", "linux") => (armv8.as_path(), "linux64", &[] as &[&str], "KeccakF1600"),
+            (arch, os) => panic!("openssl: unsupported target {arch}-{os}"),
+        };
 
-        // `+sha3` flavor enables ARMv8.2 SHA3-ext (`KeccakF1600_cext`); we use
-        // it on Apple Silicon (always SHA3-capable) and skip it on Linux
-        // aarch64 to avoid emitting unreachable code.
-        let (script, flavor, extra_globals, native_entry) =
-            match (ctx.target_arch.as_str(), ctx.target_os.as_str()) {
-                ("x86_64", "macos") => (x86_64.as_path(), "macosx", &[] as &[&str], "KeccakF1600"),
-                ("x86_64", "linux") => (x86_64.as_path(), "linux64", &[] as &[&str], "KeccakF1600"),
-                ("aarch64", "macos") => (
-                    armv8.as_path(),
-                    "ios64+sha3",
-                    &["KeccakF1600_cext"][..],
-                    "KeccakF1600_cext",
-                ),
-                ("aarch64", "linux") => (armv8.as_path(), "linux64", &[] as &[&str], "KeccakF1600"),
-                (arch, os) => panic!("openssl: unsupported target {arch}-{os}"),
-            };
+    let asm_path = ctx.out_dir.join("keccak1600_openssl.S");
+    run_perl(script, flavor, &asm_path);
 
-        let asm_path = ctx.out_dir.join("keccak1600_openssl.S");
-        run_perl(script, flavor, &asm_path);
+    let mut labels: Vec<&str> = vec!["KeccakF1600"];
+    labels.extend_from_slice(extra_globals);
+    let asm = fs::read_to_string(&asm_path).unwrap();
+    fs::write(&asm_path, export_asm_symbols(&asm, &labels, ctx.is_macos)).unwrap();
 
-        let mut labels: Vec<&str> = vec!["KeccakF1600"];
-        labels.extend_from_slice(extra_globals);
-        let asm = fs::read_to_string(&asm_path).unwrap();
-        fs::write(&asm_path, export_asm_symbols(&asm, &labels, ctx.is_macos)).unwrap();
+    // The emitted armv8 asm `#include`s `arm_arch.h` for PAC/BTI hints.
+    ctx.cc()
+        .include(openssl.join("crypto"))
+        .file(&asm_path)
+        .compile("keccak_openssl");
+    println!("cargo:rerun-if-changed={}", armv8.display());
+    println!("cargo:rerun-if-changed={}", x86_64.display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        openssl.join("crypto/arm_arch.h").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        openssl.join("crypto/perlasm/arm-xlate.pl").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        openssl.join("crypto/perlasm/x86_64-xlate.pl").display()
+    );
 
-        // The emitted armv8 asm `#include`s `arm_arch.h` for PAC/BTI hints.
-        ctx.cc()
-            .include(openssl.join("crypto"))
-            .file(&asm_path)
-            .compile("keccak_openssl");
-        println!("cargo:rerun-if-changed={}", armv8.display());
-        println!("cargo:rerun-if-changed={}", x86_64.display());
-        println!(
-            "cargo:rerun-if-changed={}",
-            openssl.join("crypto/arm_arch.h").display()
-        );
-        println!(
-            "cargo:rerun-if-changed={}",
-            openssl.join("crypto/perlasm/arm-xlate.pl").display()
-        );
-        println!(
-            "cargo:rerun-if-changed={}",
-            openssl.join("crypto/perlasm/x86_64-xlate.pl").display()
-        );
-
-        native_entry.to_string()
-    }
+    native_entry.to_string()
 }
