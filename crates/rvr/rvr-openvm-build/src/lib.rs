@@ -143,3 +143,32 @@ fn is_executable_file(path: &Path) -> bool {
 fn is_executable_file(path: &Path) -> bool {
     path.is_file()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{clang_version_suffix, is_clang_command};
+
+    #[test]
+    fn detects_clang_command_names() {
+        assert!(is_clang_command("clang"));
+        assert!(is_clang_command("clang-22"));
+        assert!(is_clang_command("/usr/bin/clang-22"));
+        assert!(is_clang_command("/opt/homebrew/opt/llvm/bin/clang"));
+    }
+
+    #[test]
+    fn rejects_non_clang_command_names() {
+        assert!(!is_clang_command("gcc"));
+        assert!(!is_clang_command("/opt/not-clang-tools/gcc"));
+        assert!(!is_clang_command("my-clang-wrapper"));
+        assert!(!is_clang_command("clang++"));
+    }
+
+    #[test]
+    fn extracts_clang_version_suffix() {
+        assert_eq!(clang_version_suffix("clang"), Some(""));
+        assert_eq!(clang_version_suffix("clang-22"), Some("-22"));
+        assert_eq!(clang_version_suffix("/usr/bin/clang-18"), Some("-18"));
+        assert_eq!(clang_version_suffix("gcc"), None);
+    }
+}
