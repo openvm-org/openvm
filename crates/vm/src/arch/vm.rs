@@ -40,10 +40,14 @@ use tracing::{info_span, instrument};
 
 #[cfg(feature = "aot")]
 use super::aot::AotInstance;
+#[cfg(feature = "metrics")]
+use super::compilation_metrics::CompilationTimer;
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
-    compile_metered_cost, ChipMapping, RvrMeteredCostInstance, RvrMeteredInstance, RvrPureInstance,
+    compile_metered_cost, compile_metered_segment_boundary, ChipMapping, RunToCompletion,
+    RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
+    SegmentBoundary,
 };
 use super::{
     execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx, Segment},
@@ -238,6 +242,8 @@ where
         &self,
         exe: &VmExe<F>,
     ) -> Result<InterpretedInstance<'_, F, ExecutionCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_timer = CompilationTimer::start("compile_pure_ms", "interpreter");
         InterpretedInstance::new(&self.inventory, exe)
     }
 
@@ -246,6 +252,8 @@ where
         &self,
         exe: &VmExe<F>,
     ) -> Result<InterpretedInstance<'_, F, ExecutionCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_timer = CompilationTimer::start("compile_pure_ms", "interpreter");
         InterpretedInstance::new(&self.inventory, exe)
     }
 
@@ -285,6 +293,8 @@ where
     VC::Executor: Executor<F>,
 {
     pub fn rvr_instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<F>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_timer = CompilationTimer::start("compile_pure_ms", "rvr");
         let extensions = self.build_rvr_extensions(None);
         let compiled = compile(exe, &extensions).map_err(map_rvr_compile_error)?;
 
@@ -308,6 +318,8 @@ where
         &self,
         exe: &VmExe<F>,
     ) -> Result<AotInstance<'_, F, ExecutionCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_timer = CompilationTimer::start("compile_pure_ms", "aot");
         AotInstance::new(&self.inventory, exe)
     }
 }
@@ -325,6 +337,8 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<'_, F, MeteredCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_timer = CompilationTimer::start("compile_metered_ms", "interpreter");
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -334,6 +348,8 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<'_, F, MeteredCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_timer = CompilationTimer::start("compile_metered_ms", "interpreter");
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -353,6 +369,8 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<AotInstance<'_, F, MeteredCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_timer = CompilationTimer::start("compile_metered_ms", "aot");
         AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -364,6 +382,8 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<'_, F, MeteredCostCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_timer = CompilationTimer::start("compile_metered_cost_ms", "interpreter");
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -373,6 +393,8 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<F, MeteredCostCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_timer = CompilationTimer::start("compile_metered_cost_ms", "interpreter");
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 }
@@ -397,6 +419,8 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<RvrMeteredInstance<F>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_timer = CompilationTimer::start("compile_metered_ms", "rvr");
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let chips = ChipMapping {
             pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
@@ -410,6 +434,32 @@ where
             exe: Arc::new(exe.clone()),
             extensions,
             compiled,
+            _mode: PhantomData::<RunToCompletion>,
+        })
+    }
+
+    pub fn metered_segment_rvr_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<RvrMeteredSegmentInstance<F>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_timer = CompilationTimer::start("compile_metered_segment_ms", "rvr");
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let chips = ChipMapping {
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                .map_err(map_rvr_compile_error)?,
+            chip_widths: None,
+        };
+        let compiled = compile_metered_segment_boundary(exe, &extensions, &chips)
+            .map_err(map_rvr_compile_error)?;
+
+        Ok(RvrMeteredSegmentInstance {
+            system_config: self.inventory.config().clone(),
+            exe: Arc::new(exe.clone()),
+            extensions,
+            compiled,
+            _mode: PhantomData::<SegmentBoundary>,
         })
     }
 
@@ -428,6 +478,8 @@ where
         executor_idx_to_air_idx: &[usize],
         widths: &[usize],
     ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_timer = CompilationTimer::start("compile_metered_cost_ms", "rvr");
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
         let chips = ChipMapping {
@@ -686,6 +738,20 @@ where
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         self.executor()
             .metered_rvr_instance(exe, &executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn get_metered_segment_rvr_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredSegmentInstance<Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_segment_rvr_instance(exe, &executor_idx_to_air_idx)
     }
 
     #[cfg(feature = "aot")]
@@ -1262,7 +1328,7 @@ where
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
 {
-    /// First performs metered execution (E2) to determine segments. Then sequentially proves each
+    /// First performs metered execution to determine segments. Then sequentially proves each
     /// segment. The proof for each segment uses the specified [ProverBackend], but the proof for
     /// the next segment does not start before the current proof finishes.
     fn prove(

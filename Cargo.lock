@@ -8778,6 +8778,7 @@ dependencies = [
  "rvr-openvm-ext-ffi-common",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

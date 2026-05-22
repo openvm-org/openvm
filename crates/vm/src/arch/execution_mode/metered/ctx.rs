@@ -23,8 +23,19 @@ pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub is_trace_height_constant: Vec<bool>,
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
+    // TODO: Remove this once segmented execution is selected by typed executor entry points across
+    // all backends. RVR already treats the compiled suspender policy as the source of truth.
     #[getset(get = "pub", set = "pub", set_with = "pub")]
     suspend_on_segment: bool,
+}
+
+#[cfg(feature = "rvr")]
+pub(crate) struct MeteredCtxParts<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
+    pub trace_heights: Vec<u32>,
+    pub is_trace_height_constant: Vec<bool>,
+    pub memory_ctx: MemoryCtx<PAGE_BITS>,
+    pub segmentation_ctx: SegmentationCtx,
+    pub suspend_on_segment: bool,
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
@@ -128,6 +139,28 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     pub fn into_segments(self) -> Vec<Segment> {
         self.segmentation_ctx.segments
+    }
+
+    #[cfg(feature = "rvr")]
+    pub(crate) fn into_parts(self) -> MeteredCtxParts<PAGE_BITS> {
+        MeteredCtxParts {
+            trace_heights: self.trace_heights,
+            is_trace_height_constant: self.is_trace_height_constant,
+            memory_ctx: self.memory_ctx,
+            segmentation_ctx: self.segmentation_ctx,
+            suspend_on_segment: self.suspend_on_segment,
+        }
+    }
+
+    #[cfg(feature = "rvr")]
+    pub(crate) fn from_parts(parts: MeteredCtxParts<PAGE_BITS>) -> Self {
+        Self {
+            trace_heights: parts.trace_heights,
+            is_trace_height_constant: parts.is_trace_height_constant,
+            memory_ctx: parts.memory_ctx,
+            segmentation_ctx: parts.segmentation_ctx,
+            suspend_on_segment: parts.suspend_on_segment,
+        }
     }
 
     #[inline(always)]
@@ -251,5 +284,60 @@ impl<const PAGE_BITS: usize> MeteredExecutionCtxTrait for MeteredCtx<PAGE_BITS> 
                 .get_unchecked(chip_idx)
                 .wrapping_add(height_delta);
         }
+    }
+}
+
+#[cfg(all(test, feature = "rvr"))]
+mod tests {
+    use super::*;
+    use crate::{
+        arch::{BOUNDARY_AIR_ID, MERKLE_AIR_ID},
+        utils::test_system_config,
+    };
+
+    #[test]
+    fn rvr_metered_ctx_parts_roundtrip_preserves_execution_state() {
+        let system_config = test_system_config();
+        let num_airs = 6;
+        let mut air_names = (0..num_airs)
+            .map(|idx| format!("Air {idx}"))
+            .collect::<Vec<_>>();
+        air_names[BOUNDARY_AIR_ID] = "Memory Boundary".to_string();
+        air_names[MERKLE_AIR_ID] = "Memory Merkle".to_string();
+
+        let mut segmentation_ctx = SegmentationCtx::new(
+            air_names,
+            vec![1; num_airs],
+            vec![0; num_airs],
+            vec![false; num_airs],
+            system_config.segmentation_config.clone(),
+        );
+        segmentation_ctx.instret = 123;
+        segmentation_ctx.segment_check_insns = 1;
+        segmentation_ctx.instrets_until_check = 1;
+
+        let mut memory_ctx = MemoryCtx::<DEFAULT_PAGE_BITS>::new(&system_config, 1);
+        memory_ctx.addr_space_access_count[1] = 7;
+        memory_ctx.page_indices_since_checkpoint_len = 3;
+
+        let ctx = MeteredCtx::<DEFAULT_PAGE_BITS> {
+            trace_heights: vec![1, 2, 3, 4, 5, 6],
+            is_trace_height_constant: vec![false, true, false, true, false, true],
+            memory_ctx,
+            segmentation_ctx,
+            suspend_on_segment: true,
+        };
+
+        let restored = MeteredCtx::from_parts(ctx.into_parts());
+
+        assert_eq!(restored.trace_heights, vec![1, 2, 3, 4, 5, 6]);
+        assert_eq!(
+            restored.is_trace_height_constant,
+            vec![false, true, false, true, false, true]
+        );
+        assert_eq!(restored.segmentation_ctx.instret, 123);
+        assert_eq!(restored.memory_ctx.addr_space_access_count[1], 7);
+        assert_eq!(restored.memory_ctx.page_indices_since_checkpoint_len, 3);
+        assert!(*restored.suspend_on_segment());
     }
 }
