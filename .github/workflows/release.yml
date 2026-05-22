@@ -33,6 +33,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+      - name: Configure sccache startup timeout
+        run: |
+          mkdir -p ~/.config/sccache
+          echo "server_startup_timeout_ms = 60000" > ~/.config/sccache/config
       - uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Cargo dependencies

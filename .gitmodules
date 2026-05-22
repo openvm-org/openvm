@@ -7,9 +7,7 @@
 [submodule "extensions/algebra/rvr/ffi/modular/secp256k1"]
 	path = extensions/algebra/rvr/ffi/modular/secp256k1
 	url = https://github.com/bitcoin-core/secp256k1.git
-[submodule "extensions/keccak256/rvr/ffi/xkcp"]
-	path = extensions/keccak256/rvr/ffi/xkcp
-	url = https://github.com/XKCP/XKCP.git
+	shallow = true
 [submodule "extensions/keccak256/rvr/ffi/openssl"]
 	path = extensions/keccak256/rvr/ffi/openssl
 	url = https://github.com/openssl/openssl.git
