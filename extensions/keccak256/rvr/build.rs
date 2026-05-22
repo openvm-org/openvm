@@ -2,7 +2,9 @@
 // to. The path to the resulting `librvr_openvm_ext_keccak_ffi.a` is exposed
 // to the source via the `RVR_KECCAK_FFI_STATICLIB` cargo env var.
 
-use std::{env, path::PathBuf, process::Command};
+use std::{env, path::PathBuf};
+
+use rvr_openvm_build::build_rust_staticlib;
 
 fn main() {
     let manifest_dir =
@@ -13,30 +15,11 @@ fn main() {
     // Use a private target dir to avoid lock contention with the outer cargo.
     let ffi_target_dir = out_dir.join("ffi-target");
 
-    let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    let status = Command::new(&cargo)
-        .args([
-            "build",
-            "--release",
-            "--config",
-            "profile.release.lto=false",
-            "--manifest-path",
-        ])
-        .arg(&ffi_manifest)
-        .arg("--target-dir")
-        .arg(&ffi_target_dir)
-        .status()
-        .expect("failed to spawn cargo for rvr-openvm-ext-keccak-ffi");
-    assert!(
-        status.success(),
-        "cargo build for rvr-openvm-ext-keccak-ffi failed"
-    );
-
-    let lib_path = ffi_target_dir.join("release/librvr_openvm_ext_keccak_ffi.a");
-    assert!(
-        lib_path.exists(),
-        "expected staticlib at {} after cargo build",
-        lib_path.display()
+    let lib_path = build_rust_staticlib(
+        &ffi_manifest,
+        &ffi_target_dir,
+        "librvr_openvm_ext_keccak_ffi.a",
+        "rvr-openvm-ext-keccak-ffi",
     );
 
     println!(
@@ -46,6 +29,14 @@ fn main() {
     println!("cargo:rerun-if-changed=ffi/Cargo.toml");
     println!("cargo:rerun-if-changed=ffi/build.rs");
     println!("cargo:rerun-if-changed=ffi/src");
-    println!("cargo:rerun-if-changed=ffi/openssl");
-    println!("cargo:rerun-if-changed=ffi/xkcp");
+    println!("cargo:rerun-if-changed=ffi/openssl/crypto/arm_arch.h");
+    println!("cargo:rerun-if-changed=ffi/openssl/crypto/perlasm/arm-xlate.pl");
+    println!("cargo:rerun-if-changed=ffi/openssl/crypto/perlasm/x86_64-xlate.pl");
+    println!("cargo:rerun-if-changed=ffi/openssl/crypto/sha/asm/keccak1600-armv8.pl");
+    println!("cargo:rerun-if-changed=ffi/openssl/crypto/sha/asm/keccak1600-x86_64.pl");
+    println!("cargo:rerun-if-env-changed=RVR_CC");
+    println!("cargo:rerun-if-env-changed=CC");
+    println!("cargo:rerun-if-env-changed=AS");
+    println!("cargo:rerun-if-env-changed=CFLAGS");
+    println!("cargo:rerun-if-env-changed=PATH");
 }

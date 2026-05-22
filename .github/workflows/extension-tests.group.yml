@@ -43,8 +43,7 @@ jobs:
         if: inputs.mode == 'rvr'
         run: |
           git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
-          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/xkcp
-          git submodule update --init --recursive --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"

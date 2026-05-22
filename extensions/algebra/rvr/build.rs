@@ -6,8 +6,9 @@
 use std::{
     env,
     path::{Path, PathBuf},
-    process::Command,
 };
+
+use rvr_openvm_build::build_rust_staticlib;
 
 fn main() {
     let manifest_dir =
@@ -44,29 +45,10 @@ fn main() {
 }
 
 fn build_subffi(crate_dir: &Path, target_dir: &Path, lib_name: &str, crate_name: &str) -> PathBuf {
-    let manifest = crate_dir.join("Cargo.toml");
-
-    let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    let status = Command::new(&cargo)
-        .args([
-            "build",
-            "--release",
-            "--config",
-            "profile.release.lto=false",
-            "--manifest-path",
-        ])
-        .arg(&manifest)
-        .arg("--target-dir")
-        .arg(target_dir)
-        .status()
-        .unwrap_or_else(|e| panic!("failed to spawn cargo for {crate_name}: {e}"));
-    assert!(status.success(), "cargo build for {crate_name} failed");
-
-    let lib_path = target_dir.join("release").join(lib_name);
-    assert!(
-        lib_path.exists(),
-        "expected staticlib at {} after cargo build",
-        lib_path.display()
-    );
-    lib_path
+    build_rust_staticlib(
+        &crate_dir.join("Cargo.toml"),
+        target_dir,
+        lib_name,
+        crate_name,
+    )
 }

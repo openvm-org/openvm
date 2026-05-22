@@ -1,12 +1,13 @@
-use std::{path::Path, process::Command};
+use std::process::Command;
 
-/// Default clang command used across the workspace.
-pub const DEFAULT_CLANG_COMMAND: &str = "clang-22";
+use rvr_openvm_build::{clang_version_suffix, is_clang_command};
+pub use rvr_openvm_build::{
+    command_exists, default_compiler_command, ensure_clang_compiler, DEFAULT_CLANG_COMMAND,
+};
 
 /// C compiler to use for generated code.
 ///
-/// Accepts any compiler command (e.g., "clang", "clang-20", "gcc-13").
-/// Clang vs GCC is auto-detected from the command name to determine flags.
+/// Accepts clang compiler commands (e.g., "clang", "clang-20").
 /// For clang, the linker (lld) version is auto-derived from the compiler
 /// command (e.g., "clang-20" → "lld-20"). Use `with_linker()` to override.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -46,7 +47,7 @@ impl Compiler {
     /// Check if this is a clang-based compiler (for flag selection).
     #[must_use]
     pub fn is_clang(&self) -> bool {
-        self.command.contains("clang")
+        is_clang_command(&self.command)
     }
 
     /// Get the linker to use with `-fuse-ld=`. Returns the linker (explicit
@@ -70,11 +71,7 @@ impl Compiler {
 
     /// Extract version suffix from compiler command (e.g., "clang-20" → "-20").
     fn version_suffix(&self) -> &str {
-        if !self.is_clang() {
-            return "";
-        }
-        let basename = self.command.rsplit('/').next().unwrap_or(&self.command);
-        basename.strip_prefix("clang").unwrap_or("")
+        clang_version_suffix(&self.command).unwrap_or("")
     }
 }
 
@@ -82,15 +79,6 @@ impl Default for Compiler {
     fn default() -> Self {
         Self::clang()
     }
-}
-
-pub fn default_compiler_command() -> String {
-    std::env::var("RVR_CC")
-        .ok()
-        .or_else(|| std::env::var("CC").ok())
-        .filter(|value| !value.trim().is_empty())
-        .and_then(|value| value.split_whitespace().next().map(str::to_string))
-        .unwrap_or_else(|| DEFAULT_CLANG_COMMAND.to_string())
 }
 
 pub fn default_compiler() -> Compiler {
@@ -160,8 +148,7 @@ fn resolve_llvm_tool(base_name: &str, preferred: Option<String>) -> Option<Strin
 
 fn derive_llvm_tool_from_compiler(base_name: &str) -> Option<String> {
     let compiler = default_compiler_command();
-    let basename = compiler.rsplit('/').next().unwrap_or(&compiler);
-    let version_suffix = basename.strip_prefix("clang")?;
+    let version_suffix = clang_version_suffix(&compiler)?;
     if version_suffix.is_empty() {
         detect_clang_major(&compiler).map(|major| format!("{base_name}-{major}"))
     } else {
@@ -181,21 +168,6 @@ fn detect_clang_major(compiler: &str) -> Option<u32> {
         .split_whitespace()
         .find(|token| token.as_bytes().first().is_some_and(u8::is_ascii_digit))?;
     version.split('.').next()?.parse().ok()
-}
-
-fn command_exists(command: &str) -> bool {
-    if command.contains(std::path::MAIN_SEPARATOR) && Path::new(command).exists() {
-        return true;
-    }
-
-    let Some(path_var) = std::env::var_os("PATH") else {
-        return false;
-    };
-
-    std::env::split_paths(&path_var).any(|dir| {
-        let candidate = dir.join(command);
-        candidate.is_file()
-    })
 }
 
 fn dedup_preserve_order(candidates: Vec<String>) -> Vec<String> {
