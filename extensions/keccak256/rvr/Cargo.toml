@@ -15,3 +15,5 @@ openvm-instructions.workspace = true
 openvm-keccak256-transpiler.workspace = true
 openvm-stark-backend.workspace = true
 
+[build-dependencies]
+rvr-openvm-build.workspace = true

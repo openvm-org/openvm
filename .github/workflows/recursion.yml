@@ -28,8 +28,6 @@ jobs:
         with:
           sccache: s3
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
