@@ -11,16 +11,19 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx, NO_CHIP};
+use rvr_openvm_lift::{
+    air_index_to_c, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
+    RvrExtensionCtx,
+};
 
 /// keccak-f[1600]: read 200 bytes via `buffer_ptr_reg`, permute in place.
 #[derive(Debug, Clone)]
 pub struct KeccakfInstr {
     pub buffer_ptr_reg: Reg,
     /// KeccakfOp chip (1 row per instruction).
-    pub op_chip_idx: u32,
+    pub op_chip_idx: Option<AirIndex>,
     /// KeccakfPerm chip (24 rows per instruction).
-    pub perm_chip_idx: u32,
+    pub perm_chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for KeccakfInstr {
@@ -30,10 +33,9 @@ impl ExtInstr for KeccakfInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let buf = ctx.read_reg(self.buffer_ptr_reg);
-        ctx.write_line(&format!(
-            "rvr_ext_keccakf(state, {buf}, {}u, {}u);",
-            self.op_chip_idx, self.perm_chip_idx
-        ));
+        let op = air_index_to_c(self.op_chip_idx);
+        let perm = air_index_to_c(self.perm_chip_idx);
+        ctx.write_line(&format!("rvr_ext_keccakf(state, {buf}, {op}u, {perm}u);"));
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -52,7 +54,7 @@ pub struct XorinInstr {
     pub input_ptr_reg: Reg,
     pub len_reg: Reg,
     /// Xorin chip (1 row per instruction).
-    pub chip_idx: u32,
+    pub chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for XorinInstr {
@@ -64,9 +66,9 @@ impl ExtInstr for XorinInstr {
         let buf_ptr = ctx.read_reg(self.buffer_ptr_reg);
         let input = ctx.read_reg(self.input_ptr_reg);
         let len = ctx.read_reg(self.len_reg);
+        let chip = air_index_to_c(self.chip_idx);
         ctx.write_line(&format!(
-            "rvr_ext_xorin(state, {buf_ptr}, {input}, {len}, {}u);",
-            self.chip_idx
+            "rvr_ext_xorin(state, {buf_ptr}, {input}, {len}, {chip}u);"
         ));
     }
 
@@ -81,37 +83,21 @@ impl ExtInstr for XorinInstr {
 
 /// Keccak-256 extension. Register with the `ExtensionRegistry`.
 pub struct KeccakExtension {
-    xorin_chip_idx: u32,
-    keccakf_op_chip_idx: u32,
-    keccakf_perm_chip_idx: u32,
+    xorin_chip_idx: Option<AirIndex>,
+    keccakf_op_chip_idx: Option<AirIndex>,
+    keccakf_perm_chip_idx: Option<AirIndex>,
     /// Path to the keccak-ffi staticlib that exports `rvr_keccak_f1600`.
     asm_staticlib_path: PathBuf,
 }
 
 impl KeccakExtension {
-    /// Pure-mode constructor; chip indices are unused (`trace_chip` is no-op).
-    pub fn new_pure() -> Self {
-        Self {
-            xorin_chip_idx: NO_CHIP,
-            keccakf_op_chip_idx: NO_CHIP,
-            keccakf_perm_chip_idx: NO_CHIP,
-            asm_staticlib_path: default_staticlib_path(),
-        }
-    }
-
-    /// Resolves chip indices from the VM config.
-    pub fn new(ctx: &RvrExtensionCtx) -> Result<Self, ExtensionError> {
-        let xorin_chip_idx = ctx.require_opcode_air_idx(XorinOpcode::XORIN.global_opcode())?;
-        let keccakf_op_chip_idx =
-            ctx.require_opcode_air_idx(KeccakfOpcode::KECCAKF.global_opcode())?;
+    pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
+        let xorin_chip_idx = opcode_air_idx(ctx, XorinOpcode::XORIN)?;
+        let keccakf_op_chip_idx = opcode_air_idx(ctx, KeccakfOpcode::KECCAKF)?;
         // KeccakfPermAir is inserted right before KeccakfOpAir in
         // Keccak256Rv32::extend_circuit, and the chip indices are set in
         // reverse order.
-        let keccakf_perm_chip_idx = if keccakf_op_chip_idx == NO_CHIP {
-            NO_CHIP
-        } else {
-            keccakf_op_chip_idx + 1
-        };
+        let keccakf_perm_chip_idx = keccakf_op_chip_idx.map(AirIndex::next);
 
         Ok(Self {
             xorin_chip_idx,
