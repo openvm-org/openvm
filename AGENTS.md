@@ -8,6 +8,7 @@
 - Run tests with nextest when available: `cargo nextest run --cargo-profile=fast -p <crate>`; fallback: `cargo test -p <crate>`.
 - Speed knob for local runs: `OPENVM_SKIP_DEBUG=1` (see below).
 - After major code edits, run `./scripts/pre-push.sh` to check formatting, linting, and tests on changed crates before pushing.
+- Generated C should minimize preprocessor directives. Prefer separate specialized headers, `static constexpr` values, and `static inline`/`always_inline` helpers for compile-time selection; reserve preprocessor use for include guards or unavoidable platform/configuration boundaries. Avoid unused-parameter cast statements; the generated C build already suppresses unused-parameter warnings, so keep readable parameter names.
 
 ## Project Overview
 

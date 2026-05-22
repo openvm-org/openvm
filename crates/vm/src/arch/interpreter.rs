@@ -15,6 +15,8 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
+#[cfg(feature = "metrics")]
+use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
 #[cfg(feature = "tco")]
 use crate::arch::Handler;
 use crate::{
@@ -29,7 +31,7 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-/// VM pure executor(E1/E2 executor) which doesn't consider trace generation.
+/// VM pure executor which doesn't consider trace generation.
 /// Note: This executor doesn't hold any VM state and can be used for multiple execution.
 ///
 /// The generic `Ctx` and constructor determine whether this supported pure execution or metered
@@ -110,7 +112,7 @@ macro_rules! run {
     }};
 }
 
-// Constructors for E1 and E2 respectively, which generate pre-computed buffers and function
+// Constructors for pure and metered execution, which generate pre-computed buffers and function
 // pointers
 // - Generic in `Ctx`
 
@@ -120,7 +122,7 @@ where
     Ctx: ExecutionCtxTrait,
 {
     /// Creates a new interpreter instance for pure execution.
-    // (E1 execution)
+    // (pure execution)
     pub fn new<E>(
         inventory: &ExecutorInventory<E>,
         exe: &VmExe<F>,
@@ -151,7 +153,7 @@ where
                     if let Some((inst, _)) = inst_opt {
                         let pc = pc_idx as u32 * DEFAULT_PC_STEP;
                         if get_system_opcode_handler::<F, Ctx>(inst, pre_compute).is_some() {
-                            Ok(terminate_execute_e12_tco_handler)
+                            Ok(terminate_execute_tco_handler)
                         } else {
                             // unwrap because get_pre_compute_instructions would have errored
                             // already on DisabledOperation
@@ -229,7 +231,7 @@ where
     Ctx: MeteredExecutionCtxTrait,
 {
     /// Creates a new interpreter instance for pure execution.
-    // (E1 execution)
+    // (metered execution)
     pub fn new_metered<E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
@@ -263,7 +265,7 @@ where
                     if let Some((inst, _)) = inst_opt {
                         let pc = pc_idx as u32 * DEFAULT_PC_STEP;
                         if get_system_opcode_handler::<F, Ctx>(inst, pre_compute).is_some() {
-                            Ok(terminate_execute_e12_tco_handler)
+                            Ok(terminate_execute_tco_handler)
                         } else {
                             // unwrap because get_pre_compute_instructions would have errored
                             // already on DisabledOperation
@@ -333,19 +335,16 @@ where
         let mut exec_state = VmExecState::new(from_state, ctx);
 
         #[cfg(feature = "metrics")]
-        let start = std::time::Instant::now();
+        let metrics = ExecutionMetricTimer::start(ExecutionMetric::Pure);
         #[cfg(feature = "metrics")]
         let start_instret_left = exec_state.ctx.instret_left;
 
-        run!("execute_e1", self, exec_state, ExecutionCtx);
+        run!("execute_pure", self, exec_state, ExecutionCtx);
 
         #[cfg(feature = "metrics")]
         {
-            let elapsed = start.elapsed();
             let insns = start_instret_left - exec_state.ctx.instret_left;
-            tracing::info!("instructions_executed={insns}");
-            metrics::counter!("execute_e1_insns").absolute(insns);
-            metrics::gauge!("execute_e1_insn_mi/s").set(insns as f64 / elapsed.as_micros() as f64);
+            metrics.record(insns);
         }
         tracing::debug!("pc: {}", exec_state.vm_state.pc());
         tracing::debug!("interpreter exit code {:?}", exec_state.exit_code);
@@ -431,7 +430,7 @@ where
         mut exec_state: VmExecState<F, GuestMemory, MeteredCtx>,
     ) -> Result<VmExecState<F, GuestMemory, MeteredCtx>, ExecutionError> {
         #[cfg(feature = "metrics")]
-        let start = std::time::Instant::now();
+        let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         #[cfg(feature = "metrics")]
         let start_instret = exec_state.ctx.segmentation_ctx.instret;
 
@@ -440,12 +439,8 @@ where
 
         #[cfg(feature = "metrics")]
         {
-            let elapsed = start.elapsed();
             let insns = exec_state.ctx.segmentation_ctx.instret - start_instret;
-            tracing::info!("instructions_executed={insns}");
-            metrics::counter!("execute_metered_insns").absolute(insns);
-            metrics::gauge!("execute_metered_insn_mi/s")
-                .set(insns as f64 / elapsed.as_micros() as f64);
+            metrics.record(insns);
         }
         Ok(exec_state)
     }
@@ -480,7 +475,7 @@ where
         let mut exec_state = VmExecState::new(from_state, ctx);
 
         #[cfg(feature = "metrics")]
-        let start = std::time::Instant::now();
+        let metrics = ExecutionMetricTimer::start(ExecutionMetric::MeteredCost);
         #[cfg(feature = "metrics")]
         let start_instret = exec_state.ctx.instret;
 
@@ -489,12 +484,8 @@ where
 
         #[cfg(feature = "metrics")]
         {
-            let elapsed = start.elapsed();
             let insns = exec_state.ctx.instret - start_instret;
-            tracing::info!("instructions_executed={insns}");
-            metrics::counter!("execute_metered_cost_insns").absolute(insns);
-            metrics::gauge!("execute_metered_cost_insn_mi/s")
-                .set(insns as f64 / elapsed.as_micros() as f64);
+            metrics.record(insns);
         }
 
         check_exit_code(exec_state.exit_code)?;
@@ -608,7 +599,7 @@ impl Drop for AlignedBuf {
 }
 
 #[inline(always)]
-unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn terminate_execute_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -619,12 +610,12 @@ unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 }
 
 #[cfg(feature = "tco")]
-unsafe fn terminate_execute_e12_tco_handler<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn terminate_execute_tco_handler<F: PrimeField32, CTX: ExecutionCtxTrait>(
     interpreter: &InterpretedInstance<F, CTX>,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute = interpreter.get_pre_compute(exec_state.vm_state.pc());
-    terminate_execute_e12_impl(pre_compute, exec_state);
+    terminate_execute_impl(pre_compute, exec_state);
 }
 
 #[cfg(feature = "tco")]
@@ -818,7 +809,7 @@ fn get_system_opcode_handler<F: PrimeField32, Ctx: ExecutionCtxTrait>(
     if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
         let pre_compute: &mut TerminatePreCompute = buf.borrow_mut();
         pre_compute.exit_code = inst.c.as_canonical_u32();
-        return Some(terminate_execute_e12_impl);
+        return Some(terminate_execute_impl);
     }
     None
 }
