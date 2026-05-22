@@ -5804,6 +5804,7 @@ version = "2.0.0-beta.2"
 dependencies = [
  "abi_stable",
  "backtrace",
+ "bitcode",
  "bytesize",
  "cfg-if",
  "dashmap",
@@ -5813,6 +5814,7 @@ dependencies = [
  "enum_dispatch",
  "eyre",
  "getset",
+ "hex",
  "itertools 0.14.0",
  "libc",
  "libloading 0.8.8",
@@ -5843,6 +5845,7 @@ dependencies = [
  "rvr-state",
  "serde",
  "serde-big-array",
+ "sha2 0.10.9",
  "static_assertions",
  "tempfile",
  "test-case",

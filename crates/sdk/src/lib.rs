@@ -17,6 +17,14 @@ use openvm_build::{
 // Re-exports
 pub use openvm_build::{cargo_command, get_rustup_toolchain_name};
 pub use openvm_circuit;
+// Conditional imports for the backend-specific [`CompiledExePure`]/[`MeteredInterpreter`]/
+// [`MeteredCostInterpreter`] aliases below. With the rvr backend, none of these are
+// referenced.
+#[cfg(not(feature = "rvr"))]
+use openvm_circuit::arch::{
+    execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx},
+    InterpretedInstance,
+};
 use openvm_circuit::{
     arch::{
         execution_mode::Segment, instructions::exe::VmExe, Executor, InitFileGenerator,
@@ -68,6 +76,58 @@ cfg_if::cfg_if! {
 }
 
 pub use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config as SC, F};
+
+// ── Compiled-exe type aliases ─────────────────────────────────────────────────
+//
+// `compile_*` returns these and `execute_compiled[_metered/_cost]` consumes them. They wrap the
+// backend-specific instance type (rvr `.so` + extensions, AOT-generated library + precompute, or
+// interpreter precompute). Once held, the cached `.so` (rvr) or library (AOT) is not recompiled
+// across `execute_compiled` calls in the same process.
+//
+// AOT does not have a dedicated metered-cost variant; that mode falls through to the interpreter.
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "rvr")] {
+        pub use openvm_circuit::arch::rvr::RvrPureInstance as CompiledExePure;
+        pub use openvm_circuit::arch::rvr::RvrMeteredInstance as MeteredInterpreter;
+        pub use openvm_circuit::arch::rvr::RvrMeteredCostInstance as MeteredCostInterpreter;
+    } else if #[cfg(feature = "aot")] {
+        pub use openvm_circuit::arch::AotInstance;
+        /// Pure compiled artifact: AOT-generated library + precompute.
+        pub type CompiledExePure<F> = AotInstance<F, ExecutionCtx>;
+        pub type MeteredInterpreter<F> = AotInstance<F, MeteredCtx>;
+        /// AOT has no dedicated metered-cost backend; we use the interpreter instead.
+        pub type MeteredCostInterpreter<F> = InterpretedInstance<F, MeteredCostCtx>;
+    } else {
+        /// Pure compiled artifact: interpreter precompute (no shared library to cache).
+        pub type CompiledExePure<F> = InterpretedInstance<F, ExecutionCtx>;
+        pub type MeteredInterpreter<F> = InterpretedInstance<F, MeteredCtx>;
+        pub type MeteredCostInterpreter<F> = InterpretedInstance<F, MeteredCostCtx>;
+    }
+}
+
+/// A compiled metered-execution artifact. Bundles the (lazily-keygen'd) [`AppProver`] used to
+/// build the `MeteredCtx` from the proving key together with the cached [`MeteredInterpreter`]
+/// (so the rvr `.so` is only compiled once per artifact, even when an instance is reused for many
+/// `execute_compiled_metered` calls).
+pub struct CompiledExeMetered<E, VB>
+where
+    E: StarkEngine<SC = SC>,
+    VB: VmBuilder<E>,
+{
+    pub app_prover: AppProver<E, VB>,
+    pub interpreter: MeteredInterpreter<F>,
+}
+
+/// A compiled metered-cost-execution artifact. See [`CompiledExeMetered`].
+pub struct CompiledExeMeteredCost<E, VB>
+where
+    E: StarkEngine<SC = SC>,
+    VB: VmBuilder<E>,
+{
+    pub app_prover: AppProver<E, VB>,
+    pub interpreter: MeteredCostInterpreter<F>,
+}
 
 pub mod builder;
 pub mod config;
@@ -316,11 +376,41 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<Vec<u8>, SdkError> {
+        let compiled = self.compile_pure(app_exe, None::<&Path>)?;
+        self.execute_compiled(&compiled, inputs)
+    }
+
+    /// Compile `app_exe` for pure execution, optionally caching the artifact under
+    /// `save_path`.
+    ///
+    /// For backends that compile to a shared library (rvr), the artifact filename inside
+    /// `save_path` is derived from a hash of every input that affects codegen — exe, extensions,
+    /// tracer mode, target triple, OpenVM version, compile options. If a matching file already
+    /// exists at that path, it is loaded without recompiling.
+    ///
+    /// AOT and the pure interpreter ignore `save_path`: AOT-generated assembly embeds absolute
+    /// pointers to in-process structures, and the interpreter has no compiled file to persist.
+    pub fn compile_pure(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+        save_path: Option<impl AsRef<Path>>,
+    ) -> Result<CompiledExePure<F>, SdkError> {
         let exe = self.convert_to_exe(app_exe)?;
-        let final_memory = self
+        let save_path = save_path.as_ref().map(|p| p.as_ref());
+        let instance = self
             .executor
-            .instance(&exe)
-            .map_err(VirtualMachineError::from)?
+            .instance_with_cache(&exe, save_path)
+            .map_err(VirtualMachineError::from)?;
+        Ok(instance)
+    }
+
+    /// Run a [`CompiledExePure`] against `inputs` and extract the user public values.
+    pub fn execute_compiled(
+        &self,
+        compiled: &CompiledExePure<F>,
+        inputs: StdIn,
+    ) -> Result<Vec<u8>, SdkError> {
+        let final_memory = compiled
             .execute(inputs, None)
             .map_err(VirtualMachineError::from)?
             .memory;
@@ -338,24 +428,51 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
+        let compiled = self.compile_metered(app_exe, None::<&Path>)?;
+        self.execute_compiled_metered(&compiled, inputs)
+    }
+
+    /// Compile `app_exe` for metered execution, optionally caching the compiled artifact under
+    /// `save_path`. See [`Self::compile_pure`] for cache-path semantics.
+    ///
+    /// The returned [`CompiledExeMetered`] also bundles an [`AppProver`] so the [`MeteredCtx`]
+    /// (which depends on the proving key) can be built without redoing app keygen on every
+    /// [`Self::execute_compiled_metered`] call.
+    pub fn compile_metered(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+        save_path: Option<impl AsRef<Path>>,
+    ) -> Result<CompiledExeMetered<E, VB>, SdkError> {
         let app_prover = self.app_prover(app_exe)?;
-
-        let vm = app_prover.vm();
-        let exe = app_prover.exe();
-
-        let ctx = vm.build_metered_ctx(&exe);
-        let interpreter = vm
-            .metered_interpreter(&exe)
+        let save_path = save_path.as_ref().map(|p| p.as_ref());
+        let interpreter = app_prover
+            .vm()
+            .metered_interpreter_with_cache(&app_prover.exe(), save_path)
             .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMetered {
+            app_prover,
+            interpreter,
+        })
+    }
 
-        let (segments, final_state) = interpreter
+    /// Run a [`CompiledExeMetered`] against `inputs` and return the user public values
+    /// alongside the per-segment trace heights and instruction counts.
+    pub fn execute_compiled_metered(
+        &self,
+        compiled: &CompiledExeMetered<E, VB>,
+        inputs: StdIn,
+    ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
+        let vm = compiled.app_prover.vm();
+        let exe = compiled.app_prover.exe();
+        let ctx = vm.build_metered_ctx(&exe);
+        let (segments, final_state) = compiled
+            .interpreter
             .execute_metered(inputs, ctx)
             .map_err(VirtualMachineError::from)?;
         let public_values = extract_public_values(
             self.executor.config.as_ref().num_public_values,
             &final_state.memory.memory,
         );
-
         Ok((public_values, segments))
     }
 
@@ -366,28 +483,48 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
+        let compiled = self.compile_metered_cost(app_exe, None::<&Path>)?;
+        self.execute_compiled_metered_cost(&compiled, inputs)
+    }
+
+    /// Compile `app_exe` for metered-cost execution, optionally caching the compiled artifact
+    /// under `save_path`. See [`Self::compile_pure`] for cache-path semantics and
+    /// [`Self::compile_metered`] for why an [`AppProver`] is bundled in.
+    pub fn compile_metered_cost(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+        save_path: Option<impl AsRef<Path>>,
+    ) -> Result<CompiledExeMeteredCost<E, VB>, SdkError> {
         let app_prover = self.app_prover(app_exe)?;
-
-        let vm = app_prover.vm();
-        let exe = app_prover.exe();
-
-        let ctx = vm.build_metered_cost_ctx();
-        let interpreter = vm
-            .metered_cost_interpreter(&exe)
+        let save_path = save_path.as_ref().map(|p| p.as_ref());
+        let interpreter = app_prover
+            .vm()
+            .metered_cost_interpreter_with_cache(&app_prover.exe(), save_path)
             .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMeteredCost {
+            app_prover,
+            interpreter,
+        })
+    }
 
-        let (ctx, final_state) = interpreter
+    /// Run a [`CompiledExeMeteredCost`] against `inputs` and return the user public values
+    /// alongside `(cost, instret)`.
+    pub fn execute_compiled_metered_cost(
+        &self,
+        compiled: &CompiledExeMeteredCost<E, VB>,
+        inputs: StdIn,
+    ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
+        let vm = compiled.app_prover.vm();
+        let ctx = vm.build_metered_cost_ctx();
+        let (ctx, final_state) = compiled
+            .interpreter
             .execute_metered_cost(inputs, ctx)
             .map_err(VirtualMachineError::from)?;
-        let instret = ctx.instret;
-        let cost = ctx.cost;
-
         let public_values = extract_public_values(
             self.executor.config.as_ref().num_public_values,
             &final_state.memory.memory,
         );
-
-        Ok((public_values, (cost, instret)))
+        Ok((public_values, (ctx.cost, ctx.instret)))
     }
 
     // ======================== Proving Methods ============================

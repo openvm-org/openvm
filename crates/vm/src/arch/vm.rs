@@ -6,6 +6,8 @@
 //!
 //! [VirtualMachine] will similarly be the struct that has done all the setup so it can
 //! execute+prove an arbitrary program for a fixed config - it will internally still hold VmExecutor
+#[cfg(feature = "rvr")]
+use std::path::Path;
 use std::{any::TypeId, borrow::Borrow, collections::VecDeque, marker::PhantomData, sync::Arc};
 
 use getset::{Getters, MutGetters, Setters, WithSetters};
@@ -253,8 +255,45 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<F>, StaticProgramError> {
+    pub fn instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<F>, StaticProgramError>
+    where
+        VC: serde::Serialize,
+    {
         Self::rvr_instance(self, exe)
+    }
+
+    /// Like [`Self::instance`] but allows caching the compiled rvr `.so` under `cache_dir`. For
+    /// non-rvr feature configurations `cache_dir` is ignored.
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    pub fn instance_with_cache(
+        &self,
+        exe: &VmExe<F>,
+        _cache_dir: Option<&std::path::Path>,
+    ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
+        self.instance(exe)
+    }
+
+    /// AOT cannot reuse a `.so` across processes because the generated assembly embeds absolute
+    /// pointers to in-process structures; `cache_dir` is ignored.
+    #[cfg(feature = "aot")]
+    pub fn instance_with_cache(
+        &self,
+        exe: &VmExe<F>,
+        _cache_dir: Option<&std::path::Path>,
+    ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
+        self.instance(exe)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn instance_with_cache(
+        &self,
+        exe: &VmExe<F>,
+        cache_dir: Option<&Path>,
+    ) -> Result<RvrPureInstance<F>, StaticProgramError>
+    where
+        VC: serde::Serialize,
+    {
+        self.rvr_instance_with_cache(exe, cache_dir)
     }
 }
 
@@ -276,7 +315,21 @@ where
     VC: VmExecutionConfig<F>,
     VC::Executor: Executor<F>,
 {
-    pub fn rvr_instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<F>, StaticProgramError> {
+    pub fn rvr_instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<F>, StaticProgramError>
+    where
+        VC: serde::Serialize,
+    {
+        self.rvr_instance_with_cache(exe, None)
+    }
+
+    pub fn rvr_instance_with_cache(
+        &self,
+        exe: &VmExe<F>,
+        cache_dir: Option<&Path>,
+    ) -> Result<RvrPureInstance<F>, StaticProgramError>
+    where
+        VC: serde::Serialize,
+    {
         // Pure execution does not consult air indices, so we hand the extension
         // registry a placeholder filled with `NO_CHIP` sentinels sized to cover
         // every executor.
@@ -285,7 +338,9 @@ where
         // execution can avoid passing `executor_idx_to_air_idx` altogether.
         let executor_idx_to_air_idx = vec![NO_CHIP as usize; self.inventory.executors.len()];
         let extensions = self.build_rvr_extensions(&executor_idx_to_air_idx);
-        let compiled = compile(exe, &extensions).map_err(map_rvr_compile_error)?;
+        let config_bytes = cache_dir.map(|_| serialize_config_for_cache(&self.config));
+        let compiled = compile(exe, &extensions, cache_dir, config_bytes.as_deref())
+            .map_err(map_rvr_compile_error)?;
 
         Ok(RvrPureInstance {
             system_config: self.inventory.config().clone(),
@@ -294,6 +349,13 @@ where
             extensions,
         })
     }
+}
+
+/// Serialize a `VmConfig` to bytes via bitcode for use as a cache-key input. Bitcode is
+/// deterministic, so the same config produces the same bytes across runs.
+#[cfg(feature = "rvr")]
+fn serialize_config_for_cache<VC: serde::Serialize>(config: &VC) -> Vec<u8> {
+    bitcode::serialize(config).expect("VmConfig should always serialize successfully")
 }
 
 #[cfg(feature = "aot")]
@@ -374,6 +436,67 @@ where
     ) -> Result<InterpretedInstance<F, MeteredCostCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
+
+    /// Like [`Self::metered_instance`] but allows caching the compiled rvr `.so` under
+    /// `cache_dir`. For non-rvr feature configurations `cache_dir` is ignored.
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    pub fn metered_instance_with_cache(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        _cache_dir: Option<&std::path::Path>,
+    ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
+        self.metered_instance(exe, executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "aot")]
+    pub fn metered_instance_with_cache(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        _cache_dir: Option<&std::path::Path>,
+    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
+        self.metered_instance(exe, executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn metered_instance_with_cache(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        cache_dir: Option<&Path>,
+    ) -> Result<RvrMeteredInstance<F>, StaticProgramError>
+    where
+        VC: serde::Serialize,
+    {
+        self.metered_rvr_instance_with_cache(exe, executor_idx_to_air_idx, cache_dir)
+    }
+
+    /// Like [`Self::metered_cost_instance`] but allows caching the compiled rvr `.so` under
+    /// `cache_dir`. For non-rvr feature configurations `cache_dir` is ignored.
+    #[cfg(not(feature = "rvr"))]
+    pub fn metered_cost_instance_with_cache(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        _cache_dir: Option<&std::path::Path>,
+    ) -> Result<InterpretedInstance<F, MeteredCostCtx>, StaticProgramError> {
+        self.metered_cost_instance(exe, executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn metered_cost_instance_with_cache(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        widths: &[usize],
+        cache_dir: Option<&Path>,
+    ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError>
+    where
+        VC: serde::Serialize,
+    {
+        self.metered_cost_rvr_instance_with_cache(exe, executor_idx_to_air_idx, widths, cache_dir)
+    }
 }
 
 #[cfg(feature = "rvr")]
@@ -387,7 +510,10 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<RvrMeteredInstance<F>, StaticProgramError> {
+    ) -> Result<RvrMeteredInstance<F>, StaticProgramError>
+    where
+        VC: serde::Serialize,
+    {
         self.metered_rvr_instance(exe, executor_idx_to_air_idx)
     }
 
@@ -395,13 +521,31 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<RvrMeteredInstance<F>, StaticProgramError> {
+    ) -> Result<RvrMeteredInstance<F>, StaticProgramError>
+    where
+        VC: serde::Serialize,
+    {
+        self.metered_rvr_instance_with_cache(exe, executor_idx_to_air_idx, None)
+    }
+
+    pub fn metered_rvr_instance_with_cache(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        cache_dir: Option<&Path>,
+    ) -> Result<RvrMeteredInstance<F>, StaticProgramError>
+    where
+        VC: serde::Serialize,
+    {
         let extensions = self.build_rvr_extensions(executor_idx_to_air_idx);
         let chips = ChipMapping {
             pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx),
             chip_widths: None,
         };
-        let compiled = compile_metered(exe, &extensions, &chips).map_err(map_rvr_compile_error)?;
+        let config_bytes = cache_dir.map(|_| serialize_config_for_cache(&self.config));
+        let compiled =
+            compile_metered(exe, &extensions, &chips, cache_dir, config_bytes.as_deref())
+                .map_err(map_rvr_compile_error)?;
 
         Ok(RvrMeteredInstance {
             system_config: self.inventory.config().clone(),
@@ -416,7 +560,10 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
         widths: &[usize],
-    ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError> {
+    ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError>
+    where
+        VC: serde::Serialize,
+    {
         self.metered_cost_rvr_instance(exe, executor_idx_to_air_idx, widths)
     }
 
@@ -425,15 +572,33 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
         widths: &[usize],
-    ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError> {
+    ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError>
+    where
+        VC: serde::Serialize,
+    {
+        self.metered_cost_rvr_instance_with_cache(exe, executor_idx_to_air_idx, widths, None)
+    }
+
+    pub fn metered_cost_rvr_instance_with_cache(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        widths: &[usize],
+        cache_dir: Option<&Path>,
+    ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError>
+    where
+        VC: serde::Serialize,
+    {
         let extensions = self.build_rvr_extensions(executor_idx_to_air_idx);
         let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
         let chips = ChipMapping {
             pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx),
             chip_widths: Some(widths.clone()),
         };
+        let config_bytes = cache_dir.map(|_| serialize_config_for_cache(&self.config));
         let compiled =
-            compile_metered_cost(exe, &extensions, &chips).map_err(map_rvr_compile_error)?;
+            compile_metered_cost(exe, &extensions, &chips, cache_dir, config_bytes.as_deref())
+                .map_err(map_rvr_compile_error)?;
 
         Ok(RvrMeteredCostInstance {
             system_config: self.inventory.config().clone(),
@@ -602,6 +767,47 @@ where
         Self::get_rvr_instance(self, exe)
     }
 
+    /// Like [`Self::interpreter`] but allows caching the compiled rvr `.so` under `cache_dir`.
+    /// For non-rvr feature configurations `cache_dir` is ignored.
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    pub fn interpreter_with_cache(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+        cache_dir: Option<&std::path::Path>,
+    ) -> Result<InterpretedInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        self.executor().instance_with_cache(exe, cache_dir)
+    }
+
+    #[cfg(feature = "aot")]
+    pub fn interpreter_with_cache(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+        cache_dir: Option<&std::path::Path>,
+    ) -> Result<AotInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        self.executor().instance_with_cache(exe, cache_dir)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn interpreter_with_cache(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+        cache_dir: Option<&Path>,
+    ) -> Result<RvrPureInstance<Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        self.executor().instance_with_cache(exe, cache_dir)
+    }
+
     #[cfg(feature = "rvr")]
     pub fn get_rvr_instance(
         &self,
@@ -678,6 +884,53 @@ where
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         self.executor()
             .metered_instance(exe, &executor_idx_to_air_idx)
+    }
+
+    /// Like [`Self::metered_interpreter`] but allows caching the compiled rvr `.so` under
+    /// `cache_dir`. For non-rvr feature configurations `cache_dir` is ignored.
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    pub fn metered_interpreter_with_cache(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+        cache_dir: Option<&std::path::Path>,
+    ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_instance_with_cache(exe, &executor_idx_to_air_idx, cache_dir)
+    }
+
+    #[cfg(feature = "aot")]
+    pub fn metered_interpreter_with_cache(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+        cache_dir: Option<&std::path::Path>,
+    ) -> Result<AotInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_instance_with_cache(exe, &executor_idx_to_air_idx, cache_dir)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn metered_interpreter_with_cache(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+        cache_dir: Option<&Path>,
+    ) -> Result<RvrMeteredInstance<Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_instance_with_cache(exe, &executor_idx_to_air_idx, cache_dir)
     }
 
     #[cfg(feature = "rvr")]
@@ -781,6 +1034,48 @@ where
             .collect();
         self.executor()
             .metered_cost_rvr_instance(exe, &executor_idx_to_air_idx, &widths)
+    }
+
+    /// Like [`Self::metered_cost_interpreter`] but allows caching the compiled rvr `.so` under
+    /// `cache_dir`. For non-rvr feature configurations `cache_dir` is ignored.
+    #[cfg(not(feature = "rvr"))]
+    pub fn metered_cost_interpreter_with_cache(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+        cache_dir: Option<&std::path::Path>,
+    ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCostCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_cost_instance_with_cache(exe, &executor_idx_to_air_idx, cache_dir)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn metered_cost_interpreter_with_cache(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+        cache_dir: Option<&Path>,
+    ) -> Result<RvrMeteredCostInstance<Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        let widths: Vec<usize> = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.total_width())
+            .collect();
+        self.executor().metered_cost_instance_with_cache(
+            exe,
+            &executor_idx_to_air_idx,
+            &widths,
+            cache_dir,
+        )
     }
 
     pub fn preflight_interpreter(
