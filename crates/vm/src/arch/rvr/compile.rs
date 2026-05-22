@@ -392,9 +392,11 @@ fn compile_generated_project(
     let jobs = std::thread::available_parallelism()
         .map_or(4, |n| n.get().saturating_sub(2).max(1))
         .to_string();
-    eprintln!(
-        "[rvr-openvm] Building native library: {total_objects} translation units with {} -j{jobs}",
-        toolchain.make
+    tracing::debug!(
+        translation_units = total_objects,
+        make = %toolchain.make,
+        jobs = %jobs,
+        "building rvr native library"
     );
 
     let mut child = Command::new(&toolchain.make)
@@ -426,16 +428,20 @@ fn compile_generated_project(
         let done = count_outputs(output_dir, "o");
         let elapsed = started_at.elapsed();
         if elapsed >= progress_delay && done >= total_objects && !reported_linking {
-            eprintln!(
-                "[rvr-openvm] Native compile progress: {done}/{total_objects} object files built; linking ({:.0}s elapsed)",
-                elapsed.as_secs_f64()
+            tracing::debug!(
+                objects_done = done,
+                objects_total = total_objects,
+                elapsed_secs = elapsed.as_secs_f64(),
+                "rvr native compile linking"
             );
             last_report_at = Instant::now();
             reported_linking = true;
         } else if elapsed >= progress_delay && last_report_at.elapsed() >= progress_interval {
-            eprintln!(
-                "[rvr-openvm] Native compile progress: {done}/{total_objects} object files built ({:.0}s elapsed)",
-                elapsed.as_secs_f64()
+            tracing::debug!(
+                objects_done = done,
+                objects_total = total_objects,
+                elapsed_secs = elapsed.as_secs_f64(),
+                "rvr native compile progress"
             );
             last_report_at = Instant::now();
         }
