@@ -34,7 +34,7 @@ use openvm_stark_backend::{
 };
 use p3_baby_bear::BabyBear;
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::{ExtensionRegistry, NO_CHIP};
+use rvr_openvm_lift::ExtensionRegistry;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
@@ -264,7 +264,10 @@ where
     F: PrimeField32,
     VC: VmExecutionConfig<F>,
 {
-    fn build_rvr_extensions(&self, executor_idx_to_air_idx: &[usize]) -> ExtensionRegistry<F> {
+    fn build_rvr_extensions(
+        &self,
+        executor_idx_to_air_idx: Option<&[usize]>,
+    ) -> ExtensionRegistry<F> {
         self.config.create_rvr_extensions(executor_idx_to_air_idx)
     }
 }
@@ -277,14 +280,7 @@ where
     VC::Executor: Executor<F>,
 {
     pub fn rvr_instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<F>, StaticProgramError> {
-        // Pure execution does not consult air indices, so we hand the extension
-        // registry a placeholder filled with `NO_CHIP` sentinels sized to cover
-        // every executor.
-        // TODO: Drop this placeholder by making `RvrExtensionCtx` take an
-        // `Option<Vec<usize>>` (or be generic over a trait/value) so pure
-        // execution can avoid passing `executor_idx_to_air_idx` altogether.
-        let executor_idx_to_air_idx = vec![NO_CHIP as usize; self.inventory.executors.len()];
-        let extensions = self.build_rvr_extensions(&executor_idx_to_air_idx);
+        let extensions = self.build_rvr_extensions(None);
         let compiled = compile(exe, &extensions).map_err(map_rvr_compile_error)?;
 
         Ok(RvrPureInstance {
@@ -396,9 +392,10 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<RvrMeteredInstance<F>, StaticProgramError> {
-        let extensions = self.build_rvr_extensions(executor_idx_to_air_idx);
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let chips = ChipMapping {
-            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx),
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                .map_err(map_rvr_compile_error)?,
             chip_widths: None,
         };
         let compiled = compile_metered(exe, &extensions, &chips).map_err(map_rvr_compile_error)?;
@@ -426,10 +423,11 @@ where
         executor_idx_to_air_idx: &[usize],
         widths: &[usize],
     ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError> {
-        let extensions = self.build_rvr_extensions(executor_idx_to_air_idx);
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
         let chips = ChipMapping {
-            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx),
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                .map_err(map_rvr_compile_error)?,
             chip_widths: Some(widths.clone()),
         };
         let compiled =

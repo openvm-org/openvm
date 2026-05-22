@@ -17,7 +17,10 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_BYTES};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{decode_reg, ExtensionError, RvrExtension, RvrExtensionCtx, NO_CHIP};
+use rvr_openvm_lift::{
+    air_index_to_c, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
+    RvrExtensionCtx,
+};
 
 /// `(def_idx, output_raw) → output_commit` hasher registered by the host.
 pub type DeferralHashFn = Arc<dyn Fn(u32, &[u8]) -> [u8; DEFERRAL_COMMIT_NUM_BYTES] + Send + Sync>;
@@ -41,7 +44,7 @@ pub struct DeferralCallInstr {
     pub rd_reg: Reg,
     pub rs_reg: Reg,
     pub def_idx: u32,
-    pub poseidon2_chip_idx: u32,
+    pub poseidon2_chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for DeferralCallInstr {
@@ -52,9 +55,10 @@ impl ExtInstr for DeferralCallInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rd = ctx.read_reg(self.rd_reg);
         let rs = ctx.read_reg(self.rs_reg);
+        let poseidon2 = air_index_to_c(self.poseidon2_chip_idx);
         ctx.write_line(&format!(
-            "rvr_ext_deferral_call(state, {rd}, {rs}, {}u, {}u);",
-            self.def_idx, self.poseidon2_chip_idx
+            "rvr_ext_deferral_call(state, {rd}, {rs}, {}u, {poseidon2}u);",
+            self.def_idx
         ));
     }
 
@@ -73,8 +77,8 @@ pub struct DeferralOutputInstr {
     pub rd_reg: Reg,
     pub rs_reg: Reg,
     pub def_idx: u32,
-    pub output_chip_idx: u32,
-    pub poseidon2_chip_idx: u32,
+    pub output_chip_idx: Option<AirIndex>,
+    pub poseidon2_chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for DeferralOutputInstr {
@@ -85,9 +89,11 @@ impl ExtInstr for DeferralOutputInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rd = ctx.read_reg(self.rd_reg);
         let rs = ctx.read_reg(self.rs_reg);
+        let output = air_index_to_c(self.output_chip_idx);
+        let poseidon2 = air_index_to_c(self.poseidon2_chip_idx);
         ctx.write_line(&format!(
-            "rvr_ext_deferral_output(state, {rd}, {rs}, {}u, {}u, {}u);",
-            self.def_idx, self.output_chip_idx, self.poseidon2_chip_idx
+            "rvr_ext_deferral_output(state, {rd}, {rs}, {}u, {output}u, {poseidon2}u);",
+            self.def_idx
         ));
     }
 
@@ -105,42 +111,25 @@ impl ExtInstr for DeferralOutputInstr {
 /// The Deferral extension (CALL + OUTPUT opcodes).
 pub struct DeferralRvrExtension {
     #[allow(dead_code)]
-    call_chip_idx: u32,
-    output_chip_idx: u32,
-    poseidon2_chip_idx: u32,
+    call_chip_idx: Option<AirIndex>,
+    output_chip_idx: Option<AirIndex>,
+    poseidon2_chip_idx: Option<AirIndex>,
     staticlib_path: PathBuf,
     deferral_ctx: DeferralCtx,
 }
 
 impl DeferralRvrExtension {
-    /// Create for pure execution (chip indices don't matter).
-    pub fn new_pure(fns: Vec<Arc<DeferralFn>>, hash: DeferralHashFn) -> Self {
-        Self {
-            call_chip_idx: NO_CHIP,
-            output_chip_idx: NO_CHIP,
-            poseidon2_chip_idx: NO_CHIP,
-            staticlib_path: default_staticlib_path(),
-            deferral_ctx: DeferralCtx::new(fns, hash),
-        }
-    }
-
-    /// Create with chip indices resolved from the VM config.
     pub fn new(
-        ctx: &RvrExtensionCtx,
+        ctx: Option<&RvrExtensionCtx>,
         fns: Vec<Arc<DeferralFn>>,
         hash: DeferralHashFn,
     ) -> Result<Self, ExtensionError> {
-        let call_chip_idx = ctx.require_opcode_air_idx(DeferralOpcode::CALL.global_opcode())?;
-        let output_chip_idx = ctx.require_opcode_air_idx(DeferralOpcode::OUTPUT.global_opcode())?;
+        let call_chip_idx = opcode_air_idx(ctx, DeferralOpcode::CALL)?;
+        let output_chip_idx = opcode_air_idx(ctx, DeferralOpcode::OUTPUT)?;
         // Poseidon2 periphery chip: in extend_circuit, the hasher is added
         // right before the CALL chip. Due to reverse ordering of AIR indices,
-        // poseidon2_air_idx = call_air_idx + 1. Stay NO_CHIP-safe in case
-        // pure execution sneaks a NO_CHIP `call_chip_idx` through here.
-        let poseidon2_chip_idx = if call_chip_idx == NO_CHIP {
-            NO_CHIP
-        } else {
-            call_chip_idx + 1
-        };
+        // poseidon2_air_idx = call_air_idx + 1.
+        let poseidon2_chip_idx = call_chip_idx.map(AirIndex::next);
 
         Ok(Self {
             call_chip_idx,
