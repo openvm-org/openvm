@@ -313,8 +313,7 @@ fn compile_impl<F: PrimeField32>(
         .collect();
     let ext_cflags = opts.extensions.extra_cflags();
 
-    let make_args =
-        project.make_args_with_extensions(&ext_staticlibs, &ext_sources, &ext_cflags);
+    let make_args = project.make_args_with_extensions(&ext_staticlibs, &ext_sources, &ext_cflags);
     compile_generated_project(output_dir, &make_args, &toolchain)?;
 
     let lib_path = find_shared_lib(output_dir)?;

@@ -290,8 +290,11 @@ impl CProject {
 
         // Memory-bounds check header declares per-width helpers;
         let bounds_h_path = self.output_dir.join("openvm_check_mem_bounds.h");
-        fs::write(&bounds_h_path, include_str!("../../c/openvm_check_mem_bounds.h"))?;
-        
+        fs::write(
+            &bounds_h_path,
+            include_str!("../../c/openvm_check_mem_bounds.h"),
+        )?;
+
         // Memory-bounds check implementation depending on protected/unprotected feature;
         let bounds_c_path = self.output_dir.join("openvm_check_mem_bounds.c");
         let content = include_str!("../../c/openvm_check_mem_bounds_protected.c");
