@@ -926,7 +926,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             <#extension_ty as ::rvr_openvm_lift::VmRvrExtension<F>>::extend_rvr(
                 &self.#ext_field_name,
                 &mut registry,
-                &ctx,
+                ctx.as_ref(),
             );
         });
         create_airs.push(quote! {
@@ -981,19 +981,18 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             #[cfg(feature = "rvr")]
             fn create_rvr_extensions(
                 &self,
-                air_idx: &[usize],
+                air_idx: Option<&[usize]>,
             ) -> ::rvr_openvm_lift::ExtensionRegistry<F>
             {
-                let inventory = <Self as ::openvm_circuit::arch::VmExecutionConfig<F>>::create_executors(self)
-                    .expect("create_executors failed in create_rvr_extensions");
-                let opcode_to_executor_idx = inventory
-                    .instruction_lookup
-                    .iter()
-                    .map(|(opcode, executor_idx)| (*opcode, *executor_idx as usize));
-                let ctx = ::rvr_openvm_lift::RvrExtensionCtx::new(
-                    opcode_to_executor_idx,
-                    air_idx.to_vec(),
-                );
+                let ctx = air_idx.map(|air_idx| {
+                    let inventory = <Self as ::openvm_circuit::arch::VmExecutionConfig<F>>::create_executors(self)
+                        .expect("create_executors failed in create_rvr_extensions");
+                    let opcode_to_executor_idx = inventory
+                        .instruction_lookup
+                        .iter()
+                        .map(|(opcode, executor_idx)| (*opcode, *executor_idx as usize));
+                    ::rvr_openvm_lift::RvrExtensionCtx::new(opcode_to_executor_idx, air_idx.to_vec())
+                });
                 let mut registry = <#source_field_ty as ::openvm_circuit::arch::VmExecutionConfig<F>>::create_rvr_extensions(
                     &self.#source_name,
                     air_idx,

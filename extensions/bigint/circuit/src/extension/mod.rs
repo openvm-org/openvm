@@ -79,7 +79,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for Int256 {
     fn extend_rvr(
         &self,
         registry: &mut rvr_openvm_lift::ExtensionRegistry<F>,
-        ctx: &rvr_openvm_lift::RvrExtensionCtx,
+        ctx: Option<&rvr_openvm_lift::RvrExtensionCtx>,
     ) {
         let ext = rvr_openvm_ext_bigint::Int256Extension::new(ctx)
             .expect("failed to construct rvr Int256Extension");

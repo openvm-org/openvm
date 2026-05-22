@@ -136,15 +136,11 @@ pub struct Fp2RvrExtension {
 }
 
 impl Fp2RvrExtension {
-    pub fn new_pure(fp2_moduli: Vec<BigUint>) -> Self {
+    pub fn new(fp2_moduli: Vec<BigUint>) -> Self {
         Self {
             fp2_moduli: make_moduli(fp2_moduli),
             staticlib_path: default_fp2_staticlib_path(),
         }
-    }
-
-    pub fn new(fp2_moduli: Vec<BigUint>) -> Self {
-        Self::new_pure(fp2_moduli)
     }
 }
 
