@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{fmt, process::Command};
 
 use rvr_openvm_build::{clang_version_suffix, is_clang_command};
 pub use rvr_openvm_build::{
@@ -96,8 +96,112 @@ pub fn default_linker_or_lld() -> String {
     default_linker().unwrap_or_else(|| "lld".to_string())
 }
 
-pub fn linker_exists(linker: &str) -> bool {
-    command_exists(linker) || (linker == "lld" && command_exists("ld.lld"))
+pub fn default_make_command() -> String {
+    std::env::var("RVR_MAKE")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .and_then(|value| value.split_whitespace().next().map(str::to_string))
+        .unwrap_or_else(|| "make".to_string())
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeToolchain {
+    pub compiler: String,
+    pub linker: String,
+    pub make: String,
+    pub host_os: &'static str,
+}
+
+impl RuntimeToolchain {
+    #[must_use]
+    pub fn from_env() -> Self {
+        Self {
+            compiler: default_compiler_command(),
+            linker: default_linker_or_lld(),
+            make: default_make_command(),
+            host_os: host_os(),
+        }
+    }
+
+    pub fn check(self) -> Result<Self, RuntimeToolchainError> {
+        let mut missing = Vec::new();
+        if let Err(message) = ensure_clang_compiler(&self.compiler) {
+            missing.push(MissingTool {
+                role: "C compiler",
+                command: self.compiler.clone(),
+                hint: message,
+            });
+        }
+        if !linker_exists(&self.linker) {
+            missing.push(MissingTool {
+                role: "linker",
+                command: self.linker.clone(),
+                hint: "install lld or ld.lld, or set RVR_LD/LD".to_string(),
+            });
+        }
+        if !command_exists(&self.make) {
+            missing.push(MissingTool {
+                role: "build tool",
+                command: self.make.clone(),
+                hint: "install make or set RVR_MAKE".to_string(),
+            });
+        }
+
+        if missing.is_empty() {
+            Ok(self)
+        } else {
+            Err(RuntimeToolchainError::MissingTools(MissingTools(missing)))
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum RuntimeToolchainError {
+    #[error("{0}")]
+    MissingTools(MissingTools),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MissingTools(pub Vec<MissingTool>);
+
+impl fmt::Display for MissingTools {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0.as_slice() {
+            [] => write!(f, "runtime toolchain is available"),
+            [tool] => write!(f, "{tool}"),
+            tools => {
+                write!(f, "runtime toolchain unavailable: ")?;
+                for (i, tool) in tools.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, "; ")?;
+                    }
+                    write!(f, "{tool}")?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MissingTool {
+    pub role: &'static str,
+    pub command: String,
+    pub hint: String,
+}
+
+impl fmt::Display for MissingTool {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "required {} '{}' unavailable; {}",
+            self.role, self.command, self.hint
+        )
+    }
+}
+
+pub fn runtime_toolchain() -> Result<RuntimeToolchain, RuntimeToolchainError> {
+    RuntimeToolchain::from_env().check()
 }
 
 pub fn default_addr2line_cmd() -> String {
@@ -168,6 +272,20 @@ fn detect_clang_major(compiler: &str) -> Option<u32> {
         .split_whitespace()
         .find(|token| token.as_bytes().first().is_some_and(u8::is_ascii_digit))?;
     version.split('.').next()?.parse().ok()
+}
+
+pub fn linker_exists(linker: &str) -> bool {
+    command_exists(linker) || (linker == "lld" && command_exists("ld.lld"))
+}
+
+fn host_os() -> &'static str {
+    if cfg!(target_os = "linux") {
+        "Linux"
+    } else if cfg!(target_os = "macos") {
+        "Darwin"
+    } else {
+        std::env::consts::OS
+    }
 }
 
 fn dedup_preserve_order(candidates: Vec<String>) -> Vec<String> {

@@ -5,6 +5,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_lift::ExtensionRegistry;
 
 use super::{bridge::map_rvr_execute_error, execute::execute, state::PureState, RvrCompiled};
+#[cfg(feature = "metrics")]
+use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
 use crate::{
     arch::{ExecutionError, Streams, SystemConfig, VmState},
     system::memory::online::GuestMemory,
@@ -23,21 +25,30 @@ pub struct RvrPureInstance<F: PrimeField32> {
     pub(crate) extensions: ExtensionRegistry<F>,
 }
 
+static_assertions::assert_impl_all!(RvrPureInstance<p3_baby_bear::BabyBear>: Send, Sync);
+
 impl<F> RvrPureInstance<F>
 where
     F: PrimeField32,
 {
+    pub fn create_initial_vm_state(
+        &self,
+        inputs: impl Into<Streams<F>>,
+    ) -> VmState<F, GuestMemory> {
+        VmState::initial(
+            &self.system_config,
+            &self.exe.init_memory,
+            self.exe.pc_start,
+            inputs,
+        )
+    }
+
     pub fn execute(
         &self,
         inputs: impl Into<Streams<F>>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
-        let vm_state = VmState::initial(
-            &self.system_config,
-            &self.exe.init_memory,
-            self.exe.pc_start,
-            inputs,
-        );
+        let vm_state = self.create_initial_vm_state(inputs);
         self.execute_from_state(vm_state, num_insns)
     }
 
@@ -47,18 +58,15 @@ where
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
         #[cfg(feature = "metrics")]
-        let start = std::time::Instant::now();
+        let metrics = ExecutionMetricTimer::start(ExecutionMetric::Pure);
         #[allow(unused_variables)]
-        let result = tracing::info_span!("execute_e1")
+        let result = tracing::info_span!("execute_pure")
             .in_scope(|| execute(&self.compiled, &self.extensions, &mut vm_state, num_insns))
             .map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]
         {
-            let elapsed = start.elapsed();
             let insns = result.state.instret;
-            tracing::info!("instructions_executed={insns}");
-            metrics::counter!("execute_e1_insns").absolute(insns);
-            metrics::gauge!("execute_e1_insn_mi/s").set(insns as f64 / elapsed.as_micros() as f64);
+            metrics.record(insns);
         }
         Ok(vm_state)
     }
