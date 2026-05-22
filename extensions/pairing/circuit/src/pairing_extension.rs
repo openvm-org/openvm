@@ -70,7 +70,7 @@ pub struct PairingExtension {
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for PairingExtension {
-    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: &RvrExtensionCtx) {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: Option<&RvrExtensionCtx>) {
         registry.register(rvr_openvm_ext_pairing::PairingExtension::new());
     }
 }
