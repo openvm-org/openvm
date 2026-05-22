@@ -15,3 +15,5 @@ openvm-instructions.workspace = true
 openvm-sha2-transpiler.workspace = true
 openvm-stark-backend.workspace = true
 
+[build-dependencies]
+rvr-openvm-build.workspace = true

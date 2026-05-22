@@ -1,4 +1,4 @@
-CC ?= clang
+CC ?= clang-22
 LINKER ?= lld
 OPT ?= -O3
 DEBUG ?=

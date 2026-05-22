@@ -17,3 +17,5 @@ openvm-stark-backend.workspace = true
 
 strum.workspace = true
 
+[build-dependencies]
+rvr-openvm-build.workspace = true
