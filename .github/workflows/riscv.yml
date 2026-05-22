@@ -61,8 +61,8 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
+      - name: Init RISC-V test-vector submodule
+        run: git submodule update --init --depth 1 crates/toolchain/tests/rv32im-test-vectors/riscv-tests
       - uses: ./.github/actions/sccache
 
       - name: Set feature flags

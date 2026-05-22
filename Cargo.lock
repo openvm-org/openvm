@@ -8949,10 +8949,15 @@ version = "2.0.0-beta.2"
 dependencies = [
  "openvm-instructions",
  "openvm-stark-backend",
+ "rvr-openvm-build",
  "rvr-openvm-ext-ffi-common",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
 ]
+
+[[package]]
+name = "rvr-openvm-build"
+version = "2.0.0-beta.2"
 
 [[package]]
 name = "rvr-openvm-ext-algebra"
@@ -8964,6 +8969,7 @@ dependencies = [
  "openvm-instructions",
  "openvm-stark-backend",
  "rand 0.9.2",
+ "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
  "strum 0.26.3",
@@ -9013,6 +9019,7 @@ dependencies = [
  "openvm-instructions",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
+ "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
  "strum 0.26.3",
@@ -9034,6 +9041,7 @@ dependencies = [
  "openvm-deferral-transpiler",
  "openvm-instructions",
  "openvm-stark-backend",
+ "rvr-openvm-build",
  "rvr-openvm-ext-ffi-common",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
@@ -9053,6 +9061,7 @@ dependencies = [
  "openvm-ecc-transpiler",
  "openvm-instructions",
  "openvm-stark-backend",
+ "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
  "strum 0.26.3",
@@ -9083,6 +9092,7 @@ dependencies = [
  "openvm-instructions",
  "openvm-keccak256-transpiler",
  "openvm-stark-backend",
+ "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
 ]
@@ -9092,6 +9102,7 @@ name = "rvr-openvm-ext-keccak-ffi"
 version = "2.0.0-beta.2"
 dependencies = [
  "cc",
+ "rvr-openvm-build",
 ]
 
 [[package]]
@@ -9101,6 +9112,7 @@ dependencies = [
  "openvm-instructions",
  "openvm-pairing-transpiler",
  "openvm-stark-backend",
+ "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
 ]
@@ -9135,6 +9147,7 @@ dependencies = [
  "openvm-instructions",
  "openvm-sha2-transpiler",
  "openvm-stark-backend",
+ "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
 ]
