@@ -2,11 +2,7 @@
 //! `DeferralRvrExtension` for lifting them via double FFI.
 #![cfg(feature = "rvr")]
 
-use std::{
-    ffi::c_void,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{ffi::c_void, sync::Arc};
 
 use openvm_circuit::arch::{
     deferral::{DeferralFn, InputMapVal},
@@ -114,7 +110,6 @@ pub struct DeferralRvrExtension {
     call_chip_idx: Option<AirIndex>,
     output_chip_idx: Option<AirIndex>,
     poseidon2_chip_idx: Option<AirIndex>,
-    staticlib_path: PathBuf,
     deferral_ctx: DeferralCtx,
 }
 
@@ -135,14 +130,9 @@ impl DeferralRvrExtension {
             call_chip_idx,
             output_chip_idx,
             poseidon2_chip_idx,
-            staticlib_path: default_staticlib_path(),
             deferral_ctx: DeferralCtx::new(fns, hash),
         })
     }
-}
-
-fn default_staticlib_path() -> PathBuf {
-    PathBuf::from(env!("RVR_DEFERRAL_FFI_STATICLIB"))
 }
 
 impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
@@ -199,8 +189,11 @@ impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
         )]
     }
 
-    fn staticlib_path(&self) -> &Path {
-        &self.staticlib_path
+    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
+        (
+            "librvr_openvm_ext_deferral_ffi.a",
+            include_bytes!(env!("RVR_DEFERRAL_FFI_STATICLIB")),
+        )
     }
 
     unsafe fn register_host_callbacks(

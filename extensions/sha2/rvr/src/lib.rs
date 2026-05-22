@@ -3,8 +3,6 @@
 //! Provides IR nodes for the SHA-256 and SHA-512 opcodes and the
 //! `Sha2Extension` for lifting and executing them via double FFI.
 
-use std::path::{Path, PathBuf};
-
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_sha2_transpiler::Rv32Sha2Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -107,7 +105,6 @@ pub struct Sha2Extension {
     sha256_block_hasher_chip_idx: Option<AirIndex>,
     sha512_main_chip_idx: Option<AirIndex>,
     sha512_block_hasher_chip_idx: Option<AirIndex>,
-    staticlib_path: PathBuf,
 }
 
 impl Sha2Extension {
@@ -126,13 +123,8 @@ impl Sha2Extension {
             sha256_block_hasher_chip_idx,
             sha512_main_chip_idx,
             sha512_block_hasher_chip_idx,
-            staticlib_path: default_staticlib_path(),
         })
     }
-}
-
-fn default_staticlib_path() -> PathBuf {
-    PathBuf::from(env!("RVR_SHA2_FFI_STATICLIB"))
 }
 
 impl<F: PrimeField32> RvrExtension<F> for Sha2Extension {
@@ -180,7 +172,10 @@ impl<F: PrimeField32> RvrExtension<F> for Sha2Extension {
         vec![("rvr_ext_sha2.h", include_str!("../c/rvr_ext_sha2.h"))]
     }
 
-    fn staticlib_path(&self) -> &Path {
-        &self.staticlib_path
+    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
+        (
+            "librvr_openvm_ext_sha2_ffi.a",
+            include_bytes!(env!("RVR_SHA2_FFI_STATICLIB")),
+        )
     }
 }

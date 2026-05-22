@@ -1,6 +1,6 @@
 //! Extension registry for plugging in new opcode families.
 
-use std::{collections::HashMap, path::Path};
+use std::collections::HashMap;
 
 use openvm_instructions::{instruction::Instruction, LocalOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -134,19 +134,25 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
         vec![]
     }
 
-    /// Paths to pre-built static libraries (.a) for this extension.
-    /// These are linked into the final .so/.dylib.
-    /// Default delegates to `staticlib_path()`.
-    fn staticlib_paths(&self) -> Vec<&Path> {
-        vec![self.staticlib_path()]
+    /// Embedded pre-built static libraries (.a) for this extension.
+    /// These are written to the generated project and linked into the final
+    /// .so/.dylib. Default delegates to `staticlib_file()`.
+    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
+        vec![self.staticlib_file()]
     }
 
-    /// Path to a single pre-built static library (.a) for this extension.
-    fn staticlib_path(&self) -> &Path;
+    /// A single embedded pre-built static library (.a) for this extension.
+    fn staticlib_file(&self) -> (&'static str, &'static [u8]);
 
     /// Additional embedded C source files to compile alongside the generated
     /// code (e.g., precomputed tables).
     fn extra_c_sources(&self) -> Vec<(&'static str, &'static str)> {
+        vec![]
+    }
+
+    /// Additional embedded C support files to write alongside the generated
+    /// project but not compile directly as translation units.
+    fn extra_c_files(&self) -> Vec<(&'static str, &'static str)> {
         vec![]
     }
 
@@ -229,11 +235,11 @@ impl<F: PrimeField32> ExtensionRegistry<F> {
             .collect()
     }
 
-    /// Collect all staticlib paths for linking.
-    pub fn staticlib_paths(&self) -> Vec<&Path> {
+    /// Collect all embedded static libraries for linking.
+    pub fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
         self.extensions
             .iter()
-            .flat_map(|ext| ext.staticlib_paths())
+            .flat_map(|ext| ext.staticlib_files())
             .collect()
     }
 
@@ -242,6 +248,14 @@ impl<F: PrimeField32> ExtensionRegistry<F> {
         self.extensions
             .iter()
             .flat_map(|ext| ext.extra_c_sources())
+            .collect()
+    }
+
+    /// Collect extra embedded C support files from all extensions.
+    pub fn extra_c_files(&self) -> Vec<(&'static str, &'static str)> {
+        self.extensions
+            .iter()
+            .flat_map(|ext| ext.extra_c_files())
             .collect()
     }
 

@@ -322,18 +322,36 @@ impl CProject {
         // Write extension C headers
         for (filename, content) in extensions.c_headers() {
             let path = self.output_dir.join(filename);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
             fs::write(&path, content)?;
         }
 
         // Write extension C source files (compiled by the Makefile)
         for (filename, content) in extensions.c_sources() {
             let path = self.output_dir.join(filename);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
             fs::write(&path, content)?;
         }
 
         // Write embedded extra C source files (e.g., precomputed tables).
         for (filename, content) in extensions.extra_c_sources() {
             let path = self.output_dir.join(filename);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&path, content)?;
+        }
+
+        // Write embedded C support files that are included by extension sources.
+        for (filename, content) in extensions.extra_c_files() {
+            let path = self.output_dir.join(filename);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
             fs::write(&path, content)?;
         }
 
@@ -743,7 +761,7 @@ impl CProject {
 
     pub fn make_args_with_extensions(
         &self,
-        ext_staticlibs: &[&std::path::Path],
+        ext_staticlibs: &[PathBuf],
         ext_sources: &[String],
         ext_cflags: &[String],
     ) -> Vec<String> {

@@ -266,7 +266,7 @@ fn compile_impl<F: PrimeField32>(
     let text_start = exe.program.pc_base;
     project.write_all(&blocks, entry_point, text_start, opts.extensions)?;
 
-    let ext_staticlibs = opts.extensions.staticlib_paths();
+    let ext_staticlibs = write_extension_staticlibs(output_dir, opts.extensions)?;
     if let Some(path) = ext_staticlibs
         .iter()
         .find(|path| path.to_string_lossy().contains(' '))
@@ -307,6 +307,22 @@ fn compile_impl<F: PrimeField32>(
         lib,
         temp_dir: Some(temp_dir),
     })
+}
+
+fn write_extension_staticlibs<F: PrimeField32>(
+    output_dir: &Path,
+    extensions: &ExtensionRegistry<F>,
+) -> Result<Vec<PathBuf>, CompileError> {
+    let mut paths = Vec::new();
+    for (filename, content) in extensions.staticlib_files() {
+        let path = output_dir.join(filename);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&path, content)?;
+        paths.push(path);
+    }
+    Ok(paths)
 }
 
 fn sanitize_base_name(name: &str) -> String {

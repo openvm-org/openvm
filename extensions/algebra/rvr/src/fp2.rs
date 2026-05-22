@@ -1,7 +1,5 @@
 //! Fp2 (complex extension field) IR nodes and the [`Fp2RvrExtension`] lifter.
 
-use std::path::{Path, PathBuf};
-
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
@@ -122,24 +120,17 @@ impl ExtInstr for Fp2SetupInstr {
 
 // ── Fp2 extension ────────────────────────────────────────────────────────────
 
-/// Default path to the fp2 FFI staticlib, populated by `build.rs`.
-fn default_fp2_staticlib_path() -> PathBuf {
-    PathBuf::from(env!("RVR_ALGEBRA_FP2_FFI_STATICLIB"))
-}
-
 /// Fp2 (complex extension field) arithmetic. Self-contained: owns its own
 /// Rust FFI staticlib and ships only `rvr_ext_fp2.h`. No lift-time C, no
 /// dependency on [`crate::ModularRvrExtension`].
 pub struct Fp2RvrExtension {
     fp2_moduli: Vec<ModulusInfo>,
-    staticlib_path: PathBuf,
 }
 
 impl Fp2RvrExtension {
     pub fn new(fp2_moduli: Vec<BigUint>) -> Self {
         Self {
             fp2_moduli: make_moduli(fp2_moduli),
-            staticlib_path: default_fp2_staticlib_path(),
         }
     }
 }
@@ -154,8 +145,11 @@ impl<F: PrimeField32> RvrExtension<F> for Fp2RvrExtension {
         vec![("rvr_ext_fp2.h", include_str!("../c/rvr_ext_fp2.h"))]
     }
 
-    fn staticlib_path(&self) -> &Path {
-        &self.staticlib_path
+    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
+        (
+            "librvr_openvm_ext_algebra_fp2_ffi.a",
+            include_bytes!(env!("RVR_ALGEBRA_FP2_FFI_STATICLIB")),
+        )
     }
 }
 

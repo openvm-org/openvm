@@ -4,8 +4,6 @@
 //! TODO: check if other RV32IM instructions/opcodes can be separated into
 //! extensions.
 
-use std::path::Path;
-
 use openvm_instructions::{instruction::Instruction, riscv::RV32_MEMORY_AS, LocalOpcode};
 use openvm_rv32im_transpiler::{Rv32HintStoreOpcode, Rv32LoadStoreOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -174,13 +172,13 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IoExtension {
         Vec::new()
     }
 
-    fn staticlib_paths(&self) -> Vec<&Path> {
+    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
         Vec::new()
     }
 
-    fn staticlib_path(&self) -> &Path {
-        // Unused: we override `staticlib_paths()` to return an empty list
+    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
+        // Unused: we override `staticlib_files()` to return an empty list
         // because this extension has no native side-car library.
-        Path::new("")
+        ("", &[])
     }
 }

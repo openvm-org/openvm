@@ -255,11 +255,6 @@ impl ExtInstr for HintSqrtInstr {
 
 // ── Modular extension ────────────────────────────────────────────────────────
 
-/// Default path to the modular Rust FFI staticlib, populated by `build.rs`.
-fn default_modular_staticlib_path() -> PathBuf {
-    PathBuf::from(env!("RVR_ALGEBRA_MODULAR_FFI_STATICLIB"))
-}
-
 /// Path to the secp256k1 submodule, consumed by `ModularRvrExtension`'s
 /// lift-time C registration.
 fn secp256k1_dir() -> PathBuf {
@@ -278,14 +273,12 @@ fn secp256k1_dir() -> PathBuf {
 /// [`crate::Fp2RvrExtension`].
 pub struct ModularRvrExtension {
     moduli: Vec<ModulusInfo>,
-    staticlib_path: PathBuf,
 }
 
 impl ModularRvrExtension {
     pub fn new(moduli: Vec<BigUint>) -> Self {
         Self {
             moduli: make_moduli(moduli),
-            staticlib_path: default_modular_staticlib_path(),
         }
     }
 }
@@ -318,8 +311,11 @@ impl<F: PrimeField32> RvrExtension<F> for ModularRvrExtension {
         )]
     }
 
-    fn staticlib_path(&self) -> &Path {
-        &self.staticlib_path
+    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
+        (
+            "librvr_openvm_ext_algebra_modular_ffi.a",
+            include_bytes!(env!("RVR_ALGEBRA_MODULAR_FFI_STATICLIB")),
+        )
     }
 
     fn extra_c_sources(&self) -> Vec<(&'static str, &'static str)> {

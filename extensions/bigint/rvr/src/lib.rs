@@ -4,8 +4,6 @@
 //! and branch instructions) and the `Int256Extension` for lifting and executing them
 //! via double FFI.
 
-use std::path::{Path, PathBuf};
-
 use openvm_bigint_transpiler::{
     Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode, Rv32BranchLessThan256Opcode,
     Rv32LessThan256Opcode, Rv32Mul256Opcode, Rv32Shift256Opcode,
@@ -242,7 +240,6 @@ pub struct Int256Extension {
     mul_chip_idx: Option<AirIndex>,
     branch_eq_chip_idx: Option<AirIndex>,
     branch_lt_chip_idx: Option<AirIndex>,
-    staticlib_path: PathBuf,
 }
 
 impl Int256Extension {
@@ -263,7 +260,6 @@ impl Int256Extension {
             mul_chip_idx,
             branch_eq_chip_idx,
             branch_lt_chip_idx,
-            staticlib_path: default_staticlib_path(),
         })
     }
 
@@ -308,10 +304,6 @@ fn decode_imm<F: PrimeField32>(f: F) -> i32 {
     } else {
         v as i32
     }
-}
-
-fn default_staticlib_path() -> PathBuf {
-    PathBuf::from(env!("RVR_BIGINT_FFI_STATICLIB"))
 }
 
 impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
@@ -428,8 +420,11 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
         vec![("rvr_ext_bigint.h", include_str!("../c/rvr_ext_bigint.h"))]
     }
 
-    fn staticlib_path(&self) -> &Path {
-        &self.staticlib_path
+    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
+        (
+            "librvr_openvm_ext_bigint_ffi.a",
+            include_bytes!(env!("RVR_BIGINT_FFI_STATICLIB")),
+        )
     }
 }
 
