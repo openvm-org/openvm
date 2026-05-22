@@ -38,8 +38,6 @@ use tracing::{info_span, instrument};
 
 #[cfg(feature = "aot")]
 use super::aot::AotInstance;
-#[cfg(feature = "metrics")]
-use super::compilation_metrics::CompilationTimer;
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
@@ -235,7 +233,8 @@ where
         exe: &VmExe<F>,
     ) -> Result<InterpretedInstance<'_, F, ExecutionCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_timer = CompilationTimer::start("compile_pure_ms", "interpreter");
+        let _compilation_span =
+            tracing::info_span!("compile_pure", backend = "interpreter").entered();
         InterpretedInstance::new(&self.inventory, exe)
     }
 
@@ -245,7 +244,8 @@ where
         exe: &VmExe<F>,
     ) -> Result<InterpretedInstance<'_, F, ExecutionCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_timer = CompilationTimer::start("compile_pure_ms", "interpreter");
+        let _compilation_span =
+            tracing::info_span!("compile_pure", backend = "interpreter").entered();
         InterpretedInstance::new(&self.inventory, exe)
     }
 
@@ -286,7 +286,7 @@ where
 {
     pub fn rvr_instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<F>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_timer = CompilationTimer::start("compile_pure_ms", "rvr");
+        let _compilation_span = tracing::info_span!("compile_pure", backend = "rvr").entered();
         let extensions = self.build_rvr_extensions(None);
         let compiled = compile(exe, &extensions).map_err(map_rvr_compile_error)?;
 
@@ -311,7 +311,7 @@ where
         exe: &VmExe<F>,
     ) -> Result<AotInstance<'_, F, ExecutionCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_timer = CompilationTimer::start("compile_pure_ms", "aot");
+        let _compilation_span = tracing::info_span!("compile_pure", backend = "aot").entered();
         AotInstance::new(&self.inventory, exe)
     }
 }
@@ -330,7 +330,8 @@ where
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<'_, F, MeteredCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_timer = CompilationTimer::start("compile_metered_ms", "interpreter");
+        let _compilation_span =
+            tracing::info_span!("compile_metered", backend = "interpreter").entered();
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -341,7 +342,8 @@ where
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<'_, F, MeteredCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_timer = CompilationTimer::start("compile_metered_ms", "interpreter");
+        let _compilation_span =
+            tracing::info_span!("compile_metered", backend = "interpreter").entered();
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -362,7 +364,7 @@ where
         executor_idx_to_air_idx: &[usize],
     ) -> Result<AotInstance<'_, F, MeteredCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_timer = CompilationTimer::start("compile_metered_ms", "aot");
+        let _compilation_span = tracing::info_span!("compile_metered", backend = "aot").entered();
         AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -375,7 +377,8 @@ where
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<'_, F, MeteredCostCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_timer = CompilationTimer::start("compile_metered_cost_ms", "interpreter");
+        let _compilation_span =
+            tracing::info_span!("compile_metered_cost", backend = "interpreter").entered();
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -386,7 +389,8 @@ where
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<F, MeteredCostCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_timer = CompilationTimer::start("compile_metered_cost_ms", "interpreter");
+        let _compilation_span =
+            tracing::info_span!("compile_metered_cost", backend = "interpreter").entered();
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 }
@@ -412,7 +416,7 @@ where
         executor_idx_to_air_idx: &[usize],
     ) -> Result<RvrMeteredInstance<F>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_timer = CompilationTimer::start("compile_metered_ms", "rvr");
+        let _compilation_span = tracing::info_span!("compile_metered", backend = "rvr").entered();
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let chips = ChipMapping {
             pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
@@ -436,7 +440,8 @@ where
         executor_idx_to_air_idx: &[usize],
     ) -> Result<RvrMeteredSegmentInstance<F>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_timer = CompilationTimer::start("compile_metered_segment_ms", "rvr");
+        let _compilation_span =
+            tracing::info_span!("compile_metered_segment", backend = "rvr").entered();
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let chips = ChipMapping {
             pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
@@ -471,7 +476,8 @@ where
         widths: &[usize],
     ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_timer = CompilationTimer::start("compile_metered_cost_ms", "rvr");
+        let _compilation_span =
+            tracing::info_span!("compile_metered_cost", backend = "rvr").entered();
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
         let chips = ChipMapping {
