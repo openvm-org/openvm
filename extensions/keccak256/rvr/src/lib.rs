@@ -5,8 +5,6 @@
 //! `.c` shim is emitted alongside generated code so clang can inline the
 //! tracer helpers across the call boundary.
 
-use std::path::{Path, PathBuf};
-
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -86,8 +84,6 @@ pub struct KeccakExtension {
     xorin_chip_idx: Option<AirIndex>,
     keccakf_op_chip_idx: Option<AirIndex>,
     keccakf_perm_chip_idx: Option<AirIndex>,
-    /// Path to the keccak-ffi staticlib that exports `rvr_keccak_f1600`.
-    asm_staticlib_path: PathBuf,
 }
 
 impl KeccakExtension {
@@ -103,13 +99,8 @@ impl KeccakExtension {
             xorin_chip_idx,
             keccakf_op_chip_idx,
             keccakf_perm_chip_idx,
-            asm_staticlib_path: default_staticlib_path(),
         })
     }
-}
-
-fn default_staticlib_path() -> PathBuf {
-    PathBuf::from(env!("RVR_KECCAK_FFI_STATICLIB"))
 }
 
 impl<F: PrimeField32> RvrExtension<F> for KeccakExtension {
@@ -148,15 +139,18 @@ impl<F: PrimeField32> RvrExtension<F> for KeccakExtension {
         None
     }
 
-    fn c_headers(&self) -> Vec<(&str, &str)> {
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![("rvr_ext_keccak.h", include_str!("../c/rvr_ext_keccak.h"))]
     }
 
-    fn c_sources(&self) -> Vec<(&str, &str)> {
+    fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![("rvr_ext_keccak.c", include_str!("../c/rvr_ext_keccak.c"))]
     }
 
-    fn staticlib_path(&self) -> &Path {
-        &self.asm_staticlib_path
+    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
+        (
+            "librvr_openvm_ext_keccak_ffi.a",
+            include_bytes!(env!("RVR_KECCAK_FFI_STATICLIB")),
+        )
     }
 }

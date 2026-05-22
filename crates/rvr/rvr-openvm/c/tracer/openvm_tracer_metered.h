@@ -19,7 +19,7 @@ typedef struct Tracer {
   uint32_t* mem_page_buf;
   uint32_t* pv_page_buf;
   uint32_t* deferral_page_buf;
-  void (*on_check)(struct Tracer*);
+  uint8_t (*on_check)(struct Tracer*);
   void* seg_state;
   uint32_t mem_page_buf_len;
   uint32_t pv_page_buf_len;
@@ -183,7 +183,6 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u32(RvState* rest
 
 static __attribute__((always_inline)) inline void trace_rd_mem_u32_range(RvState* restrict state, uint32_t base_addr,
                                                                          const uint32_t* vals, uint32_t num_words) {
-  (void)vals;
   assume(num_words > 0);
   uint32_t last_addr = base_addr + (num_words - 1) * WORD_SIZE;
   record_mem_page_range(state->tracer, addr_to_local_page(base_addr), addr_to_local_page(last_addr));
@@ -191,7 +190,6 @@ static __attribute__((always_inline)) inline void trace_rd_mem_u32_range(RvState
 
 static __attribute__((always_inline)) inline void trace_wr_mem_u32_range(RvState* restrict state, uint32_t base_addr,
                                                                          const uint32_t* vals, uint32_t num_words) {
-  (void)vals;
   assume(num_words > 0);
   uint32_t last_addr = base_addr + (num_words - 1) * WORD_SIZE;
   record_mem_page_range(state->tracer, addr_to_local_page(base_addr), addr_to_local_page(last_addr));
@@ -219,6 +217,17 @@ static __attribute__((always_inline)) inline void trace_block(RvState* restrict 
     }
   }
   state->tracer->check_counter -= block_insn_count;
+}
+
+static __attribute__((always_inline)) inline uint8_t trace_block_with_segment_check(RvState* restrict state, uint32_t pc,
+                                                                                    uint32_t block_insn_count) {
+  if (unlikely(state->tracer->check_counter < block_insn_count)) {
+    if (state->tracer->on_check && state->tracer->on_check(state->tracer)) {
+      return 1;
+    }
+  }
+  state->tracer->check_counter -= block_insn_count;
+  return 0;
 }
 
 static __attribute__((always_inline)) inline void trace_chip(RvState* restrict state, uint32_t chip_idx, uint32_t count) {

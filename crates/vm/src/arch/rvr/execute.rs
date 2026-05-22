@@ -18,7 +18,10 @@ use super::{
         host_hint_buffer, host_hint_input, host_hint_random, host_hint_storew,
         host_hint_stream_set, host_print_str, host_reveal, OpenVmHostCallbacks, OpenVmIoState,
     },
-    metered::{metered_periodic_check, MeteredTracerData, SegmentationState, NO_LAST_PAGE},
+    metered::{
+        metered_periodic_check, MeteredTracerData, RvrMeteredResult, SegmentationState,
+        NO_LAST_PAGE,
+    },
     metered_cost::{MeteredCostData, PureTracerData, RvrMeteredCostResult},
     pure::RvrPureResult,
     state::{
@@ -43,6 +46,8 @@ pub enum ExecuteError {
     MemoryAlloc(#[from] MemoryError),
     #[error("extension host callback registration failed: {0}")]
     ExtensionRegistration(#[from] ExtensionError),
+    #[error("invalid metered context: {0}")]
+    InvalidMeteredContext(String),
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -230,8 +235,36 @@ pub fn execute_metered<F: PrimeField32>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
     vm_state: &mut VmState<F, GuestMemory>,
-    mut seg_state: SegmentationState,
+    seg_state: SegmentationState,
 ) -> Result<SegmentationState, ExecuteError> {
+    execute_metered_impl(compiled, extensions, vm_state, seg_state, false).map(|result| {
+        debug_assert!(!result.suspended);
+        result.seg_state
+    })
+}
+
+/// Execute a VmExe with per-chip metered execution until termination or a segment boundary.
+pub fn execute_metered_segment_boundary<F: PrimeField32>(
+    compiled: &RvrCompiled,
+    extensions: &ExtensionRegistry<F>,
+    vm_state: &mut VmState<F, GuestMemory>,
+    seg_state: SegmentationState,
+) -> Result<RvrMeteredResult, ExecuteError> {
+    execute_metered_impl(compiled, extensions, vm_state, seg_state, true)
+}
+
+fn execute_metered_impl<F: PrimeField32>(
+    compiled: &RvrCompiled,
+    extensions: &ExtensionRegistry<F>,
+    vm_state: &mut VmState<F, GuestMemory>,
+    mut seg_state: SegmentationState,
+    allow_suspended: bool,
+) -> Result<RvrMeteredResult, ExecuteError> {
+    debug_assert!(
+        !allow_suspended || seg_state.suspend_on_segment(),
+        "segment-boundary rvr execution requires MeteredCtx::suspend_on_segment"
+    );
+
     let pc = vm_state.pc();
     let initial_regs = read_rv32_registers(vm_state);
 
@@ -239,6 +272,20 @@ pub fn execute_metered<F: PrimeField32>(
     let mut state = init_rvr_state_with_metered(vm_state, pc);
     state.regs = initial_regs;
     state.tracer = TracerPtr(&mut tracer_data);
+
+    let check_counter =
+        u32::try_from(seg_state.segmentation_ctx.instrets_until_check).map_err(|_| {
+            ExecuteError::InvalidMeteredContext(format!(
+                "instrets_until_check {} exceeds rvr tracer u32 counter",
+                seg_state.segmentation_ctx.instrets_until_check
+            ))
+        })?;
+    let _ = u32::try_from(seg_state.segmentation_ctx.segment_check_insns).map_err(|_| {
+        ExecuteError::InvalidMeteredContext(format!(
+            "segment_check_insns {} exceeds rvr tracer u32 counter",
+            seg_state.segmentation_ctx.segment_check_insns
+        ))
+    })?;
 
     state.tracer.trace_heights = seg_state.trace_heights_ptr();
     state.tracer.mem_page_buf = seg_state.mem_page_buf_ptr();
@@ -248,18 +295,34 @@ pub fn execute_metered<F: PrimeField32>(
     state.tracer.pv_page_buf_len = 0;
     state.tracer.deferral_page_buf_len = 0;
     state.tracer.last_mem_page = NO_LAST_PAGE;
-    state.tracer.check_counter = seg_state.segmentation_ctx.segment_check_insns as u32;
+    state.tracer.check_counter = check_counter;
     state.tracer.on_check = Some(metered_periodic_check);
     state.tracer.seg_state = &mut seg_state as *mut SegmentationState as *mut c_void;
 
-    run_and_finalize(compiled, extensions, vm_state, &mut state, false)
+    let status = run_and_finalize(compiled, extensions, vm_state, &mut state, allow_suspended)
         .inspect_err(|e| eprintln!("rvr metered execution failed: {e}"))?;
 
-    seg_state.on_termination(
-        state.tracer.mem_page_buf_len,
-        state.tracer.pv_page_buf_len,
-        state.tracer.deferral_page_buf_len,
-        state.tracer.check_counter,
-    );
-    Ok(seg_state)
+    debug_assert!(matches!(
+        status,
+        ExecutionStatus::Terminated | ExecutionStatus::Suspended
+    ));
+    let terminated = status == ExecutionStatus::Terminated;
+    if terminated {
+        seg_state.on_termination(
+            state.tracer.mem_page_buf_len,
+            state.tracer.pv_page_buf_len,
+            state.tracer.deferral_page_buf_len,
+            state.tracer.check_counter,
+        );
+    } else {
+        // The segment-boundary suspender exits before executing the triggering block.
+        // The periodic check already flushed page buffers and initialized the next
+        // segment; carry the bumped countdown forward for resume.
+        seg_state.segmentation_ctx.instrets_until_check = state.tracer.check_counter as u64;
+    }
+    Ok(RvrMeteredResult {
+        seg_state,
+        suspended: !terminated,
+        exit_code: terminated.then_some(state.result_code() as u32),
+    })
 }
