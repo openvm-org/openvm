@@ -307,11 +307,11 @@ impl<F: PrimeField32> RvrExtension<F> for ModularRvrExtension {
         None
     }
 
-    fn c_headers(&self) -> Vec<(&str, &str)> {
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![("rvr_ext_mod.h", include_str!("../c/rvr_ext_mod.h"))]
     }
 
-    fn c_sources(&self) -> Vec<(&str, &str)> {
+    fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
             "rvr_ext_modular.c",
             include_str!("../ffi/modular/c/rvr_ext_modular.c"),
@@ -322,11 +322,16 @@ impl<F: PrimeField32> RvrExtension<F> for ModularRvrExtension {
         &self.staticlib_path
     }
 
-    fn extra_c_source_paths(&self) -> Vec<PathBuf> {
-        let dir = secp256k1_dir();
+    fn extra_c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![
-            dir.join("src/precomputed_ecmult.c"),
-            dir.join("src/precomputed_ecmult_gen.c"),
+            (
+                "precomputed_ecmult.c",
+                include_str!("../ffi/modular/secp256k1/src/precomputed_ecmult.c"),
+            ),
+            (
+                "precomputed_ecmult_gen.c",
+                include_str!("../ffi/modular/secp256k1/src/precomputed_ecmult_gen.c"),
+            ),
         ]
     }
 

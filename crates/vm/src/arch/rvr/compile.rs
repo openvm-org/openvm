@@ -285,14 +285,9 @@ fn compile_impl<F: PrimeField32>(
         .map(|(filename, _)| filename.to_string())
         .chain(
             opts.extensions
-                .extra_c_source_paths()
+                .extra_c_sources()
                 .into_iter()
-                .map(|path| {
-                    path.file_name()
-                        .expect("extra C source path missing file name")
-                        .to_string_lossy()
-                        .into_owned()
-                }),
+                .map(|(filename, _)| filename.to_string()),
         )
         .collect();
     let ext_cflags = opts.extensions.extra_cflags();

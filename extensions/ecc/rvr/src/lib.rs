@@ -232,7 +232,7 @@ impl<F: PrimeField32> RvrExtension<F> for EccExtension {
         }))
     }
 
-    fn c_headers(&self) -> Vec<(&str, &str)> {
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         // K-256 EC ops are bundled into the modular staticlib via libsecp256k1
         // (see `extensions/algebra/rvr/ffi/modular/c/rvr_ext_modular.c`); their
         // declarations live in `rvr_ext_ecc.h` alongside the other curves'.

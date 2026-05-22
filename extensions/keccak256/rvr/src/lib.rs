@@ -148,11 +148,11 @@ impl<F: PrimeField32> RvrExtension<F> for KeccakExtension {
         None
     }
 
-    fn c_headers(&self) -> Vec<(&str, &str)> {
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![("rvr_ext_keccak.h", include_str!("../c/rvr_ext_keccak.h"))]
     }
 
-    fn c_sources(&self) -> Vec<(&str, &str)> {
+    fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![("rvr_ext_keccak.c", include_str!("../c/rvr_ext_keccak.c"))]
     }
 

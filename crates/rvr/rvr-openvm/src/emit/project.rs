@@ -289,14 +289,13 @@ impl CProject {
         fs::write(&muldiv_path, include_str!("../../c/rv_muldiv.h"))?;
 
         // IO implementation.
-        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        fs::copy(
-            manifest_dir.join("c/openvm_io.c"),
+        fs::write(
             self.output_dir.join("openvm_io.c"),
+            include_str!("../../c/openvm_io.c"),
         )?;
-        fs::copy(
-            manifest_dir.join("c/openvm_io.h"),
+        fs::write(
             self.output_dir.join("openvm_io.h"),
+            include_str!("../../c/openvm_io.h"),
         )?;
 
         let mut openvm_h = String::new();
@@ -332,10 +331,10 @@ impl CProject {
             fs::write(&path, content)?;
         }
 
-        // Copy extra C source files from disk (e.g., precomputed tables)
-        for path in extensions.extra_c_source_paths() {
-            let filename = path.file_name().unwrap();
-            fs::copy(&path, self.output_dir.join(filename))?;
+        // Write embedded extra C source files (e.g., precomputed tables).
+        for (filename, content) in extensions.extra_c_sources() {
+            let path = self.output_dir.join(filename);
+            fs::write(&path, content)?;
         }
 
         // Write wrapper functions if any extensions are registered
@@ -347,10 +346,9 @@ impl CProject {
     }
 
     fn write_ext_wrappers(&self) -> io::Result<()> {
-        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        fs::copy(
-            manifest_dir.join("c/rvr_ext_wrappers.c"),
+        fs::write(
             self.output_dir.join("rvr_ext_wrappers.c"),
+            include_str!("../../c/rvr_ext_wrappers.c"),
         )?;
         Ok(())
     }

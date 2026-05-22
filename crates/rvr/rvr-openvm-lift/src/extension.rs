@@ -1,9 +1,6 @@
 //! Extension registry for plugging in new opcode families.
 
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, path::Path};
 
 use openvm_instructions::{instruction::Instruction, LocalOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -126,14 +123,14 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
 
     /// C header files for this extension, as `(filename, content)` pairs.
     /// Written to the output directory and `#include`d in the generated code.
-    fn c_headers(&self) -> Vec<(&str, &str)>;
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)>;
 
     /// C source files for this extension, as `(filename, content)` pairs.
     /// Written to the output directory and compiled alongside the generated
     /// code by the Makefile (`$(wildcard *.c)`). This lets extension code
     /// call static inline tracer helpers directly instead of routing through
     /// separate Rust FFI wrappers.
-    fn c_sources(&self) -> Vec<(&str, &str)> {
+    fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![]
     }
 
@@ -147,10 +144,9 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
     /// Path to a single pre-built static library (.a) for this extension.
     fn staticlib_path(&self) -> &Path;
 
-    /// Additional C source file paths to compile alongside the generated
-    /// code. Unlike `c_sources()` which provides inline content, these are
-    /// paths to files on disk (e.g., precomputed tables in a submodule).
-    fn extra_c_source_paths(&self) -> Vec<PathBuf> {
+    /// Additional embedded C source files to compile alongside the generated
+    /// code (e.g., precomputed tables).
+    fn extra_c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![]
     }
 
@@ -218,7 +214,7 @@ impl<F: PrimeField32> ExtensionRegistry<F> {
     }
 
     /// Collect all C headers from all registered extensions.
-    pub fn c_headers(&self) -> Vec<(&str, &str)> {
+    pub fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
             .iter()
             .flat_map(|ext| ext.c_headers())
@@ -226,7 +222,7 @@ impl<F: PrimeField32> ExtensionRegistry<F> {
     }
 
     /// Collect all C source files from all registered extensions.
-    pub fn c_sources(&self) -> Vec<(&str, &str)> {
+    pub fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
             .iter()
             .flat_map(|ext| ext.c_sources())
@@ -241,11 +237,11 @@ impl<F: PrimeField32> ExtensionRegistry<F> {
             .collect()
     }
 
-    /// Collect extra C source file paths from all extensions.
-    pub fn extra_c_source_paths(&self) -> Vec<PathBuf> {
+    /// Collect extra embedded C source files from all extensions.
+    pub fn extra_c_sources(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
             .iter()
-            .flat_map(|ext| ext.extra_c_source_paths())
+            .flat_map(|ext| ext.extra_c_sources())
             .collect()
     }
 

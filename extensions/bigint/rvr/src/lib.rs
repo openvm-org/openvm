@@ -424,7 +424,7 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
         None
     }
 
-    fn c_headers(&self) -> Vec<(&str, &str)> {
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![("rvr_ext_bigint.h", include_str!("../c/rvr_ext_bigint.h"))]
     }
 

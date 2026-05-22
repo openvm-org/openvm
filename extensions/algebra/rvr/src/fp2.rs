@@ -150,7 +150,7 @@ impl<F: PrimeField32> RvrExtension<F> for Fp2RvrExtension {
         self.try_lift_fp2(insn, pc, opcode)
     }
 
-    fn c_headers(&self) -> Vec<(&str, &str)> {
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![("rvr_ext_fp2.h", include_str!("../c/rvr_ext_fp2.h"))]
     }
 

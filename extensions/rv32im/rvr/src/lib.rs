@@ -170,7 +170,7 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IoExtension {
         None
     }
 
-    fn c_headers(&self) -> Vec<(&str, &str)> {
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         Vec::new()
     }
 

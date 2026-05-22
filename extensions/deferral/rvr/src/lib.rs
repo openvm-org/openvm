@@ -185,14 +185,14 @@ impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
         None
     }
 
-    fn c_headers(&self) -> Vec<(&str, &str)> {
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
             "rvr_ext_deferral.h",
             include_str!("../c/rvr_ext_deferral.h"),
         )]
     }
 
-    fn c_sources(&self) -> Vec<(&str, &str)> {
+    fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
             "rvr_ext_deferral.c",
             include_str!("../c/rvr_ext_deferral.c"),

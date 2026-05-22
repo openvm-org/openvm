@@ -176,7 +176,7 @@ impl<F: PrimeField32> RvrExtension<F> for Sha2Extension {
         None
     }
 
-    fn c_headers(&self) -> Vec<(&str, &str)> {
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![("rvr_ext_sha2.h", include_str!("../c/rvr_ext_sha2.h"))]
     }
 
