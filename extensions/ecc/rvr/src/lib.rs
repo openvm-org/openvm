@@ -5,8 +5,6 @@
 //!
 //! Modular arithmetic opcodes are handled separately by the algebra extension.
 
-use std::path::{Path, PathBuf};
-
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode::{
     self, EC_ADD_NE, EC_DOUBLE, SETUP_EC_ADD_NE, SETUP_EC_DOUBLE,
 };
@@ -136,48 +134,36 @@ pub struct CurveInfo {
 /// The ECC extension: handles Weierstrass EC opcodes (EC_ADD_NE, EC_DOUBLE + setups).
 pub struct EccExtension {
     curves: Vec<CurveInfo>,
-    staticlib_path: PathBuf,
 }
 
 impl EccExtension {
-    fn from_struct_names(struct_names: Vec<String>, staticlib_path: PathBuf) -> Self {
+    fn from_struct_names(struct_names: Vec<String>) -> Self {
         let curves = struct_names
             .into_iter()
             .map(|name| CurveInfo {
                 curve: KnownCurve::from_struct_name(&name),
             })
             .collect();
-        Self {
-            curves,
-            staticlib_path,
-        }
+        Self { curves }
     }
 
-    fn from_curve_ids(curves: Vec<u32>, staticlib_path: PathBuf) -> Self {
+    fn from_curve_ids(curves: Vec<u32>) -> Self {
         let curves = curves
             .into_iter()
             .map(|curve_id| CurveInfo {
                 curve: KnownCurve::from_id(curve_id),
             })
             .collect();
-        Self {
-            curves,
-            staticlib_path,
-        }
+        Self { curves }
     }
 
     pub fn new(curves_info: Vec<u32>) -> Self {
-        Self::from_curve_ids(curves_info, default_staticlib_path())
+        Self::from_curve_ids(curves_info)
     }
 
     pub fn new_from_struct_names(struct_names: Vec<String>) -> Self {
-        Self::from_struct_names(struct_names, default_staticlib_path())
+        Self::from_struct_names(struct_names)
     }
-}
-
-/// Default path to the ECC FFI staticlib, populated by `extensions/ecc/rvr/build.rs`.
-fn default_staticlib_path() -> PathBuf {
-    PathBuf::from(env!("RVR_ECC_FFI_STATICLIB"))
 }
 
 impl<F: PrimeField32> RvrExtension<F> for EccExtension {
@@ -232,14 +218,17 @@ impl<F: PrimeField32> RvrExtension<F> for EccExtension {
         }))
     }
 
-    fn c_headers(&self) -> Vec<(&str, &str)> {
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         // K-256 EC ops are bundled into the modular staticlib via libsecp256k1
         // (see `extensions/algebra/rvr/ffi/modular/c/rvr_ext_modular.c`); their
         // declarations live in `rvr_ext_ecc.h` alongside the other curves'.
         vec![("rvr_ext_ecc.h", include_str!("../c/rvr_ext_ecc.h"))]
     }
 
-    fn staticlib_path(&self) -> &Path {
-        &self.staticlib_path
+    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
+        (
+            "librvr_openvm_ext_ecc_ffi.a",
+            include_bytes!(env!("RVR_ECC_FFI_STATICLIB")),
+        )
     }
 }

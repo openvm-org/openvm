@@ -12,6 +12,8 @@ use super::{
     state::{MeteredCostState, TracerPayload, TracerPtr},
     RvrCompiled,
 };
+#[cfg(feature = "metrics")]
+use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
 use crate::{
     arch::{execution_mode::MeteredCostCtx, ExecutionError, Streams, SystemConfig, VmState},
     system::memory::online::GuestMemory,
@@ -92,7 +94,7 @@ impl<F: PrimeField32> RvrMeteredCostInstance<F> {
         ctx: MeteredCostCtx,
     ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
         #[cfg(feature = "metrics")]
-        let start = std::time::Instant::now();
+        let metrics = ExecutionMetricTimer::start(ExecutionMetric::MeteredCost);
         let result = tracing::info_span!("execute_metered_cost")
             .in_scope(|| {
                 execute_metered_cost(
@@ -105,12 +107,8 @@ impl<F: PrimeField32> RvrMeteredCostInstance<F> {
             .map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]
         {
-            let elapsed = start.elapsed();
             let insns = result.state.instret;
-            tracing::info!("instructions_executed={insns}");
-            metrics::counter!("execute_metered_cost_insns").absolute(insns);
-            metrics::gauge!("execute_metered_cost_insn_mi/s")
-                .set(insns as f64 / elapsed.as_micros() as f64);
+            metrics.record(insns);
         }
 
         let mut output_ctx = ctx;
