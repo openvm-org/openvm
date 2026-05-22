@@ -282,18 +282,11 @@ pub struct ModularRvrExtension {
 }
 
 impl ModularRvrExtension {
-    /// Pure-mode constructor; equivalent to [`Self::new`] today (chip indices
-    /// are unused by this extension).
-    pub fn new_pure(moduli: Vec<BigUint>) -> Self {
+    pub fn new(moduli: Vec<BigUint>) -> Self {
         Self {
             moduli: make_moduli(moduli),
             staticlib_path: default_modular_staticlib_path(),
         }
-    }
-
-    /// Standard constructor.
-    pub fn new(moduli: Vec<BigUint>) -> Self {
-        Self::new_pure(moduli)
     }
 }
 

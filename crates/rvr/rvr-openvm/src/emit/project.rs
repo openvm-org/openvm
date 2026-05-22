@@ -9,7 +9,7 @@ use std::{
 
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::*;
-use rvr_openvm_lift::ExtensionRegistry;
+use rvr_openvm_lift::{ExtensionRegistry, TraceChipIndex};
 
 use super::{
     codegen::{emit_terminator, InstrCodegen, TermCtx},
@@ -65,8 +65,9 @@ pub struct CProject {
     /// Enable thin LTO for the generated C code.
     pub enable_lto: bool,
     /// Per-PC chip index for hardcoded trace_chip calls.
-    /// Index i = chip for PC = pc_base + i*4. u32::MAX means no chip.
-    pub pc_to_chip: Option<Vec<u32>>,
+    /// Index i = chip for PC = pc_base + i*4.
+    /// `None` in pure mode (no chip metadata requested); must be set in metered modes.
+    pub pc_to_chip: Option<Vec<TraceChipIndex>>,
     /// Program PC base (used to compute pc_to_chip index).
     pub pc_base: u32,
     /// Per-AIR widths for MeteredCost precomputation. Indexed by chip index.
@@ -182,17 +183,20 @@ impl CProject {
     fn block_end_pc(&self, block: &Block) -> u32 {
         block.terminator_pc.saturating_add(4)
     }
-    /// Look up the chip index for a given PC. Returns u32::MAX if no mapping.
-    fn chip_idx_for_pc(&self, pc: u32) -> u32 {
-        if let Some(ref mapping) = self.pc_to_chip {
-            let Some(offset) = pc.checked_sub(self.pc_base) else {
-                return u32::MAX;
-            };
-            let idx = (offset / 4) as usize;
-            mapping.get(idx).copied().unwrap_or(u32::MAX)
-        } else {
-            u32::MAX
-        }
+    /// Look up the chip index for a given PC. Must only be called in metered
+    /// modes; panics if `pc_to_chip` is unset.
+    fn chip_idx_for_pc(&self, pc: u32) -> TraceChipIndex {
+        let mapping = self
+            .pc_to_chip
+            .as_ref()
+            .expect("pc_to_chip must be set for metered rvr codegen");
+        let Some(offset) = pc.checked_sub(self.pc_base) else {
+            return TraceChipIndex::NoChip;
+        };
+        mapping
+            .get((offset / 4) as usize)
+            .copied()
+            .unwrap_or(TraceChipIndex::NoChip)
     }
 
     /// Write all C project files.
@@ -522,22 +526,17 @@ impl CProject {
         if matches!(self.tracer_mode, TracerMode::Pure) {
             return;
         }
-        if self.pc_to_chip.is_none() {
-            return;
-        }
 
         let mut chip_counts: BTreeMap<u32, u32> = BTreeMap::new();
+        let mut increment_chip_count = |pc: u32| match self.chip_idx_for_pc(pc) {
+            TraceChipIndex::Chip(chip) => *chip_counts.entry(chip.as_u32()).or_insert(0) += 1,
+            TraceChipIndex::NoChip => {}
+        };
         for instr_at in &block.instructions {
-            let chip = self.chip_idx_for_pc(instr_at.pc);
-            if chip != u32::MAX {
-                *chip_counts.entry(chip).or_insert(0) += 1;
-            }
+            increment_chip_count(instr_at.pc);
         }
         if !matches!(block.terminator, Terminator::FallThrough) {
-            let chip = self.chip_idx_for_pc(block.terminator_pc);
-            if chip != u32::MAX {
-                *chip_counts.entry(chip).or_insert(0) += 1;
-            }
+            increment_chip_count(block.terminator_pc);
         }
         if chip_counts.is_empty() {
             return;

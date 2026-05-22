@@ -12,15 +12,15 @@ pub mod pure;
 pub mod state;
 
 pub use compile::{
-    compile, compile_metered, compile_metered_cost, load_compiled_from_path, ChipMapping,
-    CompileError, RvrCompiled,
+    build_pc_to_chip, compile, compile_metered, compile_metered_cost, load_compiled_from_path,
+    ChipMapping, CompileError, RvrCompiled,
 };
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
 pub use execute::{
     build_callbacks, execute, execute_metered, execute_metered_cost, register_openvm_callbacks,
     rv_execute, ExecuteError,
 };
-pub use metered::{build_pc_to_chip, RvrMeteredInstance};
+pub use metered::RvrMeteredInstance;
 pub use metered_cost::{
     MeteredCostData, MeteredCostMeter, PureTracer, PureTracerData, RvrMeteredCostInstance,
     RvrMeteredCostResult,
