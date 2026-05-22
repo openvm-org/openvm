@@ -170,6 +170,10 @@ impl SegmentationState {
         })
     }
 
+    pub(crate) fn suspend_on_segment(&self) -> bool {
+        self.suspend_on_segment
+    }
+
     /// Get mutable pointer to trace_heights for the C tracer.
     pub fn trace_heights_ptr(&mut self) -> *mut u32 {
         self.trace_heights.as_mut_ptr()
@@ -313,6 +317,8 @@ impl SegmentationState {
         if did_segment {
             self.segmentation_ctx
                 .initialize_segment(&mut self.trace_heights, &self.is_trace_height_constant);
+            // Re-apply the boundary-crossing page accesses after clearing the
+            // segment-local page set so the new segment starts with them.
             self.initialize_segment_memory(mem_len, pv_len, deferral_len);
 
             self.segmentation_ctx.warn_if_exceeds_limits(

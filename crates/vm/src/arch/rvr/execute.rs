@@ -260,6 +260,11 @@ fn execute_metered_impl<F: PrimeField32>(
     mut seg_state: SegmentationState,
     allow_suspended: bool,
 ) -> Result<RvrMeteredResult, ExecuteError> {
+    debug_assert!(
+        !allow_suspended || seg_state.suspend_on_segment(),
+        "segment-boundary rvr execution requires MeteredCtx::suspend_on_segment"
+    );
+
     let pc = vm_state.pc();
     let initial_regs = read_rv32_registers(vm_state);
 

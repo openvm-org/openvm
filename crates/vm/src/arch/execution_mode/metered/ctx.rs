@@ -22,6 +22,8 @@ pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub is_trace_height_constant: Vec<bool>,
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
+    // TODO: Remove this once segmented execution is selected by typed executor entry points across
+    // all backends. RVR already treats the compiled suspender policy as the source of truth.
     #[getset(get = "pub", set = "pub", set_with = "pub")]
     suspend_on_segment: bool,
 }
