@@ -13,12 +13,13 @@ For a segment proof, the following metrics are collected:
 - `execute_preflight_time_ms` (gauge): The preflight execution time of the segment in milliseconds.
   - If this is a segment in a VM with continuations enabled, a `segment: segment_idx` label is added to the metric.
   - `memory_finalize_time_ms` (gauge): The time at the end of preflight execution spent on memory finalization.
+- `compile_pure_ms`, `compile_metered_ms`, `compile_metered_segment_ms`, `compile_metered_cost_ms` (gauge): Time to build an execution instance in milliseconds. The metric name identifies the execution mode, and the `backend` label identifies the backend.
 - `trace_gen_time_ms` (gauge): The time to generate non-cached trace matrices from execution records.
   - If this is a segment in a VM with continuations enabled, a `segment: segment_idx` label is added to the metric.
 - All metrics collected by [`openvm-stark-backend`](https://github.com/openvm-org/stark-backend/blob/main/docs/metrics.md), in particular `stark_prove_excluding_trace_time_ms` (gauge).
 - The `total_proof_time_ms` of the proof is instrumented directly when possible. Otherwise, it is calculated as:
   - The sum `execute_preflight_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms`. The `execute_metered_time_ms` is excluded for app proofs because it is not run on a per-segment basis.
-- `execute_e1_insns` (counter): The total number of instructions executed in pure execution mode.
+- `execute_pure_insns` (counter): The total number of instructions executed in pure execution mode.
 - `execute_metered_insns` (counter): The total number of instructions executed in metered execution mode.
 - `main_cells_used` (counter): The total number of main trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights. Only main trace cells, not preprocessed or permutation trace cells, are counted.
 - `total_cells_used` (counter): The total number of preprocessed, main, and permutation trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights.
