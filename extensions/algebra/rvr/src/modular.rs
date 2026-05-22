@@ -266,8 +266,7 @@ fn secp256k1_dir() -> PathBuf {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("ffi/modular/secp256k1");
     assert!(
         dir.join("src/secp256k1.c").exists(),
-        "missing secp256k1 submodule at {}. Run `git submodule update --init {}`.",
-        dir.display(),
+        "missing secp256k1 submodule at {}. Run `git submodule update --init extensions/algebra/rvr/ffi/modular/secp256k1`.",
         dir.display()
     );
     dir

@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::{
     path::{Path, PathBuf},
     process::Command,
@@ -8,9 +10,11 @@ pub const DEFAULT_CLANG_COMMAND: &str = "clang-22";
 
 /// Select the C compiler for RVR native code.
 ///
-/// `RVR_CC` is the explicit override. Otherwise prefer `clang-22`, then a
-/// clang-valued `CC`, then plain `clang`. Non-clang `CC` values are ignored so
-/// ambient Cargo C compiler settings do not make RVR use GCC by accident.
+/// `RVR_CC` is the explicit override and is returned even if the command name
+/// is not clang. Callers must validate the selected command with
+/// [`ensure_clang_compiler`]. Otherwise prefer `clang-22`, then a clang-valued
+/// `CC`, then plain `clang`. Non-clang `CC` values are ignored so ambient Cargo
+/// C compiler settings do not make RVR use GCC by accident.
 pub fn default_compiler_command() -> String {
     if let Some(compiler) = env_command("RVR_CC") {
         return compiler;
@@ -50,15 +54,15 @@ pub fn ensure_clang_compiler(compiler: &str) -> Result<(), String> {
 }
 
 pub fn command_exists(command: &str) -> bool {
-    if command.contains(std::path::MAIN_SEPARATOR) && Path::new(command).exists() {
-        return true;
+    if command.contains(std::path::MAIN_SEPARATOR) {
+        return is_executable_file(Path::new(command));
     }
 
     let Some(path_var) = std::env::var_os("PATH") else {
         return false;
     };
 
-    std::env::split_paths(&path_var).any(|dir| dir.join(command).is_file())
+    std::env::split_paths(&path_var).any(|dir| is_executable_file(&dir.join(command)))
 }
 
 /// Build a Rust staticlib crate in a private target directory and return the
@@ -107,8 +111,19 @@ fn env_command(name: &str) -> Option<String> {
 }
 
 fn is_clang_command(command: &str) -> bool {
-    command
-        .rsplit('/')
-        .next()
+    Path::new(command)
+        .file_name()
+        .and_then(|name| name.to_str())
         .is_some_and(|name| name == "clang" || name.starts_with("clang-"))
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &Path) -> bool {
+    path.metadata()
+        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
 }
