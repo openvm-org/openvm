@@ -47,6 +47,10 @@ jobs:
           skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,./crates/toolchain/tests/rv32im-test-vectors/riscv-tests,./crates/sdk/contracts/lib/forge-std,./extensions/algebra/rvr/ffi/modular/secp256k1,./extensions/keccak256/rvr/ffi/openssl
           ignore_words_file: .codespellignore
       - uses: dtolnay/rust-toolchain@stable
+      - name: Configure sccache startup timeout
+        run: |
+          mkdir -p ~/.config/sccache
+          echo "server_startup_timeout_ms = 60000" > ~/.config/sccache/config
       - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
@@ -128,6 +132,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
+      - name: Configure sccache startup timeout
+        run: |
+          mkdir -p ~/.config/sccache
+          echo "server_startup_timeout_ms = 60000" > ~/.config/sccache/config
       - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: ./.github/actions/rust-cache-cuda
         with:

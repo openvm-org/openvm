@@ -148,7 +148,7 @@ mod openssl {
         let (script, flavor, extra_globals, native_entry) =
             match (ctx.target_arch.as_str(), ctx.target_os.as_str()) {
                 ("x86_64", "macos") => (x86_64.as_path(), "macosx", &[] as &[&str], "KeccakF1600"),
-                ("x86_64", _) => (x86_64.as_path(), "elf", &[] as &[&str], "KeccakF1600"),
+                ("x86_64", "linux") => (x86_64.as_path(), "linux64", &[] as &[&str], "KeccakF1600"),
                 ("aarch64", "macos") => (
                     armv8.as_path(),
                     "ios64+sha3",
