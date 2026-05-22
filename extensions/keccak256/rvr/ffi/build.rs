@@ -1,6 +1,5 @@
-// Compile a keccak-f[1600] asm backend into a staticlib that exports
-// `rvr_keccak_f1600(uint64_t state[25])`. Backend selected via cargo features
-// (see Cargo.toml).
+// Compile OpenSSL's keccak-f[1600] asm backend into a staticlib that exports
+// `rvr_keccak_f1600(uint64_t state[25])`.
 
 use std::{
     env, fs,
@@ -8,12 +7,17 @@ use std::{
     process::Command,
 };
 
+use rvr_openvm_build::{default_compiler_command, ensure_clang_compiler};
+
 fn main() {
+    println!("cargo:rerun-if-env-changed=RVR_CC");
+    println!("cargo:rerun-if-env-changed=CC");
+    println!("cargo:rerun-if-env-changed=AS");
+    println!("cargo:rerun-if-env-changed=CFLAGS");
+    println!("cargo:rerun-if-env-changed=PATH");
+
     let ctx = BuildCtx::from_env();
-    let native_entry = match ctx.backend {
-        Backend::Xkcp => xkcp::build(&ctx),
-        Backend::Openssl => openssl::build(&ctx),
-    };
+    let native_entry = build_openssl(&ctx);
 
     let shim_path = ctx.out_dir.join("rvr_keccak_shim.c");
     fs::write(&shim_path, shim_c(&native_entry)).expect("write shim");
@@ -22,14 +26,8 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 }
 
-#[derive(Copy, Clone)]
-enum Backend {
-    Xkcp,
-    Openssl,
-}
-
 struct BuildCtx {
-    backend: Backend,
+    compiler: String,
     manifest_dir: PathBuf,
     out_dir: PathBuf,
     target_arch: String,
@@ -44,8 +42,19 @@ impl BuildCtx {
         let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
         let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
         let is_macos = target_os == "macos" || target_os == "ios";
+        let compiler = default_compiler_command();
+        ensure_clang_compiler(&compiler).unwrap_or_else(|e| {
+            panic!(
+                "\n\n\
+                 rvr-openvm-ext-keccak-ffi requires clang to build its \
+                 OpenSSL assembly backend.\n\
+                 {e}\n\n\
+                 Install clang-22 and re-run with:\n\
+                   export RVR_CC=clang-22 CC=clang-22 AS=clang-22 CFLAGS=-fintegrated-as\n"
+            )
+        });
         Self {
-            backend: select_backend(),
+            compiler,
             manifest_dir,
             out_dir,
             target_arch,
@@ -56,23 +65,12 @@ impl BuildCtx {
 
     fn cc(&self) -> cc::Build {
         let mut b = cc::Build::new();
+        b.compiler(&self.compiler).flag("-fintegrated-as");
         if self.is_macos {
             // GNU `ar`'s slash-member format is rejected by the macOS linker.
             b.archiver("/usr/bin/ar");
         }
         b
-    }
-}
-
-fn select_backend() -> Backend {
-    match (
-        cfg!(feature = "backend-xkcp"),
-        cfg!(feature = "backend-openssl"),
-    ) {
-        (true, false) => Backend::Xkcp,
-        (false, true) => Backend::Openssl,
-        (false, false) => panic!("keccak-ffi: enable backend-openssl or backend-xkcp"),
-        (true, true) => panic!("keccak-ffi: enable exactly one backend feature"),
     }
 }
 
@@ -109,47 +107,6 @@ fn export_asm_symbols(asm: &str, labels: &[&str], is_macos: bool) -> String {
     out
 }
 
-/// Rewrite gas-only NEON lane notation `vN.2d[i]` to `vN.d[i]` for clang's
-/// Mach-O assembler. Requires the `.2d[` to be preceded by a `vN` register
-/// digit so a stray `.2d[0]` in a comment can't be mis-rewritten. Panics if
-/// any unguarded match appears or if zero rewrites fire (upstream shape
-/// changed). Operates on raw bytes; non-ASCII bytes pass through unsplit.
-fn rewrite_xkcp_neon_lane_syntax(asm: &str) -> String {
-    let bytes = asm.as_bytes();
-    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    let mut rewrites = 0usize;
-    let mut unguarded = 0usize;
-    while i < bytes.len() {
-        let tail_is_lane = i + 6 <= bytes.len()
-            && &bytes[i..i + 4] == b".2d["
-            && (bytes[i + 4] == b'0' || bytes[i + 4] == b'1')
-            && bytes[i + 5] == b']';
-        if tail_is_lane {
-            let guarded = i > 0 && bytes[i - 1].is_ascii_digit();
-            if guarded {
-                out.extend_from_slice(b".d[");
-                out.push(bytes[i + 4]);
-                out.push(b']');
-                i += 6;
-                rewrites += 1;
-                continue;
-            } else {
-                unguarded += 1;
-            }
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    assert!(unguarded == 0, "unguarded `.2d[0/1]` in XKCP NEON asm");
-    assert!(
-        rewrites > 0,
-        "no `vN.2d[i]` rewrites; upstream shape changed?"
-    );
-    println!("cargo:warning=xkcp: rewrote {rewrites} `vN.2d[i]` lane tokens");
-    String::from_utf8(out).expect("rewrite preserves UTF-8")
-}
-
 fn run_perl(script: &Path, flavor: &str, out_path: &Path) {
     let output = Command::new("perl")
         .arg(script)
@@ -173,90 +130,59 @@ fn run_perl(script: &Path, flavor: &str, out_path: &Path) {
     assert!(out_path.exists(), "asm not generated at {out_path:?}");
 }
 
-mod xkcp {
-    use super::*;
+fn build_openssl(ctx: &BuildCtx) -> String {
+    let openssl = ctx.manifest_dir.join("openssl");
+    let armv8 = openssl.join("crypto/sha/asm/keccak1600-armv8.pl");
+    let x86_64 = openssl.join("crypto/sha/asm/keccak1600-x86_64.pl");
+    assert!(
+        armv8.exists() && x86_64.exists(),
+        "openssl submodule missing. Run: git submodule update --init extensions/keccak256/rvr/ffi/openssl"
+    );
 
-    pub fn build(ctx: &BuildCtx) -> String {
-        let xkcp = ctx.manifest_dir.join("xkcp");
-        assert!(
-            xkcp.join("lib/low/KeccakP-1600").is_dir(),
-            "xkcp submodule missing. Run: git submodule update --init --recursive"
-        );
-
-        let (src_rel, native_entry) = match ctx.target_arch.as_str() {
-            // AVX-512 file already exports both plain and `_`-prefix forms.
-            "x86_64" => (
-                "lib/low/KeccakP-1600/AVX512/KeccakP-1600-AVX512.s",
-                "KeccakP1600_AVX512_Permute_24rounds",
+    // `+sha3` flavor enables ARMv8.2 SHA3-ext (`KeccakF1600_cext`); we use
+    // it on Apple Silicon (always SHA3-capable) and skip it on Linux aarch64
+    // to avoid emitting unreachable code.
+    let (script, flavor, extra_globals, native_entry) =
+        match (ctx.target_arch.as_str(), ctx.target_os.as_str()) {
+            ("x86_64", "macos") => (x86_64.as_path(), "macosx", &[] as &[&str], "KeccakF1600"),
+            ("x86_64", "linux") => (x86_64.as_path(), "linux64", &[] as &[&str], "KeccakF1600"),
+            ("aarch64", "macos") => (
+                armv8.as_path(),
+                "ios64+sha3",
+                &["KeccakF1600_cext"][..],
+                "KeccakF1600_cext",
             ),
-            "aarch64" => (
-                "lib/low/KeccakP-1600/ARMv8A/KeccakP-1600-armv8a-neon.s",
-                "KeccakP1600_Permute_24rounds",
-            ),
-            arch => panic!("xkcp: unsupported target {arch}-{}", ctx.target_os),
+            ("aarch64", "linux") => (armv8.as_path(), "linux64", &[] as &[&str], "KeccakF1600"),
+            (arch, os) => panic!("openssl: unsupported target {arch}-{os}"),
         };
 
-        let asm_path = ctx.out_dir.join("keccak1600_xkcp.S");
-        let src = fs::read_to_string(xkcp.join(src_rel)).unwrap();
-        let patched = if ctx.target_arch == "aarch64" {
-            let with_globals = export_asm_symbols(&src, &[native_entry], ctx.is_macos);
-            rewrite_xkcp_neon_lane_syntax(&with_globals)
-        } else {
-            src
-        };
-        fs::write(&asm_path, patched).unwrap();
+    let asm_path = ctx.out_dir.join("keccak1600_openssl.S");
+    run_perl(script, flavor, &asm_path);
 
-        ctx.cc().file(&asm_path).compile("keccak_xkcp");
-        println!("cargo:rerun-if-changed={}", xkcp.display());
+    let mut labels: Vec<&str> = vec!["KeccakF1600"];
+    labels.extend_from_slice(extra_globals);
+    let asm = fs::read_to_string(&asm_path).unwrap();
+    fs::write(&asm_path, export_asm_symbols(&asm, &labels, ctx.is_macos)).unwrap();
 
-        native_entry.to_string()
-    }
-}
+    // The emitted armv8 asm `#include`s `arm_arch.h` for PAC/BTI hints.
+    ctx.cc()
+        .include(openssl.join("crypto"))
+        .file(&asm_path)
+        .compile("keccak_openssl");
+    println!("cargo:rerun-if-changed={}", armv8.display());
+    println!("cargo:rerun-if-changed={}", x86_64.display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        openssl.join("crypto/arm_arch.h").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        openssl.join("crypto/perlasm/arm-xlate.pl").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        openssl.join("crypto/perlasm/x86_64-xlate.pl").display()
+    );
 
-mod openssl {
-    use super::*;
-
-    pub fn build(ctx: &BuildCtx) -> String {
-        let openssl = ctx.manifest_dir.join("openssl");
-        let armv8 = openssl.join("crypto/sha/asm/keccak1600-armv8.pl");
-        let x86_64 = openssl.join("crypto/sha/asm/keccak1600-x86_64.pl");
-        assert!(
-            armv8.exists() && x86_64.exists(),
-            "openssl submodule missing. Run: git submodule update --init --recursive"
-        );
-
-        // `+sha3` flavor enables ARMv8.2 SHA3-ext (`KeccakF1600_cext`); we use
-        // it on Apple Silicon (always SHA3-capable) and skip it on Linux
-        // aarch64 to avoid emitting unreachable code.
-        let (script, flavor, extra_globals, native_entry) =
-            match (ctx.target_arch.as_str(), ctx.target_os.as_str()) {
-                ("x86_64", "macos") => (x86_64.as_path(), "macosx", &[] as &[&str], "KeccakF1600"),
-                ("x86_64", _) => (x86_64.as_path(), "elf", &[] as &[&str], "KeccakF1600"),
-                ("aarch64", "macos") => (
-                    armv8.as_path(),
-                    "ios64+sha3",
-                    &["KeccakF1600_cext"][..],
-                    "KeccakF1600_cext",
-                ),
-                ("aarch64", "linux") => (armv8.as_path(), "linux64", &[] as &[&str], "KeccakF1600"),
-                (arch, os) => panic!("openssl: unsupported target {arch}-{os}"),
-            };
-
-        let asm_path = ctx.out_dir.join("keccak1600_openssl.S");
-        run_perl(script, flavor, &asm_path);
-
-        let mut labels: Vec<&str> = vec!["KeccakF1600"];
-        labels.extend_from_slice(extra_globals);
-        let asm = fs::read_to_string(&asm_path).unwrap();
-        fs::write(&asm_path, export_asm_symbols(&asm, &labels, ctx.is_macos)).unwrap();
-
-        // The emitted armv8 asm `#include`s `arm_arch.h` for PAC/BTI hints.
-        ctx.cc()
-            .include(openssl.join("crypto"))
-            .file(&asm_path)
-            .compile("keccak_openssl");
-        println!("cargo:rerun-if-changed={}", openssl.display());
-
-        native_entry.to_string()
-    }
+    native_entry.to_string()
 }

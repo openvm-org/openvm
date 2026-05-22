@@ -77,6 +77,7 @@ members = [
 
     # rvr
     "crates/rvr/rvr-state",
+    "crates/rvr/rvr-openvm-build",
     "crates/rvr/rvr-openvm",
     "crates/rvr/rvr-openvm-ir",
     "crates/rvr/rvr-openvm-lift",
@@ -208,6 +209,7 @@ openvm-deferral-transpiler = { path = "extensions/deferral/transpiler", default-
 
 # rvr
 rvr-state = { path = "crates/rvr/rvr-state" }
+rvr-openvm-build = { path = "crates/rvr/rvr-openvm-build" }
 rvr-openvm = { path = "crates/rvr/rvr-openvm" }
 rvr-openvm-ir = { path = "crates/rvr/rvr-openvm-ir" }
 rvr-openvm-lift = { path = "crates/rvr/rvr-openvm-lift" }
