@@ -349,22 +349,48 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Memory access out of bounds")]
     #[cfg(feature = "rvr")]
     fn test_out_of_bound_mem_access() {
-        let config = test_rv32im_config();
-        let elf = build_example_program_at_path(get_programs_dir!(), "out_of_bound_mem_access", &config).unwrap();
-        let exe = VmExe::from_elf(
-            elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
-        )
-        .unwrap();
-        let executor = VmExecutor::new(config).unwrap();
-        let instance = executor.instance(&exe).unwrap();
-        instance.execute(vec![], None).unwrap();
+        use std::process::Command;
+
+        // Child mode: triggers the OOB; abort_oob in C aborts the process.
+        if std::env::var("OPENVM_OOB_CHILD").is_ok() {
+            let config = test_rv32im_config();
+            let elf = build_example_program_at_path(
+                get_programs_dir!(),
+                "out_of_bound_mem_access",
+                &config,
+            )
+            .unwrap();
+            let exe = VmExe::from_elf(
+                elf,
+                Transpiler::<F>::default()
+                    .with_extension(Rv32ITranspilerExtension)
+                    .with_extension(Rv32MTranspilerExtension)
+                    .with_extension(Rv32IoTranspilerExtension),
+            )
+            .unwrap();
+            let executor = VmExecutor::new(config).unwrap();
+            let instance = executor.instance(&exe).unwrap();
+            instance.execute(vec![], None).unwrap();
+            return; // unreachable — abort fired
+        }
+
+        // Parent mode: spawn ourselves as the child and forward its stderr
+        // as our own panic. `#[should_panic(expected = ...)]` matches iff
+        // the child's rvr bounds check actually fired.
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "tests::test_out_of_bound_mem_access",
+                "--nocapture",
+            ])
+            .env("OPENVM_OOB_CHILD", "1")
+            .output()
+            .expect("failed to spawn self");
+
+        panic!("{}", String::from_utf8_lossy(&output.stderr));
     }
 
     #[test_case("getrandom", vec!["getrandom", "getrandom-unsupported"])]
