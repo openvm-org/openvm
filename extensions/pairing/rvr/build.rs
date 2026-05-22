@@ -2,7 +2,9 @@
 // to. The path to the resulting `librvr_openvm_ext_pairing_ffi.a` is exposed
 // to the source via the `RVR_PAIRING_FFI_STATICLIB` cargo env var.
 
-use std::{env, path::PathBuf, process::Command};
+use std::{env, path::PathBuf};
+
+use rvr_openvm_build::build_rust_staticlib;
 
 fn main() {
     let manifest_dir =
@@ -12,30 +14,11 @@ fn main() {
     let ffi_manifest = manifest_dir.join("ffi/Cargo.toml");
     let ffi_target_dir = out_dir.join("ffi-target");
 
-    let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    let status = Command::new(&cargo)
-        .args([
-            "build",
-            "--release",
-            "--config",
-            "profile.release.lto=false",
-            "--manifest-path",
-        ])
-        .arg(&ffi_manifest)
-        .arg("--target-dir")
-        .arg(&ffi_target_dir)
-        .status()
-        .expect("failed to spawn cargo for rvr-openvm-ext-pairing-ffi");
-    assert!(
-        status.success(),
-        "cargo build for rvr-openvm-ext-pairing-ffi failed"
-    );
-
-    let lib_path = ffi_target_dir.join("release/librvr_openvm_ext_pairing_ffi.a");
-    assert!(
-        lib_path.exists(),
-        "expected staticlib at {} after cargo build",
-        lib_path.display()
+    let lib_path = build_rust_staticlib(
+        &ffi_manifest,
+        &ffi_target_dir,
+        "librvr_openvm_ext_pairing_ffi.a",
+        "rvr-openvm-ext-pairing-ffi",
     );
 
     println!(
