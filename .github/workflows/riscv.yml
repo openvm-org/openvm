@@ -68,6 +68,11 @@ jobs:
       - uses: actions/checkout@v5
       - name: Init RISC-V test-vector submodule
         run: git submodule update --init --depth 1 crates/toolchain/tests/rv32im-test-vectors/riscv-tests
+      - name: Init rvr FFI submodules
+        if: matrix.platform.features == 'rvr'
+        run: |
+          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: ./.github/actions/sccache
 
       - name: Set feature flags
@@ -96,6 +101,14 @@ jobs:
           tar -xJf gcc.tar.xz
           echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
           rm gcc.tar.xz
+
+      - name: Install clang-22 and lld (required for rvr)
+        if: matrix.platform.features == 'rvr'
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install -y lld
 
       - name: Run Makefile
         working-directory: crates/toolchain/tests/rv32im-test-vectors
