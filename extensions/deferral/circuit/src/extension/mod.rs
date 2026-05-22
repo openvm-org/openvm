@@ -73,7 +73,7 @@ pub struct DeferralExtension {
 
 #[cfg(feature = "rvr")]
 impl<F: VmField> VmRvrExtension<F> for DeferralExtension {
-    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: &RvrExtensionCtx) {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: Option<&RvrExtensionCtx>) {
         let hash = make_deferral_hash::<F>();
         let ext = DeferralRvrExtension::new(ctx, self.fns.clone(), hash)
             .expect("failed to construct rvr DeferralRvrExtension");
