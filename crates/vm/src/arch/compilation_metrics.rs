@@ -19,7 +19,7 @@ impl CompilationTimer {
 impl Drop for CompilationTimer {
     fn drop(&mut self) {
         let elapsed = self.start.elapsed();
-        // compile_*_ms gauges report milliseconds.
+        // Compilation gauges report milliseconds.
         let ms = elapsed.as_secs_f64() * 1000.0;
         tracing::info!(
             metric = self.metric_name,
