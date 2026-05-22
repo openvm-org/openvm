@@ -18,7 +18,10 @@ use super::{
         host_hint_buffer, host_hint_input, host_hint_random, host_hint_storew,
         host_hint_stream_set, host_print_str, host_reveal, OpenVmHostCallbacks, OpenVmIoState,
     },
-    metered::{metered_periodic_check, MeteredTracerData, SegmentationState, NO_LAST_PAGE},
+    metered::{
+        metered_periodic_check, MeteredTracerData, RvrMeteredResult, SegmentationState,
+        NO_LAST_PAGE,
+    },
     metered_cost::{MeteredCostData, PureTracerData, RvrMeteredCostResult},
     pure::RvrPureResult,
     state::{
@@ -230,8 +233,31 @@ pub fn execute_metered<F: PrimeField32>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
     vm_state: &mut VmState<F, GuestMemory>,
-    mut seg_state: SegmentationState,
+    seg_state: SegmentationState,
 ) -> Result<SegmentationState, ExecuteError> {
+    execute_metered_impl(compiled, extensions, vm_state, seg_state, false).map(|result| {
+        debug_assert!(!result.suspended);
+        result.seg_state
+    })
+}
+
+/// Execute a VmExe with per-chip metered execution until termination or a segment boundary.
+pub fn execute_metered_segment_boundary<F: PrimeField32>(
+    compiled: &RvrCompiled,
+    extensions: &ExtensionRegistry<F>,
+    vm_state: &mut VmState<F, GuestMemory>,
+    seg_state: SegmentationState,
+) -> Result<RvrMeteredResult, ExecuteError> {
+    execute_metered_impl(compiled, extensions, vm_state, seg_state, true)
+}
+
+fn execute_metered_impl<F: PrimeField32>(
+    compiled: &RvrCompiled,
+    extensions: &ExtensionRegistry<F>,
+    vm_state: &mut VmState<F, GuestMemory>,
+    mut seg_state: SegmentationState,
+    allow_suspended: bool,
+) -> Result<RvrMeteredResult, ExecuteError> {
     let pc = vm_state.pc();
     let initial_regs = read_rv32_registers(vm_state);
 
@@ -252,14 +278,25 @@ pub fn execute_metered<F: PrimeField32>(
     state.tracer.on_check = Some(metered_periodic_check);
     state.tracer.seg_state = &mut seg_state as *mut SegmentationState as *mut c_void;
 
-    run_and_finalize(compiled, extensions, vm_state, &mut state, false)
+    let status = run_and_finalize(compiled, extensions, vm_state, &mut state, allow_suspended)
         .inspect_err(|e| eprintln!("rvr metered execution failed: {e}"))?;
 
-    seg_state.on_termination(
-        state.tracer.mem_page_buf_len,
-        state.tracer.pv_page_buf_len,
-        state.tracer.deferral_page_buf_len,
-        state.tracer.check_counter,
-    );
-    Ok(seg_state)
+    debug_assert!(matches!(
+        status,
+        ExecutionStatus::Terminated | ExecutionStatus::Suspended
+    ));
+    let terminated = status == ExecutionStatus::Terminated;
+    if terminated {
+        seg_state.on_termination(
+            state.tracer.mem_page_buf_len,
+            state.tracer.pv_page_buf_len,
+            state.tracer.deferral_page_buf_len,
+            state.tracer.check_counter,
+        );
+    }
+    Ok(RvrMeteredResult {
+        seg_state,
+        suspended: !terminated,
+        exit_code: terminated.then_some(state.result_code() as u32),
+    })
 }

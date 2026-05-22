@@ -16,7 +16,7 @@ use crate::{
     system::memory::online::TracingMemory,
 };
 
-/// VM preflight executor (E3 executor) for use with trace generation.
+/// VM preflight executor for use with trace generation.
 /// Note: This executor doesn't hold any VM state and can be used for multiple execution.
 pub struct PreflightInterpretedInstance<F, E> {
     // NOTE[jpw]: we use an Arc so that VmInstance can hold both VirtualMachine and
@@ -232,7 +232,10 @@ impl<F: Default> PcEntry<F> {
 macro_rules! execute_spanned {
     ($name:literal, $executor:expr, $state:expr) => {{
         #[cfg(feature = "metrics")]
-        let start = std::time::Instant::now();
+        let metrics = $crate::arch::execution_metrics::ExecutionMetricTimer::start_custom(
+            concat!($name, "_insns"),
+            concat!($name, "_insn_mi/s"),
+        );
         #[cfg(feature = "metrics")]
         let start_instret_left = $state.ctx.instret_left;
 
@@ -240,12 +243,8 @@ macro_rules! execute_spanned {
 
         #[cfg(feature = "metrics")]
         {
-            let elapsed = start.elapsed();
             let insns = start_instret_left - $state.ctx.instret_left;
-            tracing::info!("instructions_executed={insns}");
-            metrics::counter!(concat!($name, "_insns")).absolute(insns);
-            metrics::gauge!(concat!($name, "_insn_mi/s"))
-                .set(insns as f64 / elapsed.as_micros() as f64);
+            metrics.record(insns);
         }
         result
     }};

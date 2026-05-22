@@ -27,6 +27,13 @@ pub enum TracerMode {
     Metered,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SuspendPolicy {
+    Disabled,
+    InstretLimit,
+    SegmentBoundary,
+}
+
 impl TracerMode {
     /// The tracer header filename (without directory).
     pub fn header_filename(self) -> &'static str {
@@ -39,18 +46,45 @@ impl TracerMode {
 
     fn header_content(self) -> &'static str {
         match self {
-            TracerMode::Pure => include_str!("../../c/openvm_tracer_pure.h"),
-            TracerMode::MeteredCost => include_str!("../../c/openvm_tracer_metered_cost.h"),
-            TracerMode::Metered => include_str!("../../c/openvm_tracer_metered.h"),
+            TracerMode::Pure => include_str!("../../c/tracer/openvm_tracer_pure.h"),
+            TracerMode::MeteredCost => {
+                include_str!("../../c/tracer/openvm_tracer_metered_cost.h")
+            }
+            TracerMode::Metered => include_str!("../../c/tracer/openvm_tracer_metered.h"),
         }
     }
 
-    /// Whether block functions should check `target_instret` for suspension.
-    ///
-    /// Only modes that track instret per-block can use the suspender.
-    /// Metered mode tracks instret via its own check_counter instead.
-    pub fn has_suspend_check(self) -> bool {
-        matches!(self, TracerMode::Pure | TracerMode::MeteredCost)
+    pub fn default_suspend_policy(self) -> SuspendPolicy {
+        match self {
+            TracerMode::Pure | TracerMode::MeteredCost => SuspendPolicy::InstretLimit,
+            TracerMode::Metered => SuspendPolicy::Disabled,
+        }
+    }
+
+    fn block_header_content(self, suspend_policy: SuspendPolicy) -> &'static str {
+        match (self, suspend_policy) {
+            (TracerMode::Metered, SuspendPolicy::SegmentBoundary) => {
+                include_str!("../../c/block/openvm_block_metered_segment.h")
+            }
+            (TracerMode::Metered, _) => include_str!("../../c/block/openvm_block_metered.h"),
+            (TracerMode::Pure | TracerMode::MeteredCost, _) => {
+                include_str!("../../c/block/openvm_block_instret.h")
+            }
+        }
+    }
+}
+
+impl SuspendPolicy {
+    fn header_content(self) -> &'static str {
+        match self {
+            SuspendPolicy::Disabled => include_str!("../../c/suspender/openvm_suspender_none.h"),
+            SuspendPolicy::InstretLimit => {
+                include_str!("../../c/suspender/openvm_suspender_instret_limit.h")
+            }
+            SuspendPolicy::SegmentBoundary => {
+                include_str!("../../c/suspender/openvm_suspender_segment_boundary.h")
+            }
+        }
     }
 }
 
@@ -59,6 +93,7 @@ pub struct CProject {
     output_dir: PathBuf,
     name: String,
     pub tracer_mode: TracerMode,
+    pub suspend_policy: SuspendPolicy,
     pub hot_regs: HashSet<u8>,
     /// Maximum blocks per partition file.
     pub blocks_per_partition: usize,
@@ -86,6 +121,7 @@ impl CProject {
             output_dir: output_dir.to_path_buf(),
             name: name.to_string(),
             tracer_mode,
+            suspend_policy: tracer_mode.default_suspend_policy(),
             hot_regs,
             blocks_per_partition: 512,
             enable_lto: true,
@@ -237,6 +273,17 @@ impl CProject {
         let tracer_path = self.output_dir.join(self.tracer_mode.header_filename());
         fs::write(&tracer_path, self.tracer_mode.header_content())?;
 
+        // Block and suspender headers are selected like tracer headers, then
+        // copied under stable include names so generated block C does not
+        // depend on mode or policy.
+        let block_path = self.output_dir.join("openvm_block.h");
+        fs::write(
+            &block_path,
+            self.tracer_mode.block_header_content(self.suspend_policy),
+        )?;
+        let suspender_path = self.output_dir.join("openvm_suspender.h");
+        fs::write(&suspender_path, self.suspend_policy.header_content())?;
+
         // RISC-V M-extension helpers.
         let muldiv_path = self.output_dir.join("rv_muldiv.h");
         fs::write(&muldiv_path, include_str!("../../c/rv_muldiv.h"))?;
@@ -259,6 +306,8 @@ impl CProject {
             self.tracer_mode.header_filename()
         )
         .unwrap();
+        writeln!(openvm_h, "#include \"openvm_block.h\"").unwrap();
+        writeln!(openvm_h, "#include \"openvm_suspender.h\"").unwrap();
         writeln!(openvm_h, "#include \"openvm_io.h\"").unwrap();
         fs::write(self.output_dir.join("openvm.h"), openvm_h)?;
 
@@ -320,6 +369,8 @@ impl CProject {
 
         // Tracer header (includes openvm_state.h internally).
         writeln!(h, "#include \"{tracer_header}\"").unwrap();
+        writeln!(h, "#include \"openvm_block.h\"").unwrap();
+        writeln!(h, "#include \"openvm_suspender.h\"").unwrap();
         writeln!(h).unwrap();
 
         // Block function type and dispatch table (for JumpDyn tail calls).
@@ -426,7 +477,6 @@ impl CProject {
         let pc = block.start_pc;
         let end_pc = self.block_end_pc(block);
         let insn_count = block.insn_count();
-        let has_suspend_check = self.tracer_mode.has_suspend_check();
         let params = self.param_list();
         let save = self.save_hot_regs_call();
 
@@ -451,27 +501,22 @@ impl CProject {
         // Body instructions (each in its own scope to avoid variable collisions).
         let mut ctx = EmitContext::new(self.hot_regs.clone());
 
-        // In metered mode, instret is tracked via check_counter, not per-block.
-        if self.tracer_mode != TracerMode::Metered {
-            writeln!(out, "    state->instret += {insn_count}u;").unwrap();
-        }
-        // Suspend check: bump instret first so the fast path falls through,
-        // then undo the bump on the cold suspend path for strict <= semantics.
-        if has_suspend_check {
-            writeln!(
-                out,
-                "    if (unlikely(state->instret > state->target_instret)) {{"
-            )
-            .unwrap();
-            writeln!(out, "        state->instret -= {insn_count}u;").unwrap();
-            writeln!(out, "        state->has_exited = OPENVM_EXEC_SUSPENDED;").unwrap();
-            writeln!(out, "        state->exit_code = 0;").unwrap();
-            writeln!(out, "        {save}").unwrap();
-            writeln!(out, "        state->pc = 0x{pc:08x}u;").unwrap();
-            writeln!(out, "        return;").unwrap();
-            writeln!(out, "    }}").unwrap();
-        }
-        writeln!(out, "    trace_block(state, 0x{pc:08x}u, {insn_count}u);").unwrap();
+        writeln!(
+            out,
+            "    uint8_t suspend_signal = begin_block(state, 0x{pc:08x}u, {insn_count}u);"
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "    if (unlikely(should_suspend(state, 0x{pc:08x}u, {insn_count}u, suspend_signal))) {{"
+        )
+        .unwrap();
+        writeln!(out, "        state->has_exited = OPENVM_EXEC_SUSPENDED;").unwrap();
+        writeln!(out, "        state->exit_code = 0;").unwrap();
+        writeln!(out, "        {save}").unwrap();
+        writeln!(out, "        state->pc = 0x{pc:08x}u;").unwrap();
+        writeln!(out, "        return;").unwrap();
+        writeln!(out, "    }}").unwrap();
 
         // Per-block chip accounting: batch all per-instruction chip
         // contributions into a single tracer update at block entry.
@@ -724,5 +769,45 @@ impl CProject {
             args.push(format!("EXT_CFLAGS={}", ext_cflags.join(" ")));
         }
         args
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tracer_modes_select_expected_default_suspend_policy() {
+        assert_eq!(
+            TracerMode::Pure.default_suspend_policy(),
+            SuspendPolicy::InstretLimit
+        );
+        assert_eq!(
+            TracerMode::MeteredCost.default_suspend_policy(),
+            SuspendPolicy::InstretLimit
+        );
+        assert_eq!(
+            TracerMode::Metered.default_suspend_policy(),
+            SuspendPolicy::Disabled
+        );
+    }
+
+    #[test]
+    fn metered_segment_boundary_selects_segment_block_header() {
+        let normal_metered = TracerMode::Metered.block_header_content(SuspendPolicy::Disabled);
+        let segment_metered =
+            TracerMode::Metered.block_header_content(SuspendPolicy::SegmentBoundary);
+
+        assert!(normal_metered.contains("trace_block(state, pc, block_insn_count);"));
+        assert!(!normal_metered.contains("trace_block_with_segment_check"));
+        assert!(segment_metered.contains("trace_block_with_segment_check"));
+    }
+
+    #[test]
+    fn segment_boundary_suspender_uses_block_signal() {
+        let suspender = SuspendPolicy::SegmentBoundary.header_content();
+
+        assert!(suspender.contains("uint8_t suspend_signal"));
+        assert!(suspender.contains("return suspend_signal;"));
     }
 }

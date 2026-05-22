@@ -1,7 +1,7 @@
 //! Per-chip metered execution: page tracking and segmentation
 //! matching OpenVM's `MeteredCtx`.
 
-use std::{ffi::c_void, sync::Arc};
+use std::{ffi::c_void, marker::PhantomData, sync::Arc};
 
 use openvm_instructions::{exe::VmExe, riscv::RV32_MEMORY_AS, DEFERRAL_AS};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -10,16 +10,18 @@ use rvr_openvm_lift::ExtensionRegistry;
 
 use super::{
     bridge::map_rvr_execute_error,
-    execute_metered,
+    execute_metered, execute_metered_segment_boundary,
     state::{TracerPayload, TracerPtr},
     RvrCompiled,
 };
+#[cfg(feature = "metrics")]
+use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
 use crate::{
     arch::{
         execution_mode::{
             metered::{
-                ctx::DEFAULT_PAGE_BITS,
-                memory_ctx::BitSet,
+                ctx::{MeteredCtxParts, DEFAULT_PAGE_BITS},
+                memory_ctx::MemoryCtx,
                 segment_ctx::{Segment, SegmentationCtx},
             },
             MeteredCtx,
@@ -31,11 +33,32 @@ use crate::{
     },
 };
 
-pub struct RvrMeteredInstance<F: PrimeField32> {
+pub struct RunToCompletion;
+
+pub struct SegmentBoundary;
+
+pub type RvrMeteredInstance<F> = RvrMeteredInstanceWith<F, RunToCompletion>;
+
+pub type RvrMeteredSegmentInstance<F> = RvrMeteredInstanceWith<F, SegmentBoundary>;
+
+pub struct RvrMeteredInstanceWith<F: PrimeField32, S> {
     pub(crate) system_config: SystemConfig,
     pub(crate) exe: Arc<VmExe<F>>,
     pub(crate) extensions: ExtensionRegistry<F>,
     pub(crate) compiled: RvrCompiled,
+    pub(crate) _mode: PhantomData<S>,
+}
+
+static_assertions::assert_impl_all!(RvrMeteredInstance<p3_baby_bear::BabyBear>: Send, Sync);
+static_assertions::assert_impl_all!(
+    RvrMeteredSegmentInstance<p3_baby_bear::BabyBear>: Send,
+    Sync
+);
+
+pub struct RvrMeteredResult {
+    pub seg_state: SegmentationState,
+    pub suspended: bool,
+    pub exit_code: Option<u32>,
 }
 
 // ── C-compatible tracer struct ───────────────────────────────────────────────
@@ -50,7 +73,7 @@ pub struct MeteredTracerData {
     pub mem_page_buf: *mut u32,
     pub pv_page_buf: *mut u32,
     pub deferral_page_buf: *mut u32,
-    pub on_check: Option<unsafe extern "C" fn(*mut MeteredTracerData)>,
+    pub on_check: Option<unsafe extern "C" fn(*mut MeteredTracerData) -> u8>,
     pub seg_state: *mut c_void,
     pub mem_page_buf_len: u32,
     pub pv_page_buf_len: u32,
@@ -96,13 +119,12 @@ pub struct SegmentationState {
     pub segmentation_ctx: SegmentationCtx,
     trace_heights: Vec<u32>,
     is_trace_height_constant: Vec<bool>,
+    memory_ctx: MemoryCtx<DEFAULT_PAGE_BITS>,
+    suspend_on_segment: bool,
     /// Per-address-space page buffers. Each entry = 1 u32 page id.
     mem_page_buf: Vec<u32>,
     pv_page_buf: Vec<u32>,
     deferral_page_buf: Vec<u32>,
-    // Page tracking
-    page_indices: BitSet,
-    addr_space_access_count: Vec<u32>,
     address_height: u32,
     addr_space_height: u32,
     chunk_bits: u32,
@@ -110,33 +132,42 @@ pub struct SegmentationState {
 
 impl SegmentationState {
     pub fn new(ctx: MeteredCtx, system_config: &SystemConfig) -> Self {
+        let ctx = ctx.into_parts();
         let segmentation_ctx = ctx.segmentation_ctx;
         let trace_heights = ctx.trace_heights;
         let is_trace_height_constant = ctx.is_trace_height_constant;
+        let memory_ctx = ctx.memory_ctx;
+        let suspend_on_segment = ctx.suspend_on_segment;
 
         let mem_config = &system_config.memory_config;
         let memory_dimensions = mem_config.memory_dimensions();
         let address_height = memory_dimensions.address_height as u32;
         let addr_space_height = mem_config.addr_space_height as u32;
         let chunk_bits = MERKLE_CHUNK.ilog2();
-        let num_addr_spaces = mem_config.addr_spaces.len();
-
-        let overall_height = addr_space_height as usize + address_height as usize;
-        let bitset_size = 1usize << overall_height.saturating_sub(DEFAULT_PAGE_BITS);
 
         Self {
             segmentation_ctx,
             trace_heights,
             is_trace_height_constant,
+            memory_ctx,
+            suspend_on_segment,
             mem_page_buf: vec![0u32; MEM_PAGE_BUF_CAP],
             pv_page_buf: vec![0u32; PV_PAGE_BUF_CAP],
             deferral_page_buf: vec![0u32; DEFERRAL_PAGE_BUF_CAP],
-            page_indices: BitSet::new(bitset_size),
-            addr_space_access_count: vec![0u32; num_addr_spaces],
             address_height,
             addr_space_height,
             chunk_bits,
         }
+    }
+
+    pub fn into_metered_ctx(self) -> MeteredCtx {
+        MeteredCtx::from_parts(MeteredCtxParts {
+            trace_heights: self.trace_heights,
+            is_trace_height_constant: self.is_trace_height_constant,
+            memory_ctx: self.memory_ctx,
+            segmentation_ctx: self.segmentation_ctx,
+            suspend_on_segment: self.suspend_on_segment,
+        })
     }
 
     /// Get mutable pointer to trace_heights for the C tracer.
@@ -179,8 +210,8 @@ impl SegmentationState {
         let end_page_id = ((end_block_id - 1) >> DEFAULT_PAGE_BITS) + 1;
 
         for page_id in start_page_id..end_page_id {
-            if self.page_indices.insert(page_id as usize) {
-                self.addr_space_access_count[REG_AS as usize] += 1;
+            if self.memory_ctx.page_indices.insert(page_id as usize) {
+                self.memory_ctx.addr_space_access_count[REG_AS as usize] += 1;
             }
         }
     }
@@ -188,7 +219,7 @@ impl SegmentationState {
     /// Flush all page buffers: convert local pages to global ids, deduplicate
     /// via the BitSet, and update `addr_space_access_count` for each new page.
     fn flush_page_buffer(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
-        let num_as = self.addr_space_access_count.len();
+        let num_as = self.memory_ctx.addr_space_access_count.len();
         let page_shift = self.address_height as usize - DEFAULT_PAGE_BITS;
         for &(buf_len, addr_space) in &[
             (mem_len, RV32_MEMORY_AS),
@@ -206,8 +237,12 @@ impl SegmentationState {
                 _ => &self.deferral_page_buf,
             };
             for &local_page in &buf[..buf_len as usize] {
-                if self.page_indices.insert(as_offset + local_page as usize) {
-                    self.addr_space_access_count[as_idx] += 1;
+                if self
+                    .memory_ctx
+                    .page_indices
+                    .insert(as_offset + local_page as usize)
+                {
+                    self.memory_ctx.addr_space_access_count[as_idx] += 1;
                 }
             }
         }
@@ -215,7 +250,7 @@ impl SegmentationState {
 
     /// Apply boundary and merkle height updates from accumulated page accesses.
     fn apply_height_updates(&mut self) {
-        let page_access_count: u32 = self.addr_space_access_count.iter().sum();
+        let page_access_count: u32 = self.memory_ctx.addr_space_access_count.iter().sum();
         let leaves = page_access_count << DEFAULT_PAGE_BITS;
 
         let trace_heights = &mut self.trace_heights;
@@ -232,7 +267,9 @@ impl SegmentationState {
         trace_heights[poseidon2_idx] += leaves * 2 + nodes_per_page * page_access_count * 2;
 
         // Reset counts
-        self.addr_space_access_count.fill(0);
+        for count in self.memory_ctx.addr_space_access_count.iter_mut() {
+            *count = 0;
+        }
     }
 
     fn initialize_segment_memory(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
@@ -241,8 +278,11 @@ impl SegmentationState {
         self.trace_heights[MERKLE_AIR_ID] = 0;
         self.trace_heights[poseidon2_idx] = 0;
 
-        self.page_indices.clear();
-        self.addr_space_access_count.fill(0);
+        self.memory_ctx.page_indices.clear();
+        for count in self.memory_ctx.addr_space_access_count.iter_mut() {
+            *count = 0;
+        }
+        self.memory_ctx.page_indices_since_checkpoint_len = 0;
 
         self.flush_page_buffer(mem_len, pv_len, deferral_len);
         self.apply_height_updates();
@@ -321,7 +361,7 @@ impl SegmentationState {
 /// # Safety
 /// `t` must point to a valid `MeteredTracerData` whose `seg_state` pointer
 /// references a live `SegmentationState`.
-pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) {
+pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) -> u8 {
     let tracer = &mut *t;
     let seg_state = &mut *(tracer.seg_state as *mut SegmentationState);
     let mem_len = tracer.mem_page_buf_len;
@@ -334,10 +374,26 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) {
     // that clear the global BitSet.
     tracer.last_mem_page = NO_LAST_PAGE;
 
-    seg_state.on_periodic_check(mem_len, pv_len, deferral_len, tracer.check_counter);
+    let did_segment =
+        seg_state.on_periodic_check(mem_len, pv_len, deferral_len, tracer.check_counter);
 
     // Reset the countdown for the next interval.
     tracer.check_counter += seg_state.segmentation_ctx.segment_check_insns as u32;
+    did_segment as u8
+}
+
+impl<F: PrimeField32, S> RvrMeteredInstanceWith<F, S> {
+    pub fn create_initial_vm_state(
+        &self,
+        inputs: impl Into<Streams<F>>,
+    ) -> VmState<F, GuestMemory> {
+        VmState::initial(
+            &self.system_config,
+            &self.exe.init_memory,
+            self.exe.pc_start,
+            inputs,
+        )
+    }
 }
 
 impl<F: PrimeField32> RvrMeteredInstance<F> {
@@ -346,12 +402,7 @@ impl<F: PrimeField32> RvrMeteredInstance<F> {
         inputs: impl Into<Streams<F>>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let vm_state = VmState::initial(
-            &self.system_config,
-            &self.exe.init_memory,
-            self.exe.pc_start,
-            inputs,
-        );
+        let vm_state = self.create_initial_vm_state(inputs);
         self.execute_metered_from_state(vm_state, ctx)
     }
 
@@ -363,7 +414,7 @@ impl<F: PrimeField32> RvrMeteredInstance<F> {
         let seg_state = SegmentationState::new(ctx, &self.system_config);
 
         #[cfg(feature = "metrics")]
-        let start = std::time::Instant::now();
+        let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         let result_seg_state = tracing::info_span!("execute_metered")
             .in_scope(|| {
                 execute_metered(&self.compiled, &self.extensions, &mut vm_state, seg_state)
@@ -372,14 +423,50 @@ impl<F: PrimeField32> RvrMeteredInstance<F> {
         let result_seg_ctx = result_seg_state.segmentation_ctx;
         #[cfg(feature = "metrics")]
         {
-            let elapsed = start.elapsed();
             let insns = result_seg_ctx.instret;
-            tracing::info!("instructions_executed={insns}");
-            metrics::counter!("execute_metered_insns").absolute(insns);
-            metrics::gauge!("execute_metered_insn_mi/s")
-                .set(insns as f64 / elapsed.as_micros() as f64);
+            metrics.record(insns);
         }
 
         Ok((result_seg_ctx.segments, vm_state))
+    }
+}
+
+impl<F: PrimeField32> RvrMeteredSegmentInstance<F> {
+    /// Executes until termination or the next segment-boundary suspension.
+    pub fn execute_metered_until_segment_boundary(
+        &self,
+        inputs: impl Into<Streams<F>>,
+        ctx: MeteredCtx,
+    ) -> Result<(RvrMeteredResult, VmState<F, GuestMemory>), ExecutionError> {
+        let vm_state = self.create_initial_vm_state(inputs);
+        self.execute_metered_from_state_until_segment_boundary(vm_state, ctx)
+    }
+
+    pub fn execute_metered_from_state_until_segment_boundary(
+        &self,
+        mut vm_state: VmState<F, GuestMemory>,
+        ctx: MeteredCtx,
+    ) -> Result<(RvrMeteredResult, VmState<F, GuestMemory>), ExecutionError> {
+        #[cfg(feature = "metrics")]
+        let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
+        #[cfg(feature = "metrics")]
+        let start_instret = ctx.segmentation_ctx.instret;
+        let seg_state = SegmentationState::new(ctx, &self.system_config);
+
+        let result = tracing::info_span!("execute_metered").in_scope(|| {
+            execute_metered_segment_boundary(
+                &self.compiled,
+                &self.extensions,
+                &mut vm_state,
+                seg_state,
+            )
+        });
+        let result = result.map_err(map_rvr_execute_error)?;
+        #[cfg(feature = "metrics")]
+        {
+            let insns = result.seg_state.segmentation_ctx.instret - start_instret;
+            metrics.record(insns);
+        }
+        Ok((result, vm_state))
     }
 }

@@ -13,7 +13,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{
     default_compiler_command, default_linker_or_lld, ensure_clang_compiler, linker_exists,
-    CProject, TracerMode,
+    CProject, SuspendPolicy, TracerMode,
 };
 use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers, AirIndex,
@@ -116,6 +116,7 @@ pub struct CompileOptions<'a, F: PrimeField32> {
     pub guest_debug_map: Option<&'a GuestDebugMap>,
     /// Compile with `-g -fno-omit-frame-pointer` for profiling.
     pub native_debug_info: bool,
+    pub suspend_policy: Option<SuspendPolicy>,
 }
 
 /// Compile a VmExe into a shared library (pure execution, optional suspension).
@@ -132,6 +133,7 @@ pub fn compile<F: PrimeField32>(
             chips: None,
             guest_debug_map: None,
             native_debug_info: false,
+            suspend_policy: None,
         },
     )
 }
@@ -151,6 +153,27 @@ pub fn compile_metered<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map: None,
             native_debug_info: false,
+            suspend_policy: None,
+        },
+    )
+}
+
+/// Compile a VmExe with per-chip metered execution and segment-boundary suspension.
+pub fn compile_metered_segment_boundary<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry<F>,
+    chips: &ChipMapping,
+) -> Result<RvrCompiled, CompileError> {
+    compile_impl(
+        exe,
+        &CompileOptions {
+            base_name: None,
+            tracer_mode: TracerMode::Metered,
+            extensions,
+            chips: Some(chips),
+            guest_debug_map: None,
+            native_debug_info: false,
+            suspend_policy: Some(SuspendPolicy::SegmentBoundary),
         },
     )
 }
@@ -170,6 +193,7 @@ pub fn compile_metered_cost<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map: None,
             native_debug_info: false,
+            suspend_policy: None,
         },
     )
 }
@@ -204,6 +228,22 @@ fn compile_impl<F: PrimeField32>(
     let output_dir = temp_dir.path();
 
     let mut project = CProject::new(output_dir, &base_name, opts.tracer_mode);
+    if let Some(suspend_policy) = opts.suspend_policy {
+        project.suspend_policy = suspend_policy;
+    }
+    match (opts.tracer_mode, project.suspend_policy) {
+        (TracerMode::Metered, SuspendPolicy::InstretLimit) => {
+            return Err(CompileError::InvalidOptions(
+                "metered rvr cannot use instret-limit suspension",
+            ));
+        }
+        (TracerMode::Pure | TracerMode::MeteredCost, SuspendPolicy::SegmentBoundary) => {
+            return Err(CompileError::InvalidOptions(
+                "segment-boundary suspension requires metered rvr",
+            ));
+        }
+        _ => {}
+    }
 
     match opts.tracer_mode {
         TracerMode::Pure => {}
