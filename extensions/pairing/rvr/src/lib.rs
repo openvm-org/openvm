@@ -3,8 +3,6 @@
 //! Provides an IR node for the `HintFinalExp` phantom instruction and the
 //! `PairingExtension` for lifting and executing it via FFI.
 
-use std::path::{Path, PathBuf};
-
 use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
 use openvm_pairing_transpiler::PairingPhantom;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -74,15 +72,11 @@ impl ExtInstr for HintFinalExpInstr {
 
 /// The Pairing extension (HintFinalExp phantom instruction).
 /// Register this with the `ExtensionRegistry`.
-pub struct PairingExtension {
-    staticlib_path: PathBuf,
-}
+pub struct PairingExtension;
 
 impl PairingExtension {
     pub fn new() -> Self {
-        Self {
-            staticlib_path: default_staticlib_path(),
-        }
+        Self
     }
 }
 
@@ -90,10 +84,6 @@ impl Default for PairingExtension {
     fn default() -> Self {
         Self::new()
     }
-}
-
-fn default_staticlib_path() -> PathBuf {
-    PathBuf::from(env!("RVR_PAIRING_FFI_STATICLIB"))
 }
 
 impl<F: PrimeField32> RvrExtension<F> for PairingExtension {
@@ -128,11 +118,14 @@ impl<F: PrimeField32> RvrExtension<F> for PairingExtension {
         }))
     }
 
-    fn c_headers(&self) -> Vec<(&str, &str)> {
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![("rvr_ext_pairing.h", include_str!("../c/rvr_ext_pairing.h"))]
     }
 
-    fn staticlib_path(&self) -> &Path {
-        &self.staticlib_path
+    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
+        (
+            "librvr_openvm_ext_pairing_ffi.a",
+            include_bytes!(env!("RVR_PAIRING_FFI_STATICLIB")),
+        )
     }
 }

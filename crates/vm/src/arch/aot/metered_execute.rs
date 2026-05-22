@@ -4,6 +4,8 @@ use openvm_instructions::{exe::VmExe, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{common::*, AotInstance};
+#[cfg(feature = "metrics")]
+use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
 use crate::{
     arch::{
         aot::{
@@ -447,7 +449,7 @@ where
             Box::new(vm_exec_state);
 
         #[cfg(feature = "metrics")]
-        let start = std::time::Instant::now();
+        let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         #[cfg(feature = "metrics")]
         let start_instret = vm_exec_state.ctx.segmentation_ctx.instret;
 
@@ -472,12 +474,8 @@ where
 
         #[cfg(feature = "metrics")]
         {
-            let elapsed = start.elapsed();
             let insns = vm_exec_state.ctx.segmentation_ctx.instret - start_instret;
-            tracing::info!("instructions_executed={insns}");
-            metrics::counter!("execute_metered_insns").absolute(insns);
-            metrics::gauge!("execute_metered_insn_mi/s")
-                .set(insns as f64 / elapsed.as_micros() as f64);
+            metrics.record(insns);
         }
         Ok(*vm_exec_state)
     }

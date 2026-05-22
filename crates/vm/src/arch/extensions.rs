@@ -132,11 +132,9 @@ pub struct ExecutorInventory<E> {
     ext_start: Vec<usize>,
 }
 
-// @dev: We need ExecutorInventoryBuilder separate from ExecutorInventory because of how
-// ExecutorInventory::extend works: we want to build an inventory with some big E3 enum that
-// includes both enum types E1, E2. However the interface for an ExecutionExtension will only know
-// about the enum E2. In order to be able to allow access to the old executors with type E1 without
-// referring to the type E1, we need to create this separate builder struct.
+// @dev: We need ExecutorInventoryBuilder separate from ExecutorInventory because extension
+// composition builds a combined executor enum while each extension only knows its own executor
+// enum. The builder keeps access to existing executors without naming the final combined enum.
 pub struct ExecutorInventoryBuilder<'a, F, E> {
     /// Chips that are already included in the chipset and may be used
     /// as dependencies. The order should be that depended-on chips are ordered
@@ -255,16 +253,16 @@ impl<E> ExecutorInventory<E> {
 
     /// Extend the inventory with a new extension.
     /// A new inventory with different type generics is returned with the combined inventory.
-    pub fn extend<F, E3, EXT>(
+    pub fn extend<F, CombinedE, EXT>(
         self,
         other: &EXT,
-    ) -> Result<ExecutorInventory<E3>, ExecutorInventoryError>
+    ) -> Result<ExecutorInventory<CombinedE>, ExecutorInventoryError>
     where
         F: 'static,
-        E: Into<E3> + AnyEnum,
-        E3: AnyEnum,
+        E: Into<CombinedE> + AnyEnum,
+        CombinedE: AnyEnum,
         EXT: VmExecutionExtension<F>,
-        EXT::Executor: Into<E3>,
+        EXT::Executor: Into<CombinedE>,
     {
         let mut builder: ExecutorInventoryBuilder<F, EXT::Executor> = self.builder();
         other.extend_execution(&mut builder)?;
@@ -289,7 +287,7 @@ impl<E> ExecutorInventory<E> {
         Ok(inventory_ext)
     }
 
-    pub fn builder<F, E2>(&self) -> ExecutorInventoryBuilder<'_, F, E2>
+    pub fn builder<F, NewE>(&self) -> ExecutorInventoryBuilder<'_, F, NewE>
     where
         F: 'static,
         E: AnyEnum,
@@ -302,9 +300,9 @@ impl<E> ExecutorInventory<E> {
         }
     }
 
-    pub fn transmute<E2>(self) -> ExecutorInventory<E2>
+    pub fn transmute<TargetE>(self) -> ExecutorInventory<TargetE>
     where
-        E: Into<E2>,
+        E: Into<TargetE>,
     {
         ExecutorInventory {
             config: self.config,

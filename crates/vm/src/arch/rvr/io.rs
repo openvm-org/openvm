@@ -157,3 +157,41 @@ pub unsafe extern "C" fn host_hint_stream_set<F: PrimeField32>(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::VecDeque;
+
+    use p3_baby_bear::BabyBear;
+    use rand::{rngs::StdRng, SeedableRng};
+
+    use super::*;
+
+    #[test]
+    fn host_reveal_writes_public_values_slice() {
+        let mut input_stream = VecDeque::new();
+        let mut hint_stream = VecDeque::new();
+        let mut rng = StdRng::seed_from_u64(0);
+        let mut memory = vec![0u8; 16];
+        let mut public_values = vec![0u8; 16];
+        let mut deferrals = Vec::new();
+
+        let mut io = OpenVmIoState::<BabyBear> {
+            input_stream: &mut input_stream,
+            hint_stream: &mut hint_stream,
+            rng: &mut rng,
+            memory_ptr: memory.as_mut_ptr(),
+            public_values: &mut public_values,
+            deferrals: &mut deferrals,
+        };
+
+        host_reveal::<BabyBear>(
+            &mut io as *mut OpenVmIoState<'_, BabyBear> as *mut c_void,
+            0x11223344,
+            4,
+            2,
+        );
+
+        assert_eq!(&io.public_values[6..10], &[0x44, 0x33, 0x22, 0x11]);
+    }
+}
