@@ -1,5 +1,3 @@
-#[cfg(feature = "metrics")]
-pub(crate) mod compilation_metrics;
 mod config;
 /// Streams-like deferral state
 pub mod deferral;
