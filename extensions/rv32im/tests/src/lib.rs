@@ -390,6 +390,59 @@ mod tests {
             .output()
             .expect("failed to spawn self");
 
+        if output.status.success() {
+            panic!("child process succeeded — OOB access was not caught");
+        }
+        panic!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    #[test]
+    #[should_panic(expected = "Memory access out of bounds")]
+    #[cfg(feature = "rvr")]
+    fn test_out_of_bound_print_str() {
+        use std::process::Command;
+
+        // Child mode: triggers a print_str hostcall with a wild ptr; the
+        // Rust-side bounds check in host_print_str panics across extern "C",
+        // which aborts the process.
+        if std::env::var("OPENVM_OOB_CHILD").is_ok() {
+            let config = test_rv32im_config();
+            let elf = build_example_program_at_path(
+                get_programs_dir!(),
+                "out_of_bound_print_str",
+                &config,
+            )
+            .unwrap();
+            let exe = VmExe::from_elf(
+                elf,
+                Transpiler::<F>::default()
+                    .with_extension(Rv32ITranspilerExtension)
+                    .with_extension(Rv32MTranspilerExtension)
+                    .with_extension(Rv32IoTranspilerExtension),
+            )
+            .unwrap();
+            let executor = VmExecutor::new(config).unwrap();
+            let instance = executor.instance(&exe).unwrap();
+            instance.execute(vec![], None).unwrap();
+            return; // unreachable — abort fired
+        }
+
+        // Parent mode: spawn ourselves as the child and forward its stderr
+        // as our own panic. `#[should_panic(expected = ...)]` matches iff
+        // the child's host_print_str bounds check actually fired.
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "tests::test_out_of_bound_print_str",
+                "--nocapture",
+            ])
+            .env("OPENVM_OOB_CHILD", "1")
+            .output()
+            .expect("failed to spawn self");
+
+        if output.status.success() {
+            panic!("child process succeeded — OOB access was not caught");
+        }
         panic!("{}", String::from_utf8_lossy(&output.stderr));
     }
 

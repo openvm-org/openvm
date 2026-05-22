@@ -44,6 +44,28 @@ pub struct OpenVmHostCallbacks {
     pub hint_stream_set: unsafe extern "C" fn(*mut c_void, *const u8, u32),
 }
 
+// ── Bounds checking ─────────────────────────────────────────────────────────
+
+/// Verify that `[start, start + num_bytes)` fits within AS_MEMORY
+/// (`1 << MEM_BITS` bytes). Panics with a "Memory access out of bounds"
+/// message on overflow; panicking across `extern "C"` aborts the process,
+/// matching the C-side `abort_oob` termination used by `rd_mem_*`/`wr_mem_*`.
+/// Compiles to a no-op under the `unprotected` feature.
+#[cfg(not(feature = "unprotected"))]
+fn check_mem_bounds_range(start: u32, num_bytes: usize) {
+    const MEM_SIZE: usize = 1usize << openvm_platform::memory::MEM_BITS;
+    let start = start as usize;
+    if start > MEM_SIZE || num_bytes > MEM_SIZE - start {
+        panic!(
+            "Memory access out of bounds: start={start} size={num_bytes} memory_size={MEM_SIZE}"
+        );
+    }
+}
+
+#[cfg(feature = "unprotected")]
+#[inline(always)]
+fn check_mem_bounds_range(_start: u32, _num_bytes: usize) {}
+
 // ── Callback implementations ────────────────────────────────────────────────
 
 /// HintInput: pop next input record from VmState's input_stream and overwrite
@@ -70,6 +92,7 @@ pub extern "C" fn host_hint_input<F: PrimeField32>(ctx: *mut c_void) {
 pub extern "C" fn host_print_str<F: PrimeField32>(ctx: *mut c_void, ptr: u32, len: u32) {
     let io = unsafe { &*(ctx as *const OpenVmIoState<'_, F>) };
     if len > 0 && !io.memory_ptr.is_null() {
+        check_mem_bounds_range(ptr, len as usize);
         let slice =
             unsafe { std::slice::from_raw_parts(io.memory_ptr.add(ptr as usize), len as usize) };
         let _ = std::io::stdout().write_all(slice);
@@ -95,6 +118,7 @@ pub extern "C" fn host_hint_storew<F: PrimeField32>(ctx: *mut c_void, dest_addr:
     if io.hint_stream.len() < 4 || io.memory_ptr.is_null() {
         return;
     }
+    check_mem_bounds_range(dest_addr, 4);
     let mut bytes = [0u8; 4];
     for byte in &mut bytes {
         *byte = io.hint_stream.pop_front().unwrap().as_canonical_u32() as u8;
@@ -116,6 +140,7 @@ pub extern "C" fn host_hint_buffer<F: PrimeField32>(
     if io.hint_stream.len() < nbytes || io.memory_ptr.is_null() {
         return;
     }
+    check_mem_bounds_range(dest_addr, nbytes);
     let dst = unsafe { io.memory_ptr.add(dest_addr as usize) };
     for i in 0..nbytes {
         let byte = io.hint_stream.pop_front().unwrap().as_canonical_u32() as u8;
