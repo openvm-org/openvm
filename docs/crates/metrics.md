@@ -13,7 +13,7 @@ For a segment proof, the following metrics are collected:
 - `execute_preflight_time_ms` (gauge): The preflight execution time of the segment in milliseconds.
   - If this is a segment in a VM with continuations enabled, a `segment: segment_idx` label is added to the metric.
   - `memory_finalize_time_ms` (gauge): The time at the end of preflight execution spent on memory finalization.
-- `compile_pure_ms`, `compile_metered_ms`, `compile_metered_segment_ms`, `compile_metered_cost_ms` (gauge): Time to build an execution instance in milliseconds. The metric name identifies the execution mode, and the `backend` label identifies the backend.
+- `compile_pure_time_ms`, `compile_metered_time_ms`, `compile_metered_segment_time_ms`, `compile_metered_cost_time_ms` (gauge): Time to build an execution instance in milliseconds. The metric name identifies the execution mode, and the `backend` label identifies the backend.
 - `trace_gen_time_ms` (gauge): The time to generate non-cached trace matrices from execution records.
   - If this is a segment in a VM with continuations enabled, a `segment: segment_idx` label is added to the metric.
 - All metrics collected by [`openvm-stark-backend`](https://github.com/openvm-org/stark-backend/blob/main/docs/metrics.md), in particular `stark_prove_excluding_trace_time_ms` (gauge).
