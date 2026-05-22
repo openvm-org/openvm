@@ -75,7 +75,7 @@ impl Fp2Extension {
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for Fp2Extension {
-    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: &RvrExtensionCtx) {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: Option<&RvrExtensionCtx>) {
         let fp2_moduli = self
             .supported_moduli
             .iter()

@@ -93,7 +93,7 @@ impl WeierstrassExtension {
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for WeierstrassExtension {
-    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: &RvrExtensionCtx) {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: Option<&RvrExtensionCtx>) {
         let struct_names = self
             .supported_curves
             .iter()
