@@ -47,7 +47,11 @@ pub fn find_manifest_dir(mut current_dir: PathBuf) -> Result<PathBuf> {
     while !current_dir.join("Cargo.toml").exists() {
         current_dir = current_dir
             .parent()
-            .expect("Could not find Cargo.toml in current directory or any parent directory")
+            .ok_or_else(|| {
+                eyre::eyre!(
+                    "Could not find Cargo.toml in current directory or any parent directory"
+                )
+            })?
             .to_path_buf();
     }
     Ok(current_dir)
@@ -174,4 +178,43 @@ pub fn get_files_with_ext(dir: &Path, extension: &str) -> Result<Vec<PathBuf>> {
         }
     }
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    use super::find_manifest_dir;
+
+    #[test]
+    fn find_manifest_dir_returns_nearest_manifest_dir() {
+        let temp_dir = tempdir().unwrap();
+        let nested_dir = temp_dir.path().join("nested").join("crate");
+        fs::create_dir_all(&nested_dir).unwrap();
+        fs::write(temp_dir.path().join("Cargo.toml"), "").unwrap();
+        fs::write(temp_dir.path().join("nested").join("Cargo.toml"), "").unwrap();
+
+        let manifest_dir = find_manifest_dir(nested_dir).unwrap();
+
+        assert_eq!(
+            manifest_dir,
+            temp_dir.path().join("nested").canonicalize().unwrap()
+        );
+    }
+
+    #[test]
+    fn find_manifest_dir_errors_when_manifest_is_missing() {
+        let temp_dir = tempdir().unwrap();
+        let nested_dir = temp_dir.path().join("nested").join("crate");
+        fs::create_dir_all(&nested_dir).unwrap();
+
+        let err = find_manifest_dir(nested_dir).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "Could not find Cargo.toml in current directory or any parent directory"
+        );
+    }
 }
