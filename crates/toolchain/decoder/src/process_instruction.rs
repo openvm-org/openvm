@@ -720,9 +720,7 @@ mod tests {
         );
     }
 
-    // JALR uses I-type encoding. Per spec §2.5.1 (RISC-V Unprivileged
-    // Architecture, v20260120), JALR requires funct3=0; the decoder
-    // currently dispatches for any funct3.
+    // JALR uses I-type encoding with funct3=0 (spec §2.5.1).
     test_i!(dispatch_jalr => Jalr, opcode = 0x67, funct3 = 0, rd = 15, rs1 = 16, imm = 42);
     test_rejects!(
         rejects_jalr_with_nonzero_funct3,
