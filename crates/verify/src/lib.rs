@@ -303,21 +303,22 @@ pub fn verify_vm_stark_proof_pvs(
                     actual: def_hook_commit,
                 });
             }
-            let deferral_merkle_proofs = proof
-                .deferral_merkle_proofs
-                .as_ref()
-                .ok_or(VerifyStarkError::MissingDeferralMerkleProofs)?;
-            deferral_merkle_proofs.verify(
-                vk.baseline.memory_dimensions,
-                initial_root,
-                final_root,
-                initial_acc_hash,
-                final_acc_hash,
-                depth.as_canonical_u32() as usize,
-            )?;
         } else {
             return Err(VerifyStarkError::InvalidDeferralFlag(deferral_flag));
         }
+
+        let deferral_merkle_proofs = proof
+            .deferral_merkle_proofs
+            .as_ref()
+            .ok_or(VerifyStarkError::MissingDeferralMerkleProofs)?;
+        deferral_merkle_proofs.verify(
+            vk.baseline.memory_dimensions,
+            initial_root,
+            final_root,
+            initial_acc_hash,
+            final_acc_hash,
+            depth.as_canonical_u32() as usize,
+        )?;
     } else if !verifier_def_pvs_slice.is_empty()
         || !proof.inner.public_values[DEF_PVS_AIR_ID].is_empty()
         || proof.deferral_merkle_proofs.is_some()

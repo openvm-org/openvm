@@ -39,9 +39,11 @@ pub struct VerificationBaseline {
     /// index > 0) internal-recursive layer verifiers.
     pub internal_recursive_vk_commit: VkCommit,
     /// Expected deferral VK commit (hash of the deferral aggregation prover's vk commits).
-    /// When `Some`, the proof must have `deferral_flag == 2` with a matching
-    /// `def_hook_commit` and valid deferral Merkle proofs. When `None`, the proof must
-    /// have no deferral public values.
+    /// When Some, the proof must have deferral_flag == 0 || deferral_flag == 2 and valid
+    /// deferral Merkle proofs. If deferral_flag == 2, def_hook_commit must match this value.
+    /// If deferral_flag == 0, the deferral public values must be unset and the Merkle proofs
+    /// must show that the deferral address space is unchanged. When None, there must be no
+    /// deferral public values.
     pub expected_def_hook_commit: Option<Digest>,
 }
 

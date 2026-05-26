@@ -64,6 +64,23 @@ impl DeferralMerkleProofs<F> {
             });
         }
 
+        if depth > overall_height {
+            return Err(VerifyStarkError::DeferralDepthTooLarge {
+                depth,
+                overall_height,
+            });
+        }
+
+        for i in 0..memory_dimensions.address_height {
+            if self.initial_merkle_proof[i] != self.final_merkle_proof[i] {
+                return Err(VerifyStarkError::DeferralMerkleProofSiblingMismatch {
+                    depth: i,
+                    initial: self.initial_merkle_proof[i],
+                    final_: self.final_merkle_proof[i],
+                });
+            }
+        }
+
         let is_unset = depth == 0;
         let skip_depth = if is_unset { 0 } else { depth };
         let idx_prefix =
