@@ -254,7 +254,7 @@ mod tests {
             }
         );
 
-        // ori x13, x7, 4
+        // ori x13, x7, -2048
         assert_eq!(
             IType::new(0x8003e693),
             IType {
