@@ -8979,6 +8979,7 @@ name = "rvr-openvm"
 version = "2.0.0-beta.2"
 dependencies = [
  "openvm-instructions",
+ "openvm-platform",
  "openvm-stark-backend",
  "rvr-openvm-build",
  "rvr-openvm-ext-ffi-common",
