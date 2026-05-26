@@ -2,9 +2,14 @@ use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper, SubAir};
-use openvm_recursion_circuit::bus::{
-    CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
-    PreHashBus, PreHashMessage, PublicValuesBus, PublicValuesBusMessage,
+use openvm_recursion_circuit::{
+    bus::{
+        CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
+        PreHashBus, PreHashMessage, PublicValuesBus, PublicValuesBusMessage,
+    },
+    primitives::bus::{
+        PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage,
+    },
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -25,7 +30,7 @@ use crate::{
             hook::bus::{
                 DefCircuitCommitBus, DefCircuitCommitMessage, OnionResultBus, OnionResultMessage,
             },
-            DeferralAggregationPvs, DEF_AGG_PVS_AIR_ID,
+            DeferralAggregationPvs, DEF_AGG_PVS_AIR_ID, MAX_DEF_AGG_MERKLE_DEPTH,
         },
         root::NUM_DIGESTS_IN_VM_COMMIT,
         subair::{HashSliceCtx, HashSliceSubAir, MerkleRootBus, MerkleRootMessage},
@@ -40,6 +45,8 @@ use crate::{
 pub struct DeferralHookPvsCols<F> {
     pub verifier_pvs: VerifierBasePvs<F>,
     pub def_pvs: DeferralAggregationPvs<F>,
+
+    pub num_merkle_leaves: F,
 
     pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VM_COMMIT - 1],
     pub def_circuit_commit: [F; DIGEST_SIZE],
@@ -60,6 +67,8 @@ pub struct DeferralHookPvsAir {
     pub pre_hash_bus: PreHashBus,
     pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub hash_slice_subair: HashSliceSubAir,
+    pub pow_checker_bus: PowerCheckerBus,
+    pub range_checker_bus: RangeCheckerBus,
 
     pub def_circuit_commit_bus: DefCircuitCommitBus,
     pub merkle_root_bus: MerkleRootBus,
@@ -77,6 +86,8 @@ impl DeferralHookPvsAir {
         pre_hash_bus: PreHashBus,
         poseidon2_compress_bus: Poseidon2CompressBus,
         hash_slice_subair: HashSliceSubAir,
+        pow_checker_bus: PowerCheckerBus,
+        range_checker_bus: RangeCheckerBus,
         def_circuit_commit_bus: DefCircuitCommitBus,
         merkle_root_bus: MerkleRootBus,
         onion_res_bus: OnionResultBus,
@@ -89,6 +100,8 @@ impl DeferralHookPvsAir {
             pre_hash_bus,
             poseidon2_compress_bus,
             hash_slice_subair,
+            pow_checker_bus,
+            range_checker_bus,
             def_circuit_commit_bus,
             merkle_root_bus,
             onion_res_bus,
@@ -247,11 +260,30 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * and performing two onion hashes. Both steps are done in different AIRs, but we
          * must receive these commits to constrain consistency.
          */
+        self.pow_checker_bus.lookup_key(
+            builder,
+            PowerCheckerBusMessage {
+                log: local.def_pvs.merkle_depth,
+                exp: local.num_merkle_leaves,
+            },
+            AB::F::ONE,
+        );
+
+        self.range_checker_bus.lookup_key(
+            builder,
+            RangeCheckerBusMessage {
+                value: AB::Expr::from_usize(MAX_DEF_AGG_MERKLE_DEPTH) - local.def_pvs.merkle_depth,
+                max_bits: AB::Expr::from_usize(8),
+            },
+            AB::F::ONE,
+        );
+
         self.merkle_root_bus.receive(
             builder,
             MerkleRootMessage {
                 merkle_root: local.def_pvs.merkle_commit.map(Into::into),
                 idx: AB::Expr::ZERO,
+                num_rows_or_zero: local.num_merkle_leaves * AB::Expr::TWO,
             },
             AB::F::ONE,
         );

@@ -47,6 +47,8 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
                 compress_bus: bus_inventory.poseidon2_compress_bus,
                 permute_bus: bus_inventory.poseidon2_permute_bus,
             },
+            bus_inventory.power_checker_bus,
+            bus_inventory.range_checker_bus,
             def_circuit_commit_bus,
             merkle_root_bus,
             onion_res_bus,
@@ -59,6 +61,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
                 merkle_root_bus,
                 merkle_tree_internal_bus,
                 0,
+                true,
             ),
             io_commit_bus,
         };

@@ -528,6 +528,12 @@ fn expected_deferral_inner_merkle_commit_from_copies(
 }
 
 #[cfg(feature = "cuda")]
+fn expected_deferral_inner_merkle_depth(num_copies: usize) -> u32 {
+    assert!(num_copies > 0, "num_copies must be non-zero");
+    num_copies.next_power_of_two().ilog2()
+}
+
+#[cfg(feature = "cuda")]
 #[test_case(1)]
 #[test_case(2)]
 fn test_deferral_leaf_prover(num_children: usize) -> Result<()> {
@@ -560,6 +566,10 @@ fn test_deferral_leaf_prover(num_children: usize) -> Result<()> {
         num_children as u32,
         wrapped_pvs.num_def_circuit_proofs.as_canonical_u32()
     );
+    assert_eq!(
+        expected_deferral_inner_merkle_depth(num_children),
+        wrapped_pvs.merkle_depth.as_canonical_u32()
+    );
 
     Ok(())
 }
@@ -591,6 +601,10 @@ fn test_deferral_aggregation(num_children: usize) -> Result<()> {
     assert_eq!(
         num_children as u32,
         wrapped_pvs.num_def_circuit_proofs.as_canonical_u32()
+    );
+    assert_eq!(
+        expected_deferral_inner_merkle_depth(num_children),
+        wrapped_pvs.merkle_depth.as_canonical_u32()
     );
 
     Ok(())

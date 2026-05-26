@@ -53,6 +53,7 @@ impl UserPvsCommitAir {
                 merkle_root_bus,
                 merkle_tree_internal_bus,
                 0,
+                false,
             ),
             encoder,
             num_user_pvs,

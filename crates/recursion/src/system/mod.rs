@@ -80,6 +80,7 @@ pub struct VerifierExternalData<'a> {
     pub poseidon2_compress_inputs: &'a Vec<[F; POSEIDON2_WIDTH]>,
     pub poseidon2_permute_inputs: &'a Vec<[F; POSEIDON2_WIDTH]>,
     pub range_check_inputs: &'a Vec<usize>,
+    pub power_check_inputs: &'a Vec<usize>,
     pub required_heights: Option<&'a [usize]>,
     pub final_transcript_state: Option<&'a mut [F; POSEIDON2_WIDTH]>,
 }
@@ -139,11 +140,13 @@ pub trait VerifierTraceGen<
     ) -> Vec<AirProvingContext<PB>> {
         let poseidon2_compress_inputs = vec![];
         let range_check_inputs = vec![];
+        let power_check_inputs = vec![];
 
         let mut external_data = VerifierExternalData {
             poseidon2_compress_inputs: &poseidon2_compress_inputs,
             poseidon2_permute_inputs: &poseidon2_compress_inputs,
             range_check_inputs: &range_check_inputs,
+            power_check_inputs: &power_check_inputs,
             required_heights: None,
             final_transcript_state: None,
         };
@@ -1135,6 +1138,9 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
 
         let power_checker_gen =
             Arc::new(PowerCheckerCpuTraceGenerator::<2, POW_CHECKER_HEIGHT>::default());
+        for &log in external_data.power_check_inputs {
+            power_checker_gen.add_pow(log);
+        }
         let exp_bits_len_gen = ExpBitsLenCpuTraceGenerator::default();
 
         let (module_required, power_checker_required, exp_bits_len_required) =
@@ -1411,6 +1417,11 @@ pub mod cuda_tracegen {
             let power_checker_gen = Arc::new(
                 PowerCheckerGpuTraceGenerator::<2, POW_CHECKER_HEIGHT>::hybrid(device_ctx.clone()),
             );
+            if let Some(cpu_checker) = power_checker_gen.cpu_checker() {
+                for &log in external_data.power_check_inputs {
+                    cpu_checker.add_pow(log);
+                }
+            }
             let exp_bits_len_gen = GpuExpBitsLenTraceGenerator::new(device_ctx.clone());
 
             let (module_required, power_checker_required, exp_bits_len_required) =

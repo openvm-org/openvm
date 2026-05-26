@@ -1,19 +1,22 @@
 use std::{array::from_fn, borrow::Borrow};
 
+use itertools::Itertools;
 use openvm_circuit_primitives::{
+    encoder::Encoder,
     utils::{assert_array_eq, not},
-    ColumnsAir, StructReflection, StructReflectionHelper,
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_recursion_circuit::{
     bus::{
         Poseidon2CompressBus, Poseidon2CompressMessage, PublicValuesBus, PublicValuesBusMessage,
     },
-    prelude::DIGEST_SIZE,
+    prelude::{DIGEST_SIZE, F},
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::poseidon2_compress_with_capacity;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
@@ -25,9 +28,13 @@ use crate::{
             InputOrMerkleCommitMessage,
         },
         DeferralAggregationPvs, DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID, DEF_CIRCUIT_PVS_AIR_ID,
+        MAX_DEF_AGG_MERKLE_DEPTH,
     },
     utils::digests_to_poseidon2_input,
+    CommitBytes,
 };
+
+const ENCODER_MAX_DEGREE: u32 = 2;
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
@@ -47,6 +54,37 @@ pub struct DeferralAggPvsAir {
     pub poseidon2_bus: Poseidon2CompressBus,
     pub input_or_merkle_commit_bus: InputOrMerkleCommitBus,
     pub def_pvs_consistency_bus: DefPvsConsistencyBus,
+
+    pub encoder: Encoder,
+    pub zero_hashes: [CommitBytes; MAX_DEF_AGG_MERKLE_DEPTH + 1],
+}
+
+impl DeferralAggPvsAir {
+    pub(super) fn depth_encoder() -> Encoder {
+        Encoder::new(MAX_DEF_AGG_MERKLE_DEPTH + 1, ENCODER_MAX_DEGREE, false)
+    }
+
+    pub fn new(
+        public_values_bus: PublicValuesBus,
+        poseidon2_bus: Poseidon2CompressBus,
+        input_or_merkle_commit_bus: InputOrMerkleCommitBus,
+        def_pvs_consistency_bus: DefPvsConsistencyBus,
+    ) -> Self {
+        let encoder = Self::depth_encoder();
+        assert!(encoder.width() < DIGEST_SIZE);
+        let mut zero_hash = [F::ZERO; DIGEST_SIZE];
+        Self {
+            public_values_bus,
+            poseidon2_bus,
+            input_or_merkle_commit_bus,
+            def_pvs_consistency_bus,
+            encoder,
+            zero_hashes: from_fn(|_| {
+                zero_hash = poseidon2_compress_with_capacity(zero_hash, zero_hash).0;
+                zero_hash.into()
+            }),
+        }
+    }
 }
 
 impl<F> BaseAir<F> for DeferralAggPvsAir {
@@ -164,11 +202,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * columns, we repurpose the unused local.child_pvs.input_commit[0].
          */
         let local_num_def_circuit_proofs = local.child_pvs.input_commit[0];
+        let local_merkle_depth = local.child_pvs.input_commit[1];
 
-        builder
-            .when(not(local.is_present))
-            .when(is_internal)
-            .assert_zero(local_num_def_circuit_proofs);
+        let mut when_dummy_internal = builder.when(not(local.is_present) * is_internal);
+        when_dummy_internal.assert_zero(local_num_def_circuit_proofs);
+        when_dummy_internal.assert_zero(local_merkle_depth);
 
         self.public_values_bus.receive(
             builder,
@@ -181,15 +219,27 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             is_internal * local.is_present,
         );
 
+        self.public_values_bus.receive(
+            builder,
+            local.proof_idx,
+            PublicValuesBusMessage {
+                air_idx: AB::Expr::from_usize(DEF_AGG_PVS_AIR_ID),
+                pv_idx: AB::Expr::from_usize(DIGEST_SIZE + 1),
+                value: local_merkle_depth.into(),
+            },
+            is_internal * local.is_present,
+        );
+
         /*
          * If there is only one row, then this proof is a wrapper and its public values should
-         * match those of its child's. Otherwise, constrain that merkle_commit is the hash of
-         * the child proofs'. We also constrain that num_def_circuit_proofs is the sum of the
-         * present children's.
+         * match those of its child's. Otherwise, constrain that num_def_circuit_proofs is the
+         * sum of the present children's and that merkle_depth is the child merkle_depth + 1.
+         * If both children are present, we constrain that their merkle_depth values are equal.
          */
         let &DeferralAggregationPvs::<_> {
             merkle_commit,
             num_def_circuit_proofs,
+            merkle_depth,
         } = builder.public_values().borrow();
 
         let is_first = not(local.proof_idx);
@@ -199,20 +249,61 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             local.is_present * is_leaf.clone() + is_internal * local_num_def_circuit_proofs;
         let next_num_proofs =
             next.is_present * is_leaf + is_internal * next.child_pvs.input_commit[0];
+        let local_merkle_depth = is_internal * local_merkle_depth;
+        let next_merkle_depth = is_internal * next.child_pvs.input_commit[1];
 
         let mut when_one_row = builder.when(is_first * not(next.proof_idx));
         when_one_row.assert_eq(local_num_proofs.clone(), num_def_circuit_proofs);
+        when_one_row.assert_eq(local_merkle_depth.clone(), merkle_depth);
         assert_array_eq(&mut when_one_row, local.merkle_commit, merkle_commit);
 
         builder
             .when_transition()
             .assert_eq(local_num_proofs + next_num_proofs, num_def_circuit_proofs);
+        builder
+            .when_transition()
+            .assert_eq(local_merkle_depth.clone() + AB::Expr::ONE, merkle_depth);
+        builder
+            .when_transition()
+            .when(next.is_present)
+            .assert_eq(local_merkle_depth, next_merkle_depth);
+
+        /*
+         * If there are two rows, then the second (next) is either present or not. If present
+         * the parent merkle_hash should be the compression of both children's merkle_commit.
+         * If not the second merkle_commit contains encoder flags for the child merkle depth,
+         * which is used to select the correct zero hash depth.
+         */
+        let flags = next
+            .merkle_commit
+            .into_iter()
+            .take(self.encoder.width())
+            .collect_vec();
+        self.encoder
+            .eval(&mut builder.when(not(next.is_present)), &flags);
+
+        let mut zero_hash = [AB::Expr::ZERO; DIGEST_SIZE];
+        for i in 0..=MAX_DEF_AGG_MERKLE_DEPTH {
+            let is_current = self.encoder.get_flag_expr::<AB>(i, &flags);
+            builder
+                .when(not(next.is_present))
+                .when(is_current.clone())
+                .assert_eq(merkle_depth, AB::Expr::from_usize(i + 1));
+
+            let current_zero_hash: [AB::F; DIGEST_SIZE] = self.zero_hashes[i].into();
+            for j in 0..DIGEST_SIZE {
+                zero_hash[j] += is_current.clone() * current_zero_hash[j];
+            }
+        }
+
+        let right_child = from_fn(|i| {
+            next.is_present * next.merkle_commit[i] + not(next.is_present) * zero_hash[i].clone()
+        });
 
         self.poseidon2_bus.lookup_key(
             builder,
             Poseidon2CompressMessage {
-                input: digests_to_poseidon2_input(local.merkle_commit, next.merkle_commit)
-                    .map(Into::into),
+                input: digests_to_poseidon2_input(local.merkle_commit.map(Into::into), right_child),
                 output: merkle_commit.map(Into::into),
             },
             is_first_of_two_rows,
