@@ -4,7 +4,8 @@
 //! both the C tracer struct layout and the Rust-side `SegmentationState`
 //! buffer allocations — they must match byte-for-byte.
 
-use rvr_openvm_ext_ffi_common::{CHUNK, DEFAULT_PAGE_BITS, DEFAULT_SEGMENT_CHECK_INSNS, MEM_BITS};
+use openvm_platform::memory::MEM_SIZE;
+use rvr_openvm_ext_ffi_common::{CHUNK, DEFAULT_PAGE_BITS, DEFAULT_SEGMENT_CHECK_INSNS};
 
 /// Maximum AS_MEMORY page buffer entries per segment check interval.
 ///
@@ -29,7 +30,7 @@ pub const DEFERRAL_PAGE_BUF_CAP: usize = 1 << 16;
 /// Generate the `openvm_constants.h` content with compile-time constants
 /// for the C tracer headers.
 pub fn constants_header() -> String {
-    let memory_mask = (1u64 << MEM_BITS) - 1;
+    let memory_mask = MEM_SIZE as u64 - 1;
     let chunk_bits = CHUNK.ilog2();
 
     format!(

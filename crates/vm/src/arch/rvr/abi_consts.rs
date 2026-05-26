@@ -35,8 +35,7 @@ const _: () = assert!(
     ffi::DEFERRAL_DIGEST_SIZE == openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE,
 );
 
-// ── rvr-openvm-ext-ffi-common memory / metered-execution layout ────────
-const _: () = assert!(ffi::MEM_BITS == openvm_platform::memory::MEM_BITS);
+// ── rvr-openvm-ext-ffi-common metered-execution layout ─────────────────
 const _: () = assert!(ffi::CHUNK == CHUNK);
 const _: () = assert!(ffi::DEFAULT_PAGE_BITS == DEFAULT_PAGE_BITS);
 const _: () = assert!(ffi::DEFAULT_SEGMENT_CHECK_INSNS as u64 == DEFAULT_SEGMENT_CHECK_INSNS);
