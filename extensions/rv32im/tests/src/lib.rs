@@ -1,5 +1,8 @@
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "rvr")]
+    use std::{env, process::Command};
+
     use eyre::Result;
     use openvm_circuit::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VmExecutor},
@@ -28,6 +31,8 @@ mod tests {
     use test_case::test_case;
 
     type F = BabyBear;
+    #[cfg(feature = "rvr")]
+    const RVR_OOB_CHILD_ENV: &str = "OPENVM_RVR_OOB_CHILD";
 
     #[cfg(test)]
     fn test_rv32im_config() -> Rv32ImConfig {
@@ -38,6 +43,40 @@ mod tests {
             },
             ..Default::default()
         }
+    }
+
+    #[cfg(feature = "rvr")]
+    fn execute_rvr_example(program_name: &str) {
+        let config = test_rv32im_config();
+        let elf =
+            build_example_program_at_path(get_programs_dir!(), program_name, &config).unwrap();
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )
+        .unwrap();
+        let executor = VmExecutor::new(config).unwrap();
+        let instance = executor.instance(&exe).unwrap();
+        instance.execute(vec![], None).unwrap();
+    }
+
+    #[cfg(feature = "rvr")]
+    fn assert_child_aborts(test_name: &str) {
+        let output = Command::new(env::current_exe().unwrap())
+            .args(["--exact", test_name, "--nocapture"])
+            .env(RVR_OOB_CHILD_ENV, "1")
+            .output()
+            .expect("failed to spawn self");
+
+        if output.status.success() {
+            panic!("child process succeeded; OOB access was not caught");
+        }
+        // Success path for these tests: relay the child failure text so the
+        // caller's `#[should_panic(expected = ...)]` can match it.
+        panic!("{}", String::from_utf8_lossy(&output.stderr));
     }
 
     #[test_case("fibonacci", 1)]
@@ -368,6 +407,54 @@ mod tests {
         let executor = VmExecutor::new(config).unwrap();
         let instance = executor.instance(&exe).unwrap();
         instance.execute(vec![], None).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Memory access out of bounds")]
+    #[cfg(feature = "rvr")]
+    fn test_out_of_bound_mem_access() {
+        // Child mode: triggers the OOB; abort_oob in C aborts the process.
+        if env::var(RVR_OOB_CHILD_ENV).is_ok() {
+            execute_rvr_example("out_of_bound_mem_access");
+            return; // unreachable: abort fired
+        }
+
+        // Parent mode: spawn ourselves as the child and forward its stderr
+        // as our own panic. `#[should_panic(expected = ...)]` matches iff
+        // the child's rvr bounds check actually fired.
+        assert_child_aborts("tests::test_out_of_bound_mem_access");
+    }
+
+    #[test]
+    #[should_panic(expected = "reveal out of bounds")]
+    #[cfg(feature = "rvr")]
+    fn test_out_of_bound_reveal() {
+        // Child mode: triggers the existing host_reveal public-values bounds assert.
+        if env::var(RVR_OOB_CHILD_ENV).is_ok() {
+            execute_rvr_example("out_of_bound_reveal");
+            return; // unreachable: abort fired
+        }
+
+        // Parent mode: spawn ourselves as the child and forward its stderr
+        // as our own panic. `#[should_panic(expected = ...)]` matches iff
+        // the child's host_reveal assert actually fired.
+        assert_child_aborts("tests::test_out_of_bound_reveal");
+    }
+
+    #[test]
+    #[should_panic(expected = "Memory access out of bounds")]
+    #[cfg(feature = "rvr")]
+    fn test_out_of_bound_print_str() {
+        // Child mode: triggers the Rust-side bounds check in host_print_str.
+        if env::var(RVR_OOB_CHILD_ENV).is_ok() {
+            execute_rvr_example("out_of_bound_print_str");
+            return; // unreachable: abort fired
+        }
+
+        // Parent mode: spawn ourselves as the child and forward its stderr
+        // as our own panic. `#[should_panic(expected = ...)]` matches iff
+        // the child's host_print_str bounds check actually fired.
+        assert_child_aborts("tests::test_out_of_bound_print_str");
     }
 
     #[test_case("getrandom", vec!["getrandom", "getrandom-unsupported"])]
