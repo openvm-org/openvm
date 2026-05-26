@@ -231,8 +231,16 @@ pub unsafe extern "C" fn rvr_ext_fp2_setup(
     let num_words = total_limbs / WORD_SIZE as u32;
     debug_assert!(num_words >= 1);
 
-    let mut src_words = vec![0u32; num_words as usize];
-    rd_mem_words_traced(state, rs1_ptr, &mut src_words);
+    let mut input_words = vec![0u32; num_words as usize];
+    rd_mem_words_traced(state, rs1_ptr, &mut input_words);
     trace_mem_access_range(state, rs2_ptr, num_words, AS_MEMORY);
-    wr_mem_words_traced(state, rd_ptr, &src_words);
+
+    // Setup validates that the guest-provided base-field modulus and setup
+    // inputs match the constants configured into this chip.
+    //
+    // In mod-builder, `Input(0)` means the first input slot. For setup, that
+    // slot is the modulus p read from rs1. VM evaluates inputs modulo p,
+    // so each setup coordinate writes p % p = 0.
+    let output_words = vec![0u32; num_words as usize];
+    wr_mem_words_traced(state, rd_ptr, &output_words);
 }

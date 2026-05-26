@@ -5,7 +5,12 @@
 //! `Streams<F>` and the host RNG are borrowed directly into [`OpenVmIoState`]
 //! and never converted upfront.
 
-use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
+use std::mem::{align_of, size_of};
+
+use openvm_instructions::{
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    DEFERRAL_AS,
+};
 use rvr_state::NUM_REGS_I;
 
 use super::{compile::CompileError, ExecuteError};
@@ -28,6 +33,19 @@ pub fn rv32_memory_ptr<F>(vm_state: &mut VmState<F, GuestMemory>) -> *mut u8 {
 
 pub fn public_values_slice(memory: &mut AddressMap) -> &mut [u8] {
     memory.mem[PUBLIC_VALUES_AS as usize].as_mut_slice()
+}
+
+/// Raw alias of the `F`-typed DEFERRAL address space.
+/// The returned length is in `F` cells, not bytes.
+pub fn deferral_memory_ptr<F>(memory: &mut AddressMap) -> (*mut F, usize) {
+    let bytes = memory.mem[DEFERRAL_AS as usize].as_mut_slice();
+    debug_assert_eq!(
+        bytes.as_mut_ptr().addr() % align_of::<F>(),
+        0,
+        "DEFERRAL_AS buffer must be aligned for F"
+    );
+    debug_assert_eq!(bytes.len() % size_of::<F>(), 0);
+    (bytes.as_mut_ptr().cast::<F>(), bytes.len() / size_of::<F>())
 }
 
 pub fn read_rv32_registers<F>(vm_state: &VmState<F, GuestMemory>) -> [u32; NUM_REGS_I] {
