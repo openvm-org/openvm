@@ -12,11 +12,9 @@
 #include <string.h>
 
 #include "openvm_constants.h"
+#include "openvm_util.h"
 #include "openvm_check_mem_bounds.h"
 
-/* Branch prediction hints. */
-static __attribute__((always_inline)) inline int likely(int x) { return __builtin_expect(!!(x), 1); }
-static __attribute__((always_inline)) inline int unlikely(int x) { return __builtin_expect(!!(x), 0); }
 static __attribute__((always_inline)) inline void assume(int x) { __builtin_assume(x); }
 static __attribute__((always_inline)) inline void debug_assume(int x) {
   assert(x);
@@ -90,22 +88,16 @@ static __attribute__((always_inline)) inline void reg_write(RvState* restrict st
 
 static __attribute__((always_inline)) inline uint8_t rd_mem_u8(RvState* restrict state, uint32_t addr) {
   check_mem_bounds_u8(addr);
-  __builtin_assume((addr & ~(uint32_t)MEMORY_MASK) == 0u);
-
   return *mem_ptr(state, addr);
 }
 
 static __attribute__((always_inline)) inline int8_t rd_mem_i8(RvState* restrict state, uint32_t addr) {
   check_mem_bounds_i8(addr);
-  __builtin_assume((addr & ~(uint32_t)MEMORY_MASK) == 0u);
-
   return (int8_t)*mem_ptr(state, addr);
 }
 
 static __attribute__((always_inline)) inline uint16_t rd_mem_u16(RvState* restrict state, uint32_t addr) {
   check_mem_bounds_u16(addr);
-  __builtin_assume((addr & ~(uint32_t)MEMORY_MASK) == 0u);
-
   uint16_t v;
   const void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(v));
   memcpy(&v, p, sizeof(v));
@@ -114,8 +106,6 @@ static __attribute__((always_inline)) inline uint16_t rd_mem_u16(RvState* restri
 
 static __attribute__((always_inline)) inline int16_t rd_mem_i16(RvState* restrict state, uint32_t addr) {
   check_mem_bounds_i16(addr);
-  __builtin_assume((addr & ~(uint32_t)MEMORY_MASK) == 0u);
-
   int16_t v;
   const void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(v));
   memcpy(&v, p, sizeof(v));
@@ -124,8 +114,6 @@ static __attribute__((always_inline)) inline int16_t rd_mem_i16(RvState* restric
 
 static __attribute__((always_inline)) inline uint32_t rd_mem_u32(RvState* restrict state, uint32_t addr) {
   check_mem_bounds_u32(addr);
-  __builtin_assume((addr & ~(uint32_t)MEMORY_MASK) == 0u);
-
   uint32_t v;
   const void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(v));
   memcpy(&v, p, sizeof(v));
@@ -136,23 +124,17 @@ static __attribute__((always_inline)) inline uint32_t rd_mem_u32(RvState* restri
 
 static __attribute__((always_inline)) inline void wr_mem_u8(RvState* restrict state, uint32_t addr, uint8_t val) {
   check_mem_bounds_u8(addr);
-  __builtin_assume((addr & ~(uint32_t)MEMORY_MASK) == 0u);
-
   *mem_ptr(state, addr) = val;
 }
 
 static __attribute__((always_inline)) inline void wr_mem_u16(RvState* restrict state, uint32_t addr, uint16_t val) {
   check_mem_bounds_u16(addr);
-  __builtin_assume((addr & ~(uint32_t)MEMORY_MASK) == 0u);
-
   void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(val));
   memcpy(p, &val, sizeof(val));
 }
 
 static __attribute__((always_inline)) inline void wr_mem_u32(RvState* restrict state, uint32_t addr, uint32_t val) {
   check_mem_bounds_u32(addr);
-  __builtin_assume((addr & ~(uint32_t)MEMORY_MASK) == 0u);
-
   void* p = __builtin_assume_aligned(mem_ptr(state, addr), sizeof(val));
   memcpy(p, &val, sizeof(val));
 }
@@ -164,8 +146,6 @@ static __attribute__((always_inline)) inline void wr_mem_u32(RvState* restrict s
 static __attribute__((always_inline)) inline void rd_mem_u32_range(RvState* restrict state, uint32_t base_addr,
                                                                    uint32_t* restrict out, uint32_t num_words) {
   check_mem_bounds_u32_range(base_addr, num_words);
-  __builtin_assume((base_addr & ~(uint32_t)MEMORY_MASK) == 0u);
-
   const void* p = __builtin_assume_aligned(mem_ptr(state, base_addr), WORD_SIZE);
   memcpy(out, p, (size_t)num_words * sizeof(uint32_t));
 }
@@ -173,8 +153,6 @@ static __attribute__((always_inline)) inline void rd_mem_u32_range(RvState* rest
 static __attribute__((always_inline)) inline void wr_mem_u32_range(RvState* restrict state, uint32_t base_addr,
                                                                    const uint32_t* restrict vals, uint32_t num_words) {
   check_mem_bounds_u32_range(base_addr, num_words);
-  __builtin_assume((base_addr & ~(uint32_t)MEMORY_MASK) == 0u);
-
   void* p = __builtin_assume_aligned(mem_ptr(state, base_addr), WORD_SIZE);
   memcpy(p, vals, (size_t)num_words * sizeof(uint32_t));
 }

@@ -265,6 +265,11 @@ impl CProject {
     // ── Support files (tracer header, state header, IO) ─────────────────
 
     fn write_support_files(&self) -> io::Result<()> {
+        fs::write(
+            self.output_dir.join("openvm_util.h"),
+            include_str!("../../c/openvm_util.h"),
+        )?;
+
         // RvState struct definition (forward-declares Tracer).
         let state_path = self.output_dir.join("openvm_state.h");
         fs::write(&state_path, include_str!("../../c/openvm_state.h"))?;
@@ -288,19 +293,23 @@ impl CProject {
         let muldiv_path = self.output_dir.join("rv_muldiv.h");
         fs::write(&muldiv_path, include_str!("../../c/rv_muldiv.h"))?;
 
-        // Memory-bounds check header declares per-width helpers;
+        // Memory-bounds checks are header-selected so hot helpers can inline.
         let bounds_h_path = self.output_dir.join("openvm_check_mem_bounds.h");
-        fs::write(
-            &bounds_h_path,
-            include_str!("../../c/openvm_check_mem_bounds.h"),
-        )?;
-
-        // Memory-bounds check implementation depending on protected/unprotected feature;
-        let bounds_c_path = self.output_dir.join("openvm_check_mem_bounds.c");
-        let content = include_str!("../../c/openvm_check_mem_bounds_protected.c");
+        #[cfg(not(feature = "unprotected"))]
+        let bounds_h_content = include_str!("../../c/openvm_check_mem_bounds.h");
         #[cfg(feature = "unprotected")]
-        let content = include_str!("../../c/openvm_check_mem_bounds_unprotected.c");
-        fs::write(&bounds_c_path, content)?;
+        let bounds_h_content = include_str!("../../c/openvm_check_mem_bounds_unprotected.h");
+        fs::write(&bounds_h_path, bounds_h_content)?;
+
+        // Protected mode keeps only the cold abort path out-of-line.
+        let bounds_c_path = self.output_dir.join("openvm_check_mem_bounds.c");
+        #[cfg(not(feature = "unprotected"))]
+        fs::write(
+            &bounds_c_path,
+            include_str!("../../c/openvm_check_mem_bounds.c"),
+        )?;
+        #[cfg(feature = "unprotected")]
+        let _ = fs::remove_file(&bounds_c_path);
 
         // IO implementation.
         fs::write(

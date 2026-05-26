@@ -7,12 +7,16 @@
 //! adjustments for IO instructions are handled entirely in the generated C
 //! code; these callbacks are pure IO logic.
 
-use std::{collections::VecDeque, ffi::c_void, io::Write};
+use std::{collections::VecDeque, ffi::c_void, io::Write, mem::size_of};
 
+#[cfg(not(feature = "unprotected"))]
+use openvm_platform::memory::MEM_SIZE;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, Rng};
 
 use crate::arch::deferral::DeferralState;
+
+const WORD_SIZE: usize = size_of::<u32>();
 
 /// IO execution state borrowed from the host `VmState<F>` for the duration of
 /// one rvr call. Streams, rng, and the public-values byte slice are mutable
@@ -47,13 +51,12 @@ pub struct OpenVmHostCallbacks {
 // ── Bounds checking ─────────────────────────────────────────────────────────
 
 /// Verify that `[start, start + num_bytes)` fits within AS_MEMORY
-/// (`1 << MEM_BITS` bytes). Panics with a "Memory access out of bounds"
+/// (`MEM_SIZE` bytes). Panics with a "Memory access out of bounds"
 /// message on overflow; panicking across `extern "C"` aborts the process,
 /// matching the C-side `abort_oob` termination used by `rd_mem_*`/`wr_mem_*`.
 /// Compiles to a no-op under the `unprotected` feature.
 #[cfg(not(feature = "unprotected"))]
 fn check_mem_bounds_range(start: u32, num_bytes: usize) {
-    const MEM_SIZE: usize = 1usize << openvm_platform::memory::MEM_BITS;
     let start = start as usize;
     if start > MEM_SIZE || num_bytes > MEM_SIZE - start {
         panic!(
@@ -100,43 +103,48 @@ pub extern "C" fn host_print_str<F: PrimeField32>(ctx: *mut c_void, ptr: u32, le
     }
 }
 
-/// HintRandom: refill the hint stream with `num_words * 4` random bytes drawn
-/// from VmState's persistent RNG (matches openvm's `Rv32HintRandomSubEx`).
+/// HintRandom: refill the hint stream with `num_words * WORD_SIZE` random
+/// bytes drawn from VmState's persistent RNG (matches openvm's
+/// `Rv32HintRandomSubEx`).
 pub extern "C" fn host_hint_random<F: PrimeField32>(ctx: *mut c_void, num_words: u32) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
-    let nbytes = num_words as usize * 4;
+    let nbytes = num_words as usize * WORD_SIZE;
     io.hint_stream.clear();
     for _ in 0..nbytes {
         io.hint_stream.push_back(F::from_u8(io.rng.random::<u8>()));
     }
 }
 
-/// HINT_STOREW: pop 4 field elements from the hint stream, cast each to a
-/// byte, and write them to guest memory at `dest_addr`.
+/// HINT_STOREW: pop one word from the hint stream as bytes and write it to
+/// guest memory at `dest_addr`.
 pub extern "C" fn host_hint_storew<F: PrimeField32>(ctx: *mut c_void, dest_addr: u32) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
-    if io.hint_stream.len() < 4 || io.memory_ptr.is_null() {
+    if io.hint_stream.len() < WORD_SIZE || io.memory_ptr.is_null() {
         return;
     }
-    check_mem_bounds_range(dest_addr, 4);
-    let mut bytes = [0u8; 4];
+    check_mem_bounds_range(dest_addr, WORD_SIZE);
+    let mut bytes = [0u8; WORD_SIZE];
     for byte in &mut bytes {
         *byte = io.hint_stream.pop_front().unwrap().as_canonical_u32() as u8;
     }
     unsafe {
-        std::ptr::copy_nonoverlapping(bytes.as_ptr(), io.memory_ptr.add(dest_addr as usize), 4);
+        std::ptr::copy_nonoverlapping(
+            bytes.as_ptr(),
+            io.memory_ptr.add(dest_addr as usize),
+            bytes.len(),
+        );
     }
 }
 
-/// HINT_BUFFER: pop `num_words * 4` field elements from the hint stream and
-/// copy them as bytes into guest memory.
+/// HINT_BUFFER: pop `num_words * WORD_SIZE` field elements from the hint stream
+/// and copy them as bytes into guest memory.
 pub extern "C" fn host_hint_buffer<F: PrimeField32>(
     ctx: *mut c_void,
     dest_addr: u32,
     num_words: u32,
 ) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
-    let nbytes = num_words as usize * 4;
+    let nbytes = num_words as usize * WORD_SIZE;
     if io.hint_stream.len() < nbytes || io.memory_ptr.is_null() {
         return;
     }
@@ -158,7 +166,7 @@ pub extern "C" fn host_reveal<F: PrimeField32>(
 ) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
     let start = ptr as usize + offset as usize;
-    let end = start + 4;
+    let end = start + WORD_SIZE;
     assert!(
         end <= io.public_values.len(),
         "reveal out of bounds: writing bytes [{start}..{end}) but public_values size is {} (configured via SystemConfig::with_public_values)",
