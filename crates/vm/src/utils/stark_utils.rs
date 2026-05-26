@@ -9,11 +9,9 @@ use openvm_stark_sdk::{
 };
 
 #[cfg(any(feature = "aot", feature = "rvr"))]
-use crate::arch::SystemConfig;
-#[cfg(any(feature = "aot", feature = "rvr"))]
 use crate::arch::VmState;
 #[cfg(any(feature = "aot", feature = "rvr"))]
-use crate::system::memory::online::GuestMemory;
+use crate::system::memory::online::{GuestMemory, LinearMemory};
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, verify_segments, vm::VirtualMachine, Executor,
@@ -114,7 +112,6 @@ fn is_periphery_air(air_name: &str) -> bool {
 #[cfg(feature = "aot")]
 pub fn check_aot_equivalence<E, VB>(
     vm: &VirtualMachine<E, VB>,
-    config: &VB::VmConfig,
     exe: &VmExe<Val<E::SC>>,
     input: &Streams<Val<E::SC>>,
 ) -> eyre::Result<()>
@@ -141,18 +138,7 @@ where
             .execute(input.clone(), None)
             .expect("Failed to execute");
 
-        let system_config: &SystemConfig = config.as_ref();
-        let addr_spaces = &system_config.memory_config.addr_spaces;
-        let assert_vm_state_eq =
-            |lhs: &VmState<Val<E::SC>, GuestMemory>, rhs: &VmState<Val<E::SC>, GuestMemory>| {
-                assert_eq!(lhs.pc(), rhs.pc());
-                for r in 0..addr_spaces[1].num_cells {
-                    let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
-                    let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
-                    assert_eq!(a, b);
-                }
-            };
-        assert_vm_state_eq(&interp_state_pure, &aot_state_pure);
+        check_vm_state_eq(&interp_state_pure, &aot_state_pure)?;
     }
 
     /*
@@ -169,16 +155,7 @@ where
             .naive_metered_interpreter(exe)?
             .execute_metered(input.clone(), metered_ctx.clone())?;
 
-        assert_eq!(interp_state_metered.pc(), aot_state_metered.pc());
-
-        let system_config: &SystemConfig = config.as_ref();
-        let addr_spaces = &system_config.memory_config.addr_spaces;
-
-        for r in 0..addr_spaces[1].num_cells {
-            let interp = unsafe { interp_state_metered.memory.read::<u8, 1>(1, r as u32) };
-            let aot_interp = unsafe { aot_state_metered.memory.read::<u8, 1>(1, r as u32) };
-            assert_eq!(interp, aot_interp);
-        }
+        check_vm_state_eq(&interp_state_metered, &aot_state_metered)?;
 
         assert_eq!(segments.len(), aot_segments.len());
         for i in 0..segments.len() {
@@ -191,6 +168,47 @@ where
     Ok(())
 }
 
+/// Checks that two `VmState`s are byte-identical: same `pc` and the same
+/// bytes in every guest address space. Reports the diverging AS, byte offset,
+/// and both byte values on failure. Short-circuits at the first mismatch.
+#[cfg(any(feature = "aot", feature = "rvr"))]
+fn check_vm_state_eq<F: PrimeField32>(
+    lhs: &VmState<F, GuestMemory>,
+    rhs: &VmState<F, GuestMemory>,
+) -> eyre::Result<()> {
+    if lhs.pc() != rhs.pc() {
+        eyre::bail!("pc mismatch: interp={}, rvr={}", lhs.pc(), rhs.pc());
+    }
+    let lhs_mems = &lhs.memory.memory.mem;
+    let rhs_mems = &rhs.memory.memory.mem;
+    if lhs_mems.len() != rhs_mems.len() {
+        eyre::bail!(
+            "address space count mismatch: interp={}, rvr={}",
+            lhs_mems.len(),
+            rhs_mems.len()
+        );
+    }
+    for (as_idx, (l_mem, r_mem)) in lhs_mems.iter().zip(rhs_mems).enumerate() {
+        let l = l_mem.as_slice();
+        let r = r_mem.as_slice();
+        if l.len() != r.len() {
+            eyre::bail!(
+                "address space {as_idx} size mismatch: interp={}, rvr={}",
+                l.len(),
+                r.len()
+            );
+        }
+        if let Some(offset) = l.iter().zip(r).position(|(a, b)| a != b) {
+            eyre::bail!(
+                "guest memory mismatch in AS={as_idx} at byte offset 0x{offset:08x}: interp={}, rvr={}",
+                l[offset],
+                r[offset]
+            );
+        }
+    }
+    Ok(())
+}
+
 // Compares the output of the interpreter and the RVR instance for pure and metered execution.
 // Metered comparison is relaxed because rvr segments at block granularity while OpenVM segments
 // per-instruction, so segment boundaries differ. We assert: equal pure end-state, equal total
@@ -199,7 +217,6 @@ where
 #[cfg(feature = "rvr")]
 pub fn check_rvr_equivalence<E, VB>(
     vm: &VirtualMachine<E, VB>,
-    config: &VB::VmConfig,
     exe: &VmExe<Val<E::SC>>,
     input: &Streams<Val<E::SC>>,
 ) -> eyre::Result<()>
@@ -226,18 +243,7 @@ where
             .execute(input.clone(), None)
             .expect("Failed to execute");
 
-        let system_config: &SystemConfig = config.as_ref();
-        let addr_spaces = &system_config.memory_config.addr_spaces;
-        let assert_vm_state_eq =
-            |lhs: &VmState<Val<E::SC>, GuestMemory>, rhs: &VmState<Val<E::SC>, GuestMemory>| {
-                assert_eq!(lhs.pc(), rhs.pc());
-                for r in 0..addr_spaces[1].num_cells {
-                    let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
-                    let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
-                    assert_eq!(a, b);
-                }
-            };
-        assert_vm_state_eq(&interp_state_pure, &rvr_state_pure);
+        check_vm_state_eq(&interp_state_pure, &rvr_state_pure)?;
     }
 
     /*
@@ -366,10 +372,10 @@ where
     let metered_ctx = vm.build_metered_ctx(&exe);
 
     #[cfg(feature = "aot")]
-    check_aot_equivalence(&vm, &config, &exe, &input)?;
+    check_aot_equivalence(&vm, &exe, &input)?;
 
     #[cfg(feature = "rvr")]
-    check_rvr_equivalence(&vm, &config, &exe, &input)?;
+    check_rvr_equivalence(&vm, &exe, &input)?;
 
     let (segments, _) = vm
         .metered_interpreter(&exe)?
