@@ -731,3 +731,42 @@ impl SegmentationCtx {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn small_segmentation_ctx() -> SegmentationCtx {
+        let limits = SegmentationLimits::new(4, usize::MAX, usize::MAX);
+        let memory_config = ProvingMemoryConfig {
+            base_field_size: 4,
+            extension_degree: 4,
+            log_blowup: 1,
+            l_skip: 4,
+            max_constraint_degree: 4,
+            cache_rs_code_matrix: false,
+        };
+        SegmentationCtx::new(
+            vec!["air".to_string()],
+            vec![1],
+            vec![0],
+            vec![false],
+            limits,
+            memory_config,
+        )
+    }
+
+    #[test]
+    fn test_check_and_segment_uses_last_safe_checkpoint() {
+        let mut ctx = small_segmentation_ctx();
+        ctx.update_checkpoint(10, &[2]);
+
+        let mut trace_heights = vec![8];
+        assert!(ctx.check_and_segment(15, &mut trace_heights, &[false]));
+
+        assert_eq!(ctx.segments.len(), 1);
+        assert_eq!(ctx.segments[0].instret_start, 0);
+        assert_eq!(ctx.segments[0].num_insns, 10);
+        assert_eq!(ctx.segments[0].trace_heights, vec![2]);
+    }
+}

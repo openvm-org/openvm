@@ -12,7 +12,10 @@ use rvr_openvm_lift::{ExtensionError, ExtensionRegistry};
 use rvr_state::{ExecutionStatus, MemoryError, Rv32, RvState, SuspenderState, TracerState};
 
 use super::{
-    bridge::{public_values_slice, read_rv32_registers, rv32_memory_ptr, write_rv32_registers},
+    bridge::{
+        deferral_memory_ptr, public_values_slice, read_rv32_registers, rv32_memory_ptr,
+        write_rv32_registers,
+    },
     compile::RvrCompiled,
     io::{
         host_hint_buffer, host_hint_input, host_hint_random, host_hint_storew,
@@ -71,6 +74,8 @@ fn build_io_state_borrowed<'a, F: PrimeField32>(
     vm_state: &'a mut VmState<F, GuestMemory>,
 ) -> OpenVmIoState<'a, F> {
     let memory_ptr = rv32_memory_ptr(vm_state);
+    let (deferral_memory, deferral_memory_len) =
+        deferral_memory_ptr::<F>(&mut vm_state.memory.memory);
     let streams = &mut vm_state.streams;
     OpenVmIoState {
         input_stream: &mut streams.input_stream,
@@ -78,6 +83,8 @@ fn build_io_state_borrowed<'a, F: PrimeField32>(
         rng: &mut vm_state.rng,
         memory_ptr,
         public_values: public_values_slice(&mut vm_state.memory.memory),
+        deferral_memory,
+        deferral_memory_len,
         deferrals: &mut streams.deferrals,
     }
 }
