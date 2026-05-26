@@ -487,4 +487,314 @@ mod tests {
         // jal x26, .+46
         assert_eq!(JType::new(0x02e00d6f), JType { imm: 46, rd: 26 });
     }
+
+    // ---- RV64 edge cases and field-extraction stress -----------
+    //
+    // Section references in the tests below (e.g. "spec §4.2.1") refer to
+    // *The RISC-V Instruction Set Manual, Volume I: Unprivileged
+    // Architecture*, Version 20260120 (Official Release).
+    //
+    // Encoder helpers per spec §2.2 (Base Instruction Formats).
+
+    fn enc_r(opcode: u32, funct7: u32, rs2: u32, rs1: u32, funct3: u32, rd: u32) -> u32 {
+        (funct7 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
+    }
+
+    fn enc_i(opcode: u32, imm: i32, rs1: u32, funct3: u32, rd: u32) -> u32 {
+        let imm_u = (imm as u32) & 0xfff;
+        (imm_u << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
+    }
+
+    fn enc_i_shamt6(opcode: u32, funct6: u32, shamt: u32, rs1: u32, funct3: u32, rd: u32) -> u32 {
+        (funct6 << 26) | (shamt << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
+    }
+
+    fn enc_s(opcode: u32, imm: i32, rs2: u32, rs1: u32, funct3: u32) -> u32 {
+        let imm_u = (imm as u32) & 0xfff;
+        let imm_hi = (imm_u >> 5) & 0x7f;
+        let imm_lo = imm_u & 0x1f;
+        (imm_hi << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (imm_lo << 7) | opcode
+    }
+
+    fn enc_b(opcode: u32, imm: i32, rs2: u32, rs1: u32, funct3: u32) -> u32 {
+        let imm_u = (imm as u32) & 0x1fff;
+        let bit12 = (imm_u >> 12) & 1;
+        let bit11 = (imm_u >> 11) & 1;
+        let bits_10_5 = (imm_u >> 5) & 0x3f;
+        let bits_4_1 = (imm_u >> 1) & 0xf;
+        (bit12 << 31)
+            | (bits_10_5 << 25)
+            | (rs2 << 20)
+            | (rs1 << 15)
+            | (funct3 << 12)
+            | (bits_4_1 << 8)
+            | (bit11 << 7)
+            | opcode
+    }
+
+    fn enc_u(opcode: u32, imm: i32, rd: u32) -> u32 {
+        ((imm as u32) & 0xffff_f000) | (rd << 7) | opcode
+    }
+
+    fn enc_j(opcode: u32, imm: i32, rd: u32) -> u32 {
+        let imm_u = (imm as u32) & 0x1f_ffff;
+        let bit20 = (imm_u >> 20) & 1;
+        let bits_10_1 = (imm_u >> 1) & 0x3ff;
+        let bit11 = (imm_u >> 11) & 1;
+        let bits_19_12 = (imm_u >> 12) & 0xff;
+        (bit20 << 31)
+            | (bits_10_1 << 21)
+            | (bit11 << 20)
+            | (bits_19_12 << 12)
+            | (rd << 7)
+            | opcode
+    }
+
+    // ---- ITypeShamt RV64 6-bit shamt boundaries (spec §4.2.1) ----
+
+    #[test]
+    fn itype_shamt_rv64_shamt_32() {
+        // shamt=32 (bit 25 set in the instruction word) is legal in RV64
+        // OP_IMM shifts. Decoder must treat shamt as 6 bits, not 5; if it
+        // were masking to 5 bits, this would decode as shamt=0.
+        let bits = enc_i_shamt6(OPCODE_OP_IMM, 0, 32, 1, 1, 2);
+        assert_eq!(
+            ITypeShamt::new(bits),
+            ITypeShamt {
+                funct6: 0,
+                shamt: 32,
+                rs1: 1,
+                funct3: 1,
+                rd: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn itype_shamt_rv64_shamt_63() {
+        // Max 6-bit shamt = 63 = 0x3f. All 6 shamt bits set.
+        let bits = enc_i_shamt6(OPCODE_OP_IMM, 0, 63, 3, 5, 4);
+        assert_eq!(
+            ITypeShamt::new(bits),
+            ITypeShamt {
+                funct6: 0,
+                shamt: 63,
+                rs1: 3,
+                funct3: 5,
+                rd: 4,
+            }
+        );
+    }
+
+    #[test]
+    fn itype_shamt_funct6_separation_from_shamt() {
+        // funct6=0x10 (SRAI marker) + shamt=32 simultaneously. If the
+        // decoder confused funct6 and shamt bit-ranges, funct6 would
+        // bleed into shamt or vice versa. Independent fields:
+        //   funct6 = bits[31:26]  → 0x10
+        //   shamt  = bits[25:20]  → 32
+        let bits = enc_i_shamt6(OPCODE_OP_IMM, 0x10, 32, 5, 5, 6);
+        assert_eq!(
+            ITypeShamt::new(bits),
+            ITypeShamt {
+                funct6: 0x10,
+                shamt: 32,
+                rs1: 5,
+                funct3: 5,
+                rd: 6,
+            }
+        );
+    }
+
+    #[test]
+    fn itype_shamt_max_funct6() {
+        // funct6=0x3f (all 6 bits set), shamt=0. The decoder's IType::new
+        // sign-extends bits[31:20] -- here bits 31, 30, 29, 28, 27, 26 are
+        // set, so the underlying IType.imm goes negative. ITypeShamt then
+        // masks (imm as u32) & 0x3f to get shamt; this must yield 0
+        // even though imm itself is negative.
+        let bits = enc_i_shamt6(OPCODE_OP_IMM, 0x3f, 0, 1, 1, 2);
+        assert_eq!(
+            ITypeShamt::new(bits),
+            ITypeShamt {
+                funct6: 0x3f,
+                shamt: 0,
+                rs1: 1,
+                funct3: 1,
+                rd: 2,
+            }
+        );
+    }
+
+    // ---- 5-bit register-field masks (rd / rs1 / rs2) -------------------
+    // Exercise the high boundary (x31) in each format.
+
+    #[test]
+    fn rtype_all_registers_31() {
+        let bits = enc_r(OPCODE_OP, 0, 31, 31, 0, 31);
+        assert_eq!(
+            RType::new(bits),
+            RType {
+                funct7: 0,
+                rs2: 31,
+                rs1: 31,
+                funct3: 0,
+                rd: 31,
+            }
+        );
+    }
+
+    #[test]
+    fn itype_registers_31() {
+        let bits = enc_i(OPCODE_OP_IMM, 0, 31, 0, 31);
+        assert_eq!(
+            IType::new(bits),
+            IType {
+                imm: 0,
+                rs1: 31,
+                funct3: 0,
+                rd: 31,
+            }
+        );
+    }
+
+    #[test]
+    fn stype_registers_31() {
+        let bits = enc_s(OPCODE_STORE, 0, 31, 31, 0);
+        assert_eq!(
+            SType::new(bits),
+            SType {
+                imm: 0,
+                rs2: 31,
+                rs1: 31,
+                funct3: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn btype_registers_31() {
+        let bits = enc_b(OPCODE_BRANCH, 0, 31, 31, 0);
+        assert_eq!(
+            BType::new(bits),
+            BType {
+                imm: 0,
+                rs2: 31,
+                rs1: 31,
+                funct3: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn utype_rd_31() {
+        let bits = enc_u(OPCODE_LUI, 0, 31);
+        assert_eq!(UType::new(bits), UType { imm: 0, rd: 31 });
+    }
+
+    #[test]
+    fn jtype_rd_31() {
+        let bits = enc_j(OPCODE_JAL, 0, 31);
+        assert_eq!(JType::new(bits), JType { imm: 0, rd: 31 });
+    }
+
+    // ---- One-hot immediate-bit sweeps ----------------------------------
+    // S-type, B-type, and J-type immediates are scattered across the
+    // instruction word in non-contiguous fields. For each bit position in
+    // the decoded immediate, set ONLY that bit and confirm it round-trips
+    // correctly. This is the single best check that the scattering
+    // formulas are right.
+
+    #[test]
+    fn stype_one_hot_imm_bits() {
+        // S-type imm is 12-bit signed. Bits 0..=10 are positive single-bit
+        // values; bit 11 is the sign bit (= -2048 when set alone).
+        for bit in 0..=10 {
+            let imm = 1i32 << bit;
+            let bits = enc_s(OPCODE_STORE, imm, 1, 2, 0);
+            assert_eq!(
+                SType::new(bits).imm,
+                imm,
+                "S-type imm bit {bit} did not round-trip"
+            );
+        }
+        // Bit 11 set alone -> -2048.
+        let bits = enc_s(OPCODE_STORE, -2048, 1, 2, 0);
+        assert_eq!(SType::new(bits).imm, -2048);
+    }
+
+    #[test]
+    fn btype_one_hot_imm_bits() {
+        // B-type imm is 13-bit signed; imm[0] is always 0 (branch targets
+        // are 2-byte aligned). So bits 1..=11 are positive; bit 12 is sign.
+        for bit in 1..=11 {
+            let imm = 1i32 << bit;
+            let bits = enc_b(OPCODE_BRANCH, imm, 1, 2, 0);
+            assert_eq!(
+                BType::new(bits).imm,
+                imm,
+                "B-type imm bit {bit} did not round-trip"
+            );
+        }
+        // Bit 12 set alone -> -4096.
+        let bits = enc_b(OPCODE_BRANCH, -4096, 1, 2, 0);
+        assert_eq!(BType::new(bits).imm, -4096);
+    }
+
+    #[test]
+    fn jtype_one_hot_imm_bits() {
+        // J-type imm is 21-bit signed; imm[0] is always 0 (jump targets
+        // are 2-byte aligned). Bits 1..=19 are positive; bit 20 is sign.
+        for bit in 1..=19 {
+            let imm = 1i32 << bit;
+            let bits = enc_j(OPCODE_JAL, imm, 0);
+            assert_eq!(
+                JType::new(bits).imm,
+                imm,
+                "J-type imm bit {bit} did not round-trip"
+            );
+        }
+        // Bit 20 set alone -> -(1 << 20) = -1048576.
+        let bits = enc_j(OPCODE_JAL, -(1 << 20), 0);
+        assert_eq!(JType::new(bits).imm, -(1 << 20));
+    }
+
+    // ---- I-type sign-extension boundaries ------------------------------
+    // Imm = 0 and +1 boundaries.
+
+    #[test]
+    fn itype_imm_zero() {
+        let bits = enc_i(OPCODE_OP_IMM, 0, 0, 0, 0);
+        assert_eq!(IType::new(bits).imm, 0);
+    }
+
+    #[test]
+    fn itype_imm_plus_one() {
+        let bits = enc_i(OPCODE_OP_IMM, 1, 0, 0, 0);
+        assert_eq!(IType::new(bits).imm, 1);
+    }
+
+    // ---- U-type sign / low-bits handling -------------------------------
+
+    #[test]
+    fn utype_sign_bit_preserved() {
+        // High bit of the 20-bit imm field set -> imm is negative i32.
+        let bits = enc_u(OPCODE_LUI, 0x8000_0000_u32 as i32, 0);
+        assert_eq!(UType::new(bits).imm, 0x8000_0000_u32 as i32);
+    }
+
+    #[test]
+    fn utype_low_12_bits_zeroed() {
+        // Even if the raw instruction word has bits set in positions 0..11
+        // (which would be the rd/opcode fields), the decoded U-type imm
+        // must have those bits zero -- only bits 12..31 of the instruction
+        // contribute to imm.
+        //
+        // 0x12345abc: imm portion (bits 31..12) = 0x12345, rd (bits 11..7)
+        // = (0xabc >> 7) & 0x1f. With low bits used as rd/opcode, the
+        // decoded imm must still be exactly 0x12345000.
+        let bits = 0x12345abc;
+        let decoded = UType::new(bits);
+        assert_eq!(decoded.imm, 0x1234_5000_u32 as i32);
+    }
 }
