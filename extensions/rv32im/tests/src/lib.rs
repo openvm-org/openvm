@@ -74,6 +74,8 @@ mod tests {
         if output.status.success() {
             panic!("child process succeeded; OOB access was not caught");
         }
+        // Success path for these tests: relay the child failure text so the
+        // caller's `#[should_panic(expected = ...)]` can match it.
         panic!("{}", String::from_utf8_lossy(&output.stderr));
     }
 
