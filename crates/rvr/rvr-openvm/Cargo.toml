@@ -14,5 +14,9 @@ rvr-openvm-ir.workspace = true
 rvr-openvm-lift.workspace = true
 
 openvm-instructions.workspace = true
+openvm-platform.workspace = true
 openvm-stark-backend.workspace = true
 thiserror.workspace = true
+
+[features]
+unprotected = []
