@@ -7,19 +7,12 @@
 #ifndef OPENVM_STATE_H
 #define OPENVM_STATE_H
 
-#include <assert.h>
 #include <stdint.h>
 #include <string.h>
 
 #include "openvm_constants.h"
 #include "openvm_util.h"
 #include "openvm_check_mem_bounds.h"
-
-static __attribute__((always_inline)) inline void assume(int x) { __builtin_assume(x); }
-static __attribute__((always_inline)) inline void debug_assume(int x) {
-  assert(x);
-  assume(x);
-}
 
 struct Tracer;
 
