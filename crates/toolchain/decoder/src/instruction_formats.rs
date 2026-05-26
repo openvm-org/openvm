@@ -204,7 +204,19 @@ mod tests {
                 funct3: 0,
                 rd: 0
             }
-        )
+        );
+
+        // add x31, x31, x31
+        assert_eq!(
+            RType::new(0x1ff8fb3),
+            RType {
+                funct7: 0,
+                rs2: 31,
+                rs1: 31,
+                funct3: 0,
+                rd: 31,
+            }
+        );
     }
 
     #[test]
@@ -252,6 +264,17 @@ mod tests {
                 rd: 13
             }
         );
+
+        // addi x31, x31, 0
+        assert_eq!(
+            IType::new(0xf8f93),
+            IType {
+                imm: 0,
+                rs1: 31,
+                funct3: 0,
+                rd: 31,
+            }
+        );
     }
 
     #[test]
@@ -289,6 +312,42 @@ mod tests {
                 rs1: 23,
                 funct3: 0b101,
                 rd: 7
+            }
+        );
+
+        // RV64: slli x2, x1, 32
+        assert_eq!(
+            ITypeShamt::new(0x2009113),
+            ITypeShamt {
+                funct6: 0,
+                shamt: 32,
+                rs1: 1,
+                funct3: 1,
+                rd: 2,
+            }
+        );
+
+        // RV64: srli x4, x3, 63
+        assert_eq!(
+            ITypeShamt::new(0x3f1d213),
+            ITypeShamt {
+                funct6: 0,
+                shamt: 63,
+                rs1: 3,
+                funct3: 5,
+                rd: 4,
+            }
+        );
+
+        // RV64: srai x6, x5, 32
+        assert_eq!(
+            ITypeShamt::new(0x4202d313),
+            ITypeShamt {
+                funct6: 0x10,
+                shamt: 32,
+                rs1: 5,
+                funct3: 5,
+                rd: 6,
             }
         );
     }
@@ -360,6 +419,17 @@ mod tests {
                 funct3: 2,
             }
         );
+
+        // sb x31, 0(x31)
+        assert_eq!(
+            SType::new(0x1ff8023),
+            SType {
+                imm: 0,
+                rs2: 31,
+                rs1: 31,
+                funct3: 0,
+            }
+        );
     }
 
     #[test]
@@ -429,6 +499,17 @@ mod tests {
                 funct3: 0b111
             }
         );
+
+        // beq x31, x31, 0
+        assert_eq!(
+            BType::new(0x1ff8063),
+            BType {
+                imm: 0,
+                rs2: 31,
+                rs1: 31,
+                funct3: 0,
+            }
+        );
     }
 
     #[test]
@@ -453,6 +534,9 @@ mod tests {
                 rd: 17,
             }
         );
+
+        // lui x31, 0
+        assert_eq!(UType::new(0xfb7), UType { imm: 0, rd: 31 });
     }
 
     #[test]
@@ -486,6 +570,9 @@ mod tests {
 
         // jal x26, .+46
         assert_eq!(JType::new(0x02e00d6f), JType { imm: 46, rd: 26 });
+
+        // jal x31, 0
+        assert_eq!(JType::new(0xfef), JType { imm: 0, rd: 31 });
     }
 
     // ---- RV64 edge cases and field-extraction stress -----------
@@ -542,160 +629,7 @@ mod tests {
         let bits_10_1 = (imm_u >> 1) & 0x3ff;
         let bit11 = (imm_u >> 11) & 1;
         let bits_19_12 = (imm_u >> 12) & 0xff;
-        (bit20 << 31)
-            | (bits_10_1 << 21)
-            | (bit11 << 20)
-            | (bits_19_12 << 12)
-            | (rd << 7)
-            | opcode
-    }
-
-    // ---- ITypeShamt RV64 6-bit shamt boundaries (spec §4.2.1) ----
-
-    #[test]
-    fn itype_shamt_rv64_shamt_32() {
-        // shamt=32 (bit 25 set in the instruction word) is legal in RV64
-        // OP_IMM shifts. Decoder must treat shamt as 6 bits, not 5; if it
-        // were masking to 5 bits, this would decode as shamt=0.
-        let bits = enc_i_shamt6(OPCODE_OP_IMM, 0, 32, 1, 1, 2);
-        assert_eq!(
-            ITypeShamt::new(bits),
-            ITypeShamt {
-                funct6: 0,
-                shamt: 32,
-                rs1: 1,
-                funct3: 1,
-                rd: 2,
-            }
-        );
-    }
-
-    #[test]
-    fn itype_shamt_rv64_shamt_63() {
-        // Max 6-bit shamt = 63 = 0x3f. All 6 shamt bits set.
-        let bits = enc_i_shamt6(OPCODE_OP_IMM, 0, 63, 3, 5, 4);
-        assert_eq!(
-            ITypeShamt::new(bits),
-            ITypeShamt {
-                funct6: 0,
-                shamt: 63,
-                rs1: 3,
-                funct3: 5,
-                rd: 4,
-            }
-        );
-    }
-
-    #[test]
-    fn itype_shamt_funct6_separation_from_shamt() {
-        // funct6=0x10 (SRAI marker) + shamt=32 simultaneously. If the
-        // decoder confused funct6 and shamt bit-ranges, funct6 would
-        // bleed into shamt or vice versa. Independent fields:
-        //   funct6 = bits[31:26]  → 0x10
-        //   shamt  = bits[25:20]  → 32
-        let bits = enc_i_shamt6(OPCODE_OP_IMM, 0x10, 32, 5, 5, 6);
-        assert_eq!(
-            ITypeShamt::new(bits),
-            ITypeShamt {
-                funct6: 0x10,
-                shamt: 32,
-                rs1: 5,
-                funct3: 5,
-                rd: 6,
-            }
-        );
-    }
-
-    #[test]
-    fn itype_shamt_max_funct6() {
-        // funct6=0x3f (all 6 bits set), shamt=0. The decoder's IType::new
-        // sign-extends bits[31:20] -- here bits 31, 30, 29, 28, 27, 26 are
-        // set, so the underlying IType.imm goes negative. ITypeShamt then
-        // masks (imm as u32) & 0x3f to get shamt; this must yield 0
-        // even though imm itself is negative.
-        let bits = enc_i_shamt6(OPCODE_OP_IMM, 0x3f, 0, 1, 1, 2);
-        assert_eq!(
-            ITypeShamt::new(bits),
-            ITypeShamt {
-                funct6: 0x3f,
-                shamt: 0,
-                rs1: 1,
-                funct3: 1,
-                rd: 2,
-            }
-        );
-    }
-
-    // ---- 5-bit register-field masks (rd / rs1 / rs2) -------------------
-    // Exercise the high boundary (x31) in each format.
-
-    #[test]
-    fn rtype_all_registers_31() {
-        let bits = enc_r(OPCODE_OP, 0, 31, 31, 0, 31);
-        assert_eq!(
-            RType::new(bits),
-            RType {
-                funct7: 0,
-                rs2: 31,
-                rs1: 31,
-                funct3: 0,
-                rd: 31,
-            }
-        );
-    }
-
-    #[test]
-    fn itype_registers_31() {
-        let bits = enc_i(OPCODE_OP_IMM, 0, 31, 0, 31);
-        assert_eq!(
-            IType::new(bits),
-            IType {
-                imm: 0,
-                rs1: 31,
-                funct3: 0,
-                rd: 31,
-            }
-        );
-    }
-
-    #[test]
-    fn stype_registers_31() {
-        let bits = enc_s(OPCODE_STORE, 0, 31, 31, 0);
-        assert_eq!(
-            SType::new(bits),
-            SType {
-                imm: 0,
-                rs2: 31,
-                rs1: 31,
-                funct3: 0,
-            }
-        );
-    }
-
-    #[test]
-    fn btype_registers_31() {
-        let bits = enc_b(OPCODE_BRANCH, 0, 31, 31, 0);
-        assert_eq!(
-            BType::new(bits),
-            BType {
-                imm: 0,
-                rs2: 31,
-                rs1: 31,
-                funct3: 0,
-            }
-        );
-    }
-
-    #[test]
-    fn utype_rd_31() {
-        let bits = enc_u(OPCODE_LUI, 0, 31);
-        assert_eq!(UType::new(bits), UType { imm: 0, rd: 31 });
-    }
-
-    #[test]
-    fn jtype_rd_31() {
-        let bits = enc_j(OPCODE_JAL, 0, 31);
-        assert_eq!(JType::new(bits), JType { imm: 0, rd: 31 });
+        (bit20 << 31) | (bits_10_1 << 21) | (bit11 << 20) | (bits_19_12 << 12) | (rd << 7) | opcode
     }
 
     // ---- One-hot immediate-bit sweeps ----------------------------------

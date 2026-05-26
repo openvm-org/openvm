@@ -237,7 +237,11 @@ pub fn process_instruction<T: InstructionProcessor>(
             Some(processor.process_jal(instruction_formats::JType::new(insn_bits)))
         }
         instruction_formats::OPCODE_JALR => {
-            Some(processor.process_jalr(instruction_formats::IType::new(insn_bits)))
+            let dec_insn = instruction_formats::IType::new(insn_bits);
+            match dec_insn.funct3 {
+                0b000 => Some(processor.process_jalr(dec_insn)),
+                _ => None,
+            }
         }
         instruction_formats::OPCODE_MISC_MEM => {
             let dec_insn = instruction_formats::IType::new(insn_bits);
@@ -439,12 +443,7 @@ mod tests {
         let bits_10_1 = (imm_u >> 1) & 0x3ff;
         let bit11 = (imm_u >> 11) & 1;
         let bits_19_12 = (imm_u >> 12) & 0xff;
-        (bit20 << 31)
-            | (bits_10_1 << 21)
-            | (bit11 << 20)
-            | (bits_19_12 << 12)
-            | (rd << 7)
-            | opcode
+        (bit20 << 31) | (bits_10_1 << 21) | (bit11 << 20) | (bits_19_12 << 12) | (rd << 7) | opcode
     }
 
     // Per-format test macros. Each row passes its own register / imm values
@@ -590,14 +589,38 @@ mod tests {
     test_r!(dispatch_sra    => Sra,    opcode = 0x33, funct7 = 0x20, funct3 = 5, rd = 22, rs1 = 23, rs2 = 24);
     test_r!(dispatch_or     => Or,     opcode = 0x33, funct7 = 0,    funct3 = 6, rd = 25, rs1 = 26, rs2 = 27);
     test_r!(dispatch_and    => And,    opcode = 0x33, funct7 = 0,    funct3 = 7, rd = 28, rs1 = 29, rs2 = 30);
-    test_rejects!(rejects_op_funct3_0_invalid_funct7, enc_r(OPCODE_OP, 0x02, 1, 2, 0, 3));
-    test_rejects!(rejects_op_funct3_1_invalid_funct7, enc_r(OPCODE_OP, 0x02, 1, 2, 1, 3));
-    test_rejects!(rejects_op_funct3_2_invalid_funct7, enc_r(OPCODE_OP, 0x02, 1, 2, 2, 3));
-    test_rejects!(rejects_op_funct3_3_invalid_funct7, enc_r(OPCODE_OP, 0x02, 1, 2, 3, 3));
-    test_rejects!(rejects_op_funct3_4_invalid_funct7, enc_r(OPCODE_OP, 0x02, 1, 2, 4, 3));
-    test_rejects!(rejects_op_funct3_5_invalid_funct7, enc_r(OPCODE_OP, 0x02, 1, 2, 5, 3));
-    test_rejects!(rejects_op_funct3_6_invalid_funct7, enc_r(OPCODE_OP, 0x02, 1, 2, 6, 3));
-    test_rejects!(rejects_op_funct3_7_invalid_funct7, enc_r(OPCODE_OP, 0x02, 1, 2, 7, 3));
+    test_rejects!(
+        rejects_op_funct3_0_invalid_funct7,
+        enc_r(OPCODE_OP, 0x02, 1, 2, 0, 3)
+    );
+    test_rejects!(
+        rejects_op_funct3_1_invalid_funct7,
+        enc_r(OPCODE_OP, 0x02, 1, 2, 1, 3)
+    );
+    test_rejects!(
+        rejects_op_funct3_2_invalid_funct7,
+        enc_r(OPCODE_OP, 0x02, 1, 2, 2, 3)
+    );
+    test_rejects!(
+        rejects_op_funct3_3_invalid_funct7,
+        enc_r(OPCODE_OP, 0x02, 1, 2, 3, 3)
+    );
+    test_rejects!(
+        rejects_op_funct3_4_invalid_funct7,
+        enc_r(OPCODE_OP, 0x02, 1, 2, 4, 3)
+    );
+    test_rejects!(
+        rejects_op_funct3_5_invalid_funct7,
+        enc_r(OPCODE_OP, 0x02, 1, 2, 5, 3)
+    );
+    test_rejects!(
+        rejects_op_funct3_6_invalid_funct7,
+        enc_r(OPCODE_OP, 0x02, 1, 2, 6, 3)
+    );
+    test_rejects!(
+        rejects_op_funct3_7_invalid_funct7,
+        enc_r(OPCODE_OP, 0x02, 1, 2, 7, 3)
+    );
 
     // ---- OP (0x33) -- M extension --------------------------------------
     test_r!(dispatch_mul    => Mul,    opcode = 0x33, funct7 = 1, funct3 = 0, rd = 31, rs1 = 0,  rs2 = 1);
@@ -620,11 +643,15 @@ mod tests {
     test_i_shamt6!(dispatch_srli => Srli, opcode = 0x13, funct6 = 0,    funct3 = 5, rd = 6, rs1 = 7, shamt = 33);
     test_i_shamt6!(dispatch_srai => Srai, opcode = 0x13, funct6 = 0x10, funct3 = 5, rd = 8, rs1 = 9, shamt = 63);
     // SLLI has funct6=0 only; anything else is illegal.
-    test_rejects!(rejects_slli_invalid_funct6,
-        enc_i_shamt6(OPCODE_OP_IMM, 0x01, 5, 1, 1, 2));
+    test_rejects!(
+        rejects_slli_invalid_funct6,
+        enc_i_shamt6(OPCODE_OP_IMM, 0x01, 5, 1, 1, 2)
+    );
     // SRLI uses funct6=0, SRAI uses funct6=0x10; anything else is illegal.
-    test_rejects!(rejects_srli_srai_invalid_funct6,
-        enc_i_shamt6(OPCODE_OP_IMM, 0x01, 5, 1, 5, 2));
+    test_rejects!(
+        rejects_srli_srai_invalid_funct6,
+        enc_i_shamt6(OPCODE_OP_IMM, 0x01, 5, 1, 5, 2)
+    );
 
     // ---- U-type --------------------------------------------------------
     #[test]
@@ -695,9 +722,7 @@ mod tests {
 
     // JALR uses I-type encoding. Per spec §2.5.1 (RISC-V Unprivileged
     // Architecture, v20260120), JALR requires funct3=0; the decoder
-    // currently dispatches for any funct3. The rejection test below
-    // asserts the spec-correct behavior and fails until the decoder is
-    // fixed.
+    // currently dispatches for any funct3.
     test_i!(dispatch_jalr => Jalr, opcode = 0x67, funct3 = 0, rd = 15, rs1 = 16, imm = 42);
     test_rejects!(
         rejects_jalr_with_nonzero_funct3,
@@ -723,12 +748,30 @@ mod tests {
     test_r!(dispatch_divuw => Divuw, opcode = 0x3b, funct7 = 1, funct3 = 5, rd = 8,  rs1 = 9,  rs2 = 10);
     test_r!(dispatch_remw  => Remw,  opcode = 0x3b, funct7 = 1, funct3 = 6, rd = 11, rs1 = 12, rs2 = 13);
     test_r!(dispatch_remuw => Remuw, opcode = 0x3b, funct7 = 1, funct3 = 7, rd = 14, rs1 = 15, rs2 = 16);
-    test_rejects!(rejects_op_32_funct3_0_invalid_funct7, enc_r(OPCODE_OP_32, 0x02, 1, 2, 0, 3));
-    test_rejects!(rejects_op_32_funct3_1_invalid_funct7, enc_r(OPCODE_OP_32, 0x02, 1, 2, 1, 3));
-    test_rejects!(rejects_op_32_funct3_4_invalid_funct7, enc_r(OPCODE_OP_32, 0x02, 1, 2, 4, 3));
-    test_rejects!(rejects_op_32_funct3_5_invalid_funct7, enc_r(OPCODE_OP_32, 0x02, 1, 2, 5, 3));
-    test_rejects!(rejects_op_32_funct3_6_invalid_funct7, enc_r(OPCODE_OP_32, 0x02, 1, 2, 6, 3));
-    test_rejects!(rejects_op_32_funct3_7_invalid_funct7, enc_r(OPCODE_OP_32, 0x02, 1, 2, 7, 3));
+    test_rejects!(
+        rejects_op_32_funct3_0_invalid_funct7,
+        enc_r(OPCODE_OP_32, 0x02, 1, 2, 0, 3)
+    );
+    test_rejects!(
+        rejects_op_32_funct3_1_invalid_funct7,
+        enc_r(OPCODE_OP_32, 0x02, 1, 2, 1, 3)
+    );
+    test_rejects!(
+        rejects_op_32_funct3_4_invalid_funct7,
+        enc_r(OPCODE_OP_32, 0x02, 1, 2, 4, 3)
+    );
+    test_rejects!(
+        rejects_op_32_funct3_5_invalid_funct7,
+        enc_r(OPCODE_OP_32, 0x02, 1, 2, 5, 3)
+    );
+    test_rejects!(
+        rejects_op_32_funct3_6_invalid_funct7,
+        enc_r(OPCODE_OP_32, 0x02, 1, 2, 6, 3)
+    );
+    test_rejects!(
+        rejects_op_32_funct3_7_invalid_funct7,
+        enc_r(OPCODE_OP_32, 0x02, 1, 2, 7, 3)
+    );
     // OP_32 funct3 in {2, 3} have no defined W-form instructions (no
     // SLTW / SLTUW etc., because comparisons return a single bit that
     // doesn't need a separate W-form).
@@ -742,27 +785,50 @@ mod tests {
     test_i_shamt5!(dispatch_sraiw => Sraiw, opcode = 0x1b, funct7 = 0x20, funct3 = 5, rd = 23, rs1 = 24, shamt = 0);
     // For W-form shifts the spec mandates shamt is 5 bits (0-31). Setting
     // shamt=32 is illegal even though the field syntactically allows it.
-    test_rejects!(rejects_slliw_shamt_too_large,
-        enc_i_shamt5(OPCODE_OP_IMM_32, 0, 32, 1, 1, 2));
-    test_rejects!(rejects_srliw_shamt_too_large,
-        enc_i_shamt5(OPCODE_OP_IMM_32, 0, 32, 1, 5, 2));
+    test_rejects!(
+        rejects_slliw_shamt_too_large,
+        enc_i_shamt5(OPCODE_OP_IMM_32, 0, 32, 1, 1, 2)
+    );
+    test_rejects!(
+        rejects_srliw_shamt_too_large,
+        enc_i_shamt5(OPCODE_OP_IMM_32, 0, 32, 1, 5, 2)
+    );
     // SLLIW with bit 26 set (funct6=1) is illegal -- the spec requires
     // funct7=0 for SLLIW, which means bits 31:25 are all zero.
-    test_rejects!(rejects_slliw_invalid_funct6,
-        enc_i_shamt5(OPCODE_OP_IMM_32, 0x02, 5, 1, 1, 2));
+    test_rejects!(
+        rejects_slliw_invalid_funct6,
+        enc_i_shamt5(OPCODE_OP_IMM_32, 0x02, 5, 1, 1, 2)
+    );
     // SRLIW/SRAIW with funct6 not in {0, 0x10} is illegal even when
     // shamt < 32.
-    test_rejects!(rejects_srliw_invalid_funct6,
-        enc_i_shamt5(OPCODE_OP_IMM_32, 0x02, 5, 1, 5, 2));
+    test_rejects!(
+        rejects_srliw_invalid_funct6,
+        enc_i_shamt5(OPCODE_OP_IMM_32, 0x02, 5, 1, 5, 2)
+    );
     // OP_IMM_32 has only ADDIW (funct3=0), SLLIW (1), SRLIW/SRAIW (5).
     // funct3 in {2, 3, 4, 6, 7} is unassigned.
-    test_rejects!(rejects_op_imm_32_funct3_2, enc_i(OPCODE_OP_IMM_32, 0, 1, 2, 2));
-    test_rejects!(rejects_op_imm_32_funct3_3, enc_i(OPCODE_OP_IMM_32, 0, 1, 3, 2));
-    test_rejects!(rejects_op_imm_32_funct3_4, enc_i(OPCODE_OP_IMM_32, 0, 1, 4, 2));
-    test_rejects!(rejects_op_imm_32_funct3_6, enc_i(OPCODE_OP_IMM_32, 0, 1, 6, 2));
-    test_rejects!(rejects_op_imm_32_funct3_7, enc_i(OPCODE_OP_IMM_32, 0, 1, 7, 2));
+    test_rejects!(
+        rejects_op_imm_32_funct3_2,
+        enc_i(OPCODE_OP_IMM_32, 0, 1, 2, 2)
+    );
+    test_rejects!(
+        rejects_op_imm_32_funct3_3,
+        enc_i(OPCODE_OP_IMM_32, 0, 1, 3, 2)
+    );
+    test_rejects!(
+        rejects_op_imm_32_funct3_4,
+        enc_i(OPCODE_OP_IMM_32, 0, 1, 4, 2)
+    );
+    test_rejects!(
+        rejects_op_imm_32_funct3_6,
+        enc_i(OPCODE_OP_IMM_32, 0, 1, 6, 2)
+    );
+    test_rejects!(
+        rejects_op_imm_32_funct3_7,
+        enc_i(OPCODE_OP_IMM_32, 0, 1, 7, 2)
+    );
 
     // ---- SYSTEM (0x73) -- ECALL/EBREAK/CSRs unsupported ----------------
-    test_rejects!(rejects_ebreak,  0x00100073); // ebreak
-    test_rejects!(rejects_csrrw,   0x30001073); // csrrw x0, mstatus, x0
+    test_rejects!(rejects_ebreak, 0x00100073); // ebreak
+    test_rejects!(rejects_csrrw, 0x30001073); // csrrw x0, mstatus, x0
 }
