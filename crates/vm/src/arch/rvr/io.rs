@@ -18,12 +18,16 @@ use crate::arch::deferral::DeferralState;
 /// one rvr call. Streams, rng, and the public-values byte slice are mutable
 /// borrows; `memory_ptr` is a raw alias of VmState's main memory buffer
 /// (raw because the C engine accesses it directly via pointer).
+///
+/// `deferral_memory` aliases AS=4 as `F` cells for deferral accumulator updates.
 pub struct OpenVmIoState<'a, F: PrimeField32> {
     pub input_stream: &'a mut VecDeque<Vec<F>>,
     pub hint_stream: &'a mut VecDeque<F>,
     pub rng: &'a mut StdRng,
     pub memory_ptr: *mut u8,
     pub public_values: &'a mut [u8],
+    pub deferral_memory: *mut F,
+    pub deferral_memory_len: usize,
     pub deferrals: &'a mut Vec<DeferralState>,
 }
 
@@ -182,6 +186,8 @@ mod tests {
             rng: &mut rng,
             memory_ptr: memory.as_mut_ptr(),
             public_values: &mut public_values,
+            deferral_memory: std::ptr::null_mut(),
+            deferral_memory_len: 0,
             deferrals: &mut deferrals,
         };
 
