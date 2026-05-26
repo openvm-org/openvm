@@ -113,7 +113,7 @@ rvr = [
     "openvm-circuit-derive/rvr",
 ]
 # Disable bounds checking in memory operations for performance
-unprotected = []
+unprotected = ["rvr-openvm/unprotected"]
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
