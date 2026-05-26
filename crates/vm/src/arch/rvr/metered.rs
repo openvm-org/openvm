@@ -281,11 +281,12 @@ impl SegmentationState {
 
         self.memory_ctx.page_indices.clear();
         self.memory_ctx.addr_space_access_count.fill(0);
-        // RVR only suspends at segment boundaries today, after flushing the
-        // boundary-crossing page buffers below. Mid-segment suspension would
-        // need to preserve this checkpoint buffer instead of resetting it.
         self.memory_ctx.page_indices_since_checkpoint_len = 0;
 
+        // RVR can only suspend at block boundaries, so segmentation uses the
+        // last safe checkpoint. The pages accumulated since that checkpoint
+        // belong to the next segment and must seed its memory trace heights
+        // after the previous segment's heights are subtracted.
         self.flush_page_buffer(mem_len, pv_len, deferral_len);
         self.apply_height_updates();
 
@@ -304,13 +305,14 @@ impl SegmentationState {
         remaining_counter: u32,
     ) -> bool {
         let seg_check_insns = self.segmentation_ctx.segment_check_insns;
-        self.segmentation_ctx.instret += seg_check_insns;
+        let insns_since_last_check = seg_check_insns - remaining_counter as u64;
+        let instret = self.segmentation_ctx.instret + insns_since_last_check;
+        self.segmentation_ctx.instret = instret;
         self.segmentation_ctx.instrets_until_check = seg_check_insns;
 
         self.flush_page_buffer(mem_len, pv_len, deferral_len);
         self.apply_height_updates();
 
-        let instret = self.segmentation_ctx.instret - remaining_counter as u64;
         let did_segment = self.segmentation_ctx.check_and_segment(
             instret,
             &mut self.trace_heights,
@@ -320,8 +322,6 @@ impl SegmentationState {
         if did_segment {
             self.segmentation_ctx
                 .initialize_segment(&mut self.trace_heights, &self.is_trace_height_constant);
-            // Re-apply the boundary-crossing page accesses after clearing the
-            // segment-local page set so the new segment starts with them.
             self.initialize_segment_memory(mem_len, pv_len, deferral_len);
 
             self.segmentation_ctx.warn_if_exceeds_limits(
@@ -387,8 +387,10 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) -> u8
         seg_state.segmentation_ctx.segment_check_insns
     );
 
-    // Reset the countdown for the next interval.
-    tracer.check_counter += segment_check_insns;
+    // We are at the start of a block that would cross the old countdown.
+    // `remaining_counter` was used to record this block start as the metering
+    // boundary, so the next interval starts here with a full countdown.
+    tracer.check_counter = segment_check_insns;
     did_segment as u8
 }
 
@@ -478,5 +480,124 @@ impl<F: PrimeField32> RvrMeteredSegmentInstance<F> {
             metrics.record(insns);
         }
         Ok((result, vm_state))
+    }
+}
+
+#[cfg(all(test, feature = "rvr"))]
+mod tests {
+    use super::*;
+    use crate::{
+        arch::{execution_mode::metered::ctx::DEFAULT_PAGE_BITS, BOUNDARY_AIR_ID, MERKLE_AIR_ID},
+        utils::test_system_config,
+    };
+
+    fn make_segmentation_state() -> SegmentationState {
+        let system_config = test_system_config();
+        let num_airs = 6;
+        let mut air_names = (0..num_airs)
+            .map(|idx| format!("Air {idx}"))
+            .collect::<Vec<_>>();
+        air_names[BOUNDARY_AIR_ID] = "Memory Boundary".to_string();
+        air_names[MERKLE_AIR_ID] = "Memory Merkle".to_string();
+
+        let ctx = MeteredCtx::<DEFAULT_PAGE_BITS>::new(
+            vec![None; num_airs],
+            air_names,
+            vec![1; num_airs],
+            vec![0; num_airs],
+            vec![false; num_airs],
+            &system_config,
+        );
+        SegmentationState::new(ctx, &system_config)
+    }
+
+    #[test]
+    fn test_initialize_segment_memory_replays_checkpoint_pages() {
+        let mut with_interval_buffer = make_segmentation_state();
+        with_interval_buffer.mem_page_buf[0] = 7;
+        with_interval_buffer.pv_page_buf[0] = 3;
+        with_interval_buffer.deferral_page_buf[0] = 2;
+        with_interval_buffer.initialize_segment_memory(1, 1, 1);
+
+        let mut clean = make_segmentation_state();
+        clean.initialize_segment_memory(0, 0, 0);
+
+        assert!(
+            with_interval_buffer.trace_heights[BOUNDARY_AIR_ID]
+                > clean.trace_heights[BOUNDARY_AIR_ID]
+        );
+        assert!(
+            with_interval_buffer.trace_heights[MERKLE_AIR_ID] > clean.trace_heights[MERKLE_AIR_ID]
+        );
+        let poseidon2_idx = clean.trace_heights.len() - 2;
+        assert!(
+            with_interval_buffer.trace_heights[poseidon2_idx] > clean.trace_heights[poseidon2_idx]
+        );
+    }
+
+    #[test]
+    fn test_periodic_check_records_block_boundary_instret() {
+        let mut seg_state = make_segmentation_state();
+        seg_state.segmentation_ctx.segment_check_insns = 1000;
+        seg_state.segmentation_ctx.instrets_until_check = 1000;
+
+        assert!(!seg_state.on_periodic_check(0, 0, 0, 250));
+
+        assert_eq!(seg_state.segmentation_ctx.instret, 750);
+        assert_eq!(seg_state.segmentation_ctx.instrets_until_check, 1000);
+    }
+
+    #[test]
+    fn test_periodic_callback_starts_next_interval_at_block_boundary() {
+        let mut seg_state = make_segmentation_state();
+        seg_state.segmentation_ctx.segment_check_insns = 1000;
+        seg_state.segmentation_ctx.instrets_until_check = 1000;
+        let mut tracer = MeteredTracerData {
+            trace_heights: seg_state.trace_heights_ptr(),
+            mem_page_buf: seg_state.mem_page_buf_ptr(),
+            pv_page_buf: seg_state.pv_page_buf_ptr(),
+            deferral_page_buf: seg_state.deferral_page_buf_ptr(),
+            on_check: Some(metered_periodic_check),
+            seg_state: &mut seg_state as *mut SegmentationState as *mut c_void,
+            mem_page_buf_len: 0,
+            pv_page_buf_len: 0,
+            deferral_page_buf_len: 0,
+            check_counter: 250,
+            last_mem_page: NO_LAST_PAGE,
+        };
+
+        let did_segment = unsafe { metered_periodic_check(&mut tracer) };
+
+        assert_eq!(did_segment, 0);
+        assert_eq!(tracer.check_counter, 1000);
+        assert_eq!(seg_state.segmentation_ctx.instret, 750);
+    }
+
+    #[test]
+    fn test_periodic_callback_starts_next_interval_when_suspending() {
+        let mut seg_state = make_segmentation_state();
+        seg_state.segmentation_ctx.segment_check_insns = 1000;
+        seg_state.segmentation_ctx.instrets_until_check = 1000;
+        seg_state.segmentation_ctx.config.limits.max_trace_height = 1;
+        *seg_state.trace_heights.last_mut().unwrap() = 2;
+        let mut tracer = MeteredTracerData {
+            trace_heights: seg_state.trace_heights_ptr(),
+            mem_page_buf: seg_state.mem_page_buf_ptr(),
+            pv_page_buf: seg_state.pv_page_buf_ptr(),
+            deferral_page_buf: seg_state.deferral_page_buf_ptr(),
+            on_check: Some(metered_periodic_check),
+            seg_state: &mut seg_state as *mut SegmentationState as *mut c_void,
+            mem_page_buf_len: 0,
+            pv_page_buf_len: 0,
+            deferral_page_buf_len: 0,
+            check_counter: 250,
+            last_mem_page: NO_LAST_PAGE,
+        };
+
+        let did_segment = unsafe { metered_periodic_check(&mut tracer) };
+
+        assert_eq!(did_segment, 1);
+        assert_eq!(tracer.check_counter, 1000);
+        assert_eq!(seg_state.segmentation_ctx.instret, 750);
     }
 }
