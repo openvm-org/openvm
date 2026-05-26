@@ -71,6 +71,7 @@ cfg_if::cfg_if! {
 pub use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config as SC, F};
 
 pub mod builder;
+pub mod compiled;
 pub mod config;
 pub mod fs;
 #[cfg(feature = "evm-prove")]
@@ -87,6 +88,7 @@ mod tests;
 
 mod error;
 mod stdin;
+pub use compiled::{CompiledExeMetered, CompiledExeMeteredCost, CompiledExePure};
 pub use error::SdkError;
 pub use stdin::*;
 
@@ -359,11 +361,29 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<Vec<u8>, SdkError> {
+        let compiled = self.compile_pure(app_exe)?;
+        self.execute_compiled(&compiled, inputs)
+    }
+
+    /// Compile `app_exe` for pure execution.
+    pub fn compile_pure(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<CompiledExePure<F>, SdkError> {
         let exe = self.convert_to_exe(app_exe)?;
-        let final_memory = self
-            .executor
+        self.executor
             .instance(&exe)
-            .map_err(VirtualMachineError::from)?
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
+    /// Run a [`CompiledExePure`] against `inputs` and extract the user public values.
+    pub fn execute_compiled(
+        &self,
+        compiled: &CompiledExePure<F>,
+        inputs: StdIn,
+    ) -> Result<Vec<u8>, SdkError> {
+        let final_memory = compiled
             .execute(inputs, None)
             .map_err(VirtualMachineError::from)?
             .memory;
@@ -381,18 +401,37 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
+        let compiled = self.compile_metered(app_exe)?;
+        self.execute_compiled_metered(&compiled, inputs)
+    }
+
+    /// Compile `app_exe` for metered execution. The returned [`CompiledExeMetered`] bundles
+    /// a precomputed [`MeteredCtx`] so subsequent runs just clone it.
+    pub fn compile_metered(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<CompiledExeMetered, SdkError> {
         let app_prover = self.app_prover(app_exe)?;
 
         let vm = app_prover.vm();
         let exe = app_prover.exe();
 
         let ctx = vm.build_metered_ctx(&exe);
-        let interpreter = vm
+        let instance = vm
             .metered_interpreter(&exe)
             .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMetered { instance, ctx })
+    }
 
-        let (segments, final_state) = interpreter
-            .execute_metered(inputs, ctx)
+    /// Run a [`CompiledExeMetered`] against `inputs`.
+    pub fn execute_compiled_metered(
+        &self,
+        compiled: &CompiledExeMetered,
+        inputs: StdIn,
+    ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
+        let (segments, final_state) = compiled
+            .instance
+            .execute_metered(inputs, compiled.ctx.clone())
             .map_err(VirtualMachineError::from)?;
         let public_values = extract_public_values(
             self.executor.config.as_ref().num_public_values,
@@ -409,18 +448,36 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
+        let compiled = self.compile_metered_cost(app_exe)?;
+        self.execute_compiled_metered_cost(&compiled, inputs)
+    }
+
+    /// Compile `app_exe` for metered-cost execution. See [`Self::compile_metered`].
+    pub fn compile_metered_cost(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<CompiledExeMeteredCost, SdkError> {
         let app_prover = self.app_prover(app_exe)?;
 
         let vm = app_prover.vm();
         let exe = app_prover.exe();
 
         let ctx = vm.build_metered_cost_ctx();
-        let interpreter = vm
+        let instance = vm
             .metered_cost_interpreter(&exe)
             .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMeteredCost { instance, ctx })
+    }
 
-        let (ctx, final_state) = interpreter
-            .execute_metered_cost(inputs, ctx)
+    /// Run a [`CompiledExeMeteredCost`] against `inputs`.
+    pub fn execute_compiled_metered_cost(
+        &self,
+        compiled: &CompiledExeMeteredCost,
+        inputs: StdIn,
+    ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
+        let (ctx, final_state) = compiled
+            .instance
+            .execute_metered_cost(inputs, compiled.ctx.clone())
             .map_err(VirtualMachineError::from)?;
         let instret = ctx.instret;
         let cost = ctx.cost;
