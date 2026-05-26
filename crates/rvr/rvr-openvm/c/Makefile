@@ -25,19 +25,20 @@ LIB ?= libout.so
 EXT_LIBS ?=
 EXT_SRCS ?=
 EXT_OBJS = $(EXT_SRCS:.c=.o)
+ALL_OBJS = $(sort $(OBJS) $(EXT_OBJS))
 EXT_CFLAGS ?=
 
 $(EXT_OBJS): CFLAGS += $(EXT_CFLAGS)
 
 shared: $(LIB)
 
-$(LIB): $(OBJS)
+$(LIB): $(ALL_OBJS)
 	$(CC) -shared $(CFLAGS) $(LDFLAGS) -o $@ $^ $(EXT_LIBS) $(LDLIBS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(OBJS) $(LIB)
+	rm -f $(ALL_OBJS) $(LIB)
 
 .PHONY: shared clean
