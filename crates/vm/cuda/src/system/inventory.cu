@@ -42,8 +42,10 @@ __device__ inline bool same_output_block(
 /// field elements. The output values must be in Montgomery form because they are
 /// stored directly into MemoryInventoryRecord.values, which boundary.cu later
 /// reads via FpArray::from_raw_array (a raw copy that assumes Montgomery encoding).
-/// DEFERRAL_AS stores field elements (4 bytes per cell, already Montgomery-encoded).
+/// Address spaces >= DEFERRAL_AS stores field elements (4 bytes per cell, already Montgomery-encoded).
 /// Other address spaces store u8 cells (1 byte per cell).
+/// Note: originally only DEFERRAL_AS stored field elements, this change was
+/// made to support powdr-wasm's (crush) FP_AS address space.
 __device__ inline void read_initial_chunk(
     uint32_t *out_values, // Montgomery-encoded Fp values
     uint8_t const *const *initial_mem,
@@ -59,7 +61,7 @@ __device__ inline void read_initial_chunk(
         }
         return;
     }
-    if (address_space == DEFERRAL_AS) {
+    if (address_space >= DEFERRAL_AS) {
         // F-type cells: 4 bytes per cell, already raw Montgomery u32
         uint32_t const *cells = reinterpret_cast<uint32_t const *>(mem) + chunk_ptr;
         #pragma unroll

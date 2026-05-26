@@ -47,9 +47,13 @@ __global__ void cukernel_persistent_boundary_tracegen(
         if (row_idx % 2 == 0) {
             FpArray<8> init_values;
             uint32_t addr_space_idx = record.address_space - 1;
+            // Address spaces >= DEFERRAL_AS use native32 cell type (field elements).
+            // Address spaces < DEFERRAL_AS use U8 cell type (bytes).
+            // Extensions can define additional native32 address spaces above
+            // DEFERRAL_AS (e.g. crush's FP_AS = 5).
             if (initial_mem[addr_space_idx]) {
                 init_values =
-                    record.address_space == DEFERRAL_AS
+                    record.address_space >= DEFERRAL_AS
                         ? FpArray<8>::from_raw_array(
                             reinterpret_cast<uint32_t const *>(
                                 initial_mem[addr_space_idx]
