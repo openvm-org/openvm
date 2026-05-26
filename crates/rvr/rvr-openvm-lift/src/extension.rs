@@ -127,9 +127,8 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
 
     /// C source files for this extension, as `(filename, content)` pairs.
     /// Written to the output directory and compiled alongside the generated
-    /// code by the Makefile (`$(wildcard *.c)`). This lets extension code
-    /// call static inline tracer helpers directly instead of routing through
-    /// separate Rust FFI wrappers.
+    /// code. This lets extension code call static inline tracer helpers
+    /// directly instead of routing through separate Rust FFI wrappers.
     fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![]
     }
