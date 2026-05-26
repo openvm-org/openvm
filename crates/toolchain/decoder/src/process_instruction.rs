@@ -259,7 +259,7 @@ pub fn process_instruction<T: InstructionProcessor>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::instruction_formats::*;
+    use crate::{instruction_formats::*, test_helpers::*};
 
     // A recording `InstructionProcessor` for testing the dispatch tree.
     //
@@ -384,449 +384,395 @@ mod tests {
         Remuw   process_remuw   RType,
     }
 
-    // Encoder helpers built directly from the RISC-V Unprivileged Spec bit
-    // layouts. Each `enc_*` function constructs the canonical bit pattern for
-    // its format; the per-format `test_*!` macros below combine an encoder
-    // call with a `process_instruction` assertion so each test reads as a
-    // single tabular row.
+    // Per-format dispatch helpers. Each `check_*_dispatch` builds an
+    // instruction word, runs it through `process_instruction`, and asserts
+    // that the right `Called::*` variant is produced with the right
+    // decoded fields. Tests below call these with concrete values and the
+    // expected variant constructor.
 
-    fn enc_r(opcode: u32, funct7: u32, rs2: u32, rs1: u32, funct3: u32, rd: u32) -> u32 {
-        (funct7 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
-    }
-
-    fn enc_i(opcode: u32, imm: i32, rs1: u32, funct3: u32, rd: u32) -> u32 {
-        let imm_u = (imm as u32) & 0xfff;
-        (imm_u << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
-    }
-
-    // RV64 OP_IMM shifts: funct6 in bits 31:26, shamt 6 bits in bits 25:20.
-    fn enc_i_shamt6(opcode: u32, funct6: u32, shamt: u32, rs1: u32, funct3: u32, rd: u32) -> u32 {
-        (funct6 << 26) | (shamt << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
-    }
-
-    // RV64 OP_IMM_32 (W-form) shifts: funct7 in bits 31:25, shamt 5 bits in bits 24:20.
-    // Bit 25 must be 0 (encoded via funct7 having a 0 low bit).
-    fn enc_i_shamt5(opcode: u32, funct7: u32, shamt: u32, rs1: u32, funct3: u32, rd: u32) -> u32 {
-        (funct7 << 25) | (shamt << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
-    }
-
-    fn enc_s(opcode: u32, imm: i32, rs2: u32, rs1: u32, funct3: u32) -> u32 {
-        let imm_u = (imm as u32) & 0xfff;
-        let imm_hi = (imm_u >> 5) & 0x7f;
-        let imm_lo = imm_u & 0x1f;
-        (imm_hi << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (imm_lo << 7) | opcode
-    }
-
-    fn enc_b(opcode: u32, imm: i32, rs2: u32, rs1: u32, funct3: u32) -> u32 {
-        let imm_u = (imm as u32) & 0x1fff;
-        let bit12 = (imm_u >> 12) & 1;
-        let bit11 = (imm_u >> 11) & 1;
-        let bits_10_5 = (imm_u >> 5) & 0x3f;
-        let bits_4_1 = (imm_u >> 1) & 0xf;
-        (bit12 << 31)
-            | (bits_10_5 << 25)
-            | (rs2 << 20)
-            | (rs1 << 15)
-            | (funct3 << 12)
-            | (bits_4_1 << 8)
-            | (bit11 << 7)
-            | opcode
-    }
-
-    fn enc_u(opcode: u32, imm: i32, rd: u32) -> u32 {
-        ((imm as u32) & 0xffff_f000) | (rd << 7) | opcode
-    }
-
-    fn enc_j(opcode: u32, imm: i32, rd: u32) -> u32 {
-        let imm_u = (imm as u32) & 0x1f_ffff;
-        let bit20 = (imm_u >> 20) & 1;
-        let bits_10_1 = (imm_u >> 1) & 0x3ff;
-        let bit11 = (imm_u >> 11) & 1;
-        let bits_19_12 = (imm_u >> 12) & 0xff;
-        (bit20 << 31) | (bits_10_1 << 21) | (bit11 << 20) | (bits_19_12 << 12) | (rd << 7) | opcode
-    }
-
-    // Per-format test macros. Each row passes its own register / imm values
-    // so the suite as a whole varies field values across tests.
-
-    macro_rules! test_r {
-        ($name:ident => $variant:ident, opcode = $op:expr, funct7 = $f7:expr, funct3 = $f3:expr,
-         rd = $rd:expr, rs1 = $rs1:expr, rs2 = $rs2:expr $(,)?) => {
-            #[test]
-            fn $name() {
-                let bits = enc_r($op, $f7, $rs2 as u32, $rs1 as u32, $f3, $rd as u32);
-                assert_eq!(
-                    process_instruction(&mut Recorder, bits),
-                    Some(Called::$variant(RType {
-                        funct7: $f7,
-                        rs2: $rs2 as usize,
-                        rs1: $rs1 as usize,
-                        funct3: $f3,
-                        rd: $rd as usize,
-                    }))
-                );
-            }
+    fn check_r_dispatch(
+        opcode: u32,
+        funct7: u32,
+        funct3: u32,
+        rd: u32,
+        rs1: u32,
+        rs2: u32,
+        expected: fn(RType) -> Called,
+    ) {
+        let bits = enc_r(opcode, funct7, rs2, rs1, funct3, rd);
+        let dec = RType {
+            funct7,
+            rs2: rs2 as usize,
+            rs1: rs1 as usize,
+            funct3,
+            rd: rd as usize,
         };
-    }
-
-    macro_rules! test_i {
-        ($name:ident => $variant:ident, opcode = $op:expr, funct3 = $f3:expr,
-         rd = $rd:expr, rs1 = $rs1:expr, imm = $imm:expr $(,)?) => {
-            #[test]
-            fn $name() {
-                let bits = enc_i($op, $imm, $rs1 as u32, $f3, $rd as u32);
-                assert_eq!(
-                    process_instruction(&mut Recorder, bits),
-                    Some(Called::$variant(IType {
-                        imm: $imm,
-                        rs1: $rs1 as usize,
-                        funct3: $f3,
-                        rd: $rd as usize,
-                    }))
-                );
-            }
-        };
-    }
-
-    macro_rules! test_i_shamt6 {
-        ($name:ident => $variant:ident, opcode = $op:expr, funct6 = $f6:expr, funct3 = $f3:expr,
-         rd = $rd:expr, rs1 = $rs1:expr, shamt = $shamt:expr $(,)?) => {
-            #[test]
-            fn $name() {
-                let bits = enc_i_shamt6($op, $f6, $shamt, $rs1 as u32, $f3, $rd as u32);
-                assert_eq!(
-                    process_instruction(&mut Recorder, bits),
-                    Some(Called::$variant(ITypeShamt {
-                        funct6: $f6,
-                        shamt: $shamt,
-                        rs1: $rs1 as usize,
-                        funct3: $f3,
-                        rd: $rd as usize,
-                    }))
-                );
-            }
-        };
-    }
-
-    // For OP_IMM_32 shifts, the decoder still produces an `ITypeShamt`; its
-    // `funct6` field is bits 31:26. With shamt < 32 (bit 25 = 0) and funct7
-    // having a low bit of 0, the produced funct6 is `funct7 >> 1`.
-    macro_rules! test_i_shamt5 {
-        ($name:ident => $variant:ident, opcode = $op:expr, funct7 = $f7:expr, funct3 = $f3:expr,
-         rd = $rd:expr, rs1 = $rs1:expr, shamt = $shamt:expr $(,)?) => {
-            #[test]
-            fn $name() {
-                let bits = enc_i_shamt5($op, $f7, $shamt, $rs1 as u32, $f3, $rd as u32);
-                assert_eq!(
-                    process_instruction(&mut Recorder, bits),
-                    Some(Called::$variant(ITypeShamt {
-                        funct6: $f7 >> 1,
-                        shamt: $shamt,
-                        rs1: $rs1 as usize,
-                        funct3: $f3,
-                        rd: $rd as usize,
-                    }))
-                );
-            }
-        };
-    }
-
-    macro_rules! test_s {
-        ($name:ident => $variant:ident, opcode = $op:expr, funct3 = $f3:expr,
-         rs1 = $rs1:expr, rs2 = $rs2:expr, imm = $imm:expr $(,)?) => {
-            #[test]
-            fn $name() {
-                let bits = enc_s($op, $imm, $rs2 as u32, $rs1 as u32, $f3);
-                assert_eq!(
-                    process_instruction(&mut Recorder, bits),
-                    Some(Called::$variant(SType {
-                        imm: $imm,
-                        rs2: $rs2 as usize,
-                        rs1: $rs1 as usize,
-                        funct3: $f3,
-                    }))
-                );
-            }
-        };
-    }
-
-    macro_rules! test_b {
-        ($name:ident => $variant:ident, opcode = $op:expr, funct3 = $f3:expr,
-         rs1 = $rs1:expr, rs2 = $rs2:expr, imm = $imm:expr $(,)?) => {
-            #[test]
-            fn $name() {
-                let bits = enc_b($op, $imm, $rs2 as u32, $rs1 as u32, $f3);
-                assert_eq!(
-                    process_instruction(&mut Recorder, bits),
-                    Some(Called::$variant(BType {
-                        imm: $imm,
-                        rs2: $rs2 as usize,
-                        rs1: $rs1 as usize,
-                        funct3: $f3,
-                    }))
-                );
-            }
-        };
-    }
-
-    macro_rules! test_rejects {
-        ($name:ident, $bits:expr $(,)?) => {
-            #[test]
-            fn $name() {
-                assert_eq!(process_instruction(&mut Recorder, $bits), None);
-            }
-        };
-    }
-
-    // ---- OP (0x33) -- R-type -------------------------------------------
-    test_r!(dispatch_add    => Add,    opcode = 0x33, funct7 = 0,    funct3 = 0, rd = 1,  rs1 = 2,  rs2 = 3);
-    test_r!(dispatch_sub    => Sub,    opcode = 0x33, funct7 = 0x20, funct3 = 0, rd = 4,  rs1 = 5,  rs2 = 6);
-    test_r!(dispatch_sll    => Sll,    opcode = 0x33, funct7 = 0,    funct3 = 1, rd = 7,  rs1 = 8,  rs2 = 9);
-    test_r!(dispatch_slt    => Slt,    opcode = 0x33, funct7 = 0,    funct3 = 2, rd = 10, rs1 = 11, rs2 = 12);
-    test_r!(dispatch_sltu   => Sltu,   opcode = 0x33, funct7 = 0,    funct3 = 3, rd = 13, rs1 = 14, rs2 = 15);
-    test_r!(dispatch_xor    => Xor,    opcode = 0x33, funct7 = 0,    funct3 = 4, rd = 16, rs1 = 17, rs2 = 18);
-    test_r!(dispatch_srl    => Srl,    opcode = 0x33, funct7 = 0,    funct3 = 5, rd = 19, rs1 = 20, rs2 = 21);
-    test_r!(dispatch_sra    => Sra,    opcode = 0x33, funct7 = 0x20, funct3 = 5, rd = 22, rs1 = 23, rs2 = 24);
-    test_r!(dispatch_or     => Or,     opcode = 0x33, funct7 = 0,    funct3 = 6, rd = 25, rs1 = 26, rs2 = 27);
-    test_r!(dispatch_and    => And,    opcode = 0x33, funct7 = 0,    funct3 = 7, rd = 28, rs1 = 29, rs2 = 30);
-    test_rejects!(
-        rejects_op_funct3_0_invalid_funct7,
-        enc_r(OPCODE_OP, 0x02, 1, 2, 0, 3)
-    );
-    test_rejects!(
-        rejects_op_funct3_1_invalid_funct7,
-        enc_r(OPCODE_OP, 0x02, 1, 2, 1, 3)
-    );
-    test_rejects!(
-        rejects_op_funct3_2_invalid_funct7,
-        enc_r(OPCODE_OP, 0x02, 1, 2, 2, 3)
-    );
-    test_rejects!(
-        rejects_op_funct3_3_invalid_funct7,
-        enc_r(OPCODE_OP, 0x02, 1, 2, 3, 3)
-    );
-    test_rejects!(
-        rejects_op_funct3_4_invalid_funct7,
-        enc_r(OPCODE_OP, 0x02, 1, 2, 4, 3)
-    );
-    test_rejects!(
-        rejects_op_funct3_5_invalid_funct7,
-        enc_r(OPCODE_OP, 0x02, 1, 2, 5, 3)
-    );
-    test_rejects!(
-        rejects_op_funct3_6_invalid_funct7,
-        enc_r(OPCODE_OP, 0x02, 1, 2, 6, 3)
-    );
-    test_rejects!(
-        rejects_op_funct3_7_invalid_funct7,
-        enc_r(OPCODE_OP, 0x02, 1, 2, 7, 3)
-    );
-
-    // ---- OP (0x33) -- M extension --------------------------------------
-    test_r!(dispatch_mul    => Mul,    opcode = 0x33, funct7 = 1, funct3 = 0, rd = 31, rs1 = 0,  rs2 = 1);
-    test_r!(dispatch_mulh   => Mulh,   opcode = 0x33, funct7 = 1, funct3 = 1, rd = 2,  rs1 = 3,  rs2 = 4);
-    test_r!(dispatch_mulhsu => Mulhsu, opcode = 0x33, funct7 = 1, funct3 = 2, rd = 5,  rs1 = 6,  rs2 = 7);
-    test_r!(dispatch_mulhu  => Mulhu,  opcode = 0x33, funct7 = 1, funct3 = 3, rd = 8,  rs1 = 9,  rs2 = 10);
-    test_r!(dispatch_div    => Div,    opcode = 0x33, funct7 = 1, funct3 = 4, rd = 11, rs1 = 12, rs2 = 13);
-    test_r!(dispatch_divu   => Divu,   opcode = 0x33, funct7 = 1, funct3 = 5, rd = 14, rs1 = 15, rs2 = 16);
-    test_r!(dispatch_rem    => Rem,    opcode = 0x33, funct7 = 1, funct3 = 6, rd = 17, rs1 = 18, rs2 = 19);
-    test_r!(dispatch_remu   => Remu,   opcode = 0x33, funct7 = 1, funct3 = 7, rd = 20, rs1 = 21, rs2 = 22);
-
-    // ---- OP_IMM (0x13) -- I-type / ITypeShamt --------------------------
-    test_i!(dispatch_addi  => Addi,  opcode = 0x13, funct3 = 0, rd = 23, rs1 = 24, imm = 42);
-    test_i!(dispatch_slti  => Slti,  opcode = 0x13, funct3 = 2, rd = 25, rs1 = 26, imm = -5);
-    test_i!(dispatch_sltui => Sltui, opcode = 0x13, funct3 = 3, rd = 27, rs1 = 28, imm = 100);
-    test_i!(dispatch_xori  => Xori,  opcode = 0x13, funct3 = 4, rd = 29, rs1 = 30, imm = -100);
-    test_i!(dispatch_ori   => Ori,   opcode = 0x13, funct3 = 6, rd = 31, rs1 = 0,  imm = 2047);
-    test_i!(dispatch_andi  => Andi,  opcode = 0x13, funct3 = 7, rd = 1,  rs1 = 2,  imm = -2048);
-    test_i_shamt6!(dispatch_slli => Slli, opcode = 0x13, funct6 = 0,    funct3 = 1, rd = 3, rs1 = 4, shamt = 5);
-    test_i_shamt6!(dispatch_srli => Srli, opcode = 0x13, funct6 = 0,    funct3 = 5, rd = 6, rs1 = 7, shamt = 33);
-    test_i_shamt6!(dispatch_srai => Srai, opcode = 0x13, funct6 = 0x10, funct3 = 5, rd = 8, rs1 = 9, shamt = 63);
-    // SLLI has funct6=0 only; anything else is illegal.
-    test_rejects!(
-        rejects_slli_invalid_funct6,
-        enc_i_shamt6(OPCODE_OP_IMM, 0x01, 5, 1, 1, 2)
-    );
-    // SRLI uses funct6=0, SRAI uses funct6=0x10; anything else is illegal.
-    test_rejects!(
-        rejects_srli_srai_invalid_funct6,
-        enc_i_shamt6(OPCODE_OP_IMM, 0x01, 5, 1, 5, 2)
-    );
-
-    // ---- U-type --------------------------------------------------------
-    #[test]
-    fn dispatch_lui() {
-        let bits = enc_u(0x37, 0x12345000u32 as i32, 10);
         assert_eq!(
             process_instruction(&mut Recorder, bits),
-            Some(Called::Lui(UType {
-                imm: 0x12345000,
-                rd: 10,
-            }))
+            Some(expected(dec))
         );
     }
 
-    #[test]
-    fn dispatch_auipc() {
-        // imm with high bit set to also exercise the sign-extended case.
-        let bits = enc_u(0x17, 0xabcde000u32 as i32, 11);
+    fn check_i_dispatch(
+        opcode: u32,
+        funct3: u32,
+        rd: u32,
+        rs1: u32,
+        imm: i32,
+        expected: fn(IType) -> Called,
+    ) {
+        let bits = enc_i(opcode, imm, rs1, funct3, rd);
+        let dec = IType {
+            imm,
+            rs1: rs1 as usize,
+            funct3,
+            rd: rd as usize,
+        };
         assert_eq!(
             process_instruction(&mut Recorder, bits),
-            Some(Called::Auipc(UType {
-                imm: 0xabcde000u32 as i32,
-                rd: 11,
-            }))
+            Some(expected(dec))
         );
     }
 
-    // ---- BRANCH (0x63) -- B-type ---------------------------------------
-    test_b!(dispatch_beq  => Beq,  opcode = 0x63, funct3 = 0, rs1 = 12, rs2 = 13, imm = 100);
-    test_b!(dispatch_bne  => Bne,  opcode = 0x63, funct3 = 1, rs1 = 14, rs2 = 15, imm = -200);
-    test_b!(dispatch_blt  => Blt,  opcode = 0x63, funct3 = 4, rs1 = 16, rs2 = 17, imm = 4094);
-    test_b!(dispatch_bge  => Bge,  opcode = 0x63, funct3 = 5, rs1 = 18, rs2 = 19, imm = -4096);
-    test_b!(dispatch_bltu => Bltu, opcode = 0x63, funct3 = 6, rs1 = 20, rs2 = 21, imm = 2);
-    test_b!(dispatch_bgeu => Bgeu, opcode = 0x63, funct3 = 7, rs1 = 22, rs2 = 23, imm = -2);
-    test_rejects!(rejects_branch_funct3_2, enc_b(OPCODE_BRANCH, 0, 1, 2, 2));
-    test_rejects!(rejects_branch_funct3_3, enc_b(OPCODE_BRANCH, 0, 1, 2, 3));
-
-    // ---- LOAD (0x03) -- I-type -----------------------------------------
-    test_i!(dispatch_lb  => Lb,  opcode = 0x03, funct3 = 0, rd = 24, rs1 = 25, imm = 10);
-    test_i!(dispatch_lh  => Lh,  opcode = 0x03, funct3 = 1, rd = 26, rs1 = 27, imm = 20);
-    test_i!(dispatch_lw  => Lw,  opcode = 0x03, funct3 = 2, rd = 28, rs1 = 29, imm = -50);
-    test_i!(dispatch_ld  => Ld,  opcode = 0x03, funct3 = 3, rd = 30, rs1 = 31, imm = 1000);
-    test_i!(dispatch_lbu => Lbu, opcode = 0x03, funct3 = 4, rd = 0,  rs1 = 1,  imm = -1);
-    test_i!(dispatch_lhu => Lhu, opcode = 0x03, funct3 = 5, rd = 2,  rs1 = 3,  imm = 0);
-    test_i!(dispatch_lwu => Lwu, opcode = 0x03, funct3 = 6, rd = 4,  rs1 = 5,  imm = 2047);
-    // LD uses 3, LWU uses 6. funct3=7 is unassigned.
-    test_rejects!(rejects_load_funct3_7, enc_i(OPCODE_LOAD, 0, 1, 7, 2));
-
-    // ---- STORE (0x23) -- S-type ----------------------------------------
-    test_s!(dispatch_sb => Sb, opcode = 0x23, funct3 = 0, rs1 = 6,  rs2 = 7,  imm = 8);
-    test_s!(dispatch_sh => Sh, opcode = 0x23, funct3 = 1, rs1 = 8,  rs2 = 9,  imm = -8);
-    test_s!(dispatch_sw => Sw, opcode = 0x23, funct3 = 2, rs1 = 10, rs2 = 11, imm = 2047);
-    test_s!(dispatch_sd => Sd, opcode = 0x23, funct3 = 3, rs1 = 12, rs2 = 13, imm = -2048);
-    test_rejects!(rejects_store_funct3_4, enc_s(OPCODE_STORE, 0, 1, 2, 4));
-    test_rejects!(rejects_store_funct3_5, enc_s(OPCODE_STORE, 0, 1, 2, 5));
-    test_rejects!(rejects_store_funct3_6, enc_s(OPCODE_STORE, 0, 1, 2, 6));
-    test_rejects!(rejects_store_funct3_7, enc_s(OPCODE_STORE, 0, 1, 2, 7));
-
-    // ---- Jumps ---------------------------------------------------------
-    #[test]
-    fn dispatch_jal() {
-        let bits = enc_j(OPCODE_JAL, 2046, 14);
+    fn check_i_shamt6_dispatch(
+        opcode: u32,
+        funct6: u32,
+        funct3: u32,
+        rd: u32,
+        rs1: u32,
+        shamt: u32,
+        expected: fn(ITypeShamt) -> Called,
+    ) {
+        let bits = enc_i_shamt6(opcode, funct6, shamt, rs1, funct3, rd);
+        let dec = ITypeShamt {
+            funct6,
+            shamt,
+            rs1: rs1 as usize,
+            funct3,
+            rd: rd as usize,
+        };
         assert_eq!(
             process_instruction(&mut Recorder, bits),
-            Some(Called::Jal(JType { imm: 2046, rd: 14 }))
+            Some(expected(dec))
         );
     }
 
-    // JALR uses I-type encoding with funct3=0 (spec §2.5.1).
-    test_i!(dispatch_jalr => Jalr, opcode = 0x67, funct3 = 0, rd = 15, rs1 = 16, imm = 42);
-    test_rejects!(
-        rejects_jalr_with_nonzero_funct3,
-        enc_i(OPCODE_JALR, 0, 5, 1, 4),
-    );
+    /// W-form shift dispatch. Caller supplies `funct7` (the field the spec
+    /// uses for W shifts), but the decoder produces `funct6 = funct7 >> 1`
+    /// because it reads bits 31:26 unconditionally. Caller must keep
+    /// `shamt < 32`.
+    fn check_i_shamt5_dispatch(
+        opcode: u32,
+        funct7: u32,
+        funct3: u32,
+        rd: u32,
+        rs1: u32,
+        shamt: u32,
+        expected: fn(ITypeShamt) -> Called,
+    ) {
+        let bits = enc_i_shamt5(opcode, funct7, shamt, rs1, funct3, rd);
+        let dec = ITypeShamt {
+            funct6: funct7 >> 1,
+            shamt,
+            rs1: rs1 as usize,
+            funct3,
+            rd: rd as usize,
+        };
+        assert_eq!(
+            process_instruction(&mut Recorder, bits),
+            Some(expected(dec))
+        );
+    }
 
-    // ---- MISC-MEM (0x0F) -----------------------------------------------
-    // FENCE encodes fm/pred/succ in the imm field; for dispatch we just need
-    // funct3=0 and an arbitrary imm value (decoder doesn't validate fm/pred/succ).
-    test_i!(dispatch_fence => Fence, opcode = 0x0f, funct3 = 0, rd = 17, rs1 = 18, imm = 0x0ff);
-    test_rejects!(rejects_fence_i, enc_i(OPCODE_MISC_MEM, 0, 0, 1, 0));
+    fn check_s_dispatch(
+        opcode: u32,
+        funct3: u32,
+        rs1: u32,
+        rs2: u32,
+        imm: i32,
+        expected: fn(SType) -> Called,
+    ) {
+        let bits = enc_s(opcode, imm, rs2, rs1, funct3);
+        let dec = SType {
+            imm,
+            rs2: rs2 as usize,
+            rs1: rs1 as usize,
+            funct3,
+        };
+        assert_eq!(
+            process_instruction(&mut Recorder, bits),
+            Some(expected(dec))
+        );
+    }
 
-    // ---- OP_32 (0x3B) -- R-type (RV64 only) ----------------------------
-    test_r!(dispatch_addw  => Addw,  opcode = 0x3b, funct7 = 0,    funct3 = 0, rd = 19, rs1 = 20, rs2 = 21);
-    test_r!(dispatch_subw  => Subw,  opcode = 0x3b, funct7 = 0x20, funct3 = 0, rd = 22, rs1 = 23, rs2 = 24);
-    test_r!(dispatch_sllw  => Sllw,  opcode = 0x3b, funct7 = 0,    funct3 = 1, rd = 25, rs1 = 26, rs2 = 27);
-    test_r!(dispatch_srlw  => Srlw,  opcode = 0x3b, funct7 = 0,    funct3 = 5, rd = 28, rs1 = 29, rs2 = 30);
-    test_r!(dispatch_sraw  => Sraw,  opcode = 0x3b, funct7 = 0x20, funct3 = 5, rd = 31, rs1 = 0,  rs2 = 1);
+    fn check_b_dispatch(
+        opcode: u32,
+        funct3: u32,
+        rs1: u32,
+        rs2: u32,
+        imm: i32,
+        expected: fn(BType) -> Called,
+    ) {
+        let bits = enc_b(opcode, imm, rs2, rs1, funct3);
+        let dec = BType {
+            imm,
+            rs2: rs2 as usize,
+            rs1: rs1 as usize,
+            funct3,
+        };
+        assert_eq!(
+            process_instruction(&mut Recorder, bits),
+            Some(expected(dec))
+        );
+    }
 
-    // ---- OP_32 (0x3B) -- M extension -----------------------------------
-    test_r!(dispatch_mulw  => Mulw,  opcode = 0x3b, funct7 = 1, funct3 = 0, rd = 2,  rs1 = 3,  rs2 = 4);
-    test_r!(dispatch_divw  => Divw,  opcode = 0x3b, funct7 = 1, funct3 = 4, rd = 5,  rs1 = 6,  rs2 = 7);
-    test_r!(dispatch_divuw => Divuw, opcode = 0x3b, funct7 = 1, funct3 = 5, rd = 8,  rs1 = 9,  rs2 = 10);
-    test_r!(dispatch_remw  => Remw,  opcode = 0x3b, funct7 = 1, funct3 = 6, rd = 11, rs1 = 12, rs2 = 13);
-    test_r!(dispatch_remuw => Remuw, opcode = 0x3b, funct7 = 1, funct3 = 7, rd = 14, rs1 = 15, rs2 = 16);
-    test_rejects!(
-        rejects_op_32_funct3_0_invalid_funct7,
-        enc_r(OPCODE_OP_32, 0x02, 1, 2, 0, 3)
-    );
-    test_rejects!(
-        rejects_op_32_funct3_1_invalid_funct7,
-        enc_r(OPCODE_OP_32, 0x02, 1, 2, 1, 3)
-    );
-    test_rejects!(
-        rejects_op_32_funct3_4_invalid_funct7,
-        enc_r(OPCODE_OP_32, 0x02, 1, 2, 4, 3)
-    );
-    test_rejects!(
-        rejects_op_32_funct3_5_invalid_funct7,
-        enc_r(OPCODE_OP_32, 0x02, 1, 2, 5, 3)
-    );
-    test_rejects!(
-        rejects_op_32_funct3_6_invalid_funct7,
-        enc_r(OPCODE_OP_32, 0x02, 1, 2, 6, 3)
-    );
-    test_rejects!(
-        rejects_op_32_funct3_7_invalid_funct7,
-        enc_r(OPCODE_OP_32, 0x02, 1, 2, 7, 3)
-    );
-    // OP_32 funct3 in {2, 3} have no defined W-form instructions (no
-    // SLTW / SLTUW etc., because comparisons return a single bit that
-    // doesn't need a separate W-form).
-    test_rejects!(rejects_op_32_funct3_2, enc_r(OPCODE_OP_32, 0, 1, 2, 2, 3));
-    test_rejects!(rejects_op_32_funct3_3, enc_r(OPCODE_OP_32, 0, 1, 2, 3, 3));
+    fn check_u_dispatch(opcode: u32, rd: u32, imm: i32, expected: fn(UType) -> Called) {
+        let bits = enc_u(opcode, imm, rd);
+        let dec = UType {
+            imm,
+            rd: rd as usize,
+        };
+        assert_eq!(
+            process_instruction(&mut Recorder, bits),
+            Some(expected(dec))
+        );
+    }
 
-    // ---- OP_IMM_32 (0x1B) -- I-type / ITypeShamt (RV64 only) -----------
-    test_i!(dispatch_addiw => Addiw, opcode = 0x1b, funct3 = 0, rd = 17, rs1 = 18, imm = 100);
-    test_i_shamt5!(dispatch_slliw => Slliw, opcode = 0x1b, funct7 = 0,    funct3 = 1, rd = 19, rs1 = 20, shamt = 5);
-    test_i_shamt5!(dispatch_srliw => Srliw, opcode = 0x1b, funct7 = 0,    funct3 = 5, rd = 21, rs1 = 22, shamt = 31);
-    test_i_shamt5!(dispatch_sraiw => Sraiw, opcode = 0x1b, funct7 = 0x20, funct3 = 5, rd = 23, rs1 = 24, shamt = 0);
-    // For W-form shifts the spec mandates shamt is 5 bits (0-31). Setting
-    // shamt=32 is illegal even though the field syntactically allows it.
-    test_rejects!(
-        rejects_slliw_shamt_too_large,
-        enc_i_shamt5(OPCODE_OP_IMM_32, 0, 32, 1, 1, 2)
-    );
-    test_rejects!(
-        rejects_srliw_shamt_too_large,
-        enc_i_shamt5(OPCODE_OP_IMM_32, 0, 32, 1, 5, 2)
-    );
-    // SLLIW with bit 26 set (funct6=1) is illegal -- the spec requires
-    // funct7=0 for SLLIW, which means bits 31:25 are all zero.
-    test_rejects!(
-        rejects_slliw_invalid_funct6,
-        enc_i_shamt5(OPCODE_OP_IMM_32, 0x02, 5, 1, 1, 2)
-    );
-    // SRLIW/SRAIW with funct6 not in {0, 0x10} is illegal even when
-    // shamt < 32.
-    test_rejects!(
-        rejects_srliw_invalid_funct6,
-        enc_i_shamt5(OPCODE_OP_IMM_32, 0x02, 5, 1, 5, 2)
-    );
-    // OP_IMM_32 has only ADDIW (funct3=0), SLLIW (1), SRLIW/SRAIW (5).
-    // funct3 in {2, 3, 4, 6, 7} is unassigned.
-    test_rejects!(
-        rejects_op_imm_32_funct3_2,
-        enc_i(OPCODE_OP_IMM_32, 0, 1, 2, 2)
-    );
-    test_rejects!(
-        rejects_op_imm_32_funct3_3,
-        enc_i(OPCODE_OP_IMM_32, 0, 1, 3, 2)
-    );
-    test_rejects!(
-        rejects_op_imm_32_funct3_4,
-        enc_i(OPCODE_OP_IMM_32, 0, 1, 4, 2)
-    );
-    test_rejects!(
-        rejects_op_imm_32_funct3_6,
-        enc_i(OPCODE_OP_IMM_32, 0, 1, 6, 2)
-    );
-    test_rejects!(
-        rejects_op_imm_32_funct3_7,
-        enc_i(OPCODE_OP_IMM_32, 0, 1, 7, 2)
-    );
+    fn check_j_dispatch(opcode: u32, rd: u32, imm: i32, expected: fn(JType) -> Called) {
+        let bits = enc_j(opcode, imm, rd);
+        let dec = JType {
+            imm,
+            rd: rd as usize,
+        };
+        assert_eq!(
+            process_instruction(&mut Recorder, bits),
+            Some(expected(dec))
+        );
+    }
 
-    // ---- SYSTEM (0x73) -- ECALL/EBREAK/CSRs unsupported ----------------
-    test_rejects!(rejects_ebreak, 0x00100073); // ebreak
-    test_rejects!(rejects_csrrw, 0x30001073); // csrrw x0, mstatus, x0
+    /// Asserts that `process_instruction` rejects the given encoding (returns `None`).
+    fn check_rejects(bits: u32) {
+        assert_eq!(process_instruction(&mut Recorder, bits), None);
+    }
+
+    // ---- Happy-path dispatch tests, one function per opcode group ------
+
+    #[test]
+    fn dispatch_op_r_type() {
+        // Base RV32I/RV64I R-type integer ops on OPCODE_OP = 0x33.
+        check_r_dispatch(OPCODE_OP, 0, 0, 1, 2, 3, Called::Add);
+        check_r_dispatch(OPCODE_OP, 0x20, 0, 4, 5, 6, Called::Sub);
+        check_r_dispatch(OPCODE_OP, 0, 1, 7, 8, 9, Called::Sll);
+        check_r_dispatch(OPCODE_OP, 0, 2, 10, 11, 12, Called::Slt);
+        check_r_dispatch(OPCODE_OP, 0, 3, 13, 14, 15, Called::Sltu);
+        check_r_dispatch(OPCODE_OP, 0, 4, 16, 17, 18, Called::Xor);
+        check_r_dispatch(OPCODE_OP, 0, 5, 19, 20, 21, Called::Srl);
+        check_r_dispatch(OPCODE_OP, 0x20, 5, 22, 23, 24, Called::Sra);
+        check_r_dispatch(OPCODE_OP, 0, 6, 25, 26, 27, Called::Or);
+        check_r_dispatch(OPCODE_OP, 0, 7, 28, 29, 30, Called::And);
+    }
+
+    #[test]
+    fn dispatch_op_m_extension() {
+        // M-extension R-type ops on OPCODE_OP (funct7 = 1).
+        check_r_dispatch(OPCODE_OP, 1, 0, 31, 0, 1, Called::Mul);
+        check_r_dispatch(OPCODE_OP, 1, 1, 2, 3, 4, Called::Mulh);
+        check_r_dispatch(OPCODE_OP, 1, 2, 5, 6, 7, Called::Mulhsu);
+        check_r_dispatch(OPCODE_OP, 1, 3, 8, 9, 10, Called::Mulhu);
+        check_r_dispatch(OPCODE_OP, 1, 4, 11, 12, 13, Called::Div);
+        check_r_dispatch(OPCODE_OP, 1, 5, 14, 15, 16, Called::Divu);
+        check_r_dispatch(OPCODE_OP, 1, 6, 17, 18, 19, Called::Rem);
+        check_r_dispatch(OPCODE_OP, 1, 7, 20, 21, 22, Called::Remu);
+    }
+
+    #[test]
+    fn dispatch_op_imm() {
+        // I-type ops on OPCODE_OP_IMM = 0x13.
+        check_i_dispatch(OPCODE_OP_IMM, 0, 23, 24, 42, Called::Addi);
+        check_i_dispatch(OPCODE_OP_IMM, 2, 25, 26, -5, Called::Slti);
+        check_i_dispatch(OPCODE_OP_IMM, 3, 27, 28, 100, Called::Sltui);
+        check_i_dispatch(OPCODE_OP_IMM, 4, 29, 30, -100, Called::Xori);
+        check_i_dispatch(OPCODE_OP_IMM, 6, 31, 0, 2047, Called::Ori);
+        check_i_dispatch(OPCODE_OP_IMM, 7, 1, 2, -2048, Called::Andi);
+        // Shift-immediate forms use RV64 6-bit shamt + 6-bit funct6.
+        check_i_shamt6_dispatch(OPCODE_OP_IMM, 0, 1, 3, 4, 5, Called::Slli);
+        check_i_shamt6_dispatch(OPCODE_OP_IMM, 0, 5, 6, 7, 33, Called::Srli);
+        check_i_shamt6_dispatch(OPCODE_OP_IMM, 0x10, 5, 8, 9, 63, Called::Srai);
+    }
+
+    #[test]
+    fn dispatch_u_type() {
+        check_u_dispatch(OPCODE_LUI, 10, 0x12345000_u32 as i32, Called::Lui);
+        // imm with high bit set exercises the sign-extended case.
+        check_u_dispatch(OPCODE_AUIPC, 11, 0xabcde000_u32 as i32, Called::Auipc);
+    }
+
+    #[test]
+    fn dispatch_branches() {
+        check_b_dispatch(OPCODE_BRANCH, 0, 12, 13, 100, Called::Beq);
+        check_b_dispatch(OPCODE_BRANCH, 1, 14, 15, -200, Called::Bne);
+        check_b_dispatch(OPCODE_BRANCH, 4, 16, 17, 4094, Called::Blt);
+        check_b_dispatch(OPCODE_BRANCH, 5, 18, 19, -4096, Called::Bge);
+        check_b_dispatch(OPCODE_BRANCH, 6, 20, 21, 2, Called::Bltu);
+        check_b_dispatch(OPCODE_BRANCH, 7, 22, 23, -2, Called::Bgeu);
+    }
+
+    #[test]
+    fn dispatch_loads() {
+        check_i_dispatch(OPCODE_LOAD, 0, 24, 25, 10, Called::Lb);
+        check_i_dispatch(OPCODE_LOAD, 1, 26, 27, 20, Called::Lh);
+        check_i_dispatch(OPCODE_LOAD, 2, 28, 29, -50, Called::Lw);
+        check_i_dispatch(OPCODE_LOAD, 3, 30, 31, 1000, Called::Ld);
+        check_i_dispatch(OPCODE_LOAD, 4, 0, 1, -1, Called::Lbu);
+        check_i_dispatch(OPCODE_LOAD, 5, 2, 3, 0, Called::Lhu);
+        check_i_dispatch(OPCODE_LOAD, 6, 4, 5, 2047, Called::Lwu);
+    }
+
+    #[test]
+    fn dispatch_stores() {
+        check_s_dispatch(OPCODE_STORE, 0, 6, 7, 8, Called::Sb);
+        check_s_dispatch(OPCODE_STORE, 1, 8, 9, -8, Called::Sh);
+        check_s_dispatch(OPCODE_STORE, 2, 10, 11, 2047, Called::Sw);
+        check_s_dispatch(OPCODE_STORE, 3, 12, 13, -2048, Called::Sd);
+    }
+
+    #[test]
+    fn dispatch_jumps() {
+        check_j_dispatch(OPCODE_JAL, 14, 2046, Called::Jal);
+        // JALR uses I-type encoding with funct3=0 (spec §2.5.1).
+        check_i_dispatch(OPCODE_JALR, 0, 15, 16, 42, Called::Jalr);
+    }
+
+    #[test]
+    fn dispatch_fence() {
+        // FENCE encodes fm/pred/succ in the imm field; the decoder treats
+        // the field as an I-type immediate without validating its contents.
+        check_i_dispatch(OPCODE_MISC_MEM, 0, 17, 18, 0x0ff, Called::Fence);
+    }
+
+    #[test]
+    fn dispatch_op_32_r_type() {
+        // RV64 W-form base ops on OPCODE_OP_32 = 0x3B.
+        check_r_dispatch(OPCODE_OP_32, 0, 0, 19, 20, 21, Called::Addw);
+        check_r_dispatch(OPCODE_OP_32, 0x20, 0, 22, 23, 24, Called::Subw);
+        check_r_dispatch(OPCODE_OP_32, 0, 1, 25, 26, 27, Called::Sllw);
+        check_r_dispatch(OPCODE_OP_32, 0, 5, 28, 29, 30, Called::Srlw);
+        check_r_dispatch(OPCODE_OP_32, 0x20, 5, 31, 0, 1, Called::Sraw);
+    }
+
+    #[test]
+    fn dispatch_op_32_m_extension() {
+        // RV64M W-form ops (funct7 = 1).
+        check_r_dispatch(OPCODE_OP_32, 1, 0, 2, 3, 4, Called::Mulw);
+        check_r_dispatch(OPCODE_OP_32, 1, 4, 5, 6, 7, Called::Divw);
+        check_r_dispatch(OPCODE_OP_32, 1, 5, 8, 9, 10, Called::Divuw);
+        check_r_dispatch(OPCODE_OP_32, 1, 6, 11, 12, 13, Called::Remw);
+        check_r_dispatch(OPCODE_OP_32, 1, 7, 14, 15, 16, Called::Remuw);
+    }
+
+    #[test]
+    fn dispatch_op_imm_32() {
+        check_i_dispatch(OPCODE_OP_IMM_32, 0, 17, 18, 100, Called::Addiw);
+        // W-form shifts use 5-bit shamt; shamt < 32 is required.
+        check_i_shamt5_dispatch(OPCODE_OP_IMM_32, 0, 1, 19, 20, 5, Called::Slliw);
+        check_i_shamt5_dispatch(OPCODE_OP_IMM_32, 0, 5, 21, 22, 31, Called::Srliw);
+        check_i_shamt5_dispatch(OPCODE_OP_IMM_32, 0x20, 5, 23, 24, 0, Called::Sraiw);
+    }
+
+    // ---- Rejection-path tests, one function per opcode group ----------
+
+    #[test]
+    fn rejects_op_invalid_funct7() {
+        // OPCODE_OP accepts funct7 in {0, 1, 0x20}; everything else is illegal.
+        // funct7 = 2 is outside that set, regardless of funct3.
+        for funct3 in 0..8 {
+            check_rejects(enc_r(OPCODE_OP, 0x02, 1, 2, funct3, 3));
+        }
+    }
+
+    #[test]
+    fn rejects_op_imm_shifts_invalid_funct6() {
+        // SLLI requires funct6 = 0; SRLI/SRAI require funct6 in {0, 0x10}.
+        check_rejects(enc_i_shamt6(OPCODE_OP_IMM, 0x01, 5, 1, 1, 2));
+        check_rejects(enc_i_shamt6(OPCODE_OP_IMM, 0x01, 5, 1, 5, 2));
+    }
+
+    #[test]
+    fn rejects_branch_unassigned_funct3() {
+        // BRANCH funct3 in {2, 3} are unassigned.
+        check_rejects(enc_b(OPCODE_BRANCH, 0, 1, 2, 2));
+        check_rejects(enc_b(OPCODE_BRANCH, 0, 1, 2, 3));
+    }
+
+    #[test]
+    fn rejects_load_unassigned_funct3() {
+        // LD uses funct3=3, LWU uses funct3=6; funct3=7 is unassigned.
+        check_rejects(enc_i(OPCODE_LOAD, 0, 1, 7, 2));
+    }
+
+    #[test]
+    fn rejects_store_unassigned_funct3() {
+        // STORE funct3 in {4, 5, 6, 7} are unassigned.
+        for funct3 in 4..8 {
+            check_rejects(enc_s(OPCODE_STORE, 0, 1, 2, funct3));
+        }
+    }
+
+    #[test]
+    fn rejects_jalr_with_nonzero_funct3() {
+        // Per spec §2.5.1, JALR requires funct3=0.
+        check_rejects(enc_i(OPCODE_JALR, 0, 5, 1, 4));
+    }
+
+    #[test]
+    fn rejects_fence_i() {
+        // FENCE.I (Zifencei) has opcode 0x0F, funct3=1. This decoder does
+        // not support Zifencei and rejects it.
+        check_rejects(enc_i(OPCODE_MISC_MEM, 0, 0, 1, 0));
+    }
+
+    #[test]
+    fn rejects_op_32_invalid_funct7() {
+        // OPCODE_OP_32 funct3 in {0, 1, 4, 5, 6, 7} each have specific
+        // funct7 values defined; funct7=2 is outside the valid set for all.
+        for funct3 in [0, 1, 4, 5, 6, 7] {
+            check_rejects(enc_r(OPCODE_OP_32, 0x02, 1, 2, funct3, 3));
+        }
+    }
+
+    #[test]
+    fn rejects_op_32_unassigned_funct3() {
+        // OPCODE_OP_32 funct3 in {2, 3} have no defined W-form instructions
+        // (no SLTW / SLTUW etc.).
+        check_rejects(enc_r(OPCODE_OP_32, 0, 1, 2, 2, 3));
+        check_rejects(enc_r(OPCODE_OP_32, 0, 1, 2, 3, 3));
+    }
+
+    #[test]
+    fn rejects_op_imm_32_invalid_shifts() {
+        // W-form shifts use 5-bit shamt; shamt >= 32 is illegal.
+        check_rejects(enc_i_shamt5(OPCODE_OP_IMM_32, 0, 32, 1, 1, 2));
+        check_rejects(enc_i_shamt5(OPCODE_OP_IMM_32, 0, 32, 1, 5, 2));
+        // SLLIW must have bits 31:25 = 0; funct7=2 sets bit 26 (funct6=1).
+        check_rejects(enc_i_shamt5(OPCODE_OP_IMM_32, 0x02, 5, 1, 1, 2));
+        // SRLIW/SRAIW must have funct6 in {0, 0x10}.
+        check_rejects(enc_i_shamt5(OPCODE_OP_IMM_32, 0x02, 5, 1, 5, 2));
+    }
+
+    #[test]
+    fn rejects_op_imm_32_unassigned_funct3() {
+        // OPCODE_OP_IMM_32 defines only ADDIW (funct3=0), SLLIW (1),
+        // SRLIW/SRAIW (5). All other funct3 values are unassigned.
+        for funct3 in [2, 3, 4, 6, 7] {
+            check_rejects(enc_i(OPCODE_OP_IMM_32, 0, 1, funct3, 2));
+        }
+    }
+
+    #[test]
+    fn rejects_system_opcode() {
+        // SYSTEM opcode 0x73 (ECALL/EBREAK/CSRs) is not in this decoder's
+        // dispatch tree. The transpiler layer handles these earlier.
+        check_rejects(0x00100073); // ebreak
+        check_rejects(0x30001073); // csrrw x0, mstatus, x0
+    }
 }

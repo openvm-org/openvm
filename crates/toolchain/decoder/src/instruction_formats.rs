@@ -192,6 +192,7 @@ impl JType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_helpers::*;
 
     #[test]
     fn test_rtype() {
@@ -573,63 +574,6 @@ mod tests {
 
         // jal x31, 0
         assert_eq!(JType::new(0xfef), JType { imm: 0, rd: 31 });
-    }
-
-    // ---- RV64 edge cases and field-extraction stress -----------
-    //
-    // Section references in the tests below (e.g. "spec §4.2.1") refer to
-    // *The RISC-V Instruction Set Manual, Volume I: Unprivileged
-    // Architecture*, Version 20260120 (Official Release).
-    //
-    // Encoder helpers per spec §2.2 (Base Instruction Formats).
-
-    fn enc_r(opcode: u32, funct7: u32, rs2: u32, rs1: u32, funct3: u32, rd: u32) -> u32 {
-        (funct7 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
-    }
-
-    fn enc_i(opcode: u32, imm: i32, rs1: u32, funct3: u32, rd: u32) -> u32 {
-        let imm_u = (imm as u32) & 0xfff;
-        (imm_u << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
-    }
-
-    fn enc_i_shamt6(opcode: u32, funct6: u32, shamt: u32, rs1: u32, funct3: u32, rd: u32) -> u32 {
-        (funct6 << 26) | (shamt << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
-    }
-
-    fn enc_s(opcode: u32, imm: i32, rs2: u32, rs1: u32, funct3: u32) -> u32 {
-        let imm_u = (imm as u32) & 0xfff;
-        let imm_hi = (imm_u >> 5) & 0x7f;
-        let imm_lo = imm_u & 0x1f;
-        (imm_hi << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (imm_lo << 7) | opcode
-    }
-
-    fn enc_b(opcode: u32, imm: i32, rs2: u32, rs1: u32, funct3: u32) -> u32 {
-        let imm_u = (imm as u32) & 0x1fff;
-        let bit12 = (imm_u >> 12) & 1;
-        let bit11 = (imm_u >> 11) & 1;
-        let bits_10_5 = (imm_u >> 5) & 0x3f;
-        let bits_4_1 = (imm_u >> 1) & 0xf;
-        (bit12 << 31)
-            | (bits_10_5 << 25)
-            | (rs2 << 20)
-            | (rs1 << 15)
-            | (funct3 << 12)
-            | (bits_4_1 << 8)
-            | (bit11 << 7)
-            | opcode
-    }
-
-    fn enc_u(opcode: u32, imm: i32, rd: u32) -> u32 {
-        ((imm as u32) & 0xffff_f000) | (rd << 7) | opcode
-    }
-
-    fn enc_j(opcode: u32, imm: i32, rd: u32) -> u32 {
-        let imm_u = (imm as u32) & 0x1f_ffff;
-        let bit20 = (imm_u >> 20) & 1;
-        let bits_10_1 = (imm_u >> 1) & 0x3ff;
-        let bit11 = (imm_u >> 11) & 1;
-        let bits_19_12 = (imm_u >> 12) & 0xff;
-        (bit20 << 31) | (bits_10_1 << 21) | (bit11 << 20) | (bits_19_12 << 12) | (rd << 7) | opcode
     }
 
     // ---- One-hot immediate-bit sweeps ----------------------------------
