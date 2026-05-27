@@ -47,16 +47,20 @@ jobs:
 
             When you post the review to the PR, dedupe using the hidden HTML
             marker `<!-- claude-code-review:sticky -->` so re-runs update the
-            existing review instead of stacking new comments:
+            existing review instead of stacking new comments. Use the `gh`
+            CLI (GITHUB_TOKEN is already in the environment):
 
-            1. List the PR's issue comments and find one whose body contains
+            1. `gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments`
+               and find the comment whose body starts with
                `<!-- claude-code-review:sticky -->`.
-            2. If found, edit that comment in place with the new review,
-               keeping the marker as the first line of the body.
-            3. If not found, create a new issue comment whose first line is
-               `<!-- claude-code-review:sticky -->`, followed by the review.
+            2. If found, PATCH it in place:
+               `gh api -X PATCH repos/${{ github.repository }}/issues/comments/<id> -F body=@body.md`
+               (write the new body — first line `<!-- claude-code-review:sticky -->` — to body.md first; note `-F`/uppercase is required for the `@file` read).
+            3. If not found, create a new comment with the marker as the first
+               line: `gh pr comment ${{ github.event.pull_request.number }} --body-file body.md`.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
 
           claude_args: |
             --model claude-opus-4-7
+            --allowedTools "Read" "Grep" "Glob" "Write" "Bash(git:*)" "Bash(gh pr view:*)" "Bash(gh pr comment:*)" "Bash(gh api:*)" "Bash(gh issue:*)"
