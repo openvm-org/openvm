@@ -71,10 +71,12 @@ impl ExtInstr for DeferralCallInstr {
         let rd = ctx.read_reg(self.rd_reg);
         let rs = ctx.read_reg(self.rs_reg);
         let poseidon2 = air_index_to_c(self.poseidon2_chip_idx);
-        ctx.write_line(&format!(
-            "rvr_ext_deferral_call(state, {rd}, {rs}, {}u, {poseidon2}u);",
-            self.def_idx
-        ));
+        let def_idx = format!("{}u", self.def_idx);
+        let poseidon2 = format!("{poseidon2}u");
+        ctx.extern_call(
+            "rvr_ext_deferral_call",
+            &["state", &rd, &rs, &def_idx, &poseidon2],
+        );
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -106,10 +108,13 @@ impl ExtInstr for DeferralOutputInstr {
         let rs = ctx.read_reg(self.rs_reg);
         let output = air_index_to_c(self.output_chip_idx);
         let poseidon2 = air_index_to_c(self.poseidon2_chip_idx);
-        ctx.write_line(&format!(
-            "rvr_ext_deferral_output(state, {rd}, {rs}, {}u, {output}u, {poseidon2}u);",
-            self.def_idx
-        ));
+        let def_idx = format!("{}u", self.def_idx);
+        let output = format!("{output}u");
+        let poseidon2 = format!("{poseidon2}u");
+        ctx.extern_call(
+            "rvr_ext_deferral_output",
+            &["state", &rd, &rs, &def_idx, &output, &poseidon2],
+        );
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
