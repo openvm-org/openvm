@@ -192,6 +192,7 @@ impl JType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_helpers::*;
 
     #[test]
     fn test_rtype() {
@@ -204,7 +205,19 @@ mod tests {
                 funct3: 0,
                 rd: 0
             }
-        )
+        );
+
+        // add x31, x31, x31
+        assert_eq!(
+            RType::new(0x1ff8fb3),
+            RType {
+                funct7: 0,
+                rs2: 31,
+                rs1: 31,
+                funct3: 0,
+                rd: 31,
+            }
+        );
     }
 
     #[test]
@@ -242,7 +255,7 @@ mod tests {
             }
         );
 
-        // ori x13, x7, 4
+        // ori x13, x7, -2048
         assert_eq!(
             IType::new(0x8003e693),
             IType {
@@ -250,6 +263,17 @@ mod tests {
                 rs1: 7,
                 funct3: 0b110,
                 rd: 13
+            }
+        );
+
+        // addi x31, x31, 0
+        assert_eq!(
+            IType::new(0xf8f93),
+            IType {
+                imm: 0,
+                rs1: 31,
+                funct3: 0,
+                rd: 31,
             }
         );
     }
@@ -289,6 +313,42 @@ mod tests {
                 rs1: 23,
                 funct3: 0b101,
                 rd: 7
+            }
+        );
+
+        // RV64: slli x2, x1, 32
+        assert_eq!(
+            ITypeShamt::new(0x2009113),
+            ITypeShamt {
+                funct6: 0,
+                shamt: 32,
+                rs1: 1,
+                funct3: 1,
+                rd: 2,
+            }
+        );
+
+        // RV64: srli x4, x3, 63
+        assert_eq!(
+            ITypeShamt::new(0x3f1d213),
+            ITypeShamt {
+                funct6: 0,
+                shamt: 63,
+                rs1: 3,
+                funct3: 5,
+                rd: 4,
+            }
+        );
+
+        // RV64: srai x6, x5, 32
+        assert_eq!(
+            ITypeShamt::new(0x4202d313),
+            ITypeShamt {
+                funct6: 0x10,
+                shamt: 32,
+                rs1: 5,
+                funct3: 5,
+                rd: 6,
             }
         );
     }
@@ -360,6 +420,17 @@ mod tests {
                 funct3: 2,
             }
         );
+
+        // sb x31, 0(x31)
+        assert_eq!(
+            SType::new(0x1ff8023),
+            SType {
+                imm: 0,
+                rs2: 31,
+                rs1: 31,
+                funct3: 0,
+            }
+        );
     }
 
     #[test]
@@ -429,6 +500,17 @@ mod tests {
                 funct3: 0b111
             }
         );
+
+        // beq x31, x31, 0
+        assert_eq!(
+            BType::new(0x1ff8063),
+            BType {
+                imm: 0,
+                rs2: 31,
+                rs1: 31,
+                funct3: 0,
+            }
+        );
     }
 
     #[test]
@@ -453,6 +535,9 @@ mod tests {
                 rd: 17,
             }
         );
+
+        // lui x31, 0
+        assert_eq!(UType::new(0xfb7), UType { imm: 0, rd: 31 });
     }
 
     #[test]
@@ -486,5 +571,108 @@ mod tests {
 
         // jal x26, .+46
         assert_eq!(JType::new(0x02e00d6f), JType { imm: 46, rd: 26 });
+
+        // jal x31, 0
+        assert_eq!(JType::new(0xfef), JType { imm: 0, rd: 31 });
+    }
+
+    // ---- One-hot immediate-bit sweeps ----------------------------------
+    // S-type, B-type, and J-type immediates are scattered across the
+    // instruction word in non-contiguous fields. For each bit position in
+    // the decoded immediate, set ONLY that bit and confirm it round-trips
+    // correctly. This is the single best check that the scattering
+    // formulas are right.
+
+    #[test]
+    fn stype_one_hot_imm_bits() {
+        // S-type imm is 12-bit signed. Bits 0..=10 are positive single-bit
+        // values; bit 11 is the sign bit (= -2048 when set alone).
+        for bit in 0..=10 {
+            let imm = 1i32 << bit;
+            let bits = enc_s(OPCODE_STORE, imm, 1, 2, 0);
+            assert_eq!(
+                SType::new(bits).imm,
+                imm,
+                "S-type imm bit {bit} did not round-trip"
+            );
+        }
+        // Bit 11 set alone -> -2048.
+        let bits = enc_s(OPCODE_STORE, -2048, 1, 2, 0);
+        assert_eq!(SType::new(bits).imm, -2048);
+    }
+
+    #[test]
+    fn btype_one_hot_imm_bits() {
+        // B-type imm is 13-bit signed; imm[0] is always 0 (branch targets
+        // are 2-byte aligned). So bits 1..=11 are positive; bit 12 is sign.
+        for bit in 1..=11 {
+            let imm = 1i32 << bit;
+            let bits = enc_b(OPCODE_BRANCH, imm, 1, 2, 0);
+            assert_eq!(
+                BType::new(bits).imm,
+                imm,
+                "B-type imm bit {bit} did not round-trip"
+            );
+        }
+        // Bit 12 set alone -> -4096.
+        let bits = enc_b(OPCODE_BRANCH, -4096, 1, 2, 0);
+        assert_eq!(BType::new(bits).imm, -4096);
+    }
+
+    #[test]
+    fn jtype_one_hot_imm_bits() {
+        // J-type imm is 21-bit signed; imm[0] is always 0 (jump targets
+        // are 2-byte aligned). Bits 1..=19 are positive; bit 20 is sign.
+        for bit in 1..=19 {
+            let imm = 1i32 << bit;
+            let bits = enc_j(OPCODE_JAL, imm, 0);
+            assert_eq!(
+                JType::new(bits).imm,
+                imm,
+                "J-type imm bit {bit} did not round-trip"
+            );
+        }
+        // Bit 20 set alone -> -(1 << 20) = -1048576.
+        let bits = enc_j(OPCODE_JAL, -(1 << 20), 0);
+        assert_eq!(JType::new(bits).imm, -(1 << 20));
+    }
+
+    // ---- I-type sign-extension boundaries ------------------------------
+    // Imm = 0 and +1 boundaries.
+
+    #[test]
+    fn itype_imm_zero() {
+        let bits = enc_i(OPCODE_OP_IMM, 0, 0, 0, 0);
+        assert_eq!(IType::new(bits).imm, 0);
+    }
+
+    #[test]
+    fn itype_imm_plus_one() {
+        let bits = enc_i(OPCODE_OP_IMM, 1, 0, 0, 0);
+        assert_eq!(IType::new(bits).imm, 1);
+    }
+
+    // ---- U-type sign / low-bits handling -------------------------------
+
+    #[test]
+    fn utype_sign_bit_preserved() {
+        // High bit of the 20-bit imm field set -> imm is negative i32.
+        let bits = enc_u(OPCODE_LUI, 0x8000_0000_u32 as i32, 0);
+        assert_eq!(UType::new(bits).imm, 0x8000_0000_u32 as i32);
+    }
+
+    #[test]
+    fn utype_low_12_bits_zeroed() {
+        // Even if the raw instruction word has bits set in positions 0..11
+        // (which would be the rd/opcode fields), the decoded U-type imm
+        // must have those bits zero -- only bits 12..31 of the instruction
+        // contribute to imm.
+        //
+        // 0x12345abc: imm portion (bits 31..12) = 0x12345, rd (bits 11..7)
+        // = (0xabc >> 7) & 0x1f. With low bits used as rd/opcode, the
+        // decoded imm must still be exactly 0x12345000.
+        let bits = 0x12345abc;
+        let decoded = UType::new(bits);
+        assert_eq!(decoded.imm, 0x1234_5000_u32 as i32);
     }
 }
