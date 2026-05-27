@@ -96,6 +96,12 @@ pub(in crate::tests) fn root_system_params() -> SystemParams {
     root_params_with_100_bits_security()
 }
 
+#[cfg(all(feature = "cuda", feature = "root-prover"))]
+pub(in crate::tests) fn hook_system_params() -> SystemParams {
+    use openvm_stark_sdk::config::hook_params_with_100_bits_security;
+    hook_params_with_100_bits_security()
+}
+
 pub(in crate::tests) fn test_rv32im_config() -> Rv32ImConfig {
     Rv32ImConfig {
         rv32i: Rv32IConfig {
@@ -646,7 +652,7 @@ fn test_deferral_hook_prover(num_children: usize) -> Result<()> {
     let deferral_hook_prover = DeferralHookProver::new::<Engine>(
         deferral_internal_recursive_vk,
         internal_recursive_cached_commit,
-        root_system_params(),
+        hook_system_params(),
     );
     let root_proof =
         deferral_hook_prover.prove::<Engine>(final_inner_proof.clone(), leaf_children)?;

@@ -45,7 +45,7 @@ use tracing::{warn, Level};
 use super::{
     app_system_params,
     dummy::{generate_dummy_def_proof, EmptyAirWithPvs},
-    internal_system_params, leaf_system_params, root_system_params,
+    hook_system_params, internal_system_params, leaf_system_params, root_system_params,
 };
 use crate::{
     circuit::{
@@ -275,7 +275,7 @@ fn test_deferral_e2e() -> Result<()> {
     let hook_prover_for_commit = DeferralHookProver::new::<GpuEngine>(
         def_i1_prover.get_vk(),
         def_i1_prover.get_vk_commit(true).cached_commit.into(),
-        root_system_params(),
+        hook_system_params(),
     );
     let def_hook_cached_commit = hook_prover_for_commit.get_cached_commit();
 
@@ -538,7 +538,7 @@ fn test_deferral_e2e() -> Result<()> {
         let hook_prover = DeferralHookProver::new::<GpuEngine>(
             ir_prover.get_vk(),
             ir_prover.get_vk_commit(true).cached_commit.into(),
-            root_system_params(),
+            hook_system_params(),
         );
         warn!("proving deferral hook");
         let hook_proof = hook_prover.prove::<GpuEngine>(wrapped, leaf_children)?;
