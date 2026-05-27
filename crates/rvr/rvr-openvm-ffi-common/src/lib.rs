@@ -12,7 +12,7 @@
 use std::ffi::c_void;
 
 /// Word size for memory access (4 bytes).
-pub const WORD_SIZE: usize = 4;
+pub use openvm_platform::WORD_SIZE;
 
 // ── Deferral constants ───────────────────────────────────────────────────
 
@@ -26,14 +26,10 @@ pub const DEFERRAL_COMMIT_NUM_BYTES: usize = DEFERRAL_DIGEST_SIZE * WORD_SIZE;
 pub const DEFERRAL_OUTPUT_KEY_BYTES: usize = DEFERRAL_COMMIT_NUM_BYTES + 8;
 
 // ── OpenVM address space identifiers (mirror C `openvm_state.h`) ──
-/// Register file address space.
-pub const AS_REGISTER: u32 = 1;
-/// Main guest memory address space.
-pub const AS_MEMORY: u32 = 2;
-/// Public values address space.
-pub const AS_PUBLIC_VALUES: u32 = 3;
-/// Deferral output address space.
-pub const DEFERRAL_AS: u32 = 4;
+pub use openvm_instructions::{
+    riscv::{RV32_MEMORY_AS as AS_MEMORY, RV32_REGISTER_AS as AS_REGISTER},
+    DEFERRAL_AS, PUBLIC_VALUES_AS as AS_PUBLIC_VALUES,
+};
 
 // ── OpenVM metered-execution layout ───────────────────────────────────
 // Redefined here to avoid a cycle with openvm-circuit. Checked against
