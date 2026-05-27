@@ -3,12 +3,13 @@
 
 use core::hint::black_box;
 
-use openvm_rv32im_guest::raw_print_str_from_bytes;
-
 openvm::entry!(main);
 
 pub fn main() {
     // Wild address: 4 bytes past the 512 MiB guest region (0..0x2000_0000).
     let wild = black_box(0x2000_0004u32) as *const u8;
-    raw_print_str_from_bytes(wild, 4);
+    #[cfg(target_os = "zkvm")]
+    openvm_rv32im_guest::raw_print_str_from_bytes(wild, 4);
+    #[cfg(not(target_os = "zkvm"))]
+    let _ = wild;
 }
