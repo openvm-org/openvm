@@ -1,9 +1,10 @@
-use core::borrow::Borrow;
+use core::{borrow::Borrow, mem::size_of};
 use std::{array::from_fn, sync::Arc};
 
 use openvm_circuit_primitives::ColumnsAir;
 use openvm_poseidon2_air::{
     Poseidon2SubAir, Poseidon2SubCols, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
+    BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -34,10 +35,6 @@ pub struct Poseidon2Air<F: Field, const SBOX_REGISTERS: usize> {
     pub poseidon2_permute_bus: Poseidon2PermuteBus,
     pub poseidon2_compress_bus: Poseidon2CompressBus,
 }
-
-// No columns provided: `Poseidon2Cols` embeds external `Poseidon2SubCols` which doesn't derive
-// `StructReflection`.
-impl<F: Field, const SBOX_REGISTERS: usize> ColumnsAir for Poseidon2Air<F, SBOX_REGISTERS> {}
 
 impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for Poseidon2Air<F, SBOX_REGISTERS> {
     fn width(&self) -> usize {
@@ -91,5 +88,68 @@ impl<AB: AirBuilder + InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             },
             local.compress_mult,
         );
+    }
+}
+
+impl<F: Field, const SBOX_REGISTERS: usize> ColumnsAir for Poseidon2Air<F, SBOX_REGISTERS> {
+    fn columns(&self) -> Option<Vec<String>> {
+        let mut columns = poseidon2_sub_columns::<SBOX_REGISTERS>();
+        columns.push("permute_mult".to_string());
+        columns.push("compress_mult".to_string());
+        debug_assert_eq!(columns.len(), Poseidon2Cols::<u8, SBOX_REGISTERS>::width());
+        Some(columns)
+    }
+}
+
+pub(crate) fn poseidon2_sub_columns<const SBOX_REGISTERS: usize>() -> Vec<String> {
+    let mut columns = Vec::with_capacity(size_of::<Poseidon2SubCols<u8, SBOX_REGISTERS>>());
+    columns.push("export_col".to_string());
+    push_array_columns(&mut columns, "inputs", POSEIDON2_WIDTH);
+    for round in 0..BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS {
+        for lane in 0..POSEIDON2_WIDTH {
+            push_array_columns(
+                &mut columns,
+                &format!("beginning_full_rounds_{round}_sbox_{lane}_registers"),
+                SBOX_REGISTERS,
+            );
+        }
+        push_array_columns(
+            &mut columns,
+            &format!("beginning_full_rounds_{round}_post"),
+            POSEIDON2_WIDTH,
+        );
+    }
+    for round in 0..BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS {
+        push_array_columns(
+            &mut columns,
+            &format!("partial_rounds_{round}_sbox_registers"),
+            SBOX_REGISTERS,
+        );
+        columns.push(format!("partial_rounds_{round}_post"));
+    }
+    for round in 0..BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS {
+        for lane in 0..POSEIDON2_WIDTH {
+            push_array_columns(
+                &mut columns,
+                &format!("ending_full_rounds_{round}_sbox_{lane}_registers"),
+                SBOX_REGISTERS,
+            );
+        }
+        push_array_columns(
+            &mut columns,
+            &format!("ending_full_rounds_{round}_post"),
+            POSEIDON2_WIDTH,
+        );
+    }
+    debug_assert_eq!(
+        columns.len(),
+        size_of::<Poseidon2SubCols<u8, SBOX_REGISTERS>>()
+    );
+    columns
+}
+
+fn push_array_columns(columns: &mut Vec<String>, field: &str, len: usize) {
+    for i in 0..len {
+        columns.push(format!("{field}_{i}"));
     }
 }

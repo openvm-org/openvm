@@ -1,7 +1,10 @@
 use core::array;
 use std::{borrow::Borrow, sync::Arc};
 
-use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, ColumnsAir, SubAir};
+use openvm_circuit_primitives::{
+    encoder::Encoder, utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper,
+    SubAir,
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     air_builders::PartitionedAirBuilder, interaction::InteractionBuilder, BaseAirWithPublicValues,
@@ -70,7 +73,7 @@ pub(crate) enum NodeKind {
     InteractionBusIndex = 13,
 }
 
-#[derive(AlignedBorrow, Copy, Clone)]
+#[derive(AlignedBorrow, Copy, Clone, StructReflection)]
 #[repr(C)]
 pub struct CachedSymbolicExpressionColumns<T> {
     pub(in crate::batch_constraint) flags: [T; NUM_FLAGS],
@@ -87,7 +90,7 @@ pub struct CachedSymbolicExpressionColumns<T> {
     pub(in crate::batch_constraint) constraint_idx: T,
 }
 
-#[derive(AlignedBorrow, Copy, Clone)]
+#[derive(AlignedBorrow, Copy, Clone, StructReflection)]
 #[repr(C)]
 pub struct SingleMainSymbolicExpressionColumns<T> {
     // 0 = proof absent from this slot, 1 = proof present with absent air, 2 = proof present with
@@ -118,10 +121,6 @@ pub struct SymbolicExpressionAir<F: Field> {
     pub cnt_proofs: usize,
     pub dag_commit_subair: Option<Arc<DagCommitSubAir<F>>>,
 }
-// No columns provided: width is dynamic, depending on `cnt_proofs` and on whether
-// `dag_commit_subair` is present, and mixes several column structs.
-impl<F: Field> ColumnsAir for SymbolicExpressionAir<F> {}
-
 impl<F: Field> SymbolicExpressionAir<F> {
     fn has_cached(&self) -> bool {
         self.dag_commit_subair.is_none()
@@ -477,5 +476,23 @@ where
                 cached_cols.is_constraint * air_present,
             );
         }
+    }
+}
+
+impl<F: Field> ColumnsAir for SymbolicExpressionAir<F> {
+    fn columns(&self) -> Option<Vec<String>> {
+        let mut columns = if self.has_cached() {
+            CachedSymbolicExpressionColumns::<u8>::struct_reflection()?
+        } else {
+            self.dag_commit_subair.as_ref()?.columns()?
+        };
+        let single_main = SingleMainSymbolicExpressionColumns::<u8>::struct_reflection()?;
+        for proof_idx in 0..self.cnt_proofs {
+            for field in &single_main {
+                columns.push(format!("{field}_proof_{proof_idx}"));
+            }
+        }
+        debug_assert_eq!(columns.len(), self.width());
+        Some(columns)
     }
 }

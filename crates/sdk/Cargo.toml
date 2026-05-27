@@ -100,7 +100,7 @@ stark-debug = ["openvm-circuit/stark-debug"]
 test-utils = ["openvm-circuit/test-utils"]
 
 async = ["tokio"]
-lean = ["openvm-recursion-circuit/lean", "openvm-stark-backend/lean"]
+lean = ["openvm-stark-backend/lean"]
 parallel = ["openvm-continuations/parallel", "openvm-sdk-config/parallel"]
 mimalloc = ["openvm-circuit/mimalloc", "openvm-sdk-config/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc", "openvm-sdk-config/jemalloc"]

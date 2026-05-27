@@ -1,6 +1,9 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, ColumnsAir, SubAir};
+use openvm_circuit_primitives::{
+    encoder::Encoder, utils::assert_array_eq, ColumnsAir, StructReflection, StructReflectionHelper,
+    SubAir,
+};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -24,7 +27,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, StructReflection)]
 pub struct WhirRoundCols<T, const ENC_WIDTH: usize> {
     pub is_enabled: T,
     pub proof_idx: T,
@@ -75,9 +78,6 @@ pub struct WhirRoundAir {
 
 impl BaseAirWithPublicValues<F> for WhirRoundAir {}
 impl PartitionedBaseAir<F> for WhirRoundAir {}
-// No columns provided: `WhirRoundCols` is parameterized by `ENC_WIDTH` chosen at runtime (1, 2, or
-// 3), so there is no single static layout to reflect.
-impl ColumnsAir for WhirRoundAir {}
 
 impl<F> BaseAir<F> for WhirRoundAir {
     fn width(&self) -> usize {
@@ -361,5 +361,16 @@ impl WhirRoundAir {
             },
             is_enabled,
         );
+    }
+}
+
+impl ColumnsAir for WhirRoundAir {
+    fn columns(&self) -> Option<Vec<String>> {
+        match self.whir_round_encoder.width() {
+            1 => WhirRoundCols::<u8, 1>::struct_reflection(),
+            2 => WhirRoundCols::<u8, 2>::struct_reflection(),
+            3 => WhirRoundCols::<u8, 3>::struct_reflection(),
+            _ => None,
+        }
     }
 }

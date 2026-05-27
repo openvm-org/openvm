@@ -4,7 +4,7 @@ use itertools::fold;
 use openvm_circuit_primitives::{
     encoder::Encoder,
     utils::{and, not, or, select},
-    ColumnsAir, SubAir,
+    ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -39,7 +39,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, Debug, StructReflection)]
 pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     pub proof_idx: F,
     pub is_valid: F,
@@ -189,13 +189,6 @@ impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> PartitionedBaseAir<F>
     for ProofShapeAir<NUM_LIMBS, LIMB_BITS>
 {
 }
-// No columns provided: width is dynamic — `ProofShapeCols` plus encoder flags plus
-// `max_cached * DIGEST_SIZE` cached commit columns.
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ColumnsAir
-    for ProofShapeAir<NUM_LIMBS, LIMB_BITS>
-{
-}
-
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize, AB: AirBuilder + InteractionBuilder> Air<AB>
     for ProofShapeAir<NUM_LIMBS, LIMB_BITS>
 where
@@ -1150,5 +1143,32 @@ pub(super) fn borrow_var_cols_mut<F>(
     ProofShapeVarColsMut {
         idx_flags: &mut slice[flags_idx..cached_commits_idx],
         cached_commits,
+    }
+}
+
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ColumnsAir
+    for ProofShapeAir<NUM_LIMBS, LIMB_BITS>
+{
+    fn columns(&self) -> Option<Vec<String>> {
+        let mut columns = ProofShapeCols::<u8, NUM_LIMBS>::struct_reflection()?;
+        push_array_columns(&mut columns, "idx_flags", self.idx_encoder.width());
+        for cached_idx in 0..self.max_cached {
+            for elem_idx in 0..DIGEST_SIZE {
+                columns.push(format!("cached_commits_{cached_idx}_{elem_idx}"));
+            }
+        }
+        debug_assert_eq!(
+            columns.len(),
+            ProofShapeCols::<u8, NUM_LIMBS>::width()
+                + self.idx_encoder.width()
+                + self.max_cached * DIGEST_SIZE
+        );
+        Some(columns)
+    }
+}
+
+fn push_array_columns(columns: &mut Vec<String>, field: &str, len: usize) {
+    for i in 0..len {
+        columns.push(format!("{field}_{i}"));
     }
 }

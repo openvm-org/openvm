@@ -17,6 +17,7 @@ use crate::{
     batch_constraint::expr_eval::{
         CachedRecord, CachedSymbolicExpressionColumns, FLAG_MODULUS, NUM_FLAGS,
     },
+    transcript::poseidon2::poseidon2_sub_columns,
     utils::assert_zeros,
 };
 
@@ -47,10 +48,6 @@ pub struct DagCommitPvs<T> {
 pub struct DagCommitSubAir<F: Field> {
     pub subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
 }
-
-// No columns provided: `DagCommitCols` embeds external `Poseidon2SubCols` which doesn't derive
-// `StructReflection`.
-impl<F: Field> ColumnsAir for DagCommitSubAir<F> {}
 
 impl<F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>> DagCommitSubAir<F> {
     pub fn new() -> Self {
@@ -231,5 +228,17 @@ pub(crate) fn generate_dag_commit_info(
     DagCommitInfo {
         commit: from_fn(|i| state[i]),
         poseidon2_inputs,
+    }
+}
+
+impl<F: Field> ColumnsAir for DagCommitSubAir<F> {
+    fn columns(&self) -> Option<Vec<String>> {
+        let mut columns = poseidon2_sub_columns::<SBOX_REGISTERS>();
+        for i in 0..NUM_FLAGS {
+            columns.push(format!("flags_{i}"));
+        }
+        columns.push("is_constraint".to_string());
+        debug_assert_eq!(columns.len(), DagCommitCols::<u8>::width());
+        Some(columns)
     }
 }

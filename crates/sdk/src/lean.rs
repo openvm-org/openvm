@@ -2,74 +2,77 @@
 //! sub-circuit wrapped in `InnerCircuit`), render every supported AIR's
 //! symbolic constraints, and emit per-AIR Lean modules in the
 //! `Fundamentals.Air` dialect under
-//! `<output>/Recursion/<Group>/<AirStem>/Generated/{Schema,Constraints,Interactions}.lean`.
+//! `<output>/Recursion/Airs/<Group>/<AirStem>/Generated/{Schema,Constraints,Interactions}.lean`.
 //!
-//! V1 scope: cached partitions, public values, preprocessed columns,
-//! and atypical multi-partition AIRs (`SymbolicExpressionAir`,
-//! `ProofShapeAir`, `WhirRoundAir`, `Poseidon2Air`) are skipped with a
-//! warning. The leaf of `vk.symbolic_constraints` for those AIRs still
-//! mentions buses we don't have a name for; unknown bus indices fall
-//! back to `bus_<idx>` placeholder constructors.
+//! Unknown bus indices fall back to `bus_<idx>` placeholder constructors.
 
 use std::{
-    collections::BTreeSet,
     fs,
     io::{BufWriter, Write},
     path::{Path, PathBuf},
 };
 
 use eyre::{bail, Result, WrapErr};
-use openvm_continuations::circuit::Circuit;
+use openvm_circuit::primitives::{ColumnsAir, StructReflectionHelper};
+use openvm_continuations::circuit::{
+    inner::{
+        def_pvs::DeferralPvsAir, unset::UnsetPvsAir, verifier::VerifierPvsAir, vm_pvs::VmPvsAir,
+    },
+    Circuit,
+};
 use openvm_recursion_circuit::{
     batch_constraint::{
         eq_airs::{
-            eq_3b::Eq3bColumns,
-            eq_neg::EqNegCols,
-            eq_ns::EqNsColumns,
-            eq_sharp_uni::{EqSharpUniCols, EqSharpUniReceiverCols},
-            eq_uni::EqUniCols,
+            eq_3b::Eq3bAir,
+            eq_neg::EqNegAir,
+            eq_ns::EqNsAir,
+            eq_sharp_uni::{EqSharpUniAir, EqSharpUniReceiverAir},
+            eq_uni::EqUniAir,
         },
         expr_eval::{
-            constraints_folding::ConstraintsFoldingCols,
-            interactions_folding::InteractionsFoldingCols,
-            symbolic_expression::{
-                CachedSymbolicExpressionColumns, SingleMainSymbolicExpressionColumns,
-            },
+            constraints_folding::ConstraintsFoldingAir,
+            interactions_folding::InteractionsFoldingAir,
+            symbolic_expression::SymbolicExpressionAir,
         },
-        expression_claim::ExpressionClaimCols,
-        fractions_folder::FractionsFolderCols,
-        sumcheck::{multilinear::MultilinearSumcheckCols, univariate::UnivariateSumcheckCols},
+        expression_claim::ExpressionClaimAir,
+        fractions_folder::FractionsFolderAir,
+        sumcheck::{multilinear::MultilinearSumcheckAir, univariate::UnivariateSumcheckAir},
     },
     gkr::{
-        input::GkrInputCols, layer::GkrLayerCols, sumcheck::GkrLayerSumcheckCols,
-        xi_sampler::GkrXiSamplerCols,
+        input::GkrInputAir, layer::GkrLayerAir, sumcheck::GkrLayerSumcheckAir,
+        xi_sampler::GkrXiSamplerAir,
     },
-    primitives::{exp_bits_len::ExpBitsLenCols, pow::PowerCheckerCols, range::RangeCheckerCols},
-    proof_shape::{proof_shape::ProofShapeCols, pvs::PublicValuesCols},
+    primitives::{exp_bits_len::ExpBitsLenAir, pow::PowerCheckerAir, range::RangeCheckerAir},
+    proof_shape::{proof_shape::ProofShapeAir, pvs::PublicValuesAir},
     stacking::{
-        claims::StackingClaimsCols, eq_base::EqBaseCols, eq_bits::EqBitsCols,
-        opening::OpeningClaimsCols, sumcheck::SumcheckRoundsCols, univariate::UnivariateRoundCols,
+        claims::StackingClaimsAir, eq_base::EqBaseAir, eq_bits::EqBitsAir,
+        opening::OpeningClaimsAir, sumcheck::SumcheckRoundsAir, univariate::UnivariateRoundAir,
     },
-    transcript::{merkle_verify::MerkleVerifyCols, transcript::TranscriptCols},
+    transcript::{
+        merkle_verify::MerkleVerifyAir, poseidon2::Poseidon2Air, transcript::TranscriptAir,
+    },
     whir::{
-        final_poly_mle_eval::FinalyPolyMleEvalCols, final_poly_query_eval::FinalPolyQueryEvalCols,
-        folding::WhirFoldingCols, initial_opened_values::InitialOpenedValuesCols,
-        non_initial_opened_values::NonInitialOpenedValuesCols, query::WhirQueryCols,
-        sumcheck::SumcheckCols, whir_round::WhirRoundCols,
+        final_poly_mle_eval::FinalPolyMleEvalAir, final_poly_query_eval::FinalPolyQueryEvalAir,
+        folding::WhirFoldingAir, initial_opened_values::InitialOpenedValuesAir,
+        non_initial_opened_values::NonInitialOpenedValuesAir, query::WhirQueryAir,
+        sumcheck::SumcheckAir, whir_round::WhirRoundAir,
     },
 };
 use openvm_stark_backend::{
     interaction::BusIndex,
     lean::{
-        air_file_stem, flat_columns_of, render_air, write_constraints, write_interactions,
-        write_schema, BusBinding, LeanRenderOptions, LeanWriteOptions, RenderedAir,
+        air_file_stem, render_air, write_constraints, write_interactions, write_schema, BusBinding,
+        LeanRenderOptions, LeanWriteOptions, RenderedAir,
     },
+    AirRef,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
+use openvm_verify_stark_host::pvs::{VerifierBasePvs, VmPvs};
 
 use crate::{config, Sdk, SC};
 
-const MAX_NUM_PROOFS: usize = 4;
 const ROOT_MODULE: &str = "Recursion";
+const AIRS_MODULE: &str = "Airs";
 const FUNDAMENTALS_IMPORT: &str = "Fundamentals.Air";
 const BUS_DEFS_IMPORT: &str = "Recursion.BusDefs";
 const BUS_DEFS_NAMESPACE: &str = "Recursion.BusDefs";
@@ -277,212 +280,83 @@ fn air_group(air_name: &str) -> Result<&'static str> {
     })
 }
 
-/// Resolve an AIR's Cols struct to a flat column-name list. Returns
-/// `None` for AIRs whose layout this v1 driver doesn't yet support
-/// (multi-partition, encoder-parameterized, etc.).
-fn flat_column_names(air_name: &str) -> Option<Vec<String>> {
-    Some(match air_name {
-        // Leaf-circuit-only AIRs (added by `InnerCircuit` wrapping the
-        // verifier sub-circuit). The continuations Cols structs don't
-        // derive `LeanColumns`, so columns are hardcoded here. For the
-        // non-deferral leaf the widths match `Cols<u8>` exactly:
-        // `VerifierPvsAir` has zero deferral cols, and `VmPvsAir` has
-        // zero trailing deferral_flag col.
-        n if n.starts_with("VerifierPvsAir") => verifier_pvs_air_columns(),
-        n if n.starts_with("VmPvsAir") => vm_pvs_air_columns(),
-        n if n.starts_with("UnsetPvsAir") => unset_pvs_air_columns(),
-        n if n.starts_with("FractionsFolderAir") => flat_columns_of::<FractionsFolderCols<u8>>(),
-        n if n.starts_with("UnivariateSumcheckAir") => {
-            flat_columns_of::<UnivariateSumcheckCols<u8>>()
-        }
-        n if n.starts_with("MultilinearSumcheckAir") => {
-            flat_columns_of::<MultilinearSumcheckCols<u8>>()
-        }
-        n if n.starts_with("EqNsAir") => flat_columns_of::<EqNsColumns<u8>>(),
-        n if n.starts_with("Eq3bAir") => flat_columns_of::<Eq3bColumns<u8>>(),
-        n if n.starts_with("EqSharpUniReceiverAir") => {
-            flat_columns_of::<EqSharpUniReceiverCols<u8>>()
-        }
-        n if n.starts_with("EqSharpUniAir") => flat_columns_of::<EqSharpUniCols<u8>>(),
-        n if n.starts_with("EqUniAir") => flat_columns_of::<EqUniCols<u8>>(),
-        n if n.starts_with("ExpressionClaimAir") => flat_columns_of::<ExpressionClaimCols<u8>>(),
-        n if n.starts_with("InteractionsFoldingAir") => {
-            flat_columns_of::<InteractionsFoldingCols<u8>>()
-        }
-        n if n.starts_with("ConstraintsFoldingAir") => {
-            flat_columns_of::<ConstraintsFoldingCols<u8>>()
-        }
-        n if n.starts_with("EqNegAir") => flat_columns_of::<EqNegCols<u8>>(),
-        n if n.starts_with("TranscriptAir") => flat_columns_of::<TranscriptCols<u8>>(),
-        n if n.starts_with("MerkleVerifyAir") => flat_columns_of::<MerkleVerifyCols<u8>>(),
-        n if n.starts_with("PublicValuesAir") => flat_columns_of::<PublicValuesCols<u8>>(),
-        n if n.starts_with("RangeCheckerAir") => flat_columns_of::<RangeCheckerCols<u8>>(),
-        n if n.starts_with("GkrInputAir") => flat_columns_of::<GkrInputCols<u8>>(),
-        n if n.starts_with("GkrLayerSumcheckAir") => flat_columns_of::<GkrLayerSumcheckCols<u8>>(),
-        n if n.starts_with("GkrLayerAir") => flat_columns_of::<GkrLayerCols<u8>>(),
-        n if n.starts_with("GkrXiSamplerAir") => flat_columns_of::<GkrXiSamplerCols<u8>>(),
-        n if n.starts_with("OpeningClaimsAir") => flat_columns_of::<OpeningClaimsCols<u8>>(),
-        n if n.starts_with("UnivariateRoundAir") => flat_columns_of::<UnivariateRoundCols<u8>>(),
-        n if n.starts_with("SumcheckRoundsAir") => flat_columns_of::<SumcheckRoundsCols<u8>>(),
-        n if n.starts_with("StackingClaimsAir") => flat_columns_of::<StackingClaimsCols<u8>>(),
-        n if n.starts_with("EqBaseAir") => flat_columns_of::<EqBaseCols<u8>>(),
-        n if n.starts_with("EqBitsAir") => flat_columns_of::<EqBitsCols<u8>>(),
-        n if n.starts_with("SumcheckAir") => flat_columns_of::<SumcheckCols<u8>>(),
-        n if n.starts_with("WhirQueryAir") => flat_columns_of::<WhirQueryCols<u8>>(),
-        n if n.starts_with("InitialOpenedValuesAir") => {
-            flat_columns_of::<InitialOpenedValuesCols<u8>>()
-        }
-        n if n.starts_with("NonInitialOpenedValuesAir") => {
-            flat_columns_of::<NonInitialOpenedValuesCols<u8>>()
-        }
-        n if n.starts_with("WhirFoldingAir") => flat_columns_of::<WhirFoldingCols<u8>>(),
-        n if n.starts_with("FinalPolyMleEvalAir") || n.starts_with("Finaly") => {
-            flat_columns_of::<FinalyPolyMleEvalCols<u8>>()
-        }
-        n if n.starts_with("FinalPolyQueryEvalAir") => {
-            flat_columns_of::<FinalPolyQueryEvalCols<u8>>()
-        }
-        n if n.starts_with("PowerCheckerAir") => flat_columns_of::<PowerCheckerCols<u8>>(),
-        n if n.starts_with("ExpBitsLenAir") => flat_columns_of::<ExpBitsLenCols<u8>>(),
-        // Hardcoded layouts for AIRs that don't fit the simple
-        // `flat_columns_of::<Cols<u8>>` pattern (sub-air-heavy or
-        // encoder-parameterized). Names sourced from the previous
-        // generator's deprecated output (ws-fv/Recursion/Deprecated/Airs/).
-        n if n.starts_with("Poseidon2Air") => poseidon2_air_columns(),
-        n if n.starts_with("ProofShapeAir") => proof_shape_air_columns(),
-        n if n.starts_with("WhirRoundAir") => whir_round_air_columns(),
-        // SymbolicExpressionAir: cached partition + MAX_NUM_PROOFS-fold
-        // repeated SingleMain partition. Schema.lean emits a flat
-        // singleMain layout (concatenated cached + per-proof
-        // SingleMain blocks); the constraint renderer uses
-        // partition_offsets to map (part_index, index) to flat name.
-        n if n.starts_with("SymbolicExpressionAir") => symbolic_expression_air_columns(),
-        _ => return None,
-    })
+fn columns_from_air_trait(air: &AirRef<SC>) -> Option<Vec<String>> {
+    macro_rules! try_air {
+        ($ty:ty) => {
+            if let Some(air) = air.as_any().downcast_ref::<$ty>() {
+                if let Some(columns) = air.columns() {
+                    return Some(normalize_columns_air_names(columns));
+                }
+            }
+        };
+    }
+
+    try_air!(VerifierPvsAir);
+    try_air!(VmPvsAir);
+    try_air!(UnsetPvsAir);
+    try_air!(DeferralPvsAir);
+
+    try_air!(FractionsFolderAir);
+    try_air!(UnivariateSumcheckAir);
+    try_air!(MultilinearSumcheckAir);
+    try_air!(EqNsAir);
+    try_air!(Eq3bAir);
+    try_air!(EqSharpUniReceiverAir);
+    try_air!(EqSharpUniAir);
+    try_air!(EqUniAir);
+    try_air!(ExpressionClaimAir);
+    try_air!(InteractionsFoldingAir);
+    try_air!(ConstraintsFoldingAir);
+    try_air!(SymbolicExpressionAir<F>);
+    try_air!(EqNegAir);
+    try_air!(TranscriptAir);
+    try_air!(MerkleVerifyAir);
+    try_air!(Poseidon2Air<F, 1>);
+    try_air!(PublicValuesAir);
+    try_air!(ProofShapeAir<4, 8>);
+    try_air!(RangeCheckerAir<8>);
+    try_air!(GkrInputAir);
+    try_air!(GkrLayerSumcheckAir);
+    try_air!(GkrLayerAir);
+    try_air!(GkrXiSamplerAir);
+    try_air!(OpeningClaimsAir);
+    try_air!(UnivariateRoundAir);
+    try_air!(SumcheckRoundsAir);
+    try_air!(StackingClaimsAir);
+    try_air!(EqBaseAir);
+    try_air!(EqBitsAir);
+    try_air!(SumcheckAir);
+    try_air!(WhirQueryAir);
+    try_air!(InitialOpenedValuesAir);
+    try_air!(NonInitialOpenedValuesAir);
+    try_air!(WhirFoldingAir);
+    try_air!(FinalPolyMleEvalAir);
+    try_air!(FinalPolyQueryEvalAir);
+    try_air!(WhirRoundAir);
+    try_air!(PowerCheckerAir<2, 32>);
+    try_air!(ExpBitsLenAir);
+
+    None
 }
 
-fn symbolic_expression_air_columns() -> Vec<String> {
-    let cached = flat_columns_of::<CachedSymbolicExpressionColumns<u8>>();
-    let single_main = flat_columns_of::<SingleMainSymbolicExpressionColumns<u8>>();
-    let mut cols = cached;
-    for proof in 0..MAX_NUM_PROOFS {
-        for field in &single_main {
-            cols.push(format!("{field}_proof_{proof}"));
-        }
-    }
-    cols
+fn normalize_columns_air_names(columns: Vec<String>) -> Vec<String> {
+    columns
+        .into_iter()
+        .map(|mut name| {
+            while name.contains("__") {
+                name = name.replace("__", "_");
+            }
+            if name.ends_with("_aux_inv") {
+                name.truncate(name.len() - "_inv".len());
+                name.push_str("_0");
+            }
+            name
+        })
+        .collect()
 }
 
-fn poseidon2_air_columns() -> Vec<String> {
-    let mut cols: Vec<String> = Vec::with_capacity(301);
-    cols.push("export_col".to_string());
-    for i in 0..16 {
-        cols.push(format!("inputs_{i}"));
-    }
-    for round in 0..4 {
-        for lane in 0..16 {
-            cols.push(format!(
-                "beginning_full_rounds_{round}_sbox_{lane}_registers_0"
-            ));
-        }
-        for lane in 0..16 {
-            cols.push(format!("beginning_full_rounds_{round}_post_{lane}"));
-        }
-    }
-    for round in 0..13 {
-        cols.push(format!("partial_rounds_{round}_sbox_registers_0"));
-        cols.push(format!("partial_rounds_{round}_post"));
-    }
-    for round in 0..4 {
-        for lane in 0..16 {
-            cols.push(format!(
-                "ending_full_rounds_{round}_sbox_{lane}_registers_0"
-            ));
-        }
-        for lane in 0..16 {
-            cols.push(format!("ending_full_rounds_{round}_post_{lane}"));
-        }
-    }
-    cols.push("permute_mult".to_string());
-    cols.push("compress_mult".to_string());
-    debug_assert_eq!(cols.len(), 301);
-    cols
-}
-
-fn proof_shape_air_columns() -> Vec<String> {
-    // 28 fixed columns from ProofShapeCols<u8, 4> + idx_encoder.width()=11
-    // (`idx_flags_*`) + max_cached=1 × DIGEST_SIZE=8 (`cached_commits_*_*`) = 47.
-    // Encoder width and max_cached are runtime-determined; values here match
-    // the standard Sdk config.
-    let mut cols = flat_columns_of::<ProofShapeCols<u8, 4>>();
-    for i in 0..11 {
-        cols.push(format!("idx_flags_{i}"));
-    }
-    for cached_idx in 0..1 {
-        for elem_idx in 0..8 {
-            cols.push(format!("cached_commits_{cached_idx}_{elem_idx}"));
-        }
-    }
-    debug_assert_eq!(cols.len(), 47);
-    cols
-}
-
-/// Join two name fragments with `_`, treating an empty fragment as
-/// "no fragment" (so an empty prefix produces unprefixed names like
-/// `internal_flag` rather than `_internal_flag`).
-fn join_name(a: &str, b: &str) -> String {
-    if a.is_empty() {
-        b.to_string()
-    } else if b.is_empty() {
-        a.to_string()
-    } else {
-        format!("{a}_{b}")
-    }
-}
-
-fn vk_commit_columns(prefix: &str) -> Vec<String> {
-    let mut cols = Vec::with_capacity(16);
-    for i in 0..8 {
-        cols.push(join_name(prefix, &format!("cached_commit_{i}")));
-    }
-    for i in 0..8 {
-        cols.push(join_name(prefix, &format!("vk_pre_hash_{i}")));
-    }
-    cols
-}
-
-fn verifier_base_pvs_columns(prefix: &str) -> Vec<String> {
-    let mut cols = vec![join_name(prefix, "internal_flag")];
-    cols.extend(vk_commit_columns(&join_name(prefix, "app_vk_commit")));
-    cols.extend(vk_commit_columns(&join_name(prefix, "leaf_vk_commit")));
-    cols.extend(vk_commit_columns(&join_name(
-        prefix,
-        "internal_for_leaf_vk_commit",
-    )));
-    cols.push(join_name(prefix, "recursion_flag"));
-    cols.extend(vk_commit_columns(&join_name(
-        prefix,
-        "internal_recursive_vk_commit",
-    )));
-    cols
-}
-
-fn vm_pvs_columns(prefix: &str) -> Vec<String> {
-    let mut cols = Vec::new();
-    for i in 0..8 {
-        cols.push(join_name(prefix, &format!("program_commit_{i}")));
-    }
-    cols.push(join_name(prefix, "initial_pc"));
-    cols.push(join_name(prefix, "final_pc"));
-    cols.push(join_name(prefix, "exit_code"));
-    cols.push(join_name(prefix, "is_terminate"));
-    for i in 0..8 {
-        cols.push(join_name(prefix, &format!("initial_root_{i}")));
-    }
-    for i in 0..8 {
-        cols.push(join_name(prefix, &format!("final_root_{i}")));
-    }
-    cols
+fn flat_column_names(air: &AirRef<SC>) -> Option<Vec<String>> {
+    columns_from_air_trait(air)
 }
 
 /// Names for the AIR's flat public-value list, in the order matching
@@ -490,49 +364,16 @@ fn vm_pvs_columns(prefix: &str) -> Vec<String> {
 /// Returned slice is empty for AIRs without public values.
 fn flat_pv_names(air_name: &str) -> Vec<String> {
     if air_name.starts_with("VerifierPvsAir") {
-        // Non-deferral leaf: VerifierBasePvs::<F>::width() = 66 PVs in
-        // the order of `VerifierBasePvs`'s field declarations.
-        verifier_base_pvs_columns("")
+        normalize_columns_air_names(
+            VerifierBasePvs::<u8>::struct_reflection().expect("VerifierBasePvs column reflection"),
+        )
     } else if air_name.starts_with("VmPvsAir") {
-        // VmPvs::<F>::width() = 28 PVs.
-        vm_pvs_columns("")
+        normalize_columns_air_names(
+            VmPvs::<u8>::struct_reflection().expect("VmPvs column reflection"),
+        )
     } else {
         Vec::new()
     }
-}
-
-fn verifier_pvs_air_columns() -> Vec<String> {
-    let mut cols = vec![
-        "proof_idx".to_string(),
-        "is_valid".to_string(),
-        "has_verifier_pvs".to_string(),
-    ];
-    cols.extend(verifier_base_pvs_columns("child_pvs"));
-    debug_assert_eq!(cols.len(), 3 + 1 + 4 * 16 + 1);
-    cols
-}
-
-fn vm_pvs_air_columns() -> Vec<String> {
-    let mut cols = vec![
-        "proof_idx".to_string(),
-        "is_valid".to_string(),
-        "is_last".to_string(),
-        "has_verifier_pvs".to_string(),
-    ];
-    cols.extend(vm_pvs_columns("child_pvs"));
-    debug_assert_eq!(cols.len(), 4 + 28);
-    cols
-}
-
-fn unset_pvs_air_columns() -> Vec<String> {
-    vec!["proof_idx".to_string(), "is_valid".to_string()]
-}
-
-fn whir_round_air_columns() -> Vec<String> {
-    // 45 base columns + ENC_WIDTH=2 (`whir_round_enc_*`) = 47. The
-    // standard Sdk uses the enc2 variant; if a future config picks
-    // enc1 or enc3, swap the const generic here.
-    flat_columns_of::<WhirRoundCols<u8, 2>>()
 }
 
 /// Generates Lean files for the leaf aggregation circuit AIRs under a
@@ -545,6 +386,8 @@ pub fn generate_lean_files_for_leaf_circuit<P: AsRef<Path>>(output_dir: P) -> Re
 
     let recursion_dir = output_dir.join(ROOT_MODULE);
     fs::create_dir_all(&recursion_dir).wrap_err("create Recursion output dir")?;
+    let airs_dir = recursion_dir.join(AIRS_MODULE);
+    fs::create_dir_all(&airs_dir).wrap_err("create Recursion/Airs output dir")?;
 
     eprintln!("[lean] Building Sdk::standard...");
     let agg_params = config::AggregationSystemParams::default();
@@ -577,7 +420,7 @@ pub fn generate_lean_files_for_leaf_circuit<P: AsRef<Path>>(output_dir: P) -> Re
 
         // For non-partitioned AIRs (no cached partition), partition_offsets
         // is just `[0]`. For SymbolicExpressionAir we build a partitioned
-        // layout (cached at part 0, common-of-MAX_NUM_PROOFS-singles at part 1).
+        // layout (cached at part 0, common singles at part 1).
         let cached_widths = &air_vk.params.width.cached_mains;
         let partition_offsets: Vec<usize> = if cached_widths.is_empty() {
             vec![0]
@@ -595,7 +438,7 @@ pub fn generate_lean_files_for_leaf_circuit<P: AsRef<Path>>(output_dir: P) -> Re
             continue;
         };
 
-        let column_names = match flat_column_names(&air_name) {
+        let column_names = match flat_column_names(air) {
             Some(n) => n,
             None => {
                 skipped.push((air_name.clone(), "unsupported AIR shape (v1)"));
@@ -611,8 +454,9 @@ pub fn generate_lean_files_for_leaf_circuit<P: AsRef<Path>>(output_dir: P) -> Re
 
         let stem = air_file_stem(&air_name).to_string();
         let air_namespace = format!("{ROOT_MODULE}.{group}.{stem}");
-        let schema_import = format!("{air_namespace}.Generated.Schema");
-        let constraints_import = format!("{air_namespace}.Generated.Constraints");
+        let air_import_module = format!("{ROOT_MODULE}.{AIRS_MODULE}.{group}.{stem}");
+        let schema_import = format!("{air_import_module}.Generated.Schema");
+        let constraints_import = format!("{air_import_module}.Generated.Constraints");
         let opts = LeanWriteOptions {
             render: LeanRenderOptions::default(),
             characteristic: Some(BABY_BEAR_P),
@@ -639,7 +483,7 @@ pub fn generate_lean_files_for_leaf_circuit<P: AsRef<Path>>(output_dir: P) -> Re
             }
         };
 
-        let stem_dir = recursion_dir.join(group).join(&stem);
+        let stem_dir = airs_dir.join(group).join(&stem);
         let generated_dir = stem_dir.join("Generated");
         fs::create_dir_all(&generated_dir)
             .wrap_err_with(|| format!("create dir {}", generated_dir.display()))?;
@@ -679,11 +523,11 @@ pub fn generate_lean_files_for_leaf_circuit<P: AsRef<Path>>(output_dir: P) -> Re
         emitted.push(EmittedModule {
             group,
             stem,
-            air_namespace,
+            air_import_module,
         });
     }
 
-    write_per_air_module_files(&recursion_dir, &emitted)?;
+    write_per_air_module_files(&airs_dir, &emitted)?;
     write_root_module(output_dir.join(format!("{ROOT_MODULE}.lean")), &emitted)?;
 
     eprintln!(
@@ -703,21 +547,21 @@ pub fn generate_lean_files_for_leaf_circuit<P: AsRef<Path>>(output_dir: P) -> Re
 struct EmittedModule {
     group: &'static str,
     stem: String,
-    air_namespace: String,
+    air_import_module: String,
 }
 
 /// Per-AIR module file `<Group>/<AirStem>.lean`: imports its own five
 /// sub-files (Schema, Constraints, Interactions, Labels, Facts).
-fn write_per_air_module_files(recursion_dir: &Path, modules: &[EmittedModule]) -> Result<()> {
+fn write_per_air_module_files(airs_dir: &Path, modules: &[EmittedModule]) -> Result<()> {
     for m in modules {
-        let path = recursion_dir.join(m.group).join(format!("{}.lean", m.stem));
-        let air_ns = &m.air_namespace;
+        let path = airs_dir.join(m.group).join(format!("{}.lean", m.stem));
+        let air_import_module = &m.air_import_module;
         write_lean_file(path, |w| {
-            writeln!(w, "import {air_ns}.Generated.Schema")?;
-            writeln!(w, "import {air_ns}.Generated.Constraints")?;
-            writeln!(w, "import {air_ns}.Generated.Interactions")?;
-            writeln!(w, "import {air_ns}.Labels")?;
-            writeln!(w, "import {air_ns}.Facts")?;
+            writeln!(w, "import {air_import_module}.Generated.Schema")?;
+            writeln!(w, "import {air_import_module}.Generated.Constraints")?;
+            writeln!(w, "import {air_import_module}.Generated.Interactions")?;
+            writeln!(w, "import {air_import_module}.Labels")?;
+            writeln!(w, "import {air_import_module}.Facts")?;
             Ok(())
         })?;
     }
@@ -731,7 +575,7 @@ fn write_root_module(path: PathBuf, modules: &[EmittedModule]) -> Result<()> {
     write_lean_file(path, |w| {
         writeln!(w, "import {BUS_DEFS_IMPORT}")?;
         for m in modules {
-            writeln!(w, "import {}", m.air_namespace)?;
+            writeln!(w, "import {}", m.air_import_module)?;
         }
         Ok(())
     })
