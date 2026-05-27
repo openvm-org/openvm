@@ -2,6 +2,47 @@ use std::{collections::HashSet, fmt::Write};
 
 use super::codegen::hex_u32;
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum EmitMode {
+    /// Memory accesses go through `*_traced` helpers so the tracer sees values.
+    #[allow(dead_code)]
+    ValueTrace,
+    /// Memory accesses use direct helpers and do not emit memory trace events.
+    #[default]
+    Direct,
+    /// Metered block ABI. Blocks with memory ops record AS_MEMORY pages locally.
+    Metered { trace_memory_pages: bool },
+}
+
+impl EmitMode {
+    fn has_metered_abi(self) -> bool {
+        matches!(self, Self::Metered { .. })
+    }
+
+    fn traces_memory_values(self) -> bool {
+        matches!(self, Self::ValueTrace)
+    }
+
+    fn is_metered_without_memory_pages(self) -> bool {
+        matches!(
+            self,
+            Self::Metered {
+                trace_memory_pages: false
+            }
+        )
+    }
+
+    /// Whether this block records AS_MEMORY pages through local `TraceMemory`.
+    fn traces_memory_pages(self) -> bool {
+        matches!(
+            self,
+            Self::Metered {
+                trace_memory_pages: true
+            }
+        )
+    }
+}
+
 /// Code generation context. Holds a mutable buffer and tracks hot registers.
 pub struct EmitContext {
     buf: String,
@@ -10,15 +51,17 @@ pub struct EmitContext {
     indent: usize,
     /// Counter for unique variable names.
     var_counter: u32,
+    mode: EmitMode,
 }
 
 impl EmitContext {
-    pub fn new(hot_regs: HashSet<u8>) -> Self {
+    pub(crate) fn new(hot_regs: HashSet<u8>, mode: EmitMode) -> Self {
         Self {
             buf: String::with_capacity(1024),
             hot_regs,
             indent: 2,
             var_counter: 0,
+            mode,
         }
     }
 
@@ -172,34 +215,86 @@ impl EmitContext {
         }
     }
 
-    /// Read memory with tracing (per-width specialization). Returns a C expression.
-    pub fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
-        let addr = Self::addr_expr(base, offset);
-        let var = self.next_var();
-        let (data_func, var_ty) = match (width, signed) {
-            (1, false) => ("rd_mem_u8_traced", "uint32_t"),
-            (1, true) => ("rd_mem_i8_traced", "int32_t"),
-            (2, false) => ("rd_mem_u16_traced", "uint32_t"),
-            (2, true) => ("rd_mem_i16_traced", "int32_t"),
-            (4, _) => ("rd_mem_u32_traced", "uint32_t"),
+    fn read_mem_helper(width: u8, signed: bool, traced: bool) -> (&'static str, &'static str) {
+        let (raw_func, traced_func, var_ty) = match (width, signed) {
+            (1, false) => ("rd_mem_u8", "rd_mem_u8_traced", "uint32_t"),
+            (1, true) => ("rd_mem_i8", "rd_mem_i8_traced", "int32_t"),
+            (2, false) => ("rd_mem_u16", "rd_mem_u16_traced", "uint32_t"),
+            (2, true) => ("rd_mem_i16", "rd_mem_i16_traced", "int32_t"),
+            (4, _) => ("rd_mem_u32", "rd_mem_u32_traced", "uint32_t"),
             _ => unreachable!("invalid memory width {width}"),
         };
-        self.write_line(&format!("{var_ty} {var} = {data_func}(state, {addr});"));
+        let func = if traced { traced_func } else { raw_func };
+        (func, var_ty)
+    }
+
+    fn write_mem_helper(width: u8, traced: bool) -> (&'static str, &'static str) {
+        let (raw_func, traced_func, cast_ty) = match width {
+            1 => ("wr_mem_u8", "wr_mem_u8_traced", "uint8_t"),
+            2 => ("wr_mem_u16", "wr_mem_u16_traced", "uint16_t"),
+            4 => ("wr_mem_u32", "wr_mem_u32_traced", "uint32_t"),
+            _ => unreachable!("invalid memory width {width}"),
+        };
+        let func = if traced { traced_func } else { raw_func };
+        (func, cast_ty)
+    }
+
+    /// Read guest memory. Metered hot blocks record the memory page separately.
+    pub fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
+        assert!(
+            !self.mode.is_metered_without_memory_pages(),
+            "metered memory read emitted without page tracking"
+        );
+        let addr = Self::addr_expr(base, offset);
+        let var = self.next_var();
+        let value_traced = self.mode.traces_memory_values();
+        let (data_func, var_ty) = Self::read_mem_helper(width, signed, value_traced);
+        let data_arg = if value_traced { "state" } else { "memory" };
+
+        self.write_line(&format!(
+            "{var_ty} {var} = {data_func}({data_arg}, {addr});"
+        ));
+        if self.mode.traces_memory_pages() {
+            self.emit_inline_page_record(&addr);
+        }
         var
     }
 
-    /// Write memory. The combined helper traces before storing; passing
-    /// `val` as an argument evaluates it exactly once, so no local temp
-    /// is needed even when `val` is an opaque expression.
+    /// Emit a guest memory write. Metered hot blocks record the memory page
+    /// through the block-local `TraceMemory` context, then use the raw memory
+    /// helper so the common path avoids tracer calls.
     pub fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
+        assert!(
+            !self.mode.is_metered_without_memory_pages(),
+            "metered memory write emitted without page tracking"
+        );
         let addr = Self::addr_expr(base, offset);
-        let (cast_ty, wr_func) = match width {
-            1 => ("uint8_t", "wr_mem_u8_traced"),
-            2 => ("uint16_t", "wr_mem_u16_traced"),
-            4 => ("uint32_t", "wr_mem_u32_traced"),
-            _ => unreachable!("invalid memory width {width}"),
-        };
-        self.write_line(&format!("{wr_func}(state, {addr}, ({cast_ty})({val}));"));
+        let value_traced = self.mode.traces_memory_values();
+        let (wr_func, cast_ty) = Self::write_mem_helper(width, value_traced);
+        let data_arg = if value_traced { "state" } else { "memory" };
+
+        if self.mode.traces_memory_pages() {
+            self.emit_inline_page_record(&addr);
+        }
+        self.write_line(&format!(
+            "{wr_func}({data_arg}, {addr}, ({cast_ty})({val}));"
+        ));
+    }
+
+    fn emit_inline_page_record(&mut self, addr: &str) {
+        self.write_line(&format!("trace_memory_access(&trace_memory, {addr});"));
+    }
+
+    pub fn flush_page_locals(&mut self) {
+        if self.mode.traces_memory_pages() {
+            self.write_line("trace_memory_flush(state->tracer, &trace_memory);");
+        }
+    }
+
+    pub fn reload_page_locals(&mut self) {
+        if self.mode.traces_memory_pages() {
+            self.write_line("trace_memory_reload(state->tracer, &trace_memory);");
+        }
     }
 
     /// Emit a trace_pc call. Per-instruction chip accounting is rolled into
@@ -210,12 +305,49 @@ impl EmitContext {
     }
 
     pub fn extern_call(&mut self, name: &str, args: &[&str]) {
+        self.flush_page_locals();
         let args_str = args.join(", ");
         self.write_line(&format!("{name}({args_str});"));
+        self.reload_page_locals();
+    }
+
+    pub fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+        self.flush_page_locals();
+        let tmp = self.next_var();
+        let args_str = args.join(", ");
+        self.write_line(&format!("{ret_ty} {tmp} = {name}({args_str});"));
+        self.reload_page_locals();
+        tmp
+    }
+
+    pub fn trace_chip(&mut self, chip_idx: u32, count_expr: &str) {
+        if chip_idx == u32::MAX {
+            return;
+        }
+        if self.mode.has_metered_abi() {
+            self.write_line(&format!("trace_heights[{chip_idx}] += {count_expr};"));
+        } else {
+            self.write_line(&format!("trace_chip(state, {chip_idx}u, {count_expr});"));
+        }
     }
 
     pub fn trace_mem_access(&mut self, addr: &str, addr_space: u32) {
+        self.flush_page_locals();
         self.write_line(&format!("trace_mem_access(state, {addr}, {addr_space}u);"));
+        self.reload_page_locals();
+    }
+
+    pub fn trace_mem_access_u32_range(
+        &mut self,
+        base_addr: &str,
+        num_words: &str,
+        addr_space: u32,
+    ) {
+        self.flush_page_locals();
+        self.write_line(&format!(
+            "trace_mem_access_u32_range(state, {base_addr}, {num_words}, {addr_space}u);"
+        ));
+        self.reload_page_locals();
     }
 
     fn sorted_hot_regs(&self) -> Vec<u8> {
@@ -230,12 +362,23 @@ impl EmitContext {
             let name = Self::abi_name(idx);
             write!(args, ", {name}").unwrap();
         }
+        if self.mode.has_metered_abi() {
+            args.push_str(", check_counter, trace_heights");
+        }
         args
     }
 
     pub fn sync_regs_to_state(&mut self) {
-        let args = self.tail_call_args();
+        self.flush_page_locals();
+        let mut args = "state".to_string();
+        for &idx in &self.sorted_hot_regs() {
+            let name = Self::abi_name(idx);
+            write!(args, ", {name}").unwrap();
+        }
         self.write_line(&format!("rv_save_hot_regs({args});"));
+        if self.mode.has_metered_abi() {
+            self.write_line("state->tracer->check_counter = check_counter;");
+        }
     }
 
     pub fn sync_regs_from_state(&mut self) {
@@ -265,5 +408,33 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
 
     fn write_line(&mut self, s: &str) {
         EmitContext::write_line(self, s)
+    }
+
+    fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
+        EmitContext::read_mem(self, base, offset, width, signed)
+    }
+
+    fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
+        EmitContext::write_mem(self, base, offset, val, width);
+    }
+
+    fn extern_call(&mut self, name: &str, args: &[&str]) {
+        EmitContext::extern_call(self, name, args);
+    }
+
+    fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+        EmitContext::extern_call_expr(self, ret_ty, name, args)
+    }
+
+    fn trace_chip(&mut self, chip_idx: u32, count_expr: &str) {
+        EmitContext::trace_chip(self, chip_idx, count_expr);
+    }
+
+    fn trace_mem_access(&mut self, addr: &str, addr_space: u32) {
+        EmitContext::trace_mem_access(self, addr, addr_space);
+    }
+
+    fn trace_mem_access_u32_range(&mut self, base_addr: &str, num_words: &str, addr_space: u32) {
+        EmitContext::trace_mem_access_u32_range(self, base_addr, num_words, addr_space);
     }
 }
