@@ -61,17 +61,15 @@ impl ExtInstr for Fp2ArithInstr {
         let op_name = self.op.c_name();
         let fp2_suffix = detect_known_field(&self.modulus).and_then(|f| f.fp2_c_suffix());
         if let Some(suffix) = fp2_suffix {
-            ctx.write_line(&format!(
-                "rvr_ext_fp2_{op_name}_{suffix}(state, {rd}, {rs1}, {rs2});",
-            ));
+            let name = format!("rvr_ext_fp2_{op_name}_{suffix}");
+            ctx.extern_call(&name, &["state", &rd, &rs1, &rs2]);
         } else {
             let mod_literal = format_c_byte_array(&self.modulus);
             ctx.write_line("{");
             ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
-            ctx.write_line(&format!(
-                "rvr_ext_fp2_{op_name}(state, {rd}, {rs1}, {rs2}, {}u, mod_);",
-                self.num_limbs
-            ));
+            let name = format!("rvr_ext_fp2_{op_name}");
+            let num_limbs = format!("{}u", self.num_limbs);
+            ctx.extern_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
             ctx.write_line("}");
         }
     }
@@ -103,10 +101,8 @@ impl ExtInstr for Fp2SetupInstr {
         let rd = ctx.read_reg(self.rd_reg);
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
-        ctx.write_line(&format!(
-            "rvr_ext_fp2_setup(state, {rd}, {rs1}, {rs2}, {}u);",
-            self.num_limbs
-        ));
+        let num_limbs = format!("{}u", self.num_limbs);
+        ctx.extern_call("rvr_ext_fp2_setup", &["state", &rd, &rs1, &rs2, &num_limbs]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
