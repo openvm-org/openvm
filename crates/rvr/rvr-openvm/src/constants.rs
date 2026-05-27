@@ -5,7 +5,23 @@
 //! buffer allocations — they must match byte-for-byte.
 
 use openvm_platform::memory::MEM_SIZE;
-use rvr_openvm_ext_ffi_common::{CHUNK, DEFAULT_PAGE_BITS, DEFAULT_SEGMENT_CHECK_INSNS};
+use openvm_rv32im_guest::MAX_HINT_BUFFER_WORDS;
+use rvr_openvm_ext_ffi_common::{CHUNK, DEFAULT_PAGE_BITS, DEFAULT_SEGMENT_CHECK_INSNS, WORD_SIZE};
+
+/// Worst-case AS_MEMORY pages a single instruction can touch.
+///
+/// Bound is set by `HINT_BUFFER`, which writes up to
+/// `MAX_HINT_BUFFER_WORDS * WORD_SIZE` contiguous bytes. One AS_MEMORY page
+/// covers `CHUNK * 2^PAGE_BITS` bytes. The `+1` covers worst-case
+/// misalignment of the range across page boundaries; the second `+1` is
+/// safety slack to keep parity with the prior hardcoded value under default
+/// `PAGE_BITS` in case an executor touches more pages than this is
+/// accounted for.
+pub const MAX_MEM_PAGES_PER_INSN: usize = {
+    let page_bytes = CHUNK * (1 << DEFAULT_PAGE_BITS);
+    let max_bytes = MAX_HINT_BUFFER_WORDS * WORD_SIZE;
+    max_bytes.div_ceil(page_bytes) + 2
+};
 
 /// Maximum AS_MEMORY page buffer entries per segment check interval.
 ///
@@ -45,6 +61,7 @@ static constexpr uint32_t TRACER_MEM_PAGE_BUF_CAP = {MEM_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_PV_PAGE_BUF_CAP = {PV_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_DEFERRAL_PAGE_BUF_CAP = {DEFERRAL_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_SEGMENT_CHECK_INSNS = {DEFAULT_SEGMENT_CHECK_INSNS};
+static constexpr uint32_t TRACER_MAX_MEM_PAGES_PER_INSN = {MAX_MEM_PAGES_PER_INSN};
 "
     )
 }

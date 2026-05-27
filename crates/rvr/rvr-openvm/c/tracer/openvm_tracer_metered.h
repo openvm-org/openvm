@@ -34,10 +34,9 @@ typedef struct Tracer {
 static constexpr uint32_t NO_CHIP = UINT32_MAX;
 static constexpr uint32_t NO_LAST_PAGE = UINT32_MAX;
 
-static constexpr uint32_t MAX_MEM_PAGES_PER_INSN = 10;
 static constexpr uint32_t MAX_PV_PAGES_PER_INSN = 1;
 _Static_assert(
-    TRACER_MEM_PAGE_BUF_CAP >= 2 * TRACER_SEGMENT_CHECK_INSNS * MAX_MEM_PAGES_PER_INSN,
+    TRACER_MEM_PAGE_BUF_CAP >= 2 * TRACER_SEGMENT_CHECK_INSNS * TRACER_MAX_MEM_PAGES_PER_INSN,
     "MEM_PAGE_BUF_CAP too small for worst-case pages per flush interval");
 _Static_assert(
     TRACER_PV_PAGE_BUF_CAP >= 2 * TRACER_SEGMENT_CHECK_INSNS * MAX_PV_PAGES_PER_INSN,
