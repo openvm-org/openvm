@@ -7,14 +7,39 @@
 pub trait ExtEmitCtx {
     /// Read a register with tracing. Returns a C expression for the value.
     fn read_reg(&mut self, idx: u8) -> String;
+
     /// Read a register without tracing (for phantom instructions).
     fn read_reg_raw(&mut self, idx: u8) -> String;
+
     /// Write a register with tracing.
     fn write_reg(&mut self, idx: u8, val: &str);
+
     /// Write a register without tracing (for phantom instructions).
     fn write_reg_raw(&mut self, idx: u8, val: &str);
+
     /// Append a line of C code (indented).
     fn write_line(&mut self, s: &str);
+
+    /// Read guest memory and return a C expression for the loaded value.
+    fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String;
+
+    /// Write guest memory.
+    fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8);
+
+    /// Emit an opaque C call that may update state observed by the tracer.
+    fn extern_call(&mut self, name: &str, args: &[&str]);
+
+    /// Emit an opaque C call that returns a value.
+    fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String;
+
+    /// Emit a chip-height update.
+    fn trace_chip(&mut self, chip_idx: u32, count_expr: &str);
+
+    /// Emit a single memory-page trace.
+    fn trace_mem_access(&mut self, addr: &str, addr_space: u32);
+
+    /// Emit a word-range memory-page trace.
+    fn trace_mem_access_u32_range(&mut self, base_addr: &str, num_words: &str, addr_space: u32);
 }
 
 /// Trait for extension IR nodes. Implemented by each extension's instruction types.
@@ -42,6 +67,15 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
     /// Default: returns `"ext"`.
     fn opname(&self) -> &str {
         "ext"
+    }
+
+    /// Whether this instruction may touch guest memory or otherwise need
+    /// metered page tracking.
+    ///
+    /// The conservative default is `true` because most opaque extension FFIs
+    /// read or write guest memory through `state`.
+    fn uses_page_tracking(&self) -> bool {
+        true
     }
 
     /// Clone into a new boxed trait object.

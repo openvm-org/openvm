@@ -27,10 +27,8 @@ impl ExtInstr for HintStoreWInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let ptr = ctx.read_reg(self.ptr_reg);
-        ctx.write_line(&format!(
-            "trace_mem_access(state, {ptr}, {RV32_MEMORY_AS}u);"
-        ));
-        ctx.write_line(&format!("openvm_hint_storew({ptr});"));
+        ctx.trace_mem_access(&ptr, RV32_MEMORY_AS);
+        ctx.extern_call("openvm_hint_storew", &[&ptr]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -59,14 +57,12 @@ impl ExtInstr for HintBufferInstr {
         // `(n - 1)` correction only when there is more than one row.
         let chip_idx = air_index_to_c(self.chip_idx);
         ctx.write_line(&format!("if ({n} > 1) {{"));
-        ctx.write_line(&format!("  trace_chip(state, {chip_idx}u, {n} - 1);"));
+        ctx.trace_chip(chip_idx, &format!("{n} - 1"));
         ctx.write_line("}");
         ctx.write_line(&format!("if ({n} > 0) {{"));
-        ctx.write_line(&format!(
-            "  trace_mem_access_u32_range(state, {ptr}, {n}, {RV32_MEMORY_AS}u);"
-        ));
+        ctx.trace_mem_access_u32_range(&ptr, &n, RV32_MEMORY_AS);
         ctx.write_line("}");
-        ctx.write_line(&format!("openvm_hint_buffer({ptr}, {n});"));
+        ctx.extern_call("openvm_hint_buffer", &[&ptr, &n]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -96,13 +92,9 @@ impl ExtInstr for RevealInstr {
         } else {
             format!("({ptr} + 0x{:08x}u)", self.offset)
         };
-        ctx.write_line(&format!(
-            "trace_mem_access(state, {addr}, {AS_PUBLIC_VALUES}u);"
-        ));
-        ctx.write_line(&format!(
-            "openvm_reveal({src}, {ptr}, 0x{:08x}u);",
-            self.offset
-        ));
+        ctx.trace_mem_access(&addr, AS_PUBLIC_VALUES);
+        let offset = format!("0x{:08x}u", self.offset);
+        ctx.extern_call("openvm_reveal", &[&src, &ptr, &offset]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -212,6 +204,47 @@ mod tests {
 
         fn write_line(&mut self, s: &str) {
             self.lines.push(s.to_string());
+        }
+
+        fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
+            let tmp = format!("tmp{}", self.lines.len());
+            self.write_line(&format!(
+                "uint32_t {tmp} = read_mem({base}, {offset}, {width}, {signed});"
+            ));
+            tmp
+        }
+
+        fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
+            self.write_line(&format!("write_mem({base}, {offset}, {val}, {width});"));
+        }
+
+        fn extern_call(&mut self, name: &str, args: &[&str]) {
+            self.write_line(&format!("{name}({});", args.join(", ")));
+        }
+
+        fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+            let tmp = format!("tmp{}", self.lines.len());
+            self.write_line(&format!("{ret_ty} {tmp} = {name}({});", args.join(", ")));
+            tmp
+        }
+
+        fn trace_chip(&mut self, chip_idx: u32, count_expr: &str) {
+            self.write_line(&format!("trace_chip(state, {chip_idx}u, {count_expr});"));
+        }
+
+        fn trace_mem_access(&mut self, addr: &str, addr_space: u32) {
+            self.write_line(&format!("trace_mem_access(state, {addr}, {addr_space}u);"));
+        }
+
+        fn trace_mem_access_u32_range(
+            &mut self,
+            base_addr: &str,
+            num_words: &str,
+            addr_space: u32,
+        ) {
+            self.write_line(&format!(
+                "trace_mem_access_u32_range(state, {base_addr}, {num_words}, {addr_space}u);"
+            ));
         }
     }
 

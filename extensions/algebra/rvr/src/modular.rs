@@ -78,17 +78,15 @@ impl ExtInstr for ModArithInstr {
         let op_name = self.op.c_name();
         if let Some(field) = detect_known_field(&self.modulus) {
             let suffix = field.c_suffix();
-            ctx.write_line(&format!(
-                "rvr_ext_mod_{op_name}_{suffix}(state, {rd}, {rs1}, {rs2});",
-            ));
+            let name = format!("rvr_ext_mod_{op_name}_{suffix}");
+            ctx.extern_call(&name, &["state", &rd, &rs1, &rs2]);
         } else {
             let mod_literal = format_c_byte_array(&self.modulus);
             ctx.write_line("{");
             ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
-            ctx.write_line(&format!(
-                "rvr_ext_mod_{op_name}(state, {rd}, {rs1}, {rs2}, {}u, mod_);",
-                self.num_limbs
-            ));
+            let name = format!("rvr_ext_mod_{op_name}");
+            let num_limbs = format!("{}u", self.num_limbs);
+            ctx.extern_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
             ctx.write_line("}");
         }
     }
@@ -122,21 +120,20 @@ impl ExtInstr for ModIsEqInstr {
         let rs2 = ctx.read_reg(self.rs2_reg);
         if let Some(field) = detect_known_field(&self.modulus) {
             let suffix = field.c_suffix();
-            ctx.write_reg(
-                self.rd_reg,
-                &format!("rvr_ext_mod_iseq_{suffix}(state, {rs1}, {rs2})"),
-            );
+            let name = format!("rvr_ext_mod_iseq_{suffix}");
+            let val = ctx.extern_call_expr("uint32_t", &name, &["state", &rs1, &rs2]);
+            ctx.write_reg(self.rd_reg, &val);
         } else {
             let mod_literal = format_c_byte_array(&self.modulus);
             ctx.write_line("{");
             ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
-            ctx.write_reg(
-                self.rd_reg,
-                &format!(
-                    "rvr_ext_mod_iseq(state, {rs1}, {rs2}, {}u, mod_)",
-                    self.num_limbs
-                ),
+            let num_limbs = format!("{}u", self.num_limbs);
+            let val = ctx.extern_call_expr(
+                "uint32_t",
+                "rvr_ext_mod_iseq",
+                &["state", &rs1, &rs2, &num_limbs, "mod_"],
             );
+            ctx.write_reg(self.rd_reg, &val);
             ctx.write_line("}");
         }
     }
@@ -168,10 +165,8 @@ impl ExtInstr for ModSetupInstr {
         let rd = ctx.read_reg(self.rd_reg);
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
-        ctx.write_line(&format!(
-            "rvr_ext_mod_setup(state, {rd}, {rs1}, {rs2}, {}u);",
-            self.num_limbs
-        ));
+        let num_limbs = format!("{}u", self.num_limbs);
+        ctx.extern_call("rvr_ext_mod_setup", &["state", &rd, &rs1, &rs2, &num_limbs]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -196,14 +191,16 @@ impl ExtInstr for HintNonQrInstr {
         "hint_nonqr"
     }
 
+    fn uses_page_tracking(&self) -> bool {
+        false
+    }
+
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let literal = format_c_byte_array(&self.non_qr_bytes);
         ctx.write_line("{");
         ctx.write_line(&format!("static const uint8_t nqr[] = {literal};"));
-        ctx.write_line(&format!(
-            "ext_hint_stream_set(nqr, {}u);",
-            self.non_qr_bytes.len()
-        ));
+        let len = format!("{}u", self.non_qr_bytes.len());
+        ctx.extern_call("ext_hint_stream_set", &["nqr", &len]);
         ctx.write_line("}");
     }
 
@@ -237,10 +234,11 @@ impl ExtInstr for HintSqrtInstr {
         ctx.write_line("{");
         ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
         ctx.write_line(&format!("static const uint8_t nqr[] = {nqr_literal};"));
-        ctx.write_line(&format!(
-            "rvr_ext_algebra_hint_sqrt(state, {rs1}, {}u, mod_, nqr);",
-            self.num_limbs
-        ));
+        let num_limbs = format!("{}u", self.num_limbs);
+        ctx.extern_call(
+            "rvr_ext_algebra_hint_sqrt",
+            &["state", &rs1, &num_limbs, "mod_", "nqr"],
+        );
         ctx.write_line("}");
     }
 
