@@ -8,8 +8,8 @@ use openvm_deferral_circuit::DeferralFn;
 use openvm_stark_backend::{codec::Encode, StarkEngine, SystemParams};
 use openvm_stark_sdk::{
     config::{
-        app_params_with_100_bits_security, internal_params_with_100_bits_security,
-        root_params_with_100_bits_security,
+        app_params_with_100_bits_security, hook_params_with_100_bits_security,
+        internal_params_with_100_bits_security,
     },
     utils::setup_tracing,
 };
@@ -86,7 +86,7 @@ fn make_deferral_prover(sdk: &Sdk, agg_params: &AggregationSystemParams) -> Defe
         0,
     );
     let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
-    let hook_params = root_params_with_100_bits_security();
+    let hook_params = hook_params_with_100_bits_security();
     let agg_config = AggregationConfig {
         params: agg_params.clone(),
     };
@@ -384,6 +384,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
         codec::{Decode, Encode},
         proof::Proof,
     };
+    use openvm_stark_sdk::config::root_params_with_100_bits_security;
     use openvm_static_verifier::{
         compute_dag_onion_commit,
         field::baby_bear::{BabyBearChip, BabyBearExtChip},
