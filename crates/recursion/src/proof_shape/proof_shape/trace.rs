@@ -120,6 +120,21 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 cols.height = F::from_usize(height);
                 cols.num_present = F::from_usize(num_present);
 
+                if sorted_idx < preflight.proof_shape.sorted_trace_vdata.len() {
+                    let (next_idx, next_vdata) =
+                        &preflight.proof_shape.sorted_trace_vdata[sorted_idx];
+                    let diff = vdata.log_height - next_vdata.log_height;
+                    cols.is_height_equal_to_next = F::from_bool(diff == 0);
+                    if diff == 0 {
+                        range_checker.add_count(*next_idx - *idx - 1);
+                    } else {
+                        pow_checker.add_range(diff - 1);
+                    }
+                } else if sorted_idx < num_airs {
+                    cols.is_height_equal_to_next = F::ZERO;
+                    pow_checker.add_range(log_height);
+                }
+
                 let lifted_height = height.max(1 << l_skip);
                 let num_interactions_per_row = child_vk.inner.per_air[*idx].num_interactions();
                 let num_interactions = num_interactions_per_row * lifted_height;
@@ -184,15 +199,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                     range_checker.add_count(carry);
                 }
 
-                if sorted_idx < preflight.proof_shape.sorted_trace_vdata.len() {
-                    let diff = vdata.log_height
-                        - preflight.proof_shape.sorted_trace_vdata[sorted_idx]
-                            .1
-                            .log_height;
-                    pow_checker.add_range(diff);
-                } else if sorted_idx < num_airs {
-                    pow_checker.add_range(log_height);
-                }
                 pow_checker.add_range(n.unsigned_abs());
                 pow_checker.add_pow(log_height);
             }
@@ -220,6 +226,14 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 cols.starting_cidx = F::from_usize(cidx);
                 cols.n_logup = F::from_usize(preflight.proof_shape.n_logup);
 
+                if sorted_idx < num_airs {
+                    cols.is_height_equal_to_next = F::ONE;
+                    let next_idx = (idx + 1..num_airs)
+                        .find(|next_idx| proof.trace_vdata[*next_idx].is_none())
+                        .unwrap();
+                    range_checker.add_count(next_idx - idx - 1);
+                }
+
                 cols.total_interactions_limbs = total_interactions_f;
                 cols.n_max = F::from_usize(preflight.proof_shape.n_max);
                 cols.num_air_id_lookups = F::from_usize(bc_air_shape_lookups[idx]);
@@ -246,10 +260,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 range_checker.add_count_mult(0, (2 * NUM_LIMBS - 1) as u32);
                 for limb in total_interactions_usize {
                     range_checker.add_count(limb);
-                }
-
-                if sorted_idx < num_airs {
-                    pow_checker.add_range(0);
                 }
             }
 

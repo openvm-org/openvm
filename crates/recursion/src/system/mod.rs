@@ -544,6 +544,9 @@ impl<'a> TraceModuleRef<'a> {
 
 /// The recursive verifier sub-circuit consists of multiple chips, grouped into **modules**.
 ///
+/// This circuit supports child verifying keys with at most 256 AIRs. `ProofShapeAir`
+/// range-checks AIR-index gaps with an 8-bit lookup when enforcing sorted proof-shape rows.
+///
 /// This struct is stateful.
 pub struct VerifierSubCircuit<const MAX_NUM_PROOFS: usize> {
     bus_inventory: BusInventory,
