@@ -73,6 +73,8 @@ pub struct MeteredTracerData {
     pub mem_page_buf: *mut u32,
     pub pv_page_buf: *mut u32,
     pub deferral_page_buf: *mut u32,
+    /// Periodic-check callback. Always initialized; generated C calls it
+    /// unconditionally to keep the hot metered path branch-free.
     pub on_check: unsafe extern "C" fn(*mut MeteredTracerData) -> u8,
     pub seg_state: *mut c_void,
     pub mem_page_buf_len: u32,

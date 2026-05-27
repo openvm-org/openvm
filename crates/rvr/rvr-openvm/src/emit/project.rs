@@ -750,6 +750,11 @@ impl CProject {
     }
 
     fn emit_instret_suspend_check(&self, out: &mut String, pc: u32, insn_count: u32) {
+        debug_assert_ne!(
+            self.tracer_mode,
+            TracerMode::Metered,
+            "metered instret-limit suspension is rejected in compile options"
+        );
         writeln!(
             out,
             "    if (unlikely(should_suspend(state, 0x{pc:08x}u, {insn_count}u, suspend_signal))) {{"

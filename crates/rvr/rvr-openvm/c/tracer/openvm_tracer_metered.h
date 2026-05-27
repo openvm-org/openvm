@@ -34,6 +34,8 @@ typedef struct Tracer {
   uint32_t* mem_page_buf;
   uint32_t* pv_page_buf;
   uint32_t* deferral_page_buf;
+  /* Always initialized by Rust; called unconditionally on the cold checkpoint
+   * path to avoid a hot-path null check. */
   uint8_t (*on_check)(struct Tracer*);
   void* seg_state;
   uint32_t mem_page_buf_len;
