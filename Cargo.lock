@@ -8979,6 +8979,10 @@ dependencies = [
 [[package]]
 name = "rvr-openvm-ext-ffi-common"
 version = "2.0.0-beta.2"
+dependencies = [
+ "openvm-instructions",
+ "openvm-platform",
+]
 
 [[package]]
 name = "rvr-openvm-ext-keccak"
