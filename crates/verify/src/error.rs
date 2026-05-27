@@ -49,8 +49,8 @@ pub enum VerifyStarkError {
     Other(#[from] eyre::Error),
     #[error("Deferral Merkle proof length mismatch: expected {expected}, actual {actual}")]
     DeferralMerkleProofLengthMismatch { expected: usize, actual: usize },
-    #[error("Deferral depth exceeds overall memory height: depth {depth}, overall_height {overall_height}")]
-    DeferralDepthTooLarge { depth: usize, overall_height: usize },
+    #[error("Deferral depth exceeds address space height: depth {depth}, address_height {address_height}")]
+    DeferralDepthTooLarge { depth: usize, address_height: usize },
     #[error("Deferral Merkle proofs differ inside DEFERRAL_AS at depth {depth}: initial {initial:?}, final {final_:?}")]
     DeferralMerkleProofSiblingMismatch {
         depth: usize,

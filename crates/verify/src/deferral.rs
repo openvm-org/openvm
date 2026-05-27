@@ -64,10 +64,10 @@ impl DeferralMerkleProofs<F> {
             });
         }
 
-        if depth > overall_height {
+        if depth > memory_dimensions.address_height {
             return Err(VerifyStarkError::DeferralDepthTooLarge {
                 depth,
-                overall_height,
+                address_height: memory_dimensions.address_height,
             });
         }
 
