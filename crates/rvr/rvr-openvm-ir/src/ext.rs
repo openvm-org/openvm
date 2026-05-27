@@ -69,12 +69,12 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
         "ext"
     }
 
-    /// Whether this instruction may touch guest memory or otherwise need
-    /// metered page tracking.
+    /// Whether this instruction may access main guest memory (`AS_MEMORY`).
     ///
-    /// The conservative default is `true` because most opaque extension FFIs
-    /// read or write guest memory through `state`.
-    fn uses_page_tracking(&self) -> bool {
+    /// Codegen uses this to decide whether a metered block needs AS_MEMORY page
+    /// tracking. The conservative default is `true` because most opaque
+    /// extension FFIs read or write main memory through `state`.
+    fn accesses_memory(&self) -> bool {
         true
     }
 

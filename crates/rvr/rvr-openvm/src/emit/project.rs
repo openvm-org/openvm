@@ -321,7 +321,7 @@ impl CProject {
         match self.tracer_mode {
             TracerMode::Pure => EmitMode::Direct,
             TracerMode::Metered => EmitMode::Metered {
-                trace_memory_pages: block_uses_page_tracking(block),
+                trace_memory_pages: block_accesses_memory(block),
             },
             TracerMode::MeteredCost => EmitMode::Direct,
         }
@@ -980,25 +980,25 @@ impl CProject {
     }
 }
 
-fn instr_uses_page_tracking(instr: &Instr) -> bool {
+fn instr_accesses_memory(instr: &Instr) -> bool {
     match instr {
         Instr::Load { .. } | Instr::Store { .. } => true,
-        Instr::Ext(ext) => ext.uses_page_tracking(),
+        Instr::Ext(ext) => ext.accesses_memory(),
         _ => false,
     }
 }
 
-fn terminator_uses_page_tracking(terminator: &Terminator) -> bool {
+fn terminator_accesses_memory(terminator: &Terminator) -> bool {
     match terminator {
-        Terminator::Extension(ext) => ext.uses_page_tracking(),
+        Terminator::Extension(ext) => ext.accesses_memory(),
         _ => false,
     }
 }
 
-fn block_uses_page_tracking(block: &Block) -> bool {
+fn block_accesses_memory(block: &Block) -> bool {
     block
         .instructions
         .iter()
-        .any(|instr_at| instr_uses_page_tracking(&instr_at.instr))
-        || terminator_uses_page_tracking(&block.terminator)
+        .any(|instr_at| instr_accesses_memory(&instr_at.instr))
+        || terminator_accesses_memory(&block.terminator)
 }

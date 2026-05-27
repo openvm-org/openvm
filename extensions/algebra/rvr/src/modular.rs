@@ -191,7 +191,7 @@ impl ExtInstr for HintNonQrInstr {
         "hint_nonqr"
     }
 
-    fn uses_page_tracking(&self) -> bool {
+    fn accesses_memory(&self) -> bool {
         false
     }
 

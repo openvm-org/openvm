@@ -84,6 +84,10 @@ impl ExtInstr for RevealInstr {
         "reveal"
     }
 
+    fn accesses_memory(&self) -> bool {
+        false
+    }
+
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let src = ctx.read_reg(self.src_reg);
         let ptr = ctx.read_reg(self.ptr_reg);
