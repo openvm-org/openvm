@@ -18,7 +18,7 @@ pub fn read_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
     let mut result = [0u8; INT256_NUM_LIMBS];
     for i in 0..INT256_NUM_BLOCKS {
         let block: [u8; MEMORY_BLOCK_BYTES] =
-            exec_state.vm_read(addr_space, ptr + (i * MEMORY_BLOCK_BYTES) as u32);
+            exec_state.vm_byte_read(addr_space, ptr + (i * MEMORY_BLOCK_BYTES) as u32);
         result[i * MEMORY_BLOCK_BYTES..(i + 1) * MEMORY_BLOCK_BYTES].copy_from_slice(&block);
     }
     result
@@ -37,7 +37,7 @@ pub fn write_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
             [i * MEMORY_BLOCK_BYTES..(i + 1) * MEMORY_BLOCK_BYTES]
             .try_into()
             .unwrap();
-        exec_state.vm_write(addr_space, ptr + (i * MEMORY_BLOCK_BYTES) as u32, &block);
+        exec_state.vm_byte_write(addr_space, ptr + (i * MEMORY_BLOCK_BYTES) as u32, &block);
     }
 }
 

@@ -109,11 +109,11 @@ unsafe fn execute_e12_impl<
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
     let dst: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32);
+        exec_state.vm_byte_read(RV64_REGISTER_AS, pre_compute.a as u32);
     let state: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32);
+        exec_state.vm_byte_read(RV64_REGISTER_AS, pre_compute.b as u32);
     let input: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32);
+        exec_state.vm_byte_read(RV64_REGISTER_AS, pre_compute.c as u32);
     // Pointers are 32-bit-addressable; upper 4 bytes of each register must be zero.
     let dst_u32 = rv64_bytes_to_u32(dst);
     let state_u32 = rv64_bytes_to_u32(state);
@@ -122,14 +122,14 @@ unsafe fn execute_e12_impl<
     // state is in 4-byte little-endian words
     let mut state_data = Vec::with_capacity(C::STATE_BYTES);
     for i in 0..C::STATE_READS {
-        state_data.extend_from_slice(&exec_state.vm_read::<u8, SHA2_READ_SIZE>(
+        state_data.extend_from_slice(&exec_state.vm_byte_read::<SHA2_READ_SIZE>(
             RV64_MEMORY_AS,
             state_u32 + (i * SHA2_READ_SIZE) as u32,
         ));
     }
     let mut input_block = Vec::with_capacity(C::BLOCK_BYTES);
     for i in 0..C::BLOCK_READS {
-        input_block.extend_from_slice(&exec_state.vm_read::<u8, SHA2_READ_SIZE>(
+        input_block.extend_from_slice(&exec_state.vm_byte_read::<SHA2_READ_SIZE>(
             RV64_MEMORY_AS,
             input_u32 + (i * SHA2_READ_SIZE) as u32,
         ));
@@ -138,7 +138,7 @@ unsafe fn execute_e12_impl<
     C::compress(&mut state_data, &input_block);
 
     for i in 0..C::STATE_WRITES {
-        exec_state.vm_write::<u8, SHA2_WRITE_SIZE>(
+        exec_state.vm_byte_write::<SHA2_WRITE_SIZE>(
             RV64_MEMORY_AS,
             dst_u32 + (i * SHA2_WRITE_SIZE) as u32,
             &state_data[i * SHA2_WRITE_SIZE..(i + 1) * SHA2_WRITE_SIZE]

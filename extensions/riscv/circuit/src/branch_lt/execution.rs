@@ -153,8 +153,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLe
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let mut pc = exec_state.pc();
-    let rs1 = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.a as u32);
-    let rs2 = exec_state.vm_read::<u8, 8>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = exec_state.vm_byte_read::<8>(RV64_REGISTER_AS, pre_compute.a as u32);
+    let rs2 = exec_state.vm_byte_read::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
     let jmp = <OP as BranchLessThanOp>::compute(rs1, rs2);
     if jmp {
         pc = (pc as isize + pre_compute.imm) as u32;

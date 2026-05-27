@@ -164,28 +164,53 @@ impl<F, CTX> VmExecState<F, GuestMemory, CTX>
 where
     CTX: ExecutionCtxTrait,
 {
-    /// Runtime read operation for a block of memory
+    /// Runtime byte read: `byte_ptr` is a raw byte offset into the AS's
+    /// linear storage. Returns `N` bytes.
     #[inline(always)]
-    pub fn vm_read<T: Copy + Debug, const BLOCK_SIZE: usize>(
+    pub fn vm_byte_read<const N: usize>(
+        &mut self,
+        addr_space: u32,
+        byte_ptr: u32,
+    ) -> [u8; N] {
+        self.ctx
+            .on_memory_operation(addr_space, byte_ptr, N as u32);
+        self.host_byte_read(addr_space, byte_ptr)
+    }
+
+    /// Runtime byte write: `byte_ptr` is a raw byte offset.
+    #[inline(always)]
+    pub fn vm_byte_write<const N: usize>(
+        &mut self,
+        addr_space: u32,
+        byte_ptr: u32,
+        data: &[u8; N],
+    ) {
+        self.ctx
+            .on_memory_operation(addr_space, byte_ptr, N as u32);
+        self.host_byte_write(addr_space, byte_ptr, data)
+    }
+
+    /// Runtime cell read: `ptr` is an AS-native cell index.
+    /// `T` must match the AS cell type (e.g. `F` for `DEFERRAL_AS`).
+    #[inline(always)]
+    pub fn vm_read<T: Copy + Debug, const N: usize>(
         &mut self,
         addr_space: u32,
         ptr: u32,
-    ) -> [T; BLOCK_SIZE] {
-        self.ctx
-            .on_memory_operation(addr_space, ptr, BLOCK_SIZE as u32);
+    ) -> [T; N] {
+        self.ctx.on_memory_operation(addr_space, ptr, N as u32);
         self.host_read(addr_space, ptr)
     }
 
-    /// Runtime write operation for a block of memory
+    /// Runtime cell write: `ptr` is an AS-native cell index.
     #[inline(always)]
-    pub fn vm_write<T: Copy + Debug, const BLOCK_SIZE: usize>(
+    pub fn vm_write<T: Copy + Debug, const N: usize>(
         &mut self,
         addr_space: u32,
         ptr: u32,
-        data: &[T; BLOCK_SIZE],
+        data: &[T; N],
     ) {
-        self.ctx
-            .on_memory_operation(addr_space, ptr, BLOCK_SIZE as u32);
+        self.ctx.on_memory_operation(addr_space, ptr, N as u32);
         self.host_write(addr_space, ptr, data)
     }
 
@@ -193,54 +218,80 @@ where
     pub fn vm_read_slice<T: Copy + Debug>(
         &mut self,
         addr_space: u32,
-        cell_idx: u32,
+        ptr: u32,
         len: usize,
     ) -> &[T] {
-        self.ctx
-            .on_memory_operation(addr_space, cell_idx, len as u32);
-        self.host_read_slice(addr_space, cell_idx, len)
+        self.ctx.on_memory_operation(addr_space, ptr, len as u32);
+        self.host_read_slice(addr_space, ptr, len)
     }
 
     #[inline(always)]
-    pub fn host_read<T: Copy + Debug, const BLOCK_SIZE: usize>(
+    pub fn host_byte_read<const N: usize>(
         &self,
         addr_space: u32,
-        ptr: u32,
-    ) -> [T; BLOCK_SIZE] {
-        if size_of::<T>() == 1 {
-            // SAFETY: byte-sized VM operands address raw storage bytes.
-            unsafe {
-                self.memory
-                    .memory
-                    .get_memory()
-                    .get_unchecked(addr_space as usize)
-                    .read(ptr as usize)
-            }
-        } else {
-            // SAFETY: wider VM operands use AS-native cell indices.
-            unsafe { self.memory.read(addr_space, ptr) }
+        byte_ptr: u32,
+    ) -> [u8; N] {
+        // SAFETY: caller guarantees the byte range is in bounds.
+        unsafe {
+            self.memory
+                .memory
+                .get_memory()
+                .get_unchecked(addr_space as usize)
+                .read(byte_ptr as usize)
         }
     }
 
     #[inline(always)]
-    pub fn host_write<T: Copy + Debug, const BLOCK_SIZE: usize>(
+    pub fn host_byte_write<const N: usize>(
+        &mut self,
+        addr_space: u32,
+        byte_ptr: u32,
+        data: &[u8; N],
+    ) {
+        // SAFETY: caller guarantees the byte range is in bounds.
+        unsafe {
+            self.memory
+                .memory
+                .get_memory_mut()
+                .get_unchecked_mut(addr_space as usize)
+                .write(byte_ptr as usize, *data);
+        }
+    }
+
+    /// Cell read: `ptr` is a cell index; byte offset is `ptr * size_of::<T>()`.
+    #[inline(always)]
+    pub fn host_read<T: Copy + Debug, const N: usize>(
+        &self,
+        addr_space: u32,
+        ptr: u32,
+    ) -> [T; N] {
+        // SAFETY: caller guarantees T matches the AS layout and the range is
+        // in bounds.
+        unsafe {
+            self.memory
+                .memory
+                .get_memory()
+                .get_unchecked(addr_space as usize)
+                .read((ptr as usize) * size_of::<T>())
+        }
+    }
+
+    /// Cell write: `ptr` is a cell index; byte offset is `ptr * size_of::<T>()`.
+    #[inline(always)]
+    pub fn host_write<T: Copy + Debug, const N: usize>(
         &mut self,
         addr_space: u32,
         ptr: u32,
-        data: &[T; BLOCK_SIZE],
+        data: &[T; N],
     ) {
-        if size_of::<T>() == 1 {
-            // SAFETY: byte-sized VM operands address raw storage bytes.
-            unsafe {
-                self.memory
-                    .memory
-                    .get_memory_mut()
-                    .get_unchecked_mut(addr_space as usize)
-                    .write(ptr as usize, *data);
-            }
-        } else {
-            // SAFETY: wider VM operands use AS-native cell indices.
-            unsafe { self.memory.write(addr_space, ptr, *data) }
+        // SAFETY: caller guarantees T matches the AS layout and the range is
+        // in bounds.
+        unsafe {
+            self.memory
+                .memory
+                .get_memory_mut()
+                .get_unchecked_mut(addr_space as usize)
+                .write((ptr as usize) * size_of::<T>(), *data);
         }
     }
 
@@ -248,13 +299,13 @@ where
     pub fn host_read_slice<T: Copy + Debug>(
         &self,
         addr_space: u32,
-        cell_idx: u32,
+        ptr: u32,
         len: usize,
     ) -> &[T] {
         // SAFETY:
         // - T must match the AS cell type.
         // - panics if the slice is out of bounds
-        unsafe { self.memory.get_slice(addr_space, cell_idx, len) }
+        unsafe { self.memory.get_slice(addr_space, ptr, len) }
     }
 
     #[inline(always)]

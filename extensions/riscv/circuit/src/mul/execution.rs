@@ -221,13 +221,13 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32);
+        exec_state.vm_byte_read(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32);
+        exec_state.vm_byte_read(RV64_REGISTER_AS, pre_compute.c as u32);
     let rs1 = u64::from_le_bytes(rs1);
     let rs2 = u64::from_le_bytes(rs2);
     let rd = rs1.wrapping_mul(rs2);
-    exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &rd.to_le_bytes());
+    exec_state.vm_byte_write(RV64_REGISTER_AS, pre_compute.a as u32, &rd.to_le_bytes());
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

@@ -234,13 +234,13 @@ unsafe fn execute_e12_impl<
     // Read register values
     let rs_vals = pre_compute
         .rs_addrs
-        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
+        .map(|addr| rv64_bytes_to_u32(exec_state.vm_byte_read(RV64_REGISTER_AS, addr as u32)));
 
     // Read memory values for the point
     let read_data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = {
         let address = rs_vals[0];
         debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
-        from_fn(|i| exec_state.vm_read(RV64_MEMORY_AS, address + (i * MEMORY_BLOCK_BYTES) as u32))
+        from_fn(|i| exec_state.vm_byte_read(RV64_MEMORY_AS, address + (i * MEMORY_BLOCK_BYTES) as u32))
     };
 
     if IS_SETUP {
@@ -278,12 +278,12 @@ unsafe fn execute_e12_impl<
         ec_double::<CURVE_TYPE, BLOCKS>(read_data)
     };
 
-    let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
+    let rd_val = rv64_bytes_to_u32(exec_state.vm_byte_read(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     // Write output data to memory
     for (i, block) in output_data.into_iter().enumerate() {
-        exec_state.vm_write(
+        exec_state.vm_byte_write(
             RV64_MEMORY_AS,
             rd_val + (i * MEMORY_BLOCK_BYTES) as u32,
             &block,
