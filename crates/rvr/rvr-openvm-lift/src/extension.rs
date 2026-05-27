@@ -40,8 +40,9 @@ pub enum TraceChipIndex {
 }
 
 /// Lower an extension's `Option<AirIndex>` to the `u32` chip index baked into
-/// generated C source. `None` (pure mode) becomes `u32::MAX` (the `NO_CHIP`
-/// sentinel on the C side, where `trace_chip` is a no-op for that value).
+/// generated C source. `None` is expected only in pure mode, where tracing is a
+/// no-op. Metered modes must resolve real chip indices before calling
+/// chip-tracing helpers.
 #[inline]
 pub fn air_index_to_c(idx: Option<AirIndex>) -> u32 {
     idx.map_or(u32::MAX, AirIndex::as_u32)

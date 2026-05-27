@@ -141,7 +141,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u32, tc: &T
             };
             ctx.write_line(&format!("state->pc = {next_pc};"));
             ctx.write_line(&format!(
-                "[[clang::musttail]] return dispatch_table[dispatch_index({next_pc})]({args});"
+                "[[clang::musttail]] return dispatch_table[rv_dispatch_index({next_pc})]({args});"
             ));
         }
         Terminator::Branch {
@@ -157,7 +157,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u32, tc: &T
                 format!("[[clang::musttail]] return block_0x{target:08x}({args});")
             } else {
                 format!(
-                    "[[clang::musttail]] return dispatch_table[dispatch_index({})]({args});",
+                    "[[clang::musttail]] return dispatch_table[rv_dispatch_index({})]({args});",
                     hex_u32(*target)
                 )
             };
@@ -168,17 +168,19 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u32, tc: &T
         }
         Terminator::Exit { code } => {
             ctx.sync_regs_to_state();
-            ctx.write_line(&format!("state->pc = {};", hex_u32(pc)));
-            ctx.write_line("state->has_exited = OPENVM_EXEC_TERMINATED;");
-            ctx.write_line(&format!("state->exit_code = {code};"));
+            ctx.write_line(&format!(
+                "rv_set_status_at(state, {}, OPENVM_EXEC_TERMINATED, {code});",
+                hex_u32(pc)
+            ));
             ctx.write_line("return;");
         }
         Terminator::Trap { message } => {
             let escaped = message.replace('\\', "\\\\").replace('"', "\\\"");
             ctx.sync_regs_to_state();
-            ctx.write_line(&format!("state->pc = {};", hex_u32(pc)));
-            ctx.write_line("state->has_exited = OPENVM_EXEC_TRAPPED;");
-            ctx.write_line("state->exit_code = 0;");
+            ctx.write_line(&format!(
+                "rv_set_status_at(state, {}, OPENVM_EXEC_TRAPPED, 0);",
+                hex_u32(pc)
+            ));
             ctx.write_line(&format!("/* TRAP: {escaped} */"));
             ctx.write_line("return;");
         }
@@ -188,7 +190,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u32, tc: &T
                     format!("[[clang::musttail]] return block_0x{target:08x}({args});")
                 } else {
                     format!(
-                        "[[clang::musttail]] return dispatch_table[dispatch_index({})]({args});",
+                        "[[clang::musttail]] return dispatch_table[rv_dispatch_index({})]({args});",
                         hex_u32(target)
                     )
                 }
@@ -212,7 +214,7 @@ fn emit_tail_call(
         ));
     } else {
         ctx.write_line(&format!(
-            "[[clang::musttail]] return dispatch_table[dispatch_index({})]({args});",
+            "[[clang::musttail]] return dispatch_table[rv_dispatch_index({})]({args});",
             hex_u32(target)
         ));
     }

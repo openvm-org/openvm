@@ -41,9 +41,9 @@ impl ExtInstr for Sha256Instr {
         let inp = ctx.read_reg(self.input_ptr_reg);
         let main = air_index_to_c(self.main_chip_idx);
         let block = air_index_to_c(self.block_hasher_chip_idx);
-        ctx.write_line(&format!(
-            "rvr_ext_sha256(state, {dst}, {st}, {inp}, {main}u, {block}u);"
-        ));
+        let main = format!("{main}u");
+        let block = format!("{block}u");
+        ctx.extern_call("rvr_ext_sha256", &["state", &dst, &st, &inp, &main, &block]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -84,9 +84,9 @@ impl ExtInstr for Sha512Instr {
         let inp = ctx.read_reg(self.input_ptr_reg);
         let main = air_index_to_c(self.main_chip_idx);
         let block = air_index_to_c(self.block_hasher_chip_idx);
-        ctx.write_line(&format!(
-            "rvr_ext_sha512(state, {dst}, {st}, {inp}, {main}u, {block}u);"
-        ));
+        let main = format!("{main}u");
+        let block = format!("{block}u");
+        ctx.extern_call("rvr_ext_sha512", &["state", &dst, &st, &inp, &main, &block]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
