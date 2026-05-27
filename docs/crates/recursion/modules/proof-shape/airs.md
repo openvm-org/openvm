@@ -45,6 +45,7 @@ graph LR
     PSA -- "send" --> NLB
     PSA -- "send" --> E3SB
     PSA -- "send" --> NPVB
+    PSA -- "lookup_key" --> RCB
     PSA -- "lookup_key" --> POWB
     PSA -- "send" --> CCBUS
     PSA -- "send" --> PHB
@@ -64,7 +65,7 @@ graph LR
 
 ### Executive Summary
 
-ProofShapeAir is the most complex AIR in the recursion circuit. It iterates over each child proof's AIRs (sorted by descending log_height) and establishes the lookup tables that the rest of the circuit uses. For each AIR, it publishes shape properties (air_id, num_interactions, need_rot), hyperdimensional parameters, lifted heights, and commitments. On the summary row (the last row for each proof), it validates that total interactions stay within bounds and sends module-level messages to kick off GKR and batch constraint verification.
+ProofShapeAir is the most complex AIR in the recursion circuit. It iterates over each child proof's AIRs sorted by descending height and then AIR index, and establishes the lookup tables that the rest of the circuit uses. For each AIR, it publishes shape properties (air_id, num_interactions, need_rot), hyperdimensional parameters, lifted heights, and commitments. On the summary row (the last row for each proof), it validates that total interactions stay within bounds and sends module-level messages to kick off GKR and batch constraint verification.
 
 ### Public Values
 
@@ -77,30 +78,34 @@ None.
 3. **Hyperdimensional parameters (HyperdimBus — provides):** Provides `(sort_idx, n_abs, n_sign_bit)` for each child AIR.
 4. **Lifted heights (LiftedHeightsBus — provides):** Provides `(sort_idx, part_idx, commit_idx, hypercube_dim, lifted_height, log_lifted_height)` for each AIR partition.
 5. **Commitments (CommitmentsBus — provides):** Reads commitments from the transcript (TranscriptBus) and provides `(major_idx, minor_idx, commitment)` for each commitment.
-6. **Interaction bound (RangeCheckerBus — lookup):** Enforces `total_interactions < max_interaction_count` via range checks.
-7. **Height verification (PowerCheckerBus — lookup):** Verifies `height = 2^log_height` for each AIR via power-of-two lookup.
-8. **Module handoffs:** Sends `(tidx, n_logup, n_max, is_n_max_greater)` on GkrModuleBus, `(num_present_airs)` on FractionFolderInputBus, `(n_max)` on ExpressionClaimNMaxBus, `(n_logup, n_max)` on EqNsNLogupMaxBus, and `(air_idx, n_lift)` on NLiftBus.
-9. **Eq3b shape (Eq3bShapeBus — sends):** Sends `(sort_idx, n_lift, n_logup, num_interactions)` for each present AIR, providing shape parameters needed by Eq3bAir.
-10. **Cached commits (CachedCommitBus — sends):** Sends cached commitment data for downstream verifier AIRs, currently including RootVerifierPvsAir and DeferredVerifyPvsAir.
-11. **VK pre-hash (PreHashBus — sends):** Sends the child VK pre-hash for downstream verifier AIRs, currently including RootVerifierPvsAir and DeferredVerifyPvsAir.
-12. **Public values coordination (NumPublicValuesBus — sends):** Sends per-AIR public value counts to PublicValuesAir.
-13. **Transcript (TranscriptBus — receives):** Receives commitment observations from the transcript.
+6. **Proof-shape ordering (RangeCheckerBus — lookup):** Enforces descending height across adjacent rows and increasing AIR index for equal-height rows.
+7. **Interaction bound (RangeCheckerBus — lookup):** Enforces `total_interactions < max_interaction_count` via range checks.
+8. **Height verification (PowerCheckerBus — lookup):** Verifies `height = 2^log_height` for each AIR via power-of-two lookup.
+9. **Module handoffs:** Sends `(tidx, n_logup, n_max, is_n_max_greater)` on GkrModuleBus, `(num_present_airs)` on FractionFolderInputBus, `(n_max)` on ExpressionClaimNMaxBus, `(n_logup, n_max)` on EqNsNLogupMaxBus, and `(air_idx, n_lift)` on NLiftBus.
+10. **Eq3b shape (Eq3bShapeBus — sends):** Sends `(sort_idx, n_lift, n_logup, num_interactions)` for each present AIR, providing shape parameters needed by Eq3bAir.
+11. **Cached commits (CachedCommitBus — sends):** Sends cached commitment data for downstream verifier AIRs, currently including RootVerifierPvsAir and DeferredVerifyPvsAir.
+12. **VK pre-hash (PreHashBus — sends):** Sends the child VK pre-hash for downstream verifier AIRs, currently including RootVerifierPvsAir and DeferredVerifyPvsAir.
+13. **Public values coordination (NumPublicValuesBus — sends):** Sends per-AIR public value counts to PublicValuesAir.
+14. **Transcript (TranscriptBus — receives):** Receives commitment observations from the transcript.
 
 ### Walkthrough
 
-For a child proof with 2 AIRs (air_id=0 at log_height=10, air_id=1 at log_height=8):
+For a child proof with 3 AIRs (`air_id=0` at `log_height=10`, `air_id=1` at
+`log_height=10`, `air_id=2` absent):
 
 ```
-Row | proof_idx | is_first | is_last | sorted_idx | air_id | log_height | is_present | n_abs | n_sign
-----|-----------|----------|---------|------------|--------|------------|------------|-------|-------
- 0  |     0     |    1     |    0    |     0      |   0    |     10     |     1      |   2   |   0
- 1  |     0     |    0     |    0    |     1      |   1    |      8     |     1      |   0   |   0
- 2  |     0     |    0     |    1    |     -      |   -    |      -     |     0      |   -   |   -
+Row | proof_idx | is_first | is_last | sorted_idx | air_id | log_height | height | is_present | is_height_equal_to_next | n_abs | n_sign
+----|-----------|----------|---------|------------|--------|------------|--------|------------|-------------------------|-------|-------
+ 0  |     0     |    1     |    0    |     0      |   0    |     10     |  1024  |     1      |            1            |   2   |   0
+ 1  |     0     |    0     |    0    |     1      |   1    |     10     |  1024  |     1      |            0            |   2   |   0
+ 2  |     0     |    0     |    0    |     2      |   2    |      0     |    0   |     0      |            0            |   0   |   0
+ 3  |     0     |    0     |    1    |     -      |   -    |      -     |    -   |     0      |            0            |   -   |   -
 ```
 
-- **Row 0:** First AIR (highest log_height). Publishes shape properties and hyperdim params. `n_abs = |10 - 8| = 2` (assuming l_skip=8).
-- **Row 1:** Second AIR. `n_abs = |8 - 8| = 0`.
-- **Row 2 (summary):** Validates total interaction count. Sends GkrModuleBus message with accumulated `n_logup` and `n_max`. Sends FractionFolderInputBus with `num_present_airs=2`. Also sends Eq3bShapeBus and EqNsNLogupMaxBus messages.
+- **Row 0:** First present AIR. It has the same height as row 1, so `is_height_equal_to_next=1` and the AIR-index gap `1 - 0 - 1 = 0` is range-checked.
+- **Row 1:** Second present AIR. The next row is absent, so the effective rank decreases from `10 + 1` to `0`; `is_height_equal_to_next=0`.
+- **Row 2:** Absent AIR. It has `log_height=0` and `height=0`.
+- **Row 3 (summary):** Validates total interaction count. Sends GkrModuleBus message with accumulated `n_logup` and `n_max`. Sends FractionFolderInputBus with `num_present_airs=2`. Also sends Eq3bShapeBus and EqNsNLogupMaxBus messages.
 
 AIR selection uses an `idx_flags` encoder (flag columns that decode to the AIR index). The `need_rot` property is loaded from air_data metadata. The `n_logup` value is tracked as an explicit column on each row.
 

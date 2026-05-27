@@ -40,29 +40,18 @@ VK pre-hash: sent on `PreHashBus` when continuations are enabled (see
 
 The reference verifier sorts all `num_airs` AIRs by the key
 `(is_none, Reverse(log_height), air_id)`. ProofShapeAir has one row per AIR (`num_airs`
-rows total), with `sort_idx` ranging from 0 to `num_airs - 1`.
+rows total), with `sort_idx` ranging from 0 to `num_airs - 1`. The recursion circuit
+supports child verifying keys with at most 256 AIRs.
 
 ProofShapeAir constrains the sort order via:
-- **Non-increasing heights:** `log_height[i] - log_height[i+1] >= 0` (range-checked via
-  `RangeCheckerBus`).
+- **Descending heights:** when adjacent rows do not have equal height, a compact rank check
+  enforces that the local row has greater height. The rank is `log_height + is_present`, so
+  absent AIRs are below present height-1 AIRs.
+- **AIR-index tiebreaker:** when adjacent rows have equal height, `air_id[i+1] - air_id[i] - 1`
+  is range-checked as an 8-bit value, enforcing `air_id[i] < air_id[i+1]`.
 - **Absent AIRs last:** `log_height = 0` and `height = 0` when `is_present = 0`.
 - **Permutation:** a permutation bus enforces that the `sort_idx → air_idx` mapping is a
   bijection (every AIR appears exactly once).
-
-The circuit does **not** constrain the tiebreaker within a height tie — the ordering of
-AIRs with equal `log_height` is a prover choice. This is sound because:
-
-- **Internal consistency.** Every downstream use of `sort_idx` receives both structural
-  metadata (air_idx, num_interactions, need_rot via `AirShapeBus`) and proof data (column
-  openings, heights via `LiftedHeightsBus`, etc.) through the same buses, keyed by the same
-  `sort_idx`. Reordering within a tie relabels all data consistently.
-
-- **Verifier invariance.** The reference verifier's algorithm only relies on trace heights
-  being in non-increasing order — it does not depend on which specific AIR occupies which
-  sort position within a height tie. The extraction produces `(trace_vdata, proof_arrays)`
-  indexed by the circuit's sort order; the reference verifier sorts `trace_vdata` (producing
-  *some* non-increasing-height permutation) and iterates. Any such permutation leads to the
-  same verification result.
 
 ## Empty traces
 

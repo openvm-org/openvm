@@ -63,7 +63,7 @@ The stark-backend verifier ([`crates/stark-backend/src/verifier/mod.rs`](https:/
 | Per-AIR: observe public values | PublicValuesAir | TranscriptBus, PublicValuesBus | PublicValuesAir receives per-AIR PV counts from ProofShapeAir via NumPublicValuesBus, then observes each public value into the transcript |
 | Validate proof shape (VData lengths, bounds, etc.) | ProofShapeAir | RangeCheckerBus, AirShapeBus, HyperdimBus, LiftedHeightsBus | ProofShapeAir uses range checks (via RangeCheckerAir) and the idx_encoder to validate log_height bounds, cached commitment counts, and other structural properties |
 | Trace height constraint check | ProofShapeAir | AirShapeBus, LiftedHeightsBus | ProofShapeAir's summary row enforces `sum_i(num_interactions[i] * lifted_height[i]) < max_interaction_count` via limb decomposition (see Section 3.2 below) |
-| Compute trace_id_to_air_id sorting | ProofShapeAir | AirShapeBus | ProofShapeAir processes AIRs in sorted order (by descending log_height, then air_id) matching the verifier's `trace_id_to_air_id` |
+| Compute trace_id_to_air_id sorting | ProofShapeAir | RangeCheckerBus, AirShapeBus | ProofShapeAir processes AIRs in sorted order (by descending height, then air_id) matching the verifier's `trace_id_to_air_id` |
 | Populate per-AIR metadata buses | ProofShapeAir | AirShapeBus, HyperdimBus, NLiftBus, FractionFolderInputBus, ExpressionClaimNMaxBus, GkrModuleBus | ProofShapeAir sends metadata (air_id, num_interactions, need_rot, n_lift, n_max, n_logup, tidx) that downstream modules consume as lookup/permutation bus messages |
 
 #### Host-only Prechecks (No AIR Counterpart)
@@ -247,7 +247,7 @@ is mapped to its circuit counterpart.
 | 63-64 | `config.params() != &mvk.inner.params` | VK params baked into circuit | G1 |
 | 90-92 | `num_traces == 0` -> error | PS1b: VK-required AIRs must be present | [ProofShape](./modules/proof-shape/README.md) |
 | 94 | `verify_proof_shape(mvk, proof)` | Distributed across VK-fixed structure, AIR loops, bus balancing | [proof-shape-validation.md](./proof-shape-validation.md) |
-| 96-106 | Sort AIRs by `(is_none, Reverse(log_height), air_id)` | ProofShapeAir non-increasing height constraint (tiebreaker is prover choice) | [ProofShape](./modules/proof-shape/README.md) |
+| 96-106 | Sort AIRs by `(is_none, Reverse(log_height), air_id)` | ProofShapeAir descending-height constraint plus AIR-index tiebreaker | [ProofShape](./modules/proof-shape/README.md) |
 | 108-120 | Trace height constraints | `total_interactions < max_interaction_count` (PS1c) | G2 |
 | 122-123 | `omega_skip` computation | VK constant | -- |
 | 126-155 | Preamble: observe VK pre-hash, commits, PVs | ProofShapeAir + PublicValuesAir transcript preamble | [ProofShape](./modules/proof-shape/README.md) PS3, PS4 |
