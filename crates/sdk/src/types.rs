@@ -384,6 +384,7 @@ pub struct VerificationBaselineJson {
     #[serde(with = "hex_bytes32")]
     pub app_exe_commit: CommitBytes,
     pub memory_dimensions: MemoryDimensions,
+    pub num_user_pvs: usize,
     pub app_vk_commit: VkCommitJson,
     pub leaf_vk_commit: VkCommitJson,
     pub internal_for_leaf_vk_commit: VkCommitJson,
@@ -401,6 +402,7 @@ impl From<VerificationBaseline> for VerificationBaselineJson {
         Self {
             app_exe_commit: CommitBytes::from(b.app_exe_commit),
             memory_dimensions: b.memory_dimensions,
+            num_user_pvs: b.num_user_pvs,
             app_vk_commit: vk(b.app_vk_commit),
             leaf_vk_commit: vk(b.leaf_vk_commit),
             internal_for_leaf_vk_commit: vk(b.internal_for_leaf_vk_commit),
@@ -420,6 +422,7 @@ impl From<VerificationBaselineJson> for VerificationBaseline {
         Self {
             app_exe_commit: b.app_exe_commit.into(),
             memory_dimensions: b.memory_dimensions,
+            num_user_pvs: b.num_user_pvs,
             app_vk_commit: vk(b.app_vk_commit),
             leaf_vk_commit: vk(b.leaf_vk_commit),
             internal_for_leaf_vk_commit: vk(b.internal_for_leaf_vk_commit),

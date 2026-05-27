@@ -9,6 +9,8 @@ pub enum VerifyStarkError {
     StarkVerificationFailure(#[from] VerifierError<EF>),
     #[error("User public value proof verification failed with error: {0}")]
     UserPvsVerificationFailure(#[from] UserPublicValuesProofError),
+    #[error("Invalid user public values length: expected {expected}, actual {actual}")]
+    UserPvsLengthMismatch { expected: usize, actual: usize },
     #[error("Invalid app exe commit: expected {expected:?}, actual {actual:?}")]
     AppExeCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid app cached commit: expected {expected:?}, actual {actual:?}")]

@@ -128,6 +128,14 @@ pub fn verify_vm_stark_proof_pvs(
         .user_pvs_proof
         .verify(&hasher, vk.baseline.memory_dimensions, final_root)?;
 
+    // Check that user_pvs_proof has the correct number of public values.
+    if proof.user_pvs_proof.public_values.len() != vk.baseline.num_user_pvs {
+        return Err(VerifyStarkError::UserPvsLengthMismatch {
+            expected: vk.baseline.num_user_pvs,
+            actual: proof.user_pvs_proof.public_values.len(),
+        });
+    }
+
     // Check that the app_commit is as expected.
     let claimed_app_exe_commit =
         compute_exe_commit(&hasher, &program_commit, &initial_root, initial_pc);

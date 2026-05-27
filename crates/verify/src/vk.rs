@@ -27,6 +27,8 @@ pub struct VerificationBaseline {
     pub app_exe_commit: Digest,
     /// VM memory metadata used to verify the user public values merkle proof
     pub memory_dimensions: MemoryDimensions,
+    /// Number of raw user public values
+    pub num_user_pvs: usize,
     /// Commit to the app_vk's DAG and its pre-hash, first exposed by the leaf verifier.
     pub app_vk_commit: VkCommit,
     /// Commit to the leaf_vk's DAG and its pre-hash, first exposed by the internal-for-leaf
