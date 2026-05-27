@@ -24,8 +24,22 @@ use crate::arch::ExecutorInventory;
 pub struct RvrCompiled {
     /// The loaded shared library.
     pub lib: libloading::Library,
-    /// Temporary directory holding the generated C code and .so.
-    temp_dir: Option<tempfile::TempDir>,
+    /// Directory holding generated C sources and build artifacts.
+    artifact_dir: Option<ArtifactDir>,
+}
+
+enum ArtifactDir {
+    Temp(tempfile::TempDir),
+    Kept(PathBuf),
+}
+
+impl ArtifactDir {
+    fn path(&self) -> &Path {
+        match self {
+            Self::Temp(dir) => dir.path(),
+            Self::Kept(path) => path,
+        }
+    }
 }
 
 impl RvrCompiled {
@@ -33,7 +47,7 @@ impl RvrCompiled {
     /// if this library was compiled (rather than loaded from an existing path).
     /// Valid while the returned [`RvrCompiled`] is alive.
     pub fn artifact_dir(&self) -> Option<&Path> {
-        self.temp_dir.as_ref().map(|d| d.path())
+        self.artifact_dir.as_ref().map(ArtifactDir::path)
     }
 }
 
@@ -123,7 +137,16 @@ pub struct CompileOptions<'a, F: PrimeField32> {
     pub guest_debug_map: Option<&'a GuestDebugMap>,
     /// Compile with `-g -fno-omit-frame-pointer` for profiling.
     pub native_debug_info: bool,
+    /// Keep the generated native project after the compiled library is dropped.
+    pub keep_artifacts: bool,
     pub suspend_policy: Option<SuspendPolicy>,
+}
+
+pub fn compile_with_options<F: PrimeField32>(
+    exe: &VmExe<F>,
+    opts: CompileOptions<'_, F>,
+) -> Result<RvrCompiled, CompileError> {
+    compile_impl(exe, &opts)
 }
 
 /// Compile a VmExe into a shared library (pure execution, optional suspension).
@@ -140,6 +163,7 @@ pub fn compile<F: PrimeField32>(
             chips: None,
             guest_debug_map: None,
             native_debug_info: false,
+            keep_artifacts: false,
             suspend_policy: None,
         },
     )
@@ -160,6 +184,7 @@ pub fn compile_metered<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map: None,
             native_debug_info: false,
+            keep_artifacts: false,
             suspend_policy: None,
         },
     )
@@ -180,6 +205,7 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map: None,
             native_debug_info: false,
+            keep_artifacts: false,
             suspend_policy: Some(SuspendPolicy::SegmentBoundary),
         },
     )
@@ -200,6 +226,7 @@ pub fn compile_metered_cost<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map: None,
             native_debug_info: false,
+            keep_artifacts: false,
             suspend_policy: None,
         },
     )
@@ -212,7 +239,7 @@ pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileEr
     };
     Ok(RvrCompiled {
         lib,
-        temp_dir: None,
+        artifact_dir: None,
     })
 }
 
@@ -244,6 +271,7 @@ fn compile_impl<F: PrimeField32>(
     let output_dir = temp_dir.path();
 
     let mut project = CProject::new(output_dir, &base_name, opts.tracer_mode);
+    project.pc_base = exe.program.pc_base;
     if let Some(suspend_policy) = opts.suspend_policy {
         project.suspend_policy = suspend_policy;
     }
@@ -268,7 +296,6 @@ fn compile_impl<F: PrimeField32>(
                 "metered rvr compile requires ChipMapping",
             ))?;
             project.pc_to_chip = Some(chips.pc_to_chip.clone());
-            project.pc_base = exe.program.pc_base;
             project.chip_widths = chips.chip_widths.clone();
         }
     }
@@ -325,9 +352,20 @@ fn compile_impl<F: PrimeField32>(
             .map_err(|e| CompileError::LibLoad(format!("{}: {}", lib_path.display(), e)))?
     };
 
+    let artifact_dir = if opts.keep_artifacts {
+        let path = temp_dir.keep();
+        tracing::info!(
+            path = %path.display(),
+            "kept rvr generated native project"
+        );
+        ArtifactDir::Kept(path)
+    } else {
+        ArtifactDir::Temp(temp_dir)
+    };
+
     Ok(RvrCompiled {
         lib,
-        temp_dir: Some(temp_dir),
+        artifact_dir: Some(artifact_dir),
     })
 }
 

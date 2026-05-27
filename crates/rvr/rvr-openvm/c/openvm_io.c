@@ -31,11 +31,17 @@ void* openvm_get_io_ctx(void) { return g_host.ctx; }
 
 void openvm_hint_input(void) { g_host.hint_input(g_host.ctx); }
 
-void openvm_print_str(uint32_t ptr, uint32_t len) { g_host.print_str(g_host.ctx, ptr, len); }
+void openvm_print_str(uint32_t ptr, uint32_t len) {
+  g_host.print_str(g_host.ctx, ptr, len);
+}
 
-void openvm_hint_random(uint32_t num_words) { g_host.hint_random(g_host.ctx, num_words); }
+void openvm_hint_random(uint32_t num_words) {
+  g_host.hint_random(g_host.ctx, num_words);
+}
 
-void openvm_hint_storew(uint32_t dest_addr) { g_host.hint_storew(g_host.ctx, dest_addr); }
+void openvm_hint_storew(uint32_t dest_addr) {
+  g_host.hint_storew(g_host.ctx, dest_addr);
+}
 
 void openvm_hint_buffer(uint32_t dest_addr, uint32_t num_words) {
   g_host.hint_buffer(g_host.ctx, dest_addr, num_words);
