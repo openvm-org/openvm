@@ -7,6 +7,9 @@
 pub mod instruction_formats;
 pub mod process_instruction;
 
+#[cfg(test)]
+mod test_helpers;
+
 pub use process_instruction::process_instruction;
 
 /// A trait for objects which do something with RISC-V instructions (e.g. execute them or print a
