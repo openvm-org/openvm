@@ -230,6 +230,7 @@ impl AirModule for ProofShapeModule {
     }
 
     fn airs<SC: StarkProtocolConfig<F = F>>(&self) -> Vec<AirRef<SC>> {
+        assert!(self.per_air.len() <= 1 << 8);
         let proof_shape_air = ProofShapeAir::<4, 8> {
             per_air: self.per_air.clone(),
             l_skip: self.l_skip,

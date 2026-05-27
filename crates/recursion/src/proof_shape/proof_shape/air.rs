@@ -47,9 +47,8 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     pub is_last: F,
 
     pub sorted_idx: F,
-    /// Represents log2 trace height when `is_present`.
-    ///
-    /// Has a special use on summary row (when `is_last`).
+
+    /// Log2 trace height when `is_present`; has a special use on summary row (when `is_last`).
     pub log_height: F,
     /// When `is_present`, constrained to equal `log_height - l_skip < 0 ? 1 : 0`.
     pub n_sign_bit: F,
@@ -62,12 +61,12 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     // from the transcript.
     pub is_present: F,
 
-    /// Will be constrained to be `2^log_height` when `is_present`.
-    ///
-    /// Has a special use on summary row (when `is_last`).
+    /// Constrained to `2^log_height` when `is_present`; has a special use on summary row.
     pub height: F,
+    /// Indicates whether if this trace's height is equal to the next row's.
+    pub is_height_equal_to_next: F,
 
-    // Number of present AIRs so far
+    /// Number of present AIRs so far.
     pub num_present: F,
 
     // The total number of interactions over all traces needs to fit in a single field element,
@@ -87,8 +86,8 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     pub num_interactions_limbs: [F; NUM_LIMBS],
     pub total_interactions_limbs: [F; NUM_LIMBS],
 
-    /// The maximum hypercube dimension across all present AIR traces, or zero.
-    /// Computed as max(0, n0, n1, ...) where ni = log_height_i - l_skip for each present trace.
+    /// The maximum hypercube dimension across all present AIR traces, or zero. Computed a
+    /// max(0, n0, n1, ...) where ni = log_height_i - l_skip for each present trace.
     pub n_max: F,
     pub is_n_max_greater: F,
     pub n_logup: F,
@@ -216,6 +215,11 @@ where
             self.idx_encoder.width(),
             self.max_cached,
         );
+        let nextv = borrow_var_cols::<AB::Var>(
+            &next[const_width..],
+            self.idx_encoder.width(),
+            self.max_cached,
+        );
         let local: &ProofShapeCols<AB::Var, NUM_LIMBS> = (*local)[..const_width].borrow();
         let next: &ProofShapeCols<AB::Var, NUM_LIMBS> = (*next)[..const_width].borrow();
 
@@ -273,6 +277,9 @@ where
         let mut num_interactions = AB::Expr::ZERO;
         let mut need_rot = AB::Expr::ZERO;
 
+        // Select next AIR idx to ensure sortedness between traces with the same height
+        let mut next_air_idx = AB::Expr::ZERO;
+
         // Select values for LiftedHeightsBus
         let mut main_common_width = AB::Expr::ZERO;
         let mut preprocessed_stacked_width = AB::Expr::ZERO;
@@ -303,6 +310,10 @@ where
                 has_pvs += is_current_air.clone();
             }
             num_pvs += is_current_air.clone() * AB::F::from_usize(air_data.num_public_values);
+
+            // Select the next AIR idx
+            let next_is_current_air = self.idx_encoder.get_flag_expr::<AB>(i, nextv.idx_flags);
+            next_air_idx += next_is_current_air * AB::F::from_usize(i);
 
             // Select number of interactions for use later in the AIR and constrain that the
             // num_interactions_per_row limb decomposition is correct.
@@ -385,14 +396,42 @@ where
             .when(and(not(local.is_present), local.is_valid))
             .assert_zero(local.log_height);
 
-        // Range check difference using ExponentBus to ensure local.log_height >= next.log_height
+        // Constrain local.height == next.height when is_height_equal_to_next is 1, and that
+        // is_height_equal_to_next is 0 for the last AIR
+        let is_valid_transition = and(local.is_valid, not(next.is_last));
+
+        builder.assert_bool(local.is_height_equal_to_next);
+        builder
+            .when(local.is_height_equal_to_next)
+            .assert_one(is_valid_transition.clone());
+        builder
+            .when(local.is_height_equal_to_next)
+            .assert_eq(local.height, next.height);
+
+        // If is_height_equal_to_next == 0, ensure local.height > next.height by constraining
+        // local_rank > next_rank. By definition rank == 0 for non-present AIRs and rank > 0
+        // for present ones.
+        let local_rank = local.log_height + local.is_present;
+        let next_rank = next.log_height + next.is_present;
+
         self.range_bus.lookup_key(
             builder,
             RangeCheckerBusMessage {
-                value: local.log_height - next.log_height,
+                value: local_rank - next_rank - AB::Expr::ONE,
                 max_bits: AB::Expr::from_usize(5),
             },
-            and(local.is_valid, not(next.is_last)),
+            is_valid_transition.clone() * not(local.is_height_equal_to_next),
+        );
+
+        // If is_height_equal_to_next == 1, constrain that local.air_idx < next.air_idx. Note
+        // this means that the gap between air indices cannot exceed 2^8 - 1.
+        self.range_bus.lookup_key(
+            builder,
+            RangeCheckerBusMessage {
+                value: next_air_idx - air_idx.clone() - AB::Expr::ONE,
+                max_bits: AB::Expr::from_usize(8),
+            },
+            local.is_height_equal_to_next,
         );
 
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -702,7 +741,7 @@ where
         });
 
         builder
-            .when(and(local.is_valid, not(next.is_last)))
+            .when(is_valid_transition)
             .assert_eq(local.starting_cidx + cidx_offset, next.starting_cidx);
 
         self.commitments_bus.add_key_with_lookups(
