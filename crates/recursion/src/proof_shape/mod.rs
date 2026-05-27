@@ -88,6 +88,11 @@ impl ProofShapeModule {
         bus_inventory: BusInventory,
         continuations_enabled: bool,
     ) -> Self {
+        assert!(
+            mvk.per_air.len() <= 1 << 8,
+            "recursion circuit only supports child verifying keys with at most 256 AIRs"
+        );
+
         let idx_encoder = Arc::new(Encoder::new(mvk.per_air.len(), 2, true));
 
         let (min_cached_idx, min_cached) = mvk

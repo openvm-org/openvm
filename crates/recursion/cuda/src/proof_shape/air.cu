@@ -52,6 +52,7 @@ template <typename T, size_t MAX_CACHED> struct ProofShapeCols {
 
     T is_present;
     T height;
+    T is_height_equal_to_next;
     T num_present;
 
     T lifted_height_limbs[NUM_LIMBS];
@@ -245,6 +246,9 @@ __device__ __forceinline__ void fill_summary_row(
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_last, Fp::one());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, sorted_idx, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
+    COL_WRITE_VALUE(
+        row, typename Cols<MAX_CACHED>::template Type, is_height_equal_to_next, Fp::zero()
+    );
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, starting_cidx, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, num_air_id_lookups, Fp::zero());
     row.fill_zero(cached_commits_idx, MAX_CACHED * DIGEST_SIZE);
@@ -395,13 +399,33 @@ __global__ void proof_shape_tracegen(
             encoder.write_flag_pt(row.slice_from(encoder_flags_idx), trace_height.air_idx);
 
             if (record_idx + 1 < inputs.num_airs) {
+                bool is_present = record_idx < proof_data.num_present;
+                bool next_is_present = record_idx + 1 < proof_data.num_present;
                 uint8_t current_log_height = trace_height.log_height;
-                uint8_t next_log_height =
-                    record_idx + 1 < proof_data.num_present
-                        ? sorted_trace_heights[proof_idx][record_idx + 1].log_height
-                        : 0;
-                pow_checker.add_range_count(
-                    static_cast<uint32_t>(current_log_height - next_log_height)
+                TraceHeight next_trace_height = sorted_trace_heights[proof_idx][record_idx + 1];
+                uint8_t next_log_height = next_trace_height.log_height;
+                bool is_height_equal_to_next =
+                    is_present == next_is_present &&
+                    (!is_present || current_log_height == next_log_height);
+                COL_WRITE_VALUE(
+                    row,
+                    typename Cols<MAX_CACHED>::template Type,
+                    is_height_equal_to_next,
+                    is_height_equal_to_next
+                );
+                if (is_height_equal_to_next) {
+                    range_checker.add_count(next_trace_height.air_idx - trace_height.air_idx - 1);
+                } else {
+                    uint32_t rank = current_log_height + is_present;
+                    uint32_t next_rank = next_log_height + next_is_present;
+                    pow_checker.add_range_count(rank - next_rank - 1);
+                }
+            } else {
+                COL_WRITE_VALUE(
+                    row,
+                    typename Cols<MAX_CACHED>::template Type,
+                    is_height_equal_to_next,
+                    Fp::zero()
                 );
             }
 

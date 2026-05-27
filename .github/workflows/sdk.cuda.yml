@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: ["**"]
     paths:
+      - "crates/continuations/**"
+      - "crates/recursion/**"
       - "crates/sdk/**"
       - ".github/workflows/sdk.cuda.yml"
 

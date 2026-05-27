@@ -6,6 +6,8 @@ The recursion circuit verifies SWIRL proofs inside a SWIRL circuit. The circuit 
 
 The circuit is implemented as a collection of 39 AIRs organized into protocol modules plus
 shared lookup/provider AIRs. AIRs communicate through buses (permutation checks and lookups).
+The child verifying key must contain at most 256 AIRs; the ProofShape module uses an 8-bit
+range check to constrain AIR-index ordering among equal-height proof-shape rows.
 
 For the formal correspondence claim and correctness argument, see [verifier-mapping.md](./verifier-mapping.md).
 
