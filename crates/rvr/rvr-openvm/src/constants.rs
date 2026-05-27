@@ -33,8 +33,8 @@ pub const MAX_MEM_PAGES_PER_INSN: usize = {
 /// Flushed at most every 2 × `DEFAULT_SEGMENT_CHECK_INSNS` instructions
 /// (block-granular check can overshoot by up to one block, which is at
 /// most `DEFAULT_SEGMENT_CHECK_INSNS` instructions).
-/// Worst-case unique pages per instruction: ~10 (ECC setup / HINT_BUFFER, HINT_BUFFER is taken as worst-case).
-/// 2000 insns × 10 pages = 20 000 — well under 65 536.
+/// Worst-case unique pages per instruction: ~10 (ECC setup / HINT_BUFFER, HINT_BUFFER is taken as
+/// worst-case). 2000 insns × 10 pages = 20 000 — well under 65 536.
 pub const MEM_PAGE_BUF_CAP: usize = 1 << 16;
 
 /// Maximum AS_PUBLIC_VALUES page buffer entries per segment check interval.
