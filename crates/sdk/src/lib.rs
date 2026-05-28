@@ -334,6 +334,22 @@ where
             .map_err(SdkError::from)
     }
 
+    /// Load a previously saved pure-mode artifact from `dir`. Caller
+    /// supplies the matching `app_exe`; no compatibility validation is
+    /// performed (see task 2 / INT-7843).
+    #[cfg(feature = "rvr")]
+    pub fn load_compiled_pure(
+        &self,
+        dir: &std::path::Path,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<CompiledExePure<F>, SdkError> {
+        let exe = self.convert_to_exe(app_exe)?;
+        self.executor
+            .load_instance(dir, &exe)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
     /// Run a [`CompiledExePure`] against `inputs` and extract the user public values.
     pub fn execute_compiled(
         &self,
@@ -380,6 +396,26 @@ where
         Ok(CompiledExeMetered { instance, ctx })
     }
 
+    /// Load a previously saved metered-mode artifact from `dir`. The
+    /// `MeteredCtx` is rebuilt from the proving key. Caller supplies
+    /// `app_exe`; no compatibility validation is performed.
+    #[cfg(feature = "rvr")]
+    pub fn load_compiled_metered(
+        &self,
+        dir: &std::path::Path,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<CompiledExeMetered, SdkError> {
+        let app_prover = self.app_prover(app_exe)?;
+        let vm = app_prover.vm();
+        let exe = app_prover.exe();
+
+        let ctx = vm.build_metered_ctx(&exe);
+        let instance = vm
+            .load_metered_interpreter(dir, &exe)
+            .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMetered { instance, ctx })
+    }
+
     /// Run a [`CompiledExeMetered`] against `inputs`.
     pub fn execute_compiled_metered(
         &self,
@@ -422,6 +458,26 @@ where
         let ctx = vm.build_metered_cost_ctx();
         let instance = vm
             .metered_cost_interpreter(&exe)
+            .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMeteredCost { instance, ctx })
+    }
+
+    /// Load a previously saved metered-cost-mode artifact from `dir`. The
+    /// `MeteredCostCtx` is rebuilt. Caller supplies `app_exe`; no
+    /// compatibility validation is performed.
+    #[cfg(feature = "rvr")]
+    pub fn load_compiled_metered_cost(
+        &self,
+        dir: &std::path::Path,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<CompiledExeMeteredCost, SdkError> {
+        let app_prover = self.app_prover(app_exe)?;
+        let vm = app_prover.vm();
+        let exe = app_prover.exe();
+
+        let ctx = vm.build_metered_cost_ctx();
+        let instance = vm
+            .load_metered_cost_interpreter(dir, &exe)
             .map_err(VirtualMachineError::from)?;
         Ok(CompiledExeMeteredCost { instance, ctx })
     }

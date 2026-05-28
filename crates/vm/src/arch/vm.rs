@@ -492,6 +492,52 @@ where
         self.metered_cost_rvr_instance(exe, executor_idx_to_air_idx, widths)
     }
 
+    /// Load a previously saved metered-mode artifact from `dir`. Caller
+    /// supplies `exe` and `executor_idx_to_air_idx` — same as
+    /// [`Self::metered_rvr_instance`]. No compatibility validation is
+    /// performed (see task 2 / INT-7843).
+    pub fn load_metered_instance(
+        &self,
+        dir: &std::path::Path,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<RvrMeteredInstance<F>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let compiled = load_compiled_from_dir(dir).map_err(map_rvr_compile_error)?;
+
+        Ok(RvrMeteredInstance {
+            system_config: self.inventory.config().clone(),
+            exe: Arc::new(exe.clone()),
+            extensions,
+            compiled,
+            _mode: PhantomData::<RunToCompletion>,
+        })
+    }
+
+    /// Load a previously saved metered-cost-mode artifact from `dir`. Caller
+    /// supplies `exe`, `executor_idx_to_air_idx`, and `widths` — same as
+    /// [`Self::metered_cost_rvr_instance`]. No compatibility validation is
+    /// performed (see task 2 / INT-7843).
+    pub fn load_metered_cost_instance(
+        &self,
+        dir: &std::path::Path,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        widths: &[usize],
+    ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
+        let compiled = load_compiled_from_dir(dir).map_err(map_rvr_compile_error)?;
+
+        Ok(RvrMeteredCostInstance {
+            system_config: self.inventory.config().clone(),
+            exe: Arc::new(exe.clone()),
+            extensions,
+            compiled,
+            widths,
+        })
+    }
+
     pub fn metered_cost_rvr_instance(
         &self,
         exe: &VmExe<F>,
@@ -784,6 +830,21 @@ where
             .metered_segment_rvr_instance(exe, &executor_idx_to_air_idx)
     }
 
+    #[cfg(feature = "rvr")]
+    pub fn load_metered_interpreter(
+        &self,
+        dir: &std::path::Path,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredInstance<Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .load_metered_instance(dir, exe, &executor_idx_to_air_idx)
+    }
+
     #[cfg(feature = "aot")]
     pub fn metered_interpreter(
         &self,
@@ -871,6 +932,27 @@ where
             .collect();
         self.executor()
             .metered_cost_rvr_instance(exe, &executor_idx_to_air_idx, &widths)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn load_metered_cost_interpreter(
+        &self,
+        dir: &std::path::Path,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredCostInstance<Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        let widths: Vec<usize> = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.total_width())
+            .collect();
+        self.executor()
+            .load_metered_cost_instance(dir, exe, &executor_idx_to_air_idx, &widths)
     }
 
     pub fn preflight_interpreter(

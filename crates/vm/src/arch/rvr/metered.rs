@@ -408,6 +408,15 @@ impl<F: PrimeField32, S> RvrMeteredInstanceWith<F, S> {
             inputs,
         )
     }
+
+    /// Persist the compiled shared library into `dir`. See
+    /// [`RvrPureInstance::save`](super::pure::RvrPureInstance::save) for
+    /// caller responsibilities — the user must re-supply `exe`,
+    /// `executor_idx_to_air_idx`, and any mode-specific data when loading.
+    pub fn save(&self, dir: &std::path::Path) -> Result<(), super::CompileError> {
+        self.compiled.save_artifact(dir)?;
+        Ok(())
+    }
 }
 
 impl<F: PrimeField32> RvrMeteredInstance<F> {
