@@ -14,6 +14,7 @@ use std::ffi::c_void;
 /// Word size for memory access (4 bytes).
 pub use openvm_platform::WORD_SIZE;
 
+// TODO(dedup): make a common crate that is imported by rvr and openvm-circuit
 // ── Deferral constants ───────────────────────────────────────────────────
 
 /// BabyBear Poseidon2 digest size in field elements.
@@ -31,6 +32,7 @@ pub use openvm_instructions::{
     DEFERRAL_AS, PUBLIC_VALUES_AS as AS_PUBLIC_VALUES,
 };
 
+// TODO(dedup): make a common crate that is imported by rvr and openvm-circuit
 // ── OpenVM metered-execution layout ───────────────────────────────────
 // Redefined here to avoid a cycle with openvm-circuit. Checked against
 // upstream in `openvm-circuit`'s `arch::rvr::abi_consts`.
