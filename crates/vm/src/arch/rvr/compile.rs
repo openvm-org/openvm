@@ -24,7 +24,12 @@ use crate::arch::ExecutorInventory;
 pub struct RvrCompiled {
     /// The loaded shared library.
     pub lib: libloading::Library,
-    /// Directory holding generated C sources and build artifacts.
+    /// Path to the shared library file backing `lib`. Set at construction
+    /// (either by `compile_impl` or `load_compiled_from_path`) so that
+    /// [`save_artifact`](Self::save_artifact) can copy it without scanning.
+    lib_path: PathBuf,
+    /// Directory holding generated C sources and build artifacts, if this
+    /// library was compiled. `None` for libraries loaded from disk.
     artifact_dir: Option<ArtifactDir>,
 }
 
@@ -52,14 +57,11 @@ impl RvrCompiled {
 
     /// Copy the compiled shared library into `dest_dir`, creating the
     /// directory if it doesn't exist. Returns the path of the copied
-    /// library.
-    ///
-    /// Errors with [`CompileError::NoArtifactDir`] if this `RvrCompiled` was
-    /// loaded from a path (no source `.so` to copy from).
+    /// library. Works for both freshly compiled artifacts and ones loaded
+    /// from disk.
     pub fn save_artifact(&self, dest_dir: &Path) -> Result<PathBuf, CompileError> {
-        let src_dir = self.artifact_dir().ok_or(CompileError::NoArtifactDir)?;
-        let src_lib = find_shared_lib(src_dir)?;
-        let file_name = src_lib
+        let file_name = self
+            .lib_path
             .file_name()
             .expect("shared library path always has a file name");
         let dest_lib = dest_dir.join(file_name);
@@ -68,7 +70,7 @@ impl RvrCompiled {
             path: dest_dir.to_path_buf(),
             source,
         })?;
-        fs::copy(&src_lib, &dest_lib).map_err(|source| CompileError::CProject {
+        fs::copy(&self.lib_path, &dest_lib).map_err(|source| CompileError::CProject {
             path: dest_lib.clone(),
             source,
         })?;
@@ -103,8 +105,6 @@ pub enum CompileError {
     UnknownOpcode { pc: u32, opcode: VmOpcode },
     #[error("invalid compile options: {0}")]
     InvalidOptions(&'static str),
-    #[error("RvrCompiled has no artifact_dir (loaded from a path, no source to save)")]
-    NoArtifactDir,
 }
 
 /// Chip mapping information for hardcoding chip indices into generated code.
@@ -259,22 +259,26 @@ pub fn compile_metered_cost<F: PrimeField32>(
     )
 }
 
+/// Open a previously saved `.so`/`.dylib` and wrap it in an [`RvrCompiled`].
+///
+/// Note: no compatibility validation is performed — the caller must ensure
+/// the artifact was compiled for the current `exe`, config, and rvr
+/// version. See INT-7843 task 2.
 pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileError> {
+    tracing::warn!(
+        path = %lib_path.display(),
+        "loading rvr artifact without compatibility validation; \
+         caller is responsible for matching exe and config"
+    );
     let lib = unsafe {
         libloading::Library::new(lib_path)
             .map_err(|e| CompileError::LibLoad(format!("{}: {}", lib_path.display(), e)))?
     };
     Ok(RvrCompiled {
         lib,
+        lib_path: lib_path.to_path_buf(),
         artifact_dir: None,
     })
-}
-
-/// Locate a previously saved shared library in `dir` and dlopen it.
-/// Convenience wrapper around [`find_shared_lib`] + [`load_compiled_from_path`].
-pub fn load_compiled_from_dir(dir: &Path) -> Result<RvrCompiled, CompileError> {
-    let lib_path = find_shared_lib(dir)?;
-    load_compiled_from_path(&lib_path)
 }
 
 fn compile_impl<F: PrimeField32>(
@@ -399,6 +403,7 @@ fn compile_impl<F: PrimeField32>(
 
     Ok(RvrCompiled {
         lib,
+        lib_path,
         artifact_dir: Some(artifact_dir),
     })
 }
@@ -585,6 +590,6 @@ fn find_shared_lib(dir: &Path) -> Result<PathBuf, CompileError> {
             )
         })
         .ok_or_else(|| CompileError::Make {
-            stderr: "No shared library found after make".to_string(),
+            stderr: format!("no shared library (.so/.dylib) found in {}", dir.display()),
         })
 }

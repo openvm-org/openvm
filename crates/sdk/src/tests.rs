@@ -203,10 +203,10 @@ fn test_sdk_compiled_pure_save_load_roundtrip() -> Result<()> {
     let baseline = sdk.execute_compiled(&compiled_a, stdin.clone())?;
 
     let tmp = tempfile::tempdir()?;
-    compiled_a.save(tmp.path())?;
+    let lib_path = compiled_a.save(tmp.path())?;
     drop(compiled_a);
 
-    let compiled_b = sdk.load_compiled_pure(tmp.path(), exe)?;
+    let compiled_b = sdk.load_compiled_pure(&lib_path, exe)?;
     let reloaded = sdk.execute_compiled(&compiled_b, stdin)?;
 
     assert_eq!(baseline, reloaded);
@@ -231,14 +231,19 @@ fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
         sdk.execute_compiled_metered(&compiled_a, stdin.clone())?;
 
     let tmp = tempfile::tempdir()?;
-    compiled_a.save(tmp.path())?;
+    let lib_path = compiled_a.save(tmp.path())?;
     drop(compiled_a);
 
-    let compiled_b = sdk.load_compiled_metered(tmp.path(), exe)?;
+    let compiled_b = sdk.load_compiled_metered(&lib_path, exe)?;
     let (reloaded_pv, reloaded_segments) = sdk.execute_compiled_metered(&compiled_b, stdin)?;
 
     assert_eq!(baseline_pv, reloaded_pv);
     assert_eq!(baseline_segments.len(), reloaded_segments.len());
+    for (a, b) in baseline_segments.iter().zip(reloaded_segments.iter()) {
+        assert_eq!(a.instret_start, b.instret_start);
+        assert_eq!(a.num_insns, b.num_insns);
+        assert_eq!(a.trace_heights, b.trace_heights);
+    }
     Ok(())
 }
 
@@ -260,10 +265,10 @@ fn test_sdk_compiled_metered_cost_save_load_roundtrip() -> Result<()> {
         sdk.execute_compiled_metered_cost(&compiled_a, stdin.clone())?;
 
     let tmp = tempfile::tempdir()?;
-    compiled_a.save(tmp.path())?;
+    let lib_path = compiled_a.save(tmp.path())?;
     drop(compiled_a);
 
-    let compiled_b = sdk.load_compiled_metered_cost(tmp.path(), exe)?;
+    let compiled_b = sdk.load_compiled_metered_cost(&lib_path, exe)?;
     let (reloaded_pv, reloaded_cost) =
         sdk.execute_compiled_metered_cost(&compiled_b, stdin)?;
 

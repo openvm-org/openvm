@@ -406,13 +406,13 @@ mod tests {
         let compiled_a = executor.instance(&exe)?;
         let baseline = compiled_a.execute(vec![], None)?;
 
-        // save
+        // save — returns the path of the copied .so
         let tmp = tempfile::tempdir()?;
-        compiled_a.save(tmp.path())?;
+        let lib_path = compiled_a.save(tmp.path())?;
         drop(compiled_a);
 
         // load + execute via VmExecutor (mirrors `executor.instance(&exe)`)
-        let compiled_b = executor.load_instance(tmp.path(), &exe)?;
+        let compiled_b = executor.load_instance(&lib_path, &exe)?;
         let reloaded = compiled_b.execute(vec![], None)?;
 
         // assert outcome equivalence
@@ -420,7 +420,6 @@ mod tests {
         // (extend to compare memory / public values as needed)
         Ok(())
     }
-
 
     #[test]
     #[should_panic(expected = "Memory access out of bounds")]
