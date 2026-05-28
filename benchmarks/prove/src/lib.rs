@@ -130,13 +130,13 @@ pub fn run_app_benchmark(
     stdin: StdIn,
     app_params: SystemParams,
 ) -> eyre::Result<()> {
+    let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
+    let memory_dims = vm_config.system.config.memory_config.memory_dimensions();
+    let app_config = AppConfig::new(vm_config, app_params);
+    let sdk = Sdk::new(app_config, Default::default())?;
+    let (_, app_vk) = sdk.app_keygen();
+    let mut prover = sdk.app_prover(exe)?;
     run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<_> {
-        let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
-        let memory_dims = vm_config.system.config.memory_config.memory_dimensions();
-        let app_config = AppConfig::new(vm_config, app_params);
-        let sdk = Sdk::new(app_config, Default::default())?;
-        let (_, app_vk) = sdk.app_keygen();
-        let mut prover = sdk.app_prover(exe)?;
         let proof = prover.prove(stdin)?;
         let _ = verify_app_proof::<DefaultStarkEngine>(&app_vk.vk, memory_dims, &proof)?;
         Ok(())
@@ -172,33 +172,34 @@ pub fn run_evm_benchmark(
 ) -> eyre::Result<()> {
     use openvm_sdk::config::Halo2Config;
 
-    run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<_> {
-        let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
-        let app_config = AppConfig::new(vm_config, default_bench_app_params());
-        let agg_params = AggregationSystemParams {
-            leaf: leaf_params_with_100_bits_security(),
-            internal: internal_params_with_100_bits_security(),
-        };
-        let mut builder = Sdk::builder().app_config(app_config).agg_params(agg_params);
-        if halo2_wrapper_k.is_some() {
-            builder = builder.halo2_config(
-                Default::default(),
-                Halo2Config {
-                    wrapper_k: halo2_wrapper_k,
-                    profiling: false,
-                },
-            );
-        }
-        if let Some(dir) = kzg_params_dir {
-            builder = builder.halo2_params_dir(dir);
-        }
-        let sdk = builder.build()?;
-        let evm_proof = sdk.prove_evm(exe, stdin, &[])?;
-        let verifier = sdk.generate_halo2_verifier_solidity()?;
-        let gas_cost = Sdk::verify_evm_halo2_proof(&verifier, evm_proof)?;
-        tracing::info!("EVM verification gas cost: {gas_cost}");
-        Ok(())
-    })
+    let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
+    let app_config = AppConfig::new(vm_config, default_bench_app_params());
+    let agg_params = AggregationSystemParams {
+        leaf: leaf_params_with_100_bits_security(),
+        internal: internal_params_with_100_bits_security(),
+    };
+    let mut builder = Sdk::builder().app_config(app_config).agg_params(agg_params);
+    if halo2_wrapper_k.is_some() {
+        builder = builder.halo2_config(
+            Default::default(),
+            Halo2Config {
+                wrapper_k: halo2_wrapper_k,
+                profiling: false,
+            },
+        );
+    }
+    if let Some(dir) = kzg_params_dir {
+        builder = builder.halo2_params_dir(dir);
+    }
+    let sdk = builder.build()?;
+    let mut evm_prover = sdk.evm_prover(exe)?;
+    let evm_proof = run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<_> {
+        evm_prover.prove_evm(stdin, &[])
+    })?;
+    let verifier = sdk.generate_halo2_verifier_solidity()?;
+    let gas_cost = Sdk::verify_evm_halo2_proof(&verifier, evm_proof)?;
+    tracing::info!("EVM verification gas cost: {gas_cost}");
+    Ok(())
 }
 
 pub fn default_bench_app_params() -> SystemParams {
