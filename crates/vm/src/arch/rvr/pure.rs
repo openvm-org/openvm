@@ -1,10 +1,13 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_lift::ExtensionRegistry;
 
-use super::{bridge::map_rvr_execute_error, execute::execute, state::PureState, RvrCompiled};
+use super::{
+    bridge::map_rvr_execute_error, compile::CompileError, execute::execute, state::PureState,
+    RvrCompiled,
+};
 #[cfg(feature = "metrics")]
 use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
 use crate::{
@@ -69,5 +72,14 @@ where
             metrics.record(insns);
         }
         Ok(vm_state)
+    }
+
+    /// Persist the compiled shared library into `dir` so it can later be
+    /// reloaded via [`VmExecutor::load_instance`](crate::arch::VmExecutor).
+    /// The caller is responsible for matching `exe` and config at load time;
+    /// no compatibility validation is performed here (see task 2 / INT-7843).
+    pub fn save(&self, dir: &Path) -> Result<(), CompileError> {
+        self.compiled.save_artifact(dir)?;
+        Ok(())
     }
 }

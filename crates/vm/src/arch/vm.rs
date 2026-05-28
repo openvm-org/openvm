@@ -44,9 +44,9 @@ use super::aot::AotInstance;
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
-    compile_metered_cost, compile_metered_segment_boundary, ChipMapping, RunToCompletion,
-    RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
-    SegmentBoundary,
+    compile_metered_cost, compile_metered_segment_boundary, load_compiled_from_dir, ChipMapping,
+    RunToCompletion, RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance,
+    RvrPureInstance, SegmentBoundary,
 };
 use super::{
     execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx, Segment},
@@ -300,6 +300,26 @@ where
             extensions,
         })
     }
+
+    /// Load a previously saved pure-mode artifact from `dir` and return a
+    /// ready-to-execute [`RvrPureInstance`]. The caller is responsible for
+    /// supplying the matching `exe`; no compatibility validation is
+    /// performed (see task 2 / INT-7843).
+    pub fn load_instance(
+        &self,
+        dir: &std::path::Path,
+        exe: &VmExe<F>,
+    ) -> Result<RvrPureInstance<F>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(None);
+        let compiled = load_compiled_from_dir(dir).map_err(map_rvr_compile_error)?;
+
+        Ok(RvrPureInstance {
+            system_config: self.inventory.config().clone(),
+            exe: Arc::new(exe.clone()),
+            compiled,
+            extensions,
+        })
+    }
 }
 
 #[cfg(feature = "aot")]
@@ -333,7 +353,7 @@ where
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_span =
+        let _compilation_span: tracing::span::EnteredSpan =
             tracing::info_span!("compile_metered", backend = "interpreter").entered();
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }

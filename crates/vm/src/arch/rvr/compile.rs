@@ -49,6 +49,31 @@ impl RvrCompiled {
     pub fn artifact_dir(&self) -> Option<&Path> {
         self.artifact_dir.as_ref().map(ArtifactDir::path)
     }
+
+    /// Copy the compiled shared library into `dest_dir`, creating the
+    /// directory if it doesn't exist. Returns the path of the copied
+    /// library.
+    ///
+    /// Errors with [`CompileError::NoArtifactDir`] if this `RvrCompiled` was
+    /// loaded from a path (no source `.so` to copy from).
+    pub fn save_artifact(&self, dest_dir: &Path) -> Result<PathBuf, CompileError> {
+        let src_dir = self.artifact_dir().ok_or(CompileError::NoArtifactDir)?;
+        let src_lib = find_shared_lib(src_dir)?;
+        let file_name = src_lib
+            .file_name()
+            .expect("shared library path always has a file name");
+        let dest_lib = dest_dir.join(file_name);
+
+        fs::create_dir_all(dest_dir).map_err(|source| CompileError::CProject {
+            path: dest_dir.to_path_buf(),
+            source,
+        })?;
+        fs::copy(&src_lib, &dest_lib).map_err(|source| CompileError::CProject {
+            path: dest_lib.clone(),
+            source,
+        })?;
+        Ok(dest_lib)
+    }
 }
 
 /// Error during compilation.
@@ -78,6 +103,8 @@ pub enum CompileError {
     UnknownOpcode { pc: u32, opcode: VmOpcode },
     #[error("invalid compile options: {0}")]
     InvalidOptions(&'static str),
+    #[error("RvrCompiled has no artifact_dir (loaded from a path, no source to save)")]
+    NoArtifactDir,
 }
 
 /// Chip mapping information for hardcoding chip indices into generated code.
@@ -241,6 +268,13 @@ pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileEr
         lib,
         artifact_dir: None,
     })
+}
+
+/// Locate a previously saved shared library in `dir` and dlopen it.
+/// Convenience wrapper around [`find_shared_lib`] + [`load_compiled_from_path`].
+pub fn load_compiled_from_dir(dir: &Path) -> Result<RvrCompiled, CompileError> {
+    let lib_path = find_shared_lib(dir)?;
+    load_compiled_from_path(&lib_path)
 }
 
 fn compile_impl<F: PrimeField32>(
