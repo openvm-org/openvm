@@ -133,7 +133,7 @@ fn merkle_path_root(
         if i < depth {
             continue;
         }
-        let is_right = depth == 0 && i == 0 || (idx_prefix >> i) & 1 == 1;
+        let is_right = (depth == 0 && i == 0) || (idx_prefix >> i) & 1 == 1;
         node = if is_right {
             poseidon2_compress_with_capacity(*sibling, node).0
         } else {
