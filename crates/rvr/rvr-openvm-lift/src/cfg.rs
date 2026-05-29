@@ -1061,7 +1061,7 @@ fn build_block_list(
 ) -> Vec<Block> {
     // Max block size; used to flush periodically so the segmentation check in
     // metered mode (which fires at block boundaries) stays granular enough.
-    let max_block_insns = rvr_openvm_ext_ffi_common::DEFAULT_SEGMENT_CHECK_INSNS;
+    const MAX_BLOCK_INSNS: u32 = rvr_openvm_ext_ffi_common::DEFAULT_SEGMENT_CHECK_INSNS;
     let mut blocks: Vec<Block> = Vec::new();
 
     // Accumulate body instructions for the current block.
@@ -1096,7 +1096,7 @@ fn build_block_list(
         match li {
             LiftedInstr::Body(instr_at) => {
                 body.push(instr_at.clone());
-                if body.len() >= max_block_insns as usize {
+                if body.len() >= MAX_BLOCK_INSNS as usize {
                     let start = block_start_pc.unwrap();
                     let last_body_pc = body.last().unwrap().pc;
                     blocks.push(Block {
