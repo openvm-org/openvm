@@ -7123,6 +7123,7 @@ version = "2.0.0"
 dependencies = [
  "openvm-instructions",
  "openvm-platform",
+ "openvm-rv32im-guest",
  "openvm-stark-backend",
  "rvr-openvm-build",
  "rvr-openvm-ext-ffi-common",
