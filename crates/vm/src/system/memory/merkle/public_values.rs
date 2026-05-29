@@ -1,6 +1,7 @@
 use std::io::{self, Write};
 
 use itertools::Itertools;
+pub use openvm_instructions::PUBLIC_VALUES_AS;
 use openvm_stark_backend::{
     codec::{DecodableConfig, EncodableConfig},
     p3_util::log2_strict_usize,
@@ -14,8 +15,6 @@ use crate::{
     arch::{hasher::Hasher, MemoryCellType, ADDR_SPACE_OFFSET},
     system::memory::{dimensions::MemoryDimensions, online::LinearMemory, MemoryImage},
 };
-
-pub const PUBLIC_VALUES_AS: u32 = 3;
 pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: u32 = PUBLIC_VALUES_AS - ADDR_SPACE_OFFSET;
 
 /// Merkle proof for user public values in the memory state.
