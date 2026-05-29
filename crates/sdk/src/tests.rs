@@ -269,8 +269,7 @@ fn test_sdk_compiled_metered_cost_save_load_roundtrip() -> Result<()> {
     drop(compiled_a);
 
     let compiled_b = sdk.load_compiled_metered_cost(&lib_path, exe)?;
-    let (reloaded_pv, reloaded_cost) =
-        sdk.execute_compiled_metered_cost(&compiled_b, stdin)?;
+    let (reloaded_pv, reloaded_cost) = sdk.execute_compiled_metered_cost(&compiled_b, stdin)?;
 
     assert_eq!(baseline_pv, reloaded_pv);
     assert_eq!(baseline_cost, reloaded_cost);
