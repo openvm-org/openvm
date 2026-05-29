@@ -5,9 +5,22 @@
 //! buffer allocations — they must match byte-for-byte.
 
 use openvm_platform::memory::MEM_SIZE;
+use openvm_rv32im_guest::MAX_HINT_BUFFER_WORDS;
 use rvr_openvm_ext_ffi_common::{
     AS_MEMORY, AS_PUBLIC_VALUES, AS_REGISTER, CHUNK, DEFAULT_PAGE_BITS,
     DEFAULT_SEGMENT_CHECK_INSNS, DEFERRAL_AS, WORD_SIZE,
+};
+
+/// Worst-case AS_MEMORY pages a single instruction can touch.
+///
+/// Bound is set by `HINT_BUFFER`, which writes up to
+/// `MAX_HINT_BUFFER_WORDS * WORD_SIZE` contiguous bytes. One AS_MEMORY page
+/// covers `CHUNK * 2^PAGE_BITS` bytes. The `+1` covers worst-case
+/// misalignment of the range across page boundaries.
+pub const MAX_MEM_PAGES_PER_INSN: usize = {
+    let page_bytes = CHUNK * (1 << DEFAULT_PAGE_BITS);
+    let max_bytes = MAX_HINT_BUFFER_WORDS * WORD_SIZE;
+    max_bytes.div_ceil(page_bytes) + 1
 };
 
 /// Maximum AS_MEMORY page buffer entries per segment check interval.
@@ -17,8 +30,8 @@ use rvr_openvm_ext_ffi_common::{
 /// Flushed at most every 2 × `DEFAULT_SEGMENT_CHECK_INSNS` instructions
 /// (block-granular check can overshoot by up to one block, which is at
 /// most `DEFAULT_SEGMENT_CHECK_INSNS` instructions).
-/// Worst-case unique pages per instruction: ~10 (ECC setup / HINT_BUFFER).
-/// 2000 insns × 10 pages = 20 000 — well under 65 536.
+/// Worst-case unique pages per instruction: ~10 (ECC setup / HINT_BUFFER, HINT_BUFFER is taken as
+/// worst-case). 2000 insns × 10 pages = 20 000 — well under 65 536.
 pub const MEM_PAGE_BUF_CAP: usize = 1 << 16;
 
 /// Maximum AS_PUBLIC_VALUES page buffer entries per segment check interval.
@@ -56,6 +69,7 @@ static constexpr uint32_t TRACER_MEM_PAGE_BUF_CAP = {MEM_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_PV_PAGE_BUF_CAP = {PV_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_DEFERRAL_PAGE_BUF_CAP = {DEFERRAL_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_SEGMENT_CHECK_INSNS = {DEFAULT_SEGMENT_CHECK_INSNS};
+static constexpr uint32_t TRACER_MAX_MEM_PAGES_PER_INSN = {MAX_MEM_PAGES_PER_INSN};
 "
     )
 }
