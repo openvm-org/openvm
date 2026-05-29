@@ -354,7 +354,7 @@ where
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_span: tracing::span::EnteredSpan =
+        let _compilation_span =
             tracing::info_span!("compile_metered", backend = "interpreter").entered();
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }

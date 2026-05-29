@@ -56,7 +56,6 @@ toml = { workspace = true }
 [dev-dependencies]
 openvm-verify-stark-circuit = { workspace = true }
 openvm-toolchain-tests = { workspace = true }
-tempfile = { workspace = true }
 
 [features]
 default = ["parallel", "jemalloc"]

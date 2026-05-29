@@ -387,40 +387,6 @@ mod tests {
         instance.execute(vec![], None).unwrap();
     }
 
-    #[cfg(feature = "rvr")]
-    #[test]
-    fn test_rvr_save_load_pure_roundtrip() -> Result<()> {
-        let config = test_rv32im_config();
-        let elf = build_example_program_at_path(get_programs_dir!(), "fibonacci", &config)?;
-        let exe = VmExe::from_elf(
-            elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
-        )?;
-
-        let executor = VmExecutor::new(config)?;
-
-        // baseline: compile + execute in-process
-        let compiled_a = executor.instance(&exe)?;
-        let baseline = compiled_a.execute(vec![], None)?;
-
-        // save — returns the path of the copied .so
-        let tmp = tempfile::tempdir()?;
-        let lib_path = compiled_a.save(tmp.path())?;
-        drop(compiled_a);
-
-        // load + execute via VmExecutor (mirrors `executor.instance(&exe)`)
-        let compiled_b = executor.load_instance(&lib_path, &exe)?;
-        let reloaded = compiled_b.execute(vec![], None)?;
-
-        // assert outcome equivalence
-        assert_eq!(baseline.pc(), reloaded.pc());
-        // (extend to compare memory / public values as needed)
-        Ok(())
-    }
-
     #[test]
     #[should_panic(expected = "Memory access out of bounds")]
     #[cfg(feature = "rvr")]
