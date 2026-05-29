@@ -368,6 +368,14 @@ where
                     for chunk_aux in &mut cols.output_commit_and_len_aux {
                         mem_helper.fill_zero(chunk_aux.as_mut());
                     }
+                    // The canonicity aux columns are only populated on the first row (the
+                    // canonicity range check is gated by `is_first`). On non-first rows the
+                    // preflight record may have left non-zero bytes in these columns, so clear
+                    // them to satisfy the unconditional `assert_bool` constraints in the
+                    // canonicity sub-AIR.
+                    for aux in &mut cols.output_commit_lt_aux {
+                        CanonicityTraceGen::clear_aux(aux);
+                    }
                 }
 
                 cols.output_len = output_len_f;

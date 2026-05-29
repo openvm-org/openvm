@@ -342,6 +342,104 @@ fn rand_deferral_output_test() {
         .expect("Verification failed");
 }
 
+/// Regression test that the filler clears the canonicity aux columns
+/// (`output_commit_lt_aux`) on non-first rows of a section.
+///
+/// The trace buffer is normally zero-initialized at allocation, but the preflight
+/// record is laid over the section's bytes, so columns the filler does not write
+/// can retain non-zero record bytes. `output_commit_lt_aux` is only populated on
+/// the first row, so on non-first rows it must be explicitly cleared - otherwise
+/// the leftover bytes violate the unconditional `assert_bool` constraints in the
+/// canonicity sub-AIR (the canonicity range check itself is gated by `is_first`,
+/// so soundness is unaffected, but proving such a trace fails).
+///
+/// To exercise this deterministically without depending on the record being large
+/// enough to spill into those specific columns, we pre-fill the arena with a
+/// non-boolean value so that any column the filler leaves untouched is non-zero.
+#[test]
+fn deferral_output_non_first_row_canonicity_aux_cleared_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
+    let CpuHarnessBundle {
+        mut harness,
+        bitwise,
+        count,
+        poseidon2,
+    } = create_cpu_harness(&tester, NUM_DEFERRALS);
+
+    init_streams(&mut tester, NUM_DEFERRALS);
+
+    // Pre-fill the arena with a non-boolean value. The executor overwrites the
+    // record region and the filler overwrites every column it populates; only
+    // columns the filler skips (the bug under test) retain this value.
+    harness.arena.trace_buffer.fill(F::from_u32(0xdead));
+
+    let rd = gen_pointer(&mut rng, DEFAULT_BLOCK_SIZE);
+    let rs = gen_pointer(&mut rng, DEFAULT_BLOCK_SIZE);
+    let output_ptr = gen_pointer(&mut rng, DEFAULT_BLOCK_SIZE);
+    let input_ptr = gen_pointer(&mut rng, DEFAULT_BLOCK_SIZE);
+    let deferral_idx = 0;
+
+    // 2 digests -> 3 rows, so the section has non-first rows (rows 1 and 2).
+    let output_len = 2 * DIGEST_SIZE;
+    let mut input_commit = [0u8; COMMIT_NUM_BYTES];
+    rng.fill_bytes(&mut input_commit);
+    let mut output_raw = vec![0u8; output_len];
+    rng.fill_bytes(&mut output_raw);
+    let result = make_result(deferral_idx, input_commit, output_raw);
+
+    let state = &mut tester.streams_mut().deferrals[deferral_idx];
+    state.store_input(result.input.clone(), vec![]);
+    state.store_output(
+        &result.input,
+        result.output_commit.clone(),
+        result.output_raw.clone(),
+    );
+
+    tester.write(
+        RV32_REGISTER_AS as usize,
+        rd,
+        (output_ptr as u32).to_le_bytes().map(F::from_u8),
+    );
+    tester.write(
+        RV32_REGISTER_AS as usize,
+        rs,
+        (input_ptr as u32).to_le_bytes().map(F::from_u8),
+    );
+
+    let output_commit: [u8; COMMIT_NUM_BYTES] = result.output_commit.try_into().unwrap();
+    let output_key = combine_output(
+        output_commit,
+        (result.output_raw.len() as u64).to_le_bytes(),
+    );
+    write_output_key(&mut tester, input_ptr, output_key);
+
+    tester.execute(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            DeferralOpcode::OUTPUT.global_opcode(),
+            [
+                rd,
+                rs,
+                deferral_idx,
+                RV32_REGISTER_AS as usize,
+                RV32_MEMORY_AS as usize,
+            ],
+        ),
+    );
+
+    tester
+        .build()
+        .load(harness)
+        .load_periphery(count)
+        .load_periphery(poseidon2)
+        .load_periphery(bitwise)
+        .finalize()
+        .simple_test()
+        .expect("Verification failed");
+}
+
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_rand_deferral_output_tracegen() {
