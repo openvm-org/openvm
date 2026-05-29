@@ -18,6 +18,9 @@ pub mod utils;
 
 pub use phantom::*;
 
+/// Public values address space.
+pub const PUBLIC_VALUES_AS: u32 = 3;
+/// Deferral output address space.
 pub const DEFERRAL_AS: u32 = 4;
 
 pub trait LocalOpcode {
