@@ -11,12 +11,11 @@ use std::{collections::VecDeque, ffi::c_void, io::Write, mem::size_of};
 
 #[cfg(not(feature = "unprotected"))]
 use openvm_platform::memory::MEM_SIZE;
+use openvm_platform::WORD_SIZE;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, Rng};
 
 use crate::arch::deferral::DeferralState;
-
-const WORD_SIZE: usize = size_of::<u32>();
 
 /// IO execution state borrowed from the host `VmState<F>` for the duration of
 /// one rvr call. Streams, rng, and the public-values byte slice are mutable
