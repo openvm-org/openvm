@@ -258,7 +258,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         /*
          * The input_onion and output_onion are computed by decommitting def_pvs.merkle_commit
          * and performing two onion hashes. Both steps are done in different AIRs, but we
-         * must receive these commits to constrain consistency.
+         * must receive these commits to constrain consistency. We range check merkle_depth to
+         * ensure it's less than or equal to MAX_DEF_AGG_MERKLE_DEPTH.
          */
         self.pow_checker_bus.lookup_key(
             builder,

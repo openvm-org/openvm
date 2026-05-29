@@ -10,13 +10,12 @@ use openvm_recursion_circuit::{
     bus::{
         Poseidon2CompressBus, Poseidon2CompressMessage, PublicValuesBus, PublicValuesBusMessage,
     },
-    prelude::{DIGEST_SIZE, F},
+    prelude::DIGEST_SIZE,
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::poseidon2_compress_with_capacity;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
@@ -30,7 +29,7 @@ use crate::{
         DeferralAggregationPvs, DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID, DEF_CIRCUIT_PVS_AIR_ID,
         MAX_DEF_AGG_MERKLE_DEPTH,
     },
-    utils::digests_to_poseidon2_input,
+    utils::{digests_to_poseidon2_input, zero_hashes_from_depth_one},
     CommitBytes,
 };
 
@@ -72,17 +71,13 @@ impl DeferralAggPvsAir {
     ) -> Self {
         let encoder = Self::depth_encoder();
         assert!(encoder.width() < DIGEST_SIZE);
-        let mut zero_hash = [F::ZERO; DIGEST_SIZE];
         Self {
             public_values_bus,
             poseidon2_bus,
             input_or_merkle_commit_bus,
             def_pvs_consistency_bus,
             encoder,
-            zero_hashes: from_fn(|_| {
-                zero_hash = poseidon2_compress_with_capacity(zero_hash, zero_hash).0;
-                zero_hash.into()
-            }),
+            zero_hashes: zero_hashes_from_depth_one().map(Into::into),
         }
     }
 }
@@ -198,8 +193,9 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         /*
-         * On internal layers we receive num_def_circuit_proofs from PublicValuesBus. To save
-         * columns, we repurpose the unused local.child_pvs.input_commit[0].
+         * On internal layers we receive num_def_circuit_proofs and merkle_depth from
+         * PublicValuesBus. To save columns, we repurpose the first two elements of the unused
+         * local.child_pvs.input_commit.
          */
         let local_num_def_circuit_proofs = local.child_pvs.input_commit[0];
         let local_merkle_depth = local.child_pvs.input_commit[1];
@@ -271,8 +267,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         /*
          * If there are two rows, then the second (next) is either present or not. If present
          * the parent merkle_hash should be the compression of both children's merkle_commit.
-         * If not the second merkle_commit contains encoder flags for the child merkle depth,
-         * which is used to select the correct zero hash depth.
+         * If not the second row's merkle_commit columns are repurposed into encoder flags for
+         * the child merkle depth. They're used to select the correct zero hash depth.
          */
         let flags = next
             .merkle_commit
@@ -283,18 +279,20 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             .eval(&mut builder.when(not(next.is_present)), &flags);
 
         let mut zero_hash = [AB::Expr::ZERO; DIGEST_SIZE];
+        let mut encoded_parent_depth = AB::Expr::ZERO;
+
         for i in 0..=MAX_DEF_AGG_MERKLE_DEPTH {
             let is_current = self.encoder.get_flag_expr::<AB>(i, &flags);
-            builder
-                .when(not(next.is_present))
-                .when(is_current.clone())
-                .assert_eq(merkle_depth, AB::Expr::from_usize(i + 1));
-
             let current_zero_hash: [AB::F; DIGEST_SIZE] = self.zero_hashes[i].into();
             for j in 0..DIGEST_SIZE {
                 zero_hash[j] += is_current.clone() * current_zero_hash[j];
             }
+            encoded_parent_depth += is_current * AB::Expr::from_usize(i);
         }
+
+        builder
+            .when(not(next.is_present))
+            .assert_eq(merkle_depth, encoded_parent_depth + AB::Expr::ONE);
 
         let right_child = from_fn(|i| {
             next.is_present * next.merkle_commit[i] + not(next.is_present) * zero_hash[i].clone()

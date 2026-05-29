@@ -45,3 +45,11 @@ pub fn zero_hash(depth: usize) -> [F; DIGEST_SIZE] {
     }
     ret
 }
+
+pub fn zero_hashes_from_depth_one<const MAX_DEPTH: usize>() -> [[F; DIGEST_SIZE]; MAX_DEPTH] {
+    let mut zero_hash = [F::ZERO; DIGEST_SIZE];
+    from_fn(|_| {
+        zero_hash = poseidon2_compress_with_capacity(zero_hash, zero_hash).0;
+        zero_hash
+    })
+}
