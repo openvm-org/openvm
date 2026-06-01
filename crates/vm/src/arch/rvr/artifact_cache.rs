@@ -10,14 +10,9 @@ use std::{fs, io, path::Path};
 
 use sha2::{Digest, Sha256};
 
-/// Bump this constant to invalidate all existing cache entries whenever the
-/// fingerprint scheme itself changes (e.g. new inputs are added).
-pub const CACHE_ABI_VERSION: u8 = 1;
-
 /// Compute a hex fingerprint for a prepared rvr C project directory.
 ///
 /// Inputs hashed:
-/// - [`CACHE_ABI_VERSION`]
 /// - `native_debug_info` flag (affects the `DEBUG=` make variable)
 /// - `toolchain.compiler` path (different compiler → different binary)
 /// - `toolchain.linker` (affects link flags and output)
@@ -38,7 +33,6 @@ pub fn compute_fingerprint(
     make_args: &[String],
 ) -> Result<String, io::Error> {
     let mut h = Sha256::new();
-    h.update([CACHE_ABI_VERSION]);
     h.update([native_debug_info as u8]);
     h.update(toolchain.compiler.as_bytes());
     h.update(b"\0");
