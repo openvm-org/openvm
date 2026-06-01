@@ -49,6 +49,7 @@ tracing = { workspace = true }
 metrics = { workspace = true, optional = true }
 
 [dev-dependencies]
+openvm-toolchain-tests = { workspace = true }
 tempfile = { workspace = true }
 
 [features]

@@ -45,7 +45,9 @@ static_assertions.workspace = true
 getset.workspace = true
 dashmap.workspace = true
 cfg-if.workspace = true
+hex = { workspace = true, optional = true }
 libloading = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 abi_stable.workspace = true
 bytesize.workspace = true
@@ -103,7 +105,9 @@ rvr = [
     "dep:rvr-openvm-ir",
     "dep:rvr-state",
     "dep:openvm-platform",
+    "dep:hex",
     "dep:libloading",
+    "dep:sha2",
     "dep:tempfile",
     "openvm-circuit-derive/rvr",
 ]
