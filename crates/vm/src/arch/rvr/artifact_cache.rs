@@ -94,7 +94,7 @@ pub fn host_cpu_features() -> String {
 /// Recursively hash the names and contents of all files under `dir` in
 /// deterministic sorted order. Returns an error if any file cannot be read.
 fn hash_dir_into(dir: &Path, h: &mut Sha256) -> Result<(), io::Error> {
-    let mut entries: Vec<_> = fs::read_dir(dir)?.flatten().collect();
+    let mut entries: Vec<_> = fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
     entries.sort_by_key(|e| e.path());
     for entry in entries {
         let path = entry.path();
