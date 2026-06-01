@@ -2,9 +2,8 @@
 //!
 //! The fingerprint covers all inputs that affect the compiled `.so`: the
 //! generated C project files, toolchain identity, runtime CPU features (for
-//! `-march=native`), make invocation arguments, and any extra extension
-//! compiler flags. Two compilations that produce the same fingerprint are
-//! safe to share a cached artifact.
+//! `-march=native`), and make invocation arguments. Two compilations that
+//! produce the same fingerprint are safe to share a cached artifact.
 
 use std::{fs, io, path::Path};
 
@@ -19,8 +18,7 @@ use sha2::{Digest, Sha256};
 /// - `toolchain.make` (build driver identity)
 /// - `toolchain.host_os` (affects LTO and other platform flags)
 /// - [`host_cpu_features`] (for `-march=native` machine-specificity)
-/// - `ext_cflags` (extra compiler flags for extension sources)
-/// - `make_args` (OPT, LTO, EXT_LIBS, EXT_SRCS and other make variables)
+/// - `make_args` (OPT, LTO, EXT_LIBS, EXT_SRCS, EXT_CFLAGS and all other make variables
 /// - name + content of every file under `project_dir` in sorted order
 ///
 /// Returns a 32-character lowercase hex string (128 bits of SHA-256), or
@@ -29,7 +27,6 @@ pub fn compute_fingerprint(
     project_dir: &Path,
     toolchain: &rvr_openvm::RuntimeToolchain,
     native_debug_info: bool,
-    ext_cflags: &[String],
     make_args: &[String],
 ) -> Result<String, io::Error> {
     let mut h = Sha256::new();
@@ -44,10 +41,6 @@ pub fn compute_fingerprint(
     h.update(b"\0");
     h.update(host_cpu_features().as_bytes());
     h.update(b"\0");
-    for flag in ext_cflags {
-        h.update(flag.as_bytes());
-        h.update(b"\0");
-    }
     for arg in make_args {
         h.update(arg.as_bytes());
         h.update(b"\0");

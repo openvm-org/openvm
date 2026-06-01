@@ -483,8 +483,7 @@ fn test_sdk_compile_metered_cost_cached_roundtrip() -> Result<()> {
 
     // cold cache
     let compiled_cold = sdk.compile_metered_cost_cached(exe.clone(), cache_dir.path())?;
-    let (cold_pv, cold_cost) =
-        sdk.execute_compiled_metered_cost(&compiled_cold, stdin.clone())?;
+    let (cold_pv, cold_cost) = sdk.execute_compiled_metered_cost(&compiled_cold, stdin.clone())?;
     assert_eq!(baseline_pv, cold_pv);
     assert_eq!(baseline_cost, cold_cost);
 
