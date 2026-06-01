@@ -12,9 +12,17 @@ rvr-openvm-ir.workspace = true
 rvr-openvm-lift.workspace = true
 rvr-openvm-ext-ffi-common.workspace = true
 
+openvm-circuit = { workspace = true, features = ["rvr"] }
 openvm-instructions.workspace = true
+openvm-platform.workspace = true
 openvm-rv32im-transpiler.workspace = true
 openvm-stark-backend.workspace = true
+
+libloading.workspace = true
+rand.workspace = true
+
+[dev-dependencies]
+p3-baby-bear.workspace = true
 
 [features]
 default = []

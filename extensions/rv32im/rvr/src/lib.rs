@@ -4,9 +4,16 @@
 //! TODO: check if other RV32IM instructions/opcodes can be separated into
 //! extensions.
 
-use openvm_instructions::{instruction::Instruction, riscv::RV32_MEMORY_AS, LocalOpcode};
-use openvm_rv32im_transpiler::{Rv32HintStoreOpcode, Rv32LoadStoreOpcode};
+use std::{ffi::c_void, io::Write};
+
+use openvm_circuit::arch::rvr::io::{check_mem_bounds_range, OpenVmIoState};
+use openvm_instructions::{
+    instruction::Instruction, riscv::RV32_MEMORY_AS, LocalOpcode, SystemOpcode,
+};
+use openvm_platform::WORD_SIZE;
+use openvm_rv32im_transpiler::{Rv32HintStoreOpcode, Rv32LoadStoreOpcode, Rv32Phantom};
 use openvm_stark_backend::p3_field::PrimeField32;
+use rand::Rng;
 use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
@@ -106,6 +113,69 @@ impl ExtInstr for RevealInstr {
     }
 }
 
+/// HINT_INPUT phantom: pop the next input record into the hint stream.
+#[derive(Debug, Clone)]
+pub struct HintInputInstr;
+
+impl ExtInstr for HintInputInstr {
+    fn opname(&self) -> &str {
+        "hint_input"
+    }
+
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        ctx.extern_call("openvm_hint_input", &[]);
+    }
+
+    fn clone_box(&self) -> Box<dyn ExtInstr> {
+        Box::new(self.clone())
+    }
+}
+
+/// PRINT_STR phantom: print a UTF-8 string from guest memory to host stdout.
+#[derive(Debug, Clone)]
+pub struct PrintStrInstr {
+    pub ptr_reg: Reg,
+    pub len_reg: Reg,
+}
+
+impl ExtInstr for PrintStrInstr {
+    fn opname(&self) -> &str {
+        "print_str"
+    }
+
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let ptr = ctx.read_reg_raw(self.ptr_reg);
+        let len = ctx.read_reg_raw(self.len_reg);
+        ctx.extern_call("openvm_print_str", &[&ptr, &len]);
+    }
+
+    fn clone_box(&self) -> Box<dyn ExtInstr> {
+        Box::new(self.clone())
+    }
+}
+
+/// HINT_RANDOM phantom: fill the hint stream with `reg[num_words_reg] * 4`
+/// random bytes drawn from the host's persistent RNG.
+#[derive(Debug, Clone)]
+pub struct HintRandomInstr {
+    pub num_words_reg: Reg,
+}
+
+impl ExtInstr for HintRandomInstr {
+    fn opname(&self) -> &str {
+        "hint_random"
+    }
+
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let n = ctx.read_reg_raw(self.num_words_reg);
+        ctx.extern_call("openvm_hint_random", &[&n]);
+    }
+
+    fn clone_box(&self) -> Box<dyn ExtInstr> {
+        Box::new(self.clone())
+    }
+}
+
 /// rvr extension for the rv32im I/O instructions HINT_STOREW, HINT_BUFFER, and
 /// REVEAL.
 pub struct Rv32IoExtension {
@@ -170,7 +240,17 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IoExtension {
     }
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
-        Vec::new()
+        vec![(
+            "rv32io_callbacks.h",
+            include_str!("../c/rv32io_callbacks.h"),
+        )]
+    }
+
+    fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
+        vec![(
+            "rv32io_callbacks.c",
+            include_str!("../c/rv32io_callbacks.c"),
+        )]
     }
 
     fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
@@ -178,14 +258,265 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IoExtension {
     }
 
     fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
-        // Unused: we override `staticlib_files()` to return an empty list
-        // because this extension has no native side-car library.
         ("", &[])
+    }
+
+    unsafe fn register_host_callbacks(
+        &self,
+        lib: &libloading::Library,
+    ) -> Result<(), ExtensionError> {
+        let register_fn: RegisterRv32IoFn = unsafe {
+            let sym = lib
+                .get::<RegisterRv32IoFn>(b"register_rv32io_callbacks")
+                .map_err(|e| ExtensionError::HostCallbackRegistration(e.to_string()))?;
+            *sym
+        };
+        let callbacks = Rv32IoHostCallbacks {
+            hint_storew: host_hint_storew::<F>,
+            hint_buffer: host_hint_buffer::<F>,
+            reveal: host_reveal::<F>,
+        };
+        unsafe { register_fn(&callbacks) };
+        Ok(())
+    }
+}
+
+/// rvr extension for the rv32im base IO phantoms HINT_INPUT, PRINT_STR,
+/// HINT_RANDOM, and the extension hint-stream setter.
+pub struct Rv32IExtension;
+
+impl Rv32IExtension {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for Rv32IExtension {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<F: PrimeField32> RvrExtension<F> for Rv32IExtension {
+    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
+        if insn.opcode.as_usize() != SystemOpcode::PHANTOM.global_opcode_usize() {
+            return None;
+        }
+        let discriminant = (insn.c.as_canonical_u32() & 0xffff) as u16;
+        let phantom = Rv32Phantom::from_repr(discriminant)?;
+        let instr: Box<dyn ExtInstr> = match phantom {
+            Rv32Phantom::HintInput => Box::new(HintInputInstr),
+            Rv32Phantom::PrintStr => Box::new(PrintStrInstr {
+                ptr_reg: decode_reg(insn.a),
+                len_reg: decode_reg(insn.b),
+            }),
+            Rv32Phantom::HintRandom => Box::new(HintRandomInstr {
+                num_words_reg: decode_reg(insn.a),
+            }),
+        };
+        Some(LiftedInstr::Body(InstrAt {
+            pc,
+            instr: Instr::Ext(instr),
+            source_loc: None,
+        }))
+    }
+
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
+        vec![(
+            "rv32i_phantom_callbacks.h",
+            include_str!("../c/rv32i_phantom_callbacks.h"),
+        )]
+    }
+
+    fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
+        vec![(
+            "rv32i_phantom_callbacks.c",
+            include_str!("../c/rv32i_phantom_callbacks.c"),
+        )]
+    }
+
+    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
+        Vec::new()
+    }
+
+    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
+        ("", &[])
+    }
+
+    unsafe fn register_host_callbacks(
+        &self,
+        lib: &libloading::Library,
+    ) -> Result<(), ExtensionError> {
+        let register_fn: RegisterRv32IPhantomFn = unsafe {
+            let sym = lib
+                .get::<RegisterRv32IPhantomFn>(b"register_rv32i_phantom_callbacks")
+                .map_err(|e| ExtensionError::HostCallbackRegistration(e.to_string()))?;
+            *sym
+        };
+        let callbacks = Rv32IPhantomCallbacks {
+            hint_input: host_hint_input::<F>,
+            print_str: host_print_str::<F>,
+            hint_random: host_hint_random::<F>,
+            hint_stream_set: host_hint_stream_set::<F>,
+        };
+        unsafe { register_fn(&callbacks) };
+        Ok(())
+    }
+}
+
+type RegisterRv32IPhantomFn = unsafe extern "C" fn(*const Rv32IPhantomCallbacks);
+type RegisterRv32IoFn = unsafe extern "C" fn(*const Rv32IoHostCallbacks);
+
+/// Must match the C `Rv32IPhantomCallbacks` layout in `rv32i_phantom_callbacks.c`.
+#[repr(C)]
+pub struct Rv32IPhantomCallbacks {
+    pub hint_input: extern "C" fn(*mut c_void),
+    pub print_str: extern "C" fn(*mut c_void, u32, u32),
+    pub hint_random: extern "C" fn(*mut c_void, u32),
+    pub hint_stream_set: unsafe extern "C" fn(*mut c_void, *const u8, u32),
+}
+
+/// Must match the C `Rv32IoHostCallbacks` layout in `rv32io_callbacks.c`.
+#[repr(C)]
+pub struct Rv32IoHostCallbacks {
+    pub hint_storew: extern "C" fn(*mut c_void, u32),
+    pub hint_buffer: extern "C" fn(*mut c_void, u32, u32),
+    pub reveal: extern "C" fn(*mut c_void, u32, u32, u32),
+}
+
+// ── Callback implementations ────────────────────────────────────────────────
+
+/// HintInput: pop next input record from VmState's input_stream and overwrite
+/// the active hint stream with `[len: u32 LE][data][padding to 4-byte align]`,
+/// each byte stored as one field element.
+pub extern "C" fn host_hint_input<F: PrimeField32>(ctx: *mut c_void) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+    io.hint_stream.clear();
+    if let Some(vec) = io.input_stream.pop_front() {
+        let data_len = vec.len();
+        let padded_len = (data_len + 3) & !3;
+        let len_bytes = (data_len as u32).to_le_bytes();
+        for &b in &len_bytes {
+            io.hint_stream.push_back(F::from_u8(b));
+        }
+        io.hint_stream.extend(vec);
+        for _ in data_len..padded_len {
+            io.hint_stream.push_back(F::ZERO);
+        }
+    }
+}
+
+/// PrintStr: read UTF-8 from guest memory and print to stdout.
+pub extern "C" fn host_print_str<F: PrimeField32>(ctx: *mut c_void, ptr: u32, len: u32) {
+    let io = unsafe { &*(ctx as *const OpenVmIoState<'_, F>) };
+    if len > 0 && !io.memory_ptr.is_null() {
+        check_mem_bounds_range(ptr, len as usize);
+        let slice =
+            unsafe { std::slice::from_raw_parts(io.memory_ptr.add(ptr as usize), len as usize) };
+        let _ = std::io::stdout().write_all(slice);
+        let _ = std::io::stdout().flush();
+    }
+}
+
+/// HintRandom: refill the hint stream with `num_words * WORD_SIZE` random
+/// bytes drawn from VmState's persistent RNG (matches openvm's
+/// `Rv32HintRandomSubEx`).
+pub extern "C" fn host_hint_random<F: PrimeField32>(ctx: *mut c_void, num_words: u32) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+    let nbytes = num_words as usize * WORD_SIZE;
+    io.hint_stream.clear();
+    for _ in 0..nbytes {
+        io.hint_stream.push_back(F::from_u8(io.rng.random::<u8>()));
+    }
+}
+
+/// HINT_STOREW: pop one word from the hint stream as bytes and write it to
+/// guest memory at `dest_addr`.
+pub extern "C" fn host_hint_storew<F: PrimeField32>(ctx: *mut c_void, dest_addr: u32) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+    if io.hint_stream.len() < WORD_SIZE || io.memory_ptr.is_null() {
+        return;
+    }
+    check_mem_bounds_range(dest_addr, WORD_SIZE);
+    let mut bytes = [0u8; WORD_SIZE];
+    for byte in &mut bytes {
+        *byte = io.hint_stream.pop_front().unwrap().as_canonical_u32() as u8;
+    }
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            bytes.as_ptr(),
+            io.memory_ptr.add(dest_addr as usize),
+            bytes.len(),
+        );
+    }
+}
+
+/// HINT_BUFFER: pop `num_words * WORD_SIZE` field elements from the hint stream
+/// and copy them as bytes into guest memory.
+pub extern "C" fn host_hint_buffer<F: PrimeField32>(
+    ctx: *mut c_void,
+    dest_addr: u32,
+    num_words: u32,
+) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+    let nbytes = num_words as usize * WORD_SIZE;
+    if io.hint_stream.len() < nbytes || io.memory_ptr.is_null() {
+        return;
+    }
+    check_mem_bounds_range(dest_addr, nbytes);
+    let dst = unsafe { io.memory_ptr.add(dest_addr as usize) };
+    for i in 0..nbytes {
+        let byte = io.hint_stream.pop_front().unwrap().as_canonical_u32() as u8;
+        unsafe { *dst.add(i) = byte };
+    }
+}
+
+/// REVEAL: write public output bytes directly into the guest's `PUBLIC_VALUES_AS`
+/// byte slice. Cost corrections handled in C.
+pub extern "C" fn host_reveal<F: PrimeField32>(
+    ctx: *mut c_void,
+    src_val: u32,
+    ptr: u32,
+    offset: u32,
+) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+    let start = ptr as usize + offset as usize;
+    let end = start + WORD_SIZE;
+    assert!(
+        end <= io.public_values.len(),
+        "reveal out of bounds: writing bytes [{start}..{end}) but public_values size is {} (configured via SystemConfig::with_public_values)",
+        io.public_values.len(),
+    );
+    io.public_values[start..end].copy_from_slice(&src_val.to_le_bytes());
+}
+
+/// HINT_STREAM_SET: replace the hint stream contents (used by extension phantoms).
+///
+/// # Safety
+///
+/// `ctx` must be a valid `OpenVmIoState` pointer. `data` must point to `len` bytes (or be null).
+pub unsafe extern "C" fn host_hint_stream_set<F: PrimeField32>(
+    ctx: *mut c_void,
+    data: *const u8,
+    len: u32,
+) {
+    let io = &mut *(ctx as *mut OpenVmIoState<'_, F>);
+    io.hint_stream.clear();
+    if len > 0 && !data.is_null() {
+        let slice = std::slice::from_raw_parts(data, len as usize);
+        for &b in slice {
+            io.hint_stream.push_back(F::from_u8(b));
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
+
+    use p3_baby_bear::BabyBear;
+    use rand::{rngs::StdRng, SeedableRng};
+
     use super::*;
 
     #[derive(Default)]
@@ -267,5 +598,35 @@ mod tests {
             format!("trace_mem_access(state, (r10 + 0x0000000cu), {AS_PUBLIC_VALUES}u);")
         );
         assert_eq!(ctx.lines[1], "openvm_reveal(r5, r10, 0x0000000cu);");
+    }
+
+    #[test]
+    fn host_reveal_writes_public_values_slice() {
+        let mut input_stream = VecDeque::new();
+        let mut hint_stream = VecDeque::new();
+        let mut rng = StdRng::seed_from_u64(0);
+        let mut memory = vec![0u8; 16];
+        let mut public_values = vec![0u8; 16];
+        let mut deferrals = Vec::new();
+
+        let mut io = OpenVmIoState::<BabyBear> {
+            input_stream: &mut input_stream,
+            hint_stream: &mut hint_stream,
+            rng: &mut rng,
+            memory_ptr: memory.as_mut_ptr(),
+            public_values: &mut public_values,
+            deferral_memory: std::ptr::null_mut(),
+            deferral_memory_len: 0,
+            deferrals: &mut deferrals,
+        };
+
+        host_reveal::<BabyBear>(
+            &mut io as *mut OpenVmIoState<'_, BabyBear> as *mut c_void,
+            0x11223344,
+            4,
+            2,
+        );
+
+        assert_eq!(&io.public_values[6..10], &[0x44, 0x33, 0x22, 0x11]);
     }
 }

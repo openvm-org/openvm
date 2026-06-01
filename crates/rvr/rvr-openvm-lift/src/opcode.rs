@@ -3,8 +3,7 @@
 //! Supports the basic OpenVM ISA:
 //! - RV32IM base instructions
 //! - System instructions: TERMINATE, PHANTOM, PUBLISH
-//! - Phantom sub-instructions: Nop, DebugPanic, CtStart, CtEnd, Rv32HintInput, Rv32PrintStr,
-//!   Rv32HintRandom
+//! - System phantom sub-instructions: Nop, DebugPanic, CtStart, CtEnd
 //! - STOREW e=2 dispatch (normal memory store)
 
 use openvm_instructions::{
@@ -13,7 +12,7 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
     MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LoadStoreOpcode,
-    Rv32Phantom, ShiftOpcode,
+    ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
@@ -45,11 +44,7 @@ pub fn lift_instruction<F: PrimeField32>(
     }
     if opcode == SystemOpcode::PHANTOM.global_opcode_usize() {
         let discriminant = (field_to_u32(insn.c) & 0xffff) as u16;
-        // Try built-in phantom handlers first, then fall through to extensions
-        // for unknown discriminants (e.g. algebra HintNonQr/HintSqrt).
-        if SysPhantom::from_repr(discriminant).is_some()
-            || Rv32Phantom::from_repr(discriminant).is_some()
-        {
+        if SysPhantom::from_repr(discriminant).is_some() {
             return Some(lift_phantom(insn, pc));
         }
         if let Some(lifted) = extensions.try_lift(insn, pc) {
@@ -438,8 +433,6 @@ fn lift_phantom<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr 
     let c_val = field_to_u32(insn.c);
     let discriminant = (c_val & 0xffff) as u16;
 
-    // System phantoms (SysPhantom variants). `from_repr` returns None for
-    // non-system discriminants; fall through to the Rv32Phantom check.
     if let Some(sys) = SysPhantom::from_repr(discriminant) {
         return match sys {
             // Nop, CtStart, CtEnd — no-ops for execution
@@ -452,27 +445,6 @@ fn lift_phantom<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr 
                     message: "PHANTOM DebugPanic".to_string(),
                 },
             ),
-        };
-    }
-
-    // RV32IM extension phantoms (Rv32Phantom variants).
-    if let Some(rv32) = Rv32Phantom::from_repr(discriminant) {
-        return match rv32 {
-            // HintInput — pop from input_stream, reset hint_stream with length-prefixed data
-            Rv32Phantom::HintInput => body(pc, Instr::HintInput),
-
-            // PrintStr — print UTF-8 string from memory; a=ptr_reg, b=len_reg
-            Rv32Phantom::PrintStr => {
-                let ptr_reg = decode_reg(insn.a);
-                let len_reg = decode_reg(insn.b);
-                body(pc, Instr::PrintStr { ptr_reg, len_reg })
-            }
-
-            // HintRandom — fill hint_stream with [a]_1 random words
-            Rv32Phantom::HintRandom => {
-                let num_words_reg = decode_reg(insn.a);
-                body(pc, Instr::HintRandom { num_words_reg })
-            }
         };
     }
 

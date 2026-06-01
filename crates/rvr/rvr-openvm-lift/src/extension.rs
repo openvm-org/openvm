@@ -164,7 +164,7 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
     }
 
     /// Register host-side callbacks for this extension with the loaded `.so`.
-    /// Called after `register_openvm_callbacks` and before `rv_execute`.
+    /// Called after `register_openvm_io_ctx` and before `rv_execute`.
     ///
     /// # Safety
     ///
