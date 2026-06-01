@@ -8938,17 +8938,9 @@ dependencies = [
  "openvm-deferral-transpiler",
  "openvm-instructions",
  "openvm-stark-backend",
- "rvr-openvm-build",
  "rvr-openvm-ext-ffi-common",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
-]
-
-[[package]]
-name = "rvr-openvm-ext-deferral-ffi"
-version = "2.0.0-beta.2"
-dependencies = [
- "rvr-openvm-ext-ffi-common",
 ]
 
 [[package]]
