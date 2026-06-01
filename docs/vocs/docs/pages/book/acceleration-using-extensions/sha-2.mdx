@@ -45,7 +45,7 @@ fn sha256(input: &[u8]) -> [u8; 32] {
         digest
     }
     #[cfg(not(target_os = "zkvm"))] {
-        // Regular SHA-256 implementation
+        unimplemented!("native sha256 is only available on zkvm target")
     }
 }
 ```
