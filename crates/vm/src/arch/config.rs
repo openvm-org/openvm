@@ -62,25 +62,14 @@ pub(crate) const fn const_log2_strict_usize(value: usize) -> usize {
     value.ilog2() as usize
 }
 
-/// Normalized memory-bus pointer scale: `bus_ptr = BUS_PTR_SCALE * ptr`.
-/// Equals `U16_CELL_SIZE` so byte pointers in u16-celled ASes coincide with bus
-/// pointers.
-pub const BUS_PTR_SCALE: usize = U16_CELL_SIZE;
-
 /// log2 of [`U16_CELL_SIZE`].
 pub const U16_CELL_SIZE_BITS: usize = const_log2_strict_usize(U16_CELL_SIZE);
-
-/// log2 of [`BUS_PTR_SCALE`].
-pub const BUS_PTR_SCALE_BITS: usize = U16_CELL_SIZE_BITS;
 
 /// Cells per memory-bus block.
 pub const BLOCK_FE_WIDTH: usize = 4;
 
 /// Bytes per memory-bus block (one RV64 8-byte word pair).
 pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
-
-/// Bus-pointer delta between consecutive blocks.
-pub const BUS_BLOCK_STRIDE: usize = BUS_PTR_SCALE * BLOCK_FE_WIDTH;
 
 /// Default byte-capacity for `RV64_MEMORY_AS` in `MemoryConfig::default`.
 pub const DEFAULT_RV64_MEMORY_BYTE_CAPACITY: usize = 1 << (POINTER_MAX_BITS + U16_CELL_SIZE_BITS);

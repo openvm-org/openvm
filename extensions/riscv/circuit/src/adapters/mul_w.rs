@@ -34,7 +34,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::{tracing_read, tracing_write};
+use super::{byte_ptr_to_u16_ptr, tracing_read, tracing_write};
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
@@ -103,7 +103,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
         });
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs1_ptr),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
+                ),
                 pack_u8_block::<AB>(&rs1_data),
                 timestamp_pp(),
                 &local.reads_aux[0],
@@ -119,7 +122,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
         });
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs2_ptr),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local.rs2_ptr),
+                ),
                 pack_u8_block::<AB>(&rs2_data),
                 timestamp_pp(),
                 &local.reads_aux[1],
@@ -148,7 +154,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
         });
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rd_ptr),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local.rd_ptr),
+                ),
                 pack_u8_block::<AB>(&write_data),
                 timestamp_pp(),
                 &local.writes_aux,

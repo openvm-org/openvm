@@ -11,7 +11,10 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS,
 };
-use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+};
 
 mod alu;
 mod alu_w;
@@ -67,6 +70,11 @@ pub const fn openvm_ptr_from_rv64_byte_ptr(byte_ptr: u32) -> u32 {
         "RISC-V byte pointer must be u16-cell aligned"
     );
     byte_ptr >> U16_CELL_SIZE_BITS
+}
+
+/// Converts an aligned byte pointer expression to an OpenVM pointer expression.
+pub fn byte_ptr_to_u16_ptr<AB: InteractionBuilder>(byte_ptr: impl Into<AB::Expr>) -> AB::Expr {
+    byte_ptr.into() * AB::F::TWO.inverse()
 }
 
 /// Convert the RISC-V register data (64 bits represented as 8 bytes, where each byte is represented

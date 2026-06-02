@@ -30,8 +30,8 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{
-    abstract_compose, expand_to_rv64_register, tracing_read, tracing_read_reg_ptr, tracing_write,
-    RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+    abstract_compose, byte_ptr_to_u16_ptr, expand_to_rv64_register, tracing_read,
+    tracing_read_reg_ptr, tracing_write, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -122,7 +122,7 @@ impl<
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(d, ptr),
+                    MemoryAddress::new(d, byte_ptr_to_u16_ptr::<AB>(ptr)),
                     pack_u8_block::<AB>(&expand_to_rv64_register(&val)),
                     timestamp_pp(),
                     aux,
@@ -178,7 +178,7 @@ impl<
             for (offset, data, aux) in izip!(block_ptr_offset, block_data, block_aux) {
                 self.memory_bridge
                     .read(
-                        MemoryAddress::new(e, ptr.clone() + offset),
+                        MemoryAddress::new(e, byte_ptr_to_u16_ptr::<AB>(ptr.clone() + offset)),
                         pack_u8_block::<AB>(&data),
                         timestamp_pp(),
                         aux,
@@ -190,7 +190,7 @@ impl<
         // Write to rd register
         self.memory_bridge
             .write(
-                MemoryAddress::new(d, cols.rd_ptr),
+                MemoryAddress::new(d, byte_ptr_to_u16_ptr::<AB>(cols.rd_ptr)),
                 pack_u8_block::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),
                 &cols.writes_aux,

@@ -20,7 +20,7 @@ use openvm_instructions::{
     riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::expand_to_rv64_register;
+use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_rv64_register};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -283,7 +283,7 @@ where
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), local.rd_ptr),
+                MemoryAddress::new(d.clone(), byte_ptr_to_u16_ptr::<AB>(local.rd_ptr)),
                 pack_u8_block::<AB>(&rd_full),
                 local.from_state.timestamp,
                 &local.rd_aux,
@@ -292,7 +292,7 @@ where
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), local.rs_ptr),
+                MemoryAddress::new(d.clone(), byte_ptr_to_u16_ptr::<AB>(local.rs_ptr)),
                 pack_u8_block::<AB>(&rs_full),
                 local.from_state.timestamp + AB::Expr::ONE,
                 &local.rs_aux,
@@ -327,7 +327,10 @@ where
                 .read(
                     MemoryAddress::new(
                         e.clone(),
-                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
+                        byte_ptr_to_u16_ptr::<AB>(
+                            input_ptr.clone()
+                                + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
+                        ),
                     ),
                     pack_u8_block::<AB>(&data),
                     local.from_state.timestamp + AB::Expr::from_usize(2 + chunk_idx),
@@ -356,9 +359,12 @@ where
                 .write(
                     MemoryAddress::new(
                         e.clone(),
-                        output_ptr.clone()
-                            + (section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_SIZE))
-                            + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
+                        byte_ptr_to_u16_ptr::<AB>(
+                            output_ptr.clone()
+                                + (section_idx_minus_one.clone()
+                                    * AB::Expr::from_usize(DIGEST_SIZE))
+                                + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
+                        ),
                     ),
                     pack_u8_block::<AB>(&data_expr),
                     local.from_state.timestamp

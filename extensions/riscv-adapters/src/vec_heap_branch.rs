@@ -28,7 +28,8 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{
-    abstract_compose, expand_to_rv64_register, tracing_read, tracing_read_reg_ptr, RV64_CELL_BITS,
+    abstract_compose, byte_ptr_to_u16_ptr, expand_to_rv64_register, tracing_read,
+    tracing_read_reg_ptr, RV64_CELL_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -97,7 +98,10 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), ptr),
+                    MemoryAddress::new(
+                        AB::F::from_u32(RV64_REGISTER_AS),
+                        byte_ptr_to_u16_ptr::<AB>(ptr),
+                    ),
                     pack_u8_block::<AB>(&expand_to_rv64_register(&val)),
                     timestamp_pp(),
                     aux,
@@ -151,7 +155,9 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
                     .read(
                         MemoryAddress::new(
                             e,
-                            address.clone() + AB::Expr::from_usize(i * MEMORY_BLOCK_BYTES),
+                            byte_ptr_to_u16_ptr::<AB>(
+                                address.clone() + AB::Expr::from_usize(i * MEMORY_BLOCK_BYTES),
+                            ),
                         ),
                         pack_u8_block::<AB>(&read),
                         timestamp_pp(),

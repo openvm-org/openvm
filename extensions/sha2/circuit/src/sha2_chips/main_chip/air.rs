@@ -18,7 +18,7 @@ use openvm_circuit_primitives::{
 use openvm_instructions::riscv::{
     RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
 };
-use openvm_riscv_circuit::adapters::expand_to_rv64_register;
+use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_rv64_register};
 use openvm_sha2_air::Sha2BlockHasherSubairConfig;
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -219,7 +219,10 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             let data = expand_to_rv64_register(&val_arr);
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(RV64_REGISTER_AS), ptr),
+                    MemoryAddress::new(
+                        AB::Expr::from_u32(RV64_REGISTER_AS),
+                        byte_ptr_to_u16_ptr::<AB>(ptr),
+                    ),
                     pack_u8_block::<AB>(&data),
                     timestamp_pp(),
                     aux,
@@ -300,7 +303,9 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .read(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_MEMORY_AS),
-                        input_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
+                        byte_ptr_to_u16_ptr::<AB>(
+                            input_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
+                        ),
                     ),
                     pack_u8_block::<AB>(&chunk_expr),
                     timestamp_pp(),
@@ -332,7 +337,9 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .read(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_MEMORY_AS),
-                        state_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
+                        byte_ptr_to_u16_ptr::<AB>(
+                            state_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
+                        ),
                     ),
                     pack_u8_block::<AB>(&chunk_expr),
                     timestamp_pp(),
@@ -371,7 +378,9 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .write(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_MEMORY_AS),
-                        dst_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
+                        byte_ptr_to_u16_ptr::<AB>(
+                            dst_ptr_val.clone() + AB::F::from_usize(i * SHA2_WRITE_SIZE),
+                        ),
                     ),
                     pack_u8_block::<AB>(&chunk_expr),
                     timestamp_pp(),

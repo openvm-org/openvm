@@ -32,7 +32,7 @@ use openvm_stark_backend::{
 };
 
 use super::RV64_REGISTER_NUM_LIMBS;
-use crate::adapters::{tracing_read, tracing_write};
+use crate::adapters::{byte_ptr_to_u16_ptr, tracing_read, tracing_write};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -94,7 +94,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rs1_ptr),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
+                ),
                 pack_u8_block::<AB>(&ctx.reads[0].clone()),
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
@@ -103,7 +106,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rd_ptr),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local_cols.rd_ptr),
+                ),
                 pack_u8_block::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),
                 &local_cols.rd_aux_cols,

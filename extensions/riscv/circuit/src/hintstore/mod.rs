@@ -41,8 +41,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    expand_to_rv64_register, read_rv64_register_as_u32, tracing_read, tracing_read_reg_ptr,
-    tracing_write,
+    byte_ptr_to_u16_ptr, expand_to_rv64_register, read_rv64_register_as_u32, tracing_read,
+    tracing_read_reg_ptr, tracing_write,
 };
 
 mod execution;
@@ -172,7 +172,10 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         let mem_ptr_data = expand_to_rv64_register(&local_cols.mem_ptr_limbs);
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.mem_ptr_ptr),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local_cols.mem_ptr_ptr),
+                ),
                 pack_u8_block::<AB>(&mem_ptr_data),
                 timestamp_pp(),
                 &local_cols.mem_ptr_aux_cols,
@@ -183,7 +186,10 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         let num_words_data = expand_to_rv64_register(&local_cols.rem_words_limbs);
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.num_words_ptr),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local_cols.num_words_ptr),
+                ),
                 pack_u8_block::<AB>(&num_words_data),
                 timestamp_pp(),
                 &local_cols.num_words_aux_cols,
@@ -193,7 +199,10 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         // write hint
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), mem_ptr.clone()),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_MEMORY_AS),
+                    byte_ptr_to_u16_ptr::<AB>(mem_ptr.clone()),
+                ),
                 pack_u8_block::<AB>(&local_cols.data.map(Into::into)),
                 timestamp_pp(),
                 &local_cols.write_aux,

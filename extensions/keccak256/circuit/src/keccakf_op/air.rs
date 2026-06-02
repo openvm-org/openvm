@@ -15,7 +15,7 @@ use openvm_instructions::riscv::{
     RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
-use openvm_riscv_circuit::adapters::expand_to_rv64_register;
+use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_rv64_register};
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, BaseAir},
@@ -72,7 +72,10 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             expand_to_rv64_register(&local.buffer_ptr_limbs);
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), rd_ptr),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(rd_ptr),
+                ),
                 pack_u8_block::<AB>(&buffer_ptr_limbs),
                 timestamp_pp(),
                 &local.rd_aux,
@@ -124,7 +127,10 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             let data: [AB::Expr; MEMORY_BLOCK_BYTES] = std::array::from_fn(|i| post_word[i].into());
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), ptr),
+                    MemoryAddress::new(
+                        AB::F::from_u32(RV64_MEMORY_AS),
+                        byte_ptr_to_u16_ptr::<AB>(ptr),
+                    ),
                     pack_u8_block::<AB>(&data),
                     timestamp_pp(),
                     MemoryWriteAuxInput::from_prev_data_exprs(

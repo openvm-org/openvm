@@ -17,7 +17,7 @@ use openvm_instructions::riscv::{
     RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 use openvm_keccak256_transpiler::XorinOpcode;
-use openvm_riscv_circuit::adapters::expand_to_rv64_register;
+use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_rv64_register};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -157,7 +157,10 @@ impl XorinVmAir {
         ) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(RV64_REGISTER_AS), ptr),
+                    MemoryAddress::new(
+                        AB::Expr::from_u32(RV64_REGISTER_AS),
+                        byte_ptr_to_u16_ptr::<AB>(ptr),
+                    ),
                     pack_u8_block::<AB>(&value),
                     timestamp.clone(),
                     aux,
@@ -235,7 +238,10 @@ impl XorinVmAir {
 
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), ptr),
+                    MemoryAddress::new(
+                        AB::Expr::from_u32(RV64_MEMORY_AS),
+                        byte_ptr_to_u16_ptr::<AB>(ptr),
+                    ),
                     pack_u8_block::<AB>(&[
                         input[0].into(),
                         input[1].into(),
@@ -268,7 +274,10 @@ impl XorinVmAir {
 
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), ptr),
+                    MemoryAddress::new(
+                        AB::Expr::from_u32(RV64_MEMORY_AS),
+                        byte_ptr_to_u16_ptr::<AB>(ptr),
+                    ),
                     pack_u8_block::<AB>(&[
                         input[0].into(),
                         input[1].into(),
@@ -344,7 +353,10 @@ impl XorinVmAir {
 
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(AB::Expr::from_u32(RV64_MEMORY_AS), ptr),
+                    MemoryAddress::new(
+                        AB::Expr::from_u32(RV64_MEMORY_AS),
+                        byte_ptr_to_u16_ptr::<AB>(ptr),
+                    ),
                     pack_u8_block::<AB>(&[
                         output[0].into(),
                         output[1].into(),

@@ -20,11 +20,11 @@ use tracing::instrument;
 
 use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP};
 use crate::{
-    arch::{hasher::Hasher, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH, BUS_BLOCK_STRIDE},
+    arch::{hasher::Hasher, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     primitives::Chip,
     system::memory::{
         controller::DIGEST_WIDTH, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
-        TimestampedEquipartition, BUS_LEAF_STRIDE,
+        TimestampedEquipartition,
     },
 };
 
@@ -121,19 +121,13 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
             local.expand_direction * local.expand_direction,
         );
 
-        // Each leaf splits into `BLOCKS_PER_LEAF` bus messages of `BLOCK_FE_WIDTH` cells,
-        // addressed by `bus_ptr = BUS_LEAF_STRIDE * leaf_label + BUS_BLOCK_STRIDE * block_idx`.
-        let leaf_stride_f = AB::F::from_usize(BUS_LEAF_STRIDE);
-        let block_stride_f = AB::F::from_usize(BUS_BLOCK_STRIDE);
+        let leaf_ptr = local.leaf_label * AB::F::from_usize(DIGEST_WIDTH);
         for block_idx in 0..BLOCKS_PER_LEAF {
-            let offset = block_stride_f * AB::F::from_usize(block_idx);
+            let ptr = leaf_ptr.clone() + AB::F::from_usize(block_idx * BLOCK_FE_WIDTH);
             // Each block uses its own timestamp; untouched blocks stay at t=0.
             self.memory_bus
                 .send(
-                    MemoryAddress::new(
-                        local.address_space,
-                        local.leaf_label * leaf_stride_f + offset,
-                    ),
+                    MemoryAddress::new(local.address_space, ptr),
                     local.values[block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
                         .to_vec(),
                     local.timestamps[block_idx],
