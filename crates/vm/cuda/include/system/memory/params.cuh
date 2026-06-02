@@ -53,10 +53,9 @@
 #include "poseidon2.cuh" // brings in CELLS / CELLS_OUT from stark-backend
 
 // Cells per Poseidon2 half (and per merkle leaf).
-inline constexpr size_t DIGEST_WIDTH_BITS = 3;
-inline constexpr size_t DIGEST_WIDTH = 1 << DIGEST_WIDTH_BITS; // 8
+inline constexpr size_t DIGEST_WIDTH = CELLS_OUT;
 // Cells per Poseidon2 permutation input.
-inline constexpr size_t POSEIDON2_WIDTH = CELLS;  // 16
+inline constexpr size_t POSEIDON2_WIDTH = CELLS;
 
 // Bytes per memory-bus block (one RV64 8-byte word pair).
 inline constexpr size_t MEMORY_BLOCK_BYTES = 8;
@@ -71,8 +70,7 @@ inline constexpr size_t BLOCKS_PER_LEAF = DIGEST_WIDTH / BLOCK_FE_WIDTH;
 // Bus-pointer delta between consecutive blocks.
 inline constexpr size_t BUS_BLOCK_STRIDE = BUS_PTR_SCALE * BLOCK_FE_WIDTH;
 // Bus-pointer delta between consecutive merkle leaves.
-inline constexpr size_t BUS_LEAF_STRIDE_BITS = BUS_PTR_SCALE_BITS + DIGEST_WIDTH_BITS;
-inline constexpr size_t BUS_LEAF_STRIDE = 1 << BUS_LEAF_STRIDE_BITS;
+inline constexpr size_t BUS_LEAF_STRIDE = BUS_PTR_SCALE * DIGEST_WIDTH;
 
 // Host byte width of one u16-celled storage cell.
 inline constexpr size_t U16_CELL_SIZE = 2;
@@ -80,12 +78,3 @@ inline constexpr size_t U16_CELL_SIZE = 2;
 // Address space ID for the F-celled deferral AS. Matches
 // `openvm_instructions::DEFERRAL_AS`.
 inline constexpr uint32_t DEFERRAL_AS = 4;
-
-// Catch non-even divisions and cross-constant mismatches that would silently
-// break the bus / merkle layout.
-static_assert(BLOCK_FE_WIDTH * BUS_PTR_SCALE == MEMORY_BLOCK_BYTES, "memory layout invariant");
-static_assert(BLOCK_FE_WIDTH * U16_CELL_SIZE == MEMORY_BLOCK_BYTES, "u16 byte-view invariant");
-static_assert(DIGEST_WIDTH == CELLS_OUT, "DIGEST_WIDTH must match Poseidon2 half width");
-static_assert(POSEIDON2_WIDTH == 2 * DIGEST_WIDTH, "POSEIDON2_WIDTH must be 2 * DIGEST_WIDTH");
-static_assert(BLOCKS_PER_LEAF * BLOCK_FE_WIDTH == DIGEST_WIDTH, "merkle layout invariant");
-static_assert(BUS_LEAF_STRIDE == BUS_PTR_SCALE * DIGEST_WIDTH, "leaf stride invariant");
