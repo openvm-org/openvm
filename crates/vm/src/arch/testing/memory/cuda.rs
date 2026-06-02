@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         testing::memory::air::{MemoryDummyAir, MemoryDummyChip},
-        MemoryCellType, MemoryConfig, BLOCK_FE_WIDTH, BUS_PTR_SCALE,
+        MemoryCellType, MemoryConfig, BLOCK_FE_WIDTH, U16_CELL_SIZE,
     },
     system::memory::{
         offline_checker::{pack_u8_block_value, MemoryBridge, MemoryBus},
@@ -94,9 +94,9 @@ impl DeviceMemoryTester {
             }
             other => panic!("DeviceMemoryTester::read unsupported cell type {other:?}"),
         };
-        let bus_ptr = (ptr * BUS_PTR_SCALE) as u32;
-        self.chip.receive(addr_space as u32, bus_ptr, &data, t_prev);
-        self.chip.send(addr_space as u32, bus_ptr, &data, t);
+        self.chip
+            .receive(addr_space as u32, ptr as u32, &data, t_prev);
+        self.chip.send(addr_space as u32, ptr as u32, &data, t);
         std::array::from_fn(|i| data[i])
     }
 
@@ -130,10 +130,9 @@ impl DeviceMemoryTester {
             }
             other => panic!("DeviceMemoryTester::write unsupported cell type {other:?}"),
         };
-        let bus_ptr = (ptr * BUS_PTR_SCALE) as u32;
         self.chip
-            .receive(addr_space as u32, bus_ptr, &data_prev, t_prev);
-        self.chip.send(addr_space as u32, bus_ptr, &data, t);
+            .receive(addr_space as u32, ptr as u32, &data_prev, t_prev);
+        self.chip.send(addr_space as u32, ptr as u32, &data, t);
     }
 
     pub fn read_bytes<const N: usize>(&mut self, addr_space: usize, byte_ptr: usize) -> [F; N] {
@@ -149,10 +148,9 @@ impl DeviceMemoryTester {
         };
         let data = bytes.map(F::from_u8);
         let packed = pack_u8_block_value(&std::array::from_fn(|i| data[i]));
-        self.chip
-            .receive(addr_space as u32, byte_ptr as u32, &packed, t_prev);
-        self.chip
-            .send(addr_space as u32, byte_ptr as u32, &packed, t);
+        let ptr = (byte_ptr / U16_CELL_SIZE) as u32;
+        self.chip.receive(addr_space as u32, ptr, &packed, t_prev);
+        self.chip.send(addr_space as u32, ptr, &packed, t);
         data
     }
 
@@ -185,10 +183,10 @@ impl DeviceMemoryTester {
         let data_prev = bytes_prev.map(F::from_u8);
         let packed_prev = pack_u8_block_value(&std::array::from_fn(|i| data_prev[i]));
         let packed_new = pack_u8_block_value(&std::array::from_fn(|i| data[i]));
+        let ptr = (byte_ptr / U16_CELL_SIZE) as u32;
         self.chip
-            .receive(addr_space as u32, byte_ptr as u32, &packed_prev, t_prev);
-        self.chip
-            .send(addr_space as u32, byte_ptr as u32, &packed_new, t);
+            .receive(addr_space as u32, ptr, &packed_prev, t_prev);
+        self.chip.send(addr_space as u32, ptr, &packed_new, t);
     }
 }
 
