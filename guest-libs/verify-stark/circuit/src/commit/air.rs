@@ -44,9 +44,9 @@ impl UserPvsCommitValuesAir {
     ) -> Self {
         // Each leaf consumes `DIGEST_SIZE` public values, which are compressed with zeros
         // to compute the leaf hash. We require at least one leaf, and a full binary tree.
-        debug_assert!(num_user_pvs >= DIGEST_SIZE);
-        debug_assert!(num_user_pvs.is_multiple_of(DIGEST_SIZE));
-        debug_assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
+        assert!(num_user_pvs >= DIGEST_SIZE);
+        assert!(num_user_pvs.is_multiple_of(DIGEST_SIZE));
+        assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
 
         UserPvsCommitValuesAir {
             subair: MerkleTreeSubAir::new(
