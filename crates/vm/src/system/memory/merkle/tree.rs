@@ -249,10 +249,10 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
         let layer: Vec<_> = if !touched.is_empty() {
             touched
                 .iter()
-                .map(|((addr_sp, start_cell_idx), v)| {
+                .map(|((addr_sp, start_ptr), v)| {
                     (
                         (1 << self.height)
-                            + md.label_to_index((*addr_sp, *start_cell_idx / DIGEST_WIDTH as u32)),
+                            + md.label_to_index((*addr_sp, *start_ptr / DIGEST_WIDTH as u32)),
                         hasher.hash(v),
                     )
                 })

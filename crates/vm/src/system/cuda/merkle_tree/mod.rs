@@ -278,7 +278,7 @@ impl MemoryMerkleTree {
             subtree.build_async(d_data, addr_space_idx, &self.zero_hash, &self.device_ctx);
             self.subtrees.push(subtree);
         } else {
-            panic!("Invalid address space index");
+            panic!("Invalid address space ID");
         }
     }
 
@@ -315,7 +315,7 @@ impl MemoryMerkleTree {
 
     /// Updates the tree and returns the merkle trace.
     ///
-    /// `d_touched_blocks` consists of `(as, leaf_start_cell_idx, ts, [F; DIGEST_WIDTH])`.
+    /// `d_touched_blocks` consists of `(as, leaf_start_ptr, ts, [F; DIGEST_WIDTH])`.
     pub fn update_with_touched_blocks(
         &mut self,
         unpadded_height: usize,
@@ -387,8 +387,7 @@ impl MemoryMerkleTree {
     ) -> usize {
         let md = self.mem_config.memory_dimensions();
         let tree_height = md.overall_height();
-        let shift_address =
-            |(sp, start_cell_idx): (u32, u32)| (sp, start_cell_idx / DIGEST_WIDTH as u32);
+        let shift_address = |(sp, start_ptr): (u32, u32)| (sp, start_ptr / DIGEST_WIDTH as u32);
         2 * if touched_memory.is_empty() {
             tree_height
         } else {
@@ -421,10 +420,7 @@ mod tests {
     use std::sync::Arc;
 
     use openvm_circuit::{
-        arch::{
-            pointer_max_bits_for_cell_index_bits, vm_poseidon2_config, MemoryCellType,
-            MemoryConfig, U16_CELL_SIZE,
-        },
+        arch::{vm_poseidon2_config, MemoryCellType, MemoryConfig, U16_CELL_SIZE},
         system::{
             cuda::merkle_tree::MERKLE_TOUCHED_BLOCK_WIDTH,
             memory::{
@@ -458,20 +454,14 @@ mod tests {
         let mut rng = create_seeded_rng();
         let mem_config = {
             let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
-            let max_cell_bits = 16;
-            let max_cells = 1 << max_cell_bits;
+            let max_ptr_bits = 16;
+            let max_cells = 1 << max_ptr_bits;
             // RV64_REGISTER_AS uses u16 storage cells.
             addr_spaces[RV64_REGISTER_AS as usize].num_cells =
                 32 * size_of::<u64>() / U16_CELL_SIZE;
             addr_spaces[RV64_MEMORY_AS as usize].num_cells = max_cells;
             addr_spaces[DEFERRAL_AS as usize].num_cells = max_cells;
-            MemoryConfig::new(
-                2,
-                addr_spaces,
-                pointer_max_bits_for_cell_index_bits(max_cell_bits),
-                29,
-                17,
-            )
+            MemoryConfig::new(2, addr_spaces, max_ptr_bits, 29, 17)
         };
 
         let mut initial_memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
@@ -570,35 +560,35 @@ mod tests {
         // Now we add some touched memory
         // We don't care about the memory layout and whatnot, because neither implementation uses
         // any special form of the touched blocks
-        let touched_leaf_start_cell_idxs = mem_config
+        let touched_leaf_start_ptrs = mem_config
             .addr_spaces
             .iter()
             .enumerate()
             .flat_map(|(i, cnf)| {
-                let mut cell_idxs = Vec::new();
+                let mut ptrs = Vec::new();
                 for j in 0..(cnf.num_cells / DIGEST_WIDTH) {
                     if rng.random_bool(0.333) {
-                        cell_idxs.push((i as u32, (j * DIGEST_WIDTH) as u32));
+                        ptrs.push((i as u32, (j * DIGEST_WIDTH) as u32));
                     }
                 }
-                cell_idxs
+                ptrs
             })
             .collect::<Vec<_>>();
-        let new_data = touched_leaf_start_cell_idxs
+        let new_data = touched_leaf_start_ptrs
             .iter()
             .map(|_| std::array::from_fn(|_| F::from_u32(rng.random_range(0..F::ORDER_U32))))
             .collect::<Vec<[F; DIGEST_WIDTH]>>();
-        assert!(!touched_leaf_start_cell_idxs.is_empty());
+        assert!(!touched_leaf_start_ptrs.is_empty());
         cpu_merkle_tree.finalize(
             &cpu_hasher_chip,
-            &(touched_leaf_start_cell_idxs
+            &(touched_leaf_start_ptrs
                 .iter()
                 .copied()
                 .zip(new_data.iter().copied())
                 .collect()),
             &mem_config.memory_dimensions(),
         );
-        let touched_blocks = touched_leaf_start_cell_idxs
+        let touched_blocks = touched_leaf_start_ptrs
             .into_iter()
             .zip(new_data)
             .map(|(address, data)| {
@@ -614,9 +604,9 @@ mod tests {
         let mut merkle_records =
             Vec::<u32>::with_capacity(touched_blocks.len() * MERKLE_TOUCHED_BLOCK_WIDTH);
         for (address, ts_values) in &touched_blocks {
-            let (address_space, leaf_start_cell_idx) = *address;
+            let (address_space, leaf_start_ptr) = *address;
             merkle_records.push(address_space);
-            merkle_records.push(leaf_start_cell_idx);
+            merkle_records.push(leaf_start_ptr);
             merkle_records.push(ts_values.timestamp);
             for &v in &ts_values.values {
                 merkle_records.push(unsafe { std::mem::transmute::<F, u32>(v) });

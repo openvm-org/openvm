@@ -1,11 +1,13 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 namespace riscv {
 inline constexpr size_t RV64_REGISTER_NUM_LIMBS = 8;
 inline constexpr size_t RV64_WORD_NUM_LIMBS = 4;
 inline constexpr size_t RV64_CELL_BITS = 8;
+inline constexpr uint32_t RV64_CELL_MASK = (1u << RV64_CELL_BITS) - 1;
 } // namespace riscv
 
 namespace program {

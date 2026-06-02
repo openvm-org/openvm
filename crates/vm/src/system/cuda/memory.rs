@@ -47,7 +47,7 @@ pub struct MemoryInventoryGPU {
 #[derive(Clone, Copy)]
 struct MemoryInventoryRecord<const CHUNK: usize, const BLOCKS: usize> {
     address_space: u32,
-    start_cell_idx: u32,
+    start_ptr: u32,
     timestamps: [u32; BLOCKS],
     values: [u32; CHUNK],
 }
@@ -56,7 +56,7 @@ struct MemoryInventoryRecord<const CHUNK: usize, const BLOCKS: usize> {
 #[derive(Clone, Copy)]
 struct MemoryMerkleRecord {
     address_space: u32,
-    leaf_start_cell_idx: u32,
+    leaf_start_ptr: u32,
     timestamp: u32,
     values: [u32; DIGEST_WIDTH],
 }
@@ -152,7 +152,7 @@ impl MemoryInventoryGPU {
             let values_u32 = leftmost_values.map(Self::field_to_raw_u32);
             let merkle_record = MemoryMerkleRecord {
                 address_space: ADDR_SPACE_OFFSET,
-                leaf_start_cell_idx: 0,
+                leaf_start_ptr: 0,
                 timestamp: 0,
                 values: values_u32,
             };
@@ -171,9 +171,9 @@ impl MemoryInventoryGPU {
             let in_records: Vec<MemoryInventoryRecord<BLOCK_FE_WIDTH, 1>> = partition
                 .iter()
                 .map(
-                    |&((addr_space, start_cell_idx), ts_values)| MemoryInventoryRecord {
+                    |&((addr_space, start_ptr), ts_values)| MemoryInventoryRecord {
                         address_space: addr_space,
-                        start_cell_idx,
+                        start_ptr,
                         timestamps: [ts_values.timestamp],
                         values: ts_values.values.map(Self::field_to_raw_u32),
                     },
@@ -256,7 +256,7 @@ impl MemoryInventoryGPU {
                     .unwrap();
                 let record = MemoryMerkleRecord {
                     address_space: out_records[base],
-                    leaf_start_cell_idx: out_records[base + 1],
+                    leaf_start_ptr: out_records[base + 1],
                     timestamp,
                     values,
                 };

@@ -62,23 +62,16 @@ pub(crate) const fn const_log2_strict_usize(value: usize) -> usize {
     value.ilog2() as usize
 }
 
-/// Normalized memory-bus pointer scale: `bus_ptr = BUS_PTR_SCALE * cell_idx`.
+/// Normalized memory-bus pointer scale: `bus_ptr = BUS_PTR_SCALE * ptr`.
 /// Equals `U16_CELL_SIZE` so byte pointers in u16-celled ASes coincide with bus
 /// pointers.
 pub const BUS_PTR_SCALE: usize = U16_CELL_SIZE;
 
+/// log2 of [`U16_CELL_SIZE`].
+pub const U16_CELL_SIZE_BITS: usize = const_log2_strict_usize(U16_CELL_SIZE);
+
 /// log2 of [`BUS_PTR_SCALE`].
-pub const BUS_PTR_SCALE_BITS: usize = const_log2_strict_usize(BUS_PTR_SCALE);
-
-/// Converts address-space pointer bits to address-space cell-index bits.
-pub const fn cell_index_bits_from_pointer_max_bits(pointer_max_bits: usize) -> usize {
-    pointer_max_bits - BUS_PTR_SCALE_BITS
-}
-
-/// Converts address-space cell-index bits to address-space pointer bits.
-pub const fn pointer_max_bits_for_cell_index_bits(cell_index_bits: usize) -> usize {
-    cell_index_bits + BUS_PTR_SCALE_BITS
-}
+pub const BUS_PTR_SCALE_BITS: usize = U16_CELL_SIZE_BITS;
 
 /// Cells per memory-bus block.
 pub const BLOCK_FE_WIDTH: usize = 4;
@@ -90,7 +83,7 @@ pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 pub const BUS_BLOCK_STRIDE: usize = BUS_PTR_SCALE * BLOCK_FE_WIDTH;
 
 /// Default byte-capacity for `RV64_MEMORY_AS` in `MemoryConfig::default`.
-pub const DEFAULT_RV64_MEMORY_BYTE_CAPACITY: usize = 1 << 29;
+pub const DEFAULT_RV64_MEMORY_BYTE_CAPACITY: usize = 1 << (POINTER_MAX_BITS + U16_CELL_SIZE_BITS);
 
 /// Number of registers in the RV64 register file.
 pub const NUM_RV64_REGISTERS: usize = 32;
@@ -223,6 +216,7 @@ pub struct MemoryConfig {
     /// It is expected that the size of the list is `(1 << addr_space_height) + 1` and the first
     /// element is 0, which means no address space.
     pub addr_spaces: Vec<AddressSpaceHostConfig>,
+    /// Maximum bit width of AS-native OpenVM memory pointers.
     pub pointer_max_bits: usize,
     /// All timestamps must be in the range `[0, 2^timestamp_max_bits)`. Maximum allowed: 29.
     pub timestamp_max_bits: usize,
@@ -268,7 +262,7 @@ impl MemoryConfig {
     pub fn aggregation() -> Self {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
-        addr_spaces[openvm_instructions::DEFERRAL_AS as usize].num_cells = 1 << 29;
+        addr_spaces[openvm_instructions::DEFERRAL_AS as usize].num_cells = 1 << 28;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
     }
 }

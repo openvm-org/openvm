@@ -263,18 +263,18 @@ unsafe fn execute_e12_impl<
     pre_compute: &ShiftPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1 = exec_state.vm_byte_read::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2 = if IS_IMM {
         pre_compute.c.to_le_bytes()
     } else {
-        exec_state.vm_byte_read::<8>(RV64_REGISTER_AS, pre_compute.c as u32)
+        exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.c as u32)
     };
     let rs2 = u64::from_le_bytes(rs2);
 
     // Execute the shift operation
     let rd = <OP as ShiftOp>::compute(rs1, rs2);
     // Write the result back to memory
-    exec_state.vm_byte_write(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

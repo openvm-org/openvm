@@ -272,17 +272,17 @@ unsafe fn execute_e12_impl<
     pre_compute: &BaseAluPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1 = exec_state.vm_byte_read::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2: [u8; 8] = if IS_IMM {
         pre_compute.c.to_le_bytes()
     } else {
-        exec_state.vm_byte_read(RV64_REGISTER_AS, pre_compute.c as u32)
+        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.c as u32)
     };
     let rs1 = u64::from_le_bytes(rs1);
     let rs2 = u64::from_le_bytes(rs2);
     let rd = <OP as AluOp>::compute(rs1, rs2);
     let rd = rd.to_le_bytes();
-    exec_state.vm_byte_write::<8>(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write_bytes::<8>(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }

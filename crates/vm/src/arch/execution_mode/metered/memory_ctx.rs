@@ -161,8 +161,8 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         debug_assert!((address_space as usize) < self.addr_space_access_count.len());
 
         let end_ptr = ptr + size - 1;
-        // Convert the pointer range to merkle-leaf labels. DEFERRAL_AS pointers
-        // are cell indices; RV64 address spaces use byte pointers.
+        // Convert the pointer range to merkle-leaf labels. DEFERRAL_AS uses
+        // AS-native F-cell pointers; RV64 address spaces use byte pointers.
         let leaf_ptr_span = if address_space == DEFERRAL_AS {
             DIGEST_WIDTH as u32
         } else {

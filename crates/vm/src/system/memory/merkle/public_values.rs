@@ -296,8 +296,8 @@ mod tests {
             memory: AddressMap::new(addr_spaces_config),
         };
         // Write the byte sequence [0, 0, 0, 1] at byte_ptr = 12. With u16 LE
-        // storage this corresponds to u16 cells at cell_idx 6 = {0x0000} and
-        // cell_idx 7 = {0x0100}, so when lifted to F the last cell is
+        // storage this corresponds to u16 cells at ptr 6 = {0x0000} and
+        // ptr 7 = {0x0100}, so when lifted to F the last cell is
         // F::from_u16(0x0100) = F::from_u16(256).
         unsafe {
             memory.write_bytes::<4>(PUBLIC_VALUES_AS, 12, [0, 0, 0, 1]);

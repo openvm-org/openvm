@@ -1,7 +1,7 @@
 use std::ops::Mul;
 
 use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtxTrait, VmStateMut},
+    arch::{execution_mode::ExecutionCtxTrait, VmStateMut, U16_CELL_SIZE_BITS},
     system::memory::{
         merkle::public_values::PUBLIC_VALUES_AS,
         online::{GuestMemory, TracingMemory},
@@ -44,6 +44,30 @@ pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 pub const RV_B_TYPE_IMM_BITS: usize = 13;
 
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
+
+/// Converts an OpenVM u16-cell pointer bit width to a RISC-V byte-pointer bit width.
+pub const fn rv64_byte_ptr_bits_from_openvm_ptr_bits(openvm_ptr_bits: usize) -> usize {
+    openvm_ptr_bits + U16_CELL_SIZE_BITS
+}
+
+/// Converts a RISC-V byte-pointer bit width to an OpenVM u16-cell pointer bit width.
+pub const fn openvm_ptr_bits_from_rv64_byte_ptr_bits(byte_ptr_bits: usize) -> usize {
+    byte_ptr_bits - U16_CELL_SIZE_BITS
+}
+
+/// Converts an OpenVM u16-cell pointer to a RISC-V byte pointer.
+pub const fn rv64_byte_ptr_from_openvm_ptr(ptr: u32) -> u32 {
+    ptr << U16_CELL_SIZE_BITS
+}
+
+/// Converts an aligned RISC-V byte pointer to an OpenVM u16-cell pointer.
+pub const fn openvm_ptr_from_rv64_byte_ptr(byte_ptr: u32) -> u32 {
+    assert!(
+        byte_ptr & ((1 << U16_CELL_SIZE_BITS) - 1) == 0,
+        "RISC-V byte pointer must be u16-cell aligned"
+    );
+    byte_ptr >> U16_CELL_SIZE_BITS
+}
 
 /// Convert the RISC-V register data (64 bits represented as 8 bytes, where each byte is represented
 /// as a field element) back into its value as u64.
@@ -194,7 +218,7 @@ pub fn tracing_read<const N: usize>(
 pub fn timed_read_u16<const N: usize>(
     memory: &mut TracingMemory,
     address_space: u32,
-    cell_idx: u32,
+    ptr: u32,
 ) -> (u32, [u16; N]) {
     debug_assert!(
         address_space == RV64_REGISTER_AS
@@ -203,7 +227,7 @@ pub fn timed_read_u16<const N: usize>(
     );
 
     // SAFETY: these address spaces are u16-celled.
-    unsafe { memory.read::<u16, N>(address_space, cell_idx) }
+    unsafe { memory.read::<u16, N>(address_space, ptr) }
 }
 
 /// u16-typed counterpart to [`tracing_read`].
@@ -211,10 +235,10 @@ pub fn timed_read_u16<const N: usize>(
 pub fn tracing_read_u16<const N: usize>(
     memory: &mut TracingMemory,
     address_space: u32,
-    cell_idx: u32,
+    ptr: u32,
     prev_timestamp: &mut u32,
 ) -> [u16; N] {
-    let (t_prev, data) = timed_read_u16(memory, address_space, cell_idx);
+    let (t_prev, data) = timed_read_u16(memory, address_space, ptr);
     *prev_timestamp = t_prev;
     data
 }
@@ -224,7 +248,7 @@ pub fn tracing_read_u16<const N: usize>(
 pub fn timed_write_u16<const N: usize>(
     memory: &mut TracingMemory,
     address_space: u32,
-    cell_idx: u32,
+    ptr: u32,
     data: [u16; N],
 ) -> (u32, [u16; N]) {
     debug_assert!(
@@ -233,7 +257,7 @@ pub fn timed_write_u16<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
     // SAFETY: see `timed_read_u16`.
-    unsafe { memory.write::<u16, N>(address_space, cell_idx, data) }
+    unsafe { memory.write::<u16, N>(address_space, ptr, data) }
 }
 
 /// u16-typed counterpart to [`tracing_write`].
@@ -241,12 +265,12 @@ pub fn timed_write_u16<const N: usize>(
 pub fn tracing_write_u16<const N: usize>(
     memory: &mut TracingMemory,
     address_space: u32,
-    cell_idx: u32,
+    ptr: u32,
     data: [u16; N],
     prev_timestamp: &mut u32,
     prev_data: &mut [u16; N],
 ) {
-    let (t_prev, data_prev) = timed_write_u16(memory, address_space, cell_idx, data);
+    let (t_prev, data_prev) = timed_write_u16(memory, address_space, ptr, data);
     *prev_timestamp = t_prev;
     *prev_data = data_prev;
 }

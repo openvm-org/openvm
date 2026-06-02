@@ -209,7 +209,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLE
 ) {
     let pc = exec_state.pc();
     let rs1 =
-        exec_state.vm_byte_read::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs1 = rv64_bytes_to_u32(rs1);
     let to_pc = rs1.wrapping_add(pre_compute.imm_extended);
     let to_pc = to_pc - (to_pc & 1);
@@ -218,7 +218,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLE
     rd[..4].copy_from_slice(&(pc + DEFAULT_PC_STEP).to_le_bytes());
 
     if ENABLED {
-        exec_state.vm_byte_write(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
+        exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
     }
 
     exec_state.set_pc(to_pc);

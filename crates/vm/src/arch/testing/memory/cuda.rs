@@ -95,42 +95,42 @@ impl DeviceMemoryTester {
         }
     }
 
-    fn read_cells(&mut self, addr_space: usize, cell_idx: usize) -> [F; BLOCK_FE_WIDTH] {
+    fn read_cells(&mut self, addr_space: usize, ptr: usize) -> [F; BLOCK_FE_WIDTH] {
         let t = self.memory.timestamp();
         let cell_layout = self.memory.data().memory.config[addr_space].layout;
         let (t_prev, data) = match cell_layout {
             MemoryCellType::F { .. } => unsafe {
                 self.memory
-                    .read::<F, BLOCK_FE_WIDTH>(addr_space as u32, cell_idx as u32)
+                    .read::<F, BLOCK_FE_WIDTH>(addr_space as u32, ptr as u32)
             },
             MemoryCellType::U16 => {
                 let (t_prev, data) = unsafe {
                     self.memory
-                        .read::<u16, BLOCK_FE_WIDTH>(addr_space as u32, cell_idx as u32)
+                        .read::<u16, BLOCK_FE_WIDTH>(addr_space as u32, ptr as u32)
                 };
                 (t_prev, data.map(F::from_u16))
             }
             other => panic!("DeviceMemoryTester::read unsupported cell type {other:?}"),
         };
-        let bus_ptr = (cell_idx * BUS_PTR_SCALE) as u32;
+        let bus_ptr = (ptr * BUS_PTR_SCALE) as u32;
         self.chip.receive(addr_space as u32, bus_ptr, &data, t_prev);
         self.chip.send(addr_space as u32, bus_ptr, &data, t);
         data
     }
 
-    fn write_cells(&mut self, addr_space: usize, cell_idx: usize, data: [F; BLOCK_FE_WIDTH]) {
+    fn write_cells(&mut self, addr_space: usize, ptr: usize, data: [F; BLOCK_FE_WIDTH]) {
         let t = self.memory.timestamp();
         let cell_layout = self.memory.data().memory.config[addr_space].layout;
         let (t_prev, data_prev) = match cell_layout {
             MemoryCellType::F { .. } => unsafe {
                 self.memory
-                    .write::<F, BLOCK_FE_WIDTH>(addr_space as u32, cell_idx as u32, data)
+                    .write::<F, BLOCK_FE_WIDTH>(addr_space as u32, ptr as u32, data)
             },
             MemoryCellType::U16 => {
                 let (t_prev, data_prev) = unsafe {
                     self.memory.write::<u16, BLOCK_FE_WIDTH>(
                         addr_space as u32,
-                        cell_idx as u32,
+                        ptr as u32,
                         data.map(|x| {
                             let v = x.as_canonical_u32();
                             assert!(
@@ -145,7 +145,7 @@ impl DeviceMemoryTester {
             }
             other => panic!("DeviceMemoryTester::write unsupported cell type {other:?}"),
         };
-        let bus_ptr = (cell_idx * BUS_PTR_SCALE) as u32;
+        let bus_ptr = (ptr * BUS_PTR_SCALE) as u32;
         self.chip
             .receive(addr_space as u32, bus_ptr, &data_prev, t_prev);
         self.chip.send(addr_space as u32, bus_ptr, &data, t);

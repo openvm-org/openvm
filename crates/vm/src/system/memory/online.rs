@@ -33,7 +33,7 @@ pub const INITIAL_TIMESTAMP: u32 = 0;
 /// Default mmap page size. Change this if using THB.
 pub const PAGE_SIZE: usize = 4096;
 
-/// `(address_space, cell_idx)` for typed memory-cell access.
+/// `(address_space, ptr)` for typed memory-cell access.
 pub type Address = (u32, u32);
 
 /// API for any memory implementation that allocates a contiguous region of memory.
@@ -175,9 +175,9 @@ impl<M: LinearMemory> AddressMap<M> {
 
     /// # Safety
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub unsafe fn get_f<F: PrimeField32>(&self, addr_space: u32, cell_idx: u32) -> F {
+    pub unsafe fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
         let layout = &self.config.get_unchecked(addr_space as usize).layout;
-        let start = cell_idx as usize * layout.size();
+        let start = ptr as usize * layout.size();
         let bytes = self.get_u8_slice(addr_space, start, layout.size());
         layout.to_field(bytes)
     }
@@ -185,7 +185,7 @@ impl<M: LinearMemory> AddressMap<M> {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub unsafe fn get<T: Copy>(&self, (addr_space, index): Address) -> T {
+    pub unsafe fn get<T: Copy>(&self, (addr_space, ptr): Address) -> T {
         debug_assert_eq!(
             size_of::<T>(),
             self.config[addr_space as usize].layout.size()
@@ -194,26 +194,26 @@ impl<M: LinearMemory> AddressMap<M> {
         // - alignment is automatic since we multiply by `size_of::<T>()`
         self.mem
             .get_unchecked(addr_space as usize)
-            .read((index as usize) * size_of::<T>())
+            .read((ptr as usize) * size_of::<T>())
     }
 
-    /// Returns a typed cell slice starting at `cell_idx`.
+    /// Returns a typed cell slice starting at `ptr`.
     ///
-    /// Panics or segfaults if `cell_idx..cell_idx + len` is out of bounds.
+    /// Panics or segfaults if `ptr..ptr + len` is out of bounds.
     ///
     /// # Safety
     /// - `T` must exactly match the AS's cell type.
     /// - `addr_space` must be within the configured memory.
     pub unsafe fn get_slice<T: Copy + Debug>(
         &self,
-        (addr_space, cell_idx): Address,
+        (addr_space, ptr): Address,
         len: usize,
     ) -> &[T] {
         debug_assert_eq!(
             size_of::<T>(),
             self.config[addr_space as usize].layout.size()
         );
-        let start = (cell_idx as usize) * size_of::<T>();
+        let start = (ptr as usize) * size_of::<T>();
         let mem = self.mem.get_unchecked(addr_space as usize);
         // SAFETY:
         // - alignment is automatic since we multiply by `size_of::<T>()`
@@ -230,19 +230,19 @@ impl<M: LinearMemory> AddressMap<M> {
         mem.get_aligned_slice(start, len)
     }
 
-    /// Copies `data` into the memory at `(addr_space, index)`.
+    /// Copies `data` into the memory at `(addr_space, ptr)`.
     ///
-    /// Panics or segfaults if `index + size_of_val(data)` is out of bounds.
+    /// Panics or segfaults if `ptr + size_of_val(data)` is out of bounds.
     ///
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - The linear memory in `addr_space` is aligned to `T`.
     pub unsafe fn copy_slice_nonoverlapping<T: Copy>(
         &mut self,
-        (addr_space, index): Address,
+        (addr_space, ptr): Address,
         data: &[T],
     ) {
-        let start = (index as usize) * size_of::<T>();
+        let start = (ptr as usize) * size_of::<T>();
         // SAFETY:
         // - Linear memory is aligned to `T` and `start` is multiple of `size_of::<T>()` so
         //   alignment is satisfied.
@@ -257,13 +257,13 @@ impl<M: LinearMemory> AddressMap<M> {
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub fn set_from_sparse(&mut self, sparse_map: &SparseMemoryImage) {
-        for (&(addr_space, index), &data_byte) in sparse_map.iter() {
+        for (&(addr_space, ptr), &data_byte) in sparse_map.iter() {
             // SAFETY:
             // - safety assumptions in function doc comments
             unsafe {
                 self.mem
                     .get_unchecked_mut(addr_space as usize)
-                    .write_unaligned(index as usize, data_byte);
+                    .write_unaligned(ptr as usize, data_byte);
             }
         }
     }
@@ -283,17 +283,17 @@ impl GuestMemory {
         Self { memory: addr }
     }
 
-    /// Reads `BLOCK_SIZE` AS-native cells starting at `cell_idx`.
+    /// Reads `BLOCK_SIZE` AS-native cells starting at `ptr`.
     ///
     /// # Safety
     /// - `T` must match the configured cell type for `addr_space`.
-    /// - `addr_space` and `cell_idx..cell_idx + BLOCK_SIZE` must be in bounds.
+    /// - `addr_space` and `ptr..ptr + BLOCK_SIZE` must be in bounds.
     /// - `T` must be plain data compatible with [`LinearMemory::read`].
     #[inline(always)]
     pub unsafe fn read<T, const BLOCK_SIZE: usize>(
         &self,
         addr_space: u32,
-        cell_idx: u32,
+        ptr: u32,
     ) -> [T; BLOCK_SIZE]
     where
         T: Copy + Debug,
@@ -305,10 +305,10 @@ impl GuestMemory {
         self.memory
             .get_memory()
             .get_unchecked(addr_space as usize)
-            .read((cell_idx as usize) * size_of::<T>())
+            .read((ptr as usize) * size_of::<T>())
     }
 
-    /// Writes `BLOCK_SIZE` AS-native cells starting at `cell_idx`.
+    /// Writes `BLOCK_SIZE` AS-native cells starting at `ptr`.
     ///
     /// # Safety
     /// See [`GuestMemory::read`].
@@ -316,7 +316,7 @@ impl GuestMemory {
     pub unsafe fn write<T, const BLOCK_SIZE: usize>(
         &mut self,
         addr_space: u32,
-        cell_idx: u32,
+        ptr: u32,
         values: [T; BLOCK_SIZE],
     ) where
         T: Copy + Debug,
@@ -327,10 +327,10 @@ impl GuestMemory {
         self.memory
             .get_memory_mut()
             .get_unchecked_mut(addr_space as usize)
-            .write((cell_idx as usize) * size_of::<T>(), values);
+            .write((ptr as usize) * size_of::<T>(), values);
     }
 
-    /// Swaps `BLOCK_SIZE` AS-native cells starting at `cell_idx`.
+    /// Swaps `BLOCK_SIZE` AS-native cells starting at `ptr`.
     ///
     /// # Safety
     /// See [`GuestMemory::read`] and [`LinearMemory::swap`].
@@ -338,7 +338,7 @@ impl GuestMemory {
     pub unsafe fn swap<T, const BLOCK_SIZE: usize>(
         &mut self,
         addr_space: u32,
-        cell_idx: u32,
+        ptr: u32,
         values: &mut [T; BLOCK_SIZE],
     ) where
         T: Copy + Debug,
@@ -349,18 +349,13 @@ impl GuestMemory {
         self.memory
             .get_memory_mut()
             .get_unchecked_mut(addr_space as usize)
-            .swap((cell_idx as usize) * size_of::<T>(), values);
+            .swap((ptr as usize) * size_of::<T>(), values);
     }
 
     #[inline(always)]
     #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn get_slice<T: Copy + Debug>(
-        &self,
-        addr_space: u32,
-        cell_idx: u32,
-        len: usize,
-    ) -> &[T] {
-        self.memory.get_slice((addr_space, cell_idx), len)
+    pub unsafe fn get_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
+        self.memory.get_slice((addr_space, ptr), len)
     }
 
     /// Reads a raw byte slice at `byte_ptr` within `addr_space`.
@@ -419,7 +414,7 @@ pub struct TracingMemory {
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     #[getset(get = "pub")]
     pub data: GuestMemory,
-    /// Maps `(addr_space, start_cell_idx / BLOCK_FE_WIDTH)` to the latest access timestamp.
+    /// Maps `(addr_space, start_ptr / BLOCK_FE_WIDTH)` to the latest access timestamp.
     /// A value of 0 means the touched-memory slot has never been accessed.
     pub(super) meta: Vec<PagedVec<u32, PAGE_SIZE>>,
 }
@@ -446,7 +441,7 @@ impl TracingMemory {
     }
 
     #[inline(always)]
-    fn assert_valid_access<const BLOCK_SIZE: usize>(&self, addr_space: u32, cell_idx: u32) {
+    fn assert_valid_access<const BLOCK_SIZE: usize>(&self, addr_space: u32, ptr: u32) {
         const {
             assert!(
                 BLOCK_SIZE == BLOCK_FE_WIDTH,
@@ -455,9 +450,9 @@ impl TracingMemory {
         };
         debug_assert_ne!(addr_space, 0);
         assert_eq!(
-            cell_idx % BLOCK_SIZE as u32,
+            ptr % BLOCK_SIZE as u32,
             0,
-            "cell_idx={cell_idx} not aligned to BLOCK_SIZE {BLOCK_SIZE}"
+            "ptr={ptr} not aligned to BLOCK_SIZE {BLOCK_SIZE}"
         );
     }
 
@@ -477,8 +472,8 @@ impl TracingMemory {
     }
 
     #[inline(always)]
-    fn prev_access_time(&mut self, address_space: usize, start_cell_idx: usize) -> u32 {
-        let idx = start_cell_idx / BLOCK_FE_WIDTH;
+    fn prev_access_time(&mut self, address_space: usize, start_ptr: usize) -> u32 {
+        let idx = start_ptr / BLOCK_FE_WIDTH;
         // SAFETY: address_space is validated during instruction decoding
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let prev = meta_page.get(idx);
@@ -509,20 +504,20 @@ impl TracingMemory {
     ///
     /// # Safety
     /// - `T` must match the configured cell type for `address_space`.
-    /// - `cell_idx` must be aligned to `BLOCK_SIZE`.
+    /// - `ptr` must be aligned to `BLOCK_SIZE`.
     /// - `address_space` must be valid.
     #[inline(always)]
     pub unsafe fn read<T, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: u32,
-        cell_idx: u32,
+        ptr: u32,
     ) -> (u32, [T; BLOCK_SIZE])
     where
         T: Copy + Debug,
     {
-        self.assert_valid_access::<BLOCK_SIZE>(address_space, cell_idx);
-        let t_prev = self.prev_access_time(address_space as usize, cell_idx as usize);
-        let values = self.data.read(address_space, cell_idx);
+        self.assert_valid_access::<BLOCK_SIZE>(address_space, ptr);
+        let t_prev = self.prev_access_time(address_space as usize, ptr as usize);
+        let values = self.data.read(address_space, ptr);
         self.timestamp += 1;
 
         (t_prev, values)
@@ -532,22 +527,22 @@ impl TracingMemory {
     ///
     /// # Safety
     /// - `T` must match the configured cell type for `address_space`.
-    /// - `cell_idx` must be aligned to `BLOCK_SIZE`.
+    /// - `ptr` must be aligned to `BLOCK_SIZE`.
     /// - `address_space` must be valid.
     #[inline(always)]
     pub unsafe fn write<T, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: u32,
-        cell_idx: u32,
+        ptr: u32,
         values: [T; BLOCK_SIZE],
     ) -> (u32, [T; BLOCK_SIZE])
     where
         T: Copy + Debug,
     {
-        self.assert_valid_access::<BLOCK_SIZE>(address_space, cell_idx);
-        let t_prev = self.prev_access_time(address_space as usize, cell_idx as usize);
-        let values_prev = self.data.read(address_space, cell_idx);
-        self.data.write(address_space, cell_idx, values);
+        self.assert_valid_access::<BLOCK_SIZE>(address_space, ptr);
+        let t_prev = self.prev_access_time(address_space as usize, ptr as usize);
+        let values_prev = self.data.read(address_space, ptr);
+        self.data.write(address_space, ptr, values);
         self.timestamp += 1;
 
         (t_prev, values_prev)
@@ -624,8 +619,8 @@ impl TracingMemory {
                     .par_iter()
                     .filter_map(move |(idx, timestamp)| {
                         if timestamp > INITIAL_TIMESTAMP {
-                            let block_start_cell_idx = idx as u32 * BLOCK_FE_WIDTH as u32;
-                            Some(((addr_space as u32, block_start_cell_idx), timestamp))
+                            let block_start_ptr = idx as u32 * BLOCK_FE_WIDTH as u32;
+                            Some(((addr_space as u32, block_start_ptr), timestamp))
                         } else {
                             None
                         }
@@ -647,7 +642,7 @@ impl TracingMemory {
         debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
         touched_blocks
             .into_par_iter()
-            .map(|((addr_space, start_cell_idx), timestamp)| {
+            .map(|((addr_space, start_ptr), timestamp)| {
                 let addr_space_config = &self.data.memory.config[addr_space as usize];
                 let cell_size = addr_space_config.layout.size();
                 let values = from_fn(|i| unsafe {
@@ -655,12 +650,12 @@ impl TracingMemory {
                         .layout
                         .to_field(self.data.memory.get_u8_slice(
                             addr_space,
-                            (start_cell_idx as usize + i) * cell_size,
+                            (start_ptr as usize + i) * cell_size,
                             cell_size,
                         ))
                 });
                 (
-                    (addr_space, start_cell_idx),
+                    (addr_space, start_ptr),
                     TimestampedValues { timestamp, values },
                 )
             })

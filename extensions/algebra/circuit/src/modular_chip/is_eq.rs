@@ -694,13 +694,13 @@ unsafe fn execute_e12_impl<
     // Read register values (RV64: read 8 bytes, assert upper 4 are zero, cast to u32)
     let rs_vals = pre_compute
         .rs_addrs
-        .map(|addr| rv64_bytes_to_u32(exec_state.vm_byte_read(RV64_REGISTER_AS, addr as u32)));
+        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
 
     // Read memory values
     let [b, c]: [[u8; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + TOTAL_READ_SIZE - 1 < (1 << POINTER_MAX_BITS));
         from_fn::<_, NUM_LANES, _>(|i| {
-            exec_state.vm_byte_read::<MEMORY_BLOCK_BYTES>(
+            exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
                 RV64_MEMORY_AS,
                 address + (i * MEMORY_BLOCK_BYTES) as u32,
             )
@@ -723,7 +723,7 @@ unsafe fn execute_e12_impl<
     write_data[0] = (b == c) as u8;
 
     // Write result to register
-    exec_state.vm_byte_write(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
+    exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

@@ -16,7 +16,7 @@ use openvm_instructions::{
 };
 use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 
-use super::{accumulator_cell_indices, DeferralCallExecutor};
+use super::{accumulator_ptrs, DeferralCallExecutor};
 use crate::{
     poseidon2::deferral_poseidon2_chip,
     utils::{
@@ -69,7 +69,7 @@ impl DeferralCallExecutor {
             .get(deferral_idx as usize)
             .ok_or(StaticProgramError::InvalidInstruction(pc))?;
 
-        let (input_acc_ptr, output_acc_ptr) = accumulator_cell_indices(deferral_idx);
+        let (input_acc_ptr, output_acc_ptr) = accumulator_ptrs(deferral_idx);
         *data = DeferralCallPrecompute {
             rd_ptr: a.as_canonical_u32(),
             rs_ptr: b.as_canonical_u32(),
@@ -170,11 +170,13 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     pre_compute: &DeferralCallPrecompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let output_ptr = rv64_bytes_to_u32(exec_state.vm_byte_read(RV64_REGISTER_AS, pre_compute.rd_ptr));
-    let input_ptr = rv64_bytes_to_u32(exec_state.vm_byte_read(RV64_REGISTER_AS, pre_compute.rs_ptr));
+    let output_ptr =
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rd_ptr));
+    let input_ptr =
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rs_ptr));
 
     let input_commit_chunks: [[u8; MEMORY_BLOCK_BYTES]; COMMIT_MEMORY_OPS] = from_fn(|i| {
-        exec_state.vm_byte_read(RV64_MEMORY_AS, input_ptr + (i * MEMORY_BLOCK_BYTES) as u32)
+        exec_state.vm_read_bytes(RV64_MEMORY_AS, input_ptr + (i * MEMORY_BLOCK_BYTES) as u32)
     });
     let input_commit_bytes: [_; COMMIT_NUM_BYTES] = join_byte_memory_ops(input_commit_chunks);
     let input_commit: [F; _] = byte_commit_to_f(&input_commit_bytes.map(F::from_u8));
@@ -215,7 +217,7 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     let new_output_acc = poseidon2_chip.perm(&old_output_acc, &output_f_commit, true);
 
     for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
-        exec_state.vm_byte_write::<MEMORY_BLOCK_BYTES>(
+        exec_state.vm_write_bytes::<MEMORY_BLOCK_BYTES>(
             RV64_MEMORY_AS,
             output_ptr + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
             &byte_memory_op_chunk(&output_key, chunk_idx),

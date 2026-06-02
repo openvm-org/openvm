@@ -216,7 +216,7 @@ unsafe fn execute_e12_impl<
     let (pc, rd) = run_jal_lui(IS_JAL, exec_state.pc(), signed_imm);
 
     if ENABLED {
-        exec_state.vm_byte_write(RV64_REGISTER_AS, a as u32, &rd);
+        exec_state.vm_write_bytes(RV64_REGISTER_AS, a as u32, &rd);
     }
     exec_state.set_pc(pc);
 }

@@ -21,32 +21,31 @@
 //   u8 storage:  │b0 │b1 │b2 │b3 │b4 │b5 │b6 │b7 │b8 │b9 │b10│b11│b12│b13│b14│b15│
 //                └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘
 //                ╰──────╯╰──────╯╰──────╯╰──────╯╰──────╯╰──────╯╰──────╯╰──────╯   u16 cells (LE)
-//   cell_idx:        0       1       2       3       4       5       6       7
+//   ptr:             0       1       2       3       4       5       6       7
 //   bus_ptr:         0       2       4       6       8      10      12      14
 //                ╰─────────── block 0 ──────────╯╰─────────── block 1 ──────────╯
 //                ╰────────────────── one merkle leaf / digest ──────────────────╯
 //
-//   byte_ptr = U16_CELL_SIZE * cell_idx     (coincides with bus_ptr for u16 ASes)
-//   bus_ptr  = BUS_PTR_SCALE  * cell_idx
+//   byte_ptr = U16_CELL_SIZE * ptr     (coincides with bus_ptr for u16 ASes)
+//   bus_ptr  = BUS_PTR_SCALE  * ptr
 //   block stride on bus: BUS_BLOCK_STRIDE = 8  = BUS_PTR_SCALE * BLOCK_FE_WIDTH
 //   leaf  stride on bus: BUS_LEAF_STRIDE  = 16 = BUS_PTR_SCALE * DIGEST_WIDTH
 //
 // F-celled AS layout (DEFERRAL_AS). Each cell holds one Fp element
 // (size_of::<F>() bytes on host; 4 for BabyBear). The bus addresses cells
-// directly, so cell / block / leaf counts and bus_ptr / cell_idx mappings
-// match the u16 AS.
+// directly, so cell / block / leaf counts use the same pointer units as the u16 AS.
 //
 //   byte_ptr:       0       4       8       12      16      20      24      28
 //                ┌───────┬───────┬───────┬───────┬───────┬───────┬───────┬───────┐
 //   F storage:   │  F0   │  F1   │  F2   │  F3   │  F4   │  F5   │  F6   │  F7   │
 //                └───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┘
-//   cell_idx:        0       1       2       3       4       5       6       7
+//   ptr:        0       1       2       3       4       5       6       7
 //   bus_ptr:         0       2       4       6       8      10      12      14
 //                ╰─────────── block 0 ──────────╯╰─────────── block 1 ──────────╯
 //                ╰────────────────── one merkle leaf / digest ──────────────────╯
 //
-//   byte_ptr = size_of::<F>() * cell_idx     (host-memory stride; ≠ bus_ptr)
-//   bus_ptr  = BUS_PTR_SCALE   * cell_idx    (same formula as u16 ASes)
+//   byte_ptr = size_of::<F>() * ptr     (host-memory stride; ≠ bus_ptr)
+//   bus_ptr  = BUS_PTR_SCALE   * ptr    (same formula as u16 ASes)
 //   block stride on bus: BUS_BLOCK_STRIDE = 8  = BUS_PTR_SCALE * BLOCK_FE_WIDTH
 //   leaf  stride on bus: BUS_LEAF_STRIDE  = 16 = BUS_PTR_SCALE * DIGEST_WIDTH
 //   The bus addresses cells, not bytes.
@@ -61,7 +60,7 @@ inline constexpr size_t POSEIDON2_WIDTH = CELLS;  // 16
 
 // Bytes per memory-bus block (one RV64 8-byte word pair).
 inline constexpr size_t MEMORY_BLOCK_BYTES = 8;
-// Normalized memory-bus pointer scale: bus_ptr = BUS_PTR_SCALE * cell_idx.
+// Normalized memory-bus pointer scale: bus_ptr = BUS_PTR_SCALE * ptr.
 inline constexpr size_t BUS_PTR_SCALE_BITS = 1;
 inline constexpr size_t BUS_PTR_SCALE = 1 << BUS_PTR_SCALE_BITS;
 
@@ -78,7 +77,7 @@ inline constexpr size_t BUS_LEAF_STRIDE = 1 << BUS_LEAF_STRIDE_BITS;
 // Host byte width of one u16-celled storage cell.
 inline constexpr size_t U16_CELL_SIZE = 2;
 
-// Address space index for the F-celled deferral AS. Matches
+// Address space ID for the F-celled deferral AS. Matches
 // `openvm_instructions::DEFERRAL_AS`.
 inline constexpr uint32_t DEFERRAL_AS = 4;
 

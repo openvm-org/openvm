@@ -7,10 +7,7 @@ use rand::Rng;
 use test_case::test_case;
 
 #[cfg(feature = "cuda")]
-use crate::arch::{
-    pointer_max_bits_for_cell_index_bits,
-    testing::{default_var_range_checker_bus, GpuChipTestBuilder},
-};
+use crate::arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder};
 use crate::{
     arch::{
         testing::{TestBuilder, VmChipTestBuilder},
@@ -26,16 +23,16 @@ fn test_memory_write_by_tester(tester: &mut impl TestBuilder<F>, its: usize) {
 
     // The point here is to have a lot of equal
     // and intersecting/overlapping blocks,
-    // by limiting the space of valid cell indexes.
-    let max_cell_idx = 20;
+    // by limiting the space of valid pointers.
+    let max_ptr = 10;
     let value_bounds = [u16::MAX as u32 + 1; 3];
     for _ in 0..its {
         let addr_sp = rng.random_range(1..=value_bounds.len());
         let value_bound: u32 = value_bounds[addr_sp - 1];
-        let start_cell_idx = rng.random_range(0..max_cell_idx / BLOCK_FE_WIDTH) * BLOCK_FE_WIDTH;
+        let start_ptr = rng.random_range(0..max_ptr / BLOCK_FE_WIDTH) * BLOCK_FE_WIDTH;
         tester.write::<BLOCK_FE_WIDTH>(
             addr_sp,
-            start_cell_idx,
+            start_ptr,
             array::from_fn(|_| F::from_u32(rng.random_range(0..value_bound))),
         );
     }
@@ -68,7 +65,7 @@ fn test_cuda_memory_write(its: usize) {
     mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = small;
     mem_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = small;
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = small;
-    mem_config.pointer_max_bits = pointer_max_bits_for_cell_index_bits(small_bits);
+    mem_config.pointer_max_bits = small_bits;
     let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus());
     test_memory_write_by_tester(&mut tester, its);
     let tester = tester.build().finalize();

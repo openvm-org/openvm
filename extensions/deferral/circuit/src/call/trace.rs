@@ -31,7 +31,7 @@ use openvm_instructions::{
 use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, tracing_read, tracing_write};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::accumulator_cell_indices;
+use super::accumulator_ptrs;
 use crate::{
     adapters::{tracing_read_deferral, tracing_write_deferral},
     call::{DeferralCallAdapterCols, DeferralCallCoreCols, DeferralCallReads, DeferralCallWrites},
@@ -316,8 +316,8 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
 
         let deferral_idx = c.as_canonical_u32();
 
-        // DEFERRAL_AS uses cell indices; each accumulator is DIGEST_SIZE cells.
-        let (input_acc_ptr, output_acc_ptr) = accumulator_cell_indices(deferral_idx);
+        // DEFERRAL_AS uses pointers; each accumulator is DIGEST_SIZE cells.
+        let (input_acc_ptr, output_acc_ptr) = accumulator_ptrs(deferral_idx);
 
         let old_input_acc_chunks: [[F; BLOCK_FE_WIDTH]; DIGEST_F_MEMORY_OPS] = from_fn(|i| {
             tracing_read_deferral(
@@ -374,8 +374,8 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
 
         let deferral_idx = c.as_canonical_u32();
 
-        // DEFERRAL_AS uses cell indices; accumulator bases advance by DIGEST_SIZE cells.
-        let (input_acc_ptr, output_acc_ptr) = accumulator_cell_indices(deferral_idx);
+        // DEFERRAL_AS uses pointers; accumulator bases advance by DIGEST_SIZE cells.
+        let (input_acc_ptr, output_acc_ptr) = accumulator_ptrs(deferral_idx);
 
         for chunk_idx in 0..DIGEST_F_MEMORY_OPS {
             tracing_write_deferral(

@@ -1,10 +1,8 @@
 use derive_new::new;
 use serde::{Deserialize, Serialize};
 
-#[cfg(test)]
-use crate::arch::pointer_max_bits_for_cell_index_bits;
 use crate::{
-    arch::{cell_index_bits_from_pointer_max_bits, MemoryConfig, ADDR_SPACE_OFFSET},
+    arch::{MemoryConfig, ADDR_SPACE_OFFSET},
     system::memory::DIGEST_WIDTH_BITS,
 };
 
@@ -49,12 +47,12 @@ impl MemoryDimensions {
 
 /// Merkle leaf-label bits available within each address space.
 pub(crate) const fn address_height_from_pointer_max_bits(pointer_max_bits: usize) -> usize {
-    cell_index_bits_from_pointer_max_bits(pointer_max_bits) - DIGEST_WIDTH_BITS
+    pointer_max_bits - DIGEST_WIDTH_BITS
 }
 
 #[cfg(test)]
 pub(crate) const fn pointer_max_bits_for_address_height(address_height: usize) -> usize {
-    pointer_max_bits_for_cell_index_bits(address_height + DIGEST_WIDTH_BITS)
+    address_height + DIGEST_WIDTH_BITS
 }
 
 impl MemoryConfig {

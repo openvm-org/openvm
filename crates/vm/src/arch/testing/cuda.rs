@@ -44,7 +44,6 @@ use crate::metrics::VmMetrics;
 use crate::primitives::utils::check_trace_validity;
 use crate::{
     arch::{
-        cell_index_bits_from_pointer_max_bits,
         instructions::instruction::Instruction,
         testing::{
             default_tracing_memory, default_var_range_checker_bus, dummy_memory_helper,
@@ -56,6 +55,7 @@ use crate::{
         },
         Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState, MatrixRecordArena,
         MemoryConfig, PreflightExecutor, Streams, VmStateMut, MEMORY_BLOCK_BYTES,
+        U16_CELL_SIZE_BITS,
     },
     system::{
         cuda::poseidon2::Poseidon2PeripheryChipGPU,
@@ -173,7 +173,7 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     }
 
     fn address_bits(&self) -> usize {
-        self.memory.config.pointer_max_bits
+        self.memory.config.pointer_max_bits + U16_CELL_SIZE_BITS
     }
 
     fn last_to_pc(&self) -> F {
@@ -246,11 +246,9 @@ pub struct GpuChipTestBuilder {
 impl Default for GpuChipTestBuilder {
     fn default() -> Self {
         let mut mem_config = MemoryConfig::default();
-        // Tests generate register pointers across the full byte-addressable
-        // range. The register AS stores u16 cells, so convert that byte capacity
-        // to cells.
+        // Tests generate register pointers across the full AS-native pointer range.
         mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells =
-            1 << cell_index_bits_from_pointer_max_bits(mem_config.pointer_max_bits);
+            1 << mem_config.pointer_max_bits;
         Self::new(mem_config, default_var_range_checker_bus())
     }
 }

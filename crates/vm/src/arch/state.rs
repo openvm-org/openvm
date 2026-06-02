@@ -167,30 +167,24 @@ where
     /// Runtime byte read: `byte_ptr` is a raw byte offset into the AS's
     /// linear storage. Returns `N` bytes.
     #[inline(always)]
-    pub fn vm_byte_read<const N: usize>(
-        &mut self,
-        addr_space: u32,
-        byte_ptr: u32,
-    ) -> [u8; N] {
-        self.ctx
-            .on_memory_operation(addr_space, byte_ptr, N as u32);
-        self.host_byte_read(addr_space, byte_ptr)
+    pub fn vm_read_bytes<const N: usize>(&mut self, addr_space: u32, byte_ptr: u32) -> [u8; N] {
+        self.ctx.on_memory_operation(addr_space, byte_ptr, N as u32);
+        self.host_read_bytes(addr_space, byte_ptr)
     }
 
     /// Runtime byte write: `byte_ptr` is a raw byte offset.
     #[inline(always)]
-    pub fn vm_byte_write<const N: usize>(
+    pub fn vm_write_bytes<const N: usize>(
         &mut self,
         addr_space: u32,
         byte_ptr: u32,
         data: &[u8; N],
     ) {
-        self.ctx
-            .on_memory_operation(addr_space, byte_ptr, N as u32);
-        self.host_byte_write(addr_space, byte_ptr, data)
+        self.ctx.on_memory_operation(addr_space, byte_ptr, N as u32);
+        self.host_write_bytes(addr_space, byte_ptr, data)
     }
 
-    /// Runtime cell read: `ptr` is an AS-native cell index.
+    /// Runtime cell read: `ptr` is an AS-native pointer.
     /// `T` must match the AS cell type (e.g. `F` for `DEFERRAL_AS`).
     #[inline(always)]
     pub fn vm_read<T: Copy + Debug, const N: usize>(
@@ -202,7 +196,7 @@ where
         self.host_read(addr_space, ptr)
     }
 
-    /// Runtime cell write: `ptr` is an AS-native cell index.
+    /// Runtime cell write: `ptr` is an AS-native pointer.
     #[inline(always)]
     pub fn vm_write<T: Copy + Debug, const N: usize>(
         &mut self,
@@ -226,11 +220,7 @@ where
     }
 
     #[inline(always)]
-    pub fn host_byte_read<const N: usize>(
-        &self,
-        addr_space: u32,
-        byte_ptr: u32,
-    ) -> [u8; N] {
+    pub fn host_read_bytes<const N: usize>(&self, addr_space: u32, byte_ptr: u32) -> [u8; N] {
         // SAFETY: caller guarantees the byte range is in bounds.
         unsafe {
             self.memory
@@ -242,7 +232,7 @@ where
     }
 
     #[inline(always)]
-    pub fn host_byte_write<const N: usize>(
+    pub fn host_write_bytes<const N: usize>(
         &mut self,
         addr_space: u32,
         byte_ptr: u32,
@@ -258,13 +248,9 @@ where
         }
     }
 
-    /// Cell read: `ptr` is a cell index; byte offset is `ptr * size_of::<T>()`.
+    /// Cell read: `ptr` is a pointer; byte offset is `ptr * size_of::<T>()`.
     #[inline(always)]
-    pub fn host_read<T: Copy + Debug, const N: usize>(
-        &self,
-        addr_space: u32,
-        ptr: u32,
-    ) -> [T; N] {
+    pub fn host_read<T: Copy + Debug, const N: usize>(&self, addr_space: u32, ptr: u32) -> [T; N] {
         // SAFETY: caller guarantees T matches the AS layout and the range is
         // in bounds.
         unsafe {
@@ -276,7 +262,7 @@ where
         }
     }
 
-    /// Cell write: `ptr` is a cell index; byte offset is `ptr * size_of::<T>()`.
+    /// Cell write: `ptr` is a pointer; byte offset is `ptr * size_of::<T>()`.
     #[inline(always)]
     pub fn host_write<T: Copy + Debug, const N: usize>(
         &mut self,
@@ -296,12 +282,7 @@ where
     }
 
     #[inline(always)]
-    pub fn host_read_slice<T: Copy + Debug>(
-        &self,
-        addr_space: u32,
-        ptr: u32,
-        len: usize,
-    ) -> &[T] {
+    pub fn host_read_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
         // SAFETY:
         // - T must match the AS cell type.
         // - panics if the slice is out of bounds

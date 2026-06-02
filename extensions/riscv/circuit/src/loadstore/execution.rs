@@ -214,7 +214,7 @@ unsafe fn execute_e12_impl<
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
     let rs1_bytes: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_byte_read(RV64_REGISTER_AS, pre_compute.b as u32);
+        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs1_val = rv64_bytes_to_u32(rs1_bytes);
     let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
     // sign_extend([r64{c,g}(b):2]_e)
@@ -224,9 +224,9 @@ unsafe fn execute_e12_impl<
     let ptr_val = ptr_val - shift_amount; // aligned ptr
 
     let read_data: [u8; RV64_REGISTER_NUM_LIMBS] = if OP::IS_LOAD {
-        exec_state.vm_byte_read(pre_compute.e as u32, ptr_val)
+        exec_state.vm_read_bytes(pre_compute.e as u32, ptr_val)
     } else {
-        exec_state.vm_byte_read(RV64_REGISTER_AS, pre_compute.a as u32)
+        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32)
     };
 
     let mut write_data: [T; RV64_REGISTER_NUM_LIMBS] = if OP::HOST_READ {

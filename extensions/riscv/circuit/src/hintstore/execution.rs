@@ -165,14 +165,14 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
 ) -> Result<u32, ExecutionError> {
     let pc = exec_state.pc();
     let mem_ptr_limbs =
-        exec_state.vm_byte_read::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
     let mem_ptr = rv64_bytes_to_u32(mem_ptr_limbs);
 
     let num_words = if IS_HINT_STORED {
         1
     } else {
         let num_words_limbs = exec_state
-            .vm_byte_read::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
+            .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
         rv64_bytes_to_u32(num_words_limbs)
     };
     debug_assert_ne!(num_words, 0);
@@ -200,7 +200,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
                 .unwrap()
                 .as_canonical_u32() as u8
         });
-        exec_state.vm_byte_write(
+        exec_state.vm_write_bytes(
             RV64_MEMORY_AS,
             mem_ptr + (RV64_REGISTER_NUM_LIMBS as u32 * word_index),
             &data,

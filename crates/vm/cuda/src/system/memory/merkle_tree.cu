@@ -25,7 +25,7 @@ __global__ void merkle_tree_init(uint8_t *__restrict__ data, digest_t *__restric
 
     Fp cells[CELLS] = {0};
 #pragma unroll
-    for (size_t i = 0; i < CELLS_OUT; ++i) {
+    for (size_t i = 0; i < DIGEST_WIDTH; ++i) {
         if constexpr (ADDR_SPACE_IDX + 1 == DEFERRAL_AS) {
             cells[i] = reinterpret_cast<Fp *>(data)[DIGEST_WIDTH * gid + i];
         } else {

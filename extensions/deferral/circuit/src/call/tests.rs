@@ -1,7 +1,6 @@
 use std::{array::from_fn, sync::Arc};
 
 use openvm_circuit::arch::{
-    cell_index_bits_from_pointer_max_bits,
     deferral::{DeferralState, InputMapVal},
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
@@ -38,7 +37,7 @@ use {
 };
 
 use super::{
-    accumulator_cell_indices, DeferralCallAdapterAir, DeferralCallAdapterExecutor,
+    accumulator_ptrs, DeferralCallAdapterAir, DeferralCallAdapterExecutor,
     DeferralCallAdapterFiller, DeferralCallAir, DeferralCallChip, DeferralCallCoreAir,
     DeferralCallCoreFiller, DeferralCallExecutor,
 };
@@ -107,8 +106,7 @@ struct CudaHarnessBundle {
 
 fn test_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
-    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells =
-        1 << cell_index_bits_from_pointer_max_bits(config.pointer_max_bits);
+    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << config.pointer_max_bits;
     config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     config
 }
@@ -190,7 +188,7 @@ fn set_and_execute_call<RA, E>(
         );
     }
 
-    let (input_acc_ptr, output_acc_ptr) = accumulator_cell_indices(deferral_idx as u32);
+    let (input_acc_ptr, output_acc_ptr) = accumulator_ptrs(deferral_idx as u32);
     let input_acc_ptr = input_acc_ptr as usize;
     let output_acc_ptr = output_acc_ptr as usize;
     let old_input_acc = read_deferral_digest(tester, input_acc_ptr);

@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    cell_index_bits_from_pointer_max_bits,
     deferral::{DeferralResult, DeferralState},
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
@@ -98,8 +97,7 @@ struct CudaHarnessBundle {
 
 fn test_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
-    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells =
-        1 << cell_index_bits_from_pointer_max_bits(config.pointer_max_bits);
+    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << config.pointer_max_bits;
     config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     config
 }

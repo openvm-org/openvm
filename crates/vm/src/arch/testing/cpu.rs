@@ -39,7 +39,7 @@ use crate::{
         },
         vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus, ExecutionState,
         MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmField, VmStateMut,
-        MEMORY_BLOCK_BYTES,
+        MEMORY_BLOCK_BYTES, U16_CELL_SIZE_BITS,
     },
     system::{
         memory::{
@@ -135,7 +135,7 @@ where
     }
 
     fn address_bits(&self) -> usize {
-        self.memory.controller.memory_config().pointer_max_bits
+        self.memory.controller.memory_config().pointer_max_bits + U16_CELL_SIZE_BITS
     }
 
     fn last_to_pc(&self) -> F {
