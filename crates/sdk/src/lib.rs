@@ -334,9 +334,7 @@ where
             .map_err(SdkError::from)
     }
 
-    /// Load a previously saved pure-mode `.so` (the path returned by
-    /// [`CompiledExePure::save`]). Caller supplies the matching `app_exe`;
-    /// no compatibility validation is performed (see task 2 / INT-7843).
+    /// Load a previously saved pure-mode rvr artifact. No compatibility validation is performed.
     #[cfg(feature = "rvr")]
     pub fn load_compiled_pure(
         &self,
@@ -396,10 +394,8 @@ where
         Ok(CompiledExeMetered { instance, ctx })
     }
 
-    /// Load a previously saved metered-mode `.so` (the path returned by
-    /// [`CompiledExeMetered::save`]). The `MeteredCtx` is rebuilt from the
-    /// proving key. Caller supplies `app_exe`; no compatibility validation
-    /// is performed.
+    /// Load a previously saved metered-mode artifact. The `MeteredCtx`
+    /// is rebuilt. Caller supplies `app_exe`; no compatibility validation is performed.
     #[cfg(feature = "rvr")]
     pub fn load_compiled_metered(
         &self,
@@ -463,10 +459,8 @@ where
         Ok(CompiledExeMeteredCost { instance, ctx })
     }
 
-    /// Load a previously saved metered-cost-mode `.so` (the path returned
-    /// by [`CompiledExeMeteredCost::save`]). The `MeteredCostCtx` is
-    /// rebuilt. Caller supplies `app_exe`; no compatibility validation is
-    /// performed.
+    /// Load a previously saved metered-cost-mode artifact. The `MeteredCostCtx` is
+    /// rebuilt. Caller supplies `app_exe`; no compatibility validation is performed.
     #[cfg(feature = "rvr")]
     pub fn load_compiled_metered_cost(
         &self,

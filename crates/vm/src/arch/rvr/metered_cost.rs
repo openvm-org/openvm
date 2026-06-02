@@ -75,10 +75,8 @@ pub type PureTracer = TracerPtr<PureTracerData>;
 
 impl<F: PrimeField32> RvrMeteredCostInstance<F> {
     /// Persist the compiled shared library into `dir`. Returns the path to
-    /// the copied `.so`/`.dylib`. See
-    /// [`RvrPureInstance::save`](super::pure::RvrPureInstance::save) for
-    /// caller responsibilities — the user must re-supply `exe`,
-    /// `executor_idx_to_air_idx`, and `widths` when loading.
+    /// the copied artifact. The user must re-supply `exe`, `executor_idx_to_air_idx`,
+    /// and `widths` when loading.
     pub fn save(&self, dir: &std::path::Path) -> Result<std::path::PathBuf, super::CompileError> {
         self.compiled.save_artifact(dir)
     }

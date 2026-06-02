@@ -75,10 +75,7 @@ where
     }
 
     /// Persist the compiled shared library into `dir`. Returns the path to
-    /// the copied `.so`/`.dylib`, which the caller should pass back to
-    /// [`VmExecutor::load_instance`](crate::arch::VmExecutor::load_instance)
-    /// when reloading. No compatibility validation is performed here (see
-    /// task 2 / INT-7843).
+    /// the copied artifact. No compatibility validation is performed here.
     pub fn save(&self, dir: &Path) -> Result<std::path::PathBuf, CompileError> {
         self.compiled.save_artifact(dir)
     }

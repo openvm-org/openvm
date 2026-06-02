@@ -301,11 +301,9 @@ where
         })
     }
 
-    /// Load a previously saved pure-mode `.so` (the path returned by
-    /// [`RvrPureInstance::save`]) and return a ready-to-execute
+    /// Load a previously saved pure-mode artifact and return a ready-to-execute
     /// [`RvrPureInstance`]. The caller is responsible for supplying the
-    /// matching `exe`; no compatibility validation is performed (see task 2
-    /// / INT-7843).
+    /// matching `exe`; no compatibility validation is performed.
     pub fn load_instance(
         &self,
         lib_path: &std::path::Path,
@@ -493,10 +491,8 @@ where
         self.metered_cost_rvr_instance(exe, executor_idx_to_air_idx, widths)
     }
 
-    /// Load a previously saved metered-mode `.so` (the path returned by
-    /// [`RvrMeteredInstanceWith::save`]). Caller supplies `exe` and
-    /// `executor_idx_to_air_idx` — same as [`Self::metered_rvr_instance`].
-    /// No compatibility validation is performed (see task 2 / INT-7843).
+    /// Load a previously saved metered-mode artifact. Caller supplies `exe` and
+    /// `executor_idx_to_air_idx`. No compatibility validation is performed.
     pub fn load_metered_instance(
         &self,
         lib_path: &std::path::Path,
@@ -515,11 +511,8 @@ where
         })
     }
 
-    /// Load a previously saved metered-cost-mode `.so` (the path returned by
-    /// [`RvrMeteredCostInstance::save`]). Caller supplies `exe`,
-    /// `executor_idx_to_air_idx`, and `widths` — same as
-    /// [`Self::metered_cost_rvr_instance`]. No compatibility validation is
-    /// performed (see task 2 / INT-7843).
+    /// Load a previously saved metered-cost-mode artifact. Caller supplies `exe`,
+    /// `executor_idx_to_air_idx`, and `widths`. No compatibility validation is performed.
     pub fn load_metered_cost_instance(
         &self,
         lib_path: &std::path::Path,

@@ -24,9 +24,7 @@ use crate::arch::ExecutorInventory;
 pub struct RvrCompiled {
     /// The loaded shared library.
     pub lib: libloading::Library,
-    /// Path to the shared library file backing `lib`. Set at construction
-    /// (either by `compile_impl` or `load_compiled_from_path`) so that
-    /// [`save_artifact`](Self::save_artifact) can copy it without scanning.
+    /// Path to the shared library file backing `lib`.
     lib_path: PathBuf,
     /// Directory holding generated C sources and build artifacts, if this
     /// library was compiled. `None` for libraries loaded from disk.
@@ -262,8 +260,8 @@ pub fn compile_metered_cost<F: PrimeField32>(
 /// Open a previously saved `.so`/`.dylib` and wrap it in an [`RvrCompiled`].
 ///
 /// Note: no compatibility validation is performed — the caller must ensure
-/// the artifact was compiled for the current `exe`, config, and rvr
-/// version. See INT-7843 task 2.
+/// the artifact was compiled for the current `exe`, config, and codebase
+/// version.
 pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileError> {
     tracing::warn!(
         path = %lib_path.display(),
