@@ -1,6 +1,6 @@
-// Build the sha2 FFI staticlib alongside this crate so callers don't have
-// to. The path to the resulting `librvr_openvm_ext_sha2_ffi.a` is exposed
-// to the source via the `RVR_SHA2_FFI_STATICLIB` cargo env var.
+// Build the deferral FFI staticlib alongside this crate so callers don't have
+// to. The path to the resulting `librvr_openvm_ext_deferral_ffi.a` is exposed
+// to the source via the `RVR_DEFERRAL_FFI_STATICLIB` cargo env var.
 
 use std::{env, path::PathBuf};
 
@@ -12,18 +12,17 @@ fn main() {
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"));
 
     let ffi_manifest = manifest_dir.join("ffi/Cargo.toml");
-    // Use a private target dir to avoid lock contention with the outer cargo.
     let ffi_target_dir = out_dir.join("ffi-target");
 
     let lib_path = build_rust_staticlib(
         &ffi_manifest,
         &ffi_target_dir,
-        "librvr_openvm_ext_sha2_ffi.a",
-        "rvr-openvm-ext-sha2-ffi",
+        "librvr_openvm_ext_deferral_ffi.a",
+        "rvr-openvm-ext-deferral-ffi",
     );
 
     println!(
-        "cargo:rustc-env=RVR_SHA2_FFI_STATICLIB={}",
+        "cargo:rustc-env=RVR_DEFERRAL_FFI_STATICLIB={}",
         lib_path.display()
     );
     println!("cargo:rerun-if-changed=ffi/Cargo.toml");

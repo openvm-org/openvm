@@ -43,6 +43,9 @@ fn main() {
     println!("cargo:rerun-if-changed=ffi/modular/src/lib.rs");
     println!("cargo:rerun-if-changed=ffi/fp2/Cargo.toml");
     println!("cargo:rerun-if-changed=ffi/fp2/src/lib.rs");
+    println!("cargo:rerun-if-changed=../../../Cargo.toml");
+    println!("cargo:rerun-if-changed=../../../Cargo.lock");
+    println!("cargo:rerun-if-changed=../../../crates/rvr/rvr-openvm-ffi-common/src");
 }
 
 fn generate_secp256k1_files(manifest_dir: &Path, out_dir: &Path) {

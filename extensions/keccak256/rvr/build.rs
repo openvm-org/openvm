@@ -39,4 +39,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=AS");
     println!("cargo:rerun-if-env-changed=CFLAGS");
     println!("cargo:rerun-if-env-changed=PATH");
+    println!("cargo:rerun-if-changed=../../../Cargo.toml");
+    println!("cargo:rerun-if-changed=../../../Cargo.lock");
+    println!("cargo:rerun-if-changed=../../../crates/rvr/rvr-openvm-ffi-common/src");
 }
