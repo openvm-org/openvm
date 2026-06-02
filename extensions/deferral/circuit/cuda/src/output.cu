@@ -84,8 +84,10 @@ template <typename T> struct DeferralOutputCols {
     MemoryReadAuxCols<T> rd_aux;
     MemoryReadAuxCols<T> rs_aux;
 
-    // First row reads [output_commit || output_len_le] from heap.
-    // `output_commit` is the onion hash of the output bytes.
+    // Read data and auxiliary columns. output_commit and output_len are read
+    // contiguously from heap with layout [output_commit || output_len]. The
+    // onion hash of all bytes written by this opcode invocation is constrained
+    // to output_commit.
     T output_commit[COMMIT_NUM_BYTES];
     T output_len[F_NUM_BYTES];
     MemoryReadAuxCols<T> output_commit_and_len_aux[OUTPUT_TOTAL_MEMORY_OPS];
@@ -94,12 +96,14 @@ template <typename T> struct DeferralOutputCols {
     // output_commit.
     CanonicityAuxCols<T> output_commit_lt_aux[DIGEST_SIZE];
 
-    // First row sponge input is [deferral_idx, output_len, 0, ...].
-    // Later rows sponge and write the next DIGEST_SIZE output bytes.
+    // Initial [def_idx, output_len, 0, ...] digest on the first row; on non-first
+    // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
+    // written to memory and auxiliary columns.
     T sponge_inputs[DIGEST_SIZE];
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_bytes_aux[DIGEST_BYTE_MEMORY_OPS];
 
-    // Running Poseidon2 capacity on non-last rows; final compression on the last row.
+    // Capacity of the permutation of write_bytes and the previous row's capacity on
+    // non-last rows, compression on the last row.
     T poseidon2_res[DIGEST_SIZE];
 };
 
