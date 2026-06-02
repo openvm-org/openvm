@@ -53,9 +53,9 @@ use crate::{
             TestBuilder, TestChipHarness, EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS,
             POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
         },
-        Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState, MatrixRecordArena,
-        MemoryConfig, PreflightExecutor, Streams, VmStateMut, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
-        U16_CELL_SIZE_BITS,
+        to_byte_ptr_bits, Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
+        MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmStateMut, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
     },
     system::{
         cuda::poseidon2::Poseidon2PeripheryChipGPU,
@@ -193,7 +193,7 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     }
 
     fn address_bits(&self) -> usize {
-        self.memory.config.pointer_max_bits + U16_CELL_SIZE_BITS
+        to_byte_ptr_bits(self.memory.config.pointer_max_bits)
     }
 
     fn last_to_pc(&self) -> F {

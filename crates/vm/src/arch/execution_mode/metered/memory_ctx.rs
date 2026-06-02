@@ -149,8 +149,9 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         );
     }
 
-    /// Records the memory-tree pages touched by the pointer range `[ptr, ptr + size)`.
-    /// The actual height updates happen during segment checks.
+    /// Records the memory-tree pages touched by `[ptr, ptr + size)`.
+    /// For metered callbacks, DEFERRAL_AS ranges are F-cell ranges and u16-celled
+    /// address space ranges are byte ranges.
     #[inline(always)]
     pub(crate) fn update_boundary_merkle_heights(
         &mut self,
@@ -161,8 +162,6 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         debug_assert!((address_space as usize) < self.addr_space_access_count.len());
 
         let end_ptr = ptr + size - 1;
-        // Convert the pointer range to merkle-leaf labels. DEFERRAL_AS uses
-        // AS-native F-cell pointers; RV64 address spaces use byte pointers.
         let ptrs_per_leaf = if address_space == DEFERRAL_AS {
             DIGEST_WIDTH as u32
         } else {

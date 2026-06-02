@@ -65,14 +65,19 @@ pub(crate) const fn const_log2_strict_usize(value: usize) -> usize {
 /// log2 of [`U16_CELL_SIZE`].
 pub const U16_CELL_SIZE_BITS: usize = const_log2_strict_usize(U16_CELL_SIZE);
 
+/// Converts pointer bits for a u16-celled address space to byte-pointer bits.
+pub const fn to_byte_ptr_bits(ptr_bits: usize) -> usize {
+    ptr_bits + U16_CELL_SIZE_BITS
+}
+
 /// Cells per memory-bus block.
 pub const BLOCK_FE_WIDTH: usize = 4;
 
 /// Bytes per memory-bus block (one RV64 8-byte word pair).
 pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 
-/// Default byte-capacity for `RV64_MEMORY_AS` in `MemoryConfig::default`.
-pub const DEFAULT_RV64_MEMORY_BYTE_CAPACITY: usize = 1 << (POINTER_MAX_BITS + U16_CELL_SIZE_BITS);
+/// Default byte count for `RV64_MEMORY_AS` in `MemoryConfig::default`.
+pub const DEFAULT_RV64_MEMORY_BYTES: usize = 1 << to_byte_ptr_bits(POINTER_MAX_BITS);
 
 /// Number of registers in the RV64 register file.
 pub const NUM_RV64_REGISTERS: usize = 32;
@@ -222,8 +227,7 @@ impl Default for MemoryConfig {
         // 32 x 8-byte registers = 256 bytes = 128 u16 cells.
         addr_spaces[RV64_REGISTER_AS as usize].num_cells =
             NUM_RV64_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;
-        addr_spaces[RV64_MEMORY_AS as usize].num_cells =
-            DEFAULT_RV64_MEMORY_BYTE_CAPACITY / U16_CELL_SIZE;
+        addr_spaces[RV64_MEMORY_AS as usize].num_cells = DEFAULT_RV64_MEMORY_BYTES / U16_CELL_SIZE;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells =
             DEFAULT_MAX_NUM_PUBLIC_VALUES / U16_CELL_SIZE;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)

@@ -37,9 +37,9 @@ use crate::{
             ExecutionTester, MemoryTester, TestBuilder, TestChipHarness, EXECUTION_BUS, MEMORY_BUS,
             MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
         },
-        vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus, ExecutionState,
-        MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmField, VmStateMut,
-        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE_BITS,
+        to_byte_ptr_bits, vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus,
+        ExecutionState, MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmField,
+        VmStateMut, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::{
         memory::{
@@ -155,7 +155,7 @@ where
     }
 
     fn address_bits(&self) -> usize {
-        self.memory.controller.memory_config().pointer_max_bits + U16_CELL_SIZE_BITS
+        to_byte_ptr_bits(self.memory.controller.memory_config().pointer_max_bits)
     }
 
     fn last_to_pc(&self) -> F {
@@ -191,8 +191,7 @@ where
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        // Store the heap pointer as a 64-bit RV64 register value. Write bytes in
-        // `MEMORY_BLOCK_BYTES` chunks so this is independent of the register AS cell type.
+        // Store the heap pointer as a 64-bit RV64 register value.
         let ptr_bytes = (pointer as u64).to_le_bytes();
         for i in (0..RV64_REGISTER_NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
             let chunk: [u8; MEMORY_BLOCK_BYTES] =
@@ -248,16 +247,13 @@ impl<F: VmField> VmChipTestBuilder<F> {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        // Store the heap pointer as a 64-bit RV64 register value. Write bytes in
-        // `MEMORY_BLOCK_BYTES` chunks so this is independent of the register AS cell type.
+        // Store the heap pointer as a 64-bit RV64 register value.
         let ptr_bytes = (pointer as u64).to_le_bytes();
         for i in (0..RV64_REGISTER_NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
             let chunk: [u8; MEMORY_BLOCK_BYTES] =
                 ptr_bytes[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap();
             self.write_bytes::<MEMORY_BLOCK_BYTES>(1usize, register + i, chunk.map(F::from_u8));
         }
-        // Write heap payloads in `MEMORY_BLOCK_BYTES` chunks. `NUM_LIMBS` must be a
-        // multiple of `MEMORY_BLOCK_BYTES`.
         for (i, &write) in writes.iter().enumerate() {
             let ptr = pointer + i * NUM_LIMBS;
             for j in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
