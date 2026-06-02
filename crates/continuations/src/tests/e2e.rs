@@ -737,7 +737,7 @@ fn test_deferral_e2e() -> Result<()> {
         vm_ir_pcs_data.commitment.into(),
         root_system_params(),
         system.memory_config.memory_dimensions(),
-        system.num_public_values_cells(),
+        system.num_public_values,
         Some(def_hook_commit.into()),
         None,
     );

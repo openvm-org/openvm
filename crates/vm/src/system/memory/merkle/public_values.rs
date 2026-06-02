@@ -17,23 +17,25 @@ use crate::{
 pub const PUBLIC_VALUES_AS: u32 = 3;
 pub const PUBLIC_VALUES_ADDRESS_SPACE_OFFSET: u32 = PUBLIC_VALUES_AS - ADDR_SPACE_OFFSET;
 
-/// Validates that the public-values byte length maps exactly to a power-of-two
-/// number of complete merkle leaves in the u16-celled public-values AS.
-#[inline(always)]
-pub(crate) const fn assert_public_values_shape<const DIGEST_WIDTH: usize>(
-    num_public_values_bytes: usize,
-) {
+pub const fn public_values_cells_from_bytes(num_public_values_bytes: usize) -> usize {
     assert!(
         num_public_values_bytes.is_multiple_of(U16_CELL_SIZE),
         "num_public_values_bytes must be a multiple of U16_CELL_SIZE"
     );
-    let num_public_value_cells = num_public_values_bytes / U16_CELL_SIZE;
+    num_public_values_bytes / U16_CELL_SIZE
+}
+
+/// Validates that public values occupy a power-of-two number of complete merkle leaves.
+#[inline(always)]
+pub(crate) const fn assert_public_values_shape<const DIGEST_WIDTH: usize>(
+    num_public_values: usize,
+) {
     assert!(
-        num_public_value_cells.is_multiple_of(DIGEST_WIDTH),
-        "public values cell count must be a multiple of DIGEST_WIDTH"
+        num_public_values.is_multiple_of(DIGEST_WIDTH),
+        "num_public_values must be a multiple of DIGEST_WIDTH"
     );
     assert!(
-        (num_public_value_cells / DIGEST_WIDTH).is_power_of_two(),
+        (num_public_values / DIGEST_WIDTH).is_power_of_two(),
         "public values merkle leaf count must be a power of two"
     );
 }
@@ -86,7 +88,7 @@ impl<const DIGEST_WIDTH: usize, F: Field> UserPublicValuesProof<DIGEST_WIDTH, F>
         top_tree: &[[F; DIGEST_WIDTH]],
     ) -> Self {
         let memory_dimensions = system_config.memory_config.memory_dimensions();
-        let num_public_values = system_config.num_public_values_cells();
+        let num_public_values = system_config.num_public_values;
         let public_values = extract_public_value_cells(num_public_values, final_memory);
         let public_values_commit = hasher.merkle_root(&public_values);
         let proof = compute_merkle_proof_to_user_public_values_root(
@@ -286,10 +288,8 @@ mod tests {
         vm_config.memory_config.addr_space_height = addr_space_height;
         vm_config.memory_config.pointer_max_bits = 5;
         let memory_dimensions = vm_config.memory_config.memory_dimensions();
-        // One public-values merkle leaf.
-        let num_public_values_bytes = 16;
-        let vm_config = vm_config.with_public_values_bytes(num_public_values_bytes);
-        let num_public_values = vm_config.num_public_values_cells();
+        let num_public_values = DIGEST_WIDTH;
+        let vm_config = vm_config.with_public_values(num_public_values);
         let mut addr_spaces_config = MemoryConfig::empty_address_space_configs(4);
         addr_spaces_config[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         let mut memory = GuestMemory {

@@ -27,14 +27,13 @@ use crate::{
             MemoryMerkleCols, MerkleTree,
         },
         online::{GuestMemory, LinearMemory},
-        pointer_max_bits_for_address_height, AddressMap, MemoryImage,
+        ptr_bits_from_address_height, AddressMap, MemoryImage, DIGEST_WIDTH,
     },
     utils::test_cpu_engine,
 };
 
 mod util;
 
-const DIGEST_WIDTH: usize = 8;
 const COMPRESSION_BUS: PermutationCheckBus = PermutationCheckBus::new(POSEIDON2_DIRECT_BUS);
 type F = BabyBear;
 
@@ -205,7 +204,7 @@ fn random_test(
                 layout: MemoryCellType::F { size: 4 },
             },
         ],
-        pointer_max_bits_for_address_height(height),
+        ptr_bits_from_address_height(height),
         20,
         17,
     );
@@ -294,7 +293,7 @@ fn expand_test_no_accesses() {
                 layout: MemoryCellType::F { size: 4 },
             },
         ],
-        pointer_max_bits_for_address_height(height),
+        ptr_bits_from_address_height(height),
         20,
         17,
     );
@@ -339,7 +338,7 @@ fn expand_test_negative() {
                 layout: MemoryCellType::F { size: 4 },
             },
         ],
-        pointer_max_bits_for_address_height(height),
+        ptr_bits_from_address_height(height),
         20,
         17,
     );

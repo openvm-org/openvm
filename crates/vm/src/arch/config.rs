@@ -197,7 +197,7 @@ pub trait AddressSpaceHostLayout {
 
     /// # Safety
     /// - This function must only be called when `value` is guaranteed to be of size `self.size()`.
-    /// - For raw field-cell layouts, `value` must be aligned for `F` and contain a valid `F`.
+    /// - For `F`-cell layouts, `value` must be aligned for `F` and contain a valid `F`.
     unsafe fn to_field<F: Field>(&self, value: &[u8]) -> F;
 }
 
@@ -223,13 +223,10 @@ impl Default for MemoryConfig {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
         // RV64 register, memory, and public-values address spaces use u16 storage cells.
-        // Derive each capacity as a count of those cells.
-        // 32 x 8-byte registers = 256 bytes = 128 u16 cells.
         addr_spaces[RV64_REGISTER_AS as usize].num_cells =
             NUM_RV64_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;
         addr_spaces[RV64_MEMORY_AS as usize].num_cells = DEFAULT_RV64_MEMORY_BYTES / U16_CELL_SIZE;
-        addr_spaces[PUBLIC_VALUES_AS as usize].num_cells =
-            DEFAULT_MAX_NUM_PUBLIC_VALUES / U16_CELL_SIZE;
+        addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
     }
 }
@@ -255,7 +252,7 @@ impl MemoryConfig {
     pub fn aggregation() -> Self {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
-        addr_spaces[openvm_instructions::DEFERRAL_AS as usize].num_cells = 1 << 28;
+        addr_spaces[openvm_instructions::DEFERRAL_AS as usize].num_cells = 1 << POINTER_MAX_BITS;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
     }
 }
@@ -269,9 +266,8 @@ pub struct SystemConfig {
     pub max_constraint_degree: usize,
     /// Memory configuration
     pub memory_config: MemoryConfig,
-    /// Byte capacity of the user public-values address space. The `PUBLIC_VALUES_AS`
-    /// AS is u16-celled, so the underlying `num_cells` is `bytes / U16_CELL_SIZE`.
-    pub num_public_values_bytes: usize,
+    /// Number of cells in the user public-values address space.
+    pub num_public_values: usize,
     /// Whether to collect detailed profiling metrics.
     /// **Warning**: this slows down the runtime.
     pub profiling: bool,
@@ -287,19 +283,18 @@ impl SystemConfig {
     pub fn new(
         max_constraint_degree: usize,
         mut memory_config: MemoryConfig,
-        num_public_values_bytes: usize,
+        num_public_values: usize,
     ) -> Self {
         assert!(
             memory_config.timestamp_max_bits <= 29,
             "Timestamp max bits must be <= 29 for LessThan to work in 31-bit field"
         );
-        assert_public_values_shape::<DIGEST_WIDTH>(num_public_values_bytes);
-        memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells =
-            num_public_values_bytes / U16_CELL_SIZE;
+        assert_public_values_shape::<DIGEST_WIDTH>(num_public_values);
+        memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         Self {
             max_constraint_degree,
             memory_config,
-            num_public_values_bytes,
+            num_public_values,
             profiling: false,
             segmentation_config: SegmentationConfig::default(),
         }
@@ -313,21 +308,11 @@ impl SystemConfig {
         )
     }
 
-    pub fn with_public_values_bytes(mut self, num_public_values_bytes: usize) -> Self {
-        assert_public_values_shape::<DIGEST_WIDTH>(num_public_values_bytes);
-        self.num_public_values_bytes = num_public_values_bytes;
-        self.memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells =
-            num_public_values_bytes / U16_CELL_SIZE;
+    pub fn with_public_values(mut self, num_public_values: usize) -> Self {
+        assert_public_values_shape::<DIGEST_WIDTH>(num_public_values);
+        self.num_public_values = num_public_values;
+        self.memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         self
-    }
-
-    /// Number of u16 cells backing the user public-values address space.
-    /// Shape validation happens at `SystemConfig` construction
-    /// (see [`assert_public_values_shape`]); this is a plain accessor.
-    #[inline]
-    pub fn num_public_values_cells(&self) -> usize {
-        debug_assert!(self.num_public_values_bytes.is_multiple_of(U16_CELL_SIZE));
-        self.num_public_values_bytes / U16_CELL_SIZE
     }
 
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {

@@ -292,7 +292,7 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
         internal_recursive_pcs_data.commitment.into(),
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
-        system_config.num_public_values_cells(),
+        system_config.num_public_values,
         None,
         None,
     );
@@ -327,7 +327,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         internal_recursive_pcs_data.commitment.into(),
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
-        system_config.num_public_values_cells(),
+        system_config.num_public_values,
         None,
         None,
     );
@@ -354,7 +354,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         internal_recursive_pcs_data.commitment.into(),
         root_pk,
         system_config.memory_config.memory_dimensions(),
-        system_config.num_public_values_cells(),
+        system_config.num_public_values,
         None,
         Some(trace_heights.clone()),
     );

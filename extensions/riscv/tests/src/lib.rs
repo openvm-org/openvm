@@ -256,7 +256,7 @@ mod tests {
         assert_eq!(extract_public_values(64, &final_memory), expected_bytes);
 
         // Sanity-check the merkle leaves are the u16 little-endian packing of the
-        // first `num_public_values_cells` u16 cells.
+        // first `num_public_values` u16 cells.
         let expected_leaves: Vec<F> = expected_bytes
             .chunks_exact(2)
             .take(pv_proof.public_values.len())

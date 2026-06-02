@@ -13,7 +13,7 @@ pub mod persistent;
 mod tests;
 
 #[cfg(test)]
-pub(crate) use controller::dimensions::pointer_max_bits_for_address_height;
+pub(crate) use controller::dimensions::ptr_bits_from_address_height;
 pub use controller::*;
 pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 

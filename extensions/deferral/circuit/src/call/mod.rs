@@ -6,9 +6,8 @@ pub(in crate::call) const NUM_ACCUMULATORS_PER_IDX: usize = 2;
 
 #[inline(always)]
 pub(in crate::call) const fn accumulator_ptrs(deferral_idx: u32) -> (u32, u32) {
-    let digest_size = DIGEST_SIZE as u32;
-    let input_acc_ptr = (NUM_ACCUMULATORS_PER_IDX as u32) * deferral_idx * digest_size;
-    (input_acc_ptr, input_acc_ptr + digest_size)
+    let input_acc_ptr = (NUM_ACCUMULATORS_PER_IDX as u32) * deferral_idx * DIGEST_SIZE as u32;
+    (input_acc_ptr, input_acc_ptr + DIGEST_SIZE as u32)
 }
 
 mod air;

@@ -312,7 +312,7 @@ mod tests {
         system::{
             memory::{
                 merkle::MerkleTree, offline_checker::pack_u8_block_value, online::GuestMemory,
-                pointer_max_bits_for_address_height, AddressMap, TimestampedValues,
+                ptr_bits_from_address_height, AddressMap, TimestampedValues,
             },
             poseidon2::Poseidon2PeripheryChip,
         },
@@ -332,13 +332,7 @@ mod tests {
         for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
             addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
         }
-        let mem_config = MemoryConfig::new(
-            2,
-            addr_spaces,
-            pointer_max_bits_for_address_height(1),
-            29,
-            17,
-        );
+        let mem_config = MemoryConfig::new(2, addr_spaces, ptr_bits_from_address_height(1), 29, 17);
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
@@ -414,13 +408,7 @@ mod tests {
             // num_cells is in u16 cells; allocate 2 * DIGEST_WIDTH = 16 cells.
             addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
         }
-        let mem_config = MemoryConfig::new(
-            2,
-            addr_spaces,
-            pointer_max_bits_for_address_height(1),
-            29,
-            17,
-        );
+        let mem_config = MemoryConfig::new(2, addr_spaces, ptr_bits_from_address_height(1), 29, 17);
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {

@@ -45,13 +45,13 @@ impl MemoryDimensions {
     }
 }
 
-/// Merkle leaf-label bits available within each address space.
-pub(crate) const fn address_height_from_pointer_max_bits(pointer_max_bits: usize) -> usize {
-    pointer_max_bits - DIGEST_WIDTH_BITS
+/// Number of Merkle leaf labels per address space is `2^address_height`.
+pub(crate) const fn address_height_from_ptr_bits(ptr_bits: usize) -> usize {
+    ptr_bits - DIGEST_WIDTH_BITS
 }
 
 #[cfg(test)]
-pub(crate) const fn pointer_max_bits_for_address_height(address_height: usize) -> usize {
+pub(crate) const fn ptr_bits_from_address_height(address_height: usize) -> usize {
     address_height + DIGEST_WIDTH_BITS
 }
 
@@ -59,7 +59,7 @@ impl MemoryConfig {
     pub fn memory_dimensions(&self) -> MemoryDimensions {
         MemoryDimensions {
             addr_space_height: self.addr_space_height,
-            address_height: address_height_from_pointer_max_bits(self.pointer_max_bits),
+            address_height: address_height_from_ptr_bits(self.pointer_max_bits),
         }
     }
 }

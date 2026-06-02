@@ -64,7 +64,7 @@ where
 
     let system_config = app_vm_pk.vm_config.as_ref();
     let memory_dimensions = system_config.memory_config.memory_dimensions();
-    let num_user_pvs = system_config.num_public_values_cells();
+    let num_user_pvs = system_config.num_public_values;
 
     let def_hook_commit = def_prover.as_ref().map(|p| p.def_hook_commit().into());
 

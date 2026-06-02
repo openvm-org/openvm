@@ -16,7 +16,7 @@ mod cuda;
 pub use cuda::*;
 
 /// A dummy testing chip that sends/receives unconstrained messages on the [MemoryBus].
-/// All memory accesses use `BLOCK_FE_WIDTH`.
+/// Cell accesses use `BLOCK_FE_WIDTH`.
 pub struct MemoryTester<F: VmField> {
     pub(crate) chip: MemoryDummyChip<F>,
     pub memory: TracingMemory,

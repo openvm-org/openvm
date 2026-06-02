@@ -365,8 +365,6 @@ impl GpuChipTestBuilder {
             register,
             (pointer as u64).to_le_bytes().map(F::from_u8),
         );
-        // Write heap payloads in `MEMORY_BLOCK_BYTES` chunks. `NUM_LIMBS` must be a
-        // multiple of `MEMORY_BLOCK_BYTES`.
         for (i, &write) in writes.iter().enumerate() {
             let ptr = pointer + i * NUM_LIMBS;
             for j in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
