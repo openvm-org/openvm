@@ -41,6 +41,7 @@ fn main() -> eyre::Result<()> {
     let _ = verify_app_proof::<openvm_sdk::DefaultStarkEngine>(
         &app_vk.vk,
         app_vk.memory_dimensions,
+        app_vk.num_user_pvs,
         &proof,
     )?;
     // [!endregion verification]

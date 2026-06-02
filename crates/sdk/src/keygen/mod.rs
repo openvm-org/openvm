@@ -31,6 +31,7 @@ pub struct AppProvingKey<VC> {
 pub struct AppVerifyingKey {
     pub vk: MultiStarkVerifyingKey<SC>,
     pub memory_dimensions: MemoryDimensions,
+    pub num_user_pvs: usize,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -84,14 +85,11 @@ where
     }
 
     pub fn get_app_vk(&self) -> AppVerifyingKey {
+        let system_config = self.app_vm_pk.vm_config.as_ref();
         AppVerifyingKey {
             vk: self.app_vm_pk.vm_pk.get_vk(),
-            memory_dimensions: self
-                .app_vm_pk
-                .vm_config
-                .as_ref()
-                .memory_config
-                .memory_dimensions(),
+            memory_dimensions: system_config.memory_config.memory_dimensions(),
+            num_user_pvs: system_config.num_public_values,
         }
     }
 
