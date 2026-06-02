@@ -106,6 +106,9 @@ __device__ __forceinline__ void deferral_call_core_tracegen(
 #pragma unroll
     for (size_t i = 0; i < COMMIT_NUM_BYTES; i += 2) {
         bitwise_buffer.add_range(
+            record.reads.input_commit[i], record.reads.input_commit[i + 1]
+        );
+        bitwise_buffer.add_range(
             record.writes.output_commit[i], record.writes.output_commit[i + 1]
         );
     }
@@ -217,6 +220,11 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
         static_cast<uint32_t>(record.rd_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
         static_cast<uint32_t>(record.rs_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits
     );
+#pragma unroll
+    for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
+        bitwise_buffer.add_range(record.rd_val[i], record.rd_val[i + 1]);
+        bitwise_buffer.add_range(record.rs_val[i], record.rs_val[i + 1]);
+    }
 
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, from_state.pc, record.from_pc);
     COL_WRITE_VALUE(row, DeferralCallAdapterCols, from_state.timestamp, record.from_timestamp);

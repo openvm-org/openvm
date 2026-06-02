@@ -151,6 +151,13 @@ impl<
                 need_range_check[1].clone() * limb_shift,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
+        for val in &cols.rs_val {
+            for bytes in val.chunks_exact(2) {
+                self.bus
+                    .send_range(bytes[0], bytes[1])
+                    .eval(builder, ctx.instruction.is_valid.clone());
+            }
+        }
 
         // Reads from heap
         const {
@@ -382,6 +389,12 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize> Adap
                 0
             },
         );
+        for val in record.rs_val {
+            for bytes in val.to_le_bytes().chunks_exact(2) {
+                self.bitwise_lookup_chip
+                    .request_range(bytes[0] as u32, bytes[1] as u32);
+            }
+        }
         // Writing in reverse order
         cols.writes_aux
             .set_prev_data(pack_u8_block_bytes(&record.writes_aux.prev_data));

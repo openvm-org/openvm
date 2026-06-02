@@ -116,6 +116,7 @@ template <size_t NUM_LIMBS> struct BranchLessThanCore {
         bitwise_lookup.add_range(a_msb_range, b_msb_range);
 
         // AIR range-checks these byte limbs; add matching lookup counts.
+        bitwise_lookup.add_range(record.a[NUM_LIMBS - 1], record.b[NUM_LIMBS - 1]);
 #pragma unroll
         for (int i = 0; i + 1 < NUM_LIMBS; i++) {
             bitwise_lookup.add_range(record.a[i], record.b[i]);

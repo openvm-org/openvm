@@ -257,7 +257,6 @@ where
             .eval(builder, signed.clone());
 
         // Memory bus checks only packed u16 values; these read bytes need separate bounds.
-        // The signed path handles the MSB above; the unsigned path checks it below.
         for i in 0..NUM_LIMBS - 1 {
             self.bitwise_lookup_bus
                 .send_range(b[i], c[i])
@@ -265,7 +264,7 @@ where
         }
         self.bitwise_lookup_bus
             .send_range(b[NUM_LIMBS - 1], c[NUM_LIMBS - 1])
-            .eval(builder, is_valid.clone() - signed.clone());
+            .eval(builder, is_valid.clone());
 
         // Constrain that 0 <= |r| < |c| by checking that r_prime < c (unsigned LT). By
         // definition, the sign of r must be b_sign. If c is negative then we want
@@ -535,13 +534,10 @@ where
             self.bitwise_lookup_chip
                 .request_range(record.b[i] as u32, record.c[i] as u32);
         }
-        // The unsigned path also range-checks the MSB pair.
-        if !is_signed {
-            self.bitwise_lookup_chip.request_range(
-                record.b[NUM_LIMBS - 1] as u32,
-                record.c[NUM_LIMBS - 1] as u32,
-            );
-        }
+        self.bitwise_lookup_chip.request_range(
+            record.b[NUM_LIMBS - 1] as u32,
+            record.c[NUM_LIMBS - 1] as u32,
+        );
 
         // Write in a reverse order
         core_row.opcode_remu_flag = F::from_bool(opcode == DivRemOpcode::REMU);

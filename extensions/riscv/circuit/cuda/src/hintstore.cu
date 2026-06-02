@@ -121,6 +121,14 @@ struct Rv64HintStore {
                 ((record.num_words >> (RV64_CELL_BITS * (REM_WORDS_NUM_LIMBS - 1))) & 0xFF)
                     << rem_words_msl_lshift
             );
+#pragma unroll
+            for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
+                bitwise_lookup.add_range(mem_ptr_limbs[i], mem_ptr_limbs[i + 1]);
+            }
+#pragma unroll
+            for (size_t i = 0; i < REM_WORDS_NUM_LIMBS; i += 2) {
+                bitwise_lookup.add_range(rem_words_limbs[i], rem_words_limbs[i + 1]);
+            }
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv64HintStoreCols, mem_ptr_aux_cols)),
                 record.mem_ptr_aux_record.prev_timestamp,
@@ -154,6 +162,10 @@ struct Rv64HintStore {
         );
 
         COL_WRITE_ARRAY(row, Rv64HintStoreCols, data, write.data);
+#pragma unroll
+        for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i += 2) {
+            bitwise_lookup.add_range(write.data[i], write.data[i + 1]);
+        }
     }
 };
 

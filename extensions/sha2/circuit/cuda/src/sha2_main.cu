@@ -77,6 +77,12 @@ static __device__ __forceinline__ void sha2_main_row_body(
             static_cast<uint32_t>(needs_range_check[i + 1]) * shift
         );
     }
+#pragma unroll
+    for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
+        bitwise_lookup.add_range(dst_ptr_bytes[i], dst_ptr_bytes[i + 1]);
+        bitwise_lookup.add_range(state_ptr_bytes[i], state_ptr_bytes[i + 1]);
+        bitwise_lookup.add_range(input_ptr_bytes[i], input_ptr_bytes[i + 1]);
+    }
 
     // Memory aux
     uint32_t timestamp = header->timestamp;

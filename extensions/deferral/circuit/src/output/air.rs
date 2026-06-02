@@ -187,6 +187,16 @@ where
                 .send_range(rc_pair[0].clone(), rc_pair[1].clone())
                 .eval(builder, local.is_first);
         }
+        for bytes in local.output_commit.chunks_exact(2) {
+            self.bitwise_bus
+                .send_range(bytes[0], bytes[1])
+                .eval(builder, local.is_first);
+        }
+        for bytes in local.output_len.chunks_exact(2) {
+            self.bitwise_bus
+                .send_range(bytes[0], bytes[1])
+                .eval(builder, local.is_first);
+        }
 
         // Constrain the consistency of current_commit_state at each point in this
         // section's rows. The initial state should be [deferral_idx, output_len,
@@ -240,6 +250,13 @@ where
                 local.rs_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
             )
             .eval(builder, local.is_first);
+        for val in [&local.rd_val, &local.rs_val] {
+            for bytes in val.chunks_exact(2) {
+                self.bitwise_bus
+                    .send_range(bytes[0], bytes[1])
+                    .eval(builder, local.is_first);
+            }
+        }
 
         // We also constrain output_len to be under 2^address_bits.
         self.bitwise_bus

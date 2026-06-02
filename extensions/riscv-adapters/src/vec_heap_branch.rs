@@ -132,6 +132,13 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
+        for val in &cols.rs_val {
+            for bytes in val.chunks_exact(2) {
+                self.bus
+                    .send_range(bytes[0], bytes[1])
+                    .eval(builder, ctx.instruction.is_valid.clone());
+            }
+        }
 
         // Compose the 4 materialized bytes of each register value into a single field element.
         let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(abstract_compose);
@@ -300,6 +307,12 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize> Adap
                 0
             },
         );
+        for val in record.rs_vals {
+            for bytes in val.to_le_bytes().chunks_exact(2) {
+                self.bitwise_lookup_chip
+                    .request_range(bytes[0] as u32, bytes[1] as u32);
+            }
+        }
 
         let timestamp_delta = NUM_READS + NUM_READS * BLOCKS_PER_READ;
         let mut timestamp = record.from_timestamp + timestamp_delta as u32;

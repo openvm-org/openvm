@@ -167,10 +167,10 @@ __global__ void deferral_output_tracegen(
 
     COL_WRITE_ARRAY(row, DeferralOutputCols, output_commit, call_data.output_commit);
     const uint8_t output_len_bytes[F_NUM_BYTES] = {
-        static_cast<uint8_t>(output_len & 0xffu),
-        static_cast<uint8_t>((output_len >> 8) & 0xffu),
-        static_cast<uint8_t>((output_len >> 16) & 0xffu),
-        static_cast<uint8_t>((output_len >> 24) & 0xffu),
+        static_cast<uint8_t>(output_len & RV64_CELL_MASK),
+        static_cast<uint8_t>((output_len >> RV64_CELL_BITS) & RV64_CELL_MASK),
+        static_cast<uint8_t>((output_len >> (2 * RV64_CELL_BITS)) & RV64_CELL_MASK),
+        static_cast<uint8_t>((output_len >> (3 * RV64_CELL_BITS)) & RV64_CELL_MASK),
     };
     COL_WRITE_ARRAY(row, DeferralOutputCols, output_len, output_len_bytes);
 
@@ -182,6 +182,19 @@ __global__ void deferral_output_tracegen(
             static_cast<uint32_t>(header.rd_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
             static_cast<uint32_t>(header.rs_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits
         );
+#pragma unroll
+        for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
+            bitwise_buffer.add_range(header.rd_val[i], header.rd_val[i + 1]);
+            bitwise_buffer.add_range(header.rs_val[i], header.rs_val[i + 1]);
+        }
+#pragma unroll
+        for (size_t i = 0; i < COMMIT_NUM_BYTES; i += 2) {
+            bitwise_buffer.add_range(call_data.output_commit[i], call_data.output_commit[i + 1]);
+        }
+#pragma unroll
+        for (size_t i = 0; i < F_NUM_BYTES; i += 2) {
+            bitwise_buffer.add_range(output_len_bytes[i], output_len_bytes[i + 1]);
+        }
         bitwise_buffer.add_range(
             static_cast<uint32_t>(output_len_bytes[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
             0

@@ -241,6 +241,17 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .send_range(pair[0] * shift.clone(), pair[1] * shift.clone())
                 .eval(builder, *local.instruction.is_enabled);
         }
+        for limbs in [
+            &local.instruction.dst_ptr_limbs,
+            &local.instruction.state_ptr_limbs,
+            &local.instruction.input_ptr_limbs,
+        ] {
+            for i in (0..RV64_WORD_NUM_LIMBS).step_by(2) {
+                self.bitwise_lookup_bus
+                    .send_range(limbs[i], limbs[i + 1])
+                    .eval(builder, *local.instruction.is_enabled);
+            }
+        }
 
         self.execution_bridge
             .execute_and_increment_pc(

@@ -214,9 +214,7 @@ template <size_t NUM_LIMBS> struct DivRemCore {
         for (int i = 0; i + 1 < NUM_LIMBS; i++) {
             bitwise_lookup.add_range(record.b[i], record.c[i]);
         }
-        if (!is_signed) {
-            bitwise_lookup.add_range(record.b[NUM_LIMBS - 1], record.c[NUM_LIMBS - 1]);
-        }
+        bitwise_lookup.add_range(record.b[NUM_LIMBS - 1], record.c[NUM_LIMBS - 1]);
 
         // range tuple check carries
         uint32_t carry = 0;

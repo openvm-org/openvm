@@ -172,6 +172,12 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
             self.bitwise_lookup_chip
                 .request_range(pair[0] as u32 * shift, pair[1] as u32 * shift);
         }
+        for ptr in [vm_record.dst_ptr, vm_record.state_ptr, vm_record.input_ptr] {
+            for bytes in ptr.to_le_bytes().chunks_exact(2) {
+                self.bitwise_lookup_chip
+                    .request_range(bytes[0] as u32, bytes[1] as u32);
+            }
+        }
 
         // fill in the register reads aux
         let mut timestamp = vm_record.timestamp;

@@ -148,7 +148,12 @@ where
                 .eval(builder, cols.is_valid);
         }
 
-        // Range check the bytes that we write to heap memory.
+        // Range check heap byte decompositions used by canonicity and packed memory ops.
+        for bytes in cols.reads.input_commit.chunks_exact(2) {
+            self.bitwise_bus
+                .send_range(bytes[0], bytes[1])
+                .eval(builder, cols.is_valid);
+        }
         for bytes in cols.writes.output_commit.chunks_exact(2) {
             self.bitwise_bus
                 .send_range(bytes[0], bytes[1])
@@ -326,6 +331,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 cols.rs_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
+        for val in [&cols.rd_val, &cols.rs_val] {
+            for bytes in val.chunks_exact(2) {
+                self.bitwise_bus
+                    .send_range(bytes[0], bytes[1])
+                    .eval(builder, ctx.instruction.is_valid.clone());
+            }
+        }
 
         // Accumulators are read then updated in the deferral address space,
         // using deferral_idx (instruction immediate / operand c) to determine
@@ -337,7 +349,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         let deferral_as = AB::Expr::from_u32(DEFERRAL_AS);
 
         // Accumulators are consecutive DEFERRAL_AS cell ranges. Memory-bus
-        // addresses are scaled from cell indices by BUS_PTR_SCALE.
+        // addresses are scaled from pointers by BUS_PTR_SCALE.
         let digest_size = AB::F::from_usize(DIGEST_SIZE);
         let bus_scale = AB::F::from_usize(BUS_PTR_SCALE);
         let num_accumulators = AB::F::from_usize(NUM_ACCUMULATORS_PER_IDX);

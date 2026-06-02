@@ -175,6 +175,10 @@ where
             self.bitwise_lookup_chip
                 .request_range(bytes[0] as u32, bytes[1] as u32);
         }
+        for bytes in record.read_data.input_commit.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(bytes[0] as u32, bytes[1] as u32);
+        }
         for bytes in record.write_data.output_len.chunks_exact(2) {
             self.bitwise_lookup_chip
                 .request_range(bytes[0] as u32, bytes[1] as u32);
@@ -419,6 +423,12 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
             (record.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
             (record.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
         );
+        for ptr in [record.rd_val, record.rs_val] {
+            for bytes in ptr.to_le_bytes().chunks_exact(2) {
+                self.bitwise_lookup_chip
+                    .request_range(bytes[0] as u32, bytes[1] as u32);
+            }
+        }
 
         // Timestamps in AIR are assigned in strict sequence starting from
         // `from_state.timestamp`; mirror that exact sequence in reverse here.

@@ -298,7 +298,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
                 range_checker,
                 pointer_max_bits,
             ),
-            LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker),
         );
         inventory.add_air(load_store);
 
@@ -447,6 +447,7 @@ where
             LoadStoreFiller::new(
                 Rv64LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
+                range_checker.clone(),
             ),
             mem_helper.clone(),
         );

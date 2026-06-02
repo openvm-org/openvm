@@ -347,6 +347,16 @@ where
                         (header.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32)
                             << limb_shift_bits,
                     );
+                    for ptr in [header.rd_val, header.rs_val] {
+                        for bytes in ptr.to_le_bytes().chunks_exact(2) {
+                            self.bitwise_lookup_chip
+                                .request_range(bytes[0] as u32, bytes[1] as u32);
+                        }
+                    }
+                    for bytes in output_len_bytes.chunks_exact(2) {
+                        self.bitwise_lookup_chip
+                            .request_range(bytes[0] as u32, bytes[1] as u32);
+                    }
                     self.bitwise_lookup_chip.request_range(
                         (output_len_bytes[F_NUM_BYTES - 1] as u32) << limb_shift_bits,
                         0,
@@ -419,6 +429,10 @@ where
             }
 
             let output_commit = f_commit_to_bytes(&current_poseidon2_res).map(F::from_u8);
+            for bytes in output_commit.chunks_exact(2) {
+                self.bitwise_lookup_chip
+                    .request_range(bytes[0].as_canonical_u32(), bytes[1].as_canonical_u32());
+            }
             for row in section_chunk.chunks_exact_mut(width) {
                 let cols: &mut DeferralOutputCols<F> = row.borrow_mut();
                 cols.output_commit = output_commit;

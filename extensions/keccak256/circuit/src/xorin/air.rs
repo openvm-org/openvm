@@ -182,6 +182,13 @@ impl XorinVmAir {
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
                 .eval(builder, is_enabled);
         }
+        for limbs in [&instruction.buffer_ptr_limbs, &instruction.input_ptr_limbs] {
+            for bytes in limbs.chunks_exact(2) {
+                self.bitwise_lookup_bus
+                    .send_range(bytes[0], bytes[1])
+                    .eval(builder, is_enabled);
+            }
+        }
 
         builder.assert_eq(
             instruction.buffer_ptr,

@@ -147,6 +147,15 @@ where
         };
         self.subair.eval(builder, (eq_subair_io, cols.eq_marker));
 
+        for (b_pair, c_pair) in cols.b.chunks_exact(2).zip(cols.c.chunks_exact(2)) {
+            self.bus
+                .send_range(b_pair[0], b_pair[1])
+                .eval(builder, cols.is_valid);
+            self.bus
+                .send_range(c_pair[0], c_pair[1])
+                .eval(builder, cols.is_valid);
+        }
+
         // Constrain that auxiliary columns lt_columns and c_lt_mark are as defined above.
         // When c_lt_mark is 1, lt_marker should have exactly one index i where lt_marker[i]
         // is 1, and be 0 elsewhere. When c_lt_mark is 2, lt_marker[i] should have an
@@ -406,6 +415,13 @@ where
             run_unsigned_less_than::<READ_LIMBS>(&record.b, &self.modulus_limbs);
         let (c_cmp, c_diff_idx) =
             run_unsigned_less_than::<READ_LIMBS>(&record.c, &self.modulus_limbs);
+
+        for (b_pair, c_pair) in record.b.chunks_exact(2).zip(record.c.chunks_exact(2)) {
+            self.bitwise_lookup_chip
+                .request_range(b_pair[0] as u32, b_pair[1] as u32);
+            self.bitwise_lookup_chip
+                .request_range(c_pair[0] as u32, c_pair[1] as u32);
+        }
 
         if !record.is_setup {
             assert!(b_cmp, "{:?} >= {:?}", record.b, self.modulus_limbs);

@@ -317,5 +317,11 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             self.bitwise_lookup_chip
                 .request_range(pair[0] * limb_shift, pair[1] * limb_shift);
         }
+        for ptr in [record.buffer, record.input] {
+            for bytes in ptr.to_le_bytes().chunks_exact(2) {
+                self.bitwise_lookup_chip
+                    .request_range(bytes[0] as u32, bytes[1] as u32);
+            }
+        }
     }
 }

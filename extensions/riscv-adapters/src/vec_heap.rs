@@ -169,6 +169,13 @@ impl<
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
+        for val in cols.rs_val.iter().chain(std::iter::once(&cols.rd_val)) {
+            for bytes in val.chunks_exact(2) {
+                self.bus
+                    .send_range(bytes[0], bytes[1])
+                    .eval(builder, ctx.instruction.is_valid.clone());
+            }
+        }
 
         // Compose the 4 materialized bytes of each register value into a single field element
         // used as a memory address.
@@ -417,6 +424,17 @@ impl<
                 (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
                 (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
             );
+        }
+        for val in record
+            .rs_vals
+            .iter()
+            .copied()
+            .chain(std::iter::once(record.rd_val))
+        {
+            for bytes in val.to_le_bytes().chunks_exact(2) {
+                self.bitwise_lookup_chip
+                    .request_range(bytes[0] as u32, bytes[1] as u32);
+            }
         }
 
         let timestamp_delta = NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;

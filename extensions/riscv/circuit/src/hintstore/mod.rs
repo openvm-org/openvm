@@ -199,6 +199,22 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
                 &local_cols.write_aux,
             )
             .eval(builder, is_valid.clone());
+
+        for bytes in local_cols.mem_ptr_limbs.chunks_exact(2) {
+            self.bitwise_operation_lookup_bus
+                .send_range(bytes[0], bytes[1])
+                .eval(builder, is_start.clone());
+        }
+        for bytes in local_cols.rem_words_limbs.chunks_exact(2) {
+            self.bitwise_operation_lookup_bus
+                .send_range(bytes[0], bytes[1])
+                .eval(builder, is_start.clone());
+        }
+        for bytes in local_cols.data.chunks_exact(2) {
+            self.bitwise_operation_lookup_bus
+                .send_range(bytes[0], bytes[1])
+                .eval(builder, is_valid.clone());
+        }
         let expected_opcode = (local_cols.is_single
             * AB::F::from_usize(HINT_STORED as usize + self.offset))
             + (local_cols.is_buffer * AB::F::from_usize(HINT_BUFFER as usize + self.offset));
@@ -570,6 +586,14 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                     ((num_words >> (RV64_CELL_BITS * (REM_WORDS_NUM_LIMBS - 1))) & 0xFF)
                         << rem_words_msl_lshift,
                 );
+                for bytes in record.inner.mem_ptr.to_le_bytes().chunks_exact(2) {
+                    self.bitwise_lookup_chip
+                        .request_range(bytes[0] as u32, bytes[1] as u32);
+                }
+                for bytes in (num_words as u16).to_le_bytes().chunks_exact(2) {
+                    self.bitwise_lookup_chip
+                        .request_range(bytes[0] as u32, bytes[1] as u32);
+                }
 
                 let mut timestamp = record.inner.timestamp + num_words * 3;
                 let mut mem_ptr = record.inner.mem_ptr + num_words * RV64_REGISTER_NUM_LIMBS as u32;
@@ -601,6 +625,10 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
 
                         // Note: writing in reverse
                         cols.data = var.data.map(|x| F::from_u8(x));
+                        for bytes in var.data.chunks_exact(2) {
+                            self.bitwise_lookup_chip
+                                .request_range(bytes[0] as u32, bytes[1] as u32);
+                        }
 
                         cols.write_aux
                             .set_prev_data(pack_u8_block_bytes(&var.data_write_aux.prev_data));

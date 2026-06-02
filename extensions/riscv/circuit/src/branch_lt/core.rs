@@ -147,7 +147,10 @@ where
             )
             .eval(builder, is_valid.clone());
 
-        // Memory bus checks only packed u16 values; these non-MSB read bytes need separate bounds.
+        // Memory bus checks only packed u16 values; these read bytes need separate bounds.
+        self.bus
+            .send_range(a[NUM_LIMBS - 1], b[NUM_LIMBS - 1])
+            .eval(builder, is_valid.clone());
         for i in 0..NUM_LIMBS - 1 {
             self.bus
                 .send_range(a[i], b[i])
@@ -335,6 +338,10 @@ where
             .request_range(a_msb_range, b_msb_range);
 
         // AIR range-checks these byte limbs; add matching lookup counts.
+        self.bitwise_lookup_chip.request_range(
+            record.a[NUM_LIMBS - 1] as u32,
+            record.b[NUM_LIMBS - 1] as u32,
+        );
         for i in 0..NUM_LIMBS - 1 {
             self.bitwise_lookup_chip
                 .request_range(record.a[i] as u32, record.b[i] as u32);

@@ -77,7 +77,7 @@ fn create_harness_fields(
             range_checker_chip.bus(),
             address_bits,
         ),
-        LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+        LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker_chip.bus()),
     );
     let executor = Rv64LoadStoreExecutor::new(
         Rv64LoadStoreAdapterExecutor::new(address_bits),
@@ -85,8 +85,9 @@ fn create_harness_fields(
     );
     let chip = Rv64LoadStoreChip::<F>::new(
         LoadStoreFiller::new(
-            Rv64LoadStoreAdapterFiller::new(address_bits, range_checker_chip),
+            Rv64LoadStoreAdapterFiller::new(address_bits, range_checker_chip.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
+            range_checker_chip,
         ),
         memory_helper,
     );
