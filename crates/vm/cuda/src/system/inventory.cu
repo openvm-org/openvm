@@ -11,10 +11,10 @@
 ///
 /// Note on uint32_t encoding: only `values` stores Montgomery-encoded BabyBear
 /// field elements (Fp::asRaw()). All other fields (`address_space`,
-/// `start_ptr`, `timestamps`) are plain integers.
+/// `ptr`, `timestamps`) are plain integers.
 template <size_t CHUNK, size_t BLOCKS> struct MemoryInventoryRecord {
     uint32_t address_space;      // plain integer
-    uint32_t start_ptr;          // plain integer (address-space pointer)
+    uint32_t ptr;                // plain integer (address-space pointer)
     uint32_t timestamps[BLOCKS]; // plain integers
     uint32_t values[CHUNK];      // Montgomery-encoded Fp values (Fp::asRaw())
 };
@@ -35,23 +35,22 @@ __device__ inline bool same_output_block(
     if (lhs_as != rhs_as) {
         return false;
     }
-    return (in[lhs_idx].start_ptr / DIGEST_WIDTH)
-        == (in[rhs_idx].start_ptr / DIGEST_WIDTH);
+    return (in[lhs_idx].ptr / DIGEST_WIDTH) == (in[rhs_idx].ptr / DIGEST_WIDTH);
 }
 
-/// Read initial memory values for a chunk and convert them to Montgomery-encoded
+/// Read initial memory values for a Merkle leaf and convert them to Montgomery-encoded
 /// field elements. The output values must be in Montgomery form because they are
 /// stored directly into MemoryInventoryRecord.values, which boundary.cu later
 /// reads via FpArray::from_raw_array (a raw copy that assumes Montgomery encoding).
 ///
-/// `chunk_start_ptr` is an address-space pointer:
+/// `ptr` is an address-space pointer:
 /// - DEFERRAL_AS: pointer into F cells; initial memory is already raw Montgomery Fp.
 /// - Non-deferral ASes: pointer into u16 cells; initial memory is little-endian bytes.
-__device__ inline void read_initial_chunk(
+__device__ inline void read_initial_leaf(
     uint32_t *out_values, // Montgomery-encoded Fp values
     uint8_t const *const *initial_mem,
     uint32_t address_space,
-    uint32_t chunk_start_ptr
+    uint32_t ptr
 ) {
     uint32_t addr_space_idx = address_space - 1;
     uint8_t const *mem = initial_mem[addr_space_idx];
@@ -64,15 +63,15 @@ __device__ inline void read_initial_chunk(
     }
     if (address_space == DEFERRAL_AS) {
         // DEFERRAL_AS stores F cells directly, already raw Montgomery u32.
-        uint32_t const *cells = reinterpret_cast<uint32_t const *>(mem) + chunk_start_ptr;
+        uint32_t const *cells = reinterpret_cast<uint32_t const *>(mem) + ptr;
         #pragma unroll
         for (int i = 0; i < DIGEST_WIDTH; ++i) {
             out_values[i] = cells[i];
         }
     } else {
         // u16 cells, little-endian. Each cell occupies `U16_CELL_SIZE` bytes at
-        // byte offset `U16_CELL_SIZE * (chunk_start_ptr + i)`.
-        size_t base = static_cast<size_t>(chunk_start_ptr) * U16_CELL_SIZE;
+        // byte offset `U16_CELL_SIZE * (ptr + i)`.
+        size_t base = static_cast<size_t>(ptr) * U16_CELL_SIZE;
         #pragma unroll
         for (int i = 0; i < DIGEST_WIDTH; ++i) {
             out_values[i] = Fp(u16_from_bytes_le(mem + base + U16_CELL_SIZE * i)).asRaw();
@@ -99,19 +98,17 @@ __global__ void cukernel_build_candidates(
 
     OutRec rec{};
     rec.address_space = in[row_idx].address_space;
-    uint32_t leaf_start_ptr =
-        (in[row_idx].start_ptr / DIGEST_WIDTH) * DIGEST_WIDTH;
-    rec.start_ptr = leaf_start_ptr;
+    rec.ptr = (in[row_idx].ptr / DIGEST_WIDTH) * DIGEST_WIDTH;
     #pragma unroll
     for (size_t i = 0; i < BLOCKS_PER_LEAF; ++i) {
         rec.timestamps[i] = 0;
     }
 
     // Fill all values with Montgomery-encoded initial memory
-    read_initial_chunk(rec.values, initial_mem, rec.address_space, leaf_start_ptr);
+    read_initial_leaf(rec.values, initial_mem, rec.address_space, rec.ptr);
 
     // Overwrite touched block's values (already Montgomery-encoded in input records)
-    uint32_t block_idx = (in[row_idx].start_ptr % DIGEST_WIDTH) / BLOCK_FE_WIDTH;
+    uint32_t block_idx = (in[row_idx].ptr % DIGEST_WIDTH) / BLOCK_FE_WIDTH;
     #pragma unroll
     for (int i = 0; i < BLOCK_FE_WIDTH; ++i) {
         rec.values[block_idx * BLOCK_FE_WIDTH + i] = in[row_idx].values[i];
@@ -120,8 +117,7 @@ __global__ void cukernel_build_candidates(
 
     // If two input records fall in the same chunk, overwrite the second block too
     if (row_idx + 1 < in_num_records && same_output_block(in, row_idx, row_idx + 1)) {
-        uint32_t block_idx2 =
-            (in[row_idx + 1].start_ptr % DIGEST_WIDTH) / BLOCK_FE_WIDTH;
+        uint32_t block_idx2 = (in[row_idx + 1].ptr % DIGEST_WIDTH) / BLOCK_FE_WIDTH;
         #pragma unroll
         for (int i = 0; i < BLOCK_FE_WIDTH; ++i) {
             rec.values[block_idx2 * BLOCK_FE_WIDTH + i] = in[row_idx + 1].values[i];

@@ -28,7 +28,8 @@ const BLOCKS_PER_LEAF: usize = DIGEST_WIDTH / BLOCK_FE_WIDTH;
 #[derive(Clone, Copy)]
 pub struct PersistentBoundaryRecord {
     pub address_space: u32,
-    pub leaf_start_ptr: u32,
+    /// AS-native pointer to the first cell of this Merkle leaf.
+    pub ptr: u32,
     pub timestamps: [u32; BLOCKS_PER_LEAF],
     pub values: [F; DIGEST_WIDTH],
 }

@@ -47,7 +47,7 @@ pub struct MemoryInventoryGPU {
 #[derive(Clone, Copy)]
 struct MemoryInventoryRecord<const CHUNK: usize, const BLOCKS: usize> {
     address_space: u32,
-    start_ptr: u32,
+    ptr: u32,
     timestamps: [u32; BLOCKS],
     values: [u32; CHUNK],
 }
@@ -56,7 +56,7 @@ struct MemoryInventoryRecord<const CHUNK: usize, const BLOCKS: usize> {
 #[derive(Clone, Copy)]
 struct MemoryMerkleRecord {
     address_space: u32,
-    leaf_start_ptr: u32,
+    ptr: u32,
     timestamp: u32,
     values: [u32; DIGEST_WIDTH],
 }
@@ -152,7 +152,7 @@ impl MemoryInventoryGPU {
             let values_u32 = leftmost_values.map(Self::field_to_raw_u32);
             let merkle_record = MemoryMerkleRecord {
                 address_space: ADDR_SPACE_OFFSET,
-                leaf_start_ptr: 0,
+                ptr: 0,
                 timestamp: 0,
                 values: values_u32,
             };
@@ -170,14 +170,12 @@ impl MemoryInventoryGPU {
             // `inventory.cu` merges 4-cell block records into 8-cell leaf records.
             let in_records: Vec<MemoryInventoryRecord<BLOCK_FE_WIDTH, 1>> = partition
                 .iter()
-                .map(
-                    |&((addr_space, start_ptr), ts_values)| MemoryInventoryRecord {
-                        address_space: addr_space,
-                        start_ptr,
-                        timestamps: [ts_values.timestamp],
-                        values: ts_values.values.map(Self::field_to_raw_u32),
-                    },
-                )
+                .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
+                    address_space: addr_space,
+                    ptr,
+                    timestamps: [ts_values.timestamp],
+                    values: ts_values.values.map(Self::field_to_raw_u32),
+                })
                 .collect();
             let in_num_records = in_records.len();
             let out_words = in_num_records
@@ -256,7 +254,7 @@ impl MemoryInventoryGPU {
                     .unwrap();
                 let record = MemoryMerkleRecord {
                     address_space: out_records[base],
-                    leaf_start_ptr: out_records[base + 1],
+                    ptr: out_records[base + 1],
                     timestamp,
                     values,
                 };

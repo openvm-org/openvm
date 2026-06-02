@@ -315,7 +315,7 @@ impl MemoryMerkleTree {
 
     /// Updates the tree and returns the merkle trace.
     ///
-    /// `d_touched_blocks` consists of `(as, leaf_start_ptr, ts, [F; DIGEST_WIDTH])`.
+    /// `d_touched_blocks` consists of `(as, ptr, ts, [F; DIGEST_WIDTH])`.
     pub fn update_with_touched_blocks(
         &mut self,
         unpadded_height: usize,
@@ -387,7 +387,7 @@ impl MemoryMerkleTree {
     ) -> usize {
         let md = self.mem_config.memory_dimensions();
         let tree_height = md.overall_height();
-        let shift_address = |(sp, start_ptr): (u32, u32)| (sp, start_ptr / DIGEST_WIDTH as u32);
+        let shift_address = |(sp, ptr): (u32, u32)| (sp, ptr / DIGEST_WIDTH as u32);
         2 * if touched_memory.is_empty() {
             tree_height
         } else {
@@ -560,7 +560,7 @@ mod tests {
         // Now we add some touched memory
         // We don't care about the memory layout and whatnot, because neither implementation uses
         // any special form of the touched blocks
-        let touched_leaf_start_ptrs = mem_config
+        let touched_ptrs = mem_config
             .addr_spaces
             .iter()
             .enumerate()
@@ -574,21 +574,21 @@ mod tests {
                 ptrs
             })
             .collect::<Vec<_>>();
-        let new_data = touched_leaf_start_ptrs
+        let new_data = touched_ptrs
             .iter()
             .map(|_| std::array::from_fn(|_| F::from_u32(rng.random_range(0..F::ORDER_U32))))
             .collect::<Vec<[F; DIGEST_WIDTH]>>();
-        assert!(!touched_leaf_start_ptrs.is_empty());
+        assert!(!touched_ptrs.is_empty());
         cpu_merkle_tree.finalize(
             &cpu_hasher_chip,
-            &(touched_leaf_start_ptrs
+            &(touched_ptrs
                 .iter()
                 .copied()
                 .zip(new_data.iter().copied())
                 .collect()),
             &mem_config.memory_dimensions(),
         );
-        let touched_blocks = touched_leaf_start_ptrs
+        let touched_blocks = touched_ptrs
             .into_iter()
             .zip(new_data)
             .map(|(address, data)| {
@@ -604,9 +604,9 @@ mod tests {
         let mut merkle_records =
             Vec::<u32>::with_capacity(touched_blocks.len() * MERKLE_TOUCHED_BLOCK_WIDTH);
         for (address, ts_values) in &touched_blocks {
-            let (address_space, leaf_start_ptr) = *address;
+            let (address_space, ptr) = *address;
             merkle_records.push(address_space);
-            merkle_records.push(leaf_start_ptr);
+            merkle_records.push(ptr);
             merkle_records.push(ts_values.timestamp);
             for &v in &ts_values.values {
                 merkle_records.push(unsafe { std::mem::transmute::<F, u32>(v) });

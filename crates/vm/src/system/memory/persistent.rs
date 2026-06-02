@@ -171,9 +171,9 @@ pub(crate) fn group_touched_memory_by_leaf<F: Copy + Send + Sync>(
 ) -> LeafGroupedTouchedMemory<F> {
     let mut enriched: Vec<EnrichedEntry<F>> = final_memory
         .par_iter()
-        .map(|&((addr_space, start_ptr), ts_values)| {
-            let leaf_label = start_ptr / DIGEST_WIDTH as u32;
-            let block_idx = ((start_ptr % DIGEST_WIDTH as u32) / BLOCK_FE_WIDTH as u32) as usize;
+        .map(|&((addr_space, ptr), ts_values)| {
+            let leaf_label = ptr / DIGEST_WIDTH as u32;
+            let block_idx = ((ptr % DIGEST_WIDTH as u32) / BLOCK_FE_WIDTH as u32) as usize;
             let key = (addr_space, leaf_label);
             let block_info = (block_idx, ts_values.timestamp, ts_values.values);
             (key, block_info)
@@ -230,10 +230,10 @@ impl<const DIGEST_WIDTH: usize, F: PrimeField32> PersistentBoundaryChip<F, DIGES
         let final_touched_labels: Vec<_> = group_touched_memory_by_leaf(final_memory)
             .into_par_iter()
             .map(|((addr_space, leaf_label), blocks)| {
-                let leaf_start_ptr = leaf_label * DIGEST_WIDTH as u32;
+                let ptr = leaf_label * DIGEST_WIDTH as u32;
                 // SAFETY: addr_space from `final_memory` are all in bounds
                 let init_values: [F; DIGEST_WIDTH] = array::from_fn(|i| unsafe {
-                    initial_memory.get_f::<F>(addr_space, leaf_start_ptr + i as u32)
+                    initial_memory.get_f::<F>(addr_space, ptr + i as u32)
                 });
 
                 let mut final_values = init_values;

@@ -163,12 +163,12 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         let end_ptr = ptr + size - 1;
         // Convert the pointer range to merkle-leaf labels. DEFERRAL_AS uses
         // AS-native F-cell pointers; RV64 address spaces use byte pointers.
-        let leaf_ptr_span = if address_space == DEFERRAL_AS {
+        let ptrs_per_leaf = if address_space == DEFERRAL_AS {
             DIGEST_WIDTH as u32
         } else {
             (U16_CELL_SIZE * DIGEST_WIDTH) as u32
         };
-        let leaf_bits = leaf_ptr_span.ilog2();
+        let leaf_bits = ptrs_per_leaf.ilog2();
         let leaf_label = ptr >> leaf_bits;
         let end_leaf_label = end_ptr >> leaf_bits;
         let num_leaves = end_leaf_label - leaf_label + 1;

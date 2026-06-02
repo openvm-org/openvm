@@ -286,6 +286,7 @@ impl GuestMemory {
     /// Reads `BLOCK_SIZE` AS-native cells starting at `ptr`.
     ///
     /// # Safety
+    /// - `T` must be stack-allocated `repr(C)` or `repr(transparent)`.
     /// - `T` must match the configured cell type for `addr_space`.
     /// - `addr_space` and `ptr..ptr + BLOCK_SIZE` must be in bounds.
     /// - `T` must be plain data compatible with [`LinearMemory::read`].
@@ -414,7 +415,7 @@ pub struct TracingMemory {
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     #[getset(get = "pub")]
     pub data: GuestMemory,
-    /// Maps `(addr_space, start_ptr / BLOCK_FE_WIDTH)` to the latest access timestamp.
+    /// Maps `(addr_space, ptr / BLOCK_FE_WIDTH)` to the latest access timestamp.
     /// A value of 0 means the touched-memory slot has never been accessed.
     pub(super) meta: Vec<PagedVec<u32, PAGE_SIZE>>,
 }
@@ -472,8 +473,8 @@ impl TracingMemory {
     }
 
     #[inline(always)]
-    fn prev_access_time(&mut self, address_space: usize, start_ptr: usize) -> u32 {
-        let idx = start_ptr / BLOCK_FE_WIDTH;
+    fn prev_access_time(&mut self, address_space: usize, ptr: usize) -> u32 {
+        let idx = ptr / BLOCK_FE_WIDTH;
         // SAFETY: address_space is validated during instruction decoding
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let prev = meta_page.get(idx);
@@ -503,6 +504,7 @@ impl TracingMemory {
     /// Returns `(t_prev, values)`.
     ///
     /// # Safety
+    /// - `T` must be `repr(C)` or `repr(transparent)`.
     /// - `T` must match the configured cell type for `address_space`.
     /// - `ptr` must be aligned to `BLOCK_SIZE`.
     /// - `address_space` must be valid.
@@ -526,6 +528,7 @@ impl TracingMemory {
     /// Atomic cell write operation. Returns `(t_prev, values_prev)`.
     ///
     /// # Safety
+    /// - `T` must be `repr(C)` or `repr(transparent)`.
     /// - `T` must match the configured cell type for `address_space`.
     /// - `ptr` must be aligned to `BLOCK_SIZE`.
     /// - `address_space` must be valid.
@@ -619,8 +622,8 @@ impl TracingMemory {
                     .par_iter()
                     .filter_map(move |(idx, timestamp)| {
                         if timestamp > INITIAL_TIMESTAMP {
-                            let block_start_ptr = idx as u32 * BLOCK_FE_WIDTH as u32;
-                            Some(((addr_space as u32, block_start_ptr), timestamp))
+                            let ptr = idx as u32 * BLOCK_FE_WIDTH as u32;
+                            Some(((addr_space as u32, ptr), timestamp))
                         } else {
                             None
                         }
@@ -642,7 +645,7 @@ impl TracingMemory {
         debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
         touched_blocks
             .into_par_iter()
-            .map(|((addr_space, start_ptr), timestamp)| {
+            .map(|((addr_space, ptr), timestamp)| {
                 let addr_space_config = &self.data.memory.config[addr_space as usize];
                 let cell_size = addr_space_config.layout.size();
                 let values = from_fn(|i| unsafe {
@@ -650,14 +653,11 @@ impl TracingMemory {
                         .layout
                         .to_field(self.data.memory.get_u8_slice(
                             addr_space,
-                            (start_ptr as usize + i) * cell_size,
+                            (ptr as usize + i) * cell_size,
                             cell_size,
                         ))
                 });
-                (
-                    (addr_space, start_ptr),
-                    TimestampedValues { timestamp, values },
-                )
+                ((addr_space, ptr), TimestampedValues { timestamp, values })
             })
             .collect()
     }

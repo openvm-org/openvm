@@ -29,10 +29,10 @@ fn test_memory_write_by_tester(tester: &mut impl TestBuilder<F>, its: usize) {
     for _ in 0..its {
         let addr_sp = rng.random_range(1..=value_bounds.len());
         let value_bound: u32 = value_bounds[addr_sp - 1];
-        let start_ptr = rng.random_range(0..max_ptr / BLOCK_FE_WIDTH) * BLOCK_FE_WIDTH;
+        let ptr = rng.random_range(0..max_ptr / BLOCK_FE_WIDTH) * BLOCK_FE_WIDTH;
         tester.write::<BLOCK_FE_WIDTH>(
             addr_sp,
-            start_ptr,
+            ptr,
             array::from_fn(|_| F::from_u32(rng.random_range(0..value_bound))),
         );
     }

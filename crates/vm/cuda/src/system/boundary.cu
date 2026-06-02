@@ -7,7 +7,8 @@
 
 template <size_t CHUNK, size_t BLOCKS> struct BoundaryRecord {
     uint32_t address_space;
-    uint32_t leaf_start_ptr;
+    // AS-native pointer to the first cell of this Merkle leaf.
+    uint32_t ptr;
     uint32_t timestamps[BLOCKS];
     uint32_t values[CHUNK]; // Montgomery-encoded Fp values stored as raw u32
 };
@@ -44,24 +45,24 @@ __global__ void cukernel_persistent_boundary_tracegen(
             row,
             PersistentBoundaryCols,
             leaf_label,
-            record.leaf_start_ptr / DIGEST_WIDTH
+            record.ptr / DIGEST_WIDTH
         );
         if (row_idx % 2 == 0) {
             FpArray<DIGEST_WIDTH> init_values;
             uint32_t addr_space_idx = record.address_space - 1;
             if (initial_mem[addr_space_idx]) {
-                // `leaf_start_ptr` is an address-space pointer:
+                // `ptr` is an address-space pointer:
                 //   - DEFERRAL_AS: pointer into F cells; initial memory is already raw Montgomery Fp.
                 //   - Non-deferral ASes: pointer into u16 cells; initial memory is little-endian bytes,
                 //     so convert the pointer to a byte offset with `U16_CELL_SIZE`.
                 if (record.address_space == DEFERRAL_AS) {
                     init_values = FpArray<DIGEST_WIDTH>::from_raw_array(
                         reinterpret_cast<uint32_t const *>(initial_mem[addr_space_idx]) +
-                        record.leaf_start_ptr
+                        record.ptr
                     );
                 } else {
                     uint8_t const *bytes =
-                        initial_mem[addr_space_idx] + U16_CELL_SIZE * record.leaf_start_ptr;
+                        initial_mem[addr_space_idx] + U16_CELL_SIZE * record.ptr;
                     uint16_t cells[DIGEST_WIDTH];
                     #pragma unroll
                     for (int i = 0; i < DIGEST_WIDTH; ++i) {

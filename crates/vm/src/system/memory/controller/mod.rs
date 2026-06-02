@@ -69,14 +69,14 @@ pub struct TimestampedValues<T, const N: usize> {
 
 /// A sorted equipartition of memory, with timestamps and values.
 ///
-/// The "key" is a pair `(address_space, start_ptr)`, where `start_ptr` is the
-/// AS-native pointer of the block's first cell (always a multiple of `N`).
+/// The "key" is a pair `(address_space, ptr)`, where `ptr` is the AS-native
+/// pointer of the block's first cell (always a multiple of `N`).
 pub type TimestampedEquipartition<F, const N: usize> = Vec<((u32, u32), TimestampedValues<F, N>)>;
 
 /// An equipartition of memory values.
 ///
-/// The key is a pair `(address_space, start_ptr)`, where `start_ptr` is the
-/// AS-native pointer of the block's first cell (always a multiple of `N`).
+/// The key is a pair `(address_space, ptr)`, where `ptr` is the AS-native pointer
+/// of the block's first cell (always a multiple of `N`).
 ///
 /// If a key is not present in the map, then the block is uninitialized (and therefore zero).
 pub type Equipartition<F, const N: usize> = BTreeMap<(u32, u32), [F; N]>;
@@ -195,21 +195,21 @@ impl<F: VmField> MemoryController<F> {
         boundary_chip.finalize(initial_memory, &final_memory, hasher.as_ref());
 
         // Regroup BLOCK_FE_WIDTH-cell blocks into DIGEST_WIDTH-cell leaves for merkle_chip.
-        // The equipartition key is (addr_space, start_ptr).
+        // The equipartition key is (addr_space, ptr).
         let final_memory_values: Equipartition<F, DIGEST_WIDTH> =
             group_touched_memory_by_leaf(&final_memory)
                 .into_iter()
                 .map(|((addr_space, leaf_label), blocks)| {
-                    let leaf_start_ptr = leaf_label * DIGEST_WIDTH as u32;
+                    let ptr = leaf_label * DIGEST_WIDTH as u32;
                     let mut values = std::array::from_fn(|i| unsafe {
-                        initial_memory.get_f::<F>(addr_space, leaf_start_ptr + i as u32)
+                        initial_memory.get_f::<F>(addr_space, ptr + i as u32)
                     });
                     for (block_idx, _, block_values) in blocks {
                         for (i, val) in block_values.into_iter().enumerate() {
                             values[block_idx * BLOCK_FE_WIDTH + i] = val;
                         }
                     }
-                    ((addr_space, leaf_start_ptr), values)
+                    ((addr_space, ptr), values)
                 })
                 .collect();
         merkle_chip.finalize(initial_memory, &final_memory_values, hasher.as_ref());
