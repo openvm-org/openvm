@@ -11,6 +11,7 @@ use openvm_recursion_circuit::{
         Poseidon2CompressBus, Poseidon2CompressMessage, PublicValuesBus, PublicValuesBusMessage,
     },
     prelude::DIGEST_SIZE,
+    primitives::bus::{RangeCheckerBus, RangeCheckerBusMessage},
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -51,6 +52,7 @@ pub struct DeferralAggPvsCols<F> {
 pub struct DeferralAggPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub poseidon2_bus: Poseidon2CompressBus,
+    pub range_bus: RangeCheckerBus,
     pub input_or_merkle_commit_bus: InputOrMerkleCommitBus,
     pub def_pvs_consistency_bus: DefPvsConsistencyBus,
 
@@ -66,6 +68,7 @@ impl DeferralAggPvsAir {
     pub fn new(
         public_values_bus: PublicValuesBus,
         poseidon2_bus: Poseidon2CompressBus,
+        range_bus: RangeCheckerBus,
         input_or_merkle_commit_bus: InputOrMerkleCommitBus,
         def_pvs_consistency_bus: DefPvsConsistencyBus,
     ) -> Self {
@@ -74,6 +77,7 @@ impl DeferralAggPvsAir {
         Self {
             public_values_bus,
             poseidon2_bus,
+            range_bus,
             input_or_merkle_commit_bus,
             def_pvs_consistency_bus,
             encoder,
@@ -248,7 +252,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         let local_merkle_depth = is_internal * local_merkle_depth;
         let next_merkle_depth = is_internal * next.child_pvs.input_commit[1];
 
-        let mut when_one_row = builder.when(is_first * not(next.proof_idx));
+        let mut when_one_row = builder.when(is_first.clone() * not(next.proof_idx));
         when_one_row.assert_eq(local_num_proofs.clone(), num_def_circuit_proofs);
         when_one_row.assert_eq(local_merkle_depth.clone(), merkle_depth);
         assert_array_eq(&mut when_one_row, local.merkle_commit, merkle_commit);
@@ -263,6 +267,22 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             .when_transition()
             .when(next.is_present)
             .assert_eq(local_merkle_depth, next_merkle_depth);
+
+        /*
+         * MAX_DEF_AGG_MERKLE_DEPTH - merkle_depth is range checked to be in [0, 256). This,
+         * combined with the constraints above that require at least one valid child proof
+         * with merkle_depth - 1 for any merkle_depth > 0, ensures that merkle_depth does not
+         * overflow F. Inductively num_def_circuit_proofs is bounded by 2^merkle_depth, so it
+         * also cannot wrap in F.
+         */
+        self.range_bus.lookup_key(
+            builder,
+            RangeCheckerBusMessage {
+                value: AB::Expr::from_usize(MAX_DEF_AGG_MERKLE_DEPTH) - merkle_depth.into(),
+                max_bits: AB::Expr::from_u8(8),
+            },
+            is_first,
+        );
 
         /*
          * If there are two rows, then the second (next) is either present or not. If present

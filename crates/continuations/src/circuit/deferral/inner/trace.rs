@@ -32,6 +32,7 @@ pub struct DeferralInnerPreCtx<PB: ProverBackend> {
     pub input_ctx: AirProvingContext<PB>,
     pub poseidon2_compress_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
     pub poseidon2_permute_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
+    pub range_check_inputs: Vec<usize>,
 }
 
 fn fold_leaf_input_commit(
@@ -141,20 +142,22 @@ impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for Deferral
     ) -> DeferralInnerPreCtx<CpuBackend<BabyBearPoseidon2Config>> {
         let (poseidon2_compress_inputs, poseidon2_permute_inputs) =
             generate_poseidon2_inputs(proofs, child_is_agg, child_merkle_depth);
+        let super::def_pvs::DeferralAggPvsTraceCtx {
+            proving_ctx: def_pvs_ctx,
+            range_check_inputs,
+        } = super::def_pvs::generate_proving_ctx(proofs, child_is_agg, child_merkle_depth);
+
         DeferralInnerPreCtx {
             verifier_pvs_ctx: super::verifier::generate_proving_ctx(
                 proofs,
                 child_is_agg,
                 child_vk_commit,
             ),
-            def_pvs_ctx: super::def_pvs::generate_proving_ctx(
-                proofs,
-                child_is_agg,
-                child_merkle_depth,
-            ),
+            def_pvs_ctx,
             input_ctx: super::input::generate_proving_ctx(proofs, child_is_agg),
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
+            range_check_inputs,
         }
     }
 }
@@ -179,6 +182,7 @@ impl DeferralInnerTraceGen<GpuBackend, GpuDeviceCtx> for DeferralInnerTraceGenIm
             input_ctx,
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
+            range_check_inputs,
         } = <Self as DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()>>::pre_verifier_subcircuit_tracegen(
             self,
             proofs,
@@ -193,6 +197,7 @@ impl DeferralInnerTraceGen<GpuBackend, GpuDeviceCtx> for DeferralInnerTraceGenIm
             input_ctx: cpu_proving_ctx_to_gpu(input_ctx, device_ctx),
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
+            range_check_inputs,
         }
     }
 }

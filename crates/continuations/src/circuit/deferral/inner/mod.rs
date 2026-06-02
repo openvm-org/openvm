@@ -38,6 +38,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
         let def_pvs_air = def_pvs::DeferralAggPvsAir::new(
             bus_inventory.public_values_bus,
             bus_inventory.poseidon2_compress_bus,
+            bus_inventory.range_checker_bus,
             input_or_merkle_commit_bus,
             def_pvs_consistency_bus,
         );
