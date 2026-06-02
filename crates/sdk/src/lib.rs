@@ -527,7 +527,7 @@ where
                 .expect("Trace heights did not generate properly");
 
                 let memory_dimensions = system_config.memory_config.memory_dimensions();
-                let num_user_pvs = system_config.public_values_cell_count();
+                let num_user_pvs = system_config.num_public_values_cells();
 
                 Arc::new(RootProver::from_pk(
                     agg_prover.internal_recursive_prover.get_vk(),

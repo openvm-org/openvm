@@ -332,7 +332,7 @@ impl SystemConfig {
     /// Shape validation happens at `SystemConfig` construction
     /// (see [`assert_public_values_shape`]); this is a plain accessor.
     #[inline]
-    pub fn public_values_cell_count(&self) -> usize {
+    pub fn num_public_values_cells(&self) -> usize {
         debug_assert!(self.num_public_values_bytes.is_multiple_of(U16_CELL_SIZE));
         self.num_public_values_bytes / U16_CELL_SIZE
     }

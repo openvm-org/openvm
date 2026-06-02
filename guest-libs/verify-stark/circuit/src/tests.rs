@@ -181,7 +181,7 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
         internal_recursive_pcs_data.commitment.into(),
         root_params_with_100_bits_security(),
         system_config.memory_config.memory_dimensions(),
-        system_config.public_values_cell_count(),
+        system_config.num_public_values_cells(),
         None,
         0,
     );

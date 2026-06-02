@@ -139,7 +139,7 @@ pub fn compute_root_proof_heights(
     let dummy_exe = Arc::new(VmExe::new(dummy_program));
 
     let memory_dimensions = system_config.memory_config.memory_dimensions();
-    let num_user_pvs = system_config.public_values_cell_count();
+    let num_user_pvs = system_config.num_public_values_cells();
 
     let mut app_config = AppConfig::riscv64(app_params_with_100_bits_security(
         MAX_APP_LOG_STACKED_HEIGHT,
