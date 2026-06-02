@@ -39,7 +39,7 @@ use crate::{
         },
         vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus, ExecutionState,
         MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmField, VmStateMut,
-        MEMORY_BLOCK_BYTES, U16_CELL_SIZE_BITS,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE_BITS,
     },
     system::{
         memory::{
@@ -117,11 +117,18 @@ where
     }
 
     fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
-        self.memory.read(address_space, pointer)
+        const { assert!(N == BLOCK_FE_WIDTH) };
+        let data = self.memory.read::<BLOCK_FE_WIDTH>(address_space, pointer);
+        std::array::from_fn(|i| data[i])
     }
 
     fn write<const N: usize>(&mut self, address_space: usize, pointer: usize, value: [F; N]) {
-        self.memory.write(address_space, pointer, value);
+        const { assert!(N == BLOCK_FE_WIDTH) };
+        self.memory.write::<BLOCK_FE_WIDTH>(
+            address_space,
+            pointer,
+            std::array::from_fn(|i| value[i]),
+        );
     }
 
     fn read_bytes<const N: usize>(&mut self, address_space: usize, byte_ptr: usize) -> [F; N] {
@@ -148,9 +155,7 @@ where
     }
 
     fn address_bits(&self) -> usize {
-        let rv64_byte_pointer_bits =
-            self.memory.controller.memory_config().pointer_max_bits + U16_CELL_SIZE_BITS;
-        rv64_byte_pointer_bits
+        self.memory.controller.memory_config().pointer_max_bits + U16_CELL_SIZE_BITS
     }
 
     fn last_to_pc(&self) -> F {
