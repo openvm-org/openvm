@@ -128,7 +128,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         for (j, &v) in rand_buffer_arr_f[start..end].iter().enumerate() {
             buffer_chunk[j] = v;
         }
-        tester.write(
+        tester.write_bytes(
             RV64_MEMORY_AS as usize,
             buffer_ptr + MEMORY_BLOCK_BYTES * i,
             buffer_chunk,
@@ -138,24 +138,24 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         for (j, &v) in rand_input_arr_f[start..end].iter().enumerate() {
             input_chunk[j] = v;
         }
-        tester.write(
+        tester.write_bytes(
             RV64_MEMORY_AS as usize,
             input_ptr + MEMORY_BLOCK_BYTES * i,
             input_chunk,
         );
     }
 
-    tester.write(
+    tester.write_bytes(
         RV64_REGISTER_AS as usize,
         rd,
         (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write(
+    tester.write_bytes(
         RV64_REGISTER_AS as usize,
         rs1,
         (input_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write(
+    tester.write_bytes(
         RV64_REGISTER_AS as usize,
         rs2,
         (buffer_length as u64).to_le_bytes().map(F::from_u8),
@@ -184,7 +184,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     for i in 0..num_blocks {
         let output_chunk: [F; MEMORY_BLOCK_BYTES] =
-            tester.read(RV64_MEMORY_AS as usize, buffer_ptr + MEMORY_BLOCK_BYTES * i);
+            tester.read_bytes(RV64_MEMORY_AS as usize, buffer_ptr + MEMORY_BLOCK_BYTES * i);
         let start = MEMORY_BLOCK_BYTES * i;
         let end = std::cmp::min(start + MEMORY_BLOCK_BYTES, MAX_LEN);
         output_buffer[start..end].copy_from_slice(&output_chunk[..end - start]);
@@ -356,17 +356,17 @@ fn cuda_set_and_execute(
     let buffer_ptr = gen_pointer(rng, len);
     let input_ptr = gen_pointer(rng, len);
 
-    tester.write(
+    tester.write_bytes(
         1,
         buffer_reg,
         (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write(
+    tester.write_bytes(
         1,
         input_reg,
         (input_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write(1, len_reg, (len as u64).to_le_bytes().map(F::from_u8));
+    tester.write_bytes(1, len_reg, (len as u64).to_le_bytes().map(F::from_u8));
 
     let buffer_data: Vec<u8> = (0..len).map(|_| rng.random()).collect();
     for (i, chunk) in buffer_data.chunks(MEMORY_BLOCK_BYTES).enumerate() {
@@ -374,7 +374,7 @@ fn cuda_set_and_execute(
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_u8(byte);
         }
-        tester.write(2, buffer_ptr + i * MEMORY_BLOCK_BYTES, word);
+        tester.write_bytes(2, buffer_ptr + i * MEMORY_BLOCK_BYTES, word);
     }
 
     let input_data: Vec<u8> = (0..len).map(|_| rng.random()).collect();
@@ -383,7 +383,7 @@ fn cuda_set_and_execute(
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_u8(byte);
         }
-        tester.write(2, input_ptr + i * MEMORY_BLOCK_BYTES, word);
+        tester.write_bytes(2, input_ptr + i * MEMORY_BLOCK_BYTES, word);
     }
 
     let instruction = Instruction::from_usize(

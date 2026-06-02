@@ -11,7 +11,7 @@ pub fn write_ptr_reg(
     reg_addr: usize,
     value: u64,
 ) {
-    tester.write(ptr_as, reg_addr, value.to_le_bytes().map(BabyBear::from_u8));
+    tester.write_bytes(ptr_as, reg_addr, value.to_le_bytes().map(BabyBear::from_u8));
 }
 
 pub fn rv64_write_heap_default<const NUM_LIMBS: usize>(
@@ -117,9 +117,9 @@ pub fn rv64_rand_write_register_or_imm(
     let rs2 = imm.unwrap_or_else(|| gen_pointer(rng, RV64_REGISTER_NUM_LIMBS));
     let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_u32));
+    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_u32));
     if !rs2_is_imm {
-        tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, rs2_writes.map(BabyBear::from_u32));
+        tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2, rs2_writes.map(BabyBear::from_u32));
     }
 
     (

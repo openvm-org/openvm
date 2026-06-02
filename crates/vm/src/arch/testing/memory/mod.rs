@@ -2,7 +2,7 @@ use air::{MemoryDummyAir, MemoryDummyChip};
 use rand::Rng;
 
 use crate::{
-    arch::{MemoryCellType, VmField, BLOCK_FE_WIDTH, BUS_PTR_SCALE, MEMORY_BLOCK_BYTES},
+    arch::{MemoryCellType, VmField, BLOCK_FE_WIDTH, BUS_PTR_SCALE},
     system::memory::{
         offline_checker::pack_u8_block_value, online::TracingMemory, MemoryController,
     },
@@ -33,29 +33,9 @@ impl<F: VmField> MemoryTester<F> {
         }
     }
 
-    /// Reads one test memory block.
-    /// `N = BLOCK_FE_WIDTH` uses a pointer; `N = MEMORY_BLOCK_BYTES` uses a byte pointer.
-    pub fn read<const N: usize>(&mut self, addr_space: usize, addr: usize) -> [F; N] {
-        const { assert!(N == BLOCK_FE_WIDTH || N == MEMORY_BLOCK_BYTES) };
-        if N == BLOCK_FE_WIDTH {
-            let data = self.read_cells(addr_space, addr);
-            std::array::from_fn(|i| data[i])
-        } else {
-            self.read_bytes(addr_space, addr)
-        }
-    }
-
-    /// Writes one test memory block. See [`Self::read`] for address semantics.
-    pub fn write<const N: usize>(&mut self, addr_space: usize, addr: usize, data: [F; N]) {
-        const { assert!(N == BLOCK_FE_WIDTH || N == MEMORY_BLOCK_BYTES) };
-        if N == BLOCK_FE_WIDTH {
-            self.write_cells(addr_space, addr, std::array::from_fn(|i| data[i]));
-        } else {
-            self.write_bytes(addr_space, addr, data);
-        }
-    }
-
-    fn read_cells(&mut self, addr_space: usize, ptr: usize) -> [F; BLOCK_FE_WIDTH] {
+    /// Reads one AS-native cell block at `ptr`.
+    pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
+        const { assert!(N == BLOCK_FE_WIDTH) };
         let memory = &mut self.memory;
         let t = memory.timestamp();
         let cell_layout = memory.data().memory.config[addr_space].layout;
@@ -68,15 +48,18 @@ impl<F: VmField> MemoryTester<F> {
                     unsafe { memory.read::<u16, BLOCK_FE_WIDTH>(addr_space as u32, ptr as u32) };
                 (t_prev, data.map(F::from_u16))
             }
-            other => panic!("MemoryTester::read_cells unsupported cell type {other:?}"),
+            other => panic!("MemoryTester::read unsupported cell type {other:?}"),
         };
         let bus_ptr = (ptr * BUS_PTR_SCALE) as u32;
         self.chip.receive(addr_space as u32, bus_ptr, &data, t_prev);
         self.chip.send(addr_space as u32, bus_ptr, &data, t);
-        data
+        std::array::from_fn(|i| data[i])
     }
 
-    fn write_cells(&mut self, addr_space: usize, ptr: usize, data: [F; BLOCK_FE_WIDTH]) {
+    /// Writes one AS-native cell block at `ptr`.
+    pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
+        const { assert!(N == BLOCK_FE_WIDTH) };
+        let data: [F; BLOCK_FE_WIDTH] = std::array::from_fn(|i| data[i]);
         let memory = &mut self.memory;
         let t = memory.timestamp();
         let cell_layout = memory.data().memory.config[addr_space].layout;
@@ -101,7 +84,7 @@ impl<F: VmField> MemoryTester<F> {
                 };
                 (t_prev, data_prev.map(F::from_u16))
             }
-            other => panic!("MemoryTester::write_cells unsupported cell type {other:?}"),
+            other => panic!("MemoryTester::write unsupported cell type {other:?}"),
         };
         let bus_ptr = (ptr * BUS_PTR_SCALE) as u32;
         self.chip
@@ -109,7 +92,7 @@ impl<F: VmField> MemoryTester<F> {
         self.chip.send(addr_space as u32, bus_ptr, &data, t);
     }
 
-    fn read_bytes<const N: usize>(&mut self, addr_space: usize, byte_ptr: usize) -> [F; N] {
+    pub fn read_bytes<const N: usize>(&mut self, addr_space: usize, byte_ptr: usize) -> [F; N] {
         let memory = &mut self.memory;
         let t = memory.timestamp();
         let cell_layout = memory.data().memory.config[addr_space].layout;
@@ -127,7 +110,12 @@ impl<F: VmField> MemoryTester<F> {
         data
     }
 
-    fn write_bytes<const N: usize>(&mut self, addr_space: usize, byte_ptr: usize, data: [F; N]) {
+    pub fn write_bytes<const N: usize>(
+        &mut self,
+        addr_space: usize,
+        byte_ptr: usize,
+        data: [F; N],
+    ) {
         let memory = &mut self.memory;
         let t = memory.timestamp();
         let cell_layout = memory.data().memory.config[addr_space].layout;

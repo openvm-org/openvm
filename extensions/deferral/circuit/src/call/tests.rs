@@ -169,19 +169,19 @@ fn set_and_execute_call<RA, E>(
         .collect::<Vec<u8>>();
     tester.streams_mut().deferrals[deferral_idx].store_input(input_commit.to_vec(), input_raw);
 
-    tester.write(
+    tester.write_bytes(
         RV64_REGISTER_AS as usize,
         rd,
         (output_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write(
+    tester.write_bytes(
         RV64_REGISTER_AS as usize,
         rs,
         (input_ptr as u64).to_le_bytes().map(F::from_u8),
     );
     for (chunk_idx, chunk) in input_commit.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
         let chunk: [u8; MEMORY_BLOCK_BYTES] = chunk.try_into().unwrap();
-        tester.write(
+        tester.write_bytes(
             RV64_MEMORY_AS as usize,
             input_ptr + chunk_idx * MEMORY_BLOCK_BYTES,
             chunk.map(F::from_u8),
@@ -221,7 +221,7 @@ fn set_and_execute_call<RA, E>(
 
     let mut output_key = [0u8; OUTPUT_TOTAL_BYTES];
     for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
-        let chunk: [F; MEMORY_BLOCK_BYTES] = tester.read(
+        let chunk: [F; MEMORY_BLOCK_BYTES] = tester.read_bytes(
             RV64_MEMORY_AS as usize,
             output_ptr + chunk_idx * MEMORY_BLOCK_BYTES,
         );

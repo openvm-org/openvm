@@ -22,9 +22,9 @@ pub fn rv64_rand_write_register_or_imm(
     let rs2 = imm.unwrap_or_else(|| gen_pointer(rng, RV64_REGISTER_NUM_LIMBS));
     let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_u8));
+    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_u8));
     if !rs2_is_imm {
-        tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, rs2_writes.map(BabyBear::from_u8));
+        tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2, rs2_writes.map(BabyBear::from_u8));
     }
 
     (

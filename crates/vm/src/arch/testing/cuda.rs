@@ -163,6 +163,19 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         self.memory.write(address_space, pointer, value);
     }
 
+    fn read_bytes<const N: usize>(&mut self, address_space: usize, byte_ptr: usize) -> [F; N] {
+        self.memory.read_bytes(address_space, byte_ptr)
+    }
+
+    fn write_bytes<const N: usize>(
+        &mut self,
+        address_space: usize,
+        byte_ptr: usize,
+        value: [F; N],
+    ) {
+        self.memory.write_bytes(address_space, byte_ptr, value);
+    }
+
     fn write_usize<const N: usize>(
         &mut self,
         address_space: usize,
@@ -173,7 +186,8 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     }
 
     fn address_bits(&self) -> usize {
-        self.memory.config.pointer_max_bits + U16_CELL_SIZE_BITS
+        let rv64_byte_pointer_bits = self.memory.config.pointer_max_bits + U16_CELL_SIZE_BITS;
+        rv64_byte_pointer_bits
     }
 
     fn last_to_pc(&self) -> F {
@@ -350,7 +364,7 @@ impl GpuChipTestBuilder {
         for (i, &write) in writes.iter().enumerate() {
             let ptr = pointer + i * NUM_LIMBS;
             for j in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
-                self.write::<MEMORY_BLOCK_BYTES>(
+                self.write_bytes::<MEMORY_BLOCK_BYTES>(
                     2usize,
                     ptr + j,
                     write[j..j + MEMORY_BLOCK_BYTES].try_into().unwrap(),

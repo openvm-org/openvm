@@ -180,7 +180,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let expected = run_mulw(&b_word, &c_word);
     assert_eq!(
         expected.map(F::from_u8),
-        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd)
+        tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd)
     );
     expected
 }

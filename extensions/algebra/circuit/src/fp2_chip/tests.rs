@@ -192,17 +192,17 @@ fn set_and_execute_fp2<const BLOCKS: usize, const NUM_LIMBS: usize, RA>(
     let b_base_addr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
     let result_base_addr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
 
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(
+    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
         ptr_as,
         rs1_ptr,
         (a_base_addr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(
+    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
         ptr_as,
         rs2_ptr,
         (b_base_addr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(
+    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
         ptr_as,
         rd_ptr,
         (result_base_addr as u64).to_le_bytes().map(F::from_u8),
@@ -226,25 +226,25 @@ fn set_and_execute_fp2<const BLOCKS: usize, const NUM_LIMBS: usize, RA>(
         .collect();
 
     for i in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
-        tester.write::<{ MEMORY_BLOCK_BYTES }>(
+        tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
             data_as,
             a_base_addr as usize + i,
             a_c0_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
         );
 
-        tester.write::<{ MEMORY_BLOCK_BYTES }>(
+        tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
             data_as,
             (a_base_addr + NUM_LIMBS as u32) as usize + i,
             a_c1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
         );
 
-        tester.write::<{ MEMORY_BLOCK_BYTES }>(
+        tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
             data_as,
             b_base_addr as usize + i,
             b_c0_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
         );
 
-        tester.write::<{ MEMORY_BLOCK_BYTES }>(
+        tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
             data_as,
             (b_base_addr + NUM_LIMBS as u32) as usize + i,
             b_c1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),

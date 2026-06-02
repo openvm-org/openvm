@@ -225,12 +225,12 @@ mod addsub_tests {
             .collect();
 
         for i in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
-            tester.write::<{ MEMORY_BLOCK_BYTES }>(
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 address1 as usize + i,
                 a_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
-            tester.write::<{ MEMORY_BLOCK_BYTES }>(
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 address2 as usize + i,
                 b_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
@@ -253,7 +253,8 @@ mod addsub_tests {
             .collect();
 
         for i in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
-            let read_vals = tester.read::<{ MEMORY_BLOCK_BYTES }>(data_as, address3 as usize + i);
+            let read_vals =
+                tester.read_bytes::<{ MEMORY_BLOCK_BYTES }>(data_as, address3 as usize + i);
             let expected_limbs: [F; MEMORY_BLOCK_BYTES] = expected_limbs[i..i + MEMORY_BLOCK_BYTES]
                 .try_into()
                 .unwrap();
@@ -573,12 +574,12 @@ mod muldiv_tests {
             .collect();
 
         for i in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
-            tester.write::<{ MEMORY_BLOCK_BYTES }>(
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 address1 as usize + i,
                 a_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
-            tester.write::<{ MEMORY_BLOCK_BYTES }>(
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 address2 as usize + i,
                 b_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
@@ -601,7 +602,8 @@ mod muldiv_tests {
             .collect();
 
         for i in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
-            let read_vals = tester.read::<{ MEMORY_BLOCK_BYTES }>(data_as, address3 as usize + i);
+            let read_vals =
+                tester.read_bytes::<{ MEMORY_BLOCK_BYTES }>(data_as, address3 as usize + i);
             let expected_limbs: [F; MEMORY_BLOCK_BYTES] = expected_limbs[i..i + MEMORY_BLOCK_BYTES]
                 .try_into()
                 .unwrap();

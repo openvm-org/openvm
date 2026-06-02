@@ -137,8 +137,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let imm = imm.unwrap_or(rng.random_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
     let rs1 = gen_pointer(rng, 8);
     let rs2 = gen_pointer(rng, 8);
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_u8));
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_u8));
+    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_u8));
+    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_u8));
 
     let initial_pc = rng.random_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)));
     tester.execute_with_pc(

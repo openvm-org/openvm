@@ -120,7 +120,7 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, MAX_LEN);
-    tester.write(
+    tester.write_bytes(
         RV64_REGISTER_AS as usize,
         rd,
         (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
@@ -132,7 +132,7 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
             [MEMORY_BLOCK_BYTES * i..MEMORY_BLOCK_BYTES * (i + 1)]
             .try_into()
             .expect("slice has correct length");
-        tester.write(
+        tester.write_bytes(
             RV64_MEMORY_AS as usize,
             buffer_ptr + MEMORY_BLOCK_BYTES * i,
             buffer_chunk,
@@ -152,7 +152,7 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     for i in 0..(MAX_LEN / MEMORY_BLOCK_BYTES) {
         let output_chunk: [F; MEMORY_BLOCK_BYTES] =
-            tester.read(RV64_MEMORY_AS as usize, buffer_ptr + MEMORY_BLOCK_BYTES * i);
+            tester.read_bytes(RV64_MEMORY_AS as usize, buffer_ptr + MEMORY_BLOCK_BYTES * i);
         let output_chunk = output_chunk.map(|x| x.as_canonical_u32() as u8);
         output_buffer[MEMORY_BLOCK_BYTES * i..MEMORY_BLOCK_BYTES * (i + 1)]
             .copy_from_slice(&output_chunk);
@@ -295,7 +295,7 @@ fn cuda_set_and_execute(
     let buffer_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, KECCAK_STATE_BYTES);
 
-    tester.write(
+    tester.write_bytes(
         1,
         buffer_reg,
         (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
@@ -307,7 +307,7 @@ fn cuda_set_and_execute(
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_u8(byte);
         }
-        tester.write(2, buffer_ptr + i * MEMORY_BLOCK_BYTES, word);
+        tester.write_bytes(2, buffer_ptr + i * MEMORY_BLOCK_BYTES, word);
     }
 
     let instruction = Instruction::from_usize(
@@ -405,14 +405,14 @@ fn test_keccakf_cuda_tracegen_zero_state() {
     let buffer_reg = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(&mut rng, KECCAK_STATE_BYTES);
 
-    tester.write(
+    tester.write_bytes(
         1,
         buffer_reg,
         (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
 
     for i in 0..(KECCAK_STATE_BYTES / MEMORY_BLOCK_BYTES) {
-        tester.write(
+        tester.write_bytes(
             2,
             buffer_ptr + i * MEMORY_BLOCK_BYTES,
             [F::ZERO; MEMORY_BLOCK_BYTES],

@@ -264,17 +264,17 @@ mod ec_addne_tests {
         let p2_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
         let result_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
 
-        tester.write::<RV64_REGISTER_NUM_LIMBS>(
+        tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
             ptr_as,
             rs1_ptr,
             p1_base_addr.to_le_bytes().map(F::from_u8),
         );
-        tester.write::<RV64_REGISTER_NUM_LIMBS>(
+        tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
             ptr_as,
             rs2_ptr,
             p2_base_addr.to_le_bytes().map(F::from_u8),
         );
-        tester.write::<RV64_REGISTER_NUM_LIMBS>(
+        tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
             ptr_as,
             rd_ptr,
             result_base_addr.to_le_bytes().map(F::from_u8),
@@ -298,25 +298,25 @@ mod ec_addne_tests {
             .collect();
 
         for i in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
-            tester.write::<{ MEMORY_BLOCK_BYTES }>(
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 p1_base_addr as usize + i,
                 x1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
 
-            tester.write::<{ MEMORY_BLOCK_BYTES }>(
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 (p1_base_addr + NUM_LIMBS as u64) as usize + i,
                 y1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
 
-            tester.write::<{ MEMORY_BLOCK_BYTES }>(
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 p2_base_addr as usize + i,
                 x2_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
 
-            tester.write::<{ MEMORY_BLOCK_BYTES }>(
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 (p2_base_addr + NUM_LIMBS as u64) as usize + i,
                 y2_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
@@ -706,12 +706,12 @@ mod ec_double_tests {
         let p1_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
         let result_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
 
-        tester.write::<RV64_REGISTER_NUM_LIMBS>(
+        tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
             ptr_as,
             rs1_ptr,
             p1_base_addr.to_le_bytes().map(F::from_u8),
         );
-        tester.write::<RV64_REGISTER_NUM_LIMBS>(
+        tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
             ptr_as,
             rd_ptr,
             result_base_addr.to_le_bytes().map(F::from_u8),
@@ -727,13 +727,13 @@ mod ec_double_tests {
             .collect();
 
         for i in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
-            tester.write::<{ MEMORY_BLOCK_BYTES }>(
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 p1_base_addr as usize + i,
                 x1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
             );
 
-            tester.write::<{ MEMORY_BLOCK_BYTES }>(
+            tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
                 data_as,
                 (p1_base_addr + NUM_LIMBS as u64) as usize + i,
                 y1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),

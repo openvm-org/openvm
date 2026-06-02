@@ -150,7 +150,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         *[2, 3].choose(rng).unwrap()
     });
 
-    tester.write(1, b, rs1.map(F::from_u8));
+    tester.write_bytes(1, b, rs1.map(F::from_u8));
 
     let mut prev_data: [F; RV64_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_CELL_BITS))));
@@ -161,8 +161,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         if a == 0 {
             prev_data = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
         }
-        tester.write(1, a, prev_data);
-        tester.write(mem_as, (ptr_val as usize) - shift_amount, read_data);
+        tester.write_bytes(1, a, prev_data);
+        tester.write_bytes(mem_as, (ptr_val as usize) - shift_amount, read_data);
     } else {
         if mem_as == 4 {
             prev_data = array::from_fn(|_| rng.random());
@@ -170,8 +170,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         if a == 0 {
             read_data = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
         }
-        tester.write(mem_as, (ptr_val as usize) - shift_amount, prev_data);
-        tester.write(1, a, read_data);
+        tester.write_bytes(mem_as, (ptr_val as usize) - shift_amount, prev_data);
+        tester.write_bytes(1, a, read_data);
     }
 
     let enabled_write = !(is_load & (a == 0));
@@ -202,17 +202,20 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     .map(F::from_u32);
     if is_load {
         if enabled_write {
-            assert_eq!(write_data, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, a));
+            assert_eq!(
+                write_data,
+                tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, a)
+            );
         } else {
             assert_eq!(
                 [F::ZERO; RV64_REGISTER_NUM_LIMBS],
-                tester.read::<RV64_REGISTER_NUM_LIMBS>(1, a)
+                tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, a)
             );
         }
     } else {
         assert_eq!(
             write_data,
-            tester.read::<RV64_REGISTER_NUM_LIMBS>(mem_as, (ptr_val as usize) - shift_amount)
+            tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(mem_as, (ptr_val as usize) - shift_amount)
         );
     }
 }

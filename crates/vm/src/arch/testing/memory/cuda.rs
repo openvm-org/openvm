@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         testing::memory::air::{MemoryDummyAir, MemoryDummyChip},
-        MemoryCellType, MemoryConfig, BLOCK_FE_WIDTH, BUS_PTR_SCALE, MEMORY_BLOCK_BYTES,
+        MemoryCellType, MemoryConfig, BLOCK_FE_WIDTH, BUS_PTR_SCALE,
     },
     system::memory::{
         offline_checker::{pack_u8_block_value, MemoryBridge, MemoryBus},
@@ -75,27 +75,9 @@ impl DeviceMemoryTester {
         MemoryBridge::new(self.mem_bus, self.config.timestamp_max_bits, self.range_bus)
     }
 
-    /// See [`crate::arch::testing::MemoryTester::read`] for address semantics.
-    pub fn read<const N: usize>(&mut self, addr_space: usize, addr: usize) -> [F; N] {
-        const { assert!(N == BLOCK_FE_WIDTH || N == MEMORY_BLOCK_BYTES) };
-        if N == BLOCK_FE_WIDTH {
-            let data = self.read_cells(addr_space, addr);
-            std::array::from_fn(|i| data[i])
-        } else {
-            self.read_bytes::<N>(addr_space, addr)
-        }
-    }
-
-    pub fn write<const N: usize>(&mut self, addr_space: usize, addr: usize, data: [F; N]) {
-        const { assert!(N == BLOCK_FE_WIDTH || N == MEMORY_BLOCK_BYTES) };
-        if N == BLOCK_FE_WIDTH {
-            self.write_cells(addr_space, addr, std::array::from_fn(|i| data[i]));
-        } else {
-            self.write_bytes::<N>(addr_space, addr, data);
-        }
-    }
-
-    fn read_cells(&mut self, addr_space: usize, ptr: usize) -> [F; BLOCK_FE_WIDTH] {
+    /// Reads one AS-native cell block at `ptr`.
+    pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
+        const { assert!(N == BLOCK_FE_WIDTH) };
         let t = self.memory.timestamp();
         let cell_layout = self.memory.data().memory.config[addr_space].layout;
         let (t_prev, data) = match cell_layout {
@@ -115,10 +97,13 @@ impl DeviceMemoryTester {
         let bus_ptr = (ptr * BUS_PTR_SCALE) as u32;
         self.chip.receive(addr_space as u32, bus_ptr, &data, t_prev);
         self.chip.send(addr_space as u32, bus_ptr, &data, t);
-        data
+        std::array::from_fn(|i| data[i])
     }
 
-    fn write_cells(&mut self, addr_space: usize, ptr: usize, data: [F; BLOCK_FE_WIDTH]) {
+    /// Writes one AS-native cell block at `ptr`.
+    pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
+        const { assert!(N == BLOCK_FE_WIDTH) };
+        let data: [F; BLOCK_FE_WIDTH] = std::array::from_fn(|i| data[i]);
         let t = self.memory.timestamp();
         let cell_layout = self.memory.data().memory.config[addr_space].layout;
         let (t_prev, data_prev) = match cell_layout {
@@ -151,7 +136,7 @@ impl DeviceMemoryTester {
         self.chip.send(addr_space as u32, bus_ptr, &data, t);
     }
 
-    fn read_bytes<const N: usize>(&mut self, addr_space: usize, byte_ptr: usize) -> [F; N] {
+    pub fn read_bytes<const N: usize>(&mut self, addr_space: usize, byte_ptr: usize) -> [F; N] {
         let t = self.memory.timestamp();
         let cell_layout = self.memory.data().memory.config[addr_space].layout;
         assert!(
@@ -171,7 +156,12 @@ impl DeviceMemoryTester {
         data
     }
 
-    fn write_bytes<const N: usize>(&mut self, addr_space: usize, byte_ptr: usize, data: [F; N]) {
+    pub fn write_bytes<const N: usize>(
+        &mut self,
+        addr_space: usize,
+        byte_ptr: usize,
+        data: [F; N],
+    ) {
         let t = self.memory.timestamp();
         let cell_layout = self.memory.data().memory.config[addr_space].layout;
         assert!(
