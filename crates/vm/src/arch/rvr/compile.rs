@@ -53,45 +53,49 @@ impl RvrCompiled {
         self.artifact_dir.as_ref().map(ArtifactDir::path)
     }
 
-    /// Copy the compiled shared library into `dest_dir`, creating the
-    /// directory if it doesn't exist. Returns the path of the copied
-    /// library after appending `suffix` to the path. Works for both
-    /// freshly compiled artifacts and ones loaded from disk.  
-    pub fn save_artifact_with_suffix(
-        &self,
-        dest_dir: &Path,
-        suffix: &str,
-    ) -> Result<PathBuf, CompileError> {
+    pub fn lib_file_name_with_suffix(&self, suffix: &str) -> Result<String, CompileError> {
         let stem = self
             .lib_path
             .file_stem()
-            .ok_or_else(|| CompileError::LibLoad("wrong file name".to_string()))?
+            .ok_or_else(|| {
+                CompileError::LibLoad(format!(
+                    "shared library path has no file stem: {}",
+                    self.lib_path.display()
+                ))
+            })?
             .to_string_lossy();
         let ext = self
             .lib_path
             .extension()
-            .ok_or_else(|| CompileError::LibLoad("wrong extension name".to_string()))?
+            .ok_or_else(|| {
+                CompileError::LibLoad(format!(
+                    "shared library path has no extension: {}",
+                    self.lib_path.display()
+                ))
+            })?
             .to_string_lossy();
-        let file_name = if suffix.is_empty() {
+        Ok(if suffix.is_empty() {
             format!("{stem}.{ext}")
         } else {
-            format!("{stem}{suffix}.{ext}")
-        };
-        let dest_lib = dest_dir.join(file_name);
-
-        fs::create_dir_all(dest_dir).map_err(|source| CompileError::CProject {
-            path: dest_dir.to_path_buf(),
-            source,
-        })?;
-        fs::copy(&self.lib_path, &dest_lib).map_err(|source| CompileError::CProject {
-            path: dest_lib.clone(),
-            source,
-        })?;
-        Ok(dest_lib)
+            format!("{stem}-{suffix}.{ext}")
+        })
     }
 
-    pub fn save_artifact(&self, dest_dir: &Path) -> Result<PathBuf, CompileError> {
-        self.save_artifact_with_suffix(dest_dir, "")
+    /// Copy the compiled shared library into `dest_lib`, creating parent
+    /// directories if it doesn't exist. Returns the path of the copied
+    /// library. Works for both freshly compiled artifacts and ones loaded from disk.  
+    pub fn save_artifact(&self, dest_lib: &Path) -> Result<PathBuf, CompileError> {
+        if let Some(parent) = dest_lib.parent() {
+            fs::create_dir_all(parent).map_err(|source| CompileError::CProject {
+                path: parent.to_path_buf(),
+                source,
+            })?;
+        }
+        fs::copy(&self.lib_path, dest_lib).map_err(|source| CompileError::CProject {
+            path: dest_lib.to_path_buf(),
+            source,
+        })?;
+        Ok(dest_lib.to_path_buf())
     }
 }
 
@@ -606,7 +610,10 @@ fn find_shared_lib(dir: &Path) -> Result<PathBuf, CompileError> {
                 Some("so" | "dylib")
             )
         })
-        .ok_or_else(|| CompileError::Make {
-            stderr: format!("no shared library (.so/.dylib) found in {}", dir.display()),
+        .ok_or_else(|| {
+            CompileError::LibLoad(format!(
+                "no shared library (.so/.dylib) found in {}",
+                dir.display()
+            ))
         })
 }

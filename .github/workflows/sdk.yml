@@ -25,7 +25,7 @@ jobs:
   tests:
     strategy:
       matrix:
-        mode: ["default", "ignored", "aot"]
+        mode: ["default", "ignored", "aot", "rvr"]
 
     runs-on:
       - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=m7a.24xlarge/image=ubuntu24-full-x64/disk=large/extras=s3-cache
@@ -89,7 +89,7 @@ jobs:
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify
 
       - name: Run openvm-sdk crate tests (RVR)
-        if: ${{ matrix.mode == 'default' }}
+        if: ${{ matrix.mode == 'rvr' }}
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1

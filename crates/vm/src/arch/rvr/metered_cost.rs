@@ -1,6 +1,9 @@
 //! Metered cost execution: per-chip trace cost tracking matching OpenVM's `MeteredCostCtx`.
 
-use std::sync::Arc;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -77,9 +80,9 @@ impl<F: PrimeField32> RvrMeteredCostInstance<F> {
     /// Persist the compiled shared library into `dir`. Returns the path to
     /// the copied artifact. The user must re-supply `exe`, `executor_idx_to_air_idx`,
     /// and `widths` when loading.
-    pub fn save(&self, dir: &std::path::Path) -> Result<std::path::PathBuf, super::CompileError> {
-        self.compiled
-            .save_artifact_with_suffix(dir, "-metered-cost")
+    pub fn save(&self, dir: &Path) -> Result<PathBuf, super::CompileError> {
+        let dest_lib = self.compiled.lib_file_name_with_suffix("metered-cost")?;
+        self.compiled.save_artifact(&dir.join(dest_lib))
     }
 
     pub fn execute_metered_cost(

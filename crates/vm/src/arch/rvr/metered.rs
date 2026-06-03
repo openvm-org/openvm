@@ -1,7 +1,12 @@
 //! Per-chip metered execution: page tracking and segmentation
 //! matching OpenVM's `MeteredCtx`.
 
-use std::{ffi::c_void, marker::PhantomData, sync::Arc};
+use std::{
+    ffi::c_void,
+    marker::PhantomData,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use openvm_instructions::{exe::VmExe, riscv::RV32_MEMORY_AS, DEFERRAL_AS};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -412,8 +417,9 @@ impl<F: PrimeField32, S> RvrMeteredInstanceWith<F, S> {
     /// Persist the compiled shared library into `dir`. Returns the path to
     /// the copied artifact. The user must re-supply `exe`, `executor_idx_to_air_idx`,
     /// and any mode-specific data when loading.
-    pub fn save(&self, dir: &std::path::Path) -> Result<std::path::PathBuf, super::CompileError> {
-        self.compiled.save_artifact_with_suffix(dir, "-metered")
+    pub fn save(&self, dir: &Path) -> Result<PathBuf, super::CompileError> {
+        let dest_lib = self.compiled.lib_file_name_with_suffix("metered")?;
+        self.compiled.save_artifact(&dir.join(dest_lib))
     }
 }
 

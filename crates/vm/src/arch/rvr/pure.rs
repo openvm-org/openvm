@@ -1,4 +1,7 @@
-use std::{path::Path, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -76,7 +79,8 @@ where
 
     /// Persist the compiled shared library into `dir`. Returns the path to
     /// the copied artifact. No compatibility validation is performed here.
-    pub fn save(&self, dir: &Path) -> Result<std::path::PathBuf, CompileError> {
-        self.compiled.save_artifact_with_suffix(dir, "-pure")
+    pub fn save(&self, dir: &Path) -> Result<PathBuf, CompileError> {
+        let dest_lib = self.compiled.lib_file_name_with_suffix("pure")?;
+        self.compiled.save_artifact(&dir.join(dest_lib))
     }
 }
