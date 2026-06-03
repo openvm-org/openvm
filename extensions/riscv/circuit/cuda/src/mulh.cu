@@ -53,14 +53,14 @@ __device__ void run_mulh(
         for (int j = 0; j <= i; j++) {
             out_mul[i] += x[j] * y[i - j];
         }
-        out_carry[i] = out_mul[i] >> RV64_CELL_BITS;
-        out_mul[i] %= (1u << RV64_CELL_BITS);
+        out_carry[i] = out_mul[i] >> RV64_BYTE_BITS;
+        out_mul[i] %= (1u << RV64_BYTE_BITS);
     }
 
-    out_x_ext = (x[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) *
-                (opcode == MULHU ? 0 : ((1u << RV64_CELL_BITS) - 1));
-    out_y_ext = (y[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) *
-                (opcode == MULH ? ((1u << RV64_CELL_BITS) - 1) : 0);
+    out_x_ext = (x[NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1)) *
+                (opcode == MULHU ? 0 : ((1u << RV64_BYTE_BITS) - 1));
+    out_y_ext = (y[NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1)) *
+                (opcode == MULH ? ((1u << RV64_BYTE_BITS) - 1) : 0);
 
     uint32_t x_prefix = 0;
     uint32_t y_prefix = 0;
@@ -74,8 +74,8 @@ __device__ void run_mulh(
         for (int j = i + 1; j < NUM_LIMBS; j++) {
             out_mulh[i] += x[j] * y[NUM_LIMBS + i - j];
         }
-        out_carry[NUM_LIMBS + i] = out_mulh[i] >> RV64_CELL_BITS;
-        out_mulh[i] %= (1u << RV64_CELL_BITS);
+        out_carry[NUM_LIMBS + i] = out_mulh[i] >> RV64_BYTE_BITS;
+        out_mulh[i] %= (1u << RV64_BYTE_BITS);
     }
 }
 
@@ -121,8 +121,8 @@ template <size_t NUM_LIMBS> struct MulHCore {
         }
 
         if (opcode != MULHU) {
-            uint32_t b_sign_mask = (b_ext == 0) ? 0 : (1u << (RV64_CELL_BITS - 1));
-            uint32_t c_sign_mask = (c_ext == 0) ? 0 : (1u << (RV64_CELL_BITS - 1));
+            uint32_t b_sign_mask = (b_ext == 0) ? 0 : (1u << (RV64_BYTE_BITS - 1));
+            uint32_t c_sign_mask = (c_ext == 0) ? 0 : (1u << (RV64_BYTE_BITS - 1));
 
             bitwise_lookup.add_range(
                 (b[NUM_LIMBS - 1] - b_sign_mask) << 1,

@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
-use openvm_instructions::riscv::RV64_CELL_BITS;
+use openvm_instructions::riscv::RV64_BYTE_BITS;
 use openvm_stark_backend::prover::AirProvingContext;
 use p3_keccak_air::NUM_ROUNDS;
 
@@ -27,7 +27,7 @@ mod cuda_abi;
 #[derive(new)]
 pub struct XorinVmChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: u32,
 }
@@ -85,7 +85,6 @@ pub type SharedKeccakfRecordsGpu = Arc<Mutex<SharedKeccakfRecords>>;
 #[derive(new)]
 pub struct KeccakfOpChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: u32,
     pub shared_records: SharedKeccakfRecordsGpu,
@@ -119,7 +118,6 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
                 trace_height,
                 &d_records,
                 &self.range_checker.count,
-                &self.bitwise_lookup.count,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits,
                 device_ctx.stream.as_raw(),

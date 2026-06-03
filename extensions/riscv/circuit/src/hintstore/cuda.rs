@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_instructions::riscv::RV64_CELL_BITS;
+use openvm_instructions::riscv::RV64_BYTE_BITS;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -21,7 +21,7 @@ use crate::{
 #[derive(new)]
 pub struct Rv64HintStoreChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }

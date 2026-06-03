@@ -50,8 +50,8 @@ use super::Rv64JalrCoreAir;
 use crate::Rv64ImConfig;
 use crate::{
     adapters::{
-        compose, Rv64JalrAdapterAir, Rv64JalrAdapterCols, Rv64JalrAdapterExecutor,
-        Rv64JalrAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        rv64_limbs_to_u64, Rv64JalrAdapterAir, Rv64JalrAdapterCols, Rv64JalrAdapterExecutor,
+        Rv64JalrAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
     Rv64JalrAir, Rv64JalrFiller,
@@ -69,7 +69,7 @@ fn into_limbs(num: u32) -> [u32; RV64_REGISTER_NUM_LIMBS] {
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     range_checker_chip: Arc<VariableRangeCheckerChip>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64JalrAir, Rv64JalrExecutor, Rv64JalrChip<F>) {
@@ -94,12 +94,12 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
     let range_checker_chip = tester.range_checker().clone();
@@ -161,7 +161,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     let final_pc = tester.last_to_pc().as_canonical_u32();
 
-    let rs1 = compose(rs1) as u32;
+    let rs1 = rv64_limbs_to_u64(rs1) as u32;
 
     let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, imm_sign == 1);
     let rd_data = if a == 0 {
@@ -686,7 +686,7 @@ type GpuHarness =
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_bus = default_var_range_checker_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));

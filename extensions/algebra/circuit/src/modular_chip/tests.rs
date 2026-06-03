@@ -19,7 +19,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
     VmOpcode,
 };
 use openvm_mod_circuit_builder::{
@@ -73,12 +73,12 @@ mod addsub_tests {
     ) -> (
         Harness<BLOCKS>,
         (
-            BitwiseOperationLookupAir<RV64_CELL_BITS>,
-            SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+            BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+            SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
         ),
     ) {
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
             bitwise_bus,
         ));
 
@@ -129,7 +129,7 @@ mod addsub_tests {
         let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
             bitwise_bus,
         ));
 
@@ -419,12 +419,12 @@ mod muldiv_tests {
     ) -> (
         Harness<BLOCKS>,
         (
-            BitwiseOperationLookupAir<RV64_CELL_BITS>,
-            SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+            BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+            SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
         ),
     ) {
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
             bitwise_bus,
         ));
 
@@ -477,7 +477,7 @@ mod muldiv_tests {
         let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
         let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
             bitwise_bus,
         ));
 
@@ -953,7 +953,7 @@ mod is_equal_tests {
     ) -> GpuHarness<NUM_LANES, TOTAL_LIMBS> {
         let bitwise_bus = default_bitwise_lookup_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
             bitwise_bus,
         ));
 

@@ -11,15 +11,16 @@ use openvm_circuit::{
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::AlignedBytesBorrow;
+use openvm_circuit_primitives::{AlignedBytesBorrow, U16_BITS};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
-    read_rv64_register_as_u32, rv64_bytes_to_u32, tracing_read, tracing_write,
+    ptr_bound_from_ptr, ptr_to_field_u16_limbs, read_rv64_register_as_u32, rv64_bytes_to_u32,
+    tracing_read, tracing_write,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -233,9 +234,9 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         trace_row.instruction.input_reg_ptr = F::from_u32(record.rs1_ptr);
         trace_row.instruction.len_reg_ptr = F::from_u32(record.rs2_ptr);
         trace_row.instruction.buffer_ptr = F::from_u32(record.buffer);
-        trace_row.instruction.buffer_ptr_limbs = record.buffer.to_le_bytes().map(F::from_u8);
+        trace_row.instruction.buffer_ptr_limbs = ptr_to_field_u16_limbs(record.buffer);
         trace_row.instruction.input_ptr = F::from_u32(record.input);
-        trace_row.instruction.input_ptr_limbs = record.input.to_le_bytes().map(F::from_u8);
+        trace_row.instruction.input_ptr_limbs = ptr_to_field_u16_limbs(record.input);
         trace_row.instruction.len = F::from_u32(record.len);
         trace_row.instruction.len_limb = F::from_u8(record.len as u8);
         trace_row.instruction.start_timestamp = F::from_u32(record.timestamp);
@@ -302,26 +303,15 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
                 timestamp,
                 trace_row.mem_oc.buffer_bytes_write_aux_cols[t].as_mut(),
             );
-            trace_row.mem_oc.buffer_bytes_write_aux_cols[t].prev_data =
-                pack_u8_block_bytes(&record.buffer_write_aux_cols[t].prev_data);
+            trace_row.mem_oc.buffer_bytes_write_aux_cols[t].set_prev_data(pack_u8_block_bytes(
+                &record.buffer_write_aux_cols[t].prev_data,
+            ));
             timestamp += 1;
         }
 
-        let msb_byte =
-            |val: u32| -> u32 { (val >> (RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1))) & 0xFF };
-        let need_range_check = [msb_byte(record.buffer), msb_byte(record.input)];
-
-        let limb_shift = 1u32 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits);
-
-        for pair in need_range_check.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] * limb_shift, pair[1] * limb_shift);
-        }
         for ptr in [record.buffer, record.input] {
-            for bytes in ptr.to_le_bytes().chunks_exact(2) {
-                self.bitwise_lookup_chip
-                    .request_range(bytes[0] as u32, bytes[1] as u32);
-            }
+            self.range_checker_chip
+                .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
         }
     }
 }

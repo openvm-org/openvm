@@ -6,10 +6,10 @@ use std::{
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, MatrixRecordArena,
-        RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension,
-        VmExecutionExtension, VmField, VmProverExtension,
+        to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator,
+        MatrixRecordArena, RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex,
+        VmCircuitExtension, VmExecutionExtension, VmField, VmProverExtension,
     },
     system::{
         memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor,
@@ -25,8 +25,7 @@ use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::*;
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_riscv_circuit::{
-    adapters::rv64_byte_ptr_bits_from_openvm_ptr_bits, Rv64I, Rv64IExecutor, Rv64ImCpuProverExt,
-    Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
+    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_stark_backend::{
     interaction::PermutationCheckBus, p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val,
@@ -155,16 +154,15 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits =
-            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
-        let xorin_executor = XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, pointer_max_bits);
+        let xorin_executor = XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, byte_ptr_max_bits);
         inventory.add_executor(
             xorin_executor,
             XorinOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let keccak_executor = KeccakfExecutor::new(KeccakfOpcode::CLASS_OFFSET, pointer_max_bits);
+        let keccak_executor = KeccakfExecutor::new(KeccakfOpcode::CLASS_OFFSET, byte_ptr_max_bits);
         inventory.add_executor(
             keccak_executor,
             KeccakfOpcode::iter().map(|x| x.global_opcode()),
@@ -183,8 +181,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
         } = inventory.system().port();
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
-        let pointer_max_bits =
-            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
+        let range_checker = inventory.range_checker().bus;
 
         let bitwise_lu = {
             let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
@@ -202,7 +200,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
             exec_bridge,
             memory_bridge,
             bitwise_lu,
-            pointer_max_bits,
+            range_checker,
+            byte_ptr_max_bits,
             XorinOpcode::CLASS_OFFSET,
         );
         inventory.add_air(xorin_air);
@@ -214,9 +213,9 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
         let op_air = KeccakfOpAir::new(
             exec_bridge,
             memory_bridge,
-            bitwise_lu,
             keccakf_state_bus,
-            pointer_max_bits,
+            range_checker,
+            byte_ptr_max_bits,
             KeccakfOpcode::CLASS_OFFSET,
         );
         inventory.add_air(op_air);
@@ -244,8 +243,7 @@ where
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let pointer_max_bits =
-            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.airs().pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
 
         let bitwise_lu = {
             let existing_chip = inventory
@@ -264,7 +262,7 @@ where
 
         inventory.next_air::<XorinVmAir>()?;
         let xorin_chip = XorinVmChip::new(
-            XorinVmFiller::new(bitwise_lu.clone(), pointer_max_bits),
+            XorinVmFiller::new(bitwise_lu.clone(), range_checker.clone(), byte_ptr_max_bits),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(xorin_chip);
@@ -280,8 +278,8 @@ where
 
         inventory.next_air::<KeccakfOpAir>()?;
         let op_chip = KeccakfOpChip::new(
-            bitwise_lu,
-            pointer_max_bits,
+            range_checker.clone(),
+            byte_ptr_max_bits,
             mem_helper.clone(),
             shared_records,
         );
