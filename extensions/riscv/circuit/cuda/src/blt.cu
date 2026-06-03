@@ -1,6 +1,6 @@
 #include "launcher.cuh"
 #include "primitives/buffer_view.cuh"
-#include "primitives/constants.h" // RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS
+#include "primitives/constants.h" // RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "riscv/adapters/branch.cuh" // Rv64BranchAdapterCols, Rv64BranchAdapterRecord, Rv64BranchAdapter

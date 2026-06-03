@@ -4,9 +4,9 @@ use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena,
+        VmCircuitExtension, VmExecutionExtension, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -21,7 +21,6 @@ use openvm_circuit_primitives::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_riscv_circuit::adapters::rv64_byte_ptr_bits_from_openvm_ptr_bits;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
@@ -110,8 +109,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Fp2ExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits =
-            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         // TODO: somehow get the range checker bus from `ExecutorInventory`
         let dummy_range_checker_bus = VariableRangeCheckerBus::new(u16::MAX, 16);
         for (i, (_, modulus)) in self.supported_moduli.iter().enumerate() {
@@ -128,7 +126,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                 let addsub = get_fp2_addsub_step(
                     config.clone(),
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -141,7 +139,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                 let muldiv = get_fp2_muldiv_step(
                     config,
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -159,7 +157,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                 let addsub = get_fp2_addsub_step(
                     config.clone(),
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -172,7 +170,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                 let muldiv = get_fp2_muldiv_step(
                     config,
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -199,8 +197,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker_bus = inventory.range_checker().bus;
-        let pointer_max_bits =
-            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
         let bitwise_lu = {
             // A trick to get around Rust's borrow rules
@@ -232,7 +229,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
                     config.clone(),
                     range_checker_bus,
                     bitwise_lu,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(addsub);
@@ -243,7 +240,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
                     config,
                     range_checker_bus,
                     bitwise_lu,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(muldiv);
@@ -260,7 +257,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
                     config.clone(),
                     range_checker_bus,
                     bitwise_lu,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(addsub);
@@ -271,7 +268,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
                     config,
                     range_checker_bus,
                     bitwise_lu,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(muldiv);
@@ -301,8 +298,7 @@ where
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let pointer_max_bits =
-            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.airs().pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let bitwise_lu = {
             let existing_chip = inventory
@@ -334,7 +330,7 @@ where
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(addsub);
 
@@ -344,7 +340,7 @@ where
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(muldiv);
             } else if bytes <= NUM_LIMBS_48 {
@@ -360,7 +356,7 @@ where
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(addsub);
 
@@ -370,7 +366,7 @@ where
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(muldiv);
             } else {

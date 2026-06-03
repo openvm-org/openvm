@@ -66,7 +66,7 @@ use crate::Rv64ImConfig;
 use crate::{
     adapters::{
         Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor,
-        Rv64MultWAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        Rv64MultWAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     mul::MultiplicationCoreCols,
     test_utils::rv64_rand_write_register_or_imm,
@@ -77,13 +77,13 @@ const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
 const TUPLE_CHECKER_SIZES: [u32; 2] = [
-    (1u32 << RV64_CELL_BITS),
-    (MAX_NUM_LIMBS * (1u32 << RV64_CELL_BITS)),
+    (1u32 << RV64_BYTE_BITS),
+    (MAX_NUM_LIMBS * (1u32 << RV64_BYTE_BITS)),
 ];
 
 type F = BabyBear;
 type Harness = TestChipHarness<F, Rv64MulWExecutor, Rv64MulWAir, Rv64MulWChip<F>>;
-type MulWCoreCols<T> = MultiplicationCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
+type MulWCoreCols<T> = MultiplicationCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 
 #[inline(always)]
 fn run_mulw(
@@ -99,7 +99,7 @@ fn run_mulw(
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64MulWAir, Rv64MulWExecutor, Rv64MulWChip<F>) {
@@ -129,13 +129,13 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
     (RangeTupleCheckerAir<2>, SharedRangeTupleCheckerChip<2>),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
@@ -251,7 +251,7 @@ fn run_negative_mulw_test(
     );
 
     let default_result_sign =
-        prank_result_sign.unwrap_or((prank_a[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) & 1);
+        prank_result_sign.unwrap_or((prank_a[RV64_WORD_NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1)) & 1);
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
@@ -392,7 +392,7 @@ fn run_mulw_sanity_test() {
     let y: [u8; RV64_WORD_NUM_LIMBS] = [51, 109, 78, 142];
     let z: [u8; RV64_WORD_NUM_LIMBS] = [63, 247, 125, 232];
     let c: [u32; RV64_WORD_NUM_LIMBS] = [39, 100, 126, 205];
-    let (result, carry) = crate::mul::run_mul::<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>(&x, &y);
+    let (result, carry) = crate::mul::run_mul::<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>(&x, &y);
     for i in 0..RV64_WORD_NUM_LIMBS {
         assert_eq!(z[i], result[i]);
         assert_eq!(c[i], carry[i]);
@@ -607,7 +607,7 @@ type GpuHarness =
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
@@ -656,7 +656,7 @@ fn test_cuda_rand_mul_w_tracegen() {
 
     type Record<'a> = (
         &'a mut Rv64MultWAdapterRecord,
-        &'a mut MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>,
+        &'a mut MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
     );
     harness
         .dense_arena

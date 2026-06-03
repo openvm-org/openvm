@@ -16,7 +16,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
@@ -220,7 +220,7 @@ pub struct LoadSignExtendExecutor<A, const NUM_CELLS: usize, const LIMB_BITS: us
 pub struct LoadSignExtendFiller<
     A = Rv64LoadStoreAdapterFiller,
     const NUM_CELLS: usize = RV64_REGISTER_NUM_LIMBS,
-    const LIMB_BITS: usize = RV64_CELL_BITS,
+    const LIMB_BITS: usize = RV64_BYTE_BITS,
 > {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,

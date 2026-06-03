@@ -44,7 +44,7 @@ use super::{Rv64ShiftWChip, ShiftWCoreAir, ShiftWFiller};
 use crate::{
     adapters::{
         Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterCols, Rv64BaseAluWAdapterExecutor,
-        Rv64BaseAluWAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        Rv64BaseAluWAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     shift::ShiftCoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
@@ -54,7 +54,7 @@ use crate::{
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 type Harness = TestChipHarness<F, Rv64ShiftWExecutor, Rv64ShiftWAir, Rv64ShiftWChip<F>>;
-type ShiftWCoreCols<T> = ShiftCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
+type ShiftWCoreCols<T> = ShiftCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 
 #[inline(always)]
 fn run_shift_w(
@@ -69,8 +69,8 @@ fn run_shift_w(
         SRLW => (u32::from_le_bytes(*x) >> (rs2 & 0x1F)).to_le_bytes(),
         SRAW => ((i32::from_le_bytes(*x) >> (rs2 & 0x1F)) as u32).to_le_bytes(),
     };
-    let sign_extend_limb = ((1u16 << RV64_CELL_BITS) - 1) as u8
-        * (word_result[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS as u8 - 1));
+    let sign_extend_limb = ((1u16 << RV64_BYTE_BITS) - 1) as u8
+        * (word_result[RV64_WORD_NUM_LIMBS - 1] >> (RV64_BYTE_BITS as u8 - 1));
     let mut result = [sign_extend_limb; RV64_REGISTER_NUM_LIMBS];
     result[..RV64_WORD_NUM_LIMBS].copy_from_slice(&word_result);
     (result, limb_shift, bit_shift)
@@ -78,14 +78,14 @@ fn run_shift_w(
 
 #[inline(always)]
 fn get_shift_w(y0: u8) -> (usize, usize) {
-    let shift = (y0 as usize) % (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS);
-    (shift / RV64_CELL_BITS, shift % RV64_CELL_BITS)
+    let shift = (y0 as usize) % (RV64_WORD_NUM_LIMBS * RV64_BYTE_BITS);
+    (shift / RV64_BYTE_BITS, shift % RV64_BYTE_BITS)
 }
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     range_checker: Arc<VariableRangeCheckerChip>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64ShiftWAir, Rv64ShiftWExecutor, Rv64ShiftWChip<F>) {
@@ -118,13 +118,13 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
 ) {
     let range_checker = tester.range_checker().clone();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -229,7 +229,7 @@ struct ShiftPrankValues {
     pub bit_multiplier_right: Option<u32>,
     pub b_sign: Option<u32>,
     pub result_sign: Option<u32>,
-    pub bit_shift_marker: Option<[u32; RV64_CELL_BITS]>,
+    pub bit_shift_marker: Option<[u32; RV64_BYTE_BITS]>,
     pub limb_shift_marker: Option<[u32; RV64_WORD_NUM_LIMBS]>,
     pub bit_shift_carry: Option<[u32; RV64_WORD_NUM_LIMBS]>,
 }
@@ -602,9 +602,9 @@ fn run_sllw_sanity_test() {
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
-    let shift = (y[0] as usize) % (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS);
-    assert_eq!(shift / RV64_CELL_BITS, limb_shift);
-    assert_eq!(shift % RV64_CELL_BITS, bit_shift);
+    let shift = (y[0] as usize) % (RV64_WORD_NUM_LIMBS * RV64_BYTE_BITS);
+    assert_eq!(shift / RV64_BYTE_BITS, limb_shift);
+    assert_eq!(shift % RV64_BYTE_BITS, bit_shift);
 }
 
 #[test]
@@ -622,9 +622,9 @@ fn run_srlw_sanity_test() {
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
-    let shift = (y[0] as usize) % (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS);
-    assert_eq!(shift / RV64_CELL_BITS, limb_shift);
-    assert_eq!(shift % RV64_CELL_BITS, bit_shift);
+    let shift = (y[0] as usize) % (RV64_WORD_NUM_LIMBS * RV64_BYTE_BITS);
+    assert_eq!(shift / RV64_BYTE_BITS, limb_shift);
+    assert_eq!(shift % RV64_BYTE_BITS, bit_shift);
 }
 
 #[test]
@@ -642,9 +642,9 @@ fn run_sraw_sanity_test() {
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
-    let shift = (y[0] as usize) % (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS);
-    assert_eq!(shift / RV64_CELL_BITS, limb_shift);
-    assert_eq!(shift % RV64_CELL_BITS, bit_shift);
+    let shift = (y[0] as usize) % (RV64_WORD_NUM_LIMBS * RV64_BYTE_BITS);
+    assert_eq!(shift / RV64_BYTE_BITS, limb_shift);
+    assert_eq!(shift % RV64_BYTE_BITS, bit_shift);
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////
@@ -662,7 +662,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_bus = default_var_range_checker_bus();
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
     let dummy_range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
@@ -709,7 +709,7 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
 
     type Record<'a> = (
         &'a mut Rv64BaseAluWAdapterRecord,
-        &'a mut ShiftCoreRecord<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>,
+        &'a mut ShiftCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
     );
     harness
         .dense_arena

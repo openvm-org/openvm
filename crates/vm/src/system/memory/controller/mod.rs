@@ -185,26 +185,26 @@ impl<F: VmField> MemoryController<F> {
         } = &mut self.interface_chip;
 
         let hasher = self.hasher_chip.as_ref().unwrap();
-        boundary_chip.finalize(initial_memory, &final_memory, hasher.as_ref());
+        let final_memory_by_leaf = group_touched_memory_by_leaf(&final_memory);
+        boundary_chip.finalize(initial_memory, &final_memory_by_leaf, hasher.as_ref());
 
         // Regroup BLOCK_FE_WIDTH-cell blocks into DIGEST_WIDTH-cell leaves for merkle_chip.
         // The equipartition key is (addr_space, ptr).
-        let final_memory_values: Equipartition<F, DIGEST_WIDTH> =
-            group_touched_memory_by_leaf(&final_memory)
-                .into_iter()
-                .map(|((addr_space, leaf_label), blocks)| {
-                    let ptr = leaf_label * DIGEST_WIDTH as u32;
-                    let mut values = std::array::from_fn(|i| unsafe {
-                        initial_memory.get_f::<F>(addr_space, ptr + i as u32)
-                    });
-                    for (block_idx, _, block_values) in blocks {
-                        for (i, val) in block_values.into_iter().enumerate() {
-                            values[block_idx * BLOCK_FE_WIDTH + i] = val;
-                        }
+        let final_memory_values: Equipartition<F, DIGEST_WIDTH> = final_memory_by_leaf
+            .iter()
+            .map(|((addr_space, leaf_label), blocks)| {
+                let ptr = leaf_label * DIGEST_WIDTH as u32;
+                let mut values = std::array::from_fn(|i| unsafe {
+                    initial_memory.get_f::<F>(*addr_space, ptr + i as u32)
+                });
+                for &(block_idx, _, block_values) in blocks {
+                    for (i, val) in block_values.iter().enumerate() {
+                        values[block_idx * BLOCK_FE_WIDTH + i] = *val;
                     }
-                    ((addr_space, ptr), values)
-                })
-                .collect();
+                }
+                ((*addr_space, ptr), values)
+            })
+            .collect();
         merkle_chip.finalize(initial_memory, &final_memory_values, hasher.as_ref());
 
         vec![

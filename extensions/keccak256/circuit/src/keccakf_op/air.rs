@@ -2,20 +2,19 @@ use std::{borrow::Borrow, iter};
 
 use itertools::izip;
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState, MEMORY_BLOCK_BYTES},
+    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
     system::memory::{
-        offline_checker::{pack_u8_block, MemoryBridge, MemoryWriteAuxInput},
+        offline_checker::{MemoryBridge, MemoryWriteAuxInput},
         MemoryAddress,
     },
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose, ColumnsAir,
-};
-use openvm_instructions::riscv::{
-    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
-};
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir, U16_BITS};
+use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_keccak256_transpiler::KeccakfOpcode;
-use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_rv64_register};
+use openvm_riscv_circuit::adapters::{
+    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
+    RV64_PTR_U16_LIMBS,
+};
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, BaseAir},
@@ -31,12 +30,13 @@ use crate::keccakf_op::columns::{KeccakfOpCols, NUM_KECCAKF_OP_COLS};
 pub struct KeccakfOpAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
-    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     /// Direct bus with keccakf pre- or post-state. Bus message is
     /// ```text
     /// is_post || timestamp || state_u16_limbs
     /// ```
     pub keccakf_state_bus: PermutationCheckBus,
+    /// Range-checks the u16 high cell of `buffer_ptr` after scaling.
+    pub range_bus: VariableRangeCheckerBus,
     pub ptr_max_bits: usize,
     pub(super) offset: usize,
 }
@@ -67,46 +67,37 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         };
         // ======== Read `rd` =========
         let rd_ptr = local.rd_ptr;
-        // Build full 8-element data array with upper 4 limbs hardcoded to zero
-        let buffer_ptr_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] =
-            expand_to_rv64_register(&local.buffer_ptr_limbs);
+        // Register read: low 32 bits as u16 cells, zero-extended to one memory block.
+        let buffer_ptr_data: [AB::Expr; BLOCK_FE_WIDTH] =
+            expand_to_rv64_block(&local.buffer_ptr_limbs);
         self.memory_bridge
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(rd_ptr),
                 ),
-                pack_u8_block::<AB>(&buffer_ptr_limbs),
+                buffer_ptr_data,
                 timestamp_pp(),
                 &local.rd_aux,
             )
             .eval(builder, is_valid);
 
-        // Bound the pointer MSB to the configured pointer width.
-        {
-            assert!(self.ptr_max_bits >= RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1));
-            let limb_shift =
-                AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.ptr_max_bits));
-            let msb = local.buffer_ptr_limbs[RV64_WORD_NUM_LIMBS - 1];
-            self.bitwise_lookup_bus
-                .send_range(msb * limb_shift, msb * limb_shift)
-                .eval(builder, is_valid);
-        }
-        // The memory read only bounds packed u16 cells; bound the pointer bytes before composing.
-        self.bitwise_lookup_bus
-            .send_range(local.buffer_ptr_limbs[0], local.buffer_ptr_limbs[1])
+        self.range_bus
+            .range_check(
+                ptr_bound_from_high_u16_expr::<AB::Expr, _>(
+                    local.buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1],
+                    self.ptr_max_bits,
+                ),
+                U16_BITS,
+            )
             .eval(builder, is_valid);
-        self.bitwise_lookup_bus
-            .send_range(local.buffer_ptr_limbs[2], local.buffer_ptr_limbs[3])
-            .eval(builder, is_valid);
-        // Now it is safe to cast buffer_ptr to F
-        let buffer_ptr: AB::Expr = compose(&local.buffer_ptr_limbs[..], RV64_CELL_BITS);
+        let buffer_ptr = u16_limbs_to_ptr(&local.buffer_ptr_limbs);
 
         // ======== Constrain new writes of `buffer` to memory =========
         // Keccak state and memory both consume these values as packed u16 cells.
         for (word_idx, (prev_word, post_word, base_aux)) in izip!(
-            local.preimage.chunks_exact(MEMORY_BLOCK_BYTES),
-            local.postimage.chunks_exact(MEMORY_BLOCK_BYTES),
+            local.preimage.chunks_exact(BLOCK_FE_WIDTH),
+            local.postimage.chunks_exact(BLOCK_FE_WIDTH),
             local.buffer_word_aux
         )
         .enumerate()
@@ -122,21 +113,18 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             //   accesses are valid and timestamp always moves forward, the new write to `ptr` must
             //   be valid as well.
             let ptr = buffer_ptr.clone() + AB::F::from_usize(word_idx * MEMORY_BLOCK_BYTES);
-            let prev_data: [AB::Expr; MEMORY_BLOCK_BYTES] =
+            let prev_data: [AB::Expr; BLOCK_FE_WIDTH] =
                 std::array::from_fn(|i| prev_word[i].into());
-            let data: [AB::Expr; MEMORY_BLOCK_BYTES] = std::array::from_fn(|i| post_word[i].into());
+            let data: [AB::Expr; BLOCK_FE_WIDTH] = std::array::from_fn(|i| post_word[i].into());
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
                         AB::F::from_u32(RV64_MEMORY_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
-                    pack_u8_block::<AB>(&data),
+                    data,
                     timestamp_pp(),
-                    MemoryWriteAuxInput::from_prev_data_exprs(
-                        &base_aux,
-                        pack_u8_block::<AB>(&prev_data),
-                    ),
+                    MemoryWriteAuxInput::from_prev_data_exprs(&base_aux, prev_data),
                 )
                 .eval(builder, is_valid);
         }
@@ -158,9 +146,9 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             .eval(builder, is_valid);
 
         // ======== KeccakF State Interaction =======
-        // Now we actually constrain that the pre- and post- buffer values are valid, but doing a
-        // permutation check with the KeccakFPeripheryAir. We compose two u8 into a u16
-        // since the keccakf periphery air uses u16 limbs
+        // Now we actually constrain that the pre- and post-buffer values are valid, by doing a
+        // permutation check with the KeccakFPeripheryAir. The state columns are already u16
+        // limbs, matching the keccakf periphery bus.
         //
         // We use two interactions bound with the same timestamp to avoid having a really large
         // message length.
@@ -168,24 +156,14 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
             builder,
             iter::empty()
                 .chain([AB::Expr::ZERO, local.timestamp.into()])
-                .chain(
-                    local
-                        .preimage
-                        .chunks(2)
-                        .map(|pair| pair[0] + pair[1] * AB::F::from_u32(256)),
-                ),
+                .chain(local.preimage.iter().copied().map(Into::into)),
             is_valid,
         );
         self.keccakf_state_bus.send(
             builder,
             iter::empty()
                 .chain([AB::Expr::ONE, local.timestamp.into()])
-                .chain(
-                    local
-                        .postimage
-                        .chunks(2)
-                        .map(|pair| pair[0] + pair[1] * AB::F::from_u32(256)),
-                ),
+                .chain(local.postimage.iter().copied().map(Into::into)),
             is_valid,
         );
     }
