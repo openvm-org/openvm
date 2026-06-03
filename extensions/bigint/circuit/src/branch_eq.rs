@@ -15,7 +15,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256},
-    BranchAdapterExecutor, Rv64BranchEqual256Executor, INT256_NUM_LIMBS, INT256_NUM_U64_LIMBS,
+    BranchAdapterExecutor, Rv64BranchEqual256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
 };
 
 impl Rv64BranchEqual256Executor {
@@ -208,7 +208,7 @@ impl Rv64BranchEqual256Executor {
     }
 }
 
-fn u256_eq(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> bool {
+fn u256_eq(rs1: [u8; INT256_NUM_U8_LIMBS], rs2: [u8; INT256_NUM_U8_LIMBS]) -> bool {
     let rs1_u64 = bytes_to_u64_array(rs1);
     let rs2_u64 = bytes_to_u64_array(rs2);
     for i in 0..INT256_NUM_U64_LIMBS {

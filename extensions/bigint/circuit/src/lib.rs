@@ -4,20 +4,25 @@
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 use openvm_circuit::{
     self,
-    arch::{InitFileGenerator, SystemConfig, VmAirWrapper, VmChipWrapper, MEMORY_BLOCK_BYTES},
+    arch::{
+        InitFileGenerator, SystemConfig, VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
+    },
     system::SystemExecutor,
 };
 use openvm_circuit_derive::{PreflightExecutor, VmConfig};
 use openvm_riscv_adapters::{
     Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
-    Rv64VecHeapBranchAdapterAir, Rv64VecHeapBranchAdapterExecutor, Rv64VecHeapBranchAdapterFiller,
-    VecToFlatAluAdapterAir, VecToFlatAluAdapterExecutor, VecToFlatBranchAdapterAir,
-    VecToFlatBranchAdapterExecutor,
+    Rv64VecHeapBranchU16AdapterAir, Rv64VecHeapBranchU16AdapterExecutor,
+    Rv64VecHeapBranchU16AdapterFiller, Rv64VecHeapU16AdapterAir, Rv64VecHeapU16AdapterExecutor,
+    Rv64VecHeapU16AdapterFiller, VecToFlatAluAdapterAir, VecToFlatAluAdapterExecutor,
+    VecToFlatAluU16AdapterExecutor, VecToFlatBranchAdapterAir, VecToFlatBranchAdapterExecutor,
 };
 use openvm_riscv_circuit::{
-    adapters::RV64_BYTE_BITS, BaseAluCoreAir, BaseAluExecutor, BaseAluFiller, BranchEqualCoreAir,
-    BranchEqualExecutor, BranchEqualFiller, BranchLessThanCoreAir, BranchLessThanExecutor,
-    BranchLessThanFiller, LessThanCoreAir, LessThanExecutor, LessThanFiller, MultiplicationCoreAir,
+    adapters::{RV64_BYTE_BITS, U16_BITS},
+    BaseAluCoreAir, BaseAluExecutor, BaseAluFiller, BranchEqualCoreAir, BranchEqualExecutor,
+    BranchEqualFiller, BranchLessThanCoreAir, BranchLessThanExecutor, BranchLessThanFiller,
+    LessThanCoreAir, LessThanExecutor, LessThanFiller, MultiplicationCoreAir,
     MultiplicationExecutor, MultiplicationFiller, Rv64I, Rv64IExecutor, Rv64Io, Rv64IoExecutor,
     Rv64M, Rv64MExecutor, ShiftCoreAir, ShiftExecutor, ShiftFiller,
 };
@@ -43,142 +48,170 @@ pub use cuda::*;
 mod tests;
 
 /// 256-bit heap integer stored as 32 bytes.
-pub const INT256_NUM_LIMBS: usize = 32;
-/// Number of blocks for INT256 operations (INT256_NUM_LIMBS / MEMORY_BLOCK_BYTES)
-pub const INT256_NUM_BLOCKS: usize = INT256_NUM_LIMBS / MEMORY_BLOCK_BYTES;
+pub const INT256_NUM_U8_LIMBS: usize = 32;
+/// Number of blocks for INT256 operations (INT256_NUM_U8_LIMBS / MEMORY_BLOCK_BYTES).
+pub const INT256_NUM_MEMORY_BLOCKS: usize = INT256_NUM_U8_LIMBS / MEMORY_BLOCK_BYTES;
 /// Number of u64 limbs in a 256-bit integer.
-pub const INT256_NUM_U64_LIMBS: usize = INT256_NUM_LIMBS / size_of::<u64>();
+pub const INT256_NUM_U64_LIMBS: usize = INT256_NUM_U8_LIMBS / size_of::<u64>();
 /// Number of u32 limbs in a 256-bit integer.
-pub const INT256_NUM_U32_LIMBS: usize = INT256_NUM_LIMBS / size_of::<u32>();
+pub const INT256_NUM_U32_LIMBS: usize = INT256_NUM_U8_LIMBS / size_of::<u32>();
+/// Number of u16 limbs in a 256-bit integer.
+pub const INT256_NUM_U16_LIMBS: usize = INT256_NUM_U8_LIMBS / size_of::<u16>();
 /// Number of source operand reads (rs1, rs2) for binary 256-bit instructions.
 pub(crate) const NUM_READS: usize = 2;
 
 /// Type alias for the ALU adapter AIR wrapper
 type AluAdapterAir = VecToFlatAluAdapterAir<
-    Rv64VecHeapAdapterAir<NUM_READS, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS>,
+    Rv64VecHeapAdapterAir<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
     NUM_READS,
-    INT256_NUM_BLOCKS,
-    INT256_NUM_BLOCKS,
-    INT256_NUM_LIMBS,
-    INT256_NUM_LIMBS,
+    INT256_NUM_MEMORY_BLOCKS,
+    INT256_NUM_MEMORY_BLOCKS,
+    MEMORY_BLOCK_BYTES,
+    INT256_NUM_U8_LIMBS,
+    INT256_NUM_U8_LIMBS,
 >;
 
 /// Type alias for the ALU adapter executor wrapper
 type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
-    Rv64VecHeapAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS>,
+    Rv64VecHeapAdapterExecutor<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
     NUM_READS,
-    INT256_NUM_BLOCKS,
-    INT256_NUM_BLOCKS,
-    INT256_NUM_LIMBS,
-    INT256_NUM_LIMBS,
+    INT256_NUM_MEMORY_BLOCKS,
+    INT256_NUM_MEMORY_BLOCKS,
+    MEMORY_BLOCK_BYTES,
+    INT256_NUM_U8_LIMBS,
+    INT256_NUM_U8_LIMBS,
+>;
+
+type AluU16AdapterAir = VecToFlatAluAdapterAir<
+    Rv64VecHeapU16AdapterAir<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
+    NUM_READS,
+    INT256_NUM_MEMORY_BLOCKS,
+    INT256_NUM_MEMORY_BLOCKS,
+    BLOCK_FE_WIDTH,
+    INT256_NUM_U16_LIMBS,
+    INT256_NUM_U16_LIMBS,
+>;
+
+type AluU16AdapterExecutor = VecToFlatAluU16AdapterExecutor<
+    Rv64VecHeapU16AdapterExecutor<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
+    NUM_READS,
+    INT256_NUM_MEMORY_BLOCKS,
+    INT256_NUM_MEMORY_BLOCKS,
+    BLOCK_FE_WIDTH,
+    INT256_NUM_U16_LIMBS,
+    INT256_NUM_U16_LIMBS,
 >;
 
 /// Type alias for the Branch adapter AIR wrapper
 type BranchAdapterAir = VecToFlatBranchAdapterAir<
-    Rv64VecHeapBranchAdapterAir<NUM_READS, INT256_NUM_BLOCKS>,
+    Rv64VecHeapBranchU16AdapterAir<NUM_READS, INT256_NUM_MEMORY_BLOCKS>,
     NUM_READS,
-    INT256_NUM_BLOCKS,
-    INT256_NUM_LIMBS,
+    INT256_NUM_MEMORY_BLOCKS,
+    BLOCK_FE_WIDTH,
+    INT256_NUM_U16_LIMBS,
 >;
 
 /// Type alias for the Branch adapter executor wrapper
 type BranchAdapterExecutor = VecToFlatBranchAdapterExecutor<
-    Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS>,
+    Rv64VecHeapBranchU16AdapterExecutor<NUM_READS, INT256_NUM_MEMORY_BLOCKS>,
     NUM_READS,
-    INT256_NUM_BLOCKS,
-    INT256_NUM_LIMBS,
+    INT256_NUM_MEMORY_BLOCKS,
+    BLOCK_FE_WIDTH,
+    INT256_NUM_U16_LIMBS,
 >;
 
 /// BaseAlu256
 pub type Rv64BaseAlu256Air =
-    VmAirWrapper<AluAdapterAir, BaseAluCoreAir<INT256_NUM_LIMBS, RV64_BYTE_BITS>>;
+    VmAirWrapper<AluAdapterAir, BaseAluCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv64BaseAlu256Executor(
-    BaseAluExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV64_BYTE_BITS>,
+    BaseAluExecutor<AluAdapterExecutor, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>,
 );
 pub type Rv64BaseAlu256Chip<F> = VmChipWrapper<
     F,
     BaseAluFiller<
-        Rv64VecHeapAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS>,
-        INT256_NUM_LIMBS,
+        Rv64VecHeapAdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
+        INT256_NUM_U8_LIMBS,
         RV64_BYTE_BITS,
     >,
 >;
 
 /// LessThan256
 pub type Rv64LessThan256Air =
-    VmAirWrapper<AluAdapterAir, LessThanCoreAir<INT256_NUM_LIMBS, RV64_BYTE_BITS>>;
+    VmAirWrapper<AluU16AdapterAir, LessThanCoreAir<INT256_NUM_U16_LIMBS, U16_BITS>>;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv64LessThan256Executor(
-    LessThanExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV64_BYTE_BITS>,
+    LessThanExecutor<AluU16AdapterExecutor, INT256_NUM_U16_LIMBS, U16_BITS>,
 );
 pub type Rv64LessThan256Chip<F> = VmChipWrapper<
     F,
     LessThanFiller<
-        Rv64VecHeapAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS>,
-        INT256_NUM_LIMBS,
-        RV64_BYTE_BITS,
+        Rv64VecHeapU16AdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
+        INT256_NUM_U16_LIMBS,
+        U16_BITS,
     >,
 >;
 
 /// Multiplication256
 pub type Rv64Multiplication256Air =
-    VmAirWrapper<AluAdapterAir, MultiplicationCoreAir<INT256_NUM_LIMBS, RV64_BYTE_BITS>>;
+    VmAirWrapper<AluAdapterAir, MultiplicationCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv64Multiplication256Executor(
-    MultiplicationExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV64_BYTE_BITS>,
+    MultiplicationExecutor<AluAdapterExecutor, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>,
 );
 pub type Rv64Multiplication256Chip<F> = VmChipWrapper<
     F,
     MultiplicationFiller<
-        Rv64VecHeapAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS>,
-        INT256_NUM_LIMBS,
+        Rv64VecHeapAdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
+        INT256_NUM_U8_LIMBS,
         RV64_BYTE_BITS,
     >,
 >;
 
 /// Shift256
 pub type Rv64Shift256Air =
-    VmAirWrapper<AluAdapterAir, ShiftCoreAir<INT256_NUM_LIMBS, RV64_BYTE_BITS>>;
+    VmAirWrapper<AluAdapterAir, ShiftCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv64Shift256Executor(
-    ShiftExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV64_BYTE_BITS>,
+    ShiftExecutor<AluAdapterExecutor, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>,
 );
 pub type Rv64Shift256Chip<F> = VmChipWrapper<
     F,
     ShiftFiller<
-        Rv64VecHeapAdapterFiller<NUM_READS, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS>,
-        INT256_NUM_LIMBS,
+        Rv64VecHeapAdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
+        INT256_NUM_U8_LIMBS,
         RV64_BYTE_BITS,
     >,
 >;
 
 /// BranchEqual256
 pub type Rv64BranchEqual256Air =
-    VmAirWrapper<BranchAdapterAir, BranchEqualCoreAir<INT256_NUM_LIMBS>>;
+    VmAirWrapper<BranchAdapterAir, BranchEqualCoreAir<INT256_NUM_U16_LIMBS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv64BranchEqual256Executor(BranchEqualExecutor<BranchAdapterExecutor, INT256_NUM_LIMBS>);
+pub struct Rv64BranchEqual256Executor(
+    BranchEqualExecutor<BranchAdapterExecutor, INT256_NUM_U16_LIMBS>,
+);
 pub type Rv64BranchEqual256Chip<F> = VmChipWrapper<
     F,
     BranchEqualFiller<
-        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS>,
-        INT256_NUM_LIMBS,
+        Rv64VecHeapBranchU16AdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS>,
+        INT256_NUM_U16_LIMBS,
     >,
 >;
 
 /// BranchLessThan256
 pub type Rv64BranchLessThan256Air =
-    VmAirWrapper<BranchAdapterAir, BranchLessThanCoreAir<INT256_NUM_LIMBS, RV64_BYTE_BITS>>;
+    VmAirWrapper<BranchAdapterAir, BranchLessThanCoreAir<INT256_NUM_U16_LIMBS, U16_BITS>>;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv64BranchLessThan256Executor(
-    BranchLessThanExecutor<BranchAdapterExecutor, INT256_NUM_LIMBS, RV64_BYTE_BITS>,
+    BranchLessThanExecutor<BranchAdapterExecutor, INT256_NUM_U16_LIMBS, U16_BITS>,
 );
 pub type Rv64BranchLessThan256Chip<F> = VmChipWrapper<
     F,
     BranchLessThanFiller<
-        Rv64VecHeapBranchAdapterFiller<NUM_READS, INT256_NUM_BLOCKS>,
-        INT256_NUM_LIMBS,
-        RV64_BYTE_BITS,
+        Rv64VecHeapBranchU16AdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS>,
+        INT256_NUM_U16_LIMBS,
+        U16_BITS,
     >,
 >;
 
