@@ -252,9 +252,7 @@ where
                 .assert_eq(AB::Expr::from(modulus[i]) - cols.c[i], cols.c_lt_diff);
         }
 
-        // Check that b_lt_diff and c_lt_diff are positive: each is in [1, 2^LIMB_BITS], so
-        // (b_lt_diff - 1) and (c_lt_diff - 1) lie in [0, 2^LIMB_BITS), which we enforce via two
-        // LIMB_BITS-bit range checks on the variable range checker.
+        // Check that b_lt_diff and c_lt_diff are positive
         self.range_bus
             .range_check(cols.b_lt_diff - AB::Expr::ONE, LIMB_BITS)
             .eval(builder, cols.is_valid - cols.is_setup);
@@ -424,8 +422,6 @@ where
         cols.c_lt_diff = F::from_u16(self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx]);
         if !record.is_setup {
             cols.b_lt_diff = F::from_u16(self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx]);
-            // Mirror the AIR's two LIMB_BITS-wide range checks on (b_lt_diff - 1) and
-            // (c_lt_diff - 1) via the variable range checker.
             self.range_checker_chip.add_count(
                 (self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx] - 1) as u32,
                 LIMB_BITS,
@@ -473,14 +469,12 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
     }
 }
 
-// Host-side fast execute precompute. The trace uses u16 limbs, while the host fast path reads the
-// same memory as bytes to preserve the existing VM memory API.
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-struct ModularIsEqualPreCompute<const TOTAL_READ_SIZE: usize> {
+struct ModularIsEqualPreCompute<const READ_LIMBS: usize> {
     a: u8,
     rs_addrs: [u8; 2],
-    modulus_limbs: [u16; TOTAL_READ_SIZE],
+    modulus_limbs: [u16; READ_LIMBS],
 }
 
 impl<const NUM_LANES: usize, const TOTAL_READ_SIZE: usize>
@@ -706,44 +700,36 @@ unsafe fn execute_e12_impl<
         .rs_addrs
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
 
-    // On-chip limbs are u16 cells; read the same BLOCK_FE_WIDTH-cell chunks as bytes.
-    let total_bytes: usize = TOTAL_READ_SIZE * U16_CELL_SIZE;
-    debug_assert!(rs_vals[0] as usize + total_bytes - 1 < RV64_MEMORY_BYTES);
-    debug_assert!(rs_vals[1] as usize + total_bytes - 1 < RV64_MEMORY_BYTES);
-    let mut b_eq_c = true;
-    let mut b_lt_modulus = false;
-    let mut c_lt_modulus = false;
-    for i in 0..NUM_LANES {
-        let b_block = exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
-            RV64_MEMORY_AS,
-            rs_vals[0] + (i * MEMORY_BLOCK_BYTES) as u32,
-        );
-        let c_block = exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
-            RV64_MEMORY_AS,
-            rs_vals[1] + (i * MEMORY_BLOCK_BYTES) as u32,
-        );
-        b_eq_c &= b_block == c_block;
-        // For little-endian byte arrays, the last differing byte determines the comparison.
-        for j in 0..MEMORY_BLOCK_BYTES {
-            let byte_idx = i * MEMORY_BLOCK_BYTES + j;
-            let modulus_byte = u16_modulus_byte(&pre_compute.modulus_limbs, byte_idx);
-            if b_block[j] != modulus_byte {
-                b_lt_modulus = b_block[j] < modulus_byte;
-            }
-            if c_block[j] != modulus_byte {
-                c_lt_modulus = c_block[j] < modulus_byte;
-            }
-        }
-    }
+    // Read memory values
+    let [b, c]: [[[u8; MEMORY_BLOCK_BYTES]; NUM_LANES]; 2] = rs_vals.map(|address| {
+        debug_assert!(address as usize + TOTAL_READ_SIZE * U16_CELL_SIZE - 1 < RV64_MEMORY_BYTES);
+        from_fn::<_, NUM_LANES, _>(|i| {
+            exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
+                RV64_MEMORY_AS,
+                address + (i * MEMORY_BLOCK_BYTES) as u32,
+            )
+        })
+    });
 
     if !IS_SETUP {
-        debug_assert!(b_lt_modulus, "b operand must be less than modulus");
+        debug_assert!(
+            bytes_lt_u16_modulus(b.as_flattened(), &pre_compute.modulus_limbs),
+            "{:?} >= modulus {:?}",
+            b.as_flattened(),
+            pre_compute.modulus_limbs
+        );
     }
-    debug_assert!(c_lt_modulus, "c operand must be less than modulus");
+
+    debug_assert!(
+        bytes_lt_u16_modulus(c.as_flattened(), &pre_compute.modulus_limbs),
+        "{:?} >= modulus {:?}",
+        c.as_flattened(),
+        pre_compute.modulus_limbs
+    );
 
     // Compute result (RV64: 8-byte result register)
     let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-    write_data[0] = b_eq_c as u8;
+    write_data[0] = (b == c) as u8;
 
     // Write result to register
     exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
@@ -753,13 +739,20 @@ unsafe fn execute_e12_impl<
 }
 
 #[inline(always)]
-fn u16_modulus_byte<const NUM_LIMBS: usize>(modulus: &[u16; NUM_LIMBS], byte_idx: usize) -> u8 {
-    let cell = modulus[byte_idx / 2];
-    if byte_idx.is_multiple_of(2) {
-        cell as u8
-    } else {
-        (cell >> 8) as u8
+fn bytes_lt_u16_modulus<const NUM_LIMBS: usize>(bytes: &[u8], modulus: &[u16; NUM_LIMBS]) -> bool {
+    debug_assert_eq!(bytes.len(), NUM_LIMBS * U16_CELL_SIZE);
+    for i in (0..bytes.len()).rev() {
+        let cell = modulus[i / U16_CELL_SIZE];
+        let m = if i.is_multiple_of(U16_CELL_SIZE) {
+            cell as u8
+        } else {
+            (cell >> u8::BITS) as u8
+        };
+        if bytes[i] != m {
+            return bytes[i] < m;
+        }
     }
+    false
 }
 
 // Returns (cmp_result, diff_idx)
