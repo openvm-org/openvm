@@ -167,6 +167,7 @@ struct AuipcPrankValues {
     pub rd_data: Option<[u32; RV64_PTR_U16_LIMBS]>,
     pub imm_low_8: Option<u32>,
     pub imm_high_16: Option<u32>,
+    pub pc_high: Option<u32>,
 }
 
 fn pack_rd_u8_limbs(limbs: [u32; RV64_WORD_NUM_LIMBS]) -> [u32; RV64_PTR_U16_LIMBS] {
@@ -218,6 +219,9 @@ fn run_negative_auipc_test(
         }
         if let Some(val) = prank_vals.imm_high_16 {
             core_cols.imm_high_16 = F::from_u32(val);
+        }
+        if let Some(val) = prank_vals.pc_high {
+            core_cols.pc_high = F::from_u32(val);
         }
 
         *trace = RowMajorMatrix::new(trace_row, trace.width());
@@ -410,6 +414,16 @@ fn overflow_negative_tests() {
             ..Default::default()
         },
         true,
+    );
+    run_negative_auipc_test(
+        AUIPC,
+        Some((F::ORDER_U32 + 255) >> RV64_BYTE_BITS),
+        Some(0),
+        AuipcPrankValues {
+            rd_data: Some([255, 0]),
+            ..Default::default()
+        },
+        false,
     );
 }
 

@@ -9,7 +9,11 @@ use openvm_circuit_primitives::{
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{DEFAULT_PC_STEP, PC_BITS},
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::Rv64AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -31,6 +35,8 @@ pub struct Rv64AuipcCoreCols<T> {
     // The immediate is split around the byte shift in AUIPC's `imm << 8`.
     pub imm_low_8: T,
     pub imm_high_16: T,
+    // High u16 limb of `from_pc`; the low limb is derived from `from_pc`.
+    pub pc_high: T,
     pub rd_data: [T; RV64_PTR_U16_LIMBS],
 }
 
@@ -69,6 +75,7 @@ where
             is_sign_extend,
             imm_low_8,
             imm_high_16,
+            pc_high,
             rd_data,
         } = *cols;
         builder.assert_bool(is_valid);
@@ -81,13 +88,21 @@ where
         let limb_base = AB::F::from_u32(1 << U16_BITS);
         let carry_divide = limb_base.inverse();
         let imm = imm_low_8 + imm_high_16 * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
-        let rd_low_32 = rd_data[0] + rd_data[1] * limb_base;
+        let pc_low = from_pc - pc_high * limb_base;
 
-        // Constrain the low 32-bit addition.
         // `from_pc` is bounded to `PC_BITS` by the program bus.
-        let carry_top = (from_pc + imm.clone() * AB::F::from_u32(1 << RV64_BYTE_BITS) - rd_low_32)
-            * carry_divide
-            * carry_divide;
+        self.range_bus
+            .range_check(pc_low.clone(), U16_BITS)
+            .eval(builder, is_valid);
+        self.range_bus
+            .range_check(pc_high, PC_BITS - U16_BITS)
+            .eval(builder, is_valid);
+
+        let carry_low =
+            (pc_low + imm_low_8 * AB::F::from_u32(1 << RV64_BYTE_BITS) - rd_data[0]) * carry_divide;
+        builder.when(is_valid).assert_bool(carry_low.clone());
+
+        let carry_top = (pc_high + imm_high_16 + carry_low - rd_data[1]) * carry_divide;
         builder.when(is_valid).assert_bool(carry_top);
 
         self.range_bus
@@ -213,11 +228,16 @@ where
         debug_assert_eq!(imm_bytes[3], 0);
         let imm_low_8 = imm_bytes[0];
         let imm_high_16 = (imm_bytes[1] as u32) | ((imm_bytes[2] as u32) << RV64_BYTE_BITS);
+        let pc_low = record.from_pc & (u16::MAX as u32);
+        let pc_high = record.from_pc >> U16_BITS;
 
         let rd_block = run_auipc(record.from_pc, record.imm);
         let rd_u16 = [rd_block[0], rd_block[1]];
 
         // range checks:
+        self.range_checker_chip.add_count(pc_low, U16_BITS);
+        self.range_checker_chip
+            .add_count(pc_high, PC_BITS - U16_BITS);
         self.range_checker_chip
             .add_count(imm_low_8 as u32, RV64_BYTE_BITS);
         self.range_checker_chip.add_count(imm_high_16, U16_BITS);
@@ -235,6 +255,7 @@ where
         core_row.rd_data = rd_u16.map(F::from_u16);
         core_row.imm_low_8 = F::from_u8(imm_low_8);
         core_row.imm_high_16 = F::from_u32(imm_high_16);
+        core_row.pc_high = F::from_u32(pc_high);
         core_row.is_sign_extend = F::from_bool(is_sign_extend != 0);
         core_row.is_valid = F::ONE;
     }

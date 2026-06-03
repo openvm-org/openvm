@@ -14,6 +14,7 @@ template <typename T> struct Rv64AuipcCoreCols {
     // The immediate is split around the byte shift in AUIPC's `imm << 8`.
     T imm_low_8;
     T imm_high_16;
+    T pc_high;
     T rd_data[RV64_PTR_U16_LIMBS];
 };
 
@@ -32,11 +33,15 @@ struct Rv64AuipcCore {
     __device__ void fill_trace_row(RowSlice row, Rv64AuipcCoreRecord record) {
         uint32_t imm_low_8 = record.imm & ((1u << RV64_BYTE_BITS) - 1u);
         uint32_t imm_high_16 = (record.imm >> RV64_BYTE_BITS) & uint32_t(UINT16_MAX);
+        uint32_t pc_low = record.from_pc & uint32_t(UINT16_MAX);
+        uint32_t pc_high = record.from_pc >> U16_BITS;
         auto auipc = run_auipc(record.from_pc, record.imm);
         uint16_t rd_lo = (uint16_t)(auipc & uint32_t(UINT16_MAX));
         uint16_t rd_hi = (uint16_t)(auipc >> U16_BITS);
         uint32_t is_sign_ext = (rd_hi >> (U16_BITS - 1)) & 1;
 
+        range_checker.add_count(pc_low, U16_BITS);
+        range_checker.add_count(pc_high, PC_BITS - U16_BITS);
         range_checker.add_count(imm_low_8, RV64_BYTE_BITS);
         range_checker.add_count(imm_high_16, U16_BITS);
         range_checker.add_count(rd_lo, U16_BITS);
@@ -48,6 +53,7 @@ struct Rv64AuipcCore {
         uint32_t rd_u16[2] = {rd_lo, rd_hi};
         COL_WRITE_VALUE(row, Rv64AuipcCoreCols, imm_low_8, imm_low_8);
         COL_WRITE_VALUE(row, Rv64AuipcCoreCols, imm_high_16, imm_high_16);
+        COL_WRITE_VALUE(row, Rv64AuipcCoreCols, pc_high, pc_high);
         COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, rd_data, rd_u16);
         COL_WRITE_VALUE(row, Rv64AuipcCoreCols, is_sign_extend, is_sign_ext);
         COL_WRITE_VALUE(row, Rv64AuipcCoreCols, is_valid, 1);
