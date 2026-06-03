@@ -229,7 +229,11 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        self.write(1, register, (pointer as u64).to_le_bytes().map(F::from_u8));
+        self.write_bytes::<MEMORY_BLOCK_BYTES>(
+            1,
+            register,
+            (pointer as u64).to_le_bytes().map(F::from_u8),
+        );
         (register, pointer)
     }
 
@@ -360,7 +364,7 @@ impl GpuChipTestBuilder {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        self.write(
+        self.write_bytes::<MEMORY_BLOCK_BYTES>(
             1usize,
             register,
             (pointer as u64).to_le_bytes().map(F::from_u8),
