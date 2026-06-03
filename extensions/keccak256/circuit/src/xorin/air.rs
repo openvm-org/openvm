@@ -9,15 +9,15 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus,
-    utils::{compose, not},
-    ColumnsAir,
+    bitwise_op_lookup::BitwiseOperationLookupBus, utils::not, var_range::VariableRangeCheckerBus,
+    ColumnsAir, U16_BITS,
 };
-use openvm_instructions::riscv::{
-    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
-};
+use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_keccak256_transpiler::XorinOpcode;
-use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_rv64_register};
+use openvm_riscv_circuit::adapters::{
+    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
+    RV64_PTR_U16_LIMBS,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -38,6 +38,8 @@ pub struct XorinVmAir {
     pub memory_bridge: MemoryBridge,
     /// Bus to send 8-bit XOR requests to.
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
+    /// Range checker for pointer-width bounds.
+    pub range_bus: VariableRangeCheckerBus,
     /// Maximum number of bits allowed for an address pointer
     pub ptr_max_bits: usize,
     pub(super) offset: usize,
@@ -141,18 +143,17 @@ impl XorinVmAir {
 
         let mut timestamp: AB::Expr = instruction.start_timestamp.into();
 
-        // Build full 8-element data arrays with upper 4 limbs hardcoded to zero
-        let buffer_ptr_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] =
-            expand_to_rv64_register(&instruction.buffer_ptr_limbs);
-        let input_ptr_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] =
-            expand_to_rv64_register(&instruction.input_ptr_limbs);
-        let len_limbs: [AB::Expr; RV64_REGISTER_NUM_LIMBS] =
-            expand_to_rv64_register(&[instruction.len_limb]);
+        // Register reads: low 32 bits as u16 cells, zero-extended to one memory block.
+        let buffer_ptr_data: [AB::Expr; BLOCK_FE_WIDTH] =
+            expand_to_rv64_block(&instruction.buffer_ptr_limbs);
+        let input_ptr_data: [AB::Expr; BLOCK_FE_WIDTH] =
+            expand_to_rv64_block(&instruction.input_ptr_limbs);
+        let len_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&[instruction.len_limb]);
 
         // Increases timestamp by 3
         for (ptr, value, aux) in izip!(
             [buffer_reg_ptr, input_reg_ptr, len_reg_ptr],
-            [buffer_ptr_limbs, input_ptr_limbs, len_limbs],
+            [buffer_ptr_data, input_ptr_data, len_data],
             register_aux
         ) {
             self.memory_bridge
@@ -161,7 +162,7 @@ impl XorinVmAir {
                         AB::Expr::from_u32(RV64_REGISTER_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
-                    pack_u8_block::<AB>(&value),
+                    value,
                     timestamp.clone(),
                     aux,
                 )
@@ -170,37 +171,25 @@ impl XorinVmAir {
             timestamp += AB::Expr::ONE;
         }
 
-        // SAFETY: this approach only works when self.ptr_max_bits >= RV64_CELL_BITS *
-        // (RV64_WORD_NUM_LIMBS - 1) because we are only range checking the MSB of the lower
-        // address bytes
-        let need_range_check = [
-            instruction.buffer_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-            instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-        ];
-
-        let limb_shift =
-            AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.ptr_max_bits));
-        for pair in need_range_check.chunks_exact(2) {
-            self.bitwise_lookup_bus
-                .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
+        for top_cell in [
+            instruction.buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1],
+            instruction.input_ptr_limbs[RV64_PTR_U16_LIMBS - 1],
+        ] {
+            self.range_bus
+                .range_check(
+                    ptr_bound_from_high_u16_expr::<AB::Expr, _>(top_cell, self.ptr_max_bits),
+                    U16_BITS,
+                )
                 .eval(builder, is_enabled);
-        }
-        for limbs in [&instruction.buffer_ptr_limbs, &instruction.input_ptr_limbs] {
-            for bytes in limbs.chunks_exact(2) {
-                self.bitwise_lookup_bus
-                    .send_range(bytes[0], bytes[1])
-                    .eval(builder, is_enabled);
-            }
         }
 
         builder.assert_eq(
             instruction.buffer_ptr,
-            compose(&instruction.buffer_ptr_limbs[..], RV64_CELL_BITS),
+            u16_limbs_to_ptr(&instruction.buffer_ptr_limbs),
         );
-
         builder.assert_eq(
             instruction.input_ptr,
-            compose(&instruction.input_ptr_limbs[..], RV64_CELL_BITS),
+            u16_limbs_to_ptr(&instruction.input_ptr_limbs),
         );
 
         builder.assert_eq(instruction.len, instruction.len_limb);

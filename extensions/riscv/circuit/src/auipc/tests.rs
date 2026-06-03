@@ -42,7 +42,7 @@ use super::{run_auipc, Rv64AuipcChip, Rv64AuipcCoreAir, Rv64AuipcCoreCols, Rv64A
 use crate::{
     adapters::{
         Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols, Rv64RdWriteAdapterExecutor,
-        Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_WORD_NUM_LIMBS,
+        Rv64RdWriteAdapterFiller, RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS,
     },
     Rv64AuipcAir, Rv64AuipcFiller,
 };
@@ -55,7 +55,7 @@ type Harness<RA> = TestChipHarness<F, Rv64AuipcExecutor, Rv64AuipcAir, Rv64Auipc
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64AuipcAir, Rv64AuipcExecutor, Rv64AuipcChip<F>) {
     let air = VmAirWrapper::new(
@@ -75,12 +75,12 @@ fn create_harness<RA: Arena>(
 ) -> (
     Harness<RA>,
     (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -422,7 +422,7 @@ type GpuHarness =
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 

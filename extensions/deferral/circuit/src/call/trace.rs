@@ -24,7 +24,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{
-        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
+        RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
         RV64_WORD_NUM_LIMBS,
     },
 };
@@ -67,7 +67,7 @@ pub struct DeferralCallCoreFiller<A, F: VmField> {
     adapter: A,
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     address_bits: usize,
 }
 
@@ -185,8 +185,8 @@ where
         }
 
         // Match the adapter AIR's output-length range check.
-        debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
-        let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
+        debug_assert!(RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
+        let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
         self.bitwise_lookup_chip.request_range(
             (record.write_data.output_len[F_NUM_BYTES - 1] as u32) << limb_shift_bits,
             0,
@@ -265,7 +265,7 @@ pub struct DeferralCallAdapterExecutor;
 
 #[derive(Clone, derive_new::new)]
 pub struct DeferralCallAdapterFiller {
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     address_bits: usize,
 }
 
@@ -416,8 +416,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
 
         // Range checks must happen before we start writing adapter columns,
         // since the record and columns share the same backing buffer.
-        debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
-        let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
+        debug_assert!(RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
+        let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
 
         self.bitwise_lookup_chip.request_range(
             (record.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,

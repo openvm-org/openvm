@@ -2,7 +2,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::{
     adapters::{
-        Rv64MultWAdapterAir, Rv64MultWAdapterExecutor, Rv64MultWAdapterFiller, RV64_CELL_BITS,
+        Rv64MultWAdapterAir, Rv64MultWAdapterExecutor, Rv64MultWAdapterFiller, RV64_BYTE_BITS,
         RV64_WORD_NUM_LIMBS,
     },
     mul::{MultiplicationCoreAir, MultiplicationExecutor, MultiplicationFiller},
@@ -10,9 +10,9 @@ use super::{
 
 mod execution;
 
-pub type MulWCoreAir = MultiplicationCoreAir<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
-pub type MulWExecutor<A> = MultiplicationExecutor<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
-pub type MulWFiller<A> = MultiplicationFiller<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
+pub type MulWCoreAir = MultiplicationCoreAir<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+pub type MulWExecutor<A> = MultiplicationExecutor<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+pub type MulWFiller<A> = MultiplicationFiller<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 
 #[cfg(feature = "cuda")]
 mod cuda;
