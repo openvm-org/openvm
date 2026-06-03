@@ -13,7 +13,7 @@ template <typename T> struct Rv64MultAdapterCols {
     T rs1_ptr;
     T rs2_ptr;
     MemoryReadAuxCols<T> reads_aux[2];
-    MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS> writes_aux;
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> writes_aux;
 };
 
 struct Rv64MultAdapterRecord {
@@ -38,7 +38,9 @@ struct Rv64MultAdapter {
 __device__ inline void Rv64MultAdapter::fill_trace_row(RowSlice row, Rv64MultAdapterRecord record) {
     uint32_t ts = record.from_timestamp;
 
-    COL_WRITE_ARRAY(row, Rv64MultAdapterCols, writes_aux.prev_data, record.writes_aux.prev_data);
+    Fp packed_prev[BLOCK_FE_WIDTH];
+    pack_u8_block_bytes(packed_prev, record.writes_aux.prev_data);
+    COL_WRITE_ARRAY(row, Rv64MultAdapterCols, writes_aux.prev_data, packed_prev);
     mem_helper.fill(
         row.slice_from(COL_INDEX(Rv64MultAdapterCols, writes_aux)),
         record.writes_aux.prev_timestamp,

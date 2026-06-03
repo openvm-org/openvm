@@ -4,7 +4,10 @@ mod tests {
     use openvm_circuit::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VmExecutor},
         system::memory::{
-            merkle::{public_values::UserPublicValuesProof, MerkleTree},
+            merkle::{
+                public_values::{extract_public_values, UserPublicValuesProof},
+                MerkleTree,
+            },
             online::LinearMemory,
         },
         utils::{air_test, air_test_with_min_segments, test_system_config},
@@ -234,23 +237,33 @@ mod tests {
         let md = config.as_ref().memory_config.memory_dimensions();
         let tree = MerkleTree::from_memory(&final_memory, &md, &hasher);
         let top_tree = tree.top_tree(md.addr_space_height);
-        let pv_proof = UserPublicValuesProof::compute(md, 64, &hasher, &final_memory, &top_tree);
+        let pv_proof =
+            UserPublicValuesProof::compute(config.as_ref(), &hasher, &final_memory, &top_tree);
+
+        // `pv_proof.public_values` is the u16-packed merkle leaf representation;
+        // user-facing byte content is read via `extract_public_values`.
         let mut bytes = [0u8; 32];
         for (i, byte) in bytes.iter_mut().enumerate() {
             *byte = i as u8;
         }
-        assert_eq!(
-            pv_proof.public_values,
-            bytes
-                .into_iter()
-                .chain(
-                    [123, 0, 456, 0u32, 0u32, 0u32, 0u32, 0u32]
-                        .into_iter()
-                        .flat_map(|x| x.to_le_bytes())
-                )
-                .map(F::from_u8)
-                .collect::<Vec<_>>()
-        );
+        let expected_bytes = bytes
+            .into_iter()
+            .chain(
+                [123, 0, 456, 0u32, 0u32, 0u32, 0u32, 0u32]
+                    .into_iter()
+                    .flat_map(|x| x.to_le_bytes()),
+            )
+            .collect::<Vec<_>>();
+        assert_eq!(extract_public_values(64, &final_memory), expected_bytes);
+
+        // Sanity-check the merkle leaves are the u16 little-endian packing of the
+        // first `num_public_values` u16 cells.
+        let expected_leaves: Vec<F> = expected_bytes
+            .chunks_exact(2)
+            .take(pv_proof.public_values.len())
+            .map(|c| F::from_u16(u16::from_le_bytes([c[0], c[1]])))
+            .collect();
+        assert_eq!(pv_proof.public_values, expected_leaves);
         Ok(())
     }
 

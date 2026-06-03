@@ -139,6 +139,14 @@ where
                 .eval(builder, is_valid.clone());
         }
 
+        // Memory bus checks only packed u16 values; ADD/SUB read bytes need separate bounds.
+        let add_or_sub = cols.opcode_add_flag + cols.opcode_sub_flag;
+        for i in 0..NUM_LIMBS {
+            self.bus
+                .send_range(b[i], c[i])
+                .eval(builder, add_or_sub.clone());
+        }
+
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
             flags.iter().zip(BaseAluOpcode::iter()).fold(
@@ -276,6 +284,11 @@ where
             for a_val in a {
                 self.bitwise_lookup_chip
                     .request_xor(a_val as u32, a_val as u32);
+            }
+            // AIR range-checks these byte limbs; add matching lookup counts.
+            for (b_val, c_val) in zip(record.b, record.c) {
+                self.bitwise_lookup_chip
+                    .request_range(b_val as u32, c_val as u32);
             }
         } else {
             for (b_val, c_val) in zip(record.b, record.c) {

@@ -9,8 +9,10 @@ use openvm_circuit::{
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
-    encoder::Encoder, AlignedBorrow, AlignedBytesBorrow, ColumnsAir, StructReflection,
-    StructReflectionHelper, SubAir,
+    encoder::Encoder,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    AlignedBorrow, AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    SubAir,
 };
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode,
@@ -214,13 +216,15 @@ pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
 pub struct LoadStoreCoreAir<const NUM_CELLS: usize> {
     pub offset: usize,
     encoder: Encoder,
+    range_bus: VariableRangeCheckerBus,
 }
 
 impl<const NUM_CELLS: usize> LoadStoreCoreAir<NUM_CELLS> {
-    pub fn new(offset: usize) -> Self {
+    pub fn new(offset: usize, range_bus: VariableRangeCheckerBus) -> Self {
         Self {
             offset,
             encoder: loadstore_encoder(),
+            range_bus,
         }
     }
 }
@@ -273,6 +277,17 @@ where
 
         builder.assert_eq(is_valid, expected_is_valid.clone());
         builder.assert_eq(is_load, expected_is_load.clone());
+
+        for cell in read_data {
+            self.range_bus
+                .range_check(cell, 8)
+                .eval(builder, is_valid.into());
+        }
+        for cell in prev_data {
+            self.range_bus
+                .range_check(cell, 8)
+                .eval(builder, is_valid.into());
+        }
 
         let expected_opcode = InstructionCase::ALL
             .iter()
@@ -367,14 +382,20 @@ pub struct LoadStoreFiller<
     adapter: A,
     pub offset: usize,
     encoder: Encoder,
+    range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<A, const NUM_CELLS: usize> LoadStoreFiller<A, NUM_CELLS> {
-    pub fn new(adapter: A, offset: usize) -> Self {
+    pub fn new(
+        adapter: A,
+        offset: usize,
+        range_checker_chip: SharedVariableRangeCheckerChip,
+    ) -> Self {
         Self {
             adapter,
             offset,
             encoder: loadstore_encoder(),
+            range_checker_chip,
         }
     }
 }
@@ -456,6 +477,13 @@ where
         let opcode = Rv64LoadStoreOpcode::from_usize(record.local_opcode as usize);
         let shift = record.shift_amount as usize;
         let write_data = run_write_data(opcode, record.read_data, record.prev_data, shift);
+
+        for cell in record.read_data {
+            self.range_checker_chip.add_count(cell as u32, 8);
+        }
+        for cell in record.prev_data {
+            self.range_checker_chip.add_count(cell, 8);
+        }
 
         core_row.write_data = write_data.map(F::from_u32);
         core_row.prev_data = record.prev_data.map(F::from_u32);
