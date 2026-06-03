@@ -3,6 +3,7 @@
 //!
 //! TODO: check if other RV32IM instructions/opcodes can be separated into
 //! extensions.
+#![cfg(feature = "rvr")]
 
 use std::{ffi::c_void, io::Write};
 
