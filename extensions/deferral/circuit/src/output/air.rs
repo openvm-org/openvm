@@ -2,9 +2,9 @@ use std::{array::from_fn, borrow::Borrow};
 
 use itertools::{izip, Itertools};
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState, DEFAULT_BLOCK_SIZE},
+    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         MemoryAddress,
     },
 };
@@ -20,7 +20,7 @@ use openvm_instructions::{
     riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::expand_to_rv64_register;
+use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_rv64_register};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -36,8 +36,8 @@ use crate::{
     count::DeferralCircuitCountBus,
     poseidon2::DeferralPoseidon2Bus,
     utils::{
-        byte_commit_to_f, bytes_to_f, combine_output, split_memory_ops, COMMIT_NUM_BYTES,
-        DIGEST_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        byte_commit_to_f, bytes_to_f, combine_output, split_byte_memory_ops, COMMIT_NUM_BYTES,
+        DIGEST_BYTE_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
 
@@ -79,7 +79,7 @@ pub struct DeferralOutputCols<T> {
     // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
     // written to memory and auxiliary columns.
     pub sponge_inputs: [T; DIGEST_SIZE],
-    pub write_bytes_aux: [MemoryWriteAuxCols<T, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
+    pub write_bytes_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_BYTE_MEMORY_OPS],
 
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.
@@ -191,6 +191,16 @@ where
                 .send_range(rc_pair[0].clone(), rc_pair[1].clone())
                 .eval(builder, local.is_first);
         }
+        for bytes in local.output_commit.chunks_exact(2) {
+            self.bitwise_bus
+                .send_range(bytes[0], bytes[1])
+                .eval(builder, local.is_first);
+        }
+        for bytes in local.output_len.chunks_exact(2) {
+            self.bitwise_bus
+                .send_range(bytes[0], bytes[1])
+                .eval(builder, local.is_first);
+        }
 
         // Constrain the consistency of current_commit_state at each point in this
         // section's rows. The initial state should be [deferral_idx, output_len,
@@ -247,6 +257,13 @@ where
                 local.rs_val[RV64_WORD_NUM_LIMBS - 1] * limb_shift,
             )
             .eval(builder, local.is_first);
+        for val in [&local.rd_val, &local.rs_val] {
+            for bytes in val.chunks_exact(2) {
+                self.bitwise_bus
+                    .send_range(bytes[0], bytes[1])
+                    .eval(builder, local.is_first);
+            }
+        }
 
         // We also constrain output_len to be under 2^address_bits.
         self.bitwise_bus
@@ -266,8 +283,8 @@ where
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), local.rd_ptr),
-                rd_full,
+                MemoryAddress::new(d.clone(), byte_ptr_to_u16_ptr::<AB>(local.rd_ptr)),
+                pack_u8_block::<AB>(&rd_full),
                 local.from_state.timestamp,
                 &local.rd_aux,
             )
@@ -275,8 +292,8 @@ where
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), local.rs_ptr),
-                rs_full,
+                MemoryAddress::new(d.clone(), byte_ptr_to_u16_ptr::<AB>(local.rs_ptr)),
+                pack_u8_block::<AB>(&rs_full),
                 local.from_state.timestamp + AB::Expr::ONE,
                 &local.rs_aux,
             )
@@ -297,7 +314,7 @@ where
         let output_commit_and_len =
             combine_output(local.output_commit.map(Into::into), output_len_full);
         let output_commit_and_len_chunks =
-            split_memory_ops::<_, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS>(
+            split_byte_memory_ops::<_, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS>(
                 output_commit_and_len,
             );
 
@@ -310,9 +327,12 @@ where
                 .read(
                     MemoryAddress::new(
                         e.clone(),
-                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                        byte_ptr_to_u16_ptr::<AB>(
+                            input_ptr.clone()
+                                + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
+                        ),
                     ),
-                    data,
+                    pack_u8_block::<AB>(&data),
                     local.from_state.timestamp + AB::Expr::from_usize(2 + chunk_idx),
                     aux,
                 )
@@ -320,7 +340,7 @@ where
         }
 
         let write_bytes_chunks =
-            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(local.sponge_inputs);
+            split_byte_memory_ops::<_, DIGEST_SIZE, DIGEST_BYTE_MEMORY_OPS>(local.sponge_inputs);
         let section_idx_minus_one = local.section_idx - AB::Expr::ONE;
 
         for (chunk_idx, (data, aux)) in write_bytes_chunks
@@ -334,18 +354,23 @@ where
                     .eval(builder, local.is_valid - local.is_first);
             }
 
+            let data_expr: [AB::Expr; MEMORY_BLOCK_BYTES] = from_fn(|i| data[i].into());
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
                         e.clone(),
-                        output_ptr.clone()
-                            + (section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_SIZE))
-                            + AB::Expr::from_usize(chunk_idx * DEFAULT_BLOCK_SIZE),
+                        byte_ptr_to_u16_ptr::<AB>(
+                            output_ptr.clone()
+                                + (section_idx_minus_one.clone()
+                                    * AB::Expr::from_usize(DIGEST_SIZE))
+                                + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
+                        ),
                     ),
-                    data,
+                    pack_u8_block::<AB>(&data_expr),
                     local.from_state.timestamp
                         + AB::Expr::from_usize(2 + OUTPUT_TOTAL_MEMORY_OPS + chunk_idx)
-                        + (section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_MEMORY_OPS)),
+                        + (section_idx_minus_one.clone()
+                            * AB::Expr::from_usize(DIGEST_BYTE_MEMORY_OPS)),
                     aux,
                 )
                 .eval(builder, local.is_valid - local.is_first);
@@ -364,7 +389,7 @@ where
                     e,
                 ],
                 local.from_state,
-                (local.section_idx * AB::Expr::from_usize(DIGEST_MEMORY_OPS))
+                (local.section_idx * AB::Expr::from_usize(DIGEST_BYTE_MEMORY_OPS))
                     + AB::Expr::from_usize(OUTPUT_TOTAL_MEMORY_OPS + 2),
                 (DEFAULT_PC_STEP, None),
             )

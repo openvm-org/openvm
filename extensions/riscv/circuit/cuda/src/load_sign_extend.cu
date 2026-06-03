@@ -68,6 +68,10 @@ template <size_t NUM_CELLS> struct LoadSignExtendCore {
         bool is_half = !record.is_byte && !is_word;
 
         range_checker.add_count(most_sig_limb - most_sig_bit, RV64_CELL_BITS - 1);
+#pragma unroll
+        for (size_t i = 0; i < NUM_CELLS; i++) {
+            range_checker.add_count(shifted_read_data[i], RV64_CELL_BITS);
+        }
         COL_WRITE_VALUE(row, Cols, opcode_loadb_flag0, record.is_byte && inner_shift == 0);
         COL_WRITE_VALUE(row, Cols, opcode_loadb_flag1, record.is_byte && inner_shift == 1);
         COL_WRITE_VALUE(row, Cols, opcode_loadb_flag2, record.is_byte && inner_shift == 2);

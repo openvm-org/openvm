@@ -20,7 +20,7 @@ use crate::{
         ExitCode, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
         VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
-    system::memory::{MemoryImage, CHUNK},
+    system::memory::{MemoryImage, DIGEST_WIDTH},
 };
 
 /// Supports `trace height <= 2^20`.
@@ -117,7 +117,7 @@ where
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+    Com<E::SC>: Into<[Val<E::SC>; DIGEST_WIDTH]> + From<[Val<E::SC>; DIGEST_WIDTH]>,
 {
     /*
     Assertions for Pure Execution AOT
@@ -138,11 +138,10 @@ where
         let assert_vm_state_eq =
             |lhs: &VmState<Val<E::SC>, GuestMemory>, rhs: &VmState<Val<E::SC>, GuestMemory>| {
                 assert_eq!(lhs.pc(), rhs.pc());
-                for r in 0..addr_spaces[1].num_cells {
-                    let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
-                    let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
-                    assert_eq!(a, b);
-                }
+                assert_eq!(
+                    lhs.memory.memory.mem[1].as_slice(),
+                    rhs.memory.memory.mem[1].as_slice()
+                );
             };
         assert_vm_state_eq(&interp_state_pure, &aot_state_pure);
     }
@@ -163,14 +162,10 @@ where
 
         assert_eq!(interp_state_metered.pc(), aot_state_metered.pc());
 
-        let system_config: &SystemConfig = config.as_ref();
-        let addr_spaces = &system_config.memory_config.addr_spaces;
-
-        for r in 0..addr_spaces[1].num_cells {
-            let interp = unsafe { interp_state_metered.memory.read::<u8, 1>(1, r as u32) };
-            let aot_interp = unsafe { aot_state_metered.memory.read::<u8, 1>(1, r as u32) };
-            assert_eq!(interp, aot_interp);
-        }
+        assert_eq!(
+            interp_state_metered.memory.memory.mem[1].as_slice(),
+            aot_state_metered.memory.memory.mem[1].as_slice()
+        );
 
         assert_eq!(segments.len(), aot_segments.len());
         for i in 0..segments.len() {
@@ -207,7 +202,7 @@ where
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+    Com<E::SC>: Into<[Val<E::SC>; DIGEST_WIDTH]> + From<[Val<E::SC>; DIGEST_WIDTH]>,
 {
     setup_tracing();
     let engine = E::new(params);

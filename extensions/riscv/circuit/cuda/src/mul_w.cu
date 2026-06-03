@@ -49,7 +49,7 @@ __global__ void rv64_mul_w_tracegen(
         RangeTupleChecker<2> range_tuple_checker(
             d_range_tuple_ptr, (uint32_t[2]){range_tuple_sizes.x, range_tuple_sizes.y}
         );
-        Rv64MulWCore core(range_tuple_checker);
+        Rv64MulWCore core(range_tuple_checker, BitwiseOperationLookup(d_bitwise_lookup_ptr));
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv64MulWCols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(Rv64MulWCols<uint8_t>));

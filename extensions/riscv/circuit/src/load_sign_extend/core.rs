@@ -161,6 +161,11 @@ where
                 LIMB_BITS - 1,
             )
             .eval(builder, is_valid.clone());
+        for cell in shifted_read_data {
+            self.range_bus
+                .range_check(cell, LIMB_BITS)
+                .eval(builder, is_valid.clone());
+        }
 
         // Unshift the shifted_read_data to get the original read_data
         let read_data: [AB::Expr; NUM_CELLS] = array::from_fn(|i| {
@@ -327,6 +332,9 @@ where
         let most_sig_bit = most_sig_limb & (1 << (LIMB_BITS - 1));
         self.range_checker_chip
             .add_count((most_sig_limb - most_sig_bit) as u32, LIMB_BITS - 1);
+        for cell in shifted {
+            self.range_checker_chip.add_count(cell as u32, LIMB_BITS);
+        }
 
         core_row.prev_data = record.prev_data.map(F::from_u8);
         core_row.shifted_read_data = shifted.map(F::from_u8);

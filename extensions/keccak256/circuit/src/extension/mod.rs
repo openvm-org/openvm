@@ -25,7 +25,8 @@ use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::*;
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_riscv_circuit::{
-    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
+    adapters::rv64_byte_ptr_bits_from_openvm_ptr_bits, Rv64I, Rv64IExecutor, Rv64ImCpuProverExt,
+    Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_stark_backend::{
     interaction::PermutationCheckBus, p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val,
@@ -139,7 +140,8 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
 
         let xorin_executor = XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, pointer_max_bits);
         inventory.add_executor(
@@ -166,7 +168,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
         } = inventory.system().port();
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
 
         let bitwise_lu = {
             let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
@@ -226,7 +229,8 @@ where
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.airs().pointer_max_bits());
 
         let bitwise_lu = {
             let existing_chip = inventory

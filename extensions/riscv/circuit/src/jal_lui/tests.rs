@@ -147,7 +147,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     };
 
     assert_eq!(next_pc, final_pc);
-    assert_eq!(rd_data.map(F::from_u8), tester.read::<8>(1, a));
+    assert_eq!(rd_data.map(F::from_u8), tester.read_bytes::<8>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -366,7 +366,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
     let clean_rd_prev = [9u32, 8, 7, 6, 0, 0, 0, 0];
 
     // Seed the destination register with a known clean value.
-    tester.write(1, rd_ptr, clean_rd_prev.map(F::from_u32));
+    tester.write_bytes(1, rd_ptr, clean_rd_prev.map(F::from_u32));
 
     tester.execute_with_pc(
         &mut harness.executor,
@@ -389,7 +389,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
-        adapter_cols.inner.rd_aux_cols.prev_data[4] = F::from_u32(1);
+        adapter_cols.inner.rd_aux_cols.prev_data[2] = F::from_u32(1);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 

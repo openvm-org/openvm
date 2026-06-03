@@ -6,7 +6,7 @@ use openvm_circuit::{
         BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord},
+        offline_checker::{pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord},
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
@@ -25,7 +25,7 @@ use openvm_stark_backend::{
 };
 
 use super::RV64_REGISTER_NUM_LIMBS;
-use crate::adapters::tracing_read;
+use crate::adapters::{byte_ptr_to_u16_ptr, tracing_read};
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
@@ -69,8 +69,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs1_ptr),
-                ctx.reads[0].clone(),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
+                ),
+                pack_u8_block::<AB>(&ctx.reads[0].clone()),
                 timestamp_pp(),
                 &local.reads_aux[0],
             )
@@ -78,8 +81,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs2_ptr),
-                ctx.reads[1].clone(),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local.rs2_ptr),
+                ),
+                pack_u8_block::<AB>(&ctx.reads[1].clone()),
                 timestamp_pp(),
                 &local.reads_aux[1],
             )
