@@ -32,7 +32,7 @@ struct EcDoublePreCompute<'a> {
     flag_idx: u8,
 }
 
-impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
+impl<'a, const BLOCKS: usize> EcDoubleExecutor<BLOCKS> {
     fn pre_compute_impl<F: PrimeField32>(
         &'a self,
         pc: u32,
@@ -95,51 +95,39 @@ macro_rules! dispatch {
         } {
             match ($is_setup, curve_type) {
                 (true, CurveType::K256) => {
-                    Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }, true>)
+                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::K256 as u8 }, true>)
                 }
                 (true, CurveType::P256) => {
-                    Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }, true>)
+                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::P256 as u8 }, true>)
                 }
                 (true, CurveType::BN254) => {
-                    Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }, true>)
+                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::BN254 as u8 }, true>)
                 }
-                (true, CurveType::BLS12_381) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { CurveType::BLS12_381 as u8 },
-                    true,
-                >),
+                (true, CurveType::BLS12_381) => {
+                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::BLS12_381 as u8 }, true>)
+                }
                 (false, CurveType::K256) => {
-                    Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }, false>)
+                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::K256 as u8 }, false>)
                 }
                 (false, CurveType::P256) => {
-                    Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }, false>)
+                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::P256 as u8 }, false>)
                 }
                 (false, CurveType::BN254) => {
-                    Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }, false>)
+                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::BN254 as u8 }, false>)
                 }
-                (false, CurveType::BLS12_381) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { CurveType::BLS12_381 as u8 },
-                    false,
-                >),
+                (false, CurveType::BLS12_381) => {
+                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::BLS12_381 as u8 }, false>)
+                }
             }
         } else if $is_setup {
-            Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
+            Ok($execute_impl::<_, _, BLOCKS, { u8::MAX }, true>)
         } else {
-            Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, false>)
+            Ok($execute_impl::<_, _, BLOCKS, { u8::MAX }, false>)
         }
     };
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterExecutor<F>
-    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
-{
+impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcDoubleExecutor<BLOCKS> {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<EcDoublePreCompute>()
@@ -179,13 +167,10 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterE
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotExecutor<F>
-    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
-{
-}
+impl<F: PrimeField32, const BLOCKS: usize> AotExecutor<F> for EcDoubleExecutor<BLOCKS> {}
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterMeteredExecutor<F>
-    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
+impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
+    for EcDoubleExecutor<BLOCKS>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
@@ -232,17 +217,13 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterM
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotMeteredExecutor<F>
-    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
-{
-}
+impl<F: PrimeField32, const BLOCKS: usize> AotMeteredExecutor<F> for EcDoubleExecutor<BLOCKS> {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
     const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
@@ -253,13 +234,15 @@ unsafe fn execute_e12_impl<
     // Read register values
     let rs_vals = pre_compute
         .rs_addrs
-        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
+        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
 
     // Read memory values for the point
-    let read_data: [[u8; BLOCK_SIZE]; BLOCKS] = {
+    let read_data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = {
         let address = rs_vals[0];
-        debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
-        from_fn(|i| exec_state.vm_read(RV64_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
+        debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+        from_fn(|i| {
+            exec_state.vm_read_bytes(RV64_MEMORY_AS, address + (i * MEMORY_BLOCK_BYTES) as u32)
+        })
     };
 
     if IS_SETUP {
@@ -294,15 +277,20 @@ unsafe fn execute_e12_impl<
         )
         .into()
     } else {
-        ec_double::<CURVE_TYPE, BLOCKS, BLOCK_SIZE>(read_data)
+        ec_double::<CURVE_TYPE, BLOCKS>(read_data)
     };
 
-    let rd_val = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
-    debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+    let rd_val =
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32));
+    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     // Write output data to memory
     for (i, block) in output_data.into_iter().enumerate() {
-        exec_state.vm_write(RV64_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
+        exec_state.vm_write_bytes(
+            RV64_MEMORY_AS,
+            rd_val + (i * MEMORY_BLOCK_BYTES) as u32,
+            &block,
+        );
     }
 
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
@@ -316,7 +304,6 @@ unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
     const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
@@ -325,7 +312,7 @@ unsafe fn execute_e1_impl<
 ) -> Result<(), ExecutionError> {
     let pre_compute: &EcDoublePreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<EcDoublePreCompute>()).borrow();
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(pre_compute, exec_state)
+    execute_e12_impl::<_, _, BLOCKS, CURVE_TYPE, IS_SETUP>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -334,7 +321,6 @@ unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
     const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
@@ -347,8 +333,5 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(
-        &e2_pre_compute.data,
-        exec_state,
-    )
+    execute_e12_impl::<_, _, BLOCKS, CURVE_TYPE, IS_SETUP>(&e2_pre_compute.data, exec_state)
 }

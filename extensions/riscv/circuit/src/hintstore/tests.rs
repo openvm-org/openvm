@@ -120,7 +120,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let a = if opcode == HINT_BUFFER {
         let a = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-        tester.write(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
+        tester.write_bytes(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
         a
     } else {
         0
@@ -128,7 +128,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let mem_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
     let b = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
+    tester.write_bytes(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
 
     let mut input = Vec::with_capacity(num_words as usize * RV64_REGISTER_NUM_LIMBS);
     for _ in 0..num_words {
@@ -147,7 +147,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
 
     for idx in 0..num_words as usize {
-        let data = tester.read::<RV64_REGISTER_NUM_LIMBS>(
+        let data = tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(
             RV64_MEMORY_AS as usize,
             mem_ptr as usize + idx * RV64_REGISTER_NUM_LIMBS,
         );
@@ -215,11 +215,11 @@ fn test_hint_buffer_exceeds_max_words() {
     let num_words = (MAX_HINT_BUFFER_DWORDS + 1) as u32;
 
     let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
+    tester.write_bytes(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
 
     let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
     let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
+    tester.write_bytes(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
 
     for _ in 0..num_words {
         let data = rng.next_u64().to_le_bytes().map(F::from_u8);
@@ -245,11 +245,11 @@ fn test_hint_buffer_rem_words_range_check() {
 
     let num_words: u32 = 1;
     let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
+    tester.write_bytes(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
 
     let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
     let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
+    tester.write_bytes(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
 
     for _ in 0..num_words {
         let data = rng.next_u64().to_le_bytes().map(F::from_u8);
@@ -300,11 +300,11 @@ fn test_hint_buffer_mem_ptr_range_check() {
 
     let num_words: u32 = 1;
     let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
+    tester.write_bytes(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
 
     let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
     let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
+    tester.write_bytes(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
 
     for _ in 0..num_words {
         let data = rng.next_u64().to_le_bytes().map(F::from_u8);
@@ -355,7 +355,7 @@ fn test_hintstore_rs1_upper_bytes_non_zero() {
     let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
     let mut mem_ptr_limbs = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
     mem_ptr_limbs[4] = F::from_u8(1);
-    tester.write(RV64_REGISTER_AS as usize, b, mem_ptr_limbs);
+    tester.write_bytes(RV64_REGISTER_AS as usize, b, mem_ptr_limbs);
 
     let data = rng.next_u64().to_le_bytes().map(F::from_u8);
     tester.streams_mut().hint_stream.extend(data);

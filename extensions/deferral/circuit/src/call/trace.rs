@@ -5,10 +5,13 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterTraceExecutor, AdapterTraceFiller, EmptyAdapterCoreLayout,
         ExecutionError, PreflightExecutor, RecordArena, TraceFiller, VmField, VmStateMut,
-        DEFAULT_BLOCK_SIZE,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
-        offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord, MemoryWriteBytesAuxRecord},
+        offline_checker::{
+            pack_u8_block_bytes, MemoryReadAuxRecord, MemoryWriteAuxRecord,
+            MemoryWriteBytesAuxRecord,
+        },
         online::TracingMemory,
         MemoryAuxColsFactory,
     },
@@ -27,8 +30,8 @@ use openvm_instructions::{
 };
 use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, tracing_read, tracing_write};
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
+use super::accumulator_ptrs;
 use crate::{
     adapters::{tracing_read_deferral, tracing_write_deferral},
     call::{DeferralCallAdapterCols, DeferralCallCoreCols, DeferralCallReads, DeferralCallWrites},
@@ -36,8 +39,9 @@ use crate::{
     count::DeferralCircuitCountChip,
     poseidon2::{deferral_poseidon2_chip, DeferralPoseidon2Chip},
     utils::{
-        byte_commit_to_f, combine_output, join_memory_ops, memory_op_chunk, COMMIT_MEMORY_OPS,
-        DIGEST_MEMORY_OPS, F_NUM_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        byte_commit_to_f, byte_memory_op_chunk, combine_output, f_memory_op_chunk,
+        join_byte_memory_ops, join_f_memory_ops, COMMIT_MEMORY_OPS, DIGEST_F_MEMORY_OPS,
+        F_NUM_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
     DeferralFn,
 };
@@ -171,12 +175,16 @@ where
             self.bitwise_lookup_chip
                 .request_range(bytes[0] as u32, bytes[1] as u32);
         }
+        for bytes in record.read_data.input_commit.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(bytes[0] as u32, bytes[1] as u32);
+        }
         for bytes in record.write_data.output_len.chunks_exact(2) {
             self.bitwise_lookup_chip
                 .request_range(bytes[0] as u32, bytes[1] as u32);
         }
 
-        // NOTE: this range check is done in the adapter AIR
+        // Match the adapter AIR's output-length range check.
         debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
         let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
         self.bitwise_lookup_chip.request_range(
@@ -241,14 +249,15 @@ pub struct DeferralCallAdapterRecord<F> {
 
     // Read auxiliary records
     pub input_commit_aux: [MemoryReadAuxRecord; COMMIT_MEMORY_OPS],
-    pub old_input_acc_aux: [MemoryReadAuxRecord; DIGEST_MEMORY_OPS],
-    pub old_output_acc_aux: [MemoryReadAuxRecord; DIGEST_MEMORY_OPS],
+    pub old_input_acc_aux: [MemoryReadAuxRecord; DIGEST_F_MEMORY_OPS],
+    pub old_output_acc_aux: [MemoryReadAuxRecord; DIGEST_F_MEMORY_OPS],
 
-    // Write auxiliary records
+    // Heap output writes use byte chunks; accumulator writes use DEFERRAL_AS
+    // cell chunks.
     pub output_commit_and_len_aux:
-        [MemoryWriteBytesAuxRecord<DEFAULT_BLOCK_SIZE>; OUTPUT_TOTAL_MEMORY_OPS],
-    pub new_input_acc_aux: [MemoryWriteAuxRecord<F, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
-    pub new_output_acc_aux: [MemoryWriteAuxRecord<F, DEFAULT_BLOCK_SIZE>; DIGEST_MEMORY_OPS],
+        [MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>; OUTPUT_TOTAL_MEMORY_OPS],
+    pub new_input_acc_aux: [MemoryWriteAuxRecord<F, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
+    pub new_output_acc_aux: [MemoryWriteAuxRecord<F, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
 }
 
 #[derive(Clone, Copy)]
@@ -299,38 +308,37 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         );
         record.rs_val = rv64_bytes_to_u32(rs_bytes);
 
-        let input_commit_chunks: [[u8; DEFAULT_BLOCK_SIZE]; COMMIT_MEMORY_OPS] = from_fn(|i| {
+        let input_commit_chunks: [[u8; MEMORY_BLOCK_BYTES]; COMMIT_MEMORY_OPS] = from_fn(|i| {
             tracing_read(
                 memory,
                 e.as_canonical_u32(),
-                record.rs_val + (i * DEFAULT_BLOCK_SIZE) as u32,
+                record.rs_val + (i * MEMORY_BLOCK_BYTES) as u32,
                 &mut record.input_commit_aux[i].prev_timestamp,
             )
         });
-        let input_commit = join_memory_ops(input_commit_chunks);
+        let input_commit = join_byte_memory_ops(input_commit_chunks);
 
         let deferral_idx = c.as_canonical_u32();
 
-        const DIGEST_SIZE_U32: u32 = DIGEST_SIZE as u32;
-        let input_acc_ptr = 2 * deferral_idx * DIGEST_SIZE_U32;
-        let output_acc_ptr = input_acc_ptr + DIGEST_SIZE_U32;
+        // DEFERRAL_AS uses pointers; each accumulator is DIGEST_SIZE cells.
+        let (input_acc_ptr, output_acc_ptr) = accumulator_ptrs(deferral_idx);
 
-        let old_input_acc_chunks: [[F; DEFAULT_BLOCK_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
+        let old_input_acc_chunks: [[F; BLOCK_FE_WIDTH]; DIGEST_F_MEMORY_OPS] = from_fn(|i| {
             tracing_read_deferral(
                 memory,
-                input_acc_ptr + (i * DEFAULT_BLOCK_SIZE) as u32,
+                input_acc_ptr + (i * BLOCK_FE_WIDTH) as u32,
                 &mut record.old_input_acc_aux[i].prev_timestamp,
             )
         });
-        let old_output_acc_chunks: [[F; DEFAULT_BLOCK_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
+        let old_output_acc_chunks: [[F; BLOCK_FE_WIDTH]; DIGEST_F_MEMORY_OPS] = from_fn(|i| {
             tracing_read_deferral(
                 memory,
-                output_acc_ptr + (i * DEFAULT_BLOCK_SIZE) as u32,
+                output_acc_ptr + (i * BLOCK_FE_WIDTH) as u32,
                 &mut record.old_output_acc_aux[i].prev_timestamp,
             )
         });
-        let old_input_acc = join_memory_ops(old_input_acc_chunks);
-        let old_output_acc = join_memory_ops(old_output_acc_chunks);
+        let old_input_acc = join_f_memory_ops(old_input_acc_chunks);
+        let old_output_acc = join_f_memory_ops(old_output_acc_chunks);
 
         DeferralCallReads {
             input_commit,
@@ -361,8 +369,8 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
             tracing_write(
                 memory,
                 e.as_canonical_u32(),
-                record.rd_val + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
-                memory_op_chunk(&output_commit_and_len, chunk_idx),
+                record.rd_val + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
+                byte_memory_op_chunk(&output_commit_and_len, chunk_idx),
                 &mut record.output_commit_and_len_aux[chunk_idx].prev_timestamp,
                 &mut record.output_commit_and_len_aux[chunk_idx].prev_data,
             );
@@ -370,25 +378,24 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
 
         let deferral_idx = c.as_canonical_u32();
 
-        const DIGEST_SIZE_U32: u32 = DIGEST_SIZE as u32;
-        let input_acc_ptr = 2 * deferral_idx * DIGEST_SIZE_U32;
-        let output_acc_ptr = input_acc_ptr + DIGEST_SIZE_U32;
+        // DEFERRAL_AS uses pointers; accumulator bases advance by DIGEST_SIZE cells.
+        let (input_acc_ptr, output_acc_ptr) = accumulator_ptrs(deferral_idx);
 
-        for chunk_idx in 0..DIGEST_MEMORY_OPS {
+        for chunk_idx in 0..DIGEST_F_MEMORY_OPS {
             tracing_write_deferral(
                 memory,
-                input_acc_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
-                memory_op_chunk(&data.new_input_acc, chunk_idx),
+                input_acc_ptr + (chunk_idx * BLOCK_FE_WIDTH) as u32,
+                f_memory_op_chunk(&data.new_input_acc, chunk_idx),
                 &mut record.new_input_acc_aux[chunk_idx].prev_timestamp,
                 &mut record.new_input_acc_aux[chunk_idx].prev_data,
             );
         }
 
-        for chunk_idx in 0..DIGEST_MEMORY_OPS {
+        for chunk_idx in 0..DIGEST_F_MEMORY_OPS {
             tracing_write_deferral(
                 memory,
-                output_acc_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
-                memory_op_chunk(&data.new_output_acc, chunk_idx),
+                output_acc_ptr + (chunk_idx * BLOCK_FE_WIDTH) as u32,
+                f_memory_op_chunk(&data.new_output_acc, chunk_idx),
                 &mut record.new_output_acc_aux[chunk_idx].prev_timestamp,
                 &mut record.new_output_acc_aux[chunk_idx].prev_data,
             );
@@ -416,11 +423,17 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
             (record.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
             (record.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
         );
+        for ptr in [record.rd_val, record.rs_val] {
+            for bytes in ptr.to_le_bytes().chunks_exact(2) {
+                self.bitwise_lookup_chip
+                    .request_range(bytes[0] as u32, bytes[1] as u32);
+            }
+        }
 
         // Timestamps in AIR are assigned in strict sequence starting from
         // `from_state.timestamp`; mirror that exact sequence in reverse here.
         let timestamp_delta =
-            2 + COMMIT_MEMORY_OPS + OUTPUT_TOTAL_MEMORY_OPS + 4 * DIGEST_MEMORY_OPS;
+            2 + COMMIT_MEMORY_OPS + OUTPUT_TOTAL_MEMORY_OPS + 4 * DIGEST_F_MEMORY_OPS;
         let mut timestamp = record.from_timestamp + timestamp_delta as u32;
         let mut timestamp_mm = || {
             timestamp -= 1;
@@ -428,7 +441,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
         };
 
         // Writing in reverse order to avoid overwriting the record
-        for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+        for chunk_idx in (0..DIGEST_F_MEMORY_OPS).rev() {
             adapter_row.new_output_acc_aux[chunk_idx]
                 .set_prev_data(record.new_output_acc_aux[chunk_idx].prev_data);
             mem_helper.fill(
@@ -437,7 +450,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
                 adapter_row.new_output_acc_aux[chunk_idx].as_mut(),
             );
         }
-        for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+        for chunk_idx in (0..DIGEST_F_MEMORY_OPS).rev() {
             adapter_row.new_input_acc_aux[chunk_idx]
                 .set_prev_data(record.new_input_acc_aux[chunk_idx].prev_data);
             mem_helper.fill(
@@ -447,11 +460,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
             );
         }
         for chunk_idx in (0..OUTPUT_TOTAL_MEMORY_OPS).rev() {
-            adapter_row.output_commit_and_len_aux[chunk_idx].set_prev_data(
-                record.output_commit_and_len_aux[chunk_idx]
-                    .prev_data
-                    .map(F::from_u8),
-            );
+            adapter_row.output_commit_and_len_aux[chunk_idx].set_prev_data(pack_u8_block_bytes(
+                &record.output_commit_and_len_aux[chunk_idx].prev_data,
+            ));
             mem_helper.fill(
                 record.output_commit_and_len_aux[chunk_idx].prev_timestamp,
                 timestamp_mm(),
@@ -459,14 +470,14 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
             );
         }
 
-        for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+        for chunk_idx in (0..DIGEST_F_MEMORY_OPS).rev() {
             mem_helper.fill(
                 record.old_output_acc_aux[chunk_idx].prev_timestamp,
                 timestamp_mm(),
                 adapter_row.old_output_acc_aux[chunk_idx].as_mut(),
             );
         }
-        for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+        for chunk_idx in (0..DIGEST_F_MEMORY_OPS).rev() {
             mem_helper.fill(
                 record.old_input_acc_aux[chunk_idx].prev_timestamp,
                 timestamp_mm(),

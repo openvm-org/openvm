@@ -139,7 +139,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Rv64IExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
 
         let base_alu =
             Rv64BaseAluExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
@@ -240,7 +241,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker = inventory.range_checker().bus;
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
 
         let bitwise_lu = {
             // A trick to get around Rust's borrow rules
@@ -296,7 +298,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
                 range_checker,
                 pointer_max_bits,
             ),
-            LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker),
         );
         inventory.add_air(load_store);
 
@@ -313,7 +315,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let beq = Rv64BranchEqualAir::new(
             Rv64BranchAdapterAir::new(exec_bridge, memory_bridge),
-            BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+            BranchEqualCoreAir::new(bitwise_lu, BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
         );
         inventory.add_air(beq);
 
@@ -363,7 +365,8 @@ where
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.airs().pointer_max_bits());
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
 
         let bitwise_lu = {
@@ -444,6 +447,7 @@ where
             LoadStoreFiller::new(
                 Rv64LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
+                range_checker.clone(),
             ),
             mem_helper.clone(),
         );
@@ -463,6 +467,7 @@ where
         let beq = Rv64BranchEqualChip::new(
             BranchEqualFiller::new(
                 Rv64BranchAdapterFiller,
+                bitwise_lu.clone(),
                 BranchEqualOpcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
@@ -582,13 +587,17 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64M {
 
         let mult = Rv64MultiplicationAir::new(
             Rv64MultAdapterAir::new(exec_bridge, memory_bridge),
-            MultiplicationCoreAir::new(range_tuple_checker, MulOpcode::CLASS_OFFSET),
+            MultiplicationCoreAir::new(range_tuple_checker, bitwise_lu, MulOpcode::CLASS_OFFSET),
         );
         inventory.add_air(mult);
 
         let mul_w = Rv64MulWAir::new(
             Rv64MultWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            crate::mul_w::MulWCoreAir::new(range_tuple_checker, MulWOpcode::CLASS_OFFSET),
+            crate::mul_w::MulWCoreAir::new(
+                range_tuple_checker,
+                bitwise_lu,
+                MulWOpcode::CLASS_OFFSET,
+            ),
         );
         inventory.add_air(mul_w);
 
@@ -675,6 +684,7 @@ where
             MultiplicationFiller::new(
                 Rv64MultAdapterFiller,
                 range_tuple_checker.clone(),
+                bitwise_lu.clone(),
                 MulOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
@@ -686,6 +696,7 @@ where
             crate::mul_w::MulWFiller::new(
                 Rv64MultWAdapterFiller::new(bitwise_lu.clone()),
                 range_tuple_checker.clone(),
+                bitwise_lu.clone(),
                 MulWOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
@@ -738,7 +749,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64Io {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Rv64IoExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
         let hint_store =
             Rv64HintStoreExecutor::new(pointer_max_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
         inventory.add_executor(
@@ -759,7 +771,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
         } = inventory.system().port();
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
 
         let bitwise_lu = {
             let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
@@ -804,7 +817,8 @@ where
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.airs().pointer_max_bits());
 
         let bitwise_lu = {
             let existing_chip = inventory
