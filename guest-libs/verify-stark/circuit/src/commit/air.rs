@@ -44,9 +44,9 @@ impl UserPvsCommitValuesAir {
     ) -> Self {
         // Each leaf consumes `DIGEST_SIZE` public values, which are compressed with zeros
         // to compute the leaf hash. We require at least one leaf, and a full binary tree.
-        debug_assert!(num_user_pvs >= DIGEST_SIZE);
-        debug_assert!(num_user_pvs.is_multiple_of(DIGEST_SIZE));
-        debug_assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
+        assert!(num_user_pvs >= DIGEST_SIZE);
+        assert!(num_user_pvs.is_multiple_of(DIGEST_SIZE));
+        assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
 
         UserPvsCommitValuesAir {
             subair: MerkleTreeSubAir::new(
@@ -79,11 +79,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             main.row_slice(1).expect("window should have two elements"),
         );
 
-        let const_width = MerkleTreeCols::<u8>::width();
-        let row_idx_flags = &(*local)[const_width..];
-
-        let local: &MerkleTreeCols<AB::Var> = (*local)[..const_width].borrow();
-        let next: &MerkleTreeCols<AB::Var> = (*next)[..const_width].borrow();
+        let local: &MerkleTreeCols<AB::Var> = (*local).borrow();
+        let next: &MerkleTreeCols<AB::Var> = (*next).borrow();
 
         let num_rows = AB::F::from_usize(2 * self.num_user_pvs / DIGEST_SIZE);
         self.subair.eval(builder, (local, next, num_rows.into()));
@@ -100,8 +97,6 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         const OUTPUT_USER_PVS_START_IDX: usize = (2 * DIGEST_SIZE) / VALS_IN_DIGEST;
         const OUTPUT_VAL_MSGS_PER_ROW: usize = DIGEST_SIZE / VALS_IN_DIGEST;
-
-        debug_assert_eq!(row_idx_flags.len(), 0);
 
         for (i, output_values) in local.left_child.chunks_exact(VALS_IN_DIGEST).enumerate() {
             self.output_val_bus.send(
