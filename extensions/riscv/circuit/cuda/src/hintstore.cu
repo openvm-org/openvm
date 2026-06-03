@@ -108,17 +108,17 @@ struct Rv64HintStore {
 
             // Range check for mem_ptr (using pointer_max_bits). `mem_ptr` is a 4-limb value;
             // the range check packs the most-significant of those 4 limbs into a single byte.
-            uint32_t msl_rshift = (RV64_WORD_NUM_LIMBS - 1) * RV64_CELL_BITS;
-            uint32_t msl_lshift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - pointer_max_bits;
+            uint32_t msl_rshift = (RV64_WORD_NUM_LIMBS - 1) * RV64_BYTE_BITS;
+            uint32_t msl_lshift = RV64_WORD_NUM_LIMBS * RV64_BYTE_BITS - pointer_max_bits;
 
             // Range check for num_words (using MAX_HINT_BUFFER_DWORDS_BITS).
             uint32_t rem_words_msl_lshift =
-                REM_WORDS_NUM_LIMBS * RV64_CELL_BITS - MAX_HINT_BUFFER_DWORDS_BITS;
+                REM_WORDS_NUM_LIMBS * RV64_BYTE_BITS - MAX_HINT_BUFFER_DWORDS_BITS;
 
             // Combined range check for mem_ptr and num_words
             bitwise_lookup.add_range(
                 (record.mem_ptr >> msl_rshift) << msl_lshift,
-                ((record.num_words >> (RV64_CELL_BITS * (REM_WORDS_NUM_LIMBS - 1))) & 0xFF)
+                ((record.num_words >> (RV64_BYTE_BITS * (REM_WORDS_NUM_LIMBS - 1))) & 0xFF)
                     << rem_words_msl_lshift
             );
 #pragma unroll

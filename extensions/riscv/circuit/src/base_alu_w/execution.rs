@@ -16,7 +16,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::BaseAluWExecutor;
 #[allow(unused_imports)]
-use crate::{adapters::imm_to_u64, common::*};
+use crate::{adapters::imm_to_rv64_u64, common::*};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -46,7 +46,7 @@ impl<A> BaseAluWExecutor<A> {
         let c_u32 = c.as_canonical_u32();
         *data = BaseAluWPreCompute {
             c: if is_imm {
-                imm_to_u64(c_u32)
+                imm_to_rv64_u64(c_u32)
             } else {
                 c_u32 as u64
             },

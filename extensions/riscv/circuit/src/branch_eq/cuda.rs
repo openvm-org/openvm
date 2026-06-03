@@ -11,7 +11,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     adapters::{
-        Rv64BranchAdapterCols, Rv64BranchAdapterRecord, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+        Rv64BranchAdapterCols, Rv64BranchAdapterRecord, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     cuda_abi::beq_cuda::tracegen,
     BranchEqualCoreCols, BranchEqualCoreRecord,
@@ -20,7 +20,7 @@ use crate::{
 #[derive(new)]
 pub struct Rv64BranchEqualChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub timestamp_max_bits: usize,
 }
 

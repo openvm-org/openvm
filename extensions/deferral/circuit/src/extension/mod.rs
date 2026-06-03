@@ -3,10 +3,10 @@ use std::sync::Arc;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, MatrixRecordArena,
-        RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension,
-        VmExecutionExtension, VmField, VmProverExtension,
+        to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator,
+        MatrixRecordArena, RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex,
+        VmCircuitExtension, VmExecutionExtension, VmField, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
@@ -19,8 +19,7 @@ use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_circuit::{
-    adapters::rv64_byte_ptr_bits_from_openvm_ptr_bits, Rv64I, Rv64IExecutor, Rv64ImCpuProverExt,
-    Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
+    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
@@ -124,7 +123,7 @@ where
         };
 
         let base_num_airs = inventory.num_airs();
-        let address_bits = rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
+        let address_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
         inventory.add_air(DeferralCircuitCountAir::new(count_bus, self.fns.len()));
 
@@ -168,8 +167,7 @@ where
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let address_bits =
-            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.airs().pointer_max_bits());
+        let address_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let bitwise_lu = {
             let existing_chip = inventory
