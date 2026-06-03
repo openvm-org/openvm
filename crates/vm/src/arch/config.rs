@@ -75,8 +75,11 @@ pub const BLOCK_FE_WIDTH: usize = 4;
 /// Bytes per memory-bus block.
 pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 
+/// Default RISC-V byte-pointer bit width.
+pub const DEFAULT_RV64_BYTE_PTR_BITS: usize = to_byte_ptr_bits(POINTER_MAX_BITS);
+
 /// Default byte count for `RV64_MEMORY_AS` in `MemoryConfig::default`.
-pub const DEFAULT_RV64_MEMORY_BYTES: usize = 1 << to_byte_ptr_bits(POINTER_MAX_BITS);
+pub const DEFAULT_RV64_MEMORY_BYTES: usize = 1 << DEFAULT_RV64_BYTE_PTR_BITS;
 
 /// Number of registers in the RV64 register file.
 pub const NUM_RV64_REGISTERS: usize = 32;
