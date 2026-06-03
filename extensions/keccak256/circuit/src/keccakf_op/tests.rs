@@ -25,7 +25,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
@@ -80,15 +80,15 @@ fn create_harness_fields(
 struct TestHarness<RA> {
     harness: Harness<RA>,
     bitwise: (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
     perm: (KeccakfPermAir, KeccakfPermChip),
 }
 
 fn create_test_harness<RA: Arena>(tester: &mut VmChipTestBuilder<F>) -> TestHarness<RA> {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 

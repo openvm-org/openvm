@@ -11,8 +11,8 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir};
 use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, compose_rv64_u16_limbs, expand_to_rv64_block_from_slice,
-    scale_ptr_high_u16_expr, RV64_PTR_U16_LIMBS, RV64_U16_LIMB_BITS,
+    byte_ptr_to_u16_ptr, expand_to_rv64_block_from_slice, ptr_bound_from_high_u16_expr,
+    u16_limbs_to_ptr, RV64_PTR_U16_LIMBS, RV64_U16_BITS,
 };
 use openvm_sha2_air::Sha2BlockHasherSubairConfig;
 use openvm_stark_backend::{
@@ -233,11 +233,11 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         ] {
             self.range_bus
                 .range_check(
-                    scale_ptr_high_u16_expr::<AB::Expr, _>(
+                    ptr_bound_from_high_u16_expr::<AB::Expr, _>(
                         limbs[RV64_PTR_U16_LIMBS - 1],
                         self.ptr_max_bits,
                     ),
-                    RV64_U16_LIMB_BITS,
+                    RV64_U16_BITS,
                 )
                 .eval(builder, *local.instruction.is_enabled);
         }
@@ -263,8 +263,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
-        let input_ptr_val =
-            compose_rv64_u16_limbs(local.instruction.input_ptr_limbs.as_slice().unwrap());
+        let input_ptr_val = u16_limbs_to_ptr(local.instruction.input_ptr_limbs.as_slice().unwrap());
         for i in 0..C::BLOCK_READS {
             let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
                 std::array::from_fn(|j| local.block.message_u16s[i * BLOCK_FE_WIDTH + j].into());
@@ -283,8 +282,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .eval(builder, *local.instruction.is_enabled);
         }
 
-        let state_ptr_val =
-            compose_rv64_u16_limbs(local.instruction.state_ptr_limbs.as_slice().unwrap());
+        let state_ptr_val = u16_limbs_to_ptr(local.instruction.state_ptr_limbs.as_slice().unwrap());
         for i in 0..C::STATE_READS {
             let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
                 std::array::from_fn(|j| local.block.prev_state[i * BLOCK_FE_WIDTH + j].into());
@@ -310,8 +308,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
-        let dst_ptr_val =
-            compose_rv64_u16_limbs(local.instruction.dst_ptr_limbs.as_slice().unwrap());
+        let dst_ptr_val = u16_limbs_to_ptr(local.instruction.dst_ptr_limbs.as_slice().unwrap());
         for i in 0..C::STATE_WRITES {
             let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
                 std::array::from_fn(|j| local.block.new_state[i * BLOCK_FE_WIDTH + j].into());

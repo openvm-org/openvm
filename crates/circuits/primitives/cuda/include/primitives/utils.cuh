@@ -26,21 +26,21 @@ __device__ __forceinline__ uint32_t u32_from_bytes_le(const uint8_t *b) {
 }
 
 template <typename T, size_t NUM_LIMBS>
-__device__ __forceinline__ void u32_to_le_u16_limbs(T (&out)[NUM_LIMBS], uint32_t value) {
-    static_assert(NUM_LIMBS == 2, "u32_to_le_u16_limbs expects two u16 cells");
+__device__ __forceinline__ void ptr_to_u16_limbs(T (&out)[NUM_LIMBS], uint32_t value) {
+    static_assert(NUM_LIMBS == 2, "ptr_to_u16_limbs expects two u16 limbs");
     out[0] = T(uint16_t(value));
     out[1] = T(uint16_t(value >> 16));
 }
 
 template <typename T, size_t NUM_LIMBS>
-__device__ __forceinline__ void bytes_to_le_u16_limbs(T (&out)[NUM_LIMBS], const uint8_t *bytes) {
+__device__ __forceinline__ void bytes_to_u16_limbs(T (&out)[NUM_LIMBS], const uint8_t *bytes) {
 #pragma unroll
     for (size_t i = 0; i < NUM_LIMBS; i++) {
         out[i] = T(u16_from_bytes_le(bytes + 2 * i));
     }
 }
 
-__device__ __host__ __forceinline__ uint32_t scale_ptr_high_u16(
+__device__ __host__ __forceinline__ uint32_t ptr_bound_from_high_u16(
     uint16_t high_u16,
     uint32_t ptr_max_bits
 ) {

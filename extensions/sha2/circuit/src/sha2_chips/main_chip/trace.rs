@@ -8,9 +8,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::Chip;
 use openvm_cpu_backend::CpuBackend;
-use openvm_riscv_circuit::adapters::{
-    scale_ptr_high_u16_from_ptr, u32_to_le_u16_cells, RV64_U16_LIMB_BITS,
-};
+use openvm_riscv_circuit::adapters::{ptr_bound_from_ptr, ptr_to_u16_limbs, RV64_U16_BITS};
 use openvm_sha2_air::{set_arrayview_from_u16_le_bytes, set_arrayview_from_u16_slice};
 use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -160,21 +158,21 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
         // Pack low 32 bits of each pointer into u16 cells.
         set_arrayview_from_u16_slice(
             &mut cols.instruction.dst_ptr_limbs,
-            u32_to_le_u16_cells(vm_record.dst_ptr),
+            ptr_to_u16_limbs(vm_record.dst_ptr),
         );
         set_arrayview_from_u16_slice(
             &mut cols.instruction.state_ptr_limbs,
-            u32_to_le_u16_cells(vm_record.state_ptr),
+            ptr_to_u16_limbs(vm_record.state_ptr),
         );
         set_arrayview_from_u16_slice(
             &mut cols.instruction.input_ptr_limbs,
-            u32_to_le_u16_cells(vm_record.input_ptr),
+            ptr_to_u16_limbs(vm_record.input_ptr),
         );
 
         for ptr in [vm_record.dst_ptr, vm_record.state_ptr, vm_record.input_ptr] {
             self.range_checker_chip.add_count(
-                scale_ptr_high_u16_from_ptr(ptr, self.pointer_max_bits),
-                RV64_U16_LIMB_BITS,
+                ptr_bound_from_ptr(ptr, self.pointer_max_bits),
+                RV64_U16_BITS,
             );
         }
 

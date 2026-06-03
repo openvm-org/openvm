@@ -12,8 +12,8 @@ use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir};
 use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, compose_rv64_u16_limbs, expand_to_rv64_block, scale_ptr_high_u16_expr,
-    RV64_PTR_U16_LIMBS, RV64_U16_LIMB_BITS,
+    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
+    RV64_PTR_U16_LIMBS, RV64_U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
@@ -84,14 +84,14 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
 
         self.range_bus
             .range_check(
-                scale_ptr_high_u16_expr::<AB::Expr, _>(
+                ptr_bound_from_high_u16_expr::<AB::Expr, _>(
                     local.buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1],
                     self.ptr_max_bits,
                 ),
-                RV64_U16_LIMB_BITS,
+                RV64_U16_BITS,
             )
             .eval(builder, is_valid);
-        let buffer_ptr = compose_rv64_u16_limbs(&local.buffer_ptr_limbs);
+        let buffer_ptr = u16_limbs_to_ptr(&local.buffer_ptr_limbs);
 
         // ======== Constrain new writes of `buffer` to memory =========
         // NOTE: we use the _next_ row's `buffer` as the pre-state

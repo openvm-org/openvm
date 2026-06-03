@@ -19,8 +19,8 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
-    read_rv64_register_as_u32, rv64_bytes_to_u32, scale_ptr_high_u16_from_ptr, tracing_read,
-    tracing_write, u32_to_le_u16_limbs, RV64_U16_LIMB_BITS,
+    ptr_bound_from_ptr, ptr_to_field_u16_limbs, read_rv64_register_as_u32, rv64_bytes_to_u32,
+    tracing_read, tracing_write, RV64_U16_BITS,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -234,9 +234,9 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         trace_row.instruction.input_reg_ptr = F::from_u32(record.rs1_ptr);
         trace_row.instruction.len_reg_ptr = F::from_u32(record.rs2_ptr);
         trace_row.instruction.buffer_ptr = F::from_u32(record.buffer);
-        trace_row.instruction.buffer_ptr_limbs = u32_to_le_u16_limbs(record.buffer);
+        trace_row.instruction.buffer_ptr_limbs = ptr_to_field_u16_limbs(record.buffer);
         trace_row.instruction.input_ptr = F::from_u32(record.input);
-        trace_row.instruction.input_ptr_limbs = u32_to_le_u16_limbs(record.input);
+        trace_row.instruction.input_ptr_limbs = ptr_to_field_u16_limbs(record.input);
         trace_row.instruction.len = F::from_u32(record.len);
         trace_row.instruction.len_limb = F::from_u8(record.len as u8);
         trace_row.instruction.start_timestamp = F::from_u32(record.timestamp);
@@ -311,8 +311,8 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
 
         for ptr in [record.buffer, record.input] {
             self.range_checker_chip.add_count(
-                scale_ptr_high_u16_from_ptr(ptr, self.pointer_max_bits),
-                RV64_U16_LIMB_BITS,
+                ptr_bound_from_ptr(ptr, self.pointer_max_bits),
+                RV64_U16_BITS,
             );
         }
     }

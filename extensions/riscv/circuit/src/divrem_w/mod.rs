@@ -2,7 +2,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::{
     adapters::{
-        Rv64MultWAdapterAir, Rv64MultWAdapterExecutor, Rv64MultWAdapterFiller, RV64_CELL_BITS,
+        Rv64MultWAdapterAir, Rv64MultWAdapterExecutor, Rv64MultWAdapterFiller, RV64_BYTE_BITS,
         RV64_WORD_NUM_LIMBS,
     },
     divrem::{DivRemCoreAir, DivRemExecutor, DivRemFiller},
@@ -10,9 +10,9 @@ use super::{
 
 mod execution;
 
-pub type DivRemWCoreAir = DivRemCoreAir<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
-pub type DivRemWExecutor<A> = DivRemExecutor<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
-pub type DivRemWFiller<A> = DivRemFiller<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
+pub type DivRemWCoreAir = DivRemCoreAir<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+pub type DivRemWExecutor<A> = DivRemExecutor<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+pub type DivRemWFiller<A> = DivRemFiller<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 
 #[cfg(feature = "cuda")]
 mod cuda;

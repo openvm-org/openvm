@@ -75,9 +75,9 @@ impl Default for Rv64M {
 fn default_range_tuple_checker_sizes() -> [u32; 2] {
     [
         // range for a single limb
-        1 << RV64_CELL_BITS,
+        1 << RV64_BYTE_BITS,
         // carry bound across a column of an N-limb × N-limb multiplication
-        2 * RV64_REGISTER_NUM_LIMBS as u32 * (1 << RV64_CELL_BITS),
+        2 * RV64_REGISTER_NUM_LIMBS as u32 * (1 << RV64_BYTE_BITS),
     ]
 }
 

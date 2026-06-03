@@ -40,13 +40,13 @@ static __device__ __forceinline__ void sha2_main_row_body(
     SHA2_MAIN_WRITE_BLOCK(V, row, request_id, Fp(row_idx));
     {
         Fp message_u16s[V::BLOCK_U16S];
-        bytes_to_le_u16_limbs(message_u16s, record.message_bytes);
+        bytes_to_u16_limbs(message_u16s, record.message_bytes);
         SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, message_u16s, message_u16s);
 
         Fp prev_state_u16s[V::STATE_U16S];
         Fp new_state_u16s[V::STATE_U16S];
-        bytes_to_le_u16_limbs(prev_state_u16s, record.prev_state);
-        bytes_to_le_u16_limbs(new_state_u16s, record.new_state);
+        bytes_to_u16_limbs(prev_state_u16s, record.prev_state);
+        bytes_to_u16_limbs(new_state_u16s, record.new_state);
         SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, prev_state, prev_state_u16s);
         SHA2_MAIN_WRITE_ARRAY_BLOCK(V, row, new_state, new_state_u16s);
     }
@@ -63,25 +63,25 @@ static __device__ __forceinline__ void sha2_main_row_body(
     uint16_t dst_ptr_u16s[RV64_PTR_U16_LIMBS];
     uint16_t state_ptr_u16s[RV64_PTR_U16_LIMBS];
     uint16_t input_ptr_u16s[RV64_PTR_U16_LIMBS];
-    u32_to_le_u16_limbs(dst_ptr_u16s, header->dst_ptr);
-    u32_to_le_u16_limbs(state_ptr_u16s, header->state_ptr);
-    u32_to_le_u16_limbs(input_ptr_u16s, header->input_ptr);
+    ptr_to_u16_limbs(dst_ptr_u16s, header->dst_ptr);
+    ptr_to_u16_limbs(state_ptr_u16s, header->state_ptr);
+    ptr_to_u16_limbs(input_ptr_u16s, header->input_ptr);
     SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, dst_ptr_limbs, dst_ptr_u16s);
     SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, state_ptr_limbs, state_ptr_u16s);
     SHA2_MAIN_WRITE_ARRAY_INSTR(V, row, input_ptr_limbs, input_ptr_u16s);
 
     // Range-check the high u16 of each pointer via the variable range checker.
     range_checker.add_count(
-        scale_ptr_high_u16(dst_ptr_u16s[RV64_PTR_U16_LIMBS - 1], ptr_max_bits),
-        RV64_U16_LIMB_BITS
+        ptr_bound_from_high_u16(dst_ptr_u16s[RV64_PTR_U16_LIMBS - 1], ptr_max_bits),
+        RV64_U16_BITS
     );
     range_checker.add_count(
-        scale_ptr_high_u16(state_ptr_u16s[RV64_PTR_U16_LIMBS - 1], ptr_max_bits),
-        RV64_U16_LIMB_BITS
+        ptr_bound_from_high_u16(state_ptr_u16s[RV64_PTR_U16_LIMBS - 1], ptr_max_bits),
+        RV64_U16_BITS
     );
     range_checker.add_count(
-        scale_ptr_high_u16(input_ptr_u16s[RV64_PTR_U16_LIMBS - 1], ptr_max_bits),
-        RV64_U16_LIMB_BITS
+        ptr_bound_from_high_u16(input_ptr_u16s[RV64_PTR_U16_LIMBS - 1], ptr_max_bits),
+        RV64_U16_BITS
     );
 
     // Memory aux

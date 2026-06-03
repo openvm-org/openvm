@@ -33,18 +33,16 @@ pub use loadstore::*;
 pub use mul::*;
 pub use mul_w::*;
 pub use openvm_instructions::riscv::{
-    RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+    RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 pub use rdwrite::*;
 
-/// 256-bit heap integer stored as 32 bytes (32 limbs of 8-bits)
-pub const INT256_NUM_LIMBS: usize = 32;
-/// Bit width of one u16 memory-bus cell.
-pub const RV64_U16_LIMB_BITS: usize = 2 * RV64_CELL_BITS;
-/// Number of u16 cells needed for a low-32-bit RV64 pointer.
+/// Bit width of one u16 limb.
+pub const RV64_U16_BITS: usize = u16::BITS as usize;
+/// Number of u16 limbs needed for a low-32-bit RV64 pointer.
 pub const RV64_PTR_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 /// Bit width covered by [`RV64_PTR_U16_LIMBS`].
-pub const RV64_PTR_BITS: usize = RV64_U16_LIMB_BITS * RV64_PTR_U16_LIMBS;
+pub const RV64_PTR_BITS: usize = RV64_U16_BITS * RV64_PTR_U16_LIMBS;
 
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;
@@ -54,33 +52,27 @@ pub const RV_B_TYPE_IMM_BITS: usize = 13;
 
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
 
-/// Converts an aligned byte pointer expression to an OpenVM pointer expression.
-pub fn byte_ptr_to_u16_ptr<AB: InteractionBuilder>(byte_ptr: impl Into<AB::Expr>) -> AB::Expr {
-    byte_ptr.into() * AB::F::TWO.inverse()
-}
-
-/// Convert the RISC-V register data (64 bits represented as 8 bytes, where each byte is represented
-/// as a field element) back into its value as u64.
-pub fn compose<F: PrimeField32>(ptr_data: [F; RV64_REGISTER_NUM_LIMBS]) -> u64 {
+/// Composes an RV64 register byte-limb array into a `u64`.
+pub fn rv64_limbs_to_u64<F: PrimeField32>(limbs: [F; RV64_REGISTER_NUM_LIMBS]) -> u64 {
     let mut val: u64 = 0;
-    for (i, limb) in ptr_data.map(|x| x.as_canonical_u32()).iter().enumerate() {
-        val += (*limb as u64) << (i * RV64_CELL_BITS);
+    for (i, limb) in limbs.map(|x| x.as_canonical_u32()).iter().enumerate() {
+        val += (*limb as u64) << (i * RV64_BYTE_BITS);
     }
     val
 }
 
-/// inverse of `compose`
-pub fn decompose<F: PrimeField32>(value: u64) -> [F; RV64_REGISTER_NUM_LIMBS] {
+/// Decomposes a `u64` into RV64 register byte limbs.
+pub fn u64_to_rv64_limbs<F: PrimeField32>(value: u64) -> [F; RV64_REGISTER_NUM_LIMBS] {
     std::array::from_fn(|i| {
-        F::from_u32(((value >> (RV64_CELL_BITS * i)) & ((1 << RV64_CELL_BITS) - 1)) as u32)
+        F::from_u32(((value >> (RV64_BYTE_BITS * i)) & ((1 << RV64_BYTE_BITS) - 1)) as u32)
     })
 }
 
-/// Convert a 24-bit immediate to sign-extended RV64 bytes.
+/// Converts a 24-bit instruction immediate to sign-extended RV64 register bytes.
 /// The immediate is a 12-bit signed value encoded into 24 bits with byte 2
-/// carrying the sign. This function sign-extends it to 8 bytes.
+/// carrying the sign.
 #[inline(always)]
-pub fn imm_to_bytes(imm: u32) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+pub fn imm_to_rv64_bytes(imm: u32) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     debug_assert_eq!(imm >> 24, 0);
     let mut imm_le = (imm as u64).to_le_bytes();
     // Sign-extend: byte 2 carries the sign, replicate to bytes 3-7
@@ -92,16 +84,143 @@ pub fn imm_to_bytes(imm: u32) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     imm_le
 }
 
-/// Convert a 24-bit immediate (as stored in the instruction) to a sign-extended u64.
+/// Converts a 24-bit instruction immediate to a sign-extended RV64 value.
 /// The immediate is a 12-bit signed value that was encoded into 24 bits with byte 2
-/// carrying the sign. This function sign-extends it to 64 bits for RV64 execution.
+/// carrying the sign.
 #[inline(always)]
-pub fn imm_to_u64(imm: u32) -> u64 {
+pub fn imm_to_rv64_u64(imm: u32) -> u64 {
     debug_assert_eq!(imm >> 24, 0);
     // The immediate is 12-bit sign-extended to 24 bits.
     // Sign-extend from 24 bits to 64 bits:
     let sign_extended = ((imm as i32) << 8) >> 8;
     sign_extended as i64 as u64
+}
+
+#[inline(always)]
+pub fn byte_ptr_to_u16_ptr<AB: InteractionBuilder>(byte_ptr: impl Into<AB::Expr>) -> AB::Expr {
+    byte_ptr.into() * AB::F::TWO.inverse()
+}
+
+/// Converts a `u64` to `u32`, asserting in debug that the upper 32 bits are zero.
+#[inline(always)]
+pub fn u64_to_u32_checked(value: u64) -> u32 {
+    debug_assert_eq!(value >> 32, 0, "upper 4 bytes must be zero");
+    value as u32
+}
+
+/// Converts RV64 register bytes to a `u32`, asserting in debug that the upper 4 bytes are zero.
+#[inline(always)]
+pub fn rv64_bytes_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
+    u64_to_u32_checked(u64::from_le_bytes(bytes))
+}
+
+/// Splits a 32-bit RV64 pointer into low-to-high u16 limbs.
+#[inline(always)]
+pub fn ptr_to_u16_limbs(ptr: u32) -> [u16; RV64_PTR_U16_LIMBS] {
+    std::array::from_fn(|i| (ptr >> (RV64_U16_BITS * i)) as u16)
+}
+
+/// Field-element form of [`ptr_to_u16_limbs`].
+#[inline(always)]
+pub fn ptr_to_field_u16_limbs<F: PrimeCharacteristicRing>(value: u32) -> [F; RV64_PTR_U16_LIMBS] {
+    ptr_to_u16_limbs(value).map(F::from_u16)
+}
+
+/// Left shift applied to the high u16 limb for the pointer-width range check.
+#[inline(always)]
+pub fn ptr_max_bits_shift(ptr_max_bits: usize) -> usize {
+    assert!(
+        (RV64_U16_BITS..=RV64_PTR_BITS).contains(&ptr_max_bits),
+        "ptr_max_bits must be in [RV64_U16_BITS, RV64_PTR_BITS]"
+    );
+    RV64_PTR_BITS - ptr_max_bits
+}
+
+/// Range-check value for a high u16 pointer limb.
+#[inline(always)]
+pub fn ptr_bound_from_high_u16(high_u16: u16, ptr_max_bits: usize) -> u32 {
+    u32::from(high_u16) << ptr_max_bits_shift(ptr_max_bits)
+}
+
+/// Range-check value for the high u16 limb of a low-32-bit pointer.
+#[inline(always)]
+pub fn ptr_bound_from_ptr(ptr: u32, ptr_max_bits: usize) -> u32 {
+    let high_u16 = ptr_to_u16_limbs(ptr)[RV64_PTR_U16_LIMBS - 1];
+    ptr_bound_from_high_u16(high_u16, ptr_max_bits)
+}
+
+/// Expression form of [`ptr_bound_from_high_u16`].
+#[inline(always)]
+pub fn ptr_bound_from_high_u16_expr<T, V>(high_u16: V, ptr_max_bits: usize) -> T
+where
+    T: PrimeCharacteristicRing,
+    V: Into<T>,
+{
+    high_u16.into() * T::from_u64(1u64 << ptr_max_bits_shift(ptr_max_bits))
+}
+
+/// Composes low-to-high u16 pointer limbs into one field expression/value.
+#[inline(always)]
+pub fn u16_limbs_to_ptr<T, V>(limbs: &[V]) -> T
+where
+    T: PrimeCharacteristicRing,
+    V: Copy + Into<T>,
+{
+    assert_eq!(limbs.len(), RV64_PTR_U16_LIMBS);
+    limbs.iter().enumerate().fold(T::ZERO, |acc, (i, limb)| {
+        acc + (*limb).into() * T::from_u64(1u64 << (i * RV64_U16_BITS))
+    })
+}
+
+/// Expand `N` limbs to `RV64_REGISTER_NUM_LIMBS` (8) by zero-padding the upper limbs. Used for
+/// register bus reads where the register holds a value in fewer than 8 bytes.
+pub fn expand_to_rv64_register<V: Clone + Into<T>, T: PrimeCharacteristicRing, const N: usize>(
+    limbs: &[V; N],
+) -> [T; RV64_REGISTER_NUM_LIMBS] {
+    const { assert!(N <= RV64_REGISTER_NUM_LIMBS) }
+    std::array::from_fn(|i| {
+        if i < N {
+            limbs[i].clone().into()
+        } else {
+            T::ZERO
+        }
+    })
+}
+
+/// Expand `N` u16 limbs to one RV64 register bus block by zero-padding.
+pub fn expand_to_rv64_block<V, T, const N: usize>(limbs: &[V; N]) -> [T; BLOCK_FE_WIDTH]
+where
+    V: Clone + Into<T>,
+    T: PrimeCharacteristicRing,
+{
+    const { assert!(N <= BLOCK_FE_WIDTH) }
+    expand_to_rv64_block_from_slice(limbs)
+}
+
+/// Expand a slice of u16 limbs to one RV64 register bus block by zero-padding.
+pub fn expand_to_rv64_block_from_slice<V, T>(limbs: &[V]) -> [T; BLOCK_FE_WIDTH]
+where
+    V: Clone + Into<T>,
+    T: PrimeCharacteristicRing,
+{
+    assert!(limbs.len() <= BLOCK_FE_WIDTH);
+    std::array::from_fn(|i| {
+        if i < limbs.len() {
+            limbs[i].clone().into()
+        } else {
+            T::ZERO
+        }
+    })
+}
+
+pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>, const N: usize>(
+    data: [V; N],
+) -> T {
+    data.into_iter()
+        .enumerate()
+        .fold(T::ZERO, |acc, (i, limb)| {
+            acc + limb * T::from_u64(1u64 << (i * RV64_BYTE_BITS))
+        })
 }
 
 #[inline(always)]
@@ -289,7 +408,7 @@ pub fn tracing_read_imm(
 ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     *imm_mut = imm;
     memory.increment_timestamp();
-    imm_to_bytes(imm)
+    imm_to_rv64_bytes(imm)
 }
 
 /// Writes `reg_ptr, reg_val` into memory and records the memory access in mutable buffer.
@@ -356,128 +475,5 @@ pub fn read_rv64_register(memory: &GuestMemory, ptr: u32) -> u64 {
 /// 32 bits are zero.
 #[inline(always)]
 pub fn read_rv64_register_as_u32(memory: &GuestMemory, ptr: u32) -> u32 {
-    rv64_u64_to_u32(read_rv64_register(memory, ptr))
-}
-
-/// Convert a u64 value to u32, asserting (in debug) that the upper 32 bits are zero.
-#[inline(always)]
-pub fn rv64_u64_to_u32(val: u64) -> u32 {
-    debug_assert_eq!(val >> 32, 0, "upper 4 bytes must be zero");
-    val as u32
-}
-
-/// Convert an 8-byte RV64 register value to a u32 pointer, asserting (in debug) that the upper 4
-/// bytes are zero.
-#[inline(always)]
-pub fn rv64_bytes_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
-    rv64_u64_to_u32(u64::from_le_bytes(bytes))
-}
-
-/// Split a u32 pointer into little-endian u16 cells.
-#[inline(always)]
-pub fn u32_to_le_u16_cells(value: u32) -> [u16; RV64_PTR_U16_LIMBS] {
-    std::array::from_fn(|i| (value >> (RV64_U16_LIMB_BITS * i)) as u16)
-}
-
-/// Field-element form of [`u32_to_le_u16_cells`].
-#[inline(always)]
-pub fn u32_to_le_u16_limbs<F: PrimeCharacteristicRing>(value: u32) -> [F; RV64_PTR_U16_LIMBS] {
-    u32_to_le_u16_cells(value).map(F::from_u16)
-}
-
-/// Shift needed to bound a low-32-bit RV64 pointer by `ptr_max_bits`.
-#[inline(always)]
-pub fn rv64_ptr_max_bits_shift(ptr_max_bits: usize) -> usize {
-    assert!(
-        (RV64_U16_LIMB_BITS..=RV64_PTR_BITS).contains(&ptr_max_bits),
-        "ptr_max_bits must be in [RV64_U16_LIMB_BITS, RV64_PTR_BITS]"
-    );
-    RV64_PTR_BITS - ptr_max_bits
-}
-
-/// Return the scaled high u16 pointer cell used by pointer-width range checks.
-#[inline(always)]
-pub fn scale_ptr_high_u16(high_u16: u16, ptr_max_bits: usize) -> u32 {
-    u32::from(high_u16) << rv64_ptr_max_bits_shift(ptr_max_bits)
-}
-
-/// Return the scaled high u16 cell from a full low-32-bit RV64 pointer.
-#[inline(always)]
-pub fn scale_ptr_high_u16_from_ptr(ptr: u32, ptr_max_bits: usize) -> u32 {
-    let high_u16 = u32_to_le_u16_cells(ptr)[RV64_PTR_U16_LIMBS - 1];
-    scale_ptr_high_u16(high_u16, ptr_max_bits)
-}
-
-/// Expression form of [`scale_ptr_high_u16`].
-#[inline(always)]
-pub fn scale_ptr_high_u16_expr<T, V>(high_u16: V, ptr_max_bits: usize) -> T
-where
-    T: PrimeCharacteristicRing,
-    V: Into<T>,
-{
-    high_u16.into() * T::from_u64(1u64 << rv64_ptr_max_bits_shift(ptr_max_bits))
-}
-
-/// Compose little-endian u16 pointer limbs into one field expression/value.
-#[inline(always)]
-pub fn compose_rv64_u16_limbs<T, V>(limbs: &[V]) -> T
-where
-    T: PrimeCharacteristicRing,
-    V: Copy + Into<T>,
-{
-    assert_eq!(limbs.len(), RV64_PTR_U16_LIMBS);
-    limbs.iter().enumerate().fold(T::ZERO, |acc, (i, limb)| {
-        acc + (*limb).into() * T::from_u64(1u64 << (i * RV64_U16_LIMB_BITS))
-    })
-}
-
-/// Expand `N` limbs to `RV64_REGISTER_NUM_LIMBS` (8) by zero-padding the upper limbs. Used for
-/// register bus reads where the register holds a value in fewer than 8 bytes.
-pub fn expand_to_rv64_register<V: Clone + Into<T>, T: PrimeCharacteristicRing, const N: usize>(
-    limbs: &[V; N],
-) -> [T; RV64_REGISTER_NUM_LIMBS] {
-    const { assert!(N <= RV64_REGISTER_NUM_LIMBS) }
-    std::array::from_fn(|i| {
-        if i < N {
-            limbs[i].clone().into()
-        } else {
-            T::ZERO
-        }
-    })
-}
-
-/// Expand `N` u16 limbs to one RV64 register bus block by zero-padding.
-pub fn expand_to_rv64_block<V, T, const N: usize>(limbs: &[V; N]) -> [T; BLOCK_FE_WIDTH]
-where
-    V: Clone + Into<T>,
-    T: PrimeCharacteristicRing,
-{
-    const { assert!(N <= BLOCK_FE_WIDTH) }
-    expand_to_rv64_block_from_slice(limbs)
-}
-
-/// Expand a slice of u16 limbs to one RV64 register bus block by zero-padding.
-pub fn expand_to_rv64_block_from_slice<V, T>(limbs: &[V]) -> [T; BLOCK_FE_WIDTH]
-where
-    V: Clone + Into<T>,
-    T: PrimeCharacteristicRing,
-{
-    assert!(limbs.len() <= BLOCK_FE_WIDTH);
-    std::array::from_fn(|i| {
-        if i < limbs.len() {
-            limbs[i].clone().into()
-        } else {
-            T::ZERO
-        }
-    })
-}
-
-pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>, const N: usize>(
-    data: [V; N],
-) -> T {
-    data.into_iter()
-        .enumerate()
-        .fold(T::ZERO, |acc, (i, limb)| {
-            acc + limb * T::from_u64(1u64 << (i * RV64_CELL_BITS))
-        })
+    u64_to_u32_checked(read_rv64_register(memory, ptr))
 }

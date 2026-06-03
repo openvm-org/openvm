@@ -56,13 +56,13 @@ static __device__ __noinline__ void fill_keccakf_op_row(
 
     // Store the low-32-bit buffer pointer as u16 cells.
     uint16_t buffer_ptr_limbs[RV64_PTR_U16_LIMBS];
-    u32_to_le_u16_limbs(buffer_ptr_limbs, rec.buffer_ptr);
+    ptr_to_u16_limbs(buffer_ptr_limbs, rec.buffer_ptr);
     KECCAKF_OP_WRITE_ARRAY(buffer_ptr_limbs, buffer_ptr_limbs);
 
     uint16_t preimage_u16s[KECCAK_WIDTH_U16S];
     uint16_t postimage_u16s[KECCAK_WIDTH_U16S];
-    bytes_to_le_u16_limbs(preimage_u16s, rec.preimage_buffer_bytes);
-    bytes_to_le_u16_limbs(postimage_u16s, state.bytes);
+    bytes_to_u16_limbs(preimage_u16s, rec.preimage_buffer_bytes);
+    bytes_to_u16_limbs(postimage_u16s, state.bytes);
     KECCAKF_OP_WRITE_ARRAY(preimage, preimage_u16s);
     KECCAKF_OP_WRITE_ARRAY(postimage, postimage_u16s);
 
@@ -81,8 +81,8 @@ static __device__ __noinline__ void fill_keccakf_op_row(
 
     // Bound the high u16 cell so the low-32-bit buffer pointer fits in pointer_max_bits.
     range_checker.add_count(
-        scale_ptr_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
-        RV64_U16_LIMB_BITS
+        ptr_bound_from_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
+        RV64_U16_BITS
     );
 }
 

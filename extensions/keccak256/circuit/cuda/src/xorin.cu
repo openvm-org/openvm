@@ -69,8 +69,8 @@ __global__ void xorin_tracegen(
         // Store low-32-bit pointers as u16 cells.
         uint16_t buffer_ptr_limbs[RV64_PTR_U16_LIMBS];
         uint16_t input_ptr_limbs[RV64_PTR_U16_LIMBS];
-        u32_to_le_u16_limbs(buffer_ptr_limbs, rec.buffer);
-        u32_to_le_u16_limbs(input_ptr_limbs, rec.input);
+        ptr_to_u16_limbs(buffer_ptr_limbs, rec.buffer);
+        ptr_to_u16_limbs(input_ptr_limbs, rec.input);
         XORIN_WRITE_ARRAY(instruction.buffer_ptr_limbs, buffer_ptr_limbs);
         XORIN_WRITE_ARRAY(instruction.input_ptr_limbs, input_ptr_limbs);
         XORIN_WRITE(instruction.len_limb, static_cast<uint8_t>(rec.len));
@@ -159,12 +159,12 @@ __global__ void xorin_tracegen(
 
         // Bound the high u16 cells so the low-32-bit pointers fit in pointer_max_bits.
         range_checker.add_count(
-            scale_ptr_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
-            RV64_U16_LIMB_BITS
+            ptr_bound_from_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
+            RV64_U16_BITS
         );
         range_checker.add_count(
-            scale_ptr_high_u16(input_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
-            RV64_U16_LIMB_BITS
+            ptr_bound_from_high_u16(input_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
+            RV64_U16_BITS
         );
 
     } else {

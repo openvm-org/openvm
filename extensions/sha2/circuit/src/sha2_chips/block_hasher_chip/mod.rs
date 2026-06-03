@@ -16,14 +16,14 @@ use openvm_circuit::system::memory::SharedMemoryHelper;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
 };
-use openvm_instructions::riscv::RV64_CELL_BITS;
+use openvm_instructions::riscv::RV64_BYTE_BITS;
 use openvm_sha2_air::{Sha2BlockHasherFillerHelper, Sha2BlockHasherSubairConfig};
 
 pub use super::{config::*, Sha2SharedRecords};
 
 pub struct Sha2BlockHasherChip<F, C: Sha2BlockHasherSubairConfig> {
     pub inner: Sha2BlockHasherFillerHelper<C>,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     /// Range checker for digest-row `final_hash` limbs.
     pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub pointer_max_bits: usize,
@@ -42,7 +42,7 @@ pub struct Sha2BlockHasherChip<F, C: Sha2BlockHasherSubairConfig> {
 
 impl<F, C: Sha2BlockHasherSubairConfig> Sha2BlockHasherChip<F, C> {
     pub fn new(
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
         pointer_max_bits: usize,
         mem_helper: SharedMemoryHelper<F>,

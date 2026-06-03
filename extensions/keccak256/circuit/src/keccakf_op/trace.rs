@@ -23,8 +23,8 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{
-    rv64_bytes_to_u32, scale_ptr_high_u16_from_ptr, timed_write, tracing_read, u32_to_le_u16_limbs,
-    RV64_U16_LIMB_BITS,
+    ptr_bound_from_ptr, ptr_to_field_u16_limbs, rv64_bytes_to_u32, timed_write, tracing_read,
+    RV64_U16_BITS,
 };
 use openvm_stark_backend::{
     p3_field::PrimeField32,
@@ -219,7 +219,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                 local.is_valid = F::ONE;
                 local.timestamp = F::from_u32(record.timestamp);
                 local.rd_ptr = F::from_u32(record.rd_ptr);
-                local.buffer_ptr_limbs = u32_to_le_u16_limbs(record.buffer_ptr);
+                local.buffer_ptr_limbs = ptr_to_field_u16_limbs(record.buffer_ptr);
 
                 // Pack consecutive pairs of state bytes into u16 cells.
                 for (dst, bytes) in local
@@ -254,8 +254,8 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                 }
 
                 self.range_checker_chip.add_count(
-                    scale_ptr_high_u16_from_ptr(record.buffer_ptr, self.pointer_max_bits),
-                    RV64_U16_LIMB_BITS,
+                    ptr_bound_from_ptr(record.buffer_ptr, self.pointer_max_bits),
+                    RV64_U16_BITS,
                 );
             });
         *self.shared_records.lock().unwrap() = records;

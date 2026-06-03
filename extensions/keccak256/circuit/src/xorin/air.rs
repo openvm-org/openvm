@@ -15,8 +15,8 @@ use openvm_circuit_primitives::{
 use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, compose_rv64_u16_limbs, expand_to_rv64_block, scale_ptr_high_u16_expr,
-    RV64_PTR_U16_LIMBS, RV64_U16_LIMB_BITS,
+    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
+    RV64_PTR_U16_LIMBS, RV64_U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -178,19 +178,19 @@ impl XorinVmAir {
         ] {
             self.range_bus
                 .range_check(
-                    scale_ptr_high_u16_expr::<AB::Expr, _>(top_cell, self.ptr_max_bits),
-                    RV64_U16_LIMB_BITS,
+                    ptr_bound_from_high_u16_expr::<AB::Expr, _>(top_cell, self.ptr_max_bits),
+                    RV64_U16_BITS,
                 )
                 .eval(builder, is_enabled);
         }
 
         builder.assert_eq(
             instruction.buffer_ptr,
-            compose_rv64_u16_limbs(&instruction.buffer_ptr_limbs),
+            u16_limbs_to_ptr(&instruction.buffer_ptr_limbs),
         );
         builder.assert_eq(
             instruction.input_ptr,
-            compose_rv64_u16_limbs(&instruction.input_ptr_limbs),
+            u16_limbs_to_ptr(&instruction.input_ptr_limbs),
         );
 
         builder.assert_eq(instruction.len, instruction.len_limb);
