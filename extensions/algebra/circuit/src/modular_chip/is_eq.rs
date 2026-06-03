@@ -1,6 +1,7 @@
 use std::{
     array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
+    mem::size_of,
 };
 
 use num_bigint::BigUint;
@@ -9,7 +10,7 @@ use openvm_circuit::{
     arch::*,
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory, POINTER_MAX_BITS,
+        MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
@@ -704,50 +705,49 @@ unsafe fn execute_e12_impl<
     // Read register values (RV64: read 8 bytes, assert upper 4 are zero, cast to u32)
     let rs_vals = pre_compute
         .rs_addrs
-        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, addr as u32)));
+        .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
 
     // On-chip limbs are u16 cells; read the same BLOCK_FE_WIDTH-cell chunks as bytes.
     let total_bytes: usize = TOTAL_READ_SIZE * size_of::<u16>();
-    let mut b_bytes: Vec<u8> = Vec::with_capacity(total_bytes);
-    let mut c_bytes: Vec<u8> = Vec::with_capacity(total_bytes);
-    debug_assert!(rs_vals[0] as usize + total_bytes - 1 < (1 << POINTER_MAX_BITS));
-    debug_assert!(rs_vals[1] as usize + total_bytes - 1 < (1 << POINTER_MAX_BITS));
+    debug_assert!(rs_vals[0] as usize + total_bytes - 1 < RV64_MEMORY_BYTES);
+    debug_assert!(rs_vals[1] as usize + total_bytes - 1 < RV64_MEMORY_BYTES);
+    let mut b_eq_c = true;
+    let mut b_lt_modulus = false;
+    let mut c_lt_modulus = false;
     for i in 0..NUM_LANES {
-        let bb: [u8; MEMORY_BLOCK_BYTES] = exec_state.vm_read::<u8, MEMORY_BLOCK_BYTES>(
+        let b_block = exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
             RV64_MEMORY_AS,
             rs_vals[0] + (i * MEMORY_BLOCK_BYTES) as u32,
         );
-        let cc: [u8; MEMORY_BLOCK_BYTES] = exec_state.vm_read::<u8, MEMORY_BLOCK_BYTES>(
+        let c_block = exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
             RV64_MEMORY_AS,
             rs_vals[1] + (i * MEMORY_BLOCK_BYTES) as u32,
         );
-        b_bytes.extend_from_slice(&bb);
-        c_bytes.extend_from_slice(&cc);
+        b_eq_c &= b_block == c_block;
+        // For little-endian byte arrays, the last differing byte determines the comparison.
+        for j in 0..MEMORY_BLOCK_BYTES {
+            let byte_idx = i * MEMORY_BLOCK_BYTES + j;
+            let modulus_byte = u16_modulus_byte(&pre_compute.modulus_limbs, byte_idx);
+            if b_block[j] != modulus_byte {
+                b_lt_modulus = b_block[j] < modulus_byte;
+            }
+            if c_block[j] != modulus_byte {
+                c_lt_modulus = c_block[j] < modulus_byte;
+            }
+        }
     }
-    let b_bytes: &[u8] = &b_bytes;
-    let c_bytes: &[u8] = &c_bytes;
 
     if !IS_SETUP {
-        debug_assert!(
-            bytes_lt_u16_modulus(b_bytes, &pre_compute.modulus_limbs),
-            "{:?} >= modulus {:?}",
-            b_bytes,
-            pre_compute.modulus_limbs
-        );
+        debug_assert!(b_lt_modulus, "b operand must be less than modulus");
     }
-    debug_assert!(
-        bytes_lt_u16_modulus(c_bytes, &pre_compute.modulus_limbs),
-        "{:?} >= modulus {:?}",
-        c_bytes,
-        pre_compute.modulus_limbs
-    );
+    debug_assert!(c_lt_modulus, "c operand must be less than modulus");
 
     // Compute result (RV64: 8-byte result register)
     let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-    write_data[0] = (b_bytes == c_bytes) as u8;
+    write_data[0] = b_eq_c as u8;
 
     // Write result to register
-    exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
+    exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
@@ -761,18 +761,6 @@ fn u16_modulus_byte<const NUM_LIMBS: usize>(modulus: &[u16; NUM_LIMBS], byte_idx
     } else {
         (cell >> 8) as u8
     }
-}
-
-#[inline(always)]
-fn bytes_lt_u16_modulus<const NUM_LIMBS: usize>(bytes: &[u8], modulus: &[u16; NUM_LIMBS]) -> bool {
-    debug_assert_eq!(bytes.len(), NUM_LIMBS * size_of::<u16>());
-    for i in (0..bytes.len()).rev() {
-        let m = u16_modulus_byte(modulus, i);
-        if bytes[i] != m {
-            return bytes[i] < m;
-        }
-    }
-    false
 }
 
 // Returns (cmp_result, diff_idx)
