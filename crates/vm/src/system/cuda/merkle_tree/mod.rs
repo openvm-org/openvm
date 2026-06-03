@@ -471,7 +471,7 @@ mod tests {
                     MemoryCellType::Null => {}
                     MemoryCellType::U8 => {
                         for i in 0..space.num_cells {
-                            initial_memory.write::<u8, 1>(idx as u32, i as u32, [rng.random()]);
+                            initial_memory.write_bytes::<1>(idx as u32, i as u32, [rng.random()]);
                         }
                     }
                     MemoryCellType::U16 => {
