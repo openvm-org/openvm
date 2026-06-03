@@ -1,10 +1,16 @@
-use std::sync::Arc;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_lift::ExtensionRegistry;
 
-use super::{bridge::map_rvr_execute_error, execute::execute, state::PureState, RvrCompiled};
+use super::{
+    bridge::map_rvr_execute_error, compile::CompileError, execute::execute, state::PureState,
+    RvrCompiled,
+};
 #[cfg(feature = "metrics")]
 use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
 use crate::{
@@ -69,5 +75,12 @@ where
             metrics.record(insns);
         }
         Ok(vm_state)
+    }
+
+    /// Persist the compiled shared library into `dir`. Returns the path to
+    /// the copied artifact. No compatibility validation is performed here.
+    pub fn save(&self, dir: &Path) -> Result<PathBuf, CompileError> {
+        let dest_lib = self.compiled.lib_file_name_with_suffix("pure")?;
+        self.compiled.save_artifact(&dir.join(dest_lib))
     }
 }
