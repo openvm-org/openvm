@@ -25,7 +25,7 @@ struct Rv64JalrAdapterRecord {
     uint32_t rd_ptr;
 
     MemoryReadAuxRecord reads_aux;
-    MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS> writes_aux;
+    MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH> writes_aux;
 };
 
 struct Rv64JalrAdapter {
@@ -39,9 +39,9 @@ struct Rv64JalrAdapter {
         COL_WRITE_VALUE(row, Rv64JalrAdapterCols, needs_write, do_write);
 
         if (do_write) {
-            Fp packed_prev[BLOCK_FE_WIDTH];
-            pack_u8_block_bytes(packed_prev, record.writes_aux.prev_data);
-            COL_WRITE_ARRAY(row, Rv64JalrAdapterCols, rd_aux_cols.prev_data, packed_prev);
+            Fp prev[BLOCK_FE_WIDTH];
+            copy_u16_cells(prev, record.writes_aux.prev_data);
+            COL_WRITE_ARRAY(row, Rv64JalrAdapterCols, rd_aux_cols.prev_data, prev);
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv64JalrAdapterCols, rd_aux_cols.base)),
                 record.writes_aux.prev_timestamp,
