@@ -134,7 +134,6 @@ template <size_t NUM_LIMBS> struct BaseAluCore {
         for (size_t i = 0; i < NUM_LIMBS; i++) {
             if (record.local_opcode == 0 || record.local_opcode == 1) {
                 bitwise_lookup.add_xor(a[i], a[i]);
-                // AIR range-checks these byte limbs; add matching lookup counts.
                 bitwise_lookup.add_range(record.b[i], record.c[i]);
             } else {
                 bitwise_lookup.add_xor(record.b[i], record.c[i]);

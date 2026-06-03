@@ -18,7 +18,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{i256_lt, read_int256, u256_lt},
-    BranchAdapterExecutor, Rv64BranchLessThan256Executor, INT256_NUM_LIMBS,
+    BranchAdapterExecutor, Rv64BranchLessThan256Executor, INT256_NUM_U8_LIMBS,
 };
 
 impl Rv64BranchLessThan256Executor {
@@ -214,7 +214,7 @@ impl Rv64BranchLessThan256Executor {
 }
 
 trait BranchLessThanOp {
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> bool;
+    fn compute(rs1: [u8; INT256_NUM_U8_LIMBS], rs2: [u8; INT256_NUM_U8_LIMBS]) -> bool;
 }
 struct BltOp;
 struct BltuOp;
@@ -223,25 +223,25 @@ struct BgeuOp;
 
 impl BranchLessThanOp for BltOp {
     #[inline(always)]
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> bool {
+    fn compute(rs1: [u8; INT256_NUM_U8_LIMBS], rs2: [u8; INT256_NUM_U8_LIMBS]) -> bool {
         i256_lt(rs1, rs2)
     }
 }
 impl BranchLessThanOp for BltuOp {
     #[inline(always)]
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> bool {
+    fn compute(rs1: [u8; INT256_NUM_U8_LIMBS], rs2: [u8; INT256_NUM_U8_LIMBS]) -> bool {
         u256_lt(rs1, rs2)
     }
 }
 impl BranchLessThanOp for BgeOp {
     #[inline(always)]
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> bool {
+    fn compute(rs1: [u8; INT256_NUM_U8_LIMBS], rs2: [u8; INT256_NUM_U8_LIMBS]) -> bool {
         !i256_lt(rs1, rs2)
     }
 }
 impl BranchLessThanOp for BgeuOp {
     #[inline(always)]
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> bool {
+    fn compute(rs1: [u8; INT256_NUM_U8_LIMBS], rs2: [u8; INT256_NUM_U8_LIMBS]) -> bool {
         !u256_lt(rs1, rs2)
     }
 }

@@ -129,8 +129,12 @@ mod tests {
             for i in 0..len {
                 unsafe {
                     assert_eq!(
-                        end_state1.memory.memory.mem[addr_space].read::<u8>(i),
-                        end_state2.memory.memory.mem[addr_space].read::<u8>(i)
+                        end_state1
+                            .memory
+                            .read_bytes::<1>(addr_space as u32, i as u32),
+                        end_state2
+                            .memory
+                            .read_bytes::<1>(addr_space as u32, i as u32)
                     );
                 }
             }

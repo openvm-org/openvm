@@ -2,6 +2,7 @@
 
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
+#include "primitives/constants.h"
 #include "system/memory/controller.cuh"
 
 using namespace riscv;
@@ -94,12 +95,13 @@ struct Rv64LoadStoreAdapter {
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, imm_sign, record.imm_sign);
 
         uint32_t ptr = record.rs1_val + ((uint32_t)record.imm + record.imm_sign * 0xffff0000);
-        auto ptr_limbs = reinterpret_cast<uint16_t *>(&ptr);
+        uint32_t ptr_limbs[RV64_PTR_U16_LIMBS];
+        pack_u32_to_u16_limbs(ptr_limbs, ptr);
         COL_WRITE_ARRAY(row, Rv64LoadStoreAdapterCols, mem_ptr_limbs, ptr_limbs);
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, mem_as, record.mem_as);
 
-        range_checker.add_count((uint32_t)ptr_limbs[0] >> 3, RV64_BYTE_BITS * 2 - 3);
-        range_checker.add_count((uint32_t)ptr_limbs[1], pointer_max_bits - 16);
+        range_checker.add_count(ptr_limbs[0] >> 3, U16_BITS - 3);
+        range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
 
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, needs_write, needs_write);
         if (needs_write) {

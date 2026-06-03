@@ -18,7 +18,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
-    AluAdapterExecutor, Rv64Shift256Executor, INT256_NUM_LIMBS, INT256_NUM_U64_LIMBS,
+    AluAdapterExecutor, Rv64Shift256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
 };
 
 impl Rv64Shift256Executor {
@@ -204,14 +204,20 @@ impl Rv64Shift256Executor {
 }
 
 trait ShiftOp {
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS];
+    fn compute(
+        rs1: [u8; INT256_NUM_U8_LIMBS],
+        rs2: [u8; INT256_NUM_U8_LIMBS],
+    ) -> [u8; INT256_NUM_U8_LIMBS];
 }
 struct SllOp;
 struct SrlOp;
 struct SraOp;
 impl ShiftOp for SllOp {
     #[inline(always)]
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
+    fn compute(
+        rs1: [u8; INT256_NUM_U8_LIMBS],
+        rs2: [u8; INT256_NUM_U8_LIMBS],
+    ) -> [u8; INT256_NUM_U8_LIMBS] {
         let rs1_u64 = bytes_to_u64_array(rs1);
         let rs2_u64 = bytes_to_u64_array(rs2);
         let mut rd = [0u64; INT256_NUM_U64_LIMBS];
@@ -232,16 +238,22 @@ impl ShiftOp for SllOp {
 }
 impl ShiftOp for SrlOp {
     #[inline(always)]
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
+    fn compute(
+        rs1: [u8; INT256_NUM_U8_LIMBS],
+        rs2: [u8; INT256_NUM_U8_LIMBS],
+    ) -> [u8; INT256_NUM_U8_LIMBS] {
         // Logical right shift - fill with 0
         shift_right(rs1, rs2, 0)
     }
 }
 impl ShiftOp for SraOp {
     #[inline(always)]
-    fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
+    fn compute(
+        rs1: [u8; INT256_NUM_U8_LIMBS],
+        rs2: [u8; INT256_NUM_U8_LIMBS],
+    ) -> [u8; INT256_NUM_U8_LIMBS] {
         // Arithmetic right shift - fill with sign bit
-        if rs1[INT256_NUM_LIMBS - 1] & 0x80 > 0 {
+        if rs1[INT256_NUM_U8_LIMBS - 1] & 0x80 > 0 {
             shift_right(rs1, rs2, u64::MAX)
         } else {
             shift_right(rs1, rs2, 0)
@@ -251,10 +263,10 @@ impl ShiftOp for SraOp {
 
 #[inline(always)]
 fn shift_right(
-    rs1: [u8; INT256_NUM_LIMBS],
-    rs2: [u8; INT256_NUM_LIMBS],
+    rs1: [u8; INT256_NUM_U8_LIMBS],
+    rs2: [u8; INT256_NUM_U8_LIMBS],
     init_value: u64,
-) -> [u8; INT256_NUM_LIMBS] {
+) -> [u8; INT256_NUM_U8_LIMBS] {
     let rs1_u64 = bytes_to_u64_array(rs1);
     let rs2_u64 = bytes_to_u64_array(rs2);
     let mut rd = [init_value; INT256_NUM_U64_LIMBS];
@@ -283,15 +295,15 @@ mod tests {
 
     use crate::{
         shift::{ShiftOp, SllOp, SraOp, SrlOp},
-        INT256_NUM_LIMBS,
+        INT256_NUM_U8_LIMBS,
     };
 
     #[test]
     fn test_shift_op() {
         let mut rng = StdRng::from_seed([42; 32]);
         for _ in 0..10000 {
-            let limbs_a: [u8; INT256_NUM_LIMBS] = rng.random();
-            let mut limbs_b: [u8; INT256_NUM_LIMBS] = [0; INT256_NUM_LIMBS];
+            let limbs_a: [u8; INT256_NUM_U8_LIMBS] = rng.random();
+            let mut limbs_b: [u8; INT256_NUM_U8_LIMBS] = [0; INT256_NUM_U8_LIMBS];
             let shift: u8 = rng.random();
             limbs_b[0] = shift;
             let a = U256::from_le_bytes(limbs_a);

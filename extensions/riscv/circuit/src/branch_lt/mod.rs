@@ -1,7 +1,8 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
-use super::adapters::{RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS};
-use crate::adapters::{Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller};
+use crate::adapters::{
+    Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller, U16_BITS,
+};
 
 mod core;
 mod execution;
@@ -17,13 +18,9 @@ mod aot;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64BranchLessThanAir = VmAirWrapper<
-    Rv64BranchAdapterAir,
-    BranchLessThanCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
->;
+pub type Rv64BranchLessThanAir =
+    VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<BLOCK_FE_WIDTH, U16_BITS>>;
 pub type Rv64BranchLessThanExecutor =
-    BranchLessThanExecutor<Rv64BranchAdapterExecutor, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type Rv64BranchLessThanChip<F> = VmChipWrapper<
-    F,
-    BranchLessThanFiller<Rv64BranchAdapterFiller, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
->;
+    BranchLessThanExecutor<Rv64BranchAdapterExecutor, BLOCK_FE_WIDTH, U16_BITS>;
+pub type Rv64BranchLessThanChip<F> =
+    VmChipWrapper<F, BranchLessThanFiller<Rv64BranchAdapterFiller, BLOCK_FE_WIDTH, U16_BITS>>;

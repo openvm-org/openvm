@@ -10,6 +10,7 @@ use openvm_riscv_transpiler::Rv64JalLuiOpcode::{self, JAL};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::{get_signed_imm, run_jal_lui, Rv64JalLuiExecutor};
+use crate::adapters::byte_ptr_to_u16_ptr_value;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -216,7 +217,7 @@ unsafe fn execute_e12_impl<
     let (pc, rd) = run_jal_lui(IS_JAL, exec_state.pc(), signed_imm);
 
     if ENABLED {
-        exec_state.vm_write_bytes(RV64_REGISTER_AS, a as u32, &rd);
+        exec_state.vm_write(RV64_REGISTER_AS, byte_ptr_to_u16_ptr_value(a as u32), &rd);
     }
     exec_state.set_pc(pc);
 }

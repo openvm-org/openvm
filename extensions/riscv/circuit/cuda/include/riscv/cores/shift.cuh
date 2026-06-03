@@ -124,7 +124,6 @@ template <size_t NUM_LIMBS> struct ShiftCore {
             bitwise_lookup.add_range(a[i], a[i + 1]);
         }
 
-        // AIR range-checks these byte limbs; add matching lookup counts.
 #pragma unroll
         for (size_t i = 0; i + 1 < NUM_LIMBS; i += 2) {
             bitwise_lookup.add_range(record.b[i], record.b[i + 1]);
