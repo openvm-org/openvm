@@ -267,19 +267,24 @@ unsafe fn execute_e12_impl<
     pre_compute: &ShiftWPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1 = exec_state.vm_read::<u8, RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs1 =
+        exec_state.vm_read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2: [u8; RV64_WORD_NUM_LIMBS] = if IS_IMM {
         pre_compute.c.to_le_bytes()[..RV64_WORD_NUM_LIMBS]
             .try_into()
             .unwrap()
     } else {
-        exec_state.vm_read::<u8, RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32)
+        exec_state.vm_read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32)
     };
     let rs2 = u32::from_le_bytes(rs2);
 
     let rd_word = u32::from_le_bytes(<OP as ShiftWOp>::compute(rs1, rs2));
     let rd = (rd_word as i32 as i64 as u64).to_le_bytes();
-    exec_state.vm_write::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write_bytes::<RV64_REGISTER_NUM_LIMBS>(
+        RV64_REGISTER_AS,
+        pre_compute.a as u32,
+        &rd,
+    );
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

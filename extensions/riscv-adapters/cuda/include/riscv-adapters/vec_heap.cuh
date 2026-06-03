@@ -27,7 +27,7 @@ struct Rv64VecHeapAdapterCols {
     MemoryReadAuxCols<T> rd_read_aux;
 
     MemoryReadAuxCols<T> reads_aux[NUM_READS][BLOCKS_PER_READ];
-    MemoryWriteAuxCols<T, WRITE_SIZE> writes_aux[BLOCKS_PER_WRITE];
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> writes_aux[BLOCKS_PER_WRITE];
 };
 
 template <
@@ -114,13 +114,28 @@ struct Rv64VecHeapAdapter {
         } else {
             assert(false);
         }
+#pragma unroll
+        for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
+            for (size_t r = 0; r < NUM_READS; r++) {
+                bitwise_lookup.add_range(
+                    (record.rs_vals[r] >> (RV64_CELL_BITS * i)) & RV64_CELL_MASK,
+                    (record.rs_vals[r] >> (RV64_CELL_BITS * (i + 1))) & RV64_CELL_MASK
+                );
+            }
+            bitwise_lookup.add_range(
+                (record.rd_val >> (RV64_CELL_BITS * i)) & RV64_CELL_MASK,
+                (record.rd_val >> (RV64_CELL_BITS * (i + 1))) & RV64_CELL_MASK
+            );
+        }
 
         uint32_t timestamp =
             record.from_timestamp + NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;
 
         for (int i = BLOCKS_PER_WRITE - 1; i >= 0; i--) {
             timestamp--;
-            COL_WRITE_ARRAY(row, Cols, writes_aux[i].prev_data, record.writes_aux[i].prev_data);
+            Fp packed_prev[BLOCK_FE_WIDTH];
+            pack_u8_block_bytes(packed_prev, record.writes_aux[i].prev_data);
+            COL_WRITE_ARRAY(row, Cols, writes_aux[i].prev_data, packed_prev);
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Cols, writes_aux[i])),
                 record.writes_aux[i].prev_timestamp,

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::{AddressSpaceHostLayout, MemoryConfig, ADDR_SPACE_OFFSET, DEFAULT_BLOCK_SIZE},
+    arch::{AddressSpaceHostLayout, MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     system::{
-        memory::{persistent::BLOCKS_PER_CHUNK, AddressMap},
+        memory::{persistent::BLOCKS_PER_LEAF, AddressMap},
         TouchedMemory,
     },
 };
@@ -26,12 +26,11 @@ use super::{
 use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 
 // The CUDA merge kernel in `inventory.cu` is hardcoded to a 2-way merge of
-// `<IN_BLOCK_SIZE=4, 1>` records into `<OUT_BLOCK_SIZE=8, 2>` records, so only two
-// (DEFAULT_BLOCK_SIZE, DIGEST_WIDTH) shapes are currently supported: the equal case (no merge) and
-// (4, 8) (the hardcoded merge).
+// `<IN_BLOCK_SIZE=4, 1>` records into `<OUT_BLOCK_SIZE=8, 2>` records, so the only
+// supported `(BLOCK_FE_WIDTH, DIGEST_WIDTH)` shape is `(4, 8)`.
 const _: () = assert!(
-    DEFAULT_BLOCK_SIZE == DIGEST_WIDTH || (DEFAULT_BLOCK_SIZE == 4 && DIGEST_WIDTH == 8),
-    "CUDA memory inventory only supports DEFAULT_BLOCK_SIZE == DIGEST_WIDTH or (DEFAULT_BLOCK_SIZE, DIGEST_WIDTH) == (4, 8)"
+    BLOCK_FE_WIDTH == 4 && DIGEST_WIDTH == 8,
+    "CUDA memory inventory only supports (BLOCK_FE_WIDTH, DIGEST_WIDTH) == (4, 8)"
 );
 
 pub struct MemoryInventoryGPU {
@@ -170,46 +169,9 @@ impl MemoryInventoryGPU {
 
             self.boundary.finalize_records::<DIGEST_WIDTH>(Vec::new());
             0
-        } else if DEFAULT_BLOCK_SIZE == DIGEST_WIDTH {
-            // TODO: remove this fast path once the u16 cell switch restores
-            // `DEFAULT_BLOCK_SIZE < DIGEST_WIDTH` (and thus `BLOCKS_PER_CHUNK > 1`). Until then,
-            // the merge kernel in `inventory.cu` hardcodes a 2-way merge (`<4,1> → <8,2>`), so
-            // when `DEFAULT_BLOCK_SIZE == DIGEST_WIDTH` we bypass it: each touched block is
-            // already a full chunk, so no merge is needed.
-            // `partition` is already sorted by (addr_space, ptr) — see `GuestMemory::finalize`
-            // in system/memory/online.rs.
-            let records: Vec<MemoryInventoryRecord<DIGEST_WIDTH, 1>> = partition
-                .iter()
-                .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
-                    address_space: addr_space,
-                    ptr,
-                    timestamps: [ts_values.timestamp],
-                    values: ts_values.values.map(Self::field_to_raw_u32),
-                })
-                .collect();
-
-            let d_records = records
-                .to_device_on(&self.device_ctx)
-                .unwrap()
-                .as_buffer::<u32>();
-
-            self.boundary
-                .finalize_records_device::<DIGEST_WIDTH>(d_records, records.len());
-
-            // `MemoryInventoryRecord<DIGEST_WIDTH, 1>` has the same layout as
-            // `MemoryMerkleRecord`, so reinterpret `records` directly.
-            let merkle_words: &[u32] = unsafe {
-                std::slice::from_raw_parts(
-                    records.as_ptr() as *const u32,
-                    records.len() * MERKLE_TOUCHED_BLOCK_WIDTH,
-                )
-            };
-            self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
-            records.len()
-        } else if DEFAULT_BLOCK_SIZE == 4 && DIGEST_WIDTH == 8 {
-            // Merge DEFAULT_BLOCK_SIZE-sized input blocks into DIGEST_WIDTH-sized chunks via the
-            // hardcoded `<4,1> → <8,2>` kernel in `inventory.cu`.
-            let in_records: Vec<MemoryInventoryRecord<DEFAULT_BLOCK_SIZE, 1>> = partition
+        } else {
+            // `inventory.cu` merges 4-cell block records into 8-cell leaf records.
+            let in_records: Vec<MemoryInventoryRecord<BLOCK_FE_WIDTH, 1>> = partition
                 .iter()
                 .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
                     address_space: addr_space,
@@ -220,7 +182,7 @@ impl MemoryInventoryGPU {
                 .collect();
             let in_num_records = in_records.len();
             let out_words = in_num_records
-                * (std::mem::size_of::<MemoryInventoryRecord<DIGEST_WIDTH, BLOCKS_PER_CHUNK>>()
+                * (std::mem::size_of::<MemoryInventoryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF>>()
                     / std::mem::size_of::<u32>());
             let d_in_records = in_records
                 .to_device_on(&self.device_ctx)
@@ -280,16 +242,16 @@ impl MemoryInventoryGPU {
                 .records()
                 .to_host_on(&self.device_ctx)
                 .unwrap();
-            let record_words = 2 + BLOCKS_PER_CHUNK + DIGEST_WIDTH;
+            let record_words = 2 + BLOCKS_PER_LEAF + DIGEST_WIDTH;
             let mut merkle_records = Vec::with_capacity(out_num_records);
             for i in 0..out_num_records {
                 let base = i * record_words;
                 let mut values = [0u32; DIGEST_WIDTH];
                 values.copy_from_slice(
                     &out_records
-                        [base + 2 + BLOCKS_PER_CHUNK..base + 2 + BLOCKS_PER_CHUNK + DIGEST_WIDTH],
+                        [base + 2 + BLOCKS_PER_LEAF..base + 2 + BLOCKS_PER_LEAF + DIGEST_WIDTH],
                 );
-                let timestamp = *out_records[base + 2..base + 2 + BLOCKS_PER_CHUNK]
+                let timestamp = *out_records[base + 2..base + 2 + BLOCKS_PER_LEAF]
                     .iter()
                     .max()
                     .unwrap();
@@ -309,9 +271,6 @@ impl MemoryInventoryGPU {
             };
             self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
             out_num_records
-        } else {
-            // Excluded by the module-level const assert on (DEFAULT_BLOCK_SIZE, DIGEST_WIDTH).
-            unreachable!()
         };
 
         let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
@@ -362,9 +321,12 @@ mod tests {
     use std::sync::Arc;
 
     use openvm_circuit::{
-        arch::{vm_poseidon2_config, MemoryConfig},
+        arch::{vm_poseidon2_config, MemoryConfig, MEMORY_BLOCK_BYTES},
         system::{
-            memory::{merkle::MerkleTree, online::GuestMemory, AddressMap, TimestampedValues},
+            memory::{
+                merkle::MerkleTree, offline_checker::pack_u8_block_value, online::GuestMemory,
+                ptr_bits_from_address_height, AddressMap, TimestampedValues,
+            },
             poseidon2::Poseidon2PeripheryChip,
         },
     };
@@ -383,12 +345,16 @@ mod tests {
         for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
             addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
         }
-        let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17);
+        let mem_config = MemoryConfig::new(2, addr_spaces, ptr_bits_from_address_height(1), 29, 17);
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
-            memory.write::<u8, DIGEST_WIDTH>(RV64_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
-            memory.write::<u8, { DIGEST_WIDTH / 2 }>(RV64_MEMORY_AS, 0, [9, 10, 11, 12]);
+            memory.write_bytes::<MEMORY_BLOCK_BYTES>(RV64_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
+            memory.write_bytes::<MEMORY_BLOCK_BYTES>(
+                RV64_MEMORY_AS,
+                0,
+                [9, 10, 11, 12, 0, 0, 0, 0],
+            );
         }
 
         let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
@@ -431,37 +397,37 @@ mod tests {
         assert_eq!(expected_root, gpu_root);
     }
 
-    // TODO: pre-rv64 this test put two `DEFAULT_BLOCK_SIZE == 4` touched blocks at ptrs 0 and 4,
-    // which both fell in Merkle chunk 0 and exercised the 2-way merge path in `inventory.cu`. On
-    // rv64 `DEFAULT_BLOCK_SIZE == CHUNK == 8`, so two blocks cannot share a chunk and the test
-    // now covers only the "two independent full chunks" case. Restore merge-path coverage when
-    // the u16 cell switch brings `DEFAULT_BLOCK_SIZE` back to 4.
+    // Touched-memory coverage for the merge path: writes two MEMORY_BLOCK_BYTES
+    // blocks into RV64_MEMORY_AS (u16-celled, so each block is
+    // BLOCK_FE_WIDTH = 4 u16 cells = MEMORY_BLOCK_BYTES = 8 bytes) and routes
+    // them through `inventory.cu`'s `<4, 1> -> <8, 2>` merge kernel.
     #[test]
     fn test_touched_memory_updates_memory_address_space() {
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
         for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
+            // num_cells is in u16 cells; allocate 2 * DIGEST_WIDTH = 16 cells.
             addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
         }
-        let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17);
+        let mem_config = MemoryConfig::new(2, addr_spaces, ptr_bits_from_address_height(1), 29, 17);
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
-            memory.write::<u8, DIGEST_WIDTH>(RV64_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
-            memory.write::<u8, { DIGEST_WIDTH / 2 }>(RV64_MEMORY_AS, 0, [9, 10, 11, 12]);
+            memory.write_bytes::<MEMORY_BLOCK_BYTES>(RV64_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
+            memory.write_bytes::<MEMORY_BLOCK_BYTES>(
+                RV64_MEMORY_AS,
+                0,
+                [9, 10, 11, 12, 0, 0, 0, 0],
+            );
         }
 
         let mut final_memory = memory.clone();
         let touched_bytes = [101u8, 102, 103, 104, 105, 106, 107, 108];
         let touched_bytes_late = [111u8, 112, 113, 114, 115, 116, 117, 118];
         unsafe {
-            final_memory.write::<u8, { crate::arch::DEFAULT_BLOCK_SIZE }>(
+            final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(RV64_MEMORY_AS, 0, touched_bytes);
+            final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(
                 RV64_MEMORY_AS,
-                0,
-                touched_bytes,
-            );
-            final_memory.write::<u8, { crate::arch::DEFAULT_BLOCK_SIZE }>(
-                RV64_MEMORY_AS,
-                crate::arch::DEFAULT_BLOCK_SIZE as u32,
+                MEMORY_BLOCK_BYTES as u32,
                 touched_bytes_late,
             );
         }
@@ -488,14 +454,14 @@ mod tests {
                 (RV64_MEMORY_AS, 0),
                 TimestampedValues {
                     timestamp: 1,
-                    values: touched_bytes.map(F::from_u8),
+                    values: pack_u8_block_value(&touched_bytes.map(F::from_u8)),
                 },
             ),
             (
-                (RV64_MEMORY_AS, crate::arch::DEFAULT_BLOCK_SIZE as u32),
+                (RV64_MEMORY_AS, BLOCK_FE_WIDTH as u32),
                 TimestampedValues {
                     timestamp: 3,
-                    values: touched_bytes_late.map(F::from_u8),
+                    values: pack_u8_block_value(&touched_bytes_late.map(F::from_u8)),
                 },
             ),
         ];

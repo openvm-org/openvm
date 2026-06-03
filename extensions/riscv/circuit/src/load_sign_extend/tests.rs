@@ -137,7 +137,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let b = gen_pointer(rng, 8);
 
     let shift_amount = ptr_val % 8;
-    tester.write(1, b, rs1.map(F::from_u8));
+    tester.write_bytes(1, b, rs1.map(F::from_u8));
 
     let some_prev_data: [F; RV64_REGISTER_NUM_LIMBS] = if a != 0 {
         array::from_fn(|_| F::from_u8(rng.random()))
@@ -147,8 +147,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let read_data: [u8; RV64_REGISTER_NUM_LIMBS] =
         read_data.unwrap_or(array::from_fn(|_| rng.random()));
 
-    tester.write(1, a, some_prev_data);
-    tester.write(
+    tester.write_bytes(1, a, some_prev_data);
+    tester.write_bytes(
         2,
         (ptr_val - shift_amount) as usize,
         read_data.map(F::from_u8),
@@ -177,9 +177,9 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         shift_amount as usize,
     );
     if a != 0 {
-        assert_eq!(write_data.map(F::from_u8), tester.read::<8>(1, a));
+        assert_eq!(write_data.map(F::from_u8), tester.read_bytes::<8>(1, a));
     } else {
-        assert_eq!([F::ZERO; 8], tester.read::<8>(1, a));
+        assert_eq!([F::ZERO; 8], tester.read_bytes::<8>(1, a));
     }
 }
 

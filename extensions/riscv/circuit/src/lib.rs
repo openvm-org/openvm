@@ -7,7 +7,10 @@ use openvm_circuit::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
         VmBuilder, VmChipComplex, VmField, VmProverExtension,
     },
-    system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
+    system::{
+        memory::merkle::public_values::public_values_cells_from_bytes, SystemChipInventory,
+        SystemCpuBuilder, SystemExecutor,
+    },
 };
 use openvm_circuit_derive::{Executor, MeteredExecutor, PreflightExecutor, VmConfig};
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
@@ -118,8 +121,9 @@ impl Default for Rv64IConfig {
 }
 
 impl Rv64IConfig {
-    pub fn with_public_values(public_values: usize) -> Self {
-        let system = SystemConfig::default().with_public_values(public_values);
+    pub fn with_public_values_bytes(num_public_values_bytes: usize) -> Self {
+        let system = SystemConfig::default()
+            .with_public_values(public_values_cells_from_bytes(num_public_values_bytes));
         Self {
             system,
             base: Default::default(),
@@ -130,9 +134,9 @@ impl Rv64IConfig {
 }
 
 impl Rv64ImConfig {
-    pub fn with_public_values(public_values: usize) -> Self {
+    pub fn with_public_values_bytes(num_public_values_bytes: usize) -> Self {
         Self {
-            rv64i: Rv64IConfig::with_public_values(public_values),
+            rv64i: Rv64IConfig::with_public_values_bytes(num_public_values_bytes),
             mul: Default::default(),
         }
     }
