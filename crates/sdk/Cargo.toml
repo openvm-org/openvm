@@ -48,6 +48,9 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 metrics = { workspace = true, optional = true }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [features]
 default = ["parallel", "jemalloc"]
 root-prover = [
