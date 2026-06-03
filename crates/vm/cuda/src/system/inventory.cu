@@ -1,5 +1,7 @@
 #include "launcher.cuh"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
+#include "system/memory/params.cuh"
 #include <cub/device/device_scan.cuh>
 #include <cstddef>
 #include <cstdint>
@@ -8,22 +10,20 @@
 /// Matches the Rust-side repr(C) `PersistentBoundaryRecord` layout.
 ///
 /// Note on uint32_t encoding: only `values` stores Montgomery-encoded BabyBear
-/// field elements (Fp::asRaw()). All other fields (`address_space`, `ptr`,
-/// `timestamps`) are plain integers.
+/// field elements (Fp::asRaw()). All other fields (`address_space`,
+/// `ptr`, `timestamps`) are plain integers.
 template <size_t CHUNK, size_t BLOCKS> struct MemoryInventoryRecord {
-    uint32_t address_space; // plain integer
-    uint32_t ptr;           // plain integer (cell-level pointer)
+    uint32_t address_space;      // plain integer
+    uint32_t ptr;                // plain integer (address-space pointer)
     uint32_t timestamps[BLOCKS]; // plain integers
     uint32_t values[CHUNK];      // Montgomery-encoded Fp values (Fp::asRaw())
 };
 
-inline constexpr uint32_t IN_BLOCK_SIZE = 4;
-inline constexpr uint32_t OUT_BLOCK_SIZE = 8;
-// TODO better address space handling
-inline constexpr uint32_t DEFERRAL_AS = 4;
-
-using InRec = MemoryInventoryRecord<IN_BLOCK_SIZE, 1>;
-using OutRec = MemoryInventoryRecord<OUT_BLOCK_SIZE, 2>;
+// Input records are one memory-bus message (`BLOCK_FE_WIDTH` cells, one
+// timestamp). The merge kernel groups `BLOCKS_PER_LEAF` of them per merkle
+// leaf (= `DIGEST_WIDTH` cells, `BLOCKS_PER_LEAF` timestamps).
+using InRec = MemoryInventoryRecord<BLOCK_FE_WIDTH, 1>;
+using OutRec = MemoryInventoryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF>;
 
 __device__ inline bool same_output_block(
     InRec const *in,
@@ -35,43 +35,46 @@ __device__ inline bool same_output_block(
     if (lhs_as != rhs_as) {
         return false;
     }
-    return (in[lhs_idx].ptr / OUT_BLOCK_SIZE) == (in[rhs_idx].ptr / OUT_BLOCK_SIZE);
+    return (in[lhs_idx].ptr / DIGEST_WIDTH) == (in[rhs_idx].ptr / DIGEST_WIDTH);
 }
 
-/// Read initial memory values for a chunk and convert them to Montgomery-encoded
+/// Read initial memory values for a Merkle leaf and convert them to Montgomery-encoded
 /// field elements. The output values must be in Montgomery form because they are
 /// stored directly into MemoryInventoryRecord.values, which boundary.cu later
 /// reads via FpArray::from_raw_array (a raw copy that assumes Montgomery encoding).
-/// DEFERRAL_AS stores field elements (4 bytes per cell, already Montgomery-encoded).
-/// Other address spaces store u8 cells (1 byte per cell).
-__device__ inline void read_initial_chunk(
+///
+/// `ptr` is an address-space pointer:
+/// - DEFERRAL_AS: pointer into F cells; initial memory is already raw Montgomery Fp.
+/// - Non-deferral ASes: pointer into u16 cells; initial memory is little-endian bytes.
+__device__ inline void read_initial_leaf(
     uint32_t *out_values, // Montgomery-encoded Fp values
     uint8_t const *const *initial_mem,
     uint32_t address_space,
-    uint32_t chunk_ptr
+    uint32_t ptr
 ) {
     uint32_t addr_space_idx = address_space - 1;
     uint8_t const *mem = initial_mem[addr_space_idx];
     if (!mem) {
         #pragma unroll
-        for (int i = 0; i < OUT_BLOCK_SIZE; ++i) {
+        for (int i = 0; i < DIGEST_WIDTH; ++i) {
             out_values[i] = 0;
         }
         return;
     }
     if (address_space == DEFERRAL_AS) {
-        // F-type cells: 4 bytes per cell, already raw Montgomery u32
-        uint32_t const *cells = reinterpret_cast<uint32_t const *>(mem) + chunk_ptr;
+        // DEFERRAL_AS stores F cells directly, already raw Montgomery u32.
+        uint32_t const *cells = reinterpret_cast<uint32_t const *>(mem) + ptr;
         #pragma unroll
-        for (int i = 0; i < OUT_BLOCK_SIZE; ++i) {
+        for (int i = 0; i < DIGEST_WIDTH; ++i) {
             out_values[i] = cells[i];
         }
     } else {
-        // U8 cells: 1 byte per cell, convert to Montgomery form
-        size_t byte_offset = static_cast<size_t>(chunk_ptr);
+        // u16 cells, little-endian. Each cell occupies `U16_CELL_SIZE` bytes at
+        // byte offset `U16_CELL_SIZE * (ptr + i)`.
+        size_t base = static_cast<size_t>(ptr) * U16_CELL_SIZE;
         #pragma unroll
-        for (int i = 0; i < OUT_BLOCK_SIZE; ++i) {
-            out_values[i] = Fp(mem[byte_offset + i]).asRaw();
+        for (int i = 0; i < DIGEST_WIDTH; ++i) {
+            out_values[i] = Fp(u16_from_bytes_le(mem + base + U16_CELL_SIZE * i)).asRaw();
         }
     }
 }
@@ -95,28 +98,29 @@ __global__ void cukernel_build_candidates(
 
     OutRec rec{};
     rec.address_space = in[row_idx].address_space;
-    uint32_t chunk_ptr = (in[row_idx].ptr / OUT_BLOCK_SIZE) * OUT_BLOCK_SIZE;
-    rec.ptr = chunk_ptr;
-    rec.timestamps[0] = 0;
-    rec.timestamps[1] = 0;
+    rec.ptr = (in[row_idx].ptr / DIGEST_WIDTH) * DIGEST_WIDTH;
+    #pragma unroll
+    for (size_t i = 0; i < BLOCKS_PER_LEAF; ++i) {
+        rec.timestamps[i] = 0;
+    }
 
     // Fill all values with Montgomery-encoded initial memory
-    read_initial_chunk(rec.values, initial_mem, rec.address_space, chunk_ptr);
+    read_initial_leaf(rec.values, initial_mem, rec.address_space, rec.ptr);
 
     // Overwrite touched block's values (already Montgomery-encoded in input records)
-    uint32_t block_idx = (in[row_idx].ptr % OUT_BLOCK_SIZE) / IN_BLOCK_SIZE;
+    uint32_t block_idx = (in[row_idx].ptr % DIGEST_WIDTH) / BLOCK_FE_WIDTH;
     #pragma unroll
-    for (int i = 0; i < IN_BLOCK_SIZE; ++i) {
-        rec.values[block_idx * IN_BLOCK_SIZE + i] = in[row_idx].values[i];
+    for (int i = 0; i < BLOCK_FE_WIDTH; ++i) {
+        rec.values[block_idx * BLOCK_FE_WIDTH + i] = in[row_idx].values[i];
     }
     rec.timestamps[block_idx] = in[row_idx].timestamps[0];
 
     // If two input records fall in the same chunk, overwrite the second block too
     if (row_idx + 1 < in_num_records && same_output_block(in, row_idx, row_idx + 1)) {
-        uint32_t block_idx2 = (in[row_idx + 1].ptr % OUT_BLOCK_SIZE) / IN_BLOCK_SIZE;
+        uint32_t block_idx2 = (in[row_idx + 1].ptr % DIGEST_WIDTH) / BLOCK_FE_WIDTH;
         #pragma unroll
-        for (int i = 0; i < IN_BLOCK_SIZE; ++i) {
-            rec.values[block_idx2 * IN_BLOCK_SIZE + i] = in[row_idx + 1].values[i];
+        for (int i = 0; i < BLOCK_FE_WIDTH; ++i) {
+            rec.values[block_idx2 * BLOCK_FE_WIDTH + i] = in[row_idx + 1].values[i];
         }
         rec.timestamps[block_idx2] = in[row_idx + 1].timestamps[0];
     }

@@ -31,7 +31,7 @@ use openvm_riscv_adapters::{
     Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
     Rv64VecHeapBranchAdapterAir, Rv64VecHeapBranchAdapterExecutor, Rv64VecHeapBranchAdapterFiller,
 };
-use openvm_riscv_circuit::Rv64ImCpuProverExt;
+use openvm_riscv_circuit::{adapters::rv64_byte_ptr_bits_from_openvm_ptr_bits, Rv64ImCpuProverExt};
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::VmRvrExtension;
@@ -111,7 +111,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Int256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
 
         let alu = Rv64BaseAlu256Executor::new(
             AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(pointer_max_bits)),
@@ -173,7 +174,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker = inventory.range_checker().bus;
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
 
         let bitwise_lu = {
             // A trick to get around Rust's borrow rules
@@ -235,7 +237,11 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
                 bitwise_lu,
                 pointer_max_bits,
             )),
-            BranchEqualCoreAir::new(Rv64BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+            BranchEqualCoreAir::new(
+                bitwise_lu,
+                Rv64BranchEqual256Opcode::CLASS_OFFSET,
+                DEFAULT_PC_STEP,
+            ),
         );
         inventory.add_air(beq);
 
@@ -257,7 +263,11 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
                 bitwise_lu,
                 pointer_max_bits,
             )),
-            MultiplicationCoreAir::new(range_tuple_checker, Rv64Mul256Opcode::CLASS_OFFSET),
+            MultiplicationCoreAir::new(
+                range_tuple_checker,
+                bitwise_lu,
+                Rv64Mul256Opcode::CLASS_OFFSET,
+            ),
         );
         inventory.add_air(mult);
 
@@ -295,7 +305,9 @@ where
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let pointer_max_bits = inventory.airs().config().memory_config.pointer_max_bits;
+        let pointer_max_bits = rv64_byte_ptr_bits_from_openvm_ptr_bits(
+            inventory.airs().config().memory_config.pointer_max_bits,
+        );
 
         let bitwise_lu = {
             let existing_chip = inventory
@@ -354,6 +366,7 @@ where
         let beq = Rv64BranchEqual256Chip::new(
             BranchEqualFiller::new(
                 Rv64VecHeapBranchAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                bitwise_lu.clone(),
                 Rv64BranchEqual256Opcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
@@ -377,6 +390,7 @@ where
             MultiplicationFiller::new(
                 Rv64VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                 range_tuple_checker.clone(),
+                bitwise_lu.clone(),
                 Rv64Mul256Opcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),

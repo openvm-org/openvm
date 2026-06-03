@@ -81,7 +81,7 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A> AotExecutor<F> for Rv32AuipcExecutor<A>
+impl<F, A> AotExecutor<F> for Rv64AuipcExecutor<A>
 where
     F: PrimeField32,
 {
@@ -186,7 +186,7 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A> AotMeteredExecutor<F> for Rv32AuipcExecutor<A>
+impl<F, A> AotMeteredExecutor<F> for Rv64AuipcExecutor<A>
 where
     F: PrimeField32,
 {
@@ -213,7 +213,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 ) {
     let pc = exec_state.pc();
     let rd = run_auipc(pc, pre_compute.imm);
-    exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
 
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }

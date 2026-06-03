@@ -304,11 +304,17 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: DivRemWO
     pre_compute: &DivRemWPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1: [u8; RV64_WORD_NUM_LIMBS] = exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2: [u8; RV64_WORD_NUM_LIMBS] = exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32);
+    let rs1: [u8; RV64_WORD_NUM_LIMBS] =
+        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs2: [u8; RV64_WORD_NUM_LIMBS] =
+        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.c as u32);
     let result_word = <OP as DivRemWOp>::compute(rs1, rs2);
     let rd = (u32::from_le_bytes(result_word) as i32 as i64 as u64).to_le_bytes();
-    exec_state.vm_write::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write_bytes::<RV64_REGISTER_NUM_LIMBS>(
+        RV64_REGISTER_AS,
+        pre_compute.a as u32,
+        &rd,
+    );
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }

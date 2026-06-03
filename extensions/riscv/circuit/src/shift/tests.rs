@@ -147,7 +147,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let (a, _, _) = run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode, &b, &c);
     assert_eq!(
         a.map(F::from_u8),
-        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd)
+        tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd)
     )
 }
 

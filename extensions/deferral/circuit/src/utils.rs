@@ -1,7 +1,7 @@
 use std::array::from_fn;
 
 use itertools::Itertools;
-use openvm_circuit::arch::DEFAULT_BLOCK_SIZE;
+use openvm_circuit::arch::{BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES};
 use openvm_instructions::riscv::RV64_CELL_BITS;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
@@ -10,35 +10,88 @@ pub const F_NUM_BYTES: usize = 4;
 pub const COMMIT_NUM_BYTES: usize = DIGEST_SIZE * F_NUM_BYTES;
 pub const OUTPUT_LEN_NUM_BYTES: usize = 8;
 pub const OUTPUT_TOTAL_BYTES: usize = OUTPUT_LEN_NUM_BYTES + COMMIT_NUM_BYTES;
-pub const DIGEST_MEMORY_OPS: usize = num_memory_ops(DIGEST_SIZE);
-pub const COMMIT_MEMORY_OPS: usize = num_memory_ops(COMMIT_NUM_BYTES);
-pub const OUTPUT_TOTAL_MEMORY_OPS: usize = num_memory_ops(OUTPUT_TOTAL_BYTES);
+/// Number of memory-bus messages for a `DIGEST_SIZE`-byte heap chunk.
+pub const DIGEST_BYTE_MEMORY_OPS: usize = num_byte_memory_ops(DIGEST_SIZE);
+/// Number of memory-bus messages for a `DIGEST_SIZE`-cell DEFERRAL_AS chunk.
+pub const DIGEST_F_MEMORY_OPS: usize = num_f_memory_ops(DIGEST_SIZE);
+pub const COMMIT_MEMORY_OPS: usize = num_byte_memory_ops(COMMIT_NUM_BYTES);
+pub const OUTPUT_TOTAL_MEMORY_OPS: usize = num_byte_memory_ops(OUTPUT_TOTAL_BYTES);
 
 #[inline(always)]
-pub const fn num_memory_ops(total_cells: usize) -> usize {
-    assert!(total_cells.is_multiple_of(DEFAULT_BLOCK_SIZE));
-    total_cells / DEFAULT_BLOCK_SIZE
+pub const fn num_byte_memory_ops(total_bytes: usize) -> usize {
+    assert!(total_bytes.is_multiple_of(MEMORY_BLOCK_BYTES));
+    total_bytes / MEMORY_BLOCK_BYTES
 }
 
-pub fn split_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
-    data: [T; TOTAL_CELLS],
-) -> [[T; DEFAULT_BLOCK_SIZE]; NUM_OPS] {
-    assert_eq!(TOTAL_CELLS, NUM_OPS * DEFAULT_BLOCK_SIZE);
+#[inline(always)]
+pub const fn num_f_memory_ops(total_cells: usize) -> usize {
+    assert!(total_cells.is_multiple_of(BLOCK_FE_WIDTH));
+    total_cells / BLOCK_FE_WIDTH
+}
+
+/// Split heap byte data into memory-bus chunks.
+pub fn split_byte_memory_ops<T, const TOTAL_BYTES: usize, const NUM_OPS: usize>(
+    data: [T; TOTAL_BYTES],
+) -> [[T; MEMORY_BLOCK_BYTES]; NUM_OPS] {
+    const {
+        assert!(
+            TOTAL_BYTES == NUM_OPS * MEMORY_BLOCK_BYTES,
+            "TOTAL_BYTES must equal NUM_OPS * MEMORY_BLOCK_BYTES"
+        )
+    };
     let mut it = data.into_iter();
     from_fn(|_| from_fn(|_| it.next().unwrap()))
 }
 
-pub fn join_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
-    chunks: [[T; DEFAULT_BLOCK_SIZE]; NUM_OPS],
-) -> [T; TOTAL_CELLS] {
-    assert_eq!(TOTAL_CELLS, NUM_OPS * DEFAULT_BLOCK_SIZE);
+pub fn join_byte_memory_ops<T, const TOTAL_BYTES: usize, const NUM_OPS: usize>(
+    chunks: [[T; MEMORY_BLOCK_BYTES]; NUM_OPS],
+) -> [T; TOTAL_BYTES] {
+    const {
+        assert!(
+            TOTAL_BYTES == NUM_OPS * MEMORY_BLOCK_BYTES,
+            "TOTAL_BYTES must equal NUM_OPS * MEMORY_BLOCK_BYTES"
+        )
+    };
     chunks.into_iter().flatten().collect_array().unwrap()
 }
 
-pub fn memory_op_chunk<T: Clone>(data: &[T], chunk_idx: usize) -> [T; DEFAULT_BLOCK_SIZE] {
-    debug_assert!(data.len().is_multiple_of(DEFAULT_BLOCK_SIZE));
-    let start = chunk_idx * DEFAULT_BLOCK_SIZE;
-    debug_assert!(start + DEFAULT_BLOCK_SIZE <= data.len());
+pub fn byte_memory_op_chunk<T: Clone>(data: &[T], chunk_idx: usize) -> [T; MEMORY_BLOCK_BYTES] {
+    debug_assert!(data.len().is_multiple_of(MEMORY_BLOCK_BYTES));
+    let start = chunk_idx * MEMORY_BLOCK_BYTES;
+    debug_assert!(start + MEMORY_BLOCK_BYTES <= data.len());
+    from_fn(|i| data[start + i].clone())
+}
+
+/// Split DEFERRAL_AS cell data into memory-bus chunks.
+pub fn split_f_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
+    data: [T; TOTAL_CELLS],
+) -> [[T; BLOCK_FE_WIDTH]; NUM_OPS] {
+    const {
+        assert!(
+            TOTAL_CELLS == NUM_OPS * BLOCK_FE_WIDTH,
+            "TOTAL_CELLS must equal NUM_OPS * BLOCK_FE_WIDTH"
+        )
+    };
+    let mut it = data.into_iter();
+    from_fn(|_| from_fn(|_| it.next().unwrap()))
+}
+
+pub fn join_f_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
+    chunks: [[T; BLOCK_FE_WIDTH]; NUM_OPS],
+) -> [T; TOTAL_CELLS] {
+    const {
+        assert!(
+            TOTAL_CELLS == NUM_OPS * BLOCK_FE_WIDTH,
+            "TOTAL_CELLS must equal NUM_OPS * BLOCK_FE_WIDTH"
+        )
+    };
+    chunks.into_iter().flatten().collect_array().unwrap()
+}
+
+pub fn f_memory_op_chunk<T: Clone>(data: &[T], chunk_idx: usize) -> [T; BLOCK_FE_WIDTH] {
+    debug_assert!(data.len().is_multiple_of(BLOCK_FE_WIDTH));
+    let start = chunk_idx * BLOCK_FE_WIDTH;
+    debug_assert!(start + BLOCK_FE_WIDTH <= data.len());
     from_fn(|i| data[start + i].clone())
 }
 

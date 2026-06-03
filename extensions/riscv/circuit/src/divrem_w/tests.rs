@@ -183,8 +183,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1_ptr, b.map(F::from_u32));
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2_ptr, c.map(F::from_u32));
+    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1_ptr, b.map(F::from_u32));
+    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2_ptr, c.map(F::from_u32));
 
     let b_word: [u32; RV64_WORD_NUM_LIMBS] = b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
     let c_word: [u32; RV64_WORD_NUM_LIMBS] = c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
@@ -212,7 +212,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     assert_eq!(
         expected.map(F::from_u8),
-        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd_ptr)
+        tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd_ptr)
     );
 }
 

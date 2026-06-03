@@ -20,8 +20,8 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use super::DeferralOutputExecutor;
 use crate::{
     utils::{
-        join_memory_ops, memory_op_chunk, split_output, DIGEST_MEMORY_OPS, OUTPUT_TOTAL_BYTES,
-        OUTPUT_TOTAL_MEMORY_OPS,
+        byte_memory_op_chunk, join_byte_memory_ops, split_output, DIGEST_BYTE_MEMORY_OPS,
+        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
     OUTPUT_AIR_REL_IDX, POSEIDON2_AIR_REL_IDX,
 };
@@ -155,12 +155,14 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &DeferralOutputPrecompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
-    let output_ptr = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.rd_ptr));
-    let input_ptr = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.rs_ptr));
-    let output_key_chunks: [[u8; DEFAULT_BLOCK_SIZE]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
-        exec_state.vm_read(RV64_MEMORY_AS, input_ptr + (i * DEFAULT_BLOCK_SIZE) as u32)
+    let output_ptr =
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rd_ptr));
+    let input_ptr =
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rs_ptr));
+    let output_key_chunks: [[u8; MEMORY_BLOCK_BYTES]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
+        exec_state.vm_read_bytes(RV64_MEMORY_AS, input_ptr + (i * MEMORY_BLOCK_BYTES) as u32)
     });
-    let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_memory_ops(output_key_chunks);
+    let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_byte_memory_ops(output_key_chunks);
     let (output_commit, output_len) = split_output(output_key);
 
     let output_len_val = rv64_bytes_to_u32(output_len) as usize;
@@ -177,11 +179,11 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
     for (row_idx, output_chunk) in output_raw.chunks_exact(DIGEST_SIZE).enumerate() {
         let row_output_ptr = output_ptr + (row_idx * DIGEST_SIZE) as u32;
-        for chunk_idx in 0..DIGEST_MEMORY_OPS {
-            exec_state.vm_write::<u8, DEFAULT_BLOCK_SIZE>(
+        for chunk_idx in 0..DIGEST_BYTE_MEMORY_OPS {
+            exec_state.vm_write_bytes::<MEMORY_BLOCK_BYTES>(
                 RV64_MEMORY_AS,
-                row_output_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
-                &memory_op_chunk(output_chunk, chunk_idx),
+                row_output_ptr + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
+                &byte_memory_op_chunk(output_chunk, chunk_idx),
             );
         }
     }

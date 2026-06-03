@@ -80,6 +80,8 @@ pub trait TestBuilder<F> {
 
     fn write<const N: usize>(&mut self, address_space: usize, pointer: usize, value: [F; N]);
     fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N];
+    fn write_bytes<const N: usize>(&mut self, address_space: usize, byte_ptr: usize, value: [F; N]);
+    fn read_bytes<const N: usize>(&mut self, address_space: usize, byte_ptr: usize) -> [F; N];
 
     fn write_usize<const N: usize>(
         &mut self,
@@ -88,6 +90,7 @@ pub trait TestBuilder<F> {
         value: [usize; N],
     );
 
+    /// Bit width for RISC-V byte pointers used by extension tests and adapter configs.
     fn address_bits(&self) -> usize;
 
     fn last_to_pc(&self) -> F;

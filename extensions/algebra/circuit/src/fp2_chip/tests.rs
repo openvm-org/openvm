@@ -8,7 +8,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, PreflightExecutor, DEFAULT_BLOCK_SIZE,
+    Arena, PreflightExecutor, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::{
     bigint::utils::secp256k1_coord_prime,
@@ -42,19 +42,15 @@ use crate::{
 const LIMB_BITS: usize = 8;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness<const BLOCKS: usize, const BLOCK_SIZE: usize> = TestChipHarness<
-    F,
-    Fp2Executor<BLOCKS, BLOCK_SIZE>,
-    Fp2Air<BLOCKS, BLOCK_SIZE>,
-    Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
->;
+type Harness<const BLOCKS: usize> =
+    TestChipHarness<F, Fp2Executor<BLOCKS>, Fp2Air<BLOCKS>, Fp2Chip<F, BLOCKS>>;
 
-fn create_addsub_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+fn create_addsub_test_chips<const BLOCKS: usize>(
     tester: &mut VmChipTestBuilder<F>,
     config: ExprBuilderConfig,
     offset: usize,
 ) -> (
-    Harness<BLOCKS, BLOCK_SIZE>,
+    Harness<BLOCKS>,
     (
         BitwiseOperationLookupAir<RV64_CELL_BITS>,
         SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
@@ -92,12 +88,12 @@ fn create_addsub_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
-fn create_muldiv_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+fn create_muldiv_test_chips<const BLOCKS: usize>(
     tester: &mut VmChipTestBuilder<F>,
     config: ExprBuilderConfig,
     offset: usize,
 ) -> (
-    Harness<BLOCKS, BLOCK_SIZE>,
+    Harness<BLOCKS>,
     (
         BitwiseOperationLookupAir<RV64_CELL_BITS>,
         SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
@@ -136,9 +132,9 @@ fn create_muldiv_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize, RA>(
+fn set_and_execute_fp2<const BLOCKS: usize, const NUM_LIMBS: usize, RA>(
     tester: &mut impl TestBuilder<F>,
-    executor: &mut Fp2Executor<BLOCKS, BLOCK_SIZE>,
+    executor: &mut Fp2Executor<BLOCKS>,
     arena: &mut RA,
     rng: &mut StdRng,
     modulus: &BigUint,
@@ -147,7 +143,7 @@ fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_L
     offset: usize,
 ) where
     RA: Arena,
-    Fp2Executor<BLOCKS, BLOCK_SIZE>: PreflightExecutor<F, RA>,
+    Fp2Executor<BLOCKS>: PreflightExecutor<F, RA>,
 {
     let (a_c0, a_c1, b_c0, b_c1, op_local) = if is_setup {
         (
@@ -196,17 +192,17 @@ fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_L
     let b_base_addr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
     let result_base_addr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
 
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(
+    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
         ptr_as,
         rs1_ptr,
         (a_base_addr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(
+    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
         ptr_as,
         rs2_ptr,
         (b_base_addr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write::<RV64_REGISTER_NUM_LIMBS>(
+    tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(
         ptr_as,
         rd_ptr,
         (result_base_addr as u64).to_le_bytes().map(F::from_u8),
@@ -229,29 +225,29 @@ fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_L
         .map(F::from_u8)
         .collect();
 
-    for i in (0..NUM_LIMBS).step_by(BLOCK_SIZE) {
-        tester.write::<BLOCK_SIZE>(
+    for i in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
+        tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
             data_as,
             a_base_addr as usize + i,
-            a_c0_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            a_c0_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
         );
 
-        tester.write::<BLOCK_SIZE>(
+        tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
             data_as,
             (a_base_addr + NUM_LIMBS as u32) as usize + i,
-            a_c1_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            a_c1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
         );
 
-        tester.write::<BLOCK_SIZE>(
+        tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
             data_as,
             b_base_addr as usize + i,
-            b_c0_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            b_c0_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
         );
 
-        tester.write::<BLOCK_SIZE>(
+        tester.write_bytes::<{ MEMORY_BLOCK_BYTES }>(
             data_as,
             (b_base_addr + NUM_LIMBS as u32) as usize + i,
-            b_c1_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            b_c1_limbs[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap(),
         );
     }
 
@@ -267,54 +263,54 @@ fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_L
 }
 
 #[derive(new)]
-struct TestConfig<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize> {
+struct TestConfig<const BLOCKS: usize, const NUM_LIMBS: usize> {
     pub modulus: BigUint,
     pub is_addsub: bool,
     pub num_ops: usize,
 }
 
-#[test_case(TestConfig::<{FP2_BLOCKS_32}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {NUM_LIMBS_32}>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_32}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {NUM_LIMBS_32}>::new(
     secp256k1_coord_prime(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_32}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {NUM_LIMBS_32}>::new(
     BN254_MODULUS.clone(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_48}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_48}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_48}, {NUM_LIMBS_48}>::new(
     BLS12_381_MODULUS.clone(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_32}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {NUM_LIMBS_32}>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_32}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {NUM_LIMBS_32}>::new(
     secp256k1_coord_prime(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_32}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {NUM_LIMBS_32}>::new(
     BN254_MODULUS.clone(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<{FP2_BLOCKS_48}, {DEFAULT_BLOCK_SIZE}, {NUM_LIMBS_48}>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_48}, {NUM_LIMBS_48}>::new(
     BLS12_381_MODULUS.clone(),
     false,
     50,
 ))]
-fn run_test_with_config<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
-    test_config: TestConfig<BLOCKS, BLOCK_SIZE, NUM_LIMBS>,
+fn run_test_with_config<const BLOCKS: usize, const NUM_LIMBS: usize>(
+    test_config: TestConfig<BLOCKS, NUM_LIMBS>,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
@@ -327,13 +323,13 @@ fn run_test_with_config<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_
     let offset = Fp2Opcode::CLASS_OFFSET;
 
     let (mut harness, bitwise) = if test_config.is_addsub {
-        create_addsub_test_chips::<BLOCKS, BLOCK_SIZE>(&mut tester, config, offset)
+        create_addsub_test_chips::<BLOCKS>(&mut tester, config, offset)
     } else {
-        create_muldiv_test_chips::<BLOCKS, BLOCK_SIZE>(&mut tester, config, offset)
+        create_muldiv_test_chips::<BLOCKS>(&mut tester, config, offset)
     };
 
     for i in 0..test_config.num_ops {
-        set_and_execute_fp2::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_fp2::<BLOCKS, NUM_LIMBS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.arena,
@@ -370,19 +366,14 @@ mod cuda_tests {
     use super::*;
     use crate::extension::HybridFp2Chip;
 
-    pub type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize, T> = GpuTestChipHarness<
-        F,
-        Fp2Executor<BLOCKS, BLOCK_SIZE>,
-        Fp2Air<BLOCKS, BLOCK_SIZE>,
-        T,
-        Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
-    >;
+    pub type GpuHarness<const BLOCKS: usize, T> =
+        GpuTestChipHarness<F, Fp2Executor<BLOCKS>, Fp2Air<BLOCKS>, T, Fp2Chip<F, BLOCKS>>;
 
-    fn create_addsub_cuda_test_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    fn create_addsub_cuda_test_harness<const BLOCKS: usize>(
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
         offset: usize,
-    ) -> GpuHarness<BLOCKS, BLOCK_SIZE, HybridFp2Chip<F, BLOCKS, BLOCK_SIZE>> {
+    ) -> GpuHarness<BLOCKS, HybridFp2Chip<F, BLOCKS>> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
         let bitwise_bus = default_bitwise_lookup_bus();
@@ -425,11 +416,11 @@ mod cuda_tests {
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
-    fn create_muldiv_cuda_test_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    fn create_muldiv_cuda_test_harness<const BLOCKS: usize>(
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
         offset: usize,
-    ) -> GpuHarness<BLOCKS, BLOCK_SIZE, HybridFp2Chip<F, BLOCKS, BLOCK_SIZE>> {
+    ) -> GpuHarness<BLOCKS, HybridFp2Chip<F, BLOCKS>> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
         let bitwise_bus = default_bitwise_lookup_bus();
@@ -472,66 +463,65 @@ mod cuda_tests {
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
-    #[test_case(TestConfig::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, NUM_LIMBS_32>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     true,
     50),
-    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_32>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, NUM_LIMBS_32>::new(
     secp256k1_coord_prime(),
     true,
     50),
-    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_32>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, NUM_LIMBS_32>::new(
     BN254_MODULUS.clone(),
     true,
     50),
-    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_32>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_48, NUM_LIMBS_48>::new(
     BLS12_381_MODULUS.clone(),
     true,
     50),
-    create_addsub_cuda_test_harness::<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_48>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, NUM_LIMBS_32>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, NUM_LIMBS_32>::new(
     secp256k1_coord_prime(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, NUM_LIMBS_32>::new(
     BN254_MODULUS.clone(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32>
 )]
-    #[test_case(TestConfig::<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_48, NUM_LIMBS_48>::new(
     BLS12_381_MODULUS.clone(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_48>
 )]
     fn run_cuda_test_with_config<
         const BLOCKS: usize,
-        const BLOCK_SIZE: usize,
         const NUM_LIMBS: usize,
         C: Chip<DenseRecordArena, GpuBackend>,
     >(
-        test_config: TestConfig<BLOCKS, BLOCK_SIZE, NUM_LIMBS>,
+        test_config: TestConfig<BLOCKS, NUM_LIMBS>,
         create_cuda_test_harness: impl Fn(
             &GpuChipTestBuilder,
             ExprBuilderConfig,
             usize,
-        ) -> GpuHarness<BLOCKS, BLOCK_SIZE, C>,
+        ) -> GpuHarness<BLOCKS, C>,
     ) {
         use crate::AlgebraRecord;
 
@@ -549,7 +539,7 @@ mod cuda_tests {
 
         let mut harness = create_cuda_test_harness(&tester, config, offset);
         for i in 0..test_config.num_ops {
-            set_and_execute_fp2::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, DenseRecordArena>(
+            set_and_execute_fp2::<BLOCKS, NUM_LIMBS, DenseRecordArena>(
                 &mut tester,
                 &mut harness.executor,
                 &mut harness.dense_arena,
@@ -563,7 +553,7 @@ mod cuda_tests {
 
         harness
             .dense_arena
-            .get_record_seeker::<AlgebraRecord<2, BLOCKS, BLOCK_SIZE>, _>()
+            .get_record_seeker::<AlgebraRecord<2, BLOCKS>, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
                 harness.executor.get_record_layout::<F>(),

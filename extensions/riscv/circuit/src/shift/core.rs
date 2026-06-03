@@ -207,6 +207,16 @@ where
                 .eval(builder, is_valid.clone());
         }
 
+        // Memory bus checks only packed u16 values; these byte limbs need separate bounds.
+        for i in 0..(NUM_LIMBS / 2) {
+            self.bitwise_lookup_bus
+                .send_range(b[i * 2], b[i * 2 + 1])
+                .eval(builder, is_valid.clone());
+            self.bitwise_lookup_bus
+                .send_range(c[i * 2], c[i * 2 + 1])
+                .eval(builder, is_valid.clone());
+        }
+
         for carry in cols.bit_shift_carry {
             self.range_bus
                 .send(carry, bit_shift.clone())
@@ -368,6 +378,16 @@ where
             run_shift::<NUM_LIMBS, LIMB_BITS>(opcode, &record.b, &record.c);
 
         for pair in a.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
+        }
+
+        // AIR range-checks these byte limbs; add matching lookup counts.
+        for pair in record.b.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
+        }
+        for pair in record.c.chunks_exact(2) {
             self.bitwise_lookup_chip
                 .request_range(pair[0] as u32, pair[1] as u32);
         }

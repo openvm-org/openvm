@@ -108,6 +108,10 @@ __device__ __forceinline__ void run_write_data(
 }
 
 template <size_t NUM_CELLS> struct LoadStoreCore {
+    VariableRangeChecker range_checker;
+
+    __device__ LoadStoreCore(VariableRangeChecker range_checker)
+        : range_checker(range_checker) {}
 
     template <typename T> using Cols = LoadStoreCoreCols<T, NUM_CELLS>;
 
@@ -134,6 +138,11 @@ template <size_t NUM_CELLS> struct LoadStoreCore {
         );
         COL_WRITE_ARRAY(row, Cols, read_data, record.read_data);
         COL_WRITE_ARRAY(row, Cols, prev_data, record.prev_data);
+#pragma unroll
+        for (size_t i = 0; i < NUM_CELLS; i++) {
+            range_checker.add_count(record.read_data[i], 8);
+            range_checker.add_count(record.prev_data[i], 8);
+        }
 
         run_write_data(write_data, opcode, record.read_data, record.prev_data, shift);
         COL_WRITE_ARRAY(row, Cols, write_data, write_data);
@@ -173,7 +182,9 @@ __global__ void rv64_load_store_tracegen(
         );
         adapter.fill_trace_row(row, record.adapter);
 
-        auto core = LoadStoreCore<RV64_REGISTER_NUM_LIMBS>();
+        auto core = LoadStoreCore<RV64_REGISTER_NUM_LIMBS>(
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins)
+        );
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv64LoadStoreCols, core)), record.core);
     } else {
         row.fill_zero(0, sizeof(Rv64LoadStoreCols<uint8_t>));

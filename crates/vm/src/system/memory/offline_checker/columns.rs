@@ -1,5 +1,5 @@
-//! Defines auxiliary columns for memory operations: `MemoryReadAuxCols`,
-//! `MemoryReadWithImmediateAuxCols`, and `MemoryWriteAuxCols`.
+//! Defines auxiliary columns for memory operations: `MemoryReadAuxCols`
+//! and `MemoryWriteAuxCols`.
 
 use openvm_circuit_primitives::{
     is_less_than::LessThanAuxCols, StructReflection, StructReflectionHelper,
@@ -89,14 +89,6 @@ impl<F: PrimeField32> MemoryReadAuxCols<F> {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Debug, AlignedBorrow, StructReflection)]
-pub struct MemoryReadOrImmediateAuxCols<T> {
-    pub base: MemoryBaseAuxCols<T>,
-    pub is_immediate: T,
-    pub is_zero_aux: T,
-}
-
 impl<T, const N: usize> AsRef<MemoryReadAuxCols<T>> for MemoryWriteAuxCols<T, N> {
     fn as_ref(&self) -> &MemoryReadAuxCols<T> {
         // Safety:
@@ -115,12 +107,6 @@ impl<T, const N: usize> AsMut<MemoryBaseAuxCols<T>> for MemoryWriteAuxCols<T, N>
 }
 
 impl<T> AsMut<MemoryBaseAuxCols<T>> for MemoryReadAuxCols<T> {
-    fn as_mut(&mut self) -> &mut MemoryBaseAuxCols<T> {
-        &mut self.base
-    }
-}
-
-impl<T> AsMut<MemoryBaseAuxCols<T>> for MemoryReadOrImmediateAuxCols<T> {
     fn as_mut(&mut self) -> &mut MemoryBaseAuxCols<T> {
         &mut self.base
     }
