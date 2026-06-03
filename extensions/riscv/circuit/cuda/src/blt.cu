@@ -1,18 +1,20 @@
 #include "launcher.cuh"
 #include "primitives/buffer_view.cuh"
-#include "primitives/constants.h" // RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "primitives/constants.h"
 #include "riscv/adapters/branch.cuh" // Rv64BranchAdapterCols, Rv64BranchAdapterRecord, Rv64BranchAdapter
 #include "riscv/cores/blt.cuh"
+#include "system/memory/params.cuh" // BLOCK_FE_WIDTH
 
 using namespace riscv;
 
-// Concrete type aliases for 64-bit
-using Rv64BranchLessThanCoreRecord = BranchLessThanCoreRecord<RV64_REGISTER_NUM_LIMBS>;
-using Rv64BranchLessThanCore = BranchLessThanCore<RV64_REGISTER_NUM_LIMBS>;
+using Rv64BranchLessThanCoreRecord =
+    BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>;
+using Rv64BranchLessThanCore = BranchLessThanCore<BLOCK_FE_WIDTH, U16_BITS>;
 template <typename T>
-using Rv64BranchLessThanCoreCols = BranchLessThanCoreCols<T, RV64_REGISTER_NUM_LIMBS>;
+using Rv64BranchLessThanCoreCols =
+    BranchLessThanCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct BranchLessThanCols {
     Rv64BranchAdapterCols<T> adapter;
@@ -30,7 +32,6 @@ __global__ void blt_tracegen(
     DeviceBufferConstView<BranchLessThanRecord> records,
     uint32_t *rc_ptr,
     uint32_t rc_bins,
-    uint32_t *bw_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -42,7 +43,7 @@ __global__ void blt_tracegen(
         Rv64BranchAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full_record.adapter);
 
-        Rv64BranchLessThanCore core{BitwiseOperationLookup(bw_ptr)};
+        Rv64BranchLessThanCore core{VariableRangeChecker(rc_ptr, rc_bins)};
         core.fill_trace_row(row.slice_from(COL_INDEX(BranchLessThanCols, core)), full_record.core);
     } else {
         row.fill_zero(0, sizeof(BranchLessThanCols<uint8_t>));
@@ -56,7 +57,6 @@ extern "C" int _blt_tracegen(
     DeviceBufferConstView<BranchLessThanRecord> d_records,
     uint32_t *d_rc,
     uint32_t rc_bins,
-    uint32_t *d_bw,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -64,7 +64,7 @@ extern "C" int _blt_tracegen(
 
     auto [grid, block] = kernel_launch_params(height);
     blt_tracegen<<<grid, block, 0, stream>>>(
-        d_trace, height, d_records, d_rc, rc_bins, d_bw, timestamp_max_bits
+        d_trace, height, d_records, d_rc, rc_bins, timestamp_max_bits
     );
     return CHECK_KERNEL();
 }

@@ -11,8 +11,8 @@ use openvm_circuit::{
     },
     system::memory::{
         offline_checker::{
-            pack_u8_block, pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols,
-            MemoryReadAuxRecord, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
+            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+            MemoryWriteU16AuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -31,8 +31,9 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::RV64_REGISTER_NUM_LIMBS;
-use crate::adapters::{byte_ptr_to_u16_ptr, tracing_read, tracing_write};
+use crate::adapters::{
+    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_read_u16, tracing_write_u16,
+};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -66,8 +67,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
         SignedImmInstruction<AB::Expr>,
         1,
         1,
-        RV64_REGISTER_NUM_LIMBS,
-        RV64_REGISTER_NUM_LIMBS,
+        BLOCK_FE_WIDTH,
+        BLOCK_FE_WIDTH,
     >;
 
     fn eval(
@@ -98,7 +99,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
                     AB::F::from_u32(RV64_REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
                 ),
-                pack_u8_block::<AB>(&ctx.reads[0].clone()),
+                ctx.reads[0].clone(),
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
             )
@@ -110,7 +111,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
                     AB::F::from_u32(RV64_REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rd_ptr),
                 ),
-                pack_u8_block::<AB>(&ctx.writes[0].clone()),
+                ctx.writes[0].clone(),
                 timestamp_pp(),
                 &local_cols.rd_aux_cols,
             )
@@ -159,10 +160,10 @@ pub struct Rv64JalrAdapterRecord {
     pub rd_ptr: u32,
 
     pub reads_aux: MemoryReadAuxRecord,
-    pub writes_aux: MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
+    pub writes_aux: MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>,
 }
 
-// This adapter reads from [b:8]_d (rs1) and writes to [a:8]_d (rd)
+// This adapter reads from register [b]_d (rs1) and writes to register [a]_d (rd)
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64JalrAdapterExecutor;
 
@@ -174,8 +175,8 @@ where
     F: PrimeField32,
 {
     const WIDTH: usize = size_of::<Rv64JalrAdapterCols<u8>>();
-    type ReadData = [u8; RV64_REGISTER_NUM_LIMBS];
-    type WriteData = [u8; RV64_REGISTER_NUM_LIMBS];
+    type ReadData = [u16; BLOCK_FE_WIDTH];
+    type WriteData = [u16; BLOCK_FE_WIDTH];
     type RecordMut<'a> = &'a mut Rv64JalrAdapterRecord;
 
     #[inline(always)]
@@ -196,10 +197,10 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
 
         record.rs1_ptr = b.as_canonical_u32();
-        tracing_read(
+        tracing_read_u16(
             memory,
             RV64_REGISTER_AS,
-            b.as_canonical_u32(),
+            byte_ptr_to_u16_ptr_value(record.rs1_ptr),
             &mut record.reads_aux.prev_timestamp,
         )
     }
@@ -221,10 +222,10 @@ where
         if enabled.is_one() {
             record.rd_ptr = a.as_canonical_u32();
 
-            tracing_write(
+            tracing_write_u16(
                 memory,
                 RV64_REGISTER_AS,
-                a.as_canonical_u32(),
+                byte_ptr_to_u16_ptr_value(record.rd_ptr),
                 data,
                 &mut record.writes_aux.prev_timestamp,
                 &mut record.writes_aux.prev_data,
@@ -254,7 +255,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64JalrAdapterFiller {
         if record.rd_ptr != u32::MAX {
             adapter_row
                 .rd_aux_cols
-                .set_prev_data(pack_u8_block_bytes(&record.writes_aux.prev_data));
+                .set_prev_data(record.writes_aux.prev_data.map(F::from_u16));
             mem_helper.fill(
                 record.writes_aux.prev_timestamp,
                 record.from_timestamp + 1,

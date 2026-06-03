@@ -156,7 +156,6 @@ where
             )
             .eval(builder, cols.opcode_mulh_flag + cols.opcode_mulhsu_flag);
 
-        // Memory bus checks only packed u16 values; these read bytes need separate bounds.
         for i in 0..NUM_LIMBS {
             self.bitwise_lookup_bus
                 .send_range(b[i], c[i])
@@ -340,7 +339,6 @@ where
             );
         }
 
-        // AIR range-checks these byte limbs; add matching lookup counts.
         for i in 0..NUM_LIMBS {
             self.bitwise_lookup_chip
                 .request_range(record.b[i] as u32, record.c[i] as u32);

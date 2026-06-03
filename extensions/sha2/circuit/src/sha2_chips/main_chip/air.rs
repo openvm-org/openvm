@@ -264,7 +264,8 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
-        let input_ptr_val = u16_limbs_to_ptr(local.instruction.input_ptr_limbs.as_slice().unwrap());
+        let input_ptr_limbs = std::array::from_fn(|i| local.instruction.input_ptr_limbs[i]);
+        let input_ptr_val = u16_limbs_to_ptr(&input_ptr_limbs);
         for i in 0..C::BLOCK_READS {
             let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
                 std::array::from_fn(|j| local.block.message_u16s[i * BLOCK_FE_WIDTH + j].into());
@@ -283,7 +284,8 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 .eval(builder, *local.instruction.is_enabled);
         }
 
-        let state_ptr_val = u16_limbs_to_ptr(local.instruction.state_ptr_limbs.as_slice().unwrap());
+        let state_ptr_limbs = std::array::from_fn(|i| local.instruction.state_ptr_limbs[i]);
+        let state_ptr_val = u16_limbs_to_ptr(&state_ptr_limbs);
         for i in 0..C::STATE_READS {
             let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
                 std::array::from_fn(|j| local.block.prev_state[i * BLOCK_FE_WIDTH + j].into());
@@ -309,7 +311,8 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
-        let dst_ptr_val = u16_limbs_to_ptr(local.instruction.dst_ptr_limbs.as_slice().unwrap());
+        let dst_ptr_limbs = std::array::from_fn(|i| local.instruction.dst_ptr_limbs[i]);
+        let dst_ptr_val = u16_limbs_to_ptr(&dst_ptr_limbs);
         for i in 0..C::STATE_WRITES {
             let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
                 std::array::from_fn(|j| local.block.new_state[i * BLOCK_FE_WIDTH + j].into());

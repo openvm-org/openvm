@@ -285,7 +285,6 @@ where
                 self.bitwise_lookup_chip
                     .request_xor(a_val as u32, a_val as u32);
             }
-            // AIR range-checks these byte limbs; add matching lookup counts.
             for (b_val, c_val) in zip(record.b, record.c) {
                 self.bitwise_lookup_chip
                     .request_range(b_val as u32, c_val as u32);

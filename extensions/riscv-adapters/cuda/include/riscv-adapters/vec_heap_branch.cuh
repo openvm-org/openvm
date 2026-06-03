@@ -7,7 +7,7 @@
 
 using namespace riscv;
 
-template <typename T, size_t NUM_READS, size_t BLOCKS_PER_READ, size_t READ_SIZE>
+template <typename T, size_t NUM_READS, size_t BLOCKS_PER_READ>
 struct Rv64VecHeapBranchAdapterCols {
     ExecutionState<T> from_state;
 
@@ -30,7 +30,7 @@ struct Rv64VecHeapBranchAdapterRecord {
     MemoryReadAuxRecord heap_read_aux[NUM_READS][BLOCKS_PER_READ];
 };
 
-template <size_t NUM_READS, size_t BLOCKS_PER_READ, size_t READ_SIZE>
+template <size_t NUM_READS, size_t BLOCKS_PER_READ>
 struct Rv64VecHeapBranchAdapter {
     size_t pointer_max_bits;
     BitwiseOperationLookup bitwise_lookup;
@@ -49,7 +49,7 @@ struct Rv64VecHeapBranchAdapter {
           mem_helper(range_checker, timestamp_max_bits) {}
 
     template <typename T>
-    using Cols = Rv64VecHeapBranchAdapterCols<T, NUM_READS, BLOCKS_PER_READ, READ_SIZE>;
+    using Cols = Rv64VecHeapBranchAdapterCols<T, NUM_READS, BLOCKS_PER_READ>;
 
     __device__ void fill_trace_row(
         RowSlice row,
@@ -107,11 +107,11 @@ struct Rv64VecHeapBranchAdapter {
 };
 
 // Type aliases for the simple case with BLOCKS_PER_READ=1
-template <typename T, size_t NUM_READS, size_t READ_SIZE>
-using Rv64HeapBranchAdapterCols = Rv64VecHeapBranchAdapterCols<T, NUM_READS, 1, READ_SIZE>;
+template <typename T, size_t NUM_READS>
+using Rv64HeapBranchAdapterCols = Rv64VecHeapBranchAdapterCols<T, NUM_READS, 1>;
 
 template <size_t NUM_READS>
 using Rv64HeapBranchAdapterRecord = Rv64VecHeapBranchAdapterRecord<NUM_READS, 1>;
 
-template <size_t NUM_READS, size_t READ_SIZE>
-using Rv64HeapBranchAdapter = Rv64VecHeapBranchAdapter<NUM_READS, 1, READ_SIZE>;
+template <size_t NUM_READS>
+using Rv64HeapBranchAdapter = Rv64VecHeapBranchAdapter<NUM_READS, 1>;

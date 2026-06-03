@@ -6,17 +6,17 @@
 
 using namespace riscv;
 
-template <size_t NUM_LIMBS> struct BranchLessThanCoreRecord;
-template <typename T, size_t NUM_LIMBS> struct BranchLessThanCoreCols;
-template <size_t NUM_LIMBS> struct BranchLessThanCore;
-template <size_t NUM_LIMBS> struct BranchLessThanCoreRecord {
-    uint8_t a[NUM_LIMBS];
-    uint8_t b[NUM_LIMBS];
+template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BranchLessThanCoreRecord;
+template <typename T, size_t NUM_LIMBS, size_t LIMB_BITS> struct BranchLessThanCoreCols;
+template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BranchLessThanCore;
+template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BranchLessThanCoreRecord {
+    uint16_t a[NUM_LIMBS];
+    uint16_t b[NUM_LIMBS];
     uint32_t imm;
     uint8_t local_opcode;
 };
 
-template <typename T, size_t NUM_LIMBS> struct BranchLessThanCoreCols {
+template <typename T, size_t NUM_LIMBS, size_t LIMB_BITS> struct BranchLessThanCoreCols {
     T a[NUM_LIMBS];
     T b[NUM_LIMBS];
 
@@ -37,15 +37,15 @@ template <typename T, size_t NUM_LIMBS> struct BranchLessThanCoreCols {
     T diff_val;
 };
 
-template <size_t NUM_LIMBS> struct BranchLessThanCore {
-    BitwiseOperationLookup bitwise_lookup;
+template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BranchLessThanCore {
+    VariableRangeChecker range_checker;
 
-    template <typename T> using Cols = BranchLessThanCoreCols<T, NUM_LIMBS>;
+    template <typename T> using Cols = BranchLessThanCoreCols<T, NUM_LIMBS, LIMB_BITS>;
 
-    __device__ BranchLessThanCore(BitwiseOperationLookup bitwise_lookup)
-        : bitwise_lookup(bitwise_lookup) {}
+    __device__ BranchLessThanCore(VariableRangeChecker rc) : range_checker(rc) {}
 
-    __device__ void fill_trace_row(RowSlice row, BranchLessThanCoreRecord<NUM_LIMBS> record) {
+    __device__ void
+    fill_trace_row(RowSlice row, BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS> record) {
         static constexpr uint8_t BLT = 0;
         static constexpr uint8_t BLTU = 1;
         static constexpr uint8_t BGE = 2;
@@ -67,8 +67,8 @@ template <size_t NUM_LIMBS> struct BranchLessThanCore {
         if (diff_idx == NUM_LIMBS) {
             cmp_lt = false;
         } else if (signed_op && (diff_idx == NUM_LIMBS - 1)) {
-            bool a_sign = record.a[NUM_LIMBS - 1] >= (1u << (RV64_BYTE_BITS - 1));
-            bool b_sign = record.b[NUM_LIMBS - 1] >= (1u << (RV64_BYTE_BITS - 1));
+            bool a_sign = record.a[NUM_LIMBS - 1] >= (1u << (LIMB_BITS - 1));
+            bool b_sign = record.b[NUM_LIMBS - 1] >= (1u << (LIMB_BITS - 1));
 
             if (a_sign != b_sign) {
                 cmp_lt = a_sign;
@@ -81,23 +81,24 @@ template <size_t NUM_LIMBS> struct BranchLessThanCore {
 
         bool cmp_result = ge_op ? !cmp_lt : cmp_lt;
 
-        bool a_sign = signed_op && (record.a[NUM_LIMBS - 1] >= (1u << (RV64_BYTE_BITS - 1)));
-        bool b_sign = signed_op && (record.b[NUM_LIMBS - 1] >= (1u << (RV64_BYTE_BITS - 1)));
+        bool a_sign = signed_op && (record.a[NUM_LIMBS - 1] >= (1u << (LIMB_BITS - 1)));
+        bool b_sign = signed_op && (record.b[NUM_LIMBS - 1] >= (1u << (LIMB_BITS - 1)));
 
-        uint32_t a_msb_f = a_sign ? (Fp::P - ((1u << RV64_BYTE_BITS) - record.a[NUM_LIMBS - 1]))
+        uint32_t a_msb_f = a_sign ? (Fp::P - ((1u << LIMB_BITS) - record.a[NUM_LIMBS - 1]))
                                   : uint32_t(record.a[NUM_LIMBS - 1]);
-        uint32_t b_msb_f = b_sign ? (Fp::P - ((1u << RV64_BYTE_BITS) - record.b[NUM_LIMBS - 1]))
+        uint32_t b_msb_f = b_sign ? (Fp::P - ((1u << LIMB_BITS) - record.b[NUM_LIMBS - 1]))
                                   : uint32_t(record.b[NUM_LIMBS - 1]);
 
-        uint8_t a_msb_range =
-            a_sign ? uint8_t(record.a[NUM_LIMBS - 1] - (1u << (RV64_BYTE_BITS - 1)))
-                   : uint8_t(
-                         record.a[NUM_LIMBS - 1] + ((signed_op ? 1u : 0u) << (RV64_BYTE_BITS - 1))
+        // Shift signed MSBs into the same [0, 2^LIMB_BITS) range as unsigned MSBs.
+        uint32_t a_msb_range =
+            a_sign ? uint32_t(record.a[NUM_LIMBS - 1] - (1u << (LIMB_BITS - 1)))
+                   : uint32_t(
+                         record.a[NUM_LIMBS - 1] + ((signed_op ? 1u : 0u) << (LIMB_BITS - 1))
                      );
-        uint8_t b_msb_range =
-            b_sign ? uint8_t(record.b[NUM_LIMBS - 1] - (1u << (RV64_BYTE_BITS - 1)))
-                   : uint8_t(
-                         record.b[NUM_LIMBS - 1] + ((signed_op ? 1u : 0u) << (RV64_BYTE_BITS - 1))
+        uint32_t b_msb_range =
+            b_sign ? uint32_t(record.b[NUM_LIMBS - 1] - (1u << (LIMB_BITS - 1)))
+                   : uint32_t(
+                         record.b[NUM_LIMBS - 1] + ((signed_op ? 1u : 0u) << (LIMB_BITS - 1))
                      );
 
         uint32_t diff_val = 0;
@@ -113,18 +114,13 @@ template <size_t NUM_LIMBS> struct BranchLessThanCore {
             diff_val = uint32_t(record.a[diff_idx] - record.b[diff_idx]);
         }
 
-        bitwise_lookup.add_range(a_msb_range, b_msb_range);
+        range_checker.add_count(a_msb_range, LIMB_BITS);
+        range_checker.add_count(b_msb_range, LIMB_BITS);
 
-        // AIR range-checks these byte limbs; add matching lookup counts.
-        bitwise_lookup.add_range(record.a[NUM_LIMBS - 1], record.b[NUM_LIMBS - 1]);
-#pragma unroll
-        for (int i = 0; i + 1 < NUM_LIMBS; i++) {
-            bitwise_lookup.add_range(record.a[i], record.b[i]);
-        }
-
-        uint8_t diff_marker[NUM_LIMBS] = {0};
+        uint16_t diff_marker[NUM_LIMBS] = {0};
         if (diff_idx != NUM_LIMBS) {
-            bitwise_lookup.add_range(diff_val - 1, 0);
+            // Range-check diff_val - 1 to prove the first differing limb is non-zero.
+            range_checker.add_count(diff_val - 1, LIMB_BITS);
             diff_marker[diff_idx] = 1;
         }
 
