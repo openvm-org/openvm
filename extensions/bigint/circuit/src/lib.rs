@@ -47,9 +47,9 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-/// 256-bit heap integer stored as 32 u8 limbs.
+/// 256-bit heap integer stored as 32 bytes.
 pub const INT256_NUM_U8_LIMBS: usize = 32;
-/// Number of memory blocks needed to hold one 256-bit integer.
+/// Number of blocks for INT256 operations (INT256_NUM_U8_LIMBS / MEMORY_BLOCK_BYTES).
 pub const INT256_NUM_MEMORY_BLOCKS: usize = INT256_NUM_U8_LIMBS / MEMORY_BLOCK_BYTES;
 /// Number of u64 limbs in a 256-bit integer.
 pub const INT256_NUM_U64_LIMBS: usize = INT256_NUM_U8_LIMBS / size_of::<u64>();
@@ -102,7 +102,7 @@ type AluU16AdapterExecutor = VecToFlatAluU16AdapterExecutor<
     INT256_NUM_U16_LIMBS,
 >;
 
-/// U16 branch adapter for 256-bit comparisons.
+/// Type alias for the Branch adapter AIR wrapper
 type BranchAdapterAir = VecToFlatBranchAdapterAir<
     Rv64VecHeapBranchU16AdapterAir<NUM_READS, INT256_NUM_MEMORY_BLOCKS>,
     NUM_READS,
@@ -111,7 +111,7 @@ type BranchAdapterAir = VecToFlatBranchAdapterAir<
     INT256_NUM_U16_LIMBS,
 >;
 
-/// Type alias for the Branch adapter executor wrapper.
+/// Type alias for the Branch adapter executor wrapper
 type BranchAdapterExecutor = VecToFlatBranchAdapterExecutor<
     Rv64VecHeapBranchU16AdapterExecutor<NUM_READS, INT256_NUM_MEMORY_BLOCKS>,
     NUM_READS,
@@ -136,7 +136,7 @@ pub type Rv64BaseAlu256Chip<F> = VmChipWrapper<
     >,
 >;
 
-/// LessThan256 over 16 u16 limbs.
+/// LessThan256
 pub type Rv64LessThan256Air =
     VmAirWrapper<AluU16AdapterAir, LessThanCoreAir<INT256_NUM_U16_LIMBS, U16_BITS>>;
 #[derive(Clone, PreflightExecutor)]

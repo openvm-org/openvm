@@ -39,8 +39,8 @@ use openvm_stark_backend::{
 
 use super::{RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS};
 use crate::adapters::{
-    expand_to_rv64_register, memory_read, memory_read_deferral, rv64_bytes_to_u32, timed_write,
-    tracing_read, RV64_BYTE_BITS, U16_BITS,
+    byte_ptr_to_u16_ptr, expand_to_rv64_register, memory_read, memory_read_deferral,
+    rv64_bytes_to_u32, timed_write, tracing_read, RV64_BYTE_BITS, U16_BITS,
 };
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
@@ -164,7 +164,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         let rs1_data = expand_to_rv64_register(&local_cols.rs1_data);
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rs1_ptr),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
+                ),
                 pack_u8_block::<AB>(&rs1_data),
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
@@ -234,7 +237,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(read_as, read_ptr),
+                MemoryAddress::new(read_as, byte_ptr_to_u16_ptr::<AB>(read_ptr)),
                 pack_u8_block::<AB>(&ctx.reads.1),
                 timestamp_pp(),
                 &local_cols.read_data_aux,
@@ -255,7 +258,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         let prev_data_expr: [AB::Expr; MEMORY_BLOCK_BYTES] = ctx.reads.0.map(Into::into);
         self.memory_bridge
             .write(
-                MemoryAddress::new(write_as, write_ptr),
+                MemoryAddress::new(write_as, byte_ptr_to_u16_ptr::<AB>(write_ptr)),
                 pack_u8_block::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),
                 MemoryWriteAuxInput::from_prev_data_exprs(

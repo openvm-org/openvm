@@ -3,9 +3,9 @@ use std::sync::Arc;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmField, VmProverExtension,
+        to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena,
+        VmCircuitExtension, VmExecutionExtension, VmField, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -139,7 +139,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Rv64IExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
         let base_alu =
             Rv64BaseAluExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
@@ -166,7 +166,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         inventory.add_executor(shift_w, ShiftWOpcode::iter().map(|x| x.global_opcode()))?;
 
         let load_store = Rv64LoadStoreExecutor::new(
-            Rv64LoadStoreAdapterExecutor::new(pointer_max_bits),
+            Rv64LoadStoreAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -177,7 +177,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         )?;
 
         let load_sign_extend =
-            Rv64LoadSignExtendExecutor::new(Rv64LoadStoreAdapterExecutor::new(pointer_max_bits));
+            Rv64LoadSignExtendExecutor::new(Rv64LoadStoreAdapterExecutor::new(byte_ptr_max_bits));
         inventory.add_executor(
             load_sign_extend,
             [
@@ -240,7 +240,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker = inventory.range_checker().bus;
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
         let bitwise_lu = {
             // A trick to get around Rust's borrow rules
@@ -294,7 +294,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
                 memory_bridge,
                 exec_bridge,
                 range_checker,
-                pointer_max_bits,
+                byte_ptr_max_bits,
             ),
             LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker),
         );
@@ -305,7 +305,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
                 memory_bridge,
                 exec_bridge,
                 range_checker,
-                pointer_max_bits,
+                byte_ptr_max_bits,
             ),
             LoadSignExtendCoreAir::new(range_checker),
         );
@@ -363,7 +363,7 @@ where
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
 
         let bitwise_lu = {
@@ -442,7 +442,7 @@ where
         inventory.next_air::<Rv64LoadStoreAir>()?;
         let load_store_chip = Rv64LoadStoreChip::new(
             LoadStoreFiller::new(
-                Rv64LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+                Rv64LoadStoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 range_checker.clone(),
             ),
@@ -453,7 +453,7 @@ where
         inventory.next_air::<Rv64LoadSignExtendAir>()?;
         let load_sign_extend = Rv64LoadSignExtendChip::new(
             LoadSignExtendFiller::new(
-                Rv64LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+                Rv64LoadStoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 range_checker.clone(),
             ),
             mem_helper.clone(),
@@ -741,9 +741,9 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64Io {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Rv64IoExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         let hint_store =
-            Rv64HintStoreExecutor::new(pointer_max_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
+            Rv64HintStoreExecutor::new(byte_ptr_max_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
         inventory.add_executor(
             hint_store,
             Rv64HintStoreOpcode::iter().map(|x| x.global_opcode()),
@@ -763,14 +763,14 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker = inventory.range_checker().bus;
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
         let hint_store = Rv64HintStoreAir::new(
             exec_bridge,
             memory_bridge,
             range_checker,
             Rv64HintStoreOpcode::CLASS_OFFSET,
-            pointer_max_bits,
+            byte_ptr_max_bits,
         );
         inventory.add_air(hint_store);
 
@@ -796,11 +796,11 @@ where
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
 
         inventory.next_air::<Rv64HintStoreAir>()?;
         let hint_store = Rv64HintStoreChip::new(
-            Rv64HintStoreFiller::new(pointer_max_bits, range_checker.clone()),
+            Rv64HintStoreFiller::new(byte_ptr_max_bits, range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(hint_store);

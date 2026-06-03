@@ -37,8 +37,8 @@ use {openvm_circuit_primitives::var_range::VariableRangeCheckerChip, std::sync::
 use super::{core::run_less_than, LessThanCoreAir, Rv64LessThanChip};
 use crate::{
     adapters::{
-        Rv64BaseAluU16AdapterAir, Rv64BaseAluU16AdapterExecutor, Rv64BaseAluU16AdapterFiller,
-        RV64_REGISTER_NUM_LIMBS, U16_BITS,
+        rv64_bytes_to_u16_block, Rv64BaseAluU16AdapterAir, Rv64BaseAluU16AdapterExecutor,
+        Rv64BaseAluU16AdapterFiller, RV64_REGISTER_NUM_LIMBS, U16_BITS,
     },
     less_than::LessThanCoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
@@ -48,11 +48,6 @@ use crate::{
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 type Harness = TestChipHarness<F, Rv64LessThanExecutor, Rv64LessThanAir, Rv64LessThanChip<F>>;
-
-#[inline]
-fn bytes_to_u16(bytes: &[u8; RV64_REGISTER_NUM_LIMBS]) -> [u16; BLOCK_FE_WIDTH] {
-    array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
-}
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
@@ -124,8 +119,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(executor, arena, &instruction);
 
-    let b_u16 = bytes_to_u16(&b);
-    let c_u16 = bytes_to_u16(&c);
+    let b_u16 = rv64_bytes_to_u16_block(b);
+    let c_u16 = rv64_bytes_to_u16_block(c);
     let (cmp, _, _, _) = run_less_than::<BLOCK_FE_WIDTH, U16_BITS>(opcode == SLT, &b_u16, &c_u16);
     let mut a = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
     a[0] = F::from_bool(cmp);

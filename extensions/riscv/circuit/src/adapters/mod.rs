@@ -109,16 +109,21 @@ pub fn byte_ptr_to_u16_ptr_value(byte_ptr: u32) -> u32 {
     byte_ptr >> 1
 }
 
-/// Converts a `u64` to `u32`, asserting in debug that the upper 32 bits are zero.
+/// Converts a `u64` to `u32`, requiring the upper 32 bits to be zero.
 #[inline(always)]
 pub fn u64_to_u32_checked(value: u64) -> u32 {
     u32::try_from(value).expect("upper 4 bytes must be zero")
 }
 
-/// Converts RV64 register bytes to a `u32`, asserting in debug that the upper 4 bytes are zero.
+/// Converts RV64 register bytes to a `u32`, requiring the upper 4 bytes to be zero.
 #[inline(always)]
 pub fn rv64_bytes_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
     u64_to_u32_checked(u64::from_le_bytes(bytes))
+}
+
+#[inline(always)]
+pub fn rv64_bytes_to_u16_block(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> [u16; BLOCK_FE_WIDTH] {
+    std::array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
 }
 
 /// Splits a 32-bit RV64 pointer into low-to-high u16 limbs.

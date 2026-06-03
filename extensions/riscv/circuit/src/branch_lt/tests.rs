@@ -41,8 +41,8 @@ use {
 use super::{run_cmp, Rv64BranchLessThanChip};
 use crate::{
     adapters::{
-        Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller,
-        RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS, U16_BITS,
+        rv64_u16_block_to_bytes, Rv64BranchAdapterAir, Rv64BranchAdapterExecutor,
+        Rv64BranchAdapterFiller, RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS, U16_BITS,
     },
     branch_lt::BranchLessThanCoreCols,
     BranchLessThanCoreAir, BranchLessThanFiller, Rv64BranchLessThanAir, Rv64BranchLessThanExecutor,
@@ -51,18 +51,6 @@ use crate::{
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
-
-/// Convert a `[u16; 4]` register value to its little-endian 8-byte representation.
-#[inline]
-fn u16_array_to_bytes_le(arr: &[u16; BLOCK_FE_WIDTH]) -> [u8; RV64_REGISTER_NUM_LIMBS] {
-    let mut out = [0u8; RV64_REGISTER_NUM_LIMBS];
-    for (i, &v) in arr.iter().enumerate() {
-        let [lo, hi] = v.to_le_bytes();
-        out[2 * i] = lo;
-        out[2 * i + 1] = hi;
-    }
-    out
-}
 type Harness = TestChipHarness<
     F,
     Rv64BranchLessThanExecutor,
@@ -131,8 +119,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let imm = imm.unwrap_or(rng.random_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
     let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let a_bytes: [F; RV64_REGISTER_NUM_LIMBS] = u16_array_to_bytes_le(&a).map(F::from_u8);
-    let b_bytes: [F; RV64_REGISTER_NUM_LIMBS] = u16_array_to_bytes_le(&b).map(F::from_u8);
+    let a_bytes: [F; RV64_REGISTER_NUM_LIMBS] = rv64_u16_block_to_bytes(a).map(F::from_u8);
+    let b_bytes: [F; RV64_REGISTER_NUM_LIMBS] = rv64_u16_block_to_bytes(b).map(F::from_u8);
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a_bytes);
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b_bytes);
 
