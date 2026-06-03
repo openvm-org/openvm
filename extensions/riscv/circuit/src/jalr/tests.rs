@@ -7,7 +7,7 @@ use openvm_circuit::arch::{
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, PreflightExecutor,
+        Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -56,8 +56,9 @@ use super::Rv64JalrCoreAir;
 use crate::Rv64ImConfig;
 use crate::{
     adapters::{
-        rv64_limbs_to_u64, Rv64JalrAdapterAir, Rv64JalrAdapterCols, Rv64JalrAdapterExecutor,
-        Rv64JalrAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        rv64_limbs_to_u64, rv64_u16_block_to_bytes, Rv64JalrAdapterAir, Rv64JalrAdapterCols,
+        Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_BYTE_BITS, RV64_PTR_U16_LIMBS,
+        RV64_REGISTER_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
     Rv64JalrAir, Rv64JalrFiller,
@@ -81,17 +82,14 @@ fn create_harness_fields(
     range_checker_chip: Arc<VariableRangeCheckerChip>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64JalrAir, Rv64JalrExecutor, Rv64JalrChip<F>) {
+    let _ = bitwise_chip;
     let air = Rv64JalrAir::new(
         Rv64JalrAdapterAir::new(memory_bridge, execution_bridge),
-        Rv64JalrCoreAir::new(bitwise_chip.bus(), range_checker_chip.bus()),
+        Rv64JalrCoreAir::new(range_checker_chip.bus()),
     );
     let executor = Rv64JalrExecutor::new(Rv64JalrAdapterExecutor);
     let chip = Rv64JalrChip::<F>::new(
-        Rv64JalrFiller::new(
-            Rv64JalrAdapterFiller::new(),
-            bitwise_chip,
-            range_checker_chip,
-        ),
+        Rv64JalrFiller::new(Rv64JalrAdapterFiller::new(), range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -172,14 +170,16 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let rs1 = rv64_limbs_to_u64(rs1) as u32;
 
     let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, imm_sign == 1);
+    // The register write is suppressed for x0.
     let rd_data = if a == 0 {
-        [0; RV64_REGISTER_NUM_LIMBS]
+        [0u16; BLOCK_FE_WIDTH]
     } else {
         rd_data
     };
 
     assert_eq!(next_pc & !1, final_pc);
-    assert_eq!(rd_data.map(F::from_u8), tester.read_bytes::<8>(1, a));
+    let rd_bytes = rv64_u16_block_to_bytes(rd_data);
+    assert_eq!(rd_bytes.map(F::from_u8), tester.read_bytes::<8>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -227,10 +227,10 @@ fn rand_jalr_test() {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalrPrankValues {
-    pub rd_data: Option<[u32; RV64_WORD_NUM_LIMBS - 1]>,
-    pub rs1_data: Option<[u32; RV64_WORD_NUM_LIMBS]>,
+    pub rd_high: Option<[u32; RV64_PTR_U16_LIMBS - 1]>,
+    pub rs1_data: Option<[u32; RV64_PTR_U16_LIMBS]>,
     pub to_pc_least_sig_bit: Option<u32>,
-    pub to_pc_limbs: Option<[u32; 2]>,
+    pub to_pc_limbs: Option<[u32; RV64_PTR_U16_LIMBS]>,
     pub imm_sign: Option<u32>,
     pub rd_ptr: Option<u32>,
     pub needs_write: Option<bool>,
@@ -272,8 +272,8 @@ fn run_negative_jalr_test_with_rd_ptr(
         let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
         let core_cols: &mut Rv64JalrCoreCols<F> = core_row.borrow_mut();
 
-        if let Some(data) = prank_vals.rd_data {
-            core_cols.rd_data = data.map(F::from_u32);
+        if let Some(data) = prank_vals.rd_high {
+            core_cols.rd_high = data.map(F::from_u32);
         }
         if let Some(data) = prank_vals.rs1_data {
             core_cols.rs1_data = data.map(F::from_u32);
@@ -530,7 +530,7 @@ fn overflow_negative_tests() {
         None,
         None,
         JalrPrankValues {
-            rd_data: Some([1, 0, 0]),
+            rd_high: Some([1]),
             ..Default::default()
         },
         true,
@@ -566,7 +566,7 @@ fn run_jalr_sanity_test() {
     let rs1 = 736482910;
     let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, true);
     assert_eq!(next_pc & !1, 736481674);
-    assert_eq!(rd_data, [252, 36, 14, 47, 0, 0, 0, 0]);
+    assert_eq!(rd_data, [0x24fc, 0x2f0e, 0, 0]);
 }
 
 #[test]
@@ -872,11 +872,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64JalrChipGpu::new(
-        tester.range_checker(),
-        tester.bitwise_op_lookup(),
-        tester.timestamp_max_bits(),
-    );
+    let gpu_chip = Rv64JalrChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }
