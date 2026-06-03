@@ -6,6 +6,7 @@ use openvm_circuit::arch::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
     to_byte_ptr_bits, Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor,
+    MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -97,7 +98,7 @@ struct CudaHarnessBundle {
 
 fn test_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
-    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << config.pointer_max_bits;
     config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     config
 }
@@ -118,11 +119,11 @@ fn write_output_key(
     input_ptr: usize,
     output_key: [u8; OUTPUT_TOTAL_BYTES],
 ) {
-    for (chunk_idx, chunk) in output_key.chunks_exact(DEFAULT_BLOCK_SIZE).enumerate() {
-        let chunk: [u8; DEFAULT_BLOCK_SIZE] = chunk.try_into().unwrap();
-        tester.write(
+    for (chunk_idx, chunk) in output_key.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
+        let chunk: [u8; MEMORY_BLOCK_BYTES] = chunk.try_into().unwrap();
+        tester.write_bytes(
             RV64_MEMORY_AS as usize,
-            input_ptr + chunk_idx * DEFAULT_BLOCK_SIZE,
+            input_ptr + chunk_idx * MEMORY_BLOCK_BYTES,
             chunk.map(F::from_u8),
         );
     }
@@ -154,10 +155,10 @@ fn set_and_execute_output<RA, E>(
     RA: Arena,
     E: PreflightExecutor<F, RA>,
 {
-    let rd = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
-    let rs = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
-    let output_ptr = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
-    let input_ptr = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
+    let rd = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let rs = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let output_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let input_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = rng.random_range(0..num_deferrals);
 
     let mut input_commit = [0u8; COMMIT_NUM_BYTES];
@@ -175,12 +176,12 @@ fn set_and_execute_output<RA, E>(
         result.output_raw.clone(),
     );
 
-    tester.write(
+    tester.write_bytes(
         RV64_REGISTER_AS as usize,
         rd,
         (output_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write(
+    tester.write_bytes(
         RV64_REGISTER_AS as usize,
         rs,
         (input_ptr as u64).to_le_bytes().map(F::from_u8),
@@ -381,10 +382,10 @@ fn deferral_output_non_first_row_canonicity_aux_cleared_test() {
     // columns the filler skips (the bug under test) retain this value.
     harness.arena.trace_buffer.fill(F::from_u32(0xdead));
 
-    let rd = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    let rs = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    let output_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    let input_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    let rd = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
+    let rs = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
+    let output_ptr = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
+    let input_ptr = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = 0;
 
     // 2 digests -> 3 rows, so the section has non-first rows (rows 1 and 2).

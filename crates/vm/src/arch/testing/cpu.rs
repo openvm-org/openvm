@@ -37,9 +37,9 @@ use crate::{
             ExecutionTester, MemoryTester, TestBuilder, TestChipHarness, EXECUTION_BUS, MEMORY_BUS,
             MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
         },
-        vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus, ExecutionState,
-        MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmField, VmStateMut,
-        DEFAULT_BLOCK_SIZE,
+        to_byte_ptr_bits, vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus,
+        ExecutionState, MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmField,
+        VmStateMut, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::{
         memory::{
@@ -117,11 +117,31 @@ where
     }
 
     fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
-        self.memory.read(address_space, pointer)
+        const { assert!(N == BLOCK_FE_WIDTH) };
+        let data = self.memory.read::<BLOCK_FE_WIDTH>(address_space, pointer);
+        std::array::from_fn(|i| data[i])
     }
 
     fn write<const N: usize>(&mut self, address_space: usize, pointer: usize, value: [F; N]) {
-        self.memory.write(address_space, pointer, value);
+        const { assert!(N == BLOCK_FE_WIDTH) };
+        self.memory.write::<BLOCK_FE_WIDTH>(
+            address_space,
+            pointer,
+            std::array::from_fn(|i| value[i]),
+        );
+    }
+
+    fn read_bytes<const N: usize>(&mut self, address_space: usize, byte_ptr: usize) -> [F; N] {
+        self.memory.read_bytes(address_space, byte_ptr)
+    }
+
+    fn write_bytes<const N: usize>(
+        &mut self,
+        address_space: usize,
+        byte_ptr: usize,
+        value: [F; N],
+    ) {
+        self.memory.write_bytes(address_space, byte_ptr, value);
     }
 
     fn write_usize<const N: usize>(
@@ -135,7 +155,7 @@ where
     }
 
     fn address_bits(&self) -> usize {
-        self.memory.controller.memory_config().pointer_max_bits
+        to_byte_ptr_bits(self.memory.controller.memory_config().pointer_max_bits)
     }
 
     fn last_to_pc(&self) -> F {
@@ -171,13 +191,12 @@ where
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        // Write pointer in DEFAULT_BLOCK_SIZE-byte chunks to match the fixed block size.
-        // The pointer is RV64_REGISTER_NUM_LIMBS bytes (64-bit for RV64).
+        // Store the heap pointer as a 64-bit RV64 register value.
         let ptr_bytes = (pointer as u64).to_le_bytes();
-        for i in (0..RV64_REGISTER_NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
-            let chunk: [u8; DEFAULT_BLOCK_SIZE] =
-                ptr_bytes[i..i + DEFAULT_BLOCK_SIZE].try_into().unwrap();
-            self.write::<DEFAULT_BLOCK_SIZE>(1, register + i, chunk.map(F::from_u8));
+        for i in (0..RV64_REGISTER_NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
+            let chunk: [u8; MEMORY_BLOCK_BYTES] =
+                ptr_bytes[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap();
+            self.write_bytes::<MEMORY_BLOCK_BYTES>(1, register + i, chunk.map(F::from_u8));
         }
         (register, pointer)
     }
@@ -228,22 +247,20 @@ impl<F: VmField> VmChipTestBuilder<F> {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        // Write pointer in DEFAULT_BLOCK_SIZE-byte chunks to match the fixed block size.
-        // The pointer is RV64_REGISTER_NUM_LIMBS bytes (64-bit for RV64).
+        // Store the heap pointer as a 64-bit RV64 register value.
         let ptr_bytes = (pointer as u64).to_le_bytes();
-        for i in (0..RV64_REGISTER_NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
-            let chunk: [u8; DEFAULT_BLOCK_SIZE] =
-                ptr_bytes[i..i + DEFAULT_BLOCK_SIZE].try_into().unwrap();
-            self.write::<DEFAULT_BLOCK_SIZE>(1usize, register + i, chunk.map(F::from_u8));
+        for i in (0..RV64_REGISTER_NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
+            let chunk: [u8; MEMORY_BLOCK_BYTES] =
+                ptr_bytes[i..i + MEMORY_BLOCK_BYTES].try_into().unwrap();
+            self.write_bytes::<MEMORY_BLOCK_BYTES>(1usize, register + i, chunk.map(F::from_u8));
         }
-        // Always write in DEFAULT_BLOCK_SIZE-byte chunks to match the fixed block size.
         for (i, &write) in writes.iter().enumerate() {
             let ptr = pointer + i * NUM_LIMBS;
-            for j in (0..NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
-                self.write::<DEFAULT_BLOCK_SIZE>(
+            for j in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
+                self.write_bytes::<MEMORY_BLOCK_BYTES>(
                     2usize,
                     ptr + j,
-                    write[j..j + DEFAULT_BLOCK_SIZE].try_into().unwrap(),
+                    write[j..j + MEMORY_BLOCK_BYTES].try_into().unwrap(),
                 );
             }
         }

@@ -96,6 +96,13 @@ template <size_t NUM_LIMBS> struct LessThanCore {
 
         bitwise_lookup.add_range(b_msb_range, c_msb_range);
 
+        // AIR range-checks these byte limbs; add matching lookup counts.
+        bitwise_lookup.add_range(record.b[NUM_LIMBS - 1], record.c[NUM_LIMBS - 1]);
+#pragma unroll
+        for (int i = 0; i + 1 < NUM_LIMBS; i++) {
+            bitwise_lookup.add_range(record.b[i], record.c[i]);
+        }
+
         uint8_t diff_marker[NUM_LIMBS] = {0};
         if (diff_idx != NUM_LIMBS) {
             bitwise_lookup.add_range(diff_val - 1, 0);

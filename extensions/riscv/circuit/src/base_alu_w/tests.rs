@@ -156,7 +156,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let expected = run_alu_w(opcode, &b_word, &c_word);
     assert_eq!(
         expected.map(F::from_u8),
-        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd)
+        tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd)
     );
     expected
 }
@@ -177,10 +177,10 @@ fn rand_rv64w_alu_test(opcode: BaseAluWOpcode, num_ops: usize) {
     let (mut harness, bitwise) = create_harness(&tester);
 
     // TODO(AG): make a more meaningful test for memory accesses
-    tester.write(2, 1024, [F::ONE; 8]);
-    tester.write(2, 1032, [F::ONE; 8]);
-    let sm_lo: [F; 8] = tester.read(2, 1024);
-    let sm_hi: [F; 8] = tester.read(2, 1032);
+    tester.write_bytes(2, 1024, [F::ONE; 8]);
+    tester.write_bytes(2, 1032, [F::ONE; 8]);
+    let sm_lo: [F; 8] = tester.read_bytes(2, 1024);
+    let sm_hi: [F; 8] = tester.read_bytes(2, 1032);
     assert_eq!(sm_lo, [F::ONE; 8]);
     assert_eq!(sm_hi, [F::ONE; 8]);
 
@@ -214,10 +214,10 @@ fn rand_rv64w_alu_test_persistent(opcode: BaseAluWOpcode, num_ops: usize) {
     let (mut harness, bitwise) = create_harness(&tester);
 
     // TODO(AG): make a more meaningful test for memory accesses
-    tester.write(2, 1024, [F::ONE; 8]);
-    tester.write(2, 1032, [F::ONE; 8]);
-    let sm_lo: [F; 8] = tester.read(2, 1024);
-    let sm_hi: [F; 8] = tester.read(2, 1032);
+    tester.write_bytes(2, 1024, [F::ONE; 8]);
+    tester.write_bytes(2, 1032, [F::ONE; 8]);
+    let sm_lo: [F; 8] = tester.read_bytes(2, 1024);
+    let sm_hi: [F; 8] = tester.read_bytes(2, 1032);
     assert_eq!(sm_lo, [F::ONE; 8]);
     assert_eq!(sm_hi, [F::ONE; 8]);
 

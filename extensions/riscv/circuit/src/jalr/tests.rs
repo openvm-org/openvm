@@ -139,7 +139,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let rs1 = rs1.unwrap_or(into_limbs((to_pc as u32).wrapping_sub(imm_ext)));
     let rs1 = rs1.map(F::from_u32);
 
-    tester.write(1, b, rs1);
+    tester.write_bytes(1, b, rs1);
 
     let initial_pc = initial_pc.unwrap_or(rng.random_range(0..(1 << PC_BITS)));
     tester.execute_with_pc(
@@ -171,7 +171,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     };
 
     assert_eq!(next_pc & !1, final_pc);
-    assert_eq!(rd_data.map(F::from_u8), tester.read::<8>(1, a));
+    assert_eq!(rd_data.map(F::from_u8), tester.read_bytes::<8>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -398,8 +398,8 @@ fn rs1_upper_bytes_trace_tamper_negative_test() {
 
     // Seed the same source register with a poisoned value, then overwrite with a clean one so
     // the execution is initially valid.
-    tester.write(1, rs1_ptr, poisoned_rs1.map(F::from_u32));
-    tester.write(1, rs1_ptr, clean_rs1.map(F::from_u32));
+    tester.write_bytes(1, rs1_ptr, poisoned_rs1.map(F::from_u32));
+    tester.write_bytes(1, rs1_ptr, clean_rs1.map(F::from_u32));
 
     tester.execute_with_pc(
         &mut harness.executor,
@@ -449,8 +449,8 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
     let clean_rd_prev = [9u32, 8, 7, 6, 0, 0, 0, 0];
 
     // Seed the destination register with a known clean value.
-    tester.write(1, rd_ptr, clean_rd_prev.map(F::from_u32));
-    tester.write(1, rs1_ptr, into_limbs(rs1_low).map(F::from_u32));
+    tester.write_bytes(1, rd_ptr, clean_rd_prev.map(F::from_u32));
+    tester.write_bytes(1, rs1_ptr, into_limbs(rs1_low).map(F::from_u32));
 
     tester.execute_with_pc(
         &mut harness.executor,
@@ -467,7 +467,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
-        adapter_cols.rd_aux_cols.prev_data[4] = F::from_u32(1);
+        adapter_cols.rd_aux_cols.prev_data[2] = F::from_u32(1);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -608,7 +608,11 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F
 
 #[cfg(feature = "aot")]
 fn read_register(state: &VmState<F>, offset: usize) -> u32 {
-    let bytes = unsafe { state.memory.read::<u8, 4>(RV64_REGISTER_AS, offset as u32) };
+    let bytes = unsafe {
+        state
+            .memory
+            .read_bytes::<4>(RV64_REGISTER_AS, offset as u32)
+    };
     u32::from_le_bytes(bytes)
 }
 
