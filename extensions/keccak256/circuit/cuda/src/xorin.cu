@@ -145,9 +145,11 @@ __global__ void xorin_tracegen(
                 rec.buffer_write_aux_cols[t].prev_timestamp,
                 timestamp
             );
+            Fp packed_prev[BLOCK_FE_WIDTH];
+            pack_u8_block_bytes(packed_prev, rec.buffer_write_aux_cols[t].prev_data);
             XORIN_WRITE_ARRAY(
                 mem_oc.buffer_bytes_write_aux_cols[t].prev_data,
-                rec.buffer_write_aux_cols[t].prev_data
+                packed_prev
             );
             timestamp++;
         }
@@ -162,6 +164,17 @@ __global__ void xorin_tracegen(
             (rec.buffer >> MSL_RSHIFT) << (RV64_TOTAL_BITS - pointer_max_bits),
             (rec.input >> MSL_RSHIFT) << (RV64_TOTAL_BITS - pointer_max_bits)
         );
+#pragma unroll
+        for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
+            bitwise_lookup.add_range(
+                (rec.buffer >> (RV64_CELL_BITS * i)) & RV64_CELL_MASK,
+                (rec.buffer >> (RV64_CELL_BITS * (i + 1))) & RV64_CELL_MASK
+            );
+            bitwise_lookup.add_range(
+                (rec.input >> (RV64_CELL_BITS * i)) & RV64_CELL_MASK,
+                (rec.input >> (RV64_CELL_BITS * (i + 1))) & RV64_CELL_MASK
+            );
+        }
 
     } else {
         // Zero-fill padding rows

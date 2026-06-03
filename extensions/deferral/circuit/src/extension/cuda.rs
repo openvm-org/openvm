@@ -16,7 +16,7 @@ use openvm_cuda_backend::{
     prelude::F as CudaF, BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
 use openvm_cuda_common::d_buffer::DeviceBuffer;
-use openvm_riscv_circuit::Rv64ImGpuProverExt;
+use openvm_riscv_circuit::{adapters::rv64_byte_ptr_bits_from_openvm_ptr_bits, Rv64ImGpuProverExt};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{
@@ -40,7 +40,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let num_deferral_circuits = extension.fns.len();
-        let address_bits = inventory.airs().pointer_max_bits();
+        let address_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);

@@ -150,20 +150,21 @@ where
         // SAFETY:
         // - RV64_MEMORY_AS (2) consists of `u8`
         // - get_slice will panic (if protected mode) if out of bounds
-        let prestate =
-            unsafe { guest_mem.get_slice(RV64_MEMORY_AS, record.buffer_ptr, KECCAK_WIDTH_BYTES) };
+        let prestate = unsafe {
+            guest_mem.get_u8_slice(RV64_MEMORY_AS, record.buffer_ptr, KECCAK_WIDTH_BYTES)
+        };
         record.preimage_buffer_bytes.copy_from_slice(prestate);
         let poststate = keccakf_postimage_bytes(&record.preimage_buffer_bytes);
         for (word_idx, (word, aux)) in poststate
-            .chunks_exact(DEFAULT_BLOCK_SIZE)
+            .chunks_exact(MEMORY_BLOCK_BYTES)
             .zip(&mut record.buffer_word_aux)
             .enumerate()
         {
             // We don't need prev_data since we read it earlier
-            let (t_prev, _) = timed_write::<DEFAULT_BLOCK_SIZE>(
+            let (t_prev, _) = timed_write::<MEMORY_BLOCK_BYTES>(
                 state.memory,
                 RV64_MEMORY_AS,
-                buffer_ptr + (word_idx * DEFAULT_BLOCK_SIZE) as u32,
+                buffer_ptr + (word_idx * MEMORY_BLOCK_BYTES) as u32,
                 word.try_into().unwrap(),
             );
             aux.prev_timestamp = t_prev;
@@ -247,10 +248,11 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                 self.bitwise_lookup_chip
                     .request_range(scaled_limb, scaled_limb);
 
-                for pair in postimage_buffer_bytes.chunks_exact(2) {
-                    self.bitwise_lookup_chip
-                        .request_range(pair[0] as u32, pair[1] as u32);
-                }
+                // AIR bounds the pointer bytes before composing them.
+                self.bitwise_lookup_chip
+                    .request_range(ptr_bytes[0] as u32, ptr_bytes[1] as u32);
+                self.bitwise_lookup_chip
+                    .request_range(ptr_bytes[2] as u32, ptr_bytes[3] as u32);
             });
         *self.shared_records.lock().unwrap() = records;
     }

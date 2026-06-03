@@ -8,7 +8,7 @@
 
 use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
 use openvm_circuit::{
-    arch::{ExecutionError, PreflightExecutor, RecordArena, VmStateMut},
+    arch::{ExecutionError, PreflightExecutor, RecordArena, VmStateMut, MEMORY_BLOCK_BYTES},
     system::memory::online::TracingMemory,
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
@@ -35,7 +35,6 @@ macro_rules! dispatch_field_op {
                 (FieldType::$curve, Operation::$operation) => $fn::<
                     { FieldType::$curve as u8 },
                     BLOCKS,
-                    BLOCK_SIZE,
                     { Operation::$operation as u8 },
                 >($read_data),
             )*
@@ -48,32 +47,28 @@ macro_rules! dispatch_field_op {
 /// Compute output using fast native field arithmetic for known field types.
 /// Returns None if the field type is not supported (falls back to slow path).
 #[inline]
-fn compute_output_fast<const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>(
+fn compute_output_fast<const BLOCKS: usize, const IS_FP2: bool>(
     field_type: Option<FieldType>,
     operation: Option<Operation>,
-    read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
-) -> Option<[[u8; BLOCK_SIZE]; BLOCKS]> {
+    read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2],
+) -> Option<[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]> {
     let field_type = field_type?;
     let op = operation?;
 
     if IS_FP2 {
-        Some(compute_fp2_fast::<BLOCKS, BLOCK_SIZE>(
-            field_type, op, read_data,
-        ))
+        Some(compute_fp2_fast::<BLOCKS>(field_type, op, read_data))
     } else {
-        Some(compute_field_fast::<BLOCKS, BLOCK_SIZE>(
-            field_type, op, read_data,
-        ))
+        Some(compute_field_fast::<BLOCKS>(field_type, op, read_data))
     }
 }
 
 /// Compute field operation using native arithmetic.
 #[inline]
-fn compute_field_fast<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+fn compute_field_fast<const BLOCKS: usize>(
     field_type: FieldType,
     op: Operation,
-    read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
-) -> [[u8; BLOCK_SIZE]; BLOCKS] {
+    read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
     dispatch_field_op!(
         field_operation,
         field_type,
@@ -118,11 +113,11 @@ fn compute_field_fast<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 
 /// Compute Fp2 operation using native arithmetic.
 #[inline]
-fn compute_fp2_fast<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+fn compute_fp2_fast<const BLOCKS: usize>(
     field_type: FieldType,
     op: Operation,
-    read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
-) -> [[u8; BLOCK_SIZE]; BLOCKS] {
+    read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
     dispatch_field_op!(
         fp2_operation,
         field_type,
@@ -167,18 +162,18 @@ fn local_opcode_to_fp2_operation(local_opcode: usize) -> Option<Operation> {
     }
 }
 
-impl<F, RA, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    PreflightExecutor<F, RA> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
+impl<F, RA, const BLOCKS: usize, const IS_FP2: bool> PreflightExecutor<F, RA>
+    for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<
         'buf,
         FieldExpressionRecordLayout<
             F,
-            Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>,
         >,
         (
-            <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as openvm_circuit::arch::AdapterTraceExecutor<F>>::RecordMut<'buf>,
+            <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS> as openvm_circuit::arch::AdapterTraceExecutor<F>>::RecordMut<'buf>,
             FieldExpressionCoreRecordMut<'buf>,
         ),
     >,
@@ -193,13 +188,13 @@ where
         let (mut adapter_record, mut core_record) =
             state.ctx.alloc(self.inner.get_record_layout());
 
-        <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
+        <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS> as AdapterTraceExecutor<F>>::start(
             *state.pc,
             state.memory,
             &mut adapter_record,
         );
 
-        let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = self
+        let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] = self
             .inner
             .adapter()
             .read(state.memory, instruction, &mut adapter_record);
@@ -216,8 +211,8 @@ where
             local_opcode_to_modular_operation(local_opcode)
         };
 
-        let output: [[u8; BLOCK_SIZE]; BLOCKS] =
-            if let Some(output) = compute_output_fast::<BLOCKS, BLOCK_SIZE, IS_FP2>(
+        let output: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] =
+            if let Some(output) = compute_output_fast::<BLOCKS, IS_FP2>(
                 self.cached_field_type,
                 operation,
                 read_data,

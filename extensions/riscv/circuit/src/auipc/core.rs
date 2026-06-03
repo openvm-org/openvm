@@ -295,8 +295,6 @@ where
         let msl_shift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - PC_BITS;
         self.bitwise_lookup_chip
             .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);
-        // Mirror the AIR: rd_data[0..2] pair, then rd_data[2] paired with the sign-extend
-        // constraint on rd_data[3].
         self.bitwise_lookup_chip
             .request_range(rd_data[0] as u32, rd_data[1] as u32);
         let is_sign_extend = (rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) & 1;

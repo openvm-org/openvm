@@ -63,7 +63,7 @@ fn gen_base_expr(
     (expr, local_opcode_idx, opcode_flag_idx)
 }
 
-pub fn get_modular_addsub_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_modular_addsub_air<const BLOCKS: usize>(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
@@ -71,7 +71,7 @@ pub fn get_modular_addsub_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     bitwise_lookup_bus: BitwiseOperationLookupBus,
     pointer_max_bits: usize,
     offset: usize,
-) -> ModularAir<BLOCKS, BLOCK_SIZE> {
+) -> ModularAir<BLOCKS> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
     ModularAir::new(
         Rv64VecHeapAdapterAir::new(
@@ -84,12 +84,12 @@ pub fn get_modular_addsub_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     )
 }
 
-pub fn get_modular_addsub_executor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_modular_addsub_executor<const BLOCKS: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
     offset: usize,
-) -> ModularExecutor<BLOCKS, BLOCK_SIZE> {
+) -> ModularExecutor<BLOCKS> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
     FieldExprVecHeapExecutor::new(FieldExpressionExecutor::new(
@@ -102,13 +102,13 @@ pub fn get_modular_addsub_executor<const BLOCKS: usize, const BLOCK_SIZE: usize>
     ))
 }
 
-pub fn get_modular_addsub_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_modular_addsub_chip<F, const BLOCKS: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     pointer_max_bits: usize,
-) -> ModularChip<F, BLOCKS, BLOCK_SIZE> {
+) -> ModularChip<F, BLOCKS> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
     ModularChip::new(
         FieldExpressionFiller::new(
