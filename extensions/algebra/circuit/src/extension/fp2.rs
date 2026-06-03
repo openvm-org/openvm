@@ -242,7 +242,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
     }
 }
 
-// This implementation is specific to CpuBackend because the lookup chips are CPU-backed.
+// This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
+// BitwiseOperationLookupChip) are specific to CpuBackend.
 impl<SC, E, RA> VmProverExtension<E, RA, Fp2Extension> for AlgebraCpuProverExt
 where
     SC: StarkProtocolConfig,

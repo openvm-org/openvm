@@ -129,7 +129,7 @@ impl<
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Read register values for rs, rd.
+        // Read register values for rs, rd
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux).chain(once((
             cols.rd_ptr,
             cols.rd_val,

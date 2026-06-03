@@ -144,7 +144,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         * RV64_REGISTER_NUM_LIMBS;
 
     let is_load = [LOADD, LOADWU, LOADHU, LOADBU].contains(&opcode);
-    // Random store cases use u16-celled address spaces.
+    // Store tests choose writable u16-celled address spaces.
     let mem_as = mem_as.unwrap_or(if is_load {
         2
     } else {

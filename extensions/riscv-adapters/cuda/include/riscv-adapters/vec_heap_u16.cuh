@@ -4,7 +4,6 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/constants.h"
-#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -139,12 +138,12 @@ struct Rv64VecHeapU16Adapter {
         }
 
         Fp rd_val_packed[RV64_PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rd_val_packed, record.rd_val);
+        pack_u32_to_u16_limbs(rd_val_packed, record.rd_val);
         COL_WRITE_ARRAY(row, Cols, rd_val, rd_val_packed);
 
         for (int i = NUM_READS - 1; i >= 0; i--) {
             Fp rs_val_packed[RV64_PTR_U16_LIMBS];
-            ptr_to_u16_limbs(rs_val_packed, record.rs_vals[i]);
+            pack_u32_to_u16_limbs(rs_val_packed, record.rs_vals[i]);
             COL_WRITE_ARRAY(row, Cols, rs_val[i], rs_val_packed);
         }
 

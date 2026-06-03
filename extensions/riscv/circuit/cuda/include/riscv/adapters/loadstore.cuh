@@ -2,7 +2,6 @@
 
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
-#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -70,7 +69,7 @@ struct Rv64LoadStoreAdapter {
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, rs1_ptr, record.rs1_ptr);
 
         Fp rs1_data[RV64_PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rs1_data, record.rs1_val);
+        pack_u32_to_u16_limbs(rs1_data, record.rs1_val);
         COL_WRITE_ARRAY(row, Rv64LoadStoreAdapterCols, rs1_data, rs1_data);
 
         bool needs_write = record.rd_rs2_ptr != UINT32_MAX;
@@ -99,7 +98,7 @@ struct Rv64LoadStoreAdapter {
         uint32_t ptr = record.rs1_val + uint32_t(record.imm) +
                        uint32_t(record.imm_sign) * (UINT32_MAX << U16_BITS);
         uint32_t ptr_limbs[RV64_PTR_U16_LIMBS];
-        ptr_to_u16_limbs(ptr_limbs, ptr);
+        pack_u32_to_u16_limbs(ptr_limbs, ptr);
         COL_WRITE_ARRAY(row, Rv64LoadStoreAdapterCols, mem_ptr_limbs, ptr_limbs);
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, mem_as, record.mem_as);
 

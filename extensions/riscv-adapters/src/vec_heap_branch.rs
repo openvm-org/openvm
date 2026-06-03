@@ -95,7 +95,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Read register values for rs.
+        // Read register values for rs
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
                 .read(

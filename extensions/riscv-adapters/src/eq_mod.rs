@@ -118,11 +118,11 @@ impl<
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        // Address spaces.
+        // Address spaces
         let d = AB::F::from_u32(RV64_REGISTER_AS);
         let e = AB::F::from_u32(RV64_MEMORY_AS);
 
-        // Read register values for rs.
+        // Read register values for rs
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
                 .read(
@@ -148,7 +148,7 @@ impl<
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // Read heap values.
+        // Reads from heap
         let read_block_data: [[[_; MEMORY_BLOCK_BYTES]; BLOCKS_PER_READ]; NUM_READS] =
             ctx.reads.map(|r: [AB::Expr; TOTAL_READ_SIZE]| {
                 let mut r_it = r.into_iter();
@@ -170,7 +170,7 @@ impl<
             }
         }
 
-        // Write to rd register.
+        // Write to rd register
         self.memory_bridge
             .write(
                 MemoryAddress::new(d, byte_ptr_to_u16_ptr::<AB>(cols.rd_ptr)),
@@ -298,7 +298,7 @@ impl<
             )
         });
 
-        // Read heap values.
+        // Reads from heap
         from_fn(|i| {
             debug_assert!(
                 (record.rs_val[i] as u64) + ((TOTAL_READ_SIZE - 1) as u64)

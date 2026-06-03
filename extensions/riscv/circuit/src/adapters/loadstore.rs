@@ -97,7 +97,7 @@ pub struct Rv64LoadStoreAdapterCols<T> {
     /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
     pub mem_ptr_limbs: [T; 2],
     pub mem_as: T,
-    /// prev_data will be provided by the core chip to make a complete MemoryWriteAuxCols
+    /// Timestamp aux for the write; previous data is provided by the core chip.
     pub write_base_aux: MemoryBaseAuxCols<T>,
     /// Only writes if `needs_write`.
     /// If the instruction is a Load:
@@ -192,7 +192,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         let carry = (limbs_23 + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
         builder.when(is_valid.clone()).assert_bool(carry.clone());
 
-        // Prevent mem_ptr overflow.
+        // preventing mem_ptr overflow
         self.range_bus
             .range_check(
                 // (limb[0] - shift_amount) / 8 < 2^13 => limb[0] - shift_amount < 2^16
