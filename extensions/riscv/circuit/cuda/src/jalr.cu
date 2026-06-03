@@ -11,7 +11,7 @@ using namespace program;
 template <typename T> struct Rv64JalrCoreCols {
     T imm;                                  // 2 bytes
     T rs1_data[RV64_PTR_U16_LIMBS];         // low 32 bits of rs1 as u16 cells
-    T rd_data[RV64_PTR_U16_LIMBS - 1];      // high u16 cell of low-32 rd_data
+    T rd_high[RV64_PTR_U16_LIMBS - 1];      // high u16 limb of low-32 rd
     T is_valid;                             // 1 byte
     T to_pc_least_sig_bit;                  // 1 byte
     T to_pc_limbs[RV64_PTR_U16_LIMBS];      // `to_pc * 2` after the low-bit split
@@ -86,7 +86,7 @@ struct Rv64JalrCore {
         uint32_t rs1_limbs[RV64_PTR_U16_LIMBS] = {rs1_u16_lo, rs1_u16_hi};
         COL_WRITE_ARRAY(row, Rv64JalrCoreCols, rs1_data, rs1_limbs);
         uint32_t rd_limbs[RV64_PTR_U16_LIMBS - 1] = {rd_low_u16_hi};
-        COL_WRITE_ARRAY(row, Rv64JalrCoreCols, rd_data, rd_limbs);
+        COL_WRITE_ARRAY(row, Rv64JalrCoreCols, rd_high, rd_limbs);
         COL_WRITE_VALUE(row, Rv64JalrCoreCols, imm, record.imm);
     }
 };

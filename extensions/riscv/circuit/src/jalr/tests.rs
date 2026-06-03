@@ -219,7 +219,7 @@ fn rand_jalr_test() {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalrPrankValues {
-    pub rd_data: Option<[u32; RV64_PTR_U16_LIMBS - 1]>,
+    pub rd_high: Option<[u32; RV64_PTR_U16_LIMBS - 1]>,
     pub rs1_data: Option<[u32; RV64_PTR_U16_LIMBS]>,
     pub to_pc_least_sig_bit: Option<u32>,
     pub to_pc_limbs: Option<[u32; RV64_PTR_U16_LIMBS]>,
@@ -264,8 +264,8 @@ fn run_negative_jalr_test_with_rd_ptr(
         let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
         let core_cols: &mut Rv64JalrCoreCols<F> = core_row.borrow_mut();
 
-        if let Some(data) = prank_vals.rd_data {
-            core_cols.rd_data = data.map(F::from_u32);
+        if let Some(data) = prank_vals.rd_high {
+            core_cols.rd_high = data.map(F::from_u32);
         }
         if let Some(data) = prank_vals.rs1_data {
             core_cols.rs1_data = data.map(F::from_u32);
@@ -522,7 +522,7 @@ fn overflow_negative_tests() {
         None,
         None,
         JalrPrankValues {
-            rd_data: Some([1]),
+            rd_high: Some([1]),
             ..Default::default()
         },
         true,

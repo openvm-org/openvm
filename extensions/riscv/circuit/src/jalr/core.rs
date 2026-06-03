@@ -34,7 +34,7 @@ pub struct Rv64JalrCoreCols<T> {
     // Low 32 bits of rs1 as u16 cells.
     pub rs1_data: [T; RV64_PTR_U16_LIMBS],
     // High u16 limb of low-32 rd; the low limb is derived from from_pc.
-    pub rd_data: [T; RV64_PTR_U16_LIMBS - 1],
+    pub rd_high: [T; RV64_PTR_U16_LIMBS - 1],
     pub is_valid: T,
 
     pub to_pc_least_sig_bit: T,
@@ -75,7 +75,7 @@ where
         let Rv64JalrCoreCols::<AB::Var> {
             imm,
             rs1_data: rs1,
-            rd_data: rd_high,
+            rd_high,
             is_valid,
             imm_sign,
             to_pc_least_sig_bit,
@@ -299,7 +299,7 @@ where
         // fill_trace_row is called only on valid rows
         core_row.is_valid = F::ONE;
         core_row.rs1_data = [F::from_u16(rs1_low_u16_lo), F::from_u16(rs1_low_u16_hi)];
-        core_row.rd_data = [F::from_u16(rd_low_u16_hi); RV64_PTR_U16_LIMBS - 1];
+        core_row.rd_high = [F::from_u16(rd_low_u16_hi)];
         core_row.imm = F::from_u16(record.imm);
     }
 }
