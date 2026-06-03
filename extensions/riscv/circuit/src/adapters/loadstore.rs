@@ -7,12 +7,12 @@ use std::{
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface,
+        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{
-            MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
-            MemoryWriteAuxCols,
+            pack_u8_block, MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxInput,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -39,8 +39,8 @@ use openvm_stark_backend::{
 
 use super::{RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS};
 use crate::adapters::{
-    expand_to_rv64_register, memory_read, memory_read_deferral, rv64_bytes_to_u32, timed_write,
-    timed_write_deferral, tracing_read, RV64_CELL_BITS,
+    byte_ptr_to_u16_ptr, expand_to_rv64_register, memory_read, memory_read_deferral,
+    rv64_bytes_to_u32, timed_write, tracing_read, RV64_CELL_BITS,
 };
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
@@ -95,7 +95,7 @@ pub struct Rv64LoadStoreAdapterCols<T> {
     /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
     pub mem_ptr_limbs: [T; 2],
     pub mem_as: T,
-    /// prev_data will be provided by the core chip to make a complete MemoryWriteAuxCols
+    /// Timestamp aux for the write; previous data is provided by the core chip.
     pub write_base_aux: MemoryBaseAuxCols<T>,
     /// Only writes if `needs_write`.
     /// If the instruction is a Load:
@@ -164,8 +164,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         let rs1_data = expand_to_rv64_register(&local_cols.rs1_data);
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rs1_ptr),
-                rs1_data,
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
+                ),
+                pack_u8_block::<AB>(&rs1_data),
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
             )
@@ -234,14 +237,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(read_as, read_ptr),
-                ctx.reads.1,
+                MemoryAddress::new(read_as, byte_ptr_to_u16_ptr::<AB>(read_ptr)),
+                pack_u8_block::<AB>(&ctx.reads.1),
                 timestamp_pp(),
                 &local_cols.read_data_aux,
             )
             .eval(builder, is_valid.clone());
-
-        let write_aux_cols = MemoryWriteAuxCols::from_base(local_cols.write_base_aux, ctx.reads.0);
 
         // write_as is 1 for loads and [local_cols.mem_as] for stores
         let write_as = select::<AB::Expr>(
@@ -254,12 +255,16 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         let write_ptr = select::<AB::Expr>(is_load.clone(), local_cols.rd_rs2_ptr, mem_ptr.clone())
             - store_shift_amount;
 
+        let prev_data_expr: [AB::Expr; MEMORY_BLOCK_BYTES] = ctx.reads.0.map(Into::into);
         self.memory_bridge
             .write(
-                MemoryAddress::new(write_as, write_ptr),
-                ctx.writes[0].clone(),
+                MemoryAddress::new(write_as, byte_ptr_to_u16_ptr::<AB>(write_ptr)),
+                pack_u8_block::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),
-                &write_aux_cols,
+                MemoryWriteAuxInput::from_prev_data_exprs(
+                    &local_cols.write_base_aux,
+                    pack_u8_block::<AB>(&prev_data_expr),
+                ),
             )
             .eval(builder, write_count);
 
@@ -464,7 +469,8 @@ where
                         & !(RV64_REGISTER_NUM_LIMBS as u32 - 1);
 
                     if record.mem_as == DEFERRAL_AS as u8 {
-                        timed_write_deferral(memory, ptr, data.map(F::from_u32)).0
+                        // TODO: Remove STORED-to-DEFERRAL_AS support from loadstore.
+                        unreachable!("STORED to DEFERRAL_AS is unsupported")
                     } else {
                         timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
                     }

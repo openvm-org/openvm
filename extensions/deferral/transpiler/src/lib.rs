@@ -108,15 +108,16 @@ impl<F: PrimeField32> TranspilerExtension<F> for DeferralTranspilerExtension {
         const F_NUM_BYTES: usize = 4;
         const COMMIT_SIZE: usize = COMMIT_NUM_BYTES / F_NUM_BYTES;
 
-        // Each input_acc starts at cell 2 * def_idx * COMMIT_SIZE, and each output_acc
-        // immediately follows it. The initial input_acc must be the def_circuit_commit,
-        // and the initial output_acc must be all 0 (i.e. untouched).
+        // Each input_acc starts at AS-native ptr `2 * def_idx * COMMIT_SIZE` in
+        // DEFERRAL_AS, and each output_acc immediately follows it. The initial
+        // input_acc must be the def_circuit_commit, and the initial output_acc
+        // must be all 0 (i.e. untouched).
         for (def_idx, commit) in self.def_circuit_commits.iter().enumerate() {
-            let start_cell = 2 * def_idx * COMMIT_SIZE;
-            let start_byte = start_cell * F_NUM_BYTES;
+            let start_ptr = 2 * def_idx * COMMIT_SIZE;
+            let start_byte_ptr = start_ptr * F_NUM_BYTES;
 
             for (byte_offset, b) in commit.iter().copied().enumerate() {
-                init_memory.insert((DEFERRAL_AS, (start_byte + byte_offset) as u32), b);
+                init_memory.insert((DEFERRAL_AS, (start_byte_ptr + byte_offset) as u32), b);
             }
         }
 

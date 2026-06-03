@@ -40,6 +40,8 @@ use tracing::Level;
 
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
+#[cfg(feature = "touchemall")]
+use crate::primitives::utils::check_trace_validity;
 use crate::{
     arch::{
         instructions::instruction::Instruction,
@@ -51,8 +53,9 @@ use crate::{
             TestBuilder, TestChipHarness, EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS,
             POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
         },
-        Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState, MatrixRecordArena,
-        MemoryConfig, PreflightExecutor, Streams, VmStateMut, DEFAULT_BLOCK_SIZE,
+        to_byte_ptr_bits, Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
+        MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmStateMut, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
     },
     system::{
         cuda::poseidon2::Poseidon2PeripheryChipGPU,
@@ -153,11 +156,31 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     }
 
     fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
-        self.memory.read(address_space, pointer)
+        const { assert!(N == BLOCK_FE_WIDTH) };
+        let data = self.memory.read::<BLOCK_FE_WIDTH>(address_space, pointer);
+        std::array::from_fn(|i| data[i])
     }
 
     fn write<const N: usize>(&mut self, address_space: usize, pointer: usize, value: [F; N]) {
-        self.memory.write(address_space, pointer, value);
+        const { assert!(N == BLOCK_FE_WIDTH) };
+        self.memory.write::<BLOCK_FE_WIDTH>(
+            address_space,
+            pointer,
+            std::array::from_fn(|i| value[i]),
+        );
+    }
+
+    fn read_bytes<const N: usize>(&mut self, address_space: usize, byte_ptr: usize) -> [F; N] {
+        self.memory.read_bytes(address_space, byte_ptr)
+    }
+
+    fn write_bytes<const N: usize>(
+        &mut self,
+        address_space: usize,
+        byte_ptr: usize,
+        value: [F; N],
+    ) {
+        self.memory.write_bytes(address_space, byte_ptr, value);
     }
 
     fn write_usize<const N: usize>(
@@ -170,7 +193,7 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     }
 
     fn address_bits(&self) -> usize {
-        self.memory.config.pointer_max_bits
+        to_byte_ptr_bits(self.memory.config.pointer_max_bits)
     }
 
     fn last_to_pc(&self) -> F {
@@ -206,7 +229,11 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        self.write(1, register, (pointer as u64).to_le_bytes().map(F::from_u8));
+        self.write_bytes::<MEMORY_BLOCK_BYTES>(
+            1,
+            register,
+            (pointer as u64).to_le_bytes().map(F::from_u8),
+        );
         (register, pointer)
     }
 
@@ -243,8 +270,9 @@ pub struct GpuChipTestBuilder {
 impl Default for GpuChipTestBuilder {
     fn default() -> Self {
         let mut mem_config = MemoryConfig::default();
-        // Currently tests still use gen_pointer for the full 1<<29 range of address space 1.
-        mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+        // Tests generate register pointers across the full AS-native pointer range.
+        mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells =
+            1 << mem_config.pointer_max_bits;
         Self::new(mem_config, default_var_range_checker_bus())
     }
 }
@@ -336,19 +364,18 @@ impl GpuChipTestBuilder {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        self.write(
+        self.write_bytes::<MEMORY_BLOCK_BYTES>(
             1usize,
             register,
             (pointer as u64).to_le_bytes().map(F::from_u8),
         );
-        // Always write in DEFAULT_BLOCK_SIZE-byte chunks to match the fixed block size.
         for (i, &write) in writes.iter().enumerate() {
             let ptr = pointer + i * NUM_LIMBS;
-            for j in (0..NUM_LIMBS).step_by(DEFAULT_BLOCK_SIZE) {
-                self.write::<DEFAULT_BLOCK_SIZE>(
+            for j in (0..NUM_LIMBS).step_by(MEMORY_BLOCK_BYTES) {
+                self.write_bytes::<MEMORY_BLOCK_BYTES>(
                     2usize,
                     ptr + j,
-                    write[j..j + DEFAULT_BLOCK_SIZE].try_into().unwrap(),
+                    write[j..j + MEMORY_BLOCK_BYTES].try_into().unwrap(),
                 );
             }
         }
@@ -516,8 +543,6 @@ impl GpuChipTester {
     ) -> Self {
         #[cfg(feature = "touchemall")]
         {
-            use crate::primitives::utils::check_trace_validity;
-
             check_trace_validity(&proving_ctx, &air.name());
         }
         self.airs.push(air);
@@ -542,8 +567,6 @@ impl GpuChipTester {
         let expected_trace = cpu_chip.generate_proving_ctx(cpu_arena).common_main;
         #[cfg(feature = "touchemall")]
         {
-            use crate::primitives::utils::check_trace_validity;
-
             check_trace_validity(&proving_ctx, &air.name());
         }
         let expected_trace_cm = ColMajorMatrix::from_row_major(&expected_trace);

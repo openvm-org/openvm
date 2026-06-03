@@ -2,6 +2,7 @@ use halo2curves_axiom::ff::{Field, PrimeField};
 use num_bigint::BigUint;
 use num_traits::Num;
 use once_cell::sync::Lazy;
+use openvm_circuit::arch::MEMORY_BLOCK_BYTES;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FieldType {
@@ -96,86 +97,55 @@ pub fn get_fp2_field_type(modulus: &BigUint) -> Option<FieldType> {
 }
 
 #[inline(always)]
-pub fn field_operation<
-    const FIELD: u8,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
-    const OP: u8,
->(
-    input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
-) -> [[u8; BLOCK_SIZE]; BLOCKS] {
+pub fn field_operation<const FIELD: u8, const BLOCKS: usize, const OP: u8>(
+    input_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
     match FIELD {
         x if x == FieldType::K256Coordinate as u8 => {
-            field_operation_256bit::<halo2curves_axiom::secq256k1::Fq, BLOCKS, BLOCK_SIZE, OP>(
-                input_data,
-            )
+            field_operation_256bit::<halo2curves_axiom::secq256k1::Fq, BLOCKS, OP>(input_data)
         }
         x if x == FieldType::K256Scalar as u8 => {
-            field_operation_256bit::<halo2curves_axiom::secq256k1::Fp, BLOCKS, BLOCK_SIZE, OP>(
-                input_data,
-            )
+            field_operation_256bit::<halo2curves_axiom::secq256k1::Fp, BLOCKS, OP>(input_data)
         }
         x if x == FieldType::P256Coordinate as u8 => {
-            field_operation_256bit::<halo2curves_axiom::secp256r1::Fp, BLOCKS, BLOCK_SIZE, OP>(
-                input_data,
-            )
+            field_operation_256bit::<halo2curves_axiom::secp256r1::Fp, BLOCKS, OP>(input_data)
         }
         x if x == FieldType::P256Scalar as u8 => {
-            field_operation_256bit::<halo2curves_axiom::secp256r1::Fq, BLOCKS, BLOCK_SIZE, OP>(
-                input_data,
-            )
+            field_operation_256bit::<halo2curves_axiom::secp256r1::Fq, BLOCKS, OP>(input_data)
         }
         x if x == FieldType::BN254Coordinate as u8 => {
-            field_operation_256bit::<halo2curves_axiom::bn256::Fq, BLOCKS, BLOCK_SIZE, OP>(
-                input_data,
-            )
+            field_operation_256bit::<halo2curves_axiom::bn256::Fq, BLOCKS, OP>(input_data)
         }
         x if x == FieldType::BN254Scalar as u8 => {
-            field_operation_256bit::<halo2curves_axiom::bn256::Fr, BLOCKS, BLOCK_SIZE, OP>(
-                input_data,
-            )
+            field_operation_256bit::<halo2curves_axiom::bn256::Fr, BLOCKS, OP>(input_data)
         }
         x if x == FieldType::BLS12_381Coordinate as u8 => {
-            field_operation_bls12_381_coordinate::<BLOCKS, BLOCK_SIZE, OP>(input_data)
+            field_operation_bls12_381_coordinate::<BLOCKS, OP>(input_data)
         }
         x if x == FieldType::BLS12_381Scalar as u8 => {
-            field_operation_256bit::<halo2curves_axiom::bls12_381::Fr, BLOCKS, BLOCK_SIZE, OP>(
-                input_data,
-            )
+            field_operation_256bit::<halo2curves_axiom::bls12_381::Fr, BLOCKS, OP>(input_data)
         }
         _ => panic!("Unsupported field type: {FIELD}"),
     }
 }
 
 #[inline(always)]
-pub fn fp2_operation<
-    const FIELD: u8,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
-    const OP: u8,
->(
-    input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
-) -> [[u8; BLOCK_SIZE]; BLOCKS] {
+pub fn fp2_operation<const FIELD: u8, const BLOCKS: usize, const OP: u8>(
+    input_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
     match FIELD {
-        x if x == FieldType::BN254Coordinate as u8 => {
-            fp2_operation_bn254::<BLOCKS, BLOCK_SIZE, OP>(input_data)
-        }
+        x if x == FieldType::BN254Coordinate as u8 => fp2_operation_bn254::<BLOCKS, OP>(input_data),
         x if x == FieldType::BLS12_381Coordinate as u8 => {
-            fp2_operation_bls12_381::<BLOCKS, BLOCK_SIZE, OP>(input_data)
+            fp2_operation_bls12_381::<BLOCKS, OP>(input_data)
         }
         _ => panic!("Unsupported field type for Fp2: {FIELD}"),
     }
 }
 
 #[inline(always)]
-fn field_operation_256bit<
-    F: PrimeField<Repr = [u8; 32]>,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
-    const OP: u8,
->(
-    input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
-) -> [[u8; BLOCK_SIZE]; BLOCKS] {
+fn field_operation_256bit<F: PrimeField<Repr = [u8; 32]>, const BLOCKS: usize, const OP: u8>(
+    input_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
     let a = blocks_to_field_element::<F>(input_data[0].as_flattened());
     let b = blocks_to_field_element::<F>(input_data[1].as_flattened());
     let c = match OP {
@@ -186,19 +156,15 @@ fn field_operation_256bit<
         _ => panic!("Unsupported operation: {OP}"),
     };
 
-    let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
+    let mut output = [[0u8; MEMORY_BLOCK_BYTES]; BLOCKS];
     field_element_to_blocks(&c, &mut output);
     output
 }
 
 #[inline(always)]
-fn field_operation_bls12_381_coordinate<
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
-    const OP: u8,
->(
-    input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
-) -> [[u8; BLOCK_SIZE]; BLOCKS] {
+fn field_operation_bls12_381_coordinate<const BLOCKS: usize, const OP: u8>(
+    input_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
     let a = blocks_to_field_element_bls12_381_coordinate(input_data[0].as_flattened());
     let b = blocks_to_field_element_bls12_381_coordinate(input_data[1].as_flattened());
     let c = match OP {
@@ -209,17 +175,17 @@ fn field_operation_bls12_381_coordinate<
         _ => panic!("Unsupported operation: {OP}"),
     };
 
-    let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
+    let mut output = [[0u8; MEMORY_BLOCK_BYTES]; BLOCKS];
     field_element_to_blocks_bls12_381_coordinate(&c, &mut output);
     output
 }
 
 #[inline(always)]
-fn fp2_operation_bn254<const BLOCKS: usize, const BLOCK_SIZE: usize, const OP: u8>(
-    input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
-) -> [[u8; BLOCK_SIZE]; BLOCKS] {
-    let a = blocks_to_fp2_bn254::<BLOCKS, BLOCK_SIZE>(input_data[0].as_ref());
-    let b = blocks_to_fp2_bn254::<BLOCKS, BLOCK_SIZE>(input_data[1].as_ref());
+fn fp2_operation_bn254<const BLOCKS: usize, const OP: u8>(
+    input_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
+    let a = blocks_to_fp2_bn254::<BLOCKS>(input_data[0].as_ref());
+    let b = blocks_to_fp2_bn254::<BLOCKS>(input_data[1].as_ref());
     let c = match OP {
         x if x == Operation::Add as u8 => a + b,
         x if x == Operation::Sub as u8 => a - b,
@@ -228,17 +194,17 @@ fn fp2_operation_bn254<const BLOCKS: usize, const BLOCK_SIZE: usize, const OP: u
         _ => panic!("Unsupported operation: {OP}"),
     };
 
-    let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
+    let mut output = [[0u8; MEMORY_BLOCK_BYTES]; BLOCKS];
     fp2_to_blocks_bn254(&c, &mut output);
     output
 }
 
 #[inline(always)]
-fn fp2_operation_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize, const OP: u8>(
-    input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
-) -> [[u8; BLOCK_SIZE]; BLOCKS] {
-    let a = blocks_to_fp2_bls12_381::<BLOCKS, BLOCK_SIZE>(input_data[0].as_ref());
-    let b = blocks_to_fp2_bls12_381::<BLOCKS, BLOCK_SIZE>(input_data[1].as_ref());
+fn fp2_operation_bls12_381<const BLOCKS: usize, const OP: u8>(
+    input_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2],
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
+    let a = blocks_to_fp2_bls12_381::<BLOCKS>(input_data[0].as_ref());
+    let b = blocks_to_fp2_bls12_381::<BLOCKS>(input_data[1].as_ref());
     let c = match OP {
         x if x == Operation::Add as u8 => a + b,
         x if x == Operation::Sub as u8 => a - b,
@@ -247,7 +213,7 @@ fn fp2_operation_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize, const O
         _ => panic!("Unsupported operation: {OP}"),
     };
 
-    let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
+    let mut output = [[0u8; MEMORY_BLOCK_BYTES]; BLOCKS];
     fp2_to_blocks_bls12_381(&c, &mut output);
     output
 }
@@ -296,11 +262,11 @@ pub fn blocks_to_field_element<F: PrimeField<Repr = [u8; 32]>>(blocks: &[u8]) ->
 }
 
 #[inline(always)]
-pub fn field_element_to_blocks<F: PrimeField<Repr = [u8; 32]>, const BLOCK_SIZE: usize>(
+pub fn field_element_to_blocks<F: PrimeField<Repr = [u8; 32]>>(
     field_element: &F,
-    output: &mut [[u8; BLOCK_SIZE]],
+    output: &mut [[u8; MEMORY_BLOCK_BYTES]],
 ) {
-    debug_assert!(output.len() * BLOCK_SIZE == 32);
+    debug_assert!(output.len() * MEMORY_BLOCK_BYTES == 32);
     let bytes = field_element.to_repr();
     let mut byte_idx = 0;
 
@@ -326,11 +292,11 @@ pub fn blocks_to_field_element_bls12_381_coordinate(blocks: &[u8]) -> blstrs::Fp
 }
 
 #[inline(always)]
-pub fn field_element_to_blocks_bls12_381_coordinate<const BLOCK_SIZE: usize>(
+pub fn field_element_to_blocks_bls12_381_coordinate(
     field_element: &blstrs::Fp,
-    output: &mut [[u8; BLOCK_SIZE]],
+    output: &mut [[u8; MEMORY_BLOCK_BYTES]],
 ) {
-    debug_assert!(output.len() * BLOCK_SIZE == 48);
+    debug_assert!(output.len() * MEMORY_BLOCK_BYTES == 48);
     let bytes = field_element.to_bytes_le();
     let mut byte_idx = 0;
 
@@ -347,8 +313,8 @@ pub fn field_element_to_blocks_bls12_381_coordinate<const BLOCK_SIZE: usize>(
 }
 
 #[inline(always)]
-fn blocks_to_fp2_bn254<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    blocks: &[[u8; BLOCK_SIZE]],
+fn blocks_to_fp2_bn254<const BLOCKS: usize>(
+    blocks: &[[u8; MEMORY_BLOCK_BYTES]],
 ) -> halo2curves_axiom::bn256::Fq2 {
     let c0 = blocks_to_field_element::<halo2curves_axiom::bn256::Fq>(
         blocks[..BLOCKS / 2].as_flattened(),
@@ -360,23 +326,17 @@ fn blocks_to_fp2_bn254<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 }
 
 #[inline(always)]
-fn fp2_to_blocks_bn254<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+fn fp2_to_blocks_bn254<const BLOCKS: usize>(
     fp2: &halo2curves_axiom::bn256::Fq2,
-    output: &mut [[u8; BLOCK_SIZE]; BLOCKS],
+    output: &mut [[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
 ) {
-    field_element_to_blocks::<halo2curves_axiom::bn256::Fq, BLOCK_SIZE>(
-        &fp2.c0,
-        &mut output[..BLOCKS / 2],
-    );
-    field_element_to_blocks::<halo2curves_axiom::bn256::Fq, BLOCK_SIZE>(
-        &fp2.c1,
-        &mut output[BLOCKS / 2..],
-    );
+    field_element_to_blocks::<halo2curves_axiom::bn256::Fq>(&fp2.c0, &mut output[..BLOCKS / 2]);
+    field_element_to_blocks::<halo2curves_axiom::bn256::Fq>(&fp2.c1, &mut output[BLOCKS / 2..]);
 }
 
 #[inline(always)]
-fn blocks_to_fp2_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    blocks: &[[u8; BLOCK_SIZE]],
+fn blocks_to_fp2_bls12_381<const BLOCKS: usize>(
+    blocks: &[[u8; MEMORY_BLOCK_BYTES]],
 ) -> blstrs::Fp2 {
     let c0 = blocks_to_field_element_bls12_381_coordinate(blocks[..BLOCKS / 2].as_flattened());
     let c1 = blocks_to_field_element_bls12_381_coordinate(blocks[BLOCKS / 2..].as_flattened());
@@ -384,9 +344,9 @@ fn blocks_to_fp2_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 }
 
 #[inline(always)]
-fn fp2_to_blocks_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+fn fp2_to_blocks_bls12_381<const BLOCKS: usize>(
     fp2: &blstrs::Fp2,
-    output: &mut [[u8; BLOCK_SIZE]; BLOCKS],
+    output: &mut [[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
 ) {
     field_element_to_blocks_bls12_381_coordinate(&fp2.c0(), &mut output[..BLOCKS / 2]);
     field_element_to_blocks_bls12_381_coordinate(&fp2.c1(), &mut output[BLOCKS / 2..]);

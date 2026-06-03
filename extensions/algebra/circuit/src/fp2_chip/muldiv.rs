@@ -106,7 +106,7 @@ fn gen_base_expr(
     (expr, local_opcode_idx, opcode_flag_idx)
 }
 
-pub fn get_fp2_muldiv_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_fp2_muldiv_air<const BLOCKS: usize>(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
@@ -114,7 +114,7 @@ pub fn get_fp2_muldiv_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     bitwise_lookup_bus: BitwiseOperationLookupBus,
     pointer_max_bits: usize,
     offset: usize,
-) -> Fp2Air<BLOCKS, BLOCK_SIZE> {
+) -> Fp2Air<BLOCKS> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
     Fp2Air::new(
         Rv64VecHeapAdapterAir::new(
@@ -127,12 +127,12 @@ pub fn get_fp2_muldiv_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     )
 }
 
-pub fn get_fp2_muldiv_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_fp2_muldiv_step<const BLOCKS: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
     offset: usize,
-) -> Fp2Executor<BLOCKS, BLOCK_SIZE> {
+) -> Fp2Executor<BLOCKS> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
     FieldExprVecHeapExecutor::new(FieldExpressionExecutor::new(
@@ -145,13 +145,13 @@ pub fn get_fp2_muldiv_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     ))
 }
 
-pub fn get_fp2_muldiv_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_fp2_muldiv_chip<F, const BLOCKS: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     pointer_max_bits: usize,
-) -> Fp2Chip<F, BLOCKS, BLOCK_SIZE> {
+) -> Fp2Chip<F, BLOCKS> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
     Fp2Chip::new(
         FieldExpressionFiller::new(

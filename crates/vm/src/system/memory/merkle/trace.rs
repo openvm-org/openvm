@@ -20,13 +20,13 @@ use crate::{
     },
 };
 
-impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
+impl<const DIGEST_WIDTH: usize, F: PrimeField32> MemoryMerkleChip<DIGEST_WIDTH, F> {
     #[instrument(name = "merkle_finalize", level = "debug", skip_all)]
     pub(crate) fn finalize(
         &mut self,
         initial_memory: &MemoryImage,
-        final_memory: &Equipartition<F, CHUNK>,
-        hasher: &impl HasherChip<CHUNK, F>,
+        final_memory: &Equipartition<F, DIGEST_WIDTH>,
+        hasher: &impl HasherChip<DIGEST_WIDTH, F>,
     ) {
         assert!(self.final_state.is_none(), "Merkle chip already finalized");
         let memory_dimensions = &self.air.memory_dimensions;
@@ -36,7 +36,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     }
 }
 
-impl<const CHUNK: usize, F> MemoryMerkleChip<CHUNK, F>
+impl<const DIGEST_WIDTH: usize, F> MemoryMerkleChip<DIGEST_WIDTH, F>
 where
     F: PrimeField32,
 {
@@ -62,7 +62,7 @@ where
         {
             self.current_height = rows.len();
         }
-        let width = MemoryMerkleCols::<Val<SC>, CHUNK>::width();
+        let width = MemoryMerkleCols::<Val<SC>, DIGEST_WIDTH>::width();
         let mut height = rows.len().next_power_of_two();
         if let Some(mut oh) = self.overridden_height {
             oh = oh.next_power_of_two();
