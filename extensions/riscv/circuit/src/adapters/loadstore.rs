@@ -163,14 +163,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             .assert_zero(local_cols.rd_rs2_ptr);
 
         // Read rs1 as a low 32-bit pointer value; the upper register cells are zero on the bus.
-        let rs1_bus: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&local_cols.rs1_data);
+        let rs1_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&local_cols.rs1_data);
         self.memory_bridge
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
                 ),
-                rs1_bus,
+                rs1_data,
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
             )

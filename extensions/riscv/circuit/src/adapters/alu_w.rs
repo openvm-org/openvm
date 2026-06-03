@@ -38,7 +38,7 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    byte_ptr_to_u16_ptr, pack_high_u16, pack_u8_pair, tracing_read, tracing_read_imm,
+    byte_ptr_to_u16_ptr, pack_high_u16, pack_rv64_u16_block, tracing_read, tracing_read_imm,
     tracing_write, RV64_PTR_U16_LIMBS,
 };
 
@@ -128,19 +128,15 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
             .send_range(rs2_limbs[0].clone(), rs2_limbs[1].clone())
             .eval(builder, ctx.instruction.is_valid.clone() - local.rs2_as);
 
-        let rs1_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
-            pack_u8_pair(ctx.reads[0][0].clone(), ctx.reads[0][1].clone()),
-            pack_u8_pair(ctx.reads[0][2].clone(), ctx.reads[0][3].clone()),
-            local.rs1_high[0].into(),
-            local.rs1_high[1].into(),
-        ];
+        let rs1_data: [AB::Expr; BLOCK_FE_WIDTH] =
+            pack_rv64_u16_block(&ctx.reads[0], &local.rs1_high);
         self.memory_bridge
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
                 ),
-                rs1_bus,
+                rs1_data,
                 timestamp_pp(),
                 &local.reads_aux[0],
             )
@@ -150,16 +146,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
         builder
             .when(local.rs2_as)
             .assert_one(ctx.instruction.is_valid.clone());
-        let rs2_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
-            pack_u8_pair(ctx.reads[1][0].clone(), ctx.reads[1][1].clone()),
-            pack_u8_pair(ctx.reads[1][2].clone(), ctx.reads[1][3].clone()),
-            local.rs2_high[0].into(),
-            local.rs2_high[1].into(),
-        ];
+        let rs2_data: [AB::Expr; BLOCK_FE_WIDTH] =
+            pack_rv64_u16_block(&ctx.reads[1], &local.rs2_high);
         self.memory_bridge
             .read(
                 MemoryAddress::new(local.rs2_as, byte_ptr_to_u16_ptr::<AB>(local.rs2)),
-                rs2_bus,
+                rs2_data,
                 timestamp_pp(),
                 &local.reads_aux[1],
             )
@@ -180,19 +172,16 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
             )
             .eval(builder, ctx.instruction.is_valid.clone());
         let sign_extend_u16 = AB::Expr::from_u32(u16::MAX as u32) * local.result_sign;
-        let write_bus: [AB::Expr; BLOCK_FE_WIDTH] = [
-            pack_u8_pair(ctx.writes[0][0].clone(), ctx.writes[0][1].clone()),
-            pack_u8_pair(ctx.writes[0][2].clone(), ctx.writes[0][3].clone()),
-            sign_extend_u16.clone(),
-            sign_extend_u16.clone(),
-        ];
+        let sign_extend = [sign_extend_u16.clone(), sign_extend_u16.clone()];
+        let write_data: [AB::Expr; BLOCK_FE_WIDTH] =
+            pack_rv64_u16_block(&ctx.writes[0], &sign_extend);
         self.memory_bridge
             .write(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local.rd_ptr),
                 ),
-                write_bus,
+                write_data,
                 timestamp_pp(),
                 &local.writes_aux,
             )

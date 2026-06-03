@@ -57,6 +57,24 @@ pub fn pack_u8_pair_u32<T: PrimeCharacteristicRing>(lo: u32, hi: u32) -> T {
 }
 
 #[inline(always)]
+pub fn pack_rv64_u16_block<L, H, T>(
+    low_word: &[L; RV64_WORD_NUM_LIMBS],
+    high: &[H; RV64_PTR_U16_LIMBS],
+) -> [T; BLOCK_FE_WIDTH]
+where
+    L: Clone + Into<T>,
+    H: Clone + Into<T>,
+    T: PrimeCharacteristicRing,
+{
+    [
+        pack_u8_pair(low_word[0].clone().into(), low_word[1].clone().into()),
+        pack_u8_pair(low_word[2].clone().into(), low_word[3].clone().into()),
+        high[0].clone().into(),
+        high[1].clone().into(),
+    ]
+}
+
+#[inline(always)]
 pub(crate) fn pack_high_u16<T: PrimeCharacteristicRing>(
     bytes: &[u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
 ) -> [T; RV64_PTR_U16_LIMBS] {
