@@ -306,7 +306,6 @@ pub fn constraint_word_addition<AB: AirBuilder, C: Sha2BlockHasherSubairConfig>(
     }
 }
 
-/// Fill an array view from u32 values.
 pub fn set_arrayview_from_u32_slice<F: PrimeField32, D: ndarray::Dimension>(
     arrayview: &mut ArrayViewMut<F, D>,
     data: impl IntoIterator<Item = u32>,
@@ -317,7 +316,6 @@ pub fn set_arrayview_from_u32_slice<F: PrimeField32, D: ndarray::Dimension>(
         .for_each(|(x, y)| *x = y);
 }
 
-/// Fill an array view from u16 values.
 pub fn set_arrayview_from_u16_slice<F: PrimeField32, D: ndarray::Dimension>(
     arrayview: &mut ArrayViewMut<F, D>,
     data: impl IntoIterator<Item = u16>,
@@ -328,7 +326,6 @@ pub fn set_arrayview_from_u16_slice<F: PrimeField32, D: ndarray::Dimension>(
         .for_each(|(x, y)| *x = y);
 }
 
-/// Fill an array view from u8 values.
 pub fn set_arrayview_from_u8_slice<F: PrimeField32, D: ndarray::Dimension>(
     arrayview: &mut ArrayViewMut<F, D>,
     data: impl IntoIterator<Item = u8>,
@@ -339,7 +336,6 @@ pub fn set_arrayview_from_u8_slice<F: PrimeField32, D: ndarray::Dimension>(
         .for_each(|(x, y)| *x = y);
 }
 
-/// Fill an array view by decoding bytes as little-endian u16 limbs.
 pub fn set_arrayview_from_u16_le_bytes<F: PrimeField32, D: ndarray::Dimension>(
     arrayview: &mut ArrayViewMut<F, D>,
     bytes: &[u8],

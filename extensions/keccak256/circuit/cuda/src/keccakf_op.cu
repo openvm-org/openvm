@@ -25,9 +25,9 @@ using openvm::U16_BITS;
 // Fill the single trace row for one keccakf_op record.
 //
 // Marked __noinline__ so the large local working set (200 B keccak state union,
-// MemoryAuxColsFactory, plus per-call spills around keccakf_permutation) lives in this
-// helper's own stack frame instead of the kernel's. The kernel itself only does the
-// index/dummy-row plumbing.
+// MemoryAuxColsFactory, plus per-call spills around
+// keccakf_permutation) lives in this helper's own stack frame instead of the
+// kernel's. The kernel itself only does the index/dummy-row plumbing.
 static __device__ __noinline__ void fill_keccakf_op_row(
     RowSlice row,
     KeccakfOpRecord const &rec,

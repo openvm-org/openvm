@@ -38,7 +38,7 @@ pub struct XorinVmAir {
     pub memory_bridge: MemoryBridge,
     /// Bus to send 8-bit XOR requests to.
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
-    /// Range checker for pointer-byte canonicity and pointer-width bounds.
+    /// Range checker for pointer-width bounds.
     pub range_bus: VariableRangeCheckerBus,
     /// Maximum number of bits allowed for an address pointer
     pub ptr_max_bits: usize,

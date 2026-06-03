@@ -20,7 +20,7 @@ pub struct XorinVmExecutor {
 // number of bits = 8
 pub struct XorinVmFiller {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
-    /// Range checker for pointer-byte canonicity and pointer-width bounds.
+    /// Range checker for pointer-width bounds.
     pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub pointer_max_bits: usize,
 }

@@ -94,7 +94,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         let buffer_ptr = u16_limbs_to_ptr(&local.buffer_ptr_limbs);
 
         // ======== Constrain new writes of `buffer` to memory =========
-        // NOTE: we use the _next_ row's `buffer` as the pre-state
+        // Keccak state and memory both consume these values as packed u16 cells.
         for (word_idx, (prev_word, post_word, base_aux)) in izip!(
             local.preimage.chunks_exact(BLOCK_FE_WIDTH),
             local.postimage.chunks_exact(BLOCK_FE_WIDTH),
