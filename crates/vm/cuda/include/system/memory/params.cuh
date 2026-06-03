@@ -4,8 +4,7 @@
 // `openvm_circuit::arch::config` and `openvm_circuit::system::memory::controller`.
 //
 // Terminology:
-//   Cell    one storage word in an address space (u16 for RV64 ASes, Fp for
-//           DEFERRAL_AS).
+//   Cell    one storage word in an address space.
 //   Block   the unit of one memory-bus message: BLOCK_FE_WIDTH cells =
 //           MEMORY_BLOCK_BYTES bytes.
 //   Digest  the output of one Poseidon2 compression (DIGEST_WIDTH cells); also
@@ -50,7 +49,7 @@ inline constexpr size_t DIGEST_WIDTH = CELLS_OUT;
 // Cells per Poseidon2 permutation input.
 inline constexpr size_t POSEIDON2_WIDTH = CELLS;
 
-// Bytes per memory-bus block (one RV64 8-byte word pair).
+// Bytes per memory-bus block.
 inline constexpr size_t MEMORY_BLOCK_BYTES = 8;
 
 // Host byte width of one u16-celled storage cell.

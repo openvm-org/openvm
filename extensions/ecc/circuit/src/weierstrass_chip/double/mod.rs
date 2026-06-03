@@ -15,7 +15,7 @@ use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
-use openvm_instructions::riscv::RV64_CELL_BITS;
+use openvm_instructions::riscv::RV64_BYTE_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
     FieldExpressionFiller, FieldVariable,
@@ -159,7 +159,7 @@ pub fn get_ec_double_chip<F, const BLOCKS: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     pointer_max_bits: usize,
     a_biguint: BigUint,
 ) -> WeierstrassChip<F, 1, BLOCKS> {

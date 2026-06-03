@@ -12,7 +12,7 @@ __device__ __forceinline__ uint64_t limbs_to_u64(const uint8_t (&limbs)[NUM_LIMB
     uint64_t val = 0;
 #pragma unroll
     for (size_t i = 0; i < NUM_LIMBS; i++) {
-        val |= (uint64_t)limbs[i] << (i * RV64_CELL_BITS);
+        val |= (uint64_t)limbs[i] << (i * RV64_BYTE_BITS);
     }
     return val;
 }
@@ -21,7 +21,7 @@ template <size_t NUM_LIMBS>
 __device__ __forceinline__ void u64_to_limbs(uint64_t val, uint8_t (&limbs)[NUM_LIMBS]) {
 #pragma unroll
     for (size_t i = 0; i < NUM_LIMBS; i++) {
-        limbs[i] = (uint8_t)(val >> (i * RV64_CELL_BITS));
+        limbs[i] = (uint8_t)(val >> (i * RV64_BYTE_BITS));
     }
 }
 
@@ -50,7 +50,7 @@ template <typename T, size_t NUM_LIMBS> struct DivRemCoreCols {
 
     // Auxiliary columns to constrain that 0 <= |r| < |c|. When sign_xor == 1 we have
     // r_prime = -r, and when sign_xor == 0 we have r_prime = r. Each r_inv[i] is the
-    // field inverse of r_prime[i] - 2^RV64_CELL_BITS, ensures each r_prime[i] is in range.
+    // field inverse of r_prime[i] - 2^RV64_BYTE_BITS, ensures each r_prime[i] is in range.
     T r_prime[NUM_LIMBS];
     T r_inv[NUM_LIMBS];
     T lt_marker[NUM_LIMBS];
@@ -82,7 +82,7 @@ template <size_t NUM_LIMBS> struct DivRemCore {
 
     template <typename T> using Cols = DivRemCoreCols<T, NUM_LIMBS>;
 
-    static constexpr size_t TOTAL_BITS = NUM_LIMBS * RV64_CELL_BITS;
+    static constexpr size_t TOTAL_BITS = NUM_LIMBS * RV64_BYTE_BITS;
     static_assert(TOTAL_BITS <= 64, "DivRemCore supports up to 64 total bits");
     static constexpr uint64_t VALUE_MASK =
         (TOTAL_BITS == 64) ? ~uint64_t(0) : ((uint64_t(1) << TOTAL_BITS) - 1);
@@ -102,8 +102,8 @@ template <size_t NUM_LIMBS> struct DivRemCore {
         DivRemOpcode opcode = static_cast<DivRemOpcode>(record.local_opcode);
 
         bool is_signed = opcode == DIV || opcode == REM;
-        bool b_sign = is_signed && (record.b[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1));
-        bool c_sign = is_signed && (record.c[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1));
+        bool b_sign = is_signed && (record.b[NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1));
+        bool c_sign = is_signed && (record.c[NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1));
         bool q_sign = false;
         bool case_none = false;
 
@@ -225,14 +225,14 @@ template <size_t NUM_LIMBS> struct DivRemCore {
             for (size_t j = 0; j <= i; j++) {
                 carry += (uint32_t)q[j] * (uint32_t)record.c[i - j];
             }
-            carry = carry >> RV64_CELL_BITS;
+            carry = carry >> RV64_BYTE_BITS;
             range_tuple_checker.add_count((uint32_t[2]){(uint32_t)q[i], carry});
         }
-        bool r_sign = is_signed && (r[NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1));
+        bool r_sign = is_signed && (r[NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1));
 
-        uint32_t q_ext = (q_sign && is_signed) * ((1 << RV64_CELL_BITS) - 1);
-        uint32_t c_ext = (c_sign << RV64_CELL_BITS) - c_sign;
-        uint32_t r_ext = (r_sign << RV64_CELL_BITS) - r_sign;
+        uint32_t q_ext = (q_sign && is_signed) * ((1 << RV64_BYTE_BITS) - 1);
+        uint32_t c_ext = (c_sign << RV64_BYTE_BITS) - c_sign;
+        uint32_t r_ext = (r_sign << RV64_BYTE_BITS) - r_sign;
 
         uint32_t c_pref = 0;
         uint32_t q_pref = 0;
@@ -245,7 +245,7 @@ template <size_t NUM_LIMBS> struct DivRemCore {
             for (size_t j = i + 1; j < NUM_LIMBS; j++) {
                 carry += (uint32_t)record.c[j] * (uint32_t)q[NUM_LIMBS + i - j];
             }
-            carry = carry >> RV64_CELL_BITS;
+            carry = carry >> RV64_BYTE_BITS;
             range_tuple_checker.add_count((uint32_t[2]){(uint32_t)r[i], carry});
         }
     }

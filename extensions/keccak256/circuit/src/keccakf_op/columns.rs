@@ -1,9 +1,9 @@
 use openvm_circuit::system::memory::offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols};
 use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::riscv::RV64_WORD_NUM_LIMBS;
+use openvm_riscv_circuit::adapters::RV64_PTR_U16_LIMBS;
 
-use crate::{KECCAK_WIDTH_BYTES, KECCAK_WIDTH_MEM_OPS};
+use crate::{KECCAK_WIDTH_MEM_OPS, KECCAK_WIDTH_U16S};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, AlignedBorrow, StructReflection)]
@@ -19,17 +19,16 @@ pub struct KeccakfOpCols<T> {
     /// The `rd` register holds the value of `buffer_ptr`.
     pub rd_ptr: T,
     /// `buffer_ptr <- [rd_ptr:8]_1`.
-    /// Low 4 bytes of the 8-byte `rd` register, interpreted as the pointer to address space 2
-    /// `buffer`.
-    pub buffer_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
-    /// The preimage state, to be permuted in the `keccakf` operation.
-    pub preimage: [T; KECCAK_WIDTH_BYTES],
-    /// The postimage state after `keccakf` permute of `preimage`.
+    /// Low 32 bits as u16 cells.
+    pub buffer_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
+    /// The preimage state before the `keccakf` permutation.
+    pub preimage: [T; KECCAK_WIDTH_U16S],
+    /// The postimage state after the `keccakf` permutation.
     ///
     /// Note: there is 2 row per instruction design where these columns can be shared with
     /// `preimage`. However due to the interactions necessary for range checks, currently we
     /// determined it is better to minimum number of rows while using more main columns.
-    pub postimage: [T; KECCAK_WIDTH_BYTES],
+    pub postimage: [T; KECCAK_WIDTH_U16S],
     /// Auxiliary columns for timestamp checking for the read of `[rd_ptr:8]_1`.
     pub rd_aux: MemoryReadAuxCols<T>,
     /// Auxiliary columns for timestamp checking of the writes to `buffer`. The writes are done one

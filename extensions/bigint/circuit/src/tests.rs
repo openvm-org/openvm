@@ -22,7 +22,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     program::{DEFAULT_PC_STEP, PC_BITS},
-    riscv::RV64_CELL_BITS,
+    riscv::RV64_BYTE_BITS,
     LocalOpcode,
 };
 use openvm_riscv_adapters::{
@@ -31,10 +31,9 @@ use openvm_riscv_adapters::{
     Rv64VecHeapBranchAdapterExecutor, Rv64VecHeapBranchAdapterFiller,
 };
 use openvm_riscv_circuit::{
-    adapters::{INT256_NUM_LIMBS, RV_B_TYPE_IMM_BITS},
-    BaseAluCoreAir, BaseAluFiller, BranchEqualCoreAir, BranchEqualFiller, BranchLessThanCoreAir,
-    BranchLessThanFiller, LessThanCoreAir, LessThanFiller, MultiplicationCoreAir,
-    MultiplicationFiller, ShiftCoreAir, ShiftFiller,
+    adapters::RV_B_TYPE_IMM_BITS, BaseAluCoreAir, BaseAluFiller, BranchEqualCoreAir,
+    BranchEqualFiller, BranchLessThanCoreAir, BranchLessThanFiller, LessThanCoreAir,
+    LessThanFiller, MultiplicationCoreAir, MultiplicationFiller, ShiftCoreAir, ShiftFiller,
 };
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
@@ -69,20 +68,21 @@ use crate::{
     Rv64BranchLessThan256Executor, Rv64LessThan256Air, Rv64LessThan256Chip,
     Rv64LessThan256Executor, Rv64Multiplication256Air, Rv64Multiplication256Chip,
     Rv64Multiplication256Executor, Rv64Shift256Air, Rv64Shift256Chip, Rv64Shift256Executor,
+    INT256_NUM_LIMBS,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_BRANCH: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 const RANGE_TUPLE_SIZES: [u32; 2] = [
-    1 << RV64_CELL_BITS,
-    (INT256_NUM_LIMBS * (1 << RV64_CELL_BITS)) as u32,
+    1 << RV64_BYTE_BITS,
+    (INT256_NUM_LIMBS * (1 << RV64_BYTE_BITS)) as u32,
 ];
 
 fn create_alu_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -117,7 +117,7 @@ fn create_alu_harness_fields(
 fn create_lt_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -152,7 +152,7 @@ fn create_lt_harness_fields(
 fn create_mul_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
@@ -193,7 +193,7 @@ fn create_mul_harness_fields(
 fn create_shift_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     range_checker_chip: Arc<VariableRangeCheckerChip>,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
@@ -230,7 +230,7 @@ fn create_shift_harness_fields(
 fn create_beq_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -271,7 +271,7 @@ fn create_beq_harness_fields(
 fn create_blt_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -322,8 +322,8 @@ fn blt_branch_fn(opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NU
         BranchLessThanOpcode::BGE => (true, true),
         BranchLessThanOpcode::BGEU => (true, false),
     };
-    let x_sign = x[INT256_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1) != 0 && is_signed;
-    let y_sign = y[INT256_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1) != 0 && is_signed;
+    let x_sign = x[INT256_NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1) != 0 && is_signed;
+    let y_sign = y[INT256_NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1) != 0 && is_signed;
     for (x, y) in x.iter().rev().zip(y.iter().rev()) {
         if x != y {
             return (x < y) ^ x_sign ^ y_sign ^ is_ge;
@@ -343,8 +343,8 @@ fn set_and_execute_rand<RA: Arena, E: PreflightExecutor<F, RA>>(
 ) {
     let branch = branch_fn.is_some();
 
-    let b = generate_long_number::<INT256_NUM_LIMBS, RV64_CELL_BITS>(rng);
-    let c = generate_long_number::<INT256_NUM_LIMBS, RV64_CELL_BITS>(rng);
+    let b = generate_long_number::<INT256_NUM_LIMBS, RV64_BYTE_BITS>(rng);
+    let c = generate_long_number::<INT256_NUM_LIMBS, RV64_BYTE_BITS>(rng);
     if branch {
         let imm = rng.random_range((-ABS_MAX_BRANCH)..ABS_MAX_BRANCH);
         let instruction = rv64_heap_branch_default(
@@ -388,7 +388,7 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
     let offset = Rv64BaseAlu256Opcode::CLASS_OFFSET;
 
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -427,7 +427,7 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     let offset = Rv64LessThan256Opcode::CLASS_OFFSET;
 
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -468,7 +468,7 @@ fn run_mul_256_rand_test(opcode: MulOpcode, num_ops: usize) {
     let range_tuple_chip =
         SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -511,7 +511,7 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
 
     let range_checker_chip = tester.range_checker();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -552,7 +552,7 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
     let offset = Rv64BranchEqual256Opcode::CLASS_OFFSET;
 
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -593,7 +593,7 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     let offset = Rv64BranchLessThan256Opcode::CLASS_OFFSET;
 
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -636,7 +636,7 @@ fn run_alu_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -697,7 +697,7 @@ fn run_lt_256_rand_test_cuda(opcode: LessThanOpcode, num_ops: usize) {
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -760,7 +760,7 @@ fn run_mul_256_rand_test_cuda(opcode: MulOpcode, num_ops: usize) {
         .with_bitwise_op_lookup(default_bitwise_lookup_bus())
         .with_range_tuple_checker(range_tuple_bus);
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
     let dummy_range_tuple_chip = Arc::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
@@ -826,7 +826,7 @@ fn run_shift_256_rand_test_cuda(opcode: ShiftOpcode, num_ops: usize) {
 
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_bus = default_var_range_checker_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
@@ -886,7 +886,7 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = GpuChipTestBuilder::default().with_bitwise_op_lookup(bitwise_bus);
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -952,7 +952,7 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = GpuChipTestBuilder::default().with_bitwise_op_lookup(bitwise_bus);
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 

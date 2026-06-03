@@ -54,8 +54,7 @@ pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 // byte/cell/block/leaf layout diagram).
 //
 // Terminology:
-//   Cell    one storage word in an address space (u16 for RV64 ASes, F for
-//           DEFERRAL_AS).
+//   Cell    one storage word in an address space.
 //   Block   the unit of one memory-bus message: BLOCK_FE_WIDTH cells =
 //           MEMORY_BLOCK_BYTES bytes.
 //   Digest  the output of one Poseidon2 compression (DIGEST_WIDTH cells); also
@@ -82,11 +81,16 @@ pub const fn to_byte_ptr_bits(ptr_bits: usize) -> usize {
 /// Cells per memory-bus block.
 pub const BLOCK_FE_WIDTH: usize = 4;
 
-/// Bytes per memory-bus block (one RV64 8-byte word pair).
+/// Bytes per memory-bus block.
 pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 
-/// Default byte count for `RV64_MEMORY_AS` in `MemoryConfig::default`.
-pub const DEFAULT_RV64_MEMORY_BYTES: usize = 1 << to_byte_ptr_bits(POINTER_MAX_BITS);
+/// Default byte-pointer bit width.
+pub const BYTE_POINTER_MAX_BITS: usize = to_byte_ptr_bits(POINTER_MAX_BITS);
+
+/// Byte count for `RV64_MEMORY_AS`.
+// TODO: make executor debug bounds use `MemoryConfig::pointer_max_bits` once
+// execution state carries the memory config.
+pub const RV64_MEMORY_BYTES: usize = 1 << BYTE_POINTER_MAX_BITS;
 
 /// Number of registers in the RV64 register file.
 pub const NUM_RV64_REGISTERS: usize = 32;
@@ -239,7 +243,7 @@ impl Default for MemoryConfig {
         // RV64 register, memory, and public-values address spaces use u16 storage cells.
         addr_spaces[RV64_REGISTER_AS as usize].num_cells =
             NUM_RV64_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;
-        addr_spaces[RV64_MEMORY_AS as usize].num_cells = DEFAULT_RV64_MEMORY_BYTES / U16_CELL_SIZE;
+        addr_spaces[RV64_MEMORY_AS as usize].num_cells = RV64_MEMORY_BYTES / U16_CELL_SIZE;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
     }
