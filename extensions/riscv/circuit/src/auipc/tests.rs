@@ -41,7 +41,8 @@ use {
 use crate::{
     adapters::{
         rv64_u16_block_to_bytes, Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols,
-        Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_BYTE_BITS,
+        Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_BYTE_BITS, RV64_PTR_U16_LIMBS,
+        RV64_WORD_NUM_LIMBS,
     },
     auipc::{run_auipc, Rv64AuipcCoreCols},
     Rv64AuipcAir, Rv64AuipcChip, Rv64AuipcCoreAir, Rv64AuipcExecutor, Rv64AuipcFiller,
@@ -163,19 +164,19 @@ fn rand_auipc_test() {
 #[derive(Clone, Copy, Default, PartialEq)]
 struct AuipcPrankValues {
     pub is_sign_extend: Option<u32>,
-    pub rd_data: Option<[u32; 2]>,
+    pub rd_data: Option<[u32; RV64_PTR_U16_LIMBS]>,
     pub imm_low_8: Option<u32>,
     pub imm_high_16: Option<u32>,
 }
 
-fn pack_rd_u8_limbs(limbs: [u32; 4]) -> [u32; 2] {
+fn pack_rd_u8_limbs(limbs: [u32; RV64_WORD_NUM_LIMBS]) -> [u32; RV64_PTR_U16_LIMBS] {
     [
         limbs[0] + (limbs[1] << RV64_BYTE_BITS),
         limbs[2] + (limbs[3] << RV64_BYTE_BITS),
     ]
 }
 
-fn split_imm_u8_limbs(limbs: [u32; 3]) -> (u32, u32) {
+fn split_imm_u8_limbs(limbs: [u32; RV64_WORD_NUM_LIMBS - 1]) -> (u32, u32) {
     (limbs[0], limbs[1] + (limbs[2] << RV64_BYTE_BITS))
 }
 
@@ -336,8 +337,8 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 
 #[test]
 fn sign_extend_flag_negative_tests() {
-    // is_sign_extend = 1 when the result fits in 32 bits (MSB of rd_data[1] is 0).
-    // pc=4, imm=0 => rd low 32 bits = [4, 0].
+    // Prank is_sign_extend = 1 when the result has bit 31 unset (MSB of rd_data[1] is 0).
+    // pc=4, imm=0 ⟹ rd = 4 ⟹ rd low 32 bits = [4, 0].
     run_negative_auipc_test(
         AUIPC,
         Some(0),
@@ -348,8 +349,8 @@ fn sign_extend_flag_negative_tests() {
         },
         true,
     );
-    // is_sign_extend = 0 when the result has bit 31 set (MSB of rd_data[1] is 1).
-    // pc=0, imm=2^23 => rd low 32 bits = [0, 0x8000].
+    // Prank is_sign_extend = 0 when the result has bit 31 set (MSB of rd_data[1] is 1).
+    // pc=0, imm=2^23 ⟹ rd = 2^31 ⟹ rd low 32 bits = [0, 0x8000].
     run_negative_auipc_test(
         AUIPC,
         Some(1 << 23),
@@ -464,7 +465,8 @@ fn test_cuda_rand_auipc_tracegen() {
     let mut rng = create_seeded_rng();
     let mut harness = create_cuda_harness(&tester);
 
-    for _ in 0..100 {
+    let num_ops = 100;
+    for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
             &mut harness.executor,

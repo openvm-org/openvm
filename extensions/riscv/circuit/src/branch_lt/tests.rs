@@ -380,10 +380,12 @@ fn rv64_blt_zero_diff_marker_negative_test() {
 
 #[test]
 fn rv64_blt_signed_wrong_a_msb_negative_test() {
-    let a = rv64_bytes_to_u16_block([145, 56, 89, 100, 5, 34, 25, 205]);
-    let b = rv64_bytes_to_u16_block([73, 56, 89, 100, 5, 35, 25, 205]);
+    let a_bytes = [145, 56, 89, 100, 5, 34, 25, 205];
+    let b_bytes = [73, 56, 89, 100, 5, 35, 25, 205];
+    let a = rv64_bytes_to_u16_block(a_bytes);
+    let b = rv64_bytes_to_u16_block(b_bytes);
     let prank_vals = BranchLessThanPrankValues {
-        a_msb: Some(rv64_msb_byte_prank_to_u16_limb(25, 206)),
+        a_msb: Some(rv64_msb_byte_prank_to_u16_limb(a_bytes, 206)),
         diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(1),
         ..Default::default()
@@ -394,10 +396,12 @@ fn rv64_blt_signed_wrong_a_msb_negative_test() {
 
 #[test]
 fn rv64_blt_signed_wrong_a_msb_sign_negative_test() {
-    let a = rv64_bytes_to_u16_block([145, 56, 89, 100, 5, 34, 25, 205]);
-    let b = rv64_bytes_to_u16_block([73, 56, 89, 100, 5, 35, 25, 205]);
+    let a_bytes = [145, 56, 89, 100, 5, 34, 25, 205];
+    let b_bytes = [73, 56, 89, 100, 5, 35, 25, 205];
+    let a = rv64_bytes_to_u16_block(a_bytes);
+    let b = rv64_bytes_to_u16_block(b_bytes);
     let prank_vals = BranchLessThanPrankValues {
-        a_msb: Some(rv64_msb_byte_prank_to_u16_limb(25, 205)),
+        a_msb: Some(rv64_msb_byte_prank_to_u16_limb(a_bytes, 205)),
         diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(256),
         ..Default::default()
@@ -408,10 +412,12 @@ fn rv64_blt_signed_wrong_a_msb_sign_negative_test() {
 
 #[test]
 fn rv64_blt_signed_wrong_b_msb_negative_test() {
-    let a = rv64_bytes_to_u16_block([145, 56, 89, 100, 5, 36, 25, 205]);
-    let b = rv64_bytes_to_u16_block([73, 56, 89, 100, 5, 35, 25, 205]);
+    let a_bytes = [145, 56, 89, 100, 5, 36, 25, 205];
+    let b_bytes = [73, 56, 89, 100, 5, 35, 25, 205];
+    let a = rv64_bytes_to_u16_block(a_bytes);
+    let b = rv64_bytes_to_u16_block(b_bytes);
     let prank_vals = BranchLessThanPrankValues {
-        b_msb: Some(rv64_msb_byte_prank_to_u16_limb(25, 206)),
+        b_msb: Some(rv64_msb_byte_prank_to_u16_limb(b_bytes, 206)),
         diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(1),
         ..Default::default()
@@ -422,10 +428,12 @@ fn rv64_blt_signed_wrong_b_msb_negative_test() {
 
 #[test]
 fn rv64_blt_signed_wrong_b_msb_sign_negative_test() {
-    let a = rv64_bytes_to_u16_block([145, 56, 89, 100, 5, 36, 25, 205]);
-    let b = rv64_bytes_to_u16_block([73, 56, 89, 100, 5, 35, 25, 205]);
+    let a_bytes = [145, 56, 89, 100, 5, 36, 25, 205];
+    let b_bytes = [73, 56, 89, 100, 5, 35, 25, 205];
+    let a = rv64_bytes_to_u16_block(a_bytes);
+    let b = rv64_bytes_to_u16_block(b_bytes);
     let prank_vals = BranchLessThanPrankValues {
-        b_msb: Some(rv64_msb_byte_prank_to_u16_limb(25, 205)),
+        b_msb: Some(rv64_msb_byte_prank_to_u16_limb(b_bytes, 205)),
         diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(256),
         ..Default::default()
@@ -436,10 +444,12 @@ fn rv64_blt_signed_wrong_b_msb_sign_negative_test() {
 
 #[test]
 fn rv64_blt_unsigned_wrong_a_msb_negative_test() {
-    let a = rv64_bytes_to_u16_block([145, 56, 89, 100, 5, 36, 25, 205]);
-    let b = rv64_bytes_to_u16_block([73, 56, 89, 100, 5, 35, 25, 205]);
+    let a_bytes = [145, 56, 89, 100, 5, 36, 25, 205];
+    let b_bytes = [73, 56, 89, 100, 5, 35, 25, 205];
+    let a = rv64_bytes_to_u16_block(a_bytes);
+    let b = rv64_bytes_to_u16_block(b_bytes);
     let prank_vals = BranchLessThanPrankValues {
-        a_msb: Some(rv64_msb_byte_prank_to_u16_limb(25, 204)),
+        a_msb: Some(rv64_msb_byte_prank_to_u16_limb(a_bytes, 204)),
         diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(1),
         ..Default::default()
@@ -450,10 +460,12 @@ fn rv64_blt_unsigned_wrong_a_msb_negative_test() {
 
 #[test]
 fn rv64_blt_unsigned_wrong_a_msb_sign_negative_test() {
-    let a = rv64_bytes_to_u16_block([145, 56, 89, 100, 5, 36, 25, 205]);
-    let b = rv64_bytes_to_u16_block([73, 56, 89, 100, 5, 35, 25, 205]);
+    let a_bytes = [145, 56, 89, 100, 5, 36, 25, 205];
+    let b_bytes = [73, 56, 89, 100, 5, 35, 25, 205];
+    let a = rv64_bytes_to_u16_block(a_bytes);
+    let b = rv64_bytes_to_u16_block(b_bytes);
     let prank_vals = BranchLessThanPrankValues {
-        a_msb: Some(rv64_msb_byte_prank_to_u16_limb(25, -51)),
+        a_msb: Some(rv64_msb_byte_prank_to_u16_limb(a_bytes, -51)),
         diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(256),
         ..Default::default()
@@ -464,10 +476,12 @@ fn rv64_blt_unsigned_wrong_a_msb_sign_negative_test() {
 
 #[test]
 fn rv64_blt_unsigned_wrong_b_msb_negative_test() {
-    let a = rv64_bytes_to_u16_block([145, 56, 89, 100, 5, 34, 25, 205]);
-    let b = rv64_bytes_to_u16_block([73, 56, 89, 100, 5, 35, 25, 205]);
+    let a_bytes = [145, 56, 89, 100, 5, 34, 25, 205];
+    let b_bytes = [73, 56, 89, 100, 5, 35, 25, 205];
+    let a = rv64_bytes_to_u16_block(a_bytes);
+    let b = rv64_bytes_to_u16_block(b_bytes);
     let prank_vals = BranchLessThanPrankValues {
-        b_msb: Some(rv64_msb_byte_prank_to_u16_limb(25, 206)),
+        b_msb: Some(rv64_msb_byte_prank_to_u16_limb(b_bytes, 206)),
         diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(1),
         ..Default::default()
@@ -478,10 +492,12 @@ fn rv64_blt_unsigned_wrong_b_msb_negative_test() {
 
 #[test]
 fn rv64_blt_unsigned_wrong_b_msb_sign_negative_test() {
-    let a = rv64_bytes_to_u16_block([145, 56, 89, 100, 5, 34, 25, 205]);
-    let b = rv64_bytes_to_u16_block([73, 56, 89, 100, 5, 35, 25, 205]);
+    let a_bytes = [145, 56, 89, 100, 5, 34, 25, 205];
+    let b_bytes = [73, 56, 89, 100, 5, 35, 25, 205];
+    let a = rv64_bytes_to_u16_block(a_bytes);
+    let b = rv64_bytes_to_u16_block(b_bytes);
     let prank_vals = BranchLessThanPrankValues {
-        b_msb: Some(rv64_msb_byte_prank_to_u16_limb(25, -51)),
+        b_msb: Some(rv64_msb_byte_prank_to_u16_limb(b_bytes, -51)),
         diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(256),
         ..Default::default()
@@ -530,17 +546,18 @@ fn execute_roundtrip_sanity_test() {
 fn run_cmp_unsigned_sanity_test() {
     let x = rv64_bytes_to_u16_block([145, 56, 89, 100, 5, 34, 25, 205]);
     let y = rv64_bytes_to_u16_block([73, 56, 89, 100, 5, 35, 25, 205]);
+    let diff_u16_idx = 5 / 2; // old byte-limb diff index, packed into u16 cells
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_cmp::<BLOCK_FE_WIDTH, U16_BITS>(BranchLessThanOpcode::BLTU as u8, &x, &y);
     assert!(cmp_result);
-    assert_eq!(diff_idx, 2);
+    assert_eq!(diff_idx, diff_u16_idx);
     assert!(!x_sign); // unsigned
     assert!(!y_sign); // unsigned
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_cmp::<BLOCK_FE_WIDTH, U16_BITS>(BranchLessThanOpcode::BGEU as u8, &x, &y);
     assert!(!cmp_result);
-    assert_eq!(diff_idx, 2);
+    assert_eq!(diff_idx, diff_u16_idx);
     assert!(!x_sign); // unsigned
     assert!(!y_sign); // unsigned
 }
@@ -549,17 +566,18 @@ fn run_cmp_unsigned_sanity_test() {
 fn run_cmp_same_sign_sanity_test() {
     let x = rv64_bytes_to_u16_block([145, 56, 89, 100, 5, 34, 25, 205]);
     let y = rv64_bytes_to_u16_block([73, 56, 89, 100, 5, 35, 25, 205]);
+    let diff_u16_idx = 5 / 2; // old byte-limb diff index, packed into u16 cells
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_cmp::<BLOCK_FE_WIDTH, U16_BITS>(BranchLessThanOpcode::BLT as u8, &x, &y);
     assert!(cmp_result);
-    assert_eq!(diff_idx, 2);
+    assert_eq!(diff_idx, diff_u16_idx);
     assert!(x_sign); // negative
     assert!(y_sign); // negative
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_cmp::<BLOCK_FE_WIDTH, U16_BITS>(BranchLessThanOpcode::BGE as u8, &x, &y);
     assert!(!cmp_result);
-    assert_eq!(diff_idx, 2);
+    assert_eq!(diff_idx, diff_u16_idx);
     assert!(x_sign); // negative
     assert!(y_sign); // negative
 }

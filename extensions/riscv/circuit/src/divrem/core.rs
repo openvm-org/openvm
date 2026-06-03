@@ -530,7 +530,6 @@ where
             );
         }
 
-        // AIR range-checks these byte limbs; add matching lookup counts.
         for i in 0..NUM_LIMBS - 1 {
             self.bitwise_lookup_chip
                 .request_range(record.b[i] as u32, record.c[i] as u32);

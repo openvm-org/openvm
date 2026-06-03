@@ -10,25 +10,27 @@ using namespace program;
 using hintstore::MAX_HINT_BUFFER_DWORDS;
 using hintstore::MAX_HINT_BUFFER_DWORDS_BITS;
 
-static_assert(
-    MAX_HINT_BUFFER_DWORDS_BITS <= U16_BITS,
-    "MAX_HINT_BUFFER_DWORDS_BITS must fit in one u16 cell"
-);
+static_assert(MAX_HINT_BUFFER_DWORDS_BITS <= U16_BITS, "rem_words must fit in one u16 cell");
+constexpr uint32_t REM_WORDS_SHIFT = U16_BITS - MAX_HINT_BUFFER_DWORDS_BITS;
 
 template <typename T> struct Rv64HintStoreCols {
     // common
     T is_single;
     T is_buffer;
 
+    // Low u16 cell of the 8-byte RV64 register that holds `rem_words`; the upper register cells
+    // are known to be zero and are hardcoded in the memory bus interaction.
     T rem_words;
 
     ExecutionState<T> from_state;
     T mem_ptr_ptr;
-    // Low 32 bits of mem_ptr.
+    // Low 32 bits of the 8-byte RV64 register that holds `mem_ptr`; the upper 4 bytes are
+    // known to be zero and are hardcoded in the memory bus interaction.
     T mem_ptr_limbs[RV64_PTR_U16_LIMBS];
     MemoryReadAuxCols<T> mem_ptr_aux_cols;
 
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
+    // One hint word packed as u16 cells.
     T data[BLOCK_FE_WIDTH];
 
     // only buffer
@@ -101,14 +103,13 @@ struct Rv64HintStore {
             assert(record.num_words <= MAX_HINT_BUFFER_DWORDS);
 #endif
 
-            // Constrain mem_ptr < 2^pointer_max_bits by narrowing its high u16 limb.
+            // Range check for mem_ptr (using pointer_max_bits).
             uint32_t mem_ptr_shift = RV64_PTR_BITS - (uint32_t)pointer_max_bits;
             uint32_t mem_ptr_high_u16 = record.mem_ptr >> U16_BITS;
             range_checker.add_count(mem_ptr_high_u16 << mem_ptr_shift, U16_BITS);
 
-            // Constrain rem_words < 2^MAX_HINT_BUFFER_DWORDS_BITS.
-            uint32_t rem_words_shift = U16_BITS - (uint32_t)MAX_HINT_BUFFER_DWORDS_BITS;
-            range_checker.add_count(record.num_words << rem_words_shift, U16_BITS);
+            // Range check for num_words (using MAX_HINT_BUFFER_DWORDS_BITS).
+            range_checker.add_count(record.num_words << REM_WORDS_SHIFT, U16_BITS);
 
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv64HintStoreCols, mem_ptr_aux_cols)),

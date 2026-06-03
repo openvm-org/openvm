@@ -7,15 +7,16 @@
 using namespace riscv;
 using namespace program;
 
+constexpr uint32_t LUI_IMM_LOW_BITS = U16_BITS - RV_IS_TYPE_IMM_BITS;
 constexpr uint32_t PC_HIGH_U16_SHIFT = 2 * U16_BITS - PC_BITS;
 
 template <typename T> struct Rv64JalLuiCoreCols {
-    T imm;
-    T rd_data[RV64_PTR_U16_LIMBS];
-    T imm_low_4;
-    T is_jal;
-    T is_lui;
-    T is_sign_extend;
+    T imm;                             // core_row.imm
+    T rd_data[RV64_PTR_U16_LIMBS];     // low-32 bits of rd_data as u16 cells
+    T imm_low_4;                       // low 4 bits of imm for LUI
+    T is_jal;                          // core_row.is_jal
+    T is_lui;                          // core_row.is_lui
+    T is_sign_extend;                  // 1 if upper cells are 0xFFFF, 0 if 0x0000
 };
 
 struct Rv64JalLuiCoreRecord {
@@ -43,7 +44,7 @@ struct Rv64JalLuiCore {
         );
 
         if (!record.is_jal) {
-            range_checker.add_count(imm_low_4, 4);
+            range_checker.add_count(imm_low_4, LUI_IMM_LOW_BITS);
         } else {
             range_checker.add_count(rd_hi << PC_HIGH_U16_SHIFT, U16_BITS);
         }

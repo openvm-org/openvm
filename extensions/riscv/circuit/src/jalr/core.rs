@@ -23,18 +23,17 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    expand_to_rv64_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, Rv64JalrAdapterExecutor,
-    Rv64JalrAdapterFiller, RV64_PTR_U16_LIMBS, U16_BITS,
+    expand_to_rv64_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, rv64_u32_to_u16_block,
+    Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64JalrCoreCols<T> {
     pub imm: T,
-    // Keep the low 32-bit decomposition and zero-extend to RV64 at the adapter boundary.
+    // Low 32 bits of rs1 as u16 cells.
     pub rs1_data: [T; RV64_PTR_U16_LIMBS],
-    // To save a column, we only store the high u16 limb of low-32 rd_data.
-    // The low u16 limb can be derived from from_pc and this limb.
+    // High u16 limb of low-32 rd; the low limb is derived from from_pc.
     pub rd_data: [T; RV64_PTR_U16_LIMBS - 1],
     pub is_valid: T,
 
@@ -85,29 +84,27 @@ where
 
         builder.assert_bool(is_valid);
 
-        // To save a column, we only store the high u16 limb of low-32 rd.
-        // The low u16 limb is derived from from_pc + DEFAULT_PC_STEP and the
-        // stored high limb.
-        let rd_low = from_pc + AB::F::from_u32(DEFAULT_PC_STEP)
-            - rd_high[0] * AB::F::from_u32(1 << U16_BITS);
+        // composed is the high u16 limb of low-32 rd.
+        let composed = rd_high[0] * AB::F::from_u32(1 << U16_BITS);
 
-        let rd_data_low: [AB::Expr; RV64_PTR_U16_LIMBS] = [rd_low.clone(), rd_high[0].into()];
+        let least_sig_limb = from_pc + AB::F::from_u32(DEFAULT_PC_STEP) - composed;
 
-        // rd_data_low is the low-32-bit decomposition of from_pc + DEFAULT_PC_STEP.
-        // The range check on rd_low also ensures that the stored high limb is
-        // correct: if it is wrong, rd_low absorbs the error and falls outside
-        // [0, 2^U16_BITS).
-        // Assumes only from_pc in [0, 2^PC_BITS) is allowed by the program bus.
+        // rd_data_low is the low-32-bit decomposition of `from_pc + DEFAULT_PC_STEP`.
+        // The range check on `least_sig_limb` also ensures that `rd_data_low` correctly
+        // represents `from_pc + DEFAULT_PC_STEP`.
+        let rd_data_low: [AB::Expr; RV64_PTR_U16_LIMBS] =
+            [least_sig_limb.clone(), rd_high[0].into()];
+
+        // Constrain rd_data_low.
+        // Assumes only from_pc in [0, 2^PC_BITS) is allowed by program bus
         self.range_bus
-            .range_check(rd_low.clone(), U16_BITS)
+            .range_check(least_sig_limb.clone(), U16_BITS)
             .eval(builder, is_valid);
         self.range_bus
-            .range_check(rd_high[0], PC_BITS - U16_BITS)
+            .range_check(rd_data_low[1].clone(), PC_BITS - U16_BITS)
             .eval(builder, is_valid);
 
-        // Constrain each rs1 u16 cell to be a valid limb.
-        // The adapter reads one u16-celled memory block, so the bus sees packed
-        // u16 values directly.
+        // Constrain rs1_data.
         for &v in rs1.iter() {
             self.range_bus
                 .range_check(v, U16_BITS)
@@ -140,7 +137,7 @@ where
             .eval(builder, is_valid);
         let to_pc = to_pc_limbs[0] * AB::F::TWO + to_pc_limbs[1] * AB::F::from_u32(1 << U16_BITS);
 
-        // Zero-extend low-32 rs1/rd at the u16-celled adapter interface.
+        // Zero-extend low-32 rs1/rd at the adapter interface.
         let rs1_data = expand_to_rv64_block(&rs1);
         let rd_data = expand_to_rv64_block(&rd_data_low);
 
@@ -319,11 +316,6 @@ pub(super) fn run_jalr(
     assert!(to_pc < (1 << PC_BITS));
 
     let rd_low_u32 = pc.wrapping_add(DEFAULT_PC_STEP);
-    let rd_data = [
-        (rd_low_u32 & (u16::MAX as u32)) as u16,
-        (rd_low_u32 >> U16_BITS) as u16,
-        0,
-        0,
-    ];
+    let rd_data = rv64_u32_to_u16_block(rd_low_u32);
     (to_pc, rd_data)
 }

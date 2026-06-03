@@ -209,7 +209,6 @@ template <size_t NUM_LIMBS> struct DivRemCore {
             );
         }
 
-        // AIR range-checks these byte limbs; add matching lookup counts.
 #pragma unroll
         for (int i = 0; i + 1 < NUM_LIMBS; i++) {
             bitwise_lookup.add_range(record.b[i], record.c[i]);

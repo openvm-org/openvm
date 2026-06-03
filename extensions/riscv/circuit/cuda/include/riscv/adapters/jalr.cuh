@@ -21,7 +21,7 @@ struct Rv64JalrAdapterRecord {
     uint32_t from_timestamp;
 
     uint32_t rs1_ptr;
-    // rd_ptr == UINT32_MAX means "no write"
+    // rd_ptr == UINT32_MAX means “no write”
     uint32_t rd_ptr;
 
     MemoryReadAuxRecord reads_aux;

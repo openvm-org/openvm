@@ -1,4 +1,3 @@
-mod constants;
 mod eq_mod;
 mod vec_heap;
 mod vec_heap_branch;

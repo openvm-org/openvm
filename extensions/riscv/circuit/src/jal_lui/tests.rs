@@ -41,15 +41,16 @@ use {
 
 use crate::{
     adapters::{
-        Rv64CondRdWriteAdapterAir, Rv64CondRdWriteAdapterCols, Rv64CondRdWriteAdapterExecutor,
-        Rv64CondRdWriteAdapterFiller, Rv64RdWriteAdapterFiller, RV64_BYTE_BITS, RV_J_TYPE_IMM_BITS,
+        rv64_u16_block_to_bytes, Rv64CondRdWriteAdapterAir, Rv64CondRdWriteAdapterCols,
+        Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, Rv64RdWriteAdapterFiller,
+        RV64_BYTE_BITS, RV_J_TYPE_IMM_BITS,
     },
     jal_lui::{get_signed_imm, run_jal_lui, Rv64JalLuiCoreCols},
     Rv64JalLuiAir, Rv64JalLuiChip, Rv64JalLuiCoreAir, Rv64JalLuiExecutor, Rv64JalLuiFiller,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
-const LIMB_MAX_U16: u32 = (1 << 16) - 1;
+const LIMB_MAX_U16: u32 = u16::MAX as u32;
 type F = BabyBear;
 type Harness = TestChipHarness<F, Rv64JalLuiExecutor, Rv64JalLuiAir, Rv64JalLuiChip<F>>;
 
@@ -161,12 +162,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let (_next_pc, rd_data) = run_jal_lui(is_jal, initial_pc, imm);
     if a != 0 {
-        let mut rd_bytes = [0u8; 8];
-        for (i, &v) in rd_data.iter().enumerate() {
-            let [lo, hi] = v.to_le_bytes();
-            rd_bytes[2 * i] = lo;
-            rd_bytes[2 * i + 1] = hi;
-        }
+        let rd_bytes = rv64_u16_block_to_bytes(rd_data);
         assert_eq!(rd_bytes.map(F::from_u8), tester.read_bytes::<8>(1, a));
     }
 }
@@ -208,13 +204,12 @@ fn rand_jal_lui_test(opcode: Rv64JalLuiOpcode, num_ops: usize) {
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS
 //
-// `rd_data` is `[T; 2]` u16 limbs; the chip also stores `imm_low_4`
-// for LUI's low-4-bit imm witness.
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalLuiPrankValues {
-    /// 2 u16 limbs of rd_low_32.
     pub rd_data: Option<[u32; 2]>,
     pub imm: Option<i32>,
     pub imm_low_4: Option<u32>,
@@ -318,7 +313,6 @@ fn run_negative_jal_lui_test(
 
 #[test]
 fn opcode_flag_negative_test() {
-    // Swap is_jal ↔ is_lui: instruction bus mismatch.
     run_negative_jal_lui_test(
         JAL,
         None,
@@ -330,7 +324,6 @@ fn opcode_flag_negative_test() {
         },
         false,
     );
-    // Clear both flags: instruction bus has nothing matching.
     run_negative_jal_lui_test(
         JAL,
         None,
@@ -358,8 +351,6 @@ fn opcode_flag_negative_test() {
 
 #[test]
 fn write_suppression_boundary_negative_test() {
-    // rd_ptr = 0 means JAL should suppress the write. Pranking rd_ptr to a non-zero value
-    // tries to claim a write happened to that address; the memory bus permutation rejects.
     run_negative_jal_lui_test_with_rd_ptr(
         JAL,
         Some((1 << 19) + 2),
@@ -371,8 +362,7 @@ fn write_suppression_boundary_negative_test() {
         },
         true,
     );
-    // Conversely, with rd_ptr = 8 (real write) pranking needs_write to false skips the
-    // permutation send.
+
     run_negative_jal_lui_test_with_rd_ptr(
         JAL,
         Some((1 << 19) + 2),
@@ -388,7 +378,6 @@ fn write_suppression_boundary_negative_test() {
 
 #[test]
 fn rd_upper_bytes_trace_tamper_negative_test() {
-    // Tamper with one of the 4 u16 prev_data cells; the memory bus permutation rejects.
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_harness(&tester);
 
@@ -396,6 +385,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
     let imm = 16i32;
     let rd_ptr = 16usize;
     let clean_rd_prev = [9u32, 8, 7, 6, 0, 0, 0, 0];
+
     tester.write_bytes(1, rd_ptr, clean_rd_prev.map(F::from_u32));
 
     tester.execute_with_pc(
@@ -419,7 +409,6 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
-        // u16 cells: bump the high cell.
         adapter_cols.inner.rd_aux_cols.prev_data[1] = F::from_u32(1);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
@@ -438,7 +427,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 #[test]
 fn sign_extend_flag_negative_tests() {
     // LUI with imm small enough that imm << 12 has bit 31 unset (MSB of rd[1] is 0).
-    // is_sign_extend pranked to true should fail the sign-bit range check on rd[1].
+    // is_sign_extend pranked to true should fail.
     run_negative_jal_lui_test(
         LUI,
         Some(1),
@@ -449,7 +438,8 @@ fn sign_extend_flag_negative_tests() {
         },
         true,
     );
-    // JAL writes pc+4 with pc < 2^30 so MSB of rd[1] is always 0; same prank fails.
+    // JAL writes pc+4 with pc < 2^30, so MSB of rd[1] is always 0.
+    // is_sign_extend pranked to true should fail.
     run_negative_jal_lui_test(
         JAL,
         None,
@@ -464,7 +454,6 @@ fn sign_extend_flag_negative_tests() {
 
 #[test]
 fn overflow_negative_tests() {
-    // Out-of-canonical rd_data fails the per-limb range check via range_bus.
     run_negative_jal_lui_test(
         JAL,
         None,
@@ -475,7 +464,7 @@ fn overflow_negative_tests() {
         },
         false,
     );
-    // LUI: pinning imm sign to high-bit case so this exercises bad rd arithmetic.
+    // Pin LUI sign bit so this case exercises bad rd arithmetic, not sign-select mismatch.
     run_negative_jal_lui_test(
         LUI,
         Some(1 << 19),
@@ -486,7 +475,6 @@ fn overflow_negative_tests() {
         },
         false,
     );
-    // rd_data with high limb > 2^16 fails the range check.
     run_negative_jal_lui_test(
         LUI,
         None,
@@ -497,7 +485,6 @@ fn overflow_negative_tests() {
         },
         false,
     );
-    // imm wrap to negative on LUI: violates the constraint imm = imm_low_4 + rd[1] * 16.
     run_negative_jal_lui_test(
         LUI,
         None,
@@ -518,7 +505,6 @@ fn overflow_negative_tests() {
         },
         false,
     );
-    // LUI imm = 2^19 => high bit set => canonical is_sign_extend = 1.
     run_negative_jal_lui_test(
         LUI,
         Some(1 << 19),
@@ -571,7 +557,6 @@ fn run_jal_sanity_test() {
     let imm = -2048;
     let (next_pc, rd_data) = run_jal_lui(true, initial_pc, imm);
     assert_eq!(next_pc, 26072);
-    // rd_low_32 = pc + 4 = 28124 = 0x6ddc => u16[0] = 0x6ddc, u16[1] = 0.
     assert_eq!(rd_data, [0x6ddc, 0, 0, 0]);
 }
 
@@ -599,14 +584,11 @@ fn run_lui_sanity_test() {
     let imm = 853679;
     let (next_pc, rd_data) = run_jal_lui(false, initial_pc, imm);
     assert_eq!(next_pc, 456789124);
-    // rd_low_32 = imm << 12 = 853679 << 12 = 0xd06af000. u16: lo = 0xf000, hi = 0xd06a.
-    // Top bit of hi is 1 ⇒ sign extension fills upper cells with 0xffff.
     assert_eq!(rd_data, [0xf000, 0xd06a, 0xffff, 0xffff]);
 }
 
 #[test]
 fn run_lui_sign_extend_sanity_test() {
-    // imm = 2^19 (high bit set) => imm << 12 = 2^31 => bit 31 of rd_low_32 is 1.
     let (_, rd_data) = run_jal_lui(false, 0, 1 << 19);
     assert_eq!(rd_data[2], 0xffff);
     assert_eq!(rd_data[3], 0xffff);

@@ -19,8 +19,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_BYTE_BITS, RV64_PTR_U16_LIMBS,
-    U16_BITS,
+    ptr_to_u16_limbs, Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_BYTE_BITS,
+    RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 #[repr(C)]
@@ -74,12 +74,16 @@ where
         builder.assert_bool(is_valid);
         builder.assert_bool(is_sign_extend);
 
+        // We want to constrain rd = from_pc + (imm << RV64_BYTE_BITS) where:
+        // - rd_data represents the low 32 bits of rd as u16 cells
+        // - imm_low_8 is the least significant byte of imm
+        // - imm_high_16 is the remaining high 16 bits of imm
         let limb_base = AB::F::from_u32(1 << U16_BITS);
         let carry_divide = limb_base.inverse();
         let imm = imm_low_8 + imm_high_16 * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
         let rd_low_32 = rd_data[0] + rd_data[1] * limb_base;
 
-        // Constrain the low 32 bits of rd = from_pc + (imm << 8).
+        // Constrain the low 32-bit addition.
         let carry_top = (from_pc + imm.clone() * AB::F::from_u32(1 << RV64_BYTE_BITS) - rd_low_32)
             * carry_divide
             * carry_divide;
@@ -93,6 +97,7 @@ where
             )
             .eval(builder, is_valid);
 
+        // Range check rd and immediate limbs.
         self.range_bus
             .range_check(rd_data[0], U16_BITS)
             .eval(builder, is_valid);
@@ -211,6 +216,7 @@ where
         let rd_block = run_auipc(record.from_pc, record.imm);
         let rd_u16 = [rd_block[0], rd_block[1]];
 
+        // range checks:
         self.range_checker_chip
             .add_count(imm_low_8 as u32, RV64_BYTE_BITS);
         self.range_checker_chip.add_count(imm_high_16, U16_BITS);
@@ -224,6 +230,7 @@ where
         self.range_checker_chip
             .add_count(second_range_limb, U16_BITS);
 
+        // Writing in reverse order
         core_row.rd_data = rd_u16.map(F::from_u16);
         core_row.imm_low_8 = F::from_u8(imm_low_8);
         core_row.imm_high_16 = F::from_u32(imm_high_16);
@@ -236,8 +243,7 @@ where
 #[inline(always)]
 pub(super) fn run_auipc(pc: u32, imm: u32) -> [u16; BLOCK_FE_WIDTH] {
     let rd_low_32 = pc.wrapping_add(imm << RV64_BYTE_BITS);
-    let lo = (rd_low_32 & (u16::MAX as u32)) as u16;
-    let hi = (rd_low_32 >> U16_BITS) as u16;
+    let [lo, hi] = ptr_to_u16_limbs(rd_low_32);
     let sign = if (hi >> (U16_BITS - 1)) & 1 == 1 {
         u16::MAX
     } else {

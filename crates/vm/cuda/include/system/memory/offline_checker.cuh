@@ -49,7 +49,7 @@ template <typename T>
 __device__ inline void pack_u32_to_u16_limbs(T (&out)[RV64_PTR_U16_LIMBS], uint32_t value) {
 #pragma unroll
     for (size_t i = 0; i < RV64_PTR_U16_LIMBS; i++) {
-        out[i] = T((value >> (U16_BITS * i)) & 0xffffu);
+        out[i] = T((value >> (U16_BITS * i)) & uint32_t(UINT16_MAX));
     }
 }
 

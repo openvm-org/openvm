@@ -5,7 +5,7 @@ use openvm_circuit::arch::{VmExecutor, VmState};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, PreflightExecutor,
+        Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -50,8 +50,9 @@ use super::Rv64JalrCoreAir;
 use crate::Rv64ImConfig;
 use crate::{
     adapters::{
-        rv64_limbs_to_u64, Rv64JalrAdapterAir, Rv64JalrAdapterCols, Rv64JalrAdapterExecutor,
-        Rv64JalrAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
+        rv64_limbs_to_u64, rv64_u16_block_to_bytes, Rv64JalrAdapterAir, Rv64JalrAdapterCols,
+        Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_BYTE_BITS, RV64_PTR_U16_LIMBS,
+        RV64_REGISTER_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
     Rv64JalrAir, Rv64JalrFiller,
@@ -162,16 +163,14 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, imm_sign == 1);
     // The register write is suppressed for x0.
-    let rd_data = if a == 0 { [0u16; 4] } else { rd_data };
+    let rd_data = if a == 0 {
+        [0u16; BLOCK_FE_WIDTH]
+    } else {
+        rd_data
+    };
 
     assert_eq!(next_pc & !1, final_pc);
-    // Compare against the raw 8-byte register value stored in memory.
-    let mut rd_bytes = [0u8; RV64_REGISTER_NUM_LIMBS];
-    for (i, &v) in rd_data.iter().enumerate() {
-        let [lo, hi] = v.to_le_bytes();
-        rd_bytes[2 * i] = lo;
-        rd_bytes[2 * i + 1] = hi;
-    }
+    let rd_bytes = rv64_u16_block_to_bytes(rd_data);
     assert_eq!(rd_bytes.map(F::from_u8), tester.read_bytes::<8>(1, a));
 }
 
@@ -218,14 +217,12 @@ fn rand_jalr_test() {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-// Prankable JALR core columns: rs1 low 32 as two u16 cells; rd stores only
-// the high u16 of pc + 4.
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalrPrankValues {
-    pub rd_data: Option<[u32; 1]>,
-    pub rs1_data: Option<[u32; 2]>,
+    pub rd_data: Option<[u32; RV64_PTR_U16_LIMBS - 1]>,
+    pub rs1_data: Option<[u32; RV64_PTR_U16_LIMBS]>,
     pub to_pc_least_sig_bit: Option<u32>,
-    pub to_pc_limbs: Option<[u32; 2]>,
+    pub to_pc_limbs: Option<[u32; RV64_PTR_U16_LIMBS]>,
     pub imm_sign: Option<u32>,
     pub rd_ptr: Option<u32>,
     pub needs_write: Option<bool>,
@@ -561,7 +558,6 @@ fn run_jalr_sanity_test() {
     let rs1 = 736482910;
     let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, true);
     assert_eq!(next_pc & !1, 736481674);
-    // u32 pc+4 = 789456124 = 0x2f0e24fc => low u16=0x24fc, high u16=0x2f0e.
     assert_eq!(rd_data, [0x24fc, 0x2f0e, 0, 0]);
 }
 
@@ -623,7 +619,11 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F
 
 #[cfg(feature = "aot")]
 fn read_register(state: &VmState<F>, offset: usize) -> u32 {
-    let bytes = unsafe { state.memory.read::<u8, 4>(RV64_REGISTER_AS, offset as u32) };
+    let bytes = unsafe {
+        state
+            .memory
+            .read_bytes::<4>(RV64_REGISTER_AS, offset as u32)
+    };
     u32::from_le_bytes(bytes)
 }
 

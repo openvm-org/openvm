@@ -40,7 +40,10 @@ use {
 };
 
 use super::{Rv64HintStoreAir, Rv64HintStoreChip, Rv64HintStoreCols, Rv64HintStoreExecutor};
-use crate::{adapters::u64_to_rv64_limbs, Rv64HintStoreFiller};
+use crate::{
+    adapters::{u64_to_rv64_limbs, RV64_PTR_U16_LIMBS, U16_BITS},
+    Rv64HintStoreFiller,
+};
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
@@ -263,12 +266,12 @@ fn test_hint_buffer_rem_words_range_check() {
         ),
     );
 
+    let invalid_rem_words = 1 << MAX_HINT_BUFFER_DWORDS_BITS;
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
-        // Setting `rem_words = 2^MAX_HINT_BUFFER_DWORDS_BITS` scales to 2^16, outside
-        // the 16-bit range-check table.
-        cols.rem_words = F::from_u32(1 << MAX_HINT_BUFFER_DWORDS_BITS);
+        // Set `rem_words` to the first value outside the allowed range.
+        cols.rem_words = F::from_u32(invalid_rem_words);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -320,12 +323,12 @@ fn test_hint_buffer_mem_ptr_range_check() {
         ),
     );
 
+    let invalid_high_u16 = 1 << (tester.address_bits() - U16_BITS);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
-        // With `pointer_max_bits = 29`, the high u16 cell must be < 2^13.
-        // Setting it to 2^13 scales to 2^16, outside the 16-bit table.
-        cols.mem_ptr_limbs[1] = F::from_u32(8192);
+        // Set the high u16 pointer cell to the first value outside the configured bound.
+        cols.mem_ptr_limbs[RV64_PTR_U16_LIMBS - 1] = F::from_u32(invalid_high_u16);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 

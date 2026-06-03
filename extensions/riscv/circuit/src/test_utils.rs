@@ -69,7 +69,8 @@ pub fn rv64_marker_bytes_to_u16_marker(
 }
 
 #[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
-pub fn rv64_msb_byte_prank_to_u16_limb(low_byte: u8, msb: i32) -> i32 {
+pub fn rv64_msb_byte_prank_to_u16_limb(bytes: [u8; RV64_REGISTER_NUM_LIMBS], msb: i32) -> i32 {
+    let low_byte = bytes[RV64_REGISTER_NUM_LIMBS - 2];
     let limb = u16::from_le_bytes([low_byte, msb as u8]);
     if msb < 0 {
         -i32::from(limb.wrapping_neg())

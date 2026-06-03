@@ -9,13 +9,13 @@ using namespace riscv;
 using namespace program;
 
 template <typename T> struct Rv64JalrCoreCols {
-    T imm;
-    T rs1_data[RV64_PTR_U16_LIMBS];
-    T rd_data[RV64_PTR_U16_LIMBS - 1];
-    T is_valid;
-    T to_pc_least_sig_bit;
-    T to_pc_limbs[2];
-    T imm_sign;
+    T imm;                                  // 2 bytes
+    T rs1_data[RV64_PTR_U16_LIMBS];         // low 32 bits of rs1 as u16 cells
+    T rd_data[RV64_PTR_U16_LIMBS - 1];      // high u16 cell of low-32 rd_data
+    T is_valid;                             // 1 byte
+    T to_pc_least_sig_bit;                  // 1 byte
+    T to_pc_limbs[RV64_PTR_U16_LIMBS];      // `to_pc * 2` after the low-bit split
+    T imm_sign;                             // 1 byte
 };
 
 struct Rv64JalrCoreRecord {
@@ -41,8 +41,10 @@ __device__ void run_jalr(
     uint32_t rd_val = pc + DEFAULT_PC_STEP;
     rd_data[0] = uint16_t(rd_val);
     rd_data[1] = uint16_t(rd_val >> U16_BITS);
-    rd_data[2] = 0;
-    rd_data[3] = 0;
+#pragma unroll
+    for (size_t i = RV64_PTR_U16_LIMBS; i < BLOCK_FE_WIDTH; i++) {
+        rd_data[i] = 0;
+    }
 }
 
 struct Rv64JalrCore {
@@ -73,7 +75,6 @@ struct Rv64JalrCore {
 
         uint32_t rs1_u16_lo = record.rs1_val & uint32_t(UINT16_MAX);
         uint32_t rs1_u16_hi = (record.rs1_val >> U16_BITS) & uint32_t(UINT16_MAX);
-        // AIR range-checks these u16 limbs; add matching lookup counts.
         rc.add_count(rs1_u16_lo, U16_BITS);
         rc.add_count(rs1_u16_hi, U16_BITS);
 

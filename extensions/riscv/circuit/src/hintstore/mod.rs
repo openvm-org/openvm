@@ -57,6 +57,7 @@ mod tests;
 // column carries all information. The upper register cells are hardcoded to zero
 // in the memory bus interaction.
 const _: () = assert!(MAX_HINT_BUFFER_DWORDS_BITS <= U16_BITS);
+const REM_WORDS_SHIFT: usize = U16_BITS - MAX_HINT_BUFFER_DWORDS_BITS;
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
@@ -234,8 +235,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         // Preventing rem_words overflow: rem_words < 2^MAX_HINT_BUFFER_DWORDS_BITS.
         self.range_bus
             .range_check(
-                local_cols.rem_words
-                    * AB::F::from_usize(1 << (U16_BITS - MAX_HINT_BUFFER_DWORDS_BITS)),
+                local_cols.rem_words * AB::F::from_usize(1 << REM_WORDS_SHIFT),
                 U16_BITS,
             )
             .eval(builder, is_start.clone());
@@ -526,9 +526,6 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
             trace = rest;
         }
 
-        // Scale factor for rem_words range check (using MAX_HINT_BUFFER_DWORDS_BITS).
-        let rem_words_shift: u32 = (U16_BITS - MAX_HINT_BUFFER_DWORDS_BITS) as u32;
-
         chunks
             .par_iter_mut()
             .zip(sizes.par_iter())
@@ -558,7 +555,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                 );
                 // Range check for num_words (using MAX_HINT_BUFFER_DWORDS_BITS).
                 self.range_checker_chip
-                    .add_count(num_words << rem_words_shift, U16_BITS);
+                    .add_count(num_words << REM_WORDS_SHIFT, U16_BITS);
 
                 let mut timestamp = record.inner.timestamp + num_words * 3;
                 let mut mem_ptr = record.inner.mem_ptr + num_words * RV64_REGISTER_NUM_LIMBS as u32;

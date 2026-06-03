@@ -23,8 +23,9 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, RV64_PTR_U16_LIMBS,
-    RV_IS_TYPE_IMM_BITS, RV_J_TYPE_IMM_BITS, U16_BITS,
+    ptr_to_u16_limbs, rv64_u32_to_u16_block, Rv64CondRdWriteAdapterExecutor,
+    Rv64CondRdWriteAdapterFiller, RV64_PTR_U16_LIMBS, RV_IS_TYPE_IMM_BITS, RV_J_TYPE_IMM_BITS,
+    U16_BITS,
 };
 
 const LUI_IMM_LOW_BITS: usize = U16_BITS - RV_IS_TYPE_IMM_BITS;
@@ -34,7 +35,7 @@ const PC_HIGH_U16_SHIFT: usize = 2 * U16_BITS - PC_BITS;
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64JalLuiCoreCols<T> {
     pub imm: T,
-    // Low 32 bits of rd.
+    // Low 32 bits of rd as u16 cells. Upper register cells are sign extension.
     pub rd_data: [T; RV64_PTR_U16_LIMBS],
     pub imm_low_4: T,
     pub is_jal: T,
@@ -86,23 +87,16 @@ where
         builder.assert_bool(is_valid.clone());
         builder.assert_bool(is_sign_extend);
 
-        // We want to constrain the low 32 bits of the write value where rd[0],
-        // rd[1] are the two u16 cells.
-
-        // In the LUI case, constrain rd = imm << RV_IS_TYPE_IMM_BITS. Split
-        // imm at the shift boundary so rd[0] contains the shifted low bits and
-        // rd[1] contains the remaining high bits.
+        // LUI: constrain rd = imm << RV_IS_TYPE_IMM_BITS.
         builder
             .when(is_lui)
             .assert_eq(rd[0], imm_low_4 * AB::F::from_u32(1 << RV_IS_TYPE_IMM_BITS));
-        // Constrain that imm_low_4 + 2^LUI_IMM_LOW_BITS * rd[1] is the correct
-        // composition of imm.
         builder.when(is_lui).assert_eq(
             imm,
             imm_low_4 + rd[1] * AB::F::from_u32(1 << LUI_IMM_LOW_BITS),
         );
 
-        // imm_low_4 must be the low LUI_IMM_LOW_BITS bits of imm.
+        // Range-check the low LUI_IMM_LOW_BITS bits of imm.
         self.range_bus
             .range_check(imm_low_4, LUI_IMM_LOW_BITS)
             .eval(builder, is_lui);
@@ -111,13 +105,12 @@ where
         let carry_divide = limb_base.inverse();
         let rd_low_32 = rd[0] + rd[1] * limb_base;
 
-        // In the JAL case, constrain that rd_low_32 is the low 32 bits of
-        // from_pc + DEFAULT_PC_STEP.
+        // JAL: constrain rd_low_32 = from_pc + DEFAULT_PC_STEP.
         let carry_top =
             (from_pc + AB::F::from_u32(DEFAULT_PC_STEP) - rd_low_32) * carry_divide * carry_divide;
         builder.when(is_jal).assert_bool(carry_top);
 
-        // rd is stored as u16 cells, so both cells must be 16-bit values.
+        // Range-check the low 32-bit rd cells.
         self.range_bus
             .range_check(rd[0], U16_BITS)
             .eval(builder, is_valid.clone());
@@ -125,10 +118,7 @@ where
             .range_check(rd[1], U16_BITS)
             .eval(builder, is_valid.clone());
 
-        // Constrain is_sign_extend to the top bit of rd[1]:
-        // - is_sign_extend = 0 forces rd[1] < 2^15.
-        // - is_sign_extend = 1 forces rd[1] >= 2^15.
-        // This ties the high 32-bit sign extension below to bit 31 of rd.
+        // Tie is_sign_extend to bit 31 of rd.
         self.range_bus
             .range_check(
                 AB::Expr::from_u32(2) * rd[1] - is_sign_extend * AB::Expr::from_u32(1 << U16_BITS),
@@ -136,14 +126,12 @@ where
             )
             .eval(builder, is_valid.clone());
 
-        // Prevent PC overflow in the JAL case by forcing rd[1] to fit in the
-        // PC_BITS - U16_BITS bits above the low u16 cell.
+        // JAL cannot write a return address outside PC_BITS.
         self.range_bus
             .range_check(rd[1] * AB::F::from_u32(1 << PC_HIGH_U16_SHIFT), U16_BITS)
             .eval(builder, is_jal);
 
-        // The adapter writes one u16-celled memory block. The high two cells are
-        // the sign extension of bit 31.
+        // Sign-extend bit 31 into the upper RV64 register cells.
         let sign_extend_cell = is_sign_extend * AB::Expr::from_u32(u16::MAX as u32);
         let write_data: [AB::Expr; BLOCK_FE_WIDTH] = [
             rd[0].into(),
@@ -312,16 +300,13 @@ pub(super) fn get_signed_imm<F: PrimeField32>(is_jal: bool, imm: F) -> i32 {
 pub(super) fn run_jal_lui(is_jal: bool, pc: u32, imm: i32) -> (u32, [u16; BLOCK_FE_WIDTH]) {
     if is_jal {
         let rd_low = pc.wrapping_add(DEFAULT_PC_STEP);
-        let lo = (rd_low & (u16::MAX as u32)) as u16;
-        let hi = (rd_low >> U16_BITS) as u16;
         let next_pc = pc as i32 + imm;
         debug_assert!(next_pc >= 0);
-        (next_pc as u32, [lo, hi, 0, 0])
+        (next_pc as u32, rv64_u32_to_u16_block(rd_low))
     } else {
         let imm = imm as u32;
         let rd_low = imm << RV_IS_TYPE_IMM_BITS;
-        let lo = (rd_low & (u16::MAX as u32)) as u16;
-        let hi = (rd_low >> U16_BITS) as u16;
+        let [lo, hi] = ptr_to_u16_limbs(rd_low);
         let sign = if (hi >> (U16_BITS - 1)) & 1 == 1 {
             u16::MAX
         } else {

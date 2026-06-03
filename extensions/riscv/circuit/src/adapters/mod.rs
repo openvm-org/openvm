@@ -126,6 +126,18 @@ pub fn rv64_bytes_to_u16_block(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> [u16; BL
     std::array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
 }
 
+/// Converts a low-32-bit value to one zero-extended RV64 u16 block.
+#[inline(always)]
+pub fn rv64_u32_to_u16_block(value: u32) -> [u16; BLOCK_FE_WIDTH] {
+    std::array::from_fn(|i| {
+        if i < RV64_PTR_U16_LIMBS {
+            (value >> (U16_BITS * i)) as u16
+        } else {
+            0
+        }
+    })
+}
+
 /// Splits a 32-bit RV64 pointer into low-to-high u16 limbs.
 #[inline(always)]
 pub fn ptr_to_u16_limbs(ptr: u32) -> [u16; RV64_PTR_U16_LIMBS] {

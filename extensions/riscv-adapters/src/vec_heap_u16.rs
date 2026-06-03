@@ -31,16 +31,14 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_read_reg_ptr, tracing_read_u16,
-    tracing_write_u16, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, ptr_to_u16_limbs, tracing_read_reg_ptr,
+    tracing_read_u16, tracing_write_u16, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
-
-use crate::constants::u32_to_le_u16_limbs;
 
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
@@ -450,13 +448,13 @@ impl<
                 mem_helper.fill(aux.prev_timestamp, timestamp_mm(), cols_aux.as_mut());
             });
 
-        cols.rd_val = u32_to_le_u16_limbs(record.rd_val).map(F::from_u16);
+        cols.rd_val = ptr_to_u16_limbs(record.rd_val).map(F::from_u16);
         cols.rs_val
             .iter_mut()
             .rev()
             .zip(record.rs_vals.iter().rev())
             .for_each(|(cols_val, val)| {
-                *cols_val = u32_to_le_u16_limbs(*val).map(F::from_u16);
+                *cols_val = ptr_to_u16_limbs(*val).map(F::from_u16);
             });
         cols.rd_ptr = F::from_u32(record.rd_ptr);
         cols.rs_ptr
