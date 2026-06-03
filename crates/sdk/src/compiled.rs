@@ -33,3 +33,31 @@ pub struct CompiledExeMeteredCost {
     pub instance: MeteredCostInstance<F>,
     pub ctx: MeteredCostCtx,
 }
+
+#[cfg(feature = "rvr")]
+impl CompiledExeMetered {
+    /// Persist the compiled shared library into `dir`. Returns the path of
+    /// the copied `.so`/`.dylib`. The `MeteredCtx` is not persisted — it is
+    /// rebuilt from the proving key on load via
+    /// [`Sdk::load_compiled_metered`](crate::Sdk::load_compiled_metered).
+    pub fn save(
+        &self,
+        dir: &std::path::Path,
+    ) -> Result<std::path::PathBuf, openvm_circuit::arch::rvr::CompileError> {
+        self.instance.save(dir)
+    }
+}
+
+#[cfg(feature = "rvr")]
+impl CompiledExeMeteredCost {
+    /// Persist the compiled shared library into `dir`. Returns the path of
+    /// the copied `.so`/`.dylib`. The `MeteredCostCtx` is not persisted — it
+    /// is rebuilt on load via
+    /// [`Sdk::load_compiled_metered_cost`](crate::Sdk::load_compiled_metered_cost).
+    pub fn save(
+        &self,
+        dir: &std::path::Path,
+    ) -> Result<std::path::PathBuf, openvm_circuit::arch::rvr::CompileError> {
+        self.instance.save(dir)
+    }
+}
