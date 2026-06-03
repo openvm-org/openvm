@@ -69,7 +69,7 @@ struct Rv64MultWAdapter {
         }
 
         bitwise_lookup.add_xor(
-            static_cast<uint32_t>(record.result_word_msl), 1u << (RV64_CELL_BITS - 1)
+            static_cast<uint32_t>(record.result_word_msl), 1u << (RV64_BYTE_BITS - 1)
         );
 
         COL_WRITE_VALUE(row, Rv64MultWAdapterCols, result_sign, record.result_sign);

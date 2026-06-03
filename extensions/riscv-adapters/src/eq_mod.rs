@@ -31,7 +31,7 @@ use openvm_instructions::{
 };
 use openvm_riscv_circuit::adapters::{
     abstract_compose, byte_ptr_to_u16_ptr, expand_to_rv64_register, tracing_read,
-    tracing_read_reg_ptr, tracing_write, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+    tracing_read_reg_ptr, tracing_write, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -143,7 +143,7 @@ impl<
         });
 
         let limb_shift =
-            AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
+            AB::F::from_usize(1 << (RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
 
         self.bus
             .send_range(
@@ -253,7 +253,7 @@ pub struct Rv64IsEqualModAdapterExecutor<
 #[derive(derive_new::new)]
 pub struct Rv64IsEqualModAdapterFiller<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
     pointer_max_bits: usize,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
 }
 
 impl<const NUM_READS: usize, const BLOCKS_PER_READ: usize, const TOTAL_READ_SIZE: usize>
@@ -268,7 +268,7 @@ impl<const NUM_READS: usize, const BLOCKS_PER_READ: usize, const TOTAL_READ_SIZE
             );
         }
         assert!(
-            RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - pointer_max_bits < RV64_CELL_BITS,
+            RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - pointer_max_bits < RV64_BYTE_BITS,
             "pointer_max_bits={pointer_max_bits} needs to be large enough for high limb range check"
         );
         Self { pointer_max_bits }
@@ -378,9 +378,9 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize> Adap
             timestamp
         };
         // Do range checks before writing anything:
-        debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * RV64_WORD_NUM_LIMBS);
-        let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits;
-        const MSL_SHIFT: usize = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
+        debug_assert!(self.pointer_max_bits <= RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS);
+        let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits;
+        const MSL_SHIFT: usize = RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1);
         self.bitwise_lookup_chip.request_range(
             (record.rs_val[0] >> MSL_SHIFT) << limb_shift_bits,
             if NUM_READS > 1 {

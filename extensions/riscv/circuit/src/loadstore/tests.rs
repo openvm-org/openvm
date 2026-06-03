@@ -47,7 +47,7 @@ use super::{
 use crate::{
     adapters::{
         rv64_bytes_to_u32, Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterCols,
-        Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller, RV64_CELL_BITS,
+        Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller, RV64_BYTE_BITS,
         RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     LoadStoreFiller, Rv64LoadStoreAir, Rv64LoadStoreExecutor,
@@ -153,9 +153,9 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.write_bytes(1, b, rs1.map(F::from_u8));
 
     let mut prev_data: [F; RV64_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_CELL_BITS))));
+        array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_BYTE_BITS))));
     let mut read_data: [F; RV64_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_CELL_BITS))));
+        array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_BYTE_BITS))));
 
     if is_load {
         if a == 0 {

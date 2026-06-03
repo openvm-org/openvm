@@ -11,7 +11,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     adapters::{
-        Rv64BaseAluWAdapterCols, Rv64BaseAluWAdapterRecord, RV64_CELL_BITS, RV64_WORD_NUM_LIMBS,
+        Rv64BaseAluWAdapterCols, Rv64BaseAluWAdapterRecord, RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS,
     },
     cuda_abi::alu_w_cuda::tracegen,
     BaseAluCoreCols, BaseAluCoreRecord,
@@ -20,7 +20,7 @@ use crate::{
 #[derive(new)]
 pub struct Rv64BaseAluWChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
@@ -36,7 +36,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64BaseAluWChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = BaseAluCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>::width()
+        let trace_width = BaseAluCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width()
             + Rv64BaseAluWAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;

@@ -28,7 +28,7 @@ use openvm_stark_backend::{
 
 use crate::adapters::{
     expand_to_rv64_register, rv64_bytes_to_u32, Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller,
-    RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+    RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 
 #[repr(C)]
@@ -95,7 +95,7 @@ where
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_u32(1 << ((i + 1) * RV64_CELL_BITS))
+                acc + val * AB::Expr::from_u32(1 << ((i + 1) * RV64_BYTE_BITS))
             });
 
         let least_sig_limb = from_pc + AB::F::from_u32(DEFAULT_PC_STEP) - composed;
@@ -104,7 +104,7 @@ where
         // The range check on `least_sig_limb` also ensures that `rd_data_low` correctly
         // represents `from_pc + DEFAULT_PC_STEP`. Specifically, if the prover provides
         // incorrect values for `rd` (the 3 most significant limbs), then `least_sig_limb`
-        // absorbs the error and falls outside [0, 2^RV64_CELL_BITS), failing the range check.
+        // absorbs the error and falls outside [0, 2^RV64_BYTE_BITS), failing the range check.
         let rd_data_low: [AB::Expr; RV64_WORD_NUM_LIMBS] = array::from_fn(|i| {
             if i == 0 {
                 least_sig_limb.clone()
@@ -119,10 +119,10 @@ where
             .send_range(rd_data_low[0].clone(), rd_data_low[1].clone())
             .eval(builder, is_valid);
         self.range_bus
-            .range_check(rd_data_low[2].clone(), RV64_CELL_BITS)
+            .range_check(rd_data_low[2].clone(), RV64_BYTE_BITS)
             .eval(builder, is_valid);
         self.range_bus
-            .range_check(rd_data_low[3].clone(), PC_BITS - RV64_CELL_BITS * 3)
+            .range_check(rd_data_low[3].clone(), PC_BITS - RV64_BYTE_BITS * 3)
             .eval(builder, is_valid);
 
         // Memory bus checks only packed u16 values; these rs1 bytes need separate bounds.
@@ -136,8 +136,8 @@ where
 
         // Constrain to_pc_least_sig_bit + 2 * to_pc_limbs = rs1 + imm as an i32 addition with 2
         // 16-bit limbs. RISC-V spec explicitly sets the least significant bit of `to_pc` to 0.
-        let rs1_limbs_01 = rs1[0] + rs1[1] * AB::F::from_u32(1 << RV64_CELL_BITS);
-        let rs1_limbs_23 = rs1[2] + rs1[3] * AB::F::from_u32(1 << RV64_CELL_BITS);
+        let rs1_limbs_01 = rs1[0] + rs1[1] * AB::F::from_u32(1 << RV64_BYTE_BITS);
+        let rs1_limbs_23 = rs1[2] + rs1[3] * AB::F::from_u32(1 << RV64_BYTE_BITS);
         let inv = AB::F::from_u32(1 << 16).inverse();
 
         builder.assert_bool(to_pc_least_sig_bit);
@@ -199,14 +199,14 @@ pub struct Rv64JalrExecutor<A = Rv64JalrAdapterExecutor> {
 #[derive(Clone)]
 pub struct Rv64JalrFiller<A = Rv64JalrAdapterFiller> {
     adapter: A,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<A> Rv64JalrFiller<A> {
     pub fn new(
         adapter: A,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         assert!(range_checker_chip.range_max_bits() >= 16);
@@ -308,9 +308,9 @@ where
             .request_range(rd_data[0] as u32, rd_data[1] as u32);
 
         self.range_checker_chip
-            .add_count(rd_data[2] as u32, RV64_CELL_BITS);
+            .add_count(rd_data[2] as u32, RV64_BYTE_BITS);
         self.range_checker_chip
-            .add_count(rd_data[3] as u32, PC_BITS - RV64_CELL_BITS * 3);
+            .add_count(rd_data[3] as u32, PC_BITS - RV64_BYTE_BITS * 3);
 
         // AIR range-checks these byte limbs; add matching lookup counts.
         let rs1_bytes = record.rs1_val.to_le_bytes();

@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::{ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension},
+    arch::{
+        to_byte_ptr_bits, ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension,
+    },
     system::cuda::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
 };
 use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU};
@@ -9,15 +11,14 @@ use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engi
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{
-    adapters::rv64_byte_ptr_bits_from_openvm_ptr_bits, Rv64AuipcAir, Rv64AuipcChipGpu,
-    Rv64BaseAluAir, Rv64BaseAluChipGpu, Rv64BaseAluWAir, Rv64BaseAluWChipGpu, Rv64BranchEqualAir,
-    Rv64BranchEqualChipGpu, Rv64BranchLessThanAir, Rv64BranchLessThanChipGpu, Rv64DivRemAir,
-    Rv64DivRemChipGpu, Rv64DivRemWAir, Rv64DivRemWChipGpu, Rv64HintStoreAir, Rv64HintStoreChipGpu,
-    Rv64I, Rv64Io, Rv64JalLuiAir, Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir,
-    Rv64LessThanChipGpu, Rv64LoadSignExtendAir, Rv64LoadSignExtendChipGpu, Rv64LoadStoreAir,
-    Rv64LoadStoreChipGpu, Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir, Rv64MulWChipGpu,
-    Rv64MultiplicationAir, Rv64MultiplicationChipGpu, Rv64ShiftAir, Rv64ShiftChipGpu,
-    Rv64ShiftWAir, Rv64ShiftWChipGpu,
+    Rv64AuipcAir, Rv64AuipcChipGpu, Rv64BaseAluAir, Rv64BaseAluChipGpu, Rv64BaseAluWAir,
+    Rv64BaseAluWChipGpu, Rv64BranchEqualAir, Rv64BranchEqualChipGpu, Rv64BranchLessThanAir,
+    Rv64BranchLessThanChipGpu, Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemWAir,
+    Rv64DivRemWChipGpu, Rv64HintStoreAir, Rv64HintStoreChipGpu, Rv64I, Rv64Io, Rv64JalLuiAir,
+    Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir, Rv64LessThanChipGpu,
+    Rv64LoadSignExtendAir, Rv64LoadSignExtendChipGpu, Rv64LoadStoreAir, Rv64LoadStoreChipGpu,
+    Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir, Rv64MulWChipGpu, Rv64MultiplicationAir,
+    Rv64MultiplicationChipGpu, Rv64ShiftAir, Rv64ShiftChipGpu, Rv64ShiftWAir, Rv64ShiftWChipGpu,
 };
 
 pub struct Rv64ImGpuProverExt;
@@ -30,8 +31,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         _: &Rv64I,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
-        let pointer_max_bits =
-            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.airs().pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
@@ -81,13 +81,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
 
         inventory.next_air::<Rv64LoadStoreAir>()?;
         let load_store_chip =
-            Rv64LoadStoreChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
+            Rv64LoadStoreChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(load_store_chip);
 
         inventory.next_air::<Rv64LoadSignExtendAir>()?;
         let load_sign_extend = Rv64LoadSignExtendChipGpu::new(
             range_checker.clone(),
-            pointer_max_bits,
+            byte_ptr_max_bits,
             timestamp_max_bits,
         );
         inventory.add_executor_chip(load_sign_extend);
@@ -144,8 +144,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
         extension: &Rv64M,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
-        let pointer_max_bits =
-            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.airs().pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
@@ -205,7 +204,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             range_checker.clone(),
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
-            pointer_max_bits,
+            byte_ptr_max_bits,
             timestamp_max_bits,
         );
         inventory.add_executor_chip(div_rem);
@@ -215,7 +214,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             range_checker.clone(),
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
-            pointer_max_bits,
+            byte_ptr_max_bits,
             timestamp_max_bits,
         );
         inventory.add_executor_chip(divrem_w);
@@ -234,8 +233,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64Io>
         _: &Rv64Io,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
-        let pointer_max_bits =
-            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.airs().pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
@@ -245,7 +243,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64Io>
         let hint_store = Rv64HintStoreChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
-            pointer_max_bits,
+            byte_ptr_max_bits,
             timestamp_max_bits,
         );
         inventory.add_executor_chip(hint_store);

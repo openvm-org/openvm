@@ -28,7 +28,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{
-        RV64_CELL_BITS, RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        RV64_BYTE_BITS, RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
 };
 use openvm_stark_backend::{
@@ -108,8 +108,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
         let rs2_limbs = ctx.reads[1].clone();
         let rs2_sign = rs2_limbs[2].clone();
         let rs2_imm = rs2_limbs[0].clone()
-            + rs2_limbs[1].clone() * AB::Expr::from_usize(1 << RV64_CELL_BITS)
-            + rs2_sign.clone() * AB::Expr::from_usize(1 << (2 * RV64_CELL_BITS));
+            + rs2_limbs[1].clone() * AB::Expr::from_usize(1 << RV64_BYTE_BITS)
+            + rs2_sign.clone() * AB::Expr::from_usize(1 << (2 * RV64_BYTE_BITS));
         builder.assert_bool(local.rs2_as);
         let mut rs2_imm_when = builder.when(not(local.rs2_as));
         rs2_imm_when.assert_eq(local.rs2, rs2_imm);
@@ -117,7 +117,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
             rs2_imm_when.assert_eq(rs2_sign.clone(), limb.clone());
         }
         rs2_imm_when.assert_zero(
-            rs2_sign.clone() * (AB::Expr::from_usize((1 << RV64_CELL_BITS) - 1) - rs2_sign),
+            rs2_sign.clone() * (AB::Expr::from_usize((1 << RV64_BYTE_BITS) - 1) - rs2_sign),
         );
         self.bitwise_lookup_bus
             .send_range(rs2_limbs[0].clone(), rs2_limbs[1].clone())
@@ -166,7 +166,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
         // most-significant limb of the 32-bit word, then fill the upper limbs with
         // 0x00 (positive) or 0xFF (negative).
         builder.assert_bool(local.result_sign);
-        let sign_mask = AB::Expr::from_u32(1 << (RV64_CELL_BITS - 1));
+        let sign_mask = AB::Expr::from_u32(1 << (RV64_BYTE_BITS - 1));
         let result_word_msl = ctx.writes[0][RV64_WORD_NUM_LIMBS - 1].clone();
         self.bitwise_lookup_bus
             .send_xor(
@@ -176,7 +176,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
                     - AB::Expr::from_u32(2) * local.result_sign * sign_mask,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
-        let sign_extend_limb = AB::Expr::from_u32((1 << RV64_CELL_BITS) - 1) * local.result_sign;
+        let sign_extend_limb = AB::Expr::from_u32((1 << RV64_BYTE_BITS) - 1) * local.result_sign;
         let write_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
             if i < RV64_WORD_NUM_LIMBS {
                 ctx.writes[0][i].clone()
@@ -224,7 +224,7 @@ pub struct Rv64BaseAluWAdapterExecutor;
 
 #[derive(derive_new::new)]
 pub struct Rv64BaseAluWAdapterFiller {
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
 }
 
 #[repr(C)]
@@ -327,8 +327,8 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluWAdapterExecutor {
         record.rd_ptr = a.as_canonical_u32();
         let write_low = data[0];
         record.result_word_msl = write_low[RV64_WORD_NUM_LIMBS - 1];
-        record.result_sign = record.result_word_msl >> (RV64_CELL_BITS as u8 - 1);
-        let sign_extend_limb = ((1u16 << RV64_CELL_BITS) - 1) as u8 * record.result_sign;
+        record.result_sign = record.result_word_msl >> (RV64_BYTE_BITS as u8 - 1);
+        let sign_extend_limb = ((1u16 << RV64_BYTE_BITS) - 1) as u8 * record.result_sign;
         let mut write_data = [sign_extend_limb; RV64_REGISTER_NUM_LIMBS];
         write_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&write_low);
         tracing_write(
@@ -382,9 +382,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWAdapterFiller {
         } else {
             mem_helper.fill_zero(adapter_row.reads_aux[1].as_mut());
             let rs2_imm = record.rs2;
-            let mask = (1 << RV64_CELL_BITS) - 1;
+            let mask = (1 << RV64_BYTE_BITS) - 1;
             self.bitwise_lookup_chip
-                .request_range(rs2_imm & mask, (rs2_imm >> RV64_CELL_BITS) & mask);
+                .request_range(rs2_imm & mask, (rs2_imm >> RV64_BYTE_BITS) & mask);
         }
         timestamp -= 1;
 
@@ -394,7 +394,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWAdapterFiller {
             adapter_row.reads_aux[0].as_mut(),
         );
         self.bitwise_lookup_chip
-            .request_xor(record.result_word_msl as u32, 1u32 << (RV64_CELL_BITS - 1));
+            .request_xor(record.result_word_msl as u32, 1u32 << (RV64_BYTE_BITS - 1));
 
         adapter_row.result_sign = F::from_u8(record.result_sign);
         adapter_row.rs2_as = F::from_u8(record.rs2_as);

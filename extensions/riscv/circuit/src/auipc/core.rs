@@ -26,7 +26,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+    Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     RV64_WORD_NUM_LIMBS,
 };
 
@@ -94,12 +94,12 @@ where
                 .iter()
                 .enumerate()
                 .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                    acc + val * AB::Expr::from_u32(1 << ((i + 1) * RV64_CELL_BITS))
+                    acc + val * AB::Expr::from_u32(1 << ((i + 1) * RV64_BYTE_BITS))
                 });
 
         // Compute the most significant limb of PC
         let pc_msl = (from_pc - intermed_val)
-            * AB::F::from_usize(1 << (RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1))).inverse();
+            * AB::F::from_usize(1 << (RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1))).inverse();
 
         // The vector pc_limbs contains the actual limbs of PC in little endian order
         let pc_limbs = [rd_data[0]]
@@ -110,7 +110,7 @@ where
             .collect::<Vec<AB::Expr>>();
 
         let mut carry: [AB::Expr; RV64_WORD_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
-        let carry_divide = AB::F::from_usize(1 << RV64_CELL_BITS).inverse();
+        let carry_divide = AB::F::from_usize(1 << RV64_BYTE_BITS).inverse();
 
         // Don't need to constrain the least significant limb of the addition
         // since we already know that rd_data[0] = pc_limbs[0] and the least significant limb of imm
@@ -124,8 +124,8 @@ where
 
         // Byte-range check rd_data with two bus sends:
         //   1. (rd_data[0], rd_data[1]).
-        //   2. (rd_data[2], 2*rd_data[3] - is_sign_extend * 2^RV64_CELL_BITS) — constraining the
-        //      second value to [0, 2^RV64_CELL_BITS) forces is_sign_extend = msb(rd_data[3]) and
+        //   2. (rd_data[2], 2*rd_data[3] - is_sign_extend * 2^RV64_BYTE_BITS) — constraining the
+        //      second value to [0, 2^RV64_BYTE_BITS) forces is_sign_extend = msb(rd_data[3]) and
         //      (combined with the carry chain) byte-bounds rd_data[3].
         self.bus
             .send_range(rd_data[0], rd_data[1])
@@ -134,12 +134,12 @@ where
             .send_range(
                 rd_data[RV64_WORD_NUM_LIMBS - 2],
                 AB::Expr::from_u32(2) * rd_data[RV64_WORD_NUM_LIMBS - 1]
-                    - is_sign_extend * AB::Expr::from_u32(1 << RV64_CELL_BITS),
+                    - is_sign_extend * AB::Expr::from_u32(1 << RV64_BYTE_BITS),
             )
             .eval(builder, is_valid);
 
         // The immediate and PC limbs need range checking to ensure they're within [0,
-        // 2^RV64_CELL_BITS) Since we range check two items at a time, doing this way helps
+        // 2^RV64_BYTE_BITS) Since we range check two items at a time, doing this way helps
         // efficiently divide the limbs into groups of 2 Note: range checking the limbs of
         // immediate and PC separately would result in additional range checks       since
         // they both have odd number of limbs that need to be range checked
@@ -155,10 +155,10 @@ where
             // the most significant limb is pc_limbs[3] => i = 3
             if i == pc_limbs.len() - 1 {
                 // Range check the most significant limb of pc to be in [0,
-                // 2^{PC_BITS-(RV64_WORD_NUM_LIMBS-1)*RV64_CELL_BITS})
+                // 2^{PC_BITS-(RV64_WORD_NUM_LIMBS-1)*RV64_BYTE_BITS})
                 need_range_check.push(
                     (*limb).clone()
-                        * AB::Expr::from_usize(1 << (pc_limbs.len() * RV64_CELL_BITS - PC_BITS)),
+                        * AB::Expr::from_usize(1 << (pc_limbs.len() * RV64_BYTE_BITS - PC_BITS)),
                 );
             } else {
                 need_range_check.push((*limb).clone());
@@ -179,7 +179,7 @@ where
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_u32(1 << (i * RV64_CELL_BITS))
+                acc + val * AB::Expr::from_u32(1 << (i * RV64_BYTE_BITS))
             });
 
         let sign_extend_limb = is_sign_extend * AB::Expr::from_u32(u8::MAX as u32);
@@ -224,7 +224,7 @@ pub struct Rv64AuipcExecutor<A = Rv64RdWriteAdapterExecutor> {
 #[derive(Clone, derive_new::new)]
 pub struct Rv64AuipcFiller<A = Rv64RdWriteAdapterFiller> {
     adapter: A,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
 }
 
 impl<F, A, RA> PreflightExecutor<F, RA> for Rv64AuipcExecutor<A>
@@ -292,16 +292,16 @@ where
             .request_range(imm_limbs[0] as u32, imm_limbs[1] as u32);
         self.bitwise_lookup_chip
             .request_range(imm_limbs[2] as u32, pc_limbs[1] as u32);
-        let msl_shift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - PC_BITS;
+        let msl_shift = RV64_WORD_NUM_LIMBS * RV64_BYTE_BITS - PC_BITS;
         self.bitwise_lookup_chip
             .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);
         self.bitwise_lookup_chip
             .request_range(rd_data[0] as u32, rd_data[1] as u32);
-        let is_sign_extend = (rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) & 1;
+        let is_sign_extend = (rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1)) & 1;
         self.bitwise_lookup_chip.request_range(
             rd_data[RV64_WORD_NUM_LIMBS - 2] as u32,
             2 * rd_data[RV64_WORD_NUM_LIMBS - 1] as u32
-                - is_sign_extend as u32 * (1 << RV64_CELL_BITS),
+                - is_sign_extend as u32 * (1 << RV64_BYTE_BITS),
         );
 
         // Writing in reverse order
@@ -318,10 +318,10 @@ where
 // returns rd_data
 #[inline(always)]
 pub(super) fn run_auipc(pc: u32, imm: u32) -> [u8; RV64_REGISTER_NUM_LIMBS] {
-    let rd = pc.wrapping_add(imm << RV64_CELL_BITS);
+    let rd = pc.wrapping_add(imm << RV64_BYTE_BITS);
     let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
     rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&rd.to_le_bytes());
-    let sign_extend_limb = (rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1)) * u8::MAX;
+    let sign_extend_limb = (rd_data[RV64_WORD_NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1)) * u8::MAX;
     rd_data[RV64_WORD_NUM_LIMBS..].fill(sign_extend_limb);
     rd_data
 }

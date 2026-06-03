@@ -12,7 +12,7 @@ pub use air::*;
 pub use columns::*;
 pub use config::*;
 use openvm_circuit::system::memory::SharedMemoryHelper;
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
+use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 
 use crate::Sha2Config;
@@ -34,7 +34,7 @@ pub struct Sha2MainChip<F, C: Sha2Config> {
     // twice (once to set the value and once to get the value).
     // So, we will just use an arc mutex to avoid overcomplicating things.
     pub records: Arc<Mutex<Option<Sha2SharedRecords<F>>>>,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub pointer_max_bits: usize,
     pub mem_helper: SharedMemoryHelper<F>,
     _phantom: PhantomData<C>,
@@ -43,13 +43,13 @@ pub struct Sha2MainChip<F, C: Sha2Config> {
 impl<F, C: Sha2Config> Sha2MainChip<F, C> {
     pub fn new(
         records: Arc<Mutex<Option<Sha2SharedRecords<F>>>>,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
+        range_checker_chip: SharedVariableRangeCheckerChip,
         pointer_max_bits: usize,
         mem_helper: SharedMemoryHelper<F>,
     ) -> Self {
         Self {
             records,
-            bitwise_lookup_chip,
+            range_checker_chip,
             pointer_max_bits,
             mem_helper,
             _phantom: PhantomData,

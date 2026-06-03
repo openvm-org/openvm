@@ -40,7 +40,7 @@ use openvm_stark_backend::{
 use super::{RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS};
 use crate::adapters::{
     byte_ptr_to_u16_ptr, expand_to_rv64_register, memory_read, memory_read_deferral,
-    rv64_bytes_to_u32, timed_write, tracing_read, RV64_CELL_BITS,
+    rv64_bytes_to_u32, timed_write, tracing_read, RV64_BYTE_BITS,
 };
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
@@ -176,11 +176,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
 
         // constrain mem_ptr = rs1 + imm as a u32 addition with 2 limbs
         let limbs_01 =
-            local_cols.rs1_data[0] + local_cols.rs1_data[1] * AB::F::from_u32(1 << RV64_CELL_BITS);
+            local_cols.rs1_data[0] + local_cols.rs1_data[1] * AB::F::from_u32(1 << RV64_BYTE_BITS);
         let limbs_23 =
-            local_cols.rs1_data[2] + local_cols.rs1_data[3] * AB::F::from_u32(1 << RV64_CELL_BITS);
+            local_cols.rs1_data[2] + local_cols.rs1_data[3] * AB::F::from_u32(1 << RV64_BYTE_BITS);
 
-        let inv = AB::F::from_u32(1 << (RV64_CELL_BITS * 2)).inverse();
+        let inv = AB::F::from_u32(1 << (RV64_BYTE_BITS * 2)).inverse();
         let carry = (limbs_01 + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
 
         builder.when(is_valid.clone()).assert_bool(carry.clone());
@@ -189,7 +189,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             .when(is_valid.clone())
             .assert_bool(local_cols.imm_sign);
         let imm_extend_limb =
-            local_cols.imm_sign * AB::F::from_u32((1 << (RV64_CELL_BITS * 2)) - 1);
+            local_cols.imm_sign * AB::F::from_u32((1 << (RV64_BYTE_BITS * 2)) - 1);
         let carry = (limbs_23 + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
         builder.when(is_valid.clone()).assert_bool(carry.clone());
 
@@ -199,18 +199,18 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
                 // (limb[0] - shift_amount) / 8 < 2^13 => limb[0] - shift_amount < 2^16
                 (local_cols.mem_ptr_limbs[0] - shift_amount)
                     * AB::F::from_u32(RV64_REGISTER_NUM_LIMBS as u32).inverse(),
-                RV64_CELL_BITS * 2 - 3,
+                RV64_BYTE_BITS * 2 - 3,
             )
             .eval(builder, is_valid.clone());
         self.range_bus
             .range_check(
                 local_cols.mem_ptr_limbs[1],
-                self.pointer_max_bits - RV64_CELL_BITS * 2,
+                self.pointer_max_bits - RV64_BYTE_BITS * 2,
             )
             .eval(builder, is_valid.clone());
 
         let mem_ptr = local_cols.mem_ptr_limbs[0]
-            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1 << (RV64_CELL_BITS * 2));
+            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1 << (RV64_BYTE_BITS * 2));
 
         let is_store = is_valid.clone() - is_load.clone();
         // constrain mem_as to be in {0, 1, 2} if the instruction is a load,
@@ -528,7 +528,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
 
         let ptr_limbs = [ptr & 0xffff, ptr >> 16];
         self.range_checker_chip
-            .add_count(ptr_limbs[0] >> 3, RV64_CELL_BITS * 2 - 3);
+            .add_count(ptr_limbs[0] >> 3, RV64_BYTE_BITS * 2 - 3);
         self.range_checker_chip
             .add_count(ptr_limbs[1], self.pointer_max_bits - 16);
         adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_u32);

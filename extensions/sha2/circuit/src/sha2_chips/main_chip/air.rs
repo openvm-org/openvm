@@ -1,24 +1,19 @@
 use std::marker::PhantomData;
 
 use itertools::izip;
-use ndarray::s;
 use openvm_circuit::{
-    arch::ExecutionBridge,
+    arch::{ExecutionBridge, BLOCK_FE_WIDTH},
     system::{
-        memory::{
-            offline_checker::{pack_u8_block, MemoryBridge},
-            MemoryAddress,
-        },
+        memory::{offline_checker::MemoryBridge, MemoryAddress},
         SystemPort,
     },
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus, utils::compose, ColumnsAir,
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir, U16_BITS};
+use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+use openvm_riscv_circuit::adapters::{
+    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
+    RV64_PTR_U16_LIMBS,
 };
-use openvm_instructions::riscv::{
-    RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS,
-};
-use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_rv64_register};
 use openvm_sha2_air::Sha2BlockHasherSubairConfig;
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -35,7 +30,7 @@ use crate::{MessageType, Sha2ColsRef, SHA2_READ_SIZE, SHA2_WRITE_SIZE};
 pub struct Sha2MainAir<C: Sha2MainChipConfig> {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
-    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
+    pub range_bus: VariableRangeCheckerBus,
     pub sha2_bus: PermutationCheckBus,
     /// Maximum number of bits allowed for an address pointer
     /// Must be at least 24
@@ -55,7 +50,7 @@ impl<C: Sha2MainChipConfig> Sha2MainAir<C> {
             program_bus,
             memory_bridge,
         }: SystemPort,
-        bitwise_lookup_bus: BitwiseOperationLookupBus,
+        range_bus: VariableRangeCheckerBus,
         ptr_max_bits: usize,
         self_bus_idx: BusIndex,
         offset: usize,
@@ -63,7 +58,7 @@ impl<C: Sha2MainChipConfig> Sha2MainAir<C> {
         Self {
             execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
             memory_bridge,
-            bitwise_lookup_bus,
+            range_bus,
             sha2_bus: PermutationCheckBus::new(self_bus_idx),
             ptr_max_bits,
             offset,
@@ -129,21 +124,21 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 *local.block.request_id + AB::Expr::ONE,
             );
 
-        let prev_state_as_u16s: Vec<AB::Expr> = local
+        // State payload for the SHA-2 bus.
+        let prev_state_as_u16s = local
             .block
             .prev_state
-            .exact_chunks(C::WORD_U8S)
-            .into_iter()
-            .flat_map(|word| {
-                word.as_slice()
-                    .unwrap()
-                    .chunks_exact(2)
-                    .map(|x| x[1] * AB::F::from_u64(1 << 8) + x[0])
-                    .collect::<Vec<_>>()
-            })
-            .collect();
+            .iter()
+            .map(|x| (*x).into())
+            .collect::<Vec<AB::Expr>>();
+        let new_state_as_u16s = local
+            .block
+            .new_state
+            .iter()
+            .map(|x| (*x).into())
+            .collect::<Vec<AB::Expr>>();
 
-        // Send (STATE, request_id, prev_state_as_u16s, new_state) to the sha2 bus
+        // Send (STATE, request_id, prev_state, new_state) to the SHA-2 bus.
         self.sha2_bus.send(
             builder,
             [
@@ -152,11 +147,12 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             ]
             .into_iter()
             .chain(prev_state_as_u16s)
-            .chain(local.block.new_state.into_iter().copied().map(|x| x.into())),
+            .chain(new_state_as_u16s),
             *local.instruction.is_enabled,
         );
 
-        // Send (MESSAGE_1, request_id, first_half_of_message) to the sha2 bus
+        // Split the message payload across two SHA-2 bus rows.
+        // Send (MESSAGE_1, request_id, first half of message) to the SHA-2 bus.
         self.sha2_bus.send(
             builder,
             [
@@ -167,15 +163,15 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             .chain(
                 local
                     .block
-                    .message_bytes
+                    .message_u16s
                     .iter()
-                    .take(C::BLOCK_BYTES / 2)
+                    .take(C::BLOCK_U16S / 2)
                     .map(|x| (*x).into()),
             ),
             *local.instruction.is_enabled,
         );
 
-        // Send (MESSAGE_2, request_id, second_half_of_message) to the sha2 bus
+        // Send (MESSAGE_2, request_id, second half of message) to the SHA-2 bus.
         self.sha2_bus.send(
             builder,
             [
@@ -186,9 +182,9 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             .chain(
                 local
                     .block
-                    .message_bytes
+                    .message_u16s
                     .iter()
-                    .skip(C::BLOCK_BYTES / 2)
+                    .skip(C::BLOCK_U16S / 2)
                     .map(|x| (*x).into()),
             ),
             *local.instruction.is_enabled,
@@ -201,6 +197,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
+        // Register reads: low 32 bits as u16 cells, zero-extended to one memory block.
         for (&ptr, val, aux) in izip!(
             [
                 local.instruction.dst_reg_ptr,
@@ -214,49 +211,37 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             ],
             &local.mem.register_aux,
         ) {
-            let val_arr: [AB::Var; RV64_WORD_NUM_LIMBS] =
-                std::array::from_fn(|i| *val.get(i).unwrap());
-            let data = expand_to_rv64_register(&val_arr);
+            // Put the two pointer limbs in an array for zero-extension.
+            let val = [val[0], val[1]];
+            let bus_payload: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&val);
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
                         AB::Expr::from_u32(RV64_REGISTER_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
-                    pack_u8_block::<AB>(&data),
+                    bus_payload,
                     timestamp_pp(),
                     aux,
                 )
                 .eval(builder, *local.instruction.is_enabled);
         }
 
-        // range check the high byte of each 32-bit effective pointer
-        assert!(self.ptr_max_bits >= RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1));
-        let shift =
-            AB::Expr::from_usize(1 << (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - self.ptr_max_bits));
-        let needs_range_check = [
-            local.instruction.dst_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-            local.instruction.state_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-            local.instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1],
-            local.instruction.input_ptr_limbs[RV64_WORD_NUM_LIMBS - 1], /* needs_range_check must have even length */
-        ];
-        for pair in needs_range_check.chunks_exact(2) {
-            self.bitwise_lookup_bus
-                .send_range(pair[0] * shift.clone(), pair[1] * shift.clone())
+        for limbs in [
+            local.instruction.dst_ptr_limbs,
+            local.instruction.state_ptr_limbs,
+            local.instruction.input_ptr_limbs,
+        ] {
+            self.range_bus
+                .range_check(
+                    ptr_bound_from_high_u16_expr::<AB::Expr, _>(
+                        limbs[RV64_PTR_U16_LIMBS - 1],
+                        self.ptr_max_bits,
+                    ),
+                    U16_BITS,
+                )
                 .eval(builder, *local.instruction.is_enabled);
         }
-        for limbs in [
-            &local.instruction.dst_ptr_limbs,
-            &local.instruction.state_ptr_limbs,
-            &local.instruction.input_ptr_limbs,
-        ] {
-            for i in (0..RV64_WORD_NUM_LIMBS).step_by(2) {
-                self.bitwise_lookup_bus
-                    .send_range(limbs[i], limbs[i + 1])
-                    .eval(builder, *local.instruction.is_enabled);
-            }
-        }
-
         self.execution_bridge
             .execute_and_increment_pc(
                 AB::Expr::from_usize(C::OPCODE as usize + self.offset),
@@ -279,27 +264,10 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
-        // Upper 4 bytes of each pointer are constrained to zero, so only compose the low 4 bytes
-        // to form the 32-bit effective address. Composing all 8 would overflow the field.
-        let input_ptr_val = compose(
-            &local
-                .instruction
-                .input_ptr_limbs
-                .slice(s![..RV64_WORD_NUM_LIMBS])
-                .to_vec(),
-            RV64_CELL_BITS,
-        );
+        let input_ptr_val = u16_limbs_to_ptr(local.instruction.input_ptr_limbs.as_slice().unwrap());
         for i in 0..C::BLOCK_READS {
-            let chunk: [AB::Var; SHA2_READ_SIZE] = local
-                .block
-                .message_bytes
-                .slice(s![i * SHA2_READ_SIZE..(i + 1) * SHA2_READ_SIZE])
-                .to_vec()
-                .try_into()
-                .unwrap_or_else(|_| {
-                    panic!("message bytes is not the correct size");
-                });
-            let chunk_expr: [AB::Expr; SHA2_READ_SIZE] = chunk.map(Into::into);
+            let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
+                std::array::from_fn(|j| local.block.message_u16s[i * BLOCK_FE_WIDTH + j].into());
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
@@ -308,32 +276,17 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                             input_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
                         ),
                     ),
-                    pack_u8_block::<AB>(&chunk_expr),
+                    chunk,
                     timestamp_pp(),
                     &local.mem.input_reads[i],
                 )
                 .eval(builder, *local.instruction.is_enabled);
         }
 
-        let state_ptr_val = compose(
-            &local
-                .instruction
-                .state_ptr_limbs
-                .slice(s![..RV64_WORD_NUM_LIMBS])
-                .to_vec(),
-            RV64_CELL_BITS,
-        );
+        let state_ptr_val = u16_limbs_to_ptr(local.instruction.state_ptr_limbs.as_slice().unwrap());
         for i in 0..C::STATE_READS {
-            let chunk: [AB::Var; SHA2_READ_SIZE] = local
-                .block
-                .prev_state
-                .slice(s![i * SHA2_READ_SIZE..(i + 1) * SHA2_READ_SIZE])
-                .to_vec()
-                .try_into()
-                .unwrap_or_else(|_| {
-                    panic!("prev state is not the correct size");
-                });
-            let chunk_expr: [AB::Expr; SHA2_READ_SIZE] = chunk.map(Into::into);
+            let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
+                std::array::from_fn(|j| local.block.prev_state[i * BLOCK_FE_WIDTH + j].into());
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
@@ -342,7 +295,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                             state_ptr_val.clone() + AB::F::from_usize(i * SHA2_READ_SIZE),
                         ),
                     ),
-                    pack_u8_block::<AB>(&chunk_expr),
+                    chunk,
                     timestamp_pp(),
                     &local.mem.state_reads[i],
                 )
@@ -356,25 +309,10 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         local: &Sha2ColsRef<AB::Var>,
         timestamp_pp: &mut impl FnMut() -> AB::Expr,
     ) {
-        let dst_ptr_val = compose(
-            &local
-                .instruction
-                .dst_ptr_limbs
-                .slice(s![..RV64_WORD_NUM_LIMBS])
-                .to_vec(),
-            RV64_CELL_BITS,
-        );
-        for i in 0..C::STATE_READS {
-            let chunk: [AB::Var; SHA2_WRITE_SIZE] = local
-                .block
-                .new_state
-                .slice(s![i * SHA2_READ_SIZE..(i + 1) * SHA2_READ_SIZE])
-                .to_vec()
-                .try_into()
-                .unwrap_or_else(|_| {
-                    panic!("new state is not the correct size");
-                });
-            let chunk_expr: [AB::Expr; SHA2_WRITE_SIZE] = chunk.map(Into::into);
+        let dst_ptr_val = u16_limbs_to_ptr(local.instruction.dst_ptr_limbs.as_slice().unwrap());
+        for i in 0..C::STATE_WRITES {
+            let chunk: [AB::Expr; BLOCK_FE_WIDTH] =
+                std::array::from_fn(|j| local.block.new_state[i * BLOCK_FE_WIDTH + j].into());
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
@@ -383,7 +321,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                             dst_ptr_val.clone() + AB::F::from_usize(i * SHA2_WRITE_SIZE),
                         ),
                     ),
-                    pack_u8_block::<AB>(&chunk_expr),
+                    chunk,
                     timestamp_pp(),
                     &local.mem.write_aux[i],
                 )

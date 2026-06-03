@@ -171,17 +171,17 @@ __global__ void deferral_output_tracegen(
 
     COL_WRITE_ARRAY(row, DeferralOutputCols, output_commit, call_data.output_commit);
     const uint8_t output_len_bytes[F_NUM_BYTES] = {
-        static_cast<uint8_t>(output_len & RV64_CELL_MASK),
-        static_cast<uint8_t>((output_len >> RV64_CELL_BITS) & RV64_CELL_MASK),
-        static_cast<uint8_t>((output_len >> (2 * RV64_CELL_BITS)) & RV64_CELL_MASK),
-        static_cast<uint8_t>((output_len >> (3 * RV64_CELL_BITS)) & RV64_CELL_MASK),
+        static_cast<uint8_t>(output_len & RV64_BYTE_MASK),
+        static_cast<uint8_t>((output_len >> RV64_BYTE_BITS) & RV64_BYTE_MASK),
+        static_cast<uint8_t>((output_len >> (2 * RV64_BYTE_BITS)) & RV64_BYTE_MASK),
+        static_cast<uint8_t>((output_len >> (3 * RV64_BYTE_BITS)) & RV64_BYTE_MASK),
     };
     COL_WRITE_ARRAY(row, DeferralOutputCols, output_len, output_len_bytes);
 
     if (is_first) {
         count_buffer.add_count(header.deferral_idx);
 
-        const uint32_t limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - address_bits;
+        const uint32_t limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - address_bits;
         bitwise_buffer.add_range(
             static_cast<uint32_t>(header.rd_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
             static_cast<uint32_t>(header.rs_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits
