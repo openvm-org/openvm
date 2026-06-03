@@ -186,6 +186,96 @@ fn test_sdk_fibonacci() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "rvr")]
+#[test]
+fn test_sdk_compiled_pure_save_load_roundtrip() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let compiled_a = sdk.compile_pure(exe.clone())?;
+    let baseline = sdk.execute_compiled(&compiled_a, stdin.clone())?;
+
+    let tmp = tempfile::tempdir()?;
+    let lib_path = compiled_a.save(tmp.path())?;
+    drop(compiled_a);
+
+    let compiled_b = sdk.load_compiled_pure(&lib_path, exe)?;
+    let reloaded = sdk.execute_compiled(&compiled_b, stdin)?;
+
+    assert_eq!(baseline, reloaded);
+    Ok(())
+}
+
+#[cfg(feature = "rvr")]
+#[test]
+fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let compiled_a = sdk.compile_metered(exe.clone())?;
+    let (baseline_pv, baseline_segments) =
+        sdk.execute_compiled_metered(&compiled_a, stdin.clone())?;
+
+    let tmp = tempfile::tempdir()?;
+    let lib_path = compiled_a.save(tmp.path())?;
+    drop(compiled_a);
+
+    let compiled_b = sdk.load_compiled_metered(&lib_path, exe)?;
+    let (reloaded_pv, reloaded_segments) = sdk.execute_compiled_metered(&compiled_b, stdin)?;
+
+    assert_eq!(baseline_pv, reloaded_pv);
+    assert_eq!(baseline_segments.len(), reloaded_segments.len());
+    for (a, b) in baseline_segments.iter().zip(reloaded_segments.iter()) {
+        assert_eq!(a.instret_start, b.instret_start);
+        assert_eq!(a.num_insns, b.num_insns);
+        assert_eq!(a.trace_heights, b.trace_heights);
+    }
+    Ok(())
+}
+
+#[cfg(feature = "rvr")]
+#[test]
+fn test_sdk_compiled_metered_cost_save_load_roundtrip() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let compiled_a = sdk.compile_metered_cost(exe.clone())?;
+    let (baseline_pv, baseline_cost) =
+        sdk.execute_compiled_metered_cost(&compiled_a, stdin.clone())?;
+
+    let tmp = tempfile::tempdir()?;
+    let lib_path = compiled_a.save(tmp.path())?;
+    drop(compiled_a);
+
+    let compiled_b = sdk.load_compiled_metered_cost(&lib_path, exe)?;
+    let (reloaded_pv, reloaded_cost) = sdk.execute_compiled_metered_cost(&compiled_b, stdin)?;
+
+    assert_eq!(baseline_pv, reloaded_pv);
+    assert_eq!(baseline_cost, reloaded_cost);
+    Ok(())
+}
+
 #[test]
 fn test_verify_stark_deferral() -> Result<()> {
     setup_tracing();

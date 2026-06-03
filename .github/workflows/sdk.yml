@@ -25,7 +25,7 @@ jobs:
   tests:
     strategy:
       matrix:
-        mode: ["default", "ignored", "aot"]
+        mode: ["default", "ignored", "aot", "rvr"]
 
     runs-on:
       - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=m7a.24xlarge/image=ubuntu24-full-x64/disk=large/extras=s3-cache
@@ -80,21 +80,23 @@ jobs:
           jq -S . ./abi/IOpenVmHalo2Verifier.json > expected_abi_sorted.json
           diff -u expected_abi_sorted.json compiled_abi.json
 
-      - name: Run openvm-sdk crate tests
-        if: ${{ matrix.mode == 'default' }}
+      - name: Run openvm-sdk crate tests (${{ matrix.mode }})
+        if: ${{ matrix.mode != 'ignored' }}
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
           export RUST_MIN_STACK=8388608
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify
-
-      - name: Run openvm-sdk crate tests (AOT)
-        if: ${{ matrix.mode == 'aot' }}
-        working-directory: crates/sdk
-        run: |
-          export RUST_BACKTRACE=1
-          export RUST_MIN_STACK=8388608
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify,aot
+          FEATURES="parallel,root-prover,evm-verify"
+          if [[ "${{ matrix.mode }}" == "default" ]]; then
+            : # no additional features
+          elif [[ "${{ matrix.mode }}" == "aot" ]]; then
+            FEATURES="$FEATURES,aot"
+          elif [[ "${{ matrix.mode }}" == "rvr" ]]; then
+            FEATURES="$FEATURES,rvr"
+          else
+            echo "Unknown matrix mode: ${{ matrix.mode }}" && exit 1
+          fi
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features "$FEATURES"
 
       - name: Run ignored tests
         if: ${{ matrix.mode == 'ignored' }}
