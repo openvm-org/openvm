@@ -21,7 +21,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::Segment, instructions::exe::VmExe, Executor, InitFileGenerator,
         MeteredExecutor, PreflightExecutor, VirtualMachineError, VmBuilder, VmExecutionConfig,
-        VmExecutor,
+        VmExecutor, U16_CELL_SIZE,
     },
     system::memory::merkle::public_values::extract_public_values,
 };
@@ -467,7 +467,7 @@ where
             .map_err(VirtualMachineError::from)?
             .memory;
         let public_values = extract_public_values(
-            self.executor.config.as_ref().num_public_values,
+            self.executor.config.as_ref().num_public_values * U16_CELL_SIZE,
             &final_memory.memory,
         );
         Ok(public_values)
@@ -537,7 +537,7 @@ where
             .execute_metered(inputs, compiled.ctx.clone())
             .map_err(VirtualMachineError::from)?;
         let public_values = extract_public_values(
-            self.executor.config.as_ref().num_public_values,
+            self.executor.config.as_ref().num_public_values * U16_CELL_SIZE,
             &final_state.memory.memory,
         );
 
@@ -615,7 +615,7 @@ where
         let cost = ctx.cost;
 
         let public_values = extract_public_values(
-            self.executor.config.as_ref().num_public_values,
+            self.executor.config.as_ref().num_public_values * U16_CELL_SIZE,
             &final_state.memory.memory,
         );
 

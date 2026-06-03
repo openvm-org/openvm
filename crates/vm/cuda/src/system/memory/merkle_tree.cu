@@ -2,30 +2,36 @@
 #include "poseidon2.cuh"
 #include "primitives/shared_buffer.cuh"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
+#include "system/memory/params.cuh"
 
 #include <cub/cub.cuh>
 
 using poseidon2::poseidon2_mix;
 
 struct alignas(32) digest_t {
-    Fp cells[CELLS_OUT];
+    Fp cells[DIGEST_WIDTH];
 };
 
 #define COPY_DIGEST(dst, src) memcpy(dst, src, sizeof(digest_t))
 
 // `ADDR_SPACE_IDX` is the address space minus `ADDR_SPACE_OFFSET` (which is 1)
+//
+// DEFERRAL_AS stores Fp cells directly.
+// Non-deferral address spaces store u16 cells in little-endian byte order.
 template <int ADDR_SPACE_IDX>
 __global__ void merkle_tree_init(uint8_t *__restrict__ data, digest_t *__restrict__ out) {
     auto gid = blockDim.x * blockIdx.x + threadIdx.x;
 
     Fp cells[CELLS] = {0};
-    // TODO: revisit when we sort out address space handling
 #pragma unroll
-    for (size_t i = 0; i < CELLS_OUT; ++i) {
-        if constexpr (ADDR_SPACE_IDX < 3) {
-            cells[i] = Fp(data[CELLS_OUT * gid + i]);
+    for (size_t i = 0; i < DIGEST_WIDTH; ++i) {
+        if constexpr (ADDR_SPACE_IDX + 1 == DEFERRAL_AS) {
+            cells[i] = reinterpret_cast<Fp *>(data)[DIGEST_WIDTH * gid + i];
         } else {
-            cells[i] = reinterpret_cast<Fp *>(data)[CELLS_OUT * gid + i];
+            // u16 cells, little-endian.
+            auto byte_off = U16_CELL_SIZE * (DIGEST_WIDTH * gid + i);
+            cells[i] = Fp(u16_from_bytes_le(data + byte_off));
         }
     }
 

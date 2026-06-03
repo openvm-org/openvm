@@ -1,11 +1,13 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 namespace riscv {
 inline constexpr size_t RV64_REGISTER_NUM_LIMBS = 8;
 inline constexpr size_t RV64_WORD_NUM_LIMBS = 4;
 inline constexpr size_t RV64_CELL_BITS = 8;
+inline constexpr uint32_t RV64_CELL_MASK = (1u << RV64_CELL_BITS) - 1;
 } // namespace riscv
 
 namespace program {
@@ -23,6 +25,8 @@ inline constexpr size_t U64_LIMBS = 64 / BITS_PER_LIMB;
 namespace keccak256 {
 /// Total number of sponge bytes: number of rate bytes + number of capacity bytes.
 inline constexpr size_t KECCAK_WIDTH_BYTES = 200;
+/// Total number of 16-bit limbs in the sponge.
+inline constexpr size_t KECCAK_WIDTH_U16S = KECCAK_WIDTH_BYTES / 2;
 /// Number of rate bytes.
 inline constexpr size_t KECCAK_RATE_BYTES = 136;
 /// Memory reads for the full state per row

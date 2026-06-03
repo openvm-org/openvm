@@ -76,7 +76,7 @@ use crate::{
                 MemoryMerklePvs,
             },
             online::{GuestMemory, TracingMemory},
-            AddressMap, CHUNK,
+            AddressMap, DIGEST_WIDTH,
         },
         program::trace::generate_cached_trace,
         SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights,
@@ -571,8 +571,8 @@ pub enum VmVerificationError<SC: StarkProtocolConfig> {
 
     #[error("exe commit mismatch (expected: {expected:?}, actual: {actual:?})")]
     ExeCommitMismatch {
-        expected: [u32; CHUNK],
-        actual: [u32; CHUNK],
+        expected: [u32; DIGEST_WIDTH],
+        actual: [u32; DIGEST_WIDTH],
     },
 
     #[error("initial pc mismatch (initial: {initial}, prev_final: {prev_final})")]
@@ -1224,7 +1224,7 @@ where
     }
 
     /// See [`SystemChipComplex::memory_top_tree`].
-    pub fn memory_top_tree(&self) -> Option<&[[Val<E::SC>; CHUNK]]> {
+    pub fn memory_top_tree(&self) -> Option<&[[Val<E::SC>; DIGEST_WIDTH]]> {
         self.chip_complex.system.memory_top_tree()
     }
 
@@ -1365,7 +1365,7 @@ mod tests {
 ))]
 pub struct ContinuationVmProof<SC: StarkProtocolConfig> {
     pub per_segment: Vec<Proof<SC>>,
-    pub user_public_values: UserPublicValuesProof<{ CHUNK }, Val<SC>>,
+    pub user_public_values: UserPublicValuesProof<{ DIGEST_WIDTH }, Val<SC>>,
 }
 
 /// Prover for a specific exe in a specific continuation VM using a specific Stark config.
@@ -1510,8 +1510,7 @@ where
         let final_memory = &to_state.memory.memory;
         let final_memory_top_tree = vm.memory_top_tree().expect("memory top tree should exist");
         let user_public_values = UserPublicValuesProof::compute(
-            vm.config().as_ref().memory_config.memory_dimensions(),
-            vm.config().as_ref().num_public_values,
+            vm.config().as_ref(),
             &vm_poseidon2_hasher(),
             final_memory,
             final_memory_top_tree,
@@ -1533,9 +1532,9 @@ pub struct VerifiedExecutionPayload<F> {
     ///
     /// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
     /// and a cryptographic compression function (for internal nodes).
-    pub exe_commit: [F; CHUNK],
+    pub exe_commit: [F; DIGEST_WIDTH],
     /// The Merkle root of the final memory state.
-    pub final_memory_root: [F; CHUNK],
+    pub final_memory_root: [F; DIGEST_WIDTH],
 }
 
 /// Verify segment proofs with boundary condition checks for continuation between segments.
@@ -1562,7 +1561,7 @@ pub fn verify_segments<E>(
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
-    Com<E::SC>: Into<[Val<E::SC>; CHUNK]>,
+    Com<E::SC>: Into<[Val<E::SC>; DIGEST_WIDTH]>,
 {
     if proofs.is_empty() {
         return Err(VmVerificationError::ProofNotFound);
@@ -1649,7 +1648,7 @@ where
                 }
             } else if air_idx == MERKLE_AIR_ID {
                 merkle_air_present = true;
-                let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
+                let pvs: &MemoryMerklePvs<_, DIGEST_WIDTH> = pvs.as_slice().borrow();
 
                 // Check that initial root matches the previous final root.
                 if i != 0 {

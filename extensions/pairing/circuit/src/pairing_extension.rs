@@ -294,7 +294,7 @@ pub(crate) mod phantom {
         let repr: &[u8; N] = unsafe {
             memory
                 .memory
-                .get_slice::<u8>((RV64_MEMORY_AS, ptr), N)
+                .get_u8_slice(RV64_MEMORY_AS, ptr as usize, N)
                 .try_into()
                 .unwrap()
         };
