@@ -450,7 +450,7 @@ fn read_register(state: &VmState<F>, offset: usize) -> u32 {
     let bytes = unsafe {
         state
             .memory
-            .read::<u8, RV64_WORD_NUM_LIMBS>(RV32_REGISTER_AS, offset as u32)
+            .read_bytes::<RV64_WORD_NUM_LIMBS>(RV32_REGISTER_AS, offset as u32)
     };
     u32::from_le_bytes(bytes)
 }
