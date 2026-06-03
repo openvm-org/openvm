@@ -41,9 +41,9 @@ use super::aot::AotInstance;
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
-    compile_metered_cost, compile_metered_segment_boundary, ChipMapping, RunToCompletion,
-    RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
-    SegmentBoundary,
+    compile_metered_cost, compile_metered_segment_boundary, load_compiled_from_path, ChipMapping,
+    RunToCompletion, RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance,
+    RvrPureInstance, SegmentBoundary,
 };
 use super::{
     execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx, Segment},
@@ -297,6 +297,25 @@ where
             extensions,
         })
     }
+
+    /// Load a previously saved pure-mode artifact and return a ready-to-execute
+    /// [`RvrPureInstance`]. The caller is responsible for supplying the
+    /// matching `exe`; no compatibility validation is performed.
+    pub fn load_instance(
+        &self,
+        lib_path: &std::path::Path,
+        exe: &VmExe<F>,
+    ) -> Result<RvrPureInstance<F>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(None);
+        let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
+
+        Ok(RvrPureInstance {
+            system_config: self.inventory.config().clone(),
+            exe: Arc::new(exe.clone()),
+            compiled,
+            extensions,
+        })
+    }
 }
 
 #[cfg(feature = "aot")]
@@ -467,6 +486,48 @@ where
         widths: &[usize],
     ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError> {
         self.metered_cost_rvr_instance(exe, executor_idx_to_air_idx, widths)
+    }
+
+    /// Load a previously saved metered-mode artifact. Caller supplies `exe` and
+    /// `executor_idx_to_air_idx`. No compatibility validation is performed.
+    pub fn load_metered_instance(
+        &self,
+        lib_path: &std::path::Path,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<RvrMeteredInstance<F>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
+
+        Ok(RvrMeteredInstance {
+            system_config: self.inventory.config().clone(),
+            exe: Arc::new(exe.clone()),
+            extensions,
+            compiled,
+            _mode: PhantomData::<RunToCompletion>,
+        })
+    }
+
+    /// Load a previously saved metered-cost-mode artifact. Caller supplies `exe`,
+    /// `executor_idx_to_air_idx`, and `widths`. No compatibility validation is performed.
+    pub fn load_metered_cost_instance(
+        &self,
+        lib_path: &std::path::Path,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        widths: &[usize],
+    ) -> Result<RvrMeteredCostInstance<F>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
+        let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
+
+        Ok(RvrMeteredCostInstance {
+            system_config: self.inventory.config().clone(),
+            exe: Arc::new(exe.clone()),
+            extensions,
+            compiled,
+            widths,
+        })
     }
 
     pub fn metered_cost_rvr_instance(
@@ -752,6 +813,21 @@ where
             .metered_segment_rvr_instance(exe, &executor_idx_to_air_idx)
     }
 
+    #[cfg(feature = "rvr")]
+    pub fn load_metered_interpreter(
+        &self,
+        lib_path: &std::path::Path,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredInstance<Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .load_metered_instance(lib_path, exe, &executor_idx_to_air_idx)
+    }
+
     #[cfg(feature = "aot")]
     pub fn metered_interpreter(
         &self,
@@ -839,6 +915,27 @@ where
             .collect();
         self.executor()
             .metered_cost_rvr_instance(exe, &executor_idx_to_air_idx, &widths)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn load_metered_cost_interpreter(
+        &self,
+        lib_path: &std::path::Path,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredCostInstance<Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        let widths: Vec<usize> = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.total_width())
+            .collect();
+        self.executor()
+            .load_metered_cost_instance(lib_path, exe, &executor_idx_to_air_idx, &widths)
     }
 
     pub fn preflight_interpreter(
