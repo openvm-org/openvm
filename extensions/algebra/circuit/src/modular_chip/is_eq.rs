@@ -1,7 +1,6 @@
 use std::{
     array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
-    mem::size_of,
 };
 
 use num_bigint::BigUint;
@@ -708,7 +707,7 @@ unsafe fn execute_e12_impl<
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
 
     // On-chip limbs are u16 cells; read the same BLOCK_FE_WIDTH-cell chunks as bytes.
-    let total_bytes: usize = TOTAL_READ_SIZE * size_of::<u16>();
+    let total_bytes: usize = TOTAL_READ_SIZE * U16_CELL_SIZE;
     debug_assert!(rs_vals[0] as usize + total_bytes - 1 < RV64_MEMORY_BYTES);
     debug_assert!(rs_vals[1] as usize + total_bytes - 1 < RV64_MEMORY_BYTES);
     let mut b_eq_c = true;

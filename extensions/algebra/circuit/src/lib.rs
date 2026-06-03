@@ -3,12 +3,9 @@
 #![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 
-use std::{
-    mem::size_of,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
-use openvm_circuit::arch::MEMORY_BLOCK_BYTES;
+use openvm_circuit::arch::{MEMORY_BLOCK_BYTES, U16_CELL_SIZE};
 use openvm_mod_circuit_builder::FieldExpressionExecutor;
 use openvm_riscv_adapters::Rv64VecHeapAdapterExecutor;
 #[cfg(feature = "cuda")]
@@ -23,9 +20,9 @@ pub const NUM_LIMBS_32: usize = 32;
 /// Number of limbs for 384-bit (48-byte) moduli
 pub const NUM_LIMBS_48: usize = 48;
 /// Number of u16 limbs for 256-bit moduli
-pub const NUM_LIMBS_32_U16: usize = NUM_LIMBS_32 / size_of::<u16>();
+pub const NUM_LIMBS_32_U16: usize = NUM_LIMBS_32 / U16_CELL_SIZE;
 /// Number of u16 limbs for 384-bit moduli
-pub const NUM_LIMBS_48_U16: usize = NUM_LIMBS_48 / size_of::<u16>();
+pub const NUM_LIMBS_48_U16: usize = NUM_LIMBS_48 / U16_CELL_SIZE;
 
 // Blocks per operation for modular arithmetic (single field element)
 /// Blocks for 32-limb modular operations: 32 / 8 = 4 blocks
