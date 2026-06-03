@@ -382,7 +382,6 @@ where
                 .request_range(pair[0] as u32, pair[1] as u32);
         }
 
-        // AIR range-checks these byte limbs; add matching lookup counts.
         for pair in record.b.chunks_exact(2) {
             self.bitwise_lookup_chip
                 .request_range(pair[0] as u32, pair[1] as u32);

@@ -17,7 +17,7 @@ struct Rv64RdWriteAdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
     uint32_t rd_ptr;
-    MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS> rd_aux_record;
+    MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH> rd_aux_record;
 };
 
 struct Rv64RdWriteAdapter {
@@ -31,9 +31,9 @@ struct Rv64RdWriteAdapter {
         COL_WRITE_VALUE(row, Rv64RdWriteAdapterCols, from_state.timestamp, record.from_timestamp);
         COL_WRITE_VALUE(row, Rv64RdWriteAdapterCols, rd_ptr, record.rd_ptr);
 
-        Fp packed_prev[BLOCK_FE_WIDTH];
-        pack_u8_block_bytes(packed_prev, record.rd_aux_record.prev_data);
-        COL_WRITE_ARRAY(row, Rv64RdWriteAdapterCols, rd_aux_cols.prev_data, packed_prev);
+        Fp prev[BLOCK_FE_WIDTH];
+        copy_u16_cells(prev, record.rd_aux_record.prev_data);
+        COL_WRITE_ARRAY(row, Rv64RdWriteAdapterCols, rd_aux_cols.prev_data, prev);
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64RdWriteAdapterCols, rd_aux_cols.base)),
             record.rd_aux_record.prev_timestamp,

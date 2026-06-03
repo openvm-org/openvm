@@ -18,7 +18,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip},
-    var_range::VariableRangeCheckerChip,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
 };
 use openvm_instructions::{
     program::{DEFAULT_PC_STEP, PC_BITS},
@@ -27,8 +27,9 @@ use openvm_instructions::{
 };
 use openvm_riscv_adapters::{
     rv64_heap_branch_default, rv64_write_heap_default, Rv64VecHeapAdapterAir,
-    Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller, Rv64VecHeapBranchAdapterAir,
-    Rv64VecHeapBranchAdapterExecutor, Rv64VecHeapBranchAdapterFiller,
+    Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller, Rv64VecHeapBranchU16AdapterAir,
+    Rv64VecHeapBranchU16AdapterExecutor, Rv64VecHeapBranchU16AdapterFiller,
+    Rv64VecHeapU16AdapterAir, Rv64VecHeapU16AdapterExecutor, Rv64VecHeapU16AdapterFiller,
 };
 use openvm_riscv_circuit::{
     adapters::RV_B_TYPE_IMM_BITS, BaseAluCoreAir, BaseAluFiller, BranchEqualCoreAir,
@@ -50,7 +51,8 @@ use {
         BranchLessThan256AdapterRecord, BranchLessThan256ChipGpu, BranchLessThan256CoreRecord,
         LessThan256AdapterRecord, LessThan256ChipGpu, LessThan256CoreRecord,
         Multiplication256AdapterRecord, Multiplication256ChipGpu, Multiplication256CoreRecord,
-        Shift256AdapterRecord, Shift256ChipGpu, Shift256CoreRecord, INT256_NUM_BLOCKS, NUM_READS,
+        Shift256AdapterRecord, Shift256ChipGpu, Shift256CoreRecord, INT256_NUM_MEMORY_BLOCKS,
+        NUM_READS,
     },
     openvm_circuit::arch::{
         testing::{
@@ -62,13 +64,13 @@ use {
 };
 
 use crate::{
-    AluAdapterAir, AluAdapterExecutor, BranchAdapterAir, BranchAdapterExecutor, Rv64BaseAlu256Air,
-    Rv64BaseAlu256Chip, Rv64BaseAlu256Executor, Rv64BranchEqual256Air, Rv64BranchEqual256Chip,
-    Rv64BranchEqual256Executor, Rv64BranchLessThan256Air, Rv64BranchLessThan256Chip,
-    Rv64BranchLessThan256Executor, Rv64LessThan256Air, Rv64LessThan256Chip,
-    Rv64LessThan256Executor, Rv64Multiplication256Air, Rv64Multiplication256Chip,
-    Rv64Multiplication256Executor, Rv64Shift256Air, Rv64Shift256Chip, Rv64Shift256Executor,
-    INT256_NUM_LIMBS,
+    AluAdapterAir, AluAdapterExecutor, AluU16AdapterAir, AluU16AdapterExecutor, BranchAdapterAir,
+    BranchAdapterExecutor, Rv64BaseAlu256Air, Rv64BaseAlu256Chip, Rv64BaseAlu256Executor,
+    Rv64BranchEqual256Air, Rv64BranchEqual256Chip, Rv64BranchEqual256Executor,
+    Rv64BranchLessThan256Air, Rv64BranchLessThan256Chip, Rv64BranchLessThan256Executor,
+    Rv64LessThan256Air, Rv64LessThan256Chip, Rv64LessThan256Executor, Rv64Multiplication256Air,
+    Rv64Multiplication256Chip, Rv64Multiplication256Executor, Rv64Shift256Air, Rv64Shift256Chip,
+    Rv64Shift256Executor, INT256_NUM_U8_LIMBS,
 };
 
 type F = BabyBear;
@@ -76,7 +78,7 @@ const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_BRANCH: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 const RANGE_TUPLE_SIZES: [u32; 2] = [
     1 << RV64_BYTE_BITS,
-    (INT256_NUM_LIMBS * (1 << RV64_BYTE_BITS)) as u32,
+    (INT256_NUM_U8_LIMBS * (1 << RV64_BYTE_BITS)) as u32,
 ];
 
 fn create_alu_harness_fields(
@@ -114,10 +116,11 @@ fn create_alu_harness_fields(
     (air, executor, chip)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_lt_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -126,22 +129,25 @@ fn create_lt_harness_fields(
     Rv64LessThan256Chip<F>,
 ) {
     let air = Rv64LessThan256Air::new(
-        AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
+        AluU16AdapterAir::new(Rv64VecHeapU16AdapterAir::new(
             execution_bridge,
             memory_bridge,
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             address_bits,
         )),
-        LessThanCoreAir::new(bitwise_chip.bus(), Rv64LessThan256Opcode::CLASS_OFFSET),
+        LessThanCoreAir::new(
+            range_checker_chip.bus(),
+            Rv64LessThan256Opcode::CLASS_OFFSET,
+        ),
     );
     let executor = Rv64LessThan256Executor::new(
-        AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(address_bits)),
+        AluU16AdapterExecutor::new(Rv64VecHeapU16AdapterExecutor::new(address_bits)),
         Rv64LessThan256Opcode::CLASS_OFFSET,
     );
     let chip = Rv64LessThan256Chip::new(
         LessThanFiller::new(
-            Rv64VecHeapAdapterFiller::new(address_bits, bitwise_chip.clone()),
-            bitwise_chip.clone(),
+            Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
+            range_checker_chip,
             Rv64LessThan256Opcode::CLASS_OFFSET,
         ),
         memory_helper,
@@ -227,10 +233,11 @@ fn create_shift_harness_fields(
     (air, executor, chip)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_beq_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -239,27 +246,22 @@ fn create_beq_harness_fields(
     Rv64BranchEqual256Chip<F>,
 ) {
     let air = Rv64BranchEqual256Air::new(
-        BranchAdapterAir::new(Rv64VecHeapBranchAdapterAir::new(
+        BranchAdapterAir::new(Rv64VecHeapBranchU16AdapterAir::new(
             execution_bridge,
             memory_bridge,
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             address_bits,
         )),
-        BranchEqualCoreAir::new(
-            bitwise_chip.bus(),
-            Rv64BranchEqual256Opcode::CLASS_OFFSET,
-            DEFAULT_PC_STEP,
-        ),
+        BranchEqualCoreAir::new(Rv64BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
     );
     let executor = Rv64BranchEqual256Executor::new(
-        BranchAdapterExecutor::new(Rv64VecHeapBranchAdapterExecutor::new(address_bits)),
+        BranchAdapterExecutor::new(Rv64VecHeapBranchU16AdapterExecutor::new(address_bits)),
         Rv64BranchEqual256Opcode::CLASS_OFFSET,
         DEFAULT_PC_STEP,
     );
     let chip = Rv64BranchEqual256Chip::new(
         BranchEqualFiller::new(
-            Rv64VecHeapBranchAdapterFiller::new(address_bits, bitwise_chip.clone()),
-            bitwise_chip,
+            Rv64VecHeapBranchU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
             Rv64BranchEqual256Opcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
@@ -268,10 +270,11 @@ fn create_beq_harness_fields(
     (air, executor, chip)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_blt_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -280,25 +283,25 @@ fn create_blt_harness_fields(
     Rv64BranchLessThan256Chip<F>,
 ) {
     let air = Rv64BranchLessThan256Air::new(
-        BranchAdapterAir::new(Rv64VecHeapBranchAdapterAir::new(
+        BranchAdapterAir::new(Rv64VecHeapBranchU16AdapterAir::new(
             execution_bridge,
             memory_bridge,
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             address_bits,
         )),
         BranchLessThanCoreAir::new(
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             Rv64BranchLessThan256Opcode::CLASS_OFFSET,
         ),
     );
     let executor = Rv64BranchLessThan256Executor::new(
-        BranchAdapterExecutor::new(Rv64VecHeapBranchAdapterExecutor::new(address_bits)),
+        BranchAdapterExecutor::new(Rv64VecHeapBranchU16AdapterExecutor::new(address_bits)),
         Rv64BranchLessThan256Opcode::CLASS_OFFSET,
     );
     let chip = Rv64BranchLessThan256Chip::new(
         BranchLessThanFiller::new(
-            Rv64VecHeapBranchAdapterFiller::new(address_bits, bitwise_chip.clone()),
-            bitwise_chip,
+            Rv64VecHeapBranchU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
+            range_checker_chip,
             Rv64BranchLessThan256Opcode::CLASS_OFFSET,
         ),
         memory_helper,
@@ -306,14 +309,22 @@ fn create_blt_harness_fields(
     (air, executor, chip)
 }
 
-fn beq_branch_fn(opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NUM_LIMBS]) -> bool {
+fn beq_branch_fn(
+    opcode: usize,
+    x: &[u32; INT256_NUM_U8_LIMBS],
+    y: &[u32; INT256_NUM_U8_LIMBS],
+) -> bool {
     x.iter()
         .zip(y.iter())
         .fold(true, |acc, (x, y)| acc && (x == y))
         ^ (opcode == BranchEqualOpcode::BNE.local_usize() + Rv64BranchEqual256Opcode::CLASS_OFFSET)
 }
 
-fn blt_branch_fn(opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NUM_LIMBS]) -> bool {
+fn blt_branch_fn(
+    opcode: usize,
+    x: &[u32; INT256_NUM_U8_LIMBS],
+    y: &[u32; INT256_NUM_U8_LIMBS],
+) -> bool {
     let opcode =
         BranchLessThanOpcode::from_usize(opcode - Rv64BranchLessThan256Opcode::CLASS_OFFSET);
     let (is_ge, is_signed) = match opcode {
@@ -322,8 +333,8 @@ fn blt_branch_fn(opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NU
         BranchLessThanOpcode::BGE => (true, true),
         BranchLessThanOpcode::BGEU => (true, false),
     };
-    let x_sign = x[INT256_NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1) != 0 && is_signed;
-    let y_sign = y[INT256_NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1) != 0 && is_signed;
+    let x_sign = x[INT256_NUM_U8_LIMBS - 1] >> (RV64_BYTE_BITS - 1) != 0 && is_signed;
+    let y_sign = y[INT256_NUM_U8_LIMBS - 1] >> (RV64_BYTE_BITS - 1) != 0 && is_signed;
     for (x, y) in x.iter().rev().zip(y.iter().rev()) {
         if x != y {
             return (x < y) ^ x_sign ^ y_sign ^ is_ge;
@@ -339,12 +350,12 @@ fn set_and_execute_rand<RA: Arena, E: PreflightExecutor<F, RA>>(
     arena: &mut RA,
     rng: &mut StdRng,
     opcode: usize,
-    branch_fn: Option<fn(usize, &[u32; INT256_NUM_LIMBS], &[u32; INT256_NUM_LIMBS]) -> bool>,
+    branch_fn: Option<fn(usize, &[u32; INT256_NUM_U8_LIMBS], &[u32; INT256_NUM_U8_LIMBS]) -> bool>,
 ) {
     let branch = branch_fn.is_some();
 
-    let b = generate_long_number::<INT256_NUM_LIMBS, RV64_BYTE_BITS>(rng);
-    let c = generate_long_number::<INT256_NUM_LIMBS, RV64_BYTE_BITS>(rng);
+    let b = generate_long_number::<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>(rng);
+    let c = generate_long_number::<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>(rng);
     if branch {
         let imm = rng.random_range((-ABS_MAX_BRANCH)..ABS_MAX_BRANCH);
         let instruction = rv64_heap_branch_default(
@@ -434,7 +445,7 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     let (air, executor, chip) = create_lt_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -559,7 +570,7 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
     let (air, executor, chip) = create_beq_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -600,7 +611,7 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     let (air, executor, chip) = create_blt_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -639,7 +650,6 @@ fn run_alu_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
-
     let (air, executor, cpu_chip) = create_alu_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
@@ -696,21 +706,18 @@ fn run_lt_256_rand_test_cuda(opcode: LessThanOpcode, num_ops: usize) {
     let mut tester =
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
-    let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
     ));
-
     let (air, executor, cpu_chip) = create_lt_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
     let gpu_chip = LessThan256ChipGpu::new(
         tester.range_checker(),
-        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
@@ -738,7 +745,7 @@ fn run_lt_256_rand_test_cuda(opcode: LessThanOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, AluAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, AluU16AdapterExecutor>::new(),
         );
 
     tester
@@ -886,20 +893,19 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = GpuChipTestBuilder::default().with_bitwise_op_lookup(bitwise_bus);
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
     ));
 
     let (air, executor, cpu_chip) = create_beq_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
     let gpu_chip = BranchEqual256ChipGpu::new(
         tester.range_checker(),
-        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
@@ -929,7 +935,7 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
             &mut harness.matrix_arena,
             EmptyAdapterCoreLayout::<
                 F,
-                Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS>,
+                Rv64VecHeapBranchU16AdapterExecutor<NUM_READS, INT256_NUM_MEMORY_BLOCKS>,
             >::new(),
         );
 
@@ -952,20 +958,19 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = GpuChipTestBuilder::default().with_bitwise_op_lookup(bitwise_bus);
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
     ));
 
     let (air, executor, cpu_chip) = create_blt_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
     let gpu_chip = BranchLessThan256ChipGpu::new(
         tester.range_checker(),
-        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
@@ -995,7 +1000,7 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
             &mut harness.matrix_arena,
             EmptyAdapterCoreLayout::<
                 F,
-                Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS>,
+                Rv64VecHeapBranchU16AdapterExecutor<NUM_READS, INT256_NUM_MEMORY_BLOCKS>,
             >::new(),
         );
 
