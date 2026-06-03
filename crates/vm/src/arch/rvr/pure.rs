@@ -77,6 +77,6 @@ where
     /// Persist the compiled shared library into `dir`. Returns the path to
     /// the copied artifact. No compatibility validation is performed here.
     pub fn save(&self, dir: &Path) -> Result<std::path::PathBuf, CompileError> {
-        self.compiled.save_artifact(dir)
+        self.compiled.save_artifact_with_suffix(dir, "-pure")
     }
 }

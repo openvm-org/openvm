@@ -78,7 +78,8 @@ impl<F: PrimeField32> RvrMeteredCostInstance<F> {
     /// the copied artifact. The user must re-supply `exe`, `executor_idx_to_air_idx`,
     /// and `widths` when loading.
     pub fn save(&self, dir: &std::path::Path) -> Result<std::path::PathBuf, super::CompileError> {
-        self.compiled.save_artifact(dir)
+        self.compiled
+            .save_artifact_with_suffix(dir, "-metered-cost")
     }
 
     pub fn execute_metered_cost(

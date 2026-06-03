@@ -55,13 +55,28 @@ impl RvrCompiled {
 
     /// Copy the compiled shared library into `dest_dir`, creating the
     /// directory if it doesn't exist. Returns the path of the copied
-    /// library. Works for both freshly compiled artifacts and ones loaded
-    /// from disk.
-    pub fn save_artifact(&self, dest_dir: &Path) -> Result<PathBuf, CompileError> {
-        let file_name = self
+    /// library after appending `suffix` to the path. Works for both
+    /// freshly compiled artifacts and ones loaded from disk.  
+    pub fn save_artifact_with_suffix(
+        &self,
+        dest_dir: &Path,
+        suffix: &str,
+    ) -> Result<PathBuf, CompileError> {
+        let stem = self
             .lib_path
-            .file_name()
-            .ok_or_else(|| CompileError::LibLoad("wrong file name".to_string()))?;
+            .file_stem()
+            .ok_or_else(|| CompileError::LibLoad("wrong file name".to_string()))?
+            .to_string_lossy();
+        let ext = self
+            .lib_path
+            .extension()
+            .ok_or_else(|| CompileError::LibLoad("wrong extension name".to_string()))?
+            .to_string_lossy();
+        let file_name = if suffix.is_empty() {
+            format!("{stem}.{ext}")
+        } else {
+            format!("{stem}{suffix}.{ext}")
+        };
         let dest_lib = dest_dir.join(file_name);
 
         fs::create_dir_all(dest_dir).map_err(|source| CompileError::CProject {
@@ -73,6 +88,10 @@ impl RvrCompiled {
             source,
         })?;
         Ok(dest_lib)
+    }
+
+    pub fn save_artifact(&self, dest_dir: &Path) -> Result<PathBuf, CompileError> {
+        self.save_artifact_with_suffix(dest_dir, "")
     }
 }
 

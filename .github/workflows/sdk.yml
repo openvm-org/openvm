@@ -88,6 +88,14 @@ jobs:
           export RUST_MIN_STACK=8388608
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify
 
+      - name: Run openvm-sdk crate tests (RVR)
+        if: ${{ matrix.mode == 'default' }}
+        working-directory: crates/sdk
+        run: |
+          export RUST_BACKTRACE=1
+          export RUST_MIN_STACK=8388608
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify,rvr
+
       - name: Run openvm-sdk crate tests (AOT)
         if: ${{ matrix.mode == 'aot' }}
         working-directory: crates/sdk
