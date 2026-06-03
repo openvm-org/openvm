@@ -51,8 +51,8 @@ use crate::Rv64ImConfig;
 use crate::{
     adapters::{
         rv64_limbs_to_u64, rv64_u16_block_to_bytes, Rv64JalrAdapterAir, Rv64JalrAdapterCols,
-        Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
-        RV64_WORD_NUM_LIMBS,
+        Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_BYTE_BITS, RV64_PTR_U16_LIMBS,
+        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
     Rv64JalrAir, Rv64JalrFiller,
@@ -231,10 +231,10 @@ fn rand_jalr_test() {
 // the high u16 of pc + 4.
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalrPrankValues {
-    pub rd_high: Option<[u32; 1]>,
-    pub rs1_data: Option<[u32; 2]>,
+    pub rd_high: Option<[u32; RV64_PTR_U16_LIMBS - 1]>,
+    pub rs1_data: Option<[u32; RV64_PTR_U16_LIMBS]>,
     pub to_pc_least_sig_bit: Option<u32>,
-    pub to_pc_limbs: Option<[u32; 2]>,
+    pub to_pc_limbs: Option<[u32; RV64_PTR_U16_LIMBS]>,
     pub imm_sign: Option<u32>,
     pub rd_ptr: Option<u32>,
     pub needs_write: Option<bool>,
