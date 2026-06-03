@@ -14,6 +14,7 @@
 
 using namespace riscv;
 using namespace sha2;
+using openvm::U16_BITS;
 
 // === Utility helpers for SHA-2 block hasher ===
 template <typename V>
@@ -768,7 +769,7 @@ __global__ void sha2_first_pass_phase2(
             for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
                 uint32_t fh_limb = word_to_u16_limb<V>(fh_val, limb);
                 SHA2INNER_WRITE_DIGEST(V, inner_row, final_hash[i][limb], Fp(fh_limb));
-                range_checker.add_count(fh_limb, V::WORD_U16_BITS);
+                range_checker.add_count(fh_limb, U16_BITS);
             }
             for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
                 SHA2INNER_WRITE_DIGEST(V, inner_row, prev_hash[i][limb],

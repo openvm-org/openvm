@@ -29,7 +29,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
         _extension: &Keccak256,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
-        let pointer_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
@@ -40,7 +40,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
         let xorin_chip = XorinVmChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
-            pointer_max_bits,
+            byte_ptr_max_bits,
             timestamp_max_bits as u32,
         );
         inventory.add_executor_chip(xorin_chip);
@@ -63,7 +63,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
         inventory.next_air::<KeccakfOpAir>()?;
         let op_chip = KeccakfOpChipGpu::new(
             range_checker,
-            pointer_max_bits,
+            byte_ptr_max_bits,
             timestamp_max_bits as u32,
             shared_records,
         );

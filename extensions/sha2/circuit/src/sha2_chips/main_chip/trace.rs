@@ -6,9 +6,9 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::Chip;
+use openvm_circuit_primitives::{Chip, U16_BITS};
 use openvm_cpu_backend::CpuBackend;
-use openvm_riscv_circuit::adapters::{ptr_bound_from_ptr, ptr_to_u16_limbs, RV64_U16_BITS};
+use openvm_riscv_circuit::adapters::{ptr_bound_from_ptr, ptr_to_u16_limbs};
 use openvm_sha2_air::{set_arrayview_from_u16_le_bytes, set_arrayview_from_u16_slice};
 use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -170,10 +170,8 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
         );
 
         for ptr in [vm_record.dst_ptr, vm_record.state_ptr, vm_record.input_ptr] {
-            self.range_checker_chip.add_count(
-                ptr_bound_from_ptr(ptr, self.pointer_max_bits),
-                RV64_U16_BITS,
-            );
+            self.range_checker_chip
+                .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
         }
 
         // fill in the register reads aux

@@ -31,7 +31,6 @@ struct Sha2VariantBase {
     static constexpr size_t MESSAGE_LENGTH_BITS = MESSAGE_LENGTH_BITS_;
 
     static constexpr size_t WORD_U16S = WORD_BITS / 16;
-    static constexpr size_t WORD_U16_BITS = WORD_BITS / WORD_U16S;
     static constexpr size_t WORD_U8S = WORD_BITS / 8;
     static constexpr size_t WORD_BYTES = WORD_U8S;
     static constexpr size_t BLOCK_U8S = BLOCK_WORDS * WORD_U8S;

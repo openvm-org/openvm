@@ -25,9 +25,8 @@ __device__ __forceinline__ uint32_t u32_from_bytes_le(const uint8_t *b) {
     return (uint32_t)b[0] | ((uint32_t)b[1] << 8) | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
 }
 
-template <typename T, size_t NUM_LIMBS>
-__device__ __forceinline__ void ptr_to_u16_limbs(T (&out)[NUM_LIMBS], uint32_t value) {
-    static_assert(NUM_LIMBS == 2, "ptr_to_u16_limbs expects two u16 limbs");
+template <typename T>
+__device__ __forceinline__ void ptr_to_u16_limbs(T (&out)[2], uint32_t value) {
     out[0] = T(uint16_t(value));
     out[1] = T(uint16_t(value >> 16));
 }

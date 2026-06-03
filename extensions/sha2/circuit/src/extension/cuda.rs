@@ -29,7 +29,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
         _: &Sha2,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
-        let pointer_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker_gpu = get_inventory_range_checker(inventory);
@@ -49,7 +49,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
         let sha256_main_gpu = Sha2MainChipGpu::<Sha256Config>::new(
             sha256_shared_records,
             range_checker_gpu.clone(),
-            pointer_max_bits as u32,
+            byte_ptr_max_bits as u32,
             timestamp_max_bits as u32,
         );
         inventory.add_executor_chip(sha256_main_gpu);
@@ -68,7 +68,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
         let sha512_main_gpu = Sha2MainChipGpu::<Sha512Config>::new(
             sha512_shared_records,
             range_checker_gpu,
-            pointer_max_bits as u32,
+            byte_ptr_max_bits as u32,
             timestamp_max_bits as u32,
         );
         inventory.add_executor_chip(sha512_main_gpu);

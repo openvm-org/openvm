@@ -133,14 +133,14 @@ impl<F> VmExecutionExtension<F> for Sha2 {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Sha2Executor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
         let sha256_executor =
-            Sha2VmExecutor::<Sha256Config>::new(Rv64Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
+            Sha2VmExecutor::<Sha256Config>::new(Rv64Sha2Opcode::CLASS_OFFSET, byte_ptr_max_bits);
         inventory.add_executor(sha256_executor, [Rv64Sha2Opcode::SHA256.global_opcode()])?;
 
         let sha512_executor =
-            Sha2VmExecutor::<Sha512Config>::new(Rv64Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
+            Sha2VmExecutor::<Sha512Config>::new(Rv64Sha2Opcode::CLASS_OFFSET, byte_ptr_max_bits);
         inventory.add_executor(sha512_executor, [Rv64Sha2Opcode::SHA512.global_opcode()])?;
 
         Ok(())
@@ -228,7 +228,7 @@ where
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let pointer_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
 
         let bitwise_lu = {
             let existing_chip = inventory
@@ -255,7 +255,7 @@ where
         let sha256_block_hasher_chip = Sha2BlockHasherChip::<Val<SC>, Sha256Config>::new(
             bitwise_lu.clone(),
             range_checker.clone(),
-            pointer_max_bits,
+            byte_ptr_max_bits,
             mem_helper.clone(),
             records.clone(),
         );
@@ -265,7 +265,7 @@ where
         let sha256_main_chip = Sha2MainChip::<Val<SC>, Sha256Config>::new(
             records,
             range_checker.clone(),
-            pointer_max_bits,
+            byte_ptr_max_bits,
             mem_helper.clone(),
         );
         inventory.add_executor_chip(sha256_main_chip);
@@ -277,7 +277,7 @@ where
         let sha512_block_hasher_chip = Sha2BlockHasherChip::<Val<SC>, Sha512Config>::new(
             bitwise_lu.clone(),
             range_checker.clone(),
-            pointer_max_bits,
+            byte_ptr_max_bits,
             mem_helper.clone(),
             records.clone(),
         );
@@ -287,7 +287,7 @@ where
         let sha512_main_chip = Sha2MainChip::<Val<SC>, Sha512Config>::new(
             records,
             range_checker.clone(),
-            pointer_max_bits,
+            byte_ptr_max_bits,
             mem_helper.clone(),
         );
         inventory.add_executor_chip(sha512_main_chip);

@@ -15,6 +15,7 @@
 
 using namespace riscv;
 using namespace sha2;
+using openvm::U16_BITS;
 
 // Body shared by both the inlined (SHA-256) and outlined (SHA-512) paths.
 //
@@ -36,7 +37,7 @@ static __device__ __forceinline__ void sha2_main_row_body(
     VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
     MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
 
-    // Block cols.
+    // Block cols
     SHA2_MAIN_WRITE_BLOCK(V, row, request_id, Fp(row_idx));
     {
         Fp message_u16s[V::BLOCK_U16S];
@@ -73,15 +74,15 @@ static __device__ __forceinline__ void sha2_main_row_body(
     // Range-check the high u16 of each pointer via the variable range checker.
     range_checker.add_count(
         ptr_bound_from_high_u16(dst_ptr_u16s[RV64_PTR_U16_LIMBS - 1], ptr_max_bits),
-        RV64_U16_BITS
+        U16_BITS
     );
     range_checker.add_count(
         ptr_bound_from_high_u16(state_ptr_u16s[RV64_PTR_U16_LIMBS - 1], ptr_max_bits),
-        RV64_U16_BITS
+        U16_BITS
     );
     range_checker.add_count(
         ptr_bound_from_high_u16(input_ptr_u16s[RV64_PTR_U16_LIMBS - 1], ptr_max_bits),
-        RV64_U16_BITS
+        U16_BITS
     );
 
     // Memory aux

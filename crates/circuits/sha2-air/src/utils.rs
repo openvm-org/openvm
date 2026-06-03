@@ -339,12 +339,12 @@ pub fn set_arrayview_from_u8_slice<F: PrimeField32, D: ndarray::Dimension>(
         .for_each(|(x, y)| *x = y);
 }
 
-/// Fill an array view by decoding bytes as little-endian u16 cells.
+/// Fill an array view by decoding bytes as little-endian u16 limbs.
 pub fn set_arrayview_from_u16_le_bytes<F: PrimeField32, D: ndarray::Dimension>(
     arrayview: &mut ArrayViewMut<F, D>,
     bytes: &[u8],
 ) {
-    debug_assert_eq!(arrayview.len() * size_of::<u16>(), bytes.len());
+    assert_eq!(arrayview.len() * size_of::<u16>(), bytes.len());
     arrayview
         .iter_mut()
         .zip(bytes.chunks_exact(size_of::<u16>()))

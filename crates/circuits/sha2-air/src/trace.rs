@@ -2,7 +2,7 @@ use std::{marker::PhantomData, ops::Range};
 
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder, utils::compose,
-    var_range::SharedVariableRangeCheckerChip,
+    var_range::SharedVariableRangeCheckerChip, U16_BITS,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use sha2::{compress256, compress512, digest::generic_array::GenericArray};
@@ -296,7 +296,7 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
                 // `prev_hash + work_vars == final_hash` is constrained in u16 limbs.
                 for word in final_hash_u16_limbs.iter() {
                     for &limb in word.iter() {
-                        range_checker_chip.add_count(limb, C::WORD_U16_BITS);
+                        range_checker_chip.add_count(limb, U16_BITS);
                     }
                 }
                 set_arrayview_from_u32_slice(

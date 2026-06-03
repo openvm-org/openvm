@@ -3,7 +3,7 @@ use std::{iter::once, marker::PhantomData};
 use ndarray::s;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::select,
-    var_range::VariableRangeCheckerBus, ColumnsAir, SubAir,
+    var_range::VariableRangeCheckerBus, ColumnsAir, SubAir, U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -156,7 +156,7 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
     ) {
         // Assert that the previous hash + work vars == final hash.
         // That is, `next.prev_hash[i] + local.work_vars[i] == next.final_hash[i]`
-        // where addition is done modulo 2^32.
+        // where addition is done modulo 2^32
         for i in 0..C::HASH_WORDS {
             let mut carry = AB::Expr::ZERO;
             for j in 0..C::WORD_U16S {
@@ -192,7 +192,7 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
             // Range-check final-hash limbs for the digest-row addition.
             for j in 0..C::WORD_U16S {
                 self.range_bus
-                    .range_check(next.final_hash[[i, j]], C::WORD_U16_BITS)
+                    .range_check(next.final_hash[[i, j]], U16_BITS)
                     .eval(builder, *next.flags.is_digest_row);
             }
         }

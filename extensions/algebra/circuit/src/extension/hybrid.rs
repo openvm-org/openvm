@@ -134,7 +134,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
     ) -> Result<(), ChipInventoryError> {
         let range_checker_gpu = get_inventory_range_checker(inventory);
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let pointer_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let range_checker = range_checker_gpu.cpu_chip.clone().unwrap();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let bitwise_lu_gpu = get_or_create_bitwise_op_lookup(inventory)?;
@@ -162,7 +162,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridModularChip::new(addsub, device_ctx.clone()));
 
@@ -172,7 +172,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridModularChip::new(muldiv, device_ctx.clone()));
 
@@ -186,7 +186,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_32, NUM_LIMBS_32>>()?;
                 let is_eq = ModularIsEqualChip::<F, MODULAR_BLOCKS_32, NUM_LIMBS_32>::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModAdapterFiller::new(byte_ptr_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs,
                         bitwise_lu.clone(),
@@ -208,7 +208,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridModularChip::new(addsub, device_ctx.clone()));
 
@@ -218,7 +218,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridModularChip::new(muldiv, device_ctx.clone()));
 
@@ -232,7 +232,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_48, NUM_LIMBS_48>>()?;
                 let is_eq = ModularIsEqualChip::<F, MODULAR_BLOCKS_48, NUM_LIMBS_48>::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModAdapterFiller::new(byte_ptr_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs,
                         bitwise_lu.clone(),
@@ -300,7 +300,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
     ) -> Result<(), ChipInventoryError> {
         let range_checker_gpu = get_inventory_range_checker(inventory);
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let pointer_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let range_checker = range_checker_gpu.cpu_chip.clone().unwrap();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let bitwise_lu_gpu = get_or_create_bitwise_op_lookup(inventory)?;
@@ -324,7 +324,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(addsub, device_ctx.clone()));
 
@@ -334,7 +334,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(muldiv, device_ctx.clone()));
             } else if bytes <= NUM_LIMBS_48 {
@@ -350,7 +350,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(addsub, device_ctx.clone()));
 
@@ -360,7 +360,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(muldiv, device_ctx.clone()));
             } else {

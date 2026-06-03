@@ -7,6 +7,7 @@ use openvm_circuit::{
         online::{GuestMemory, TracingMemory},
     },
 };
+use openvm_circuit_primitives::U16_BITS;
 use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS,
@@ -37,12 +38,10 @@ pub use openvm_instructions::riscv::{
 };
 pub use rdwrite::*;
 
-/// Bit width of one u16 limb.
-pub const RV64_U16_BITS: usize = u16::BITS as usize;
 /// Number of u16 limbs needed for a low-32-bit RV64 pointer.
 pub const RV64_PTR_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 /// Bit width covered by [`RV64_PTR_U16_LIMBS`].
-pub const RV64_PTR_BITS: usize = RV64_U16_BITS * RV64_PTR_U16_LIMBS;
+pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;
@@ -117,7 +116,7 @@ pub fn rv64_bytes_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
 /// Splits a 32-bit RV64 pointer into low-to-high u16 limbs.
 #[inline(always)]
 pub fn ptr_to_u16_limbs(ptr: u32) -> [u16; RV64_PTR_U16_LIMBS] {
-    std::array::from_fn(|i| (ptr >> (RV64_U16_BITS * i)) as u16)
+    std::array::from_fn(|i| (ptr >> (U16_BITS * i)) as u16)
 }
 
 /// Field-element form of [`ptr_to_u16_limbs`].
@@ -130,8 +129,8 @@ pub fn ptr_to_field_u16_limbs<F: PrimeCharacteristicRing>(value: u32) -> [F; RV6
 #[inline(always)]
 pub fn ptr_max_bits_shift(ptr_max_bits: usize) -> usize {
     assert!(
-        (RV64_U16_BITS..=RV64_PTR_BITS).contains(&ptr_max_bits),
-        "ptr_max_bits must be in [RV64_U16_BITS, RV64_PTR_BITS]"
+        (U16_BITS..=RV64_PTR_BITS).contains(&ptr_max_bits),
+        "ptr_max_bits must be in [U16_BITS, RV64_PTR_BITS]"
     );
     RV64_PTR_BITS - ptr_max_bits
 }
@@ -168,7 +167,7 @@ where
 {
     assert_eq!(limbs.len(), RV64_PTR_U16_LIMBS);
     limbs.iter().enumerate().fold(T::ZERO, |acc, (i, limb)| {
-        acc + (*limb).into() * T::from_u64(1u64 << (i * RV64_U16_BITS))
+        acc + (*limb).into() * T::from_u64(1u64 << (i * U16_BITS))
     })
 }
 
@@ -194,18 +193,8 @@ where
     T: PrimeCharacteristicRing,
 {
     const { assert!(N <= BLOCK_FE_WIDTH) }
-    expand_to_rv64_block_from_slice(limbs)
-}
-
-/// Expand a slice of u16 limbs to one RV64 register bus block by zero-padding.
-pub fn expand_to_rv64_block_from_slice<V, T>(limbs: &[V]) -> [T; BLOCK_FE_WIDTH]
-where
-    V: Clone + Into<T>,
-    T: PrimeCharacteristicRing,
-{
-    assert!(limbs.len() <= BLOCK_FE_WIDTH);
     std::array::from_fn(|i| {
-        if i < limbs.len() {
+        if i < N {
             limbs[i].clone().into()
         } else {
             T::ZERO

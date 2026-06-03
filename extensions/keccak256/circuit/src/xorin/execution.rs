@@ -169,7 +169,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
         MEMORY_BLOCK_BYTES
     );
 
-    // Byte-view reads from u16-celled RV64 memory.
+    // SAFETY: RV64_MEMORY_AS supports byte-view reads.
     let num_reads = (length_u32 as usize).div_ceil(MEMORY_BLOCK_BYTES);
     let buffer_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {

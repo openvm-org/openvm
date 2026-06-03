@@ -139,15 +139,15 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
-        let xorin_executor = XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, pointer_max_bits);
+        let xorin_executor = XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, byte_ptr_max_bits);
         inventory.add_executor(
             xorin_executor,
             XorinOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let keccak_executor = KeccakfExecutor::new(KeccakfOpcode::CLASS_OFFSET, pointer_max_bits);
+        let keccak_executor = KeccakfExecutor::new(KeccakfOpcode::CLASS_OFFSET, byte_ptr_max_bits);
         inventory.add_executor(
             keccak_executor,
             KeccakfOpcode::iter().map(|x| x.global_opcode()),
@@ -166,7 +166,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
         } = inventory.system().port();
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
-        let pointer_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         let range_checker = inventory.range_checker().bus;
 
         let bitwise_lu = {
@@ -186,7 +186,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
             memory_bridge,
             bitwise_lu,
             range_checker,
-            pointer_max_bits,
+            byte_ptr_max_bits,
             XorinOpcode::CLASS_OFFSET,
         );
         inventory.add_air(xorin_air);
@@ -200,7 +200,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
             memory_bridge,
             keccakf_state_bus,
             range_checker,
-            pointer_max_bits,
+            byte_ptr_max_bits,
             KeccakfOpcode::CLASS_OFFSET,
         );
         inventory.add_air(op_air);
@@ -228,7 +228,7 @@ where
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let pointer_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
 
         let bitwise_lu = {
             let existing_chip = inventory
@@ -247,7 +247,7 @@ where
 
         inventory.next_air::<XorinVmAir>()?;
         let xorin_chip = XorinVmChip::new(
-            XorinVmFiller::new(bitwise_lu.clone(), range_checker.clone(), pointer_max_bits),
+            XorinVmFiller::new(bitwise_lu.clone(), range_checker.clone(), byte_ptr_max_bits),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(xorin_chip);
@@ -264,7 +264,7 @@ where
         inventory.next_air::<KeccakfOpAir>()?;
         let op_chip = KeccakfOpChip::new(
             range_checker.clone(),
-            pointer_max_bits,
+            byte_ptr_max_bits,
             mem_helper.clone(),
             shared_records,
         );

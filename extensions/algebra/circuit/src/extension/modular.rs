@@ -90,7 +90,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, ModularExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         // TODO: somehow get the range checker bus from `ExecutorInventory`
         let dummy_range_checker_bus = VariableRangeCheckerBus::new(u16::MAX, 16);
         for (i, modulus) in self.supported_moduli.iter().enumerate() {
@@ -108,7 +108,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 let addsub = get_modular_addsub_step::<MODULAR_BLOCKS_32>(
                     config.clone(),
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -122,7 +122,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 let muldiv = get_modular_muldiv_step::<MODULAR_BLOCKS_32>(
                     config,
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -142,7 +142,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 });
 
                 let is_eq = VmModularIsEqualExecutor::new(
-                    Rv64IsEqualModAdapterExecutor::new(pointer_max_bits),
+                    Rv64IsEqualModAdapterExecutor::new(byte_ptr_max_bits),
                     start_offset,
                     modulus_limbs,
                 );
@@ -162,7 +162,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 let addsub = get_modular_addsub_step::<MODULAR_BLOCKS_48>(
                     config.clone(),
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -176,7 +176,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 let muldiv = get_modular_muldiv_step::<MODULAR_BLOCKS_48>(
                     config,
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -196,7 +196,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 });
 
                 let is_eq = VmModularIsEqualExecutor::new(
-                    Rv64IsEqualModAdapterExecutor::new(pointer_max_bits),
+                    Rv64IsEqualModAdapterExecutor::new(byte_ptr_max_bits),
                     start_offset,
                     modulus_limbs,
                 );
@@ -238,7 +238,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker_bus = inventory.range_checker().bus;
-        let pointer_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
         let bitwise_lu = {
             // A trick to get around Rust's borrow rules
@@ -271,7 +271,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                     config.clone(),
                     range_checker_bus,
                     bitwise_lu,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(addsub);
@@ -282,7 +282,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                     config,
                     range_checker_bus,
                     bitwise_lu,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(muldiv);
@@ -292,7 +292,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                         exec_bridge,
                         memory_bridge,
                         bitwise_lu,
-                        pointer_max_bits,
+                        byte_ptr_max_bits,
                     ),
                     ModularIsEqualCoreAir::new(modulus.clone(), bitwise_lu, start_offset),
                 );
@@ -310,7 +310,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                     config.clone(),
                     range_checker_bus,
                     bitwise_lu,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(addsub);
@@ -321,7 +321,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                     config,
                     range_checker_bus,
                     bitwise_lu,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(muldiv);
@@ -331,7 +331,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                         exec_bridge,
                         memory_bridge,
                         bitwise_lu,
-                        pointer_max_bits,
+                        byte_ptr_max_bits,
                     ),
                     ModularIsEqualCoreAir::new(modulus.clone(), bitwise_lu, start_offset),
                 );
@@ -362,7 +362,7 @@ where
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let pointer_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let bitwise_lu = {
             let existing_chip = inventory
@@ -398,7 +398,7 @@ where
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(addsub);
 
@@ -408,7 +408,7 @@ where
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(muldiv);
 
@@ -422,7 +422,7 @@ where
                 inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_32, NUM_LIMBS_32>>()?;
                 let is_eq = ModularIsEqualChip::<Val<SC>, MODULAR_BLOCKS_32, NUM_LIMBS_32>::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModAdapterFiller::new(byte_ptr_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs,
                         bitwise_lu.clone(),
@@ -443,7 +443,7 @@ where
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(addsub);
 
@@ -453,7 +453,7 @@ where
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(muldiv);
 
@@ -467,7 +467,7 @@ where
                 inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_48, NUM_LIMBS_48>>()?;
                 let is_eq = ModularIsEqualChip::<Val<SC>, MODULAR_BLOCKS_48, NUM_LIMBS_48>::new(
                     ModularIsEqualFiller::new(
-                        Rv64IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv64IsEqualModAdapterFiller::new(byte_ptr_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs,
                         bitwise_lu.clone(),

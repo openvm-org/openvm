@@ -8,11 +8,11 @@ use openvm_circuit::{
         SystemPort,
     },
 };
-use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir};
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerBus, ColumnsAir, U16_BITS};
 use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_riscv_circuit::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_block_from_slice, ptr_bound_from_high_u16_expr,
-    u16_limbs_to_ptr, RV64_PTR_U16_LIMBS, RV64_U16_BITS,
+    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
+    RV64_PTR_U16_LIMBS,
 };
 use openvm_sha2_air::Sha2BlockHasherSubairConfig;
 use openvm_stark_backend::{
@@ -211,8 +211,9 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             ],
             &local.mem.register_aux,
         ) {
-            let bus_payload: [AB::Expr; BLOCK_FE_WIDTH] =
-                expand_to_rv64_block_from_slice(val.as_slice().unwrap());
+            // Put the two pointer limbs in an array for zero-extension.
+            let val = [val[0], val[1]];
+            let bus_payload: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&val);
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
@@ -237,7 +238,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                         limbs[RV64_PTR_U16_LIMBS - 1],
                         self.ptr_max_bits,
                     ),
-                    RV64_U16_BITS,
+                    U16_BITS,
                 )
                 .eval(builder, *local.instruction.is_enabled);
         }

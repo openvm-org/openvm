@@ -10,13 +10,13 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus, utils::not, var_range::VariableRangeCheckerBus,
-    ColumnsAir,
+    ColumnsAir, U16_BITS,
 };
 use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
     byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, u16_limbs_to_ptr,
-    RV64_PTR_U16_LIMBS, RV64_U16_BITS,
+    RV64_PTR_U16_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -38,8 +38,7 @@ pub struct XorinVmAir {
     pub memory_bridge: MemoryBridge,
     /// Bus to send 8-bit XOR requests to.
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
-    /// Used to range-check the u16 high cells of `buffer_ptr` and `input_ptr`
-    /// after scaling.
+    /// Range checker for pointer-byte canonicity and pointer-width bounds.
     pub range_bus: VariableRangeCheckerBus,
     /// Maximum number of bits allowed for an address pointer
     pub ptr_max_bits: usize,
@@ -179,7 +178,7 @@ impl XorinVmAir {
             self.range_bus
                 .range_check(
                     ptr_bound_from_high_u16_expr::<AB::Expr, _>(top_cell, self.ptr_max_bits),
-                    RV64_U16_BITS,
+                    U16_BITS,
                 )
                 .eval(builder, is_enabled);
         }

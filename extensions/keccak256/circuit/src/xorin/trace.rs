@@ -11,7 +11,7 @@ use openvm_circuit::{
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::AlignedBytesBorrow;
+use openvm_circuit_primitives::{AlignedBytesBorrow, U16_BITS};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -20,7 +20,7 @@ use openvm_instructions::{
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
     ptr_bound_from_ptr, ptr_to_field_u16_limbs, read_rv64_register_as_u32, rv64_bytes_to_u32,
-    tracing_read, tracing_write, RV64_U16_BITS,
+    tracing_read, tracing_write,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -310,10 +310,8 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         }
 
         for ptr in [record.buffer, record.input] {
-            self.range_checker_chip.add_count(
-                ptr_bound_from_ptr(ptr, self.pointer_max_bits),
-                RV64_U16_BITS,
-            );
+            self.range_checker_chip
+                .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
         }
     }
 }

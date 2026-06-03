@@ -15,6 +15,7 @@
 
 using namespace keccakf_op;
 using namespace riscv;
+using openvm::U16_BITS;
 
 #define KECCAKF_OP_WRITE(FIELD, VALUE) COL_WRITE_VALUE(row, KeccakfOpCols, FIELD, VALUE)
 #define KECCAKF_OP_WRITE_ARRAY(FIELD, VALUES) COL_WRITE_ARRAY(row, KeccakfOpCols, FIELD, VALUES)
@@ -82,7 +83,7 @@ static __device__ __noinline__ void fill_keccakf_op_row(
     // Bound the high u16 cell so the low-32-bit buffer pointer fits in pointer_max_bits.
     range_checker.add_count(
         ptr_bound_from_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
-        RV64_U16_BITS
+        U16_BITS
     );
 }
 

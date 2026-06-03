@@ -15,6 +15,7 @@ using namespace xorin;
 using namespace riscv;
 using namespace keccak256;
 using namespace program;
+using openvm::U16_BITS;
 
 #define XORIN_WRITE(FIELD, VALUE) COL_WRITE_VALUE(row, XorinVmCols, FIELD, VALUE)
 #define XORIN_WRITE_ARRAY(FIELD, VALUES) COL_WRITE_ARRAY(row, XorinVmCols, FIELD, VALUES)
@@ -160,11 +161,11 @@ __global__ void xorin_tracegen(
         // Bound the high u16 cells so the low-32-bit pointers fit in pointer_max_bits.
         range_checker.add_count(
             ptr_bound_from_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
-            RV64_U16_BITS
+            U16_BITS
         );
         range_checker.add_count(
             ptr_bound_from_high_u16(input_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
-            RV64_U16_BITS
+            U16_BITS
         );
 
     } else {

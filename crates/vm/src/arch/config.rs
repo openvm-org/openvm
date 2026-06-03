@@ -45,8 +45,7 @@ pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 // byte/cell/block/leaf layout diagram).
 //
 // Terminology:
-//   Cell    one storage word in an address space (u16 for RV64 ASes, F for
-//           DEFERRAL_AS).
+//   Cell    one storage word in an address space.
 //   Block   the unit of one memory-bus message: BLOCK_FE_WIDTH cells =
 //           MEMORY_BLOCK_BYTES bytes.
 //   Digest  the output of one Poseidon2 compression (DIGEST_WIDTH cells); also
@@ -73,7 +72,7 @@ pub const fn to_byte_ptr_bits(ptr_bits: usize) -> usize {
 /// Cells per memory-bus block.
 pub const BLOCK_FE_WIDTH: usize = 4;
 
-/// Bytes per memory-bus block (one RV64 8-byte word pair).
+/// Bytes per memory-bus block.
 pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 
 /// Default byte count for `RV64_MEMORY_AS` in `MemoryConfig::default`.
