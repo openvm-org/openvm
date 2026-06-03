@@ -17,10 +17,6 @@ pub fn write_ptr_reg(
     tester.write_bytes(ptr_as, reg_addr, value.to_le_bytes().map(BabyBear::from_u8));
 }
 
-/// Writes byte-shaped heap operands and returns the corresponding RV64 instruction.
-///
-/// Use this for adapters whose heap payload is `MEMORY_BLOCK_BYTES` raw bytes per
-/// memory-bus message.
 pub fn rv64_write_heap_default<const NUM_LIMBS: usize>(
     tester: &mut impl TestBuilder<BabyBear>,
     addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
@@ -38,13 +34,16 @@ pub fn rv64_write_heap_default<const NUM_LIMBS: usize>(
     };
     let (reg3, _) = tester.write_heap_pointer_default(RV64_REGISTER_NUM_LIMBS, 128);
 
-    rv64_heap_instruction(reg3, reg1, reg2, opcode_with_offset)
+    Instruction::from_isize(
+        VmOpcode::from_usize(opcode_with_offset),
+        reg3 as isize,
+        reg1 as isize,
+        reg2 as isize,
+        1_isize,
+        2_isize,
+    )
 }
 
-/// Writes u16-cell heap operands and returns the corresponding RV64 instruction.
-///
-/// Use this for adapters whose heap payload is `BLOCK_FE_WIDTH` u16 cells per
-/// memory-bus message.
 pub fn rv64_write_u16_heap_default<const NUM_LIMBS: usize>(
     tester: &mut impl TestBuilder<BabyBear>,
     addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
@@ -62,7 +61,14 @@ pub fn rv64_write_u16_heap_default<const NUM_LIMBS: usize>(
     };
     let (reg3, _) = tester.write_heap_pointer_default(RV64_REGISTER_NUM_LIMBS, 128);
 
-    rv64_heap_instruction(reg3, reg1, reg2, opcode_with_offset)
+    Instruction::from_isize(
+        VmOpcode::from_usize(opcode_with_offset),
+        reg3 as isize,
+        reg1 as isize,
+        reg2 as isize,
+        1_isize,
+        2_isize,
+    )
 }
 
 pub fn rv64_write_heap_default_with_increment<const NUM_LIMBS: usize>(
@@ -89,20 +95,11 @@ pub fn rv64_write_heap_default_with_increment<const NUM_LIMBS: usize>(
     };
     let (reg3, _) = tester.write_heap_pointer_default(RV64_REGISTER_NUM_LIMBS, pointer_increment);
 
-    rv64_heap_instruction(reg3, reg1, reg2, opcode_with_offset)
-}
-
-fn rv64_heap_instruction(
-    rd: usize,
-    rs1: usize,
-    rs2: usize,
-    opcode_with_offset: usize,
-) -> Instruction<BabyBear> {
     Instruction::from_isize(
         VmOpcode::from_usize(opcode_with_offset),
-        rd as isize,
-        rs1 as isize,
-        rs2 as isize,
+        reg3 as isize,
+        reg1 as isize,
+        reg2 as isize,
         1_isize,
         2_isize,
     )
@@ -116,17 +113,15 @@ fn write_u16_heap_default<const NUM_LIMBS: usize>(
 ) -> (usize, usize) {
     const { assert!(NUM_LIMBS.is_multiple_of(BLOCK_FE_WIDTH)) };
 
-    let register = tester.get_default_register(reg_increment);
-    let pointer = tester.get_default_pointer(pointer_increment);
-    write_ptr_reg(tester, 1, register, pointer as u64);
+    let (register, pointer) = tester.write_heap_pointer_default(reg_increment, pointer_increment);
 
     for (i, &write) in writes.iter().enumerate() {
         let byte_ptr = pointer + i * NUM_LIMBS * U16_CELL_SIZE;
         for j in (0..NUM_LIMBS).step_by(BLOCK_FE_WIDTH) {
-            let cell_idx = byte_ptr / U16_CELL_SIZE + j;
+            let ptr = byte_ptr / U16_CELL_SIZE + j;
             tester.write::<BLOCK_FE_WIDTH>(
                 2usize,
-                cell_idx,
+                ptr,
                 write[j..j + BLOCK_FE_WIDTH].try_into().unwrap(),
             );
         }
