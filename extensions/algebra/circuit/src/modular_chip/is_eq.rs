@@ -714,7 +714,7 @@ unsafe fn execute_e12_impl<
 
     // Read memory values
     let [b, c]: [[u8; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
-        debug_assert!(address as usize + TOTAL_READ_SIZE - 1 < (1 << DEFAULT_RV64_BYTE_PTR_BITS));
+        debug_assert!(address as usize + TOTAL_READ_SIZE - 1 < RV64_MEMORY_BYTES);
         from_fn::<_, NUM_LANES, _>(|i| {
             exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
                 RV64_MEMORY_AS,

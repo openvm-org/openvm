@@ -215,7 +215,7 @@ unsafe fn execute_e12_impl<
     let rs1_val = rv64_bytes_to_u32(rs1_bytes);
     let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
     // sign_extend([r64{c,g}(b):2]_e)
-    debug_assert!(ptr_val < (1 << DEFAULT_RV64_BYTE_PTR_BITS));
+    debug_assert!((ptr_val as usize) < RV64_MEMORY_BYTES);
 
     let shift_amount = ptr_val % RV64_REGISTER_NUM_LIMBS as u32;
     let ptr_val = ptr_val - shift_amount; // aligned ptr
