@@ -4,7 +4,7 @@ mod tests {
 
     use eyre::Result;
     use hex::FromHex;
-    #[cfg(feature = "aot")]
+    #[cfg(any(feature = "aot", feature = "rvr"))]
     use openvm_circuit::arch::{testing::assert_vm_states_equivalent, SystemConfig};
     use openvm_circuit::{arch::VmExecutor, utils::air_test_with_min_segments};
     use openvm_instructions::exe::VmExe;

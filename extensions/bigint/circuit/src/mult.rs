@@ -15,7 +15,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u32_array, read_int256, u32_array_to_bytes, write_int256},
-    AluAdapterExecutor, Rv64Multiplication256Executor, INT256_NUM_LIMBS, INT256_NUM_U32_LIMBS,
+    AluAdapterExecutor, Rv64Multiplication256Executor, INT256_NUM_U32_LIMBS, INT256_NUM_U8_LIMBS,
 };
 
 impl Rv64Multiplication256Executor {
@@ -195,9 +195,9 @@ impl Rv64Multiplication256Executor {
 
 #[inline(always)]
 pub(crate) fn u256_mul(
-    rs1: [u8; INT256_NUM_LIMBS],
-    rs2: [u8; INT256_NUM_LIMBS],
-) -> [u8; INT256_NUM_LIMBS] {
+    rs1: [u8; INT256_NUM_U8_LIMBS],
+    rs2: [u8; INT256_NUM_U8_LIMBS],
+) -> [u8; INT256_NUM_U8_LIMBS] {
     let rs1_u32 = bytes_to_u32_array(rs1);
     let rs2_u32 = bytes_to_u32_array(rs2);
     let mut rd = [0u32; INT256_NUM_U32_LIMBS];
@@ -218,7 +218,7 @@ mod tests {
     use rand::{prelude::StdRng, Rng, SeedableRng};
 
     use crate::{
-        common::u64_array_to_bytes, mult::u256_mul, INT256_NUM_LIMBS, INT256_NUM_U64_LIMBS,
+        common::u64_array_to_bytes, mult::u256_mul, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
     };
 
     #[test]
@@ -229,8 +229,8 @@ mod tests {
             let limbs_b: [u64; INT256_NUM_U64_LIMBS] = rng.random();
             let a = U256::from_limbs(limbs_a);
             let b = U256::from_limbs(limbs_b);
-            let a_u8: [u8; INT256_NUM_LIMBS] = u64_array_to_bytes(limbs_a);
-            let b_u8: [u8; INT256_NUM_LIMBS] = u64_array_to_bytes(limbs_b);
+            let a_u8: [u8; INT256_NUM_U8_LIMBS] = u64_array_to_bytes(limbs_a);
+            let b_u8: [u8; INT256_NUM_U8_LIMBS] = u64_array_to_bytes(limbs_b);
             assert_eq!(U256::from_le_bytes(u256_mul(a_u8, b_u8)), a.wrapping_mul(b));
         }
     }

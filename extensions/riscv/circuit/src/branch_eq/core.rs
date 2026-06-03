@@ -4,11 +4,7 @@ use openvm_circuit::{
     arch::*,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    utils::not,
-    ColumnsAir, StructReflection, StructReflectionHelper,
-};
+use openvm_circuit_primitives::{utils::not, ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_riscv_transpiler::BranchEqualOpcode;
@@ -39,7 +35,6 @@ pub struct BranchEqualCoreCols<T, const NUM_LIMBS: usize> {
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(BranchEqualCoreCols<u8, NUM_LIMBS>)]
 pub struct BranchEqualCoreAir<const NUM_LIMBS: usize> {
-    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     offset: usize,
     pc_step: u32,
 }
@@ -82,6 +77,7 @@ where
         let b = &cols.b;
         let inv_marker = &cols.diff_inv_marker;
 
+        // The adapter reads u16 memory cells, so the memory bus enforces the limb bounds.
         // 1 if cmp_result indicates a and b are equal, 0 otherwise
         let cmp_eq =
             cols.cmp_result * cols.opcode_beq_flag + not(cols.cmp_result) * cols.opcode_bne_flag;
@@ -94,7 +90,7 @@ where
         // - At this position, inv_marker[i] contains the multiplicative inverse of (a[i] - b[i])
         // - This ensures inv_marker[i] * (a[i] - b[i]) = 1, making the sum = 1
         // Note: There might be multiple valid inv_marker if a != b.
-        // But as long as the trace can provide at least one, that’s sufficient to prove a != b.
+        // But as long as the trace can provide at least one, that's sufficient to prove a != b.
         //
         // Note:
         // - If cmp_eq == 0, then it is impossible to have sum != 0 if a == b.
@@ -104,16 +100,6 @@ where
             builder.assert_zero(cmp_eq.clone() * (a[i] - b[i]));
         }
         builder.when(is_valid.clone()).assert_one(sum);
-
-        // Memory bus checks only packed u16 values; these byte limbs need separate bounds.
-        for i in 0..NUM_LIMBS / 2 {
-            self.bitwise_lookup_bus
-                .send_range(a[i * 2], a[i * 2 + 1])
-                .eval(builder, is_valid.clone());
-            self.bitwise_lookup_bus
-                .send_range(b[i * 2], b[i * 2 + 1])
-                .eval(builder, is_valid.clone());
-        }
 
         let expected_opcode = flags
             .iter()
@@ -148,8 +134,8 @@ where
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct BranchEqualCoreRecord<const NUM_LIMBS: usize> {
-    pub a: [u8; NUM_LIMBS],
-    pub b: [u8; NUM_LIMBS],
+    pub a: [u16; NUM_LIMBS],
+    pub b: [u16; NUM_LIMBS],
     pub imm: u32,
     pub local_opcode: u8,
 }
@@ -164,7 +150,6 @@ pub struct BranchEqualExecutor<A, const NUM_LIMBS: usize> {
 #[derive(Clone, derive_new::new)]
 pub struct BranchEqualFiller<A, const NUM_LIMBS: usize> {
     adapter: A,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     pub offset: usize,
     pub pc_step: u32,
 }
@@ -173,7 +158,7 @@ impl<F, A, RA, const NUM_LIMBS: usize> PreflightExecutor<F, RA>
     for BranchEqualExecutor<A, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceExecutor<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    A: 'static + AdapterTraceExecutor<F, ReadData: Into<[[u16; NUM_LIMBS]; 2]>, WriteData = ()>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -252,18 +237,8 @@ where
         core_row.imm = F::from_u32(record.imm);
         core_row.cmp_result = F::from_bool(cmp_result);
 
-        // AIR range-checks these byte limbs; add matching lookup counts.
-        for pair in record.a.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32, pair[1] as u32);
-        }
-        for pair in record.b.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32, pair[1] as u32);
-        }
-
-        core_row.b = record.b.map(F::from_u8);
-        core_row.a = record.a.map(F::from_u8);
+        core_row.b = record.b.map(F::from_u16);
+        core_row.a = record.a.map(F::from_u16);
     }
 }
 
@@ -271,8 +246,8 @@ where
 #[inline(always)]
 pub(super) fn fast_run_eq<const NUM_LIMBS: usize>(
     local_opcode: BranchEqualOpcode,
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
+    x: &[u16; NUM_LIMBS],
+    y: &[u16; NUM_LIMBS],
 ) -> bool {
     match local_opcode {
         BranchEqualOpcode::BEQ => x == y,
@@ -284,15 +259,19 @@ pub(super) fn fast_run_eq<const NUM_LIMBS: usize>(
 #[inline(always)]
 pub(super) fn run_eq<F, const NUM_LIMBS: usize>(
     is_beq: bool,
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
+    x: &[u16; NUM_LIMBS],
+    y: &[u16; NUM_LIMBS],
 ) -> (bool, usize, F)
 where
     F: PrimeField32,
 {
     for i in 0..NUM_LIMBS {
         if x[i] != y[i] {
-            return (!is_beq, i, (F::from_u8(x[i]) - F::from_u8(y[i])).inverse());
+            return (
+                !is_beq,
+                i,
+                (F::from_u16(x[i]) - F::from_u16(y[i])).inverse(),
+            );
         }
     }
     (is_beq, 0, F::ZERO)

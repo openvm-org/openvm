@@ -18,6 +18,7 @@ inline constexpr size_t RV64_BYTE_BITS = BYTE_BITS;
 inline constexpr uint32_t RV64_BYTE_MASK = (1u << RV64_BYTE_BITS) - 1;
 inline constexpr size_t RV64_PTR_U16_LIMBS = RV64_WORD_NUM_LIMBS / 2;
 inline constexpr size_t RV64_PTR_BITS = U16_BITS * RV64_PTR_U16_LIMBS;
+inline constexpr size_t RV_IS_TYPE_IMM_BITS = 12;
 } // namespace riscv
 
 namespace program {
