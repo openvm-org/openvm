@@ -3,7 +3,6 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv-adapters/constants.cuh"
 #include "riscv/adapters/jalr.cuh"
 
 using namespace riscv;
@@ -26,16 +25,35 @@ struct Rv64JalrCoreRecord {
     uint8_t imm_sign; // 0 or 1
 };
 
+__device__ void run_jalr(
+    uint32_t pc,
+    uint32_t rs1,
+    uint16_t imm,
+    bool imm_sign,
+    uint32_t &out_pc,
+    uint16_t rd_data[BLOCK_FE_WIDTH]
+) {
+    uint32_t offset = imm + (imm_sign ? (uint32_t(UINT16_MAX) << U16_BITS) : 0);
+    uint32_t to_pc = rs1 + offset;
+
+    assert(to_pc < (1u << PC_BITS));
+    out_pc = to_pc;
+    uint32_t rd_val = pc + DEFAULT_PC_STEP;
+    rd_data[0] = uint16_t(rd_val);
+    rd_data[1] = uint16_t(rd_val >> U16_BITS);
+    rd_data[2] = 0;
+    rd_data[3] = 0;
+}
+
 struct Rv64JalrCore {
     VariableRangeChecker rc;
 
     __device__ Rv64JalrCore(VariableRangeChecker rc) : rc(rc) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv64JalrCoreRecord record) {
-        uint32_t offset =
-            record.imm + (record.imm_sign ? (uint32_t(UINT16_MAX) << U16_BITS) : 0);
-        uint32_t to_pc = record.rs1_val + offset;
-        assert(to_pc < (1u << PC_BITS));
+        uint32_t to_pc;
+        uint16_t rd_data[BLOCK_FE_WIDTH];
+        run_jalr(record.from_pc, record.rs1_val, record.imm, record.imm_sign, to_pc, rd_data);
 
         uint32_t to_pc_limbs[2] = {
             (to_pc & uint32_t(UINT16_MAX)) >> 1, to_pc >> U16_BITS
@@ -45,9 +63,8 @@ struct Rv64JalrCore {
         rc.add_count(to_pc_limbs[0], U16_BITS - 1);
         rc.add_count(to_pc_limbs[1], PC_BITS - U16_BITS);
 
-        uint32_t rd_low_u32 = record.from_pc + DEFAULT_PC_STEP;
-        uint32_t rd_low_u16_lo = rd_low_u32 & uint32_t(UINT16_MAX);
-        uint32_t rd_low_u16_hi = (rd_low_u32 >> U16_BITS) & uint32_t(UINT16_MAX);
+        uint32_t rd_low_u16_lo = rd_data[0];
+        uint32_t rd_low_u16_hi = rd_data[1];
 
         // rd writes the low 32 bits of from_pc + DEFAULT_PC_STEP. The high
         // limb is narrowed to the remaining PC bits because from_pc is program-bus bounded.
@@ -56,7 +73,7 @@ struct Rv64JalrCore {
 
         uint32_t rs1_u16_lo = record.rs1_val & uint32_t(UINT16_MAX);
         uint32_t rs1_u16_hi = (record.rs1_val >> U16_BITS) & uint32_t(UINT16_MAX);
-        // rs1 is read as two u16 cells.
+        // AIR range-checks these u16 limbs; add matching lookup counts.
         rc.add_count(rs1_u16_lo, U16_BITS);
         rc.add_count(rs1_u16_hi, U16_BITS);
 

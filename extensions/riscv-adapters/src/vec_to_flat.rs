@@ -32,9 +32,9 @@ use openvm_stark_backend::{
 /// - `NUM_READS`: Number of read operands
 /// - `BLOCKS_PER_READ`: Number of blocks per read operand
 /// - `BLOCKS_PER_WRITE`: Number of blocks per write operand
-/// - `BLOCK_VALUE_WIDTH`: Number of values in each block
-/// - `TOTAL_READ_SIZE`: Total read size per operand (`BLOCKS_PER_READ * BLOCK_VALUE_WIDTH`)
-/// - `TOTAL_WRITE_SIZE`: Total write size per operand (`BLOCKS_PER_WRITE * BLOCK_VALUE_WIDTH`)
+/// - `BLOCK_VALUE_WIDTH`: Values per block
+/// - `TOTAL_READ_SIZE`: Flattened values per read (`BLOCKS_PER_READ * BLOCK_VALUE_WIDTH`)
+/// - `TOTAL_WRITE_SIZE`: Flattened values per write (`BLOCKS_PER_WRITE * BLOCK_VALUE_WIDTH`)
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct VecToFlatAluAdapterAir<
     A,
@@ -148,8 +148,14 @@ where
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
         const {
-            assert!(TOTAL_READ_SIZE == BLOCKS_PER_READ * BLOCK_VALUE_WIDTH);
-            assert!(TOTAL_WRITE_SIZE == BLOCKS_PER_WRITE * BLOCK_VALUE_WIDTH);
+            assert!(
+                TOTAL_READ_SIZE == BLOCKS_PER_READ * BLOCK_VALUE_WIDTH,
+                "TOTAL_READ_SIZE must equal BLOCKS_PER_READ * BLOCK_VALUE_WIDTH"
+            );
+            assert!(
+                TOTAL_WRITE_SIZE == BLOCKS_PER_WRITE * BLOCK_VALUE_WIDTH,
+                "TOTAL_WRITE_SIZE must equal BLOCKS_PER_WRITE * BLOCK_VALUE_WIDTH"
+            );
         };
 
         type InnerI<T, const NR: usize, const BPR: usize, const BPW: usize, const BS: usize> =
@@ -418,8 +424,8 @@ where
 /// - `A`: The inner adapter AIR (e.g., `Rv64VecHeapBranchAdapterAir`)
 /// - `NUM_READS`: Number of read operands
 /// - `BLOCKS_PER_READ`: Number of blocks per read operand
-/// - `BLOCK_VALUE_WIDTH`: Number of values in each block
-/// - `TOTAL_READ_SIZE`: Total read size per operand (`BLOCKS_PER_READ * BLOCK_VALUE_WIDTH`)
+/// - `BLOCK_VALUE_WIDTH`: Values per block
+/// - `TOTAL_READ_SIZE`: Flattened values per read (`BLOCKS_PER_READ * BLOCK_VALUE_WIDTH`)
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct VecToFlatBranchAdapterAir<
     A,
@@ -492,7 +498,12 @@ where
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        const { assert!(TOTAL_READ_SIZE == BLOCKS_PER_READ * BLOCK_VALUE_WIDTH) };
+        const {
+            assert!(
+                TOTAL_READ_SIZE == BLOCKS_PER_READ * BLOCK_VALUE_WIDTH,
+                "TOTAL_READ_SIZE must equal BLOCKS_PER_READ * BLOCK_VALUE_WIDTH"
+            )
+        };
 
         type InnerI<T, const NR: usize, const BPR: usize, const BS: usize> =
             VecHeapBranchAdapterInterface<T, NR, BPR, BS>;

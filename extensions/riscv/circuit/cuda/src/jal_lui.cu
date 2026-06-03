@@ -1,8 +1,7 @@
 #include "primitives/buffer_view.cuh"
-#include "primitives/constants.h" // PC_BITS
+#include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv-adapters/constants.cuh"
 #include "riscv/adapters/rdwrite.cuh"
 
 using namespace riscv;
@@ -37,19 +36,15 @@ struct Rv64JalLuiCore {
         bool is_sign_extend = (rd_hi >> (U16_BITS - 1)) & 1;
         uint32_t imm_low_4 = record.is_jal ? 0u : (record.imm & 0xfu);
 
-        // Range-check the low-32 rd cells used by the JAL/LUI relations.
         range_checker.add_count(rd_lo, U16_BITS);
         range_checker.add_count(rd_hi, U16_BITS);
-        // Tie is_sign_extend to bit 31, the top bit of rd_hi.
         range_checker.add_count(
             2u * rd_hi - ((uint32_t)is_sign_extend << U16_BITS), U16_BITS
         );
 
         if (!record.is_jal) {
-            // LUI constrains the low immediate part used across the 12-bit shift.
             range_checker.add_count(imm_low_4, 4);
         } else {
-            // JAL constrains the return address to fit within PC_BITS.
             range_checker.add_count(rd_hi << PC_HIGH_U16_SHIFT, U16_BITS);
         }
 

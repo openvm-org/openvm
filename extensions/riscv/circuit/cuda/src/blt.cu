@@ -2,7 +2,7 @@
 #include "primitives/buffer_view.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv-adapters/constants.cuh"
+#include "primitives/constants.h"
 #include "riscv/adapters/branch.cuh" // Rv64BranchAdapterCols, Rv64BranchAdapterRecord, Rv64BranchAdapter
 #include "riscv/cores/blt.cuh"
 #include "system/memory/params.cuh" // BLOCK_FE_WIDTH

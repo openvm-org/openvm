@@ -1,10 +1,13 @@
-use openvm_circuit::arch::testing::{memory::gen_pointer, TestBuilder};
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, TestBuilder},
+    BLOCK_FE_WIDTH,
+};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, Rng};
 
-use super::adapters::{RV64_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
+use super::adapters::{rv64_bytes_to_u16_block, RV64_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
 
 // Returns (instruction, rd)
 #[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
@@ -56,4 +59,21 @@ pub fn generate_rv64_is_type_immediate(rng: &mut StdRng) -> (usize, [u8; RV64_RE
             sign_byte,
         ],
     )
+}
+
+#[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
+pub fn rv64_marker_bytes_to_u16_marker(
+    marker: [u8; RV64_REGISTER_NUM_LIMBS],
+) -> [u32; BLOCK_FE_WIDTH] {
+    rv64_bytes_to_u16_block(marker).map(|marker| u32::from(marker != 0))
+}
+
+#[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
+pub fn rv64_msb_byte_prank_to_u16_limb(low_byte: u8, msb: i32) -> i32 {
+    let limb = u16::from_le_bytes([low_byte, msb as u8]);
+    if msb < 0 {
+        -i32::from(limb.wrapping_neg())
+    } else {
+        i32::from(limb)
+    }
 }

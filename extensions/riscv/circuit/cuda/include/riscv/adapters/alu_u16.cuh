@@ -3,7 +3,7 @@
 #include "primitives/execution.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv-adapters/constants.cuh"
+#include "primitives/constants.h"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 

@@ -207,7 +207,7 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        // The memory bus sees packed u16 pairs, so the byte operands need local range checks.
+        // Memory bus checks only packed u16 values; these byte limbs need separate bounds.
         for i in 0..(NUM_LIMBS / 2) {
             self.bitwise_lookup_bus
                 .send_range(b[i * 2], b[i * 2 + 1])
@@ -382,7 +382,7 @@ where
                 .request_range(pair[0] as u32, pair[1] as u32);
         }
 
-        // Add lookup counts for the byte operands range-checked by AIR.
+        // AIR range-checks these byte limbs; add matching lookup counts.
         for pair in record.b.chunks_exact(2) {
             self.bitwise_lookup_chip
                 .request_range(pair[0] as u32, pair[1] as u32);

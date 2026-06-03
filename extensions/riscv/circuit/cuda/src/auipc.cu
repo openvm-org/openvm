@@ -3,7 +3,6 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv-adapters/constants.cuh"
 #include "riscv/adapters/rdwrite.cuh"
 
 using namespace riscv;
@@ -12,8 +11,9 @@ using namespace program;
 template <typename T> struct Rv64AuipcCoreCols {
     T is_valid;
     T is_sign_extend;
-    T imm_low_8;   // imm & ((1 << RV64_BYTE_BITS) - 1)
-    T imm_high_16; // (imm >> RV64_BYTE_BITS) & uint32_t(UINT16_MAX)
+    // The immediate is split around the byte shift in AUIPC's `imm << 8`.
+    T imm_low_8;
+    T imm_high_16;
     T rd_data[RV64_PTR_U16_LIMBS];
 };
 
@@ -37,12 +37,10 @@ struct Rv64AuipcCore {
         uint16_t rd_hi = (uint16_t)(auipc >> U16_BITS);
         uint32_t is_sign_ext = (rd_hi >> (U16_BITS - 1)) & 1;
 
-        // Range-check the immediate split and low-32 rd cells used by the relation.
         range_checker.add_count(imm_low_8, RV64_BYTE_BITS);
         range_checker.add_count(imm_high_16, U16_BITS);
         range_checker.add_count(rd_lo, U16_BITS);
         range_checker.add_count(rd_hi, U16_BITS);
-        // Tie is_sign_extend to bit 31, the top bit of rd_hi.
         range_checker.add_count(
             2u * rd_hi - (is_sign_ext << U16_BITS), U16_BITS
         );

@@ -168,6 +168,17 @@ struct AuipcPrankValues {
     pub imm_high_16: Option<u32>,
 }
 
+fn pack_rd_u8_limbs(limbs: [u32; 4]) -> [u32; 2] {
+    [
+        limbs[0] + (limbs[1] << RV64_BYTE_BITS),
+        limbs[2] + (limbs[3] << RV64_BYTE_BITS),
+    ]
+}
+
+fn split_imm_u8_limbs(limbs: [u32; 3]) -> (u32, u32) {
+    (limbs[0], limbs[1] + (limbs[2] << RV64_BYTE_BITS))
+}
+
 fn run_negative_auipc_test(
     opcode: Rv64AuipcOpcode,
     initial_imm: Option<u32>,
@@ -224,13 +235,14 @@ fn run_negative_auipc_test(
 
 #[test]
 fn invalid_limb_negative_tests() {
+    let (imm_low_8, imm_high_16) = split_imm_u8_limbs([107, 46, 81]);
     run_negative_auipc_test(
         AUIPC,
         Some(9722891),
         None,
         AuipcPrankValues {
-            imm_low_8: Some(107),
-            imm_high_16: Some(0x512e),
+            imm_low_8: Some(imm_low_8),
+            imm_high_16: Some(imm_high_16),
             ..Default::default()
         },
         false,
@@ -240,17 +252,18 @@ fn invalid_limb_negative_tests() {
         Some(0),
         Some(2110400),
         AuipcPrankValues {
-            rd_data: Some([0x33c2, 0xf020]),
+            rd_data: Some(pack_rd_u8_limbs([194, 51, 32, 240])),
             ..Default::default()
         },
         true,
     );
+    let (_, imm_high_16) = split_imm_u8_limbs([0, 206, 166]);
     run_negative_auipc_test(
         AUIPC,
         None,
         None,
         AuipcPrankValues {
-            imm_high_16: Some(0xa6ce),
+            imm_high_16: Some(imm_high_16),
             ..Default::default()
         },
         false,
@@ -260,19 +273,20 @@ fn invalid_limb_negative_tests() {
         None,
         None,
         AuipcPrankValues {
-            rd_data: Some([0x5c1e, 0x8452]),
+            rd_data: Some(pack_rd_u8_limbs([30, 92, 82, 132])),
             ..Default::default()
         },
         false,
     );
+    let (imm_low_8, imm_high_16) = split_imm_u8_limbs([166, 243, 17]);
     run_negative_auipc_test(
         AUIPC,
         None,
         Some(876487877),
         AuipcPrankValues {
-            rd_data: Some([0xcac5, 0x4631]),
-            imm_low_8: Some(166),
-            imm_high_16: Some(0x11f3),
+            rd_data: Some(pack_rd_u8_limbs([197, 202, 49, 70])),
+            imm_low_8: Some(imm_low_8),
+            imm_high_16: Some(imm_high_16),
             ..Default::default()
         },
         false,
@@ -323,7 +337,7 @@ fn rd_upper_bytes_trace_tamper_negative_test() {
 #[test]
 fn sign_extend_flag_negative_tests() {
     // is_sign_extend = 1 when the result fits in 32 bits (MSB of rd_data[1] is 0).
-    // pc=4, imm=0 => rd = 4 => rd_data = [4, 0, 0, 0].
+    // pc=4, imm=0 => rd low 32 bits = [4, 0].
     run_negative_auipc_test(
         AUIPC,
         Some(0),
@@ -335,7 +349,7 @@ fn sign_extend_flag_negative_tests() {
         true,
     );
     // is_sign_extend = 0 when the result has bit 31 set (MSB of rd_data[1] is 1).
-    // pc=0, imm=2^23 => rd = 2^31 => rd_data = [0, 0x8000, 0xffff, 0xffff].
+    // pc=0, imm=2^23 => rd low 32 bits = [0, 0x8000].
     run_negative_auipc_test(
         AUIPC,
         Some(1 << 23),
@@ -350,13 +364,14 @@ fn sign_extend_flag_negative_tests() {
 
 #[test]
 fn overflow_negative_tests() {
+    let (imm_low_8, imm_high_16) = split_imm_u8_limbs([3592, 219, 3]);
     run_negative_auipc_test(
         AUIPC,
         Some(256264),
         None,
         AuipcPrankValues {
-            imm_low_8: Some(3592),
-            imm_high_16: Some(0x03e9),
+            imm_low_8: Some(imm_low_8),
+            imm_high_16: Some(imm_high_16),
             ..Default::default()
         },
         false,
@@ -371,13 +386,14 @@ fn overflow_negative_tests() {
         },
         false,
     );
+    let (imm_low_8, imm_high_16) = split_imm_u8_limbs([F::NEG_ONE.as_canonical_u32(), 1, 0]);
     run_negative_auipc_test(
         AUIPC,
         Some(255),
         None,
         AuipcPrankValues {
-            imm_low_8: Some(F::NEG_ONE.as_canonical_u32()),
-            imm_high_16: Some(0),
+            imm_low_8: Some(imm_low_8),
+            imm_high_16: Some(imm_high_16),
             ..Default::default()
         },
         true,

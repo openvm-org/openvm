@@ -34,9 +34,8 @@ const PC_HIGH_U16_SHIFT: usize = 2 * U16_BITS - PC_BITS;
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64JalLuiCoreCols<T> {
     pub imm: T,
-    // Low 32 bits of rd as u16 limbs.
+    // Low 32 bits of rd.
     pub rd_data: [T; RV64_PTR_U16_LIMBS],
-    // Low 4 bits of imm.
     pub imm_low_4: T,
     pub is_jal: T,
     pub is_lui: T,

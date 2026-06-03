@@ -3,7 +3,6 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv-adapters/constants.cuh"
 #include "riscv/adapters/alu_u16.cuh"
 #include "riscv/cores/less_than.cuh"
 #include "system/memory/params.cuh"

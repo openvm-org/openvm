@@ -156,7 +156,6 @@ where
             )
             .eval(builder, cols.opcode_mulh_flag + cols.opcode_mulhsu_flag);
 
-        // The memory bus sees packed u16 pairs, so the byte operands need local range checks.
         for i in 0..NUM_LIMBS {
             self.bitwise_lookup_bus
                 .send_range(b[i], c[i])
@@ -340,7 +339,6 @@ where
             );
         }
 
-        // Add lookup counts for the byte operands range-checked by AIR.
         for i in 0..NUM_LIMBS {
             self.bitwise_lookup_chip
                 .request_range(record.b[i] as u32, record.c[i] as u32);

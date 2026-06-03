@@ -31,9 +31,10 @@ use crate::adapters::{
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64JalrCoreCols<T> {
     pub imm: T,
-    // Low 32 bits of rs1 as u16 limbs.
+    // Keep the low 32-bit decomposition and zero-extend to RV64 at the adapter boundary.
     pub rs1_data: [T; RV64_PTR_U16_LIMBS],
-    // High u16 of the low 32 bits of rd.
+    // To save a column, we only store the high u16 limb of low-32 rd_data.
+    // The low u16 limb can be derived from from_pc and this limb.
     pub rd_data: [T; RV64_PTR_U16_LIMBS - 1],
     pub is_valid: T,
 

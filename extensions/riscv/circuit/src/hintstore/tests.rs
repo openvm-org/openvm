@@ -1,30 +1,26 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
+#[cfg(feature = "cuda")]
+use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
-        testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS,
-        },
+        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
         Arena, ExecutionBridge, MatrixRecordArena, PreflightExecutor, BLOCK_FE_WIDTH,
     },
-    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
-};
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::{
-        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-        SharedBitwiseOperationLookupChip,
+    system::memory::{
+        offline_checker::{pack_u8_block_value, MemoryBridge},
+        SharedMemoryHelper,
     },
-    var_range::SharedVariableRangeCheckerChip,
 };
+use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{
     Rv64HintStoreOpcode::{self, *},
-    MAX_HINT_BUFFER_DWORDS,
+    MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS,
 };
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
@@ -39,14 +35,12 @@ use rand::{rngs::StdRng, Rng, RngCore};
 #[cfg(feature = "cuda")]
 use {
     crate::{Rv64HintStoreChipGpu, Rv64HintStoreLayout},
-    openvm_circuit::arch::testing::{
-        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
-    },
+    openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
 
 use super::{Rv64HintStoreAir, Rv64HintStoreChip, Rv64HintStoreCols, Rv64HintStoreExecutor};
-use crate::Rv64HintStoreFiller;
+use crate::{adapters::u64_to_rv64_limbs, Rv64HintStoreFiller};
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
@@ -79,20 +73,7 @@ fn create_harness_fields(
     (air, executor, chip)
 }
 
-fn create_harness<RA: Arena>(
-    tester: &mut VmChipTestBuilder<F>,
-) -> (
-    Harness<RA>,
-    (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-    ),
-) {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
-
+fn create_harness<RA: Arena>(tester: &mut VmChipTestBuilder<F>) -> Harness<RA> {
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
@@ -100,14 +81,7 @@ fn create_harness<RA: Arena>(
         tester.memory_helper(),
         tester.address_bits(),
     );
-    let harness = Harness::<RA>::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
-
-    (harness, (bitwise_chip.air, bitwise_chip))
-}
-
-/// Convert a `u32` value to the 8-limb register representation (upper 4 limbs zero).
-fn u32_to_rv64_limbs(x: u32) -> [F; RV64_REGISTER_NUM_LIMBS] {
-    (x as u64).to_le_bytes().map(F::from_u8)
+    Harness::<RA>::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
@@ -124,7 +98,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let a = if opcode == HINT_BUFFER {
         let a = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-        tester.write_bytes(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
+        tester.write_bytes(
+            RV64_REGISTER_AS as usize,
+            a,
+            u64_to_rv64_limbs(num_words.into()),
+        );
         a
     } else {
         0
@@ -132,7 +110,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let mem_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
     let b = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
+        b,
+        u64_to_rv64_limbs(mem_ptr.into()),
+    );
 
     let mut input = Vec::with_capacity(num_words as usize * RV64_REGISTER_NUM_LIMBS);
     for _ in 0..num_words {
@@ -176,7 +158,7 @@ fn rand_hintstore_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut harness, bitwise) = create_harness(&mut tester);
+    let mut harness = create_harness(&mut tester);
     let num_ops: usize = 100;
     for _ in 0..num_ops {
         let opcode = if rng.random_bool(0.5) {
@@ -193,11 +175,7 @@ fn rand_hintstore_test() {
         );
     }
 
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -214,16 +192,24 @@ fn test_hint_buffer_exceeds_max_words() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut harness, _bitwise) = create_harness::<MatrixRecordArena<F>>(&mut tester);
+    let mut harness = create_harness::<MatrixRecordArena<F>>(&mut tester);
 
     let num_words = (MAX_HINT_BUFFER_DWORDS + 1) as u32;
 
     let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
+        a,
+        u64_to_rv64_limbs(num_words.into()),
+    );
 
     let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
     let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
+        b,
+        u64_to_rv64_limbs(mem_ptr.into()),
+    );
 
     for _ in 0..num_words {
         let data = rng.next_u64().to_le_bytes().map(F::from_u8);
@@ -245,15 +231,23 @@ fn test_hint_buffer_rem_words_range_check() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut harness, bitwise) = create_harness(&mut tester);
+    let mut harness = create_harness(&mut tester);
 
     let num_words: u32 = 1;
     let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
+        a,
+        u64_to_rv64_limbs(num_words.into()),
+    );
 
     let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
     let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
+        b,
+        u64_to_rv64_limbs(mem_ptr.into()),
+    );
 
     for _ in 0..num_words {
         let data = rng.next_u64().to_le_bytes().map(F::from_u8);
@@ -272,9 +266,9 @@ fn test_hint_buffer_rem_words_range_check() {
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
-        // `rem_words = 2^MAX_HINT_BUFFER_DWORDS_BITS` scales to 2^16, outside
+        // Setting `rem_words = 2^MAX_HINT_BUFFER_DWORDS_BITS` scales to 2^16, outside
         // the 16-bit range-check table.
-        cols.rem_words = F::from_u32(1024);
+        cols.rem_words = F::from_u32(1 << MAX_HINT_BUFFER_DWORDS_BITS);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -282,7 +276,6 @@ fn test_hint_buffer_rem_words_range_check() {
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
         .finalize();
 
     tester
@@ -295,15 +288,23 @@ fn test_hint_buffer_mem_ptr_range_check() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut harness, bitwise) = create_harness(&mut tester);
+    let mut harness = create_harness(&mut tester);
 
     let num_words: u32 = 1;
     let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(RV64_REGISTER_AS as usize, a, u32_to_rv64_limbs(num_words));
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
+        a,
+        u64_to_rv64_limbs(num_words.into()),
+    );
 
     let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
     let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
-    tester.write_bytes(RV64_REGISTER_AS as usize, b, u32_to_rv64_limbs(mem_ptr));
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
+        b,
+        u64_to_rv64_limbs(mem_ptr.into()),
+    );
 
     for _ in 0..num_words {
         let data = rng.next_u64().to_le_bytes().map(F::from_u8);
@@ -332,7 +333,6 @@ fn test_hint_buffer_mem_ptr_range_check() {
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
         .finalize();
 
     tester
@@ -346,7 +346,7 @@ fn test_hintstore_rs1_upper_bytes_non_zero() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut harness, _bitwise) = create_harness::<MatrixRecordArena<F>>(&mut tester);
+    let mut harness = create_harness::<MatrixRecordArena<F>>(&mut tester);
 
     // Write b with a non-zero byte in the upper half; `mem_ptr_u64 >> 32` is then non-zero,
     // so the preflight executor must panic before it reaches the data write.
@@ -371,12 +371,12 @@ fn test_hintstore_rs1_upper_bytes_non_zero() {
 #[allow(clippy::too_many_arguments)]
 fn run_negative_hintstore_test(
     opcode: Rv64HintStoreOpcode,
-    prank_data: Option<[u32; BLOCK_FE_WIDTH]>,
+    prank_data: Option<[F; BLOCK_FE_WIDTH]>,
     _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&mut tester);
+    let mut harness = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -390,7 +390,7 @@ fn run_negative_hintstore_test(
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         if let Some(data) = prank_data {
-            cols.data = data.map(F::from_u32);
+            cols.data = data;
         }
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
@@ -399,7 +399,6 @@ fn run_negative_hintstore_test(
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
         .finalize();
     tester
         .simple_test()
@@ -408,9 +407,13 @@ fn run_negative_hintstore_test(
 
 #[test]
 fn negative_hintstore_tests() {
-    // 4 u16-cell values; differ from the random hint-stream input so the bus interaction
-    // (which sends both the new and previous data) fails to balance.
-    run_negative_hintstore_test(HINT_STORED, Some([0x5c92, 0x182d, 0xd311, 0x0540]), true);
+    run_negative_hintstore_test(
+        HINT_STORED,
+        Some(pack_u8_block_value(
+            &[92, 187, 45, 280, 17, 211, 64, 5].map(F::from_u32),
+        )),
+        true,
+    );
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -423,7 +426,7 @@ fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut harness, _) = create_harness::<MatrixRecordArena<F>>(&mut tester);
+    let mut harness = create_harness::<MatrixRecordArena<F>>(&mut tester);
 
     let num_ops: usize = 10;
     for _ in 0..num_ops {
@@ -478,8 +481,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[test]
 fn test_cuda_rand_hintstore_tracegen() {
     let mut rng = create_seeded_rng();
-    let mut tester =
-        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let mut tester = GpuChipTestBuilder::default();
 
     let mut harness = create_cuda_harness(&tester);
     let num_ops = 50;

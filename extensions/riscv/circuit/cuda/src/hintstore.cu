@@ -2,7 +2,6 @@
 #include "primitives/constants.h"
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
-#include "riscv-adapters/constants.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -21,17 +20,15 @@ template <typename T> struct Rv64HintStoreCols {
     T is_single;
     T is_buffer;
 
-    // Single u16 cell holding rem_words.
     T rem_words;
 
     ExecutionState<T> from_state;
     T mem_ptr_ptr;
-    // Low 32 bits of mem_ptr as u16 cells.
+    // Low 32 bits of mem_ptr.
     T mem_ptr_limbs[RV64_PTR_U16_LIMBS];
     MemoryReadAuxCols<T> mem_ptr_aux_cols;
 
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
-    // One hint word as BLOCK_FE_WIDTH u16 cells.
     T data[BLOCK_FE_WIDTH];
 
     // only buffer
@@ -105,16 +102,13 @@ struct Rv64HintStore {
 #endif
 
             // Constrain mem_ptr < 2^pointer_max_bits by narrowing its high u16 limb.
-            uint32_t mem_ptr_msl_lshift = RV64_PTR_BITS - (uint32_t)pointer_max_bits;
+            uint32_t mem_ptr_shift = RV64_PTR_BITS - (uint32_t)pointer_max_bits;
             uint32_t mem_ptr_high_u16 = record.mem_ptr >> U16_BITS;
-            range_checker.add_count(
-                mem_ptr_high_u16 << mem_ptr_msl_lshift, U16_BITS
-            );
+            range_checker.add_count(mem_ptr_high_u16 << mem_ptr_shift, U16_BITS);
 
             // Constrain rem_words < 2^MAX_HINT_BUFFER_DWORDS_BITS.
-            uint32_t rem_words_lshift =
-                U16_BITS - (uint32_t)MAX_HINT_BUFFER_DWORDS_BITS;
-            range_checker.add_count(record.num_words << rem_words_lshift, U16_BITS);
+            uint32_t rem_words_shift = U16_BITS - (uint32_t)MAX_HINT_BUFFER_DWORDS_BITS;
+            range_checker.add_count(record.num_words << rem_words_shift, U16_BITS);
 
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv64HintStoreCols, mem_ptr_aux_cols)),

@@ -28,11 +28,9 @@ use crate::adapters::{
 pub struct Rv64AuipcCoreCols<T> {
     pub is_valid: T,
     pub is_sign_extend: T,
-    // Low byte of imm.
+    // The immediate is split around the byte shift in AUIPC's `imm << 8`.
     pub imm_low_8: T,
-    // High 16 bits of imm.
     pub imm_high_16: T,
-    // Low 32 bits of rd as u16 limbs.
     pub rd_data: [T; RV64_PTR_U16_LIMBS],
 }
 
@@ -76,30 +74,17 @@ where
         builder.assert_bool(is_valid);
         builder.assert_bool(is_sign_extend);
 
-        // We want to constrain rd = from_pc + (imm << RV64_BYTE_BITS) where:
-        // - rd_data represents the low 32 bits of rd as two u16 cells
-        // - imm_low_8 is the low byte of imm
-        // - imm_high_16 is the high 16 bits of imm
-
-        // Shift imm by one byte:
-        // imm_shifted = 2^8 * imm_low_8 + 2^16 * imm_high_16
-        let sl_lo = imm_low_8 * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
-        let sl_hi: AB::Expr = imm_high_16.into();
-
         let limb_base = AB::F::from_u32(1 << U16_BITS);
         let carry_divide = limb_base.inverse();
-
-        // Compose the two output cells:
-        // rd_low_32 = rd_data[0] + 2^16 * rd_data[1]
+        let imm = imm_low_8 + imm_high_16 * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
         let rd_low_32 = rd_data[0] + rd_data[1] * limb_base;
-        let imm_shifted = sl_lo + sl_hi * limb_base;
 
-        // Constrain the low-32-bit addition:
-        // from_pc + imm_shifted = rd_low_32 + carry_top * 2^32
-        let carry_top = (from_pc + imm_shifted - rd_low_32) * carry_divide * carry_divide;
+        // Constrain the low 32 bits of rd = from_pc + (imm << 8).
+        let carry_top = (from_pc + imm.clone() * AB::F::from_u32(1 << RV64_BYTE_BITS) - rd_low_32)
+            * carry_divide
+            * carry_divide;
         builder.when(is_valid).assert_bool(carry_top);
 
-        // Constrain is_sign_extend to the top bit of rd_data[1].
         self.range_bus
             .range_check(
                 AB::Expr::from_u32(2) * rd_data[1]
@@ -108,7 +93,6 @@ where
             )
             .eval(builder, is_valid);
 
-        // Range check rd and immediate limbs.
         self.range_bus
             .range_check(rd_data[0], U16_BITS)
             .eval(builder, is_valid);
@@ -122,9 +106,6 @@ where
             .range_check(imm_high_16, U16_BITS)
             .eval(builder, is_valid);
 
-        let imm = imm_low_8 + imm_high_16 * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
-
-        // Sign-extend the 32-bit result into the two high u16 cells of the RV64 register.
         let sign_extend_cell = is_sign_extend * AB::Expr::from_u32(u16::MAX as u32);
         let write_data: [AB::Expr; BLOCK_FE_WIDTH] = [
             rd_data[0].into(),

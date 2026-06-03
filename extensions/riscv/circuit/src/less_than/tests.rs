@@ -41,7 +41,10 @@ use crate::{
         Rv64BaseAluU16AdapterFiller, RV64_REGISTER_NUM_LIMBS, U16_BITS,
     },
     less_than::LessThanCoreCols,
-    test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
+    test_utils::{
+        generate_rv64_is_type_immediate, rv64_marker_bytes_to_u16_marker,
+        rv64_msb_byte_prank_to_u16_limb, rv64_rand_write_register_or_imm,
+    },
     LessThanFiller, Rv64LessThanAir, Rv64LessThanExecutor,
 };
 
@@ -299,7 +302,7 @@ fn rv64_lt_zero_diff_val_negative_test() {
     let b = [145, 34, 25, 205, 255, 255, 255, 255];
     let c = [73, 35, 25, 205, 255, 255, 255, 255];
     let prank_vals = LessThanPrankValues {
-        diff_marker: Some([0, 1, 0, 0]),
+        diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 1, 0, 0, 0, 0, 0])),
         diff_val: Some(0),
         ..Default::default()
     };
@@ -312,7 +315,7 @@ fn rv64_lt_fake_diff_marker_negative_test() {
     let b = [145, 34, 25, 205, 255, 255, 255, 255];
     let c = [73, 35, 25, 205, 255, 255, 255, 255];
     let prank_vals = LessThanPrankValues {
-        diff_marker: Some([1, 0, 0, 0]),
+        diff_marker: Some(rv64_marker_bytes_to_u16_marker([1, 0, 0, 0, 0, 0, 0, 0])),
         diff_val: Some(72),
         ..Default::default()
     };
@@ -325,7 +328,7 @@ fn rv64_lt_zero_diff_marker_negative_test() {
     let b = [145, 34, 25, 205, 255, 255, 255, 255];
     let c = [73, 35, 25, 205, 255, 255, 255, 255];
     let prank_vals = LessThanPrankValues {
-        diff_marker: Some([0, 0, 0, 0]),
+        diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 0])),
         diff_val: Some(0),
         ..Default::default()
     };
@@ -335,12 +338,12 @@ fn rv64_lt_zero_diff_marker_negative_test() {
 
 #[test]
 fn rv64_slt_wrong_b_msb_negative_test() {
-    // b[7]=c[7]=205, actual diff at byte 1. Prank b_msb to 206.
+    // b[7]=c[7]=205, actual diff at byte 1. Prank b_msb to 206: b_diff constraint fails.
     let b = [145, 34, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
-        b_msb: Some(206),
-        diff_marker: Some([0, 0, 0, 1]),
+        b_msb: Some(rv64_msb_byte_prank_to_u16_limb(0, 206)),
+        diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(1),
         ..Default::default()
     };
@@ -350,12 +353,12 @@ fn rv64_slt_wrong_b_msb_negative_test() {
 #[test]
 fn rv64_slt_wrong_b_msb_sign_negative_test() {
     // b[7]=c[7]=205 (negative). Prank b_msb_f to 205 (raw byte instead of 205-256=-51).
-    // b_diff=0 so constraint passes, but range check sends 205+128=333.
+    // b_diff=0 so constraint passes, but range check sends 205+128=333: interaction error.
     let b = [145, 34, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
-        b_msb: Some(205),
-        diff_marker: Some([0, 0, 0, 1]),
+        b_msb: Some(rv64_msb_byte_prank_to_u16_limb(0, 205)),
+        diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(256),
         ..Default::default()
     };
@@ -364,12 +367,12 @@ fn rv64_slt_wrong_b_msb_sign_negative_test() {
 
 #[test]
 fn rv64_slt_wrong_c_msb_negative_test() {
-    // b[7]=c[7]=205, actual diff at byte 1. Prank c_msb to 204.
+    // b[7]=c[7]=205, actual diff at byte 1. Prank c_msb to 204: c_diff constraint fails.
     let b = [145, 36, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
-        c_msb: Some(204),
-        diff_marker: Some([0, 0, 0, 1]),
+        c_msb: Some(rv64_msb_byte_prank_to_u16_limb(0, 204)),
+        diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(1),
         ..Default::default()
     };
@@ -379,12 +382,12 @@ fn rv64_slt_wrong_c_msb_negative_test() {
 #[test]
 fn rv64_slt_wrong_c_msb_sign_negative_test() {
     // c[7]=205 (negative). Prank c_msb_f to 205 (raw byte instead of -51).
-    // c_diff=0 so constraint passes, but range check sends 205+128=333.
+    // c_diff=0 so constraint passes, but range check sends 205+128=333: interaction error.
     let b = [145, 36, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
-        c_msb: Some(205),
-        diff_marker: Some([0, 0, 0, 1]),
+        c_msb: Some(rv64_msb_byte_prank_to_u16_limb(0, 205)),
+        diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(256),
         ..Default::default()
     };
@@ -393,12 +396,12 @@ fn rv64_slt_wrong_c_msb_sign_negative_test() {
 
 #[test]
 fn rv64_sltu_wrong_b_msb_negative_test() {
-    // b[7]=c[7]=205. Prank b_msb to 204.
+    // b[7]=c[7]=205. Prank b_msb to 204: b_diff constraint fails.
     let b = [145, 36, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
-        b_msb: Some(204),
-        diff_marker: Some([0, 0, 0, 1]),
+        b_msb: Some(rv64_msb_byte_prank_to_u16_limb(0, 204)),
+        diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(1),
         ..Default::default()
     };
@@ -408,12 +411,12 @@ fn rv64_sltu_wrong_b_msb_negative_test() {
 #[test]
 fn rv64_sltu_wrong_b_msb_sign_negative_test() {
     // b[7]=205. Prank b_msb_f to -51 (=205-256). b_diff=205-(-51)=256, 256*(256-256)=0
-    // so constraint passes, but range check sends -51, which is out of range.
+    // so constraint passes, but range check sends -51 which is out of range: interaction error.
     let b = [145, 36, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
-        b_msb: Some(-51),
-        diff_marker: Some([0, 0, 0, 1]),
+        b_msb: Some(rv64_msb_byte_prank_to_u16_limb(0, -51)),
+        diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(256),
         ..Default::default()
     };
@@ -422,12 +425,12 @@ fn rv64_sltu_wrong_b_msb_sign_negative_test() {
 
 #[test]
 fn rv64_sltu_wrong_c_msb_negative_test() {
-    // c[7]=205. Prank c_msb to 204.
+    // c[7]=205. Prank c_msb to 204: c_diff constraint fails.
     let b = [145, 34, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
-        c_msb: Some(204),
-        diff_marker: Some([0, 0, 0, 1]),
+        c_msb: Some(rv64_msb_byte_prank_to_u16_limb(0, 204)),
+        diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(1),
         ..Default::default()
     };
@@ -437,12 +440,12 @@ fn rv64_sltu_wrong_c_msb_negative_test() {
 #[test]
 fn rv64_sltu_wrong_c_msb_sign_negative_test() {
     // c[7]=205. Prank c_msb_f to -51 (=205-256). c_diff=205-(-51)=256, 256*(256-256)=0
-    // so constraint passes, but range check sends -51, which is out of range.
+    // so constraint passes, but range check sends -51 which is out of range: interaction error.
     let b = [145, 34, 25, 0, 0, 0, 0, 205];
     let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
-        c_msb: Some(-51),
-        diff_marker: Some([0, 0, 0, 1]),
+        c_msb: Some(rv64_msb_byte_prank_to_u16_limb(0, -51)),
+        diff_marker: Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 1])),
         diff_val: Some(256),
         ..Default::default()
     };
@@ -451,15 +454,12 @@ fn rv64_sltu_wrong_c_msb_sign_negative_test() {
 
 #[test]
 fn rv64_lt_adapter_imm_sign_extension_negative_test() {
-    // Execute SLTU with a positive immediate, then prank c[2] (u16 cell 2 = bytes 4..6)
-    // to violate the imm sign-extension constraint. The four u16 cells of
-    // an imm rs2 are [imm_low_u16, sign_u16, sign_u16, sign_u16]; for positive imm sign_u16 = 0.
-    //
-    // Original execution: b bytes=[10,0,0,0,1,0,0,0] => b_u16=[10,0,1,0].
-    //   Most significant diff at cell 2 (b[2]=1, c[2]=0), cmp_result=0, diff_val=1.
-    // After prank: c[2]=1, so b[2]==c[2]; the canonical diff moves to cell 0
-    //   (b[0]=10, c[0]=5). Re-prank diff_marker / diff_val so the core's diff chain still passes,
-    //   isolating the failure to the adapter-side imm sign-extension check.
+    // Execute SLTU with an immediate, then prank c[2] to violate sign extension.
+    // b[2] is set to match the pranked c[2] so the core's diff constraints still hold.
+    // Original execution: b=[10,0,1,0], c(imm=5)=[5,0,0,0]
+    //   Most significant diff at limb 2 (b[2]=1, c[2]=0), cmp_result=0, diff_val=1
+    // After prank: c[2]=1, so b[2]==c[2], diff moves to limb 0 (b[0]=10, c[0]=5)
+    //   Need to also prank diff_marker and diff_val to keep core happy.
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut harness = create_test_chip(&tester);
@@ -480,9 +480,9 @@ fn rv64_lt_adapter_imm_sign_extension_negative_test() {
         let mut values = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut LessThanCoreCols<F, BLOCK_FE_WIDTH, U16_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
-        // Prank c[2] = 1 (matches b[2], so no diff at cell 2).
+        // Prank c[2] = 1 (matches b[2], so no diff at limb 2)
         cols.c[2] = F::ONE;
-        // Move diff_marker from cell 2 to cell 0 and update diff_val accordingly.
+        // Move diff_marker from limb 2 to limb 0 and update diff_val
         cols.diff_marker = [F::ZERO; BLOCK_FE_WIDTH];
         cols.diff_marker[0] = F::ONE;
         // diff = (c[0] - b[0]) * (2*cmp_result - 1) = (5 - 10) * (-1) = 5
@@ -508,8 +508,8 @@ fn rv64_lt_adapter_imm_sign_extension_negative_test() {
 
 #[test]
 fn run_sltu_sanity_test() {
-    let x: [u16; BLOCK_FE_WIDTH] = [0x2291, 0xcd19, 0x4d5b, 0x7858];
-    let y: [u16; BLOCK_FE_WIDTH] = [0x2349, 0xcd19, 0x4d5b, 0x7858];
+    let x = rv64_bytes_to_u16_block([145, 34, 25, 205, 91, 77, 88, 120]);
+    let y = rv64_bytes_to_u16_block([73, 35, 25, 205, 91, 77, 88, 120]);
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_less_than::<BLOCK_FE_WIDTH, U16_BITS>(false, &x, &y);
     assert!(cmp_result);
@@ -520,8 +520,8 @@ fn run_sltu_sanity_test() {
 
 #[test]
 fn run_slt_same_sign_sanity_test() {
-    let x: [u16; BLOCK_FE_WIDTH] = [0x2291, 0xcd19, 0x4d5b, 0xcd58];
-    let y: [u16; BLOCK_FE_WIDTH] = [0x2349, 0xcd19, 0x4d5b, 0xcd58];
+    let x = rv64_bytes_to_u16_block([145, 34, 25, 205, 91, 77, 88, 205]);
+    let y = rv64_bytes_to_u16_block([73, 35, 25, 205, 91, 77, 88, 205]);
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_less_than::<BLOCK_FE_WIDTH, U16_BITS>(true, &x, &y);
     assert!(cmp_result);
@@ -532,8 +532,8 @@ fn run_slt_same_sign_sanity_test() {
 
 #[test]
 fn run_slt_diff_sign_sanity_test() {
-    let x: [u16; BLOCK_FE_WIDTH] = [0x232d, 0x3719, 0x5a3d, 0x4a4d];
-    let y: [u16; BLOCK_FE_WIDTH] = [0x22ad, 0xcd19, 0x5a3d, 0xb64d];
+    let x = rv64_bytes_to_u16_block([45, 35, 25, 55, 61, 90, 77, 74]);
+    let y = rv64_bytes_to_u16_block([173, 34, 25, 205, 61, 90, 77, 182]);
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_less_than::<BLOCK_FE_WIDTH, U16_BITS>(true, &x, &y);
     assert!(!cmp_result);
@@ -544,7 +544,7 @@ fn run_slt_diff_sign_sanity_test() {
 
 #[test]
 fn run_less_than_equal_sanity_test() {
-    let x: [u16; BLOCK_FE_WIDTH] = [0x232d, 0x3719, 0x5a3d, 0x4a4d];
+    let x = rv64_bytes_to_u16_block([45, 35, 25, 55, 61, 90, 77, 74]);
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_less_than::<BLOCK_FE_WIDTH, U16_BITS>(true, &x, &x);
     assert!(!cmp_result);

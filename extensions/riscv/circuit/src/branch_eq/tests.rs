@@ -41,6 +41,7 @@ use crate::{
         Rv64BranchAdapterFiller, RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_eq::fast_run_eq,
+    test_utils::rv64_marker_bytes_to_u16_marker,
     BranchEqualCoreAir, BranchEqualFiller, Rv64BranchEqualAir, Rv64BranchEqualExecutor,
 };
 
@@ -254,7 +255,7 @@ fn rv64_beq_zero_inv_marker_negative_test() {
         [0, 0, 7, 0, 0, 0, 0, 0],
         [0, 0, 0, 7, 0, 0, 0, 0],
         Some(true),
-        Some([0, 0, 0, 0]),
+        Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 0])),
         false,
     );
 }
@@ -266,7 +267,7 @@ fn rv64_beq_invalid_inv_marker_negative_test() {
         [0, 0, 7, 0, 0, 0, 0, 0],
         [0, 0, 7, 0, 0, 0, 0, 0],
         Some(false),
-        Some([0, 1, 0, 0]),
+        Some(rv64_marker_bytes_to_u16_marker([0, 0, 1, 0, 0, 0, 0, 0])),
         false,
     );
 }
@@ -299,7 +300,7 @@ fn rv64_bne_zero_inv_marker_negative_test() {
         [0, 0, 7, 0, 0, 0, 0, 0],
         [0, 0, 0, 7, 0, 0, 0, 0],
         Some(false),
-        Some([0, 0, 0, 0]),
+        Some(rv64_marker_bytes_to_u16_marker([0, 0, 0, 0, 0, 0, 0, 0])),
         false,
     );
 }
@@ -311,7 +312,7 @@ fn rv64_bne_invalid_inv_marker_negative_test() {
         [0, 0, 7, 0, 0, 0, 0, 0],
         [0, 0, 7, 0, 0, 0, 0, 0],
         Some(true),
-        Some([0, 1, 0, 0]),
+        Some(rv64_marker_bytes_to_u16_marker([0, 0, 1, 0, 0, 0, 0, 0])),
         false,
     );
 }

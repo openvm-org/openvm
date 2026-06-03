@@ -56,7 +56,7 @@ struct Rv64BaseAluWAdapter {
         : mem_helper(range_checker, timestamp_max_bits), bitwise_lookup(lookup) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv64BaseAluWAdapterRecord record) {
-        // writes_aux at from_timestamp + 2.
+        // writes_aux at from_timestamp + 2 (full-width 8-byte register write, packed to 4 cells).
         Fp packed_prev[BLOCK_FE_WIDTH];
         pack_u8_block_bytes(packed_prev, record.writes_aux.prev_data);
         COL_WRITE_ARRAY(row, Rv64BaseAluWAdapterCols, writes_aux.prev_data, packed_prev);

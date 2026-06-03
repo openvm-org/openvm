@@ -45,12 +45,11 @@ __device__ inline void pack_u8_block_bytes(T (&out)[BLOCK_FE_WIDTH], uint8_t con
     }
 }
 
-template <typename T, size_t NUM_U16_CELLS>
-__device__ inline void pack_u32_to_u16_limbs(T (&out)[NUM_U16_CELLS], uint32_t value) {
-    static_assert(NUM_U16_CELLS == sizeof(uint32_t) / sizeof(uint16_t));
+template <typename T>
+__device__ inline void pack_u32_to_u16_limbs(T (&out)[RV64_PTR_U16_LIMBS], uint32_t value) {
 #pragma unroll
-    for (size_t i = 0; i < NUM_U16_CELLS; i++) {
-        out[i] = T((value >> ((8 * sizeof(uint16_t)) * i)) & 0xffffu);
+    for (size_t i = 0; i < RV64_PTR_U16_LIMBS; i++) {
+        out[i] = T((value >> (U16_BITS * i)) & 0xffffu);
     }
 }
 
