@@ -13,9 +13,11 @@ fn main() {
             .include("cuda/include")
             .include("../../../crates/circuits/primitives/cuda/include")
             .include("../../../crates/vm/cuda/include")
+            .include("../../riscv-adapters/cuda/include")
             .watch("cuda")
             .watch("../../../crates/circuits/primitives/cuda")
             .watch("../../../crates/vm/cuda")
+            .watch("../../riscv-adapters/cuda")
             .library_name("tracegen_gpu_rv64im")
             .files_from_glob("cuda/src/**/*.cu");
 

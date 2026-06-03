@@ -209,12 +209,14 @@ template <size_t NUM_LIMBS> struct DivRemCore {
             );
         }
 
-        // AIR range-checks these byte limbs; add matching lookup counts.
 #pragma unroll
         for (int i = 0; i + 1 < NUM_LIMBS; i++) {
             bitwise_lookup.add_range(record.b[i], record.c[i]);
         }
-        bitwise_lookup.add_range(record.b[NUM_LIMBS - 1], record.c[NUM_LIMBS - 1]);
+        // The unsigned path also range-checks the MSB pair.
+        if (!is_signed) {
+            bitwise_lookup.add_range(record.b[NUM_LIMBS - 1], record.c[NUM_LIMBS - 1]);
+        }
 
         // range tuple check carries
         uint32_t carry = 0;
