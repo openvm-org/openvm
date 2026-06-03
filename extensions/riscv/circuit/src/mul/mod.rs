@@ -1,6 +1,6 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use super::adapters::{RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS};
+use super::adapters::{RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS};
 use crate::adapters::{Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller};
 
 mod core;
@@ -17,11 +17,11 @@ mod tests;
 
 pub type Rv64MultiplicationAir = VmAirWrapper<
     Rv64MultAdapterAir,
-    MultiplicationCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
+    MultiplicationCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
 >;
 pub type Rv64MultiplicationExecutor =
-    MultiplicationExecutor<Rv64MultAdapterExecutor, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>;
+    MultiplicationExecutor<Rv64MultAdapterExecutor, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>;
 pub type Rv64MultiplicationChip<F> = VmChipWrapper<
     F,
-    MultiplicationFiller<Rv64MultAdapterFiller, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
+    MultiplicationFiller<Rv64MultAdapterFiller, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
 >;

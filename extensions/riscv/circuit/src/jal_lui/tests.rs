@@ -39,7 +39,7 @@ use crate::{
     adapters::{
         Rv64CondRdWriteAdapterAir, Rv64CondRdWriteAdapterCols, Rv64CondRdWriteAdapterExecutor,
         Rv64CondRdWriteAdapterFiller, Rv64RdWriteAdapterAir, Rv64RdWriteAdapterExecutor,
-        Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        Rv64RdWriteAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
         RV_IS_TYPE_IMM_BITS,
     },
     jal_lui::Rv64JalLuiCoreCols,
@@ -47,7 +47,7 @@ use crate::{
 };
 
 const IMM_BITS: usize = 20;
-const LIMB_MAX: u32 = (1 << RV64_CELL_BITS) - 1;
+const LIMB_MAX: u32 = (1 << RV64_BYTE_BITS) - 1;
 const MAX_INS_CAPACITY: usize = 128;
 type Harness = TestChipHarness<F, Rv64JalLuiExecutor, Rv64JalLuiAir, Rv64JalLuiChip<F>>;
 
@@ -56,7 +56,7 @@ type F = BabyBear;
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64JalLuiAir, Rv64JalLuiExecutor, Rv64JalLuiChip<F>) {
     let air = Rv64JalLuiAir::new(
@@ -81,12 +81,12 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -596,7 +596,7 @@ type GpuHarness =
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 

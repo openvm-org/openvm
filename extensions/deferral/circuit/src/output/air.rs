@@ -17,7 +17,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
+    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_rv64_register};
@@ -247,9 +247,9 @@ where
         // canonical. Note that constraining the starting output pointer is sufficient
         // to constrain the entire write is in range - even if output_ptr + output_len
         // wraps, there will be several written values in the middle that do not.
-        debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
+        debug_assert!(RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
         let limb_shift =
-            AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
+            AB::F::from_usize(1 << (RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
 
         self.bitwise_bus
             .send_range(

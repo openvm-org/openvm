@@ -12,7 +12,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     adapters::{
-        Rv64MultAdapterCols, Rv64MultAdapterRecord, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+        Rv64MultAdapterCols, Rv64MultAdapterRecord, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     cuda_abi::{mulh_cuda::tracegen, UInt2},
     MulHCoreCols, MulHCoreRecord,
@@ -21,7 +21,7 @@ use crate::{
 #[derive(new)]
 pub struct Rv64MulHChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
     pub timestamp_max_bits: usize,
 }
@@ -30,7 +30,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64MulHChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
             Rv64MultAdapterRecord,
-            MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
+            MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
@@ -38,7 +38,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64MulHChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = MulHCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>::width()
+        let trace_width = MulHCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>::width()
             + Rv64MultAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 

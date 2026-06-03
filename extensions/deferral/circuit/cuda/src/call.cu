@@ -117,7 +117,7 @@ __device__ __forceinline__ void deferral_call_core_tracegen(
         bitwise_buffer.add_range(record.writes.output_len[i], record.writes.output_len[i + 1]);
     }
 
-    const uint32_t limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - address_bits;
+    const uint32_t limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - address_bits;
     bitwise_buffer.add_range(
         static_cast<uint32_t>(record.writes.output_len[RV64_WORD_NUM_LIMBS - 1])
             << limb_shift_bits,
@@ -215,7 +215,7 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
     MemoryAuxColsFactory &mem_helper,
     const size_t address_bits
 ) {
-    const uint32_t limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - address_bits;
+    const uint32_t limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - address_bits;
     bitwise_buffer.add_range(
         static_cast<uint32_t>(record.rd_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
         static_cast<uint32_t>(record.rs_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits

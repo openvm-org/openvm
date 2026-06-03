@@ -47,7 +47,7 @@ use {
 use super::core::run_divrem;
 use crate::{
     adapters::{
-        Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller, RV64_CELL_BITS,
+        Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller, RV64_BYTE_BITS,
         RV64_REGISTER_NUM_LIMBS,
     },
     divrem::{
@@ -61,8 +61,8 @@ const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
 const TUPLE_CHECKER_SIZES: [u32; 2] = [
-    (1 << RV64_CELL_BITS) as u32,
-    (MAX_NUM_LIMBS * (1 << RV64_CELL_BITS)),
+    (1 << RV64_BYTE_BITS) as u32,
+    (MAX_NUM_LIMBS * (1 << RV64_BYTE_BITS)),
 ];
 type Harness = TestChipHarness<F, Rv64DivRemExecutor, Rv64DivRemAir, Rv64DivRemChip<F>>;
 
@@ -78,7 +78,7 @@ fn limb_sra<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64DivRemAir, Rv64DivRemExecutor, Rv64DivRemChip<F>) {
@@ -108,15 +108,15 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
     (RangeTupleCheckerAir<2>, SharedRangeTupleCheckerChip<2>),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
 
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
     let range_tuple_chip =
@@ -150,10 +150,10 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 ) {
     let b = b.unwrap_or(generate_long_number::<
         RV64_REGISTER_NUM_LIMBS,
-        RV64_CELL_BITS,
+        RV64_BYTE_BITS,
     >(rng));
-    let c = c.unwrap_or(limb_sra::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
-        generate_long_number::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(rng),
+    let c = c.unwrap_or(limb_sra::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
+        generate_long_number::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(rng),
         rng.random_range(0..(RV64_REGISTER_NUM_LIMBS - 1)),
     ));
 
@@ -168,7 +168,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let is_signed = opcode == DIV || opcode == REM;
 
     let (q, r, _, _, _, _) =
-        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(is_signed, &b, &c);
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(is_signed, &b, &c);
     tester.execute(
         executor,
         arena,
@@ -331,7 +331,7 @@ fn run_negative_divrem_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut DivRemCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
+        let cols: &mut DivRemCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
         if let Some(q) = prank_vals.q {
@@ -598,7 +598,7 @@ fn run_divrem_unsigned_sanity_test() {
     let r: [u32; RV64_REGISTER_NUM_LIMBS] = [191, 250, 228, 190, 154, 9, 158, 0];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(false, &x, &y);
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(false, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(q[i], res_q[i]);
         assert_eq!(r[i], res_r[i]);
@@ -616,7 +616,7 @@ fn run_divrem_unsigned_zero_divisor_test() {
     let q: [u32; RV64_REGISTER_NUM_LIMBS] = [255, 255, 255, 255, 255, 255, 255, 255];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(false, &x, &y);
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(false, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(q[i], res_q[i]);
         assert_eq!(x[i], res_r[i]);
@@ -635,7 +635,7 @@ fn run_divrem_signed_sanity_test() {
     let r: [u32; RV64_REGISTER_NUM_LIMBS] = [17, 9, 56, 39, 116, 254, 255, 255];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(true, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(q[i], res_q[i]);
         assert_eq!(r[i], res_r[i]);
@@ -653,7 +653,7 @@ fn run_divrem_signed_zero_divisor_test() {
     let q: [u32; RV64_REGISTER_NUM_LIMBS] = [255, 255, 255, 255, 255, 255, 255, 255];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(true, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(q[i], res_q[i]);
         assert_eq!(x[i], res_r[i]);
@@ -671,7 +671,7 @@ fn run_divrem_signed_overflow_test() {
     let r: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 0];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(true, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(x[i], res_q[i]);
         assert_eq!(r[i], res_r[i]);
@@ -690,7 +690,7 @@ fn run_divrem_signed_min_dividend_test() {
     let r: [u32; RV64_REGISTER_NUM_LIMBS] = [32, 42, 21, 236, 2, 254, 255, 255];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(true, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(q[i], res_q[i]);
         assert_eq!(r[i], res_r[i]);
@@ -708,7 +708,7 @@ fn run_divrem_zero_quotient_test() {
     let q: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 0];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(true, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(q[i], res_q[i]);
         assert_eq!(x[i], res_r[i]);
@@ -736,7 +736,7 @@ fn run_mul_carries_signed_sanity_test() {
     let c = [
         40, 101, 126, 206, 181, 197, 191, 359, 423, 558, 546, 576, 637, 793, 846, 849,
     ];
-    let carry = run_mul_carries::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &d, &q, &r, true);
+    let carry = run_mul_carries::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(true, &d, &q, &r, true);
     for (expected_c, actual_c) in c.iter().zip(carry.iter()) {
         assert_eq!(*expected_c, *actual_c)
     }
@@ -750,7 +750,7 @@ fn run_mul_unsigned_sanity_test() {
     let c = [
         40, 101, 126, 206, 181, 197, 191, 359, 225, 275, 113, 111, 84, 163, 15, 0,
     ];
-    let carry = run_mul_carries::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(false, &d, &q, &r, true);
+    let carry = run_mul_carries::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(false, &d, &q, &r, true);
     for (expected_c, actual_c) in c.iter().zip(carry.iter()) {
         assert_eq!(*expected_c, *actual_c)
     }
@@ -771,7 +771,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
     let dummy_range_tuple_chip =
