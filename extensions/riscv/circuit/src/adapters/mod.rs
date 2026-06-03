@@ -75,10 +75,14 @@ where
 }
 
 #[inline(always)]
-pub(crate) fn pack_high_u16<T: PrimeCharacteristicRing>(
-    bytes: &[u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
-) -> [T; RV64_PTR_U16_LIMBS] {
-    std::array::from_fn(|i| T::from_u16(u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]])))
+pub(crate) fn pack_high_u16<T, B>(
+    bytes: &[B; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
+) -> [T; RV64_PTR_U16_LIMBS]
+where
+    T: PrimeCharacteristicRing,
+    B: Copy + Into<u32>,
+{
+    std::array::from_fn(|i| pack_u8_pair_u32(bytes[2 * i].into(), bytes[2 * i + 1].into()))
 }
 
 /// Sign-extends a 16-bit immediate represented by `(imm, sign)` into a u32.
