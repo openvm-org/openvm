@@ -23,8 +23,9 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    expand_to_rv64_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, rv64_u32_to_u16_block,
-    Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_PTR_U16_LIMBS, U16_BITS,
+    expand_to_rv64_block, ptr_to_u16_limbs, rv64_bytes_to_u32, rv64_u16_block_to_bytes,
+    rv64_u32_to_u16_block, Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_PTR_U16_LIMBS,
+    U16_BITS,
 };
 
 #[repr(C)]
@@ -103,13 +104,6 @@ where
         self.range_bus
             .range_check(rd_data_low[1].clone(), PC_BITS - U16_BITS)
             .eval(builder, is_valid);
-
-        // Constrain rs1_data.
-        for &v in rs1.iter() {
-            self.range_bus
-                .range_check(v, U16_BITS)
-                .eval(builder, is_valid);
-        }
 
         builder.assert_bool(imm_sign);
 
@@ -271,7 +265,8 @@ where
 
         let (to_pc, rd_data) =
             run_jalr(record.from_pc, record.rs1_val, record.imm, record.imm_sign);
-        let to_pc_limbs = [(to_pc & (u16::MAX as u32)) >> 1, to_pc >> U16_BITS];
+        let [to_pc_low, to_pc_high] = ptr_to_u16_limbs(to_pc);
+        let to_pc_limbs = [u32::from(to_pc_low >> 1), u32::from(to_pc_high)];
         self.range_checker_chip
             .add_count(to_pc_limbs[0], U16_BITS - 1);
         self.range_checker_chip
@@ -285,20 +280,13 @@ where
         self.range_checker_chip
             .add_count(rd_low_u16_hi as u32, PC_BITS - U16_BITS);
 
-        let rs1_low_u16_lo = (record.rs1_val & (u16::MAX as u32)) as u16;
-        let rs1_low_u16_hi = (record.rs1_val >> U16_BITS) as u16;
-        self.range_checker_chip
-            .add_count(rs1_low_u16_lo as u32, U16_BITS);
-        self.range_checker_chip
-            .add_count(rs1_low_u16_hi as u32, U16_BITS);
-
         // Write in reverse order
         core_row.imm_sign = F::from_bool(record.imm_sign);
         core_row.to_pc_limbs = to_pc_limbs.map(F::from_u32);
         core_row.to_pc_least_sig_bit = F::from_bool(to_pc & 1 == 1);
         // fill_trace_row is called only on valid rows
         core_row.is_valid = F::ONE;
-        core_row.rs1_data = [F::from_u16(rs1_low_u16_lo), F::from_u16(rs1_low_u16_hi)];
+        core_row.rs1_data = ptr_to_u16_limbs(record.rs1_val).map(F::from_u16);
         core_row.rd_high = [F::from_u16(rd_low_u16_hi)];
         core_row.imm = F::from_u16(record.imm);
     }

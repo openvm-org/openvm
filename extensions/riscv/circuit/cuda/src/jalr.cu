@@ -3,6 +3,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
 #include "riscv/adapters/jalr.cuh"
 
 using namespace riscv;
@@ -57,9 +58,9 @@ struct Rv64JalrCore {
         uint16_t rd_data[BLOCK_FE_WIDTH];
         run_jalr(record.from_pc, record.rs1_val, record.imm, record.imm_sign, to_pc, rd_data);
 
-        uint32_t to_pc_limbs[2] = {
-            (to_pc & uint32_t(UINT16_MAX)) >> 1, to_pc >> U16_BITS
-        };
+        uint16_t to_pc_u16[RV64_PTR_U16_LIMBS];
+        ptr_to_u16_limbs(to_pc_u16, to_pc);
+        uint32_t to_pc_limbs[2] = {uint32_t(to_pc_u16[0] >> 1), uint32_t(to_pc_u16[1])};
         // to_pc_limbs[0] is 15 bits because it is doubled to reconstruct
         // the aligned JALR target.
         rc.add_count(to_pc_limbs[0], U16_BITS - 1);
@@ -73,17 +74,14 @@ struct Rv64JalrCore {
         rc.add_count(rd_low_u16_lo, U16_BITS);
         rc.add_count(rd_low_u16_hi, PC_BITS - U16_BITS);
 
-        uint32_t rs1_u16_lo = record.rs1_val & uint32_t(UINT16_MAX);
-        uint32_t rs1_u16_hi = (record.rs1_val >> U16_BITS) & uint32_t(UINT16_MAX);
-        rc.add_count(rs1_u16_lo, U16_BITS);
-        rc.add_count(rs1_u16_hi, U16_BITS);
+        uint16_t rs1_limbs[RV64_PTR_U16_LIMBS];
+        ptr_to_u16_limbs(rs1_limbs, record.rs1_val);
 
         COL_WRITE_VALUE(row, Rv64JalrCoreCols, imm_sign, record.imm_sign);
         COL_WRITE_ARRAY(row, Rv64JalrCoreCols, to_pc_limbs, to_pc_limbs);
         COL_WRITE_VALUE(row, Rv64JalrCoreCols, to_pc_least_sig_bit, (to_pc & 1) == 1 ? 1 : 0);
         COL_WRITE_VALUE(row, Rv64JalrCoreCols, is_valid, 1);
 
-        uint32_t rs1_limbs[RV64_PTR_U16_LIMBS] = {rs1_u16_lo, rs1_u16_hi};
         COL_WRITE_ARRAY(row, Rv64JalrCoreCols, rs1_data, rs1_limbs);
         uint32_t rd_limbs[RV64_PTR_U16_LIMBS - 1] = {rd_low_u16_hi};
         COL_WRITE_ARRAY(row, Rv64JalrCoreCols, rd_high, rd_limbs);

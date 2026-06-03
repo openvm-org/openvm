@@ -83,8 +83,7 @@ where
 
         // We want to constrain rd = from_pc + (imm << RV64_BYTE_BITS) where:
         // - rd_data represents the low 32 bits of rd as u16 cells
-        // - imm_low_8 is the least significant byte of imm
-        // - imm_high_16 is the remaining high 16 bits of imm
+        // - imm_low_8 and imm_high_16 decompose the 24-bit instruction immediate
         let limb_base = AB::F::from_u32(1 << U16_BITS);
         let carry_divide = limb_base.inverse();
         let imm = imm_low_8 + imm_high_16 * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
@@ -228,16 +227,15 @@ where
         debug_assert_eq!(imm_bytes[3], 0);
         let imm_low_8 = imm_bytes[0];
         let imm_high_16 = (imm_bytes[1] as u32) | ((imm_bytes[2] as u32) << RV64_BYTE_BITS);
-        let pc_low = record.from_pc & (u16::MAX as u32);
-        let pc_high = record.from_pc >> U16_BITS;
+        let [pc_low, pc_high] = ptr_to_u16_limbs(record.from_pc);
 
         let rd_block = run_auipc(record.from_pc, record.imm);
         let rd_u16 = [rd_block[0], rd_block[1]];
 
         // range checks:
-        self.range_checker_chip.add_count(pc_low, U16_BITS);
+        self.range_checker_chip.add_count(pc_low as u32, U16_BITS);
         self.range_checker_chip
-            .add_count(pc_high, PC_BITS - U16_BITS);
+            .add_count(pc_high as u32, PC_BITS - U16_BITS);
         self.range_checker_chip
             .add_count(imm_low_8 as u32, RV64_BYTE_BITS);
         self.range_checker_chip.add_count(imm_high_16, U16_BITS);
@@ -255,7 +253,7 @@ where
         core_row.rd_data = rd_u16.map(F::from_u16);
         core_row.imm_low_8 = F::from_u8(imm_low_8);
         core_row.imm_high_16 = F::from_u32(imm_high_16);
-        core_row.pc_high = F::from_u32(pc_high);
+        core_row.pc_high = F::from_u16(pc_high);
         core_row.is_sign_extend = F::from_bool(is_sign_extend != 0);
         core_row.is_valid = F::ONE;
     }
