@@ -30,15 +30,24 @@ pub const TIMESTAMPED_BLOCK_WIDTH: usize = 3 + BLOCK_FE_WIDTH;
 /// Width of `((u32, u32), TimestampedValues<F, DIGEST_WIDTH>)` in u32 units.
 /// = 2 (key) + 1 (timestamp) + DIGEST_WIDTH (values)
 pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + DIGEST_WIDTH;
+pub(crate) const OMITTED_BOTTOM_LEVELS: usize = 3;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+enum MemoryMerkleSubTreeLayout {
+    Full = 0,
+    OmitBottomLevels = 1,
+}
 
 /// A Merkle subtree stored in a single flat buffer, combining a vertical path and a heap-ordered
-/// binary tree.
+/// retained tree.
 ///
 /// Memory layout:
 /// - The first `path_len` elements form a vertical path (one node per level), used when the actual
 ///   size is smaller than the max size.
-/// - The remaining elements store the subtree nodes in heap-order (breadth-first), with `size`
-///   leaves and `2 * size - 1` total nodes.
+/// - `Full` subtrees store the remaining nodes as the complete subtree heap.
+/// - `OmitBottomLevels` subtrees omit the bottom `OMITTED_BOTTOM_LEVELS` levels and store only the
+///   retained heap whose leaves are the first stored hashes above the omitted levels.
 ///
 /// All GPU work is issued on the subtree's `GpuDeviceCtx` stream.
 /// `build_completion_event` records when the build kernels finish so that downstream consumers can
@@ -48,9 +57,36 @@ pub struct MemoryMerkleSubTree {
     pub buf: DeviceBuffer<H>,
     pub height: usize,
     pub path_len: usize,
+    layout: MemoryMerkleSubTreeLayout,
+    initial_data_ptr: usize,
 }
 
 impl MemoryMerkleSubTree {
+    fn layout_for_height(height: usize) -> MemoryMerkleSubTreeLayout {
+        if height > OMITTED_BOTTOM_LEVELS {
+            MemoryMerkleSubTreeLayout::OmitBottomLevels
+        } else {
+            MemoryMerkleSubTreeLayout::Full
+        }
+    }
+
+    fn heap_len(height: usize, layout: MemoryMerkleSubTreeLayout) -> usize {
+        let retained_height = match layout {
+            MemoryMerkleSubTreeLayout::Full => height,
+            MemoryMerkleSubTreeLayout::OmitBottomLevels => height - OMITTED_BOTTOM_LEVELS,
+        };
+        2 * (1 << retained_height) - 1
+    }
+
+    fn buffer_len(
+        addr_space_size: usize,
+        path_len: usize,
+        layout: MemoryMerkleSubTreeLayout,
+    ) -> usize {
+        let height = log2_ceil_usize(addr_space_size);
+        path_len + Self::heap_len(height, layout)
+    }
+
     /// Constructs a new Merkle subtree with a vertical path and heap-ordered tree.
     /// The buffer is sized based on the actual address space and the maximum size.
     ///
@@ -76,19 +112,22 @@ impl MemoryMerkleSubTree {
         }
         let height = log2_ceil_usize(addr_space_size);
         let path_len = log2_ceil_usize(max_size).checked_sub(height).unwrap();
+        let layout = Self::layout_for_height(height);
+        let buffer_len = Self::buffer_len(addr_space_size, path_len, layout);
         tracing::debug!(
             "Creating a subtree buffer, size is {} (addr space size is {})",
-            path_len + (2 * addr_space_size - 1),
+            buffer_len,
             addr_space_size
         );
-        let buf =
-            DeviceBuffer::<H>::with_capacity_on(path_len + (2 * addr_space_size - 1), device_ctx);
+        let buf = DeviceBuffer::<H>::with_capacity_on(buffer_len, device_ctx);
 
         Self {
             build_completion_event: None,
             height,
             buf,
             path_len,
+            layout,
+            initial_data_ptr: 0,
         }
     }
 
@@ -98,6 +137,19 @@ impl MemoryMerkleSubTree {
             height: 0,
             buf: DeviceBuffer::new(),
             path_len: 0,
+            layout: MemoryMerkleSubTreeLayout::Full,
+            initial_data_ptr: 0,
+        }
+    }
+
+    fn layout_tag(&self) -> u8 {
+        self.layout as u8
+    }
+
+    fn stored_heap_height(&self) -> usize {
+        match self.layout {
+            MemoryMerkleSubTreeLayout::Full => self.height,
+            MemoryMerkleSubTreeLayout::OmitBottomLevels => self.height - OMITTED_BOTTOM_LEVELS,
         }
     }
 
@@ -113,6 +165,7 @@ impl MemoryMerkleSubTree {
         device_ctx: &GpuDeviceCtx,
     ) {
         let event = CudaEvent::new().unwrap();
+        self.initial_data_ptr = d_data.as_ptr() as usize;
         if self.buf.is_empty() {
             self.buf = DeviceBuffer::with_capacity_on(1, device_ctx);
             unsafe {
@@ -129,10 +182,11 @@ impl MemoryMerkleSubTree {
             unsafe {
                 build_merkle_subtree(
                     d_data,
-                    1 << self.height,
+                    1 << self.stored_heap_height(),
                     &self.buf,
                     self.path_len,
                     addr_space_idx as u32,
+                    self.layout_tag(),
                     device_ctx.stream.as_raw(),
                 )
                 .unwrap();
@@ -165,6 +219,11 @@ impl MemoryMerkleSubTree {
         if depth >= self.path_len {
             // depth is within the heap-ordered subtree
             let d = depth - self.path_len;
+            let max_stored_depth = self.stored_heap_height();
+            assert!(
+                d <= max_stored_depth,
+                "Depth {depth} is in an omitted subtree layer"
+            );
             let start = self.path_len + ((1 << d) - 1);
             let end = self.path_len + ((1 << (d + 1)) - 1);
             (start, end)
@@ -336,6 +395,16 @@ impl MemoryMerkleTree {
             output.buffer().fill_zero_on(&self.device_ctx).unwrap();
 
             let actual_heights = self.subtrees.iter().map(|s| s.height).collect::<Vec<_>>();
+            let subtree_layouts = self
+                .subtrees
+                .iter()
+                .map(|s| s.layout_tag())
+                .collect::<Vec<_>>();
+            let initial_data_ptrs = self
+                .subtrees
+                .iter()
+                .map(|s| s.initial_data_ptr)
+                .collect::<Vec<_>>();
             let subtrees_pointers = self
                 .subtrees
                 .iter()
@@ -352,6 +421,8 @@ impl MemoryMerkleTree {
                     d_touched_blocks,
                     self.height - log2_ceil_usize(self.subtrees.len()),
                     &actual_heights,
+                    &subtree_layouts,
+                    &initial_data_ptrs,
                     unpadded_height,
                     &self.hasher_buffer,
                     &self.device_ctx,
@@ -446,8 +517,42 @@ mod tests {
     use p3_field::{PrimeCharacteristicRing, PrimeField32};
     use rand::Rng;
 
-    use super::MemoryMerkleTree;
+    use super::{
+        MemoryMerkleSubTree, MemoryMerkleSubTreeLayout, MemoryMerkleTree, OMITTED_BOTTOM_LEVELS,
+    };
     use crate::system::cuda::{Poseidon2PeripheryChipGPU, DIGEST_WIDTH};
+
+    #[test]
+    fn test_cuda_merkle_subtree_layout_and_buffer_sizes() {
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let max_size = 1 << (OMITTED_BOTTOM_LEVELS + 3);
+
+        let below =
+            MemoryMerkleSubTree::new(1 << (OMITTED_BOTTOM_LEVELS - 1), max_size, &device_ctx);
+        assert_eq!(below.layout, MemoryMerkleSubTreeLayout::Full);
+        assert_eq!(
+            below.buf.len(),
+            below.path_len + (2 * (1 << (OMITTED_BOTTOM_LEVELS - 1)) - 1)
+        );
+
+        let equal = MemoryMerkleSubTree::new(1 << OMITTED_BOTTOM_LEVELS, max_size, &device_ctx);
+        assert_eq!(equal.layout, MemoryMerkleSubTreeLayout::Full);
+        assert_eq!(
+            equal.buf.len(),
+            equal.path_len + (2 * (1 << OMITTED_BOTTOM_LEVELS) - 1)
+        );
+
+        let above =
+            MemoryMerkleSubTree::new(1 << (OMITTED_BOTTOM_LEVELS + 1), max_size, &device_ctx);
+        let full_len = above.path_len + (2 * (1 << (OMITTED_BOTTOM_LEVELS + 1)) - 1);
+        let optimized_len = above.path_len + (2 * (1 << 1) - 1);
+        assert_eq!(above.layout, MemoryMerkleSubTreeLayout::OmitBottomLevels);
+        assert_eq!(above.buf.len(), optimized_len);
+        assert!(above.buf.len() < full_len);
+    }
 
     #[test]
     fn test_cuda_merkle_tree_cpu_gpu_root_equivalence() {
@@ -532,6 +637,18 @@ mod tests {
         for (i, mem_slice) in mem_slices.iter().enumerate() {
             gpu_merkle_tree.build_async(mem_slice, i);
         }
+        assert_eq!(
+            gpu_merkle_tree.subtrees[RV64_REGISTER_AS as usize - 1].layout,
+            MemoryMerkleSubTreeLayout::OmitBottomLevels
+        );
+        assert_eq!(
+            gpu_merkle_tree.subtrees[RV64_MEMORY_AS as usize - 1].layout,
+            MemoryMerkleSubTreeLayout::OmitBottomLevels
+        );
+        assert_eq!(
+            gpu_merkle_tree.subtrees[DEFERRAL_AS as usize - 1].layout,
+            MemoryMerkleSubTreeLayout::OmitBottomLevels
+        );
         gpu_merkle_tree.finalize();
 
         let cpu_hasher_chip = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
