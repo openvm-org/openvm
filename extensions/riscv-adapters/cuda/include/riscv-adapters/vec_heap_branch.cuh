@@ -61,6 +61,15 @@ struct Rv64VecHeapBranchAdapter {
             (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
             NUM_READS > 1 ? (record.rs_vals[1] >> MSL_SHIFT) << limb_shift_bits : 0
         );
+#pragma unroll
+        for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
+            for (size_t r = 0; r < NUM_READS; r++) {
+                bitwise_lookup.add_range(
+                    (record.rs_vals[r] >> (RV64_CELL_BITS * i)) & RV64_CELL_MASK,
+                    (record.rs_vals[r] >> (RV64_CELL_BITS * (i + 1))) & RV64_CELL_MASK
+                );
+            }
+        }
 
         uint32_t timestamp = record.from_timestamp + NUM_READS + NUM_READS * BLOCKS_PER_READ;
 

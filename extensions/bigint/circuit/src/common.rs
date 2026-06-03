@@ -1,5 +1,5 @@
 use openvm_circuit::{
-    arch::{ExecutionCtxTrait, VmExecState, DEFAULT_BLOCK_SIZE},
+    arch::{ExecutionCtxTrait, VmExecState, MEMORY_BLOCK_BYTES},
     system::memory::online::GuestMemory,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -17,9 +17,9 @@ pub fn read_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
 ) -> [u8; INT256_NUM_LIMBS] {
     let mut result = [0u8; INT256_NUM_LIMBS];
     for i in 0..INT256_NUM_BLOCKS {
-        let block: [u8; DEFAULT_BLOCK_SIZE] =
-            exec_state.vm_read(addr_space, ptr + (i * DEFAULT_BLOCK_SIZE) as u32);
-        result[i * DEFAULT_BLOCK_SIZE..(i + 1) * DEFAULT_BLOCK_SIZE].copy_from_slice(&block);
+        let block: [u8; MEMORY_BLOCK_BYTES] =
+            exec_state.vm_read_bytes(addr_space, ptr + (i * MEMORY_BLOCK_BYTES) as u32);
+        result[i * MEMORY_BLOCK_BYTES..(i + 1) * MEMORY_BLOCK_BYTES].copy_from_slice(&block);
     }
     result
 }
@@ -33,11 +33,11 @@ pub fn write_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
     data: &[u8; INT256_NUM_LIMBS],
 ) {
     for i in 0..INT256_NUM_BLOCKS {
-        let block: [u8; DEFAULT_BLOCK_SIZE] = data
-            [i * DEFAULT_BLOCK_SIZE..(i + 1) * DEFAULT_BLOCK_SIZE]
+        let block: [u8; MEMORY_BLOCK_BYTES] = data
+            [i * MEMORY_BLOCK_BYTES..(i + 1) * MEMORY_BLOCK_BYTES]
             .try_into()
             .unwrap();
-        exec_state.vm_write(addr_space, ptr + (i * DEFAULT_BLOCK_SIZE) as u32, &block);
+        exec_state.vm_write_bytes(addr_space, ptr + (i * MEMORY_BLOCK_BYTES) as u32, &block);
     }
 }
 

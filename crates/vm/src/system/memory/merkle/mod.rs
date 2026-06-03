@@ -24,23 +24,23 @@ pub use tree::*;
 #[cfg(test)]
 mod tests;
 
-pub struct MemoryMerkleChip<const CHUNK: usize, F> {
-    pub air: MemoryMerkleAir<CHUNK>,
-    final_state: Option<FinalState<CHUNK, F>>,
+pub struct MemoryMerkleChip<const DIGEST_WIDTH: usize, F> {
+    pub air: MemoryMerkleAir<DIGEST_WIDTH>,
+    final_state: Option<FinalState<DIGEST_WIDTH, F>>,
     overridden_height: Option<usize>,
-    pub(crate) top_tree: Vec<[F; CHUNK]>,
+    pub(crate) top_tree: Vec<[F; DIGEST_WIDTH]>,
     /// Used for metric collection purposes only
     #[cfg(feature = "metrics")]
     pub(crate) current_height: usize,
 }
 #[derive(Debug)]
-pub struct FinalState<const CHUNK: usize, F> {
-    rows: Vec<MemoryMerkleCols<F, CHUNK>>,
-    init_root: [F; CHUNK],
-    final_root: [F; CHUNK],
+pub struct FinalState<const DIGEST_WIDTH: usize, F> {
+    rows: Vec<MemoryMerkleCols<F, DIGEST_WIDTH>>,
+    init_root: [F; DIGEST_WIDTH],
+    final_root: [F; DIGEST_WIDTH],
 }
 
-impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
+impl<const DIGEST_WIDTH: usize, F: PrimeField32> MemoryMerkleChip<DIGEST_WIDTH, F> {
     /// `compression_bus` is the bus for direct (no-memory involved) interactions to call the
     /// cryptographic compression function.
     pub fn new(

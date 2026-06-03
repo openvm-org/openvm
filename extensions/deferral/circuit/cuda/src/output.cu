@@ -46,7 +46,7 @@ struct DeferralOutputPerRow {
     Fp poseidon2_res[DIGEST_SIZE];
 };
 
-template <typename T> using MemoryWriteAuxColsDef = MemoryWriteAuxCols<T, MEMORY_OP_SIZE>;
+template <typename T> using MemoryWriteAuxColsDef = MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>;
 
 __device__ __forceinline__ size_t align_up(size_t value, size_t alignment) {
     return ((value + alignment - 1) / alignment) * alignment;
@@ -100,7 +100,7 @@ template <typename T> struct DeferralOutputCols {
     // rows bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
     // written to memory and auxiliary columns.
     T sponge_inputs[DIGEST_SIZE];
-    MemoryWriteAuxCols<T, MEMORY_OP_SIZE> write_bytes_aux[DIGEST_MEMORY_OPS];
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_bytes_aux[DIGEST_BYTE_MEMORY_OPS];
 
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.
@@ -171,10 +171,10 @@ __global__ void deferral_output_tracegen(
 
     COL_WRITE_ARRAY(row, DeferralOutputCols, output_commit, call_data.output_commit);
     const uint8_t output_len_bytes[F_NUM_BYTES] = {
-        static_cast<uint8_t>(output_len & 0xffu),
-        static_cast<uint8_t>((output_len >> 8) & 0xffu),
-        static_cast<uint8_t>((output_len >> 16) & 0xffu),
-        static_cast<uint8_t>((output_len >> 24) & 0xffu),
+        static_cast<uint8_t>(output_len & RV64_CELL_MASK),
+        static_cast<uint8_t>((output_len >> RV64_CELL_BITS) & RV64_CELL_MASK),
+        static_cast<uint8_t>((output_len >> (2 * RV64_CELL_BITS)) & RV64_CELL_MASK),
+        static_cast<uint8_t>((output_len >> (3 * RV64_CELL_BITS)) & RV64_CELL_MASK),
     };
     COL_WRITE_ARRAY(row, DeferralOutputCols, output_len, output_len_bytes);
 
@@ -186,6 +186,19 @@ __global__ void deferral_output_tracegen(
             static_cast<uint32_t>(header.rd_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
             static_cast<uint32_t>(header.rs_val[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits
         );
+#pragma unroll
+        for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
+            bitwise_buffer.add_range(header.rd_val[i], header.rd_val[i + 1]);
+            bitwise_buffer.add_range(header.rs_val[i], header.rs_val[i + 1]);
+        }
+#pragma unroll
+        for (size_t i = 0; i < COMMIT_NUM_BYTES; i += 2) {
+            bitwise_buffer.add_range(call_data.output_commit[i], call_data.output_commit[i + 1]);
+        }
+#pragma unroll
+        for (size_t i = 0; i < F_NUM_BYTES; i += 2) {
+            bitwise_buffer.add_range(output_len_bytes[i], output_len_bytes[i + 1]);
+        }
         bitwise_buffer.add_range(
             static_cast<uint32_t>(output_len_bytes[RV64_WORD_NUM_LIMBS - 1]) << limb_shift_bits,
             0
@@ -246,9 +259,9 @@ __global__ void deferral_output_tracegen(
         const uint8_t *write_bytes_start = header_end + (section_idx - 1) * DIGEST_SIZE;
         const size_t write_aux_offset = align_up(
             sizeof(DeferralOutputRecordHeader) + output_len,
-            alignof(MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>)
+            alignof(MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>)
         );
-        const auto *write_aux = reinterpret_cast<const MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE> *>(
+        const auto *write_aux = reinterpret_cast<const MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES> *>(
             record_start + write_aux_offset
         );
 
@@ -266,12 +279,14 @@ __global__ void deferral_output_tracegen(
 
         constexpr size_t write_aux_stride = sizeof(MemoryWriteAuxColsDef<uint8_t>);
 #pragma unroll
-        for (size_t chunk_idx = 0; chunk_idx < DIGEST_MEMORY_OPS; ++chunk_idx) {
-            const size_t aux_idx = (section_idx - 1) * DIGEST_MEMORY_OPS + chunk_idx;
+        for (size_t chunk_idx = 0; chunk_idx < DIGEST_BYTE_MEMORY_OPS; ++chunk_idx) {
+            const size_t aux_idx = (section_idx - 1) * DIGEST_BYTE_MEMORY_OPS + chunk_idx;
             RowSlice aux_row = row.slice_from(
                 COL_INDEX(DeferralOutputCols, write_bytes_aux) + chunk_idx * write_aux_stride
             );
-            COL_WRITE_ARRAY(aux_row, MemoryWriteAuxColsDef, prev_data, write_aux[aux_idx].prev_data);
+            Fp packed_prev[BLOCK_FE_WIDTH];
+            pack_u8_block_bytes(packed_prev, write_aux[aux_idx].prev_data);
+            COL_WRITE_ARRAY(aux_row, MemoryWriteAuxColsDef, prev_data, packed_prev);
             mem_helper.fill(
                 aux_row,
                 write_aux[aux_idx].prev_timestamp,

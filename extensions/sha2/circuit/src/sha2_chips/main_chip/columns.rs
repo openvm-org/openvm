@@ -1,5 +1,5 @@
 use openvm_circuit::{
-    arch::ExecutionState,
+    arch::{ExecutionState, BLOCK_FE_WIDTH},
     system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 use openvm_circuit_primitives::ColsRef;
@@ -69,5 +69,5 @@ pub struct Sha2MemoryCols<
     #[aligned_borrow]
     pub state_reads: [MemoryReadAuxCols<T>; STATE_READS],
     #[aligned_borrow]
-    pub write_aux: [MemoryWriteAuxCols<T, SHA2_WRITE_SIZE>; STATE_WRITES],
+    pub write_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; STATE_WRITES],
 }

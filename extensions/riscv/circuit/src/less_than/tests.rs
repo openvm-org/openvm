@@ -137,7 +137,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode == SLT, &b, &c);
     let mut a = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
     a[0] = F::from_bool(cmp);
-    assert_eq!(a, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd));
+    assert_eq!(a, tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd));
 }
 
 //////////////////////////////////////////////////////////////////////////////////////

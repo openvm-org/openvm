@@ -125,6 +125,13 @@ where
             .range_check(rd_data_low[3].clone(), PC_BITS - RV64_CELL_BITS * 3)
             .eval(builder, is_valid);
 
+        // Memory bus checks only packed u16 values; these rs1 bytes need separate bounds.
+        for i in 0..RV64_WORD_NUM_LIMBS / 2 {
+            self.bitwise_lookup_bus
+                .send_range(rs1[i * 2], rs1[i * 2 + 1])
+                .eval(builder, is_valid);
+        }
+
         builder.assert_bool(imm_sign);
 
         // Constrain to_pc_least_sig_bit + 2 * to_pc_limbs = rs1 + imm as an i32 addition with 2
@@ -304,6 +311,13 @@ where
             .add_count(rd_data[2] as u32, RV64_CELL_BITS);
         self.range_checker_chip
             .add_count(rd_data[3] as u32, PC_BITS - RV64_CELL_BITS * 3);
+
+        // AIR range-checks these byte limbs; add matching lookup counts.
+        let rs1_bytes = record.rs1_val.to_le_bytes();
+        for i in 0..RV64_WORD_NUM_LIMBS / 2 {
+            self.bitwise_lookup_chip
+                .request_range(rs1_bytes[i * 2] as u32, rs1_bytes[i * 2 + 1] as u32);
+        }
 
         // Write in reverse order
         core_row.imm_sign = F::from_bool(record.imm_sign);

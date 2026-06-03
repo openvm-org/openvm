@@ -11,6 +11,12 @@ template <typename T> __global__ void fill_buffer(T *buffer, T value, uint32_t n
     }
 }
 
+// Convert 2 bytes to a u16 in little endian order
+// **SAFETY**: b has to be at least 2 bytes long
+__device__ __forceinline__ uint16_t u16_from_bytes_le(const uint8_t *b) {
+    return (uint16_t)b[0] | ((uint16_t)b[1] << 8);
+}
+
 // Convert 4 bytes to a u32 in little endian order
 // **SAFETY**: b has to be at least 4 bytes long
 __device__ __forceinline__ uint32_t u32_from_bytes_le(const uint8_t *b) {

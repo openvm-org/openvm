@@ -20,7 +20,7 @@ template <typename T> struct Rv64LoadStoreAdapterCols {
     /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
     T mem_ptr_limbs[2];
     T mem_as;
-    /// prev_data will be provided by the core chip to make a complete MemoryWriteAuxCols
+    /// Timestamp aux for the write; previous data is provided by the core chip.
     MemoryBaseAuxCols<T> write_base_aux;
     /// Only writes if `needs_write`.
     /// If the instruction is a Load:

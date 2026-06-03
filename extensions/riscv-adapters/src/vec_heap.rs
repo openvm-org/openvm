@@ -8,12 +8,13 @@ use itertools::izip;
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        ExecutionBridge, ExecutionState, VecHeapAdapterInterface, VmAdapterAir,
+        ExecutionBridge, ExecutionState, VecHeapAdapterInterface, VmAdapterAir, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
+            pack_u8_block, pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols,
+            MemoryReadAuxRecord, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -30,8 +31,8 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{
-    abstract_compose, expand_to_rv64_register, tracing_read, tracing_read_reg_ptr, tracing_write,
-    RV64_CELL_BITS,
+    abstract_compose, byte_ptr_to_u16_ptr, expand_to_rv64_register, tracing_read,
+    tracing_read_reg_ptr, tracing_write, RV64_CELL_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -42,9 +43,9 @@ use openvm_stark_backend::{
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
 ///   (address space 1).
-/// * Reads take the form of `BLOCKS_PER_READ` consecutive reads of size `READ_SIZE` from the heap,
+/// * Reads take the form of `BLOCKS_PER_READ` consecutive `MEMORY_BLOCK_BYTES` reads from the heap,
 ///   starting from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
-/// * Writes take the form of `BLOCKS_PER_WRITE` consecutive writes of size `WRITE_SIZE` to the
+/// * Writes take the form of `BLOCKS_PER_WRITE` consecutive `MEMORY_BLOCK_BYTES` writes to the
 ///   heap, starting from the address in `rd`.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
@@ -53,8 +54,6 @@ pub struct Rv64VecHeapAdapterCols<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
-    const READ_SIZE: usize,
-    const WRITE_SIZE: usize,
 > {
     pub from_state: ExecutionState<T>,
 
@@ -68,18 +67,16 @@ pub struct Rv64VecHeapAdapterCols<
     pub rd_read_aux: MemoryReadAuxCols<T>,
 
     pub reads_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
-    pub writes_aux: [MemoryWriteAuxCols<T, WRITE_SIZE>; BLOCKS_PER_WRITE],
+    pub writes_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; BLOCKS_PER_WRITE],
 }
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64VecHeapAdapterCols<u8, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>)]
+#[columns_via(Rv64VecHeapAdapterCols<u8, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>)]
 pub struct Rv64VecHeapAdapterAir<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
-    const READ_SIZE: usize,
-    const WRITE_SIZE: usize,
 > {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
@@ -93,20 +90,10 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-    > BaseAir<F>
-    for Rv64VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    > BaseAir<F> for Rv64VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
 {
     fn width(&self) -> usize {
-        Rv64VecHeapAdapterCols::<
-            F,
-            NUM_READS,
-            BLOCKS_PER_READ,
-            BLOCKS_PER_WRITE,
-            READ_SIZE,
-            WRITE_SIZE,
-        >::width()
+        Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>::width()
     }
 }
 
@@ -115,18 +102,15 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-    > VmAdapterAir<AB>
-    for Rv64VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    > VmAdapterAir<AB> for Rv64VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
 {
     type Interface = VecHeapAdapterInterface<
         AB::Expr,
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
-        READ_SIZE,
-        WRITE_SIZE,
+        MEMORY_BLOCK_BYTES,
+        MEMORY_BLOCK_BYTES,
     >;
 
     fn eval(
@@ -135,14 +119,8 @@ impl<
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let cols: &Rv64VecHeapAdapterCols<
-            _,
-            NUM_READS,
-            BLOCKS_PER_READ,
-            BLOCKS_PER_WRITE,
-            READ_SIZE,
-            WRITE_SIZE,
-        > = local.borrow();
+        let cols: &Rv64VecHeapAdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
+            local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
@@ -158,8 +136,11 @@ impl<
         ))) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), ptr),
-                    expand_to_rv64_register(&val),
+                    MemoryAddress::new(
+                        AB::F::from_u32(RV64_REGISTER_AS),
+                        byte_ptr_to_u16_ptr::<AB>(ptr),
+                    ),
+                    pack_u8_block::<AB>(&expand_to_rv64_register(&val)),
                     timestamp_pp(),
                     aux,
                 )
@@ -191,6 +172,13 @@ impl<
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
+        for val in cols.rs_val.iter().chain(std::iter::once(&cols.rd_val)) {
+            for bytes in val.chunks_exact(2) {
+                self.bus
+                    .send_range(bytes[0], bytes[1])
+                    .eval(builder, ctx.instruction.is_valid.clone());
+            }
+        }
 
         // Compose the 4 materialized bytes of each register value into a single field element
         // used as a memory address.
@@ -205,9 +193,11 @@ impl<
                     .read(
                         MemoryAddress::new(
                             e,
-                            address.clone() + AB::Expr::from_usize(i * READ_SIZE),
+                            byte_ptr_to_u16_ptr::<AB>(
+                                address.clone() + AB::Expr::from_usize(i * MEMORY_BLOCK_BYTES),
+                            ),
                         ),
-                        read,
+                        pack_u8_block::<AB>(&read),
                         timestamp_pp(),
                         aux,
                     )
@@ -219,8 +209,13 @@ impl<
         for (i, (write, aux)) in zip(ctx.writes, &cols.writes_aux).enumerate() {
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(e, rd_val_f.clone() + AB::Expr::from_usize(i * WRITE_SIZE)),
-                    write,
+                    MemoryAddress::new(
+                        e,
+                        byte_ptr_to_u16_ptr::<AB>(
+                            rd_val_f.clone() + AB::Expr::from_usize(i * MEMORY_BLOCK_BYTES),
+                        ),
+                    ),
+                    pack_u8_block::<AB>(&write),
                     timestamp_pp(),
                     aux,
                 )
@@ -251,14 +246,8 @@ impl<
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64VecHeapAdapterCols<
-            _,
-            NUM_READS,
-            BLOCKS_PER_READ,
-            BLOCKS_PER_WRITE,
-            READ_SIZE,
-            WRITE_SIZE,
-        > = local.borrow();
+        let cols: &Rv64VecHeapAdapterCols<_, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
+            local.borrow();
         cols.from_state.pc
     }
 }
@@ -270,8 +259,6 @@ pub struct Rv64VecHeapAdapterRecord<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
-    const READ_SIZE: usize,
-    const WRITE_SIZE: usize,
 > {
     pub from_pc: u32,
     pub from_timestamp: u32,
@@ -286,7 +273,7 @@ pub struct Rv64VecHeapAdapterRecord<
     pub rd_read_aux: MemoryReadAuxRecord,
 
     pub reads_aux: [[MemoryReadAuxRecord; BLOCKS_PER_READ]; NUM_READS],
-    pub writes_aux: [MemoryWriteBytesAuxRecord<WRITE_SIZE>; BLOCKS_PER_WRITE],
+    pub writes_aux: [MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>; BLOCKS_PER_WRITE],
 }
 
 #[derive(derive_new::new, Clone, Copy)]
@@ -294,8 +281,6 @@ pub struct Rv64VecHeapAdapterExecutor<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
-    const READ_SIZE: usize,
-    const WRITE_SIZE: usize,
 > {
     pointer_max_bits: usize,
 }
@@ -305,8 +290,6 @@ pub struct Rv64VecHeapAdapterFiller<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
-    const READ_SIZE: usize,
-    const WRITE_SIZE: usize,
 > {
     pointer_max_bits: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
@@ -317,34 +300,15 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
     > AdapterTraceExecutor<F>
-    for Rv64VecHeapAdapterExecutor<
-        NUM_READS,
-        BLOCKS_PER_READ,
-        BLOCKS_PER_WRITE,
-        READ_SIZE,
-        WRITE_SIZE,
-    >
+    for Rv64VecHeapAdapterExecutor<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
 {
-    const WIDTH: usize = Rv64VecHeapAdapterCols::<
-        F,
-        NUM_READS,
-        BLOCKS_PER_READ,
-        BLOCKS_PER_WRITE,
-        READ_SIZE,
-        WRITE_SIZE,
-    >::width();
-    type ReadData = [[[u8; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
-    type WriteData = [[u8; WRITE_SIZE]; BLOCKS_PER_WRITE];
-    type RecordMut<'a> = &'a mut Rv64VecHeapAdapterRecord<
-        NUM_READS,
-        BLOCKS_PER_READ,
-        BLOCKS_PER_WRITE,
-        READ_SIZE,
-        WRITE_SIZE,
-    >;
+    const WIDTH: usize =
+        Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>::width();
+    type ReadData = [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS_PER_READ]; NUM_READS];
+    type WriteData = [[u8; MEMORY_BLOCK_BYTES]; BLOCKS_PER_WRITE];
+    type RecordMut<'a> =
+        &'a mut Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>;
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
@@ -356,13 +320,7 @@ impl<
         &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
-        record: &mut &mut Rv64VecHeapAdapterRecord<
-            NUM_READS,
-            BLOCKS_PER_READ,
-            BLOCKS_PER_WRITE,
-            READ_SIZE,
-            WRITE_SIZE,
-        >,
+        record: &mut &mut Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>,
     ) -> Self::ReadData {
         let &Instruction { a, b, c, d, e, .. } = instruction;
 
@@ -391,14 +349,14 @@ impl<
         // Read memory values
         from_fn(|i| {
             debug_assert!(
-                (record.rs_vals[i] as u64) + ((READ_SIZE * BLOCKS_PER_READ - 1) as u64)
+                (record.rs_vals[i] as u64) + ((MEMORY_BLOCK_BYTES * BLOCKS_PER_READ - 1) as u64)
                     < (1u64 << self.pointer_max_bits)
             );
             from_fn(|j| {
                 tracing_read(
                     memory,
                     RV64_MEMORY_AS,
-                    record.rs_vals[i] + (j * READ_SIZE) as u32,
+                    record.rs_vals[i] + (j * MEMORY_BLOCK_BYTES) as u32,
                     &mut record.reads_aux[i][j].prev_timestamp,
                 )
             })
@@ -410,18 +368,12 @@ impl<
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
-        record: &mut &mut Rv64VecHeapAdapterRecord<
-            NUM_READS,
-            BLOCKS_PER_READ,
-            BLOCKS_PER_WRITE,
-            READ_SIZE,
-            WRITE_SIZE,
-        >,
+        record: &mut &mut Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>,
     ) {
         debug_assert_eq!(instruction.e.as_canonical_u32(), RV64_MEMORY_AS);
 
         debug_assert!(
-            (record.rd_val as u64) + ((WRITE_SIZE * BLOCKS_PER_WRITE - 1) as u64)
+            (record.rd_val as u64) + ((MEMORY_BLOCK_BYTES * BLOCKS_PER_WRITE - 1) as u64)
                 < (1u64 << self.pointer_max_bits)
         );
 
@@ -430,7 +382,7 @@ impl<
             tracing_write(
                 memory,
                 RV64_MEMORY_AS,
-                record.rd_val + (i * WRITE_SIZE) as u32,
+                record.rd_val + (i * MEMORY_BLOCK_BYTES) as u32,
                 data[i],
                 &mut record.writes_aux[i].prev_timestamp,
                 &mut record.writes_aux[i].prev_data,
@@ -444,46 +396,21 @@ impl<
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
     > AdapterTraceFiller<F>
-    for Rv64VecHeapAdapterFiller<
-        NUM_READS,
-        BLOCKS_PER_READ,
-        BLOCKS_PER_WRITE,
-        READ_SIZE,
-        WRITE_SIZE,
-    >
+    for Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
 {
-    const WIDTH: usize = Rv64VecHeapAdapterCols::<
-        F,
-        NUM_READS,
-        BLOCKS_PER_READ,
-        BLOCKS_PER_WRITE,
-        READ_SIZE,
-        WRITE_SIZE,
-    >::width();
+    const WIDTH: usize =
+        Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>::width();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
-        let record: &Rv64VecHeapAdapterRecord<
-            NUM_READS,
-            BLOCKS_PER_READ,
-            BLOCKS_PER_WRITE,
-            READ_SIZE,
-            WRITE_SIZE,
-        > = unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let record: &Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
 
-        let cols: &mut Rv64VecHeapAdapterCols<
-            F,
-            NUM_READS,
-            BLOCKS_PER_READ,
-            BLOCKS_PER_WRITE,
-            READ_SIZE,
-            WRITE_SIZE,
-        > = adapter_row.borrow_mut();
+        let cols: &mut Rv64VecHeapAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
+            adapter_row.borrow_mut();
 
         // Range checks:
         // **NOTE**: Must do the range checks before overwriting the records
@@ -505,6 +432,17 @@ impl<
                 (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
             );
         }
+        for val in record
+            .rs_vals
+            .iter()
+            .copied()
+            .chain(std::iter::once(record.rd_val))
+        {
+            for bytes in val.to_le_bytes().chunks_exact(2) {
+                self.bitwise_lookup_chip
+                    .request_range(bytes[0] as u32, bytes[1] as u32);
+            }
+        }
 
         let timestamp_delta = NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;
         let mut timestamp = record.from_timestamp + timestamp_delta as u32;
@@ -520,7 +458,7 @@ impl<
             .rev()
             .zip(cols.writes_aux.iter_mut().rev())
             .for_each(|(write, cols_write)| {
-                cols_write.set_prev_data(write.prev_data.map(F::from_u8));
+                cols_write.set_prev_data(pack_u8_block_bytes(&write.prev_data));
                 mem_helper.fill(write.prev_timestamp, timestamp_mm(), cols_write.as_mut());
             });
 

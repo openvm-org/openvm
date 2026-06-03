@@ -58,7 +58,7 @@ use {
             default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
             GpuTestChipHarness,
         },
-        EmptyAdapterCoreLayout, DEFAULT_BLOCK_SIZE,
+        EmptyAdapterCoreLayout,
     },
 };
 
@@ -168,7 +168,11 @@ fn create_mul_harness_fields(
             bitwise_chip.bus(),
             address_bits,
         )),
-        MultiplicationCoreAir::new(*range_tuple_chip.bus(), Rv64Mul256Opcode::CLASS_OFFSET),
+        MultiplicationCoreAir::new(
+            *range_tuple_chip.bus(),
+            bitwise_chip.bus(),
+            Rv64Mul256Opcode::CLASS_OFFSET,
+        ),
     );
     let executor = Rv64Multiplication256Executor::new(
         AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(address_bits)),
@@ -176,8 +180,9 @@ fn create_mul_harness_fields(
     );
     let chip = Rv64Multiplication256Chip::<F>::new(
         MultiplicationFiller::new(
-            Rv64VecHeapAdapterFiller::new(address_bits, bitwise_chip),
+            Rv64VecHeapAdapterFiller::new(address_bits, bitwise_chip.clone()),
             range_tuple_chip,
+            bitwise_chip,
             Rv64Mul256Opcode::CLASS_OFFSET,
         ),
         memory_helper,
@@ -240,7 +245,11 @@ fn create_beq_harness_fields(
             bitwise_chip.bus(),
             address_bits,
         )),
-        BranchEqualCoreAir::new(Rv64BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+        BranchEqualCoreAir::new(
+            bitwise_chip.bus(),
+            Rv64BranchEqual256Opcode::CLASS_OFFSET,
+            DEFAULT_PC_STEP,
+        ),
     );
     let executor = Rv64BranchEqual256Executor::new(
         BranchAdapterExecutor::new(Rv64VecHeapBranchAdapterExecutor::new(address_bits)),
@@ -249,7 +258,8 @@ fn create_beq_harness_fields(
     );
     let chip = Rv64BranchEqual256Chip::new(
         BranchEqualFiller::new(
-            Rv64VecHeapBranchAdapterFiller::new(address_bits, bitwise_chip),
+            Rv64VecHeapBranchAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            bitwise_chip,
             Rv64BranchEqual256Opcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
@@ -919,7 +929,7 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
             &mut harness.matrix_arena,
             EmptyAdapterCoreLayout::<
                 F,
-                Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+                Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS>,
             >::new(),
         );
 
@@ -985,7 +995,7 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
             &mut harness.matrix_arena,
             EmptyAdapterCoreLayout::<
                 F,
-                Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS, DEFAULT_BLOCK_SIZE>,
+                Rv64VecHeapBranchAdapterExecutor<NUM_READS, INT256_NUM_BLOCKS>,
             >::new(),
         );
 

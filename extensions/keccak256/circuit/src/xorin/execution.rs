@@ -157,31 +157,34 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     pre_compute: &XorinPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let buffer_u32 = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.a as u32));
-    let input_u32 = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.b as u32));
-    let length_u32 = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.c as u32));
+    let buffer_u32 =
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32));
+    let input_u32 =
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32));
+    let length_u32 =
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.c as u32));
     debug_assert!(
-        (length_u32 as usize).is_multiple_of(DEFAULT_BLOCK_SIZE),
+        (length_u32 as usize).is_multiple_of(MEMORY_BLOCK_BYTES),
         "xorin length must be {}-byte aligned",
-        DEFAULT_BLOCK_SIZE
+        MEMORY_BLOCK_BYTES
     );
 
     // SAFETY: RV64_MEMORY_AS is memory address space of type u8
-    let num_reads = (length_u32 as usize).div_ceil(DEFAULT_BLOCK_SIZE);
+    let num_reads = (length_u32 as usize).div_ceil(MEMORY_BLOCK_BYTES);
     let buffer_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
-            exec_state.vm_read::<u8, DEFAULT_BLOCK_SIZE>(
+            exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
                 RV64_MEMORY_AS,
-                buffer_u32 + (i * DEFAULT_BLOCK_SIZE) as u32,
+                buffer_u32 + (i * MEMORY_BLOCK_BYTES) as u32,
             )
         })
         .collect();
 
     let input_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
-            exec_state.vm_read::<u8, DEFAULT_BLOCK_SIZE>(
+            exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
                 RV64_MEMORY_AS,
-                input_u32 + (i * DEFAULT_BLOCK_SIZE) as u32,
+                input_u32 + (i * MEMORY_BLOCK_BYTES) as u32,
             )
         })
         .collect();
@@ -193,12 +196,12 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     }
 
     // Write XOR result back to the buffer memory in 8-byte blocks.
-    // Note: this means output_bytes length is a multiple of DEFAULT_BLOCK_SIZE
-    for (i, chunk) in output_bytes.chunks_exact(DEFAULT_BLOCK_SIZE).enumerate() {
-        let chunk: [u8; DEFAULT_BLOCK_SIZE] = chunk.try_into().unwrap();
-        exec_state.vm_write::<u8, DEFAULT_BLOCK_SIZE>(
+    // Note: this means output_bytes length is a multiple of MEMORY_BLOCK_BYTES
+    for (i, chunk) in output_bytes.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
+        let chunk: [u8; MEMORY_BLOCK_BYTES] = chunk.try_into().unwrap();
+        exec_state.vm_write_bytes::<MEMORY_BLOCK_BYTES>(
             RV64_MEMORY_AS,
-            buffer_u32 + (i * DEFAULT_BLOCK_SIZE) as u32,
+            buffer_u32 + (i * MEMORY_BLOCK_BYTES) as u32,
             &chunk,
         );
     }
