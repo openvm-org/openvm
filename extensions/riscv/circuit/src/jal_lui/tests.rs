@@ -464,6 +464,16 @@ fn overflow_negative_tests() {
         },
         false,
     );
+    run_negative_jal_lui_test(
+        JAL,
+        None,
+        Some((1u32 << 28) - 6),
+        JalLuiPrankValues {
+            rd_data: Some([0, 0]),
+            ..Default::default()
+        },
+        false,
+    );
     // Pin LUI sign bit so this case exercises bad rd arithmetic, not sign-select mismatch.
     run_negative_jal_lui_test(
         LUI,

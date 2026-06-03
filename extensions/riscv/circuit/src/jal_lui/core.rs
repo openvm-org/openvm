@@ -103,13 +103,12 @@ where
             .eval(builder, is_lui);
 
         let limb_base = AB::F::from_u32(1 << U16_BITS);
-        let carry_divide = limb_base.inverse();
-        let rd_low_32 = rd[0] + rd[1] * limb_base;
 
         // JAL: constrain rd_low_32 = from_pc + DEFAULT_PC_STEP.
-        let carry_top =
-            (from_pc + AB::F::from_u32(DEFAULT_PC_STEP) - rd_low_32) * carry_divide * carry_divide;
-        builder.when(is_jal).assert_bool(carry_top);
+        builder.when(is_jal).assert_eq(
+            rd[0],
+            from_pc + AB::F::from_u32(DEFAULT_PC_STEP) - rd[1] * limb_base,
+        );
 
         // Range-check the low 32-bit rd cells.
         self.range_bus
