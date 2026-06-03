@@ -17,15 +17,9 @@ template <typename T> struct MemoryReadAuxCols {
     MemoryBaseAuxCols<T> base;
 };
 
-template <typename T, size_t NUM_LIMBS = RV64_REGISTER_NUM_LIMBS> struct MemoryWriteAuxCols {
+template <typename T, size_t NUM_LIMBS = BLOCK_FE_WIDTH> struct MemoryWriteAuxCols {
     MemoryBaseAuxCols<T> base;
     T prev_data[NUM_LIMBS];
-};
-
-template <typename T> struct MemoryReadOrImmediateAuxCols {
-    MemoryBaseAuxCols<T> base;
-    T is_immediate;
-    T is_zero_aux;
 };
 
 struct MemoryReadAuxRecord {

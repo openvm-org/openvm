@@ -1,6 +1,6 @@
 /// 64-bit register stored as 8 bytes (8 limbs of 8-bits) in OpenVM memory.
 pub const RV64_REGISTER_NUM_LIMBS: usize = 8;
-pub const RV64_CELL_BITS: usize = 8;
+pub const RV64_BYTE_BITS: usize = 8;
 /// 32-bit word stored as 4 bytes (4 limbs of 8-bits), i.e. half a 64-bit register.
 pub const RV64_WORD_NUM_LIMBS: usize = RV64_REGISTER_NUM_LIMBS / 2;
 

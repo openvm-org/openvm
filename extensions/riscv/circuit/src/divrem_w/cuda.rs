@@ -8,7 +8,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_instructions::riscv::{RV64_CELL_BITS, RV64_WORD_NUM_LIMBS};
+use openvm_instructions::riscv::{RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS};
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
@@ -20,7 +20,7 @@ use crate::{
 #[derive(new)]
 pub struct Rv64DivRemWChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
@@ -38,7 +38,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64DivRemWChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = DivRemCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>::width()
+        let trace_width = DivRemCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width()
             + Rv64MultWAdapterCols::<F>::width();
         let height = records.len() / RECORD_SIZE;
         let padded_height = next_power_of_two_or_zero(height);

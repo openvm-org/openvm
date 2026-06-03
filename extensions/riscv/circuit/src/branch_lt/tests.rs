@@ -43,7 +43,7 @@ use {
 use super::{run_cmp, Rv64BranchLessThanChip};
 use crate::{
     adapters::{
-        Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller, RV64_CELL_BITS,
+        Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller, RV64_BYTE_BITS,
         RV64_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_lt::BranchLessThanCoreCols,
@@ -63,7 +63,7 @@ type Harness = TestChipHarness<
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (
     Rv64BranchLessThanAir,
@@ -94,12 +94,12 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -153,7 +153,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
 
     let (cmp_result, _, _, _) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode.local_usize() as u8, &a, &b);
+        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(opcode.local_usize() as u8, &a, &b);
     let from_pc = tester.last_from_pc().as_canonical_u32() as i32;
     let to_pc = tester.last_to_pc().as_canonical_u32() as i32;
     let pc_inc = if cmp_result { imm } else { 4 };
@@ -265,7 +265,7 @@ fn run_negative_branch_lt_test(
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut BranchLessThanCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
+        let cols: &mut BranchLessThanCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
         if let Some(a_msb) = prank_vals.a_msb {
@@ -541,7 +541,7 @@ fn execute_roundtrip_sanity_test() {
 fn run_cmp_unsigned_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [145, 56, 89, 100, 5, 34, 25, 205];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [73, 56, 89, 100, 5, 35, 25, 205];
-    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
         BranchLessThanOpcode::BLTU as u8,
         &x,
         &y,
@@ -551,7 +551,7 @@ fn run_cmp_unsigned_sanity_test() {
     assert!(!x_sign); // unsigned
     assert!(!y_sign); // unsigned
 
-    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
         BranchLessThanOpcode::BGEU as u8,
         &x,
         &y,
@@ -567,14 +567,14 @@ fn run_cmp_same_sign_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [145, 56, 89, 100, 5, 34, 25, 205];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [73, 56, 89, 100, 5, 35, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(BranchLessThanOpcode::BLT as u8, &x, &y);
+        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(BranchLessThanOpcode::BLT as u8, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 5);
     assert!(x_sign); // negative
     assert!(y_sign); // negative
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(BranchLessThanOpcode::BGE as u8, &x, &y);
+        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(BranchLessThanOpcode::BGE as u8, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, 5);
     assert!(x_sign); // negative
@@ -586,14 +586,14 @@ fn run_cmp_diff_sign_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 35, 25, 55, 0, 0, 0, 55];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [173, 34, 25, 205, 255, 255, 255, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(BranchLessThanOpcode::BLT as u8, &x, &y);
+        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(BranchLessThanOpcode::BLT as u8, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, RV64_REGISTER_NUM_LIMBS - 1);
     assert!(!x_sign); // positive
     assert!(y_sign); // negative
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(BranchLessThanOpcode::BGE as u8, &x, &y);
+        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(BranchLessThanOpcode::BGE as u8, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, RV64_REGISTER_NUM_LIMBS - 1);
     assert!(!x_sign); // positive
@@ -604,12 +604,12 @@ fn run_cmp_diff_sign_sanity_test() {
 fn run_cmp_eq_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 35, 25, 55, 0, 0, 0, 55];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(BranchLessThanOpcode::BLT as u8, &x, &x);
+        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(BranchLessThanOpcode::BLT as u8, &x, &x);
     assert!(!cmp_result);
     assert_eq!(diff_idx, RV64_REGISTER_NUM_LIMBS);
     assert_eq!(x_sign, y_sign);
 
-    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
         BranchLessThanOpcode::BLTU as u8,
         &x,
         &x,
@@ -619,12 +619,12 @@ fn run_cmp_eq_sanity_test() {
     assert_eq!(x_sign, y_sign);
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(BranchLessThanOpcode::BGE as u8, &x, &x);
+        run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(BranchLessThanOpcode::BGE as u8, &x, &x);
     assert!(cmp_result);
     assert_eq!(diff_idx, RV64_REGISTER_NUM_LIMBS);
     assert_eq!(x_sign, y_sign);
 
-    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
         BranchLessThanOpcode::BGEU as u8,
         &x,
         &x,
@@ -652,7 +652,7 @@ type GpuHarness = GpuTestChipHarness<
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -697,7 +697,7 @@ fn test_cuda_rand_branch_lt_tracegen(opcode: BranchLessThanOpcode, num_ops: usiz
 
     type Record<'a> = (
         &'a mut Rv64BranchAdapterRecord,
-        &'a mut BranchLessThanCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
+        &'a mut BranchLessThanCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
     );
     harness
         .dense_arena

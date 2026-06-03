@@ -25,7 +25,7 @@ use crate::{
     },
 };
 
-// @dev Currently this is only used for debug assertions, but we may switch to making it constant
+// TODO: Currently this is only used for debug assertions, but we may switch to making it constant
 // and removing from MemoryConfig.
 // This is the max bit width of AS-native OpenVM memory pointers.
 pub const POINTER_MAX_BITS: usize = 28;

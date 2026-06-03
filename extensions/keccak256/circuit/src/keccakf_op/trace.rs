@@ -13,16 +13,18 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, AlignedBytesBorrow, Chip,
+    var_range::SharedVariableRangeCheckerChip, AlignedBytesBorrow, Chip, U16_BITS,
 };
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
-use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, timed_write, tracing_read};
+use openvm_riscv_circuit::adapters::{
+    ptr_bound_from_ptr, ptr_to_field_u16_limbs, rv64_bytes_to_u32, timed_write, tracing_read,
+};
 use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -39,7 +41,7 @@ use crate::{
 
 #[derive(derive_new::new)]
 pub struct KeccakfOpChip<F> {
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub pointer_max_bits: usize,
     pub mem_helper: SharedMemoryHelper<F>,
     // NOTE[jpw]: this is an awkward way to pass data from this execution chip to the
@@ -148,8 +150,8 @@ where
 
         let guest_mem = state.memory.data();
         // SAFETY:
-        // - RV64_MEMORY_AS (2) consists of `u8`
-        // - get_slice will panic (if protected mode) if out of bounds
+        // - RV64_MEMORY_AS is u16-celled; `get_u8_slice` reads raw bytes at the byte pointer.
+        // - `get_u8_slice` will panic (if protected mode) if out of bounds.
         let prestate = unsafe {
             guest_mem.get_u8_slice(RV64_MEMORY_AS, record.buffer_ptr, KECCAK_WIDTH_BYTES)
         };
@@ -216,14 +218,22 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                 local.is_valid = F::ONE;
                 local.timestamp = F::from_u32(record.timestamp);
                 local.rd_ptr = F::from_u32(record.rd_ptr);
-                let ptr_bytes = record.buffer_ptr.to_le_bytes();
-                local.buffer_ptr_limbs = ptr_bytes.map(F::from_u8);
+                local.buffer_ptr_limbs = ptr_to_field_u16_limbs(record.buffer_ptr);
 
-                for (dst, &byte) in local.preimage.iter_mut().zip(&record.preimage_buffer_bytes) {
-                    *dst = F::from_u8(byte);
+                // Pack consecutive pairs of state bytes into u16 cells.
+                for (dst, bytes) in local
+                    .preimage
+                    .iter_mut()
+                    .zip(record.preimage_buffer_bytes.chunks_exact(2))
+                {
+                    *dst = F::from_u16(u16::from_le_bytes([bytes[0], bytes[1]]));
                 }
-                for (dst, &byte) in local.postimage.iter_mut().zip(&postimage_buffer_bytes) {
-                    *dst = F::from_u8(byte);
+                for (dst, bytes) in local
+                    .postimage
+                    .iter_mut()
+                    .zip(postimage_buffer_bytes.chunks_exact(2))
+                {
+                    *dst = F::from_u16(u16::from_le_bytes([bytes[0], bytes[1]]));
                 }
 
                 let mut timestamp = record.timestamp;
@@ -242,17 +252,10 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                     timestamp += 1;
                 }
 
-                let limb_shift =
-                    1u32 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits) as u32;
-                let scaled_limb = (ptr_bytes[RV64_WORD_NUM_LIMBS - 1] as u32) * limb_shift;
-                self.bitwise_lookup_chip
-                    .request_range(scaled_limb, scaled_limb);
-
-                // AIR bounds the pointer bytes before composing them.
-                self.bitwise_lookup_chip
-                    .request_range(ptr_bytes[0] as u32, ptr_bytes[1] as u32);
-                self.bitwise_lookup_chip
-                    .request_range(ptr_bytes[2] as u32, ptr_bytes[3] as u32);
+                self.range_checker_chip.add_count(
+                    ptr_bound_from_ptr(record.buffer_ptr, self.pointer_max_bits),
+                    U16_BITS,
+                );
             });
         *self.shared_records.lock().unwrap() = records;
     }

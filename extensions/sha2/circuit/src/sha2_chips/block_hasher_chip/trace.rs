@@ -306,6 +306,7 @@ impl<F, C: Sha2BlockHasherVmConfig> Sha2BlockHasherChip<F, C> {
             INNER_OFFSET,
             &input_words,
             self.bitwise_lookup_chip.clone(),
+            &self.range_checker_chip,
             prev_hash,
             next_block_prev_hash,
             global_block_idx as u32,
