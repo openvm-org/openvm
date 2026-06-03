@@ -26,7 +26,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_CELL_BITS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
+    riscv::{RV64_BYTE_BITS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -134,7 +134,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
 
         // Sign-extend the 32-bit result to 64 bits.
         builder.assert_bool(local.result_sign);
-        let sign_mask = AB::Expr::from_u32(1 << (RV64_CELL_BITS - 1));
+        let sign_mask = AB::Expr::from_u32(1 << (RV64_BYTE_BITS - 1));
         let result_word_msl = ctx.writes[0][RV64_WORD_NUM_LIMBS - 1].clone();
         self.bitwise_lookup_bus
             .send_xor(
@@ -144,7 +144,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultWAdapterAir {
                     - AB::Expr::from_u32(2) * local.result_sign * sign_mask,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
-        let sign_extend_limb = AB::Expr::from_u32((1 << RV64_CELL_BITS) - 1) * local.result_sign;
+        let sign_extend_limb = AB::Expr::from_u32((1 << RV64_BYTE_BITS) - 1) * local.result_sign;
         let write_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
             if i < RV64_WORD_NUM_LIMBS {
                 ctx.writes[0][i].clone()
@@ -192,7 +192,7 @@ pub struct Rv64MultWAdapterExecutor;
 
 #[derive(derive_new::new)]
 pub struct Rv64MultWAdapterFiller {
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
 }
 
 #[repr(C)]
@@ -278,8 +278,8 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64MultWAdapterExecutor {
         record.rd_ptr = a.as_canonical_u32();
         let write_low = data[0];
         record.result_word_msl = write_low[RV64_WORD_NUM_LIMBS - 1];
-        record.result_sign = record.result_word_msl >> (RV64_CELL_BITS as u8 - 1);
-        let sign_extend_limb = ((1u16 << RV64_CELL_BITS) - 1) as u8 * record.result_sign;
+        record.result_sign = record.result_word_msl >> (RV64_BYTE_BITS as u8 - 1);
+        let sign_extend_limb = ((1u16 << RV64_BYTE_BITS) - 1) as u8 * record.result_sign;
         let mut write_data = [sign_extend_limb; RV64_REGISTER_NUM_LIMBS];
         write_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&write_low);
         tracing_write(
@@ -327,7 +327,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64MultWAdapterFiller {
             adapter_row.reads_aux[0].as_mut(),
         );
         self.bitwise_lookup_chip
-            .request_xor(record.result_word_msl as u32, 1u32 << (RV64_CELL_BITS - 1));
+            .request_xor(record.result_word_msl as u32, 1u32 << (RV64_BYTE_BITS - 1));
 
         adapter_row.result_sign = F::from_u8(record.result_sign);
         adapter_row.rs2_high = record.rs2_high.map(F::from_u8);

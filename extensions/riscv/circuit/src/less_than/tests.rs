@@ -39,7 +39,7 @@ use super::{core::run_less_than, LessThanCoreAir, Rv64LessThanChip};
 use crate::{
     adapters::{
         Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
-        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+        RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     less_than::LessThanCoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
@@ -53,7 +53,7 @@ type Harness = TestChipHarness<F, Rv64LessThanExecutor, Rv64LessThanAir, Rv64Les
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64LessThanAir, Rv64LessThanExecutor, Rv64LessThanChip<F>) {
     let air = Rv64LessThanAir::new(
@@ -78,12 +78,12 @@ fn create_test_chip(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -134,7 +134,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.execute(executor, arena, &instruction);
 
     let (cmp, _, _, _) =
-        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode == SLT, &b, &c);
+        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(opcode == SLT, &b, &c);
     let mut a = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
     a[0] = F::from_bool(cmp);
     assert_eq!(a, tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd));
@@ -242,7 +242,7 @@ fn run_negative_less_than_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut LessThanCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
+        let cols: &mut LessThanCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
         if let Some(b_msb) = prank_vals.b_msb {
@@ -493,7 +493,7 @@ fn rv64_lt_adapter_imm_sign_extension_negative_test() {
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut LessThanCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
+        let cols: &mut LessThanCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         // Prank c[4] = 1 (matches b[4], so no diff at limb 4)
         cols.c[4] = F::ONE;
@@ -527,7 +527,7 @@ fn run_sltu_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [145, 34, 25, 205, 91, 77, 88, 120];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [73, 35, 25, 205, 91, 77, 88, 120];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(false, &x, &y);
+        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(false, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(!x_sign); // unsigned
@@ -539,7 +539,7 @@ fn run_slt_same_sign_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [145, 34, 25, 205, 91, 77, 88, 205];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [73, 35, 25, 205, 91, 77, 88, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(true, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(x_sign); // negative
@@ -551,7 +551,7 @@ fn run_slt_diff_sign_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 35, 25, 55, 61, 90, 77, 74];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [173, 34, 25, 205, 61, 90, 77, 182];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(true, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, 7);
     assert!(!x_sign); // positive
@@ -562,7 +562,7 @@ fn run_slt_diff_sign_sanity_test() {
 fn run_less_than_equal_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 35, 25, 55, 61, 90, 77, 74];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &x);
+        run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(true, &x, &x);
     assert!(!cmp_result);
     assert_eq!(diff_idx, RV64_REGISTER_NUM_LIMBS);
     assert!(!x_sign); // positive
@@ -587,7 +587,7 @@ type GpuHarness = GpuTestChipHarness<
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -630,14 +630,14 @@ fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
 
     type Record<'a> = (
         &'a mut Rv64BaseAluAdapterRecord,
-        &'a mut LessThanCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
+        &'a mut LessThanCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
     );
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluAdapterExecutor<RV64_CELL_BITS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluAdapterExecutor<RV64_BYTE_BITS>>::new(),
         );
 
     tester

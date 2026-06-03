@@ -62,8 +62,8 @@ struct Rv64JalrCore {
         rc.add_count(to_pc_limbs[0], 15);
         rc.add_count(to_pc_limbs[1], PC_BITS - 16);
         bw.add_range(rd_bytes[0], rd_bytes[1]);
-        rc.add_count(rd_bytes[2], RV64_CELL_BITS);
-        rc.add_count(rd_bytes[3], PC_BITS - RV64_CELL_BITS * 3);
+        rc.add_count(rd_bytes[2], RV64_BYTE_BITS);
+        rc.add_count(rd_bytes[3], PC_BITS - RV64_BYTE_BITS * 3);
 
         // AIR range-checks these byte limbs; add matching lookup counts.
         uint8_t rs1_pair_bytes[RV64_WORD_NUM_LIMBS];

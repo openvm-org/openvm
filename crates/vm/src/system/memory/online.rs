@@ -209,9 +209,10 @@ impl<M: LinearMemory> AddressMap<M> {
         (addr_space, ptr): Address,
         len: usize,
     ) -> &[T] {
-        debug_assert_eq!(
+        assert_eq!(
             size_of::<T>(),
-            self.config[addr_space as usize].layout.size()
+            self.config[addr_space as usize].layout.size(),
+            "typed slice access must use the AS cell type; use get_u8_slice for raw bytes"
         );
         let start = (ptr as usize) * size_of::<T>();
         let mem = self.mem.get_unchecked(addr_space as usize);

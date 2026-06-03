@@ -22,7 +22,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, RV64_CELL_BITS,
+    Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, RV64_BYTE_BITS,
     RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS, RV_J_TYPE_IMM_BITS,
 };
 
@@ -88,14 +88,14 @@ where
         }
 
         // Pack two range checks into a single bitwise-bus send; both values are constrained to
-        // [0, 2^RV64_CELL_BITS) and the send is gated by `is_valid`.
+        // [0, 2^RV64_BYTE_BITS) and the send is gated by `is_valid`.
         //
         // 1. First value `rd[3] * (4 * is_jal + is_lui)`:
         //    - JAL: becomes `4 * rd[3]`, so the range check forces `rd[3] < 64`. Combined with the
         //      PC composition below, this bounds `from_pc + DEFAULT_PC_STEP < 2^30`.
         //    - LUI: becomes `rd[3]`, which is already a byte — no extra constraint.
         //
-        // 2. Second value `2 * rd[3] - 2^RV64_CELL_BITS * is_sign_extend`: Forces `is_sign_extend =
+        // 2. Second value `2 * rd[3] - 2^RV64_BYTE_BITS * is_sign_extend`: Forces `is_sign_extend =
         //    msb(rd[3])`:
         //      - is_sign_extend = 0 ⟹ rd[3] ∈ [0, 128)  (top bit 0)
         //      - is_sign_extend = 1 ⟹ rd[3] ∈ [128, 256) (top bit 1)
@@ -104,7 +104,7 @@ where
             .send_range(
                 rd[3] * (AB::Expr::from_u32(4) * is_jal + is_lui),
                 AB::Expr::from_u32(2) * rd[3]
-                    - is_sign_extend * AB::Expr::from_u32(1 << RV64_CELL_BITS),
+                    - is_sign_extend * AB::Expr::from_u32(1 << RV64_BYTE_BITS),
             )
             .eval(builder, is_valid.clone());
 
@@ -113,16 +113,16 @@ where
             .skip(1)
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_u32(1 << (i * RV64_CELL_BITS))
+                acc + val * AB::Expr::from_u32(1 << (i * RV64_BYTE_BITS))
             });
 
         // Constrain that imm * 2^4 is the correct composition of intermed_val in case of LUI
         builder.when(is_lui).assert_eq(
             intermed_val.clone(),
-            imm * AB::F::from_u32(1 << (12 - RV64_CELL_BITS)),
+            imm * AB::F::from_u32(1 << (12 - RV64_BYTE_BITS)),
         );
 
-        let intermed_val = rd[0] + intermed_val * AB::Expr::from_u32(1 << RV64_CELL_BITS);
+        let intermed_val = rd[0] + intermed_val * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
         // Constrain that from_pc + DEFAULT_PC_STEP is the correct composition of intermed_val in
         // case of JAL
         builder
@@ -179,7 +179,7 @@ pub struct Rv64JalLuiExecutor<A = Rv64CondRdWriteAdapterExecutor> {
 #[derive(Clone, derive_new::new)]
 pub struct Rv64JalLuiFiller<A = Rv64CondRdWriteAdapterFiller> {
     adapter: A,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
 }
 
 impl<F, A, RA> PreflightExecutor<F, RA> for Rv64JalLuiExecutor<A>
@@ -248,10 +248,10 @@ where
             self.bitwise_lookup_chip
                 .request_range(pair[0] as u32, pair[1] as u32);
         }
-        let is_sign_extend = record.rd_data[3] >> (RV64_CELL_BITS - 1) == 1;
+        let is_sign_extend = record.rd_data[3] >> (RV64_BYTE_BITS - 1) == 1;
         let second_range_limb =
-            (record.rd_data[3] as i32) * 2 - ((is_sign_extend as i32) << RV64_CELL_BITS);
-        debug_assert!((0..(1 << RV64_CELL_BITS)).contains(&second_range_limb));
+            (record.rd_data[3] as i32) * 2 - ((is_sign_extend as i32) << RV64_BYTE_BITS);
+        debug_assert!((0..(1 << RV64_BYTE_BITS)).contains(&second_range_limb));
         self.bitwise_lookup_chip.request_range(
             record.rd_data[3] as u32 * (4 * record.is_jal as u32 + (!record.is_jal) as u32),
             second_range_limb as u32,
@@ -296,7 +296,7 @@ pub(super) fn run_jal_lui(is_jal: bool, pc: u32, imm: i32) -> (u32, [u8; RV64_RE
         let imm = imm as u32;
         let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
         rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&(imm << 12).to_le_bytes());
-        let sign_extend_limb = (rd_data[3] >> (RV64_CELL_BITS - 1)) * u8::MAX;
+        let sign_extend_limb = (rd_data[3] >> (RV64_BYTE_BITS - 1)) * u8::MAX;
         rd_data[RV64_WORD_NUM_LIMBS..].fill(sign_extend_limb);
         (pc + DEFAULT_PC_STEP, rd_data)
     }

@@ -42,7 +42,8 @@ template <typename V, typename T> struct Sha2DigestCols {
     Sha2FlagsCols<V, T> flags;
     Sha2WorkVarsCols<V, T> hash;
     Sha2MessageHelperCols<V, T> schedule_helper;
-    T final_hash[V::HASH_WORDS][V::WORD_U8S];
+    // Final hash as little-endian u16 limbs.
+    T final_hash[V::HASH_WORDS][V::WORD_U16S];
     T prev_hash[V::HASH_WORDS][V::WORD_U16S];
 };
 

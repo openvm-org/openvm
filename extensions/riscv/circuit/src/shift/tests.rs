@@ -44,7 +44,7 @@ use super::{core::run_shift, Rv64ShiftChip, ShiftCoreAir, ShiftCoreCols};
 use crate::{
     adapters::{
         Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
-        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+        RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
     Rv64ShiftAir, Rv64ShiftExecutor, ShiftFiller,
@@ -57,7 +57,7 @@ type Harness = TestChipHarness<F, Rv64ShiftExecutor, Rv64ShiftAir, Rv64ShiftChip
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     range_checker: Arc<VariableRangeCheckerChip>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64ShiftAir, Rv64ShiftExecutor, Rv64ShiftChip<F>) {
@@ -87,13 +87,13 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
 ) {
     let range_checker = tester.range_checker().clone();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -144,7 +144,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(executor, arena, &instruction);
 
-    let (a, _, _) = run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode, &b, &c);
+    let (a, _, _) = run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(opcode, &b, &c);
     assert_eq!(
         a.map(F::from_u8),
         tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd)
@@ -210,7 +210,7 @@ fn run_negative_shift_test(
     prank_a: [u32; RV64_REGISTER_NUM_LIMBS],
     b: [u8; RV64_REGISTER_NUM_LIMBS],
     c: [u8; RV64_REGISTER_NUM_LIMBS],
-    prank_vals: ShiftPrankValues<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
+    prank_vals: ShiftPrankValues<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
     _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
@@ -231,7 +231,7 @@ fn run_negative_shift_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut ShiftCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
+        let cols: &mut ShiftCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
         cols.a = prank_a.map(F::from_u32);
@@ -446,7 +446,7 @@ fn rv64_shift_adapter_imm_sign_extension_negative_test() {
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut ShiftCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
+        let cols: &mut ShiftCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         cols.c[4] = F::ONE;
         *trace = RowMajorMatrix::new(values, trace.width());
@@ -475,13 +475,13 @@ fn run_sll_sanity_test() {
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [91, 0, 100, 0, 49, 190, 190, 113];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 104, 57, 232, 209, 253];
     let (result, limb_shift, bit_shift) =
-        run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SLL, &x, &y);
+        run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(SLL, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
-    let shift = (y[0] as usize) % (RV64_REGISTER_NUM_LIMBS * RV64_CELL_BITS);
-    assert_eq!(shift / RV64_CELL_BITS, limb_shift);
-    assert_eq!(shift % RV64_CELL_BITS, bit_shift);
+    let shift = (y[0] as usize) % (RV64_REGISTER_NUM_LIMBS * RV64_BYTE_BITS);
+    assert_eq!(shift / RV64_BYTE_BITS, limb_shift);
+    assert_eq!(shift % RV64_BYTE_BITS, bit_shift);
 }
 
 #[test]
@@ -490,13 +490,13 @@ fn run_srl_sanity_test() {
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [81, 190, 190, 190, 113, 20, 50, 80];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [110, 228, 150, 131, 30, 93, 0, 0];
     let (result, limb_shift, bit_shift) =
-        run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SRL, &x, &y);
+        run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(SRL, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
-    let shift = (y[0] as usize) % (RV64_REGISTER_NUM_LIMBS * RV64_CELL_BITS);
-    assert_eq!(shift / RV64_CELL_BITS, limb_shift);
-    assert_eq!(shift % RV64_CELL_BITS, bit_shift);
+    let shift = (y[0] as usize) % (RV64_REGISTER_NUM_LIMBS * RV64_BYTE_BITS);
+    assert_eq!(shift / RV64_BYTE_BITS, limb_shift);
+    assert_eq!(shift % RV64_BYTE_BITS, bit_shift);
 }
 
 #[test]
@@ -505,13 +505,13 @@ fn run_sra_sanity_test() {
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [81, 20, 50, 80, 49, 190, 190, 113];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [110, 228, 150, 131, 30, 221, 255, 255];
     let (result, limb_shift, bit_shift) =
-        run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SRA, &x, &y);
+        run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(SRA, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
-    let shift = (y[0] as usize) % (RV64_REGISTER_NUM_LIMBS * RV64_CELL_BITS);
-    assert_eq!(shift / RV64_CELL_BITS, limb_shift);
-    assert_eq!(shift % RV64_CELL_BITS, bit_shift);
+    let shift = (y[0] as usize) % (RV64_REGISTER_NUM_LIMBS * RV64_BYTE_BITS);
+    assert_eq!(shift / RV64_BYTE_BITS, limb_shift);
+    assert_eq!(shift % RV64_BYTE_BITS, bit_shift);
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////
@@ -529,7 +529,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_bus = default_var_range_checker_bus();
 
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
     let dummy_range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
@@ -576,14 +576,14 @@ fn test_cuda_rand_shift_tracegen(opcode: ShiftOpcode, num_ops: usize) {
 
     type Record<'a> = (
         &'a mut Rv64BaseAluAdapterRecord,
-        &'a mut ShiftCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
+        &'a mut ShiftCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
     );
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluAdapterExecutor<RV64_CELL_BITS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluAdapterExecutor<RV64_BYTE_BITS>>::new(),
         );
 
     tester

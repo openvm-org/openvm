@@ -5,10 +5,7 @@ use std::{
 
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::GuestMemory, POINTER_MAX_BITS},
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -387,7 +384,7 @@ unsafe fn execute_e12_impl<
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
 
     let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] = rs_vals.map(|address| {
-        debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+        debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < RV64_MEMORY_BYTES);
         from_fn(|i| {
             exec_state.vm_read_bytes(RV64_MEMORY_AS, address + (i * MEMORY_BLOCK_BYTES) as u32)
         })
@@ -401,7 +398,7 @@ unsafe fn execute_e12_impl<
 
     let rd_val =
         rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32));
-    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < RV64_MEMORY_BYTES);
 
     for (i, block) in output_data.into_iter().enumerate() {
         exec_state.vm_write_bytes(
@@ -425,7 +422,7 @@ unsafe fn execute_e12_generic_impl<F: PrimeField32, CTX: ExecutionCtxTrait, cons
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
 
     let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] = rs_vals.map(|address| {
-        debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+        debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < RV64_MEMORY_BYTES);
         from_fn(|i| {
             exec_state.vm_read_bytes(RV64_MEMORY_AS, address + (i * MEMORY_BLOCK_BYTES) as u32)
         })
@@ -440,7 +437,7 @@ unsafe fn execute_e12_generic_impl<F: PrimeField32, CTX: ExecutionCtxTrait, cons
 
     let rd_val =
         rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32));
-    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < RV64_MEMORY_BYTES);
 
     let data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = writes.into();
     for (i, block) in data.into_iter().enumerate() {
@@ -471,7 +468,7 @@ unsafe fn execute_e12_setup_impl<
         .rs_addrs
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
     let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] = rs_vals.map(|address| {
-        debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+        debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < RV64_MEMORY_BYTES);
         from_fn(|i| {
             exec_state.vm_read_bytes(RV64_MEMORY_AS, address + (i * MEMORY_BLOCK_BYTES) as u32)
         })
@@ -502,7 +499,7 @@ unsafe fn execute_e12_setup_impl<
 
     let rd_val =
         rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32));
-    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+    debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < RV64_MEMORY_BYTES);
 
     let data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = writes.into();
     for (i, block) in data.into_iter().enumerate() {

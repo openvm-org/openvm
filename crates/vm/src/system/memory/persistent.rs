@@ -206,34 +206,31 @@ impl<const DIGEST_WIDTH: usize, F: PrimeField32> PersistentBoundaryChip<F, DIGES
         self.overridden_height = Some(overridden_height);
     }
 
-    /// Finalize the boundary chip with per-block timestamped memory.
+    /// Finalize the boundary chip with touched memory grouped by Merkle leaf.
     ///
-    /// `final_memory` is at BLOCK_FE_WIDTH granularity, with a single timestamp per entry.
-    /// This function regroups into DIGEST_WIDTH-sized leaves with per-block timestamps. Untouched
-    /// blocks within a touched leaf get values from initial_memory and timestamp 0.
+    /// Untouched blocks within a touched leaf get values from initial_memory and timestamp 0.
     #[instrument(name = "boundary_finalize", level = "debug", skip_all)]
     pub(crate) fn finalize<H>(
         &mut self,
         initial_memory: &MemoryImage,
-        // Touched stuff at BLOCK_FE_WIDTH granularity
-        final_memory: &TimestampedEquipartition<F, BLOCK_FE_WIDTH>,
+        final_memory_by_leaf: &LeafGroupedTouchedMemory<F>,
         hasher: &H,
     ) where
         H: Hasher<DIGEST_WIDTH, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
-        let final_touched_labels: Vec<_> = group_touched_memory_by_leaf(final_memory)
-            .into_par_iter()
+        let final_touched_labels: Vec<_> = final_memory_by_leaf
+            .par_iter()
             .map(|((addr_space, leaf_label), blocks)| {
                 let ptr = leaf_label * DIGEST_WIDTH as u32;
-                // SAFETY: addr_space from `final_memory` are all in bounds
+                // SAFETY: addr_space from `final_memory_by_leaf` are all in bounds
                 let init_values: [F; DIGEST_WIDTH] = array::from_fn(|i| unsafe {
-                    initial_memory.get_f::<F>(addr_space, ptr + i as u32)
+                    initial_memory.get_f::<F>(*addr_space, ptr + i as u32)
                 });
 
                 let mut final_values = init_values;
                 let mut timestamps = [0u32; BLOCKS_PER_LEAF];
 
-                for (block_idx, ts, values) in blocks {
+                for &(block_idx, ts, values) in blocks {
                     timestamps[block_idx] = ts;
                     for (i, &val) in values.iter().enumerate() {
                         final_values[block_idx * BLOCK_FE_WIDTH + i] = val;
@@ -243,8 +240,8 @@ impl<const DIGEST_WIDTH: usize, F: PrimeField32> PersistentBoundaryChip<F, DIGES
                 let initial_hash = hasher.hash(&init_values);
                 let final_hash = hasher.hash(&final_values);
                 FinalTouchedLabel {
-                    address_space: addr_space,
-                    label: leaf_label,
+                    address_space: *addr_space,
+                    label: *leaf_label,
                     init_values,
                     final_values,
                     init_hash: initial_hash,

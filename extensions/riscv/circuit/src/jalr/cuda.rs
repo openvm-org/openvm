@@ -10,14 +10,14 @@ use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv64JalrAdapterCols, Rv64JalrAdapterRecord, RV64_CELL_BITS},
+    adapters::{Rv64JalrAdapterCols, Rv64JalrAdapterRecord, RV64_BYTE_BITS},
     cuda_abi::jalr_cuda::tracegen,
     Rv64JalrCoreCols, Rv64JalrCoreRecord,
 };
 #[derive(new)]
 pub struct Rv64JalrChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
