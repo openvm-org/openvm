@@ -56,7 +56,10 @@ mod tests;
 // `rem_words` is bounded by `2^MAX_HINT_BUFFER_DWORDS_BITS` (= 2^10), so one u16
 // column carries all information. The upper register cells are hardcoded to zero
 // in the memory bus interaction.
-const _: () = assert!(MAX_HINT_BUFFER_DWORDS_BITS <= U16_BITS);
+const _: () = assert!(
+    MAX_HINT_BUFFER_DWORDS_BITS <= U16_BITS,
+    "MAX_HINT_BUFFER_DWORDS_BITS must fit in one u16 cell"
+);
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
