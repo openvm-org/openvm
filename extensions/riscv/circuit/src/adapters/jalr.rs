@@ -7,11 +7,12 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, SignedImmInstruction, VmAdapterAir,
+        BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
+            pack_u8_block, pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols,
+            MemoryReadAuxRecord, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -31,7 +32,7 @@ use openvm_stark_backend::{
 };
 
 use super::RV64_REGISTER_NUM_LIMBS;
-use crate::adapters::{tracing_read, tracing_write};
+use crate::adapters::{byte_ptr_to_u16_ptr, tracing_read, tracing_write};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -40,7 +41,7 @@ pub struct Rv64JalrAdapterCols<T> {
     pub rs1_ptr: T,
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
     pub rd_ptr: T,
-    pub rd_aux_cols: MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS>,
+    pub rd_aux_cols: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
     /// Only writes if `needs_write`.
     /// Sets `needs_write` to 0 iff `rd == x0`
     pub needs_write: T,
@@ -93,8 +94,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rs1_ptr),
-                ctx.reads[0].clone(),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
+                ),
+                pack_u8_block::<AB>(&ctx.reads[0].clone()),
                 timestamp_pp(),
                 &local_cols.rs1_aux_cols,
             )
@@ -102,8 +106,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
 
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local_cols.rd_ptr),
-                ctx.writes[0].clone(),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local_cols.rd_ptr),
+                ),
+                pack_u8_block::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),
                 &local_cols.rd_aux_cols,
             )
@@ -247,7 +254,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64JalrAdapterFiller {
         if record.rd_ptr != u32::MAX {
             adapter_row
                 .rd_aux_cols
-                .set_prev_data(record.writes_aux.prev_data.map(F::from_u8));
+                .set_prev_data(pack_u8_block_bytes(&record.writes_aux.prev_data));
             mem_helper.fill(
                 record.writes_aux.prev_timestamp,
                 record.from_timestamp + 1,

@@ -50,7 +50,7 @@ pub fn write_slice_to_memory<F: PrimeField32>(
     data.chunks_exact(SHA2_WRITE_SIZE)
         .enumerate()
         .for_each(|(i, chunk)| {
-            tester.write::<SHA2_WRITE_SIZE>(
+            tester.write_bytes::<SHA2_WRITE_SIZE>(
                 RV64_MEMORY_AS as usize,
                 ptr + i * SHA2_WRITE_SIZE,
                 chunk
@@ -72,7 +72,7 @@ pub fn read_slice_from_memory<F: PrimeField32>(
     let mut data = Vec::new();
     for i in 0..(len / SHA2_READ_SIZE) {
         data.extend_from_slice(
-            &tester.read::<SHA2_READ_SIZE>(RV64_MEMORY_AS as usize, ptr + i * SHA2_READ_SIZE),
+            &tester.read_bytes::<SHA2_READ_SIZE>(RV64_MEMORY_AS as usize, ptr + i * SHA2_READ_SIZE),
         );
     }
     data

@@ -558,10 +558,18 @@ mod conversions {
                 >,
             >,
         ) -> Self {
-            assert_eq!(BASIC_NUM_READS, NUM_READS * BLOCKS_PER_READ);
+            const {
+                assert!(
+                    BASIC_NUM_READS == NUM_READS * BLOCKS_PER_READ,
+                    "BASIC_NUM_READS must equal NUM_READS * BLOCKS_PER_READ"
+                );
+                assert!(
+                    BASIC_NUM_WRITES == BLOCKS_PER_WRITE,
+                    "BASIC_NUM_WRITES must equal BLOCKS_PER_WRITE"
+                );
+            }
             let mut reads_it = ctx.reads.into_iter();
             let reads = from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
-            assert_eq!(BASIC_NUM_WRITES, BLOCKS_PER_WRITE);
             let mut writes_it = ctx.writes.into_iter();
             let writes = from_fn(|_| writes_it.next().unwrap());
             AdapterAirContext {
@@ -593,15 +601,22 @@ mod conversions {
     {
         /// ## Panics
         /// If `READ_CELLS != NUM_READS * READ_SIZE` or `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
-        /// This is a runtime assertion until Rust const generics expressions are stabilized.
         fn from(
             ctx: AdapterAirContext<
                 T,
                 BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
             >,
         ) -> AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>> {
-            assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
-            assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
+            const {
+                assert!(
+                    READ_CELLS == NUM_READS * READ_SIZE,
+                    "READ_CELLS must equal NUM_READS * READ_SIZE"
+                );
+                assert!(
+                    WRITE_CELLS == NUM_WRITES * WRITE_SIZE,
+                    "WRITE_CELLS must equal NUM_WRITES * WRITE_SIZE"
+                );
+            }
             let mut reads_it = ctx.reads.into_iter().flatten();
             let reads = from_fn(|_| reads_it.next().unwrap());
             let mut writes_it = ctx.writes.into_iter().flatten();
@@ -633,7 +648,6 @@ mod conversions {
     {
         /// ## Panics
         /// If `READ_CELLS != NUM_READS * READ_SIZE` or `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
-        /// This is a runtime assertion until Rust const generics expressions are stabilized.
         fn from(
             AdapterAirContext {
                 to_pc,
@@ -645,8 +659,16 @@ mod conversions {
             T,
             BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
         > {
-            assert_eq!(READ_CELLS, NUM_READS * READ_SIZE);
-            assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
+            const {
+                assert!(
+                    READ_CELLS == NUM_READS * READ_SIZE,
+                    "READ_CELLS must equal NUM_READS * READ_SIZE"
+                );
+                assert!(
+                    WRITE_CELLS == NUM_WRITES * WRITE_SIZE,
+                    "WRITE_CELLS must equal NUM_WRITES * WRITE_SIZE"
+                );
+            }
             let mut reads_it = reads.into_iter();
             let reads: [[T; READ_SIZE]; NUM_READS] =
                 from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
@@ -876,7 +898,12 @@ mod conversions {
                 BasicAdapterInterface<T, ImmInstruction<T>, BASIC_NUM_READS, 0, READ_SIZE, 0>,
             >,
         ) -> Self {
-            assert_eq!(BASIC_NUM_READS, NUM_READS * BLOCKS_PER_READ);
+            const {
+                assert!(
+                    BASIC_NUM_READS == NUM_READS * BLOCKS_PER_READ,
+                    "BASIC_NUM_READS must equal NUM_READS * BLOCKS_PER_READ"
+                );
+            }
             let mut reads_it = ctx.reads.into_iter();
             let reads = from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
             AdapterAirContext {

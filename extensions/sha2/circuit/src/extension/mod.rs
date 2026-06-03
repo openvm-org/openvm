@@ -21,7 +21,8 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_circuit::{
-    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
+    adapters::rv64_byte_ptr_bits_from_openvm_ptr_bits, Rv64I, Rv64IExecutor, Rv64ImCpuProverExt,
+    Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_sha2_air::{Sha256Config, Sha512Config};
 use openvm_sha2_transpiler::Rv64Sha2Opcode;
@@ -150,7 +151,8 @@ impl<F> VmExecutionExtension<F> for Sha2 {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Sha2Executor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits());
 
         let sha256_executor =
             Sha2VmExecutor::<Sha256Config>::new(Rv64Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
@@ -191,7 +193,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
         let sha256_main_air = Sha2MainAir::<Sha256Config>::new(
             inventory.system().port(),
             bitwise_lu,
-            inventory.pointer_max_bits(),
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits()),
             sha2_bus_index,
             Rv64Sha2Opcode::CLASS_OFFSET,
         );
@@ -205,7 +207,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha2 {
         let sha512_main_air = Sha2MainAir::<Sha512Config>::new(
             inventory.system().port(),
             bitwise_lu,
-            inventory.pointer_max_bits(),
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.pointer_max_bits()),
             sha2_bus_index,
             Rv64Sha2Opcode::CLASS_OFFSET,
         );
@@ -234,7 +236,8 @@ where
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.airs().pointer_max_bits());
 
         let bitwise_lu = {
             let existing_chip = inventory

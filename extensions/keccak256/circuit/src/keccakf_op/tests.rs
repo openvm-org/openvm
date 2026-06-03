@@ -11,7 +11,7 @@ use openvm_circuit::{
             memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, ExecutionBridge, PreflightExecutor, DEFAULT_BLOCK_SIZE,
+        Arena, ExecutionBridge, PreflightExecutor, MEMORY_BLOCK_BYTES,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
@@ -120,21 +120,21 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, MAX_LEN);
-    tester.write(
+    tester.write_bytes(
         RV64_REGISTER_AS as usize,
         rd,
         (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
     let rand_buffer_arr_f = rand_buffer_arr.map(F::from_u8);
 
-    for i in 0..(MAX_LEN / DEFAULT_BLOCK_SIZE) {
-        let buffer_chunk: [F; DEFAULT_BLOCK_SIZE] = rand_buffer_arr_f
-            [DEFAULT_BLOCK_SIZE * i..DEFAULT_BLOCK_SIZE * (i + 1)]
+    for i in 0..(MAX_LEN / MEMORY_BLOCK_BYTES) {
+        let buffer_chunk: [F; MEMORY_BLOCK_BYTES] = rand_buffer_arr_f
+            [MEMORY_BLOCK_BYTES * i..MEMORY_BLOCK_BYTES * (i + 1)]
             .try_into()
             .expect("slice has correct length");
-        tester.write(
+        tester.write_bytes(
             RV64_MEMORY_AS as usize,
-            buffer_ptr + DEFAULT_BLOCK_SIZE * i,
+            buffer_ptr + MEMORY_BLOCK_BYTES * i,
             buffer_chunk,
         );
     }
@@ -150,11 +150,11 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let mut output_buffer = [0u8; MAX_LEN];
 
-    for i in 0..(MAX_LEN / DEFAULT_BLOCK_SIZE) {
-        let output_chunk: [F; DEFAULT_BLOCK_SIZE] =
-            tester.read(RV64_MEMORY_AS as usize, buffer_ptr + DEFAULT_BLOCK_SIZE * i);
+    for i in 0..(MAX_LEN / MEMORY_BLOCK_BYTES) {
+        let output_chunk: [F; MEMORY_BLOCK_BYTES] =
+            tester.read_bytes(RV64_MEMORY_AS as usize, buffer_ptr + MEMORY_BLOCK_BYTES * i);
         let output_chunk = output_chunk.map(|x| x.as_canonical_u32() as u8);
-        output_buffer[DEFAULT_BLOCK_SIZE * i..DEFAULT_BLOCK_SIZE * (i + 1)]
+        output_buffer[MEMORY_BLOCK_BYTES * i..MEMORY_BLOCK_BYTES * (i + 1)]
             .copy_from_slice(&output_chunk);
     }
     let mut state: [u64; KECCAK_WIDTH_U64S] = from_fn(|i| {
@@ -295,19 +295,19 @@ fn cuda_set_and_execute(
     let buffer_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, KECCAK_STATE_BYTES);
 
-    tester.write(
+    tester.write_bytes(
         1,
         buffer_reg,
         (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
 
     let state_data: Vec<u8> = (0..KECCAK_STATE_BYTES).map(|_| rng.random()).collect();
-    for (i, chunk) in state_data.chunks(DEFAULT_BLOCK_SIZE).enumerate() {
-        let mut word = [F::ZERO; DEFAULT_BLOCK_SIZE];
+    for (i, chunk) in state_data.chunks(MEMORY_BLOCK_BYTES).enumerate() {
+        let mut word = [F::ZERO; MEMORY_BLOCK_BYTES];
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_u8(byte);
         }
-        tester.write(2, buffer_ptr + i * DEFAULT_BLOCK_SIZE, word);
+        tester.write_bytes(2, buffer_ptr + i * MEMORY_BLOCK_BYTES, word);
     }
 
     let instruction = Instruction::from_usize(
@@ -405,17 +405,17 @@ fn test_keccakf_cuda_tracegen_zero_state() {
     let buffer_reg = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(&mut rng, KECCAK_STATE_BYTES);
 
-    tester.write(
+    tester.write_bytes(
         1,
         buffer_reg,
         (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
 
-    for i in 0..(KECCAK_STATE_BYTES / DEFAULT_BLOCK_SIZE) {
-        tester.write(
+    for i in 0..(KECCAK_STATE_BYTES / MEMORY_BLOCK_BYTES) {
+        tester.write_bytes(
             2,
-            buffer_ptr + i * DEFAULT_BLOCK_SIZE,
-            [F::ZERO; DEFAULT_BLOCK_SIZE],
+            buffer_ptr + i * MEMORY_BLOCK_BYTES,
+            [F::ZERO; MEMORY_BLOCK_BYTES],
         );
     }
 

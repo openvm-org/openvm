@@ -1,7 +1,7 @@
 use std::{ffi::c_void, sync::Arc};
 
 use openvm_circuit::{
-    arch::{MemoryConfig, ADDR_SPACE_OFFSET, DEFAULT_BLOCK_SIZE},
+    arch::{MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     system::memory::{merkle::MemoryMerkleCols, TimestampedEquipartition},
     utils::next_power_of_two_or_zero,
 };
@@ -24,9 +24,9 @@ pub mod cuda;
 use cuda::merkle_tree::*;
 
 type H = [F; DIGEST_WIDTH];
-/// Width of `((u32, u32), TimestampedValues<F, DEFAULT_BLOCK_SIZE>)` in u32 units.
-/// = 2 (key) + 1 (timestamp) + DEFAULT_BLOCK_SIZE (values)
-pub const TIMESTAMPED_BLOCK_WIDTH: usize = 3 + DEFAULT_BLOCK_SIZE;
+/// Width of `((u32, u32), TimestampedValues<F, BLOCK_FE_WIDTH>)` in u32 units.
+/// = 2 (key) + 1 (timestamp) + BLOCK_FE_WIDTH (values)
+pub const TIMESTAMPED_BLOCK_WIDTH: usize = 3 + BLOCK_FE_WIDTH;
 /// Width of `((u32, u32), TimestampedValues<F, DIGEST_WIDTH>)` in u32 units.
 /// = 2 (key) + 1 (timestamp) + DIGEST_WIDTH (values)
 pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + DIGEST_WIDTH;
@@ -232,7 +232,7 @@ impl MemoryMerkleTree {
             );
         }
 
-        let label_max_bits = mem_config.pointer_max_bits - log2_ceil_usize(DIGEST_WIDTH);
+        let label_max_bits = mem_config.memory_dimensions().address_height;
 
         let zero_hash = DeviceBuffer::<H>::with_capacity_on(label_max_bits + 1, &device_ctx);
         let top_roots = DeviceBuffer::<H>::with_capacity_on(2 * num_addr_spaces - 1, &device_ctx);
@@ -278,7 +278,7 @@ impl MemoryMerkleTree {
             subtree.build_async(d_data, addr_space_idx, &self.zero_hash, &self.device_ctx);
             self.subtrees.push(subtree);
         } else {
-            panic!("Invalid address space index");
+            panic!("Invalid address space ID");
         }
     }
 
@@ -314,10 +314,12 @@ impl MemoryMerkleTree {
     }
 
     /// Updates the tree and returns the merkle trace.
+    ///
+    /// `d_touched_blocks` consists of `(as, ptr, ts, [F; DIGEST_WIDTH])`.
     pub fn update_with_touched_blocks(
         &mut self,
         unpadded_height: usize,
-        d_touched_blocks: &DeviceBuffer<u32>, // consists of (as, ptr, ts, [F; DIGEST_WIDTH])
+        d_touched_blocks: &DeviceBuffer<u32>,
         empty_touched_blocks: bool,
     ) -> AirProvingContext<GpuBackend> {
         let mut public_values = self.top_roots.to_host_on(&self.device_ctx).unwrap()[0].to_vec();
@@ -418,7 +420,7 @@ mod tests {
     use std::sync::Arc;
 
     use openvm_circuit::{
-        arch::{vm_poseidon2_config, AddressSpaceHostLayout, MemoryCellType, MemoryConfig},
+        arch::{vm_poseidon2_config, MemoryCellType, MemoryConfig, U16_CELL_SIZE},
         system::{
             cuda::merkle_tree::MERKLE_TOUCHED_BLOCK_WIDTH,
             memory::{
@@ -452,11 +454,14 @@ mod tests {
         let mut rng = create_seeded_rng();
         let mem_config = {
             let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
-            let max_cells = 1 << 16;
-            addr_spaces[RV64_REGISTER_AS as usize].num_cells = 32 * size_of::<u64>();
+            let max_ptr_bits = 16;
+            let max_cells = 1 << max_ptr_bits;
+            // RV64_REGISTER_AS uses u16 storage cells.
+            addr_spaces[RV64_REGISTER_AS as usize].num_cells =
+                32 * size_of::<u64>() / U16_CELL_SIZE;
             addr_spaces[RV64_MEMORY_AS as usize].num_cells = max_cells;
             addr_spaces[DEFERRAL_AS as usize].num_cells = max_cells;
-            MemoryConfig::new(2, addr_spaces, max_cells.ilog2() as usize, 29, 17)
+            MemoryConfig::new(2, addr_spaces, max_ptr_bits, 29, 17)
         };
 
         let mut initial_memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
@@ -466,29 +471,17 @@ mod tests {
                     MemoryCellType::Null => {}
                     MemoryCellType::U8 => {
                         for i in 0..space.num_cells {
-                            initial_memory.write::<u8, 1>(
-                                idx as u32,
-                                i as u32,
-                                [rng.random_range(0..space.layout.size()) as u8],
-                            );
+                            initial_memory.write::<u8, 1>(idx as u32, i as u32, [rng.random()]);
                         }
                     }
                     MemoryCellType::U16 => {
                         for i in 0..space.num_cells {
-                            initial_memory.write::<u16, 1>(
-                                idx as u32,
-                                i as u32,
-                                [rng.random_range(0..space.layout.size()) as u16],
-                            );
+                            initial_memory.write::<u16, 1>(idx as u32, i as u32, [rng.random()]);
                         }
                     }
                     MemoryCellType::U32 => {
                         for i in 0..space.num_cells {
-                            initial_memory.write::<u32, 1>(
-                                idx as u32,
-                                i as u32,
-                                [rng.random_range(0..space.layout.size()) as u32],
-                            );
+                            initial_memory.write::<u32, 1>(idx as u32, i as u32, [rng.random()]);
                         }
                     }
                     MemoryCellType::F { .. } => {

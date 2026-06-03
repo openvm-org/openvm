@@ -12,23 +12,41 @@ use crate::{
     },
 };
 
+fn parent_label_parts(
+    md: &MemoryDimensions,
+    tree_height: usize,
+    parent_index: u64,
+    parent_height: usize,
+) -> (u32, u32) {
+    let parent_depth = tree_height - parent_height;
+    let heap_root_bit = 1u64 << parent_depth;
+    debug_assert_ne!(parent_index & heap_root_bit, 0);
+    let path = parent_index & !heap_root_bit;
+    let address_bits_below = md.address_height.saturating_sub(parent_height);
+    let address_mask = (1u64 << address_bits_below) - 1;
+    let parent_address_label = (path & address_mask) as u32;
+    let parent_as_label = (path >> address_bits_below) as u32;
+
+    (parent_as_label, parent_address_label)
+}
+
 #[derive(Debug)]
-pub struct MerkleTree<F, const CHUNK: usize> {
+pub struct MerkleTree<F, const DIGEST_WIDTH: usize> {
     /// Height of the tree -- the root is the only node at height `height`,
     /// and the leaves are at height `0`.
     height: usize,
     /// Nodes corresponding to all zeroes.
-    zero_nodes: Vec<[F; CHUNK]>,
+    zero_nodes: Vec<[F; DIGEST_WIDTH]>,
     /// Nodes in the tree that have ever been touched.
-    nodes: FxHashMap<u64, [F; CHUNK]>,
+    nodes: FxHashMap<u64, [F; DIGEST_WIDTH]>,
 }
 
-impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
-    pub fn new(height: usize, hasher: &impl Hasher<CHUNK, F>) -> Self {
+impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
+    pub fn new(height: usize, hasher: &impl Hasher<DIGEST_WIDTH, F>) -> Self {
         Self {
             height,
             zero_nodes: (0..height + 1)
-                .scan(hasher.hash(&[F::ZERO; CHUNK]), |acc, _| {
+                .scan(hasher.hash(&[F::ZERO; DIGEST_WIDTH]), |acc, _| {
                     let result = Some(*acc);
                     *acc = hasher.compress(acc, acc);
                     result
@@ -38,29 +56,40 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         }
     }
 
-    pub fn root(&self) -> [F; CHUNK] {
+    pub fn root(&self) -> [F; DIGEST_WIDTH] {
         self.get_node(1)
     }
 
-    pub fn get_node(&self, index: u64) -> [F; CHUNK] {
+    pub fn get_node(&self, index: u64) -> [F; DIGEST_WIDTH] {
         self.nodes
             .get(&index)
-            .cloned()
+            .copied()
             .unwrap_or(self.zero_nodes[self.height - index.ilog2() as usize])
     }
 
+    fn get_node_at_height(&self, index: u64, node_height: usize) -> [F; DIGEST_WIDTH] {
+        self.nodes
+            .get(&index)
+            .copied()
+            .unwrap_or(self.zero_nodes[node_height])
+    }
+
     #[allow(clippy::type_complexity)]
-    /// Shared logic for both from_memory and finalize.
+    /// Applies leaf updates upward to the root.
     fn process_layers<CompressFn>(
         &mut self,
-        layer: Vec<(u64, [F; CHUNK])>,
+        layer: Vec<(u64, [F; DIGEST_WIDTH])>,
         md: &MemoryDimensions,
-        mut rows: Option<&mut Vec<MemoryMerkleCols<F, CHUNK>>>,
+        mut rows: Option<&mut Vec<MemoryMerkleCols<F, DIGEST_WIDTH>>>,
         compress: CompressFn,
     ) where
-        CompressFn: Fn(&[F; CHUNK], &[F; CHUNK]) -> [F; CHUNK] + Send + Sync,
+        CompressFn: Fn(&[F; DIGEST_WIDTH], &[F; DIGEST_WIDTH]) -> [F; DIGEST_WIDTH] + Send + Sync,
     {
+        debug_assert_eq!(self.height, md.overall_height());
+
+        let initial_len = layer.len();
         let mut new_entries = layer;
+        new_entries.reserve(initial_len.max(self.height));
         let mut layer = new_entries
             .par_iter()
             .map(|(index, values)| {
@@ -99,93 +128,94 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                     layer = new_layer
                         .into_par_iter()
                         .map(|(par_index, left, right)| {
+                            let left_node;
                             let left = if let Some(left) = left {
                                 left.0
                             } else {
-                                &self.get_node(2 * par_index)
+                                left_node = self.get_node_at_height(2 * par_index, height - 1);
+                                &left_node
                             };
+                            let right_node;
                             let right = if let Some(right) = right {
                                 right.0
                             } else {
-                                &self.get_node(2 * par_index + 1)
+                                right_node = self.get_node_at_height(2 * par_index + 1, height - 1);
+                                &right_node
                             };
                             let combined = compress(left, right);
-                            let par_old_values = self.get_node(par_index);
+                            let par_old_values = self.get_node_at_height(par_index, height);
                             (par_index, combined, par_old_values)
                         })
                         .collect();
                 }
                 Some(ref mut rows) => {
-                    let label_section_height = md.address_height.saturating_sub(height);
-                    let (tmp, new_rows): (Vec<(u64, [F; CHUNK], [F; CHUNK])>, Vec<[_; 2]>) =
-                        new_layer
-                            .into_par_iter()
-                            .map(|(par_index, left, right)| {
-                                let parent_address_label =
-                                    (par_index & ((1 << label_section_height) - 1)) as u32;
-                                let parent_as_label = ((par_index & !(1 << (self.height - height)))
-                                    >> label_section_height)
-                                    as u32;
-                                let left_node;
-                                let (left, old_left, changed_left) = match left {
-                                    Some((left, old_left)) => (left, old_left, true),
-                                    None => {
-                                        left_node = self.get_node(2 * par_index);
-                                        (&left_node, &left_node, false)
-                                    }
-                                };
-                                let right_node;
-                                let (right, old_right, changed_right) = match right {
-                                    Some((right, old_right)) => (right, old_right, true),
-                                    None => {
-                                        right_node = self.get_node(2 * par_index + 1);
-                                        (&right_node, &right_node, false)
-                                    }
-                                };
-                                let combined = compress(left, right);
-                                // This is a hacky way to say:
-                                // "and we also want to record the old values"
-                                compress(old_left, old_right);
-                                let par_old_values = self.get_node(par_index);
-                                (
-                                    (par_index, combined, par_old_values),
-                                    [
-                                        MemoryMerkleCols {
-                                            expand_direction: F::ONE,
-                                            height_section: F::from_bool(
-                                                height > md.address_height,
-                                            ),
-                                            parent_height: F::from_usize(height),
-                                            parent_height_inv: F::from_usize(height).inverse(),
-                                            is_root: F::from_bool(height == md.overall_height()),
-                                            parent_as_label: F::from_u32(parent_as_label),
-                                            parent_address_label: F::from_u32(parent_address_label),
-                                            parent_hash: par_old_values,
-                                            left_child_hash: *old_left,
-                                            right_child_hash: *old_right,
-                                            left_direction_different: F::ZERO,
-                                            right_direction_different: F::ZERO,
-                                        },
-                                        MemoryMerkleCols {
-                                            expand_direction: F::NEG_ONE,
-                                            height_section: F::from_bool(
-                                                height > md.address_height,
-                                            ),
-                                            parent_height: F::from_usize(height),
-                                            parent_height_inv: F::from_usize(height).inverse(),
-                                            is_root: F::from_bool(height == md.overall_height()),
-                                            parent_as_label: F::from_u32(parent_as_label),
-                                            parent_address_label: F::from_u32(parent_address_label),
-                                            parent_hash: combined,
-                                            left_child_hash: *left,
-                                            right_child_hash: *right,
-                                            left_direction_different: F::from_bool(!changed_left),
-                                            right_direction_different: F::from_bool(!changed_right),
-                                        },
-                                    ],
-                                )
-                            })
-                            .unzip();
+                    let height_section = F::from_bool(height > md.address_height);
+                    let parent_height = F::from_usize(height);
+                    let is_root = F::from_bool(height == md.overall_height());
+                    let (tmp, new_rows): (
+                        Vec<(u64, [F; DIGEST_WIDTH], [F; DIGEST_WIDTH])>,
+                        Vec<[_; 2]>,
+                    ) = new_layer
+                        .into_par_iter()
+                        .map(|(par_index, left, right)| {
+                            let (parent_as_label, parent_address_label) =
+                                parent_label_parts(md, self.height, par_index, height);
+                            let left_node;
+                            let (left, old_left, changed_left) = match left {
+                                Some((left, old_left)) => (left, old_left, true),
+                                None => {
+                                    left_node = self.get_node_at_height(2 * par_index, height - 1);
+                                    (&left_node, &left_node, false)
+                                }
+                            };
+                            let right_node;
+                            let (right, old_right, changed_right) = match right {
+                                Some((right, old_right)) => (right, old_right, true),
+                                None => {
+                                    right_node =
+                                        self.get_node_at_height(2 * par_index + 1, height - 1);
+                                    (&right_node, &right_node, false)
+                                }
+                            };
+                            let combined = compress(left, right);
+                            // Record the old child pair on the compression bus.
+                            compress(old_left, old_right);
+                            let par_old_values = self.get_node_at_height(par_index, height);
+                            (
+                                (par_index, combined, par_old_values),
+                                [
+                                    MemoryMerkleCols {
+                                         expand_direction: F::ONE,
+                                         height_section,
+                                         parent_height,
+                                         parent_height_inv: parent_height.inverse(),
+                                         is_root,
+                                         parent_as_label: F::from_u32(parent_as_label),
+                                         parent_address_label: F::from_u32(parent_address_label),
+                                        parent_hash: par_old_values,
+                                        left_child_hash: *old_left,
+                                        right_child_hash: *old_right,
+                                        left_direction_different: F::ZERO,
+                                        right_direction_different: F::ZERO,
+                                    },
+                                    MemoryMerkleCols {
+                                         expand_direction: F::NEG_ONE,
+                                         height_section,
+                                         parent_height,
+                                         parent_height_inv: parent_height.inverse(),
+                                         is_root,
+                                         parent_as_label: F::from_u32(parent_as_label),
+                                         parent_address_label: F::from_u32(parent_address_label),
+                                        parent_hash: combined,
+                                        left_child_hash: *left,
+                                        right_child_hash: *right,
+                                        left_direction_different: F::from_bool(!changed_left),
+                                        right_direction_different: F::from_bool(!changed_right),
+                                    },
+                                ],
+                            )
+                        })
+                        .unzip();
                     rows.extend(new_rows.into_iter().flatten());
                     layer = tmp;
                 }
@@ -193,18 +223,14 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
             new_entries.extend(layer.iter().map(|(idx, values, _)| (*idx, *values)));
         }
 
-        if self.nodes.is_empty() {
-            // This, for example, should happen in every `from_memory` call
-            self.nodes = FxHashMap::from_iter(new_entries);
-        } else {
-            self.nodes.extend(new_entries);
-        }
+        self.nodes.reserve(new_entries.len());
+        self.nodes.extend(new_entries);
     }
 
     pub fn from_memory(
         memory: &AddressMap,
         md: &MemoryDimensions,
-        hasher: &(impl Hasher<CHUNK, F> + Sync),
+        hasher: &(impl Hasher<DIGEST_WIDTH, F> + Sync),
     ) -> Self {
         let mut tree = Self::new(md.overall_height(), hasher);
         let layer: Vec<_> = memory_to_vec_partition(memory, md)
@@ -217,17 +243,18 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
 
     pub fn finalize(
         &mut self,
-        hasher: &impl HasherChip<CHUNK, F>,
-        touched: &Equipartition<F, CHUNK>,
+        hasher: &impl HasherChip<DIGEST_WIDTH, F>,
+        touched: &Equipartition<F, DIGEST_WIDTH>,
         md: &MemoryDimensions,
-    ) -> FinalState<CHUNK, F> {
+    ) -> FinalState<DIGEST_WIDTH, F> {
         let init_root = self.get_node(1);
         let layer: Vec<_> = if !touched.is_empty() {
             touched
                 .iter()
                 .map(|((addr_sp, ptr), v)| {
                     (
-                        (1 << self.height) + md.label_to_index((*addr_sp, *ptr / CHUNK as u32)),
+                        (1 << self.height)
+                            + md.label_to_index((*addr_sp, *ptr / DIGEST_WIDTH as u32)),
                         hasher.hash(v),
                     )
                 })
@@ -263,7 +290,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         }
     }
 
-    pub fn top_tree(&self, top_height: usize) -> Vec<[F; CHUNK]> {
+    pub fn top_tree(&self, top_height: usize) -> Vec<[F; DIGEST_WIDTH]> {
         // tree root is at index 1
         (0..(2 << top_height) - 1)
             .map(|i| self.get_node(i + 1))

@@ -88,10 +88,9 @@ static __device__ __noinline__ void fill_keccakf_op_row(
                            << (RV64_TOTAL_BITS - pointer_max_bits);
     bitwise_lookup.add_range(scaled_limb, scaled_limb);
 
-    // Range check for postimage bytes (pairs)
-    for (size_t i = 0; i < KECCAK_WIDTH_BYTES; i += 2) {
-        bitwise_lookup.add_range(state.bytes[i], state.bytes[i + 1]);
-    }
+    // AIR bounds the pointer bytes before composing them.
+    bitwise_lookup.add_range(buffer_ptr_limbs[0], buffer_ptr_limbs[1]);
+    bitwise_lookup.add_range(buffer_ptr_limbs[2], buffer_ptr_limbs[3]);
 }
 
 // Main kernel for KeccakfOpChip trace generation

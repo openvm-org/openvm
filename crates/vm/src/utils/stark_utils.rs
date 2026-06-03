@@ -18,7 +18,7 @@ use crate::{
         ExitCode, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
         VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
-    system::memory::{MemoryImage, CHUNK},
+    system::memory::{MemoryImage, DIGEST_WIDTH},
 };
 
 /// Supports `trace height <= 2^20`.
@@ -122,7 +122,7 @@ where
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+    Com<E::SC>: Into<[Val<E::SC>; DIGEST_WIDTH]> + From<[Val<E::SC>; DIGEST_WIDTH]>,
 {
     /*
     Assertions for Pure Execution AOT
@@ -226,7 +226,7 @@ where
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+    Com<E::SC>: Into<[Val<E::SC>; DIGEST_WIDTH]> + From<[Val<E::SC>; DIGEST_WIDTH]>,
 {
     /*
     Assertions for Pure Execution RVR
@@ -360,7 +360,7 @@ where
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+    Com<E::SC>: Into<[Val<E::SC>; DIGEST_WIDTH]> + From<[Val<E::SC>; DIGEST_WIDTH]>,
 {
     setup_tracing();
     let engine = E::new(params);

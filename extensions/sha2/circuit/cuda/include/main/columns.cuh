@@ -33,7 +33,7 @@ template <typename V, typename T> struct Sha2MainMemoryCols {
     MemoryReadAuxCols<T> register_aux[sha2::SHA2_REGISTER_READS];
     MemoryReadAuxCols<T> input_reads[V::BLOCK_READS];
     MemoryReadAuxCols<T> state_reads[V::STATE_READS];
-    MemoryWriteAuxCols<T, sha2::SHA2_WRITE_SIZE> write_aux[V::STATE_WRITES];
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux[V::STATE_WRITES];
 };
 
 template <typename V, typename T> struct Sha2MainCols {

@@ -9,7 +9,7 @@ use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 
 use crate::{
     arch::{hasher::Hasher, vm_poseidon2_config, POSEIDON2_WIDTH},
-    system::memory::CHUNK,
+    system::memory::DIGEST_WIDTH,
 };
 
 pub fn vm_poseidon2_hasher<F: PrimeField32>() -> Poseidon2Hasher<F> {
@@ -29,13 +29,13 @@ pub struct Poseidon2Hasher<F: Clone> {
     _marker: PhantomData<F>,
 }
 
-impl<F: PrimeField32> Hasher<{ CHUNK }, F> for Poseidon2Hasher<F> {
-    fn compress(&self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
+impl<F: PrimeField32> Hasher<{ DIGEST_WIDTH }, F> for Poseidon2Hasher<F> {
+    fn compress(&self, lhs: &[F; DIGEST_WIDTH], rhs: &[F; DIGEST_WIDTH]) -> [F; DIGEST_WIDTH] {
         let mut state = from_fn(|i| {
-            if i < CHUNK {
+            if i < DIGEST_WIDTH {
                 BabyBear::from_u32(lhs[i].as_canonical_u32())
             } else {
-                BabyBear::from_u32(rhs[i - CHUNK].as_canonical_u32())
+                BabyBear::from_u32(rhs[i - DIGEST_WIDTH].as_canonical_u32())
             }
         });
         self.poseidon2.permute_mut(&mut state);

@@ -1,5 +1,6 @@
 use std::{
     fmt::Debug,
+    mem::size_of,
     ops::{Deref, DerefMut},
 };
 
@@ -14,7 +15,7 @@ use super::{create_memory_image, ExecutionError, Streams};
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{execution_mode::ExecutionCtxTrait, SystemConfig, VmStateMut},
-    system::memory::online::GuestMemory,
+    system::memory::online::{GuestMemory, LinearMemory},
 };
 
 /// Represents the core state of a VM.
@@ -163,28 +164,47 @@ impl<F, CTX> VmExecState<F, GuestMemory, CTX>
 where
     CTX: ExecutionCtxTrait,
 {
-    /// Runtime read operation for a block of memory
+    /// Runtime byte read: `byte_ptr` is a raw byte offset into the AS's
+    /// linear storage. Returns `N` bytes.
     #[inline(always)]
-    pub fn vm_read<T: Copy + Debug, const BLOCK_SIZE: usize>(
+    pub fn vm_read_bytes<const N: usize>(&mut self, addr_space: u32, byte_ptr: u32) -> [u8; N] {
+        self.ctx.on_memory_operation(addr_space, byte_ptr, N as u32);
+        self.host_read_bytes(addr_space, byte_ptr)
+    }
+
+    /// Runtime byte write: `byte_ptr` is a raw byte offset.
+    #[inline(always)]
+    pub fn vm_write_bytes<const N: usize>(
+        &mut self,
+        addr_space: u32,
+        byte_ptr: u32,
+        data: &[u8; N],
+    ) {
+        self.ctx.on_memory_operation(addr_space, byte_ptr, N as u32);
+        self.host_write_bytes(addr_space, byte_ptr, data)
+    }
+
+    /// Runtime cell read: `ptr` is an AS-native pointer.
+    /// `T` must match the AS cell type (e.g. `F` for `DEFERRAL_AS`).
+    #[inline(always)]
+    pub fn vm_read<T: Copy + Debug, const N: usize>(
         &mut self,
         addr_space: u32,
         ptr: u32,
-    ) -> [T; BLOCK_SIZE] {
-        self.ctx
-            .on_memory_operation(addr_space, ptr, BLOCK_SIZE as u32);
+    ) -> [T; N] {
+        self.ctx.on_memory_operation(addr_space, ptr, N as u32);
         self.host_read(addr_space, ptr)
     }
 
-    /// Runtime write operation for a block of memory
+    /// Runtime cell write: `ptr` is an AS-native pointer.
     #[inline(always)]
-    pub fn vm_write<T: Copy + Debug, const BLOCK_SIZE: usize>(
+    pub fn vm_write<T: Copy + Debug, const N: usize>(
         &mut self,
         addr_space: u32,
         ptr: u32,
-        data: &[T; BLOCK_SIZE],
+        data: &[T; N],
     ) {
-        self.ctx
-            .on_memory_operation(addr_space, ptr, BLOCK_SIZE as u32);
+        self.ctx.on_memory_operation(addr_space, ptr, N as u32);
         self.host_write(addr_space, ptr, data)
     }
 
@@ -200,39 +220,79 @@ where
     }
 
     #[inline(always)]
-    pub fn host_read<T: Copy + Debug, const BLOCK_SIZE: usize>(
-        &self,
-        addr_space: u32,
-        ptr: u32,
-    ) -> [T; BLOCK_SIZE] {
-        // SAFETY:
-        // - T is stack-allocated repr(C) or repr(transparent), usually u8 or F where F is the base
-        //   field
-        // - T is the exact memory cell type for this address space, satisfying the type requirement
-        unsafe { self.memory.read(addr_space, ptr) }
+    pub fn host_read_bytes<const N: usize>(&self, addr_space: u32, byte_ptr: u32) -> [u8; N] {
+        // SAFETY: caller guarantees the byte range is in bounds.
+        unsafe {
+            self.memory
+                .memory
+                .get_memory()
+                .get_unchecked(addr_space as usize)
+                .read(byte_ptr as usize)
+        }
     }
 
     #[inline(always)]
-    pub fn host_write<T: Copy + Debug, const BLOCK_SIZE: usize>(
+    pub fn host_write_bytes<const N: usize>(
+        &mut self,
+        addr_space: u32,
+        byte_ptr: u32,
+        data: &[u8; N],
+    ) {
+        // SAFETY: caller guarantees the byte range is in bounds.
+        unsafe {
+            self.memory
+                .memory
+                .get_memory_mut()
+                .get_unchecked_mut(addr_space as usize)
+                .write(byte_ptr as usize, *data);
+        }
+    }
+
+    /// Cell read: `ptr` is a pointer; byte offset is `ptr * size_of::<T>()`.
+    #[inline(always)]
+    pub fn host_read<T: Copy + Debug, const N: usize>(&self, addr_space: u32, ptr: u32) -> [T; N] {
+        // SAFETY: caller guarantees T matches the AS layout and the range is
+        // in bounds.
+        unsafe {
+            self.memory
+                .memory
+                .get_memory()
+                .get_unchecked(addr_space as usize)
+                .read((ptr as usize) * size_of::<T>())
+        }
+    }
+
+    /// Cell write: `ptr` is a pointer; byte offset is `ptr * size_of::<T>()`.
+    #[inline(always)]
+    pub fn host_write<T: Copy + Debug, const N: usize>(
         &mut self,
         addr_space: u32,
         ptr: u32,
-        data: &[T; BLOCK_SIZE],
+        data: &[T; N],
     ) {
-        // SAFETY:
-        // - T is stack-allocated repr(C) or repr(transparent), usually u8 or F where F is the base
-        //   field
-        // - T is the exact memory cell type for this address space, satisfying the type requirement
-        unsafe { self.memory.write(addr_space, ptr, *data) }
+        // SAFETY: caller guarantees T matches the AS layout and the range is
+        // in bounds.
+        unsafe {
+            self.memory
+                .memory
+                .get_memory_mut()
+                .get_unchecked_mut(addr_space as usize)
+                .write((ptr as usize) * size_of::<T>(), *data);
+        }
     }
 
     #[inline(always)]
     pub fn host_read_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
         // SAFETY:
-        // - T is stack-allocated repr(C) or repr(transparent), usually u8 or F where F is the base
-        //   field
-        // - T is the exact memory cell type for this address space, satisfying the type requirement
+        // - T must match the AS cell type.
         // - panics if the slice is out of bounds
         unsafe { self.memory.get_slice(addr_space, ptr, len) }
+    }
+
+    #[inline(always)]
+    pub fn host_read_u8_slice(&self, addr_space: u32, byte_ptr: u32, len: usize) -> &[u8] {
+        // SAFETY:
+        // - panics if the byte range is out of bounds
+        unsafe { self.memory.get_u8_slice(addr_space, byte_ptr, len) }
     }
 }

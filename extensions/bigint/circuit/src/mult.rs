@@ -69,7 +69,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64Multiplication256Executor {
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32> AotExecutor<F> for Rv32Multiplication256Executor {}
+impl<F: PrimeField32> AotExecutor<F> for Rv64Multiplication256Executor {}
 
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64Multiplication256Executor {
     fn metered_pre_compute_size(&self) -> usize {
@@ -112,7 +112,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64Multiplication256Exe
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32> AotMeteredExecutor<F> for Rv32Multiplication256Executor {}
+impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64Multiplication256Executor {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
@@ -120,11 +120,11 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1_ptr =
-        exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2_ptr =
-        exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32);
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32);
     let rd_ptr =
-        exec_state.vm_read::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
     let rs1 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs1_ptr));
     let rs2 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs2_ptr));
     let rd = u256_mul(rs1, rs2);

@@ -3,7 +3,10 @@
 
 use openvm_algebra_circuit::fields::FieldType;
 use openvm_circuit::{
-    arch::{AdapterTraceExecutor, ExecutionError, PreflightExecutor, RecordArena, VmStateMut},
+    arch::{
+        AdapterTraceExecutor, ExecutionError, PreflightExecutor, RecordArena, VmStateMut,
+        MEMORY_BLOCK_BYTES,
+    },
     system::memory::online::TracingMemory,
 };
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
@@ -30,7 +33,6 @@ macro_rules! dispatch_enum {
                 $variant_type::$variant => $fn::<
                     { $variant_type::$variant as u8 },
                     BLOCKS,
-                    BLOCK_SIZE,
                 >($read_data),
             )*
             #[allow(unreachable_patterns)]
@@ -41,10 +43,10 @@ macro_rules! dispatch_enum {
 
 /// Compute EC point addition using fast native field arithmetic.
 #[inline]
-fn compute_ec_add_ne_fast<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+fn compute_ec_add_ne_fast<const BLOCKS: usize>(
     field_type: Option<FieldType>,
-    read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
-) -> Option<[[u8; BLOCK_SIZE]; BLOCKS]> {
+    read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2],
+) -> Option<[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]> {
     let field_type = field_type?;
 
     Some(match field_type {
@@ -71,10 +73,10 @@ fn compute_ec_add_ne_fast<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 
 /// Compute EC point doubling using fast native field arithmetic.
 #[inline]
-fn compute_ec_double_fast<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+fn compute_ec_double_fast<const BLOCKS: usize>(
     curve_type: Option<CurveType>,
-    read_data: [[u8; BLOCK_SIZE]; BLOCKS],
-) -> Option<[[u8; BLOCK_SIZE]; BLOCKS]> {
+    read_data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
+) -> Option<[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]> {
     let curve_type = curve_type?;
 
     Some(dispatch_enum!(
@@ -100,11 +102,11 @@ fn is_setup_opcode(local_opcode: usize) -> bool {
 
 /// Slow-path fallback for EC operations (used for SETUP opcodes and unknown field types).
 #[inline]
-fn compute_ec_slow<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+fn compute_ec_slow<const BLOCKS: usize>(
     expr: &openvm_mod_circuit_builder::FieldExpr,
     local_opcode: usize,
     read_bytes: &[u8],
-) -> [[u8; BLOCK_SIZE]; BLOCKS] {
+) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
     let flag_idx = if is_setup_opcode(local_opcode) {
         // SETUP operations: pass num_flags so no flag is set
         expr.num_flags()
@@ -116,18 +118,16 @@ fn compute_ec_slow<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 }
 
 // Implementation for EcAddNeExecutor
-impl<F, RA, const BLOCKS: usize, const BLOCK_SIZE: usize> PreflightExecutor<F, RA>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+impl<F, RA, const BLOCKS: usize> PreflightExecutor<F, RA> for EcAddNeExecutor<BLOCKS>
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<
         'buf,
-        FieldExpressionRecordLayout<
-            F,
-            Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        >,
+        FieldExpressionRecordLayout<F, Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
         (
-            <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::RecordMut<'buf>,
+            <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS> as AdapterTraceExecutor<F>>::RecordMut<
+                'buf,
+            >,
             FieldExpressionCoreRecordMut<'buf>,
         ),
     >,
@@ -137,52 +137,46 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let (mut adapter_record, mut core_record) =
-            state.ctx.alloc(self.inner.get_record_layout());
+        let (mut adapter_record, mut core_record) = state.ctx.alloc(self.inner.get_record_layout());
 
-        <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
+        <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS> as AdapterTraceExecutor<F>>::start(
             *state.pc,
             state.memory,
             &mut adapter_record,
         );
 
-        let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = self
-            .inner
-            .adapter()
-            .read(state.memory, instruction, &mut adapter_record);
+        let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] =
+            self.inner
+                .adapter()
+                .read(state.memory, instruction, &mut adapter_record);
 
         let local_opcode = instruction.opcode.local_opcode_idx(self.inner.offset);
 
-        core_record.fill_from_execution_data(
-            local_opcode as u8,
-            read_data.as_flattened().as_flattened(),
-        );
+        core_record
+            .fill_from_execution_data(local_opcode as u8, read_data.as_flattened().as_flattened());
 
         // Try fast path for non-SETUP operations with known field types
-        let output: [[u8; BLOCK_SIZE]; BLOCKS] =
-            if !is_setup_opcode(local_opcode) {
-                compute_ec_add_ne_fast::<BLOCKS, BLOCK_SIZE>(self.cached_field_type, read_data)
-                    .unwrap_or_else(|| {
-                        compute_ec_slow::<BLOCKS, BLOCK_SIZE>(
-                            &self.inner.expr,
-                            local_opcode,
-                            read_data.as_flattened().as_flattened(),
-                        )
-                    })
-            } else {
-                compute_ec_slow::<BLOCKS, BLOCK_SIZE>(
-                    &self.inner.expr,
-                    local_opcode,
-                    read_data.as_flattened().as_flattened(),
-                )
-            };
+        let output: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = if !is_setup_opcode(local_opcode) {
+            compute_ec_add_ne_fast::<BLOCKS>(self.cached_field_type, read_data).unwrap_or_else(
+                || {
+                    compute_ec_slow::<BLOCKS>(
+                        &self.inner.expr,
+                        local_opcode,
+                        read_data.as_flattened().as_flattened(),
+                    )
+                },
+            )
+        } else {
+            compute_ec_slow::<BLOCKS>(
+                &self.inner.expr,
+                local_opcode,
+                read_data.as_flattened().as_flattened(),
+            )
+        };
 
-        self.inner.adapter().write(
-            state.memory,
-            instruction,
-            output,
-            &mut adapter_record,
-        );
+        self.inner
+            .adapter()
+            .write(state.memory, instruction, output, &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())
@@ -194,18 +188,16 @@ where
 }
 
 // Implementation for EcDoubleExecutor
-impl<F, RA, const BLOCKS: usize, const BLOCK_SIZE: usize> PreflightExecutor<F, RA>
-    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
+impl<F, RA, const BLOCKS: usize> PreflightExecutor<F, RA> for EcDoubleExecutor<BLOCKS>
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<
         'buf,
-        FieldExpressionRecordLayout<
-            F,
-            Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        >,
+        FieldExpressionRecordLayout<F, Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS>>,
         (
-            <Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::RecordMut<'buf>,
+            <Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS> as AdapterTraceExecutor<F>>::RecordMut<
+                'buf,
+            >,
             FieldExpressionCoreRecordMut<'buf>,
         ),
     >,
@@ -215,50 +207,42 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let (mut adapter_record, mut core_record) =
-            state.ctx.alloc(self.inner.get_record_layout());
+        let (mut adapter_record, mut core_record) = state.ctx.alloc(self.inner.get_record_layout());
 
-        <Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
+        <Rv64VecHeapAdapterExecutor<1, BLOCKS, BLOCKS> as AdapterTraceExecutor<F>>::start(
             *state.pc,
             state.memory,
             &mut adapter_record,
         );
 
-        let read_data_arr: [[[u8; BLOCK_SIZE]; BLOCKS]; 1] = self
-            .inner
-            .adapter()
-            .read(state.memory, instruction, &mut adapter_record);
-        let read_data: [[u8; BLOCK_SIZE]; BLOCKS] = read_data_arr[0];
+        let read_data_arr: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 1] =
+            self.inner
+                .adapter()
+                .read(state.memory, instruction, &mut adapter_record);
+        let read_data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = read_data_arr[0];
 
         let local_opcode = instruction.opcode.local_opcode_idx(self.inner.offset);
 
         core_record.fill_from_execution_data(local_opcode as u8, read_data.as_flattened());
 
         // Try fast path for non-SETUP operations with known curve types
-        let output: [[u8; BLOCK_SIZE]; BLOCKS] =
-            if !is_setup_opcode(local_opcode) {
-                compute_ec_double_fast::<BLOCKS, BLOCK_SIZE>(self.cached_curve_type, read_data)
-                    .unwrap_or_else(|| {
-                        compute_ec_slow::<BLOCKS, BLOCK_SIZE>(
-                            &self.inner.expr,
-                            local_opcode,
-                            read_data.as_flattened(),
-                        )
-                    })
-            } else {
-                compute_ec_slow::<BLOCKS, BLOCK_SIZE>(
-                    &self.inner.expr,
-                    local_opcode,
-                    read_data.as_flattened(),
-                )
-            };
+        let output: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = if !is_setup_opcode(local_opcode) {
+            compute_ec_double_fast::<BLOCKS>(self.cached_curve_type, read_data).unwrap_or_else(
+                || {
+                    compute_ec_slow::<BLOCKS>(
+                        &self.inner.expr,
+                        local_opcode,
+                        read_data.as_flattened(),
+                    )
+                },
+            )
+        } else {
+            compute_ec_slow::<BLOCKS>(&self.inner.expr, local_opcode, read_data.as_flattened())
+        };
 
-        self.inner.adapter().write(
-            state.memory,
-            instruction,
-            output,
-            &mut adapter_record,
-        );
+        self.inner
+            .adapter()
+            .write(state.memory, instruction, output, &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())

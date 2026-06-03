@@ -7,11 +7,12 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
+            pack_u8_block, pack_u8_block_bytes, MemoryBridge, MemoryReadAuxCols,
+            MemoryReadAuxRecord, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
@@ -36,7 +37,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::{tracing_read, tracing_read_imm, tracing_write};
+use super::{byte_ptr_to_u16_ptr, tracing_read, tracing_read_imm, tracing_write};
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
@@ -55,7 +56,7 @@ pub struct Rv64BaseAluWAdapterCols<T> {
     /// Sign bit of the low-word core result used to build full-width sign-extended writes.
     pub result_sign: T,
     pub reads_aux: [MemoryReadAuxCols<T>; 2],
-    pub writes_aux: MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS>,
+    pub writes_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
 
 /// Same instruction format as `Rv64BaseAluAdapterAir`, but only exposes the low 32-bit limbs
@@ -131,8 +132,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
         });
         self.memory_bridge
             .read(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rs1_ptr),
-                rs1_data,
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
+                ),
+                pack_u8_block::<AB>(&rs1_data),
                 timestamp_pp(),
                 &local.reads_aux[0],
             )
@@ -151,8 +155,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
         });
         self.memory_bridge
             .read(
-                MemoryAddress::new(local.rs2_as, local.rs2),
-                rs2_data,
+                MemoryAddress::new(local.rs2_as, byte_ptr_to_u16_ptr::<AB>(local.rs2)),
+                pack_u8_block::<AB>(&rs2_data),
                 timestamp_pp(),
                 &local.reads_aux[1],
             )
@@ -182,8 +186,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
         });
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::F::from_u32(RV64_REGISTER_AS), local.rd_ptr),
-                write_data,
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local.rd_ptr),
+                ),
+                pack_u8_block::<AB>(&write_data),
                 timestamp_pp(),
                 &local.writes_aux,
             )
@@ -358,7 +365,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWAdapterFiller {
 
         adapter_row
             .writes_aux
-            .set_prev_data(record.writes_aux.prev_data.map(F::from_u8));
+            .set_prev_data(pack_u8_block_bytes(&record.writes_aux.prev_data));
         mem_helper.fill(
             record.writes_aux.prev_timestamp,
             timestamp,

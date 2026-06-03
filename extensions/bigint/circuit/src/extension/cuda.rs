@@ -9,7 +9,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::range_tuple::RangeTupleCheckerChipGPU;
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
-use openvm_riscv_circuit::Rv64ImGpuProverExt;
+use openvm_riscv_circuit::{adapters::rv64_byte_ptr_bits_from_openvm_ptr_bits, Rv64ImGpuProverExt};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use super::*;
@@ -26,7 +26,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         extension: &Int256,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let pointer_max_bits =
+            rv64_byte_ptr_bits_from_openvm_ptr_bits(inventory.airs().pointer_max_bits());
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);

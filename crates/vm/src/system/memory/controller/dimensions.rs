@@ -1,10 +1,9 @@
 use derive_new::new;
-use openvm_stark_backend::p3_util::log2_strict_usize;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{MemoryConfig, ADDR_SPACE_OFFSET},
-    system::memory::CHUNK,
+    system::memory::DIGEST_WIDTH_BITS,
 };
 
 // indicates that there are 2^`addr_space_height` address spaces numbered starting from 1,
@@ -46,11 +45,21 @@ impl MemoryDimensions {
     }
 }
 
+/// Number of Merkle leaf labels per address space is `2^address_height`.
+pub(crate) const fn address_height_from_ptr_bits(ptr_bits: usize) -> usize {
+    ptr_bits - DIGEST_WIDTH_BITS
+}
+
+#[cfg(test)]
+pub(crate) const fn ptr_bits_from_address_height(address_height: usize) -> usize {
+    address_height + DIGEST_WIDTH_BITS
+}
+
 impl MemoryConfig {
     pub fn memory_dimensions(&self) -> MemoryDimensions {
         MemoryDimensions {
             addr_space_height: self.addr_space_height,
-            address_height: self.pointer_max_bits - log2_strict_usize(CHUNK),
+            address_height: address_height_from_ptr_bits(self.pointer_max_bits),
         }
     }
 }
