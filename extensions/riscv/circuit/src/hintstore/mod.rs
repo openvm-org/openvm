@@ -21,7 +21,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{
-        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
+        RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
         RV64_WORD_NUM_LIMBS,
     },
     LocalOpcode,
@@ -141,17 +141,17 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         let mut next_rem_words = AB::Expr::ZERO;
         for i in (0..REM_WORDS_NUM_LIMBS).rev() {
             rem_words =
-                rem_words * AB::F::from_u32(1 << RV64_CELL_BITS) + local_cols.rem_words_limbs[i];
-            next_rem_words = next_rem_words * AB::F::from_u32(1 << RV64_CELL_BITS)
+                rem_words * AB::F::from_u32(1 << RV64_BYTE_BITS) + local_cols.rem_words_limbs[i];
+            next_rem_words = next_rem_words * AB::F::from_u32(1 << RV64_BYTE_BITS)
                 + next_cols.rem_words_limbs[i];
         }
 
         let mut mem_ptr = AB::Expr::ZERO;
         let mut next_mem_ptr = AB::Expr::ZERO;
         for i in (0..RV64_WORD_NUM_LIMBS).rev() {
-            mem_ptr = mem_ptr * AB::F::from_u32(1 << RV64_CELL_BITS) + local_cols.mem_ptr_limbs[i];
+            mem_ptr = mem_ptr * AB::F::from_u32(1 << RV64_BYTE_BITS) + local_cols.mem_ptr_limbs[i];
             next_mem_ptr =
-                next_mem_ptr * AB::F::from_u32(1 << RV64_CELL_BITS) + next_cols.mem_ptr_limbs[i];
+                next_mem_ptr * AB::F::from_u32(1 << RV64_BYTE_BITS) + next_cols.mem_ptr_limbs[i];
         }
 
         // Constrain that if local is invalid, then the next state is invalid as well
@@ -261,10 +261,10 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         self.bitwise_operation_lookup_bus
             .send_range(
                 local_cols.mem_ptr_limbs[3]
-                    * AB::F::from_usize(1 << (4 * RV64_CELL_BITS - self.pointer_max_bits)),
+                    * AB::F::from_usize(1 << (4 * RV64_BYTE_BITS - self.pointer_max_bits)),
                 local_cols.rem_words_limbs[REM_WORDS_NUM_LIMBS - 1]
                     * AB::F::from_usize(
-                        1 << (REM_WORDS_NUM_LIMBS * RV64_CELL_BITS - MAX_HINT_BUFFER_DWORDS_BITS),
+                        1 << (REM_WORDS_NUM_LIMBS * RV64_BYTE_BITS - MAX_HINT_BUFFER_DWORDS_BITS),
                     ),
             )
             .eval(builder, is_start.clone());
@@ -410,7 +410,7 @@ pub struct Rv64HintStoreExecutor {
 #[derive(Clone, derive_new::new)]
 pub struct Rv64HintStoreFiller {
     pointer_max_bits: usize,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
 }
 
 impl<F, RA> PreflightExecutor<F, RA> for Rv64HintStoreExecutor
@@ -557,12 +557,12 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
 
         // `mem_ptr` is a 4-limb value; the range-check packs the most-significant of those
         // 4 limbs into a single byte along with the `rem_words` scaled limb.
-        let msl_rshift: u32 = (3 * RV64_CELL_BITS) as u32;
-        let msl_lshift: u32 = (4 * RV64_CELL_BITS - self.pointer_max_bits) as u32;
+        let msl_rshift: u32 = (3 * RV64_BYTE_BITS) as u32;
+        let msl_lshift: u32 = (4 * RV64_BYTE_BITS - self.pointer_max_bits) as u32;
 
         // Scale factors for rem_words range check (using MAX_HINT_BUFFER_DWORDS_BITS)
         let rem_words_msl_lshift: u32 =
-            (REM_WORDS_NUM_LIMBS * RV64_CELL_BITS - MAX_HINT_BUFFER_DWORDS_BITS) as u32;
+            (REM_WORDS_NUM_LIMBS * RV64_BYTE_BITS - MAX_HINT_BUFFER_DWORDS_BITS) as u32;
 
         chunks
             .par_iter_mut()
@@ -592,7 +592,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                 );
                 self.bitwise_lookup_chip.request_range(
                     (record.inner.mem_ptr >> msl_rshift) << msl_lshift,
-                    ((num_words >> (RV64_CELL_BITS * (REM_WORDS_NUM_LIMBS - 1))) & 0xFF)
+                    ((num_words >> (RV64_BYTE_BITS * (REM_WORDS_NUM_LIMBS - 1))) & 0xFF)
                         << rem_words_msl_lshift,
                 );
                 for bytes in record.inner.mem_ptr.to_le_bytes().chunks_exact(2) {

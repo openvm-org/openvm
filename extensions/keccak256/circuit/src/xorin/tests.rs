@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
@@ -8,22 +8,36 @@ use openvm_circuit::{
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::SharedVariableRangeCheckerChip,
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::XorinOpcode;
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_backend::{
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
+};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use crate::{
-    xorin::{air::XorinVmAir, XorinVmChip, XorinVmExecutor, XorinVmFiller},
+    xorin::{
+        air::XorinVmAir,
+        columns::{XorinVmCols, NUM_XORIN_VM_COLS},
+        XorinVmChip, XorinVmExecutor, XorinVmFiller,
+    },
     KECCAK_RATE_BYTES, KECCAK_RATE_MEM_OPS,
 };
 
@@ -34,7 +48,8 @@ const MAX_TRACE_ROWS: usize = 4096;
 fn create_harness_fields(
     execution_bridge: ExecutionBridge,
     memory_bridge: MemoryBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (XorinVmAir, XorinVmExecutor, XorinVmChip<F>) {
@@ -42,13 +57,14 @@ fn create_harness_fields(
         execution_bridge,
         memory_bridge,
         bitwise_chip.bus(),
+        range_checker_chip.bus(),
         address_bits,
         XorinOpcode::CLASS_OFFSET,
     );
 
     let executor = XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, address_bits);
     let chip = XorinVmChip::new(
-        XorinVmFiller::new(bitwise_chip, address_bits),
+        XorinVmFiller::new(bitwise_chip, range_checker_chip, address_bits),
         memory_helper,
     );
     (air, executor, chip)
@@ -59,12 +75,12 @@ fn create_test_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -72,6 +88,7 @@ fn create_test_harness(
         tester.execution_bridge(),
         tester.memory_bridge(),
         bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -199,11 +216,10 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 fn xorin_chip_positive_tests() {
     let num_ops: usize = 100;
     let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_test_harness(&mut tester);
 
     for _ in 0..num_ops {
-        let mut tester = VmChipTestBuilder::default();
-        let (mut harness, bitwise) = create_test_harness(&mut tester);
-
         let buffer_length = Some(rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
 
         set_and_execute(
@@ -214,31 +230,22 @@ fn xorin_chip_positive_tests() {
             XorinOpcode::XORIN,
             buffer_length,
         );
-
-        let tester = tester
-            .build()
-            .load(harness)
-            .load_periphery(bitwise)
-            .finalize();
-        tester.simple_test().expect("Verification failed");
     }
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
 }
 
-// todo: complete the negative test (currently wip)
-/*
-#[allow(clippy::too_many_arguments)]
-fn run_xorin_chip_negative_tests(
-    prank_sponge: Option<XorinSpongeCols<F>>,
-    prank_instruction: Option<XorinInstructionCols<F>>,
-    prank_mem_oc: Option<XorinMemoryCols<F>>,
-    interaction_error: bool,
-) {
+fn run_xorin_chip_negative_test(prank: impl Fn(&mut XorinVmCols<F>)) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_test_harness(&mut tester);
 
-    let buffer_length =
-        Some(rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
+    let buffer_length = Some(rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
 
     set_and_execute(
         &mut tester,
@@ -249,33 +256,12 @@ fn run_xorin_chip_negative_tests(
         buffer_length,
     );
 
-    use openvm_stark_backend::p3_matrix::dense::DenseMatrix;
     let modify_trace = |trace: &mut DenseMatrix<F>| {
-        use std::borrow::BorrowMut;
-
-        use openvm_stark_backend::p3_matrix::Matrix;
-
-        use crate::xorin::columns::XorinVmCols;
-
-        let mut values = trace.row_slice(0).to_vec();
-        let width = XorinVmCols::<F>::width();
-        // split_at_mut() to avoid the compiler saying that it is
-        // unable to determine the size during compile time
-        let cols: &mut XorinVmCols<F> = values.split_at_mut(width).0.borrow_mut();
-
-        if let Some(prank_sponge) = prank_sponge {
-            cols.sponge = prank_sponge;
-        }
-        if let Some(prank_instruction) = prank_instruction {
-            cols.instruction = prank_instruction;
-        }
-        if let Some(prank_mem_oc) = prank_mem_oc.clone() {
-            cols.mem_oc = prank_mem_oc;
-        }
+        let mut values = trace.row_slice(0).unwrap().to_vec();
+        let cols: &mut XorinVmCols<F> = values.split_at_mut(NUM_XORIN_VM_COLS).0.borrow_mut();
+        prank(cols);
         *trace = RowMajorMatrix::new(values, trace.width());
     };
-
-    use openvm_stark_backend::utils::disable_debug_builder;
 
     disable_debug_builder();
 
@@ -285,13 +271,24 @@ fn run_xorin_chip_negative_tests(
         .load_periphery(bitwise)
         .finalize();
 
-    if interaction_error {
-        tester.simple_test_with_expected_error(VerificationError::ChallengePhaseError);
-    } else {
-        tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
-    }
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
-*/
+
+#[test]
+fn xorin_wrong_output_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.sponge.postimage_buffer_bytes[0] += F::ONE;
+    });
+}
+
+#[test]
+fn xorin_wrong_len_limb_negative_test() {
+    run_xorin_chip_negative_test(|cols| {
+        cols.instruction.len_limb += F::ONE;
+    });
+}
 
 // ////////////////////////////////////////////////////////////////////////////////////
 // CUDA TESTS
@@ -312,14 +309,20 @@ type GpuHarness =
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
+    let dummy_range_checker_chip = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChip::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+        ),
+    );
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.execution_bridge(),
         tester.memory_bridge(),
         dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );

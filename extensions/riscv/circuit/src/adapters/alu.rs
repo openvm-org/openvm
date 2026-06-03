@@ -24,7 +24,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_CELL_BITS, RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_BYTE_BITS, RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -97,8 +97,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterAir {
         let rs2_limbs = ctx.reads[1].clone();
         let rs2_sign = rs2_limbs[2].clone();
         let rs2_imm = rs2_limbs[0].clone()
-            + rs2_limbs[1].clone() * AB::Expr::from_usize(1 << RV64_CELL_BITS)
-            + rs2_sign.clone() * AB::Expr::from_usize(1 << (2 * RV64_CELL_BITS));
+            + rs2_limbs[1].clone() * AB::Expr::from_usize(1 << RV64_BYTE_BITS)
+            + rs2_sign.clone() * AB::Expr::from_usize(1 << (2 * RV64_BYTE_BITS));
         builder.assert_bool(local.rs2_as);
         let mut rs2_imm_when = builder.when(not(local.rs2_as));
         rs2_imm_when.assert_eq(local.rs2, rs2_imm);
@@ -106,7 +106,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterAir {
             rs2_imm_when.assert_eq(rs2_sign.clone(), limb.clone());
         }
         rs2_imm_when.assert_zero(
-            rs2_sign.clone() * (AB::Expr::from_usize((1 << RV64_CELL_BITS) - 1) - rs2_sign),
+            rs2_sign.clone() * (AB::Expr::from_usize((1 << RV64_BYTE_BITS) - 1) - rs2_sign),
         );
         self.bitwise_lookup_bus
             .send_range(rs2_limbs[0].clone(), rs2_limbs[1].clone())
@@ -320,9 +320,9 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
         } else {
             mem_helper.fill_zero(adapter_row.reads_aux[1].as_mut());
             let rs2_imm = record.rs2;
-            let mask = (1 << RV64_CELL_BITS) - 1;
+            let mask = (1 << RV64_BYTE_BITS) - 1;
             self.bitwise_lookup_chip
-                .request_range(rs2_imm & mask, (rs2_imm >> RV64_CELL_BITS) & mask);
+                .request_range(rs2_imm & mask, (rs2_imm >> RV64_BYTE_BITS) & mask);
         }
         timestamp -= 1;
 

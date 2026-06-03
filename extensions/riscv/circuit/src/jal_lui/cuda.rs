@@ -10,7 +10,7 @@ use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv64CondRdWriteAdapterCols, Rv64RdWriteAdapterRecord, RV64_CELL_BITS},
+    adapters::{Rv64CondRdWriteAdapterCols, Rv64RdWriteAdapterRecord, RV64_BYTE_BITS},
     cuda_abi::jal_lui_cuda::tracegen,
     Rv64JalLuiCoreCols, Rv64JalLuiCoreRecord,
 };
@@ -18,7 +18,7 @@ use crate::{
 #[derive(new)]
 pub struct Rv64JalLuiChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_CELL_BITS>>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub timestamp_max_bits: usize,
 }
 

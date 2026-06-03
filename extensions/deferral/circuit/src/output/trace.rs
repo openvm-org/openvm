@@ -26,7 +26,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{
-        RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
+        RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
         RV64_WORD_NUM_LIMBS,
     },
 };
@@ -151,7 +151,7 @@ pub struct DeferralOutputExecutor;
 pub struct DeferralOutputFiller<F: VmField> {
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     address_bits: usize,
 }
 
@@ -338,8 +338,8 @@ where
                 cols.rs_val = header.rs_val.to_le_bytes().map(F::from_u8);
 
                 if row_idx == 0 {
-                    debug_assert!(RV64_CELL_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
-                    let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
+                    debug_assert!(RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
+                    let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
 
                     self.bitwise_lookup_chip.request_range(
                         (header.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32)

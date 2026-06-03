@@ -4,6 +4,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "xorin.cuh"
 #include <cassert>
@@ -14,6 +15,7 @@ using namespace xorin;
 using namespace riscv;
 using namespace keccak256;
 using namespace program;
+using openvm::U16_BITS;
 
 #define XORIN_WRITE(FIELD, VALUE) COL_WRITE_VALUE(row, XorinVmCols, FIELD, VALUE)
 #define XORIN_WRITE_ARRAY(FIELD, VALUES) COL_WRITE_ARRAY(row, XorinVmCols, FIELD, VALUES)
@@ -46,9 +48,8 @@ __global__ void xorin_tracegen(
         assert((uint64_t)rec.input + rec.len <= (1ULL << pointer_max_bits));
         assert(rec.len < (1U << pointer_max_bits));
 
-        MemoryAuxColsFactory mem_helper(
-            VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins), timestamp_max_bits
-        );
+        VariableRangeChecker range_checker(d_range_checker_ptr, range_checker_num_bins);
+        MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
         BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr);
 
         auto record_len = rec.len;
@@ -66,13 +67,13 @@ __global__ void xorin_tracegen(
         XORIN_WRITE(instruction.len, rec.len);
         XORIN_WRITE(instruction.start_timestamp, rec.timestamp);
 
-        // Fill buffer/input/len limbs
-        XORIN_WRITE_ARRAY(
-            instruction.buffer_ptr_limbs, reinterpret_cast<const uint8_t *>(&rec.buffer)
-        );
-        XORIN_WRITE_ARRAY(
-            instruction.input_ptr_limbs, reinterpret_cast<const uint8_t *>(&rec.input)
-        );
+        // Store low-32-bit pointers as u16 cells.
+        uint16_t buffer_ptr_limbs[RV64_PTR_U16_LIMBS];
+        uint16_t input_ptr_limbs[RV64_PTR_U16_LIMBS];
+        ptr_to_u16_limbs(buffer_ptr_limbs, rec.buffer);
+        ptr_to_u16_limbs(input_ptr_limbs, rec.input);
+        XORIN_WRITE_ARRAY(instruction.buffer_ptr_limbs, buffer_ptr_limbs);
+        XORIN_WRITE_ARRAY(instruction.input_ptr_limbs, input_ptr_limbs);
         XORIN_WRITE(instruction.len_limb, static_cast<uint8_t>(rec.len));
 
         // Fill is_padding_bytes
@@ -157,24 +158,15 @@ __global__ void xorin_tracegen(
             XORIN_FILL_ZERO(mem_oc.buffer_bytes_write_aux_cols[t]);
         }
 
-        // Range check for pointer bounds
-        constexpr uint32_t MSL_RSHIFT = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
-        constexpr uint32_t RV64_TOTAL_BITS = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS;
-        bitwise_lookup.add_range(
-            (rec.buffer >> MSL_RSHIFT) << (RV64_TOTAL_BITS - pointer_max_bits),
-            (rec.input >> MSL_RSHIFT) << (RV64_TOTAL_BITS - pointer_max_bits)
+        // Bound the high u16 cells so the low-32-bit pointers fit in pointer_max_bits.
+        range_checker.add_count(
+            ptr_bound_from_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
+            U16_BITS
         );
-#pragma unroll
-        for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
-            bitwise_lookup.add_range(
-                (rec.buffer >> (RV64_CELL_BITS * i)) & RV64_CELL_MASK,
-                (rec.buffer >> (RV64_CELL_BITS * (i + 1))) & RV64_CELL_MASK
-            );
-            bitwise_lookup.add_range(
-                (rec.input >> (RV64_CELL_BITS * i)) & RV64_CELL_MASK,
-                (rec.input >> (RV64_CELL_BITS * (i + 1))) & RV64_CELL_MASK
-            );
-        }
+        range_checker.add_count(
+            ptr_bound_from_high_u16(input_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
+            U16_BITS
+        );
 
     } else {
         // Zero-fill padding rows

@@ -32,7 +32,7 @@ use openvm_instructions::{
 };
 use openvm_riscv_circuit::adapters::{
     abstract_compose, byte_ptr_to_u16_ptr, expand_to_rv64_register, tracing_read,
-    tracing_read_reg_ptr, tracing_write, RV64_CELL_BITS,
+    tracing_read_reg_ptr, tracing_write, RV64_BYTE_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -148,7 +148,7 @@ impl<
         }
 
         // We constrain the highest limb of each materialized pointer (limb 3, i.e. the most
-        // significant of the low 4 bytes) to be less than 2^(addr_bits - RV64_CELL_BITS * 3).
+        // significant of the low 4 bytes) to be less than 2^(addr_bits - RV64_BYTE_BITS * 3).
         // Combined with the zero padding on bytes 4..8 in the memory bus interaction above and
         // the memory argument, this ensures that every heap address accessed below is less than
         // 2^addr_bits without any extra explicit assertion.
@@ -159,14 +159,14 @@ impl<
             .map(|val| val[RV64_WORD_NUM_LIMBS - 1])
             .collect();
 
-        // Range checks constrain to RV64_CELL_BITS bits, so we need to shift the limbs to
+        // Range checks constrain to RV64_BYTE_BITS bits, so we need to shift the limbs to
         // constrain the correct amount of bits
         let limb_shift =
-            AB::F::from_usize(1 << (RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
+            AB::F::from_usize(1 << (RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
 
-        // Note: since limbs are read from memory we already know that limb[i] < 2^RV64_CELL_BITS
-        //       thus range checking limb[i] * shift < 2^RV64_CELL_BITS, gives us that
-        //       limb[i] < 2^(addr_bits - (RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1)))
+        // Note: since limbs are read from memory we already know that limb[i] < 2^RV64_BYTE_BITS
+        //       thus range checking limb[i] * shift < 2^RV64_BYTE_BITS, gives us that
+        //       limb[i] < 2^(addr_bits - (RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1)))
         for pair in need_range_check.chunks_exact(2) {
             self.bus
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
@@ -292,7 +292,7 @@ pub struct Rv64VecHeapAdapterFiller<
     const BLOCKS_PER_WRITE: usize,
 > {
     pointer_max_bits: usize,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
 }
 
 impl<
@@ -414,9 +414,9 @@ impl<
 
         // Range checks:
         // **NOTE**: Must do the range checks before overwriting the records
-        debug_assert!(self.pointer_max_bits <= RV64_CELL_BITS * RV64_WORD_NUM_LIMBS);
-        let limb_shift_bits = RV64_CELL_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits;
-        const MSL_SHIFT: usize = RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1);
+        debug_assert!(self.pointer_max_bits <= RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS);
+        let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits;
+        const MSL_SHIFT: usize = RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1);
         if NUM_READS > 1 {
             self.bitwise_lookup_chip.request_range(
                 (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,

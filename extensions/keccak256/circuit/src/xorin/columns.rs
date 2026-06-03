@@ -4,7 +4,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::riscv::RV64_WORD_NUM_LIMBS;
+use openvm_riscv_circuit::adapters::RV64_PTR_U16_LIMBS;
 
 use crate::{KECCAK_RATE_BYTES, KECCAK_RATE_MEM_OPS};
 
@@ -26,9 +26,11 @@ pub struct XorinInstructionCols<T> {
     pub input_reg_ptr: T,
     pub len_reg_ptr: T,
     pub buffer_ptr: T,
-    pub buffer_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
+    /// Low 32 bits of the `rs0` register as u16 cells.
+    pub buffer_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
     pub input_ptr: T,
-    pub input_ptr_limbs: [T; RV64_WORD_NUM_LIMBS],
+    /// Low 32 bits of the `rs1` register as u16 cells.
+    pub input_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
     pub len: T,
     pub len_limb: T,
     pub start_timestamp: T,

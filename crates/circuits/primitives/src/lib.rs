@@ -58,3 +58,6 @@ pub use sub_air::*;
 
 #[cfg(feature = "cuda")]
 pub mod cuda_abi;
+
+pub const BYTE_BITS: usize = u8::BITS as usize;
+pub const U16_BITS: usize = u16::BITS as usize;

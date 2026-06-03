@@ -17,7 +17,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use super::ShiftExecutor;
 #[allow(unused_imports)]
 use crate::{
-    adapters::{imm_to_bytes, imm_to_u64},
+    adapters::{imm_to_rv64_bytes, imm_to_rv64_u64},
     common::*,
 };
 
@@ -51,7 +51,7 @@ impl<A, const LIMB_BITS: usize> ShiftExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LI
         let c_u32 = c.as_canonical_u32();
         *data = ShiftPreCompute {
             c: if is_imm {
-                imm_to_u64(c_u32)
+                imm_to_rv64_u64(c_u32)
             } else {
                 c_u32 as u64
             },

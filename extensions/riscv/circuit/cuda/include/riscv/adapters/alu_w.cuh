@@ -80,8 +80,8 @@ struct Rv64BaseAluWAdapter {
             for (size_t i = 0; i < sizeof(MemoryReadAuxCols<uint8_t>); i++) {
                 rs2_aux.write(i, 0);
             }
-            uint32_t mask = (1u << RV64_CELL_BITS) - 1u;
-            bitwise_lookup.add_range(record.rs2 & mask, (record.rs2 >> RV64_CELL_BITS) & mask);
+            uint32_t mask = (1u << RV64_BYTE_BITS) - 1u;
+            bitwise_lookup.add_range(record.rs2 & mask, (record.rs2 >> RV64_BYTE_BITS) & mask);
         }
 
         // reads_aux[0] at from_timestamp.
@@ -93,7 +93,7 @@ struct Rv64BaseAluWAdapter {
 
         // result_word_msl XOR with 0x80 provides the sign bit lookup for W-width writes.
         bitwise_lookup.add_xor(
-            static_cast<uint32_t>(record.result_word_msl), 1u << (RV64_CELL_BITS - 1)
+            static_cast<uint32_t>(record.result_word_msl), 1u << (RV64_BYTE_BITS - 1)
         );
 
         COL_WRITE_VALUE(row, Rv64BaseAluWAdapterCols, result_sign, record.result_sign);

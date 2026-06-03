@@ -10,8 +10,10 @@
  * @brief Device-side helpers for local histogram accumulation in CUDA.
  */
 
+using openvm::BYTE_BITS;
+
 static constexpr uint WARP_MASK = WARP_SIZE - 1;
-static constexpr uint32_t BITWISE_NUM_BITS = riscv::RV64_CELL_BITS;
+static constexpr uint32_t BITWISE_NUM_BITS = BYTE_BITS;
 static constexpr uint32_t BITWISE_NUM_ROWS = 1 << (BITWISE_NUM_BITS << 1);
 
 namespace lookup {
@@ -123,7 +125,7 @@ template <uint32_t N> struct RangeTupleChecker {
 
 // Histogram for BitwiseOperationLookup, which either does a range check
 // or an XOR check for two field elements at a time. We expect global_hist
-// to be of size 2 * 2^RV64_CELL_BITS, where the first 2^RV64_CELL_BITS
+// to be of size 2 * 2^BYTE_BITS, where the first 2^BYTE_BITS
 // elements store the range check histogram and the rest store for XOR.
 struct BitwiseOperationLookup {
     lookup::Histogram hist;

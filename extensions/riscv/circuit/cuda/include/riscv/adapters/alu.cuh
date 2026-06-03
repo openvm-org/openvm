@@ -68,8 +68,8 @@ struct Rv64BaseAluAdapter {
             for (size_t i = 0; i < sizeof(MemoryReadAuxCols<uint8_t>); i++) {
                 rs2_aux.write(i, 0);
             }
-            uint32_t mask = (1u << RV64_CELL_BITS) - 1u;
-            bitwise_lookup.add_range(record.rs2 & mask, (record.rs2 >> RV64_CELL_BITS) & mask);
+            uint32_t mask = (1u << RV64_BYTE_BITS) - 1u;
+            bitwise_lookup.add_range(record.rs2 & mask, (record.rs2 >> RV64_BYTE_BITS) & mask);
         }
 
         Fp packed_prev[BLOCK_FE_WIDTH];

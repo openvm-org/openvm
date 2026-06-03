@@ -1,6 +1,6 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_circuit_derive::PreflightExecutor;
-use openvm_instructions::riscv::{RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS};
+use openvm_instructions::riscv::{RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
 use openvm_riscv_adapters::{
     Rv64IsEqualModAdapterAir, Rv64IsEqualModAdapterExecutor, Rv64IsEqualModAdapterFiller,
@@ -30,7 +30,7 @@ pub type ModularChip<F, const BLOCKS: usize> =
 // Must have TOTAL_LIMBS = NUM_LANES * MEMORY_BLOCK_BYTES.
 pub type ModularIsEqualAir<const NUM_LANES: usize, const TOTAL_LIMBS: usize> = VmAirWrapper<
     Rv64IsEqualModAdapterAir<2, NUM_LANES, TOTAL_LIMBS>,
-    ModularIsEqualCoreAir<TOTAL_LIMBS, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
+    ModularIsEqualCoreAir<TOTAL_LIMBS, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
 >;
 
 #[derive(Clone, PreflightExecutor)]
@@ -39,7 +39,7 @@ pub struct VmModularIsEqualExecutor<const NUM_LANES: usize, const TOTAL_LIMBS: u
         Rv64IsEqualModAdapterExecutor<2, NUM_LANES, TOTAL_LIMBS>,
         TOTAL_LIMBS,
         RV64_REGISTER_NUM_LIMBS,
-        RV64_CELL_BITS,
+        RV64_BYTE_BITS,
     >,
 );
 
@@ -49,6 +49,6 @@ pub type ModularIsEqualChip<F, const NUM_LANES: usize, const TOTAL_LIMBS: usize>
         Rv64IsEqualModAdapterFiller<2, NUM_LANES>,
         TOTAL_LIMBS,
         RV64_REGISTER_NUM_LIMBS,
-        RV64_CELL_BITS,
+        RV64_BYTE_BITS,
     >,
 >;
