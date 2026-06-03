@@ -104,8 +104,8 @@ mod tests {
                     |lhs: &VmState<BabyBear, GuestMemory>, rhs: &VmState<BabyBear, GuestMemory>| {
                         assert_eq!(lhs.pc(), rhs.pc());
                         for r in 0..32 {
-                            let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
-                            let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
+                            let a = unsafe { lhs.memory.read_bytes::<1>(1, r as u32) };
+                            let b = unsafe { rhs.memory.read_bytes::<1>(1, r as u32) };
                             assert_eq!(a, b);
                         }
                     };

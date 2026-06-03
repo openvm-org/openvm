@@ -153,7 +153,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         )?;
 
         let lt =
-            Rv64LessThanExecutor::new(Rv64BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
+            Rv64LessThanExecutor::new(Rv64BaseAluU16AdapterExecutor, LessThanOpcode::CLASS_OFFSET);
         inventory.add_executor(lt, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
         let shift = Rv64ShiftExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
@@ -268,8 +268,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(base_alu_w);
 
         let lt = Rv64LessThanAir::new(
-            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            LessThanCoreAir::new(bitwise_lu, LessThanOpcode::CLASS_OFFSET),
+            Rv64BaseAluU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
+            LessThanCoreAir::new(range_checker, LessThanOpcode::CLASS_OFFSET),
         );
         inventory.add_air(lt);
 
@@ -313,31 +313,31 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let beq = Rv64BranchEqualAir::new(
             Rv64BranchAdapterAir::new(exec_bridge, memory_bridge),
-            BranchEqualCoreAir::new(bitwise_lu, BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+            BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
         );
         inventory.add_air(beq);
 
         let blt = Rv64BranchLessThanAir::new(
             Rv64BranchAdapterAir::new(exec_bridge, memory_bridge),
-            BranchLessThanCoreAir::new(bitwise_lu, BranchLessThanOpcode::CLASS_OFFSET),
+            BranchLessThanCoreAir::new(range_checker, BranchLessThanOpcode::CLASS_OFFSET),
         );
         inventory.add_air(blt);
 
         let jal_lui = Rv64JalLuiAir::new(
             Rv64CondRdWriteAdapterAir::new(Rv64RdWriteAdapterAir::new(memory_bridge, exec_bridge)),
-            Rv64JalLuiCoreAir::new(bitwise_lu),
+            Rv64JalLuiCoreAir::new(range_checker),
         );
         inventory.add_air(jal_lui);
 
         let jalr = Rv64JalrAir::new(
             Rv64JalrAdapterAir::new(memory_bridge, exec_bridge),
-            Rv64JalrCoreAir::new(bitwise_lu, range_checker),
+            Rv64JalrCoreAir::new(range_checker),
         );
         inventory.add_air(jalr);
 
         let auipc = Rv64AuipcAir::new(
             Rv64RdWriteAdapterAir::new(memory_bridge, exec_bridge),
-            Rv64AuipcCoreAir::new(bitwise_lu),
+            Rv64AuipcCoreAir::new(range_checker),
         );
         inventory.add_air(auipc);
 
@@ -407,8 +407,8 @@ where
         inventory.next_air::<Rv64LessThanAir>()?;
         let lt = Rv64LessThanChip::new(
             LessThanFiller::new(
-                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
-                bitwise_lu.clone(),
+                Rv64BaseAluU16AdapterFiller::new(range_checker.clone()),
+                range_checker.clone(),
                 LessThanOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
@@ -464,7 +464,6 @@ where
         let beq = Rv64BranchEqualChip::new(
             BranchEqualFiller::new(
                 Rv64BranchAdapterFiller,
-                bitwise_lu.clone(),
                 BranchEqualOpcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
@@ -476,7 +475,7 @@ where
         let blt = Rv64BranchLessThanChip::new(
             BranchLessThanFiller::new(
                 Rv64BranchAdapterFiller,
-                bitwise_lu.clone(),
+                range_checker.clone(),
                 BranchLessThanOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
@@ -487,7 +486,7 @@ where
         let jal_lui = Rv64JalLuiChip::new(
             Rv64JalLuiFiller::new(
                 Rv64CondRdWriteAdapterFiller::new(Rv64RdWriteAdapterFiller),
-                bitwise_lu.clone(),
+                range_checker.clone(),
             ),
             mem_helper.clone(),
         );
@@ -495,18 +494,14 @@ where
 
         inventory.next_air::<Rv64JalrAir>()?;
         let jalr = Rv64JalrChip::new(
-            Rv64JalrFiller::new(
-                Rv64JalrAdapterFiller,
-                bitwise_lu.clone(),
-                range_checker.clone(),
-            ),
+            Rv64JalrFiller::new(Rv64JalrAdapterFiller, range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(jalr);
 
         inventory.next_air::<Rv64AuipcAir>()?;
         let auipc = Rv64AuipcChip::new(
-            Rv64AuipcFiller::new(Rv64RdWriteAdapterFiller, bitwise_lu.clone()),
+            Rv64AuipcFiller::new(Rv64RdWriteAdapterFiller, range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(auipc);
@@ -767,24 +762,13 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64Io {
         } = inventory.system().port();
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
+        let range_checker = inventory.range_checker().bus;
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
-
-        let bitwise_lu = {
-            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
-            if let Some(air) = existing_air {
-                air.bus
-            } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
-                let air = BitwiseOperationLookupAir::<8>::new(bus);
-                inventory.add_air(air);
-                air.bus
-            }
-        };
 
         let hint_store = Rv64HintStoreAir::new(
             exec_bridge,
             memory_bridge,
-            bitwise_lu,
+            range_checker,
             Rv64HintStoreOpcode::CLASS_OFFSET,
             byte_ptr_max_bits,
         );
@@ -814,23 +798,9 @@ where
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
 
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
-                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
-
         inventory.next_air::<Rv64HintStoreAir>()?;
         let hint_store = Rv64HintStoreChip::new(
-            Rv64HintStoreFiller::new(byte_ptr_max_bits, bitwise_lu.clone()),
+            Rv64HintStoreFiller::new(byte_ptr_max_bits, range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(hint_store);

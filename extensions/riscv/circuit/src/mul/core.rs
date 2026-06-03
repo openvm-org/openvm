@@ -253,7 +253,6 @@ where
             self.range_tuple_chip.add_count(&[*a as u32, *carry]);
         }
 
-        // AIR range-checks these byte limbs; add matching lookup counts.
         for (b_val, c_val) in record.b.iter().zip(record.c.iter()) {
             self.bitwise_lookup_chip
                 .request_range(*b_val as u32, *c_val as u32);
