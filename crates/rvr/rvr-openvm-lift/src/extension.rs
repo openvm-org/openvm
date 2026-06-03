@@ -136,13 +136,10 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
 
     /// Embedded pre-built static libraries (.a) for this extension.
     /// These are written to the generated project and linked into the final
-    /// .so/.dylib. Default delegates to `staticlib_file()`.
+    /// .so/.dylib. Default is empty (extension has no native side-car).
     fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
-        vec![self.staticlib_file()]
+        Vec::new()
     }
-
-    /// A single embedded pre-built static library (.a) for this extension.
-    fn staticlib_file(&self) -> (&'static str, &'static [u8]);
 
     /// Additional embedded C source files to compile alongside the generated
     /// code (e.g., precomputed tables).

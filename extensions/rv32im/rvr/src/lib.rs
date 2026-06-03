@@ -253,14 +253,6 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IoExtension {
         )]
     }
 
-    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
-        Vec::new()
-    }
-
-    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
-        ("", &[])
-    }
-
     unsafe fn register_host_callbacks(
         &self,
         lib: &libloading::Library,
@@ -333,14 +325,6 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IExtension {
             "rv32i_phantom_callbacks.c",
             include_str!("../c/rv32i_phantom_callbacks.c"),
         )]
-    }
-
-    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
-        Vec::new()
-    }
-
-    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
-        ("", &[])
     }
 
     unsafe fn register_host_callbacks(

@@ -214,14 +214,6 @@ impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
         )]
     }
 
-    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
-        Vec::new()
-    }
-
-    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
-        ("", &[])
-    }
-
     unsafe fn register_host_callbacks(
         &self,
         lib: &libloading::Library,
