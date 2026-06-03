@@ -188,6 +188,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .eval(builder, local_cols.is_buffer_start);
 
         // write hint
+        // `data` is stored as u16 cells; the memory bus enforces the cell bounds.
         self.memory_bridge
             .write(
                 MemoryAddress::new(

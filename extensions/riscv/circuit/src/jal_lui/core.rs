@@ -95,6 +95,7 @@ where
             imm,
             imm_low_4 + rd[1] * AB::F::from_u32(1 << LUI_IMM_LOW_BITS),
         );
+        builder.when(is_jal.clone()).assert_zero(imm_low_4);
 
         // Range-check the low LUI_IMM_LOW_BITS bits of imm.
         self.range_bus

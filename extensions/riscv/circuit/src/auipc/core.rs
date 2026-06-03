@@ -84,6 +84,7 @@ where
         let rd_low_32 = rd_data[0] + rd_data[1] * limb_base;
 
         // Constrain the low 32-bit addition.
+        // `from_pc` is bounded to `PC_BITS` by the program bus.
         let carry_top = (from_pc + imm.clone() * AB::F::from_u32(1 << RV64_BYTE_BITS) - rd_low_32)
             * carry_divide
             * carry_divide;

@@ -10,7 +10,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     utils::not,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
+    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper, U16_BITS,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -335,6 +335,7 @@ pub(super) fn run_less_than<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u16; NUM_LIMBS],
     y: &[u16; NUM_LIMBS],
 ) -> (bool, usize, bool, bool) {
+    debug_assert!((1..=U16_BITS).contains(&LIMB_BITS));
     let x_sign = (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1) && is_slt;
     let y_sign = (y[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1) && is_slt;
     for i in (0..NUM_LIMBS).rev() {

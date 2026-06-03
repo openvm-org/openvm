@@ -77,6 +77,7 @@ where
         let b = &cols.b;
         let inv_marker = &cols.diff_inv_marker;
 
+        // The adapter reads u16 memory cells, so the memory bus enforces the limb bounds.
         // 1 if cmp_result indicates a and b are equal, 0 otherwise
         let cmp_eq =
             cols.cmp_result * cols.opcode_beq_flag + not(cols.cmp_result) * cols.opcode_bne_flag;
