@@ -61,7 +61,7 @@ impl RvrCompiled {
         let file_name = self
             .lib_path
             .file_name()
-            .expect("shared library path always has a file name");
+            .ok_or_else(|| CompileError::LibLoad("wrong file name".to_string()))?;
         let dest_lib = dest_dir.join(file_name);
 
         fs::create_dir_all(dest_dir).map_err(|source| CompileError::CProject {
