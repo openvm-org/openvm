@@ -19,11 +19,12 @@ use openvm_circuit_primitives::{
         SharedBitwiseOperationLookupChip,
     },
     encoder::Encoder,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
     ColumnsAir, SubAir,
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_sha2_air::{
@@ -66,7 +67,7 @@ type Harness<RA, C> = TestChipHarness<F, Sha2VmExecutor<C>, Sha2MainAir<C>, Sha2
 
 fn create_harness_fields<C: Sha2Config>(
     system_port: SystemPort,
-    bitwise_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     pointer_max_bits: usize,
 ) -> (Sha2MainAir<C>, Sha2VmExecutor<C>, Sha2MainChip<F, C>) {
@@ -74,13 +75,13 @@ fn create_harness_fields<C: Sha2Config>(
     let empty_records = Arc::new(Mutex::new(None));
     let main_chip = Sha2MainChip::new(
         empty_records.clone(),
-        bitwise_chip.clone(),
+        range_checker_chip.clone(),
         pointer_max_bits,
         memory_helper,
     );
     let main_air = Sha2MainAir::new(
         system_port,
-        bitwise_chip.bus(),
+        range_checker_chip.bus(),
         pointer_max_bits,
         SHA2_BUS_IDX,
         Rv64Sha2Opcode::CLASS_OFFSET,
@@ -91,8 +92,8 @@ fn create_harness_fields<C: Sha2Config>(
 struct TestHarness<RA, C: Sha2Config> {
     harness: Harness<RA, C>,
     bitwise: (
-        BitwiseOperationLookupAir<RV64_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
     block_hasher: (Sha2BlockHasherVmAir<C>, Sha2BlockHasherChip<F, C>),
 }
@@ -101,13 +102,13 @@ fn create_test_harness<RA: Arena, C: Sha2Config>(
     tester: &mut VmChipTestBuilder<F>,
 ) -> TestHarness<RA, C> {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
     let (air, executor, main_chip) = create_harness_fields(
         tester.system_port(),
-        bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -116,10 +117,16 @@ fn create_test_harness<RA: Arena, C: Sha2Config>(
 
     let harness = Harness::<RA, C>::with_capacity(executor, air, main_chip, MAX_INS_CAPACITY);
 
-    let block_hasher_air =
-        Sha2BlockHasherVmAir::new(bitwise_chip.bus(), SUBAIR_BUS_IDX, SHA2_BUS_IDX);
+    let range_checker = tester.range_checker();
+    let block_hasher_air = Sha2BlockHasherVmAir::new(
+        bitwise_chip.bus(),
+        range_checker.bus(),
+        SUBAIR_BUS_IDX,
+        SHA2_BUS_IDX,
+    );
     let block_hasher_chip = Sha2BlockHasherChip::new(
         bitwise_chip.clone(),
+        range_checker,
         tester.address_bits(),
         tester.memory_helper(),
         shared_records,
@@ -540,7 +547,7 @@ fn negative_sha2_test_bad_final_hash<C: Sha2Config + 'static>() {
             );
             if cols.inner.flags.is_digest_row.is_one() {
                 for i in 0..C::HASH_WORDS {
-                    for j in 0..C::WORD_U8S {
+                    for j in 0..C::WORD_U16S {
                         cols.inner.final_hash[[i, j]] = F::ZERO;
                     }
                 }
@@ -716,9 +723,11 @@ fn build_sha256_round_only_trace() -> RowMajorMatrix<F> {
 fn negative_sha256_round_only_trace_rejected() {
     disable_debug_builder();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
+    let range_bus = openvm_circuit::arch::testing::default_var_range_checker_bus();
+    let range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
     // 2 rows × 4 rounds × 2 u16-limbs = 16 range checks, all (1, 1)
     for _ in 0..16 {
@@ -727,7 +736,7 @@ fn negative_sha256_round_only_trace_rejected() {
 
     let trace = build_sha256_round_only_trace();
     let air = Sha2SubAirTestWrapper {
-        sub_air: Sha2BlockHasherSubAir::<Sha256Config>::new(bitwise_bus, SUBAIR_BUS_IDX),
+        sub_air: Sha2BlockHasherSubAir::<Sha256Config>::new(bitwise_bus, range_bus, SUBAIR_BUS_IDX),
     };
     let air_ctx = AirProvingContext::simple_no_pis(trace);
 
@@ -735,6 +744,7 @@ fn negative_sha256_round_only_trace_rejected() {
         .build()
         .load_air_proving_ctx((Arc::new(air) as AirRef<_>, air_ctx))
         .load_periphery((bitwise_chip.air, bitwise_chip))
+        .load_periphery((range_checker_chip.air, range_checker_chip))
         .finalize();
 
     tester
@@ -763,7 +773,7 @@ struct GpuHarness<C: Sha2Config> {
     block_air: Sha2BlockHasherVmAir<C>,
     block_gpu: Sha2BlockHasherChipGpu<C>,
     block_cpu: Sha2BlockHasherChip<F, C>,
-    bitwise_air: BitwiseOperationLookupAir<RV64_CELL_BITS>,
+    bitwise_air: BitwiseOperationLookupAir<RV64_BYTE_BITS>,
     bitwise_gpu: Arc<BitwiseOperationLookupChipGPU<8>>,
 }
 
@@ -771,20 +781,29 @@ struct GpuHarness<C: Sha2Config> {
 fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness<C> {
     const GPU_MAX_INS_CAPACITY: usize = 8192;
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
+    ));
+
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        openvm_circuit::arch::testing::default_var_range_checker_bus(),
     ));
 
     let (main_air, main_executor, main_chip) = create_harness_fields(
         tester.system_port(),
-        dummy_bitwise_chip.clone(),
+        dummy_range_checker_chip.clone(),
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
-
-    let block_hasher_air = Sha2BlockHasherVmAir::new(bitwise_bus, SUBAIR_BUS_IDX, SHA2_BUS_IDX);
+    let block_hasher_air = Sha2BlockHasherVmAir::new(
+        bitwise_bus,
+        dummy_range_checker_chip.bus(),
+        SUBAIR_BUS_IDX,
+        SHA2_BUS_IDX,
+    );
     let block_hasher_chip = Sha2BlockHasherChip::new(
         dummy_bitwise_chip.clone(),
+        dummy_range_checker_chip,
         tester.address_bits(),
         tester.dummy_memory_helper(),
         main_chip.records.clone(),
@@ -794,13 +813,15 @@ fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness
     let main_gpu_chip = Sha2MainChipGpu::new(
         shared_records_gpu.clone(),
         tester.range_checker(),
-        tester.bitwise_op_lookup(),
         tester.address_bits() as u32,
         tester.timestamp_max_bits() as u32,
     );
 
-    let block_gpu_chip =
-        Sha2BlockHasherChipGpu::new(shared_records_gpu.clone(), tester.bitwise_op_lookup());
+    let block_gpu_chip = Sha2BlockHasherChipGpu::new(
+        shared_records_gpu.clone(),
+        tester.bitwise_op_lookup(),
+        tester.range_checker(),
+    );
 
     let bitwise_gpu = tester.bitwise_op_lookup();
     let bitwise_air = BitwiseOperationLookupAir::new(bitwise_bus);

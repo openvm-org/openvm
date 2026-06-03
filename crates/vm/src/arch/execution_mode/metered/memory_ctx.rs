@@ -148,8 +148,8 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     }
 
     /// Records the memory-tree pages touched by `[ptr, ptr + size)`.
-    /// For metered callbacks, DEFERRAL_AS ranges are F-cell ranges and u16-celled
-    /// address space ranges are byte ranges.
+    /// For metered callbacks, DEFERRAL_AS ranges are AS-native F-cell ranges and
+    /// u16-celled address space ranges are byte ranges.
     #[inline(always)]
     pub(crate) fn update_boundary_merkle_heights(
         &mut self,
