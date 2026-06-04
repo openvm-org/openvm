@@ -39,6 +39,11 @@ __device__ __forceinline__ void bytes_to_u16_limbs(T (&out)[NUM_LIMBS], const ui
     }
 }
 
+template <typename T, size_t NUM_LIMBS>
+__device__ __forceinline__ void pack_u8_pairs_le(T (&out)[NUM_LIMBS], const uint8_t *bytes) {
+    bytes_to_u16_limbs(out, bytes);
+}
+
 __device__ __host__ __forceinline__ uint32_t ptr_bound_from_high_u16(
     uint16_t high_u16,
     uint32_t ptr_max_bits
