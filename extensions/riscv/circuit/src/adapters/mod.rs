@@ -45,6 +45,52 @@ pub const RV64_PTR_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 /// Bit width covered by [`RV64_PTR_U16_LIMBS`].
 pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 
+/// Packs two little-endian u8 limbs into one u16-shaped field element.
+#[inline(always)]
+pub fn pack_u8_pair<T: PrimeCharacteristicRing>(lo: T, hi: T) -> T {
+    lo + hi * T::from_u32(1 << RV64_BYTE_BITS)
+}
+
+#[inline(always)]
+pub fn pack_u8_pair_u32<T: PrimeCharacteristicRing>(lo: u32, hi: u32) -> T {
+    pack_u8_pair(T::from_u32(lo), T::from_u32(hi))
+}
+
+#[inline(always)]
+pub fn pack_rv64_u16_block<L, H, T>(
+    low_word: &[L; RV64_WORD_NUM_LIMBS],
+    high: &[H; RV64_PTR_U16_LIMBS],
+) -> [T; BLOCK_FE_WIDTH]
+where
+    L: Clone + Into<T>,
+    H: Clone + Into<T>,
+    T: PrimeCharacteristicRing,
+{
+    [
+        pack_u8_pair(low_word[0].clone().into(), low_word[1].clone().into()),
+        pack_u8_pair(low_word[2].clone().into(), low_word[3].clone().into()),
+        high[0].clone().into(),
+        high[1].clone().into(),
+    ]
+}
+
+#[inline(always)]
+pub(crate) fn pack_high_u16<T, B>(
+    bytes: &[B; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
+) -> [T; RV64_PTR_U16_LIMBS]
+where
+    T: PrimeCharacteristicRing,
+    B: Copy + Into<u32>,
+{
+    std::array::from_fn(|i| pack_u8_pair_u32(bytes[2 * i].into(), bytes[2 * i + 1].into()))
+}
+
+/// Sign-extends a 16-bit immediate represented by `(imm, sign)` into a u32.
+#[inline(always)]
+pub fn sign_extend_imm16(imm: u32, sign: u32) -> u32 {
+    imm + sign * (u32::MAX << U16_BITS)
+}
+
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 

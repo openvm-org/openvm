@@ -52,7 +52,7 @@ use crate::{
     adapters::{
         rv64_limbs_to_u64, rv64_u16_block_to_bytes, Rv64JalrAdapterAir, Rv64JalrAdapterCols,
         Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_BYTE_BITS, RV64_PTR_U16_LIMBS,
-        RV64_REGISTER_NUM_LIMBS,
+        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
     Rv64JalrAir, Rv64JalrFiller,
@@ -64,7 +64,13 @@ type F = BabyBear;
 type Harness = TestChipHarness<F, Rv64JalrExecutor, Rv64JalrAir, Rv64JalrChip<F>>;
 
 fn into_limbs(num: u32) -> [u32; RV64_REGISTER_NUM_LIMBS] {
-    array::from_fn(|i| if i < 4 { (num >> (8 * i)) & 255 } else { 0 })
+    array::from_fn(|i| {
+        if i < RV64_WORD_NUM_LIMBS {
+            (num >> (RV64_BYTE_BITS * i)) & ((1 << RV64_BYTE_BITS) - 1)
+        } else {
+            0
+        }
+    })
 }
 
 fn create_harness_fields(
@@ -170,8 +176,12 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     };
 
     assert_eq!(next_pc & !1, final_pc);
+    // Compare against the raw 8-byte register value stored in memory.
     let rd_bytes = rv64_u16_block_to_bytes(rd_data);
-    assert_eq!(rd_bytes.map(F::from_u8), tester.read_bytes::<8>(1, a));
+    assert_eq!(
+        rd_bytes.map(F::from_u8),
+        tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, a)
+    );
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -217,6 +227,8 @@ fn rand_jalr_test() {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
+// Prankable JALR core columns: rs1 low 32 as two u16 cells; rd stores only
+// the high u16 of pc + 4.
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalrPrankValues {
     pub rd_high: Option<[u32; RV64_PTR_U16_LIMBS - 1]>,
@@ -558,6 +570,7 @@ fn run_jalr_sanity_test() {
     let rs1 = 736482910;
     let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, true);
     assert_eq!(next_pc & !1, 736481674);
+    // u32 pc+4 = 789456124 = 0x2f0e24fc => low u16=0x24fc, high u16=0x2f0e.
     assert_eq!(rd_data, [0x24fc, 0x2f0e, 0, 0]);
 }
 
@@ -622,7 +635,7 @@ fn read_register(state: &VmState<F>, offset: usize) -> u32 {
     let bytes = unsafe {
         state
             .memory
-            .read_bytes::<4>(RV64_REGISTER_AS, offset as u32)
+            .read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, offset as u32)
     };
     u32::from_le_bytes(bytes)
 }

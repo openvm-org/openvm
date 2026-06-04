@@ -199,7 +199,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
             AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
                 exec_bridge,
                 memory_bridge,
-                bitwise_lu,
+                range_checker,
                 byte_ptr_max_bits,
             )),
             BaseAluCoreAir::new(bitwise_lu, Rv64BaseAlu256Opcode::CLASS_OFFSET),
@@ -243,7 +243,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
             AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
                 exec_bridge,
                 memory_bridge,
-                bitwise_lu,
+                range_checker,
                 byte_ptr_max_bits,
             )),
             MultiplicationCoreAir::new(
@@ -258,7 +258,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
             AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
                 exec_bridge,
                 memory_bridge,
-                bitwise_lu,
+                range_checker,
                 byte_ptr_max_bits,
             )),
             ShiftCoreAir::new(bitwise_lu, range_checker, Rv64Shift256Opcode::CLASS_OFFSET),
@@ -325,7 +325,7 @@ where
         inventory.next_air::<Rv64BaseAlu256Air>()?;
         let alu = Rv64BaseAlu256Chip::new(
             BaseAluFiller::new(
-                Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, bitwise_lu.clone()),
+                Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 bitwise_lu.clone(),
                 Rv64BaseAlu256Opcode::CLASS_OFFSET,
             ),
@@ -369,7 +369,7 @@ where
         inventory.next_air::<Rv64Multiplication256Air>()?;
         let mult = Rv64Multiplication256Chip::new(
             MultiplicationFiller::new(
-                Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, bitwise_lu.clone()),
+                Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 range_tuple_checker.clone(),
                 bitwise_lu.clone(),
                 Rv64Mul256Opcode::CLASS_OFFSET,
@@ -381,7 +381,7 @@ where
         inventory.next_air::<Rv64Shift256Air>()?;
         let shift = Rv64Shift256Chip::new(
             ShiftFiller::new(
-                Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, bitwise_lu.clone()),
+                Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 bitwise_lu.clone(),
                 range_checker.clone(),
                 Rv64Shift256Opcode::CLASS_OFFSET,
