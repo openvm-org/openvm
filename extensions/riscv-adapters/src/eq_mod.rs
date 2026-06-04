@@ -127,7 +127,7 @@ impl<
         let d = AB::F::from_u32(RV64_REGISTER_AS);
         let e = AB::F::from_u32(RV64_MEMORY_AS);
 
-        // Read register values for rs
+        // Read register values for rs.
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
                 .read(
@@ -303,7 +303,7 @@ impl<
             )
         });
 
-        // Reads from heap
+        // Read memory values
         from_fn(|i| {
             debug_assert!(
                 (record.rs_val[i] as u64) + ((TOTAL_READ_SIZE - 1) as u64)
