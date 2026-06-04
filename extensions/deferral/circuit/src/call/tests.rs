@@ -2,19 +2,13 @@ use std::{array::from_fn, sync::Arc};
 
 use openvm_circuit::arch::{
     deferral::{DeferralState, InputMapVal},
-    testing::{
-        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
-    },
+    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
-};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
 };
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::{
@@ -30,7 +24,7 @@ use {
     super::{DeferralCallAdapterRecord, DeferralCallChipGpu, DeferralCallCoreRecord},
     crate::{count::DeferralCircuitCountChipGpu, poseidon2::DeferralPoseidon2ChipGpu},
     openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
+        testing::{GpuChipTestBuilder, GpuTestChipHarness},
         DenseRecordArena, EmptyAdapterCoreLayout,
     },
     openvm_cuda_common::d_buffer::DeviceBuffer,
@@ -49,7 +43,7 @@ use crate::{
     },
     utils::{
         byte_commit_to_f, join_f_memory_ops, COMMIT_NUM_BYTES, DIGEST_F_MEMORY_OPS,
-        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS, SPONGE_BYTES_PER_ROW,
     },
     DeferralFn,
 };
@@ -62,10 +56,6 @@ const DEFERRAL_POSEIDON2_BUS: BusIndex = 21;
 
 type Harness<RA> =
     TestChipHarness<F, DeferralCallExecutor, DeferralCallAir, DeferralCallChip<F>, RA>;
-type BitwisePeriphery = (
-    BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-    SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-);
 type CountPeriphery = (DeferralCircuitCountAir, Arc<DeferralCircuitCountChip>);
 type Poseidon2Periphery = (DeferralPoseidon2Air<F>, Arc<DeferralPoseidon2Chip<F>>);
 
@@ -92,7 +82,6 @@ type CudaPoseidon2Periphery = (
 
 struct CpuHarnessBundle {
     harness: Harness<MatrixRecordArena<F>>,
-    bitwise: BitwisePeriphery,
     count: CountPeriphery,
     poseidon2: Poseidon2Periphery,
 }
@@ -119,7 +108,7 @@ fn deferral_fns(num_deferrals: usize) -> Vec<Arc<DeferralFn>> {
                     .iter()
                     .fold(idx as u8, |acc, byte| acc.wrapping_add(*byte));
                 let num_chunks = (seed as usize % 4) + 1;
-                let len = num_chunks * DIGEST_SIZE;
+                let len = num_chunks * SPONGE_BYTES_PER_ROW;
                 (0..len)
                     .map(|i| seed.wrapping_add(i as u8))
                     .collect::<Vec<_>>()
@@ -263,10 +252,8 @@ fn create_cpu_harness(
     num_deferrals: usize,
     fns: Vec<Arc<DeferralFn>>,
 ) -> CpuHarnessBundle {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let range_checker = tester.range_checker();
+    let range_bus = range_checker.bus();
 
     let count_bus = DeferralCircuitCountBus::new(DEFERRAL_COUNT_BUS);
     let poseidon2_bus = DeferralPoseidon2Bus::new(DEFERRAL_POSEIDON2_BUS);
@@ -277,18 +264,18 @@ fn create_cpu_harness(
         DeferralCallAdapterAir::new(
             tester.execution_bridge(),
             tester.memory_bridge(),
-            bitwise_bus,
+            range_bus,
             tester.address_bits(),
         ),
-        DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus),
+        DeferralCallCoreAir::new(count_bus, poseidon2_bus, range_bus),
     );
     let executor = DeferralCallExecutor::new(DeferralCallAdapterExecutor, fns);
     let chip = DeferralCallChip::new(
         DeferralCallCoreFiller::new(
-            DeferralCallAdapterFiller::new(bitwise_chip.clone(), tester.address_bits()),
+            DeferralCallAdapterFiller::new(range_checker.clone(), tester.address_bits()),
             count_chip.clone(),
             poseidon2_chip.clone(),
-            bitwise_chip.clone(),
+            range_checker.clone(),
             tester.address_bits(),
         ),
         tester.memory_helper(),
@@ -297,7 +284,6 @@ fn create_cpu_harness(
     let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
     CpuHarnessBundle {
         harness,
-        bitwise: (bitwise_chip.air, bitwise_chip),
         count: (
             DeferralCircuitCountAir::new(count_bus, num_deferrals),
             count_chip,
@@ -313,10 +299,12 @@ fn create_cuda_harness(
     num_deferrals: usize,
     fns: Vec<Arc<DeferralFn>>,
 ) -> CudaHarnessBundle {
-    let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
+    let dummy_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChip::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+        ),
+    );
+    let range_bus = dummy_range_checker.bus();
 
     let count_bus = DeferralCircuitCountBus::new(DEFERRAL_COUNT_BUS);
     let poseidon2_bus = DeferralPoseidon2Bus::new(DEFERRAL_POSEIDON2_BUS);
@@ -327,18 +315,18 @@ fn create_cuda_harness(
         DeferralCallAdapterAir::new(
             tester.execution_bridge(),
             tester.memory_bridge(),
-            bitwise_bus,
+            range_bus,
             tester.address_bits(),
         ),
-        DeferralCallCoreAir::new(count_bus, poseidon2_bus, bitwise_bus),
+        DeferralCallCoreAir::new(count_bus, poseidon2_bus, range_bus),
     );
     let executor = DeferralCallExecutor::new(DeferralCallAdapterExecutor, fns);
     let cpu_chip = DeferralCallChip::new(
         DeferralCallCoreFiller::new(
-            DeferralCallAdapterFiller::new(dummy_bitwise_chip.clone(), tester.address_bits()),
+            DeferralCallAdapterFiller::new(dummy_range_checker.clone(), tester.address_bits()),
             count_chip_cpu,
             poseidon2_chip_cpu,
-            dummy_bitwise_chip,
+            dummy_range_checker,
             tester.address_bits(),
         ),
         tester.dummy_memory_helper(),
@@ -354,7 +342,6 @@ fn create_cuda_harness(
         DeferralPoseidon2ChipGpu::new(MAX_INS_CAPACITY.max(1), 1, device_ctx.clone());
     let gpu_chip = DeferralCallChipGpu::new(
         tester.range_checker(),
-        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
         count.clone(),
@@ -384,7 +371,6 @@ fn rand_deferral_call_test() {
     let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
     let CpuHarnessBundle {
         mut harness,
-        bitwise,
         count,
         poseidon2,
     } = create_cpu_harness(&tester, NUM_DEFERRALS, deferral_fns(NUM_DEFERRALS));
@@ -406,7 +392,6 @@ fn rand_deferral_call_test() {
         .load(harness)
         .load_periphery(count)
         .load_periphery(poseidon2)
-        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .expect("Verification failed");
@@ -419,8 +404,7 @@ fn test_cuda_rand_deferral_call_tracegen() {
     let mut tester = GpuChipTestBuilder::new(
         test_memory_config(),
         openvm_circuit::arch::testing::default_var_range_checker_bus(),
-    )
-    .with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    );
     let CudaHarnessBundle {
         mut harness,
         count,

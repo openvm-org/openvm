@@ -15,13 +15,12 @@ use openvm_instructions::{
 };
 use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use super::DeferralOutputExecutor;
 use crate::{
     utils::{
-        byte_memory_op_chunk, join_byte_memory_ops, split_output, DIGEST_BYTE_MEMORY_OPS,
-        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        byte_memory_op_chunk, join_byte_memory_ops, split_output, OUTPUT_TOTAL_BYTES,
+        OUTPUT_TOTAL_MEMORY_OPS, SPONGE_BYTES_PER_ROW, SPONGE_ROW_MEMORY_OPS,
     },
     OUTPUT_AIR_REL_IDX, POSEIDON2_AIR_REL_IDX,
 };
@@ -155,32 +154,30 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &DeferralOutputPrecompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
-    let output_ptr =
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rd_ptr));
-    let input_ptr =
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rs_ptr));
+    let output_ptr = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.rd_ptr));
+    let input_ptr = rv64_bytes_to_u32(exec_state.vm_read(RV64_REGISTER_AS, pre_compute.rs_ptr));
     let output_key_chunks: [[u8; MEMORY_BLOCK_BYTES]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
-        exec_state.vm_read_bytes(RV64_MEMORY_AS, input_ptr + (i * MEMORY_BLOCK_BYTES) as u32)
+        exec_state.vm_read(RV64_MEMORY_AS, input_ptr + (i * MEMORY_BLOCK_BYTES) as u32)
     });
     let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_byte_memory_ops(output_key_chunks);
     let (output_commit, output_len) = split_output(output_key);
 
     let output_len_val = rv64_bytes_to_u32(output_len) as usize;
 
-    // Bytes are sponge-hashed and constrained against output_commit. The
-    // sponge rate is DIGEST_SIZE.
-    let num_rows = output_len_val / DIGEST_SIZE + 1;
-    debug_assert!(output_len_val.is_multiple_of(DIGEST_SIZE));
+    // Each non-init row absorbs `SPONGE_BYTES_PER_ROW` bytes into Poseidon2 and
+    // writes them back to memory in `SPONGE_ROW_MEMORY_OPS` bus blocks.
+    let num_rows = output_len_val / SPONGE_BYTES_PER_ROW + 1;
+    debug_assert!(output_len_val.is_multiple_of(SPONGE_BYTES_PER_ROW));
 
     let output_raw = exec_state.streams.deferrals[pre_compute.deferral_idx as usize]
         .get_output(&output_commit.to_vec())
         .clone();
     debug_assert_eq!(output_raw.len(), output_len_val);
 
-    for (row_idx, output_chunk) in output_raw.chunks_exact(DIGEST_SIZE).enumerate() {
-        let row_output_ptr = output_ptr + (row_idx * DIGEST_SIZE) as u32;
-        for chunk_idx in 0..DIGEST_BYTE_MEMORY_OPS {
-            exec_state.vm_write_bytes::<MEMORY_BLOCK_BYTES>(
+    for (row_idx, output_chunk) in output_raw.chunks_exact(SPONGE_BYTES_PER_ROW).enumerate() {
+        let row_output_ptr = output_ptr + (row_idx * SPONGE_BYTES_PER_ROW) as u32;
+        for chunk_idx in 0..SPONGE_ROW_MEMORY_OPS {
+            exec_state.vm_write::<u8, MEMORY_BLOCK_BYTES>(
                 RV64_MEMORY_AS,
                 row_output_ptr + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
                 &byte_memory_op_chunk(output_chunk, chunk_idx),

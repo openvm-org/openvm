@@ -1,6 +1,7 @@
-use std::{array::from_fn, borrow::Borrow};
+use std::{array::from_fn, borrow::Borrow, mem::size_of};
 
 use itertools::{fold, Itertools};
+use openvm_circuit::arch::U16_CELL_SIZE;
 use openvm_circuit_primitives::{
     utils::assert_array_eq, AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
@@ -18,8 +19,11 @@ use p3_matrix::Matrix;
 
 use crate::bus::{OutputCommitBus, OutputCommitMessage, OutputValBus, OutputValMessage};
 
-pub(crate) const F_NUM_BYTES: usize = 4;
-pub(crate) const VALS_IN_DIGEST: usize = exact_div_or_panic(DIGEST_SIZE, F_NUM_BYTES);
+pub(crate) const F_NUM_BYTES: usize = size_of::<u32>();
+pub(crate) const U16_BITS: usize = u16::BITS as usize;
+pub(crate) const F_NUM_U16S: usize = exact_div_or_panic(F_NUM_BYTES, U16_CELL_SIZE);
+pub(crate) const VALS_IN_DIGEST: usize = exact_div_or_panic(DIGEST_SIZE, F_NUM_U16S);
+pub(crate) const SPONGE_BYTES_PER_ROW: usize = DIGEST_SIZE * U16_CELL_SIZE;
 
 const fn exact_div_or_panic(a: usize, b: usize) -> usize {
     assert!(b != 0 && a.is_multiple_of(b), "non-exact division");
@@ -114,30 +118,30 @@ where
             .assert_eq(local.output_len, next.output_len);
         builder.when(is_last.clone()).assert_eq(
             local.output_len,
-            local.row_idx * AB::Expr::from_usize(DIGEST_SIZE),
+            local.row_idx * AB::Expr::from_usize(SPONGE_BYTES_PER_ROW),
         );
 
         /*
-         * On valid rows non-first we want to receive the next VALS_IN_DIGEST values
-         * and constrain that input_vals is their byte decomposition.
+         * On valid non-first rows, receive the next `VALS_IN_DIGEST` values and
+         * constrain that `input_vals` is their u16-cell decomposition.
          */
         let next_f: [_; VALS_IN_DIGEST] = local
             .input_vals
-            .chunks(F_NUM_BYTES)
+            .chunks(F_NUM_U16S)
             .map(|c| {
                 fold(c.iter().enumerate(), AB::Expr::ZERO, |acc, (i, byte)| {
-                    acc + (AB::Expr::from_usize(1 << (i * 8)) * (*byte).into())
+                    acc + (AB::Expr::from_usize(1 << (i * U16_BITS)) * (*byte).into())
                 })
             })
             .collect_array()
             .unwrap();
 
-        for byte in local.input_vals {
+        for cell in local.input_vals {
             self.range_bus.lookup_key(
                 builder,
                 RangeCheckerBusMessage {
-                    value: byte.into(),
-                    max_bits: AB::Expr::from_u8(8),
+                    value: cell.into(),
+                    max_bits: AB::Expr::from_usize(U16_BITS),
                 },
                 local.is_valid - local.is_first,
             );
@@ -153,17 +157,18 @@ where
         );
 
         /*
-         * For each output value we need to constraint the canonicity of the byte
+         * For each output value, constrain canonicity of the u16-cell
          * decomposition.
          */
         let rcs = local
             .input_vals
-            .chunks(F_NUM_BYTES)
+            .chunks(F_NUM_U16S)
             .zip(local.canonicity_aux)
-            .map(|(x, aux)| {
+            .map(|(cells, aux)| {
+                let cells: &[_; F_NUM_U16S] = cells.try_into().unwrap();
                 CanonicitySubAir.assert_canonicity(
                     builder,
-                    x,
+                    cells,
                     &aux,
                     local.is_valid - local.is_first,
                 )
@@ -175,7 +180,7 @@ where
                 builder,
                 RangeCheckerBusMessage {
                     value: rc,
-                    max_bits: AB::Expr::from_u8(8),
+                    max_bits: AB::Expr::from_usize(U16_BITS),
                 },
                 local.is_valid - local.is_first,
             );

@@ -16,32 +16,30 @@ use openvm_circuit::{
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, AlignedBytesBorrow,
-};
+use openvm_circuit_primitives::{var_range::SharedVariableRangeCheckerChip, AlignedBytesBorrow};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{
-        RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
-        RV64_WORD_NUM_LIMBS,
-    },
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
 };
 use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, tracing_read, tracing_write};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::accumulator_ptrs;
 use crate::{
     adapters::{tracing_read_deferral, tracing_write_deferral},
-    call::{DeferralCallAdapterCols, DeferralCallCoreCols, DeferralCallReads, DeferralCallWrites},
+    call::{
+        accumulator_ptrs, DeferralCallAdapterCols, DeferralCallCoreCols, DeferralCallReadsBytes,
+        DeferralCallWritesBytes,
+    },
     canonicity::CanonicityTraceGen,
     count::DeferralCircuitCountChip,
     poseidon2::{deferral_poseidon2_chip, DeferralPoseidon2Chip},
     utils::{
         byte_commit_to_f, byte_memory_op_chunk, combine_output, f_memory_op_chunk,
-        join_byte_memory_ops, join_f_memory_ops, COMMIT_MEMORY_OPS, DIGEST_F_MEMORY_OPS,
-        F_NUM_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        join_byte_memory_ops, join_f_memory_ops, le_bytes_to_u16_array, scale_output_len_value,
+        scale_rv64_ptr_from_u32_value, u32_to_le_u16_cells, COMMIT_MEMORY_OPS, COMMIT_NUM_U16S,
+        DIGEST_F_MEMORY_OPS, F_NUM_BYTES, F_NUM_U16S, OUTPUT_TOTAL_MEMORY_OPS, U16_BITS,
     },
     DeferralFn,
 };
@@ -52,8 +50,8 @@ use crate::{
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct DeferralCallCoreRecord<F> {
     pub deferral_idx: F,
-    pub read_data: DeferralCallReads<u8, F>,
-    pub write_data: DeferralCallWrites<u8, F>,
+    pub read_data: DeferralCallReadsBytes<F>,
+    pub write_data: DeferralCallWritesBytes<F>,
 }
 
 #[derive(Clone, derive_new::new)]
@@ -67,7 +65,7 @@ pub struct DeferralCallCoreFiller<A, F: VmField> {
     adapter: A,
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     address_bits: usize,
 }
 
@@ -77,8 +75,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData = DeferralCallReads<u8, F>,
-            WriteData = DeferralCallWrites<u8, F>,
+            ReadData = DeferralCallReadsBytes<F>,
+            WriteData = DeferralCallWritesBytes<F>,
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -122,7 +120,7 @@ where
 
         let output_len_u32 =
             u32::try_from(output_len).expect("deferral output length should fit in a u32");
-        let write_data = DeferralCallWrites {
+        let write_data = DeferralCallWritesBytes {
             output_commit: output_commit.try_into().unwrap(),
             output_len: output_len_u32.to_le_bytes(),
             new_input_acc,
@@ -154,15 +152,25 @@ where
             unsafe { get_record_from_slice(&mut core_row, ()) };
         let cols: &mut DeferralCallCoreCols<F> = core_row.borrow_mut();
 
-        let input_commit_f = record.read_data.input_commit.map(F::from_u8);
-        let output_commit_f = record.write_data.output_commit.map(F::from_u8);
-        let output_len_f = record.write_data.output_len.map(F::from_u8);
+        // Pack record bytes into u16 cells (little-endian within each pair).
+        let input_commit_u16: [u16; COMMIT_NUM_U16S] =
+            le_bytes_to_u16_array(&record.read_data.input_commit);
+        let output_commit_u16: [u16; COMMIT_NUM_U16S] =
+            le_bytes_to_u16_array(&record.write_data.output_commit);
+        let output_len_u16: [u16; F_NUM_U16S] =
+            le_bytes_to_u16_array(&record.write_data.output_len);
+        let input_commit_f = input_commit_u16.map(F::from_u16);
+        let output_commit_f = output_commit_u16.map(F::from_u16);
+        let output_len_f = output_len_u16.map(F::from_u16);
 
         self.count_chip
             .add_count(record.deferral_idx.as_canonical_u32());
 
-        let input_f_commit: [F; _] = byte_commit_to_f(&input_commit_f);
-        let output_f_commit: [F; _] = byte_commit_to_f(&output_commit_f);
+        // Accumulator updates are still computed from the F-level decomposition.
+        let input_f_commit: [F; _] =
+            byte_commit_to_f(&record.read_data.input_commit.map(F::from_u8));
+        let output_f_commit: [F; _] =
+            byte_commit_to_f(&record.write_data.output_commit.map(F::from_u8));
         self.poseidon2_chip
             .perm_and_record(&record.read_data.old_input_acc, &input_f_commit, true);
         self.poseidon2_chip.perm_and_record(
@@ -171,52 +179,34 @@ where
             true,
         );
 
-        for bytes in record.write_data.output_commit.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(bytes[0] as u32, bytes[1] as u32);
-        }
-        for bytes in record.read_data.input_commit.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(bytes[0] as u32, bytes[1] as u32);
-        }
-        for bytes in record.write_data.output_len.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(bytes[0] as u32, bytes[1] as u32);
+        // Range-check each u16 cell of `output_commit` and `output_len`.
+        for &cell in output_commit_u16.iter().chain(output_len_u16.iter()) {
+            self.range_checker_chip.add_count(cell as u32, U16_BITS);
         }
 
-        // Match the adapter AIR's output-length range check.
-        debug_assert!(RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
-        let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
-        self.bitwise_lookup_chip.request_range(
-            (record.write_data.output_len[F_NUM_BYTES - 1] as u32) << limb_shift_bits,
-            0,
+        // Mirror the adapter AIR's output_len pointer-width check.
+        self.range_checker_chip.add_count(
+            scale_output_len_value(&output_len_u16, self.address_bits),
+            U16_BITS,
         );
 
         // Write columns in reverse order to avoid clobbering the record.
-        let input_commit_rcs = input_commit_f
-            .chunks_exact(F_NUM_BYTES)
+        for (cells, aux) in input_commit_f
+            .chunks_exact(F_NUM_U16S)
             .zip(cols.input_commit_lt_aux.iter_mut())
-            .map(|(bytes, aux)| {
-                let x_le = from_fn(|i| bytes[i]);
-                CanonicityTraceGen::generate_subrow(&x_le, aux)
-            })
-            .collect_vec();
-        for rc_pair in input_commit_rcs.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(rc_pair[0], rc_pair[1]);
+        {
+            let x_le = from_fn(|i| cells[i]);
+            let rc = CanonicityTraceGen::generate_subrow(&x_le, aux);
+            self.range_checker_chip.add_count(rc, U16_BITS);
         }
 
-        let output_commit_rcs = output_commit_f
-            .chunks_exact(F_NUM_BYTES)
+        for (cells, aux) in output_commit_f
+            .chunks_exact(F_NUM_U16S)
             .zip(cols.output_commit_lt_aux.iter_mut())
-            .map(|(bytes, aux)| {
-                let x_le = from_fn(|i| bytes[i]);
-                CanonicityTraceGen::generate_subrow(&x_le, aux)
-            })
-            .collect_vec();
-        for rc_pair in output_commit_rcs.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(rc_pair[0], rc_pair[1]);
+        {
+            let x_le = from_fn(|i| cells[i]);
+            let rc = CanonicityTraceGen::generate_subrow(&x_le, aux);
+            self.range_checker_chip.add_count(rc, U16_BITS);
         }
 
         cols.writes.new_output_acc = record.write_data.new_output_acc;
@@ -252,8 +242,9 @@ pub struct DeferralCallAdapterRecord<F> {
     pub old_input_acc_aux: [MemoryReadAuxRecord; DIGEST_F_MEMORY_OPS],
     pub old_output_acc_aux: [MemoryReadAuxRecord; DIGEST_F_MEMORY_OPS],
 
-    // Heap output writes use byte chunks; accumulator writes use DEFERRAL_AS
-    // cell chunks.
+    // Write auxiliary records. `output_commit_and_len` writes to byte-AS
+    // RV64_MEMORY_AS in `MEMORY_BLOCK_BYTES`-sized chunks; the accumulator
+    // writes go to F-celled DEFERRAL_AS in `BLOCK_FE_WIDTH`-sized chunks.
     pub output_commit_and_len_aux:
         [MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>; OUTPUT_TOTAL_MEMORY_OPS],
     pub new_input_acc_aux: [MemoryWriteAuxRecord<F, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
@@ -265,14 +256,14 @@ pub struct DeferralCallAdapterExecutor;
 
 #[derive(Clone, derive_new::new)]
 pub struct DeferralCallAdapterFiller {
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     address_bits: usize,
 }
 
 impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
     const WIDTH: usize = DeferralCallAdapterCols::<u8>::width();
-    type ReadData = DeferralCallReads<u8, F>;
-    type WriteData = DeferralCallWrites<u8, F>;
+    type ReadData = DeferralCallReadsBytes<F>;
+    type WriteData = DeferralCallWritesBytes<F>;
     type RecordMut<'a> = &'a mut DeferralCallAdapterRecord<F>;
 
     fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
@@ -320,7 +311,6 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
 
         let deferral_idx = c.as_canonical_u32();
 
-        // DEFERRAL_AS uses pointers; each accumulator is DIGEST_SIZE cells.
         let (input_acc_ptr, output_acc_ptr) = accumulator_ptrs(deferral_idx);
 
         let old_input_acc_chunks: [[F; BLOCK_FE_WIDTH]; DIGEST_F_MEMORY_OPS] = from_fn(|i| {
@@ -340,7 +330,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         let old_input_acc = join_f_memory_ops(old_input_acc_chunks);
         let old_output_acc = join_f_memory_ops(old_output_acc_chunks);
 
-        DeferralCallReads {
+        DeferralCallReadsBytes {
             input_commit,
             old_input_acc,
             old_output_acc,
@@ -378,7 +368,6 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
 
         let deferral_idx = c.as_canonical_u32();
 
-        // DEFERRAL_AS uses pointers; accumulator bases advance by DIGEST_SIZE cells.
         let (input_acc_ptr, output_acc_ptr) = accumulator_ptrs(deferral_idx);
 
         for chunk_idx in 0..DIGEST_F_MEMORY_OPS {
@@ -416,18 +405,11 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
 
         // Range checks must happen before we start writing adapter columns,
         // since the record and columns share the same backing buffer.
-        debug_assert!(RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS >= self.address_bits);
-        let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.address_bits;
-
-        self.bitwise_lookup_chip.request_range(
-            (record.rd_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
-            (record.rs_val.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1] as u32) << limb_shift_bits,
-        );
-        for ptr in [record.rd_val, record.rs_val] {
-            for bytes in ptr.to_le_bytes().chunks_exact(2) {
-                self.bitwise_lookup_chip
-                    .request_range(bytes[0] as u32, bytes[1] as u32);
-            }
+        for &v in [record.rd_val, record.rs_val].iter() {
+            self.range_checker_chip.add_count(
+                scale_rv64_ptr_from_u32_value(v, self.address_bits),
+                U16_BITS,
+            );
         }
 
         // Timestamps in AIR are assigned in strict sequence starting from
@@ -502,8 +484,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
             timestamp_mm(),
             adapter_row.rd_aux.as_mut(),
         );
-        adapter_row.rs_val = record.rs_val.to_le_bytes().map(F::from_u8);
-        adapter_row.rd_val = record.rd_val.to_le_bytes().map(F::from_u8);
+        adapter_row.rs_val = u32_to_le_u16_cells(record.rs_val);
+        adapter_row.rd_val = u32_to_le_u16_cells(record.rd_val);
 
         adapter_row.rs_ptr = record.rs_ptr;
         adapter_row.rd_ptr = record.rd_ptr;

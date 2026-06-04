@@ -17,7 +17,8 @@ use openvm_circuit::{
 };
 use openvm_cuda_backend::{BabyBearBn254Poseidon2GpuEngine, BabyBearPoseidon2GpuEngine};
 use openvm_deferral_circuit::{
-    DeferralExtension, DeferralFn, Rv64DeferralBuilder, Rv64DeferralConfig,
+    generate_deferral_results, poseidon2::deferral_poseidon2_chip, DeferralExtension, DeferralFn,
+    RawDeferralResult, Rv64DeferralBuilder, Rv64DeferralConfig,
 };
 use openvm_deferral_transpiler::DeferralTranspilerExtension;
 use openvm_recursion_circuit::{
@@ -71,9 +72,9 @@ const INPUT_COMMIT_0: [u8; 32] = [0x11; 32];
 const INPUT_COMMIT_1: [u8; 32] = [0x22; 32];
 const INPUT_COMMIT_2: [u8; 32] = [0x33; 32];
 
-const INPUT_RAW_0: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
-const INPUT_RAW_1: [u8; 8] = [8, 7, 6, 5, 4, 3, 2, 1];
-const INPUT_RAW_2: [u8; 8] = [9, 9, 9, 9, 9, 9, 9, 9];
+const INPUT_RAW_0: [u8; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+const INPUT_RAW_1: [u8; 16] = [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+const INPUT_RAW_2: [u8; 16] = [9; 16];
 
 fn make_deferral_extension(commits: Vec<[u8; 32]>) -> DeferralExtension {
     let fns: Vec<_> = (0..NUM_DEF_CIRCUITS)
@@ -133,27 +134,20 @@ fn f_digest_to_le_bytes(digest: &[F; DIGEST_SIZE]) -> [u8; 32] {
 }
 
 fn compute_output_f_commit(deferral_idx: u32, output_raw: &[u8]) -> [F; DIGEST_SIZE] {
-    assert!(output_raw.len().is_multiple_of(DIGEST_SIZE));
-    let mut initial_input = [F::ZERO; DIGEST_SIZE];
-    initial_input[0] = F::from_u32(deferral_idx);
-    initial_input[1] = F::from_usize(output_raw.len());
-
-    let (empty_output_commit, mut capacity) =
-        poseidon2_compress_with_capacity(initial_input, [F::ZERO; DIGEST_SIZE]);
-    if output_raw.is_empty() {
-        return empty_output_commit;
-    }
-
-    let mut chunks = output_raw.chunks_exact(DIGEST_SIZE).peekable();
-    while let Some(chunk) = chunks.next() {
-        let chunk_f = std::array::from_fn(|i| F::from_u8(chunk[i]));
-        let (res_left, res_right) = poseidon2_compress_with_capacity(chunk_f, capacity);
-        if chunks.peek().is_none() {
-            return res_left;
-        }
-        capacity = res_right;
-    }
-    unreachable!()
+    let hasher = deferral_poseidon2_chip::<F>();
+    let mut results = generate_deferral_results(
+        vec![RawDeferralResult {
+            input: Vec::new(),
+            output_raw: output_raw.to_vec(),
+        }],
+        deferral_idx,
+        &hasher,
+    );
+    let output_commit = results.pop().unwrap().output_commit;
+    let output_commit: [u8; 32] = output_commit
+        .try_into()
+        .expect("deferral output commit should be 32 bytes");
+    input_commit_to_f(&output_commit)
 }
 
 fn hash_deferral_commit(commit: [F; DIGEST_SIZE]) -> [F; DIGEST_SIZE] {

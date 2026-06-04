@@ -1,16 +1,13 @@
-use std::{array::from_fn, mem::size_of, sync::Arc};
+use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
 use openvm_circuit::{
     arch::{DenseRecordArena, SizedRecord},
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
-};
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-use openvm_instructions::riscv::RV64_BYTE_BITS;
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -21,13 +18,12 @@ use super::{
 use crate::{
     cuda_abi::output::{self, DeferralOutputPerCall, DeferralOutputPerRow},
     poseidon2::{deferral_poseidon2_chip, DeferralPoseidon2SharedBuffer},
-    utils::f_commit_to_bytes,
+    utils::{f_commit_to_bytes, le_bytes_to_u16_cells, SPONGE_BYTES_PER_ROW},
 };
 
 #[derive(new)]
 pub struct DeferralOutputChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub address_bits: usize,
     pub timestamp_max_bits: usize,
     pub count: Arc<DeviceBuffer<u32>>,
@@ -54,7 +50,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
             };
 
             let num_rows = header.num_rows as usize;
-            let output_len = (num_rows - 1) * DIGEST_SIZE;
+            let output_len = (num_rows - 1) * SPONGE_BYTES_PER_ROW;
             let write_bytes = unsafe {
                 std::slice::from_raw_parts(
                     records
@@ -69,16 +65,18 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
                 u32::try_from(per_call.len()).expect("deferral output call index should fit u32");
             let header_offset_u32 =
                 u32::try_from(header_offset).expect("record byte offset should fit u32");
+            let output_len_u32 =
+                u32::try_from(output_len).expect("deferral output length should fit u32");
 
             for section_idx in 0..num_rows {
                 let sponge_inputs = if section_idx == 0 {
                     let mut input = [F::ZERO; DIGEST_SIZE];
                     input[0] = F::from_u32(header.deferral_idx);
-                    input[1] = F::from_usize(output_len);
+                    input[1] = F::from_u32(output_len_u32);
                     input
                 } else {
-                    let base = (section_idx - 1) * DIGEST_SIZE;
-                    from_fn(|i| F::from_u8(write_bytes[base + i]))
+                    let base = (section_idx - 1) * SPONGE_BYTES_PER_ROW;
+                    le_bytes_to_u16_cells(&write_bytes[base..base + SPONGE_BYTES_PER_ROW])
                 };
 
                 current_poseidon2_res = poseidon2_chip.perm(
@@ -132,7 +130,6 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
                 self.num_deferral_circuits,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
-                &self.bitwise_lookup.count,
                 self.address_bits,
                 &self.poseidon2.records,
                 &self.poseidon2.counts,
