@@ -58,8 +58,8 @@ pub struct MemoryMerkleSubTree {
     pub height: usize,
     pub path_len: usize,
     layout: MemoryMerkleSubTreeLayout,
-    /// initial_data_ptr is a raw device pointer to the initial-memory buffer (`d_data`) captured in
-    /// [`Self::build_async`], stored as a `usize` so the borrow is erased.
+    /// initial_data_ptr is a raw device pointer to the initial-memory buffer (`d_data`) captured
+    /// in [`Self::build_async`], stored as a `usize` so the borrow is erased.
     ///
     /// SAFETY / lifetime: under the `OmitBottomLevels` layout the omitted bottom levels are never
     /// materialized into `buf`; they are recomputed on demand from this buffer during
@@ -68,7 +68,8 @@ pub struct MemoryMerkleSubTree {
     /// `build_async` call all the way until that update completes — not merely until the build
     /// kernel runs. The compiler cannot enforce this through the erased pointer, so the caller is
     /// responsible: in production the owning `DeviceBuffer`s are held in
-    /// `MemoryInventoryGPU::initial_memory` and only dropped after `update_with_touched_blocks` is done.
+    /// `MemoryInventoryGPU::initial_memory` and only dropped after `update_with_touched_blocks` is
+    /// done.
     initial_data_ptr: usize,
 }
 
