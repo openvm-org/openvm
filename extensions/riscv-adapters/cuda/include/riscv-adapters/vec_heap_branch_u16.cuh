@@ -3,6 +3,7 @@
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
 #include "primitives/constants.h"
+#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -84,7 +85,7 @@ template <size_t NUM_READS, size_t BLOCKS_PER_READ> struct Rv64VecHeapBranchU16A
 
         for (int i = NUM_READS - 1; i >= 0; i--) {
             Fp rs_val_packed[RV64_PTR_U16_LIMBS];
-            pack_u32_to_u16_limbs(rs_val_packed, record.rs_vals[i]);
+            ptr_to_u16_limbs(rs_val_packed, record.rs_vals[i]);
             COL_WRITE_ARRAY(row, Cols, rs_val[i], rs_val_packed);
         }
 
