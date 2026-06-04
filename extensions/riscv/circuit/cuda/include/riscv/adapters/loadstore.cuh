@@ -97,7 +97,7 @@ struct Rv64LoadStoreAdapter {
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, imm_sign, record.imm_sign);
 
         uint32_t ptr = record.rs1_val + uint32_t(record.imm) +
-                       uint32_t(record.imm_sign) * (UINT32_MAX << U16_BITS);
+                       uint32_t(record.imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
         uint32_t ptr_limbs[RV64_PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
         COL_WRITE_ARRAY(row, Rv64LoadStoreAdapterCols, mem_ptr_limbs, ptr_limbs);
