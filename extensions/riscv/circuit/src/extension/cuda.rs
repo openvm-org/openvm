@@ -76,13 +76,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.add_executor_chip(shift_w);
 
         inventory.next_air::<Rv64LoadStoreAir>()?;
-        let load_store_chip =
-            Rv64LoadStoreChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
+        let load_store_chip = Rv64LoadStoreChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+        );
         inventory.add_executor_chip(load_store_chip);
 
         inventory.next_air::<Rv64LoadSignExtendAir>()?;
         let load_sign_extend = Rv64LoadSignExtendChipGpu::new(
             range_checker.clone(),
+            bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );
