@@ -36,7 +36,7 @@ use {
             default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder,
             GpuTestChipHarness,
         },
-        to_byte_ptr_bits, EmptyAdapterCoreLayout,
+        EmptyAdapterCoreLayout,
     },
 };
 
@@ -823,7 +823,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig {
-        pointer_max_bits: to_byte_ptr_bits(20),
+        pointer_max_bits: 20,
         ..Default::default()
     };
     mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 20;
