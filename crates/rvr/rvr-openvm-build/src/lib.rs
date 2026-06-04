@@ -49,8 +49,8 @@ pub fn default_compiler_command() -> String {
     "clang".to_string()
 }
 
-/// Check that `compiler` resolves to clang.
-pub fn ensure_clang_compiler(compiler: &str) -> Result<(), String> {
+/// Check that `compiler` resolves to clang; returns its `--version` output.
+pub fn ensure_clang_compiler(compiler: &str) -> Result<String, String> {
     let output = Command::new(compiler)
         .arg("--version")
         .output()
@@ -64,13 +64,20 @@ pub fn ensure_clang_compiler(compiler: &str) -> Result<(), String> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let version = format!("{stdout}\n{stderr}");
-    if !output.status.success() || !version.to_ascii_lowercase().contains("clang") {
-        return Err(format!(
+    if output.status.success() && version.to_ascii_lowercase().contains("clang") {
+        Ok(version)
+    } else {
+        Err(format!(
             "RVR C compilation requires clang, but selected compiler '{compiler}' is not clang; \
              install clang-22 or set RVR_CC=clang"
-        ));
+        ))
     }
+}
 
+/// Check that `compiler` can compile the generated RVR C project: LLVM (not
+/// Apple) clang >= [`MIN_CLANG_MAJOR`]. Stricter than [`ensure_clang_compiler`].
+pub fn ensure_rvr_clang_compiler(compiler: &str) -> Result<(), String> {
+    let version = ensure_clang_compiler(compiler)?;
     // Unparsable versions pass; only reject known-bad configurations.
     let Some((is_apple, major)) = parse_clang_version_output(&version) else {
         return Ok(());
