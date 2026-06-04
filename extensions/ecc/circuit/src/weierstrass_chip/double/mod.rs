@@ -118,18 +118,13 @@ pub fn get_ec_double_air<const BLOCKS: usize>(
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
-    byte_ptr_max_bits: usize,
+    pointer_max_bits: usize,
     offset: usize,
     a_biguint: BigUint,
 ) -> WeierstrassAir<1, BLOCKS> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     WeierstrassAir::new(
-        Rv64VecHeapAdapterAir::new(
-            exec_bridge,
-            mem_bridge,
-            range_checker_bus,
-            byte_ptr_max_bits,
-        ),
+        Rv64VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
         FieldExpressionCoreAir::new(expr.clone(), offset, local_opcode_idx.clone(), vec![]),
     )
 }
@@ -137,13 +132,13 @@ pub fn get_ec_double_air<const BLOCKS: usize>(
 pub fn get_ec_double_step<const BLOCKS: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
-    byte_ptr_max_bits: usize,
+    pointer_max_bits: usize,
     offset: usize,
     a_biguint: BigUint,
 ) -> EcDoubleExecutor<BLOCKS> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     EcDoubleExecutor::new(FieldExpressionExecutor::new(
-        Rv64VecHeapAdapterExecutor::new(byte_ptr_max_bits),
+        Rv64VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
@@ -156,13 +151,13 @@ pub fn get_ec_double_chip<F, const BLOCKS: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
-    byte_ptr_max_bits: usize,
+    pointer_max_bits: usize,
     a_biguint: BigUint,
 ) -> WeierstrassChip<F, 1, BLOCKS> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker.bus(), a_biguint);
     WeierstrassChip::new(
         FieldExpressionFiller::new(
-            Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+            Rv64VecHeapAdapterFiller::new(pointer_max_bits, range_checker.clone()),
             expr,
             local_opcode_idx,
             vec![],

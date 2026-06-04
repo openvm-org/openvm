@@ -85,7 +85,7 @@ pub struct Rv64VecHeapU16AdapterAir<
     pub(super) memory_bridge: MemoryBridge,
     pub range_bus: VariableRangeCheckerBus,
     /// Maximum bit width of guest byte pointers.
-    byte_ptr_max_bits: usize,
+    pointer_max_bits: usize,
 }
 
 impl<
@@ -156,7 +156,7 @@ impl<
         for val in cols.rs_val.iter().chain(once(&cols.rd_val)) {
             self.range_bus
                 .range_check(
-                    ptr_bound_from_high_u16_expr(val[1], self.byte_ptr_max_bits),
+                    ptr_bound_from_high_u16_expr(val[1], self.pointer_max_bits),
                     U16_BITS,
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
@@ -264,7 +264,7 @@ pub struct Rv64VecHeapU16AdapterExecutor<
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
 > {
-    byte_ptr_max_bits: usize,
+    pointer_max_bits: usize,
 }
 
 #[derive(derive_new::new)]
@@ -273,7 +273,7 @@ pub struct Rv64VecHeapU16AdapterFiller<
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
 > {
-    byte_ptr_max_bits: usize,
+    pointer_max_bits: usize,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
@@ -316,7 +316,7 @@ impl<
                 memory,
                 record.rs_ptrs[i],
                 &mut record.rs_read_aux[i].prev_timestamp,
-                self.byte_ptr_max_bits,
+                self.pointer_max_bits,
             )
         });
 
@@ -325,14 +325,14 @@ impl<
             memory,
             record.rd_ptr,
             &mut record.rd_read_aux.prev_timestamp,
-            self.byte_ptr_max_bits,
+            self.pointer_max_bits,
         );
 
         // Read memory values
         from_fn(|i| {
             debug_assert!(
                 (record.rs_vals[i] as u64) + ((MEMORY_BLOCK_BYTES * BLOCKS_PER_READ - 1) as u64)
-                    < (1u64 << self.byte_ptr_max_bits)
+                    < (1u64 << self.pointer_max_bits)
             );
             from_fn(|j| {
                 tracing_read_u16(
@@ -356,7 +356,7 @@ impl<
 
         debug_assert!(
             (record.rd_val as u64) + ((MEMORY_BLOCK_BYTES * BLOCKS_PER_WRITE - 1) as u64)
-                < (1u64 << self.byte_ptr_max_bits)
+                < (1u64 << self.pointer_max_bits)
         );
 
         #[allow(clippy::needless_range_loop)]
@@ -395,7 +395,7 @@ impl<
         // **NOTE**: Must do the range checks before overwriting the records
         for &v in record.rs_vals.iter().chain(once(&record.rd_val)) {
             self.range_checker_chip
-                .add_count(ptr_bound_from_ptr(v, self.byte_ptr_max_bits), U16_BITS);
+                .add_count(ptr_bound_from_ptr(v, self.pointer_max_bits), U16_BITS);
         }
 
         let timestamp_delta = NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;
