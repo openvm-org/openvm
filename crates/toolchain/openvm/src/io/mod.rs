@@ -59,7 +59,9 @@ fn hint_store_word(ptr: *mut u64) {
 /// Read the next `len` bytes from the hint stream into a vector.
 pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
     let num_words = len.div_ceil(WORD_SIZE);
-    let capacity = num_words.checked_mul(WORD_SIZE).expect("hint length overflow");
+    let capacity = num_words
+        .checked_mul(WORD_SIZE)
+        .expect("hint length overflow");
 
     #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
     {
