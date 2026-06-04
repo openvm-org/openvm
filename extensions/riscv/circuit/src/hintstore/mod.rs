@@ -56,7 +56,11 @@ mod tests;
 // `rem_words` is bounded by `2^MAX_HINT_BUFFER_DWORDS_BITS` (= 2^10), so one u16
 // column carries all information. The upper register cells are hardcoded to zero
 // in the memory bus interaction.
-const _: () = assert!(MAX_HINT_BUFFER_DWORDS_BITS <= U16_BITS);
+const _: () = assert!(
+    MAX_HINT_BUFFER_DWORDS_BITS <= U16_BITS,
+    "MAX_HINT_BUFFER_DWORDS_BITS must fit in one u16 cell"
+);
+// Scale factor for rem_words range checks.
 const REM_WORDS_SHIFT: usize = U16_BITS - MAX_HINT_BUFFER_DWORDS_BITS;
 
 #[repr(C)]
@@ -173,8 +177,12 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .eval(builder, is_start.clone());
 
         // read num_words
-        let num_words_data: [AB::Expr; BLOCK_FE_WIDTH] =
-            expand_to_rv64_block(&[local_cols.rem_words]);
+        let num_words_data: [AB::Expr; BLOCK_FE_WIDTH] = [
+            local_cols.rem_words.into(),
+            AB::Expr::ZERO,
+            AB::Expr::ZERO,
+            AB::Expr::ZERO,
+        ];
         self.memory_bridge
             .read(
                 MemoryAddress::new(
@@ -188,7 +196,6 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .eval(builder, local_cols.is_buffer_start);
 
         // write hint
-        // `data` is stored as u16 cells; the memory bus enforces the cell bounds.
         self.memory_bridge
             .write(
                 MemoryAddress::new(
@@ -219,11 +226,12 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             )
             .eval(builder, is_start.clone());
 
-        // Preventing mem_ptr overflow: mem_ptr < 2^pointer_max_bits.
         assert!(
             (U16_BITS..=RV64_PTR_BITS).contains(&self.pointer_max_bits),
             "pointer_max_bits must fit in the low 32-bit mem_ptr view"
         );
+
+        // Preventing mem_ptr overflow: mem_ptr < 2^pointer_max_bits.
         self.range_bus
             .range_check(
                 ptr_bound_from_high_u16_expr(
@@ -549,12 +557,12 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                     num_words <= MAX_HINT_BUFFER_DWORDS as u32,
                     "num_words must be <= MAX_HINT_BUFFER_DWORDS"
                 );
-                // Range check for mem_ptr (using pointer_max_bits).
+                // Range check for mem_ptr (using pointer_max_bits) and num_words (using
+                // MAX_HINT_BUFFER_DWORDS_BITS).
                 self.range_checker_chip.add_count(
                     ptr_bound_from_ptr(record.inner.mem_ptr, self.pointer_max_bits),
                     U16_BITS,
                 );
-                // Range check for num_words (using MAX_HINT_BUFFER_DWORDS_BITS).
                 self.range_checker_chip
                     .add_count(num_words << REM_WORDS_SHIFT, U16_BITS);
 

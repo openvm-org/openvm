@@ -46,9 +46,9 @@ use super::{
 };
 use crate::{
     adapters::{
-        rv64_bytes_to_u32, Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterCols,
-        Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller, RV64_BYTE_BITS,
-        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        pack_u8_pair_u32, rv64_bytes_to_u32, sign_extend_imm16, Rv64LoadStoreAdapterAir,
+        Rv64LoadStoreAdapterCols, Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller,
+        RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     LoadStoreFiller, Rv64LoadStoreAir, Rv64LoadStoreExecutor,
 };
@@ -119,7 +119,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 ) {
     let imm = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS)));
     let imm_sign = imm_sign.unwrap_or(rng.random_range(0..2));
-    let imm_ext = imm + imm_sign * 0xffff0000;
+    let imm_ext = sign_extend_imm16(imm, imm_sign);
 
     let alignment = match opcode {
         LOADD | STORED => 3,
@@ -240,7 +240,6 @@ fn rand_loadstore_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
     if [STORED, STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
-        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
     }
     let mut tester = VmChipTestBuilder::from_config(mem_config);
     let mut harness = create_harness(&mut tester);
@@ -418,7 +417,8 @@ fn run_negative_loadstore_test(
         let core_cols: &mut LoadStoreCoreCols<F, RV64_REGISTER_NUM_LIMBS> = core_row.borrow_mut();
 
         if let Some(rs1_data) = prank_vals.rs1_data {
-            adapter_cols.rs1_data = rs1_data.map(F::from_u32);
+            adapter_cols.rs1_data =
+                array::from_fn(|i| pack_u8_pair_u32(rs1_data[2 * i], rs1_data[2 * i + 1]));
         }
         if let Some(read_data) = prank_vals.read_data {
             core_cols.read_data = read_data.map(F::from_u32);

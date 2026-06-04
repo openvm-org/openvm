@@ -47,7 +47,7 @@ use {
 use super::{DivRemWCoreAir, DivRemWFiller, Rv64DivRemWChip};
 use crate::{
     adapters::{
-        Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor,
+        pack_high_u16, Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor,
         Rv64MultWAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     divrem::{run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase},
@@ -418,7 +418,7 @@ fn run_negative_divremw_test(
             let rs1_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 rs1[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
             cols.b = rs1_word.map(F::from_u32);
-            adapter_cols.rs1_high = rs1_high.map(F::from_u32);
+            adapter_cols.rs1_high = pack_high_u16(&rs1_high);
         }
         if let Some(rs2) = prank_vals.rs2 {
             let rs2_word: [u32; RV64_WORD_NUM_LIMBS] =
@@ -426,7 +426,7 @@ fn run_negative_divremw_test(
             let rs2_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 rs2[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
             cols.c = rs2_word.map(F::from_u32);
-            adapter_cols.rs2_high = rs2_high.map(F::from_u32);
+            adapter_cols.rs2_high = pack_high_u16(&rs2_high);
         }
         adapter_cols.result_sign = F::from_u32(default_result_sign);
 

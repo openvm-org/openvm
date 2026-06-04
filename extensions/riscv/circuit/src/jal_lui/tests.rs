@@ -43,7 +43,7 @@ use crate::{
     adapters::{
         rv64_u16_block_to_bytes, Rv64CondRdWriteAdapterAir, Rv64CondRdWriteAdapterCols,
         Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, Rv64RdWriteAdapterFiller,
-        RV64_BYTE_BITS, RV_J_TYPE_IMM_BITS,
+        RV64_BYTE_BITS, RV64_PTR_U16_LIMBS, RV_J_TYPE_IMM_BITS,
     },
     jal_lui::{get_signed_imm, run_jal_lui, Rv64JalLuiCoreCols},
     Rv64JalLuiAir, Rv64JalLuiChip, Rv64JalLuiCoreAir, Rv64JalLuiExecutor, Rv64JalLuiFiller,
@@ -210,7 +210,7 @@ fn rand_jal_lui_test(opcode: Rv64JalLuiOpcode, num_ops: usize) {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalLuiPrankValues {
-    pub rd_data: Option<[u32; 2]>,
+    pub rd_data: Option<[u32; RV64_PTR_U16_LIMBS]>,
     pub imm: Option<i32>,
     pub imm_low_4: Option<u32>,
     pub is_jal: Option<bool>,
