@@ -180,7 +180,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         let limbs_01 = local_cols.rs1_data[0];
         let limbs_23 = local_cols.rs1_data[1];
 
-        let inv = AB::F::from_u32((1 << U16_BITS) as u32).inverse();
+        let inv = AB::F::from_u32(1u32 << U16_BITS).inverse();
         let carry = (limbs_01 + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
 
         builder.when(is_valid.clone()).assert_bool(carry.clone());
@@ -209,7 +209,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             .eval(builder, is_valid.clone());
 
         let mem_ptr = local_cols.mem_ptr_limbs[0]
-            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32((1 << U16_BITS) as u32);
+            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1u32 << U16_BITS);
 
         let is_store = is_valid.clone() - is_load.clone();
         // constrain mem_as to be in {0, 1, 2} if the instruction is a load,
