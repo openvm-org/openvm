@@ -372,6 +372,7 @@ pub mod loadstore_cuda {
             pointer_max_bits: usize,
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
+            d_bitwise_lookup: *mut u32,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -384,6 +385,7 @@ pub mod loadstore_cuda {
         d_records: &DeviceBuffer<u8>,
         pointer_max_bits: usize,
         d_range_checker: &DeviceBuffer<F>,
+        d_bitwise_lookup: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -395,6 +397,7 @@ pub mod loadstore_cuda {
             pointer_max_bits,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
             timestamp_max_bits,
             stream,
         ))
@@ -413,6 +416,7 @@ pub mod load_sign_extend_cuda {
             pointer_max_bits: usize,
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
+            d_bitwise_lookup: *mut u32,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -425,6 +429,7 @@ pub mod load_sign_extend_cuda {
         d_records: &DeviceBuffer<u8>,
         pointer_max_bits: usize,
         d_range_checker: &DeviceBuffer<F>,
+        d_bitwise_lookup: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -436,6 +441,7 @@ pub mod load_sign_extend_cuda {
             pointer_max_bits,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
             timestamp_max_bits,
             stream,
         ))

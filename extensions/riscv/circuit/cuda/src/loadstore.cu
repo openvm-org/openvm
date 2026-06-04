@@ -108,10 +108,10 @@ __device__ __forceinline__ void run_write_data(
 }
 
 template <size_t NUM_CELLS> struct LoadStoreCore {
-    VariableRangeChecker range_checker;
+    BitwiseOperationLookup bitwise_lookup;
 
-    __device__ LoadStoreCore(VariableRangeChecker range_checker)
-        : range_checker(range_checker) {}
+    __device__ LoadStoreCore(BitwiseOperationLookup bitwise_lookup)
+        : bitwise_lookup(bitwise_lookup) {}
 
     template <typename T> using Cols = LoadStoreCoreCols<T, NUM_CELLS>;
 
@@ -139,9 +139,9 @@ template <size_t NUM_CELLS> struct LoadStoreCore {
         COL_WRITE_ARRAY(row, Cols, read_data, record.read_data);
         COL_WRITE_ARRAY(row, Cols, prev_data, record.prev_data);
 #pragma unroll
-        for (size_t i = 0; i < NUM_CELLS; i++) {
-            range_checker.add_count(record.read_data[i], 8);
-            range_checker.add_count(record.prev_data[i], 8);
+        for (size_t i = 0; i < NUM_CELLS; i += 2) {
+            bitwise_lookup.add_range(record.read_data[i], record.read_data[i + 1]);
+            bitwise_lookup.add_range(record.prev_data[i], record.prev_data[i + 1]);
         }
 
         run_write_data(write_data, opcode, record.read_data, record.prev_data, shift);
@@ -168,6 +168,7 @@ __global__ void rv64_load_store_tracegen(
     size_t pointer_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
+    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -183,7 +184,7 @@ __global__ void rv64_load_store_tracegen(
         adapter.fill_trace_row(row, record.adapter);
 
         auto core = LoadStoreCore<RV64_REGISTER_NUM_LIMBS>(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins)
+            BitwiseOperationLookup(bitwise_lookup_ptr)
         );
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv64LoadStoreCols, core)), record.core);
     } else {
@@ -199,6 +200,7 @@ extern "C" int _rv64_load_store_tracegen(
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
+    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -213,6 +215,7 @@ extern "C" int _rv64_load_store_tracegen(
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,
+        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();
