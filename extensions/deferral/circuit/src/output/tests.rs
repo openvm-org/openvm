@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, DEFAULT_BLOCK_SIZE,
+    to_byte_ptr_bits, Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -14,7 +14,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_CELL_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::{interaction::BusIndex, p3_field::PrimeCharacteristicRing};
@@ -99,6 +99,13 @@ fn test_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
     config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
     config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
+    config
+}
+
+fn test_memory_config_cpu() -> MemoryConfig {
+    let mut config = test_memory_config();
+    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells =
+        1 << to_byte_ptr_bits(config.pointer_max_bits);
     config
 }
 
@@ -311,7 +318,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
 #[test]
 fn rand_deferral_output_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config_cpu());
     let CpuHarnessBundle {
         mut harness,
         bitwise,
@@ -359,7 +366,7 @@ fn rand_deferral_output_test() {
 #[test]
 fn deferral_output_non_first_row_canonicity_aux_cleared_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config_cpu());
     let CpuHarnessBundle {
         mut harness,
         bitwise,
@@ -374,10 +381,10 @@ fn deferral_output_non_first_row_canonicity_aux_cleared_test() {
     // columns the filler skips (the bug under test) retain this value.
     harness.arena.trace_buffer.fill(F::from_u32(0xdead));
 
-    let rd = gen_pointer(&mut rng, DEFAULT_BLOCK_SIZE);
-    let rs = gen_pointer(&mut rng, DEFAULT_BLOCK_SIZE);
-    let output_ptr = gen_pointer(&mut rng, DEFAULT_BLOCK_SIZE);
-    let input_ptr = gen_pointer(&mut rng, DEFAULT_BLOCK_SIZE);
+    let rd = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    let rs = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    let output_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    let input_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
     let deferral_idx = 0;
 
     // 2 digests -> 3 rows, so the section has non-first rows (rows 1 and 2).
@@ -396,15 +403,15 @@ fn deferral_output_non_first_row_canonicity_aux_cleared_test() {
         result.output_raw.clone(),
     );
 
-    tester.write(
-        RV32_REGISTER_AS as usize,
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
         rd,
-        (output_ptr as u32).to_le_bytes().map(F::from_u8),
+        (output_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write(
-        RV32_REGISTER_AS as usize,
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
         rs,
-        (input_ptr as u32).to_le_bytes().map(F::from_u8),
+        (input_ptr as u64).to_le_bytes().map(F::from_u8),
     );
 
     let output_commit: [u8; COMMIT_NUM_BYTES] = result.output_commit.try_into().unwrap();
@@ -423,8 +430,8 @@ fn deferral_output_non_first_row_canonicity_aux_cleared_test() {
                 rd,
                 rs,
                 deferral_idx,
-                RV32_REGISTER_AS as usize,
-                RV32_MEMORY_AS as usize,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
             ],
         ),
     );
