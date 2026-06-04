@@ -54,7 +54,7 @@ async fn main() -> Result<()> {
         VmCliCommands::Prove(cmd) => cmd.run(),
         VmCliCommands::Run(cmd) => cmd.run(),
         VmCliCommands::Setup(cmd) => cmd.run().await,
-        VmCliCommands::Toolchain(cmd) => cmd.run(),
+        VmCliCommands::Toolchain(cmd) => cmd.run().await,
         VmCliCommands::Verify(cmd) => cmd.run(),
     }
 }
