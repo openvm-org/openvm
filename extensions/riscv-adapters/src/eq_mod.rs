@@ -40,8 +40,13 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-/// Byte-shaped equality-mod adapter. Heap reads and register writes are
-/// `MEMORY_BLOCK_BYTES` raw bytes per memory-bus message.
+/// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
+/// * The data is read from the heap (address space 2), and the pointers are read from registers
+///   (address space 1).
+/// * Reads take the form of `BLOCKS_PER_READ` consecutive heap reads.
+/// * Writes are to 64-bit register rd (8 bytes).
+///
+/// The materialized pointer values are stored as two u16 cells.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct Rv64IsEqualModAdapterCols<T, const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
