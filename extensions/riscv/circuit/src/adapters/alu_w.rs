@@ -49,14 +49,12 @@ pub struct Rv64BaseAluWAdapterCols<T> {
     pub rd_ptr: T,
     pub rs1_ptr: T,
     /// Upper 4 bytes of rs1 register read, packed as two u16 cells.
-    /// Kept in the adapter to constrain the full-width memory read.
     pub rs1_high: [T; RV64_PTR_U16_LIMBS],
     /// Pointer if rs2 was a read, immediate value otherwise
     pub rs2: T,
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: T,
-    /// Upper 4 bytes of rs2 register read, packed as two u16 cells.
-    /// Kept in the adapter to constrain the full-width memory read; unused when rs2 is immediate.
+    /// Upper 4 bytes of rs2 register read, packed as two u16 cells (unused when rs2 is immediate).
     pub rs2_high: [T; RV64_PTR_U16_LIMBS],
     /// Sign bit of the low-word core result used to build full-width sign-extended writes.
     pub result_sign: T,
@@ -226,14 +224,11 @@ pub struct Rv64BaseAluWAdapterRecord {
 
     pub rd_ptr: u32,
     pub rs1_ptr: u32,
-    /// Upper 4 bytes of rs1 register read, kept to satisfy the full-width memory read.
     pub rs1_high: [u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
     /// Pointer if rs2 was a read, immediate value otherwise
     pub rs2: u32,
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: u8,
-    /// Upper 4 bytes of rs2 register read, kept to satisfy the full-width memory read
-    /// (unused when rs2 is immediate).
     pub rs2_high: [u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
     pub result_sign: u8,
     pub result_word_msl: u8,
