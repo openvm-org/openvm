@@ -28,7 +28,7 @@ use openvm_stark_backend::{
         MatrixDimensions, ProverBackend, ProverDevice, ProvingContext, TraceCommitter,
     },
     verifier::VerifierError,
-    AirRef, Com, StarkEngine, StarkProtocolConfig, Val,
+    Com, StarkEngine, StarkProtocolConfig, Val,
 };
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
@@ -1342,6 +1342,9 @@ where
     VB: VmBuilder<E>,
 {
     let air_inv = vm.config().create_airs().unwrap();
-    let global_airs: Vec<AirRef<E::SC>> = air_inv.into_airs().map(|a| a as AirRef<_>).collect();
+    let global_airs: Vec<openvm_stark_backend::AirRef<E::SC>> = air_inv
+        .into_airs()
+        .map(|a| a as openvm_stark_backend::AirRef<_>)
+        .collect();
     vm.engine.debug(&global_airs, ctx);
 }
