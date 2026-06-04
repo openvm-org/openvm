@@ -65,7 +65,7 @@ use super::{MulWCoreAir, MulWFiller, Rv64MulWChip};
 use crate::Rv64ImConfig;
 use crate::{
     adapters::{
-        Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor,
+        pack_high_u16, Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor,
         Rv64MultWAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     mul::MultiplicationCoreCols,
@@ -267,7 +267,7 @@ fn run_negative_mulw_test(
             let prank_b_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 prank_b[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
             cols.b = prank_b_word.map(F::from_u32);
-            adapter_cols.rs1_high = prank_b_high.map(F::from_u32);
+            adapter_cols.rs1_high = pack_high_u16(&prank_b_high);
         }
         if let Some(prank_c) = prank_c {
             let prank_c_word: [u32; RV64_WORD_NUM_LIMBS] =
@@ -275,7 +275,7 @@ fn run_negative_mulw_test(
             let prank_c_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 prank_c[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
             cols.c = prank_c_word.map(F::from_u32);
-            adapter_cols.rs2_high = prank_c_high.map(F::from_u32);
+            adapter_cols.rs2_high = pack_high_u16(&prank_c_high);
         }
         adapter_cols.result_sign = F::from_u32(default_result_sign);
         cols.is_valid = F::from_bool(prank_is_valid);
@@ -448,7 +448,7 @@ fn read_register(state: &VmState<F>, offset: usize) -> u32 {
     let bytes = unsafe {
         state
             .memory
-            .read_bytes::<4>(RV32_REGISTER_AS, offset as u32)
+            .read_bytes::<RV64_WORD_NUM_LIMBS>(RV32_REGISTER_AS, offset as u32)
     };
     u32::from_le_bytes(bytes)
 }
