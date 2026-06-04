@@ -43,8 +43,9 @@ use {
 use super::{Rv64ShiftWChip, ShiftWCoreAir, ShiftWFiller};
 use crate::{
     adapters::{
-        Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterCols, Rv64BaseAluWAdapterExecutor,
-        Rv64BaseAluWAdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        pack_high_u16, Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterCols,
+        Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller, RV64_BYTE_BITS,
+        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     shift::ShiftCoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
@@ -274,7 +275,7 @@ fn run_negative_shift_test(
             cols.b = prank_b_word.map(F::from_u32);
             let prank_rs1_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 prank_b[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
-            adapter_cols.rs1_high = prank_rs1_high.map(F::from_u32);
+            adapter_cols.rs1_high = pack_high_u16(&prank_rs1_high);
         }
         if let Some(prank_c) = prank_c {
             let prank_c_word: [u32; RV64_WORD_NUM_LIMBS] =
@@ -282,7 +283,7 @@ fn run_negative_shift_test(
             cols.c = prank_c_word.map(F::from_u32);
             let prank_rs2_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
                 prank_c[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
-            adapter_cols.rs2_high = prank_rs2_high.map(F::from_u32);
+            adapter_cols.rs2_high = pack_high_u16(&prank_rs2_high);
         }
         if let Some(bit_multiplier_left) = prank_vals.bit_multiplier_left {
             cols.bit_multiplier_left = F::from_u32(bit_multiplier_left);
