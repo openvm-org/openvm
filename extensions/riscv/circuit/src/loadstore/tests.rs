@@ -2,14 +2,20 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
         Arena, ExecutionBridge, MemoryConfig, PreflightExecutor,
     },
     system::memory::{
         merkle::public_values::PUBLIC_VALUES_AS, offline_checker::MemoryBridge, SharedMemoryHelper,
     },
 };
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::VariableRangeCheckerChip,
+};
 #[cfg(feature = "cuda")]
 use openvm_instructions::riscv::RV64_MEMORY_AS;
 use openvm_instructions::{
@@ -33,8 +39,8 @@ use {
     crate::{adapters::Rv64LoadStoreAdapterRecord, LoadStoreCoreRecord, Rv64LoadStoreChipGpu},
     openvm_circuit::arch::{
         testing::{
-            default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder,
-            GpuTestChipHarness,
+            default_bitwise_lookup_bus, default_var_range_checker_bus, dummy_range_checker,
+            GpuChipTestBuilder, GpuTestChipHarness,
         },
         EmptyAdapterCoreLayout,
     },
@@ -63,6 +69,7 @@ fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     range_checker_chip: Arc<VariableRangeCheckerChip>,
+    bitwise_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -77,7 +84,7 @@ fn create_harness_fields(
             range_checker_chip.bus(),
             address_bits,
         ),
-        LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker_chip.bus()),
+        LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64LoadStoreExecutor::new(
         Rv64LoadStoreAdapterExecutor::new(address_bits),
@@ -87,22 +94,38 @@ fn create_harness_fields(
         LoadStoreFiller::new(
             Rv64LoadStoreAdapterFiller::new(address_bits, range_checker_chip.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
-            range_checker_chip,
+            bitwise_chip,
         ),
         memory_helper,
     );
     (air, executor, chip)
 }
 
-fn create_harness(tester: &mut VmChipTestBuilder<F>) -> Harness {
+fn create_harness(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    Harness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         tester.range_checker(),
+        bitwise_chip.clone(),
         tester.memory_helper(),
         tester.address_bits(),
     );
-    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    (
+        Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        (bitwise_chip.air, bitwise_chip),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -242,7 +265,7 @@ fn rand_loadstore_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
     let mut tester = VmChipTestBuilder::from_config(mem_config);
-    let mut harness = create_harness(&mut tester);
+    let (mut harness, bitwise) = create_harness(&mut tester);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -258,7 +281,11 @@ fn rand_loadstore_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
         );
     }
 
-    let tester = tester.build().load(harness).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -268,7 +295,7 @@ fn positive_loadwu_shift4_test() {
     let mut mem_config = MemoryConfig::default();
     mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
     let mut tester = VmChipTestBuilder::from_config(mem_config);
-    let mut harness = create_harness(&mut tester);
+    let (mut harness, bitwise) = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -282,7 +309,11 @@ fn positive_loadwu_shift4_test() {
         Some(2),
     );
 
-    let tester = tester.build().load(harness).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -292,7 +323,7 @@ fn positive_loadhu_shift6_test() {
     let mut mem_config = MemoryConfig::default();
     mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
     let mut tester = VmChipTestBuilder::from_config(mem_config);
-    let mut harness = create_harness(&mut tester);
+    let (mut harness, bitwise) = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -306,7 +337,11 @@ fn positive_loadhu_shift6_test() {
         Some(2),
     );
 
-    let tester = tester.build().load(harness).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -317,7 +352,7 @@ fn positive_storew_public_values_test() {
     mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     let mut tester = VmChipTestBuilder::from_config(mem_config);
-    let mut harness = create_harness(&mut tester);
+    let (mut harness, bitwise) = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -331,7 +366,11 @@ fn positive_storew_public_values_test() {
         Some(3),
     );
 
-    let tester = tester.build().load(harness).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -344,7 +383,7 @@ fn positive_stored_native_test() {
     mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
     mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
     let mut tester = VmChipTestBuilder::from_config(mem_config);
-    let mut harness = create_harness(&mut tester);
+    let (mut harness, bitwise) = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -358,7 +397,11 @@ fn positive_stored_native_test() {
         Some(4),
     );
 
-    let tester = tester.build().load(harness).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -394,7 +437,7 @@ fn run_negative_loadstore_test(
     mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     let mut tester = VmChipTestBuilder::from_config(mem_config);
-    let mut harness = create_harness(&mut tester);
+    let (mut harness, bitwise) = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -446,6 +489,7 @@ fn run_negative_loadstore_test(
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .finalize();
     tester
         .simple_test()
@@ -794,16 +838,22 @@ type GpuHarness = GpuTestChipHarness<
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let range_bus = default_var_range_checker_bus();
     let dummy_range_checker_chip = dummy_range_checker(range_bus);
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         dummy_range_checker_chip,
+        dummy_bitwise_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
     let gpu_chip = Rv64LoadStoreChipGpu::new(
         tester.range_checker(),
+        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
@@ -832,7 +882,8 @@ fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usiz
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 20;
         mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     }
-    let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus());
+    let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus())
+        .with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
     let mut harness = create_cuda_harness(&tester);
     for _ in 0..num_ops {
