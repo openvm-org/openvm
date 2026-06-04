@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use hex_literal::hex;
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
@@ -14,13 +12,7 @@ use openvm_circuit::{
     system::{memory::SharedMemoryHelper, SystemPort},
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::{
-        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-        SharedBitwiseOperationLookupChip,
-    },
-    var_range::VariableRangeCheckerBus,
-};
+use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_instructions::{LocalOpcode, VmOpcode};
@@ -209,19 +201,6 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for WeierstrassExtension {
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker_bus = inventory.range_checker().bus;
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
-
-        let bitwise_lu = {
-            // A trick to get around Rust's borrow rules
-            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
-            if let Some(air) = existing_air {
-                air.bus
-            } else {
-                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
-                let air = BitwiseOperationLookupAir::<8>::new(bus);
-                inventory.add_air(air);
-                air.bus
-            }
-        };
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let start_offset =
                 Rv64WeierstrassOpcode::CLASS_OFFSET + i * Rv64WeierstrassOpcode::COUNT;
@@ -239,7 +218,6 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     memory_bridge,
                     config.clone(),
                     range_checker_bus,
-                    bitwise_lu,
                     byte_ptr_max_bits,
                     start_offset,
                 );
@@ -250,7 +228,6 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     memory_bridge,
                     config,
                     range_checker_bus,
-                    bitwise_lu,
                     byte_ptr_max_bits,
                     start_offset,
                     curve.a.clone(),
@@ -268,7 +245,6 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     memory_bridge,
                     config.clone(),
                     range_checker_bus,
-                    bitwise_lu,
                     byte_ptr_max_bits,
                     start_offset,
                 );
@@ -279,7 +255,6 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     memory_bridge,
                     config,
                     range_checker_bus,
-                    bitwise_lu,
                     byte_ptr_max_bits,
                     start_offset,
                     curve.a.clone(),
@@ -313,19 +288,6 @@ where
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
-                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
         for curve in extension.supported_curves.iter() {
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
 
@@ -341,7 +303,6 @@ where
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    bitwise_lu.clone(),
                     byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(addne);
@@ -351,7 +312,6 @@ where
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    bitwise_lu.clone(),
                     byte_ptr_max_bits,
                     curve.a.clone(),
                 );
@@ -368,7 +328,6 @@ where
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    bitwise_lu.clone(),
                     byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(addne);
@@ -378,7 +337,6 @@ where
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    bitwise_lu.clone(),
                     byte_ptr_max_bits,
                     curve.a.clone(),
                 );

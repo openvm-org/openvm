@@ -315,7 +315,7 @@ fn test_execution_suspension() -> eyre::Result<()> {
         let values: Vec<_> = unsafe {
             state_vec
                 .iter()
-                .map(|state| state.vm_state.memory.read::<u8, 1>(2, 100))
+                .map(|state| state.vm_state.memory.read_bytes::<1>(2, 100))
                 .collect()
         };
         println!("Values at address space 2, ptr: 100: {values:?}");

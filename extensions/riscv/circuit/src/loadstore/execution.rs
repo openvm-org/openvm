@@ -16,7 +16,7 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::LoadStoreExecutor;
-use crate::adapters::rv64_bytes_to_u32;
+use crate::adapters::{rv64_bytes_to_u32, sign_extend_imm16};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -68,7 +68,7 @@ impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
 
         let imm = c.as_canonical_u32();
         let imm_sign = g.as_canonical_u32();
-        let imm_extended = imm + imm_sign * 0xffff0000;
+        let imm_extended = sign_extend_imm16(imm, imm_sign);
         let is_native_store = e_u32 == DEFERRAL_AS;
 
         *data = LoadStorePreCompute {

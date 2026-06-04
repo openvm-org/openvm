@@ -95,7 +95,6 @@ __global__ void alu256_tracegen(
         Rv64VecHeapAdapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
@@ -371,7 +370,6 @@ __global__ void shift256_tracegen(
         Rv64VecHeapAdapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
@@ -444,7 +442,6 @@ __global__ void multiplication256_tracegen(
         Rv64VecHeapAdapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);

@@ -85,6 +85,7 @@ fn create_alu_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -96,7 +97,7 @@ fn create_alu_harness_fields(
         AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
             execution_bridge,
             memory_bridge,
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             address_bits,
         )),
         BaseAluCoreAir::new(bitwise_chip.bus(), Rv64BaseAlu256Opcode::CLASS_OFFSET),
@@ -107,7 +108,7 @@ fn create_alu_harness_fields(
     );
     let chip = Rv64BaseAlu256Chip::new(
         BaseAluFiller::new(
-            Rv64VecHeapAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            Rv64VecHeapAdapterFiller::new(address_bits, range_checker_chip),
             bitwise_chip,
             Rv64BaseAlu256Opcode::CLASS_OFFSET,
         ),
@@ -160,6 +161,7 @@ fn create_mul_harness_fields(
     execution_bridge: ExecutionBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -171,7 +173,7 @@ fn create_mul_harness_fields(
         AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
             execution_bridge,
             memory_bridge,
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             address_bits,
         )),
         MultiplicationCoreAir::new(
@@ -186,7 +188,7 @@ fn create_mul_harness_fields(
     );
     let chip = Rv64Multiplication256Chip::<F>::new(
         MultiplicationFiller::new(
-            Rv64VecHeapAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            Rv64VecHeapAdapterFiller::new(address_bits, range_checker_chip),
             range_tuple_chip,
             bitwise_chip,
             Rv64Mul256Opcode::CLASS_OFFSET,
@@ -208,7 +210,7 @@ fn create_shift_harness_fields(
         AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
             execution_bridge,
             memory_bridge,
-            bitwise_chip.bus(),
+            range_checker_chip.bus(),
             address_bits,
         )),
         ShiftCoreAir::new(
@@ -223,7 +225,7 @@ fn create_shift_harness_fields(
     );
     let chip = Rv64Shift256Chip::new(
         ShiftFiller::new(
-            Rv64VecHeapAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            Rv64VecHeapAdapterFiller::new(address_bits, range_checker_chip.clone()),
             bitwise_chip.clone(),
             range_checker_chip.clone(),
             Rv64Shift256Opcode::CLASS_OFFSET,
@@ -407,6 +409,7 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
         tester.memory_bridge(),
         tester.execution_bridge(),
         bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -488,6 +491,7 @@ fn run_mul_256_rand_test(opcode: MulOpcode, num_ops: usize) {
         tester.execution_bridge(),
         bitwise_chip.clone(),
         range_tuple_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -650,10 +654,14 @@ fn run_alu_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
+    ));
     let (air, executor, cpu_chip) = create_alu_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
@@ -771,12 +779,16 @@ fn run_mul_256_rand_test_cuda(opcode: MulOpcode, num_ops: usize) {
         bitwise_bus,
     ));
     let dummy_range_tuple_chip = Arc::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
+    ));
 
     let (air, executor, cpu_chip) = create_mul_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         dummy_bitwise_chip,
         dummy_range_tuple_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
