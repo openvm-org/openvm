@@ -3,6 +3,7 @@ use std::{fmt, process::Command};
 use rvr_openvm_build::{clang_version_suffix, is_clang_command};
 pub use rvr_openvm_build::{
     command_exists, default_compiler_command, ensure_clang_compiler, DEFAULT_CLANG_COMMAND,
+    MIN_CLANG_MAJOR,
 };
 
 /// C compiler to use for generated code.

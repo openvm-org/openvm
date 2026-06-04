@@ -12,6 +12,7 @@ pub const DEFAULT_CLANG_COMMAND: &str = "clang-22";
 pub const MIN_CLANG_MAJOR: u32 = 19;
 
 /// Keg-only Homebrew LLVM locations (not on PATH by default).
+#[cfg(target_os = "macos")]
 const HOMEBREW_LLVM_BIN_DIRS: &[&str] = &["/opt/homebrew/opt/llvm/bin", "/usr/local/opt/llvm/bin"];
 
 /// Select the C compiler for RVR native code.
@@ -33,6 +34,7 @@ pub fn default_compiler_command() -> String {
     }
     // Probe Homebrew LLVM before falling back to plain `clang`, which on
     // macOS is Apple clang and fails `ensure_clang_compiler`.
+    #[cfg(target_os = "macos")]
     for dir in HOMEBREW_LLVM_BIN_DIRS {
         for name in [DEFAULT_CLANG_COMMAND, "clang"] {
             let candidate = format!("{dir}/{name}");
