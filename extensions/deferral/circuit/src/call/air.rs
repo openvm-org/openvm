@@ -37,7 +37,7 @@ use crate::{
     count::DeferralCircuitCountBus,
     poseidon2::DeferralPoseidon2Bus,
     utils::{
-        combine_output_cells, scale_output_len, scale_rv64_ptr_high_u16, split_cell_memory_ops,
+        combine_output_cells, scale_output_len, scale_rv64_ptr_high_u16, split_f_memory_ops,
         u16_commit_to_f, u16s_to_f, COMMIT_MEMORY_OPS, COMMIT_NUM_U16S, DIGEST_F_MEMORY_OPS,
         F_NUM_U16S, OUTPUT_TOTAL_MEMORY_OPS, OUTPUT_TOTAL_NUM_U16S, RV64_PTR_U16S, U16_BITS,
     },
@@ -48,7 +48,7 @@ use crate::{
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
 pub struct DeferralCallReads<B, F> {
-    // Commit to a specific deferral input, stored as u16 cells.
+    // Commit to a specific deferral input, passed in by the user as a pointer
     pub input_commit: [B; COMMIT_NUM_U16S],
 
     // Deferral address space accumulators immediately prior to the current deferral call
@@ -60,7 +60,8 @@ pub struct DeferralCallReads<B, F> {
 #[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
 pub struct DeferralCallWrites<B, F> {
     // Output key for raw output + its length in bytes. These cells are written as one
-    // contiguous heap write, with layout [output_commit || output_len_le].
+    // contiguous heap write, with layout [output_commit || output_len_le]. Note output_len
+    // **must** be divisible by SPONGE_BYTES_PER_ROW.
     pub output_commit: [B; COMMIT_NUM_U16S],
     pub output_len: [B; F_NUM_U16S],
 
@@ -69,8 +70,6 @@ pub struct DeferralCallWrites<B, F> {
     pub new_output_acc: [F; DIGEST_SIZE],
 }
 
-// Byte-shaped sibling of DeferralCallReads used for the tracegen record.
-// The trace filler packs byte pairs into the u16-shaped columns.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DeferralCallReadsBytes<F> {
@@ -79,12 +78,10 @@ pub struct DeferralCallReadsBytes<F> {
     pub old_output_acc: [F; DIGEST_SIZE],
 }
 
-// Byte-shaped sibling of DeferralCallWrites used for the tracegen record.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DeferralCallWritesBytes<F> {
     pub output_commit: [u8; crate::utils::COMMIT_NUM_BYTES],
-    // Low 32 bits of the output length; padded to the 8-byte OutputKey field when written.
     pub output_len: [u8; crate::utils::F_NUM_BYTES],
     pub new_input_acc: [F; DIGEST_SIZE],
     pub new_output_acc: [F; DIGEST_SIZE],
@@ -142,13 +139,8 @@ where
             cols.input_commit_lt_aux
         )
         .map(|(cells, aux)| {
-            let cells: [_; F_NUM_U16S] = cells.try_into().unwrap();
-            CanonicitySubAir.assert_canonicity(
-                builder,
-                cells.map(Into::into),
-                &aux,
-                cols.is_valid.into(),
-            )
+            let cells: &[_; F_NUM_U16S] = cells.try_into().unwrap();
+            CanonicitySubAir.assert_canonicity(builder, cells, &aux, cols.is_valid.into())
         })
         .collect_vec();
 
@@ -157,13 +149,8 @@ where
             cols.output_commit_lt_aux
         )
         .map(|(cells, aux)| {
-            let cells: [_; F_NUM_U16S] = cells.try_into().unwrap();
-            CanonicitySubAir.assert_canonicity(
-                builder,
-                cells.map(Into::into),
-                &aux,
-                cols.is_valid.into(),
-            )
+            let cells: &[_; F_NUM_U16S] = cells.try_into().unwrap();
+            CanonicitySubAir.assert_canonicity(builder, cells, &aux, cols.is_valid.into())
         })
         .collect_vec();
 
@@ -263,20 +250,19 @@ pub struct DeferralCallAdapterCols<T> {
     pub rs_ptr: T,
 
     // Heap pointers and aux columns
-    // Low 32 bits of heap pointers, packed as u16 cells.
     pub rd_val: [T; RV64_PTR_U16S],
     pub rs_val: [T; RV64_PTR_U16S],
     pub rd_aux: MemoryReadAuxCols<T>,
     pub rs_aux: MemoryReadAuxCols<T>,
 
-    // Heap commit reads use byte-addressed chunks; accumulator reads use
-    // DEFERRAL_AS cell chunks.
+    // Heap commit reads use byte chunks; accumulator reads use DEFERRAL_AS
+    // cell chunks.
     pub input_commit_aux: [MemoryReadAuxCols<T>; COMMIT_MEMORY_OPS],
     pub old_input_acc_aux: [MemoryReadAuxCols<T>; DIGEST_F_MEMORY_OPS],
     pub old_output_acc_aux: [MemoryReadAuxCols<T>; DIGEST_F_MEMORY_OPS],
 
-    // Heap output writes use byte-addressed chunks; accumulator writes use
-    // DEFERRAL_AS cell chunks.
+    // Heap output writes use byte chunks; accumulator writes use DEFERRAL_AS
+    // cell chunks.
     pub output_commit_and_len_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; OUTPUT_TOTAL_MEMORY_OPS],
     pub new_input_acc_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
     pub new_output_acc_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; DIGEST_F_MEMORY_OPS],
@@ -399,10 +385,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
 
         let output_len_full: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&output_len);
 
-        // `input_commit` is 16 u16 cells = `COMMIT_MEMORY_OPS` chunks of
-        // `BLOCK_FE_WIDTH` cells each; pass them straight to the bridge.
         let input_commit_chunks: [[AB::Expr; BLOCK_FE_WIDTH]; COMMIT_MEMORY_OPS] =
-            split_cell_memory_ops::<AB::Expr, COMMIT_NUM_U16S, COMMIT_MEMORY_OPS>(input_commit);
+            split_f_memory_ops::<AB::Expr, COMMIT_NUM_U16S, COMMIT_MEMORY_OPS>(input_commit);
         for (chunk_idx, (data, aux)) in input_commit_chunks
             .into_iter()
             .zip(&cols.input_commit_aux)
@@ -425,7 +409,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         let old_input_acc_chunks =
-            split_cell_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(old_input_acc);
+            split_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(old_input_acc);
         for (chunk_idx, (data, aux)) in old_input_acc_chunks
             .into_iter()
             .zip(&cols.old_input_acc_aux)
@@ -445,7 +429,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         let old_output_acc_chunks =
-            split_cell_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(old_output_acc);
+            split_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(old_output_acc);
         for (chunk_idx, (data, aux)) in old_output_acc_chunks
             .into_iter()
             .zip(&cols.old_output_acc_aux)
@@ -466,7 +450,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
 
         let output_commit_and_len = combine_output_cells(output_commit, output_len_full);
         let output_chunks =
-            split_cell_memory_ops::<AB::Expr, OUTPUT_TOTAL_NUM_U16S, OUTPUT_TOTAL_MEMORY_OPS>(
+            split_f_memory_ops::<AB::Expr, OUTPUT_TOTAL_NUM_U16S, OUTPUT_TOTAL_MEMORY_OPS>(
                 output_commit_and_len,
             );
         for (chunk_idx, (data, aux)) in output_chunks
@@ -491,7 +475,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         let new_input_acc_chunks =
-            split_cell_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(new_input_acc);
+            split_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(new_input_acc);
         for (chunk_idx, (data, aux)) in new_input_acc_chunks
             .into_iter()
             .zip(&cols.new_input_acc_aux)
@@ -511,7 +495,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         }
 
         let new_output_acc_chunks =
-            split_cell_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(new_output_acc);
+            split_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(new_output_acc);
         for (chunk_idx, (data, aux)) in new_output_acc_chunks
             .into_iter()
             .zip(&cols.new_output_acc_aux)

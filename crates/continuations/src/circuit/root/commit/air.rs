@@ -12,10 +12,7 @@ use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
 
 pub use crate::circuit::subair::MerkleTreeCols;
-use crate::circuit::{
-    root::assert_user_pvs_shape,
-    subair::{MerkleRootBus, MerkleTreeInternalBus, MerkleTreeSubAir},
-};
+use crate::circuit::subair::{MerkleRootBus, MerkleTreeInternalBus, MerkleTreeSubAir};
 
 pub(super) const MAX_ENCODER_DEGREE: u32 = 3;
 
@@ -45,7 +42,9 @@ impl UserPvsCommitAir {
     ) -> Self {
         // Each leaf consumes `DIGEST_SIZE` public values, which are compressed with zeros
         // to compute the leaf hash. We require at least one leaf, and a full binary tree.
-        assert_user_pvs_shape(num_user_pvs);
+        debug_assert!(num_user_pvs >= DIGEST_SIZE);
+        debug_assert!(num_user_pvs.is_multiple_of(DIGEST_SIZE));
+        debug_assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
         let encoder = Encoder::new(num_user_pvs / DIGEST_SIZE, MAX_ENCODER_DEGREE, true);
 
         UserPvsCommitAir {

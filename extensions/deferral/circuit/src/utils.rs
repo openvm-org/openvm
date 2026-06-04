@@ -70,10 +70,8 @@ pub(crate) fn byte_memory_op_chunk<T: Clone>(
     from_fn(|i| data[start + i].clone())
 }
 
-/// Split cell-shaped memory data into `BLOCK_FE_WIDTH`-cell bus chunks. The
-/// cells may be native F cells or u16-packed cells; callers choose the address
-/// stride for the address space they are accessing.
-pub(crate) fn split_cell_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
+/// Split cell data into memory-bus chunks.
+pub(crate) fn split_f_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
     data: [T; TOTAL_CELLS],
 ) -> [[T; BLOCK_FE_WIDTH]; NUM_OPS] {
     const {

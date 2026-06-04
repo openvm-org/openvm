@@ -9,6 +9,7 @@
 
 namespace deferral {
 
+using openvm::U16_BITS;
 using riscv::RV64_WORD_NUM_LIMBS;
 
 inline constexpr size_t DIGEST_SIZE = 8;
@@ -16,7 +17,6 @@ inline constexpr size_t F_NUM_BYTES = sizeof(uint32_t);
 inline constexpr size_t COMMIT_NUM_BYTES = DIGEST_SIZE * F_NUM_BYTES;
 inline constexpr size_t OUTPUT_LEN_NUM_BYTES = sizeof(uint64_t);
 inline constexpr size_t OUTPUT_TOTAL_BYTES = COMMIT_NUM_BYTES + OUTPUT_LEN_NUM_BYTES;
-inline constexpr size_t U16_BITS = 8 * U16_CELL_SIZE;
 inline constexpr uint32_t U16_MASK = (1u << U16_BITS) - 1;
 inline constexpr size_t RV64_PTR_U16S = RV64_WORD_NUM_LIMBS / U16_CELL_SIZE;
 
@@ -52,7 +52,6 @@ __device__ __host__ inline void pack_u8_pairs_le(T (&out)[OUT], uint8_t const (&
         BYTES == U16_CELL_SIZE * OUT,
         "pack_u8_pairs_le expects exactly one u16 cell worth of bytes per output"
     );
-#pragma unroll
     for (size_t i = 0; i < OUT; ++i) {
         const size_t offset = U16_CELL_SIZE * i;
         out[i] =
@@ -71,7 +70,6 @@ __device__ __host__ inline void u32_bytes_to_le_u16_cells(
 template <typename T, size_t OUT>
 __device__ __host__ inline void u32_to_le_u16_cells(T (&out)[OUT], uint32_t value) {
     static_assert(OUT * U16_CELL_SIZE == sizeof(uint32_t));
-#pragma unroll
     for (size_t i = 0; i < OUT; ++i) {
         out[i] = T(static_cast<uint32_t>((value >> (U16_BITS * i)) & U16_MASK));
     }

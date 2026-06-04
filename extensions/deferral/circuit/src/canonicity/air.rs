@@ -76,17 +76,15 @@ impl CanonicitySubAir {
     pub fn assert_canonicity<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        x: [AB::Expr; F_NUM_U16S],
+        x: &[impl Clone + Into<AB::Expr>; F_NUM_U16S],
         aux: &CanonicityAuxCols<AB::Var>,
         enabled: AB::Expr,
     ) -> AB::Expr
     where
         AB::F: PrimeField32,
     {
-        let mut x_be = x;
-        x_be.reverse();
         let io = CanonicityIo {
-            x: x_be,
+            x: std::array::from_fn(|i| x[F_NUM_U16S - 1 - i].clone().into()),
             count: enabled,
         };
         let mut ret = AB::Expr::ZERO;

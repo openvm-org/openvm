@@ -88,7 +88,9 @@ fn hash_output_raw<F: VmField>(
 
     let mut state = [F::ZERO; POSEIDON2_WIDTH];
     state[0] = F::from_u32(deferral_idx);
-    state[1] = F::from_usize(output_ref.len());
+    state[1] = F::from_u32(
+        u32::try_from(output_ref.len()).expect("deferral output length should fit in a u32"),
+    );
 
     let (lhs, rhs) = state_to_chunks(&state);
     if output_ref.is_empty() {

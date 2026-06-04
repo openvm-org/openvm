@@ -16,10 +16,7 @@ use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
 
 use crate::circuit::{
-    root::{
-        assert_user_pvs_shape,
-        bus::{MemoryMerkleCommitBus, MemoryMerkleCommitMessage},
-    },
+    root::bus::{MemoryMerkleCommitBus, MemoryMerkleCommitMessage},
     subair::{
         MerklePathRowView, MerklePathSubAir, MerklePathSubAirContext, MerkleRootBus,
         MerkleRootMessage,
@@ -58,7 +55,6 @@ impl UserPvsInMemoryAir {
         num_user_pvs: usize,
     ) -> Self {
         assert!(memory_dimensions.addr_space_height > 1);
-        assert_user_pvs_shape(num_user_pvs);
         let pv_start_idx = memory_dimensions.label_to_index((PUBLIC_VALUES_AS, 0));
         let pv_height = log2_strict_usize(num_user_pvs / DIGEST_SIZE);
         let merkle_path_branch_bits = u32::try_from(pv_start_idx >> pv_height)

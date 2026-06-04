@@ -34,7 +34,6 @@ mod tests {
     const INPUT_COMMIT_1: [u8; 32] = [0x22; 32];
     const INPUT_COMMIT_2: [u8; 32] = [0x33; 32];
 
-    // These examples use SPONGE_BYTES_PER_ROW-aligned outputs.
     const INPUT_RAW_0: [u8; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
     const INPUT_RAW_1: [u8; 16] = [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
     const INPUT_RAW_2: [u8; 16] = [9; 16];

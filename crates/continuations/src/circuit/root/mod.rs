@@ -30,38 +30,13 @@ pub use trace::*;
 pub const USER_PVS_COMMIT_AIR_ID: usize = 1;
 pub const NUM_DIGESTS_IN_VM_COMMIT: usize = 6;
 
-#[derive(Clone)]
+#[derive(derive_new::new, Clone)]
 pub struct RootCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
     pub(crate) internal_recursive_vk_commit: VkCommitBytes,
     pub(crate) def_hook_commit: Option<CommitBytes>,
     pub(crate) memory_dimensions: MemoryDimensions,
     pub(crate) num_user_pvs: usize,
-}
-
-pub(crate) fn assert_user_pvs_shape(num_user_pvs: usize) {
-    assert!(num_user_pvs >= DIGEST_SIZE);
-    assert!(num_user_pvs.is_multiple_of(DIGEST_SIZE));
-    assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
-}
-
-impl<S: AggregationSubCircuit> RootCircuit<S> {
-    pub fn new(
-        verifier_circuit: Arc<S>,
-        internal_recursive_vk_commit: VkCommitBytes,
-        def_hook_commit: Option<CommitBytes>,
-        memory_dimensions: MemoryDimensions,
-        num_user_pvs: usize,
-    ) -> Self {
-        assert_user_pvs_shape(num_user_pvs);
-        Self {
-            verifier_circuit,
-            internal_recursive_vk_commit,
-            def_hook_commit,
-            memory_dimensions,
-            num_user_pvs,
-        }
-    }
 }
 
 impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for RootCircuit<S> {
