@@ -133,7 +133,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
     ) -> Result<(), ChipInventoryError> {
         let range_checker_gpu = get_inventory_range_checker(inventory);
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let range_checker = range_checker_gpu.cpu_chip.clone().unwrap();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let device_ctx = range_checker_gpu.device_ctx.clone();
@@ -158,7 +158,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridModularChip::new(addsub, device_ctx.clone()));
 
@@ -167,7 +167,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridModularChip::new(muldiv, device_ctx.clone()));
 
@@ -183,7 +183,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 let is_eq = ModularIsEqualU16Chip::<F, MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>::new(
                     ModularIsEqualFiller::new(
                         Rv64IsEqualModU16AdapterFiller::new(
-                            pointer_max_bits,
+                            byte_ptr_max_bits,
                             range_checker.clone(),
                         ),
                         start_offset,
@@ -206,7 +206,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridModularChip::new(addsub, device_ctx.clone()));
 
@@ -215,7 +215,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridModularChip::new(muldiv, device_ctx.clone()));
 
@@ -231,7 +231,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 let is_eq = ModularIsEqualU16Chip::<F, MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>::new(
                     ModularIsEqualFiller::new(
                         Rv64IsEqualModU16AdapterFiller::new(
-                            pointer_max_bits,
+                            byte_ptr_max_bits,
                             range_checker.clone(),
                         ),
                         start_offset,
@@ -301,7 +301,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
     ) -> Result<(), ChipInventoryError> {
         let range_checker_gpu = get_inventory_range_checker(inventory);
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let range_checker = range_checker_gpu.cpu_chip.clone().unwrap();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let device_ctx = range_checker_gpu.device_ctx.clone();
@@ -322,7 +322,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(addsub, device_ctx.clone()));
 
@@ -331,7 +331,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(muldiv, device_ctx.clone()));
             } else if bytes <= NUM_LIMBS_48 {
@@ -346,7 +346,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(addsub, device_ctx.clone()));
 
@@ -355,7 +355,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(muldiv, device_ctx.clone()));
             } else {

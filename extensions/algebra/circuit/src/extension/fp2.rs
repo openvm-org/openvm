@@ -2,9 +2,9 @@ use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena,
+        VmCircuitExtension, VmExecutionExtension, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -87,7 +87,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Fp2ExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         // TODO: somehow get the range checker bus from `ExecutorInventory`
         let dummy_range_checker_bus = VariableRangeCheckerBus::new(u16::MAX, 16);
         for (i, (_, modulus)) in self.supported_moduli.iter().enumerate() {
@@ -104,7 +104,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                 let addsub = get_fp2_addsub_step(
                     config.clone(),
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -117,7 +117,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                 let muldiv = get_fp2_muldiv_step(
                     config,
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -135,7 +135,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                 let addsub = get_fp2_addsub_step(
                     config.clone(),
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -148,7 +148,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                 let muldiv = get_fp2_muldiv_step(
                     config,
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -175,7 +175,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker_bus = inventory.range_checker().bus;
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         for (i, (_, modulus)) in self.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
@@ -193,7 +193,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
                     memory_bridge,
                     config.clone(),
                     range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(addsub);
@@ -203,7 +203,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
                     memory_bridge,
                     config,
                     range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(muldiv);
@@ -219,7 +219,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
                     memory_bridge,
                     config.clone(),
                     range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(addsub);
@@ -229,7 +229,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
                     memory_bridge,
                     config,
                     range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(muldiv);
@@ -259,7 +259,7 @@ where
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         for (_, modulus) in extension.supported_moduli.iter() {
             // determine the number of bytes needed to represent a prime field element
@@ -277,7 +277,7 @@ where
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(addsub);
 
@@ -286,7 +286,7 @@ where
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(muldiv);
             } else if bytes <= NUM_LIMBS_48 {
@@ -301,7 +301,7 @@ where
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(addsub);
 
@@ -310,7 +310,7 @@ where
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(muldiv);
             } else {

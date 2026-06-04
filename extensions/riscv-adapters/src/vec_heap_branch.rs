@@ -63,8 +63,8 @@ pub struct Rv64VecHeapBranchAdapterAir<const NUM_READS: usize, const BLOCKS_PER_
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub range_bus: VariableRangeCheckerBus,
-    /// The max number of bits for an address in memory
-    address_bits: usize,
+    /// Maximum bit width of guest byte pointers.
+    byte_ptr_max_bits: usize,
 }
 
 impl<F: Field, const NUM_READS: usize, const BLOCKS_PER_READ: usize> BaseAir<F>
@@ -111,11 +111,11 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
         }
 
         // Each materialized pointer is stored as two u16 cells. Bound the high
-        // cell so `lo + 2^16 * hi < 2^address_bits`.
+        // cell against the guest byte-pointer limit.
         for val in cols.rs_val.iter() {
             self.range_bus
                 .range_check(
-                    ptr_bound_from_high_u16_expr(val[1], self.address_bits),
+                    ptr_bound_from_high_u16_expr(val[1], self.byte_ptr_max_bits),
                     U16_BITS,
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
@@ -189,12 +189,12 @@ pub struct Rv64VecHeapBranchAdapterRecord<const NUM_READS: usize, const BLOCKS_P
 
 #[derive(derive_new::new, Clone, Copy)]
 pub struct Rv64VecHeapBranchAdapterExecutor<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
-    pointer_max_bits: usize,
+    byte_ptr_max_bits: usize,
 }
 
 #[derive(derive_new::new)]
 pub struct Rv64VecHeapBranchAdapterFiller<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
-    pointer_max_bits: usize,
+    byte_ptr_max_bits: usize,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
@@ -230,7 +230,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize> Adap
                 memory,
                 record.rs_ptrs[i],
                 &mut record.rs_read_aux[i].prev_timestamp,
-                self.pointer_max_bits,
+                self.byte_ptr_max_bits,
             )
         });
 
@@ -238,7 +238,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize> Adap
         from_fn(|i| {
             debug_assert!(
                 (record.rs_vals[i] as u64) + ((MEMORY_BLOCK_BYTES * BLOCKS_PER_READ - 1) as u64)
-                    < (1u64 << self.pointer_max_bits)
+                    < (1u64 << self.byte_ptr_max_bits)
             );
             from_fn(|j| {
                 tracing_read(
@@ -279,7 +279,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize> Adap
 
         for &ptr in record.rs_vals.iter() {
             self.range_checker_chip
-                .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
+                .add_count(ptr_bound_from_ptr(ptr, self.byte_ptr_max_bits), U16_BITS);
         }
 
         let timestamp_delta = NUM_READS + NUM_READS * BLOCKS_PER_READ;

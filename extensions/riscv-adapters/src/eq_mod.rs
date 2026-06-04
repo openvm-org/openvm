@@ -72,7 +72,7 @@ pub struct Rv64IsEqualModAdapterAir<
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub range_bus: VariableRangeCheckerBus,
-    address_bits: usize,
+    byte_ptr_max_bits: usize,
 }
 
 impl<
@@ -143,11 +143,11 @@ impl<
         let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(|limbs| u16_limbs_to_ptr(&limbs));
 
         // Each materialized pointer is stored as two u16 cells. Bound the high
-        // cell so `lo + 2^16 * hi < 2^address_bits`.
+        // cell against the guest byte-pointer limit.
         for val in cols.rs_val.iter() {
             self.range_bus
                 .range_check(
-                    ptr_bound_from_high_u16_expr(val[1], self.address_bits),
+                    ptr_bound_from_high_u16_expr(val[1], self.byte_ptr_max_bits),
                     U16_BITS,
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
@@ -235,19 +235,19 @@ pub struct Rv64IsEqualModAdapterExecutor<
     const BLOCKS_PER_READ: usize,
     const TOTAL_READ_SIZE: usize,
 > {
-    pointer_max_bits: usize,
+    byte_ptr_max_bits: usize,
 }
 
 #[derive(derive_new::new)]
 pub struct Rv64IsEqualModAdapterFiller<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
-    pointer_max_bits: usize,
+    byte_ptr_max_bits: usize,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<const NUM_READS: usize, const BLOCKS_PER_READ: usize, const TOTAL_READ_SIZE: usize>
     Rv64IsEqualModAdapterExecutor<NUM_READS, BLOCKS_PER_READ, TOTAL_READ_SIZE>
 {
-    pub fn new(pointer_max_bits: usize) -> Self {
+    pub fn new(byte_ptr_max_bits: usize) -> Self {
         const {
             assert!(NUM_READS <= 2);
             assert!(
@@ -256,10 +256,10 @@ impl<const NUM_READS: usize, const BLOCKS_PER_READ: usize, const TOTAL_READ_SIZE
             );
         }
         assert!(
-            (U16_BITS..=RV64_PTR_BITS).contains(&pointer_max_bits),
-            "pointer_max_bits must be in [16, 32]"
+            (U16_BITS..=RV64_PTR_BITS).contains(&byte_ptr_max_bits),
+            "byte_ptr_max_bits must be in [16, 32]"
         );
-        Self { pointer_max_bits }
+        Self { byte_ptr_max_bits }
     }
 }
 
@@ -299,7 +299,7 @@ impl<
                 memory,
                 record.rs_ptr[i],
                 &mut record.rs_read_aux[i].prev_timestamp,
-                self.pointer_max_bits,
+                self.byte_ptr_max_bits,
             )
         });
 
@@ -307,7 +307,7 @@ impl<
         from_fn(|i| {
             debug_assert!(
                 (record.rs_val[i] as u64) + ((TOTAL_READ_SIZE - 1) as u64)
-                    < (1u64 << self.pointer_max_bits)
+                    < (1u64 << self.byte_ptr_max_bits)
             );
             from_fn::<_, BLOCKS_PER_READ, _>(|j| {
                 tracing_read::<MEMORY_BLOCK_BYTES>(
@@ -360,7 +360,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize> Adap
 
         for &ptr in record.rs_val.iter() {
             self.range_checker_chip
-                .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
+                .add_count(ptr_bound_from_ptr(ptr, self.byte_ptr_max_bits), U16_BITS);
         }
 
         let mut timestamp = record.timestamp + (NUM_READS + NUM_READS * BLOCKS_PER_READ) as u32 + 1;

@@ -6,9 +6,9 @@ use openvm_algebra_transpiler::{ModularPhantom, Rv64ModularArithmeticOpcode};
 use openvm_circuit::{
     self,
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena,
+        VmCircuitExtension, VmExecutionExtension, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -87,7 +87,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, ModularExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         // TODO: somehow get the range checker bus from `ExecutorInventory`
         let dummy_range_checker_bus = VariableRangeCheckerBus::new(u16::MAX, U16_BITS);
         for (i, modulus) in self.supported_moduli.iter().enumerate() {
@@ -105,7 +105,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 let addsub = get_modular_addsub_step::<MODULAR_BLOCKS_32>(
                     config.clone(),
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -119,7 +119,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 let muldiv = get_modular_muldiv_step::<MODULAR_BLOCKS_32>(
                     config,
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -139,7 +139,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 });
 
                 let is_eq = VmModularIsEqualU16Executor::new(
-                    Rv64IsEqualModU16AdapterExecutor::new(pointer_max_bits),
+                    Rv64IsEqualModU16AdapterExecutor::new(byte_ptr_max_bits),
                     start_offset,
                     modulus_limbs,
                 );
@@ -159,7 +159,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 let addsub = get_modular_addsub_step::<MODULAR_BLOCKS_48>(
                     config.clone(),
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -173,7 +173,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 let muldiv = get_modular_muldiv_step::<MODULAR_BLOCKS_48>(
                     config,
                     dummy_range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
 
@@ -193,7 +193,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 });
 
                 let is_eq = VmModularIsEqualU16Executor::new(
-                    Rv64IsEqualModU16AdapterExecutor::new(pointer_max_bits),
+                    Rv64IsEqualModU16AdapterExecutor::new(byte_ptr_max_bits),
                     start_offset,
                     modulus_limbs,
                 );
@@ -235,7 +235,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker_bus = inventory.range_checker().bus;
-        let pointer_max_bits = inventory.pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         for (i, modulus) in self.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
@@ -254,7 +254,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                     memory_bridge,
                     config.clone(),
                     range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(addsub);
@@ -264,7 +264,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                     memory_bridge,
                     config,
                     range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(muldiv);
@@ -274,7 +274,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                         exec_bridge,
                         memory_bridge,
                         range_checker_bus,
-                        pointer_max_bits,
+                        byte_ptr_max_bits,
                     ),
                     ModularIsEqualCoreAir::new(modulus.clone(), range_checker_bus, start_offset),
                 );
@@ -291,7 +291,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                     memory_bridge,
                     config.clone(),
                     range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(addsub);
@@ -301,7 +301,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                     memory_bridge,
                     config,
                     range_checker_bus,
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     start_offset,
                 );
                 inventory.add_air(muldiv);
@@ -311,7 +311,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                         exec_bridge,
                         memory_bridge,
                         range_checker_bus,
-                        pointer_max_bits,
+                        byte_ptr_max_bits,
                     ),
                     ModularIsEqualCoreAir::new(modulus.clone(), range_checker_bus, start_offset),
                 );
@@ -342,7 +342,7 @@ where
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         for (i, modulus) in extension.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
@@ -364,7 +364,7 @@ where
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(addsub);
 
@@ -373,7 +373,7 @@ where
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(muldiv);
 
@@ -390,7 +390,7 @@ where
                     ModularIsEqualU16Chip::<Val<SC>, MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>::new(
                         ModularIsEqualFiller::new(
                             Rv64IsEqualModU16AdapterFiller::new(
-                                pointer_max_bits,
+                                byte_ptr_max_bits,
                                 range_checker.clone(),
                             ),
                             start_offset,
@@ -412,7 +412,7 @@ where
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(addsub);
 
@@ -421,7 +421,7 @@ where
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(muldiv);
 
@@ -438,7 +438,7 @@ where
                     ModularIsEqualU16Chip::<Val<SC>, MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>::new(
                         ModularIsEqualFiller::new(
                             Rv64IsEqualModU16AdapterFiller::new(
-                                pointer_max_bits,
+                                byte_ptr_max_bits,
                                 range_checker.clone(),
                             ),
                             start_offset,

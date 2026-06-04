@@ -83,12 +83,17 @@ pub fn get_modular_muldiv_air<const BLOCKS: usize>(
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
-    pointer_max_bits: usize,
+    byte_ptr_max_bits: usize,
     offset: usize,
 ) -> ModularAir<BLOCKS> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
     ModularAir::new(
-        Rv64VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
+        Rv64VecHeapAdapterAir::new(
+            exec_bridge,
+            mem_bridge,
+            range_checker_bus,
+            byte_ptr_max_bits,
+        ),
         FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx),
     )
 }
@@ -96,13 +101,13 @@ pub fn get_modular_muldiv_air<const BLOCKS: usize>(
 pub fn get_modular_muldiv_step<const BLOCKS: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
-    pointer_max_bits: usize,
+    byte_ptr_max_bits: usize,
     offset: usize,
 ) -> ModularExecutor<BLOCKS> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
     FieldExprVecHeapExecutor::new(FieldExpressionExecutor::new(
-        Rv64VecHeapAdapterExecutor::new(pointer_max_bits),
+        Rv64VecHeapAdapterExecutor::new(byte_ptr_max_bits),
         expr,
         offset,
         local_opcode_idx,
@@ -115,12 +120,12 @@ pub fn get_modular_muldiv_chip<F, const BLOCKS: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
-    pointer_max_bits: usize,
+    byte_ptr_max_bits: usize,
 ) -> ModularChip<F, BLOCKS> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
     ModularChip::new(
         FieldExpressionFiller::new(
-            Rv64VecHeapAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+            Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
             expr,
             local_opcode_idx,
             opcode_flag_idx,

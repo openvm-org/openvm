@@ -734,7 +734,8 @@ unsafe fn execute_e12_impl<
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
-// Returns (cmp_result, diff_idx)
+// Returns (cmp_result, diff_idx). If the inputs are equal, diff_idx is NUM_LIMBS.
+// Callers must only index by diff_idx after checking cmp_result.
 #[inline(always)]
 pub(super) fn run_unsigned_less_than<const NUM_LIMBS: usize>(
     x: &[u16; NUM_LIMBS],
