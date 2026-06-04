@@ -2,7 +2,8 @@ use std::{fmt, process::Command};
 
 use rvr_openvm_build::{clang_version_suffix, is_clang_command};
 pub use rvr_openvm_build::{
-    command_exists, default_compiler_command, ensure_clang_compiler, DEFAULT_CLANG_COMMAND,
+    command_exists, default_compiler_command, ensure_clang_compiler, ensure_rvr_clang_compiler,
+    DEFAULT_CLANG_COMMAND, MIN_CLANG_MAJOR,
 };
 
 /// C compiler to use for generated code.
@@ -125,7 +126,7 @@ impl RuntimeToolchain {
 
     pub fn check(self) -> Result<Self, RuntimeToolchainError> {
         let mut missing = Vec::new();
-        if let Err(message) = ensure_clang_compiler(&self.compiler) {
+        if let Err(message) = ensure_rvr_clang_compiler(&self.compiler) {
             missing.push(MissingTool {
                 role: "C compiler",
                 command: self.compiler.clone(),
