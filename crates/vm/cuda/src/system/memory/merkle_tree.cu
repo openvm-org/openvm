@@ -326,7 +326,6 @@ __device__ __forceinline__ bool virtual_node_exists(
 __device__ __forceinline__ size_t stored_node_index(
     uint32_t const subtree_height,
     uint32_t const actual_height,
-    uint8_t const layout,
     uint32_t const node_height,
     size_t const label
 ) {
@@ -359,7 +358,7 @@ __device__ void load_virtual_node(
         return;
     }
 
-    auto const idx = stored_node_index(subtree_height, actual_height, layout, node_height, label);
+    auto const idx = stored_node_index(subtree_height, actual_height, node_height, label);
     COPY_DIGEST(out, &subtree[idx]);
 }
 
@@ -375,7 +374,7 @@ __device__ void store_virtual_node(
     if (layout == OMIT_BOTTOM_LEVELS && node_height < OMITTED_BOTTOM_LEVELS) {
         return;
     }
-    auto const idx = stored_node_index(subtree_height, actual_height, layout, node_height, label);
+    auto const idx = stored_node_index(subtree_height, actual_height, node_height, label);
     COPY_DIGEST(&subtree[idx], value);
 }
 

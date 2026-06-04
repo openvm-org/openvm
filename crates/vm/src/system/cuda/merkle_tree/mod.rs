@@ -58,6 +58,17 @@ pub struct MemoryMerkleSubTree {
     pub height: usize,
     pub path_len: usize,
     layout: MemoryMerkleSubTreeLayout,
+    /// initial_data_ptr is a raw device pointer to the initial-memory buffer (`d_data`) captured in
+    /// [`Self::build_async`], stored as a `usize` so the borrow is erased.
+    ///
+    /// SAFETY / lifetime: under the `OmitBottomLevels` layout the omitted bottom levels are never
+    /// materialized into `buf`; they are recomputed on demand from this buffer during
+    /// [`MemoryMerkleTree::update_with_touched_blocks`] (see `recompute_omitted_node` in
+    /// `merkle_tree.cu`). The pointed-to buffer must therefore stay alive and unmodified from the
+    /// `build_async` call all the way until that update completes — not merely until the build
+    /// kernel runs. The compiler cannot enforce this through the erased pointer, so the caller is
+    /// responsible: in production the owning `DeviceBuffer`s are held in
+    /// `MemoryInventoryGPU::initial_memory` and only dropped after `update_with_touched_blocks` is done.
     initial_data_ptr: usize,
 }
 
@@ -165,6 +176,8 @@ impl MemoryMerkleSubTree {
         device_ctx: &GpuDeviceCtx,
     ) {
         let event = CudaEvent::new().unwrap();
+        // Capture the raw device pointer; `d_data` must outlive `update_with_touched_blocks`,
+        // which re-reads it under the `OmitBottomLevels` layout (see the `initial_data_ptr` field).
         self.initial_data_ptr = d_data.as_ptr() as usize;
         if self.buf.is_empty() {
             self.buf = DeviceBuffer::with_capacity_on(1, device_ctx);
@@ -322,7 +335,11 @@ impl MemoryMerkleTree {
     /// address space, which should be ignored.
     ///
     /// **Note:** the caller MUST ENSURE that `d_data` lives long enough to be there
-    /// when the enqueued task actually starts.
+    /// when the enqueued task actually starts. Moreover, when the subtree uses the
+    /// `OmitBottomLevels` layout, `d_data` is also re-read during
+    /// [`Self::update_with_touched_blocks`] to recompute the omitted bottom levels, so it must
+    /// remain valid until that update completes — not just until the build kernel runs. See
+    /// [`MemoryMerkleSubTree`]'s `initial_data_ptr` field for details.
     pub fn build_async(&mut self, d_data: &DeviceBuffer<u8>, addr_space: usize) {
         if addr_space < ADDR_SPACE_OFFSET as usize {
             return;
@@ -488,21 +505,21 @@ impl Drop for MemoryMerkleTree {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{collections::BTreeMap, sync::Arc};
 
     use openvm_circuit::{
         arch::{vm_poseidon2_config, MemoryCellType, MemoryConfig, U16_CELL_SIZE},
         system::{
             cuda::merkle_tree::MERKLE_TOUCHED_BLOCK_WIDTH,
             memory::{
-                merkle::MerkleTree,
+                merkle::{MemoryMerkleChip, MerkleTree},
                 online::{GuestMemory, LinearMemory},
                 AddressMap, TimestampedValues,
             },
             poseidon2::Poseidon2PeripheryChip,
         },
     };
-    use openvm_cuda_backend::prelude::F;
+    use openvm_cuda_backend::prelude::{F, SC};
     use openvm_cuda_common::{
         common::get_device,
         copy::{MemCopyD2H, MemCopyH2D},
@@ -513,6 +530,7 @@ mod tests {
         riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
         DEFERRAL_AS,
     };
+    use openvm_stark_backend::{interaction::PermutationCheckBus, prover::MatrixDimensions};
     use openvm_stark_sdk::utils::create_seeded_rng;
     use p3_field::{PrimeCharacteristicRing, PrimeField32};
     use rand::Rng;
@@ -520,7 +538,10 @@ mod tests {
     use super::{
         MemoryMerkleSubTree, MemoryMerkleSubTreeLayout, MemoryMerkleTree, OMITTED_BOTTOM_LEVELS,
     };
-    use crate::system::cuda::{Poseidon2PeripheryChipGPU, DIGEST_WIDTH};
+    use crate::{
+        arch::testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
+        system::cuda::{Poseidon2PeripheryChipGPU, DIGEST_WIDTH},
+    };
 
     #[test]
     fn test_cuda_merkle_subtree_layout_and_buffer_sizes() {
@@ -753,6 +774,202 @@ mod tests {
                 .top_roots
                 .to_host_on(&gpu_merkle_tree.device_ctx)
                 .unwrap()[0]
+        );
+    }
+
+    /// Checks that the *trace* (not just the root) produced by the GPU
+    /// `update_with_touched_blocks` contains exactly the same rows as the canonical trace
+    /// produced by the CPU `MemoryMerkleChip`. The CPU trace is known to satisfy the
+    /// `MemoryMerkleAir` constraints (covered by the CPU-side merkle tests), so matching every
+    /// row content-for-content implies the GPU emits the correct merkle trace. This exercises the
+    /// `OmitBottomLevels` trace-generation path, whose row contents (the reconstructed omitted
+    /// levels) are not checked by the root-equivalence test.
+    ///
+    /// The comparison is order-independent: the `MemoryMerkleAir` permits more than one valid row
+    /// ordering and the GPU lays rows out differently than the CPU, so we compare the two traces
+    /// as multisets of rows rather than positionally.
+    #[test]
+    fn test_cuda_merkle_tree_cpu_gpu_trace_equivalence() {
+        let mut rng = create_seeded_rng();
+        let mem_config = {
+            let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
+            let max_ptr_bits = 16;
+            let max_cells = 1 << max_ptr_bits;
+            // RV64_REGISTER_AS uses u16 storage cells.
+            addr_spaces[RV64_REGISTER_AS as usize].num_cells =
+                32 * size_of::<u64>() / U16_CELL_SIZE;
+            addr_spaces[RV64_MEMORY_AS as usize].num_cells = max_cells;
+            addr_spaces[DEFERRAL_AS as usize].num_cells = max_cells;
+            MemoryConfig::new(2, addr_spaces, max_ptr_bits, 29, 17)
+        };
+
+        let mut initial_memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
+        for (idx, space) in mem_config.addr_spaces.iter().enumerate() {
+            unsafe {
+                match space.layout {
+                    MemoryCellType::Null => {}
+                    MemoryCellType::U8 => {
+                        for i in 0..space.num_cells {
+                            initial_memory.write::<u8, 1>(idx as u32, i as u32, [rng.random()]);
+                        }
+                    }
+                    MemoryCellType::U16 => {
+                        for i in 0..space.num_cells {
+                            initial_memory.write::<u16, 1>(idx as u32, i as u32, [rng.random()]);
+                        }
+                    }
+                    MemoryCellType::U32 => {
+                        for i in 0..space.num_cells {
+                            initial_memory.write::<u32, 1>(idx as u32, i as u32, [rng.random()]);
+                        }
+                    }
+                    MemoryCellType::F { .. } => {
+                        for i in 0..space.num_cells {
+                            initial_memory.write::<F, 1>(
+                                idx as u32,
+                                i as u32,
+                                [F::from_u32(rng.random_range(0..F::ORDER_U32))],
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let gpu_hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
+            (mem_config
+                .addr_spaces
+                .iter()
+                .map(|ashc| ashc.num_cells * 2 + mem_config.memory_dimensions().overall_height())
+                .sum::<usize>()
+                * 2)
+            .next_power_of_two()
+                * 2
+                * DIGEST_WIDTH, // max_buffer_size
+            1, // sbox_regs
+            device_ctx.clone(),
+        ));
+        let mut gpu_merkle_tree =
+            MemoryMerkleTree::new(mem_config.clone(), gpu_hasher_chip, device_ctx.clone());
+        let mem_slices = initial_memory
+            .memory
+            .get_memory()
+            .iter()
+            .map(|mem| {
+                let mem_slice = mem.as_slice();
+                if !mem_slice.is_empty() {
+                    mem_slice.to_device_on(&gpu_merkle_tree.device_ctx).unwrap()
+                } else {
+                    DeviceBuffer::new()
+                }
+            })
+            .collect::<Vec<_>>();
+        for (i, mem_slice) in mem_slices.iter().enumerate() {
+            gpu_merkle_tree.build_async(mem_slice, i);
+        }
+        gpu_merkle_tree.finalize();
+
+        // Touched blocks: ~1/3 of digest-aligned pointers get fresh random values.
+        let touched_ptrs = mem_config
+            .addr_spaces
+            .iter()
+            .enumerate()
+            .flat_map(|(i, cnf)| {
+                let mut ptrs = Vec::new();
+                for j in 0..(cnf.num_cells / DIGEST_WIDTH) {
+                    if rng.random_bool(0.333) {
+                        ptrs.push((i as u32, (j * DIGEST_WIDTH) as u32));
+                    }
+                }
+                ptrs
+            })
+            .collect::<Vec<_>>();
+        let new_data = touched_ptrs
+            .iter()
+            .map(|_| std::array::from_fn(|_| F::from_u32(rng.random_range(0..F::ORDER_U32))))
+            .collect::<Vec<[F; DIGEST_WIDTH]>>();
+        assert!(!touched_ptrs.is_empty());
+
+        // Build the canonical CPU trace from the same initial memory and touched blocks, using a
+        // Poseidon2 hasher equivalent to the GPU one.
+        let cpu_hasher_chip = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
+        let mut cpu_merkle_chip = MemoryMerkleChip::<DIGEST_WIDTH, F>::new(
+            mem_config.memory_dimensions(),
+            PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+            PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
+        );
+        let final_partition: BTreeMap<(u32, u32), [F; DIGEST_WIDTH]> = touched_ptrs
+            .iter()
+            .copied()
+            .zip(new_data.iter().copied())
+            .collect();
+        cpu_merkle_chip.finalize(&initial_memory.memory, &final_partition, &cpu_hasher_chip);
+        let cpu_ctx = cpu_merkle_chip.generate_proving_ctx::<SC>();
+
+        // Run the GPU update and capture the resulting trace.
+        let touched_blocks = touched_ptrs
+            .into_iter()
+            .zip(new_data)
+            .map(|(address, data)| {
+                (
+                    address,
+                    TimestampedValues {
+                        timestamp: rng.random_range(0..(1u32 << mem_config.timestamp_max_bits)),
+                        values: data,
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut merkle_records =
+            Vec::<u32>::with_capacity(touched_blocks.len() * MERKLE_TOUCHED_BLOCK_WIDTH);
+        for (address, ts_values) in &touched_blocks {
+            let (address_space, ptr) = *address;
+            merkle_records.push(address_space);
+            merkle_records.push(ptr);
+            merkle_records.push(ts_values.timestamp);
+            for &v in &ts_values.values {
+                merkle_records.push(unsafe { std::mem::transmute::<F, u32>(v) });
+            }
+        }
+        let d_touched_blocks = merkle_records
+            .to_device_on(&gpu_merkle_tree.device_ctx)
+            .unwrap();
+
+        let merkle_ctx = gpu_merkle_tree.update_with_touched_blocks(
+            gpu_merkle_tree.calculate_unpadded_height(&touched_blocks),
+            &d_touched_blocks,
+            false,
+        );
+
+        // The GPU trace must contain exactly the same rows as the constraint-valid CPU trace.
+        let width = cpu_ctx.common_main.width;
+        let height = cpu_ctx.common_main.values.len() / width;
+        let gpu_trace = &merkle_ctx.common_main;
+        assert_eq!(gpu_trace.width(), width, "trace width mismatch");
+        assert_eq!(gpu_trace.height(), height, "trace (padded) height mismatch");
+
+        // CPU trace is row-major; GPU trace is column-major on device.
+        let cpu_vals = &cpu_ctx.common_main.values;
+        let gpu_vals = gpu_trace
+            .buffer()
+            .to_host_on(&gpu_merkle_tree.device_ctx)
+            .unwrap();
+        let row_to_u32 = |get: &dyn Fn(usize, usize) -> F, r: usize| -> Vec<u32> {
+            (0..width).map(|c| get(r, c).as_canonical_u32()).collect()
+        };
+        let cpu_get = |r: usize, c: usize| cpu_vals[r * width + c];
+        let gpu_get = |r: usize, c: usize| gpu_vals[c * height + r];
+        let mut cpu_rows: Vec<Vec<u32>> = (0..height).map(|r| row_to_u32(&cpu_get, r)).collect();
+        let mut gpu_rows: Vec<Vec<u32>> = (0..height).map(|r| row_to_u32(&gpu_get, r)).collect();
+        cpu_rows.sort_unstable();
+        gpu_rows.sort_unstable();
+        assert_eq!(
+            gpu_rows, cpu_rows,
+            "GPU merkle trace rows do not match the CPU reference trace"
         );
     }
 }
