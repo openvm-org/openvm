@@ -3,6 +3,8 @@ use std::sync::Arc;
 use derive_more::derive::From;
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
+#[cfg(feature = "evm-prove")]
+use openvm_circuit::arch::U16_CELL_SIZE;
 use openvm_circuit::{
     arch::instructions::exe::VmExe,
     system::memory::{dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof},
@@ -120,6 +122,10 @@ pub enum EvmProofConversionError {
     InvalidLengthInstances(usize),
     #[error("Accumulator length {0} is not a multiple of {BN254_BYTES}")]
     InvalidAccumulatorLength(usize),
+    #[error("User public values length {0} is not a multiple of {U16_CELL_SIZE}")]
+    InvalidUserPublicValuesLength(usize),
+    #[error("User public value at index {0} does not fit in {U16_CELL_SIZE} bytes")]
+    UserPublicValueOutOfRange(usize),
     #[error("Value is not a canonical Bn254 scalar")]
     NonCanonicalScalar,
     #[error(transparent)]
@@ -188,7 +194,7 @@ pub fn encode_raw_evm_proof_calldata(
 /// - `instances[0..12]`: KZG accumulator (12 Fr values)
 /// - `instances[12]`: app_exe_commit (Fr)
 /// - `instances[13]`: app_vm_commit (Fr)
-/// - `instances[14..]`: user public values (each byte as Fr)
+/// - `instances[14..]`: user public values (each u16 limb as Fr)
 #[cfg(feature = "evm-prove")]
 impl TryFrom<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
     type Error = EvmProofConversionError;
@@ -224,11 +230,15 @@ impl TryFrom<openvm_static_verifier::keygen::RawEvmProof> for EvmProof {
 
         let user_public_values = instances[NUM_BN254_ACCUMULATOR + 2..]
             .iter()
-            .map(|f| {
-                // Each user public value is a single byte stored in the least significant position
-                f.to_bytes()[0]
-            })
-            .collect::<Vec<u8>>();
+            .enumerate()
+            .try_fold(Vec::new(), |mut values, (index, f)| {
+                let bytes = f.to_bytes();
+                if bytes[U16_CELL_SIZE..].iter().any(|&byte| byte != 0) {
+                    return Err(EvmProofConversionError::UserPublicValueOutOfRange(index));
+                }
+                values.extend_from_slice(&bytes[..U16_CELL_SIZE]);
+                Ok(values)
+            })?;
 
         let app_commit = AppExecutionCommit {
             app_exe_commit: CommitBytes::try_new(app_exe_bytes)?,
@@ -290,11 +300,16 @@ impl TryFrom<EvmProof> for openvm_static_verifier::keygen::RawEvmProof {
         app_vm_bytes.reverse();
         let app_vm_fr = to_fr(&app_vm_bytes)?;
 
+        if !user_public_values.len().is_multiple_of(U16_CELL_SIZE) {
+            return Err(EvmProofConversionError::InvalidUserPublicValuesLength(
+                user_public_values.len(),
+            ));
+        }
         let user_pvs_frs: Vec<Fr> = user_public_values
-            .into_iter()
-            .map(|byte| {
+            .chunks_exact(U16_CELL_SIZE)
+            .map(|limb| {
                 let mut bytes = [0u8; 32];
-                bytes[0] = byte;
+                bytes[..U16_CELL_SIZE].copy_from_slice(limb);
                 to_fr(&bytes)
             })
             .collect::<Result<_, _>>()?;
@@ -351,6 +366,37 @@ impl VersionedVmStarkProof {
                 })
                 .transpose()?,
         })
+    }
+}
+
+#[cfg(all(test, feature = "evm-prove"))]
+mod tests {
+    use halo2_base::halo2_proofs::arithmetic::Field;
+    use openvm_static_verifier::{keygen::RawEvmProof, Fr};
+
+    use super::{EvmProof, NUM_BN254_ACCUMULATOR, U16_CELL_SIZE};
+
+    fn fr_from_u16(value: u16) -> Fr {
+        let mut bytes = [0u8; 32];
+        bytes[..U16_CELL_SIZE].copy_from_slice(&value.to_le_bytes());
+        Fr::from_bytes(&bytes).unwrap()
+    }
+
+    #[test]
+    fn evm_proof_roundtrips_u16_public_values() {
+        let mut instances = vec![Fr::ZERO; NUM_BN254_ACCUMULATOR + 2];
+        instances.extend([fr_from_u16(0x1234), fr_from_u16(0xabcd)]);
+        let raw = RawEvmProof {
+            instances,
+            proof: vec![1, 2, 3],
+        };
+
+        let proof = EvmProof::try_from(raw.clone()).unwrap();
+        assert_eq!(proof.user_public_values, [0x34, 0x12, 0xcd, 0xab]);
+
+        let roundtrip = RawEvmProof::try_from(proof).unwrap();
+        assert_eq!(roundtrip.instances, raw.instances);
+        assert_eq!(roundtrip.proof, raw.proof);
     }
 }
 
