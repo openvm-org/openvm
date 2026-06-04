@@ -93,35 +93,6 @@ pub const fn num_f_memory_ops(total_cells: usize) -> usize {
     total_cells / BLOCK_FE_WIDTH
 }
 
-/// Split heap byte data into memory-bus chunks.
-pub fn split_byte_memory_ops<T, const TOTAL_BYTES: usize, const NUM_OPS: usize>(
-    data: [T; TOTAL_BYTES],
-) -> [[T; MEMORY_BLOCK_BYTES]; NUM_OPS] {
-    const {
-        assert!(
-            TOTAL_BYTES == NUM_OPS * MEMORY_BLOCK_BYTES,
-            "TOTAL_BYTES must equal NUM_OPS * MEMORY_BLOCK_BYTES"
-        )
-    };
-    let mut it = data.into_iter();
-    from_fn(|_| from_fn(|_| it.next().unwrap()))
-}
-
-/// Split cell-shaped memory data into memory-bus chunks. Callers choose the address stride for
-/// the address space they access.
-pub fn split_cell_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
-    data: [T; TOTAL_CELLS],
-) -> [[T; BLOCK_FE_WIDTH]; NUM_OPS] {
-    const {
-        assert!(
-            TOTAL_CELLS == NUM_OPS * BLOCK_FE_WIDTH,
-            "TOTAL_CELLS must equal NUM_OPS * BLOCK_FE_WIDTH"
-        )
-    };
-    let mut it = data.into_iter();
-    from_fn(|_| from_fn(|_| it.next().unwrap()))
-}
-
 pub fn join_byte_memory_ops<T, const TOTAL_BYTES: usize, const NUM_OPS: usize>(
     chunks: [[T; MEMORY_BLOCK_BYTES]; NUM_OPS],
 ) -> [T; TOTAL_BYTES] {
@@ -141,7 +112,7 @@ pub fn byte_memory_op_chunk<T: Clone>(data: &[T], chunk_idx: usize) -> [T; MEMOR
     from_fn(|i| data[start + i].clone())
 }
 
-/// Split DEFERRAL_AS cell data into memory-bus chunks.
+/// Split cell data into memory-bus chunks.
 pub fn split_f_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
     data: [T; TOTAL_CELLS],
 ) -> [[T; BLOCK_FE_WIDTH]; NUM_OPS] {
@@ -217,15 +188,6 @@ pub fn le_bytes_to_u16_array<const N: usize>(bytes: &[u8]) -> [u16; N] {
 /// Pack little-endian byte pairs into field-valued u16 cells.
 pub fn le_bytes_to_u16_cells<F: PrimeCharacteristicRing, const N: usize>(bytes: &[u8]) -> [F; N] {
     le_bytes_to_u16_array(bytes).map(F::from_u16)
-}
-
-/// Decompose a field-valued commit into little-endian u16 cells.
-pub fn f_commit_to_u16s<F: PrimeField32>(f_commit: &[F; DIGEST_SIZE]) -> [u16; COMMIT_NUM_U16S] {
-    f_commit
-        .iter()
-        .flat_map(|f| le_bytes_to_u16_array::<F_NUM_U16S>(&f.as_canonical_u32().to_le_bytes()))
-        .collect_array()
-        .unwrap()
 }
 
 pub fn bytes_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(register: &[T]) -> F {

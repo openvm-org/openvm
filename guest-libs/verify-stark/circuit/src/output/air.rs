@@ -164,12 +164,11 @@ where
             .input_vals
             .chunks(F_NUM_U16S)
             .zip(local.canonicity_aux)
-            .map(|(x, aux)| {
-                let cells_u16: [_; F_NUM_U16S] =
-                    x.iter().map(|cell| (*cell).into()).collect_array().unwrap();
+            .map(|(cells, aux)| {
+                let cells: &[_; F_NUM_U16S] = cells.try_into().unwrap();
                 CanonicitySubAir.assert_canonicity(
                     builder,
-                    cells_u16,
+                    cells,
                     &aux,
                     local.is_valid - local.is_first,
                 )

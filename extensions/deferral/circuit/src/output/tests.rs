@@ -8,6 +8,7 @@ use openvm_circuit::arch::{
     },
     ExecutionError, Executor, MemoryConfig, Postflight, MEMORY_BLOCK_BYTES,
 };
+#[cfg(feature = "cuda")]
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{

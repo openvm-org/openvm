@@ -39,7 +39,7 @@ use crate::{
     count::DeferralCircuitCountBus,
     poseidon2::DeferralPoseidon2Bus,
     utils::{
-        combine_output_cells, split_cell_memory_ops, u16_commit_to_f, u16s_to_f, COMMIT_NUM_U16S,
+        combine_output_cells, split_f_memory_ops, u16_commit_to_f, u16s_to_f, COMMIT_NUM_U16S,
         F_NUM_U16S, OUTPUT_TOTAL_MEMORY_OPS, OUTPUT_TOTAL_NUM_U16S, SPONGE_BYTES_PER_ROW,
         SPONGE_ROW_MEMORY_OPS, U16_BITS,
     },
@@ -68,21 +68,26 @@ pub struct DeferralOutputCols<T> {
     pub rd_aux: MemoryReadAuxCols<T>,
     pub rs_aux: MemoryReadAuxCols<T>,
 
-    // First row reads [output_commit || output_len_le] from heap as u16 cells.
-    // `output_commit` is the onion hash of the output bytes.
+    // Read data and auxiliary columns. output_commit and output_len are read
+    // contiguously from heap with layout [output_commit || output_len].
+    // The onion hash of all bytes written by this opcode invocation is
+    // constrained to output_commit.
     pub output_commit: [T; COMMIT_NUM_U16S],
     pub output_len: [T; F_NUM_U16S],
     pub output_commit_and_len_aux: [MemoryReadAuxCols<T>; OUTPUT_TOTAL_MEMORY_OPS],
 
-    // Auxiliary columns to ensure canonicity of output_commit cells.
+    // Auxiliary columns to ensure the canonicity of each F decomposition in
+    // output_commit.
     pub output_commit_lt_aux: [CanonicityAuxCols<T>; DIGEST_SIZE],
 
-    // First row sponge input is [deferral_idx, output_len, 0, ...].
-    // Later rows sponge and write the next SPONGE_BYTES_PER_ROW output bytes.
+    // Initial [def_idx, output_len, 0, ...] digest on the first row; on non-first
+    // rows bytes raw_output[local_idx * SPONGE_BYTES_PER_ROW..(local_idx + 1) *
+    // SPONGE_BYTES_PER_ROW] written to memory and auxiliary columns.
     pub sponge_inputs: [T; DIGEST_SIZE],
     pub write_bytes_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; SPONGE_ROW_MEMORY_OPS],
 
-    // Running Poseidon2 capacity on non-last rows; final compression on the last row.
+    // Capacity of the permutation of write_bytes and the previous row's capacity on
+    // non-last rows, compression on the last row.
     pub poseidon2_res: [T; DIGEST_SIZE],
 }
 
@@ -175,20 +180,15 @@ where
             next.output_len,
         );
 
-        // Constrain the canonicity of output_commit, i.e. that every
-        // F_NUM_U16S u16 cells uniquely represent an element of F.
+        // Constrain the canonicity of output_commit, i.e. that every F_NUM_U16S
+        // u16 cells uniquely represents an element of F.
         let output_commit_rcs = izip!(
             local.output_commit.chunks_exact(F_NUM_U16S),
             local.output_commit_lt_aux
         )
         .map(|(cells, aux)| {
-            let cells: [_; F_NUM_U16S] = cells.try_into().unwrap();
-            CanonicitySubAir.assert_canonicity(
-                builder,
-                cells.map(Into::into),
-                &aux,
-                local.is_first.into(),
-            )
+            let cells: &[_; F_NUM_U16S] = cells.try_into().unwrap();
+            CanonicitySubAir.assert_canonicity(builder, cells, &aux, local.is_first.into())
         })
         .collect_vec();
 
@@ -205,7 +205,9 @@ where
                 .eval(builder, local.is_first);
         }
 
-        // Init-row sponge state: [deferral_idx, output_len_as_F, 0, ...].
+        // Constrain the consistency of current_commit_state at each point in this
+        // section's rows. The initial state should be [deferral_idx, output_len,
+        // ..., 0].
         let output_len = u16s_to_f(&local.output_len);
         let mut initial_state = [AB::Expr::ZERO; DIGEST_SIZE];
         initial_state[0] = local.deferral_idx.into();
@@ -257,7 +259,7 @@ where
             )
             .eval(builder, local.is_first);
 
-        // Constrain output_len to be under 2^address_bits also.
+        // We also constrain output_len to be under 2^address_bits.
         self.range_bus
             .range_check(
                 ptr_bound_from_high_u16_expr(local.output_len[1], self.address_bits),
@@ -301,7 +303,7 @@ where
         let output_commit_and_len =
             combine_output_cells(local.output_commit.map(Into::into), output_len_full);
         let output_chunks =
-            split_cell_memory_ops::<AB::Expr, OUTPUT_TOTAL_NUM_U16S, OUTPUT_TOTAL_MEMORY_OPS>(
+            split_f_memory_ops::<AB::Expr, OUTPUT_TOTAL_NUM_U16S, OUTPUT_TOTAL_MEMORY_OPS>(
                 output_commit_and_len,
             );
 
@@ -338,7 +340,7 @@ where
         // Each data row writes `sponge_inputs` to memory as
         // `SPONGE_ROW_MEMORY_OPS` `BLOCK_FE_WIDTH`-cell bus blocks.
         let section_idx_minus_one = local.section_idx - AB::Expr::ONE;
-        let write_cell_chunks = split_cell_memory_ops::<AB::Expr, DIGEST_SIZE, SPONGE_ROW_MEMORY_OPS>(
+        let write_cell_chunks = split_f_memory_ops::<AB::Expr, DIGEST_SIZE, SPONGE_ROW_MEMORY_OPS>(
             local.sponge_inputs.map(Into::into),
         );
         for (chunk_idx, (data, aux)) in write_cell_chunks
