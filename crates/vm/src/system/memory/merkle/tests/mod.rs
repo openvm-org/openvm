@@ -958,11 +958,11 @@ fn expand_test_label_rebinding_attack() {
                 layout: MemoryCellType::Null,
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
+                num_cells: DIGEST_WIDTH << height,
                 layout: MemoryCellType::field32(),
             },
             AddressSpaceHostConfig {
-                num_cells: CHUNK << height,
+                num_cells: DIGEST_WIDTH << height,
                 layout: MemoryCellType::field32(),
             },
         ],
@@ -974,27 +974,27 @@ fn expand_test_label_rebinding_attack() {
 
     let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
     unsafe {
-        memory.write(1, fake_label * CHUNK as u32, [BabyBear::from_u8(69)]);
+        memory.write(1, fake_label * DIGEST_WIDTH as u32, [BabyBear::from_u8(69)]);
     }
 
     let touched_labels_for_chip = BTreeSet::from([(1u32, fake_label)]);
     let touched_labels_for_dummy = BTreeSet::from([(1u32, claimed_label)]);
 
-    let final_partition_for_chip: BTreeMap<_, [BabyBear; CHUNK]> =
-        memory_to_vec_partition::<BabyBear, CHUNK>(&memory.memory, &md)
+    let final_partition_for_chip: BTreeMap<_, [BabyBear; DIGEST_WIDTH]> =
+        memory_to_vec_partition::<BabyBear, DIGEST_WIDTH>(&memory.memory, &md)
             .into_iter()
             .map(|(idx, values)| {
                 let address_space = (idx >> md.address_height) as u32 + ADDR_SPACE_OFFSET;
                 let label = (idx & ((1 << md.address_height) - 1)) as u32;
-                ((address_space, label * (CHUNK as u32)), values)
+                ((address_space, label * (DIGEST_WIDTH as u32)), values)
             })
             .filter(|((address_space, pointer), _)| {
-                touched_labels_for_chip.contains(&(*address_space, pointer / CHUNK as u32))
+                touched_labels_for_chip.contains(&(*address_space, pointer / DIGEST_WIDTH as u32))
             })
             .collect();
 
     let merkle_bus = PermutationCheckBus::new(MEMORY_MERKLE_BUS);
-    let mut chip = MemoryMerkleChip::<CHUNK, _>::new(md, merkle_bus, COMPRESSION_BUS);
+    let mut chip = MemoryMerkleChip::<DIGEST_WIDTH, _>::new(md, merkle_bus, COMPRESSION_BUS);
     chip.finalize(&memory.memory, &final_partition_for_chip, &hash_test_chip);
     let mut chip_ctx = chip.generate_proving_ctx();
 
@@ -1020,7 +1020,7 @@ fn expand_test_label_rebinding_attack() {
         }
 
         for row in chip_ctx.common_main.rows_mut() {
-            let row: &mut MemoryMerkleCols<BabyBear, CHUNK> = row.borrow_mut();
+            let row: &mut MemoryMerkleCols<BabyBear, DIGEST_WIDTH> = row.borrow_mut();
             if row.expand_direction == BabyBear::ZERO {
                 continue;
             }
@@ -1029,14 +1029,14 @@ fn expand_test_label_rebinding_attack() {
         }
     }
 
-    let dummy_interaction_air = DummyInteractionAir::new(4 + CHUNK, true, merkle_bus.index);
+    let dummy_interaction_air = DummyInteractionAir::new(4 + DIGEST_WIDTH, true, merkle_bus.index);
     let mut dummy_interaction_trace_rows = vec![];
     let mut interaction = |interaction_type: PermutationInteractionType,
                            is_compress: bool,
                            height: usize,
                            as_label: u32,
                            address_label: u32,
-                           hash: [BabyBear; CHUNK]| {
+                           hash: [BabyBear; DIGEST_WIDTH]| {
         let expand_direction = if is_compress {
             BabyBear::NEG_ONE
         } else {
@@ -1060,7 +1060,7 @@ fn expand_test_label_rebinding_attack() {
             array::from_fn(|i| {
                 memory
                     .memory
-                    .get((address_space, fake_label * CHUNK as u32 + i as u32))
+                    .get((address_space, fake_label * DIGEST_WIDTH as u32 + i as u32))
             })
         };
         let as_label = address_space - ADDR_SPACE_OFFSET;
