@@ -70,7 +70,7 @@ pub struct ModularIsEqualCoreCols<T, const READ_LIMBS: usize> {
 }
 
 #[derive(Clone, Debug, ColumnsAir)]
-#[columns_via(ModularIsEqualCoreCols<u8, READ_LIMBS>)]
+#[columns_via(ModularIsEqualCoreCols<u16, READ_LIMBS>)]
 pub struct ModularIsEqualCoreAir<
     const READ_LIMBS: usize,
     const WRITE_LIMBS: usize,
