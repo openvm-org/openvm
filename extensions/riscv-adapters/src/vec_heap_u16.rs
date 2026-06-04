@@ -32,7 +32,7 @@ use openvm_instructions::{
 };
 use openvm_riscv_circuit::adapters::{
     byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block,
-    ptr_bound_from_high_u16_expr, ptr_bound_from_ptr, ptr_to_u16_limbs, tracing_read_reg_ptr,
+    ptr_bound_from_high_u16_expr, ptr_bound_from_ptr, ptr_to_field_u16_limbs, tracing_read_reg_ptr,
     tracing_read_u16, tracing_write_u16, u16_limbs_to_ptr, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 use openvm_stark_backend::{
@@ -446,13 +446,13 @@ impl<
                 mem_helper.fill(aux.prev_timestamp, timestamp_mm(), cols_aux.as_mut());
             });
 
-        cols.rd_val = ptr_to_u16_limbs(record.rd_val).map(F::from_u16);
+        cols.rd_val = ptr_to_field_u16_limbs(record.rd_val);
         cols.rs_val
             .iter_mut()
             .rev()
             .zip(record.rs_vals.iter().rev())
             .for_each(|(cols_val, val)| {
-                *cols_val = ptr_to_u16_limbs(*val).map(F::from_u16);
+                *cols_val = ptr_to_field_u16_limbs(*val);
             });
         cols.rd_ptr = F::from_u32(record.rd_ptr);
         cols.rs_ptr

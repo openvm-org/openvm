@@ -402,24 +402,31 @@ where
         let record: &ModularIsEqualRecord<READ_LIMBS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
         let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();
-        let (b_cmp, b_diff_idx) =
+        let (b_cmp, mut b_diff_idx) =
             run_unsigned_less_than::<READ_LIMBS>(&record.b, &self.modulus_limbs);
-        let (c_cmp, c_diff_idx) =
+        let (c_cmp, mut c_diff_idx) =
             run_unsigned_less_than::<READ_LIMBS>(&record.c, &self.modulus_limbs);
 
         if !record.is_setup {
             assert!(b_cmp, "{:?} >= {:?}", record.b, self.modulus_limbs);
+            assert!(c_cmp, "{:?} >= {:?}", record.c, self.modulus_limbs);
+        } else {
+            b_diff_idx = READ_LIMBS;
+            c_diff_idx = (0..READ_LIMBS)
+                .rev()
+                .find(|&i| record.c[i] != self.modulus_limbs[i])
+                .unwrap_or(0);
         }
-        assert!(c_cmp, "{:?} >= {:?}", record.c, self.modulus_limbs);
 
         // Writing in reverse order
-        cols.c_lt_mark = if b_diff_idx == c_diff_idx {
+        cols.c_lt_mark = if !record.is_setup && b_diff_idx == c_diff_idx {
             F::ONE
         } else {
             F::TWO
         };
 
-        cols.c_lt_diff = F::from_u16(self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx]);
+        cols.c_lt_diff =
+            F::from_u16(self.modulus_limbs[c_diff_idx].wrapping_sub(record.c[c_diff_idx]));
         if !record.is_setup {
             cols.b_lt_diff = F::from_u16(self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx]);
             self.range_checker_chip.add_count(
@@ -720,8 +727,10 @@ unsafe fn execute_e12_impl<
         debug_assert!(b_cmp, "{:?} >= modulus {:?}", b, pre_compute.modulus_limbs);
     }
 
-    let (c_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&c, &pre_compute.modulus_limbs);
-    debug_assert!(c_cmp, "{:?} >= modulus {:?}", c, pre_compute.modulus_limbs);
+    if !IS_SETUP {
+        let (c_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&c, &pre_compute.modulus_limbs);
+        debug_assert!(c_cmp, "{:?} >= modulus {:?}", c, pre_compute.modulus_limbs);
+    }
 
     // Compute result (RV64: 8-byte result register)
     let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
