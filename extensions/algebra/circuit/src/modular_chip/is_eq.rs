@@ -27,7 +27,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_riscv_adapters::Rv64IsEqualModU16AdapterExecutor;
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
+use openvm_riscv_circuit::adapters::{rv64_bytes_to_u16_block, rv64_bytes_to_u32};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -701,31 +701,27 @@ unsafe fn execute_e12_impl<
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
 
     // Read memory values
-    let [b, c]: [[[u8; MEMORY_BLOCK_BYTES]; NUM_LANES]; 2] = rs_vals.map(|address| {
+    let [b, c]: [[u16; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + TOTAL_READ_SIZE * U16_CELL_SIZE - 1 < RV64_MEMORY_BYTES);
-        from_fn::<_, NUM_LANES, _>(|i| {
-            exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
+        let mut limbs = [0u16; TOTAL_READ_SIZE];
+        for i in 0..NUM_LANES {
+            let block = rv64_bytes_to_u16_block(exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(
                 RV64_MEMORY_AS,
                 address + (i * MEMORY_BLOCK_BYTES) as u32,
-            )
-        })
+            ));
+            let start = i * BLOCK_FE_WIDTH;
+            limbs[start..start + BLOCK_FE_WIDTH].copy_from_slice(&block);
+        }
+        limbs
     });
 
     if !IS_SETUP {
-        debug_assert!(
-            bytes_lt_u16_modulus(b.as_flattened(), &pre_compute.modulus_limbs),
-            "{:?} >= modulus {:?}",
-            b.as_flattened(),
-            pre_compute.modulus_limbs
-        );
+        let (b_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&b, &pre_compute.modulus_limbs);
+        debug_assert!(b_cmp, "{:?} >= modulus {:?}", b, pre_compute.modulus_limbs);
     }
 
-    debug_assert!(
-        bytes_lt_u16_modulus(c.as_flattened(), &pre_compute.modulus_limbs),
-        "{:?} >= modulus {:?}",
-        c.as_flattened(),
-        pre_compute.modulus_limbs
-    );
+    let (c_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&c, &pre_compute.modulus_limbs);
+    debug_assert!(c_cmp, "{:?} >= modulus {:?}", c, pre_compute.modulus_limbs);
 
     // Compute result (RV64: 8-byte result register)
     let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
@@ -736,23 +732,6 @@ unsafe fn execute_e12_impl<
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
-}
-
-#[inline(always)]
-fn bytes_lt_u16_modulus<const NUM_LIMBS: usize>(bytes: &[u8], modulus: &[u16; NUM_LIMBS]) -> bool {
-    debug_assert_eq!(bytes.len(), NUM_LIMBS * U16_CELL_SIZE);
-    for i in (0..bytes.len()).rev() {
-        let cell = modulus[i / U16_CELL_SIZE];
-        let m = if i.is_multiple_of(U16_CELL_SIZE) {
-            cell as u8
-        } else {
-            (cell >> u8::BITS) as u8
-        };
-        if bytes[i] != m {
-            return bytes[i] < m;
-        }
-    }
-    false
 }
 
 // Returns (cmp_result, diff_idx)
