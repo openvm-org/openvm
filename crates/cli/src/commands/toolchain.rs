@@ -61,7 +61,13 @@ pub struct UninstallArgs {
 }
 
 impl ToolchainCmd {
-    pub fn run(&self) -> Result<()> {
+    pub async fn run(self) -> Result<()> {
+        tokio::task::spawn_blocking(move || self.run_blocking())
+            .await
+            .context("toolchain command failed to join")?
+    }
+
+    fn run_blocking(&self) -> Result<()> {
         match &self.action {
             ToolchainAction::Install(args) => install(args),
             ToolchainAction::Uninstall(args) => uninstall(args),
