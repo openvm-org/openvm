@@ -2,6 +2,7 @@
 
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -18,8 +19,8 @@ struct Rv64VecHeapAdapterCols {
     T rs_ptr[NUM_READS];
     T rd_ptr;
 
-    T rs_val[NUM_READS][RV64_WORD_NUM_LIMBS];
-    T rd_val[RV64_WORD_NUM_LIMBS];
+    T rs_val[NUM_READS][RV64_PTR_U16_LIMBS];
+    T rd_val[RV64_PTR_U16_LIMBS];
 
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
     MemoryReadAuxCols<T> rd_read_aux;
@@ -55,19 +56,15 @@ template <
     size_t BLOCKS_PER_WRITE>
 struct Rv64VecHeapAdapter {
     size_t pointer_max_bits;
-    BitwiseOperationLookup bitwise_lookup;
+    VariableRangeChecker range_checker;
     MemoryAuxColsFactory mem_helper;
-
-    static constexpr size_t RV64_WORD_TOTAL_BITS = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS;
-    static constexpr size_t MSL_SHIFT = RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1);
 
     __device__ Rv64VecHeapAdapter(
         size_t pointer_max_bits,
         VariableRangeChecker range_checker,
-        BitwiseOperationLookup bitwise_lookup,
         uint32_t timestamp_max_bits
     )
-        : pointer_max_bits(pointer_max_bits), bitwise_lookup(bitwise_lookup),
+        : pointer_max_bits(pointer_max_bits), range_checker(range_checker),
           mem_helper(range_checker, timestamp_max_bits) {}
 
     template <typename T>
@@ -84,38 +81,19 @@ struct Rv64VecHeapAdapter {
             BLOCKS_PER_READ,
             BLOCKS_PER_WRITE> record
     ) {
-        const size_t limb_shift_bits = RV64_WORD_TOTAL_BITS - pointer_max_bits;
+        static_assert(NUM_READS == 1 || NUM_READS == 2);
 
-        if (NUM_READS == 2) {
-            bitwise_lookup.add_range(
-                (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
-                (record.rs_vals[1] >> MSL_SHIFT) << limb_shift_bits
-            );
-            bitwise_lookup.add_range(
-                (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
-                (record.rd_val >> MSL_SHIFT) << limb_shift_bits
-            );
-        } else if (NUM_READS == 1) {
-            bitwise_lookup.add_range(
-                (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
-                (record.rd_val >> MSL_SHIFT) << limb_shift_bits
-            );
-        } else {
-            assert(false);
-        }
 #pragma unroll
-        for (size_t i = 0; i < RV64_WORD_NUM_LIMBS; i += 2) {
-            for (size_t r = 0; r < NUM_READS; r++) {
-                bitwise_lookup.add_range(
-                    (record.rs_vals[r] >> (RV64_BYTE_BITS * i)) & RV64_BYTE_MASK,
-                    (record.rs_vals[r] >> (RV64_BYTE_BITS * (i + 1))) & RV64_BYTE_MASK
-                );
-            }
-            bitwise_lookup.add_range(
-                (record.rd_val >> (RV64_BYTE_BITS * i)) & RV64_BYTE_MASK,
-                (record.rd_val >> (RV64_BYTE_BITS * (i + 1))) & RV64_BYTE_MASK
+        for (size_t i = 0; i < NUM_READS; i++) {
+            range_checker.add_count(
+                ptr_bound_from_high_u16(uint16_t(record.rs_vals[i] >> U16_BITS), pointer_max_bits),
+                U16_BITS
             );
         }
+        range_checker.add_count(
+            ptr_bound_from_high_u16(uint16_t(record.rd_val >> U16_BITS), pointer_max_bits),
+            U16_BITS
+        );
 
         uint32_t timestamp =
             record.from_timestamp + NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;
@@ -159,10 +137,14 @@ struct Rv64VecHeapAdapter {
             );
         }
 
-        COL_WRITE_ARRAY(row, Cols, rd_val, (uint8_t *)&record.rd_val);
+        Fp rd_val[RV64_PTR_U16_LIMBS];
+        ptr_to_u16_limbs(rd_val, record.rd_val);
+        COL_WRITE_ARRAY(row, Cols, rd_val, rd_val);
 
         for (int i = NUM_READS - 1; i >= 0; i--) {
-            COL_WRITE_ARRAY(row, Cols, rs_val[i], (uint8_t *)&record.rs_vals[i]);
+            Fp rs_val[RV64_PTR_U16_LIMBS];
+            ptr_to_u16_limbs(rs_val, record.rs_vals[i]);
+            COL_WRITE_ARRAY(row, Cols, rs_val[i], rs_val);
         }
 
         COL_WRITE_VALUE(row, Cols, rd_ptr, record.rd_ptr);
