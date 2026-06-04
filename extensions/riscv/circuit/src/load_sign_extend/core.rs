@@ -8,6 +8,7 @@ use openvm_circuit::{
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::select,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
@@ -55,10 +56,24 @@ pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {
     pub prev_data: [T; NUM_CELLS],
 }
 
-#[derive(Debug, Clone, derive_new::new, ColumnsAir)]
+#[derive(Debug, Clone, ColumnsAir)]
 #[columns_via(LoadSignExtendCoreCols<u8, NUM_CELLS>)]
 pub struct LoadSignExtendCoreAir<const NUM_CELLS: usize, const LIMB_BITS: usize> {
     pub range_bus: VariableRangeCheckerBus,
+    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
+}
+
+impl<const NUM_CELLS: usize, const LIMB_BITS: usize> LoadSignExtendCoreAir<NUM_CELLS, LIMB_BITS> {
+    pub fn new(
+        range_bus: VariableRangeCheckerBus,
+        bitwise_lookup_bus: BitwiseOperationLookupBus,
+    ) -> Self {
+        assert!(NUM_CELLS.is_multiple_of(2));
+        Self {
+            range_bus,
+            bitwise_lookup_bus,
+        }
+    }
 }
 
 impl<F: Field, const NUM_CELLS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -161,9 +176,9 @@ where
                 LIMB_BITS - 1,
             )
             .eval(builder, is_valid.clone());
-        for cell in shifted_read_data {
-            self.range_bus
-                .range_check(cell, LIMB_BITS)
+        for pair in shifted_read_data.chunks_exact(2) {
+            self.bitwise_lookup_bus
+                .send_range(pair[0], pair[1])
                 .eval(builder, is_valid.clone());
         }
 
@@ -216,7 +231,7 @@ pub struct LoadSignExtendExecutor<A, const NUM_CELLS: usize, const LIMB_BITS: us
     adapter: A,
 }
 
-#[derive(Clone, derive_new::new)]
+#[derive(Clone)]
 pub struct LoadSignExtendFiller<
     A = Rv64LoadStoreAdapterFiller,
     const NUM_CELLS: usize = RV64_REGISTER_NUM_LIMBS,
@@ -224,6 +239,24 @@ pub struct LoadSignExtendFiller<
 > {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+}
+
+impl<A, const NUM_CELLS: usize, const LIMB_BITS: usize>
+    LoadSignExtendFiller<A, NUM_CELLS, LIMB_BITS>
+{
+    pub fn new(
+        adapter: A,
+        range_checker_chip: SharedVariableRangeCheckerChip,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ) -> Self {
+        assert!(NUM_CELLS.is_multiple_of(2));
+        Self {
+            adapter,
+            range_checker_chip,
+            bitwise_lookup_chip,
+        }
+    }
 }
 
 impl<F, A, RA, const NUM_CELLS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
@@ -332,8 +365,9 @@ where
         let most_sig_bit = most_sig_limb & (1 << (LIMB_BITS - 1));
         self.range_checker_chip
             .add_count((most_sig_limb - most_sig_bit) as u32, LIMB_BITS - 1);
-        for cell in shifted {
-            self.range_checker_chip.add_count(cell as u32, LIMB_BITS);
+        for pair in shifted.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
         }
 
         core_row.prev_data = record.prev_data.map(F::from_u8);
