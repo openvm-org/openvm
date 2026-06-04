@@ -359,9 +359,6 @@ fn compile_impl<F: PrimeField32>(
         }
     }
 
-    if cfg!(target_os = "macos") {
-        project.enable_lto = false;
-    }
     project.native_debug_info = opts.native_debug_info;
 
     let entry_point = exe.pc_start;

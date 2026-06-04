@@ -7,7 +7,7 @@
 //! adjustments for IO instructions are handled entirely in the generated C
 //! code; these callbacks are pure IO logic.
 
-use std::{collections::VecDeque, ffi::c_void, io::Write, mem::size_of};
+use std::{collections::VecDeque, ffi::c_void, io::Write};
 
 #[cfg(not(feature = "unprotected"))]
 use openvm_platform::memory::MEM_SIZE;
