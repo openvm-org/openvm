@@ -2,6 +2,7 @@
 #include "primitives/constants.h"
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -85,7 +86,7 @@ struct Rv64HintStore {
         uint32_t rem_words = record.num_words - local_idx;
         uint32_t mem_ptr = record.mem_ptr + local_idx * (uint32_t)RV64_REGISTER_NUM_LIMBS;
         uint32_t mem_ptr_limbs[RV64_PTR_U16_LIMBS];
-        pack_u32_to_u16_limbs(mem_ptr_limbs, mem_ptr);
+        ptr_to_u16_limbs(mem_ptr_limbs, mem_ptr);
 
         COL_WRITE_VALUE(row, Rv64HintStoreCols, is_single, is_single);
         COL_WRITE_VALUE(row, Rv64HintStoreCols, is_buffer, !is_single);

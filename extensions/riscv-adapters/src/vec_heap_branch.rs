@@ -18,18 +18,19 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    abstract_compose, byte_ptr_to_u16_ptr, expand_to_rv64_register, tracing_read,
-    tracing_read_reg_ptr, RV64_BYTE_BITS,
+    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, ptr_bound_from_ptr,
+    ptr_to_field_u16_limbs, tracing_read, tracing_read_reg_ptr, u16_limbs_to_ptr,
+    RV64_PTR_U16_LIMBS, U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -49,7 +50,7 @@ pub struct Rv64VecHeapBranchAdapterCols<T, const NUM_READS: usize, const BLOCKS_
     pub from_state: ExecutionState<T>,
 
     pub rs_ptr: [T; NUM_READS],
-    pub rs_val: [[T; RV64_WORD_NUM_LIMBS]; NUM_READS],
+    pub rs_val: [[T; RV64_PTR_U16_LIMBS]; NUM_READS],
     pub rs_read_aux: [MemoryReadAuxCols<T>; NUM_READS],
 
     pub reads_aux: [[MemoryReadAuxCols<T>; BLOCKS_PER_READ]; NUM_READS],
@@ -61,9 +62,9 @@ pub struct Rv64VecHeapBranchAdapterCols<T, const NUM_READS: usize, const BLOCKS_
 pub struct Rv64VecHeapBranchAdapterAir<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
-    pub bus: BitwiseOperationLookupBus,
-    /// The max number of bits for an address in memory
-    address_bits: usize,
+    pub range_bus: VariableRangeCheckerBus,
+    /// Maximum bit width of guest byte pointers.
+    pointer_max_bits: usize,
 }
 
 impl<F: Field, const NUM_READS: usize, const BLOCKS_PER_READ: usize> BaseAir<F>
@@ -102,50 +103,26 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const BLOCKS_PER_READ: usiz
                         AB::F::from_u32(RV64_REGISTER_AS),
                         byte_ptr_to_u16_ptr::<AB>(ptr),
                     ),
-                    pack_u8_block::<AB>(&expand_to_rv64_register(&val)),
+                    expand_to_rv64_block(&val),
                     timestamp_pp(),
                     aux,
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        // We constrain the highest limb of each materialized pointer (limb 3, i.e. the most
-        // significant of the low 4 bytes) to be less than 2^(addr_bits - RV64_BYTE_BITS * 3).
-        // Combined with the zero padding on bytes 4..8 in the memory bus interaction above and
-        // the memory argument, this ensures that every heap address accessed below is less than
-        // 2^addr_bits without any extra explicit assertion.
-        let need_range_check: Vec<AB::Var> = cols
-            .rs_val
-            .iter()
-            .map(|val| val[RV64_WORD_NUM_LIMBS - 1])
-            .collect();
-
-        // Range checks constrain to RV64_BYTE_BITS bits, so we need to shift the limbs to
-        // constrain the correct amount of bits
-        let limb_shift =
-            AB::F::from_usize(1 << (RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.address_bits));
-
-        // Note: since limbs are read from memory we already know that limb[i] < 2^RV64_BYTE_BITS
-        //       thus range checking limb[i] * shift < 2^RV64_BYTE_BITS, gives us that
-        //       limb[i] < 2^(addr_bits - (RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1)))
-        for pair in need_range_check.chunks(2) {
-            self.bus
-                .send_range(
-                    pair[0] * limb_shift,
-                    pair.get(1).map(|x| (*x).into()).unwrap_or(AB::Expr::ZERO) * limb_shift,
+        // Each materialized pointer is stored as two u16 cells. Bound the high
+        // cell against the guest byte-pointer limit.
+        for val in cols.rs_val.iter() {
+            self.range_bus
+                .range_check(
+                    ptr_bound_from_high_u16_expr(val[1], self.pointer_max_bits),
+                    U16_BITS,
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
-        for val in &cols.rs_val {
-            for bytes in val.chunks_exact(2) {
-                self.bus
-                    .send_range(bytes[0], bytes[1])
-                    .eval(builder, ctx.instruction.is_valid.clone());
-            }
-        }
 
-        // Compose the 4 materialized bytes of each register value into a single field element.
-        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(abstract_compose);
+        // Compose the two u16 cells into low 32-bit heap pointers.
+        let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(|limbs| u16_limbs_to_ptr(&limbs));
 
         let e = AB::F::from_u32(RV64_MEMORY_AS);
         // Reads from heap
@@ -218,7 +195,7 @@ pub struct Rv64VecHeapBranchAdapterExecutor<const NUM_READS: usize, const BLOCKS
 #[derive(derive_new::new)]
 pub struct Rv64VecHeapBranchAdapterFiller<const NUM_READS: usize, const BLOCKS_PER_READ: usize> {
     pointer_max_bits: usize,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize> AdapterTraceExecutor<F>
@@ -300,24 +277,9 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize> Adap
         let cols: &mut Rv64VecHeapBranchAdapterCols<F, NUM_READS, BLOCKS_PER_READ> =
             adapter_row.borrow_mut();
 
-        // Range checks:
-        // **NOTE**: Must do the range checks before overwriting the records
-        debug_assert!(self.pointer_max_bits <= RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS);
-        let limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - self.pointer_max_bits;
-        const MSL_SHIFT: usize = RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1);
-        self.bitwise_lookup_chip.request_range(
-            (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
-            if NUM_READS > 1 {
-                (record.rs_vals[1] >> MSL_SHIFT) << limb_shift_bits
-            } else {
-                0
-            },
-        );
-        for val in record.rs_vals {
-            for bytes in val.to_le_bytes().chunks_exact(2) {
-                self.bitwise_lookup_chip
-                    .request_range(bytes[0] as u32, bytes[1] as u32);
-            }
+        for &ptr in record.rs_vals.iter() {
+            self.range_checker_chip
+                .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
         }
 
         let timestamp_delta = NUM_READS + NUM_READS * BLOCKS_PER_READ;
@@ -357,7 +319,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize> Adap
             .rev()
             .zip(record.rs_vals.iter().rev())
             .for_each(|(cols_val, val)| {
-                *cols_val = val.to_le_bytes().map(F::from_u8);
+                *cols_val = ptr_to_field_u16_limbs(*val);
             });
         cols.rs_ptr
             .iter_mut()

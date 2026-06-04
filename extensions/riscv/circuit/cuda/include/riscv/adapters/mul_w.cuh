@@ -2,6 +2,7 @@
 
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -12,11 +13,13 @@ template <typename T> struct Rv64MultWAdapterCols {
     T rd_ptr;
     T rs1_ptr;
     T rs2_ptr;
-    /// Upper 4 bytes of rs1 register read (kept in adapter to satisfy full-width memory read).
-    T rs1_high[RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS];
-    /// Upper 4 bytes of rs2 register read.
-    T rs2_high[RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS];
-    /// Sign bit of the low-word core result used to build full-width sign-extended writes.
+    // Upper 4 bytes of rs1 register read, packed as two u16 cells.
+    // Kept in the adapter to constrain the full-width memory read.
+    T rs1_high[RV64_PTR_U16_LIMBS];
+    // Upper 4 bytes of rs2 register read, packed as two u16 cells.
+    // Kept in the adapter to constrain the full-width memory read.
+    T rs2_high[RV64_PTR_U16_LIMBS];
+    // Sign bit of the low-word core result used to build full-width sign-extended writes.
     T result_sign;
     MemoryReadAuxCols<T> reads_aux[2];
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> writes_aux;
@@ -29,7 +32,9 @@ struct Rv64MultWAdapterRecord {
     uint32_t rd_ptr;
     uint32_t rs1_ptr;
     uint32_t rs2_ptr;
+    // Upper 4 bytes of rs1 register read, kept to satisfy the full-width memory read.
     uint8_t rs1_high[RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS];
+    // Upper 4 bytes of rs2 register read, kept to satisfy the full-width memory read.
     uint8_t rs2_high[RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS];
     uint8_t result_sign;
     uint8_t result_word_msl;
@@ -72,9 +77,14 @@ struct Rv64MultWAdapter {
             static_cast<uint32_t>(record.result_word_msl), 1u << (RV64_BYTE_BITS - 1)
         );
 
+        Fp rs2_high[RV64_PTR_U16_LIMBS];
+        Fp rs1_high[RV64_PTR_U16_LIMBS];
+        bytes_to_u16_limbs(rs2_high, record.rs2_high);
+        bytes_to_u16_limbs(rs1_high, record.rs1_high);
+
         COL_WRITE_VALUE(row, Rv64MultWAdapterCols, result_sign, record.result_sign);
-        COL_WRITE_ARRAY(row, Rv64MultWAdapterCols, rs2_high, record.rs2_high);
-        COL_WRITE_ARRAY(row, Rv64MultWAdapterCols, rs1_high, record.rs1_high);
+        COL_WRITE_ARRAY(row, Rv64MultWAdapterCols, rs2_high, rs2_high);
+        COL_WRITE_ARRAY(row, Rv64MultWAdapterCols, rs1_high, rs1_high);
         COL_WRITE_VALUE(row, Rv64MultWAdapterCols, rs2_ptr, record.rs2_ptr);
         COL_WRITE_VALUE(row, Rv64MultWAdapterCols, rs1_ptr, record.rs1_ptr);
         COL_WRITE_VALUE(row, Rv64MultWAdapterCols, rd_ptr, record.rd_ptr);
