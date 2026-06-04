@@ -8,6 +8,11 @@ repository.workspace = true
 license.workspace = true
 autoexamples = false
 
+[[bin]]
+name = "rvr_cache_probe"
+path = "src/bin/rvr_cache_probe.rs"
+required-features = ["rvr"]
+
 [dependencies]
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }

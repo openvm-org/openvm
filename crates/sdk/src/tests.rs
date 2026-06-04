@@ -298,7 +298,7 @@ fn test_sdk_fibonacci() -> Result<()> {
 
 #[cfg(feature = "rvr")]
 #[test]
-fn test_sdk_compile_pure_cached_roundtrip() -> Result<()> {
+fn test_sdk_compiled_pure_save_load_roundtrip() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
@@ -309,28 +309,23 @@ fn test_sdk_compile_pure_cached_roundtrip() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&100u64);
 
-    let baseline = sdk.execute_compiled(&sdk.compile_pure(exe.clone())?, stdin.clone())?;
+    let compiled_a = sdk.compile_pure(exe.clone())?;
+    let baseline = sdk.execute_compiled(&compiled_a, stdin.clone())?;
 
-    let cache_dir = tempfile::tempdir()?;
+    let tmp = tempfile::tempdir()?;
+    let lib_path = compiled_a.save(tmp.path())?;
+    drop(compiled_a);
 
-    // cold cache — should compile and store
-    let compiled_cold = sdk.compile_pure_cached(exe.clone(), cache_dir.path())?;
-    let cold_result = sdk.execute_compiled(&compiled_cold, stdin.clone())?;
-    assert_eq!(baseline, cold_result);
+    let compiled_b = sdk.load_compiled_pure(&lib_path, exe)?;
+    let reloaded = sdk.execute_compiled(&compiled_b, stdin)?;
 
-    drop(compiled_cold);
-
-    // warm cache — should load from disk
-    let compiled_warm = sdk.compile_pure_cached(exe, cache_dir.path())?;
-    let warm_result = sdk.execute_compiled(&compiled_warm, stdin)?;
-    assert_eq!(baseline, warm_result);
-
+    assert_eq!(baseline, reloaded);
     Ok(())
 }
 
 #[cfg(feature = "rvr")]
 #[test]
-fn test_sdk_compile_metered_cached_roundtrip() -> Result<()> {
+fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
@@ -341,41 +336,30 @@ fn test_sdk_compile_metered_cached_roundtrip() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&100u64);
 
+    let compiled_a = sdk.compile_metered(exe.clone())?;
     let (baseline_pv, baseline_segments) =
-        sdk.execute_compiled_metered(&sdk.compile_metered(exe.clone())?, stdin.clone())?;
+        sdk.execute_compiled_metered(&compiled_a, stdin.clone())?;
 
-    let cache_dir = tempfile::tempdir()?;
+    let tmp = tempfile::tempdir()?;
+    let lib_path = compiled_a.save(tmp.path())?;
+    drop(compiled_a);
 
-    // cold cache
-    let compiled_cold = sdk.compile_metered_cached(exe.clone(), cache_dir.path())?;
-    let (cold_pv, cold_segments) = sdk.execute_compiled_metered(&compiled_cold, stdin.clone())?;
-    assert_eq!(baseline_pv, cold_pv);
-    assert_eq!(baseline_segments.len(), cold_segments.len());
-    for (a, b) in baseline_segments.iter().zip(cold_segments.iter()) {
+    let compiled_b = sdk.load_compiled_metered(&lib_path, exe)?;
+    let (reloaded_pv, reloaded_segments) = sdk.execute_compiled_metered(&compiled_b, stdin)?;
+
+    assert_eq!(baseline_pv, reloaded_pv);
+    assert_eq!(baseline_segments.len(), reloaded_segments.len());
+    for (a, b) in baseline_segments.iter().zip(reloaded_segments.iter()) {
         assert_eq!(a.instret_start, b.instret_start);
         assert_eq!(a.num_insns, b.num_insns);
         assert_eq!(a.trace_heights, b.trace_heights);
     }
-
-    drop(compiled_cold);
-
-    // warm cache
-    let compiled_warm = sdk.compile_metered_cached(exe, cache_dir.path())?;
-    let (warm_pv, warm_segments) = sdk.execute_compiled_metered(&compiled_warm, stdin)?;
-    assert_eq!(baseline_pv, warm_pv);
-    assert_eq!(baseline_segments.len(), warm_segments.len());
-    for (a, b) in baseline_segments.iter().zip(warm_segments.iter()) {
-        assert_eq!(a.instret_start, b.instret_start);
-        assert_eq!(a.num_insns, b.num_insns);
-        assert_eq!(a.trace_heights, b.trace_heights);
-    }
-
     Ok(())
 }
 
 #[cfg(feature = "rvr")]
 #[test]
-fn test_sdk_compile_metered_cost_cached_roundtrip() -> Result<()> {
+fn test_sdk_compiled_metered_cost_save_load_roundtrip() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
@@ -386,78 +370,22 @@ fn test_sdk_compile_metered_cost_cached_roundtrip() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&100u64);
 
+    let compiled_a = sdk.compile_metered_cost(exe.clone())?;
     let (baseline_pv, baseline_cost) =
-        sdk.execute_compiled_metered_cost(&sdk.compile_metered_cost(exe.clone())?, stdin.clone())?;
+        sdk.execute_compiled_metered_cost(&compiled_a, stdin.clone())?;
 
-    let cache_dir = tempfile::tempdir()?;
+    let tmp = tempfile::tempdir()?;
+    let lib_path = compiled_a.save(tmp.path())?;
+    drop(compiled_a);
 
-    // cold cache
-    let compiled_cold = sdk.compile_metered_cost_cached(exe.clone(), cache_dir.path())?;
-    let (cold_pv, cold_cost) = sdk.execute_compiled_metered_cost(&compiled_cold, stdin.clone())?;
-    assert_eq!(baseline_pv, cold_pv);
-    assert_eq!(baseline_cost, cold_cost);
+    let compiled_b = sdk.load_compiled_metered_cost(&lib_path, exe)?;
+    let (reloaded_pv, reloaded_cost) = sdk.execute_compiled_metered_cost(&compiled_b, stdin)?;
 
-    drop(compiled_cold);
-
-    // warm cache
-    let compiled_warm = sdk.compile_metered_cost_cached(exe, cache_dir.path())?;
-    let (warm_pv, warm_cost) = sdk.execute_compiled_metered_cost(&compiled_warm, stdin)?;
-    assert_eq!(baseline_pv, warm_pv);
-    assert_eq!(baseline_cost, warm_cost);
-
+    assert_eq!(baseline_pv, reloaded_pv);
+    assert_eq!(baseline_cost, reloaded_cost);
     Ok(())
 }
 
-#[cfg(feature = "rvr")]
-#[test]
-fn test_sdk_cache_hit_after_interleaved_program() -> Result<()> {
-    // Compile pure (A), then metered (B) — different tracer modes produce
-    // different C and therefore different fingerprints, so they occupy separate
-    // cache entries.  Re-compiling pure (A) must be a cache hit: the cached
-    // file must not be rewritten (mtime unchanged proves no copy occurred).
-    let (sdk, _, _) = make_fib_sdk();
-    let elf = Elf::decode(
-        include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
-    )?;
-    let exe = sdk.convert_to_exe(elf)?;
-
-    let mut stdin = StdIn::default();
-    stdin.write(&100u64);
-
-    let cache_dir = tempfile::tempdir()?;
-
-    // A: pure — cache miss, writes one .so into cache_dir
-    let compiled_a1 = sdk.compile_pure_cached(exe.clone(), cache_dir.path())?;
-    let result_a1 = sdk.execute_compiled(&compiled_a1, stdin.clone())?;
-    drop(compiled_a1);
-
-    // Record which file was written and its modification time.
-    let a_cache_file = std::fs::read_dir(cache_dir.path())?
-        .flatten()
-        .next()
-        .expect("cache entry for A must exist")
-        .path();
-    let mtime_a = std::fs::metadata(&a_cache_file)?.modified()?;
-
-    // B: metered — cache miss, writes a second .so
-    let compiled_b = sdk.compile_metered_cached(exe.clone(), cache_dir.path())?;
-    drop(compiled_b);
-
-    // A again: pure — must be a cache hit
-    let compiled_a2 = sdk.compile_pure_cached(exe.clone(), cache_dir.path())?;
-    let result_a2 = sdk.execute_compiled(&compiled_a2, stdin)?;
-
-    // The A cache file must not have been touched (cache hit skips the copy).
-    let mtime_a_after = std::fs::metadata(&a_cache_file)?.modified()?;
-    assert_eq!(
-        mtime_a, mtime_a_after,
-        "cache hit must not rewrite the cached file"
-    );
-    assert_eq!(result_a1, result_a2, "cached result must match original");
-
-    Ok(())
-}
 
 #[test]
 fn test_sdk_compiled_metered_execute() -> Result<()> {
