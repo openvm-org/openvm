@@ -158,7 +158,17 @@ fn make_verify_stark_inputs(
     let output_raw = &raw_results[0].output_raw;
     let app_exe_commit: [u8; 32] = output_raw[..32].try_into().unwrap();
     let app_vm_commit: [u8; 32] = output_raw[32..64].try_into().unwrap();
-    let user_public_values = output_raw[64..].to_vec();
+
+    let expanded_user_public_values = &output_raw[64..];
+    assert_eq!(expanded_user_public_values.len() % 4, 0);
+    let user_public_values = expanded_user_public_values
+        .chunks_exact(4)
+        .map(|bytes| {
+            assert_eq!(&bytes[1..], &[0; 3]);
+            bytes[0]
+        })
+        .collect::<Vec<_>>();
+
     let deferral_state = get_deferral_state(&child_vk, from_ref(child_proof), 0)?;
 
     let mut stdin = StdIn::default();
