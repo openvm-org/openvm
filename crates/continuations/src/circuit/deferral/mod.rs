@@ -3,6 +3,7 @@ use openvm_recursion_circuit::prelude::DIGEST_SIZE;
 use openvm_recursion_circuit_derive::AlignedBorrow;
 pub use openvm_verify_stark_host::deferral::DeferralMerkleProofs;
 
+pub mod dummy;
 pub mod hook;
 pub mod inner;
 

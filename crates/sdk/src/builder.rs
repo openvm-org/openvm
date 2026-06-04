@@ -42,6 +42,12 @@ enum AggSource {
     Pk(AggProvingKey),
 }
 
+#[allow(clippy::large_enum_variant)]
+enum DeferralSource {
+    Prover(DeferralProver),
+    PathProver(DeferralPathProver),
+}
+
 #[cfg(feature = "root-prover")]
 enum RootSource {
     Params(SystemParams),
@@ -73,7 +79,7 @@ where
     root_source: Option<RootSource>,
     agg_tree_config: Option<AggregationTreeConfig>,
     transpiler: Option<Transpiler<F>>,
-    deferral_prover: Option<DeferralProver>,
+    deferral_source: Option<DeferralSource>,
     #[cfg(feature = "evm-prove")]
     halo2_source: Option<Halo2Source>,
     #[cfg(feature = "evm-prove")]
@@ -335,7 +341,7 @@ where
                 root_source: _,
             agg_tree_config,
             transpiler,
-            deferral_prover,
+            deferral_source,
             #[cfg(feature = "evm-prove")]
                 halo2_source: _,
             #[cfg(feature = "evm-prove")]
@@ -352,8 +358,15 @@ where
             .map_err(|e| SdkError::Vm(e.into()))?;
         let agg_tree_config = agg_tree_config.unwrap_or_default();
 
-        let def_path_prover = deferral_prover
-            .map(|deferral_prover| Self::build_deferral_path_prover(&agg_config, deferral_prover));
+        let def_path_prover = match deferral_source {
+            Some(DeferralSource::Prover(deferral_prover)) => Some(
+                Self::build_deferral_path_prover(&agg_config, deferral_prover),
+            ),
+            Some(DeferralSource::PathProver(deferral_path_prover)) => {
+                Some(Arc::new(deferral_path_prover))
+            }
+            None => None,
+        };
         let def_hook_cached_commit = def_path_prover
             .as_ref()
             .map(|def_path_prover| def_path_prover.def_hook_cached_commit());
@@ -460,9 +473,23 @@ where
     /// VM config.
     pub fn deferral_prover(mut self, deferral_prover: DeferralProver) -> Self {
         Self::set_once(
-            &mut self.deferral_prover,
-            "deferral_prover",
-            deferral_prover,
+            &mut self.deferral_source,
+            "deferral_source",
+            DeferralSource::Prover(deferral_prover),
+        );
+        self
+    }
+
+    /// Enables deferrals in this SDK build using a pre-built [`DeferralPathProver`].
+    ///
+    /// This is mutually exclusive with [`Self::deferral_prover`]. Use this when the deferral
+    /// aggregation path has already been constructed, for example by
+    /// [`DeferralPathProver::verify_stark`].
+    pub fn deferral_path_prover(mut self, deferral_path_prover: DeferralPathProver) -> Self {
+        Self::set_once(
+            &mut self.deferral_source,
+            "deferral_source",
+            DeferralSource::PathProver(deferral_path_prover),
         );
         self
     }
@@ -515,7 +542,7 @@ where
             root_source: None,
             agg_tree_config: None,
             transpiler: None,
-            deferral_prover: None,
+            deferral_source: None,
             #[cfg(feature = "evm-prove")]
             halo2_source: None,
             #[cfg(feature = "evm-prove")]
