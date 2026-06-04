@@ -36,11 +36,15 @@ template <size_t NUM_CELLS> struct LoadSignExtendCoreRecord {
 
 template <size_t NUM_CELLS> struct LoadSignExtendCore {
     VariableRangeChecker range_checker;
+    BitwiseOperationLookup bitwise_lookup;
 
     template <typename T> using Cols = LoadSignExtendCoreCols<T, NUM_CELLS>;
 
-    __device__ LoadSignExtendCore(VariableRangeChecker range_checker)
-        : range_checker(range_checker) {}
+    __device__ LoadSignExtendCore(
+        VariableRangeChecker range_checker,
+        BitwiseOperationLookup bitwise_lookup
+    )
+        : range_checker(range_checker), bitwise_lookup(bitwise_lookup) {}
 
     __device__ void fill_trace_row(RowSlice row, LoadSignExtendCoreRecord<NUM_CELLS> record) {
         uint8_t shift = record.shift_amount;
@@ -69,8 +73,8 @@ template <size_t NUM_CELLS> struct LoadSignExtendCore {
 
         range_checker.add_count(most_sig_limb - most_sig_bit, RV64_BYTE_BITS - 1);
 #pragma unroll
-        for (size_t i = 0; i < NUM_CELLS; i++) {
-            range_checker.add_count(shifted_read_data[i], RV64_BYTE_BITS);
+        for (size_t i = 0; i < NUM_CELLS; i += 2) {
+            bitwise_lookup.add_range(shifted_read_data[i], shifted_read_data[i + 1]);
         }
         COL_WRITE_VALUE(row, Cols, opcode_loadb_flag0, record.is_byte && inner_shift == 0);
         COL_WRITE_VALUE(row, Cols, opcode_loadb_flag1, record.is_byte && inner_shift == 1);
@@ -106,6 +110,7 @@ __global__ void rv64_load_sign_extend_tracegen(
     size_t pointer_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
+    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -121,7 +126,8 @@ __global__ void rv64_load_sign_extend_tracegen(
         adapter.fill_trace_row(row, record.adapter);
 
         auto core = LoadSignExtendCore<RV64_REGISTER_NUM_LIMBS>(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins)
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            BitwiseOperationLookup(bitwise_lookup_ptr)
         );
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv64LoadSignExtendCols, core)), record.core);
     } else {
@@ -137,6 +143,7 @@ extern "C" int _rv64_load_sign_extend_tracegen(
     size_t pointer_max_bits,
     uint32_t *__restrict__ d_range_checker,
     uint32_t range_checker_num_bins,
+    uint32_t *__restrict__ d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -151,6 +158,7 @@ extern "C" int _rv64_load_sign_extend_tracegen(
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,
+        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();
