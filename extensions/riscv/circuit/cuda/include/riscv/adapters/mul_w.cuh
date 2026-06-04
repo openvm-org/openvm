@@ -79,8 +79,8 @@ struct Rv64MultWAdapter {
 
         Fp rs2_high[RV64_PTR_U16_LIMBS];
         Fp rs1_high[RV64_PTR_U16_LIMBS];
-        pack_u8_pairs_le(rs2_high, record.rs2_high);
-        pack_u8_pairs_le(rs1_high, record.rs1_high);
+        bytes_to_u16_limbs(rs2_high, record.rs2_high);
+        bytes_to_u16_limbs(rs1_high, record.rs1_high);
 
         COL_WRITE_VALUE(row, Rv64MultWAdapterCols, result_sign, record.result_sign);
         COL_WRITE_ARRAY(row, Rv64MultWAdapterCols, rs2_high, rs2_high);
