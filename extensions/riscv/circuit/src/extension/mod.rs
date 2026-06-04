@@ -296,7 +296,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
                 range_checker,
                 byte_ptr_max_bits,
             ),
-            LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker),
+            LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(load_store);
 
@@ -307,7 +307,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
                 range_checker,
                 byte_ptr_max_bits,
             ),
-            LoadSignExtendCoreAir::new(range_checker),
+            LoadSignExtendCoreAir::new(range_checker, bitwise_lu),
         );
         inventory.add_air(load_sign_extend);
 
@@ -444,7 +444,7 @@ where
             LoadStoreFiller::new(
                 Rv64LoadStoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
-                range_checker.clone(),
+                bitwise_lu.clone(),
             ),
             mem_helper.clone(),
         );
@@ -455,6 +455,7 @@ where
             LoadSignExtendFiller::new(
                 Rv64LoadStoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 range_checker.clone(),
+                bitwise_lu.clone(),
             ),
             mem_helper.clone(),
         );

@@ -9,8 +9,8 @@ use openvm_circuit::{
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     encoder::Encoder,
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBorrow, AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
     SubAir,
 };
@@ -216,15 +216,16 @@ pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
 pub struct LoadStoreCoreAir<const NUM_CELLS: usize> {
     pub offset: usize,
     encoder: Encoder,
-    range_bus: VariableRangeCheckerBus,
+    bitwise_lookup_bus: BitwiseOperationLookupBus,
 }
 
 impl<const NUM_CELLS: usize> LoadStoreCoreAir<NUM_CELLS> {
-    pub fn new(offset: usize, range_bus: VariableRangeCheckerBus) -> Self {
+    pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
+        assert!(NUM_CELLS.is_multiple_of(2));
         Self {
             offset,
             encoder: loadstore_encoder(),
-            range_bus,
+            bitwise_lookup_bus,
         }
     }
 }
@@ -278,14 +279,14 @@ where
         builder.assert_eq(is_valid, expected_is_valid.clone());
         builder.assert_eq(is_load, expected_is_load.clone());
 
-        for cell in read_data {
-            self.range_bus
-                .range_check(cell, 8)
+        for pair in read_data.chunks_exact(2) {
+            self.bitwise_lookup_bus
+                .send_range(pair[0], pair[1])
                 .eval(builder, is_valid.into());
         }
-        for cell in prev_data {
-            self.range_bus
-                .range_check(cell, 8)
+        for pair in prev_data.chunks_exact(2) {
+            self.bitwise_lookup_bus
+                .send_range(pair[0], pair[1])
                 .eval(builder, is_valid.into());
         }
 
@@ -382,20 +383,21 @@ pub struct LoadStoreFiller<
     adapter: A,
     pub offset: usize,
     encoder: Encoder,
-    range_checker_chip: SharedVariableRangeCheckerChip,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
 }
 
 impl<A, const NUM_CELLS: usize> LoadStoreFiller<A, NUM_CELLS> {
     pub fn new(
         adapter: A,
         offset: usize,
-        range_checker_chip: SharedVariableRangeCheckerChip,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     ) -> Self {
+        assert!(NUM_CELLS.is_multiple_of(2));
         Self {
             adapter,
             offset,
             encoder: loadstore_encoder(),
-            range_checker_chip,
+            bitwise_lookup_chip,
         }
     }
 }
@@ -478,11 +480,12 @@ where
         let shift = record.shift_amount as usize;
         let write_data = run_write_data(opcode, record.read_data, record.prev_data, shift);
 
-        for cell in record.read_data {
-            self.range_checker_chip.add_count(cell as u32, 8);
+        for pair in record.read_data.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
         }
-        for cell in record.prev_data {
-            self.range_checker_chip.add_count(cell, 8);
+        for pair in record.prev_data.chunks_exact(2) {
+            self.bitwise_lookup_chip.request_range(pair[0], pair[1]);
         }
 
         core_row.write_data = write_data.map(F::from_u32);

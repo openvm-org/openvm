@@ -2,12 +2,21 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+        testing::{
+            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            BITWISE_OP_LOOKUP_BUS,
+        },
         Arena, ExecutionBridge, PreflightExecutor,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::VariableRangeCheckerChip,
+};
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
@@ -33,8 +42,8 @@ use {
     },
     openvm_circuit::arch::{
         testing::{
-            default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder,
-            GpuTestChipHarness,
+            default_bitwise_lookup_bus, default_var_range_checker_bus, dummy_range_checker,
+            GpuChipTestBuilder, GpuTestChipHarness,
         },
         EmptyAdapterCoreLayout,
     },
@@ -65,6 +74,7 @@ fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     range_checker_chip: Arc<VariableRangeCheckerChip>,
+    bitwise_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -79,28 +89,45 @@ fn create_harness_fields(
             range_checker_chip.bus(),
             address_bits,
         ),
-        LoadSignExtendCoreAir::new(range_checker_chip.bus()),
+        LoadSignExtendCoreAir::new(range_checker_chip.bus(), bitwise_chip.bus()),
     );
     let executor = Rv64LoadSignExtendExecutor::new(Rv64LoadStoreAdapterExecutor::new(address_bits));
     let chip = Rv64LoadSignExtendChip::<F>::new(
         LoadSignExtendFiller::new(
             Rv64LoadStoreAdapterFiller::new(address_bits, range_checker_chip.clone()),
             range_checker_chip,
+            bitwise_chip,
         ),
         memory_helper,
     );
     (air, executor, chip)
 }
 
-fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Harness {
+fn create_test_chip(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    Harness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         tester.range_checker(),
+        bitwise_chip.clone(),
         tester.memory_helper(),
         tester.address_bits(),
     );
-    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    (
+        Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        (bitwise_chip.air, bitwise_chip),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -196,7 +223,7 @@ fn rand_load_sign_extend_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let mut harness = create_test_chip(&mut tester);
+    let (mut harness, bitwise) = create_test_chip(&mut tester);
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
@@ -211,7 +238,11 @@ fn rand_load_sign_extend_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
         );
     }
 
-    let tester = tester.build().load(harness).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -219,7 +250,7 @@ fn rand_load_sign_extend_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
 fn positive_loadb_shift7_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut harness = create_test_chip(&mut tester);
+    let (mut harness, bitwise) = create_test_chip(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -233,7 +264,11 @@ fn positive_loadb_shift7_test() {
         Some(0),
     );
 
-    let tester = tester.build().load(harness).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -241,7 +276,7 @@ fn positive_loadb_shift7_test() {
 fn positive_loadh_shift6_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut harness = create_test_chip(&mut tester);
+    let (mut harness, bitwise) = create_test_chip(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -255,7 +290,11 @@ fn positive_loadh_shift6_test() {
         Some(0),
     );
 
-    let tester = tester.build().load(harness).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -263,7 +302,7 @@ fn positive_loadh_shift6_test() {
 fn positive_loadw_shift4_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut harness = create_test_chip(&mut tester);
+    let (mut harness, bitwise) = create_test_chip(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -277,7 +316,11 @@ fn positive_loadw_shift4_test() {
         Some(0),
     );
 
-    let tester = tester.build().load(harness).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -307,7 +350,7 @@ fn run_negative_load_sign_extend_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut harness = create_test_chip(&mut tester);
+    let (mut harness, bitwise) = create_test_chip(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -354,6 +397,7 @@ fn run_negative_load_sign_extend_test(
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .finalize();
     tester
         .simple_test()
@@ -602,16 +646,21 @@ type GpuHarness = GpuTestChipHarness<
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let dummy_range_checker_chip = dummy_range_checker(default_var_range_checker_bus());
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        default_bitwise_lookup_bus(),
+    ));
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         dummy_range_checker_chip,
+        dummy_bitwise_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
     let gpu_chip = Rv64LoadSignExtendChipGpu::new(
         tester.range_checker(),
+        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
@@ -625,7 +674,8 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[test_case(LOADW, 100)]
 fn test_cuda_rand_load_sign_extend_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let mut tester = GpuChipTestBuilder::default();
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
     let mut harness = create_cuda_harness(&tester);
     for _ in 0..num_ops {
