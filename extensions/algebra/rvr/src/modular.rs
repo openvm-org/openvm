@@ -2,7 +2,7 @@
 //! [`ModularRvrExtension`] lifter.
 
 use num_bigint::BigUint;
-use openvm_algebra_transpiler::{ModularPhantom, Rv32ModularArithmeticOpcode};
+use openvm_algebra_transpiler::{ModularPhantom, Rv64ModularArithmeticOpcode};
 use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
 use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -345,8 +345,8 @@ impl ModularRvrExtension {
         pc: u32,
         opcode: usize,
     ) -> Option<LiftedInstr> {
-        let base_offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET;
-        let count = Rv32ModularArithmeticOpcode::COUNT;
+        let base_offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
+        let count = Rv64ModularArithmeticOpcode::COUNT;
 
         if opcode < base_offset {
             return None;
@@ -365,7 +365,7 @@ impl ModularRvrExtension {
         let rs2_reg = decode_reg(insn.c);
 
         let instr: Instr = match local {
-            x if x == Rv32ModularArithmeticOpcode::ADD as usize => {
+            x if x == Rv64ModularArithmeticOpcode::ADD as usize => {
                 Instr::Ext(Box::new(ModArithInstr {
                     op: ModOp::Add,
                     rd_reg,
@@ -375,7 +375,7 @@ impl ModularRvrExtension {
                     modulus: info.modulus_bytes.clone(),
                 }))
             }
-            x if x == Rv32ModularArithmeticOpcode::SUB as usize => {
+            x if x == Rv64ModularArithmeticOpcode::SUB as usize => {
                 Instr::Ext(Box::new(ModArithInstr {
                     op: ModOp::Sub,
                     rd_reg,
@@ -385,7 +385,7 @@ impl ModularRvrExtension {
                     modulus: info.modulus_bytes.clone(),
                 }))
             }
-            x if x == Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize => {
+            x if x == Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize => {
                 Instr::Ext(Box::new(ModSetupInstr {
                     rd_reg,
                     rs1_reg,
@@ -393,7 +393,7 @@ impl ModularRvrExtension {
                     num_limbs: info.num_limbs,
                 }))
             }
-            x if x == Rv32ModularArithmeticOpcode::MUL as usize => {
+            x if x == Rv64ModularArithmeticOpcode::MUL as usize => {
                 Instr::Ext(Box::new(ModArithInstr {
                     op: ModOp::Mul,
                     rd_reg,
@@ -403,7 +403,7 @@ impl ModularRvrExtension {
                     modulus: info.modulus_bytes.clone(),
                 }))
             }
-            x if x == Rv32ModularArithmeticOpcode::DIV as usize => {
+            x if x == Rv64ModularArithmeticOpcode::DIV as usize => {
                 Instr::Ext(Box::new(ModArithInstr {
                     op: ModOp::Div,
                     rd_reg,
@@ -413,7 +413,7 @@ impl ModularRvrExtension {
                     modulus: info.modulus_bytes.clone(),
                 }))
             }
-            x if x == Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize => {
+            x if x == Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize => {
                 Instr::Ext(Box::new(ModSetupInstr {
                     rd_reg,
                     rs1_reg,
@@ -421,7 +421,7 @@ impl ModularRvrExtension {
                     num_limbs: info.num_limbs,
                 }))
             }
-            x if x == Rv32ModularArithmeticOpcode::IS_EQ as usize => {
+            x if x == Rv64ModularArithmeticOpcode::IS_EQ as usize => {
                 Instr::Ext(Box::new(ModIsEqInstr {
                     rd_reg,
                     rs1_reg,
@@ -430,7 +430,7 @@ impl ModularRvrExtension {
                     modulus: info.modulus_bytes.clone(),
                 }))
             }
-            x if x == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize => {
+            x if x == Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize => {
                 Instr::Ext(Box::new(ModSetupInstr {
                     rd_reg,
                     rs1_reg,

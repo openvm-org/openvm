@@ -14,7 +14,7 @@ rvr-openvm-ir.workspace = true
 rvr-openvm-lift.workspace = true
 
 openvm-platform.workspace = true
-openvm-rv32im-guest = { workspace = true, default-features = false }
+openvm-riscv-guest = { workspace = true, default-features = false }
 openvm-stark-backend.workspace = true
 thiserror.workspace = true
 

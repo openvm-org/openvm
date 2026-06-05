@@ -28,7 +28,7 @@ pub const DEFERRAL_OUTPUT_KEY_BYTES: usize = DEFERRAL_COMMIT_NUM_BYTES + 8;
 
 // ── OpenVM address space identifiers (mirror C `openvm_state.h`) ──
 pub use openvm_instructions::{
-    riscv::{RV32_MEMORY_AS as AS_MEMORY, RV32_REGISTER_AS as AS_REGISTER},
+    riscv::{RV64_MEMORY_AS as AS_MEMORY, RV64_REGISTER_AS as AS_REGISTER},
     DEFERRAL_AS, PUBLIC_VALUES_AS as AS_PUBLIC_VALUES,
 };
 

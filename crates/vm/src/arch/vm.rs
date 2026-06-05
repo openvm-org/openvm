@@ -1749,9 +1749,6 @@ where
     VB: VmBuilder<E>,
 {
     let air_inv = vm.config().create_airs().unwrap();
-    let global_airs: Vec<openvm_stark_backend::AirRef<E::SC>> = air_inv
-        .into_airs()
-        .map(|a| a as openvm_stark_backend::AirRef<_>)
-        .collect();
+    let global_airs: Vec<AirRef<E::SC>> = air_inv.into_airs().map(|a| a as AirRef<_>).collect();
     vm.engine.debug(&global_airs, ctx);
 }
