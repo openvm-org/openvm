@@ -9,7 +9,7 @@
 //! `const`s or restore runtime plumbing for just these two.
 
 use openvm_instructions::{
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS,
 };
 use rvr_openvm_ext_ffi_common as ffi;
@@ -22,8 +22,8 @@ use crate::{
 };
 
 // ── rvr-openvm-ext-ffi-common address-space identifiers ────────────────
-const _: () = assert!(ffi::AS_REGISTER == RV32_REGISTER_AS);
-const _: () = assert!(ffi::AS_MEMORY == RV32_MEMORY_AS);
+const _: () = assert!(ffi::AS_REGISTER == RV64_REGISTER_AS);
+const _: () = assert!(ffi::AS_MEMORY == RV64_MEMORY_AS);
 const _: () = assert!(ffi::AS_PUBLIC_VALUES == PUBLIC_VALUES_AS);
 const _: () = assert!(ffi::DEFERRAL_AS == DEFERRAL_AS);
 

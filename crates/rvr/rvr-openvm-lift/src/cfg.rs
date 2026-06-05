@@ -7,7 +7,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP as INSTR_SIZE, riscv::RV32_NUM_REGISTERS as NUM_REGS,
+    program::DEFAULT_PC_STEP as INSTR_SIZE, riscv::RV64_NUM_REGISTERS as NUM_REGS,
 };
 use rvr_openvm_ir::{AluOp, Block, Instr, InstrAt, LiftedInstr, MulDivOp, Terminator};
 
@@ -169,7 +169,7 @@ impl RegisterState {
     }
 }
 
-// ── Binary operation evaluation (RV32, u32) ───────────────────────────────
+// ── Binary operation evaluation (u32) ─────────────────────────────────────
 
 fn compute_binary_op(op: AluOp, left: u32, right: u32) -> u32 {
     match op {
