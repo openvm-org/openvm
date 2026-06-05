@@ -48,7 +48,7 @@ pub fn verify_stark<const DEF_IDX: u16>(input_commit: &Commit, expected: &ProofO
 fn collapse_user_public_values(expanded: &[u8]) -> Vec<u8> {
     const F_NUM_BYTES: usize = 4;
 
-    if expanded.len() % F_NUM_BYTES != 0 {
+    if !expanded.len().is_multiple_of(F_NUM_BYTES) {
         panic!("User public values output length is not a multiple of {F_NUM_BYTES}");
     }
 
