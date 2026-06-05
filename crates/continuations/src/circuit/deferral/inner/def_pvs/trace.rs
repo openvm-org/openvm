@@ -10,22 +10,28 @@ use openvm_stark_backend::{proof::Proof, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     poseidon2_compress_with_capacity, BabyBearPoseidon2Config, F,
 };
-use p3_field::PrimeCharacteristicRing;
+use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     circuit::deferral::{
         inner::def_pvs::air::{DeferralAggPvsAir, DeferralAggPvsCols},
         DeferralAggregationPvs, DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID, DEF_CIRCUIT_PVS_AIR_ID,
+        MAX_DEF_AGG_MERKLE_DEPTH,
     },
     utils::zero_hash,
 };
+
+pub struct DeferralAggPvsTraceCtx {
+    pub proving_ctx: AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
+    pub range_check_inputs: Vec<usize>,
+}
 
 pub fn generate_proving_ctx(
     proofs: &[Proof<BabyBearPoseidon2Config>],
     child_is_agg: bool,
     child_merkle_depth: Option<usize>,
-) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
+) -> DeferralAggPvsTraceCtx {
     let num_proofs = proofs.len();
     let is_wrapper = child_merkle_depth.is_none();
     debug_assert!(!is_wrapper || num_proofs == 1);
@@ -116,9 +122,17 @@ pub fn generate_proving_ctx(
     }
     pvs.num_def_circuit_proofs = num_def_circuit_proofs;
 
-    AirProvingContext {
-        cached_mains: vec![],
-        common_main: RowMajorMatrix::new(trace, width),
-        public_values,
+    let merkle_depth = pvs.merkle_depth.as_canonical_u32() as usize;
+    let max_depth_minus_merkle_depth = MAX_DEF_AGG_MERKLE_DEPTH
+        .checked_sub(merkle_depth)
+        .expect("deferral aggregation merkle depth exceeds max depth");
+
+    DeferralAggPvsTraceCtx {
+        proving_ctx: AirProvingContext {
+            cached_mains: vec![],
+            common_main: RowMajorMatrix::new(trace, width),
+            public_values,
+        },
+        range_check_inputs: vec![max_depth_minus_merkle_depth],
     }
 }
