@@ -29,7 +29,7 @@ pub fn verify_stark_unchecked<const DEF_IDX: u16>(input_commit: &Commit) -> Proo
     let app_vm_commit = output_bytes[COMMIT_NUM_BYTES..MIN_OUTPUT_BYTES]
         .try_into()
         .unwrap();
-    let user_public_values = output_bytes[MIN_OUTPUT_BYTES..].to_vec();
+    let user_public_values = collapse_user_public_values(&output_bytes[MIN_OUTPUT_BYTES..]);
 
     ProofOutput {
         app_exe_commit,
@@ -43,4 +43,21 @@ pub fn verify_stark<const DEF_IDX: u16>(input_commit: &Commit, expected: &ProofO
     if actual != *expected {
         panic!("Proof verification failed for commit {:?}", input_commit);
     }
+}
+
+fn collapse_user_public_values(expanded: &[u8]) -> Vec<u8> {
+    const F_NUM_BYTES: usize = 4;
+
+    if !expanded.len().is_multiple_of(F_NUM_BYTES) {
+        panic!("User public values output length is not a multiple of {F_NUM_BYTES}");
+    }
+
+    let mut user_public_values = Vec::with_capacity(expanded.len() / F_NUM_BYTES);
+    for bytes in expanded.chunks_exact(F_NUM_BYTES) {
+        if bytes[1..].iter().any(|&byte| byte != 0) {
+            panic!("User public value has non-zero high bytes");
+        }
+        user_public_values.push(bytes[0]);
+    }
+    user_public_values
 }
