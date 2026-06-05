@@ -1,18 +1,19 @@
-//! OpenVM opcode -> rvr-openvm-ir mapping for each RV32IM instruction.
+//! OpenVM opcode -> rvr-openvm-ir mapping for RISC-V instructions.
 //!
 //! Supports the basic OpenVM ISA:
-//! - RV32IM base instructions
+//! - RISC-V base instructions
 //! - System instructions: TERMINATE, PHANTOM, PUBLISH
-//! - System phantom sub-instructions: Nop, DebugPanic, CtStart, CtEnd
+//! - Phantom sub-instructions: Nop, DebugPanic, CtStart, CtEnd, Rv64HintInput, Rv64PrintStr,
+//!   Rv64HintRandom
 //! - STOREW e=2 dispatch (normal memory store)
 
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, SysPhantom, SystemOpcode,
+    instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode, SysPhantom, SystemOpcode,
 };
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
-    MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LoadStoreOpcode,
-    ShiftOpcode,
+    MulHOpcode, MulOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode,
+    Rv64Phantom, ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
@@ -44,8 +45,12 @@ pub fn lift_instruction<F: PrimeField32>(
     }
     if opcode == SystemOpcode::PHANTOM.global_opcode_usize() {
         let discriminant = (field_to_u32(insn.c) & 0xffff) as u16;
-        if let Some(sys) = SysPhantom::from_repr(discriminant) {
-            return Some(lift_phantom(sys, pc));
+        // Try built-in phantom handlers first, then fall through to extensions
+        // for unknown discriminants (e.g. algebra HintNonQr/HintSqrt).
+        if SysPhantom::from_repr(discriminant).is_some()
+            || Rv64Phantom::from_repr(discriminant).is_some()
+        {
+            return Some(lift_phantom(insn, pc));
         }
         if let Some(lifted) = extensions.try_lift(insn, pc) {
             return Some(lifted);
@@ -94,33 +99,33 @@ pub fn lift_instruction<F: PrimeField32>(
 
     // LoadStore: LOADW=0x210, LOADBU=0x211, LOADHU=0x212, STOREW=0x213,
     //            STOREH=0x214, STOREB=0x215, LOADB=0x216, LOADH=0x217
-    if opcode == Rv32LoadStoreOpcode::LOADW.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::LOADW.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Word, false));
     }
-    if opcode == Rv32LoadStoreOpcode::LOADBU.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::LOADBU.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Byte, false));
     }
-    if opcode == Rv32LoadStoreOpcode::LOADHU.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::LOADHU.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Half, false));
     }
-    if opcode == Rv32LoadStoreOpcode::LOADB.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::LOADB.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Byte, true));
     }
-    if opcode == Rv32LoadStoreOpcode::LOADH.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::LOADH.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Half, true));
     }
-    if opcode == Rv32LoadStoreOpcode::STOREW.global_opcode_usize() {
-        // e = RV32_MEMORY_AS is a normal store; e = AS_PUBLIC_VALUES is REVEAL,
-        // handled by `Rv32IoExtension`.
+    if opcode == Rv64LoadStoreOpcode::STOREW.global_opcode_usize() {
+        // e = RV64_MEMORY_AS is a normal store; e = AS_PUBLIC_VALUES is REVEAL,
+        // handled by `Rv64IoExtension`.
         let addr_space = field_to_u32(insn.e);
         if addr_space != AS_PUBLIC_VALUES {
             return Some(lift_store(insn, pc, MemWidth::Word));
         }
     }
-    if opcode == Rv32LoadStoreOpcode::STOREH.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::STOREH.global_opcode_usize() {
         return Some(lift_store(insn, pc, MemWidth::Half));
     }
-    if opcode == Rv32LoadStoreOpcode::STOREB.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::STOREB.global_opcode_usize() {
         return Some(lift_store(insn, pc, MemWidth::Byte));
     }
 
@@ -147,19 +152,19 @@ pub fn lift_instruction<F: PrimeField32>(
     }
 
     // JAL=0x230
-    if opcode == Rv32JalLuiOpcode::JAL.global_opcode_usize() {
+    if opcode == Rv64JalLuiOpcode::JAL.global_opcode_usize() {
         return Some(lift_jal(insn, pc));
     }
     // LUI=0x231
-    if opcode == Rv32JalLuiOpcode::LUI.global_opcode_usize() {
+    if opcode == Rv64JalLuiOpcode::LUI.global_opcode_usize() {
         return Some(lift_lui(insn, pc));
     }
     // JALR=0x235
-    if opcode == Rv32JalrOpcode::JALR.global_opcode_usize() {
+    if opcode == Rv64JalrOpcode::JALR.global_opcode_usize() {
         return Some(lift_jalr(insn, pc));
     }
     // AUIPC=0x240
-    if opcode == Rv32AuipcOpcode::AUIPC.global_opcode_usize() {
+    if opcode == Rv64AuipcOpcode::AUIPC.global_opcode_usize() {
         return Some(lift_auipc(insn, pc));
     }
 
@@ -214,9 +219,9 @@ pub fn field_to_i32<F: PrimeField32>(f: F) -> i32 {
     }
 }
 
-/// Decode register index from OpenVM operand (divided by RV32_REGISTER_NUM_LIMBS).
+/// Decode register index from OpenVM operand (divided by RV64_REGISTER_NUM_LIMBS).
 pub fn decode_reg<F: PrimeField32>(f: F) -> u8 {
-    (field_to_u32(f) / RV32_REGISTER_NUM_LIMBS as u32) as u8
+    (field_to_u32(f) / RV64_REGISTER_NUM_LIMBS as u32) as u8
 }
 
 /// Sign-extend a 12-bit immediate stored in the low 24 bits.
@@ -428,18 +433,49 @@ fn lift_auipc<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
 
 // ============= System / IO Instructions =============
 
-/// Lift a system PHANTOM sub-instruction.
-fn lift_phantom(sys: SysPhantom, pc: u32) -> LiftedInstr {
-    match sys {
-        // Nop, CtStart, CtEnd — no-ops for execution
-        SysPhantom::Nop | SysPhantom::CtStart | SysPhantom::CtEnd => body(pc, Instr::Nop),
+/// Lift PHANTOM instruction by dispatching on the sub-discriminant in field c.
+fn lift_phantom<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
+    let c_val = field_to_u32(insn.c);
+    let discriminant = (c_val & 0xffff) as u16;
 
-        // DebugPanic — trap on host
-        SysPhantom::DebugPanic => term(
-            pc,
-            Terminator::Trap {
-                message: "PHANTOM DebugPanic".to_string(),
-            },
-        ),
+    // System phantoms (SysPhantom variants). `from_repr` returns None for
+    // non-system discriminants; fall through to the Rv64Phantom check.
+    if let Some(sys) = SysPhantom::from_repr(discriminant) {
+        return match sys {
+            // Nop, CtStart, CtEnd — no-ops for execution
+            SysPhantom::Nop | SysPhantom::CtStart | SysPhantom::CtEnd => body(pc, Instr::Nop),
+
+            // DebugPanic — trap on host
+            SysPhantom::DebugPanic => term(
+                pc,
+                Terminator::Trap {
+                    message: "PHANTOM DebugPanic".to_string(),
+                },
+            ),
+        };
     }
+
+    // RISC-V extension phantoms (Rv64Phantom variants).
+    if let Some(rv64) = Rv64Phantom::from_repr(discriminant) {
+        return match rv64 {
+            // HintInput — pop from input_stream, reset hint_stream with length-prefixed data
+            Rv64Phantom::HintInput => body(pc, Instr::HintInput),
+
+            // PrintStr — print UTF-8 string from memory; a=ptr_reg, b=len_reg
+            Rv64Phantom::PrintStr => {
+                let ptr_reg = decode_reg(insn.a);
+                let len_reg = decode_reg(insn.b);
+                body(pc, Instr::PrintStr { ptr_reg, len_reg })
+            }
+
+            // HintRandom — fill hint_stream with [a]_1 random words
+            Rv64Phantom::HintRandom => {
+                let num_words_reg = decode_reg(insn.a);
+                body(pc, Instr::HintRandom { num_words_reg })
+            }
+        };
+    }
+
+    // Unknown phantom — treat as nop (forward compatible).
+    body(pc, Instr::Nop)
 }
