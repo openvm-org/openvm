@@ -634,7 +634,7 @@ fn rv64_divremw_wrong_r_zero_flag_negative_test() {
     let b: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 0, 0]);
     let c: [u32; RV64_REGISTER_NUM_LIMBS] = word_to_register([0, 0, 0, 0]);
     let prank_vals = DivRemWPrankValues {
-        zero_divisor: Some(false),
+        zero_divisor: Some(true),
         r_zero: Some(true),
         ..Default::default()
     };
