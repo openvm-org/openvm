@@ -21,13 +21,16 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-static_assertions::assert_impl_all!(AotInstance<p3_baby_bear::BabyBear, ExecutionCtx>: Send, Sync);
+static_assertions::assert_impl_all!(
+    AotInstance<'static, p3_baby_bear::BabyBear, ExecutionCtx>: Send,
+    Sync
+);
 
-impl<'a, F> AotInstance<F, ExecutionCtx>
+impl<'a, F> AotInstance<'a, F, ExecutionCtx>
 where
     F: PrimeField32,
 {
-    pub fn create_pure_asm<E>(
+    fn create_pure_asm<E>(
         exe: &VmExe<F>,
         inventory: &ExecutorInventory<E>,
         pre_compute_insns_ptr: *const PreComputeInstruction<F, ExecutionCtx>,
@@ -263,7 +266,7 @@ where
         let init_memory = exe.init_memory.clone();
 
         Ok(Self {
-            system_config: inventory.config().clone(),
+            system_config: inventory.config(),
             pre_compute_buf,
             pre_compute_insns,
             pc_start: exe.pc_start,

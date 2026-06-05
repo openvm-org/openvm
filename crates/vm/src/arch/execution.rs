@@ -134,7 +134,7 @@ pub type ExecuteFunc<F, CTX> =
 ///   pointer is typeless to avoid self-referential types.
 #[cfg(feature = "tco")]
 pub type Handler<F, CTX> = unsafe fn(
-    interpreter: &InterpretedInstance<F, CTX>,
+    interpreter: &InterpretedInstance<'_, F, CTX>,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 );
 

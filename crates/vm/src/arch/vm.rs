@@ -223,7 +223,7 @@ where
     pub fn instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, F, ExecutionCtx>, StaticProgramError> {
         InterpretedInstance::new(&self.inventory, exe)
     }
 
@@ -231,7 +231,7 @@ where
     pub fn interpreter_instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, F, ExecutionCtx>, StaticProgramError> {
         InterpretedInstance::new(&self.inventory, exe)
     }
 
@@ -239,7 +239,7 @@ where
     pub fn instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
+    ) -> Result<AotInstance<'_, F, ExecutionCtx>, StaticProgramError> {
         Self::aot_instance(self, exe)
     }
 }
@@ -253,7 +253,7 @@ where
     pub fn aot_instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
+    ) -> Result<AotInstance<'_, F, ExecutionCtx>, StaticProgramError> {
         AotInstance::new(&self.inventory, exe)
     }
 }
@@ -270,7 +270,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, F, MeteredCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -279,7 +279,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, F, MeteredCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -288,7 +288,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
+    ) -> Result<AotInstance<'_, F, MeteredCtx>, StaticProgramError> {
         Self::metered_aot_instance(self, exe, executor_idx_to_air_idx)
     }
 
@@ -298,7 +298,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
+    ) -> Result<AotInstance<'_, F, MeteredCtx>, StaticProgramError> {
         AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -308,7 +308,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<InterpretedInstance<F, MeteredCostCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, F, MeteredCostCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 }
@@ -450,7 +450,7 @@ where
     pub fn interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -463,7 +463,7 @@ where
     pub fn naive_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -476,7 +476,7 @@ where
     pub fn interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    ) -> Result<AotInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -488,7 +488,7 @@ where
     pub fn get_aot_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    ) -> Result<AotInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -500,7 +500,7 @@ where
     pub fn metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -514,7 +514,7 @@ where
     pub fn metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<AotInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -529,7 +529,7 @@ where
     pub fn get_metered_aot_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<AotInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -543,7 +543,7 @@ where
     pub fn naive_metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -556,7 +556,7 @@ where
     pub fn metered_cost_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCostCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCostCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,

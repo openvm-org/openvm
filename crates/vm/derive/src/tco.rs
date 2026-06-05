@@ -56,7 +56,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
     let handler_fn = quote! {
         #[inline(never)]
         unsafe fn #handler_name #handler_generics (
-            interpreter: &::openvm_circuit::arch::interpreter::InterpretedInstance<#f_type, #ctx_type>,
+            interpreter: &::openvm_circuit::arch::interpreter::InterpretedInstance<'_, #f_type, #ctx_type>,
             exec_state: &mut ::openvm_circuit::arch::VmExecState<
                 #f_type,
                 ::openvm_circuit::system::memory::online::GuestMemory,

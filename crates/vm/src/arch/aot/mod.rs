@@ -24,9 +24,9 @@ mod pure;
 /// Verify installation by `as --version`, `ar --version` and `cargo --version`
 /// Refer to AOT.md for further clarification about AOT
 ///  
-pub struct AotInstance<F, Ctx> {
+pub struct AotInstance<'a, F, Ctx> {
     init_memory: SparseMemoryImage,
-    system_config: SystemConfig,
+    system_config: &'a SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
     // to this buffer.
     #[allow(dead_code)]
@@ -43,18 +43,13 @@ type AsmRunFn = unsafe extern "C" fn(
     instret_left: u64,
 );
 
-impl<F, Ctx> AotInstance<F, Ctx>
+impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,
 {
     pub fn create_initial_vm_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F> {
-        VmState::initial(
-            &self.system_config,
-            &self.init_memory,
-            self.pc_start,
-            inputs,
-        )
+        VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs)
     }
 
     fn push_external_registers() -> String {
