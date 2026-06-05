@@ -40,7 +40,7 @@ jobs:
       - name: Rebase Feature Branches
         run: |
           # List of feature branches to maintain
-          FEATURE_BRANCHES=("develop-v2.0.0-rc.1")
+          FEATURE_BRANCHES=("develop-v2.0.0-rc.2")
 
           FAILED_BRANCHES=()
           SUCCEEDED_BRANCHES=()
