@@ -77,7 +77,7 @@ aot = [
 rvr = [
     "dep:rvr-openvm-lift",
     "openvm-circuit/rvr",
-    "openvm-rv32im-circuit/rvr",
+    "openvm-riscv-circuit/rvr",
     "openvm-keccak256-circuit/rvr",
     "openvm-sha2-circuit/rvr",
     "openvm-bigint-circuit/rvr",
