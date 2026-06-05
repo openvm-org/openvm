@@ -15,8 +15,8 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     circuit::deferral::{
-        inner::def_pvs::air::DeferralAggPvsCols, DeferralAggregationPvs, DeferralCircuitPvs,
-        DEF_AGG_PVS_AIR_ID, DEF_CIRCUIT_PVS_AIR_ID,
+        inner::def_pvs::air::{DeferralAggPvsAir, DeferralAggPvsCols},
+        DeferralAggregationPvs, DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID, DEF_CIRCUIT_PVS_AIR_ID,
     },
     utils::zero_hash,
 };
@@ -37,6 +37,7 @@ pub fn generate_proving_ctx(
 
     let mut trace = vec![F::ZERO; num_rows * width];
     let mut num_def_circuit_proofs = F::ZERO;
+    let mut merkle_depth = F::ZERO;
 
     for (proof_idx, (proof, chunk)) in proofs.iter().zip(trace.chunks_exact_mut(width)).enumerate()
     {
@@ -50,7 +51,13 @@ pub fn generate_proving_ctx(
                 proof.public_values[DEF_AGG_PVS_AIR_ID].as_slice().borrow();
             cols.merkle_commit = child_pvs.merkle_commit;
             cols.child_pvs.input_commit[0] = child_pvs.num_def_circuit_proofs;
+            cols.child_pvs.input_commit[1] = child_pvs.merkle_depth;
             num_def_circuit_proofs += child_pvs.num_def_circuit_proofs;
+            if proof_idx == 0 {
+                merkle_depth = child_pvs.merkle_depth;
+            } else {
+                debug_assert_eq!(merkle_depth, child_pvs.merkle_depth);
+            }
         } else {
             let child_pvs: &DeferralCircuitPvs<F> = proof.public_values[DEF_CIRCUIT_PVS_AIR_ID]
                 .as_slice()
@@ -80,7 +87,13 @@ pub fn generate_proving_ctx(
         let cols: &mut DeferralAggPvsCols<F> = trace[width..2 * width].borrow_mut();
         cols.proof_idx = F::ONE;
         cols.has_verifier_pvs = F::from_bool(child_is_agg);
-        cols.merkle_commit = zero_hash(child_merkle_depth.unwrap() + 1);
+        for (dst, value) in cols
+            .merkle_commit
+            .iter_mut()
+            .zip(DeferralAggPvsAir::depth_encoder().get_flag_pt(child_merkle_depth.unwrap()))
+        {
+            *dst = F::from_u32(value);
+        }
     }
 
     let mut public_values = vec![F::ZERO; DeferralAggregationPvs::<u8>::width()];
@@ -89,10 +102,17 @@ pub fn generate_proving_ctx(
     let first_row: &DeferralAggPvsCols<F> = trace[..width].borrow();
     if is_wrapper {
         pvs.merkle_commit = first_row.merkle_commit;
+        pvs.merkle_depth = merkle_depth;
     } else {
         let second_row: &DeferralAggPvsCols<F> = trace[width..2 * width].borrow();
+        let right_child = if num_proofs == 1 {
+            zero_hash(child_merkle_depth.unwrap() + 1)
+        } else {
+            second_row.merkle_commit
+        };
         pvs.merkle_commit =
-            poseidon2_compress_with_capacity(first_row.merkle_commit, second_row.merkle_commit).0;
+            poseidon2_compress_with_capacity(first_row.merkle_commit, right_child).0;
+        pvs.merkle_depth = merkle_depth + F::ONE;
     }
     pvs.num_def_circuit_proofs = num_def_circuit_proofs;
 

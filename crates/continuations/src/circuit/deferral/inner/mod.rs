@@ -35,12 +35,12 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
             def_pvs_consistency_bus,
         };
 
-        let def_pvs_air = def_pvs::DeferralAggPvsAir {
-            public_values_bus: bus_inventory.public_values_bus,
-            poseidon2_bus: bus_inventory.poseidon2_compress_bus,
+        let def_pvs_air = def_pvs::DeferralAggPvsAir::new(
+            bus_inventory.public_values_bus,
+            bus_inventory.poseidon2_compress_bus,
             input_or_merkle_commit_bus,
             def_pvs_consistency_bus,
-        };
+        );
 
         let input_commit_air = input::InputCommitAir {
             public_values_bus: bus_inventory.public_values_bus,

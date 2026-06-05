@@ -7,6 +7,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 pub struct MerkleRootMessage<T> {
     pub merkle_root: [T; DIGEST_SIZE],
     pub idx: T,
+    pub num_rows_or_zero: T,
 }
 
 define_typed_permutation_bus!(MerkleRootBus, MerkleRootMessage);

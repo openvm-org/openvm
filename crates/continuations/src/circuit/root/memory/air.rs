@@ -92,13 +92,15 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsInMemoryAir {
 
         /*
          * Receive the user public values commit on the first row. The first DIGEST_SIZE
-         * elements of perm state are this merkle tree node's commit.
+         * elements of perm state are this merkle tree node's commit. We do not receive
+         * the number of rows here.
          */
         self.merkle_root_bus.receive(
             builder,
             MerkleRootMessage {
                 merkle_root: local.node_commit.map(Into::into),
                 idx: AB::Expr::ZERO,
+                num_rows_or_zero: AB::Expr::ZERO,
             },
             local.is_valid * (local.is_valid - AB::F::ONE) * AB::F::TWO.inverse(),
         );

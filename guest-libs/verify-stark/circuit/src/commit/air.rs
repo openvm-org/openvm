@@ -54,6 +54,7 @@ impl UserPvsCommitValuesAir {
                 merkle_root_bus,
                 merkle_tree_internal_bus,
                 0,
+                false,
             ),
             output_val_bus,
             num_user_pvs,
