@@ -83,7 +83,12 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
         let num_records = self.num_records.unwrap();
         if num_records == 0 {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+            // Boundary AIR should always be present, so return a single zero-filled
+            // padding row.
+            let trace =
+                DeviceMatrix::<F>::with_capacity_on(1, self.trace_width(), &self.device_ctx);
+            trace.buffer().fill_zero_on(&self.device_ctx).unwrap();
+            return AirProvingContext::simple_no_pis(trace);
         }
         let unpadded_height = 2 * num_records;
         let trace_height = next_power_of_two_or_zero(unpadded_height);

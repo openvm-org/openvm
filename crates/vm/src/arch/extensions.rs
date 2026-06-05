@@ -24,8 +24,9 @@ use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     interaction::BusIndex,
+    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
     prover::{AirProvingContext, MatrixDimensions, ProverBackend, ProvingContext},
-    AnyAir, StarkEngine, StarkProtocolConfig, Val,
+    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashMap;
 use tracing::info_span;
@@ -470,6 +471,21 @@ impl<SC: StarkProtocolConfig> AirInventory<SC> {
             .into_airs()
             .into_iter()
             .chain(self.ext_airs.into_iter().rev())
+    }
+
+    /// Generates the proving key for this circuit, marking the system AIRs that must be present
+    /// in any valid proof (see [`SystemConfig::is_required_air_id`]) as required.
+    pub fn keygen(self, config: &SC) -> MultiStarkProvingKey<SC> {
+        let system_config = self.config.clone();
+        let mut keygen_builder = MultiStarkKeygenBuilder::new(config.clone());
+        for (air_id, air) in self.into_airs().enumerate() {
+            if system_config.is_required_air_id(air_id) {
+                keygen_builder.add_required_air(air as AirRef<_>);
+            } else {
+                keygen_builder.add_air(air as AirRef<_>);
+            }
+        }
+        keygen_builder.generate_pk().unwrap()
     }
 
     /// This is O(1). Returns the total number of AIRs and equals the length of [`Self::into_airs`].
