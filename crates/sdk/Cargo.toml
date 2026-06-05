@@ -24,6 +24,7 @@ openvm-recursion-circuit = { workspace = true }
 openvm-deferral-circuit = { workspace = true }
 openvm-continuations = { workspace = true }
 openvm-verify-stark-host = { workspace = true }
+openvm-verify-stark-circuit = { workspace = true }
 openvm-static-verifier = { workspace = true, optional = true }
 halo2-base = { workspace = true, optional = true, features = ["halo2-axiom"] }
 p3-bn254 = { workspace = true, optional = true }
@@ -54,7 +55,6 @@ tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 toml = { workspace = true }
 
 [dev-dependencies]
-openvm-verify-stark-circuit = { workspace = true }
 openvm-toolchain-tests = { workspace = true }
 
 [features]

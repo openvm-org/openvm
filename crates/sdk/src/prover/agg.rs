@@ -3,7 +3,7 @@ use std::sync::Arc;
 use eyre::Result;
 use openvm_circuit::arch::ContinuationVmProof;
 use openvm_continuations::{circuit::inner::ProofsType, prover::ChildVkKind};
-use openvm_recursion_circuit::prelude::Digest;
+use openvm_recursion_circuit::{prelude::Digest, utils::poseidon2_hash_slice};
 use openvm_stark_backend::{
     codec::{Decode, Encode},
     keygen::types::MultiStarkVerifyingKey,
@@ -136,6 +136,22 @@ impl AggProver {
             internal_recursive_prover,
             agg_tree_config,
         }
+    }
+
+    pub fn vm_or_hook_commit(&self) -> Digest {
+        let app_or_def_vk_commit = self.leaf_prover.get_vk_commit(false);
+        let leaf_vk_commit = self.internal_for_leaf_prover.get_vk_commit(false);
+        let internal_for_leaf_vk_commit = self.internal_recursive_prover.get_vk_commit(false);
+        let components = vec![
+            app_or_def_vk_commit.cached_commit,
+            app_or_def_vk_commit.vk_pre_hash,
+            leaf_vk_commit.cached_commit,
+            leaf_vk_commit.vk_pre_hash,
+            internal_for_leaf_vk_commit.cached_commit,
+            internal_for_leaf_vk_commit.vk_pre_hash,
+        ]
+        .into_flattened();
+        poseidon2_hash_slice(&components).0
     }
 
     pub fn prove_vm(
