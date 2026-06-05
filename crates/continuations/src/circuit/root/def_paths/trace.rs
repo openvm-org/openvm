@@ -82,8 +82,8 @@ pub fn generate_proving_input<SC: StarkProtocolConfig<F = F>>(
         0
     } else {
         assert!(
-            depth > 0 && depth <= proof_len,
-            "depth must be in 1..=proof_len when is_unset is false"
+            depth > 0 && depth <= address_height,
+            "depth must be in 1..=address_height when is_unset is false"
         );
         depth
     };

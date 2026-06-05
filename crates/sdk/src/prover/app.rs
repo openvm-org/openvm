@@ -108,6 +108,10 @@ where
             .memory_dimensions()
     }
 
+    pub fn num_user_pvs(&self) -> usize {
+        self.instance.vm.config().as_ref().num_public_values
+    }
+
     /// Generates proof for every continuation segment
     #[instrument(
         name = "app_prove",

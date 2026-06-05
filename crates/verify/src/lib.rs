@@ -128,6 +128,14 @@ pub fn verify_vm_stark_proof_pvs(
         .user_pvs_proof
         .verify(&hasher, vk.baseline.memory_dimensions, final_root)?;
 
+    // Check that user_pvs_proof has the correct number of public values.
+    if proof.user_pvs_proof.public_values.len() != vk.baseline.num_user_pvs {
+        return Err(VerifyStarkError::UserPvsLengthMismatch {
+            expected: vk.baseline.num_user_pvs,
+            actual: proof.user_pvs_proof.public_values.len(),
+        });
+    }
+
     // Check that the app_commit is as expected.
     let claimed_app_exe_commit =
         compute_exe_commit(&hasher, &program_commit, &initial_root, initial_pc);
@@ -303,21 +311,22 @@ pub fn verify_vm_stark_proof_pvs(
                     actual: def_hook_commit,
                 });
             }
-            let deferral_merkle_proofs = proof
-                .deferral_merkle_proofs
-                .as_ref()
-                .ok_or(VerifyStarkError::MissingDeferralMerkleProofs)?;
-            deferral_merkle_proofs.verify(
-                vk.baseline.memory_dimensions,
-                initial_root,
-                final_root,
-                initial_acc_hash,
-                final_acc_hash,
-                depth.as_canonical_u32() as usize,
-            )?;
         } else {
             return Err(VerifyStarkError::InvalidDeferralFlag(deferral_flag));
         }
+
+        let deferral_merkle_proofs = proof
+            .deferral_merkle_proofs
+            .as_ref()
+            .ok_or(VerifyStarkError::MissingDeferralMerkleProofs)?;
+        deferral_merkle_proofs.verify(
+            vk.baseline.memory_dimensions,
+            initial_root,
+            final_root,
+            initial_acc_hash,
+            final_acc_hash,
+            depth.as_canonical_u32() as usize,
+        )?;
     } else if !verifier_def_pvs_slice.is_empty()
         || !proof.inner.public_values[DEF_PVS_AIR_ID].is_empty()
         || proof.deferral_merkle_proofs.is_some()

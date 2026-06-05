@@ -162,6 +162,7 @@ where
         VerificationBaseline {
             app_exe_commit: self.app_prover.app_exe_commit(),
             memory_dimensions: self.app_prover.memory_dimensions(),
+            num_user_pvs: self.app_prover.num_user_pvs(),
             app_vk_commit: self.agg_prover.leaf_prover.get_vk_commit(false),
             leaf_vk_commit: self
                 .agg_prover
