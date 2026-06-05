@@ -209,7 +209,7 @@ for i in "${!CRATE_NAMES[@]}"; do
             heavy=1
             echo -n "(heavy) "
         fi
-        args=(nextest run --cargo-profile=fast -p "$name")
+        args=(nextest run --cargo-profile=fast --no-tests=pass -p "$name")
         [ -n "$feats" ] && args+=(--features "$feats")
         [ "$heavy" -eq 1 ] && args+=(--profile=heavy)
         [ "$name" = "cargo-openvm" ] && args+=(--test-threads=1)
