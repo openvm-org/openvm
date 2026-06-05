@@ -146,12 +146,8 @@ impl VerifyCmd {
                 let proof_path = resolve_proof_path(proof, APP_PROOF_EXT)?;
                 println!("Verifying application proof at {}", proof_path.display());
                 let app_proof = read_object_from_file(proof_path)?;
-                let _exe_commit = verify_app_proof::<openvm_sdk::DefaultStarkEngine>(
-                    &app_vk.vk,
-                    app_vk.memory_dimensions,
-                    app_vk.num_user_pvs,
-                    &app_proof,
-                )?;
+                let _exe_commit =
+                    verify_app_proof::<openvm_sdk::DefaultStarkEngine>(&app_vk, &app_proof)?;
             }
             VerifySubCommand::Stark {
                 app_baseline,

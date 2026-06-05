@@ -21,6 +21,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
 use tracing::instrument;
 
 use crate::{
+    keygen::AppVerifyingKey,
     prover::vm::{new_local_prover, types::VmProvingKey},
     util::check_max_constraint_degrees,
     SdkError, StdIn, F, SC,
@@ -133,7 +134,7 @@ where
         );
         let proof = ContinuationVmProver::prove(&mut self.instance, input)?;
         #[cfg(debug_assertions)]
-        let _ = verify_app_proof::<E>(
+        let _ = verify_app_proof_inner::<E>(
             &self.app_vm_vk,
             self.memory_dimensions(),
             self.num_user_pvs(),
@@ -161,6 +162,20 @@ where
 
 /// Verifies a ContinuationVmProof and returns the app_exe_commit
 pub fn verify_app_proof<E: StarkEngine<SC = SC>>(
+    app_vk: &AppVerifyingKey,
+    proof: &ContinuationVmProof<E::SC>,
+) -> Result<Digest, SdkError> {
+    verify_app_proof_inner::<E>(
+        &app_vk.vk,
+        app_vk.memory_dimensions,
+        app_vk.num_user_pvs,
+        proof,
+    )
+}
+
+/// Verifies a ContinuationVmProof from the borrowed components of an
+/// [`AppVerifyingKey`], returning the app_exe_commit.
+fn verify_app_proof_inner<E: StarkEngine<SC = SC>>(
     vk: &MultiStarkVerifyingKey<SC>,
     memory_dimensions: MemoryDimensions,
     num_user_pvs: usize,

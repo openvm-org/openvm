@@ -62,12 +62,7 @@ fn main() -> eyre::Result<()> {
                     .build()?;
                 let mut prover = sdk.app_prover(exe)?;
                 let proof = prover.prove(stdin)?;
-                let _ = verify_app_proof::<DefaultStarkEngine>(
-                    &app_vk.vk,
-                    app_vk.memory_dimensions,
-                    app_vk.num_user_pvs,
-                    &proof,
-                )?;
+                let _ = verify_app_proof::<DefaultStarkEngine>(&app_vk, &proof)?;
                 Ok(proof)
             });
             handles.push(handle);

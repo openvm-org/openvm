@@ -38,12 +38,7 @@ fn main() -> eyre::Result<()> {
     // 6. Do this once to save the app_vk, independent of the proof.
     let (_app_pk, app_vk) = sdk.app_keygen();
     // 7. Verify your program.
-    let _ = verify_app_proof::<openvm_sdk::DefaultStarkEngine>(
-        &app_vk.vk,
-        app_vk.memory_dimensions,
-        app_vk.num_user_pvs,
-        &proof,
-    )?;
+    let _ = verify_app_proof::<openvm_sdk::DefaultStarkEngine>(&app_vk, &proof)?;
     // [!endregion verification]
 
     Ok(())

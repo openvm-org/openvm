@@ -137,12 +137,7 @@ pub fn run_app_benchmark(
         let (_, app_vk) = sdk.app_keygen();
         let mut prover = sdk.app_prover(exe)?;
         let proof = prover.prove(stdin)?;
-        let _ = verify_app_proof::<DefaultStarkEngine>(
-            &app_vk.vk,
-            app_vk.memory_dimensions,
-            app_vk.num_user_pvs,
-            &proof,
-        )?;
+        let _ = verify_app_proof::<DefaultStarkEngine>(&app_vk, &proof)?;
         Ok(())
     })
 }
