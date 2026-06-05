@@ -9,25 +9,34 @@ use std::ffi::c_void;
 
 use generic_array::GenericArray;
 use rvr_openvm_ext_ffi_common::{
-    rd_mem_words_traced, trace_chip_wrapper, u32s_as_u8s, u64s_as_u32s, u64s_as_u32s_mut,
-    wr_mem_words_traced, WORD_SIZE,
+    rd_mem_words_traced, trace_chip_wrapper, u64s_as_u32s, u64s_as_u32s_mut, wr_mem_words_traced,
 };
 use sha2::{compress256, compress512};
+
+const U32_BYTES: usize = core::mem::size_of::<u32>();
 
 // SHA-256 constants
 const SHA256_STATE_BYTES: usize = 32;
 const SHA256_BLOCK_BYTES: usize = 64;
-const SHA256_STATE_WORDS: usize = SHA256_STATE_BYTES / WORD_SIZE;
-const SHA256_BLOCK_WORDS: usize = SHA256_BLOCK_BYTES / WORD_SIZE;
+const SHA256_STATE_WORDS: usize = SHA256_STATE_BYTES / U32_BYTES;
+const SHA256_BLOCK_WORDS: usize = SHA256_BLOCK_BYTES / U32_BYTES;
 const SHA256_ROWS_PER_BLOCK: u32 = 17;
 
 // SHA-512 constants
 const SHA512_BLOCK_BYTES: usize = 128;
-const SHA512_BLOCK_WORDS: usize = SHA512_BLOCK_BYTES / WORD_SIZE;
+const SHA512_BLOCK_WORDS: usize = SHA512_BLOCK_BYTES / U32_BYTES;
 const SHA512_ROWS_PER_BLOCK: u32 = 21;
 
 /// Both SHA-256 and SHA-512 use 8-element internal state arrays.
 const HASH_STATE_LEN: usize = 8;
+
+#[inline(always)]
+fn u32_words_as_bytes(words: &[u32]) -> &[u8] {
+    let len = words.len() * U32_BYTES;
+    // SAFETY: u32 alignment is stricter than u8 alignment, total bytes match,
+    // and the FFI backend is only supported on little-endian hosts.
+    unsafe { core::slice::from_raw_parts(words.as_ptr().cast::<u8>(), len) }
+}
 
 /// SHA-256 compress FFI entry point.
 ///
@@ -55,7 +64,8 @@ pub unsafe extern "C" fn rvr_ext_sha256(
 
     // compress256 wants the block as `GenericArray<u8, U64>`. Reinterpret the
     // u32 buffer as bytes (zero-copy on LE).
-    let block_array: &GenericArray<u8, _> = GenericArray::from_slice(u32s_as_u8s(&block_words));
+    let block_array: &GenericArray<u8, _> =
+        GenericArray::from_slice(u32_words_as_bytes(&block_words));
     compress256(&mut state_words, &[*block_array]);
 
     wr_mem_words_traced(state, dst_ptr, &state_words);
@@ -92,7 +102,8 @@ pub unsafe extern "C" fn rvr_ext_sha512(
     let mut block_words = [0u32; SHA512_BLOCK_WORDS];
     rd_mem_words_traced(state, input_ptr, &mut block_words);
 
-    let block_array: &GenericArray<u8, _> = GenericArray::from_slice(u32s_as_u8s(&block_words));
+    let block_array: &GenericArray<u8, _> =
+        GenericArray::from_slice(u32_words_as_bytes(&block_words));
     compress512(&mut state_u64s, &[*block_array]);
 
     wr_mem_words_traced(state, dst_ptr, u64s_as_u32s(&state_u64s));

@@ -5,7 +5,7 @@
 //!
 //! Modular arithmetic opcodes are handled separately by the algebra extension.
 
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode::{
+use openvm_ecc_transpiler::Rv64WeierstrassOpcode::{
     self, EC_ADD_NE, EC_DOUBLE, SETUP_EC_ADD_NE, SETUP_EC_DOUBLE,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
@@ -168,8 +168,8 @@ impl<F: PrimeField32> RvrExtension<F> for EccExtension {
     fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
-        let ecc_base = Rv32WeierstrassOpcode::CLASS_OFFSET;
-        let ecc_count = Rv32WeierstrassOpcode::COUNT;
+        let ecc_base = Rv64WeierstrassOpcode::CLASS_OFFSET;
+        let ecc_count = Rv64WeierstrassOpcode::COUNT;
 
         if opcode < ecc_base {
             return None;
@@ -189,7 +189,7 @@ impl<F: PrimeField32> RvrExtension<F> for EccExtension {
         let rd_reg = decode_reg(insn.a);
         let rs1_reg = decode_reg(insn.b);
 
-        let local_opcode = Rv32WeierstrassOpcode::from_repr(local_op)?;
+        let local_opcode = Rv64WeierstrassOpcode::from_repr(local_op)?;
         let instr: Box<dyn ExtInstr> = match local_opcode {
             EC_ADD_NE | SETUP_EC_ADD_NE => {
                 let rs2_reg = decode_reg(insn.c);
