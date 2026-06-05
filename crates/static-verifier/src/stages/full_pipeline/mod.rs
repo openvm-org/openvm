@@ -11,7 +11,7 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    field::baby_bear::{BabyBearExtChip, BabyBearWire},
+    field::baby_bear::{BabyBearExtChip, ReducedBabyBearWire},
     stages::{
         batch_constraints::{
             constrain_batch_constraints_verification, load_batch_constraint_proof_wire,
@@ -36,7 +36,7 @@ pub use public_values::*;
 #[derive(Clone, Debug)]
 pub struct ProofWire {
     pub common_main_commit_root: AssignedValue<Fr>,
-    pub public_values: Vec<Vec<BabyBearWire>>,
+    pub public_values: Vec<Vec<ReducedBabyBearWire>>,
     pub cached_commitment_roots: Vec<Vec<AssignedValue<Fr>>>,
     pub gkr: GkrProofWire,
     pub batch: BatchConstraintProofWire,
@@ -74,7 +74,7 @@ pub fn load_proof_wire(
         .map(|values| {
             values
                 .iter()
-                .map(|&value| base_chip.load_witness(ctx, value))
+                .map(|&value| base_chip.load_reduced_witness(ctx, value))
                 .collect()
         })
         .collect();
@@ -117,7 +117,7 @@ fn observe_preamble(
     transcript: &mut TranscriptChip,
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     log_heights_per_air: &[usize],
-    public_values: &[Vec<BabyBearWire>],
+    public_values: &[Vec<ReducedBabyBearWire>],
     cached_commitment_roots: &[Vec<AssignedValue<Fr>>],
     vk_pre_hash: DigestWire,
     common_main_commit: DigestWire,
@@ -128,14 +128,10 @@ fn observe_preamble(
     for air_idx in 0..mvk.inner.per_air.len() {
         if !mvk.inner.per_air[air_idx].is_required {
             // Static verifier: every AIR in the child VK has a trace (see crate `lib.rs`).
-            let presence_flag = ctx.load_constant(Fr::one());
-            transcript.observe(
-                ctx,
-                &BabyBearWire {
-                    value: presence_flag,
-                    max_bits: 1,
-                },
-            );
+            let presence_flag = transcript
+                .baby_bear()
+                .load_reduced_constant(ctx, BabyBear::ONE);
+            transcript.observe(ctx, &presence_flag);
         }
 
         if let Some(preprocessed) = mvk.inner.per_air[air_idx].preprocessed_data.as_ref() {
@@ -147,7 +143,7 @@ fn observe_preamble(
                 .expect("log_height must fit in u32 for BabyBear constant");
             let log_height = transcript
                 .baby_bear()
-                .load_constant(ctx, BabyBear::from_u32(lh));
+                .load_reduced_constant(ctx, BabyBear::from_u32(lh));
             transcript.observe(ctx, &log_height);
         }
 

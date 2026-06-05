@@ -15,8 +15,8 @@ use openvm_stark_sdk::{
 
 use crate::{
     field::baby_bear::{
-        BabyBearChip, BabyBearExt4Wire, BabyBearExtWire, BabyBearWire, BABY_BEAR_BITS,
-        BABY_BEAR_MODULUS_U64,
+        BabyBearChip, BabyBearExt4Wire, BabyBearExtWire, BabyBearWire, ReducedBabyBearExtWire,
+        ReducedBabyBearWire, BABY_BEAR_BITS, BABY_BEAR_MODULUS_U64,
     },
     hash::{
         poseidon2::{Poseidon2State, DIGEST_WIDTH, POSEIDON2_RATE},
@@ -188,11 +188,11 @@ fn decompose_bn254_to_base_baby_bear_digits(
 fn pack_base_2_31(
     ctx: &mut Context<Fr>,
     gate: &impl GateInstructions<Fr>,
-    values: &[BabyBearWire],
+    values: &[ReducedBabyBearWire],
 ) -> AssignedValue<Fr> {
     gate.inner_product(
         ctx,
-        values.iter().map(|v| v.value),
+        values.iter().map(|v| v.value()),
         gate.pow_of_two()
             .iter()
             .step_by(BABY_BEAR_BITS)
@@ -227,7 +227,7 @@ pub struct TranscriptChip {
     sponge_state: [AssignedValue<Fr>; POSEIDON2_WIDTH],
     absorb_idx: usize,
     sample_idx: usize,
-    observe_buf: Vec<BabyBearWire>,
+    observe_buf: Vec<ReducedBabyBearWire>,
     sample_buf: Vec<BabyBearWire>,
 }
 
@@ -310,7 +310,7 @@ impl TranscriptChip {
         }
     }
 
-    pub fn observe(&mut self, ctx: &mut Context<Fr>, value: &BabyBearWire) {
+    pub fn observe(&mut self, ctx: &mut Context<Fr>, value: &ReducedBabyBearWire) {
         self.invalidate_samples();
         self.observe_buf.push(*value);
         if self.observe_buf.len() == NUM_OBS_PER_WORD {
@@ -318,8 +318,8 @@ impl TranscriptChip {
         }
     }
 
-    pub fn observe_ext(&mut self, ctx: &mut Context<Fr>, value: &BabyBearExtWire) {
-        for coeff in &value.0 {
+    pub fn observe_ext(&mut self, ctx: &mut Context<Fr>, value: &ReducedBabyBearExtWire) {
+        for coeff in value.coeffs() {
             self.observe(ctx, coeff);
         }
     }
@@ -374,7 +374,12 @@ impl TranscriptChip {
     }
 
     /// Asserts that the PoW witness must pass.
-    pub fn check_witness(&mut self, ctx: &mut Context<Fr>, bits: usize, witness: &BabyBearWire) {
+    pub fn check_witness(
+        &mut self,
+        ctx: &mut Context<Fr>,
+        bits: usize,
+        witness: &ReducedBabyBearWire,
+    ) {
         if bits == 0 {
             return;
         }

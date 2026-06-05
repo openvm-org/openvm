@@ -8,7 +8,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE as APP_DIGEST_SIZ
 use openvm_verify_stark_host::pvs::VERIFIER_PVS_AIR_ID;
 
 use crate::{
-    field::baby_bear::{BabyBearChip, BabyBearWire, BABY_BEAR_MODULUS_U64},
+    field::baby_bear::{BabyBearChip, ReducedBabyBearWire, BABY_BEAR_MODULUS_U64},
     stages::full_pipeline::ProofWire,
     Fr,
 };
@@ -51,16 +51,12 @@ pub fn extract_public_values(
     chip: &BabyBearChip,
     proof: &ProofWire,
 ) -> StaticVerifierPvs<AssignedValue<Fr>> {
-    let root_pvs: &RootVerifierPvs<BabyBearWire> =
+    let root_pvs: &RootVerifierPvs<ReducedBabyBearWire> =
         proof.public_values[VERIFIER_PVS_AIR_ID].as_slice().borrow();
     let app_exe_commit = compress_babybear_wires_to_bn254(ctx, chip, root_pvs.app_exe_commit);
     let app_vm_commit = compress_babybear_wires_to_bn254(ctx, chip, root_pvs.app_vm_commit);
-    // not reduced:
-    let user_pvs_nr = &proof.public_values[USER_PVS_COMMIT_AIR_ID];
-    let user_public_values = user_pvs_nr
-        .iter()
-        .map(|bb| chip.reduce(ctx, *bb).value)
-        .collect::<Vec<_>>();
+    let user_pvs = &proof.public_values[USER_PVS_COMMIT_AIR_ID];
+    let user_public_values = user_pvs.iter().map(|bb| bb.value()).collect::<Vec<_>>();
 
     StaticVerifierPvs {
         app_exe_commit,
@@ -72,11 +68,9 @@ pub fn extract_public_values(
 pub fn compress_babybear_wires_to_bn254(
     ctx: &mut Context<Fr>,
     chip: &BabyBearChip,
-    base_elts: [BabyBearWire; APP_DIGEST_SIZE],
+    base_elts: [ReducedBabyBearWire; APP_DIGEST_SIZE],
 ) -> AssignedValue<Fr> {
-    // BabyBearWire is not constrained to be < BABY_BEAR_MODULUS so we need to range check them
-    // before compressing.
-    let reduced_elts = base_elts.map(|bb| chip.reduce(ctx, bb).value);
+    let reduced_elts = base_elts.map(|bb| bb.value());
     let order = Fr::from(BABY_BEAR_MODULUS_U64);
     let mut bases = [Fr::ONE; APP_DIGEST_SIZE];
     for i in 1..APP_DIGEST_SIZE {

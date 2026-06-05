@@ -7,7 +7,7 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    field::baby_bear::{BabyBearExtChip, BabyBearExtWire},
+    field::baby_bear::{BabyBearExtChip, BabyBearExtWire, ReducedBabyBearExtWire},
     profiling::CellProfiler,
     stages::{
         batch_constraints::{
@@ -25,15 +25,15 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct StackedReductionIntermediatesWire {
-    pub stacking_openings: Vec<Vec<BabyBearExtWire>>,
+    pub stacking_openings: Vec<Vec<ReducedBabyBearExtWire>>,
     pub u: Vec<BabyBearExtWire>,
 }
 
 #[derive(Clone, Debug)]
 pub struct StackingProofWire {
-    pub univariate_round_coeffs: Vec<BabyBearExtWire>,
-    pub sumcheck_round_polys: Vec<Vec<BabyBearExtWire>>,
-    pub stacking_openings: Vec<Vec<BabyBearExtWire>>,
+    pub univariate_round_coeffs: Vec<ReducedBabyBearExtWire>,
+    pub sumcheck_round_polys: Vec<Vec<ReducedBabyBearExtWire>>,
+    pub stacking_openings: Vec<Vec<ReducedBabyBearExtWire>>,
 }
 
 pub(crate) fn load_stacking_proof_wire(
@@ -44,14 +44,14 @@ pub(crate) fn load_stacking_proof_wire(
     let univariate_round_coeffs = stacking_proof
         .univariate_round_coeffs
         .iter()
-        .map(|&value| ext_chip.load_witness(ctx, value))
+        .map(|&value| ext_chip.load_reduced_witness(ctx, value))
         .collect::<Vec<_>>();
     let sumcheck_round_polys = stacking_proof
         .sumcheck_round_polys
         .iter()
         .map(|poly| {
             poly.iter()
-                .map(|&value| ext_chip.load_witness(ctx, value))
+                .map(|&value| ext_chip.load_reduced_witness(ctx, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -60,7 +60,7 @@ pub(crate) fn load_stacking_proof_wire(
         .iter()
         .map(|row| {
             row.iter()
-                .map(|&value| ext_chip.load_witness(ctx, value))
+                .map(|&value| ext_chip.load_reduced_witness(ctx, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -97,7 +97,7 @@ pub(crate) fn constrain_stacked_reduction(
     need_rot_per_commit: &[Vec<bool>],
     l_skip: usize,
     n_stack: usize,
-    batch_column_openings: &[Vec<Vec<BabyBearExtWire>>],
+    batch_column_openings: &[Vec<Vec<ReducedBabyBearExtWire>>],
     r: &[BabyBearExtWire],
     profiler: &mut CellProfiler,
 ) -> StackedReductionIntermediatesWire {
@@ -126,16 +126,24 @@ pub(crate) fn constrain_stacked_reduction(
     let mut t_claims = Vec::with_capacity(lambda_idx);
     for (trace_idx, parts) in batch_column_openings.iter().enumerate() {
         let need_rot = need_rot_per_commit[0][trace_idx];
+        let openings = parts[0]
+            .iter()
+            .map(|opening| opening.into())
+            .collect::<Vec<_>>();
         t_claims.extend(column_openings_by_rot_assigned(
-            ctx, ext_chip, &parts[0], need_rot,
+            ctx, ext_chip, &openings, need_rot,
         ));
     }
     let mut commit_idx = 1usize;
     for parts in batch_column_openings {
         for cols in parts.iter().skip(1) {
             let need_rot = need_rot_per_commit[commit_idx][0];
+            let openings = cols
+                .iter()
+                .map(|opening| opening.into())
+                .collect::<Vec<_>>();
             t_claims.extend(column_openings_by_rot_assigned(
-                ctx, ext_chip, cols, need_rot,
+                ctx, ext_chip, &openings, need_rot,
             ));
             commit_idx += 1;
         }
@@ -169,8 +177,12 @@ pub(crate) fn constrain_stacked_reduction(
     profiler.push("univariate_sumcheck", ctx.advice.len());
 
     let univariate_round_coeffs = &stacking_wire.univariate_round_coeffs;
+    let univariate_round_coeffs_raw = univariate_round_coeffs
+        .iter()
+        .map(|coeff| coeff.into())
+        .collect::<Vec<_>>();
     let mut s_0_sum_eval = ext_chip.zero(ctx);
-    for coeff in univariate_round_coeffs.iter().step_by(omega_order) {
+    for coeff in univariate_round_coeffs_raw.iter().step_by(omega_order) {
         s_0_sum_eval = ext_chip.add(ctx, s_0_sum_eval, *coeff);
     }
     let s_0_sum_eval =
@@ -189,13 +201,15 @@ pub(crate) fn constrain_stacked_reduction(
     let sumcheck_round_polys = &stacking_wire.sumcheck_round_polys;
 
     let mut final_claim =
-        horner_eval_ext_poly_assigned(ctx, ext_chip, univariate_round_coeffs, &u[0]);
+        horner_eval_ext_poly_assigned(ctx, ext_chip, &univariate_round_coeffs_raw, &u[0]);
     for round_poly in sumcheck_round_polys {
         let s_j_1 = round_poly[0];
         let s_j_2 = round_poly[1];
         transcript.observe_ext(ctx, &s_j_1);
         transcript.observe_ext(ctx, &s_j_2);
         let u_j = transcript.sample_ext(ctx);
+        let s_j_1 = s_j_1.into();
+        let s_j_2 = s_j_2.into();
         let s_j_0 = ext_chip.sub(ctx, final_claim, s_j_1);
         final_claim =
             interpolate_quadratic_at_012_assigned(ctx, ext_chip, [&s_j_0, &s_j_1, &s_j_2], &u_j);
@@ -290,7 +304,7 @@ pub(crate) fn constrain_stacked_reduction(
     for (coeff_row, opening_row) in derived_q_coeffs.iter().zip(stacking_openings.iter()) {
         for (coeff, opening) in coeff_row.iter().zip(opening_row.iter()) {
             transcript.observe_ext(ctx, opening);
-            let term = ext_chip.mul(ctx, *coeff, *opening);
+            let term = ext_chip.mul(ctx, *coeff, opening.into());
             final_sum = ext_chip.add(ctx, final_sum, term);
         }
     }
