@@ -13,7 +13,7 @@ rvr-openvm-lift.workspace = true
 
 openvm-bigint-transpiler.workspace = true
 openvm-instructions.workspace = true
-openvm-rv32im-transpiler.workspace = true
+openvm-riscv-transpiler.workspace = true
 openvm-stark-backend.workspace = true
 
 strum.workspace = true

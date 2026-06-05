@@ -6726,6 +6726,7 @@ name = "openvm-riscv-guest"
 version = "2.0.0-beta.2"
 dependencies = [
  "openvm-custom-insn",
+ "p3-field",
  "strum_macros 0.26.4",
 ]
 
@@ -8999,7 +9000,7 @@ name = "rvr-openvm"
 version = "2.0.0-beta.2"
 dependencies = [
  "openvm-platform",
- "openvm-rv32im-guest",
+ "openvm-riscv-guest",
  "openvm-stark-backend",
  "rvr-openvm-build",
  "rvr-openvm-ext-ffi-common",
@@ -9070,7 +9071,7 @@ version = "2.0.0-beta.2"
 dependencies = [
  "openvm-bigint-transpiler",
  "openvm-instructions",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "rvr-openvm-build",
  "rvr-openvm-ir",
@@ -9185,7 +9186,7 @@ dependencies = [
  "openvm-circuit",
  "openvm-instructions",
  "openvm-platform",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "p3-baby-bear",
  "rand 0.9.2",
@@ -9228,7 +9229,7 @@ version = "2.0.0-beta.2"
 dependencies = [
  "libloading 0.8.8",
  "openvm-instructions",
- "openvm-rv32im-transpiler",
+ "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "rvr-openvm-ext-ffi-common",
  "rvr-openvm-ir",

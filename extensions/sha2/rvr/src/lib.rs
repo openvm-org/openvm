@@ -4,7 +4,7 @@
 //! `Sha2Extension` for lifting and executing them via double FFI.
 
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
-use openvm_sha2_transpiler::Rv32Sha2Opcode;
+use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
@@ -109,13 +109,13 @@ pub struct Sha2Extension {
 
 impl Sha2Extension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
-        let sha256_main_chip_idx = opcode_air_idx(ctx, Rv32Sha2Opcode::SHA256)?;
+        let sha256_main_chip_idx = opcode_air_idx(ctx, Rv64Sha2Opcode::SHA256)?;
         // SHA-256 block hasher: in extend_circuit, the block hasher is added right before
         // the main chip. Due to reverse ordering of AIR indices,
         // block_hasher_air_idx = main_air_idx + 1.
         let sha256_block_hasher_chip_idx = sha256_main_chip_idx.map(AirIndex::next);
 
-        let sha512_main_chip_idx = opcode_air_idx(ctx, Rv32Sha2Opcode::SHA512)?;
+        let sha512_main_chip_idx = opcode_air_idx(ctx, Rv64Sha2Opcode::SHA512)?;
         let sha512_block_hasher_chip_idx = sha512_main_chip_idx.map(AirIndex::next);
 
         Ok(Self {
@@ -131,7 +131,7 @@ impl<F: PrimeField32> RvrExtension<F> for Sha2Extension {
     fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
-        if opcode == Rv32Sha2Opcode::SHA256.global_opcode_usize() {
+        if opcode == Rv64Sha2Opcode::SHA256.global_opcode_usize() {
             let dst_ptr_reg = decode_reg(insn.a);
             let state_ptr_reg = decode_reg(insn.b);
             let input_ptr_reg = decode_reg(insn.c);
@@ -148,7 +148,7 @@ impl<F: PrimeField32> RvrExtension<F> for Sha2Extension {
             }));
         }
 
-        if opcode == Rv32Sha2Opcode::SHA512.global_opcode_usize() {
+        if opcode == Rv64Sha2Opcode::SHA512.global_opcode_usize() {
             let dst_ptr_reg = decode_reg(insn.a);
             let state_ptr_reg = decode_reg(insn.b);
             let input_ptr_reg = decode_reg(insn.c);

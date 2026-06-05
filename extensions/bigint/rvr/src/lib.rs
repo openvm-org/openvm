@@ -5,13 +5,13 @@
 //! via double FFI.
 
 use openvm_bigint_transpiler::{
-    Rv32BaseAlu256Opcode, Rv32BranchEqual256Opcode, Rv32BranchLessThan256Opcode,
-    Rv32LessThan256Opcode, Rv32Mul256Opcode, Rv32Shift256Opcode,
+    Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
+    Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
 };
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode,
 };
-use openvm_rv32im_transpiler::{
+use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -240,14 +240,14 @@ pub struct Int256Extension {
 
 impl Int256Extension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
-        let base_alu_chip_idx = opcode_air_idx(ctx, Rv32BaseAlu256Opcode(BaseAluOpcode::ADD))?;
-        let shift_chip_idx = opcode_air_idx(ctx, Rv32Shift256Opcode(ShiftOpcode::SLL))?;
-        let less_than_chip_idx = opcode_air_idx(ctx, Rv32LessThan256Opcode(LessThanOpcode::SLT))?;
-        let mul_chip_idx = opcode_air_idx(ctx, Rv32Mul256Opcode(MulOpcode::MUL))?;
+        let base_alu_chip_idx = opcode_air_idx(ctx, Rv64BaseAlu256Opcode(BaseAluOpcode::ADD))?;
+        let shift_chip_idx = opcode_air_idx(ctx, Rv64Shift256Opcode(ShiftOpcode::SLL))?;
+        let less_than_chip_idx = opcode_air_idx(ctx, Rv64LessThan256Opcode(LessThanOpcode::SLT))?;
+        let mul_chip_idx = opcode_air_idx(ctx, Rv64Mul256Opcode(MulOpcode::MUL))?;
         let branch_eq_chip_idx =
-            opcode_air_idx(ctx, Rv32BranchEqual256Opcode(BranchEqualOpcode::BEQ))?;
+            opcode_air_idx(ctx, Rv64BranchEqual256Opcode(BranchEqualOpcode::BEQ))?;
         let branch_lt_chip_idx =
-            opcode_air_idx(ctx, Rv32BranchLessThan256Opcode(BranchLessThanOpcode::BLT))?;
+            opcode_air_idx(ctx, Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BLT))?;
 
         Ok(Self {
             base_alu_chip_idx,
@@ -261,12 +261,12 @@ impl Int256Extension {
 
     /// Map a global opcode to the chip index for that operation.
     fn chip_idx_for_opcode(&self, opcode: usize) -> Option<AirIndex> {
-        let base_alu_start = Rv32BaseAlu256Opcode::CLASS_OFFSET;
-        let shift_start = Rv32Shift256Opcode::CLASS_OFFSET;
-        let lt_start = Rv32LessThan256Opcode::CLASS_OFFSET;
-        let beq_start = Rv32BranchEqual256Opcode::CLASS_OFFSET;
-        let blt_start = Rv32BranchLessThan256Opcode::CLASS_OFFSET;
-        let mul_start = Rv32Mul256Opcode::CLASS_OFFSET;
+        let base_alu_start = Rv64BaseAlu256Opcode::CLASS_OFFSET;
+        let shift_start = Rv64Shift256Opcode::CLASS_OFFSET;
+        let lt_start = Rv64LessThan256Opcode::CLASS_OFFSET;
+        let beq_start = Rv64BranchEqual256Opcode::CLASS_OFFSET;
+        let blt_start = Rv64BranchLessThan256Opcode::CLASS_OFFSET;
+        let mul_start = Rv64Mul256Opcode::CLASS_OFFSET;
 
         if opcode >= base_alu_start && opcode < base_alu_start + BaseAluOpcode::COUNT {
             self.base_alu_chip_idx
@@ -286,9 +286,9 @@ impl Int256Extension {
     }
 }
 
-/// Decode register index from OpenVM operand (divided by RV32_REGISTER_NUM_LIMBS).
+/// Decode register index from OpenVM operand (divided by RV64_REGISTER_NUM_LIMBS).
 fn decode_reg<F: PrimeField32>(f: F) -> u8 {
-    (f.as_canonical_u32() / RV32_REGISTER_NUM_LIMBS as u32) as u8
+    (f.as_canonical_u32() / RV64_REGISTER_NUM_LIMBS as u32) as u8
 }
 
 /// Decode a field element as a signed immediate (for branch offsets).
@@ -309,7 +309,7 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
         // ── ALU body instructions ───────────────────────────────────────
 
         // BaseAlu256: ADD(0), SUB(1), XOR(2), OR(3), AND(4)
-        let base_alu_start = Rv32BaseAlu256Opcode::CLASS_OFFSET;
+        let base_alu_start = Rv64BaseAlu256Opcode::CLASS_OFFSET;
         if opcode >= base_alu_start && opcode < base_alu_start + BaseAluOpcode::COUNT {
             let op = match opcode - base_alu_start {
                 0 => Int256AluOp::Add,
@@ -323,7 +323,7 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
         }
 
         // Shift256: SLL(0), SRL(1), SRA(2)
-        let shift_start = Rv32Shift256Opcode::CLASS_OFFSET;
+        let shift_start = Rv64Shift256Opcode::CLASS_OFFSET;
         if opcode >= shift_start && opcode < shift_start + ShiftOpcode::COUNT {
             let op = match opcode - shift_start {
                 0 => Int256AluOp::Sll,
@@ -335,7 +335,7 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
         }
 
         // LessThan256: SLT(0), SLTU(1)
-        let lt_start = Rv32LessThan256Opcode::CLASS_OFFSET;
+        let lt_start = Rv64LessThan256Opcode::CLASS_OFFSET;
         if opcode >= lt_start && opcode < lt_start + LessThanOpcode::COUNT {
             let op = match opcode - lt_start {
                 0 => Int256AluOp::Slt,
@@ -346,7 +346,7 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
         }
 
         // Mul256: MUL(0)
-        let mul_start = Rv32Mul256Opcode::CLASS_OFFSET;
+        let mul_start = Rv64Mul256Opcode::CLASS_OFFSET;
         if opcode >= mul_start && opcode < mul_start + MulOpcode::COUNT {
             return Some(self.lift_alu(insn, pc, Int256AluOp::Mul));
         }
@@ -354,7 +354,7 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
         // ── Branch terminator instructions ──────────────────────────────
 
         // BranchEqual256: BEQ(0), BNE(1)
-        let beq_start = Rv32BranchEqual256Opcode::CLASS_OFFSET;
+        let beq_start = Rv64BranchEqual256Opcode::CLASS_OFFSET;
         if opcode >= beq_start && opcode < beq_start + BranchEqualOpcode::COUNT {
             let is_ne = opcode - beq_start == 1;
             let rs1_reg = decode_reg(insn.a);
@@ -379,7 +379,7 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
         }
 
         // BranchLessThan256: BLT(0), BLTU(1), BGE(2), BGEU(3)
-        let blt_start = Rv32BranchLessThan256Opcode::CLASS_OFFSET;
+        let blt_start = Rv64BranchLessThan256Opcode::CLASS_OFFSET;
         if opcode >= blt_start && opcode < blt_start + BranchLessThanOpcode::COUNT {
             let op = match opcode - blt_start {
                 0 => Int256BranchLtOp::Blt,
