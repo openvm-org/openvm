@@ -63,10 +63,12 @@ impl<S: AggregationSubCircuit, T> RootProver<S, T> {
         });
 
         let range_check_inputs = vec![];
+        let power_check_inputs = vec![];
         let mut external_data = VerifierExternalData {
             poseidon2_compress_inputs: &pre_data.poseidon2_compress_inputs,
             poseidon2_permute_inputs: &pre_data.poseidon2_permute_inputs,
             range_check_inputs: &range_check_inputs,
+            power_check_inputs: &power_check_inputs,
             required_heights: verifier_trace_heights,
             final_transcript_state: None,
         };

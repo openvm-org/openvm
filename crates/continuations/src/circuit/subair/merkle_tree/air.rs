@@ -39,6 +39,9 @@ pub struct MerkleTreeSubAir {
 
     // Identifier in case multiple AIRs use this sub-AIR
     pub idx: usize,
+    // Flag that indicates whether we should send row_idx (i.e. num_nodes) on
+    // the root row or not
+    pub send_num_rows: bool,
 }
 
 impl<AB: AirBuilder + InteractionBuilder> SubAir<AB> for MerkleTreeSubAir {
@@ -138,7 +141,7 @@ impl<AB: AirBuilder + InteractionBuilder> SubAir<AB> for MerkleTreeSubAir {
             MerkleTreeInternalMessage {
                 child_value: local.parent.map(Into::into),
                 is_right_child: local.is_right_child.into(),
-                parent_idx: (local.row_idx - local.is_right_child + num_rows) * half,
+                parent_idx: (local.row_idx - local.is_right_child + num_rows.clone()) * half,
             },
             internal_send,
         );
@@ -187,6 +190,11 @@ impl<AB: AirBuilder + InteractionBuilder> SubAir<AB> for MerkleTreeSubAir {
             MerkleRootMessage {
                 merkle_root: local.parent.map(Into::into),
                 idx: AB::Expr::from_usize(self.idx),
+                num_rows_or_zero: if self.send_num_rows {
+                    num_rows
+                } else {
+                    AB::Expr::ZERO
+                },
             },
             is_root,
         );

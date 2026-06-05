@@ -14,9 +14,12 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
 use openvm_verify_stark_host::pvs::VerifierBasePvs;
-use p3_field::PrimeCharacteristicRing;
+use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
-use crate::{circuit::SingleAirTraceData, SC};
+use crate::{
+    circuit::{deferral::MAX_DEF_AGG_MERKLE_DEPTH, SingleAirTraceData},
+    SC,
+};
 
 pub type DeferralIoCommit<F> = ([F; DIGEST_SIZE], [F; DIGEST_SIZE]);
 
@@ -26,6 +29,8 @@ pub struct DeferralHookPreCtx<PB: ProverBackend> {
     pub onion_ctx: AirProvingContext<PB>,
     pub poseidon2_compress_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
     pub poseidon2_permute_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
+    pub range_check_inputs: Vec<usize>,
+    pub power_check_inputs: Vec<usize>,
 }
 
 // Trait used to remain generic in PB.
@@ -76,6 +81,10 @@ impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for DeferralH
 
         let def_pvs: &crate::circuit::deferral::DeferralAggregationPvs<F> =
             proof.public_values[1].as_slice().borrow();
+        let merkle_depth = def_pvs.merkle_depth.as_canonical_u32() as usize;
+        let max_depth_minus_merkle_depth = MAX_DEF_AGG_MERKLE_DEPTH
+            .checked_sub(merkle_depth)
+            .expect("deferral merkle depth exceeds max depth");
         assert_eq!(
             computed_merkle_root, def_pvs.merkle_commit,
             "leaf_children do not match the child proof merkle_commit"
@@ -112,6 +121,8 @@ impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for DeferralH
                 .chain(onion_p2_inputs)
                 .collect(),
             poseidon2_permute_inputs: verifier_p2_permute_inputs,
+            range_check_inputs: vec![max_depth_minus_merkle_depth],
+            power_check_inputs: vec![merkle_depth],
         }
     }
 }
@@ -134,6 +145,8 @@ impl DeferralHookTraceGen<GpuBackend, GpuDeviceCtx> for DeferralHookTraceGenImpl
             onion_ctx,
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
+            range_check_inputs,
+            power_check_inputs,
         } = <Self as DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()>>::pre_verifier_subcircuit_tracegen(self, proof, leaf_children, &());
 
         DeferralHookPreCtx {
@@ -142,6 +155,8 @@ impl DeferralHookTraceGen<GpuBackend, GpuDeviceCtx> for DeferralHookTraceGenImpl
             onion_ctx: cpu_proving_ctx_to_gpu(onion_ctx, device_ctx),
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
+            range_check_inputs,
+            power_check_inputs,
         }
     }
 }
