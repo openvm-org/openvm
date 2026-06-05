@@ -41,7 +41,6 @@ fn main() -> eyre::Result<()> {
     stdin.write(&num_keccak_iters);
 
     let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
-    let memory_dims = vm_config.system.config.memory_config.memory_dimensions();
     let app_config = AppConfig::new(vm_config, default_bench_app_params());
     let main_sdk = Sdk::new(app_config.clone(), Default::default())?;
     let (app_pk, app_vk) = main_sdk.app_keygen();
@@ -63,7 +62,7 @@ fn main() -> eyre::Result<()> {
                     .build()?;
                 let mut prover = sdk.app_prover(exe)?;
                 let proof = prover.prove(stdin)?;
-                let _ = verify_app_proof::<DefaultStarkEngine>(&app_vk.vk, memory_dims, &proof)?;
+                let _ = verify_app_proof::<DefaultStarkEngine>(&app_vk, &proof)?;
                 Ok(proof)
             });
             handles.push(handle);

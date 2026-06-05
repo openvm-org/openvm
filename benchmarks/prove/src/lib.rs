@@ -132,13 +132,12 @@ pub fn run_app_benchmark(
 ) -> eyre::Result<()> {
     run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<_> {
         let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
-        let memory_dims = vm_config.system.config.memory_config.memory_dimensions();
         let app_config = AppConfig::new(vm_config, app_params);
         let sdk = Sdk::new(app_config, Default::default())?;
         let (_, app_vk) = sdk.app_keygen();
         let mut prover = sdk.app_prover(exe)?;
         let proof = prover.prove(stdin)?;
-        let _ = verify_app_proof::<DefaultStarkEngine>(&app_vk.vk, memory_dims, &proof)?;
+        let _ = verify_app_proof::<DefaultStarkEngine>(&app_vk, &proof)?;
         Ok(())
     })
 }
