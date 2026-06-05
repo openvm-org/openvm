@@ -158,7 +158,9 @@ fn make_verify_stark_inputs(
     let output_raw = &raw_results[0].output_raw;
     let app_exe_commit: [u8; 32] = output_raw[..32].try_into().unwrap();
     let app_vm_commit: [u8; 32] = output_raw[32..64].try_into().unwrap();
-    let user_public_values = output_raw[64..].to_vec();
+
+    let user_public_values = collapse_user_public_values(&output_raw[64..]);
+
     let deferral_state = get_deferral_state(&child_vk, from_ref(child_proof), 0)?;
 
     let mut stdin = StdIn::default();
@@ -169,6 +171,18 @@ fn make_verify_stark_inputs(
     stdin.deferrals = vec![deferral_state];
 
     Ok((stdin, DeferralInput::from_inputs(from_ref(child_proof))))
+}
+
+fn collapse_user_public_values(expanded: &[u8]) -> Vec<u8> {
+    const F_NUM_BYTES: usize = 4;
+    assert!(expanded.len().is_multiple_of(F_NUM_BYTES));
+    expanded
+        .chunks_exact(F_NUM_BYTES)
+        .map(|bytes| {
+            assert_eq!(&bytes[1..], &[0; F_NUM_BYTES - 1]);
+            bytes[0]
+        })
+        .collect()
 }
 
 /// Builds a deferral-enabled verify-stark SDK from a fibonacci SDK and proof.
