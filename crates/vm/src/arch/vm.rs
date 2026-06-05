@@ -16,10 +16,7 @@ use openvm_instructions::{
     program::Program,
 };
 use openvm_stark_backend::{
-    keygen::{
-        types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
-        MultiStarkKeygenBuilder,
-    },
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_field::{InjectiveMonomial, PrimeCharacteristicRing, PrimeField32, TwoAdicField},
     p3_util::log2_ceil_usize,
     proof::Proof,
@@ -45,7 +42,7 @@ use super::{
     AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
     ExecutorInventory, ExecutorInventoryError, MemoryConfig, MeteredExecutor, PreflightExecutor,
     StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecState,
-    VmExecutionConfig, VmState, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
+    VmExecutionConfig, VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
     PROGRAM_CACHED_TRACE_INDEX,
 };
 use crate::{
@@ -424,17 +421,8 @@ where
         builder: VB,
         config: VB::VmConfig,
     ) -> Result<(Self, MultiStarkProvingKey<E::SC>), VirtualMachineError> {
-        let system_config = config.as_ref();
-        let mut keygen_builder = MultiStarkKeygenBuilder::new(engine.config().clone());
         let circuit = config.create_airs()?;
-        for (air_id, air) in circuit.into_airs().enumerate() {
-            if system_config.is_required_air_id(air_id) {
-                keygen_builder.add_required_air(air.clone());
-            } else {
-                keygen_builder.add_air(air.clone());
-            }
-        }
-        let pk = keygen_builder.generate_pk().unwrap();
+        let pk = circuit.keygen(engine.config());
         let _vk = pk.get_vk();
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let vm = Self::new(engine, builder, config, d_pk)?;
@@ -1181,6 +1169,7 @@ where
 
         let mut program_air_present = false;
         let mut connector_air_present = false;
+        let mut boundary_air_present = false;
         let mut merkle_air_present = false;
 
         // Check public values.
@@ -1237,6 +1226,14 @@ where
                         actual: pvs.exit_code.as_canonical_u32(),
                     });
                 }
+            } else if air_idx == BOUNDARY_AIR_ID {
+                boundary_air_present = vdata.is_some();
+                if !pvs.is_empty() {
+                    return Err(VmVerificationError::UnexpectedPvs {
+                        expected: 0,
+                        actual: pvs.len(),
+                    });
+                }
             } else if air_idx == MERKLE_AIR_ID {
                 merkle_air_present = true;
                 let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
@@ -1269,6 +1266,11 @@ where
         if !connector_air_present {
             return Err(VmVerificationError::SystemAirMissing {
                 air_id: CONNECTOR_AIR_ID,
+            });
+        }
+        if !boundary_air_present {
+            return Err(VmVerificationError::SystemAirMissing {
+                air_id: BOUNDARY_AIR_ID,
             });
         }
         if !merkle_air_present {
