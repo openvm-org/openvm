@@ -83,7 +83,7 @@ impl RvrCompiled {
 
     /// Copy the compiled shared library into `dest_lib`, creating parent
     /// directories if it doesn't exist. Returns the path of the copied
-    /// library. Works for both freshly compiled artifacts and ones loaded from disk.  
+    /// library. Works for both freshly compiled artifacts and ones loaded from disk.
     pub fn save_artifact(&self, dest_lib: &Path) -> Result<PathBuf, CompileError> {
         if let Some(parent) = dest_lib.parent() {
             fs::create_dir_all(parent).map_err(|source| CompileError::CProject {
