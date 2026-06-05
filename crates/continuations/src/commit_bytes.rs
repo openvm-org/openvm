@@ -7,23 +7,24 @@ use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 pub const COMMIT_NUM_BYTES: usize = 32;
 
-/// Wrapper for an array of big-endian bytes, representing an unsigned big integer. Each commit can
-/// be converted to a Bn254 using the trivial identification as natural numbers or into a `u32`
-/// digest by decomposing the big integer base-`F::MODULUS`.
+/// Wrapper for the canonical big-endian byte representation of a BabyBear digest interpreted as
+/// an unsigned integer in base `F::MODULUS`. Each commit can be converted to a Bn254 using the
+/// trivial identification as natural numbers or into a `u32` digest by decomposing the big integer
+/// base-`F::MODULUS`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct CommitBytes([u8; COMMIT_NUM_BYTES]);
 
 impl CommitBytes {
     pub fn new(bytes: [u8; COMMIT_NUM_BYTES]) -> Self {
+        assert!(
+            u32_digest_to_bytes(&bytes_to_u32_digest(&bytes)) == bytes,
+            "non-canonical CommitBytes for BabyBear digest"
+        );
         Self(bytes)
     }
 
     pub fn as_slice(&self) -> &[u8; COMMIT_NUM_BYTES] {
         &self.0
-    }
-
-    pub fn reverse(&mut self) {
-        self.0.reverse();
     }
 }
 
@@ -44,18 +45,26 @@ impl<F: PrimeCharacteristicRing> From<VkCommitBytes> for VkCommit<F> {
 
 impl From<[F; DIGEST_SIZE]> for CommitBytes {
     fn from(value: [F; DIGEST_SIZE]) -> Self {
-        Self(u32_digest_to_bytes(&value.map(|x| x.as_canonical_u32())))
+        Self::from(value.map(|x| x.as_canonical_u32()))
     }
 }
 
 impl From<[u32; DIGEST_SIZE]> for CommitBytes {
     fn from(value: [u32; DIGEST_SIZE]) -> Self {
+        assert!(
+            value.iter().all(|&digit| digit < F::ORDER_U32),
+            "non-canonical BabyBear digest limb"
+        );
         Self(u32_digest_to_bytes(&value))
     }
 }
 
 impl<F: PrimeCharacteristicRing> From<CommitBytes> for [F; DIGEST_SIZE] {
     fn from(value: CommitBytes) -> Self {
+        assert!(
+            u32_digest_to_bytes(&bytes_to_u32_digest(&value.0)) == value.0,
+            "non-canonical CommitBytes for BabyBear digest"
+        );
         bytes_to_u32_digest(&value.0).map(F::from_u32)
     }
 }
@@ -115,7 +124,7 @@ mod bn254 {
 
     impl From<Bn254> for CommitBytes {
         fn from(value: Bn254) -> Self {
-            Self(bn254_to_bytes(value))
+            Self::new(bn254_to_bytes(value))
         }
     }
 
