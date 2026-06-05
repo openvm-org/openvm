@@ -9,6 +9,8 @@ pub enum VerifyStarkError {
     StarkVerificationFailure(#[from] VerifierError<EF>),
     #[error("User public value proof verification failed with error: {0}")]
     UserPvsVerificationFailure(#[from] UserPublicValuesProofError),
+    #[error("Invalid user public values length: expected {expected}, actual {actual}")]
+    UserPvsLengthMismatch { expected: usize, actual: usize },
     #[error("Invalid app exe commit: expected {expected:?}, actual {actual:?}")]
     AppExeCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid app cached commit: expected {expected:?}, actual {actual:?}")]
@@ -49,6 +51,14 @@ pub enum VerifyStarkError {
     Other(#[from] eyre::Error),
     #[error("Deferral Merkle proof length mismatch: expected {expected}, actual {actual}")]
     DeferralMerkleProofLengthMismatch { expected: usize, actual: usize },
+    #[error("Deferral depth exceeds address space height: depth {depth}, address_height {address_height}")]
+    DeferralDepthTooLarge { depth: usize, address_height: usize },
+    #[error("Deferral Merkle proofs differ inside DEFERRAL_AS at depth {depth}: initial {initial:?}, final {final_:?}")]
+    DeferralMerkleProofSiblingMismatch {
+        depth: usize,
+        initial: Digest,
+        final_: Digest,
+    },
     #[error("Deferral initial root mismatch: expected {expected:?}, actual {actual:?}")]
     DeferralInitialRootMismatch { expected: Digest, actual: Digest },
     #[error("Deferral final root mismatch: expected {expected:?}, actual {actual:?}")]

@@ -118,6 +118,12 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir 
             .assert_one(next.depth - local.depth);
 
         let is_set = not(next.is_unset);
+        let is_next_start_depth = (local.is_skip - next.is_skip) * (AB::Expr::TWO - next.is_valid)
+            + local.is_unset
+                * local.is_valid
+                * (local.is_valid - AB::Expr::ONE)
+                * AB::F::TWO.inverse();
+
         self.def_acc_paths_bus.receive(
             builder,
             DeferralAccPathMessage {
@@ -126,11 +132,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir 
                 depth: next.depth * is_set,
                 is_unset: next.is_unset.into(),
             },
-            (local.is_skip - next.is_skip) * (AB::Expr::TWO - next.is_valid)
-                + local.is_unset
-                    * local.is_valid
-                    * (local.is_valid - AB::Expr::ONE)
-                    * AB::F::TWO.inverse(),
+            is_next_start_depth.clone(),
         );
 
         assert_array_eq::<_, _, AB::Expr, _>(
@@ -159,7 +161,8 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir 
          * Constrain that is_within_deferral_as is set until address_height. We constrain
          * the two paths to be equal as long as is_within_deferral_as is set, i.e. that the
          * part of DEFERRAL_AS that is not included in the Merkle root is left untouched
-         * for the duration of the program execution.
+         * for the duration of the program execution. We also constrain that the received
+         * depth is less than or equal to the address height.
          */
         builder.assert_bool(local.is_within_deferral_as);
         builder
@@ -175,6 +178,9 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir 
         builder
             .when_last_row()
             .assert_zero(local.is_within_deferral_as);
+        builder
+            .when(not(local.is_within_deferral_as))
+            .assert_zero(is_next_start_depth);
 
         assert_array_eq(
             &mut builder.when(local.is_within_deferral_as),

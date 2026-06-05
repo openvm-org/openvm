@@ -64,8 +64,24 @@ impl DeferralMerkleProofs<F> {
             });
         }
 
+        if depth > memory_dimensions.address_height {
+            return Err(VerifyStarkError::DeferralDepthTooLarge {
+                depth,
+                address_height: memory_dimensions.address_height,
+            });
+        }
+
+        for i in 0..memory_dimensions.address_height {
+            if self.initial_merkle_proof[i] != self.final_merkle_proof[i] {
+                return Err(VerifyStarkError::DeferralMerkleProofSiblingMismatch {
+                    depth: i,
+                    initial: self.initial_merkle_proof[i],
+                    final_: self.final_merkle_proof[i],
+                });
+            }
+        }
+
         let is_unset = depth == 0;
-        let skip_depth = if is_unset { 0 } else { depth };
         let idx_prefix =
             usize::try_from(memory_dimensions.label_to_index((DEFERRAL_AS, 0))).unwrap();
 
@@ -81,12 +97,8 @@ impl DeferralMerkleProofs<F> {
             final_acc_hash
         };
 
-        let computed_initial_root = merkle_path_root(
-            initial_leaf,
-            &self.initial_merkle_proof,
-            idx_prefix,
-            skip_depth,
-        );
+        let computed_initial_root =
+            merkle_path_root(initial_leaf, &self.initial_merkle_proof, idx_prefix, depth);
         if computed_initial_root != initial_root {
             return Err(VerifyStarkError::DeferralInitialRootMismatch {
                 expected: initial_root,
@@ -95,7 +107,7 @@ impl DeferralMerkleProofs<F> {
         }
 
         let computed_final_root =
-            merkle_path_root(final_leaf, &self.final_merkle_proof, idx_prefix, skip_depth);
+            merkle_path_root(final_leaf, &self.final_merkle_proof, idx_prefix, depth);
         if computed_final_root != final_root {
             return Err(VerifyStarkError::DeferralFinalRootMismatch {
                 expected: final_root,
@@ -107,20 +119,21 @@ impl DeferralMerkleProofs<F> {
     }
 }
 
-/// Walk a Merkle path from `leaf` to root, skipping the first `skip_depth` levels.
-/// `idx_prefix` determines which side the node is on at each level (bit i => right child).
+/// Walk a Merkle path from `leaf` to root, skipping the first `depth` levels. `idx_prefix`
+/// determines which side the node is on at each level (bit i => right child). The first
+/// node is a right node if depth == 0.
 fn merkle_path_root(
     leaf: [F; DIGEST_SIZE],
     proof: &[[F; DIGEST_SIZE]],
     idx_prefix: usize,
-    skip_depth: usize,
+    depth: usize,
 ) -> [F; DIGEST_SIZE] {
     let mut node = leaf;
     for (i, sibling) in proof.iter().enumerate() {
-        if i < skip_depth {
+        if i < depth {
             continue;
         }
-        let is_right = (idx_prefix >> i) & 1 == 1;
+        let is_right = (depth == 0 && i == 0) || (idx_prefix >> i) & 1 == 1;
         node = if is_right {
             poseidon2_compress_with_capacity(*sibling, node).0
         } else {
