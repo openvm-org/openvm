@@ -92,8 +92,8 @@ impl KeccakExtension {
         let xorin_chip_idx = opcode_air_idx(ctx, XorinOpcode::XORIN)?;
         let keccakf_op_chip_idx = opcode_air_idx(ctx, KeccakfOpcode::KECCAKF)?;
         // KeccakfPermAir is inserted right before KeccakfOpAir in
-        // Keccak256Rv32::extend_circuit, and the chip indices are set in
-        // reverse order.
+        // Keccak256::extend_circuit, and the chip indices are set in reverse
+        // order.
         let keccakf_perm_chip_idx = keccakf_op_chip_idx.map(AirIndex::next);
 
         Ok(Self {
