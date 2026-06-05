@@ -1,53 +1,20 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
 use eyre::Result;
-use openvm_circuit_primitives::ColumnsAir;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
     prover::{AirProvingContext, DeviceDataTransporter, ProvingContext},
-    AirRef, PartitionedBaseAir, StarkEngine,
+    AirRef, StarkEngine,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     BabyBearPoseidon2CpuEngine, DuplexSponge, DIGEST_SIZE, F,
 };
-use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, BaseAirWithPublicValues};
 use p3_field::PrimeCharacteristicRing;
-use p3_matrix::{dense::RowMajorMatrix, Matrix};
+use p3_matrix::dense::RowMajorMatrix;
 
+pub(in crate::tests) use crate::circuit::deferral::dummy::EmptyAirWithPvs;
 use crate::{circuit::deferral::DeferralCircuitPvs, SC};
-
-pub(in crate::tests) struct EmptyAirWithPvs(pub(in crate::tests) usize);
-// No columns provided: test dummy with a single anonymous column and no matching `Cols` struct.
-impl ColumnsAir for EmptyAirWithPvs {}
-
-impl<F> BaseAir<F> for EmptyAirWithPvs {
-    fn width(&self) -> usize {
-        1
-    }
-}
-impl<F> BaseAirWithPublicValues<F> for EmptyAirWithPvs {
-    fn num_public_values(&self) -> usize {
-        self.0
-    }
-}
-impl<F> PartitionedBaseAir<F> for EmptyAirWithPvs {}
-impl<AB: AirBuilder + AirBuilderWithPublicValues> Air<AB> for EmptyAirWithPvs {
-    fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
-        let local = main.row_slice(0).unwrap();
-        builder.assert_zero(local[0].clone());
-
-        let pvs: Vec<AB::Expr> = builder
-            .public_values()
-            .iter()
-            .map(|pv| (*pv).into())
-            .collect();
-        for pv in pvs {
-            builder.assert_eq(pv.clone(), pv);
-        }
-    }
-}
 
 pub(in crate::tests) fn generate_dummy_def_proof(
     engine: &BabyBearPoseidon2CpuEngine<DuplexSponge>,

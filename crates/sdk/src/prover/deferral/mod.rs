@@ -34,6 +34,7 @@ cfg_if::cfg_if! {
 
 mod circuit;
 mod merkle;
+mod verify_stark;
 pub use circuit::*;
 pub use merkle::*;
 
