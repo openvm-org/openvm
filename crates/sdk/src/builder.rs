@@ -140,14 +140,10 @@ where
         agg_config: &AggregationConfig,
         deferral_prover: DeferralProver,
     ) -> Arc<DeferralPathProver> {
-        let deferral_tree_config = AggregationTreeConfig {
-            num_children_leaf: 2,
-            num_children_internal: 2,
-        };
         let agg_prover = AggProver::new(
             deferral_prover.def_hook_prover.get_vk(),
             agg_config.clone(),
-            deferral_tree_config,
+            AggregationTreeConfig::deferral(),
             Some(deferral_prover.def_hook_prover.get_cached_commit()),
         );
         Arc::new(DeferralPathProver {

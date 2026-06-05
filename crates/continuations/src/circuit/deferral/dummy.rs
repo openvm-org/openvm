@@ -45,6 +45,7 @@ impl<AB: AirBuilder + AirBuilderWithPublicValues> Air<AB> for EmptyAirWithPvs {
             .map(|pv| (*pv).into())
             .collect::<Vec<AB::Expr>>();
         for pv in pvs {
+            // Trivial asserts to ensure pvs get placed in the DAG
             builder.assert_eq(pv.clone(), pv);
         }
     }

@@ -2,11 +2,9 @@ use std::sync::Arc;
 
 use openvm_circuit::system::memory::dimensions::MemoryDimensions;
 use openvm_continuations::{
-    circuit::deferral::dummy::dummy_deferral_circuit_vk, prover::DeferralCircuitProver,
-    CommitBytes, SC,
+    circuit::deferral::dummy::dummy_deferral_circuit_vk, prover::DeferralCircuitProver, SC,
 };
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof, SystemParams};
-use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
@@ -25,61 +23,7 @@ cfg_if::cfg_if! {
     }
 }
 
-struct DeferralPathArtifacts {
-    def_hook_commit: Digest,
-    ir_vk: Arc<MultiStarkVerifyingKey<SC>>,
-    ir_cached_commit: CommitBytes,
-    agg_prover: Arc<AggProver>,
-}
-
 impl DeferralPathProver {
-    /// Derives the deferral path's fixed-point artifacts with a cheap dummy deferral circuit.
-    ///
-    /// These artifacts depend only on the aggregation and hook params, not on the concrete
-    /// deferral circuit whose proofs are later fed into the path.
-    fn fixed_point_artifacts(
-        agg_params: &AggregationSystemParams,
-        hook_params: &SystemParams,
-    ) -> DeferralPathArtifacts {
-        let dummy = DummyDefCircuitProver {
-            vk: dummy_deferral_circuit_vk::<E>(agg_params.internal.clone()),
-        };
-
-        let agg_config = AggregationConfig {
-            params: agg_params.clone(),
-        };
-        let deferral_prover = DeferralProver::new(dummy, agg_config.clone(), hook_params.clone());
-
-        let deferral_tree_config = AggregationTreeConfig {
-            num_children_leaf: 2,
-            num_children_internal: 2,
-        };
-        let agg_prover = Arc::new(AggProver::new(
-            deferral_prover.def_hook_prover.get_vk(),
-            agg_config,
-            deferral_tree_config,
-            Some(deferral_prover.def_hook_prover.get_cached_commit()),
-        ));
-
-        // The deferral-path aggregation tree's internal-recursive vk is a universal copy of the VM
-        // internal-recursive vk that a verify-stark circuit verifies.
-        let ir_vk = agg_prover.internal_recursive_prover.get_vk();
-        let ir_cached_commit = agg_prover
-            .internal_recursive_prover
-            .get_self_vk_pcs_data()
-            .expect("internal-recursive prover must expose its self vk pcs data")
-            .commitment
-            .into();
-        let path_prover = Self::new(Arc::new(deferral_prover), agg_prover.clone());
-
-        DeferralPathArtifacts {
-            def_hook_commit: path_prover.def_hook_commit(),
-            ir_vk,
-            ir_cached_commit,
-            agg_prover,
-        }
-    }
-
     /// Builds a [`DeferralPathProver`] backed by the verify-stark circuit, configured so an SDK
     /// with the given params can recursively verify the VM STARK proofs it produces, including its
     /// own deferral-carrying proofs.
@@ -92,13 +36,38 @@ impl DeferralPathProver {
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
     ) -> Self {
-        let DeferralPathArtifacts {
-            def_hook_commit,
-            ir_vk,
-            ir_cached_commit,
-            agg_prover,
-        } = Self::fixed_point_artifacts(agg_params, &hook_params);
+        // Derive the deferral path's fixed-point artifacts with a cheap dummy deferral circuit.
+        let dummy = DummyDefCircuitProver {
+            vk: dummy_deferral_circuit_vk::<E>(agg_params.internal.clone()),
+        };
+        let agg_config = AggregationConfig {
+            params: agg_params.clone(),
+        };
+        let dummy_deferral_prover =
+            DeferralProver::new(dummy, agg_config.clone(), hook_params.clone());
 
+        // Construct the deferral-path AggProver, which can aggregate hook proofs from both the
+        // dummy DeferralProver above and the verify-stark one below.
+        let agg_prover = Arc::new(AggProver::new(
+            dummy_deferral_prover.def_hook_prover.get_vk(),
+            agg_config.clone(),
+            AggregationTreeConfig::deferral(),
+            Some(dummy_deferral_prover.def_hook_prover.get_cached_commit()),
+        ));
+
+        // The deferral-path aggregation tree's internal-recursive vk is a universal copy of the VM
+        // internal-recursive vk that a verify-stark circuit verifies.
+        let ir_vk = agg_prover.internal_recursive_prover.get_vk();
+        let ir_cached_commit = agg_prover
+            .internal_recursive_prover
+            .get_self_vk_pcs_data()
+            .expect("internal-recursive prover must expose its self vk pcs data")
+            .commitment
+            .into();
+        let def_hook_commit = agg_prover.vm_or_hook_commit();
+
+        // Construct the verify-stark DeferralProver, which should have the same hook vk and cached
+        // commit as the dummy one.
         let deferred_verify_prover = VerifyProver::new::<E>(
             ir_vk,
             ir_cached_commit,
@@ -109,11 +78,18 @@ impl DeferralPathProver {
             0,
         );
         let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
-
-        let agg_config = AggregationConfig {
-            params: agg_params.clone(),
-        };
         let deferral_prover = DeferralProver::new(verify_stark_prover, agg_config, hook_params);
+
+        assert_eq!(
+            deferral_prover.def_hook_prover.get_vk().pre_hash,
+            dummy_deferral_prover.def_hook_prover.get_vk().pre_hash
+        );
+        assert_eq!(
+            deferral_prover.def_hook_prover.get_cached_commit(),
+            dummy_deferral_prover.def_hook_prover.get_cached_commit()
+        );
+
+        // Return the deferral-enabled verify-stark DeferralPathProver.
         Self::new(Arc::new(deferral_prover), agg_prover)
     }
 }
