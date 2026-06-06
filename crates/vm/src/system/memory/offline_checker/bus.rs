@@ -58,7 +58,10 @@ impl MemoryBus {
         MemoryBusInteraction {
             bus: self.inner,
             is_send,
-            address: MemoryAddress::new(address.address_space.into(), address.pointer.into()),
+            address: MemoryAddress::new(
+                address.address_space.into(),
+                address.pointer_limbs.map(Into::into),
+            ),
             data: data.into_iter().map(|item| item.into()).collect(),
             timestamp: timestamp.into(),
         }
@@ -87,9 +90,10 @@ impl<T: PrimeCharacteristicRing> MemoryBusInteraction<T> {
     where
         AB: InteractionBuilder<Expr = T>,
     {
+        // Memory-bus payload order: [address_space, pointer_lo, pointer_hi, data..., timestamp].
         let fields = iter::empty()
             .chain(iter::once(self.address.address_space))
-            .chain(iter::once(self.address.pointer))
+            .chain(self.address.pointer_limbs)
             .chain(self.data)
             .chain(iter::once(self.timestamp));
 

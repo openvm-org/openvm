@@ -29,7 +29,7 @@ use openvm_stark_backend::{
 };
 
 use super::{tracing_write, RV64_REGISTER_NUM_LIMBS};
-use crate::adapters::{byte_ptr_to_u16_ptr, tracing_read};
+use crate::adapters::{reg_byte_ptr_to_cell_ptr_limbs, tracing_read};
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
@@ -85,7 +85,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs1_ptr),
                 ),
                 pack_u8_block::<AB>(&ctx.reads[0].clone()),
                 timestamp_pp(),
@@ -97,7 +97,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rs2_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs2_ptr),
                 ),
                 pack_u8_block::<AB>(&ctx.reads[1].clone()),
                 timestamp_pp(),
@@ -109,7 +109,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
             .write(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rd_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rd_ptr),
                 ),
                 pack_u8_block::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),

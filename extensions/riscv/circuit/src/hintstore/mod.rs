@@ -38,9 +38,10 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, ptr_bound_from_ptr,
-    ptr_to_field_u16_limbs, read_rv64_register_as_u32, tracing_read, tracing_read_reg_ptr,
-    tracing_write, u16_limbs_to_ptr, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits,
+    eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_rv64_block, ptr_to_field_u16_limbs,
+    ptr_to_u16_limbs, read_rv64_register_as_u32, reg_byte_ptr_to_cell_ptr_limbs, tracing_read,
+    tracing_read_reg_ptr, tracing_write, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 mod execution;
@@ -76,10 +77,16 @@ pub struct Rv64HintStoreCols<T> {
 
     pub from_state: ExecutionState<T>,
     pub mem_ptr_ptr: T,
-    /// Low 32 bits of the 8-byte RV64 register that holds `mem_ptr`. `mem_ptr` is a
-    /// u32 memory address, so the upper 4 bytes are known to be zero and are hardcoded
-    /// in the memory bus interaction rather than materialized as columns.
+    /// Low 32 bits of the 8-byte RV64 register that holds `mem_ptr`, as little-endian 16-bit
+    /// *byte*-pointer limbs `[lo16, hi16]`. The byte pointer may span the full 2^32 byte address
+    /// space.
     pub mem_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
+    /// Carry (`mem_ptr_limbs[1] & 1`) for converting the byte pointer to AS-native u16 *cell*
+    /// pointer limbs. See `eval_byte_ptr_limbs_to_u16_cell_ptr_limbs`.
+    pub mem_ptr_carry: T,
+    /// Carry for the per-row `next.mem_ptr = mem_ptr + 8` byte increment (computed limb-wise to
+    /// avoid composing a 32-bit pointer into one field element).
+    pub mem_ptr_inc_carry: T,
     pub mem_ptr_aux_cols: MemoryReadAuxCols<T>,
 
     pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
@@ -144,9 +151,6 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         let rem_words: AB::Expr = local_cols.rem_words.into();
         let next_rem_words: AB::Expr = next_cols.rem_words.into();
 
-        let mem_ptr: AB::Expr = u16_limbs_to_ptr(&local_cols.mem_ptr_limbs);
-        let next_mem_ptr: AB::Expr = u16_limbs_to_ptr(&next_cols.mem_ptr_limbs);
-
         // Constrain that if local is invalid, then the next state is invalid as well
         builder
             .when_transition()
@@ -168,7 +172,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local_cols.mem_ptr_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local_cols.mem_ptr_ptr),
                 ),
                 mem_ptr_data,
                 timestamp_pp(),
@@ -187,7 +191,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local_cols.num_words_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local_cols.num_words_ptr),
                 ),
                 num_words_data,
                 timestamp_pp(),
@@ -195,13 +199,19 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             )
             .eval(builder, local_cols.is_buffer_start);
 
-        // write hint
+        // write hint: convert the (aligned) heap byte pointer `mem_ptr_limbs` to AS-native cell
+        // pointer limbs without composing the full byte pointer into one field element.
+        let mem_ptr_cell_limbs = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+            builder,
+            self.range_bus,
+            local_cols.mem_ptr_limbs.map(Into::into),
+            local_cols.mem_ptr_carry,
+            self.pointer_max_bits,
+            is_valid.clone(),
+        );
         self.memory_bridge
             .write(
-                MemoryAddress::new(
-                    AB::F::from_u32(RV64_MEMORY_AS),
-                    byte_ptr_to_u16_ptr::<AB>(mem_ptr.clone()),
-                ),
+                MemoryAddress::new(AB::F::from_u32(RV64_MEMORY_AS), mem_ptr_cell_limbs),
                 local_cols.data.map(Into::into),
                 timestamp_pp(),
                 &local_cols.write_aux,
@@ -226,21 +236,13 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
             )
             .eval(builder, is_start.clone());
 
-        assert!(
-            (U16_BITS..=RV64_PTR_BITS).contains(&self.pointer_max_bits),
-            "pointer_max_bits must fit in the low 32-bit mem_ptr view"
-        );
-
-        // Preventing mem_ptr overflow: mem_ptr < 2^pointer_max_bits.
+        // Range-check the low byte-pointer limb to 16 bits so the limb-wise `+8` increment below
+        // is sound. The high byte limb is bounded by the cell-pointer range checks in
+        // `eval_byte_ptr_limbs_to_u16_cell_ptr_limbs` above (`cell_hi < 2^(pointer_max_bits - 16)`
+        // implies `byte_hi < 2^16`, i.e. byte pointer `< 2^32`).
         self.range_bus
-            .range_check(
-                ptr_bound_from_high_u16_expr(
-                    local_cols.mem_ptr_limbs[RV64_PTR_U16_LIMBS - 1],
-                    self.pointer_max_bits,
-                ),
-                U16_BITS,
-            )
-            .eval(builder, is_start.clone());
+            .range_check(local_cols.mem_ptr_limbs[0], U16_BITS)
+            .eval(builder, is_valid.clone());
         // Preventing rem_words overflow: rem_words < 2^MAX_HINT_BUFFER_DWORDS_BITS.
         self.range_bus
             .range_check(
@@ -269,15 +271,22 @@ impl<AB: InteractionBuilder> Air<AB> for Rv64HintStoreAir {
         // additional `buffer` rows we will always increment `mem_ptr` to an illegal memory address
         // at some point, which prevents this exploit.
         when_buffer_transition.assert_one(rem_words.clone() - next_rem_words.clone());
-        // Note: we only care about the composed `next_mem_ptr` and not the individual limbs:
-        // the limbs do not need to be in the range, they can be anything that makes
-        // `next_mem_ptr` correct -- this is just a way to avoid another column for `mem_ptr`.
-        // The constraint we care about is `next.mem_ptr == local.mem_ptr + 8`. Since we increment
-        // by `8` each time, any out of bounds memory access will be rejected by the memory bus
-        // before we overflow the field.
+        // `next.mem_ptr == local.mem_ptr + 8`, computed limb-wise to avoid composing a 32-bit byte
+        // pointer into one field element:
+        //   next_lo = lo + 8 - inc_carry * 2^16
+        //   next_hi = hi + inc_carry
+        // with `inc_carry` boolean. The byte limbs are canonical (each `< 2^16`, range-checked),
+        // so this pins the increment exactly.
+        let inc_carry = local_cols.mem_ptr_inc_carry;
+        when_buffer_transition.assert_bool(inc_carry);
         when_buffer_transition.assert_eq(
-            next_mem_ptr.clone() - mem_ptr.clone(),
-            AB::F::from_usize(RV64_REGISTER_NUM_LIMBS),
+            next_cols.mem_ptr_limbs[0],
+            local_cols.mem_ptr_limbs[0] + AB::F::from_usize(RV64_REGISTER_NUM_LIMBS)
+                - inc_carry * AB::F::from_u32(1u32 << U16_BITS),
+        );
+        when_buffer_transition.assert_eq(
+            next_cols.mem_ptr_limbs[1],
+            local_cols.mem_ptr_limbs[1] + inc_carry,
         );
         when_buffer_transition.assert_eq(
             timestamp + AB::F::from_usize(timestamp_delta),
@@ -457,7 +466,7 @@ where
         );
 
         debug_assert_ne!(num_words, 0);
-        debug_assert!(num_words <= (1 << self.pointer_max_bits));
+        debug_assert!(u64::from(num_words) <= (1u64 << self.pointer_max_bits));
 
         record.inner.num_words = num_words;
         if local_opcode == HINT_STORED {
@@ -557,15 +566,12 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                     num_words <= MAX_HINT_BUFFER_DWORDS as u32,
                     "num_words must be <= MAX_HINT_BUFFER_DWORDS"
                 );
-                // Range check for mem_ptr (using pointer_max_bits) and num_words (using
-                // MAX_HINT_BUFFER_DWORDS_BITS).
-                self.range_checker_chip.add_count(
-                    ptr_bound_from_ptr(record.inner.mem_ptr, self.pointer_max_bits),
-                    U16_BITS,
-                );
+                // Range check num_words (using MAX_HINT_BUFFER_DWORDS_BITS). Per-row pointer-limb
+                // range checks are added in the row loop below.
                 self.range_checker_chip
                     .add_count(num_words << REM_WORDS_SHIFT, U16_BITS);
 
+                let hi_bits = cell_ptr_hi_bits(self.pointer_max_bits);
                 let mut timestamp = record.inner.timestamp + num_words * 3;
                 let mut mem_ptr = record.inner.mem_ptr + num_words * RV64_REGISTER_NUM_LIMBS as u32;
 
@@ -617,6 +623,20 @@ impl<F: PrimeField32> TraceFiller<F> for Rv64HintStoreFiller {
                         mem_ptr -= RV64_REGISTER_NUM_LIMBS as u32;
                         cols.mem_ptr_limbs = ptr_to_field_u16_limbs(mem_ptr);
                         cols.mem_ptr_ptr = F::from_u32(record.inner.mem_ptr_ptr);
+
+                        // Byte -> cell pointer conversion (heap write) and the per-row range
+                        // checks: cell_hi (hi_bits) and the low byte limb
+                        // (16 bits, for the limb-wise `+8` increment).
+                        let byte_limbs = ptr_to_u16_limbs(mem_ptr).map(u32::from);
+                        let (mem_carry, cell_limbs) =
+                            byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs);
+                        cols.mem_ptr_carry = F::from_u32(mem_carry);
+                        // `+8` carry from this row's low byte limb into the high limb.
+                        cols.mem_ptr_inc_carry = F::from_u32(
+                            (byte_limbs[0] + RV64_REGISTER_NUM_LIMBS as u32) >> U16_BITS,
+                        );
+                        self.range_checker_chip.add_count(cell_limbs[1], hi_bits);
+                        self.range_checker_chip.add_count(byte_limbs[0], U16_BITS);
 
                         cols.from_state.timestamp = F::from_u32(timestamp);
                         cols.from_state.pc = F::from_u32(record.inner.from_pc);

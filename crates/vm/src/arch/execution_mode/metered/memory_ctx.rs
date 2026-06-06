@@ -369,14 +369,17 @@ impl MemoryCtx {
         ptr: u32,
         size: u32,
     ) {
-        let end_ptr = ptr + size - 1;
+        // The inclusive end pointer may be up to 2^32 - 1 for u16-celled byte ranges, so compute
+        // it in u64 to avoid overflowing u32. (`size >= 1`.)
+        let end_ptr = u64::from(ptr) + u64::from(size) - 1;
         let leaf_bits = if address_space == DEFERRAL_AS {
             DEFERRAL_PTRS_PER_LEAF_BITS
         } else {
             BYTE_PTRS_PER_LEAF_BITS
         };
         let leaf_label = ptr >> leaf_bits;
-        let end_leaf_label = end_ptr >> leaf_bits;
+        // `end_leaf_label < 2^address_height` since `end_ptr < 2^BYTE_POINTER_MAX_BITS`.
+        let end_leaf_label = (end_ptr >> leaf_bits) as u32;
         let num_leaves = end_leaf_label - leaf_label + 1;
         debug_assert!(
             leaf_label < (1 << self.memory_dimensions.address_height),
@@ -591,7 +594,22 @@ impl MemoryCtx {
 
 #[cfg(test)]
 mod tests {
+    use openvm_instructions::riscv::RV64_MEMORY_AS;
+
     use super::*;
+    use crate::arch::SystemConfig;
+
+    /// A u16-celled byte range ending at the top of the 2^32 address space (inclusive end
+    /// `= 2^32 - 1`) must not overflow when computing the inclusive end pointer. Here `ptr + size`
+    /// alone overflows `u32`, so the accounting must widen to `u64` (regression for the 2^32
+    /// memory-address change).
+    #[test]
+    fn test_update_boundary_merkle_heights_at_top_of_address_space() {
+        let config = SystemConfig::default();
+        let mut ctx = MemoryCtx::new(&config, 1);
+        // Byte range [u32::MAX - 7, u32::MAX] (8 bytes ending at 2^32 - 1).
+        ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, u32::MAX - 7, 8);
+    }
 
     fn reference_parent_mask(mut mask: u64) -> u64 {
         let mut parents = 0;

@@ -8,7 +8,10 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{Chip, U16_BITS};
 use openvm_cpu_backend::CpuBackend;
-use openvm_riscv_circuit::adapters::{ptr_bound_from_ptr, ptr_to_u16_limbs};
+use openvm_riscv_circuit::adapters::{
+    add_const_u16_limbs_value, byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits,
+    ptr_to_u16_limbs, u32_to_ptr_limbs,
+};
 use openvm_sha2_air::{set_arrayview_from_u16_le_bytes, set_arrayview_from_u16_slice};
 use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -20,7 +23,7 @@ use openvm_stark_backend::{
 
 use crate::{
     Sha2ColsRefMut, Sha2Config, Sha2MainChip, Sha2Metadata, Sha2RecordLayout, Sha2RecordMut,
-    Sha2SharedRecords, SHA2_WRITE_SIZE,
+    Sha2SharedRecords, SHA2_READ_SIZE, SHA2_WRITE_SIZE,
 };
 
 // We will allocate a new trace matrix instead of using the record arena directly,
@@ -169,9 +172,47 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
             ptr_to_u16_limbs(vm_record.input_ptr),
         );
 
-        for ptr in [vm_record.dst_ptr, vm_record.state_ptr, vm_record.input_ptr] {
-            self.range_checker_chip
-                .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
+        // Byte -> cell pointer conversion carries and per-block cell-offset carries, plus matching
+        // range-check counts. `vm_record` holds stable copies of the pointer values, so computing
+        // and writing the carry columns here does not alias the in-place record reads above.
+        let hi_bits = cell_ptr_hi_bits(self.pointer_max_bits);
+        // Computes the base-pointer conversion carry, registers range checks, and returns the
+        // conversion carry plus one add-carry per access block (cell offset `i * cell_stride`).
+        let compute_pointer_carries =
+            |ptr: u32, num_blocks: usize, cell_stride: u32| -> (u32, Vec<u32>) {
+                let byte_limbs = u32_to_ptr_limbs(ptr);
+                let (conv_carry, base_cell) = byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs);
+                self.range_checker_chip.add_count(base_cell[1], hi_bits);
+                let add_carries = (0..num_blocks)
+                    .map(|i| {
+                        let (add_carry, block_cell_ptr) =
+                            add_const_u16_limbs_value(base_cell, i as u32 * cell_stride);
+                        self.range_checker_chip.add_count(block_cell_ptr[0], U16_BITS);
+                        add_carry
+                    })
+                    .collect();
+                (conv_carry, add_carries)
+            };
+        let read_cell_stride = (SHA2_READ_SIZE / 2) as u32;
+        let write_cell_stride = (SHA2_WRITE_SIZE / 2) as u32;
+        let (input_conv, input_add) =
+            compute_pointer_carries(vm_record.input_ptr, C::BLOCK_READS, read_cell_stride);
+        let (state_conv, state_add) =
+            compute_pointer_carries(vm_record.state_ptr, C::STATE_READS, read_cell_stride);
+        let (dst_conv, dst_add) =
+            compute_pointer_carries(vm_record.dst_ptr, C::STATE_WRITES, write_cell_stride);
+
+        *cols.mem.input_cell_carry = F::from_u32(input_conv);
+        *cols.mem.state_cell_carry = F::from_u32(state_conv);
+        *cols.mem.dst_cell_carry = F::from_u32(dst_conv);
+        for (col, &c) in cols.mem.input_add_carry.iter_mut().zip(input_add.iter()) {
+            *col = F::from_u32(c);
+        }
+        for (col, &c) in cols.mem.state_add_carry.iter_mut().zip(state_add.iter()) {
+            *col = F::from_u32(c);
+        }
+        for (col, &c) in cols.mem.write_add_carry.iter_mut().zip(dst_add.iter()) {
+            *col = F::from_u32(c);
         }
 
         // fill in the register reads aux

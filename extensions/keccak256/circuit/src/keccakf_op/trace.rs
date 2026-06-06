@@ -23,7 +23,8 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{
-    ptr_bound_from_ptr, ptr_to_field_u16_limbs, rv64_bytes_to_u32, timed_write, tracing_read,
+    add_const_u16_limbs_value, byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits,
+    ptr_to_field_u16_limbs, rv64_bytes_to_u32, timed_write, tracing_read, u32_to_ptr_limbs,
 };
 use openvm_stark_backend::{
     p3_field::PrimeField32,
@@ -252,10 +253,21 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                     timestamp += 1;
                 }
 
-                self.range_checker_chip.add_count(
-                    ptr_bound_from_ptr(record.buffer_ptr, self.pointer_max_bits),
-                    U16_BITS,
-                );
+                // Byte -> cell pointer conversion carry and per-block cell-offset carries, plus
+                // matching range-check counts. `record` is a stable clone, so writing the carry
+                // columns here does not alias the trace reads above.
+                let hi_bits = cell_ptr_hi_bits(self.pointer_max_bits);
+                let cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
+                let byte_limbs = u32_to_ptr_limbs(record.buffer_ptr);
+                let (conv_carry, base_cell) = byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs);
+                self.range_checker_chip.add_count(base_cell[1], hi_bits);
+                local.buffer_cell_carry = F::from_u32(conv_carry);
+                for (word_idx, col) in local.buffer_word_add_carry.iter_mut().enumerate() {
+                    let (add_carry, block_cell_ptr) =
+                        add_const_u16_limbs_value(base_cell, word_idx as u32 * cell_stride);
+                    self.range_checker_chip.add_count(block_cell_ptr[0], U16_BITS);
+                    *col = F::from_u32(add_carry);
+                }
             });
         *self.shared_records.lock().unwrap() = records;
     }
