@@ -32,7 +32,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_read_u16, tracing_write_u16,
+    byte_ptr_to_u16_ptr_value, reg_byte_ptr_to_cell_ptr_limbs, tracing_read_u16, tracing_write_u16,
 };
 
 #[repr(C)]
@@ -97,7 +97,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local_cols.rs1_ptr),
                 ),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
@@ -109,7 +109,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
             .write(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local_cols.rd_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local_cols.rd_ptr),
                 ),
                 ctx.writes[0].clone(),
                 timestamp_pp(),

@@ -63,9 +63,11 @@ impl Sha2Config for Sha512Config {
         debug_assert!(state.len() >= Sha512Config::STATE_BYTES);
         debug_assert!(input.len() == Sha512Config::BLOCK_BYTES);
 
-        // `state` may only be 4-byte aligned, so copy through an aligned `u64` buffer.
-        // We store the state as bytes in the record because the word size is
-        // not known at compile time (u32 for Sha256, u64 for Sha512).
+        // `state` is a byte sub-slice of a record and is not guaranteed to be 8-byte aligned, so we
+        // cannot reinterpret it in place as `&mut [u64; 8]`. Copy through an aligned buffer (using
+        // native-endian bytes, matching the in-place reinterpretation this replaces). We store the
+        // state as bytes in the record because the word size is not known at compile time (u32 for
+        // Sha256, u64 for Sha512).
         let mut state_u64s = [0u64; 8];
         for (w, chunk) in state_u64s.iter_mut().zip(state.chunks_exact(8)) {
             *w = u64::from_ne_bytes(chunk.try_into().unwrap());
@@ -73,6 +75,11 @@ impl Sha2Config for Sha512Config {
 
         let input_array = GenericArray::from_slice(input);
 
+        compress512(&mut state_u64s, &[*input_array]);
+
+        for (w, chunk) in state_u64s.iter().zip(state.chunks_exact_mut(8)) {
+            chunk.copy_from_slice(&w.to_ne_bytes());
+        }
         compress512(&mut state_u64s, &[*input_array]);
 
         for (w, chunk) in state_u64s.iter().zip(state.chunks_exact_mut(8)) {

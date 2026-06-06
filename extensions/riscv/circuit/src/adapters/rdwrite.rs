@@ -28,7 +28,9 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use crate::adapters::{byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_write_u16};
+use crate::adapters::{
+    byte_ptr_to_u16_ptr_value, reg_byte_ptr_to_cell_ptr_limbs, tracing_write_u16,
+};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -103,7 +105,7 @@ impl Rv64RdWriteAdapterAir {
             .write(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local_cols.rd_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local_cols.rd_ptr),
                 ),
                 ctx.writes[0].clone(),
                 timestamp,

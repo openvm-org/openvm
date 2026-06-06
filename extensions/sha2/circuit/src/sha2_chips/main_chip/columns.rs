@@ -76,4 +76,14 @@ pub struct Sha2MemoryCols<
     pub state_reads: [MemoryReadAuxCols<T>; STATE_READS],
     #[aligned_borrow]
     pub write_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; STATE_WRITES],
+    /// Carry for converting each base heap *byte* pointer (`input`, `state`, `dst`) to AS-native
+    /// u16 *cell* pointer limbs.
+    pub input_cell_carry: T,
+    pub state_cell_carry: T,
+    pub dst_cell_carry: T,
+    /// Per-block carry for adding the cell offset `i * (SHA2_READ_SIZE / U16_CELL_SIZE)` to each base cell
+    /// pointer (block `i`'s carry into the high cell limb).
+    pub input_add_carry: [T; BLOCK_READS],
+    pub state_add_carry: [T; STATE_READS],
+    pub write_add_carry: [T; STATE_WRITES],
 }

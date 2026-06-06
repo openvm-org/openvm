@@ -41,7 +41,7 @@ impl<'a, T> DummyMemoryInteractionColsRef<'a, T> {
         let (count, slice) = slice.split_last().unwrap();
         let (timestamp, data) = slice.split_last().unwrap();
         Self {
-            address: MemoryAddress::new(&address[0], &address[1]),
+            address: MemoryAddress::new(&address[0], [&address[1], &address[2]]),
             data,
             timestamp,
             count,
@@ -52,11 +52,12 @@ impl<'a, T> DummyMemoryInteractionColsRef<'a, T> {
 impl<'a, T> DummyMemoryInteractionColsMut<'a, T> {
     pub fn from_mut_slice(slice: &'a mut [T]) -> Self {
         let (addr_space, slice) = slice.split_first_mut().unwrap();
-        let (ptr, slice) = slice.split_first_mut().unwrap();
+        let (ptr_lo, slice) = slice.split_first_mut().unwrap();
+        let (ptr_hi, slice) = slice.split_first_mut().unwrap();
         let (count, slice) = slice.split_last_mut().unwrap();
         let (timestamp, data) = slice.split_last_mut().unwrap();
         Self {
-            address: MemoryAddress::new(addr_space, ptr),
+            address: MemoryAddress::new(addr_space, [ptr_lo, ptr_hi]),
             data,
             timestamp,
             count,
@@ -64,7 +65,8 @@ impl<'a, T> DummyMemoryInteractionColsMut<'a, T> {
     }
 }
 
-/// AIR width = BLOCK_FE_WIDTH + 4 (addr_space, ptr, data[BLOCK_FE_WIDTH], timestamp, count)
+/// AIR width = BLOCK_FE_WIDTH + 5
+/// (addr_space, ptr_lo, ptr_hi, data[BLOCK_FE_WIDTH], timestamp, count)
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct MemoryDummyAir {
     pub bus: MemoryBus,
@@ -77,7 +79,7 @@ impl<F> PartitionedBaseAir<F> for MemoryDummyAir {}
 impl ColumnsAir for MemoryDummyAir {}
 impl<F> BaseAir<F> for MemoryDummyAir {
     fn width(&self) -> usize {
-        BLOCK_FE_WIDTH + 4
+        BLOCK_FE_WIDTH + 5
     }
 }
 
@@ -89,7 +91,10 @@ impl<AB: InteractionBuilder> Air<AB> for MemoryDummyAir {
 
         self.bus
             .send(
-                MemoryAddress::new(*local.address.address_space, *local.address.pointer),
+                MemoryAddress::new(
+                    *local.address.address_space,
+                    local.address.pointer_limbs.map(|p| *p),
+                ),
                 local.data.to_vec(),
                 *local.timestamp,
             )
@@ -124,7 +129,9 @@ impl<F: PrimeField32> MemoryDummyChip<F> {
     pub fn push(&mut self, addr_space: u32, ptr: u32, data: &[F], timestamp: u32, count: F) {
         assert_eq!(data.len(), BLOCK_FE_WIDTH);
         self.trace.push(F::from_u32(addr_space));
-        self.trace.push(F::from_u32(ptr));
+        // Pointer as little-endian 16-bit limbs: [lo16, hi16].
+        self.trace.push(F::from_u32(ptr & 0xffff));
+        self.trace.push(F::from_u32(ptr >> 16));
         self.trace.extend_from_slice(data);
         self.trace.push(F::from_u32(timestamp));
         self.trace.push(count);

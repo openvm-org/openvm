@@ -25,10 +25,8 @@ pub struct XorinInstructionCols<T> {
     pub buffer_reg_ptr: T,
     pub input_reg_ptr: T,
     pub len_reg_ptr: T,
-    pub buffer_ptr: T,
     /// Low 32 bits of the `rs0` register as u16 cells.
     pub buffer_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
-    pub input_ptr: T,
     /// Low 32 bits of the `rs1` register as u16 cells.
     pub input_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
     pub len: T,
@@ -54,6 +52,16 @@ pub struct XorinMemoryCols<T> {
     pub input_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_MEM_OPS],
     pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_MEM_OPS],
     pub buffer_bytes_write_aux_cols: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; KECCAK_RATE_MEM_OPS],
+    /// Carry for converting the base `buffer`/`input` *byte* pointers to AS-native u16 *cell*
+    /// pointer limbs.
+    pub buffer_cell_carry: T,
+    pub input_cell_carry: T,
+    /// Per-block carry for adding the cell offset `i * (MEMORY_BLOCK_BYTES / U16_CELL_SIZE)` to
+    /// each base cell pointer (block `i`'s carry into the high cell limb). One set per heap
+    /// access group (buffer read, input read, buffer write).
+    pub buffer_read_add_carry: [T; KECCAK_RATE_MEM_OPS],
+    pub input_read_add_carry: [T; KECCAK_RATE_MEM_OPS],
+    pub buffer_write_add_carry: [T; KECCAK_RATE_MEM_OPS],
 }
 
 pub const NUM_XORIN_VM_COLS: usize = size_of::<XorinVmCols<u8>>();

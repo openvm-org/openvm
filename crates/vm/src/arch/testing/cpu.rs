@@ -369,7 +369,7 @@ impl<F: VmField> Default for VmChipTestBuilder<F> {
         let mut mem_config = MemoryConfig::default();
         // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
         // removed when tests are updated.
-        mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+        mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 31;
         mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 0;
         Self::from_config(mem_config)
     }

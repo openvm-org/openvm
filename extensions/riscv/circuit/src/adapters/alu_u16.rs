@@ -32,7 +32,9 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::{byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_read_u16, tracing_write_u16};
+use super::{
+    byte_ptr_to_u16_ptr_value, reg_byte_ptr_to_cell_ptr_limbs, tracing_read_u16, tracing_write_u16,
+};
 use crate::adapters::{imm_to_rv64_u64, U16_BITS};
 
 #[repr(C)]
@@ -123,7 +125,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluU16AdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs1_ptr),
                 ),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
@@ -136,7 +138,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluU16AdapterAir {
             .assert_one(ctx.instruction.is_valid.clone());
         self.memory_bridge
             .read(
-                MemoryAddress::new(local.rs2_as, byte_ptr_to_u16_ptr::<AB>(local.rs2)),
+                MemoryAddress::new(
+                    local.rs2_as,
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs2),
+                ),
                 ctx.reads[1].clone(),
                 timestamp_pp(),
                 &local.reads_aux[1],
@@ -147,7 +152,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluU16AdapterAir {
             .write(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rd_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rd_ptr),
                 ),
                 ctx.writes[0].clone(),
                 timestamp_pp(),
