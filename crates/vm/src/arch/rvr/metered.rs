@@ -42,21 +42,21 @@ pub struct RunToCompletion;
 
 pub struct SegmentBoundary;
 
-pub type RvrMeteredInstance<F> = RvrMeteredInstanceWith<F, RunToCompletion>;
+pub type RvrMeteredInstance<'a, F> = RvrMeteredInstanceWith<'a, F, RunToCompletion>;
 
-pub type RvrMeteredSegmentInstance<F> = RvrMeteredInstanceWith<F, SegmentBoundary>;
+pub type RvrMeteredSegmentInstance<'a, F> = RvrMeteredInstanceWith<'a, F, SegmentBoundary>;
 
-pub struct RvrMeteredInstanceWith<F: PrimeField32, S> {
-    pub(crate) system_config: SystemConfig,
+pub struct RvrMeteredInstanceWith<'a, F: PrimeField32, S> {
+    pub(crate) system_config: &'a SystemConfig,
     pub(crate) exe: Arc<VmExe<F>>,
     pub(crate) extensions: ExtensionRegistry<F>,
     pub(crate) compiled: RvrCompiled,
     pub(crate) _mode: PhantomData<S>,
 }
 
-static_assertions::assert_impl_all!(RvrMeteredInstance<p3_baby_bear::BabyBear>: Send, Sync);
+static_assertions::assert_impl_all!(RvrMeteredInstance<'static, p3_baby_bear::BabyBear>: Send, Sync);
 static_assertions::assert_impl_all!(
-    RvrMeteredSegmentInstance<p3_baby_bear::BabyBear>: Send,
+    RvrMeteredSegmentInstance<'static, p3_baby_bear::BabyBear>: Send,
     Sync
 );
 
@@ -401,13 +401,13 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) -> u8
     did_segment as u8
 }
 
-impl<F: PrimeField32, S> RvrMeteredInstanceWith<F, S> {
+impl<F: PrimeField32, S> RvrMeteredInstanceWith<'_, F, S> {
     pub fn create_initial_vm_state(
         &self,
         inputs: impl Into<Streams<F>>,
     ) -> VmState<F, GuestMemory> {
         VmState::initial(
-            &self.system_config,
+            self.system_config,
             &self.exe.init_memory,
             self.exe.pc_start,
             inputs,
@@ -423,7 +423,7 @@ impl<F: PrimeField32, S> RvrMeteredInstanceWith<F, S> {
     }
 }
 
-impl<F: PrimeField32> RvrMeteredInstance<F> {
+impl<F: PrimeField32> RvrMeteredInstance<'_, F> {
     pub fn execute_metered(
         &self,
         inputs: impl Into<Streams<F>>,
@@ -438,7 +438,7 @@ impl<F: PrimeField32> RvrMeteredInstance<F> {
         mut vm_state: VmState<F, GuestMemory>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let seg_state = SegmentationState::new(ctx, &self.system_config);
+        let seg_state = SegmentationState::new(ctx, self.system_config);
 
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
@@ -458,7 +458,7 @@ impl<F: PrimeField32> RvrMeteredInstance<F> {
     }
 }
 
-impl<F: PrimeField32> RvrMeteredSegmentInstance<F> {
+impl<F: PrimeField32> RvrMeteredSegmentInstance<'_, F> {
     /// Executes until termination or the next segment-boundary suspension.
     pub fn execute_metered_until_segment_boundary(
         &self,
@@ -478,7 +478,7 @@ impl<F: PrimeField32> RvrMeteredSegmentInstance<F> {
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         #[cfg(feature = "metrics")]
         let start_instret = ctx.segmentation_ctx.instret;
-        let seg_state = SegmentationState::new(ctx, &self.system_config);
+        let seg_state = SegmentationState::new(ctx, self.system_config);
 
         let result = tracing::info_span!("execute_metered").in_scope(|| {
             execute_metered_segment_boundary(
