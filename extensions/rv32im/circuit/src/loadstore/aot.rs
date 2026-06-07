@@ -138,34 +138,37 @@ fn generate_x86_asm_impl<F: PrimeField32>(
 
     match local_opcode {
         Rv32LoadStoreOpcode::LOADW => {
-            let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize].is_some() {
-                RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize].unwrap()
+            let str_reg_a = if enabled {
+                RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize].unwrap_or(REG_B_W)
             } else {
-                REG_B_W
+                REG_C_W
             };
-
             asm_str += &format!("   mov {str_reg_a}, [{gpr_reg_w64}]\n");
-            asm_str += &gpr_to_xmm(str_reg_a, a_reg);
+            if enabled {
+                asm_str += &gpr_to_xmm(str_reg_a, a_reg);
+            }
         }
         Rv32LoadStoreOpcode::LOADHU => {
-            let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize].is_some() {
-                RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize].unwrap()
+            let str_reg_a = if enabled {
+                RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize].unwrap_or(REG_B_W)
             } else {
-                REG_B_W
+                REG_C_W
             };
-
             asm_str += &format!("   movzx {str_reg_a}, word ptr [{gpr_reg_w64}]\n");
-            asm_str += &gpr_to_xmm(str_reg_a, a_reg);
+            if enabled {
+                asm_str += &gpr_to_xmm(str_reg_a, a_reg);
+            }
         }
         Rv32LoadStoreOpcode::LOADBU => {
-            let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize].is_some() {
-                RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize].unwrap()
+            let str_reg_a = if enabled {
+                RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize].unwrap_or(REG_B_W)
             } else {
-                REG_B_W
+                REG_C_W
             };
-
             asm_str += &format!("   movzx {str_reg_a}, byte ptr [{gpr_reg_w64}]\n");
-            asm_str += &gpr_to_xmm(str_reg_a, a_reg);
+            if enabled {
+                asm_str += &gpr_to_xmm(str_reg_a, a_reg);
+            }
         }
         Rv32LoadStoreOpcode::STOREW => {
             if !enabled {
@@ -199,4 +202,61 @@ fn generate_x86_asm_impl<F: PrimeField32>(
     }
 
     Ok(asm_str)
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::riscv::RV32_MEMORY_AS;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
+    use super::*;
+
+    fn disabled_load_to_x0(opcode: Rv32LoadStoreOpcode) -> Instruction<BabyBear> {
+        Instruction::from_usize(
+            opcode.global_opcode(),
+            [
+                0,
+                4,
+                0,
+                RV32_REGISTER_AS as usize,
+                RV32_MEMORY_AS as usize,
+                0,
+                0,
+            ],
+        )
+    }
+
+    #[test]
+    fn disabled_unsigned_loads_still_emit_memory_read_without_register_write() {
+        let cases = [
+            (
+                Rv32LoadStoreOpcode::LOADW,
+                format!("   mov {REG_C_W}, [{REG_B}]\n"),
+            ),
+            (
+                Rv32LoadStoreOpcode::LOADHU,
+                format!("   movzx {REG_C_W}, word ptr [{REG_B}]\n"),
+            ),
+            (
+                Rv32LoadStoreOpcode::LOADBU,
+                format!("   movzx {REG_C_W}, byte ptr [{REG_B}]\n"),
+            ),
+        ];
+
+        for (opcode, expected_read) in cases {
+            let asm = generate_x86_asm_impl(&disabled_load_to_x0(opcode), 0, |_, _, _, _, _| {
+                Ok(String::new())
+            })
+            .expect("load to x0 should be AOT-supported");
+
+            assert!(
+                asm.contains(&expected_read),
+                "{opcode:?} to x0 must still perform the memory read"
+            );
+            assert!(
+                !asm.contains("pinsrd"),
+                "{opcode:?} to x0 must not write the loaded value to an XMM register"
+            );
+        }
+    }
 }
