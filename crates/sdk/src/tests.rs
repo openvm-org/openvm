@@ -153,7 +153,7 @@ fn make_verify_stark_path_sdk(
     app_params: SystemParams,
     agg_params: AggregationSystemParams,
 ) -> Result<Sdk> {
-    let mut vm_config = openvm_sdk_config::SdkVmConfig::riscv32();
+    let mut vm_config = openvm_sdk_config::SdkVmConfig::riscv64();
     vm_config.system.config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
     let memory_dimensions = vm_config.system.config.memory_config.memory_dimensions();
     let num_user_pvs = vm_config.system.config.num_public_values;
