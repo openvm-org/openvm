@@ -326,7 +326,7 @@ where
     pub fn compile_pure(
         &self,
         app_exe: impl Into<ExecutableFormat>,
-    ) -> Result<CompiledExePure<F>, SdkError> {
+    ) -> Result<CompiledExePure<'_, F>, SdkError> {
         let exe = self.convert_to_exe(app_exe)?;
         self.executor
             .instance(&exe)
@@ -340,7 +340,7 @@ where
         &self,
         lib_path: &std::path::Path,
         app_exe: impl Into<ExecutableFormat>,
-    ) -> Result<CompiledExePure<F>, SdkError> {
+    ) -> Result<CompiledExePure<'_, F>, SdkError> {
         let exe = self.convert_to_exe(app_exe)?;
         self.executor
             .load_instance(lib_path, &exe)
@@ -351,7 +351,7 @@ where
     /// Run a [`CompiledExePure`] against `inputs` and extract the user public values.
     pub fn execute_compiled(
         &self,
-        compiled: &CompiledExePure<F>,
+        compiled: &CompiledExePure<'_, F>,
         inputs: StdIn,
     ) -> Result<Vec<u8>, SdkError> {
         let final_memory = compiled
@@ -381,15 +381,17 @@ where
     pub fn compile_metered(
         &self,
         app_exe: impl Into<ExecutableFormat>,
-    ) -> Result<CompiledExeMetered, SdkError> {
+    ) -> Result<CompiledExeMetered<'_>, SdkError> {
         let app_prover = self.app_prover(app_exe)?;
 
         let vm = app_prover.vm();
         let exe = app_prover.exe();
 
         let ctx = vm.build_metered_ctx(&exe);
-        let instance = vm
-            .metered_interpreter(&exe)
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        let instance = self
+            .executor
+            .metered_instance(&exe, &executor_idx_to_air_idx)
             .map_err(VirtualMachineError::from)?;
         Ok(CompiledExeMetered { instance, ctx })
     }
@@ -401,14 +403,16 @@ where
         &self,
         lib_path: &std::path::Path,
         app_exe: impl Into<ExecutableFormat>,
-    ) -> Result<CompiledExeMetered, SdkError> {
+    ) -> Result<CompiledExeMetered<'_>, SdkError> {
         let app_prover = self.app_prover(app_exe)?;
         let vm = app_prover.vm();
         let exe = app_prover.exe();
 
         let ctx = vm.build_metered_ctx(&exe);
-        let instance = vm
-            .load_metered_interpreter(lib_path, &exe)
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        let instance = self
+            .executor
+            .load_metered_instance(lib_path, &exe, &executor_idx_to_air_idx)
             .map_err(VirtualMachineError::from)?;
         Ok(CompiledExeMetered { instance, ctx })
     }
@@ -416,7 +420,7 @@ where
     /// Run a [`CompiledExeMetered`] against `inputs`.
     pub fn execute_compiled_metered(
         &self,
-        compiled: &CompiledExeMetered,
+        compiled: &CompiledExeMetered<'_>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
         let (segments, final_state) = compiled
@@ -446,15 +450,23 @@ where
     pub fn compile_metered_cost(
         &self,
         app_exe: impl Into<ExecutableFormat>,
-    ) -> Result<CompiledExeMeteredCost, SdkError> {
+    ) -> Result<CompiledExeMeteredCost<'_>, SdkError> {
         let app_prover = self.app_prover(app_exe)?;
 
         let vm = app_prover.vm();
         let exe = app_prover.exe();
 
         let ctx = vm.build_metered_cost_ctx();
-        let instance = vm
-            .metered_cost_interpreter(&exe)
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        #[cfg(feature = "rvr")]
+        let instance = self
+            .executor
+            .metered_cost_instance(&exe, &executor_idx_to_air_idx, &ctx.widths)
+            .map_err(VirtualMachineError::from)?;
+        #[cfg(not(feature = "rvr"))]
+        let instance = self
+            .executor
+            .metered_cost_instance(&exe, &executor_idx_to_air_idx)
             .map_err(VirtualMachineError::from)?;
         Ok(CompiledExeMeteredCost { instance, ctx })
     }
@@ -466,14 +478,16 @@ where
         &self,
         lib_path: &std::path::Path,
         app_exe: impl Into<ExecutableFormat>,
-    ) -> Result<CompiledExeMeteredCost, SdkError> {
+    ) -> Result<CompiledExeMeteredCost<'_>, SdkError> {
         let app_prover = self.app_prover(app_exe)?;
         let vm = app_prover.vm();
         let exe = app_prover.exe();
 
         let ctx = vm.build_metered_cost_ctx();
-        let instance = vm
-            .load_metered_cost_interpreter(lib_path, &exe)
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        let instance = self
+            .executor
+            .load_metered_cost_instance(lib_path, &exe, &executor_idx_to_air_idx, &ctx.widths)
             .map_err(VirtualMachineError::from)?;
         Ok(CompiledExeMeteredCost { instance, ctx })
     }
@@ -481,7 +495,7 @@ where
     /// Run a [`CompiledExeMeteredCost`] against `inputs`.
     pub fn execute_compiled_metered_cost(
         &self,
-        compiled: &CompiledExeMeteredCost,
+        compiled: &CompiledExeMeteredCost<'_>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
         let (ctx, final_state) = compiled

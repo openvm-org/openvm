@@ -27,8 +27,8 @@ pub struct RvrMeteredCostResult {
     pub cost: u64,
 }
 
-pub struct RvrMeteredCostInstance<F: PrimeField32> {
-    pub(crate) system_config: SystemConfig,
+pub struct RvrMeteredCostInstance<'a, F: PrimeField32> {
+    pub(crate) system_config: &'a SystemConfig,
     pub(crate) exe: Arc<VmExe<F>>,
     pub(crate) extensions: ExtensionRegistry<F>,
     pub(crate) compiled: RvrCompiled,
@@ -76,7 +76,7 @@ impl TracerPayload for PureTracerData {
 
 pub type PureTracer = TracerPtr<PureTracerData>;
 
-impl<F: PrimeField32> RvrMeteredCostInstance<F> {
+impl<F: PrimeField32> RvrMeteredCostInstance<'_, F> {
     /// Persist the compiled shared library into `dir`. Returns the path to
     /// the copied artifact. The user must re-supply `exe`, `executor_idx_to_air_idx`,
     /// and `widths` when loading.
@@ -91,7 +91,7 @@ impl<F: PrimeField32> RvrMeteredCostInstance<F> {
         ctx: MeteredCostCtx,
     ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
         let vm_state = VmState::initial(
-            &self.system_config,
+            self.system_config,
             &self.exe.init_memory,
             self.exe.pc_start,
             inputs,
