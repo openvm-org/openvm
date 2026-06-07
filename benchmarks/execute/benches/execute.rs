@@ -331,11 +331,11 @@ trait BenchExecutor {
 
 impl BenchExecutor for PureExecution {
     #[cfg(feature = "aot")]
-    type Instance = AotInstance<BabyBear, ExecutionCtx>;
+    type Instance = AotInstance<'static, BabyBear, ExecutionCtx>;
     #[cfg(feature = "rvr")]
-    type Instance = RvrPureInstance<BabyBear>;
+    type Instance = RvrPureInstance<'static, BabyBear>;
     #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
-    type Instance = InterpretedInstance<BabyBear, ExecutionCtx>;
+    type Instance = InterpretedInstance<'static, BabyBear, ExecutionCtx>;
 
     fn execution_mode() -> &'static str {
         #[cfg(feature = "aot")]
@@ -365,11 +365,14 @@ impl BenchExecutor for PureExecution {
 
 impl BenchExecutor for MeteredExecution {
     #[cfg(feature = "aot")]
-    type Instance = (AotInstance<BabyBear, MeteredCtx>, MeteredCtx);
+    type Instance = (AotInstance<'static, BabyBear, MeteredCtx>, MeteredCtx);
     #[cfg(feature = "rvr")]
-    type Instance = (RvrMeteredInstance<BabyBear>, MeteredCtx);
+    type Instance = (RvrMeteredInstance<'static, BabyBear>, MeteredCtx);
     #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
-    type Instance = (InterpretedInstance<BabyBear, MeteredCtx>, MeteredCtx);
+    type Instance = (
+        InterpretedInstance<'static, BabyBear, MeteredCtx>,
+        MeteredCtx,
+    );
 
     fn execution_mode() -> &'static str {
         #[cfg(feature = "aot")]
@@ -403,9 +406,9 @@ impl BenchExecutor for MeteredExecution {
 
 impl BenchExecutor for MeteredCostExecution {
     #[cfg(feature = "rvr")]
-    type Instance = RvrMeteredCostInstance<BabyBear>;
+    type Instance = RvrMeteredCostInstance<'static, BabyBear>;
     #[cfg(not(feature = "rvr"))]
-    type Instance = InterpretedInstance<BabyBear, MeteredCostCtx>;
+    type Instance = InterpretedInstance<'static, BabyBear, MeteredCostCtx>;
 
     fn execution_mode() -> &'static str {
         #[cfg(feature = "rvr")]

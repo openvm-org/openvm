@@ -573,6 +573,42 @@ fn test_sdk_compiled_metered_cost_save_load_roundtrip() -> Result<()> {
 }
 
 #[test]
+fn test_sdk_compiled_metered_execute() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let compiled = sdk.compile_metered(exe)?;
+    let (_, segments) = sdk.execute_compiled_metered(&compiled, stdin)?;
+    assert!(!segments.is_empty());
+    Ok(())
+}
+
+#[test]
+fn test_sdk_compiled_metered_cost_execute() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let compiled = sdk.compile_metered_cost(exe)?;
+    let (_, (_, instret)) = sdk.execute_compiled_metered_cost(&compiled, stdin)?;
+    assert!(instret > 0);
+    Ok(())
+}
+
+#[test]
 fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
     setup_tracing();
     let n_stack = 15;
