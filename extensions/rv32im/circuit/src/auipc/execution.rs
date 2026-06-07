@@ -88,18 +88,13 @@ where
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
         use openvm_instructions::riscv::RV32_CELL_BITS;
 
-        let to_i16 = |c: F| -> i16 {
-            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
-            let c_i24 = ((c_u24 << 8) as i32) >> 8;
-            c_i24 as i16
-        };
         let mut asm_str = String::new();
-        let a: i16 = to_i16(inst.a);
-        let c: i16 = to_i16(inst.c);
-        let d: i16 = to_i16(inst.d);
-        let rd = pc.wrapping_add((c as u32) << RV32_CELL_BITS);
+        let a = inst.a.as_canonical_u32() as u8;
+        let c = inst.c.as_canonical_u32();
+        let d = inst.d.as_canonical_u32();
+        let rd = pc.wrapping_add(c << RV32_CELL_BITS);
 
-        if d as u32 != RV32_REGISTER_AS {
+        if d != RV32_REGISTER_AS {
             return Err(AotError::InvalidInstruction);
         }
 
@@ -109,7 +104,7 @@ where
             asm_str += &format!("   mov {override_reg}, {rd}\n");
         } else {
             asm_str += &format!("   mov {REG_A_W}, {rd}\n");
-            asm_str += &gpr_to_xmm(REG_A_W, a_reg as u8);
+            asm_str += &gpr_to_xmm(REG_A_W, a_reg);
         }
 
         Ok(asm_str)
@@ -117,6 +112,33 @@ where
 
     fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
         true
+    }
+}
+
+#[cfg(all(test, feature = "aot"))]
+mod tests {
+    use openvm_instructions::{riscv::RV32_REGISTER_AS, LocalOpcode};
+    use openvm_rv32im_transpiler::Rv32AuipcOpcode::AUIPC;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
+    use super::*;
+
+    #[test]
+    fn aot_uses_full_24_bit_auipc_immediate() {
+        let executor = Rv32AuipcExecutor::new(());
+        let inst = Instruction::<BabyBear>::from_usize(
+            AUIPC.global_opcode(),
+            [4, 0, 0x10000, RV32_REGISTER_AS as usize, 0],
+        );
+
+        let asm = executor
+            .generate_x86_asm(&inst, 0)
+            .expect("valid AUIPC instruction should generate AOT assembly");
+
+        assert!(
+            asm.contains("16777216"),
+            "AUIPC AOT must shift the full raw 24-bit immediate"
+        );
     }
 }
 
