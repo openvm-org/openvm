@@ -2,7 +2,7 @@ use std::{slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
-use openvm_circuit::arch::instructions::DEFERRAL_AS;
+use openvm_circuit::arch::{instructions::DEFERRAL_AS, U16_CELL_SIZE};
 use openvm_continuations::prover::DeferralCircuitProver;
 use openvm_deferral_circuit::DeferralFn;
 use openvm_stark_backend::{codec::Encode, StarkEngine, SystemParams};
@@ -227,15 +227,23 @@ fn make_verify_stark_inputs_for_indices(
 }
 
 fn collapse_user_public_values(expanded: &[u8]) -> Vec<u8> {
-    const F_NUM_BYTES: usize = 4;
+    const F_NUM_BYTES: usize = core::mem::size_of::<u32>();
     assert!(expanded.len().is_multiple_of(F_NUM_BYTES));
-    expanded
-        .chunks_exact(F_NUM_BYTES)
-        .map(|bytes| {
-            assert_eq!(&bytes[1..], &[0; F_NUM_BYTES - 1]);
-            bytes[0]
-        })
-        .collect()
+    let mut user_public_values = Vec::with_capacity(expanded.len() / F_NUM_BYTES * U16_CELL_SIZE);
+    for bytes in expanded.chunks_exact(F_NUM_BYTES) {
+        assert_eq!(&bytes[U16_CELL_SIZE..], &[0; F_NUM_BYTES - U16_CELL_SIZE]);
+        user_public_values.extend_from_slice(&bytes[..U16_CELL_SIZE]);
+    }
+    user_public_values
+}
+
+#[test]
+fn collapse_user_public_values_preserves_u16_cells() {
+    let expanded = [0x34, 0x12, 0, 0, 0xcd, 0xab, 0, 0];
+    assert_eq!(
+        collapse_user_public_values(&expanded),
+        [0x34, 0x12, 0xcd, 0xab]
+    );
 }
 
 /// Builds a deferral-enabled verify-stark SDK from a fibonacci SDK and proof.
