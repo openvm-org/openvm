@@ -24,16 +24,16 @@ pub struct RvrPureResult {
     pub suspended: bool,
 }
 
-pub struct RvrPureInstance<F: PrimeField32> {
-    pub(crate) system_config: SystemConfig,
+pub struct RvrPureInstance<'a, F: PrimeField32> {
+    pub(crate) system_config: &'a SystemConfig,
     pub(crate) exe: Arc<VmExe<F>>,
     pub(crate) compiled: RvrCompiled,
     pub(crate) extensions: ExtensionRegistry<F>,
 }
 
-static_assertions::assert_impl_all!(RvrPureInstance<p3_baby_bear::BabyBear>: Send, Sync);
+static_assertions::assert_impl_all!(RvrPureInstance<'static, p3_baby_bear::BabyBear>: Send, Sync);
 
-impl<F> RvrPureInstance<F>
+impl<'a, F> RvrPureInstance<'a, F>
 where
     F: PrimeField32,
 {
@@ -42,7 +42,7 @@ where
         inputs: impl Into<Streams<F>>,
     ) -> VmState<F, GuestMemory> {
         VmState::initial(
-            &self.system_config,
+            self.system_config,
             &self.exe.init_memory,
             self.exe.pc_start,
             inputs,
