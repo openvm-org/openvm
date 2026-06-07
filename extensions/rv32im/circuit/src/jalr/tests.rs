@@ -1,7 +1,7 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
 #[cfg(feature = "aot")]
-use openvm_circuit::arch::{ExecutionError, testing::assert_vm_states_equivalent, VmExecutor, VmState};
+use openvm_circuit::arch::{ExecutionError, VirtualMachine, testing::assert_vm_states_equivalent, VmExecutor, VmState};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
@@ -32,6 +32,10 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+#[cfg(feature = "aot")]
+use openvm_stark_sdk::config::{
+    baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters,
+};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
@@ -47,7 +51,7 @@ use {
 
 use super::Rv32JalrCoreAir;
 #[cfg(feature = "aot")]
-use crate::Rv32ImConfig;
+use crate::{Rv32ImBuilder, Rv32ImConfig};
 use crate::{
     adapters::{
         compose, Rv32JalrAdapterAir, Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller,
@@ -399,37 +403,95 @@ fn read_register(state: &VmState<F>, offset: usize) -> u32 {
 
 #[cfg(feature = "aot")]
 #[test]
-fn test_aot_dispatch_rejects_dead_pc_before_pc_base() {
-    let program = Program::new_without_debug_infos_with_option(
-        &[Some(Instruction::<F>::from_isize(
-            SystemOpcode::TERMINATE.global_opcode(),
+fn test_aot_dispatch_rejects_dead_pc_slots() {
+    let cases = [
+        (
+            VmExe::new(Program::new_without_debug_infos_with_option(
+                &[Some(terminate_instruction())],
+                4,
+            ))
+            .with_pc_start(0),
             0,
-            0,
-            0,
-            0,
-            0,
-        ))],
-        4,
-    );
-    let exe = VmExe::new(program).with_pc_start(0);
-    let config = Rv32ImConfig::default();
-    let executor = VmExecutor::new(config).expect("failed to create Rv32IM executor");
+        ),
+        (
+            VmExe::new(Program::new_without_debug_infos_with_option(
+                &[Some(terminate_instruction()), None, Some(terminate_instruction())],
+                0,
+            ))
+            .with_pc_start(4),
+            4,
+        ),
+    ];
 
+    let config = Rv32ImConfig::default();
+    let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(engine, Rv32ImBuilder, config).expect("vm init");
+    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+
+    for (exe, dead_pc) in cases {
+        assert_dead_pc_rejected_by_pure_aot(&executor, &exe, dead_pc);
+        assert_dead_pc_rejected_by_metered_aot(&vm, &executor_idx_to_air_idx, &exe, dead_pc);
+    }
+}
+
+#[cfg(feature = "aot")]
+fn terminate_instruction() -> Instruction<F> {
+    Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0)
+}
+
+#[cfg(feature = "aot")]
+fn assert_dead_pc_rejected_by_pure_aot(
+    executor: &VmExecutor<F, Rv32ImConfig>,
+    exe: &VmExe<F>,
+    dead_pc: u32,
+) {
     let interpreter = executor
-        .interpreter_instance(&exe)
+        .interpreter_instance(exe)
         .expect("interpreter build must succeed");
     let interp_err = match interpreter.execute(vec![], None) {
         Ok(_) => panic!("interpreter must reject the dead pc slot"),
         Err(err) => err,
     };
-    assert!(matches!(interp_err, ExecutionError::Unreachable(0)));
+    assert!(matches!(interp_err, ExecutionError::Unreachable(pc) if pc == dead_pc));
 
-    let aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
+    let aot_instance = executor.aot_instance(exe).expect("AOT build must succeed");
     let aot_err = match aot_instance.execute(vec![], None) {
         Ok(_) => panic!("AOT must reject the dead pc slot"),
         Err(err) => err,
     };
-    assert!(matches!(aot_err, ExecutionError::Unreachable(0)));
+    assert!(matches!(aot_err, ExecutionError::Unreachable(pc) if pc == dead_pc));
+}
+
+#[cfg(feature = "aot")]
+fn assert_dead_pc_rejected_by_metered_aot(
+    vm: &VirtualMachine<BabyBearPoseidon2Engine, Rv32ImBuilder>,
+    executor_idx_to_air_idx: &[usize],
+    exe: &VmExe<F>,
+    dead_pc: u32,
+) {
+    let metered_ctx = vm.build_metered_ctx(exe);
+
+    let metered_interpreter = vm
+        .executor()
+        .metered_interpreter_instance(exe, executor_idx_to_air_idx)
+        .expect("metered interpreter build must succeed");
+    let interp_err = match metered_interpreter.execute_metered(vec![], metered_ctx.clone()) {
+        Ok(_) => panic!("metered interpreter must reject the dead pc slot"),
+        Err(err) => err,
+    };
+    assert!(matches!(interp_err, ExecutionError::Unreachable(pc) if pc == dead_pc));
+
+    let metered_aot = vm
+        .executor()
+        .metered_aot_instance(exe, executor_idx_to_air_idx)
+        .expect("metered AOT build must succeed");
+    let aot_err = match metered_aot.execute_metered(vec![], metered_ctx) {
+        Ok(_) => panic!("metered AOT must reject the dead pc slot"),
+        Err(err) => err,
+    };
+    assert!(matches!(aot_err, ExecutionError::Unreachable(pc) if pc == dead_pc));
 }
 
 #[cfg(feature = "aot")]
