@@ -1,6 +1,6 @@
 use std::{ffi::c_void, mem::offset_of};
 
-use openvm_instructions::exe::VmExe;
+use openvm_instructions::{exe::VmExe, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{common::*, AotInstance};
@@ -174,14 +174,17 @@ where
         asm_str += &format!("   jmp {REG_A}\n");
 
         let pc_base = exe.program.pc_base;
+        let base_idx = (pc_base / DEFAULT_PC_STEP) as usize;
+        let num_pc_slots = base_idx + exe.program.instructions_and_debug_infos.len();
 
-        for i in 0..(pc_base / 4) {
-            asm_str += &format!("asm_execute_pc_{}:", i * 4);
-            asm_str += "\n";
-        }
-
-        for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+        for pc_idx in 0..num_pc_slots {
             /* Preprocessing step, to check if we should suspend or not */
+            let pc = pc_idx as u32 * DEFAULT_PC_STEP;
+            let instruction = pc_idx.checked_sub(base_idx).and_then(|idx| {
+                exe.program.instructions_and_debug_infos[idx]
+                    .as_ref()
+                    .map(|(instruction, _)| instruction)
+            });
             asm_str += &format!("asm_execute_pc_{pc}:\n");
 
             asm_str += &format!("    cmp {REG_INSTRET_END}, 0\n");
@@ -197,80 +200,86 @@ where
             // continue with execution, as should_suspend returned false
             asm_str += &format!("execute_instruction_{pc}:\n");
 
-            if instruction.opcode.as_usize() == 0 {
-                // terminal opcode has no associated executor, so can handle with default fallback
-                asm_str += &Self::xmm_to_rv32_regs();
-                asm_str += &Self::push_address_space_start();
-                asm_str += &Self::push_internal_registers();
-                asm_str += &sync_reg_to_instret_until_end();
-                asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
-                asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
-                asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
-                asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n");
-                asm_str += &format!("   call {REG_D}\n");
-                asm_str += &format!("   cmp {REG_D}, 1\n");
+            if let Some(instruction) = instruction {
+                if instruction.opcode.as_usize() == 0 {
+                    // terminal opcode has no associated executor, so can handle with default
+                    // fallback
+                    asm_str += &Self::xmm_to_rv32_regs();
+                    asm_str += &Self::push_address_space_start();
+                    asm_str += &Self::push_internal_registers();
+                    asm_str += &sync_reg_to_instret_until_end();
+                    asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+                    asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
+                    asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
+                    asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n");
+                    asm_str += &format!("   call {REG_D}\n");
+                    asm_str += &format!("   cmp {REG_D}, 1\n");
 
-                asm_str += &Self::pop_internal_registers();
-                asm_str += &Self::pop_address_space_start();
-                asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
-                asm_str += &format!("   mov {REG_SECOND_ARG}, {pc}\n");
-                asm_str += &format!("   mov {REG_D}, {set_pc_ptr}\n");
-                asm_str += &format!("   call {REG_D}\n");
-                asm_str += &format!(
-                    "   mov {REG_RETURN_VAL}, {}\n",
-                    instruction.c.as_canonical_u32()
-                );
-                asm_str += &Self::pop_external_registers();
-                asm_str += "    ret\n";
+                    asm_str += &Self::pop_internal_registers();
+                    asm_str += &Self::pop_address_space_start();
+                    asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+                    asm_str += &format!("   mov {REG_SECOND_ARG}, {pc}\n");
+                    asm_str += &format!("   mov {REG_D}, {set_pc_ptr}\n");
+                    asm_str += &format!("   call {REG_D}\n");
+                    asm_str += &format!(
+                        "   mov {REG_RETURN_VAL}, {}\n",
+                        instruction.c.as_canonical_u32()
+                    );
+                    asm_str += &Self::pop_external_registers();
+                    asm_str += "    ret\n";
 
-                continue;
+                    continue;
+                }
+
+                let executor = inventory
+                    .get_executor(instruction.opcode)
+                    .expect("executor not found for opcode");
+                let executor_idx = inventory.instruction_lookup[&instruction.opcode] as usize;
+                let air_idx = executor_idx_to_air_idx[executor_idx];
+
+                if executor.is_aot_metered_supported(instruction) {
+                    let segment = executor
+                        .generate_x86_metered_asm(instruction, pc, air_idx, inventory.config())
+                        .map_err(|err| match err {
+                            AotError::InvalidInstruction => {
+                                StaticProgramError::InvalidInstruction(pc)
+                            }
+                            AotError::NotSupported => StaticProgramError::DisabledOperation {
+                                pc,
+                                opcode: instruction.opcode,
+                            },
+                            AotError::NoExecutorFound(opcode) => {
+                                StaticProgramError::ExecutorNotFound { opcode }
+                            }
+                            AotError::Other(_message) => StaticProgramError::InvalidInstruction(pc),
+                        })?;
+                    asm_str += &segment;
+                    continue;
+                }
             }
 
-            let executor = inventory
-                .get_executor(instruction.opcode)
-                .expect("executor not found for opcode");
-            let executor_idx = inventory.instruction_lookup[&instruction.opcode] as usize;
-            let air_idx = executor_idx_to_air_idx[executor_idx];
-
-            if executor.is_aot_metered_supported(&instruction) {
-                let segment = executor
-                    .generate_x86_metered_asm(&instruction, pc, air_idx, inventory.config())
-                    .map_err(|err| match err {
-                        AotError::InvalidInstruction => StaticProgramError::InvalidInstruction(pc),
-                        AotError::NotSupported => StaticProgramError::DisabledOperation {
-                            pc,
-                            opcode: instruction.opcode,
-                        },
-                        AotError::NoExecutorFound(opcode) => {
-                            StaticProgramError::ExecutorNotFound { opcode }
-                        }
-                        AotError::Other(_message) => StaticProgramError::InvalidInstruction(pc),
-                    })?;
-                asm_str += &segment;
-            } else {
-                asm_str += &Self::xmm_to_rv32_regs();
-                asm_str += &Self::push_address_space_start();
-                asm_str += &Self::push_internal_registers();
-                asm_str += &sync_reg_to_instret_until_end();
-                asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
-                asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
-                asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
-                asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n");
-                asm_str += &format!("   call {REG_D}\n");
-                asm_str += &format!("   cmp {REG_RETURN_VAL}, 1\n");
-                asm_str += &Self::pop_internal_registers(); // pop the internal registers from the stack
-                asm_str += &Self::pop_address_space_start();
-                asm_str += &sync_instret_until_end_to_reg();
-                asm_str += &Self::rv32_regs_to_xmm(); // read the memory from the memory location of the RV32 registers in `GuestMemory`
-                                                      // registers, to the appropriate XMM registers
-                asm_str += &format!("   je asm_run_end_{pc}\n");
-                asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
-                asm_str += &format!("   pextrq {REG_A}, xmm3, 1\n"); // extract the upper 64 bits of the xmm3 register to REG_A
-                asm_str += &format!("   mov {REG_A_W}, dword ptr [{REG_A}]\n");
-                asm_str += &format!("   movsxd {REG_A}, [{REG_C} + {REG_A}]\n");
-                asm_str += &format!("   add {REG_A}, {REG_C}\n");
-                asm_str += &format!("   jmp {REG_A}\n");
-            }
+            asm_str += &Self::xmm_to_rv32_regs();
+            asm_str += &Self::push_address_space_start();
+            asm_str += &Self::push_internal_registers();
+            asm_str += &sync_reg_to_instret_until_end();
+            asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+            asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
+            asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
+            asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n");
+            asm_str += &format!("   call {REG_D}\n");
+            asm_str += &format!("   cmp {REG_RETURN_VAL}, 1\n");
+            asm_str += &Self::pop_internal_registers(); // pop the internal registers from the stack
+            asm_str += &Self::pop_address_space_start();
+            asm_str += &sync_instret_until_end_to_reg();
+            asm_str += &Self::rv32_regs_to_xmm(); // read the memory from the memory location of the RV32 registers in `GuestMemory`
+                                                  // registers, to the appropriate XMM registers
+            asm_str += &format!("   je asm_run_end_{pc}\n");
+            asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
+            asm_str += &format!("   pextrq {REG_A}, xmm3, 1\n"); // extract the upper 64 bits of the xmm3 register to REG_A
+            asm_str += &format!("   mov {REG_A_W}, dword ptr [{REG_A}]\n");
+            asm_str += &format!("   movsxd {REG_A}, [{REG_C} + {REG_A}]\n");
+            asm_str += &format!("   add {REG_A}, {REG_C}\n");
+            asm_str += &format!("   jmp {REG_A}\n");
         }
         asm_str += "asm_handle_segment_check:\n";
         asm_str += "    push r14\n";
@@ -291,7 +300,8 @@ where
         asm_str += "    ret\n";
 
         // asm_run_end part
-        for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
+        for pc_idx in 0..num_pc_slots {
+            let pc = pc_idx as u32 * DEFAULT_PC_STEP;
             asm_str += &format!("asm_run_end_{pc}:\n");
             asm_str += &Self::xmm_to_rv32_regs();
             asm_str += &format!("    mov {REG_FIRST_ARG}, rbx\n");
@@ -307,11 +317,8 @@ where
         asm_str += ".section .rodata\n";
         asm_str += "map_pc_base:\n";
 
-        for i in 0..(pc_base / 4) {
-            asm_str += &format!("   .long asm_execute_pc_{} - map_pc_base\n", i * 4);
-        }
-
-        for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
+        for pc_idx in 0..num_pc_slots {
+            let pc = pc_idx as u32 * DEFAULT_PC_STEP;
             asm_str += &format!("   .long asm_execute_pc_{pc} - map_pc_base\n");
         }
 

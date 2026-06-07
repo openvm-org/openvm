@@ -1,7 +1,7 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
 #[cfg(feature = "aot")]
-use openvm_circuit::arch::{testing::assert_vm_states_equivalent, VmExecutor, VmState};
+use openvm_circuit::arch::{ExecutionError, testing::assert_vm_states_equivalent, VmExecutor, VmState};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
@@ -395,6 +395,41 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F
 fn read_register(state: &VmState<F>, offset: usize) -> u32 {
     let bytes = unsafe { state.memory.read::<u8, 4>(RV32_REGISTER_AS, offset as u32) };
     u32::from_le_bytes(bytes)
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_aot_dispatch_rejects_dead_pc_before_pc_base() {
+    let program = Program::new_without_debug_infos_with_option(
+        &[Some(Instruction::<F>::from_isize(
+            SystemOpcode::TERMINATE.global_opcode(),
+            0,
+            0,
+            0,
+            0,
+            0,
+        ))],
+        4,
+    );
+    let exe = VmExe::new(program).with_pc_start(0);
+    let config = Rv32ImConfig::default();
+    let executor = VmExecutor::new(config).expect("failed to create Rv32IM executor");
+
+    let interpreter = executor
+        .interpreter_instance(&exe)
+        .expect("interpreter build must succeed");
+    let interp_err = match interpreter.execute(vec![], None) {
+        Ok(_) => panic!("interpreter must reject the dead pc slot"),
+        Err(err) => err,
+    };
+    assert!(matches!(interp_err, ExecutionError::Unreachable(0)));
+
+    let aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
+    let aot_err = match aot_instance.execute(vec![], None) {
+        Ok(_) => panic!("AOT must reject the dead pc slot"),
+        Err(err) => err,
+    };
+    assert!(matches!(aot_err, ExecutionError::Unreachable(0)));
 }
 
 #[cfg(feature = "aot")]
