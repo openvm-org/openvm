@@ -37,8 +37,8 @@ use crate::{
 // NOTE: the lifetime 'a represents the lifetime of borrowed ExecutorInventory, which must outlive
 // the InterpretedInstance because `pre_compute_buf` may contain pointers to references held by
 // executors.
-pub struct InterpretedInstance<F, Ctx> {
-    system_config: SystemConfig,
+pub struct InterpretedInstance<'a, F, Ctx> {
+    system_config: &'a SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
     // to this buffer.
     #[allow(dead_code)]
@@ -62,9 +62,9 @@ pub struct InterpretedInstance<F, Ctx> {
 
 #[repr(C)]
 #[cfg_attr(feature = "tco", allow(dead_code))]
-pub struct PreComputeInstruction<F, Ctx> {
-    pub handler: ExecuteFunc<F, Ctx>,
-    pub pre_compute: *const u8,
+pub(crate) struct PreComputeInstruction<F, Ctx> {
+    pub(crate) handler: ExecuteFunc<F, Ctx>,
+    pub(crate) pre_compute: *const u8,
 }
 
 unsafe impl<F, Ctx> Send for PreComputeInstruction<F, Ctx> {}
@@ -114,7 +114,7 @@ macro_rules! run {
 // pointers
 // - Generic in `Ctx`
 
-impl<F, Ctx> InterpretedInstance<F, Ctx>
+impl<'a, F, Ctx> InterpretedInstance<'a, F, Ctx>
 where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,
@@ -122,7 +122,7 @@ where
     /// Creates a new interpreter instance for pure execution.
     // (E1 execution)
     pub fn new<E>(
-        inventory: &ExecutorInventory<E>,
+        inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
     ) -> Result<Self, StaticProgramError>
     where
@@ -166,7 +166,7 @@ where
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
-            system_config: inventory.config().clone(),
+            system_config: inventory.config(),
             pre_compute_buf,
             #[cfg(not(feature = "tco"))]
             pre_compute_insns,
@@ -180,12 +180,7 @@ where
     }
 
     pub fn create_initial_vm_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F> {
-        VmState::initial(
-            &self.system_config,
-            &self.init_memory,
-            self.pc_start,
-            inputs,
-        )
+        VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs)
     }
 
     /// # Safety
@@ -223,7 +218,7 @@ where
     }
 }
 
-impl<'a, F, Ctx> InterpretedInstance<F, Ctx>
+impl<'a, F, Ctx> InterpretedInstance<'a, F, Ctx>
 where
     F: PrimeField32,
     Ctx: MeteredExecutionCtxTrait,
@@ -280,7 +275,7 @@ where
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
-            system_config: inventory.config().clone(),
+            system_config: inventory.config(),
             pre_compute_buf,
             #[cfg(not(feature = "tco"))]
             pre_compute_insns,
@@ -296,7 +291,7 @@ where
 
 // Execute functions specialize to relevant Ctx types to provide more streamlines APIs
 
-impl<F> InterpretedInstance<F, ExecutionCtx>
+impl<'a, F> InterpretedInstance<'a, F, ExecutionCtx>
 where
     F: PrimeField32,
 {
@@ -310,12 +305,8 @@ where
         inputs: impl Into<Streams<F>>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
-        let vm_state = VmState::initial(
-            &self.system_config,
-            &self.init_memory,
-            self.pc_start,
-            inputs,
-        );
+        let vm_state =
+            VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
         self.execute_from_state(vm_state, num_insns)
     }
 
@@ -360,7 +351,7 @@ where
     }
 }
 
-impl<F> InterpretedInstance<F, MeteredCtx>
+impl<'a, F> InterpretedInstance<'a, F, MeteredCtx>
 where
     F: PrimeField32,
 {
@@ -451,7 +442,7 @@ where
     }
 }
 
-impl<F> InterpretedInstance<F, MeteredCostCtx>
+impl<'a, F> InterpretedInstance<'a, F, MeteredCostCtx>
 where
     F: PrimeField32,
 {
@@ -503,14 +494,17 @@ where
     }
 }
 
-pub fn alloc_pre_compute_buf<F>(program: &Program<F>, pre_compute_max_size: usize) -> AlignedBuf {
+pub(crate) fn alloc_pre_compute_buf<F>(
+    program: &Program<F>,
+    pre_compute_max_size: usize,
+) -> AlignedBuf {
     let base_idx = get_pc_index(program.pc_base);
     let padded_program_len = base_idx + program.instructions_and_debug_infos.len();
     let buf_len = padded_program_len * pre_compute_max_size;
     AlignedBuf::uninit(buf_len, pre_compute_max_size)
 }
 
-pub fn split_pre_compute_buf<'a, F>(
+pub(crate) fn split_pre_compute_buf<'a, F>(
     program: &Program<F>,
     pre_compute_buf: &'a mut AlignedBuf,
     pre_compute_max_size: usize,
@@ -568,7 +562,7 @@ pub fn get_pc_index(pc: u32) -> usize {
 /// initialization.git
 // @dev: This is duplicate from the openvm crate, but it doesn't seem worth importing `openvm` here
 // just for this.
-pub struct AlignedBuf {
+pub(crate) struct AlignedBuf {
     pub ptr: *mut u8,
     pub layout: Layout,
 }
@@ -620,7 +614,7 @@ unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
 #[cfg(feature = "tco")]
 unsafe fn terminate_execute_e12_tco_handler<F: PrimeField32, CTX: ExecutionCtxTrait>(
-    interpreter: &InterpretedInstance<F, CTX>,
+    interpreter: &InterpretedInstance<'_, F, CTX>,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute = interpreter.get_pre_compute(exec_state.vm_state.pc());
@@ -629,13 +623,13 @@ unsafe fn terminate_execute_e12_tco_handler<F: PrimeField32, CTX: ExecutionCtxTr
 
 #[cfg(feature = "tco")]
 unsafe fn unreachable_tco_handler<F: PrimeField32, CTX>(
-    _: &InterpretedInstance<F, CTX>,
+    _: &InterpretedInstance<'_, F, CTX>,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     exec_state.exit_code = Err(ExecutionError::Unreachable(exec_state.vm_state.pc()));
 }
 
-pub fn get_pre_compute_max_size<F, E: Executor<F>>(
+pub(crate) fn get_pre_compute_max_size<F, E: Executor<F>>(
     program: &Program<F>,
     inventory: &ExecutorInventory<E>,
 ) -> usize {
@@ -661,7 +655,7 @@ pub fn get_pre_compute_max_size<F, E: Executor<F>>(
         .next_power_of_two()
 }
 
-pub fn get_metered_pre_compute_max_size<F, E: MeteredExecutor<F>>(
+pub(crate) fn get_metered_pre_compute_max_size<F, E: MeteredExecutor<F>>(
     program: &Program<F>,
     inventory: &ExecutorInventory<E>,
 ) -> usize {
@@ -695,7 +689,7 @@ fn system_opcode_pre_compute_size<F>(inst: &Instruction<F>) -> Option<usize> {
 }
 
 #[cfg(not(feature = "tco"))]
-pub fn get_pre_compute_instructions<F, Ctx, E>(
+pub(crate) fn get_pre_compute_instructions<F, Ctx, E>(
     program: &Program<F>,
     inventory: &ExecutorInventory<E>,
     pre_compute: &mut [&mut [u8]],
@@ -751,7 +745,7 @@ where
 }
 
 #[cfg(not(feature = "tco"))]
-pub fn get_metered_pre_compute_instructions<F, Ctx, E>(
+pub(crate) fn get_metered_pre_compute_instructions<F, Ctx, E>(
     program: &Program<F>,
     inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
