@@ -254,13 +254,13 @@ impl BabyBearChip {
 
         // Constrain a = b * c (mod p)
         let mut c = self.load_witness(ctx, a.to_baby_bear() * b_inv_val);
-        if a.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
+        if a.max_bits + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             a = self.reduce(ctx, a);
         }
-        if b.max_bits + c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
+        if b.max_bits + c.max_bits + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             b = self.reduce(ctx, b);
         }
-        if b.max_bits + c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
+        if b.max_bits + c.max_bits + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             c = self.reduce(ctx, c);
         }
         let diff = self.gate().sub_mul(ctx, a.value, b.value, c.value);
