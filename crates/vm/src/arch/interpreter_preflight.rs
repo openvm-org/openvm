@@ -1,3 +1,5 @@
+#[cfg(feature = "metrics")]
+use std::collections::BTreeMap;
 use std::{iter::repeat_n, sync::Arc};
 
 #[cfg(not(feature = "parallel"))]
@@ -119,6 +121,36 @@ impl<F: Field, E> PreflightInterpretedInstance<F, E> {
 }
 
 impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
+    #[cfg(feature = "metrics")]
+    pub fn opcode_counts_by_air<RA>(&self) -> BTreeMap<(usize, String), u64>
+    where
+        RA: Arena,
+        E: PreflightExecutor<F, RA>,
+    {
+        let mut counts = BTreeMap::new();
+        for (entry, &freq) in self.pc_handler.iter().zip(&self.execution_frequencies) {
+            if freq == 0
+                || !entry.is_some()
+                || entry.insn.opcode == SystemOpcode::TERMINATE.global_opcode()
+            {
+                continue;
+            }
+            let executor_idx = entry.executor_idx as usize;
+            let air_idx = unsafe {
+                // SAFETY: `entry.executor_idx` was produced by `ExecutorInventory`, and
+                // `executor_idx_to_air_idx` has one entry per executor.
+                *self.executor_idx_to_air_idx.get_unchecked(executor_idx)
+            };
+            let executor = unsafe {
+                // SAFETY: same invariant as in `execute_instruction`.
+                self.inventory.executors.get_unchecked(executor_idx)
+            };
+            let opcode = executor.get_opcode_name(entry.insn.opcode.as_usize());
+            *counts.entry((air_idx, opcode)).or_insert(0) += freq as u64;
+        }
+        counts
+    }
+
     /// Stopping is triggered by should_stop() or if VM is terminated
     pub fn execute_from_state<RA>(
         &mut self,
@@ -167,22 +199,27 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
         unsafe {
             *self.execution_frequencies.get_unchecked_mut(pc_idx) += 1;
         };
-        // SAFETY: the `executor_idx` comes from ExecutorInventory, which ensures that
-        // `executor_idx` is within bounds
+        tracing::trace!("pc: {pc:#x} | {:?}", pc_entry.insn);
+
+        if !pc_entry.is_some() {
+            return Err(ExecutionError::Unreachable(pc));
+        }
+
+        let opcode = pc_entry.insn.opcode;
+        let c = pc_entry.insn.c;
+        // Handle termination instruction
+        if opcode == SystemOpcode::TERMINATE.global_opcode() {
+            state.exit_code = Ok(Some(c.as_canonical_u32()));
+            return Ok(());
+        }
+
+        // SAFETY: non-system `executor_idx` values come from `ExecutorInventory`, which ensures
+        // that `executor_idx` is within bounds.
         let executor = unsafe {
             self.inventory
                 .executors
                 .get_unchecked(pc_entry.executor_idx as usize)
         };
-        tracing::trace!("pc: {pc:#x} | {:?}", pc_entry.insn);
-
-        let opcode = pc_entry.insn.opcode;
-        let c = pc_entry.insn.c;
-        // Handle termination instruction
-        if opcode.as_usize() == SystemOpcode::CLASS_OFFSET + SystemOpcode::TERMINATE as usize {
-            state.exit_code = Ok(Some(c.as_canonical_u32()));
-            return Ok(());
-        }
 
         // Execute the instruction using the control implementation
         tracing::trace!(
