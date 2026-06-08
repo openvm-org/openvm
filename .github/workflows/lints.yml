@@ -49,9 +49,6 @@ jobs:
           cache-on-failure: true
           key: v1
 
-      - name: Generate docs
-        run: |
-          cargo doc --workspace  --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"
       - name: Run fmt
         run: |
           rustup install nightly
@@ -101,6 +98,9 @@ jobs:
         run: |
           cargo binstall --no-confirm --force cargo-audit
           cargo audit
+      - name: Generate docs
+        run: |
+          cargo doc --workspace  --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"
 
       - name: sccache stats
         if: always()
