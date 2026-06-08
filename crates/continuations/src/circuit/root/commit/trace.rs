@@ -41,7 +41,7 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
             )
         })
         .collect();
-    let rows = generate_cols_from_leaf_children(leaf_children);
+    let rows = generate_cols_from_leaf_children(leaf_children, false);
     let poseidon2_compress_inputs = rows
         .iter()
         .take(rows.len() - 1)

@@ -6,6 +6,7 @@ pub use openvm_verify_stark_host::deferral::DeferralMerkleProofs;
 pub mod dummy;
 pub mod hook;
 pub mod inner;
+pub mod utils;
 
 pub const DEF_CIRCUIT_PVS_AIR_ID: usize = 0;
 
@@ -13,6 +14,9 @@ pub const DEF_AGG_VERIFIER_AIR_ID: usize = 0;
 pub const DEF_AGG_PVS_AIR_ID: usize = 1;
 
 pub const DEF_HOOK_PVS_AIR_ID: usize = 0;
+
+pub const DEF_LEAF_TAG: [u8; DIGEST_SIZE] = [1, 0, 0, 0, 0, 0, 0, 0];
+pub const DEF_INTERNAL_TAG: [u8; DIGEST_SIZE] = [2, 0, 0, 0, 0, 0, 0, 0];
 
 // Set to the default max trace log height of the deferral hook circuit
 const MAX_DEF_AGG_MERKLE_DEPTH: usize = 20;
