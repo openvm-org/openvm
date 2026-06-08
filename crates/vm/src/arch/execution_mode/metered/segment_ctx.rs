@@ -25,8 +25,7 @@ const DEFAULT_MAIN_CELL_WEIGHT: usize = 3; // 1 + 2^{log_blowup=1}
 ///               = (1 + need_rot) × main_cnt bytes     (per trace, summed)
 /// ```
 ///
-/// This accounts for the extra memory after `fold_ple` in stark-backend
-/// crates/cuda-backend/src/logup_zerocheck/mod.rs.
+/// This accounts for the extra memory after `fold_ple` in the interaction prover.
 ///
 /// While the `mat_eval` is not dropped, inside `sumcheck_polys_batch_eval` we need to interpolate
 /// each MLE matrix further which takes `(constraint_degree \* padded_height / 2^l_skip / 2) \*
@@ -50,13 +49,74 @@ const DEFAULT_MAIN_CELL_SECONDARY_WEIGHT: f64 = 0.75;
 /// `2 * (1 / 16 + 1 / 256)` of the real leaf memory.
 const DEFAULT_INTERACTION_CELL_WEIGHT: f64 =
     (2 * D_EF) as f64 * (1.0 + 2.0 * (1.0 / 16.0 + 1.0 / 256.0));
-/// Constant overhead for interaction memory: sqrt-decomposed eq buffers, M matrix,
-/// and misc small buffers. Bounded by ~2 MB assuming fewer than 2^32 leaves.
-const DEFAULT_INTERACTION_CONSTANT_OVERHEAD: usize = 2 << 20; // 2 MiB
+/// Interaction memory overhead: eq buffers, M matrix, and misc small buffers.
+/// Added once per segment and bounded by ~2 MB assuming fewer than 2^32 leaves.
+const DEFAULT_INTERACTION_MEMORY_OVERHEAD: usize = 2 << 20; // 2 MiB
 
 /// Returns `ceil(cell_count * base_field_size * weight)`.
 fn ceil_weighted_bytes(cell_count: usize, base_field_size: usize, weight: f64) -> usize {
     ((cell_count * base_field_size) as f64 * weight).ceil() as usize
+}
+
+#[inline(always)]
+fn secondary_weight_for_rot(need_rot: bool, main_secondary_weight: f64) -> f64 {
+    if need_rot {
+        2.0 * main_secondary_weight
+    } else {
+        main_secondary_weight
+    }
+}
+
+#[inline(always)]
+fn calculate_main_secondary_memory(
+    main_cnt_with_rot: usize,
+    main_cnt_no_rot: usize,
+    base_field_size: usize,
+    main_secondary_weight: f64,
+) -> usize {
+    ceil_weighted_bytes(
+        main_cnt_with_rot,
+        base_field_size,
+        secondary_weight_for_rot(true, main_secondary_weight),
+    ) + ceil_weighted_bytes(
+        main_cnt_no_rot,
+        base_field_size,
+        secondary_weight_for_rot(false, main_secondary_weight),
+    )
+}
+
+#[cfg(feature = "metrics")]
+#[derive(Clone, Debug, Default)]
+struct MeteredCounts {
+    /// Rows before power-of-two padding.
+    unpadded_rows: usize,
+    /// Rows added by power-of-two padding.
+    padding_rows: usize,
+    /// Main trace cells for AIRs that open next-row rotations, before padding.
+    main_unpadded_with_rot: usize,
+    /// Main trace cells for AIRs that open next-row rotations, from padding rows.
+    main_padding_with_rot: usize,
+    /// Main trace cells for AIRs without next-row rotations, before padding.
+    main_unpadded_no_rot: usize,
+    /// Main trace cells for AIRs without next-row rotations, from padding rows.
+    main_padding_no_rot: usize,
+    /// Metered row-interaction slots before padding.
+    interaction_cells_unpadded: usize,
+    /// Metered row-interaction slots from padding rows.
+    interaction_cells_padding: usize,
+}
+
+#[cfg(feature = "metrics")]
+#[derive(Clone, Debug)]
+struct MeteredMemoryBreakdown {
+    /// Total selected segment memory estimate.
+    total: usize,
+    /// Unpadded-row contribution to the selected memory estimate.
+    unpadded: usize,
+    /// Padding-row contribution to the selected memory estimate.
+    padding: usize,
+    /// Interaction memory overhead added once per segment.
+    interaction_memory_overhead: usize,
 }
 
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
@@ -79,6 +139,7 @@ pub struct SegmentationConfig {
     #[getset(set_with = "pub")]
     pub main_cell_secondary_weight: f64,
     /// Weight multiplier for interaction cells in memory calculation.
+    /// An interaction cell is one metered row-interaction slot.
     #[getset(set_with = "pub")]
     pub interaction_cell_weight: f64,
     /// Size of the base field in bytes. Used to convert cell count to memory bytes.
@@ -233,16 +294,17 @@ impl SegmentationCtx {
             .unwrap_or((0, "unknown"))
     }
 
-    /// Convert main and interaction cell counts to memory bytes.
+    /// Convert main trace cells and interaction cells to memory bytes.
     /// Formula: base_field_size * (main_cell_weight * main_cells + interaction_cell_weight *
-    /// interaction_cells). `main_cnt_with_rot` cells commit 2 PCS openings per column so use
-    /// `2 * main_cell_secondary_weight`; `main_cnt_no_rot` cells use the base weight.
+    /// interaction_cells). `main_cnt_with_rot` cells commit 2 PCS openings per column so use `2 *
+    /// main_cell_secondary_weight`; `main_cnt_no_rot` cells use the base weight.
+    /// An interaction cell is one metered row-interaction slot.
     #[inline(always)]
     fn counts_to_memory(
         &self,
         main_cnt_with_rot: usize,
         main_cnt_no_rot: usize,
-        interaction_cnt: usize,
+        interaction_cells: usize,
     ) -> (
         usize, /* memory */
         usize, /* main */
@@ -255,15 +317,15 @@ impl SegmentationCtx {
 
         let main_cnt = main_cnt_with_rot + main_cnt_no_rot;
         let main_memory = main_cnt * main_weight * base_field_size;
-        let main_secondary_memory =
-            ceil_weighted_bytes(
-                main_cnt_with_rot,
-                base_field_size,
-                2.0 * main_secondary_weight,
-            ) + ceil_weighted_bytes(main_cnt_no_rot, base_field_size, main_secondary_weight);
+        let main_secondary_memory = calculate_main_secondary_memory(
+            main_cnt_with_rot,
+            main_cnt_no_rot,
+            base_field_size,
+            main_secondary_weight,
+        );
         let interaction_memory =
-            ceil_weighted_bytes(interaction_cnt, base_field_size, interaction_weight)
-                + DEFAULT_INTERACTION_CONSTANT_OVERHEAD;
+            ceil_weighted_bytes(interaction_cells, base_field_size, interaction_weight)
+                + DEFAULT_INTERACTION_MEMORY_OVERHEAD;
         (
             main_memory + max(main_secondary_memory, interaction_memory),
             main_memory,
@@ -271,8 +333,44 @@ impl SegmentationCtx {
         )
     }
 
-    /// Sum padded main and interaction cell counts across all chips, splitting main cells by
-    /// per-AIR `need_rot`.
+    /// Sum padded main trace cells and interaction cells across all chips, splitting main
+    /// cells by per-AIR `need_rot`.
+    #[cfg(feature = "metrics")]
+    #[inline(always)]
+    fn calculate_count_breakdown(&self, trace_heights: &[u32]) -> MeteredCounts {
+        debug_assert_eq!(trace_heights.len(), self.widths.len());
+        debug_assert_eq!(trace_heights.len(), self.interactions.len());
+        debug_assert_eq!(trace_heights.len(), self.need_rot.len());
+
+        let mut counts = MeteredCounts::default();
+        for (((&height, &width), &interactions), &need_rot) in trace_heights
+            .iter()
+            .zip(self.widths.iter())
+            .zip(self.interactions.iter())
+            .zip(self.need_rot.iter())
+        {
+            let padded_height = height.next_power_of_two() as usize;
+            let unpadded_height = height as usize;
+            let padding_height = padded_height - unpadded_height;
+            counts.unpadded_rows += unpadded_height;
+            counts.padding_rows += padding_height;
+            let main_unpadded_cells = unpadded_height * width;
+            let main_padding_cells = padding_height * width;
+            if need_rot {
+                counts.main_unpadded_with_rot += main_unpadded_cells;
+                counts.main_padding_with_rot += main_padding_cells;
+            } else {
+                counts.main_unpadded_no_rot += main_unpadded_cells;
+                counts.main_padding_no_rot += main_padding_cells;
+            }
+            counts.interaction_cells_unpadded += unpadded_height * interactions;
+            counts.interaction_cells_padding += padding_height * interactions;
+        }
+        counts
+    }
+
+    /// Sum padded main trace cells and interaction cells across all chips, splitting main
+    /// cells by per-AIR `need_rot`.
     #[inline(always)]
     fn calculate_cell_counts(&self, trace_heights: &[u32]) -> (usize, usize, usize) {
         debug_assert_eq!(trace_heights.len(), self.widths.len());
@@ -281,7 +379,7 @@ impl SegmentationCtx {
 
         let mut main_cnt_with_rot = 0;
         let mut main_cnt_no_rot = 0;
-        let mut interaction_cnt = 0;
+        let mut interaction_cells = 0;
         for (((&height, &width), &interactions), &need_rot) in trace_heights
             .iter()
             .zip(self.widths.iter())
@@ -295,9 +393,9 @@ impl SegmentationCtx {
             } else {
                 main_cnt_no_rot += main_cells;
             }
-            interaction_cnt += padded_height * interactions;
+            interaction_cells += padded_height * interactions;
         }
-        (main_cnt_with_rot, main_cnt_no_rot, interaction_cnt)
+        (main_cnt_with_rot, main_cnt_no_rot, interaction_cells)
     }
 
     /// Calculate total memory in bytes based on trace heights and widths.
@@ -310,9 +408,70 @@ impl SegmentationCtx {
         usize, /* main */
         usize, /* interaction */
     ) {
-        let (main_cnt_with_rot, main_cnt_no_rot, interaction_cnt) =
+        let (main_cnt_with_rot, main_cnt_no_rot, interaction_cells) =
             self.calculate_cell_counts(trace_heights);
-        self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cnt)
+        self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells)
+    }
+
+    #[cfg(feature = "metrics")]
+    #[inline(always)]
+    fn calculate_memory_breakdown(&self, counts: &MeteredCounts) -> MeteredMemoryBreakdown {
+        let main_weight = self.config.main_cell_weight;
+        let main_secondary_weight = self.config.main_cell_secondary_weight;
+        let interaction_weight = self.config.interaction_cell_weight;
+        let base_field_size = self.config.base_field_size;
+
+        let main_unpadded_cells = counts.main_unpadded_with_rot + counts.main_unpadded_no_rot;
+        let main_padding_cells = counts.main_padding_with_rot + counts.main_padding_no_rot;
+        let main_unpadded = main_unpadded_cells * main_weight * base_field_size;
+        let main_padding = main_padding_cells * main_weight * base_field_size;
+        let main = main_unpadded + main_padding;
+
+        let main_secondary_unpadded = calculate_main_secondary_memory(
+            counts.main_unpadded_with_rot,
+            counts.main_unpadded_no_rot,
+            base_field_size,
+            main_secondary_weight,
+        );
+        let main_secondary = calculate_main_secondary_memory(
+            counts.main_unpadded_with_rot + counts.main_padding_with_rot,
+            counts.main_unpadded_no_rot + counts.main_padding_no_rot,
+            base_field_size,
+            main_secondary_weight,
+        );
+        let main_secondary_padding = main_secondary - main_secondary_unpadded;
+
+        let interaction_weighted_unpadded = ceil_weighted_bytes(
+            counts.interaction_cells_unpadded,
+            base_field_size,
+            interaction_weight,
+        );
+        let interaction_weighted = ceil_weighted_bytes(
+            counts.interaction_cells_unpadded + counts.interaction_cells_padding,
+            base_field_size,
+            interaction_weight,
+        );
+        let interaction_unpadded =
+            interaction_weighted_unpadded + DEFAULT_INTERACTION_MEMORY_OVERHEAD;
+        let interaction_padding = interaction_weighted - interaction_weighted_unpadded;
+        let interaction = interaction_unpadded + interaction_padding;
+
+        let (peak_unpadded, peak_padding, peak) = if interaction >= main_secondary {
+            (interaction_unpadded, interaction_padding, interaction)
+        } else {
+            (
+                main_secondary_unpadded,
+                main_secondary_padding,
+                main_secondary,
+            )
+        };
+
+        MeteredMemoryBreakdown {
+            total: main + peak,
+            unpadded: main_unpadded + peak_unpadded,
+            padding: main_padding + peak_padding,
+            interaction_memory_overhead: DEFAULT_INTERACTION_MEMORY_OVERHEAD,
+        }
     }
 
     /// Calculate the total interactions based on trace heights
@@ -355,7 +514,7 @@ impl SegmentationCtx {
 
         let mut main_cnt_with_rot = 0usize;
         let mut main_cnt_no_rot = 0usize;
-        let mut interaction_cnt = 0usize;
+        let mut interaction_cells = 0usize;
         for (i, ((((padded_height, width), interactions), is_constant), &need_rot)) in trace_heights
             .iter()
             .map(|&height| height.next_power_of_two())
@@ -385,11 +544,11 @@ impl SegmentationCtx {
             } else {
                 main_cnt_no_rot += main_cells;
             }
-            interaction_cnt += padded_height as usize * interactions;
+            interaction_cells += padded_height as usize * interactions;
         }
 
         let (total_memory, main_memory, interaction_memory) =
-            self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cnt);
+            self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells);
         if total_memory > self.config.limits.max_memory {
             tracing::info!(
                 "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5})",
@@ -532,6 +691,12 @@ impl SegmentationCtx {
         );
 
         self.log_segment_info::<IS_FINAL>(instret_start, num_insns, &trace_heights);
+        #[cfg(feature = "metrics")]
+        {
+            let segment = self.segments.len().to_string();
+            self.emit_metered_segment_metrics(&segment, &trace_heights);
+            self.emit_metered_air_metrics(&segment, &trace_heights);
+        }
         self.segments.push(Segment {
             instret_start,
             num_insns,
@@ -590,5 +755,96 @@ impl SegmentationCtx {
             utilization,
             final_marker
         );
+    }
+}
+
+#[cfg(feature = "metrics")]
+impl SegmentationCtx {
+    fn emit_metered_segment_metrics(&self, segment: &str, trace_heights: &[u32]) {
+        let counts = self.calculate_count_breakdown(trace_heights);
+        let memory = self.calculate_memory_breakdown(&counts);
+        let (max_padded_height, _) = self.calculate_max_trace_height_with_name(trace_heights);
+        let labels = [("segment", segment.to_string())];
+        metrics::counter!("metered_memory_bytes", &labels).absolute(memory.total as u64);
+        metrics::counter!("metered_memory_unpadded_bytes", &labels)
+            .absolute(memory.unpadded as u64);
+        metrics::counter!("metered_memory_padding_bytes", &labels).absolute(memory.padding as u64);
+        metrics::counter!("metered_interaction_memory_overhead_bytes", &labels)
+            .absolute(memory.interaction_memory_overhead as u64);
+        metrics::counter!("metered_max_padded_height", &labels).absolute(max_padded_height as u64);
+    }
+
+    fn emit_metered_air_metrics(&self, segment: &str, trace_heights: &[u32]) {
+        let main_weight = self.config.main_cell_weight;
+        let main_secondary_weight = self.config.main_cell_secondary_weight;
+        let interaction_weight = self.config.interaction_cell_weight;
+        let base_field_size = self.config.base_field_size;
+
+        for (air_id, ((((&height, &width), &interactions), &need_rot), air_name)) in trace_heights
+            .iter()
+            .zip(self.widths.iter())
+            .zip(self.interactions.iter())
+            .zip(self.need_rot.iter())
+            .zip(self.air_names.iter())
+            .enumerate()
+        {
+            let padded_height = height.next_power_of_two();
+            let padding_height = padded_height - height;
+            if height == 0 && padding_height == 0 {
+                continue;
+            }
+            let labels = [
+                ("air_name", air_name.clone()),
+                ("air_id", air_id.to_string()),
+                ("segment", segment.to_string()),
+            ];
+            let unpadded_cells = height as usize * width;
+            let padding_cells = padding_height as usize * width;
+            // One interaction cell is one metered row-interaction slot.
+            let interaction_cells_unpadded = height as usize * interactions;
+            let interaction_cells_padding = padding_height as usize * interactions;
+            let secondary_weight = secondary_weight_for_rot(need_rot, main_secondary_weight);
+            let main_secondary_unpadded =
+                ceil_weighted_bytes(unpadded_cells, base_field_size, secondary_weight);
+            let main_secondary = ceil_weighted_bytes(
+                unpadded_cells + padding_cells,
+                base_field_size,
+                secondary_weight,
+            );
+            let interaction_unpadded = ceil_weighted_bytes(
+                interaction_cells_unpadded,
+                base_field_size,
+                interaction_weight,
+            );
+            let interaction_total = ceil_weighted_bytes(
+                interaction_cells_unpadded + interaction_cells_padding,
+                base_field_size,
+                interaction_weight,
+            );
+
+            metrics::counter!("metered_rows_unpadded", &labels).absolute(height as u64);
+            metrics::counter!("metered_rows_padding", &labels).absolute(padding_height as u64);
+            metrics::counter!("metered_main_cells_unpadded", &labels)
+                .absolute(unpadded_cells as u64);
+            metrics::counter!("metered_main_cells_padding", &labels).absolute(padding_cells as u64);
+            metrics::counter!("metered_interaction_cells_unpadded", &labels)
+                .absolute(interaction_cells_unpadded as u64);
+            metrics::counter!("metered_interaction_cells_padding", &labels)
+                .absolute(interaction_cells_padding as u64);
+            metrics::counter!("metered_main_memory_unpadded_bytes", &labels)
+                .absolute((unpadded_cells * main_weight * base_field_size) as u64);
+            metrics::counter!("metered_main_memory_padding_bytes", &labels)
+                .absolute((padding_cells * main_weight * base_field_size) as u64);
+            metrics::counter!("metered_main_secondary_memory_unpadded_bytes", &labels)
+                .absolute(main_secondary_unpadded as u64);
+            metrics::counter!("metered_main_secondary_memory_padding_bytes", &labels)
+                .absolute((main_secondary - main_secondary_unpadded) as u64);
+            metrics::counter!("metered_interaction_memory_unpadded_bytes", &labels)
+                .absolute(interaction_unpadded as u64);
+            metrics::counter!("metered_interaction_memory_padding_bytes", &labels)
+                .absolute((interaction_total - interaction_unpadded) as u64);
+            metrics::counter!("metered_interactions", &labels)
+                .absolute(((height as usize + 1) * interactions) as u64);
+        }
     }
 }
