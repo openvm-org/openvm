@@ -199,22 +199,27 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
         unsafe {
             *self.execution_frequencies.get_unchecked_mut(pc_idx) += 1;
         };
-        // SAFETY: the `executor_idx` comes from ExecutorInventory, which ensures that
-        // `executor_idx` is within bounds
+        tracing::trace!("pc: {pc:#x} | {:?}", pc_entry.insn);
+
+        if !pc_entry.is_some() {
+            return Err(ExecutionError::Unreachable(pc));
+        }
+
+        let opcode = pc_entry.insn.opcode;
+        let c = pc_entry.insn.c;
+        // Handle termination instruction
+        if opcode == SystemOpcode::TERMINATE.global_opcode() {
+            state.exit_code = Ok(Some(c.as_canonical_u32()));
+            return Ok(());
+        }
+
+        // SAFETY: non-system `executor_idx` values come from `ExecutorInventory`, which ensures
+        // that `executor_idx` is within bounds.
         let executor = unsafe {
             self.inventory
                 .executors
                 .get_unchecked(pc_entry.executor_idx as usize)
         };
-        tracing::trace!("pc: {pc:#x} | {:?}", pc_entry.insn);
-
-        let opcode = pc_entry.insn.opcode;
-        let c = pc_entry.insn.c;
-        // Handle termination instruction
-        if opcode.as_usize() == SystemOpcode::CLASS_OFFSET + SystemOpcode::TERMINATE as usize {
-            state.exit_code = Ok(Some(c.as_canonical_u32()));
-            return Ok(());
-        }
 
         // Execute the instruction using the control implementation
         tracing::trace!(
