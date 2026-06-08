@@ -129,7 +129,10 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
     {
         let mut counts = BTreeMap::new();
         for (entry, &freq) in self.pc_handler.iter().zip(&self.execution_frequencies) {
-            if freq == 0 || !entry.is_some() {
+            if freq == 0
+                || !entry.is_some()
+                || entry.insn.opcode == SystemOpcode::TERMINATE.global_opcode()
+            {
                 continue;
             }
             let executor_idx = entry.executor_idx as usize;
