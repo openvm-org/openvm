@@ -45,6 +45,10 @@ use super::{
     VmExecutionConfig, VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
     PROGRAM_CACHED_TRACE_INDEX,
 };
+#[cfg(feature = "metrics")]
+use crate::metrics::emit_opcode_counts;
+#[cfg(feature = "perf-metrics")]
+use crate::metrics::end_segment_metrics;
 use crate::{
     arch::deferral::DeferralState,
     execute_spanned,
@@ -617,9 +621,14 @@ where
         interpreter.reset_execution_frequencies();
         execute_spanned!("execute_preflight", interpreter, &mut exec_state)?;
         let filtered_exec_frequencies = interpreter.filtered_execution_frequencies();
+        #[cfg(feature = "metrics")]
+        emit_opcode_counts(
+            &exec_state.vm_state.metrics,
+            interpreter.opcode_counts_by_air::<VB::RecordArena>(),
+        );
         let touched_memory = exec_state.vm_state.memory.finalize::<Val<E::SC>>();
         #[cfg(feature = "perf-metrics")]
-        crate::metrics::end_segment_metrics(&mut exec_state);
+        end_segment_metrics(&mut exec_state);
 
         let pc = exec_state.vm_state.pc();
         let memory = exec_state.vm_state.memory;
@@ -671,9 +680,13 @@ where
             state.metrics.fn_bounds = exe.fn_bounds.clone();
             state.metrics.debug_infos = exe.program.debug_infos();
         }
+        #[cfg(feature = "metrics")]
+        {
+            state.metrics.set_pk_air_names(&self.pk);
+        }
         #[cfg(feature = "perf-metrics")]
         {
-            state.metrics.set_pk_info(&self.pk);
+            state.metrics.set_pk_trace_info(&self.pk);
             state.metrics.num_sys_airs = self.config().as_ref().num_airs();
         }
         state

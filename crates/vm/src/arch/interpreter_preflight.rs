@@ -1,3 +1,5 @@
+#[cfg(feature = "metrics")]
+use std::collections::BTreeMap;
 use std::{iter::repeat_n, sync::Arc};
 
 #[cfg(not(feature = "parallel"))]
@@ -119,6 +121,33 @@ impl<F: Field, E> PreflightInterpretedInstance<F, E> {
 }
 
 impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
+    #[cfg(feature = "metrics")]
+    pub fn opcode_counts_by_air<RA>(&self) -> BTreeMap<(usize, String), u64>
+    where
+        RA: Arena,
+        E: PreflightExecutor<F, RA>,
+    {
+        let mut counts = BTreeMap::new();
+        for (entry, &freq) in self.pc_handler.iter().zip(&self.execution_frequencies) {
+            if freq == 0 || !entry.is_some() {
+                continue;
+            }
+            let executor_idx = entry.executor_idx as usize;
+            let air_idx = unsafe {
+                // SAFETY: `entry.executor_idx` was produced by `ExecutorInventory`, and
+                // `executor_idx_to_air_idx` has one entry per executor.
+                *self.executor_idx_to_air_idx.get_unchecked(executor_idx)
+            };
+            let executor = unsafe {
+                // SAFETY: same invariant as in `execute_instruction`.
+                self.inventory.executors.get_unchecked(executor_idx)
+            };
+            let opcode = executor.get_opcode_name(entry.insn.opcode.as_usize());
+            *counts.entry((air_idx, opcode)).or_insert(0) += freq as u64;
+        }
+        counts
+    }
+
     /// Stopping is triggered by should_stop() or if VM is terminated
     pub fn execute_from_state<RA>(
         &mut self,
