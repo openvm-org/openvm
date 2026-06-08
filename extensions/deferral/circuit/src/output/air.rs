@@ -2,16 +2,17 @@ use std::{array::from_fn, borrow::Borrow};
 
 use itertools::{izip, Itertools};
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES},
+    arch::{ExecutionBridge, ExecutionState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE},
     system::memory::{
         offline_checker::{pack_u8_block, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        MemoryAddress,
+        MemoryAddress, POINTER_MAX_BITS,
     },
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
     utils::{assert_array_eq, not},
-    ColumnsAir, StructReflection, StructReflectionHelper,
+    var_range::VariableRangeCheckerBus,
+    ColumnsAir, StructReflection, StructReflectionHelper, U16_BITS,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
@@ -20,7 +21,10 @@ use openvm_instructions::{
     riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::adapters::{byte_ptr_to_u16_ptr, expand_to_rv64_register};
+use openvm_riscv_circuit::adapters::{
+    byte_ptr_to_u16_ptr, eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_u16_cell_ptr_limbs,
+    expand_to_rv64_register, pack_u8_pair, reg_byte_ptr_to_cell_ptr_limbs,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -84,6 +88,15 @@ pub struct DeferralOutputCols<T> {
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.
     pub poseidon2_res: [T; DIGEST_SIZE],
+
+    // Carry for converting the heap `input` base *byte* pointer (read on the first row) to
+    // AS-native u16 *cell* pointer limbs, plus per-block cell-offset carries.
+    pub input_cell_carry: T,
+    pub input_add_carry: [T; OUTPUT_TOTAL_MEMORY_OPS],
+
+    // Per-row output write *cell* pointer limbs `[lo16, hi16]`. On write rows this equals
+    // `(output_ptr + (section_idx - 1) * DIGEST_SIZE) / 2` (cell = byte / 2).
+    pub write_cell_ptr: [T; 2],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
@@ -94,6 +107,7 @@ pub struct DeferralOutputAir {
     pub count_bus: DeferralCircuitCountBus,
     pub poseidon2_bus: DeferralPoseidon2Bus,
     pub bitwise_bus: BitwiseOperationLookupBus,
+    pub range_bus: VariableRangeCheckerBus,
     pub address_bits: usize,
 }
 
@@ -281,9 +295,13 @@ where
         let rd_full = expand_to_rv64_register(&local.rd_val);
         let rs_full = expand_to_rv64_register(&local.rs_val);
 
+        // Register byte pointers are small: `ptr / 2` in the low cell limb, high cell limb zero.
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), byte_ptr_to_u16_ptr::<AB>(local.rd_ptr)),
+                MemoryAddress::new(
+                    d.clone(),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rd_ptr),
+                ),
                 pack_u8_block::<AB>(&rd_full),
                 local.from_state.timestamp,
                 &local.rd_aux,
@@ -292,7 +310,10 @@ where
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), byte_ptr_to_u16_ptr::<AB>(local.rs_ptr)),
+                MemoryAddress::new(
+                    d.clone(),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs_ptr),
+                ),
                 pack_u8_block::<AB>(&rs_full),
                 local.from_state.timestamp + AB::Expr::ONE,
                 &local.rs_aux,
@@ -302,7 +323,6 @@ where
         // Constrain memory reads and writes using the MemoryBridge. a and b are
         // register pointers whose values are read first, then used as heap
         // pointers. c carries deferral_idx.
-        let input_ptr = bytes_to_f(&local.rs_val);
         let output_ptr = bytes_to_f(&local.rd_val);
         let output_len_full = from_fn(|i| {
             if i < F_NUM_BYTES {
@@ -318,20 +338,43 @@ where
                 output_commit_and_len,
             );
 
-        for (chunk_idx, (data, aux)) in output_commit_and_len_chunks
-            .into_iter()
-            .zip(&local.output_commit_and_len_aux)
-            .enumerate()
+        // Cell offset (in u16 cells) between consecutive heap read blocks.
+        let heap_cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
+
+        // Convert the `input` base *byte* pointer (read on the first row) to AS-native u16 *cell*
+        // pointer limbs. The byte pointer is little-endian 16-bit limbs from the low 4 register
+        // bytes.
+        let input_byte_limbs: [AB::Expr; 2] = [
+            pack_u8_pair(local.rs_val[0].into(), local.rs_val[1].into()),
+            pack_u8_pair(local.rs_val[2].into(), local.rs_val[3].into()),
+        ];
+        let input_base_cell = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+            builder,
+            self.range_bus,
+            input_byte_limbs,
+            local.input_cell_carry,
+            self.address_bits,
+            local.is_first.into(),
+        );
+
+        for (chunk_idx, (data, aux, carry)) in izip!(
+            output_commit_and_len_chunks,
+            &local.output_commit_and_len_aux,
+            &local.input_add_carry
+        )
+        .enumerate()
         {
+            let block_cell_ptr = eval_add_const_u16_limbs::<AB>(
+                builder,
+                self.range_bus,
+                input_base_cell.clone(),
+                chunk_idx as u32 * heap_cell_stride,
+                *carry,
+                local.is_first.into(),
+            );
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(
-                        e.clone(),
-                        byte_ptr_to_u16_ptr::<AB>(
-                            input_ptr.clone()
-                                + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
-                        ),
-                    ),
+                    MemoryAddress::new(e.clone(), block_cell_ptr),
                     pack_u8_block::<AB>(&data),
                     local.from_state.timestamp + AB::Expr::from_usize(2 + chunk_idx),
                     aux,
@@ -342,6 +385,29 @@ where
         let write_bytes_chunks =
             split_byte_memory_ops::<_, DIGEST_SIZE, DIGEST_BYTE_MEMORY_OPS>(local.sponge_inputs);
         let section_idx_minus_one = local.section_idx - AB::Expr::ONE;
+        let is_write_row = local.is_valid - local.is_first;
+
+        // Output write *cell* pointer for this row: `(output_ptr + (section_idx - 1) * DIGEST_SIZE)
+        // / 2`. The composed cell-pointer field expression can approach 2^31 (and thus exceed the
+        // field modulus), so it is witnessed as little-endian 16-bit cell-pointer limbs
+        // `[lo16, hi16]` and range-checked; the limbs are then constrained to equal the composed
+        // expression. With `lo16 < 2^16` and `hi16 < 2^(POINTER_MAX_BITS - 16)` the decomposition
+        // is the unique canonical representative in `[0, 2^31)`.
+        let write_cell_lo = local.write_cell_ptr[0];
+        let write_cell_hi = local.write_cell_ptr[1];
+        let composed_write_cell = byte_ptr_to_u16_ptr::<AB>(
+            output_ptr.clone() + section_idx_minus_one.clone() * AB::Expr::from_usize(DIGEST_SIZE),
+        );
+        builder.when(is_write_row.clone()).assert_zero(
+            write_cell_lo + write_cell_hi * AB::Expr::from_u32(1 << U16_BITS) - composed_write_cell,
+        );
+        self.range_bus
+            .range_check(write_cell_lo, U16_BITS)
+            .eval(builder, is_write_row.clone());
+        self.range_bus
+            .range_check(write_cell_hi, POINTER_MAX_BITS - U16_BITS)
+            .eval(builder, is_write_row.clone());
+        let write_cell: [AB::Expr; 2] = [write_cell_lo.into(), write_cell_hi.into()];
 
         for (chunk_idx, (data, aux)) in write_bytes_chunks
             .into_iter()
@@ -351,21 +417,16 @@ where
             for bytes in data.chunks(2) {
                 self.bitwise_bus
                     .send_range(bytes[0], bytes[1])
-                    .eval(builder, local.is_valid - local.is_first);
+                    .eval(builder, is_write_row.clone());
             }
 
             let data_expr: [AB::Expr; MEMORY_BLOCK_BYTES] = from_fn(|i| data[i].into());
+            // DIGEST_BYTE_MEMORY_OPS == 1, so there is a single write block per row at
+            // `write_cell`.
+            debug_assert_eq!(chunk_idx, 0);
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(
-                        e.clone(),
-                        byte_ptr_to_u16_ptr::<AB>(
-                            output_ptr.clone()
-                                + (section_idx_minus_one.clone()
-                                    * AB::Expr::from_usize(DIGEST_SIZE))
-                                + AB::Expr::from_usize(chunk_idx * MEMORY_BLOCK_BYTES),
-                        ),
-                    ),
+                    MemoryAddress::new(e.clone(), write_cell.clone()),
                     pack_u8_block::<AB>(&data_expr),
                     local.from_state.timestamp
                         + AB::Expr::from_usize(2 + OUTPUT_TOTAL_MEMORY_OPS + chunk_idx)
@@ -373,7 +434,7 @@ where
                             * AB::Expr::from_usize(DIGEST_BYTE_MEMORY_OPS)),
                     aux,
                 )
-                .eval(builder, local.is_valid - local.is_first);
+                .eval(builder, is_write_row.clone());
         }
 
         // Evaluate the execution interaction. Because a single opcode spans many

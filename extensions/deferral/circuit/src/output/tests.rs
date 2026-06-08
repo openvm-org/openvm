@@ -226,6 +226,7 @@ fn create_cpu_harness(tester: &VmChipTestBuilder<F>, num_deferrals: usize) -> Cp
         count_bus,
         poseidon2_bus,
         bitwise_bus,
+        tester.range_checker().bus(),
         tester.address_bits(),
     );
     let executor = DeferralOutputExecutor::new();
@@ -234,6 +235,7 @@ fn create_cpu_harness(tester: &VmChipTestBuilder<F>, num_deferrals: usize) -> Cp
             count_chip.clone(),
             poseidon2_chip.clone(),
             bitwise_chip.clone(),
+            tester.range_checker(),
             tester.address_bits(),
         ),
         tester.memory_helper(),
@@ -269,6 +271,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
         count_bus,
         poseidon2_bus,
         bitwise_bus,
+        tester.cpu_range_checker().bus(),
         tester.address_bits(),
     );
     let executor = DeferralOutputExecutor::new();
@@ -277,6 +280,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
             count_chip_cpu,
             poseidon2_chip_cpu,
             dummy_bitwise_chip,
+            tester.cpu_range_checker(),
             tester.address_bits(),
         ),
         tester.dummy_memory_helper(),

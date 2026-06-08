@@ -6185,6 +6185,7 @@ dependencies = [
  "openvm-cuda-backend",
  "openvm-cuda-builder",
  "openvm-cuda-common",
+ "openvm-deferral-guest",
  "openvm-deferral-transpiler",
  "openvm-instructions",
  "openvm-poseidon2-air",
