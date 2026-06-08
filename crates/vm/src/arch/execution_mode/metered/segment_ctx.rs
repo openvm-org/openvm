@@ -6,6 +6,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
 
+use crate::utils::next_power_of_two_or_zero;
+
 /// Extension field size.
 const D_EF: usize = 4;
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
@@ -83,6 +85,15 @@ fn calculate_main_secondary_memory(
         base_field_size,
         secondary_weight_for_rot(false, main_secondary_weight),
     )
+}
+
+#[inline(always)]
+fn add_one_or_zero(n: u32) -> usize {
+    if n == 0 {
+        0
+    } else {
+        n as usize + 1
+    }
 }
 
 #[cfg(feature = "metrics")]
@@ -288,7 +299,7 @@ impl SegmentationCtx {
         trace_heights
             .iter()
             .enumerate()
-            .map(|(i, &height)| (height.next_power_of_two(), i))
+            .map(|(i, &height)| (next_power_of_two_or_zero(height as usize) as u32, i))
             .max_by_key(|(height, _)| *height)
             .map(|(height, idx)| (height, self.air_names[idx].as_str()))
             .unwrap_or((0, "unknown"))
@@ -349,7 +360,7 @@ impl SegmentationCtx {
             .zip(self.interactions.iter())
             .zip(self.need_rot.iter())
         {
-            let padded_height = height.next_power_of_two() as usize;
+            let padded_height = next_power_of_two_or_zero(height as usize);
             let unpadded_height = height as usize;
             let padding_height = padded_height - unpadded_height;
             counts.unpadded_rows += unpadded_height;
@@ -386,7 +397,7 @@ impl SegmentationCtx {
             .zip(self.interactions.iter())
             .zip(self.need_rot.iter())
         {
-            let padded_height = height.next_power_of_two() as usize;
+            let padded_height = next_power_of_two_or_zero(height as usize);
             let main_cells = padded_height * width;
             if need_rot {
                 main_cnt_with_rot += main_cells;
@@ -484,7 +495,7 @@ impl SegmentationCtx {
         trace_heights
             .iter()
             .zip(self.interactions.iter())
-            .map(|(&height, &interactions)| (height + 1) as usize * interactions)
+            .map(|(&height, &interactions)| add_one_or_zero(height) * interactions)
             .sum()
     }
 
@@ -517,7 +528,7 @@ impl SegmentationCtx {
         let mut interaction_cells = 0usize;
         for (i, ((((padded_height, width), interactions), is_constant), &need_rot)) in trace_heights
             .iter()
-            .map(|&height| height.next_power_of_two())
+            .map(|&height| next_power_of_two_or_zero(height as usize) as u32)
             .zip(self.widths.iter())
             .zip(self.interactions.iter())
             .zip(is_trace_height_constant.iter())
@@ -714,7 +725,7 @@ impl SegmentationCtx {
             .zip(self.widths.iter())
             .map(|(&height, &width)| {
                 let used = height as usize * width;
-                let padded = height.next_power_of_two() as usize * width;
+                let padded = next_power_of_two_or_zero(height as usize) * width;
                 (used, padded)
             })
             .fold((0, 0), |(u, p), (used, padded)| (u + used, p + padded));
@@ -788,9 +799,10 @@ impl SegmentationCtx {
             .zip(self.air_names.iter())
             .enumerate()
         {
-            let padded_height = height.next_power_of_two();
-            let padding_height = padded_height - height;
-            if height == 0 && padding_height == 0 {
+            let padded_height = next_power_of_two_or_zero(height as usize);
+            let unpadded_height = height as usize;
+            let padding_height = padded_height - unpadded_height;
+            if padded_height == 0 {
                 continue;
             }
             let labels = [
@@ -798,11 +810,11 @@ impl SegmentationCtx {
                 ("air_id", air_id.to_string()),
                 ("segment", segment.to_string()),
             ];
-            let unpadded_cells = height as usize * width;
-            let padding_cells = padding_height as usize * width;
+            let unpadded_cells = unpadded_height * width;
+            let padding_cells = padding_height * width;
             // One interaction cell is one metered row-interaction slot.
-            let interaction_cells_unpadded = height as usize * interactions;
-            let interaction_cells_padding = padding_height as usize * interactions;
+            let interaction_cells_unpadded = unpadded_height * interactions;
+            let interaction_cells_padding = padding_height * interactions;
             let secondary_weight = secondary_weight_for_rot(need_rot, main_secondary_weight);
             let main_secondary_unpadded =
                 ceil_weighted_bytes(unpadded_cells, base_field_size, secondary_weight);
@@ -844,7 +856,7 @@ impl SegmentationCtx {
             metrics::counter!("metered_interaction_memory_padding_bytes", &labels)
                 .absolute((interaction_total - interaction_unpadded) as u64);
             metrics::counter!("metered_interactions", &labels)
-                .absolute(((height as usize + 1) * interactions) as u64);
+                .absolute((add_one_or_zero(height) * interactions) as u64);
         }
     }
 }
