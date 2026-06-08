@@ -265,7 +265,8 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                 for (word_idx, col) in local.buffer_word_add_carry.iter_mut().enumerate() {
                     let (add_carry, block_cell_ptr) =
                         add_const_u16_limbs_value(base_cell, word_idx as u32 * cell_stride);
-                    self.range_checker_chip.add_count(block_cell_ptr[0], U16_BITS);
+                    self.range_checker_chip
+                        .add_count(block_cell_ptr[0], U16_BITS);
                     *col = F::from_u32(add_carry);
                 }
             });

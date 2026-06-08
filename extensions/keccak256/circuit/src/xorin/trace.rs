@@ -158,7 +158,9 @@ where
         debug_assert!(
             (record.inner.buffer as u64) + (len as u64) <= (1u64 << self.pointer_max_bits)
         );
-        debug_assert!((record.inner.input as u64) + (len as u64) <= (1u64 << self.pointer_max_bits));
+        debug_assert!(
+            (record.inner.input as u64) + (len as u64) <= (1u64 << self.pointer_max_bits)
+        );
         debug_assert!((record.inner.len as u64) < (1u64 << self.pointer_max_bits));
 
         // read buffer
@@ -330,7 +332,8 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             for (i, col) in add_carry_cols.iter_mut().enumerate() {
                 let (add_carry, block_cell_ptr) =
                     add_const_u16_limbs_value(base_cell, i as u32 * cell_stride);
-                self.range_checker_chip.add_count(block_cell_ptr[0], U16_BITS);
+                self.range_checker_chip
+                    .add_count(block_cell_ptr[0], U16_BITS);
                 *col = F::from_u32(add_carry);
             }
         };
@@ -358,7 +361,8 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             {
                 let (add_carry, block_cell_ptr) =
                     add_const_u16_limbs_value(base_cell, i as u32 * cell_stride);
-                self.range_checker_chip.add_count(block_cell_ptr[0], U16_BITS);
+                self.range_checker_chip
+                    .add_count(block_cell_ptr[0], U16_BITS);
                 *col = F::from_u32(add_carry);
             }
         }

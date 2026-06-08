@@ -19,6 +19,7 @@ openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-riscv-circuit = { workspace = true }
 openvm-deferral-transpiler = { workspace = true }
+openvm-deferral-guest = { workspace = true }
 rvr-openvm-lift = { workspace = true, optional = true }
 rvr-openvm-ext-deferral = { workspace = true, optional = true }
 rvr-openvm-ext-ffi-common = { workspace = true, optional = true }

@@ -153,7 +153,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         _ => unreachable!(),
     };
 
-    let ptr_val: u32 = rng.random_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
+    let ptr_val: u32 =
+        (rng.random_range(0..(1u64 << (tester.address_bits() - alignment))) << alignment) as u32;
     // rs1 is 8 bytes, but only low 4 bytes used for address
     let rs1 = rs1.unwrap_or_else(|| {
         let low4 = ptr_val.wrapping_sub(imm_ext).to_le_bytes();

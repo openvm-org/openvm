@@ -392,7 +392,8 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize> Adap
                 .map(|j| {
                     let (add_carry, block_cell_ptr) =
                         add_const_u16_limbs_value(base_cell, j as u32 * cell_stride);
-                    self.range_checker_chip.add_count(block_cell_ptr[0], U16_BITS);
+                    self.range_checker_chip
+                        .add_count(block_cell_ptr[0], U16_BITS);
                     add_carry
                 })
                 .collect();
