@@ -37,7 +37,7 @@ pub struct MemoryInventoryGPU {
     pub device_ctx: GpuDeviceCtx,
     pub boundary: BoundaryChipGPU,
     pub merkle_tree: MemoryMerkleTree,
-    pub initial_memory: Vec<DeviceBuffer<u8>>,
+    pub initial_memory: Vec<Arc<DeviceBuffer<u8>>>,
     pub merkle_records: Option<DeviceBuffer<u32>>,
     #[cfg(feature = "metrics")]
     pub(super) unpadded_merkle_height: usize,
@@ -97,15 +97,15 @@ impl MemoryInventoryGPU {
                 addr_sp,
                 raw_mem.len()
             );
-            self.initial_memory.push(if raw_mem.is_empty() {
+            self.initial_memory.push(Arc::new(if raw_mem.is_empty() {
                 DeviceBuffer::new()
             } else {
                 raw_mem
                     .to_device_on(&self.device_ctx)
                     .expect("failed to copy memory to device")
-            });
+            }));
             self.merkle_tree
-                .build_async(&self.initial_memory[addr_sp], addr_sp);
+                .build_async(self.initial_memory[addr_sp].clone(), addr_sp);
         }
         self.boundary.initial_leaves = self
             .initial_memory

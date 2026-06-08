@@ -7,6 +7,7 @@ use openvm_cuda_common::{
     error::CudaError,
     stream::{cudaStream_t, GpuDeviceCtx},
 };
+use tracing::instrument;
 
 use super::{SharedBuffer, DIGEST_WIDTH, MERKLE_TOUCHED_BLOCK_WIDTH};
 
@@ -157,6 +158,7 @@ pub mod merkle_tree {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[instrument(name = "update_merkle_tree", skip_all)]
     pub unsafe fn update_merkle_tree<T>(
         trace: &DeviceMatrix<T>,
         subtree_ptrs: &DeviceBuffer<usize>,

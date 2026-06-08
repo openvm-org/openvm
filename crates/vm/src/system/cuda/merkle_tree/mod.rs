@@ -58,19 +58,20 @@ pub struct MemoryMerkleSubTree {
     pub height: usize,
     pub path_len: usize,
     layout: MemoryMerkleSubTreeLayout,
-    /// initial_data_ptr is a raw device pointer to the initial-memory buffer (`d_data`) captured
-    /// in [`Self::build_async`], stored as a `usize` so the borrow is erased.
+    /// Shared handle to the initial-memory buffer (`d_data`) captured in [`Self::build_async`].
+    /// `None` for empty/dummy subtrees that have no backing buffer.
     ///
-    /// SAFETY / lifetime: under the `OmitBottomLevels` layout the omitted bottom levels are never
-    /// materialized into `buf`; they are recomputed on demand from this buffer during
+    /// Holding an `Arc` makes the subtree a co-owner of the buffer, so the host cannot free it
+    /// while the subtree is alive. Under the `OmitBottomLevels` layout the omitted bottom levels
+    /// are never materialized into `buf`; they are recomputed on demand from this buffer during
     /// [`MemoryMerkleTree::update_with_touched_blocks`] (see `recompute_omitted_node` in
-    /// `merkle_tree.cu`). The pointed-to buffer must therefore stay alive and unmodified from the
-    /// `build_async` call all the way until that update completes — not merely until the build
-    /// kernel runs. The compiler cannot enforce this through the erased pointer, so the caller is
-    /// responsible: in production the owning `DeviceBuffer`s are held in
-    /// `MemoryInventoryGPU::initial_memory` and only dropped after `update_with_touched_blocks` is
-    /// done.
-    initial_data_ptr: usize,
+    /// `merkle_tree.cu`), so the buffer must stay alive until that update completes.
+    ///
+    /// NOTE: this only fixes host-side ownership. The buffer is also consumed by GPU kernels
+    /// enqueued on the stream, so it must additionally outlive those kernels — that ordering is
+    /// guaranteed by the `stream.synchronize()` in [`MemoryMerkleTree::drop_subtrees`], not by the
+    /// `Arc`. Drop the subtrees (which releases these handles) only after that sync.
+    initial_data: Option<Arc<DeviceBuffer<u8>>>,
 }
 
 impl MemoryMerkleSubTree {
@@ -139,7 +140,7 @@ impl MemoryMerkleSubTree {
             buf,
             path_len,
             layout,
-            initial_data_ptr: 0,
+            initial_data: None,
         }
     }
 
@@ -150,7 +151,7 @@ impl MemoryMerkleSubTree {
             buf: DeviceBuffer::new(),
             path_len: 0,
             layout: MemoryMerkleSubTreeLayout::Full,
-            initial_data_ptr: 0,
+            initial_data: None,
         }
     }
 
@@ -171,15 +172,15 @@ impl MemoryMerkleSubTree {
     /// Here `addr_space_idx` is the address space _shifted_ by ADDR_SPACE_OFFSET = 1
     pub fn build_async(
         &mut self,
-        d_data: &DeviceBuffer<u8>,
+        d_data: Arc<DeviceBuffer<u8>>,
         addr_space_idx: usize,
         zero_hash: &DeviceBuffer<H>,
         device_ctx: &GpuDeviceCtx,
     ) {
         let event = CudaEvent::new().unwrap();
-        // Capture the raw device pointer; `d_data` must outlive `update_with_touched_blocks`,
-        // which re-reads it under the `OmitBottomLevels` layout (see the `initial_data_ptr` field).
-        self.initial_data_ptr = d_data.as_ptr() as usize;
+        // Co-own the buffer; it must outlive `update_with_touched_blocks`, which re-reads it under
+        // the `OmitBottomLevels` layout (see the `initial_data` field).
+        self.initial_data = Some(d_data.clone());
         if self.buf.is_empty() {
             self.buf = DeviceBuffer::with_capacity_on(1, device_ctx);
             unsafe {
@@ -195,7 +196,7 @@ impl MemoryMerkleSubTree {
         } else {
             unsafe {
                 build_merkle_subtree(
-                    d_data,
+                    &d_data,
                     1 << self.stored_heap_height(),
                     &self.buf,
                     self.path_len,
@@ -340,8 +341,8 @@ impl MemoryMerkleTree {
     /// `OmitBottomLevels` layout, `d_data` is also re-read during
     /// [`Self::update_with_touched_blocks`] to recompute the omitted bottom levels, so it must
     /// remain valid until that update completes — not just until the build kernel runs. See
-    /// [`MemoryMerkleSubTree`]'s `initial_data_ptr` field for details.
-    pub fn build_async(&mut self, d_data: &DeviceBuffer<u8>, addr_space: usize) {
+    /// [`MemoryMerkleSubTree`]'s `initial_data` field for details.
+    pub fn build_async(&mut self, d_data: Arc<DeviceBuffer<u8>>, addr_space: usize) {
         if addr_space < ADDR_SPACE_OFFSET as usize {
             return;
         }
@@ -421,7 +422,7 @@ impl MemoryMerkleTree {
             let initial_data_ptrs = self
                 .subtrees
                 .iter()
-                .map(|s| s.initial_data_ptr)
+                .map(|s| s.initial_data.as_ref().map_or(0, |b| b.as_ptr() as usize))
                 .collect::<Vec<_>>();
             let subtrees_pointers = self
                 .subtrees
@@ -649,15 +650,15 @@ mod tests {
             .iter()
             .map(|mem| {
                 let mem_slice = mem.as_slice();
-                if !mem_slice.is_empty() {
+                Arc::new(if !mem_slice.is_empty() {
                     mem_slice.to_device_on(&gpu_merkle_tree.device_ctx).unwrap()
                 } else {
                     DeviceBuffer::new()
-                }
+                })
             })
             .collect::<Vec<_>>();
         for (i, mem_slice) in mem_slices.iter().enumerate() {
-            gpu_merkle_tree.build_async(mem_slice, i);
+            gpu_merkle_tree.build_async(mem_slice.clone(), i);
         }
         assert_eq!(
             gpu_merkle_tree.subtrees[RV64_REGISTER_AS as usize - 1].layout,
@@ -862,15 +863,15 @@ mod tests {
             .iter()
             .map(|mem| {
                 let mem_slice = mem.as_slice();
-                if !mem_slice.is_empty() {
+                Arc::new(if !mem_slice.is_empty() {
                     mem_slice.to_device_on(&gpu_merkle_tree.device_ctx).unwrap()
                 } else {
                     DeviceBuffer::new()
-                }
+                })
             })
             .collect::<Vec<_>>();
         for (i, mem_slice) in mem_slices.iter().enumerate() {
-            gpu_merkle_tree.build_async(mem_slice, i);
+            gpu_merkle_tree.build_async(mem_slice.clone(), i);
         }
         gpu_merkle_tree.finalize();
 
