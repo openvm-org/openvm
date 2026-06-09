@@ -12,7 +12,7 @@ pub(crate) use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::{
     BABY_BEAR_RATE as MULTI_FIELD32_RATE, BN254_RATE as POSEIDON2_RATE, DIGEST_WIDTH,
 };
 
-use crate::{field::baby_bear::BabyBearWire, Fr};
+use crate::{field::baby_bear::ReducedBabyBearWire, Fr};
 
 const MULTI_FIELD32_NUM_F_ELMS: usize = MULTI_FIELD32_RATE / POSEIDON2_RATE;
 
@@ -204,12 +204,12 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
 pub(crate) fn pack_base_2_31_cells(
     ctx: &mut Context<Fr>,
     gate: &impl GateInstructions<Fr>,
-    values: &[AssignedValue<Fr>],
+    values: &[ReducedBabyBearWire],
 ) -> AssignedValue<Fr> {
     let base = Fr::from(1u64 << 31);
     gate.inner_product(
         ctx,
-        values.iter().copied(),
+        values.iter().map(|value| value.value()),
         core::iter::successors(Some(Fr::from(1u64)), |power| Some(*power * base))
             .take(values.len())
             .map(Constant),
@@ -219,7 +219,7 @@ pub(crate) fn pack_base_2_31_cells(
 pub(crate) fn hash_babybear_slice_to_digest(
     ctx: &mut Context<Fr>,
     range: &RangeChip<Fr>,
-    values: &[BabyBearWire],
+    values: &[ReducedBabyBearWire],
 ) -> AssignedValue<Fr> {
     let gate = range.gate();
     let params = &*super::POSEIDON2_PARAMS;
@@ -227,8 +227,7 @@ pub(crate) fn hash_babybear_slice_to_digest(
     let mut state = Poseidon2State::new(core::array::from_fn(|_| zero));
     for block_chunk in values.chunks(MULTI_FIELD32_RATE) {
         for (chunk_id, chunk) in block_chunk.chunks(MULTI_FIELD32_NUM_F_ELMS).enumerate() {
-            let cells = chunk.iter().map(|value| value.value).collect::<Vec<_>>();
-            state.s[chunk_id] = pack_base_2_31_cells(ctx, gate, &cells);
+            state.s[chunk_id] = pack_base_2_31_cells(ctx, gate, chunk);
         }
         state.permutation(ctx, gate, params);
     }
