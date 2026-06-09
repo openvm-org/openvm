@@ -51,6 +51,7 @@ aot = ["openvm-circuit/aot", "openvm-circuit-derive/aot"]
 rvr = [
     "dep:rvr-openvm-lift",
     "dep:rvr-openvm-ext-rv32im",
+    "rvr-openvm-ext-rv32im/rvr",
     "openvm-circuit/rvr",
 ]
 # performance features:

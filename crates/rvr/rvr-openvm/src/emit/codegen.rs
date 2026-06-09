@@ -68,21 +68,6 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
         // ── OpenVM system/IO instructions ────────────────────────────
         Instr::Nop => {}
 
-        Instr::HintInput => {
-            ctx.extern_call("openvm_hint_input", &[]);
-        }
-
-        // Phantom instructions: use read_reg_raw (no trace).
-        Instr::PrintStr { ptr_reg, len_reg } => {
-            let ptr = ctx.read_reg_raw(*ptr_reg);
-            let len = ctx.read_reg_raw(*len_reg);
-            ctx.extern_call("openvm_print_str", &[&ptr, &len]);
-        }
-        Instr::HintRandom { num_words_reg } => {
-            let n = ctx.read_reg_raw(*num_words_reg);
-            ctx.extern_call("openvm_hint_random", &[&n]);
-        }
-
         Instr::Ext(ext) => {
             ext.emit_c(ctx);
         }

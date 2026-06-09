@@ -108,14 +108,6 @@ pub enum Instr {
 
     // OpenVM system/IO instructions.
     Nop,
-    HintInput,
-    PrintStr {
-        ptr_reg: Reg,
-        len_reg: Reg,
-    },
-    HintRandom {
-        num_words_reg: Reg,
-    },
     /// Extension instruction (dispatched via trait object).
     Ext(Box<dyn ExtInstr>),
 }
@@ -176,9 +168,6 @@ impl Instr {
                 MulDivOp::Remu => "remu",
             },
             Instr::Nop => "nop",
-            Instr::HintInput => "hint_input",
-            Instr::PrintStr { .. } => "print_str",
-            Instr::HintRandom { .. } => "hint_random",
             Instr::Ext(e) => e.opname(),
         }
     }
