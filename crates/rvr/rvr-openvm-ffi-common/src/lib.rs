@@ -98,24 +98,6 @@ extern "C" {
     /// Replace the hint stream contents. Forwarded through `openvm_io.c`
     /// to `OpenVmIoState.hint_stream` via the host callback mechanism.
     pub fn ext_hint_stream_set(data: *const u8, len: u32);
-
-    // ── Deferral lookup (forwarded to OpenVmIoState.deferral) ────────
-    /// Look up deferral CALL output_key by (def_idx, input_commit).
-    /// Returns 1 on success (output_key_out written), 0 on miss.
-    pub fn ext_deferral_call_lookup(
-        def_idx: u32,
-        input_commit: *const u8,
-        output_key_out: *mut u8,
-    ) -> i32;
-    /// Look up deferral OUTPUT raw data by `(def_idx, output_commit)`.
-    /// Returns 1 on success (output_raw_out written), 0 on miss.
-    pub fn ext_deferral_output_lookup(
-        def_idx: u32,
-        output_commit: *const u8,
-        output_raw_out: *mut u8,
-        expected_len: u32,
-    ) -> i32;
-
 }
 
 // ── Zero-copy lane reinterpretation ─────────────────────────────────────
