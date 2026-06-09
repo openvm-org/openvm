@@ -427,11 +427,11 @@ fn test_deferral_e2e() -> Result<()> {
     warn!("generating dummy deferral circuit proofs");
     let idx1_proofs: Vec<Proof<SC>> = idx1_io
         .iter()
-        .map(|(inp, _, out)| generate_dummy_def_proof(&cpu_engine, &def_pk, *inp, *out))
+        .map(|(inp, _, out)| generate_dummy_def_proof(&cpu_engine, &def_pk, *inp, *out, 1))
         .collect();
     let idx2_proofs: Vec<Proof<SC>> = idx2_io
         .iter()
-        .map(|(inp, _, out)| generate_dummy_def_proof(&cpu_engine, &def_pk, *inp, *out))
+        .map(|(inp, _, out)| generate_dummy_def_proof(&cpu_engine, &def_pk, *inp, *out, 2))
         .collect();
 
     let idx1_io = idx1_io.into_iter().map(|(_, x, y)| (x, y)).collect_vec();

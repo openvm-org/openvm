@@ -82,6 +82,8 @@ pub struct DeferredVerifyPvsAir {
 
     pub expected_internal_recursive_vk_commit: VkCommitBytes,
     pub expected_def_hook_commit: Option<CommitBytes>,
+
+    pub def_idx: usize,
 }
 
 impl<F> BaseAir<F> for DeferredVerifyPvsAir {
@@ -328,12 +330,16 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * compression of the final verifier sub-circuit transcript state, and output_commit
          * should be the Poseidon2 sponge hash of the byte representations of app_exe_commit,
          * app_vm_commit, and the user public values. The latter is constrained by the
-         * DeferralOutputCommitAir, to which we need to send the app commits.
+         * DeferralOutputCommitAir, to which we need to send the app commits. def_idx must be
+         * constrained against a constant.
          */
         let &DeferralCircuitPvs::<_> {
             input_commit,
             output_commit,
+            def_idx,
         } = builder.public_values().borrow();
+
+        builder.assert_eq(def_idx, AB::Expr::from_usize(self.def_idx));
 
         self.final_state_bus.receive(
             builder,

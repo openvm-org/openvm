@@ -21,11 +21,13 @@ pub(in crate::tests) fn generate_dummy_def_proof(
     pk: &MultiStarkProvingKey<SC>,
     input_commit: [F; DIGEST_SIZE],
     output_commit: [F; DIGEST_SIZE],
+    def_idx: usize,
 ) -> Proof<SC> {
     let mut pvs = vec![F::ZERO; DeferralCircuitPvs::<u8>::width()];
     let pvs_ref: &mut DeferralCircuitPvs<F> = pvs.as_mut_slice().borrow_mut();
     pvs_ref.input_commit = input_commit;
     pvs_ref.output_commit = output_commit;
+    pvs_ref.def_idx = F::from_usize(def_idx);
 
     let trace = RowMajorMatrix::new(vec![F::ZERO], 1);
     let ctx = ProvingContext {
@@ -52,6 +54,7 @@ pub(in crate::tests) fn generate_single_dummy_def_proof(
         &pk,
         [F::ONE; DIGEST_SIZE],
         [F::from_u8(2); DIGEST_SIZE],
+        0,
     );
     Ok((Arc::new(vk), proof))
 }

@@ -40,6 +40,7 @@ pub fn generate_proving_ctx(
     let mut trace = vec![F::ZERO; num_rows * width];
     let mut num_def_circuit_proofs = F::ZERO;
     let mut merkle_depth = F::ZERO;
+    let mut def_idx = F::ZERO;
 
     for (proof_idx, (proof, chunk)) in proofs.iter().zip(trace.chunks_exact_mut(width)).enumerate()
     {
@@ -54,11 +55,14 @@ pub fn generate_proving_ctx(
             cols.merkle_commit = child_pvs.merkle_commit;
             cols.child_pvs.input_commit[0] = child_pvs.num_def_circuit_proofs;
             cols.child_pvs.input_commit[1] = child_pvs.merkle_depth;
+            cols.child_pvs.def_idx = child_pvs.def_idx;
             num_def_circuit_proofs += child_pvs.num_def_circuit_proofs;
             if proof_idx == 0 {
                 merkle_depth = child_pvs.merkle_depth;
+                def_idx = child_pvs.def_idx;
             } else {
                 debug_assert_eq!(merkle_depth, child_pvs.merkle_depth);
+                debug_assert_eq!(def_idx, child_pvs.def_idx);
             }
         } else {
             let child_pvs: &DeferralCircuitPvs<F> = proof.public_values[DEF_CIRCUIT_PVS_AIR_ID]
@@ -78,12 +82,18 @@ pub fn generate_proving_ctx(
             cols.child_pvs = DeferralCircuitPvs {
                 input_commit: folded_input_commit,
                 output_commit: child_pvs.output_commit,
+                def_idx: child_pvs.def_idx,
             };
             let (tagged_input_commit, merkle_commit) =
                 def_leaf_compress(folded_input_commit, child_pvs.output_commit);
             cols.tagged_input_commit = tagged_input_commit;
             cols.merkle_commit = merkle_commit;
             num_def_circuit_proofs += F::ONE;
+            if proof_idx == 0 {
+                def_idx = child_pvs.def_idx;
+            } else {
+                debug_assert_eq!(def_idx, child_pvs.def_idx);
+            }
         }
     }
 
@@ -122,6 +132,7 @@ pub fn generate_proving_ctx(
         pvs.merkle_depth = merkle_depth + F::ONE;
     }
     pvs.num_def_circuit_proofs = num_def_circuit_proofs;
+    pvs.def_idx = def_idx;
 
     let merkle_depth = pvs.merkle_depth.as_canonical_u32() as usize;
     let max_depth_minus_merkle_depth = MAX_DEF_AGG_MERKLE_DEPTH
