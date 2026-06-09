@@ -3,7 +3,7 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
         Arena, ExecutionBridge, PreflightExecutor,
@@ -179,9 +179,9 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     });
 
     // Write full 8-byte registers. Upper bytes are arbitrary and remain adapter-constrained.
-    let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rd_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1_ptr, b.map(F::from_u32));
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2_ptr, c.map(F::from_u32));

@@ -3,7 +3,8 @@ use std::sync::Arc;
 use openvm_circuit::arch::{
     deferral::{DeferralResult, DeferralState},
     testing::{
-        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+        memory::{gen_pointer, gen_register_pointer},
+        TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
     to_byte_ptr_bits, Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor,
     MEMORY_BLOCK_BYTES,
@@ -157,8 +158,8 @@ fn set_and_execute_output<RA, E>(
     RA: Arena,
     E: PreflightExecutor<F, RA>,
 {
-    let rd = gen_pointer(rng, MEMORY_BLOCK_BYTES);
-    let rs = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let rd = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
+    let rs = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
     let output_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let input_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = rng.random_range(0..num_deferrals);
@@ -390,8 +391,8 @@ fn deferral_output_non_first_row_canonicity_aux_cleared_test() {
     // columns the filler skips (the bug under test) retain this value.
     harness.arena.trace_buffer.fill(F::from_u32(0xdead));
 
-    let rd = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
-    let rs = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
+    let rd = gen_register_pointer(&mut rng, MEMORY_BLOCK_BYTES);
+    let rs = gen_register_pointer(&mut rng, MEMORY_BLOCK_BYTES);
     let output_ptr = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
     let input_ptr = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = 0;

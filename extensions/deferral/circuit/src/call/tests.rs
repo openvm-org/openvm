@@ -3,7 +3,8 @@ use std::{array::from_fn, sync::Arc};
 use openvm_circuit::arch::{
     deferral::{DeferralState, InputMapVal},
     testing::{
-        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+        memory::{gen_pointer, gen_register_pointer},
+        TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
     Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
 };
@@ -151,8 +152,8 @@ fn set_and_execute_call<RA, E>(
     RA: Arena,
     E: PreflightExecutor<F, RA>,
 {
-    let rd = gen_pointer(rng, MEMORY_BLOCK_BYTES);
-    let rs = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let rd = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
+    let rs = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
     let output_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let input_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = rng.random_range(0..num_deferrals);

@@ -5,8 +5,8 @@ use itertools::Itertools;
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS,
+            memory::{gen_pointer, gen_register_pointer},
+            TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
         },
         Arena, MatrixRecordArena, PreflightExecutor,
     },
@@ -150,9 +150,9 @@ fn set_and_execute_single_block<RA: Arena, C: Sha2Config, E: PreflightExecutor<F
     message: Option<&[u8]>,
     prev_state: Option<&[u8]>,
 ) {
-    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rd = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
     let dst_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let state_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
@@ -255,9 +255,9 @@ fn set_and_execute_full_message<RA: Arena, C: Sha2Config + 'static, E: Preflight
     message: Option<&[u8]>,
     len: Option<usize>,
 ) {
-    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rd = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
     let state_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let dst_ptr = state_ptr;
