@@ -102,6 +102,31 @@ fn baby_bear_base_ops_match_native_mod_arithmetic() {
 }
 
 #[test]
+fn div_reduces_operand_at_max_bits_boundary() {
+    run_mock(|builder| {
+        let range = builder.range_chip();
+        let chip = BabyBearChip::new(Arc::new(range.clone()));
+        let ctx = builder.main(0);
+        let gate = range.gate();
+
+        // Honest value is 1, but the wire is deliberately tagged as unreduced with
+        // `max_bits` exactly at the pre-reduction threshold.
+        const BOUNDARY_MAX_BITS: usize = 251; // Fr::CAPACITY (253) - RESERVED_HIGH_BITS (2)
+        let a = BabyBearWire {
+            value: ctx.load_witness(Fr::from(1u64)),
+            max_bits: BOUNDARY_MAX_BITS,
+        };
+        let b = chip.load_constant(ctx, RootF::ONE);
+
+        // Before the fix this panics in `assert_zero`; after the fix `a` is reduced
+        // first and the division yields 1.
+        let c = chip.div(ctx, a, b);
+        let c = chip.reduce(ctx, c);
+        gate.assert_is_const(ctx, &c.value, &Fr::from(1u64));
+    });
+}
+
+#[test]
 fn baby_bear_ext_mul_matches_native_binomial_extension() {
     run_mock(|builder| {
         let range = builder.range_chip();
