@@ -17,6 +17,7 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 
+use super::BABY_BEAR_MODULUS_U64;
 use crate::utils::{guarded_debug_assert, guarded_debug_assert_eq};
 
 pub(crate) const BABYBEAR_MAX_BITS: usize = 31;
@@ -37,6 +38,34 @@ pub struct BabyBearWire {
     pub value: AssignedValue<Fr>,
     /// The value is guaranteed to be less than 2^max_bits.
     pub max_bits: usize,
+}
+
+/// A BabyBear wire constrained to its canonical representative in `[0, p)`.
+///
+/// This type marks values that are safe to absorb into BabyBear-domain transcript
+/// and hash inputs. Arithmetic may still use the underlying `BabyBearWire`; converting
+/// via `BabyBearWire::from` only drops this type-level evidence and does not add or
+/// remove constraints.
+#[derive(Copy, Clone, Debug)]
+pub struct ReducedBabyBearWire(BabyBearWire);
+
+impl ReducedBabyBearWire {
+    pub fn value(&self) -> AssignedValue<Fr> {
+        self.0.value
+    }
+}
+
+impl From<ReducedBabyBearWire> for BabyBearWire {
+    /// Drops the canonicality evidence and returns the underlying arithmetic wire.
+    fn from(wire: ReducedBabyBearWire) -> Self {
+        wire.0
+    }
+}
+
+impl From<&ReducedBabyBearWire> for BabyBearWire {
+    fn from(wire: &ReducedBabyBearWire) -> Self {
+        (*wire).into()
+    }
 }
 
 impl BabyBearWire {
@@ -76,6 +105,12 @@ impl BabyBearChip {
         &self.range
     }
 
+    /// Loads a BabyBear witness and constrains only that the assigned advice cell
+    /// fits in 31 bits.
+    ///
+    /// The Rust input is canonicalized for the honest witness assignment, but the
+    /// circuit does not prove the advice cell is `< p`. Use `load_reduced_witness`
+    /// for values that will be absorbed into transcripts or hashes.
     pub fn load_witness(&self, ctx: &mut Context<Fr>, value: BabyBear) -> BabyBearWire {
         let value = ctx.load_witness(Fr::from(PrimeField64::as_canonical_u64(&value)));
         self.range.range_check(ctx, value, BABYBEAR_MAX_BITS);
@@ -83,6 +118,21 @@ impl BabyBearChip {
             value,
             max_bits: BABYBEAR_MAX_BITS,
         }
+    }
+
+    /// Loads a witness and constrains it to the canonical BabyBear range `[0, p)`.
+    pub fn load_reduced_witness(
+        &self,
+        ctx: &mut Context<Fr>,
+        value: BabyBear,
+    ) -> ReducedBabyBearWire {
+        let value = ctx.load_witness(Fr::from(PrimeField64::as_canonical_u64(&value)));
+        self.range
+            .check_less_than_safe(ctx, value, BABY_BEAR_MODULUS_U64);
+        ReducedBabyBearWire(BabyBearWire {
+            value,
+            max_bits: BABYBEAR_MAX_BITS,
+        })
     }
 
     pub fn load_constant(&self, ctx: &mut Context<Fr>, value: BabyBear) -> BabyBearWire {
@@ -102,6 +152,16 @@ impl BabyBearChip {
         };
         self.const_cache.borrow_mut().insert(key, wire);
         wire
+    }
+
+    /// Loads a canonical BabyBear constant and returns it with reduced type evidence.
+    pub fn load_reduced_constant(
+        &self,
+        ctx: &mut Context<Fr>,
+        value: BabyBear,
+    ) -> ReducedBabyBearWire {
+        // Constants are canonical by construction.
+        ReducedBabyBearWire(self.load_constant(ctx, value))
     }
 
     pub fn reduce(&self, ctx: &mut Context<Fr>, a: BabyBearWire) -> BabyBearWire {

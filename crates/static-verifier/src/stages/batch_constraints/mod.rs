@@ -15,34 +15,37 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    field::baby_bear::{BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire},
+    field::baby_bear::{
+        BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire, ReducedBabyBearExtWire,
+        ReducedBabyBearWire,
+    },
     profiling::CellProfiler,
-    stages::shared_math::{self, horner_eval_ext_poly_assigned},
+    stages::shared_math::{column_openings_by_rot_assigned, horner_eval_ext_poly_assigned},
     transcript::TranscriptChip,
-    Fr, RootF,
+    Fr, RootEF, RootF,
 };
 
 #[derive(Clone, Debug)]
 pub struct BatchConstraintIntermediatesWire {
-    pub column_openings: Vec<Vec<Vec<BabyBearExtWire>>>,
+    pub column_openings: Vec<Vec<Vec<ReducedBabyBearExtWire>>>,
     pub r: Vec<BabyBearExtWire>,
 }
 
 #[derive(Clone, Debug)]
 pub struct GkrProofWire {
-    pub logup_pow_witness: BabyBearWire,
-    pub q0_claim: BabyBearExtWire,
-    pub claims_per_layer: Vec<Vec<BabyBearExtWire>>,
-    pub sumcheck_polys: Vec<Vec<[BabyBearExtWire; 3]>>,
+    pub logup_pow_witness: ReducedBabyBearWire,
+    pub q0_claim: ReducedBabyBearExtWire,
+    pub claims_per_layer: Vec<Vec<ReducedBabyBearExtWire>>,
+    pub sumcheck_polys: Vec<Vec<[ReducedBabyBearExtWire; 3]>>,
 }
 
 #[derive(Clone, Debug)]
 pub struct BatchConstraintProofWire {
-    pub numerator_term_per_air: Vec<BabyBearExtWire>,
-    pub denominator_term_per_air: Vec<BabyBearExtWire>,
-    pub univariate_round_coeffs: Vec<BabyBearExtWire>,
-    pub sumcheck_round_polys: Vec<Vec<BabyBearExtWire>>,
-    pub column_openings: Vec<Vec<Vec<BabyBearExtWire>>>,
+    pub numerator_term_per_air: Vec<ReducedBabyBearExtWire>,
+    pub denominator_term_per_air: Vec<ReducedBabyBearExtWire>,
+    pub univariate_round_coeffs: Vec<ReducedBabyBearExtWire>,
+    pub sumcheck_round_polys: Vec<Vec<ReducedBabyBearExtWire>>,
+    pub column_openings: Vec<Vec<Vec<ReducedBabyBearExtWire>>>,
 }
 
 pub(crate) fn load_gkr_proof_wire(
@@ -51,17 +54,17 @@ pub(crate) fn load_gkr_proof_wire(
     ext_chip: &BabyBearExtChip,
     gkr_proof: &openvm_stark_sdk::openvm_stark_backend::proof::GkrProof<RootConfig>,
 ) -> GkrProofWire {
-    let logup_pow_witness = base_chip.load_witness(ctx, gkr_proof.logup_pow_witness);
-    let q0_claim = ext_chip.load_witness(ctx, gkr_proof.q0_claim);
+    let logup_pow_witness = base_chip.load_reduced_witness(ctx, gkr_proof.logup_pow_witness);
+    let q0_claim = ext_chip.load_reduced_witness(ctx, gkr_proof.q0_claim);
     let claims_per_layer = gkr_proof
         .claims_per_layer
         .iter()
         .map(|claims| {
             vec![
-                ext_chip.load_witness(ctx, claims.p_xi_0),
-                ext_chip.load_witness(ctx, claims.q_xi_0),
-                ext_chip.load_witness(ctx, claims.p_xi_1),
-                ext_chip.load_witness(ctx, claims.q_xi_1),
+                ext_chip.load_reduced_witness(ctx, claims.p_xi_0),
+                ext_chip.load_reduced_witness(ctx, claims.q_xi_0),
+                ext_chip.load_reduced_witness(ctx, claims.p_xi_1),
+                ext_chip.load_reduced_witness(ctx, claims.q_xi_1),
             ]
         })
         .collect::<Vec<_>>();
@@ -70,7 +73,7 @@ pub(crate) fn load_gkr_proof_wire(
         .iter()
         .map(|poly| {
             poly.iter()
-                .map(|evals| evals.map(|value| ext_chip.load_witness(ctx, value)))
+                .map(|evals| evals.map(|value| ext_chip.load_reduced_witness(ctx, value)))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -90,24 +93,24 @@ pub(crate) fn load_batch_constraint_proof_wire(
     let numerator_term_per_air = batch_proof
         .numerator_term_per_air
         .iter()
-        .map(|&value| ext_chip.load_witness(ctx, value))
+        .map(|&value| ext_chip.load_reduced_witness(ctx, value))
         .collect::<Vec<_>>();
     let denominator_term_per_air = batch_proof
         .denominator_term_per_air
         .iter()
-        .map(|&value| ext_chip.load_witness(ctx, value))
+        .map(|&value| ext_chip.load_reduced_witness(ctx, value))
         .collect::<Vec<_>>();
     let univariate_round_coeffs = batch_proof
         .univariate_round_coeffs
         .iter()
-        .map(|&value| ext_chip.load_witness(ctx, value))
+        .map(|&value| ext_chip.load_reduced_witness(ctx, value))
         .collect::<Vec<_>>();
     let sumcheck_round_polys = batch_proof
         .sumcheck_round_polys
         .iter()
         .map(|poly| {
             poly.iter()
-                .map(|&value| ext_chip.load_witness(ctx, value))
+                .map(|&value| ext_chip.load_reduced_witness(ctx, value))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -119,7 +122,7 @@ pub(crate) fn load_batch_constraint_proof_wire(
                 .iter()
                 .map(|part| {
                     part.iter()
-                        .map(|&value| ext_chip.load_witness(ctx, value))
+                        .map(|&value| ext_chip.load_reduced_witness(ctx, value))
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>()
@@ -467,12 +470,18 @@ struct ViewPairWire {
     next: BabyBearExtWire,
 }
 
+impl From<(BabyBearExtWire, BabyBearExtWire)> for ViewPairWire {
+    fn from((local, next): (BabyBearExtWire, BabyBearExtWire)) -> Self {
+        Self { local, next }
+    }
+}
+
 struct ConstraintEvaluatorWire<'a> {
     preprocessed: Option<&'a [ViewPairWire]>,
     partitioned_main: &'a [Vec<ViewPairWire>],
     is_first_row: BabyBearExtWire,
     is_last_row: BabyBearExtWire,
-    public_values: &'a [BabyBearWire],
+    public_values: &'a [ReducedBabyBearWire],
 }
 
 impl ConstraintEvaluatorWire<'_> {
@@ -502,7 +511,7 @@ impl ConstraintEvaluatorWire<'_> {
             }
             Entry::Public => {
                 let value = self.public_values[index];
-                ext_chip.from_base_var(ctx, value)
+                ext_chip.from_base_var(ctx, value.into())
             }
             _ => panic!("invalid constraint"),
         }
@@ -563,22 +572,26 @@ fn eval_symbolic_nodes_assigned(
     exprs
 }
 
-fn column_openings_by_rot_assigned(
+fn local_next_opening_views(
     ctx: &mut Context<Fr>,
     ext_chip: &BabyBearExtChip,
-    openings: &[BabyBearExtWire],
+    openings: &[ReducedBabyBearExtWire],
     need_rot: bool,
 ) -> Vec<ViewPairWire> {
-    shared_math::column_openings_by_rot_assigned(ctx, ext_chip, openings, need_rot)
+    let openings = openings
+        .iter()
+        .map(BabyBearExtWire::from)
+        .collect::<Vec<_>>();
+    column_openings_by_rot_assigned(ctx, ext_chip, &openings, need_rot)
         .into_iter()
-        .map(|(local, next)| ViewPairWire { local, next })
-        .collect::<Vec<_>>()
+        .map(ViewPairWire::from)
+        .collect()
 }
 
 fn observe_layer_claims_assigned(
     ctx: &mut Context<Fr>,
     transcript: &mut TranscriptChip,
-    claims: &[BabyBearExtWire],
+    claims: &[ReducedBabyBearExtWire],
 ) {
     for claim in claims {
         transcript.observe_ext(ctx, claim);
@@ -595,7 +608,7 @@ pub(crate) fn constrain_batch_constraints_verification(
     batch_wire: &BatchConstraintProofWire,
     n_per_trace: &[isize],
     trace_id_to_air_id: &[usize],
-    public_values: Vec<Vec<BabyBearWire>>,
+    public_values: Vec<Vec<ReducedBabyBearWire>>,
     profiler: &mut CellProfiler,
 ) -> BatchConstraintIntermediatesWire {
     let l_skip = mvk0.params.l_skip;
@@ -668,7 +681,6 @@ pub(crate) fn constrain_batch_constraints_verification(
 
     profiler.push("gkr_verification", ctx.advice.len());
 
-    let gkr_q0_claim = gkr_wire.q0_claim;
     let gkr_claims_per_layer = &gkr_wire.claims_per_layer;
     let gkr_sumcheck_polys = &gkr_wire.sumcheck_polys;
 
@@ -676,23 +688,28 @@ pub(crate) fn constrain_batch_constraints_verification(
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let total_gkr_rounds = l_skip + n_logup_host;
     let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, mut xi) = {
+        let gkr_q0_claim = gkr_wire.q0_claim;
         transcript.observe_ext(ctx, &gkr_q0_claim);
 
         let layer0 = &gkr_claims_per_layer[0];
         observe_layer_claims_assigned(ctx, transcript, layer0);
 
-        let p0_q1 = ext_chip.mul(ctx, layer0[0], layer0[3]);
-        let p1_q0 = ext_chip.mul(ctx, layer0[2], layer0[1]);
+        let layer0_p0 = layer0[0].into();
+        let layer0_q0 = layer0[1].into();
+        let layer0_p1 = layer0[2].into();
+        let layer0_q1 = layer0[3].into();
+        let p0_q1 = ext_chip.mul(ctx, layer0_p0, layer0_q1);
+        let p1_q0 = ext_chip.mul(ctx, layer0_p1, layer0_q0);
         let p_cross = ext_chip.add(ctx, p0_q1, p1_q0);
-        let q_cross = ext_chip.mul(ctx, layer0[1], layer0[3]);
+        let q_cross = ext_chip.mul(ctx, layer0_q0, layer0_q1);
         ext_chip.assert_zero(ctx, p_cross);
-        ext_chip.assert_equal(ctx, q_cross, gkr_q0_claim);
+        ext_chip.assert_equal(ctx, q_cross, gkr_q0_claim.into());
 
         let mu0 = transcript.sample_ext(ctx);
         let mut numer_claim =
-            interpolate_linear_at_01_assigned(ctx, ext_chip, &layer0[0], &layer0[2], &mu0);
+            interpolate_linear_at_01_assigned(ctx, ext_chip, &layer0_p0, &layer0_p1, &mu0);
         let mut denom_claim =
-            interpolate_linear_at_01_assigned(ctx, ext_chip, &layer0[1], &layer0[3], &mu0);
+            interpolate_linear_at_01_assigned(ctx, ext_chip, &layer0_q0, &layer0_q1, &mu0);
         let mut gkr_r = vec![mu0];
 
         for round in 1..total_gkr_rounds {
@@ -713,6 +730,9 @@ pub(crate) fn constrain_batch_constraints_verification(
                 let ri = transcript.sample_ext(ctx);
                 gkr_r_prime.push(ri);
 
+                let ev1 = ev1.into();
+                let ev2 = ev2.into();
+                let ev3 = ev3.into();
                 let ev0 = ext_chip.sub(ctx, claim, ev1);
                 claim = interpolate_cubic_at_0123_assigned(
                     ctx,
@@ -731,30 +751,24 @@ pub(crate) fn constrain_batch_constraints_verification(
             let layer_claims = &gkr_claims_per_layer[round];
             observe_layer_claims_assigned(ctx, transcript, layer_claims);
 
-            let p0_q1 = ext_chip.mul(ctx, layer_claims[0], layer_claims[3]);
-            let p1_q0 = ext_chip.mul(ctx, layer_claims[2], layer_claims[1]);
+            let layer_p0 = layer_claims[0].into();
+            let layer_q0 = layer_claims[1].into();
+            let layer_p1 = layer_claims[2].into();
+            let layer_q1 = layer_claims[3].into();
+            let p0_q1 = ext_chip.mul(ctx, layer_p0, layer_q1);
+            let p1_q0 = ext_chip.mul(ctx, layer_p1, layer_q0);
             let p_cross = ext_chip.add(ctx, p0_q1, p1_q0);
-            let q_cross = ext_chip.mul(ctx, layer_claims[1], layer_claims[3]);
+            let q_cross = ext_chip.mul(ctx, layer_q0, layer_q1);
             let lambda_q_cross = ext_chip.mul(ctx, lambda_round, q_cross);
             let claim_sum = ext_chip.add(ctx, p_cross, lambda_q_cross);
             let expected_claim = ext_chip.mul(ctx, claim_sum, eq);
             ext_chip.assert_equal(ctx, expected_claim, claim);
 
             let mu_round = transcript.sample_ext(ctx);
-            numer_claim = interpolate_linear_at_01_assigned(
-                ctx,
-                ext_chip,
-                &layer_claims[0],
-                &layer_claims[2],
-                &mu_round,
-            );
-            denom_claim = interpolate_linear_at_01_assigned(
-                ctx,
-                ext_chip,
-                &layer_claims[1],
-                &layer_claims[3],
-                &mu_round,
-            );
+            numer_claim =
+                interpolate_linear_at_01_assigned(ctx, ext_chip, &layer_p0, &layer_p1, &mu_round);
+            denom_claim =
+                interpolate_linear_at_01_assigned(ctx, ext_chip, &layer_q0, &layer_q1, &mu_round);
             gkr_r = core::iter::once(mu_round)
                 .chain(gkr_r_prime.into_iter())
                 .collect();
@@ -778,8 +792,8 @@ pub(crate) fn constrain_batch_constraints_verification(
         .iter()
         .zip(denominator_term_per_air.iter())
     {
-        gkr_p_xi_claim = ext_chip.sub(ctx, gkr_p_xi_claim, *num_term);
-        gkr_q_xi_claim = ext_chip.sub(ctx, gkr_q_xi_claim, *den_term);
+        gkr_p_xi_claim = ext_chip.sub(ctx, gkr_p_xi_claim, num_term.into());
+        gkr_q_xi_claim = ext_chip.sub(ctx, gkr_q_xi_claim, den_term.into());
         transcript.observe_ext(ctx, num_term);
         transcript.observe_ext(ctx, den_term);
     }
@@ -798,16 +812,18 @@ pub(crate) fn constrain_batch_constraints_verification(
         .iter()
         .zip(denominator_term_per_air.iter())
     {
+        let num_term = num_term.into();
+        let den_term = den_term.into();
         let num_weighted = if first_mu_term {
             first_mu_term = false;
-            *num_term
+            num_term
         } else {
-            ext_chip.mul(ctx, *num_term, cur_mu_pow)
+            ext_chip.mul(ctx, num_term, cur_mu_pow)
         };
         sum_claim = ext_chip.add(ctx, sum_claim, num_weighted);
         cur_mu_pow = ext_chip.mul(ctx, cur_mu_pow, mu);
 
-        let den_weighted = ext_chip.mul(ctx, *den_term, cur_mu_pow);
+        let den_weighted = ext_chip.mul(ctx, den_term, cur_mu_pow);
         sum_claim = ext_chip.add(ctx, sum_claim, den_weighted);
         cur_mu_pow = ext_chip.mul(ctx, cur_mu_pow, mu);
     }
@@ -816,11 +832,15 @@ pub(crate) fn constrain_batch_constraints_verification(
     for coeff in univariate_round_coeffs {
         transcript.observe_ext(ctx, coeff);
     }
+    let univariate_round_coeffs_raw = univariate_round_coeffs
+        .iter()
+        .map(|coeff| coeff.into())
+        .collect::<Vec<_>>();
     let mut r = vec![transcript.sample_ext(ctx)];
 
     let stride = 1usize << l_skip;
     let mut sum_univ_domain_s_0 = ext_chip.zero(ctx);
-    for coeff in univariate_round_coeffs.iter().step_by(stride) {
+    for coeff in univariate_round_coeffs_raw.iter().step_by(stride) {
         sum_univ_domain_s_0 = ext_chip.add(ctx, sum_univ_domain_s_0, *coeff);
     }
     let sum_univ_domain_s_0 =
@@ -829,17 +849,17 @@ pub(crate) fn constrain_batch_constraints_verification(
 
     let sumcheck_round_polys = &batch_wire.sumcheck_round_polys;
     let mut consistency_lhs =
-        horner_eval_ext_poly_assigned(ctx, ext_chip, univariate_round_coeffs, &r[0]);
+        horner_eval_ext_poly_assigned(ctx, ext_chip, &univariate_round_coeffs_raw, &r[0]);
     for round_evals in sumcheck_round_polys {
         for eval in round_evals {
             transcript.observe_ext(ctx, eval);
         }
 
-        let s_1 = round_evals[0];
+        let s_1 = round_evals[0].into();
         let s_0 = ext_chip.sub(ctx, consistency_lhs, s_1);
         let mut interpolation_evals = Vec::with_capacity(round_evals.len() + 1);
         interpolation_evals.push(s_0);
-        interpolation_evals.extend(round_evals.iter().copied());
+        interpolation_evals.extend(round_evals.iter().map(BabyBearExtWire::from));
         let next_r = transcript.sample_ext(ctx);
         consistency_lhs =
             eval_lagrange_on_integer_grid(ctx, ext_chip, &next_r, &interpolation_evals);
@@ -851,20 +871,44 @@ pub(crate) fn constrain_batch_constraints_verification(
 
     let column_openings = &batch_wire.column_openings;
 
+    let reduced_zero = ext_chip.load_reduced_constant(ctx, RootEF::ZERO);
     for (trace_idx, air_openings) in column_openings.iter().enumerate() {
         let need_rot = column_openings_need_rot[trace_idx][0];
-        for claim in column_openings_by_rot_assigned(ctx, ext_chip, &air_openings[0], need_rot) {
-            transcript.observe_ext(ctx, &claim.local);
-            transcript.observe_ext(ctx, &claim.next);
+        let openings = &air_openings[0];
+        if need_rot {
+            assert!(
+                openings.len().is_multiple_of(2),
+                "rotated opening vector must be even",
+            );
+            for claim in openings.chunks_exact(2) {
+                transcript.observe_ext(ctx, &claim[0]);
+                transcript.observe_ext(ctx, &claim[1]);
+            }
+        } else {
+            for opening in openings {
+                transcript.observe_ext(ctx, opening);
+                transcript.observe_ext(ctx, &reduced_zero);
+            }
         }
     }
 
     for (trace_idx, air_openings) in column_openings.iter().enumerate() {
         for (part_idx, claims) in air_openings.iter().enumerate().skip(1) {
             let need_rot = column_openings_need_rot[trace_idx][part_idx];
-            for claim in column_openings_by_rot_assigned(ctx, ext_chip, claims, need_rot) {
-                transcript.observe_ext(ctx, &claim.local);
-                transcript.observe_ext(ctx, &claim.next);
+            if need_rot {
+                assert!(
+                    claims.len().is_multiple_of(2),
+                    "rotated opening vector must be even",
+                );
+                for claim in claims.chunks_exact(2) {
+                    transcript.observe_ext(ctx, &claim[0]);
+                    transcript.observe_ext(ctx, &claim[1]);
+                }
+            } else {
+                for claim in claims {
+                    transcript.observe_ext(ctx, claim);
+                    transcript.observe_ext(ctx, &reduced_zero);
+                }
             }
         }
     }
@@ -992,17 +1036,16 @@ pub(crate) fn constrain_batch_constraints_verification(
 
         let need_rot_flags = &column_openings_need_rot[trace_idx];
         let common_main =
-            column_openings_by_rot_assigned(ctx, ext_chip, &air_openings[0], need_rot_flags[0]);
+            local_next_opening_views(ctx, ext_chip, &air_openings[0], need_rot_flags[0]);
         let has_preprocessed = trace_has_preprocessed[trace_idx];
-        let preprocessed = has_preprocessed.then(|| {
-            column_openings_by_rot_assigned(ctx, ext_chip, &air_openings[1], need_rot_flags[1])
-        });
+        let preprocessed = has_preprocessed
+            .then(|| local_next_opening_views(ctx, ext_chip, &air_openings[1], need_rot_flags[1]));
         let cached_idx = 1 + has_preprocessed as usize;
         let mut partitioned_main = air_openings[cached_idx..]
             .iter()
             .enumerate()
             .map(|(part_offset, opening)| {
-                column_openings_by_rot_assigned(
+                local_next_opening_views(
                     ctx,
                     ext_chip,
                     opening,
