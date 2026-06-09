@@ -27,15 +27,15 @@ use crate::{
             DefPvsConsistencyBus, DefPvsConsistencyMessage, InputOrMerkleCommitBus,
             InputOrMerkleCommitMessage,
         },
+        utils::def_zero_hashes_from_depth_one,
         DeferralAggregationPvs, DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID, DEF_CIRCUIT_PVS_AIR_ID,
-        MAX_DEF_AGG_MERKLE_DEPTH,
+        DEF_INTERNAL_TAG, DEF_LEAF_TAG, MAX_DEF_AGG_MERKLE_DEPTH,
     },
-    utils::{digests_to_poseidon2_input, zero_hashes_from_depth_one},
+    utils::digests_to_poseidon2_input,
     CommitBytes,
 };
 
 const ENCODER_MAX_DEGREE: u32 = 2;
-
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
 pub struct DeferralAggPvsCols<F> {
@@ -44,6 +44,9 @@ pub struct DeferralAggPvsCols<F> {
     pub has_verifier_pvs: F,
 
     pub merkle_commit: [F; DIGEST_SIZE],
+    pub tagged_input_commit: [F; DIGEST_SIZE],
+    pub tagged_left_merkle: [F; DIGEST_SIZE],
+
     pub child_pvs: DeferralCircuitPvs<F>,
 }
 
@@ -81,7 +84,7 @@ impl DeferralAggPvsAir {
             input_or_merkle_commit_bus,
             def_pvs_consistency_bus,
             encoder,
-            zero_hashes: zero_hashes_from_depth_one().map(Into::into),
+            zero_hashes: def_zero_hashes_from_depth_one().map(Into::into),
         }
     }
 }
@@ -138,6 +141,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * final Merkle root checks at the deferral hook layer.
          */
         let is_leaf = not(local.has_verifier_pvs);
+        let is_present_leaf = is_leaf.clone() * local.is_present;
         let is_internal = local.has_verifier_pvs;
         let air_idx = AB::Expr::from_usize(DEF_CIRCUIT_PVS_AIR_ID);
 
@@ -150,7 +154,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                     pv_idx: AB::Expr::from_usize(pv_idx + DIGEST_SIZE),
                     value: (*value).into(),
                 },
-                is_leaf.clone() * local.is_present,
+                is_present_leaf.clone(),
             );
         }
 
@@ -169,18 +173,30 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         /*
          * On the leaf layer we need to constrain that merkle_commit is the Poseidon2 compression
-         * of input_commit and output_commit.
+         * of the tagged input_commit and output_commit.
          */
         self.poseidon2_bus.lookup_key(
             builder,
             Poseidon2CompressMessage {
                 input: digests_to_poseidon2_input(
-                    local.child_pvs.input_commit,
-                    local.child_pvs.output_commit,
+                    DEF_LEAF_TAG.map(AB::Expr::from_u8),
+                    local.child_pvs.input_commit.map(Into::into),
                 ),
-                output: local.merkle_commit,
+                output: local.tagged_input_commit.map(Into::into),
             },
-            is_leaf.clone() * local.is_present,
+            is_present_leaf.clone(),
+        );
+
+        self.poseidon2_bus.lookup_key(
+            builder,
+            Poseidon2CompressMessage {
+                input: digests_to_poseidon2_input(
+                    local.tagged_input_commit.map(Into::into),
+                    local.child_pvs.output_commit.map(Into::into),
+                ),
+                output: local.merkle_commit.map(Into::into),
+            },
+            is_present_leaf,
         );
 
         /*
@@ -321,7 +337,22 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         self.poseidon2_bus.lookup_key(
             builder,
             Poseidon2CompressMessage {
-                input: digests_to_poseidon2_input(local.merkle_commit.map(Into::into), right_child),
+                input: digests_to_poseidon2_input(
+                    DEF_INTERNAL_TAG.map(AB::Expr::from_u8),
+                    local.merkle_commit.map(Into::into),
+                ),
+                output: local.tagged_left_merkle.map(Into::into),
+            },
+            is_first_of_two_rows.clone(),
+        );
+
+        self.poseidon2_bus.lookup_key(
+            builder,
+            Poseidon2CompressMessage {
+                input: digests_to_poseidon2_input(
+                    local.tagged_left_merkle.map(Into::into),
+                    right_child,
+                ),
                 output: merkle_commit.map(Into::into),
             },
             is_first_of_two_rows,

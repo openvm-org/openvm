@@ -1,3 +1,5 @@
+use std::array::from_fn;
+
 use openvm_circuit_primitives::{StructReflection, StructReflectionHelper, SubAir};
 use openvm_recursion_circuit::bus::{Poseidon2CompressBus, Poseidon2CompressMessage};
 use openvm_recursion_circuit_derive::AlignedBorrow;
@@ -7,8 +9,11 @@ use p3_air::AirBuilder;
 use p3_field::{Field, PrimeCharacteristicRing};
 
 use crate::{
-    circuit::subair::merkle_tree::bus::{
-        MerkleRootBus, MerkleRootMessage, MerkleTreeInternalBus, MerkleTreeInternalMessage,
+    circuit::{
+        deferral::{DEF_INTERNAL_TAG, DEF_LEAF_TAG},
+        subair::merkle_tree::bus::{
+            MerkleRootBus, MerkleRootMessage, MerkleTreeInternalBus, MerkleTreeInternalMessage,
+        },
     },
     utils::digests_to_poseidon2_input,
 };
@@ -50,6 +55,7 @@ impl<AB: AirBuilder + InteractionBuilder> SubAir<AB> for MerkleTreeSubAir {
         &'a MerkleTreeCols<AB::Var>,
         &'a MerkleTreeCols<AB::Var>,
         AB::Expr,
+        Option<&'a [AB::Var; DIGEST_SIZE]>,
     )
     where
         AB: 'a,
@@ -61,7 +67,7 @@ impl<AB: AirBuilder + InteractionBuilder> SubAir<AB> for MerkleTreeSubAir {
         AB::Var: 'a,
         AB::Expr: 'a,
     {
-        let (local, next, num_rows) = ctx;
+        let (local, next, num_rows, tagged_left_child) = ctx;
 
         /*
          * Constrain that row_idx actually corresponds to the matrix row index, and
@@ -176,14 +182,43 @@ impl<AB: AirBuilder + InteractionBuilder> SubAir<AB> for MerkleTreeSubAir {
         let is_valid = local.send_type * (AB::Expr::from_u8(3) - local.send_type) * half;
         let is_root = local.send_type * (local.send_type - AB::F::ONE) * half;
 
-        self.poseidon2_bus.lookup_key(
-            builder,
-            Poseidon2CompressMessage {
-                input: digests_to_poseidon2_input(local.left_child, local.right_child),
-                output: local.parent,
-            },
-            is_valid,
-        );
+        if let Some(tagged_left_child) = tagged_left_child {
+            let is_leaf = local.receive_type * (AB::Expr::TWO - local.receive_type);
+            let is_internal = local.receive_type * (local.receive_type - AB::F::ONE) * half;
+            let tag = from_fn(|i| {
+                is_leaf.clone() * AB::Expr::from_u8(DEF_LEAF_TAG[i])
+                    + is_internal.clone() * AB::Expr::from_u8(DEF_INTERNAL_TAG[i])
+            });
+
+            self.poseidon2_bus.lookup_key(
+                builder,
+                Poseidon2CompressMessage {
+                    input: digests_to_poseidon2_input(tag, local.left_child.map(Into::into)),
+                    output: tagged_left_child.map(Into::into),
+                },
+                is_valid.clone(),
+            );
+            self.poseidon2_bus.lookup_key(
+                builder,
+                Poseidon2CompressMessage {
+                    input: digests_to_poseidon2_input(
+                        tagged_left_child.map(Into::into),
+                        local.right_child.map(Into::into),
+                    ),
+                    output: local.parent.map(Into::into),
+                },
+                is_valid,
+            );
+        } else {
+            self.poseidon2_bus.lookup_key(
+                builder,
+                Poseidon2CompressMessage {
+                    input: digests_to_poseidon2_input(local.left_child, local.right_child),
+                    output: local.parent,
+                },
+                is_valid,
+            );
+        }
 
         self.merkle_root_bus.send(
             builder,

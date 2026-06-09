@@ -3,6 +3,7 @@ use std::sync::Arc;
 use eyre::Result;
 use itertools::Itertools;
 use openvm_continuations::{
+    circuit::deferral::utils::def_leaf_compress,
     prover::{DeferralChildVkKind, DeferralCircuitProver},
     CommitBytes, SC,
 };
@@ -14,7 +15,7 @@ use openvm_stark_backend::{
     proof::Proof,
     SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, F};
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use openvm_verify_stark_host::pvs::DeferralPvs;
 use tracing::info_span;
 
@@ -156,8 +157,7 @@ impl DeferralProver {
                         .circuit_commit(self.internal_recursive_prover.get_vk_commit(false));
                     let input_acc_hash = poseidon2_hash_slice(&def_circuit_commit).0;
                     let output_acc_hash = poseidon2_hash_slice(&[F::ZERO]).0;
-                    let combined_hash =
-                        poseidon2_compress_with_capacity(input_acc_hash, output_acc_hash).0;
+                    let combined_hash = def_leaf_compress(input_acc_hash, output_acc_hash).1;
                     Ok(DeferralProof::Absent(DeferralPvs {
                         initial_acc_hash: combined_hash,
                         final_acc_hash: combined_hash,

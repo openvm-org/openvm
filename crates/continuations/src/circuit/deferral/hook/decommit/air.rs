@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use openvm_circuit_primitives::{
     utils::not, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
-use openvm_recursion_circuit::utils::assert_zeros;
+use openvm_recursion_circuit::{prelude::DIGEST_SIZE, utils::assert_zeros};
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -21,6 +21,7 @@ use crate::circuit::{
 #[derive(AlignedBorrow, StructReflection)]
 pub struct MerkleDecommitCols<F> {
     pub merkle_tree_cols: MerkleTreeCols<F>,
+    pub tagged_left_child: [F; DIGEST_SIZE],
     pub send_commits: F,
     pub num_rows: F,
 }
@@ -58,6 +59,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 &local.merkle_tree_cols,
                 &next.merkle_tree_cols,
                 local.num_rows.into(),
+                Some(&local.tagged_left_child),
             ),
         );
         builder.assert_eq(local.num_rows, next.num_rows);

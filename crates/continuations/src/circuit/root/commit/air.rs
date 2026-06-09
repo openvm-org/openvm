@@ -90,7 +90,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         let next: &MerkleTreeCols<AB::Var> = (*next)[..const_width].borrow();
 
         let num_rows = AB::F::from_usize(2 * self.num_user_pvs / DIGEST_SIZE);
-        self.subair.eval(builder, (local, next, num_rows.into()));
+        self.subair
+            .eval(builder, (local, next, num_rows.into(), None));
 
         /*
          * Constrain that the left_child of each leaf node at row_idx corresponds to this

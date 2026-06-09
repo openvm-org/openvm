@@ -84,7 +84,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         let next: &MerkleTreeCols<AB::Var> = (*next).borrow();
 
         let num_rows = AB::F::from_usize(2 * self.num_user_pvs / DIGEST_SIZE);
-        self.subair.eval(builder, (local, next, num_rows.into()));
+        self.subair
+            .eval(builder, (local, next, num_rows.into(), None));
 
         /*
          * Send the left_child of each leaf node to output_values to be processed
