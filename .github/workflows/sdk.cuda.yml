@@ -22,7 +22,7 @@ jobs:
   cuda-backend:
     name: sdk cuda tests
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=test-gpu-nvidia/family=g6.*+g5+g6e/extras=s3-cache
+      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -41,6 +41,7 @@ jobs:
           nvidia-smi
           nvidia-smi -L
           nvcc --version
+          echo "CUDA_ARCH=75,86,89,120" >> $GITHUB_ENV
 
       - name: Setup CUDA environment
         run: |
