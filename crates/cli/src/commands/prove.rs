@@ -4,7 +4,7 @@ use clap::Parser;
 use eyre::{eyre, Result};
 use openvm_circuit::arch::{
     execution_mode::metered::segment_ctx::{
-        SegmentationConfig, SegmentationLimits, DEFAULT_MAX_MEMORY, DEFAULT_MAX_TRACE_HEIGHT_BITS,
+        SegmentationLimits, DEFAULT_MAX_MEMORY, DEFAULT_MAX_TRACE_HEIGHT_BITS,
     },
     instructions::exe::VmExe,
 };
@@ -318,7 +318,7 @@ fn configure_app_pk(app_pk: &mut AppProvingKey<SdkVmConfig>, segmentation_args: 
         .vm_config
         .system
         .config
-        .set_segmentation_config((*segmentation_args).into());
+        .set_segmentation_limits((*segmentation_args).into());
 }
 
 fn target_dir_from_cargo_args(cargo_args: &RunCargoArgs) -> Result<PathBuf> {
@@ -387,16 +387,13 @@ fn load_required_root_pk() -> Result<RootProvingKey> {
     })
 }
 
-impl From<SegmentationArgs> for SegmentationConfig {
+impl From<SegmentationArgs> for SegmentationLimits {
     fn from(args: SegmentationArgs) -> Self {
-        SegmentationConfig {
-            limits: SegmentationLimits::default()
-                .with_max_trace_height(
-                    1u32.checked_shl(args.segment_max_height_bits as u32)
-                        .expect("segment_max_height_bits too large"),
-                )
-                .with_max_memory(args.segment_max_memory),
-            ..Default::default()
-        }
+        SegmentationLimits::default()
+            .with_max_trace_height(
+                1u32.checked_shl(args.segment_max_height_bits as u32)
+                    .expect("segment_max_height_bits too large"),
+            )
+            .with_max_memory(args.segment_max_memory)
     }
 }

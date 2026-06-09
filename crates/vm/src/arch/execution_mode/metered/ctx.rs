@@ -1,6 +1,7 @@
 use getset::{Getters, Setters, WithSetters};
 use itertools::Itertools;
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS};
+use openvm_stark_backend::memory_metering::ProvingMemoryConfig;
 
 use super::{
     memory_ctx::MemoryCtx,
@@ -35,6 +36,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         interactions: Vec<usize>,
         need_rot: Vec<bool>,
         config: &SystemConfig,
+        memory_config: ProvingMemoryConfig,
     ) -> Self {
         let (trace_heights, is_trace_height_constant): (Vec<u32>, Vec<bool>) =
             constant_trace_heights
@@ -53,7 +55,8 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             widths,
             interactions,
             need_rot,
-            config.segmentation_config.clone(),
+            config.segmentation_limits.clone(),
+            memory_config,
         );
         let memory_ctx = MemoryCtx::new(config, segmentation_ctx.segment_check_insns);
 
@@ -116,26 +119,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self.memory_ctx.page_indices_since_checkpoint =
             vec![0; page_indices_since_checkpoint_cap].into_boxed_slice();
         self.memory_ctx.page_indices_since_checkpoint_len = 0;
-        self
-    }
-
-    pub fn with_main_cell_weight(mut self, weight: usize) -> Self {
-        self.segmentation_ctx.set_main_cell_weight(weight);
-        self
-    }
-
-    pub fn with_main_cell_secondary_weight(mut self, weight: f64) -> Self {
-        self.segmentation_ctx.set_main_cell_secondary_weight(weight);
-        self
-    }
-
-    pub fn with_interaction_cell_weight(mut self, weight: f64) -> Self {
-        self.segmentation_ctx.set_interaction_cell_weight(weight);
-        self
-    }
-
-    pub fn with_base_field_size(mut self, base_field_size: usize) -> Self {
-        self.segmentation_ctx.set_base_field_size(base_field_size);
         self
     }
 

@@ -58,8 +58,7 @@ impl BenchmarkCli {
             .next_power_of_two();
         vm_config
             .as_mut()
-            .segmentation_config
-            .limits
+            .segmentation_limits
             .set_max_trace_height(max_height);
         vm_config.as_mut().profiling = self.profiling;
     }

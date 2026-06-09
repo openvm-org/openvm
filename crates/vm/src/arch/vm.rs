@@ -17,6 +17,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+    memory_metering::ProvingMemoryConfig,
     p3_field::{InjectiveMonomial, PrimeCharacteristicRing, PrimeField32, TwoAdicField},
     p3_util::log2_ceil_usize,
     proof::Proof,
@@ -194,6 +195,7 @@ where
         widths: &[usize],
         interactions: &[usize],
         need_rot: &[bool],
+        memory_config: ProvingMemoryConfig,
     ) -> MeteredCtx {
         MeteredCtx::new(
             constant_trace_heights.to_vec(),
@@ -202,6 +204,7 @@ where
             interactions.to_vec(),
             need_rot.to_vec(),
             self.config.as_ref(),
+            memory_config,
         )
     }
 
@@ -905,6 +908,7 @@ where
             &widths,
             &interactions,
             &need_rot,
+            self.engine.proving_memory_config(),
         )
     }
 
