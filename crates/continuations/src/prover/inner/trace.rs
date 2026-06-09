@@ -61,12 +61,11 @@ where
                 device_ctx,
             );
 
-        let range_check_inputs = vec![];
         let power_check_inputs = vec![];
         let mut external_data = VerifierExternalData {
             poseidon2_compress_inputs: &pre_data.poseidon2_compress_inputs,
             poseidon2_permute_inputs: &pre_data.poseidon2_permute_inputs,
-            range_check_inputs: &range_check_inputs,
+            range_check_inputs: &pre_data.range_check_inputs,
             power_check_inputs: &power_check_inputs,
             required_heights: None,
             final_transcript_state: None,

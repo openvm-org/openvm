@@ -84,6 +84,7 @@ impl<SC: StarkProtocolConfig<F = F>> RootTraceGen<CpuBackend<SC>, ()> for RootTr
                 .chain(memory_inputs)
                 .collect_vec(),
             poseidon2_permute_inputs: verifier_permute_inputs,
+            range_check_inputs: vec![],
         }
     }
 
@@ -151,6 +152,7 @@ impl RootTraceGen<GenericGpuBackend<BabyBearBn254Poseidon2HashScheme>, GpuDevice
                 .collect_vec(),
             poseidon2_compress_inputs: data.poseidon2_compress_inputs,
             poseidon2_permute_inputs: data.poseidon2_permute_inputs,
+            range_check_inputs: data.range_check_inputs,
         }
     }
 

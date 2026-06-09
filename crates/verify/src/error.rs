@@ -79,4 +79,6 @@ pub enum VerifyStarkError {
     DefFinalAccHashCommitSet { actual: Digest },
     #[error("Proof has deferral_flag=0 but depth is set, actual {actual:?}")]
     DefDepthSet { actual: F },
+    #[error("Proof has unsupported deferral node_idx {actual:?}, should be 0")]
+    DefNodeIdxNonZero { actual: F },
 }

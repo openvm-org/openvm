@@ -150,10 +150,10 @@ impl DeferralProver {
         per_circuit
             .into_iter()
             .enumerate()
-            .map(|(circuit_idx, res)| {
+            .map(|(def_idx, res)| {
                 let mut proofs = res.internal_for_leaf_proofs;
                 if proofs.is_empty() {
-                    let def_circuit_commit = self.single_circuit_provers[circuit_idx]
+                    let def_circuit_commit = self.single_circuit_provers[def_idx]
                         .circuit_commit(self.internal_recursive_prover.get_vk_commit(false));
                     let input_acc_hash = poseidon2_hash_slice(&def_circuit_commit).0;
                     let output_acc_hash = poseidon2_hash_slice(&[F::ZERO]).0;
@@ -162,6 +162,7 @@ impl DeferralProver {
                         initial_acc_hash: combined_hash,
                         final_acc_hash: combined_hash,
                         depth: F::ONE,
+                        node_idx: F::from_usize(def_idx),
                     }))
                 } else {
                     let mut merkle_depth = 2usize;
@@ -183,7 +184,7 @@ impl DeferralProver {
                         proofs = info_span!(
                             "agg_layer",
                             group = format!("internal_recursive.{layer}"),
-                            circuit = circuit_idx
+                            circuit = def_idx
                         )
                         .in_scope(|| {
                             proofs

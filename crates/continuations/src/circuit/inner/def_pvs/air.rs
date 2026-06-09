@@ -4,9 +4,12 @@ use openvm_circuit_primitives::{
     utils::{assert_array_eq, not},
     ColumnsAir, StructReflection, StructReflectionHelper,
 };
-use openvm_recursion_circuit::bus::{
-    CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
-    PublicValuesBus, PublicValuesBusMessage,
+use openvm_recursion_circuit::{
+    bus::{
+        CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
+        PublicValuesBus, PublicValuesBusMessage,
+    },
+    primitives::bus::{RangeCheckerBus, RangeCheckerBusMessage},
 };
 use openvm_recursion_circuit_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -48,6 +51,7 @@ pub struct DeferralPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
     pub poseidon2_bus: Poseidon2CompressBus,
+    pub range_bus: RangeCheckerBus,
     pub pvs_air_consistency_bus: PvsAirConsistencyBus,
 
     pub expected_def_hook_cached_commit: CommitBytes,
@@ -210,19 +214,21 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
 
         /*
          * Finally, we constrain the public values to be consistent with the
-         * child's. If there is one row then the pvs are simply passed through.
-         * If there are two, then initial_acc_hash and final_acc_hash are
-         * combined and depth is incremented by 1.
+         * child's. If there is one row then the pvs are simply passed through
+         * and node_idx must be 0.
          */
         let &DeferralPvs::<_> {
             initial_acc_hash,
             final_acc_hash,
             depth,
+            node_idx,
         } = builder.public_values().borrow();
 
         // constrain that pvs are passed through if there is one row
         let mut when_one_row = builder.when(has_one_row);
         when_one_row.assert_eq(local.child_pvs.depth, depth);
+        when_one_row.assert_eq(local.child_pvs.node_idx, node_idx);
+        when_one_row.assert_zero(node_idx);
 
         assert_array_eq(
             &mut when_one_row,
@@ -235,11 +241,16 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             final_acc_hash,
         );
 
-        // constrain that pvs are updated properly if there are two rows
-        let row_delta = next.row_idx - local.row_idx;
+        /*
+         * If there are two rows, then initial_acc_hash and final_acc_hash are
+         * combined, depth is incremented by 1, and child node indices are
+         * constrained to be adjacent. The left child node_idx must be even,
+         * and the parent node_idx is the left child node_idx divided by 2.
+         * Note that we range check the parent node_idx to be in [0, 256),
+         * which forces each def_idx into [0, 512).
+         */
+        let is_first_of_two_rows = next.row_idx;
         let single_present_is_left = not(local.single_present_is_right);
-        let single_present_is_local =
-            row_delta.clone() * (row_delta + AB::Expr::ONE) * AB::F::TWO.inverse();
 
         let left_init_child = from_fn(|i| {
             single_present_is_left.clone() * local.child_pvs.initial_acc_hash[i]
@@ -256,7 +267,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                 input: digests_to_poseidon2_input(left_init_child, right_init_child),
                 output: initial_acc_hash.map(Into::into),
             },
-            single_present_is_local.clone(),
+            is_first_of_two_rows,
         );
 
         let left_final_child = from_fn(|i| {
@@ -274,11 +285,31 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                 input: digests_to_poseidon2_input(left_final_child, right_final_child),
                 output: final_acc_hash.map(Into::into),
             },
-            single_present_is_local,
+            is_first_of_two_rows,
         );
 
         builder
             .when(has_two_rows)
             .assert_one(depth.into() - local.child_pvs.depth);
+
+        let canonical_parent_node_idx =
+            (local.child_pvs.node_idx - local.single_present_is_right) * AB::F::TWO.inverse();
+
+        builder
+            .when(is_first_of_two_rows)
+            .when(next.is_present)
+            .assert_one(next.child_pvs.node_idx - local.child_pvs.node_idx);
+        builder
+            .when(is_first_of_two_rows)
+            .assert_eq(canonical_parent_node_idx, node_idx);
+
+        self.range_bus.lookup_key(
+            builder,
+            RangeCheckerBusMessage {
+                value: node_idx.into(),
+                max_bits: AB::Expr::from_u8(8),
+            },
+            is_first_of_two_rows,
+        );
     }
 }

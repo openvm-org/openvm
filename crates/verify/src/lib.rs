@@ -284,6 +284,7 @@ pub fn verify_vm_stark_proof_pvs(
             initial_acc_hash,
             final_acc_hash,
             depth,
+            node_idx,
         } = proof.inner.public_values[DEF_PVS_AIR_ID]
             .as_slice()
             .borrow();
@@ -313,6 +314,10 @@ pub fn verify_vm_stark_proof_pvs(
             }
         } else {
             return Err(VerifyStarkError::InvalidDeferralFlag(deferral_flag));
+        }
+
+        if node_idx != F::ZERO {
+            return Err(VerifyStarkError::DefNodeIdxNonZero { actual: node_idx });
         }
 
         let deferral_merkle_proofs = proof

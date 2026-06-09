@@ -12,9 +12,10 @@ pub const DEFERRAL_FUNCT3: u8 = 0b111;
 /// Low bits in immediate used to pick deferral sub-opcode
 pub const DEFERRAL_OPCODE_BITS: u32 = 2;
 
-/// Maximum number of deferral circuits, as each deferral instruction stores its
-/// deferral idx in the most significant 10 bits of the immediate field
-pub const MAX_DEF_CIRCUITS: u16 = 1024;
+/// Maximum number of deferral circuits, as constrained in the deferrals part of the
+/// continuations framework. Note that each deferral instruction stores its deferral
+/// idx in the most significant 10 bits of the immediate field.
+pub const MAX_DEF_CIRCUITS: u16 = 512;
 
 /// Number of bytes in a commit, used as identifiers for raw deferral inputs/outputs
 pub const COMMIT_NUM_BYTES: usize = 32;

@@ -8,7 +8,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
     poseidon2_compress_with_capacity, BabyBearPoseidon2Config, F,
 };
 use openvm_verify_stark_host::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
-use p3_field::PrimeCharacteristicRing;
+use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
@@ -27,6 +27,7 @@ pub fn generate_proving_ctx(
 ) -> (
     AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
     Vec<[F; POSEIDON2_WIDTH]>,
+    Vec<usize>,
 ) {
     assert!(
         absent_trace_pvs.is_none()
@@ -94,6 +95,7 @@ pub fn generate_proving_ctx(
     }
 
     let mut poseidon2_inputs = vec![];
+    let mut range_check_inputs = vec![];
     let mut public_values = vec![F::ZERO; DeferralPvs::<u8>::width()];
     let pvs: &mut DeferralPvs<F> = public_values.as_mut_slice().borrow_mut();
 
@@ -122,6 +124,8 @@ pub fn generate_proving_ctx(
         pvs.final_acc_hash = poseidon2_compress_with_capacity(left_final, right_final).0;
         poseidon2_inputs.push(digests_to_poseidon2_input(left_final, right_final));
         pvs.depth = first_child.depth + F::ONE;
+        pvs.node_idx = (first_child.node_idx - F::from_bool(single_present_is_right)).halve();
+        range_check_inputs.push(pvs.node_idx.as_canonical_u32() as usize);
     }
 
     (
@@ -131,5 +135,6 @@ pub fn generate_proving_ctx(
             public_values,
         },
         poseidon2_inputs,
+        range_check_inputs,
     )
 }
