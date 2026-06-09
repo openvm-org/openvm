@@ -172,10 +172,10 @@ impl<F: PrimeField32> RvrExtension<F> for Sha2Extension {
         vec![("rvr_ext_sha2.h", include_str!("../c/rvr_ext_sha2.h"))]
     }
 
-    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
-        (
+    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
+        vec![(
             "librvr_openvm_ext_sha2_ffi.a",
             include_bytes!(env!("RVR_SHA2_FFI_STATICLIB")),
-        )
+        )]
     }
 }

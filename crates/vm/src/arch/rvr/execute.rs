@@ -17,10 +17,7 @@ use super::{
         write_rv32_registers,
     },
     compile::RvrCompiled,
-    io::{
-        host_hint_buffer, host_hint_input, host_hint_random, host_hint_storew,
-        host_hint_stream_set, host_print_str, host_reveal, OpenVmHostCallbacks, OpenVmIoState,
-    },
+    io::OpenVmIoState,
     metered::{
         metered_periodic_check, MeteredTracerData, RvrMeteredResult, SegmentationState,
         NO_LAST_PAGE,
@@ -33,7 +30,7 @@ use super::{
 };
 use crate::{arch::VmState, system::memory::online::GuestMemory};
 
-type RegisterFn = unsafe extern "C" fn(*const OpenVmHostCallbacks);
+type RegisterIoCtxFn = unsafe extern "C" fn(*mut c_void);
 type ExecuteFn = unsafe extern "C" fn(*mut c_void);
 
 /// Error during execution.
@@ -54,21 +51,6 @@ pub enum ExecuteError {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-pub fn build_callbacks<F: PrimeField32>(
-    io_state: &mut OpenVmIoState<'_, F>,
-) -> OpenVmHostCallbacks {
-    OpenVmHostCallbacks {
-        ctx: io_state as *mut OpenVmIoState<'_, F> as *mut c_void,
-        hint_input: host_hint_input::<F>,
-        print_str: host_print_str::<F>,
-        hint_random: host_hint_random::<F>,
-        hint_storew: host_hint_storew::<F>,
-        hint_buffer: host_hint_buffer::<F>,
-        reveal: host_reveal::<F>,
-        hint_stream_set: host_hint_stream_set::<F>,
-    }
-}
 
 fn build_io_state_borrowed<'a, F: PrimeField32>(
     vm_state: &'a mut VmState<F, GuestMemory>,
@@ -92,19 +74,20 @@ fn build_io_state_borrowed<'a, F: PrimeField32>(
 /// # Safety
 ///
 /// `compiled` must contain a valid rvr-compiled shared library exporting the
-/// `register_openvm_callbacks` symbol with the expected ABI.
-pub unsafe fn register_openvm_callbacks(
+/// `register_openvm_io_ctx` symbol with the expected ABI. `io_state` must
+/// remain valid for the lifetime of the subsequent `rv_execute` call.
+unsafe fn register_openvm_io_ctx<F: PrimeField32>(
     compiled: &RvrCompiled,
-    callbacks: &OpenVmHostCallbacks,
+    io_state: &mut OpenVmIoState<'_, F>,
 ) -> Result<(), ExecuteError> {
-    let register_fn: RegisterFn = unsafe {
+    let register_fn: RegisterIoCtxFn = unsafe {
         let sym = compiled
             .lib
-            .get::<RegisterFn>(b"register_openvm_callbacks")
+            .get::<RegisterIoCtxFn>(b"register_openvm_io_ctx")
             .map_err(|e| ExecuteError::SymbolLookup(e.to_string()))?;
         *sym
     };
-    unsafe { register_fn(callbacks) };
+    unsafe { register_fn(io_state as *mut OpenVmIoState<'_, F> as *mut c_void) };
     Ok(())
 }
 
@@ -147,9 +130,8 @@ where
     S: SuspenderState,
 {
     let mut io_state = build_io_state_borrowed(vm_state);
-    let callbacks = build_callbacks(&mut io_state);
     unsafe {
-        register_openvm_callbacks(compiled, &callbacks)?;
+        register_openvm_io_ctx(compiled, &mut io_state)?;
         extensions.register_host_callbacks(&compiled.lib)?;
         rv_execute(compiled, state.as_void_ptr())?;
     }
