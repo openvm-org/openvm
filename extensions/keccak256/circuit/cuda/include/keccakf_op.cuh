@@ -38,6 +38,10 @@ template <typename T> struct KeccakfOpCols {
     T postimage[KECCAK_WIDTH_U16S];
     MemoryReadAuxCols<T> rd_aux;
     MemoryBaseAuxCols<T> buffer_word_aux[KECCAK_WIDTH_MEM_OPS]; // 25 words
+    // Carry for converting the base buffer byte pointer to AS-native u16 cell pointer limbs.
+    T buffer_cell_carry;
+    // Per-block carry for adding the cell offset to the base cell pointer.
+    T buffer_word_add_carry[KECCAK_WIDTH_MEM_OPS];
 };
 
 inline constexpr size_t NUM_KECCAKF_OP_COLS = sizeof(KeccakfOpCols<uint8_t>);

@@ -16,7 +16,7 @@ template <size_t CHUNK, size_t BLOCKS> struct BoundaryRecord {
 template <typename T> struct PersistentBoundaryCols {
     T expand_direction;
     T address_space;
-    T leaf_label;
+    T leaf_label_limbs[POINTER_LIMBS];
     T values[DIGEST_WIDTH];
     T hash[DIGEST_WIDTH];
     T timestamps[BLOCKS_PER_LEAF];
@@ -40,13 +40,13 @@ __global__ void cukernel_persistent_boundary_tracegen(
     if (record_idx < num_records) {
         BoundaryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF> record = records[record_idx];
         Poseidon2Buffer poseidon2(poseidon2_buffer, poseidon2_buffer_idx, poseidon2_capacity);
+        uint32_t const leaf_label = record.ptr / DIGEST_WIDTH;
+        uint32_t const leaf_label_limbs[POINTER_LIMBS] = {
+            leaf_label & ((uint32_t(1) << LOW_LEAF_BITS) - 1),
+            leaf_label >> LOW_LEAF_BITS,
+        };
         COL_WRITE_VALUE(row, PersistentBoundaryCols, address_space, record.address_space);
-        COL_WRITE_VALUE(
-            row,
-            PersistentBoundaryCols,
-            leaf_label,
-            record.ptr / DIGEST_WIDTH
-        );
+        COL_WRITE_ARRAY(row, PersistentBoundaryCols, leaf_label_limbs, leaf_label_limbs);
         if (row_idx % 2 == 0) {
             FpArray<DIGEST_WIDTH> init_values;
             uint32_t addr_space_idx = record.address_space - 1;

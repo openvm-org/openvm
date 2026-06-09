@@ -80,11 +80,29 @@ static __device__ __noinline__ void fill_keccakf_op_row(
         ts++;
     }
 
-    // Bound the high u16 cell so the low-32-bit buffer pointer fits in pointer_max_bits.
-    range_checker.add_count(
-        ptr_bound_from_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
-        U16_BITS
-    );
+    // Byte -> cell pointer conversion carry and per-block cell-offset carries, plus the matching
+    // range-check counts (mirrors KeccakfOpChip::fill_trace).
+    //
+    // Convert the base buffer byte pointer to AS-native u16 cell pointer limbs. The conversion
+    // carry is the high byte limb's parity; only the high cell limb is range-checked (hi_bits).
+    uint32_t byte_lo = buffer_ptr_limbs[0];
+    uint32_t byte_hi = buffer_ptr_limbs[1];
+    uint32_t conv_carry = byte_hi & 1u;
+    uint32_t base_cell_lo = (byte_lo + (conv_carry << U16_BITS)) >> 1;
+    uint32_t base_cell_hi = byte_hi >> 1;
+    uint32_t hi_bits = pointer_max_bits - U16_CELL_SIZE_BITS - U16_BITS;
+    range_checker.add_count(base_cell_hi, hi_bits);
+    KECCAKF_OP_WRITE(buffer_cell_carry, conv_carry);
+
+    // Per-block carry for adding the cell offset `word_idx * (MEMORY_BLOCK_BYTES / U16_CELL_SIZE)`
+    // to the base cell pointer. Only the new low limb is range-checked (U16_BITS).
+    uint32_t cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
+    for (uint32_t w = 0; w < KECCAK_WIDTH_MEM_OPS; w++) {
+        uint32_t sum_lo = base_cell_lo + w * cell_stride;
+        uint32_t add_carry = sum_lo >> U16_BITS;
+        range_checker.add_count(sum_lo & 0xffffu, U16_BITS);
+        KECCAKF_OP_WRITE(buffer_word_add_carry[w], add_carry);
+    }
 }
 
 // Main kernel for KeccakfOpChip trace generation

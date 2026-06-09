@@ -28,7 +28,9 @@ use {
     super::{DeferralOutputChipGpu, DeferralOutputRecordMut},
     crate::{count::DeferralCircuitCountChipGpu, poseidon2::DeferralPoseidon2ChipGpu},
     openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
+        testing::{
+            default_bitwise_lookup_bus, dummy_range_checker, GpuChipTestBuilder, GpuTestChipHarness,
+        },
         DenseRecordArena,
     },
     openvm_cuda_common::d_buffer::DeviceBuffer,
@@ -280,7 +282,9 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
             count_chip_cpu,
             poseidon2_chip_cpu,
             dummy_bitwise_chip,
-            tester.cpu_range_checker(),
+            // Dummy range checker: the GPU kernel already emits the AS-pointer range-check counts;
+            // using the real (hybrid) range checker here would double-count them.
+            dummy_range_checker(tester.cpu_range_checker().bus()),
             tester.address_bits(),
         ),
         tester.dummy_memory_helper(),

@@ -3,11 +3,14 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{AddressSpaceHostLayout, MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     system::{
-        memory::{persistent::BLOCKS_PER_LEAF, AddressMap},
+        memory::{
+            persistent::{BLOCKS_PER_LEAF, LOW_LEAF_BITS},
+            AddressMap,
+        },
         TouchedMemory,
     },
 };
-use openvm_circuit_primitives::Chip;
+use openvm_circuit_primitives::{var_range::SharedVariableRangeCheckerChip, Chip};
 use openvm_cuda_backend::{prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
@@ -37,6 +40,7 @@ pub struct MemoryInventoryGPU {
     pub device_ctx: GpuDeviceCtx,
     pub boundary: BoundaryChipGPU,
     pub merkle_tree: MemoryMerkleTree,
+    pub range_checker: SharedVariableRangeCheckerChip,
     pub hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
     pub initial_memory: Vec<Arc<DeviceBuffer<u8>>>,
     pub merkle_records: Option<DeviceBuffer<u32>>,
@@ -70,6 +74,7 @@ impl MemoryInventoryGPU {
 
     pub fn new(
         config: MemoryConfig,
+        range_checker: SharedVariableRangeCheckerChip,
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
         device_ctx: GpuDeviceCtx,
     ) -> Self {
@@ -77,6 +82,7 @@ impl MemoryInventoryGPU {
             device_ctx: device_ctx.clone(),
             boundary: BoundaryChipGPU::new(hasher_chip.shared_buffer(), device_ctx.clone()),
             merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone(), device_ctx),
+            range_checker,
             hasher_chip,
             initial_memory: Vec::new(),
             merkle_records: None,
@@ -243,6 +249,13 @@ impl MemoryInventoryGPU {
                 .to_host_on(&self.device_ctx)
                 .unwrap();
             let record_words = 2 + BLOCKS_PER_LEAF + DIGEST_WIDTH;
+            let low_mask = (1u32 << LOW_LEAF_BITS) - 1;
+            let high_bits = self
+                .merkle_tree
+                .mem_config()
+                .memory_dimensions()
+                .address_height
+                .saturating_sub(LOW_LEAF_BITS);
             let mut merkle_records = Vec::with_capacity(out_num_records);
             for i in 0..out_num_records {
                 let base = i * record_words;
@@ -255,6 +268,13 @@ impl MemoryInventoryGPU {
                     .iter()
                     .max()
                     .unwrap();
+                let leaf_label = out_records[base + 1] / DIGEST_WIDTH as u32;
+                let low = leaf_label & low_mask;
+                let high = leaf_label >> LOW_LEAF_BITS;
+                for _ in 0..2 {
+                    self.range_checker.add_count(low, LOW_LEAF_BITS);
+                    self.range_checker.add_count(high, high_bits);
+                }
                 let record = MemoryMerkleRecord {
                     address_space: out_records[base],
                     ptr: out_records[base + 1],
@@ -330,6 +350,7 @@ mod tests {
             poseidon2::Poseidon2PeripheryChip,
         },
     };
+    use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
     use openvm_cuda_backend::prelude::F;
     use openvm_cuda_common::{
         common::get_device,
@@ -370,8 +391,17 @@ mod tests {
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
         let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
-        let mut inventory =
-            MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
+        let range_max_bits = mem_config.pointer_max_bits.max(LOW_LEAF_BITS);
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+            0,
+            range_max_bits,
+        )));
+        let mut inventory = MemoryInventoryGPU::new(
+            mem_config.clone(),
+            range_checker,
+            hasher_chip,
+            device_ctx.clone(),
+        );
         inventory.set_initial_memory(&memory.memory);
 
         let ctxs = inventory.generate_proving_ctxs(Vec::new());
@@ -445,8 +475,17 @@ mod tests {
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
         let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
-        let mut inventory =
-            MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
+        let range_max_bits = mem_config.pointer_max_bits.max(LOW_LEAF_BITS);
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+            0,
+            range_max_bits,
+        )));
+        let mut inventory = MemoryInventoryGPU::new(
+            mem_config.clone(),
+            range_checker,
+            hasher_chip,
+            device_ctx.clone(),
+        );
         inventory.set_initial_memory(&memory.memory);
 
         let touched_memory = vec![
