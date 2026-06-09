@@ -123,10 +123,10 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let mut rand_input_arr = [0u8; MAX_LEN];
     rand_input_arr.copy_from_slice(&rand_input);
 
-    use openvm_circuit::arch::testing::memory::gen_pointer;
-    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    use openvm_circuit::arch::testing::memory::{gen_pointer, gen_register_pointer};
+    let rd = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs1 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
     // Align buffer/input pointers to MEMORY_BLOCK_BYTES-byte blocks for memory bus compatibility
     let num_blocks = buffer_length.div_ceil(MEMORY_BLOCK_BYTES);
@@ -345,16 +345,16 @@ fn cuda_set_and_execute(
     rng: &mut StdRng,
     len: Option<usize>,
 ) {
-    use openvm_circuit::arch::testing::memory::gen_pointer;
+    use openvm_circuit::arch::testing::memory::{gen_pointer, gen_register_pointer};
 
     let len = len.unwrap_or_else(|| rng.random_range(1..=KECCAK_RATE_MEM_OPS) * MEMORY_BLOCK_BYTES);
     if len == 0 {
         return;
     }
 
-    let buffer_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let input_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let len_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let buffer_reg = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let input_reg = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let len_reg = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
     let buffer_ptr = gen_pointer(rng, len);
     let input_ptr = gen_pointer(rng, len);

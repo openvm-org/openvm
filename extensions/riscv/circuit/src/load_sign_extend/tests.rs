@@ -3,7 +3,7 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            memory::gen_register_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
         Arena, ExecutionBridge, PreflightExecutor,
@@ -161,8 +161,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         [low4[0], low4[1], low4[2], low4[3], 0, 0, 0, 0]
     });
     let ptr_val = imm_ext.wrapping_add(rv64_bytes_to_u32(rs1));
-    let a = gen_pointer(rng, 8);
-    let b = gen_pointer(rng, 8);
+    let a = gen_register_pointer(rng, 8);
+    let b = gen_register_pointer(rng, 8);
 
     let shift_amount = ptr_val % 8;
     tester.write_bytes(1, b, rs1.map(F::from_u8));

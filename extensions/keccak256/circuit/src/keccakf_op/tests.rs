@@ -8,8 +8,8 @@ use itertools::Itertools;
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS,
+            memory::{gen_pointer, gen_register_pointer},
+            TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
         },
         Arena, ExecutionBridge, PreflightExecutor, MEMORY_BLOCK_BYTES,
     },
@@ -126,7 +126,7 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
     let mut rand_buffer_arr = [0u8; MAX_LEN];
     rand_buffer_arr.copy_from_slice(&rand_buffer);
 
-    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let rd = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, MAX_LEN);
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
@@ -296,11 +296,11 @@ fn cuda_set_and_execute(
     arena: &mut DenseRecordArena,
     rng: &mut StdRng,
 ) {
-    use openvm_circuit::arch::testing::memory::gen_pointer;
+    use openvm_circuit::arch::testing::memory::{gen_pointer, gen_register_pointer};
 
     const KECCAK_STATE_BYTES: usize = 200;
 
-    let buffer_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let buffer_reg = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, KECCAK_STATE_BYTES);
 
     tester.write_bytes(
@@ -406,11 +406,11 @@ fn test_keccakf_cuda_tracegen_zero_state() {
 
     let mut harness = create_cuda_harness(&tester);
 
-    use openvm_circuit::arch::testing::memory::gen_pointer;
+    use openvm_circuit::arch::testing::memory::{gen_pointer, gen_register_pointer};
 
     const KECCAK_STATE_BYTES: usize = 200;
 
-    let buffer_reg = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    let buffer_reg = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(&mut rng, KECCAK_STATE_BYTES);
 
     tester.write_bytes(

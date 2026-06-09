@@ -152,7 +152,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         _ => unreachable!("loadstore tests should not handle sign-extension load opcodes"),
     };
 
-    let ptr_val: u32 = rng.random_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
+    let ptr_val: u32 =
+        (rng.random_range(0..(1u64 << (tester.address_bits() - alignment))) << alignment) as u32;
     let ptr = ptr_val.wrapping_sub(imm_ext).to_le_bytes();
     let rs1 = rs1.unwrap_or([ptr[0], ptr[1], ptr[2], ptr[3], 0, 0, 0, 0]);
     let rs1_low = rv64_bytes_to_u32(rs1);
@@ -160,9 +161,13 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let shift_amount = (ptr_val as usize) & (RV64_REGISTER_NUM_LIMBS - 1);
 
     let max_addr = 1usize << tester.address_bits();
-    let a = rng.random_range(0..(max_addr - RV64_REGISTER_NUM_LIMBS)) / RV64_REGISTER_NUM_LIMBS
+    // `a`/`b` are register *locations* (instruction operands). They must be small: their AS-native
+    // cell pointer `loc/2` is sent on the memory bus as `[loc/2, 0]`, which is only canonical when
+    // `loc/2 < 2^16`.
+    let reg_loc_max = max_addr.min(1usize << 16);
+    let a = rng.random_range(0..(reg_loc_max - RV64_REGISTER_NUM_LIMBS)) / RV64_REGISTER_NUM_LIMBS
         * RV64_REGISTER_NUM_LIMBS;
-    let b = rng.random_range(0..(max_addr - RV64_REGISTER_NUM_LIMBS)) / RV64_REGISTER_NUM_LIMBS
+    let b = rng.random_range(0..(reg_loc_max - RV64_REGISTER_NUM_LIMBS)) / RV64_REGISTER_NUM_LIMBS
         * RV64_REGISTER_NUM_LIMBS;
 
     let is_load = [LOADD, LOADWU, LOADHU, LOADBU].contains(&opcode);
@@ -260,9 +265,9 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 fn rand_loadstore_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 31;
     if [STORED, STOREW, STOREB, STOREH].contains(&opcode) {
-        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
+        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 31;
     }
     let mut tester = VmChipTestBuilder::from_config(mem_config);
     let (mut harness, bitwise) = create_harness(&mut tester);
@@ -293,7 +298,7 @@ fn rand_loadstore_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
 fn positive_loadwu_shift4_test() {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 31;
     let mut tester = VmChipTestBuilder::from_config(mem_config);
     let (mut harness, bitwise) = create_harness(&mut tester);
 
@@ -321,7 +326,7 @@ fn positive_loadwu_shift4_test() {
 fn positive_loadhu_shift6_test() {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 31;
     let mut tester = VmChipTestBuilder::from_config(mem_config);
     let (mut harness, bitwise) = create_harness(&mut tester);
 
@@ -349,8 +354,8 @@ fn positive_loadhu_shift6_test() {
 fn positive_storew_public_values_test() {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
-    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 31;
+    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 31;
     let mut tester = VmChipTestBuilder::from_config(mem_config);
     let (mut harness, bitwise) = create_harness(&mut tester);
 
@@ -380,8 +385,8 @@ fn positive_storew_public_values_test() {
 fn positive_stored_native_test() {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
-    mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 31;
+    mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 31;
     let mut tester = VmChipTestBuilder::from_config(mem_config);
     let (mut harness, bitwise) = create_harness(&mut tester);
 
@@ -434,8 +439,8 @@ fn run_negative_loadstore_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
-    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 31;
+    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 31;
     let mut tester = VmChipTestBuilder::from_config(mem_config);
     let (mut harness, bitwise) = create_harness(&mut tester);
 
