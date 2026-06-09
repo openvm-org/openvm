@@ -97,7 +97,7 @@ jobs:
         working-directory: crates/toolchain/tests
         run: |
           rustup component add rust-src --toolchain nightly-2026-01-18
-          if [[ ${{ matrix.platform.runner }} == *"gpu"* ]]; then
+          if [[ "${{ matrix.platform.features }}" == *"cuda"* ]]; then
             TEST_NAME=test_rv32im_riscv_vector_prove
           else
             TEST_NAME=test_rv32im_riscv_vector_runtime
