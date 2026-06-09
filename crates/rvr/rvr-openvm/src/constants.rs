@@ -8,7 +8,7 @@ use openvm_platform::memory::MEM_SIZE;
 use openvm_rv32im_guest::MAX_HINT_BUFFER_WORDS;
 use rvr_openvm_ext_ffi_common::{
     AS_MEMORY, AS_PUBLIC_VALUES, AS_REGISTER, CHUNK, DEFAULT_PAGE_BITS,
-    DEFAULT_SEGMENT_CHECK_INSNS, DEFERRAL_AS, WORD_SIZE,
+    DEFAULT_SEGMENT_CHECK_INSNS, DEFERRAL_AS, DEFERRAL_DIGEST_SIZE, WORD_SIZE,
 };
 
 /// Worst-case AS_MEMORY pages a single instruction can touch.
@@ -60,6 +60,7 @@ static constexpr uint32_t AS_MEMORY = {AS_MEMORY};
 static constexpr uint32_t AS_PUBLIC_VALUES = {AS_PUBLIC_VALUES};
 static constexpr uint32_t AS_DEFERRAL = {DEFERRAL_AS};
 static constexpr uint32_t WORD_SIZE = {WORD_SIZE};
+static constexpr uint32_t DEFERRAL_DIGEST_SIZE = {DEFERRAL_DIGEST_SIZE};
 static constexpr uint32_t RV_TEXT_START = 0x{text_start:08x}u;
 static constexpr uint32_t RV_TEXT_END = 0x{text_end:08x}u;
 static constexpr uint32_t RV_DISPATCH_TABLE_SIZE = {dispatch_table_size}u;

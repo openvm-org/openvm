@@ -1,5 +1,5 @@
 //! Deferral extension for rvr-openvm: IR nodes for CALL/OUTPUT and the
-//! `DeferralRvrExtension` for lifting them via double FFI.
+//! `DeferralRvrExtension` for lifting them.
 #![cfg(feature = "rvr")]
 
 use std::{ffi::c_void, sync::Arc};
@@ -214,13 +214,6 @@ impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
         )]
     }
 
-    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
-        (
-            "librvr_openvm_ext_deferral_ffi.a",
-            include_bytes!(env!("RVR_DEFERRAL_FFI_STATICLIB")),
-        )
-    }
-
     unsafe fn register_host_callbacks(
         &self,
         lib: &libloading::Library,
@@ -334,12 +327,12 @@ type RegisterFn = unsafe extern "C" fn(*const DeferralHostCallbacks);
 #[repr(C)]
 pub struct DeferralHostCallbacks {
     pub ctx: *mut c_void,
-    pub call_lookup: unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *const u8, *mut u8) -> i32,
-    pub output_lookup:
-        unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *const u8, *mut u8, u32) -> i32,
+    pub call_lookup: unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *const u8, *mut u8),
+    pub output_lookup: unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *const u8, *mut u8, u32),
 }
 
-/// Deferral CALL lookup. Returns 1 on hit, 0 on miss.
+/// Deferral CALL lookup. Panics if `def_idx` or the accumulator update is
+/// invalid (a hard error in the lifted program).
 ///
 /// # Safety
 ///
@@ -353,7 +346,7 @@ pub unsafe extern "C" fn host_deferral_call_lookup<F: PrimeField32>(
     def_idx: u32,
     input_commit_raw: *const u8,
     output_key_out: *mut u8,
-) -> i32 {
+) {
     let deferral_ctx = unsafe { &*(d_ctx as *const DeferralCtx) };
     let io = unsafe { &mut *(io_ctx as *mut OpenVmIoState<'_, F>) };
 
@@ -363,9 +356,10 @@ pub unsafe extern "C" fn host_deferral_call_lookup<F: PrimeField32>(
     });
     let input_commit_key = input_commit.to_vec();
 
-    let Some(deferral_state) = io.deferrals.get_mut(def_idx as usize) else {
-        return 0;
-    };
+    let deferral_state = io
+        .deferrals
+        .get_mut(def_idx as usize)
+        .unwrap_or_else(|| panic!("deferral CALL lookup failed: def_idx={def_idx} out of range"));
 
     let (output_commit, output_len) = match deferral_state.get_input(&input_commit_key).clone() {
         InputMapVal::Output(commit) => {
@@ -387,11 +381,12 @@ pub unsafe extern "C" fn host_deferral_call_lookup<F: PrimeField32>(
         }
     };
 
-    if !unsafe {
-        update_deferral_accumulators(deferral_ctx, io, def_idx, &input_commit, &output_commit)
-    } {
-        return 0;
-    }
+    assert!(
+        unsafe {
+            update_deferral_accumulators(deferral_ctx, io, def_idx, &input_commit, &output_commit)
+        },
+        "deferral CALL lookup failed: accumulator update for def_idx={def_idx}"
+    );
 
     let mut output_key = [0u8; DEFERRAL_OUTPUT_KEY_BYTES];
     output_key[..DEFERRAL_COMMIT_NUM_BYTES].copy_from_slice(&output_commit);
@@ -403,11 +398,10 @@ pub unsafe extern "C" fn host_deferral_call_lookup<F: PrimeField32>(
             DEFERRAL_OUTPUT_KEY_BYTES,
         );
     }
-    1
 }
 
 /// Deferral OUTPUT lookup: `deferrals[def_idx].output_map[output_commit]`.
-/// Returns 1 on hit, 0 on miss.
+/// Panics on a missing `def_idx` or a length mismatch.
 ///
 /// # Safety
 ///
@@ -422,18 +416,18 @@ pub unsafe extern "C" fn host_deferral_output_lookup<F: PrimeField32>(
     output_commit_raw: *const u8,
     output_raw_out: *mut u8,
     expected_len: u32,
-) -> i32 {
+) {
     let io = unsafe { &*(io_ctx as *const OpenVmIoState<'_, F>) };
 
     let output_commit: Vec<u8> = unsafe {
         std::slice::from_raw_parts(output_commit_raw, DEFERRAL_COMMIT_NUM_BYTES).to_vec()
     };
-    let Some(state) = io.deferrals.get(def_idx as usize) else {
-        return 0;
-    };
+    let state = io
+        .deferrals
+        .get(def_idx as usize)
+        .unwrap_or_else(|| panic!("deferral OUTPUT lookup failed: def_idx={def_idx} out of range"));
     let raw = state.get_output(&output_commit);
     // TODO: change these panics to something better to handle across the FFI boundary.
     assert_eq!(raw.len(), expected_len as usize);
     unsafe { std::ptr::copy_nonoverlapping(raw.as_ptr(), output_raw_out, raw.len()) };
-    1
 }
