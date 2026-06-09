@@ -16,9 +16,9 @@ on:
   workflow_dispatch:
     inputs:
       machine_type:
-        description: "Runner machine type (e.g. test-gpu-nvidia/cpu=8+32)"
+        description: "Runner label fragment (e.g. image=ubuntu24-gpu-x64/family=g7e+g6.*+g6e/cpu=8+32/volume=40gb/spot=capacity-optimized)"
         required: false
-        default: test-gpu-nvidia/family=g6+g6e
+        default: image=ubuntu24-gpu-x64/family=g7e+g6+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized
 
 concurrency:
   group: ${{ github.workflow_ref }}-extension-tests-cuda-${{ github.event.pull_request.number || github.sha }}
@@ -36,7 +36,7 @@ jobs:
           - "rv32im"
           - "keccak256 sha2 bigint algebra ecc pairing deferral"
     runs-on:
-      - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.machine_type || 'test-gpu-nvidia/family=g6.*+g6e' }}/extras=s3-cache
+      - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/${{ github.event_name == 'workflow_dispatch' && github.event.inputs.machine_type || 'image=ubuntu24-gpu-x64/family=g7e+g6.*+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized' }}/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -103,7 +103,10 @@ jobs:
 
       - name: Check CUDA status and set environment variables
         run: |
+          nvidia-smi
+          nvidia-smi -L
           nvcc --version
+          echo "CUDA_ARCH=75,86,89,120" >> $GITHUB_ENV
           echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3" >> $GITHUB_ENV
           echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
           echo "VPMM_PAGES=1" >> $GITHUB_ENV
