@@ -133,7 +133,10 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
         // Active rows have `expand_direction in {1, -1}`, so `expand_direction^2 = 1`; padding rows
         // have `expand_direction = 0`.
         let is_active = local.expand_direction * local.expand_direction;
-        let high_bits = self.memory_dimensions.address_height - LOW_LEAF_BITS;
+        let high_bits = self
+            .memory_dimensions
+            .address_height
+            .saturating_sub(LOW_LEAF_BITS);
         self.range_bus
             .range_check(low, LOW_LEAF_BITS)
             .eval(builder, is_active.clone());
@@ -337,7 +340,11 @@ where
 
             // `leaf_label = low + 2^LOW_LEAF_BITS * high`.
             let low_mask = (1u32 << LOW_LEAF_BITS) - 1;
-            let high_bits = self.air.memory_dimensions.address_height - LOW_LEAF_BITS;
+            let high_bits = self
+                .air
+                .memory_dimensions
+                .address_height
+                .saturating_sub(LOW_LEAF_BITS);
 
             rows.par_chunks_mut(2 * width)
                 .zip(touched_labels.par_iter())

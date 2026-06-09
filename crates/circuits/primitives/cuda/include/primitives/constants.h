@@ -6,11 +6,14 @@
 namespace openvm {
 inline constexpr size_t BYTE_BITS = 8;
 inline constexpr size_t U16_BITS = 16;
+// log2 of the byte width of one u16-celled storage cell.
+inline constexpr size_t U16_CELL_SIZE_BITS = 1;
 } // namespace openvm
 
 namespace riscv {
 using openvm::BYTE_BITS;
 using openvm::U16_BITS;
+using openvm::U16_CELL_SIZE_BITS;
 
 inline constexpr size_t RV64_REGISTER_NUM_LIMBS = 8;
 inline constexpr size_t RV64_WORD_NUM_LIMBS = 4;
