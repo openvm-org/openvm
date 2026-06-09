@@ -36,6 +36,16 @@ template <typename V, typename T> struct Sha2MainMemoryCols {
     MemoryReadAuxCols<T> input_reads[V::BLOCK_READS];
     MemoryReadAuxCols<T> state_reads[V::STATE_READS];
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux[V::STATE_WRITES];
+    // Carry for converting each base heap *byte* pointer (`input`, `state`, `dst`) to AS-native
+    // u16 *cell* pointer limbs.
+    T input_cell_carry;
+    T state_cell_carry;
+    T dst_cell_carry;
+    // Per-block carry for adding the cell offset `i * (SHA2_READ_SIZE / U16_CELL_SIZE)` to each
+    // base cell pointer (block `i`'s carry into the high cell limb).
+    T input_add_carry[V::BLOCK_READS];
+    T state_add_carry[V::STATE_READS];
+    T write_add_carry[V::STATE_WRITES];
 };
 
 template <typename V, typename T> struct Sha2MainCols {
@@ -114,5 +124,13 @@ template <typename V> struct Sha2MainLayout {
 
 #define SHA2_MAIN_SLICE_MEM(V, ROW, FIELD)                                                          \
     (ROW).slice_from(SHA2_MAIN_COL_INDEX_MEM_V(V, FIELD))
+#define SHA2_MAIN_WRITE_MEM(V, ROW, FIELD, VALUE)                                                   \
+    (ROW).write(SHA2_MAIN_COL_INDEX_MEM_V(V, FIELD), VALUE)
+#define SHA2_MAIN_WRITE_ARRAY_MEM(V, ROW, FIELD, VALUES)                                            \
+    (ROW).write_array(                                                                              \
+        SHA2_MAIN_COL_INDEX_MEM_V(V, FIELD),                                                         \
+        SHA2_MAIN_COL_ARRAY_LEN_V(V, Sha2MainMemoryCols, FIELD),                                     \
+        VALUES                                                                                      \
+    )
 
 } // namespace sha2
