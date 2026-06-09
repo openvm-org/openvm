@@ -30,6 +30,8 @@ pub struct DeferralCircuitPvs<F> {
     pub input_commit: [F; DIGEST_SIZE],
     /// Commit to the output of the deferral circuit given the input
     pub output_commit: [F; DIGEST_SIZE],
+    /// Deferral circuit index, must be constrained to a constant
+    pub def_idx: F,
 }
 
 #[repr(C)]
@@ -44,4 +46,6 @@ pub struct DeferralAggregationPvs<F> {
     /// Current Merkle depth of this subtree, there are be 2^merkle_depth
     /// leaves (including padding)
     pub merkle_depth: F,
+    /// Deferral circuit index that this subtree belongs to
+    pub def_idx: F,
 }

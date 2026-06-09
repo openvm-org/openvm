@@ -48,6 +48,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for I
         let pre_hash_bus = bus_inventory.pre_hash_bus;
         let poseidon2_compress_bus = bus_inventory.poseidon2_compress_bus;
         let poseidon2_permute_bus = bus_inventory.poseidon2_permute_bus;
+        let range_bus = bus_inventory.range_checker_bus;
         let pvs_air_consistency_bus =
             PvsAirConsistencyBus::new(self.verifier_circuit.next_bus_idx());
 
@@ -84,6 +85,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for I
                 public_values_bus,
                 cached_commit_bus,
                 poseidon2_bus: poseidon2_compress_bus,
+                range_bus,
                 pvs_air_consistency_bus,
                 expected_def_hook_cached_commit: self.def_hook_cached_commit.unwrap(),
             }) as AirRef<SC>;

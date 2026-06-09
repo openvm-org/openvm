@@ -99,6 +99,7 @@ pub fn generate_proving_ctx(
     root_pvs.initial_acc_hash = initial_acc_hash;
     root_pvs.final_acc_hash = final_acc_hash;
     root_pvs.depth = F::ONE;
+    root_pvs.node_idx = def_pvs.def_idx;
 
     poseidon2_compress_inputs.extend_from_slice(&[
         pad_slice_to_poseidon2_input(&def_circuit_commit, F::ZERO),

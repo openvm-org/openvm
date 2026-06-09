@@ -304,16 +304,19 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * Finally, we need to constrain that the public values this AIR produces are consistent
          * with the child's. initial_acc_hash should be the compression of a padded
          * def_circuit_commit, and final_acc_hash should be the compression of the input and
-         * output onions. Note that the Merkle root computation hashes each leaf with the
+         * output onions. node_idx should be equal to the def_idx of the deferral circuit this
+         * hook proof is for. Note that the Merkle root computation hashes each leaf with the
          * zero digest prior.
          */
         let &DeferralPvs::<_> {
             initial_acc_hash,
             final_acc_hash,
             depth,
+            node_idx,
         } = builder.public_values().borrow();
 
         builder.assert_one(depth);
+        builder.assert_eq(node_idx, local.def_pvs.def_idx);
 
         self.poseidon2_compress_bus.lookup_key(
             builder,

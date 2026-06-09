@@ -422,6 +422,7 @@ fn reduce_def_round<const N: usize>(
                             )
                             .0,
                             depth: pvs0.depth + F::ONE,
+                            node_idx: pvs0.node_idx.halve(),
                         })
                     }
                 };
