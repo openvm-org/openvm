@@ -19,7 +19,7 @@ use openvm_verify_stark_host::pvs::{
     DeferralPvs, CONSTRAINT_EVAL_AIR_ID, CONSTRAINT_EVAL_CACHED_INDEX, DEF_PVS_AIR_ID,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{Field, PrimeCharacteristicRing};
+use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
 
 use crate::{
@@ -292,8 +292,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             .when(has_two_rows)
             .assert_one(depth.into() - local.child_pvs.depth);
 
-        let canonical_parent_node_idx =
-            (local.child_pvs.node_idx - local.single_present_is_right) * AB::F::TWO.inverse();
+        let canonical_child_node_idx =
+            AB::Expr::TWO * node_idx.into() + local.single_present_is_right;
 
         builder
             .when(is_first_of_two_rows)
@@ -301,7 +301,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             .assert_one(next.child_pvs.node_idx - local.child_pvs.node_idx);
         builder
             .when(is_first_of_two_rows)
-            .assert_eq(canonical_parent_node_idx, node_idx);
+            .assert_eq(local.child_pvs.node_idx, canonical_child_node_idx);
 
         self.range_bus.lookup_key(
             builder,
