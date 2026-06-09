@@ -29,7 +29,7 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
-use rvr_openvm_ext_rv32im::Rv32IoExtension;
+use rvr_openvm_ext_rv32im::{Rv32IExtension, Rv32IoExtension};
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
 use serde::{Deserialize, Serialize};
@@ -80,7 +80,11 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for Rv32I {}
+impl<F: PrimeField32> VmRvrExtension<F> for Rv32I {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: Option<&RvrExtensionCtx>) {
+        registry.register(Rv32IExtension::new());
+    }
+}
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for Rv32Io {

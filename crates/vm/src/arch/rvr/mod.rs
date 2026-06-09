@@ -18,8 +18,8 @@ pub use compile::{
 };
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
 pub use execute::{
-    build_callbacks, execute, execute_metered, execute_metered_cost,
-    execute_metered_segment_boundary, register_openvm_callbacks, rv_execute, ExecuteError,
+    execute, execute_metered, execute_metered_cost, execute_metered_segment_boundary, rv_execute,
+    ExecuteError,
 };
 pub use metered::{
     RunToCompletion, RvrMeteredInstance, RvrMeteredInstanceWith, RvrMeteredResult,

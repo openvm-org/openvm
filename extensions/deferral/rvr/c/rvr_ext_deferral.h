@@ -5,12 +5,12 @@
 
 struct RvState;
 
-/* Deferral CALL extension FFI entry point (implemented in Rust). */
+/* Deferral CALL extension entry point (defined in rvr_ext_deferral.c). */
 extern void rvr_ext_deferral_call(RvState* state, uint32_t output_ptr,
                                   uint32_t input_ptr, uint32_t def_idx,
                                   uint32_t poseidon2_chip_idx);
 
-/* Deferral OUTPUT extension FFI entry point (implemented in Rust). */
+/* Deferral OUTPUT extension entry point (defined in rvr_ext_deferral.c). */
 extern void rvr_ext_deferral_output(RvState* state, uint32_t output_ptr,
                                     uint32_t input_ptr, uint32_t def_idx,
                                     uint32_t output_chip_idx,

@@ -148,10 +148,10 @@ impl<F: PrimeField32> RvrExtension<F> for KeccakExtension {
         vec![("rvr_ext_keccak.c", include_str!("../c/rvr_ext_keccak.c"))]
     }
 
-    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
-        (
+    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
+        vec![(
             "librvr_openvm_ext_keccak_ffi.a",
             include_bytes!(env!("RVR_KECCAK_FFI_STATICLIB")),
-        )
+        )]
     }
 }
