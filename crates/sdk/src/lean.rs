@@ -1,8 +1,9 @@
-//! Driver: walk the leaf aggregation circuit (recursion verifier
+//! Driver: walk the aggregation recursion circuits (recursion verifier
 //! sub-circuit wrapped in `InnerCircuit`), render every supported AIR's
 //! symbolic constraints, and emit per-AIR Lean modules in the
 //! `Fundamentals.Air` dialect under
-//! `<output>/Recursion/Airs/<Group>/<AirStem>/Generated/{Schema,Constraints,Interactions}.lean`.
+//! `<output>/Recursion/Airs/<Group>/<AirStem>/Extracted/<Circuit>/{Schema,Constraints,
+//! Interactions}.lean`.
 //!
 //! Unknown bus indices fall back to `bus_<idx>` placeholder constructors.
 
@@ -10,6 +11,7 @@ use std::{
     fs,
     io::{BufWriter, Write},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use eyre::{bail, Result, WrapErr};
@@ -60,9 +62,10 @@ use openvm_recursion_circuit::{
 };
 use openvm_stark_backend::{
     interaction::BusIndex,
+    keygen::types::MultiStarkVerifyingKey,
     lean::{
-        air_file_stem, render_air, write_constraints, write_interactions, write_schema, BusBinding,
-        LeanRenderOptions, LeanWriteOptions, RenderedAir,
+        air_file_stem, render_air, write_constraints, write_interactions, write_shared_schema,
+        BusBinding, LeanRenderOptions, LeanSchemaVariant, LeanWriteOptions, RenderedAir,
     },
     AirRef,
 };
@@ -73,10 +76,34 @@ use crate::{config, Sdk, SC};
 
 const ROOT_MODULE: &str = "Recursion";
 const AIRS_MODULE: &str = "Airs";
+const EXTRACTED_MODULE: &str = "Extracted";
 const FUNDAMENTALS_IMPORT: &str = "Fundamentals.Air";
 const BUS_DEFS_IMPORT: &str = "Recursion.BusDefs";
 const BUS_DEFS_NAMESPACE: &str = "Recursion.BusDefs";
 const BABY_BEAR_P: u32 = 2_013_265_921;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RecursionCircuit {
+    Leaf,
+    InternalForLeaf,
+    InternalRecursive,
+}
+
+impl RecursionCircuit {
+    fn module(self) -> &'static str {
+        match self {
+            RecursionCircuit::Leaf => "Leaf",
+            RecursionCircuit::InternalForLeaf => "InternalForLeaf",
+            RecursionCircuit::InternalRecursive => "InternalRecursive",
+        }
+    }
+}
+
+struct CircuitLeanInput {
+    circuit: RecursionCircuit,
+    airs: Vec<AirRef<SC>>,
+    vk: Arc<MultiStarkVerifyingKey<SC>>,
+}
 
 /// Map a VK bus index to its `BusIdx` constructor name. Order tracks
 /// `recursion::system::BusInventory::new` (external buses), then the
@@ -376,11 +403,42 @@ fn flat_pv_names(air_name: &str) -> Vec<String> {
     }
 }
 
-/// Generates Lean files for the leaf aggregation circuit AIRs under a
-/// `Recursion` tree at `output_dir`. The leaf circuit is the recursion
-/// verifier sub-circuit wrapped in `InnerCircuit` (with deferral
-/// disabled, matching `Sdk::standard`'s leaf prover keygen).
-pub fn generate_lean_files_for_leaf_circuit<P: AsRef<Path>>(output_dir: P) -> Result<()> {
+fn schema_shape_param(stem: &str, circuit: RecursionCircuit) -> Option<(&'static str, usize)> {
+    match stem {
+        "SymbolicExpressionAir" => Some((
+            "numChildren",
+            match circuit {
+                RecursionCircuit::Leaf => 4,
+                RecursionCircuit::InternalForLeaf | RecursionCircuit::InternalRecursive => 3,
+            },
+        )),
+        "ProofShapeAir" => Some((
+            "numIdxFlags",
+            match circuit {
+                RecursionCircuit::Leaf => 11,
+                RecursionCircuit::InternalForLeaf | RecursionCircuit::InternalRecursive => 8,
+            },
+        )),
+        "WhirRoundAir" => Some((
+            "numRoundEncodings",
+            match circuit {
+                RecursionCircuit::Leaf => 2,
+                RecursionCircuit::InternalForLeaf | RecursionCircuit::InternalRecursive => 1,
+            },
+        )),
+        _ => None,
+    }
+}
+
+/// Generates Lean files for the aggregation recursion circuit AIRs under
+/// a `Recursion` tree at `output_dir`.
+///
+/// The emitted circuits are the recursion verifier sub-circuit wrapped
+/// in `InnerCircuit` for the leaf, internal-for-leaf, and
+/// internal-recursive aggregation provers, matching `Sdk::standard`'s
+/// aggregation keygen. Extracted files live below each AIR's
+/// `Extracted/<Circuit>/` directory.
+pub fn generate_lean_files_for_recursion_circuits<P: AsRef<Path>>(output_dir: P) -> Result<()> {
     let output_dir = output_dir.as_ref();
     fs::create_dir_all(output_dir).wrap_err("create Lean output dir")?;
 
@@ -396,137 +454,217 @@ pub fn generate_lean_files_for_leaf_circuit<P: AsRef<Path>>(output_dir: P) -> Re
     );
     let sdk = Sdk::standard(app_params, agg_params);
 
-    eprintln!("[lean] Running leaf prover keygen via SDK...");
+    eprintln!("[lean] Running aggregation prover keygen via SDK...");
     let agg_prover = sdk.agg_prover();
     let leaf_circuit = agg_prover.leaf_prover.get_circuit();
-    let vk = agg_prover.leaf_prover.get_vk();
-    let airs = Circuit::<SC>::airs(&*leaf_circuit);
-    eprintln!("[lean] Leaf circuit has {} AIRs", airs.len());
+    let leaf_vk = agg_prover.leaf_prover.get_vk();
+    let leaf_airs = Circuit::<SC>::airs(&*leaf_circuit);
+
+    let internal_4_leaf_circuit = agg_prover.internal_for_leaf_prover.get_circuit();
+    let internal_4_leaf_vk = agg_prover.internal_for_leaf_prover.get_vk();
+    let internal_4_leaf_airs = Circuit::<SC>::airs(&*internal_4_leaf_circuit);
+
+    let internal_recursive_circuit = agg_prover.internal_recursive_prover.get_circuit();
+    let internal_recursive_vk = agg_prover.internal_recursive_prover.get_vk();
+    let internal_recursive_airs = Circuit::<SC>::airs(&*internal_recursive_circuit);
+
+    let circuits = vec![
+        CircuitLeanInput {
+            circuit: RecursionCircuit::Leaf,
+            airs: leaf_airs,
+            vk: leaf_vk,
+        },
+        CircuitLeanInput {
+            circuit: RecursionCircuit::InternalForLeaf,
+            airs: internal_4_leaf_airs,
+            vk: internal_4_leaf_vk,
+        },
+        CircuitLeanInput {
+            circuit: RecursionCircuit::InternalRecursive,
+            airs: internal_recursive_airs,
+            vk: internal_recursive_vk,
+        },
+    ];
+    for circuit in &circuits {
+        eprintln!(
+            "[lean] {} circuit has {} AIRs",
+            circuit.circuit.module(),
+            circuit.airs.len()
+        );
+    }
 
     let bus_table = standard_bus_table();
 
     let mut emitted: Vec<EmittedModule> = Vec::new();
-    let mut skipped: Vec<(String, &'static str)> = Vec::new();
+    let mut skipped: Vec<(RecursionCircuit, String, String)> = Vec::new();
 
-    for (i, (air, air_vk)) in airs.iter().zip(vk.inner.per_air.iter()).enumerate() {
-        let air_name = air.name();
-        let group = match air_group(&air_name) {
-            Ok(g) => g,
-            Err(_) => {
-                skipped.push((air_name.clone(), "unknown group"));
-                continue;
-            }
-        };
+    for circuit_input in circuits {
+        for (i, (air, air_vk)) in circuit_input
+            .airs
+            .iter()
+            .zip(circuit_input.vk.inner.per_air.iter())
+            .enumerate()
+        {
+            let air_name = air.name();
+            let group = match air_group(&air_name) {
+                Ok(g) => g,
+                Err(_) => {
+                    skipped.push((
+                        circuit_input.circuit,
+                        air_name.clone(),
+                        "unknown group".to_string(),
+                    ));
+                    continue;
+                }
+            };
 
-        // For non-partitioned AIRs (no cached partition), partition_offsets
-        // is just `[0]`. For SymbolicExpressionAir we build a partitioned
-        // layout (cached at part 0, common singles at part 1).
-        let cached_widths = &air_vk.params.width.cached_mains;
-        let partition_offsets: Vec<usize> = if cached_widths.is_empty() {
-            vec![0]
-        } else if air_name.starts_with("SymbolicExpressionAir") {
-            let mut offsets = Vec::with_capacity(cached_widths.len() + 1);
-            let mut acc = 0usize;
-            offsets.push(acc);
-            for w in cached_widths {
-                acc += w;
+            // For non-partitioned AIRs (no cached partition), partition_offsets
+            // is just `[0]`. For SymbolicExpressionAir we build a partitioned
+            // layout (cached at part 0, common singles at part 1).
+            let cached_widths = &air_vk.params.width.cached_mains;
+            let partition_offsets: Vec<usize> = if cached_widths.is_empty() {
+                vec![0]
+            } else if air_name.starts_with("SymbolicExpressionAir") {
+                let mut offsets = Vec::with_capacity(cached_widths.len() + 1);
+                let mut acc = 0usize;
                 offsets.push(acc);
-            }
-            offsets
-        } else {
-            skipped.push((air_name.clone(), "cached partition (v1 unsupported)"));
-            continue;
-        };
+                for w in cached_widths {
+                    acc += w;
+                    offsets.push(acc);
+                }
+                offsets
+            } else {
+                skipped.push((
+                    circuit_input.circuit,
+                    air_name.clone(),
+                    "cached partition (v1 unsupported)".to_string(),
+                ));
+                continue;
+            };
 
-        let column_names = match flat_column_names(air) {
-            Some(n) => n,
-            None => {
-                skipped.push((air_name.clone(), "unsupported AIR shape (v1)"));
+            let column_names = match flat_column_names(air) {
+                Some(n) => n,
+                None => {
+                    skipped.push((
+                        circuit_input.circuit,
+                        air_name.clone(),
+                        "unsupported AIR shape (v1)".to_string(),
+                    ));
+                    continue;
+                }
+            };
+            let expected_width: usize =
+                cached_widths.iter().sum::<usize>() + air_vk.params.width.common_main;
+            if column_names.len() != expected_width {
+                skipped.push((
+                    circuit_input.circuit,
+                    air_name.clone(),
+                    "column count mismatch with main_width".to_string(),
+                ));
                 continue;
             }
-        };
-        let expected_width: usize =
-            cached_widths.iter().sum::<usize>() + air_vk.params.width.common_main;
-        if column_names.len() != expected_width {
-            skipped.push((air_name.clone(), "column count mismatch with main_width"));
-            continue;
-        }
 
-        let stem = air_file_stem(&air_name).to_string();
-        let air_namespace = format!("{ROOT_MODULE}.{group}.{stem}");
-        let air_import_module = format!("{ROOT_MODULE}.{AIRS_MODULE}.{group}.{stem}");
-        let schema_import = format!("{air_import_module}.Generated.Schema");
-        let constraints_import = format!("{air_import_module}.Generated.Constraints");
-        let opts = LeanWriteOptions {
-            render: LeanRenderOptions::default(),
-            characteristic: Some(BABY_BEAR_P),
-            fundamentals_import: FUNDAMENTALS_IMPORT,
-            bus_defs_import: BUS_DEFS_IMPORT,
-            bus_defs_namespace: BUS_DEFS_NAMESPACE,
-            air_namespace: air_namespace.clone(),
-            schema_import: schema_import.clone(),
-            constraints_import: constraints_import.clone(),
-            partition_offsets: partition_offsets.clone(),
-            public_value_names: flat_pv_names(&air_name),
-        };
+            let stem = air_file_stem(&air_name).to_string();
+            let schema_shape = schema_shape_param(&stem, circuit_input.circuit);
+            let (schema_param_name, schema_param_value) = match schema_shape {
+                Some((name, value)) => (Some(name), Some(value)),
+                None => (None, None),
+            };
+            let air_import_module = format!("{ROOT_MODULE}.{AIRS_MODULE}.{group}.{stem}");
+            let circuit_module = circuit_input.circuit.module();
+            let extracted_import_module =
+                format!("{air_import_module}.{EXTRACTED_MODULE}.{circuit_module}");
+            let shared_schema_import = format!("{air_import_module}.{EXTRACTED_MODULE}.Schema");
+            let shared_schema_namespace = format!("{ROOT_MODULE}.{group}.{stem}.SharedSchema");
+            let air_namespace = format!("{ROOT_MODULE}.{group}.{stem}.{circuit_module}");
+            let writer_air_name = format!("{stem}{circuit_module}");
+            let constraints_import = format!("{extracted_import_module}.Constraints");
+            let public_value_names = flat_pv_names(&air_name);
+            let opts = LeanWriteOptions {
+                render: LeanRenderOptions::default(),
+                characteristic: Some(BABY_BEAR_P),
+                fundamentals_import: FUNDAMENTALS_IMPORT,
+                bus_defs_import: BUS_DEFS_IMPORT,
+                bus_defs_namespace: BUS_DEFS_NAMESPACE,
+                air_namespace: air_namespace.clone(),
+                schema_import: shared_schema_import,
+                schema_namespace: Some(shared_schema_namespace),
+                schema_param_value,
+                constraints_import: constraints_import.clone(),
+                partition_offsets: partition_offsets.clone(),
+                public_value_names: public_value_names.clone(),
+            };
 
-        let rendered: RenderedAir = match render_air(
-            &air_vk.symbolic_constraints,
-            &column_names,
-            &bus_table,
-            &opts,
-        ) {
-            Ok(r) => r,
-            Err(e) => {
-                skipped.push((air_name.clone(), Box::leak(format!("{e}").into_boxed_str())));
-                continue;
+            let rendered: RenderedAir = match render_air(
+                &air_vk.symbolic_constraints,
+                &column_names,
+                &bus_table,
+                &opts,
+            ) {
+                Ok(r) => r,
+                Err(e) => {
+                    skipped.push((circuit_input.circuit, air_name.clone(), format!("{e}")));
+                    continue;
+                }
+            };
+
+            let stem_dir = airs_dir.join(group).join(&stem);
+            let extracted_dir = stem_dir.join(EXTRACTED_MODULE).join(circuit_module);
+            fs::create_dir_all(&extracted_dir)
+                .wrap_err_with(|| format!("create dir {}", extracted_dir.display()))?;
+
+            write_lean_file(extracted_dir.join("Constraints.lean"), |w| {
+                write_constraints(w, &writer_air_name, &column_names, &rendered, &opts)
+                    .wrap_err("write Constraints.lean")?;
+                Ok(())
+            })?;
+            write_lean_file(extracted_dir.join("Interactions.lean"), |w| {
+                write_interactions(w, &writer_air_name, &rendered, &opts)
+                    .wrap_err("write Interactions.lean")?;
+                Ok(())
+            })?;
+
+            // Hand-written sidecars: only create if not already present so
+            // we don't clobber editorial work.
+            let labels_path = stem_dir.join("Labels.lean");
+            if !labels_path.exists() {
+                fs::write(&labels_path, "")
+                    .wrap_err_with(|| format!("write {}", labels_path.display()))?;
             }
-        };
+            let facts_path = stem_dir.join("Facts.lean");
+            if !facts_path.exists() {
+                fs::write(&facts_path, "")
+                    .wrap_err_with(|| format!("write {}", facts_path.display()))?;
+            }
 
-        let stem_dir = airs_dir.join(group).join(&stem);
-        let generated_dir = stem_dir.join("Generated");
-        fs::create_dir_all(&generated_dir)
-            .wrap_err_with(|| format!("create dir {}", generated_dir.display()))?;
-
-        write_lean_file(generated_dir.join("Schema.lean"), |w| {
-            write_schema(w, &air_name, &column_names, &opts).wrap_err("write Schema.lean")?;
-            Ok(())
-        })?;
-        write_lean_file(generated_dir.join("Constraints.lean"), |w| {
-            write_constraints(w, &air_name, &column_names, &rendered, &opts)
-                .wrap_err("write Constraints.lean")?;
-            Ok(())
-        })?;
-        write_lean_file(generated_dir.join("Interactions.lean"), |w| {
-            write_interactions(w, &air_name, &rendered, &opts)
-                .wrap_err("write Interactions.lean")?;
-            Ok(())
-        })?;
-
-        // Hand-written sidecars: only create if not already present so
-        // we don't clobber editorial work.
-        let labels_path = stem_dir.join("Labels.lean");
-        if !labels_path.exists() {
-            fs::write(&labels_path, "")
-                .wrap_err_with(|| format!("write {}", labels_path.display()))?;
+            eprintln!(
+                "[lean]   [{}:{i:02}] {air_name} → {}/{}/{}/{}/{{Constraints,Interactions}}.lean",
+                circuit_input.circuit.module(),
+                group,
+                stem,
+                EXTRACTED_MODULE,
+                circuit_module,
+            );
+            record_emitted_module(
+                &mut emitted,
+                group,
+                stem,
+                air_import_module,
+                circuit_input.circuit,
+                EmittedSchemaVariant {
+                    circuit: circuit_input.circuit,
+                    writer_air_name,
+                    column_names,
+                    partition_offsets,
+                    public_value_names,
+                    schema_param_name,
+                    schema_param_value,
+                },
+            );
         }
-        let facts_path = stem_dir.join("Facts.lean");
-        if !facts_path.exists() {
-            fs::write(&facts_path, "")
-                .wrap_err_with(|| format!("write {}", facts_path.display()))?;
-        }
-
-        eprintln!(
-            "[lean]   [{i:02}] {air_name} → {}/{}/{{Generated/{{Schema,Constraints,Interactions}},Labels,Facts}}.lean",
-            group, stem
-        );
-        emitted.push(EmittedModule {
-            group,
-            stem,
-            air_import_module,
-        });
     }
 
+    write_schema_files(&airs_dir, &emitted)?;
     write_per_air_module_files(&airs_dir, &emitted)?;
     write_root_module(output_dir.join(format!("{ROOT_MODULE}.lean")), &emitted)?;
 
@@ -537,29 +675,119 @@ pub fn generate_lean_files_for_leaf_circuit<P: AsRef<Path>>(output_dir: P) -> Re
     );
     if !skipped.is_empty() {
         eprintln!("[lean] Skipped:");
-        for (name, why) in &skipped {
-            eprintln!("[lean]   - {name}: {why}");
+        for (circuit, name, why) in &skipped {
+            eprintln!("[lean]   - {} {name}: {why}", circuit.module());
         }
     }
     Ok(())
+}
+
+/// Compatibility wrapper for older call sites. This now emits all
+/// aggregation recursion circuit variants, not only the leaf circuit.
+pub fn generate_lean_files_for_leaf_circuit<P: AsRef<Path>>(output_dir: P) -> Result<()> {
+    generate_lean_files_for_recursion_circuits(output_dir)
 }
 
 struct EmittedModule {
     group: &'static str,
     stem: String,
     air_import_module: String,
+    circuits: Vec<RecursionCircuit>,
+    schemas: Vec<EmittedSchemaVariant>,
 }
 
-/// Per-AIR module file `<Group>/<AirStem>.lean`: imports its own five
-/// sub-files (Schema, Constraints, Interactions, Labels, Facts).
+struct EmittedSchemaVariant {
+    circuit: RecursionCircuit,
+    writer_air_name: String,
+    column_names: Vec<String>,
+    partition_offsets: Vec<usize>,
+    public_value_names: Vec<String>,
+    schema_param_name: Option<&'static str>,
+    schema_param_value: Option<usize>,
+}
+
+fn record_emitted_module(
+    modules: &mut Vec<EmittedModule>,
+    group: &'static str,
+    stem: String,
+    air_import_module: String,
+    circuit: RecursionCircuit,
+    schema: EmittedSchemaVariant,
+) {
+    if let Some(module) = modules
+        .iter_mut()
+        .find(|m| m.group == group && m.stem == stem && m.air_import_module == air_import_module)
+    {
+        if !module.circuits.contains(&circuit) {
+            module.circuits.push(circuit);
+        }
+        if !module.schemas.iter().any(|s| s.circuit == schema.circuit) {
+            module.schemas.push(schema);
+        }
+    } else {
+        modules.push(EmittedModule {
+            group,
+            stem,
+            air_import_module,
+            circuits: vec![circuit],
+            schemas: vec![schema],
+        });
+    }
+}
+
+/// One shared schema module per AIR.
+fn write_schema_files(airs_dir: &Path, modules: &[EmittedModule]) -> Result<()> {
+    for m in modules {
+        let stem_dir = airs_dir.join(m.group).join(&m.stem);
+        let extracted_dir = stem_dir.join(EXTRACTED_MODULE);
+        let shared_namespace = format!("{ROOT_MODULE}.{}.{}.SharedSchema", m.group, m.stem);
+        let variants = m
+            .schemas
+            .iter()
+            .map(|schema| LeanSchemaVariant {
+                air_name: &schema.writer_air_name,
+                column_names: &schema.column_names,
+                partition_offsets: &schema.partition_offsets,
+                public_value_names: &schema.public_value_names,
+                schema_param_name: schema.schema_param_name,
+                schema_param_value: schema.schema_param_value,
+            })
+            .collect::<Vec<_>>();
+
+        write_lean_file(extracted_dir.join("Schema.lean"), |w| {
+            write_shared_schema(
+                w,
+                &m.stem,
+                &shared_namespace,
+                &variants,
+                FUNDAMENTALS_IMPORT,
+            )
+            .wrap_err("write shared Schema.lean")?;
+            Ok(())
+        })?;
+    }
+    Ok(())
+}
+
+/// Per-AIR module file `<Group>/<AirStem>.lean`: imports its extracted
+/// circuit files plus hand-written Labels and Facts sidecars.
 fn write_per_air_module_files(airs_dir: &Path, modules: &[EmittedModule]) -> Result<()> {
     for m in modules {
         let path = airs_dir.join(m.group).join(format!("{}.lean", m.stem));
         let air_import_module = &m.air_import_module;
         write_lean_file(path, |w| {
-            writeln!(w, "import {air_import_module}.Generated.Schema")?;
-            writeln!(w, "import {air_import_module}.Generated.Constraints")?;
-            writeln!(w, "import {air_import_module}.Generated.Interactions")?;
+            writeln!(w, "import {air_import_module}.{EXTRACTED_MODULE}.Schema")?;
+            for circuit in &m.circuits {
+                let circuit_module = circuit.module();
+                writeln!(
+                    w,
+                    "import {air_import_module}.{EXTRACTED_MODULE}.{circuit_module}.Constraints"
+                )?;
+                writeln!(
+                    w,
+                    "import {air_import_module}.{EXTRACTED_MODULE}.{circuit_module}.Interactions"
+                )?;
+            }
             writeln!(w, "import {air_import_module}.Labels")?;
             writeln!(w, "import {air_import_module}.Facts")?;
             Ok(())
@@ -610,6 +838,6 @@ mod tests {
     #[test]
     fn generates_lean_files_for_leaf_circuit() {
         let output_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../lean_out");
-        generate_lean_files_for_leaf_circuit(output_dir).unwrap();
+        generate_lean_files_for_recursion_circuits(output_dir).unwrap();
     }
 }
