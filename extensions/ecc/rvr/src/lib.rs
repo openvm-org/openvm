@@ -223,10 +223,10 @@ impl<F: PrimeField32> RvrExtension<F> for EccExtension {
         vec![("rvr_ext_ecc.h", include_str!("../c/rvr_ext_ecc.h"))]
     }
 
-    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
-        (
+    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
+        vec![(
             "librvr_openvm_ext_ecc_ffi.a",
             include_bytes!(env!("RVR_ECC_FFI_STATICLIB")),
-        )
+        )]
     }
 }

@@ -119,10 +119,10 @@ impl<F: PrimeField32> RvrExtension<F> for PairingExtension {
         vec![("rvr_ext_pairing.h", include_str!("../c/rvr_ext_pairing.h"))]
     }
 
-    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
-        (
+    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
+        vec![(
             "librvr_openvm_ext_pairing_ffi.a",
             include_bytes!(env!("RVR_PAIRING_FFI_STATICLIB")),
-        )
+        )]
     }
 }
