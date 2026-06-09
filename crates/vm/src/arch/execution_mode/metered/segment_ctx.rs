@@ -437,13 +437,15 @@ impl SegmentationCtx {
         trace_heights: &mut [u32],
         is_trace_height_constant: &[bool],
     ) -> bool {
-        if let Some(trigger) =
-            self.segmentation_trigger(instret, trace_heights, is_trace_height_constant)
-        {
-            #[cfg(feature = "metrics")]
+        let trigger = self.segmentation_trigger(instret, trace_heights, is_trace_height_constant);
+        let should_segment = trigger.is_some();
+
+        #[cfg(feature = "metrics")]
+        if let Some(trigger) = trigger {
             self.emit_segmentation_trigger_metric(trigger);
-            #[cfg(not(feature = "metrics"))]
-            let _ = trigger;
+        }
+
+        if should_segment {
             self.create_segment_from_checkpoint(instret, trace_heights);
             true
         } else {
