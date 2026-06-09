@@ -35,7 +35,7 @@ jobs:
               features: "aot",
             }
           - {
-              labels: "image=ubuntu24-gpu-x64/family=g7e+g6.*+g5+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized",
+              labels: "image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized",
               image: "ubuntu24-gpu-x64",
               features: "cuda,touchemall",
             }

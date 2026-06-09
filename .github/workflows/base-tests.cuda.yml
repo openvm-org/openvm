@@ -24,7 +24,7 @@ env:
 jobs:
   tests-cuda:
     runs-on:
-      - runs-on=${{ github.run_id }}-base-tests-cuda-${{ github.run_attempt }}/image=ubuntu24-gpu-x64/family=g7e+g6.*+g5/cpu=4+32/volume=40gb/spot=capacity-optimized/extras=s3-cache # ensure 24G vram for async test
+      - runs-on=${{ github.run_id }}-base-tests-cuda-${{ github.run_attempt }}/image=ubuntu24-gpu-x64/family=g6.*+g5/cpu=4+32/volume=40gb/spot=capacity-optimized/extras=s3-cache # ensure 24G vram for async test
 
     steps:
       - uses: runs-on/action@v2
