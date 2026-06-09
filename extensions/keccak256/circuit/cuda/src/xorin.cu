@@ -22,6 +22,37 @@ using openvm::U16_BITS;
 #define XORIN_FILL_ZERO(FIELD) COL_FILL_ZERO(row, XorinVmCols, FIELD)
 #define XORIN_SLICE(FIELD) row.slice_from(COL_INDEX(XorinVmCols, FIELD))
 
+// Computes the byte->cell base-pointer conversion carry and the per-block cell-offset add carries
+// for one heap access group, registering the matching range-check counts. Mirrors the CPU
+// `fill_pointer_carries` closure in `xorin/trace.rs`. The per-block add carries (and their range
+// checks) are computed for *every* block, padding or not, to match the AIR's `is_enabled`-gated
+// `eval_add_const_u16_limbs`. The base high-limb range check is skipped when `register_base` is
+// false (the buffer write group reuses the buffer read group's base conversion). Returns the base
+// conversion carry.
+__device__ __forceinline__ uint32_t xorin_fill_pointer_carries(
+    VariableRangeChecker &range_checker,
+    uint32_t ptr,
+    uint32_t hi_bits,
+    bool register_base,
+    uint32_t add_carry_out[KECCAK_RATE_MEM_OPS]
+) {
+    uint32_t byte_limbs[RV64_PTR_U16_LIMBS];
+    ptr_to_u16_limbs(byte_limbs, ptr);
+    uint32_t conv_carry = byte_limbs[1] & 1u;
+    uint32_t base_cell_lo = (byte_limbs[0] + (conv_carry << U16_BITS)) >> 1;
+    uint32_t base_cell_hi = byte_limbs[1] >> 1;
+    if (register_base) {
+        range_checker.add_count(base_cell_hi, hi_bits);
+    }
+    uint32_t cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
+    for (uint32_t i = 0; i < KECCAK_RATE_MEM_OPS; i++) {
+        uint32_t sum_lo = base_cell_lo + i * cell_stride;
+        range_checker.add_count(sum_lo & 0xffffu, U16_BITS);
+        add_carry_out[i] = sum_lo >> U16_BITS;
+    }
+    return conv_carry;
+}
+
 __global__ void xorin_tracegen(
     Fp *d_trace,
     size_t height,
@@ -46,7 +77,7 @@ __global__ void xorin_tracegen(
         assert(rec.len <= XORIN_RATE_BYTES);
         assert((uint64_t)rec.buffer + rec.len <= (1ULL << pointer_max_bits));
         assert((uint64_t)rec.input + rec.len <= (1ULL << pointer_max_bits));
-        assert(rec.len < (1U << pointer_max_bits));
+        assert(rec.len < (1ULL << pointer_max_bits));
 
         VariableRangeChecker range_checker(d_range_checker_ptr, range_checker_num_bins);
         MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
@@ -62,8 +93,6 @@ __global__ void xorin_tracegen(
         XORIN_WRITE(instruction.buffer_reg_ptr, rec.rd_ptr);
         XORIN_WRITE(instruction.input_reg_ptr, rec.rs1_ptr);
         XORIN_WRITE(instruction.len_reg_ptr, rec.rs2_ptr);
-        XORIN_WRITE(instruction.buffer_ptr, rec.buffer);
-        XORIN_WRITE(instruction.input_ptr, rec.input);
         XORIN_WRITE(instruction.len, rec.len);
         XORIN_WRITE(instruction.start_timestamp, rec.timestamp);
 
@@ -84,7 +113,10 @@ __global__ void xorin_tracegen(
             XORIN_WRITE(sponge.is_padding_bytes[i], 1);
         }
 
-        // Fill sponge columns and request bitwise operations
+        // Bytes covered by active 8-byte memory blocks.
+        auto bytes_covered = num_reads * MEMORY_BLOCK_BYTES;
+
+        // Fill sponge columns and request bitwise operations for the xor'd region.
         for (auto i = 0u; i < record_len && i < XORIN_RATE_BYTES; i++) {
             XORIN_WRITE(sponge.preimage_buffer_bytes[i], rec.buffer_limbs[i]);
             XORIN_WRITE(sponge.input_bytes[i], rec.input_limbs[i]);
@@ -92,8 +124,8 @@ __global__ void xorin_tracegen(
             bitwise_lookup.add_xor(rec.buffer_limbs[i], rec.input_limbs[i]);
         }
 
-        // Zero-fill remaining sponge columns
-        for (auto i = record_len; i < XORIN_RATE_BYTES; i++) {
+        // Zero-fill the remaining padding sponge columns.
+        for (auto i = bytes_covered; i < XORIN_RATE_BYTES; i++) {
             XORIN_WRITE(sponge.preimage_buffer_bytes[i], Fp::zero());
             XORIN_WRITE(sponge.input_bytes[i], Fp::zero());
             XORIN_WRITE(sponge.postimage_buffer_bytes[i], Fp::zero());
@@ -158,15 +190,27 @@ __global__ void xorin_tracegen(
             XORIN_FILL_ZERO(mem_oc.buffer_bytes_write_aux_cols[t]);
         }
 
-        // Bound the high u16 cells so the low-32-bit pointers fit in pointer_max_bits.
-        range_checker.add_count(
-            ptr_bound_from_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
-            U16_BITS
-        );
-        range_checker.add_count(
-            ptr_bound_from_high_u16(input_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
-            U16_BITS
-        );
+        // Byte -> cell pointer conversion carries and per-block cell-offset carries, plus matching
+        // range-check counts. Mirrors `xorin/trace.rs`.
+        uint32_t hi_bits = uint32_t(pointer_max_bits) - U16_CELL_SIZE_BITS - U16_BITS;
+
+        uint32_t buffer_add_carry[KECCAK_RATE_MEM_OPS];
+        uint32_t buffer_conv_carry =
+            xorin_fill_pointer_carries(range_checker, rec.buffer, hi_bits, true, buffer_add_carry);
+        XORIN_WRITE(mem_oc.buffer_cell_carry, buffer_conv_carry);
+        XORIN_WRITE_ARRAY(mem_oc.buffer_read_add_carry, buffer_add_carry);
+
+        uint32_t input_add_carry[KECCAK_RATE_MEM_OPS];
+        uint32_t input_conv_carry =
+            xorin_fill_pointer_carries(range_checker, rec.input, hi_bits, true, input_add_carry);
+        XORIN_WRITE(mem_oc.input_cell_carry, input_conv_carry);
+        XORIN_WRITE_ARRAY(mem_oc.input_read_add_carry, input_add_carry);
+
+        // The write reuses the converted `buffer` base cell pointer; only the per-block write add
+        // carries (and their range checks) are needed. The base conversion was registered above.
+        uint32_t buffer_write_add_carry[KECCAK_RATE_MEM_OPS];
+        xorin_fill_pointer_carries(range_checker, rec.buffer, hi_bits, false, buffer_write_add_carry);
+        XORIN_WRITE_ARRAY(mem_oc.buffer_write_add_carry, buffer_write_add_carry);
 
     } else {
         // Zero-fill padding rows
