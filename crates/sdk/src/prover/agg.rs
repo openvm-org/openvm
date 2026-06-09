@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use eyre::Result;
+use itertools::Itertools;
 use openvm_circuit::arch::ContinuationVmProof;
 use openvm_continuations::{circuit::inner::ProofsType, prover::ChildVkKind};
 use openvm_recursion_circuit::{prelude::Digest, utils::poseidon2_hash_slice};
@@ -242,6 +243,7 @@ impl AggProver {
 
     pub fn prove_def(&self, input: Vec<DeferralProof>) -> Result<(DeferralProof, u32)> {
         assert!(!input.is_empty());
+        assert!(input.len().is_power_of_two());
 
         // Leaf round: hook-level → leaf-level
         let mut proofs = info_span!("agg_layer", group = "def_leaf")
@@ -372,74 +374,71 @@ impl AggProver {
 }
 
 fn reduce_def_round<const N: usize>(
-    proofs: Vec<DeferralProof>,
+    mut proofs: Vec<DeferralProof>,
     kind: ChildVkKind,
     prover: &InnerAggregationProver<N>,
 ) -> Result<Vec<DeferralProof>> {
-    let mut next = Vec::with_capacity(proofs.len().div_ceil(2));
-    let mut iter = proofs.into_iter();
-    while let Some(a) = iter.next() {
-        match iter.next() {
-            Some(b) => {
-                let combined = match (a, b) {
-                    (DeferralProof::Present(p0), DeferralProof::Present(p1)) => {
-                        DeferralProof::Present(prover.agg_prove::<E>(
-                            &[p0, p1],
-                            kind,
-                            ProofsType::Deferral,
-                            None,
-                        )?)
-                    }
-                    (DeferralProof::Present(p), DeferralProof::Absent(pvs)) => {
-                        // Absent is the right child (present is left, is_right = false)
-                        DeferralProof::Present(prover.agg_prove::<E>(
-                            &[p],
-                            kind,
-                            ProofsType::Deferral,
-                            Some((pvs, false)),
-                        )?)
-                    }
-                    (DeferralProof::Absent(pvs), DeferralProof::Present(p)) => {
-                        // Absent is the left child (present is right, is_right = true)
-                        DeferralProof::Present(prover.agg_prove::<E>(
-                            &[p],
-                            kind,
-                            ProofsType::Deferral,
-                            Some((pvs, true)),
-                        )?)
-                    }
-                    (DeferralProof::Absent(pvs0), DeferralProof::Absent(pvs1)) => {
-                        debug_assert_eq!(pvs0.depth, pvs1.depth);
-                        DeferralProof::Absent(DeferralPvs {
-                            initial_acc_hash: poseidon2_compress_with_capacity(
-                                pvs0.initial_acc_hash,
-                                pvs1.initial_acc_hash,
-                            )
-                            .0,
-                            final_acc_hash: poseidon2_compress_with_capacity(
-                                pvs0.final_acc_hash,
-                                pvs1.final_acc_hash,
-                            )
-                            .0,
-                            depth: pvs0.depth + F::ONE,
-                            node_idx: pvs0.node_idx.halve(),
-                        })
-                    }
-                };
-                next.push(combined);
+    if proofs.len() == 1 {
+        // A singleton round can only happen when the entire round has one present input proof.
+        let DeferralProof::Present(p) = proofs.pop().unwrap() else {
+            panic!("singleton deferral round must contain a present proof");
+        };
+        return Ok(vec![DeferralProof::Present(prover.agg_prove::<E>(
+            &[p],
+            kind,
+            ProofsType::Deferral,
+            None,
+        )?)]);
+    }
+
+    assert!(
+        proofs.len().is_multiple_of(2),
+        "non-singleton deferral round must have an even number of proofs"
+    );
+
+    let mut next = Vec::with_capacity(proofs.len() / 2);
+    for (a, b) in proofs.into_iter().tuples() {
+        let combined = match (a, b) {
+            (DeferralProof::Present(p0), DeferralProof::Present(p1)) => DeferralProof::Present(
+                prover.agg_prove::<E>(&[p0, p1], kind, ProofsType::Deferral, None)?,
+            ),
+            (DeferralProof::Present(p), DeferralProof::Absent(pvs)) => {
+                // Absent is the right child (present is left, is_right = false)
+                DeferralProof::Present(prover.agg_prove::<E>(
+                    &[p],
+                    kind,
+                    ProofsType::Deferral,
+                    Some((pvs, false)),
+                )?)
             }
-            None => {
-                // Trailing singleton: wrap Present, pass Absent unchanged
-                let out =
-                    match a {
-                        DeferralProof::Present(p) => DeferralProof::Present(
-                            prover.agg_prove::<E>(&[p], kind, ProofsType::Deferral, None)?,
-                        ),
-                        absent => absent,
-                    };
-                next.push(out);
+            (DeferralProof::Absent(pvs), DeferralProof::Present(p)) => {
+                // Absent is the left child (present is right, is_right = true)
+                DeferralProof::Present(prover.agg_prove::<E>(
+                    &[p],
+                    kind,
+                    ProofsType::Deferral,
+                    Some((pvs, true)),
+                )?)
             }
-        }
+            (DeferralProof::Absent(pvs0), DeferralProof::Absent(pvs1)) => {
+                debug_assert_eq!(pvs0.depth, pvs1.depth);
+                DeferralProof::Absent(DeferralPvs {
+                    initial_acc_hash: poseidon2_compress_with_capacity(
+                        pvs0.initial_acc_hash,
+                        pvs1.initial_acc_hash,
+                    )
+                    .0,
+                    final_acc_hash: poseidon2_compress_with_capacity(
+                        pvs0.final_acc_hash,
+                        pvs1.final_acc_hash,
+                    )
+                    .0,
+                    depth: pvs0.depth + F::ONE,
+                    node_idx: pvs0.node_idx.halve(),
+                })
+            }
+        };
+        next.push(combined);
     }
     Ok(next)
 }
