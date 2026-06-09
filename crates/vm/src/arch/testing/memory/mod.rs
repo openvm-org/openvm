@@ -149,6 +149,7 @@ pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
 where
     R: Rng + ?Sized,
 {
-    const MAX_MEMORY: usize = 1 << 29;
+    // TODO: create a special gen_pointer for the registers
+    const MAX_MEMORY: usize = 1 << 16;
     rng.random_range(0..MAX_MEMORY - len) / len * len
 }
