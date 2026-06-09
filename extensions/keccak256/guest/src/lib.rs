@@ -16,6 +16,11 @@ pub const MIN_ALIGN: usize = 4;
 
 /// XOR `len` bytes from `input` into `buffer` using the native XORIN instruction.
 ///
+/// # Panics
+///
+/// Panics if `len > KECCAK_RATE` (136): the XORIN circuit absorbs at most `KECCAK_RATE` bytes
+/// per instruction, so a larger length would execute but fail to prove.
+///
 /// # Safety
 ///
 /// - `buffer` must point to a buffer of at least `len` bytes.
@@ -23,6 +28,11 @@ pub const MIN_ALIGN: usize = 4;
 #[cfg(target_os = "zkvm")]
 #[no_mangle]
 pub unsafe extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
+    assert!(
+        len <= KECCAK_RATE,
+        "native_xorin: len exceeds the XORIN circuit's maximum rate of {} bytes",
+        KECCAK_RATE
+    );
     if len == 0 {
         return;
     }

@@ -26,11 +26,12 @@ impl Keccak256 {
     ///
     /// # Safety
     ///
-    /// `output` must be at least `KECCAK_OUTPUT_SIZE` (32) bytes long.
+    /// `output` must be exactly `KECCAK_OUTPUT_SIZE` (32) bytes long.
     pub unsafe fn finalize(self, output: &mut [u8]) {
-        debug_assert!(
-            output.len() >= super::KECCAK_OUTPUT_SIZE,
-            "output buffer too small"
+        debug_assert_eq!(
+            output.len(),
+            KECCAK_OUTPUT_SIZE,
+            "output must be exactly 32 bytes"
         );
         self.inner.finalize(output);
     }

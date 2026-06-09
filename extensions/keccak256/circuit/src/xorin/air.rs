@@ -157,6 +157,7 @@ impl XorinVmAir {
 
         // SAFETY: this approach only works when self.ptr_max_bits >= 24
         // because we are only range checking the last limb
+        assert!(self.ptr_max_bits >= RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1));
         let need_range_check = [
             *instruction.buffer_ptr_limbs.last().unwrap(),
             *instruction.input_ptr_limbs.last().unwrap(),
