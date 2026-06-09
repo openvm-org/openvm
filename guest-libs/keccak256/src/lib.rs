@@ -22,11 +22,12 @@ impl tiny_keccak::Hasher for Keccak256 {
 
     #[inline(always)]
     fn finalize(self, output: &mut [u8]) {
-        assert!(
-            output.len() >= KECCAK_OUTPUT_SIZE,
-            "output buffer too small"
+        assert_eq!(
+            output.len(),
+            KECCAK_OUTPUT_SIZE,
+            "output must be exactly 32 bytes"
         );
-        // SAFETY: output is at least KECCAK_OUTPUT_SIZE bytes (checked above).
+        // SAFETY: output is exactly KECCAK_OUTPUT_SIZE bytes (checked above).
         unsafe { Keccak256::finalize(self, output) };
     }
 }
