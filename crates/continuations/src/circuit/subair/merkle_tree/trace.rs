@@ -4,7 +4,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 use p3_field::PrimeCharacteristicRing;
 
 use super::MerkleTreeCols;
-use crate::circuit::deferral::{DEF_INTERNAL_TAG, DEF_LEAF_TAG};
+use crate::circuit::deferral::{utils::def_tagged_compress, DEF_INTERNAL_TAG, DEF_LEAF_TAG};
 
 /// Build Merkle-tree rows from leaf `(left_child, right_child)` inputs using
 /// Poseidon2 compression over BabyBear.
@@ -20,20 +20,13 @@ pub fn generate_cols_from_leaf_children(
     debug_assert!(num_leaves > 0);
     debug_assert!(num_leaves.is_power_of_two());
 
-    let compress = |left: [F; DIGEST_SIZE], right: [F; DIGEST_SIZE], tag: [u8; DIGEST_SIZE]| {
-        let left = if tagged {
-            poseidon2_compress_with_capacity(tag.map(F::from_u8), left).0
-        } else {
-            left
-        };
-        poseidon2_compress_with_capacity(left, right).0
-    };
-
     let mut rows = Vec::with_capacity(2 * num_leaves);
     let mut next_layer = Vec::with_capacity(num_leaves);
+    let leaf_tag = tagged.then_some(DEF_LEAF_TAG);
+    let internal_tag = tagged.then_some(DEF_INTERNAL_TAG);
 
     for (row_idx, (left, right)) in leaf_children.into_iter().enumerate() {
-        let parent = compress(left, right, DEF_LEAF_TAG);
+        let parent = compress_with_optional_tag(left, right, leaf_tag);
         rows.push(MerkleTreeCols {
             row_idx: F::from_usize(row_idx),
             send_type: if num_leaves == 1 { F::TWO } else { F::ONE },
@@ -52,7 +45,7 @@ pub fn generate_cols_from_leaf_children(
         for parent_idx in 0..parent_layer_len {
             let left = next_layer[2 * parent_idx];
             let right = next_layer[2 * parent_idx + 1];
-            let parent = compress(left, right, DEF_INTERNAL_TAG);
+            let parent = compress_with_optional_tag(left, right, internal_tag);
 
             rows.push(MerkleTreeCols {
                 row_idx: F::from_usize(row_idx),
@@ -81,4 +74,15 @@ pub fn generate_cols_from_leaf_children(
     });
 
     rows
+}
+
+fn compress_with_optional_tag(
+    left: [F; DIGEST_SIZE],
+    right: [F; DIGEST_SIZE],
+    tag: Option<[u8; DIGEST_SIZE]>,
+) -> [F; DIGEST_SIZE] {
+    match tag {
+        Some(tag) => def_tagged_compress(tag, left, right).1,
+        None => poseidon2_compress_with_capacity(left, right).0,
+    }
 }
