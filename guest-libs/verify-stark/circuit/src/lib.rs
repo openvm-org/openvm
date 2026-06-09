@@ -81,6 +81,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
             def_merkle_roots_bus: memory_merkle_roots_bus,
             expected_internal_recursive_vk_commit: self.internal_recursive_vk_commit,
             expected_def_hook_commit: self.def_hook_commit,
+            def_idx: self.def_idx,
         };
         let user_pvs_commit_air = UserPvsCommitValuesAir::new(
             bus_inventory.poseidon2_compress_bus,

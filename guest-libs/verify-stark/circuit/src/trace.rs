@@ -60,6 +60,7 @@ pub trait DeferredVerifyTraceGen<PB: ProverBackend, DC: Clone + Send + Sync> {
         record: DeferredVerifyPvsRecord<PB::Val>,
         final_transcript_state: [PB::Val; POSEIDON2_WIDTH],
         output_commit: [PB::Val; DIGEST_SIZE],
+        def_idx: usize,
         device_ctx: &DC,
     ) -> AirProvingContext<PB>;
 }
@@ -151,6 +152,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>, ()> for DeferredVerifyTraceGenImpl {
         record: DeferredVerifyPvsRecord<F>,
         final_transcript_state: [F; POSEIDON2_WIDTH],
         output_commit: [F; DIGEST_SIZE],
+        def_idx: usize,
         _device_ctx: &(),
     ) -> AirProvingContext<CpuBackend<SC>> {
         super::verifier::generate_proving_ctx(
@@ -158,6 +160,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>, ()> for DeferredVerifyTraceGenImpl {
             record,
             final_transcript_state,
             output_commit,
+            def_idx,
             self.deferral_enabled,
         )
     }
@@ -217,6 +220,7 @@ impl DeferredVerifyTraceGen<GpuBackend, GpuDeviceCtx> for DeferredVerifyTraceGen
         record: DeferredVerifyPvsRecord<F>,
         final_transcript_state: [F; POSEIDON2_WIDTH],
         output_commit: [F; DIGEST_SIZE],
+        def_idx: usize,
         device_ctx: &GpuDeviceCtx,
     ) -> AirProvingContext<GpuBackend> {
         cpu_proving_ctx_to_gpu(
@@ -225,6 +229,7 @@ impl DeferredVerifyTraceGen<GpuBackend, GpuDeviceCtx> for DeferredVerifyTraceGen
                 record,
                 final_transcript_state,
                 output_commit,
+                def_idx,
                 self.deferral_enabled,
             ),
             device_ctx,

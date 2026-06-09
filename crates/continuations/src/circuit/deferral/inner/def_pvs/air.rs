@@ -158,6 +158,17 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             );
         }
 
+        self.public_values_bus.receive(
+            builder,
+            local.proof_idx,
+            PublicValuesBusMessage {
+                air_idx,
+                pv_idx: AB::Expr::from_usize(2 * DIGEST_SIZE),
+                value: local.child_pvs.def_idx.into(),
+            },
+            is_present_leaf.clone(),
+        );
+
         self.input_or_merkle_commit_bus.receive(
             builder,
             local.proof_idx,
@@ -213,9 +224,9 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         /*
-         * On internal layers we receive num_def_circuit_proofs and merkle_depth from
+         * On internal layers we receive num_def_circuit_proofs, merkle_depth, and def_idx from
          * PublicValuesBus. To save columns, we repurpose the first two elements of the unused
-         * local.child_pvs.input_commit.
+         * local.child_pvs.input_commit for num_def_circuit_proofs and merkle_depth.
          */
         let local_num_def_circuit_proofs = local.child_pvs.input_commit[0];
         let local_merkle_depth = local.child_pvs.input_commit[1];
@@ -246,16 +257,29 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             is_internal * local.is_present,
         );
 
+        self.public_values_bus.receive(
+            builder,
+            local.proof_idx,
+            PublicValuesBusMessage {
+                air_idx: AB::Expr::from_usize(DEF_AGG_PVS_AIR_ID),
+                pv_idx: AB::Expr::from_usize(DIGEST_SIZE + 2),
+                value: local.child_pvs.def_idx.into(),
+            },
+            is_internal * local.is_present,
+        );
+
         /*
          * If there is only one row, then this proof is a wrapper and its public values should
          * match those of its child's. Otherwise, constrain that num_def_circuit_proofs is the
          * sum of the present children's and that merkle_depth is the child merkle_depth + 1.
          * If both children are present, we constrain that their merkle_depth values are equal.
+         * Every present child's def_idx should match this proof's.
          */
         let &DeferralAggregationPvs::<_> {
             merkle_commit,
             num_def_circuit_proofs,
             merkle_depth,
+            def_idx,
         } = builder.public_values().borrow();
 
         let is_first = not(local.proof_idx);
@@ -283,6 +307,9 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             .when_transition()
             .when(next.is_present)
             .assert_eq(local_merkle_depth, next_merkle_depth);
+        builder
+            .when(local.is_present)
+            .assert_eq(local.child_pvs.def_idx, def_idx);
 
         /*
          * MAX_DEF_AGG_MERKLE_DEPTH - merkle_depth is range checked to be in [0, 256). This,

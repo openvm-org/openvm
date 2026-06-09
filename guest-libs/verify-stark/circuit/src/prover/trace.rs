@@ -91,6 +91,7 @@ where
             verifier_pvs_record,
             final_transcript_state,
             output_commit,
+            self.circuit.def_idx,
             device_ctx,
         );
 

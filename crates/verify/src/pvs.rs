@@ -109,4 +109,6 @@ pub struct DeferralPvs<F> {
     pub final_acc_hash: [F; DIGEST_SIZE],
     /// Depth of the Merkle subtrees above.
     pub depth: F,
+    /// Node index at the current depth of the Merkle memory tree.
+    pub node_idx: F,
 }

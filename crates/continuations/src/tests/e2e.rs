@@ -234,6 +234,7 @@ fn make_absent_trace_pvs(
     initial_acc_hash: [F; DIGEST_SIZE],
     final_acc_hash: [F; DIGEST_SIZE],
     depth: F,
+    node_idx: F,
     is_right: bool,
 ) -> (DeferralPvs<F>, bool) {
     (
@@ -241,6 +242,7 @@ fn make_absent_trace_pvs(
             initial_acc_hash,
             final_acc_hash,
             depth,
+            node_idx,
         },
         is_right,
     )
@@ -427,11 +429,11 @@ fn test_deferral_e2e() -> Result<()> {
     warn!("generating dummy deferral circuit proofs");
     let idx1_proofs: Vec<Proof<SC>> = idx1_io
         .iter()
-        .map(|(inp, _, out)| generate_dummy_def_proof(&cpu_engine, &def_pk, *inp, *out))
+        .map(|(inp, _, out)| generate_dummy_def_proof(&cpu_engine, &def_pk, *inp, *out, 1))
         .collect();
     let idx2_proofs: Vec<Proof<SC>> = idx2_io
         .iter()
-        .map(|(inp, _, out)| generate_dummy_def_proof(&cpu_engine, &def_pk, *inp, *out))
+        .map(|(inp, _, out)| generate_dummy_def_proof(&cpu_engine, &def_pk, *inp, *out, 2))
         .collect();
 
     let idx1_io = idx1_io.into_iter().map(|(_, x, y)| (x, y)).collect_vec();
@@ -612,6 +614,7 @@ fn test_deferral_e2e() -> Result<()> {
             idx0_untouched_root,
             idx0_untouched_root,
             hook1_pvs.depth,
+            F::ZERO,
             true,
         )),
     )?;
@@ -624,6 +627,7 @@ fn test_deferral_e2e() -> Result<()> {
             zero_depth1_root,
             zero_depth1_root,
             hook2_pvs.depth,
+            F::from_u32(3),
             false,
         )),
     )?;
