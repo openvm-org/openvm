@@ -7,19 +7,15 @@ use itertools::Itertools;
 use openvm_cpu_backend::CpuBackend;
 use openvm_recursion_circuit::utils::poseidon2_hash_slice;
 use openvm_stark_backend::{proof::Proof, prover::AirProvingContext};
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, F,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::{
-    circuit::deferral::{
-        inner::def_pvs::air::{DeferralAggPvsAir, DeferralAggPvsCols},
-        DeferralAggregationPvs, DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID, DEF_CIRCUIT_PVS_AIR_ID,
-        MAX_DEF_AGG_MERKLE_DEPTH,
-    },
-    utils::zero_hash,
+use crate::circuit::deferral::{
+    inner::def_pvs::air::{DeferralAggPvsAir, DeferralAggPvsCols},
+    utils::{def_internal_compress, def_leaf_compress, def_zero_hash},
+    DeferralAggregationPvs, DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID, DEF_CIRCUIT_PVS_AIR_ID,
+    MAX_DEF_AGG_MERKLE_DEPTH,
 };
 
 pub struct DeferralAggPvsTraceCtx {
@@ -83,8 +79,10 @@ pub fn generate_proving_ctx(
                 input_commit: folded_input_commit,
                 output_commit: child_pvs.output_commit,
             };
-            cols.merkle_commit =
-                poseidon2_compress_with_capacity(folded_input_commit, child_pvs.output_commit).0;
+            let (tagged_input_commit, merkle_commit) =
+                def_leaf_compress(folded_input_commit, child_pvs.output_commit);
+            cols.tagged_input_commit = tagged_input_commit;
+            cols.merkle_commit = merkle_commit;
             num_def_circuit_proofs += F::ONE;
         }
     }
@@ -105,19 +103,22 @@ pub fn generate_proving_ctx(
     let mut public_values = vec![F::ZERO; DeferralAggregationPvs::<u8>::width()];
     let pvs: &mut DeferralAggregationPvs<F> = public_values.as_mut_slice().borrow_mut();
 
-    let first_row: &DeferralAggPvsCols<F> = trace[..width].borrow();
     if is_wrapper {
+        let first_row: &DeferralAggPvsCols<F> = trace[..width].borrow();
         pvs.merkle_commit = first_row.merkle_commit;
         pvs.merkle_depth = merkle_depth;
     } else {
-        let second_row: &DeferralAggPvsCols<F> = trace[width..2 * width].borrow();
         let right_child = if num_proofs == 1 {
-            zero_hash(child_merkle_depth.unwrap() + 1)
+            def_zero_hash(child_merkle_depth.unwrap() + 1)
         } else {
+            let second_row: &DeferralAggPvsCols<F> = trace[width..2 * width].borrow();
             second_row.merkle_commit
         };
-        pvs.merkle_commit =
-            poseidon2_compress_with_capacity(first_row.merkle_commit, right_child).0;
+        let first_row: &mut DeferralAggPvsCols<F> = trace[..width].borrow_mut();
+        let (tagged_left_merkle, merkle_commit) =
+            def_internal_compress(first_row.merkle_commit, right_child);
+        first_row.tagged_left_merkle = tagged_left_merkle;
+        pvs.merkle_commit = merkle_commit;
         pvs.merkle_depth = merkle_depth + F::ONE;
     }
     pvs.num_def_circuit_proofs = num_def_circuit_proofs;

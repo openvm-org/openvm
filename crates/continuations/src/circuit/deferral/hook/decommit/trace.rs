@@ -3,13 +3,15 @@ use std::borrow::BorrowMut;
 use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::prover::AirProvingContext;
-use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
+};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     circuit::{
-        deferral::hook::decommit::air::MerkleDecommitCols,
+        deferral::{hook::decommit::air::MerkleDecommitCols, DEF_INTERNAL_TAG, DEF_LEAF_TAG},
         subair::{generate_cols_from_leaf_children, MerkleTreeCols},
     },
     utils::digests_to_poseidon2_input,
@@ -40,12 +42,12 @@ pub fn generate_proving_ctx(
         (1..=leaf_children.len()).contains(&num_real_leaves),
         "deferral hook Merkle decommit requires 1 <= num_real_leaves <= num_leaves"
     );
-    let merkle_rows: Vec<MerkleTreeCols<F>> = generate_cols_from_leaf_children(leaf_children);
+    let merkle_rows: Vec<MerkleTreeCols<F>> = generate_cols_from_leaf_children(leaf_children, true);
     let width = MerkleDecommitCols::<u8>::width();
     let height = merkle_rows.len();
     let num_rows_f = F::from_usize(height);
     let mut trace = vec![F::ZERO; height * width];
-    let mut poseidon2_inputs = Vec::with_capacity(height.saturating_sub(1));
+    let mut poseidon2_inputs = Vec::with_capacity(2 * height.saturating_sub(1));
     let mut io_commits = Vec::with_capacity(num_real_leaves);
 
     for (row_idx, merkle_row) in merkle_rows.iter().copied().enumerate() {
@@ -59,8 +61,15 @@ pub fn generate_proving_ctx(
         cols.send_commits = F::from_bool(should_send_commit);
 
         if merkle_row.send_type != F::ZERO {
+            let tag = if is_leaf {
+                DEF_LEAF_TAG.map(F::from_u8)
+            } else {
+                DEF_INTERNAL_TAG.map(F::from_u8)
+            };
+            cols.tagged_left_child = poseidon2_compress_with_capacity(tag, merkle_row.left_child).0;
+            poseidon2_inputs.push(digests_to_poseidon2_input(tag, merkle_row.left_child));
             poseidon2_inputs.push(digests_to_poseidon2_input(
-                merkle_row.left_child,
+                cols.tagged_left_child,
                 merkle_row.right_child,
             ));
         }
