@@ -13,6 +13,15 @@ pub use stark_utils::*;
 pub use test_utils::*;
 
 #[inline(always)]
+pub fn add_one_or_zero(n: u32) -> usize {
+    if n == 0 {
+        0
+    } else {
+        n as usize + 1
+    }
+}
+
+#[inline(always)]
 pub fn transmute_field_to_u32<F: PrimeField32>(field: &F) -> u32 {
     debug_assert_eq!(
         std::mem::size_of::<F>(),

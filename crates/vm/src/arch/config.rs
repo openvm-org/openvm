@@ -16,7 +16,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
 use crate::{
     arch::{
-        execution_mode::metered::segment_ctx::SegmentationConfig, AirInventory, AirInventoryError,
+        execution_mode::metered::segment_ctx::SegmentationLimits, AirInventory, AirInventoryError,
         Arena, ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
     },
     system::{
@@ -226,12 +226,12 @@ pub struct SystemConfig {
     /// Whether to collect detailed profiling metrics.
     /// **Warning**: this slows down the runtime.
     pub profiling: bool,
-    /// Segmentation configuration
+    /// Segmentation limits
     /// This field is skipped in serde as it's only used in execution and
     /// not needed after any serialize/deserialize.
     #[serde(skip, default)]
     #[getset(set = "pub")]
-    pub segmentation_config: SegmentationConfig,
+    pub segmentation_limits: SegmentationLimits,
 }
 
 impl SystemConfig {
@@ -250,7 +250,7 @@ impl SystemConfig {
             memory_config,
             num_public_values,
             profiling: false,
-            segmentation_config: SegmentationConfig::default(),
+            segmentation_limits: SegmentationLimits::default(),
         }
     }
 
@@ -269,8 +269,7 @@ impl SystemConfig {
     }
 
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
-        self.segmentation_config
-            .limits
+        self.segmentation_limits
             .set_max_trace_height(max_segment_len as u32);
         self
     }
