@@ -113,10 +113,7 @@ __global__ void xorin_tracegen(
             XORIN_WRITE(sponge.is_padding_bytes[i], 1);
         }
 
-        // Bytes covered by active 8-byte memory blocks.
-        auto bytes_covered = num_reads * MEMORY_BLOCK_BYTES;
-
-        // Fill sponge columns and request bitwise operations for the xor'd region.
+        // Fill sponge columns and request bitwise operations
         for (auto i = 0u; i < record_len && i < XORIN_RATE_BYTES; i++) {
             XORIN_WRITE(sponge.preimage_buffer_bytes[i], rec.buffer_limbs[i]);
             XORIN_WRITE(sponge.input_bytes[i], rec.input_limbs[i]);
@@ -124,8 +121,8 @@ __global__ void xorin_tracegen(
             bitwise_lookup.add_xor(rec.buffer_limbs[i], rec.input_limbs[i]);
         }
 
-        // Zero-fill the remaining padding sponge columns.
-        for (auto i = bytes_covered; i < XORIN_RATE_BYTES; i++) {
+        // Zero-fill remaining sponge columns
+        for (auto i = record_len; i < XORIN_RATE_BYTES; i++) {
             XORIN_WRITE(sponge.preimage_buffer_bytes[i], Fp::zero());
             XORIN_WRITE(sponge.input_bytes[i], Fp::zero());
             XORIN_WRITE(sponge.postimage_buffer_bytes[i], Fp::zero());

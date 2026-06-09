@@ -3,6 +3,7 @@
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -21,6 +22,14 @@ struct Rv64VecHeapAdapterCols {
 
     T rs_val[NUM_READS][RV64_PTR_U16_LIMBS];
     T rd_val[RV64_PTR_U16_LIMBS];
+
+    // Carry for converting each base byte pointer to AS-native u16 *cell* pointer limbs.
+    T rs_cell_carry[NUM_READS];
+    T rd_cell_carry;
+    // Per-block carry for adding the cell offset `j * (MEMORY_BLOCK_BYTES / U16_CELL_SIZE)` to each
+    // base cell pointer (block `j`'s carry into the high cell limb).
+    T reads_add_carry[NUM_READS][BLOCKS_PER_READ];
+    T writes_add_carry[BLOCKS_PER_WRITE];
 
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
     MemoryReadAuxCols<T> rd_read_aux;
@@ -83,17 +92,40 @@ struct Rv64VecHeapAdapter {
     ) {
         static_assert(NUM_READS == 1 || NUM_READS == 2);
 
+        // Byte -> cell pointer conversion carries and per-block cell-offset carries, plus matching
+        // range-check counts. Mirrors the host filler in vec_heap.rs.
+        uint32_t hi_bits = cell_ptr_hi_bits(pointer_max_bits);
+        const uint32_t cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
+
 #pragma unroll
         for (size_t i = 0; i < NUM_READS; i++) {
-            range_checker.add_count(
-                ptr_bound_from_high_u16(uint16_t(record.rs_vals[i] >> U16_BITS), pointer_max_bits),
-                U16_BITS
+            CellPtr conv = byte_ptr_limbs_to_cell_ptr_limbs_value(
+                uint16_t(record.rs_vals[i]), uint16_t(record.rs_vals[i] >> U16_BITS)
             );
+            range_checker.add_count(conv.limbs[1], hi_bits);
+            COL_WRITE_VALUE(row, Cols, rs_cell_carry[i], conv.carry);
+#pragma unroll
+            for (size_t j = 0; j < BLOCKS_PER_READ; j++) {
+                CellPtr add =
+                    add_const_u16_limbs_value(conv.limbs[0], conv.limbs[1], j * cell_stride);
+                range_checker.add_count(add.limbs[0], U16_BITS);
+                COL_WRITE_VALUE(row, Cols, reads_add_carry[i][j], add.carry);
+            }
         }
-        range_checker.add_count(
-            ptr_bound_from_high_u16(uint16_t(record.rd_val >> U16_BITS), pointer_max_bits),
-            U16_BITS
-        );
+        {
+            CellPtr conv = byte_ptr_limbs_to_cell_ptr_limbs_value(
+                uint16_t(record.rd_val), uint16_t(record.rd_val >> U16_BITS)
+            );
+            range_checker.add_count(conv.limbs[1], hi_bits);
+            COL_WRITE_VALUE(row, Cols, rd_cell_carry, conv.carry);
+#pragma unroll
+            for (size_t j = 0; j < BLOCKS_PER_WRITE; j++) {
+                CellPtr add =
+                    add_const_u16_limbs_value(conv.limbs[0], conv.limbs[1], j * cell_stride);
+                range_checker.add_count(add.limbs[0], U16_BITS);
+                COL_WRITE_VALUE(row, Cols, writes_add_carry[j], add.carry);
+            }
+        }
 
         uint32_t timestamp =
             record.from_timestamp + NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;
