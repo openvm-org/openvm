@@ -44,13 +44,13 @@ pub fn lift_instruction<F: PrimeField32>(
     }
     if opcode == SystemOpcode::PHANTOM.global_opcode_usize() {
         let discriminant = (field_to_u32(insn.c) & 0xffff) as u16;
-        if SysPhantom::from_repr(discriminant).is_some() {
-            return Some(lift_phantom(insn, pc));
+        if let Some(sys) = SysPhantom::from_repr(discriminant) {
+            return Some(lift_phantom(sys, pc));
         }
         if let Some(lifted) = extensions.try_lift(insn, pc) {
             return Some(lifted);
         }
-        return Some(body(pc, Instr::Nop));
+        return None;
     }
 
     // Decode the e field to determine R-type vs I-type
@@ -428,26 +428,18 @@ fn lift_auipc<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
 
 // ============= System / IO Instructions =============
 
-/// Lift PHANTOM instruction by dispatching on the sub-discriminant in field c.
-fn lift_phantom<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
-    let c_val = field_to_u32(insn.c);
-    let discriminant = (c_val & 0xffff) as u16;
+/// Lift a system PHANTOM sub-instruction.
+fn lift_phantom(sys: SysPhantom, pc: u32) -> LiftedInstr {
+    match sys {
+        // Nop, CtStart, CtEnd — no-ops for execution
+        SysPhantom::Nop | SysPhantom::CtStart | SysPhantom::CtEnd => body(pc, Instr::Nop),
 
-    if let Some(sys) = SysPhantom::from_repr(discriminant) {
-        return match sys {
-            // Nop, CtStart, CtEnd — no-ops for execution
-            SysPhantom::Nop | SysPhantom::CtStart | SysPhantom::CtEnd => body(pc, Instr::Nop),
-
-            // DebugPanic — trap on host
-            SysPhantom::DebugPanic => term(
-                pc,
-                Terminator::Trap {
-                    message: "PHANTOM DebugPanic".to_string(),
-                },
-            ),
-        };
+        // DebugPanic — trap on host
+        SysPhantom::DebugPanic => term(
+            pc,
+            Terminator::Trap {
+                message: "PHANTOM DebugPanic".to_string(),
+            },
+        ),
     }
-
-    // Unknown phantom — treat as nop (forward compatible).
-    body(pc, Instr::Nop)
 }

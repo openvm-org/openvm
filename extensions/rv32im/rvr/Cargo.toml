@@ -30,7 +30,7 @@ rvr = [
     "dep:rvr-openvm-ext-ffi-common",
     "dep:rvr-openvm-ir",
     "dep:rvr-openvm-lift",
-    "dep:openvm-circuit",
+    "openvm-circuit/rvr",
     "dep:openvm-instructions",
     "dep:openvm-platform",
     "dep:openvm-rv32im-transpiler",

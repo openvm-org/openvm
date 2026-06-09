@@ -96,7 +96,7 @@ void rvr_ext_deferral_output(RvState* restrict state, uint32_t output_ptr,
   /* Look up the raw output into a heap buffer sized to output_len. The
    * output_commit is the leading DEFERRAL_COMMIT_NUM_BYTES of output_key. */
   uint8_t* output_raw = (uint8_t*)malloc((size_t)output_len);
-  if (!output_raw) abort();
+  if (!output_raw && output_len > 0) abort();
   g_deferral.output_lookup(g_deferral.ctx, openvm_get_io_ctx(), def_idx,
                            (const uint8_t*)key_words, output_raw,
                            (uint32_t)output_len);
