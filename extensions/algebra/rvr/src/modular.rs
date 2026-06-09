@@ -297,11 +297,11 @@ impl<F: PrimeField32> RvrExtension<F> for ModularRvrExtension {
         )]
     }
 
-    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
-        (
+    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
+        vec![(
             "librvr_openvm_ext_algebra_modular_ffi.a",
             include_bytes!(env!("RVR_ALGEBRA_MODULAR_FFI_STATICLIB")),
-        )
+        )]
     }
 
     fn extra_c_sources(&self) -> Vec<(&'static str, &'static str)> {

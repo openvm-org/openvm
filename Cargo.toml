@@ -98,7 +98,6 @@ members = [
     "extensions/pairing/rvr",
     "extensions/pairing/rvr/ffi",
     "extensions/deferral/rvr",
-    "extensions/deferral/rvr/ffi",
 ]
 exclude = ["crates/sdk/example", "benchmarks/guest/**"]
 resolver = "2"
@@ -230,7 +229,6 @@ rvr-openvm-ext-ecc-ffi = { path = "extensions/ecc/rvr/ffi" }
 rvr-openvm-ext-pairing = { path = "extensions/pairing/rvr" }
 rvr-openvm-ext-pairing-ffi = { path = "extensions/pairing/rvr/ffi" }
 rvr-openvm-ext-deferral = { path = "extensions/deferral/rvr" }
-rvr-openvm-ext-deferral-ffi = { path = "extensions/deferral/rvr/ffi" }
 
 # rvr external
 nix = { version = "0.29", features = ["mman"] }

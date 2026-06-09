@@ -416,11 +416,11 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
         vec![("rvr_ext_bigint.h", include_str!("../c/rvr_ext_bigint.h"))]
     }
 
-    fn staticlib_file(&self) -> (&'static str, &'static [u8]) {
-        (
+    fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
+        vec![(
             "librvr_openvm_ext_bigint_ffi.a",
             include_bytes!(env!("RVR_BIGINT_FFI_STATICLIB")),
-        )
+        )]
     }
 }
 

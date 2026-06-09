@@ -30,6 +30,3 @@ rvr = [
     "dep:openvm-stark-backend",
     "dep:libloading",
 ]
-
-[build-dependencies]
-rvr-openvm-build.workspace = true
