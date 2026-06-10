@@ -96,4 +96,5 @@ ignored = [
     "signature",
     "once_cell",
     "rand",
+    "rvr-openvm-lift",
 ]
