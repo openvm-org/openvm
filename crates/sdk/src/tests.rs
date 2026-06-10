@@ -64,8 +64,11 @@ fn generate_fib_vm_stark_proof(fib_sdk: &Sdk) -> Result<(VmStarkProof, Verificat
     Ok(fib_sdk.prove(fib_exe, stdin, &[])?)
 }
 
-/// Builds a DeferralProver from a base SDK.
-fn make_deferral_prover(sdk: &Sdk, agg_params: &AggregationSystemParams) -> DeferralProver {
+fn make_verify_stark_circuit_prover(
+    sdk: &Sdk,
+    def_circuit_params: SystemParams,
+    def_idx: usize,
+) -> VerifyCircuitProver {
     let agg_prover = sdk.agg_prover();
     let ir_vk = agg_prover.internal_recursive_prover.get_vk();
     let ir_pcs_data = agg_prover
@@ -75,7 +78,6 @@ fn make_deferral_prover(sdk: &Sdk, agg_params: &AggregationSystemParams) -> Defe
     let system_config = sdk.app_config().app_vm_config.as_ref().clone();
     let memory_dimensions = system_config.memory_config.memory_dimensions();
     let num_user_pvs = system_config.num_public_values;
-    let def_circuit_params = internal_params_with_100_bits_security();
     let deferred_verify_prover = VerifyProver::new::<E>(
         ir_vk,
         ir_pcs_data.commitment.into(),
@@ -83,14 +85,34 @@ fn make_deferral_prover(sdk: &Sdk, agg_params: &AggregationSystemParams) -> Defe
         memory_dimensions,
         num_user_pvs,
         None,
-        0,
+        def_idx,
     );
-    let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
+    VerifyCircuitProver::new(deferred_verify_prover)
+}
+
+/// Builds a DeferralProver from a base SDK with `num_deferral_circuits` copies of the
+/// verify-stark deferral circuit.
+fn make_deferral_prover_with_count(
+    sdk: &Sdk,
+    agg_params: &AggregationSystemParams,
+    num_deferral_circuits: usize,
+) -> DeferralProver {
+    assert!(num_deferral_circuits > 0);
+    let def_circuit_params = internal_params_with_100_bits_security();
+    let verify_stark_prover = make_verify_stark_circuit_prover(sdk, def_circuit_params.clone(), 0);
     let hook_params = hook_params_with_100_bits_security();
     let agg_config = AggregationConfig {
         params: agg_params.clone(),
     };
-    DeferralProver::new(verify_stark_prover, agg_config, hook_params)
+    let mut deferral_prover = DeferralProver::new(verify_stark_prover, agg_config, hook_params);
+    for def_idx in 1..num_deferral_circuits {
+        deferral_prover = deferral_prover.with_prover(make_verify_stark_circuit_prover(
+            sdk,
+            def_circuit_params.clone(),
+            def_idx,
+        ));
+    }
+    deferral_prover
 }
 
 /// Builds a deferral-enabled riscv32 SDK whose App VM inventory includes the
@@ -100,9 +122,21 @@ fn make_deferral_enabled_sdk(
     app_params: SystemParams,
     agg_params: AggregationSystemParams,
 ) -> Result<Sdk> {
-    let deferral_prover = make_deferral_prover(fib_sdk, &agg_params);
-    let deferral_ext =
-        deferral_prover.make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
+    make_deferral_enabled_sdk_with_count(fib_sdk, app_params, agg_params, 1)
+}
+
+fn make_deferral_enabled_sdk_with_count(
+    fib_sdk: &Sdk,
+    app_params: SystemParams,
+    agg_params: AggregationSystemParams,
+    num_deferral_circuits: usize,
+) -> Result<Sdk> {
+    let deferral_prover =
+        make_deferral_prover_with_count(fib_sdk, &agg_params, num_deferral_circuits);
+    let deferral_fns = (0..num_deferral_circuits)
+        .map(|_| Arc::new(DeferralFn::new(verify_stark_deferral_fn)))
+        .collect();
+    let deferral_ext = deferral_prover.make_extension(deferral_fns);
 
     let mut vm_config = openvm_sdk_config::SdkVmConfig::riscv32();
     vm_config.deferral = Some(deferral_ext);
@@ -147,6 +181,18 @@ fn make_verify_stark_inputs(
     child_proof: &VmStarkProof,
     child_baseline: VerificationBaseline,
 ) -> Result<(StdIn, DeferralInput)> {
+    let (stdin, mut def_inputs) =
+        make_verify_stark_inputs_for_indices(child_sdk, child_proof, child_baseline, &[0], 1)?;
+    Ok((stdin, def_inputs.pop().unwrap()))
+}
+
+fn make_verify_stark_inputs_for_indices(
+    child_sdk: &Sdk,
+    child_proof: &VmStarkProof,
+    child_baseline: VerificationBaseline,
+    present_def_indices: &[usize],
+    num_deferral_circuits: usize,
+) -> Result<(StdIn, Vec<DeferralInput>)> {
     let child_vk = VmStarkVerifyingKey {
         mvk: child_sdk.agg_vk().as_ref().clone(),
         baseline: child_baseline,
@@ -161,16 +207,23 @@ fn make_verify_stark_inputs(
 
     let user_public_values = collapse_user_public_values(&output_raw[64..]);
 
-    let deferral_state = get_deferral_state(&child_vk, from_ref(child_proof), 0)?;
-
     let mut stdin = StdIn::default();
     stdin.write(&app_exe_commit);
     stdin.write(&app_vm_commit);
     stdin.write(&user_public_values);
     stdin.write(&input_commit);
-    stdin.deferrals = vec![deferral_state];
+    stdin.deferrals = vec![Default::default(); num_deferral_circuits];
 
-    Ok((stdin, DeferralInput::from_inputs(from_ref(child_proof))))
+    let proof_input = DeferralInput::from_inputs(from_ref(child_proof));
+    let mut def_inputs = vec![DeferralInput::default(); num_deferral_circuits];
+    for &def_idx in present_def_indices {
+        assert!(def_idx < num_deferral_circuits);
+        stdin.deferrals[def_idx] =
+            get_deferral_state(&child_vk, from_ref(child_proof), def_idx as u32)?;
+        def_inputs[def_idx] = proof_input.clone();
+    }
+
+    Ok((stdin, def_inputs))
 }
 
 fn collapse_user_public_values(expanded: &[u8]) -> Vec<u8> {
@@ -254,6 +307,43 @@ fn test_verify_stark_deferral() -> Result<()> {
     let vk = evm_prover.root_prover.0.get_vk();
     let engine = RootE::new(vk.inner.params.clone());
     engine.verify(&vk, &vs_proof)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_verify_many_deferrals() -> Result<()> {
+    setup_tracing();
+    const NUM_DEFERRAL_CIRCUITS: usize = 5;
+
+    let (fib_sdk, app_params, agg_params) = make_fib_sdk();
+    let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&fib_sdk)?;
+    let (vs_stdin, def_inputs) = make_verify_stark_inputs_for_indices(
+        &fib_sdk,
+        &fib_proof,
+        fib_baseline,
+        &[0, 1, 3, 4],
+        NUM_DEFERRAL_CIRCUITS,
+    )?;
+    let vs_sdk = make_deferral_enabled_sdk_with_count(
+        &fib_sdk,
+        app_params,
+        agg_params,
+        NUM_DEFERRAL_CIRCUITS,
+    )?;
+
+    let vs_elf = Elf::decode(
+        include_bytes!("../programs/examples/verify-many.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
+
+    let (vs_proof, vs_baseline) = vs_sdk.prove(vs_exe, vs_stdin, &def_inputs)?;
+    assert!(
+        vs_proof.deferral_merkle_proofs.is_some(),
+        "verify-many proof must carry deferral merkle proofs",
+    );
+    Sdk::verify_proof(vs_sdk.agg_vk().as_ref().clone(), vs_baseline, &vs_proof)?;
 
     Ok(())
 }
