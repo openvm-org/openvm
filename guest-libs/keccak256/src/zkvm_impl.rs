@@ -105,7 +105,7 @@ impl Keccak256 {
     /// `output` must be exactly `KECCAK_OUTPUT_SIZE` (32) bytes long.
     #[inline(always)]
     pub unsafe fn finalize(mut self, output: &mut [u8]) {
-        debug_assert_eq!(
+        assert_eq!(
             output.len(),
             KECCAK_OUTPUT_SIZE,
             "output must be exactly 32 bytes"
