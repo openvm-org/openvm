@@ -13,8 +13,8 @@ use rvr_state::{ExecutionStatus, MemoryError, Rv32, RvState, SuspenderState, Tra
 
 use super::{
     bridge::{
-        deferral_memory_ptr, public_values_slice, read_rv32_registers, rv32_memory_ptr,
-        write_rv32_registers,
+        deferral_memory_ptr, public_values_slice, read_rvr_registers, riscv_memory_ptr,
+        write_rvr_registers,
     },
     compile::RvrCompiled,
     io::OpenVmIoState,
@@ -55,7 +55,7 @@ pub enum ExecuteError {
 fn build_io_state_borrowed<'a, F: PrimeField32>(
     vm_state: &'a mut VmState<F, GuestMemory>,
 ) -> OpenVmIoState<'a, F> {
-    let memory_ptr = rv32_memory_ptr(vm_state);
+    let memory_ptr = riscv_memory_ptr(vm_state);
     let (deferral_memory, deferral_memory_len) =
         deferral_memory_ptr::<F>(&mut vm_state.memory.memory);
     let streams = &mut vm_state.streams;
@@ -140,12 +140,12 @@ where
     let exit_code = state.result_code();
     match status {
         ExecutionStatus::Terminated if exit_code == 0 => {
-            write_rv32_registers(vm_state, &state.regs);
+            write_rvr_registers(vm_state, &state.regs);
             vm_state.set_pc(state.pc);
             Ok(status)
         }
         ExecutionStatus::Suspended if allow_suspended => {
-            write_rv32_registers(vm_state, &state.regs);
+            write_rvr_registers(vm_state, &state.regs);
             vm_state.set_pc(state.pc);
             Ok(status)
         }
@@ -171,7 +171,7 @@ pub fn execute<F: PrimeField32>(
     num_insns: Option<u64>,
 ) -> Result<RvrPureResult, ExecuteError> {
     let pc = vm_state.pc();
-    let initial_regs = read_rv32_registers(vm_state);
+    let initial_regs = read_rvr_registers(vm_state);
 
     let mut tracer_data = PureTracerData;
     let mut state = init_rvr_state(vm_state, pc);
@@ -203,7 +203,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
     widths: &[u64],
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
     let pc = vm_state.pc();
-    let initial_regs = read_rv32_registers(vm_state);
+    let initial_regs = read_rvr_registers(vm_state);
 
     let mut tracer_data = MeteredCostData::default();
     let mut state = init_rvr_state_with_metered_cost(vm_state, pc);
@@ -255,7 +255,7 @@ fn execute_metered_impl<F: PrimeField32>(
     );
 
     let pc = vm_state.pc();
-    let initial_regs = read_rv32_registers(vm_state);
+    let initial_regs = read_rvr_registers(vm_state);
 
     let mut tracer_data = MeteredTracerData::default();
     let mut state = init_rvr_state_with_metered(vm_state, pc);
