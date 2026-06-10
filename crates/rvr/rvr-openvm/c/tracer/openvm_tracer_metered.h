@@ -234,6 +234,16 @@ static __attribute__((always_inline)) inline void trace_rd_mem_u32(
   record_mem_page(state->tracer, byte_addr_to_local_page(addr));
 }
 
+static __attribute__((always_inline)) inline void trace_rd_mem_i32(
+    RvState* restrict state, uint32_t addr, int32_t val) {
+  record_mem_page(state->tracer, addr_to_local_page(addr));
+}
+
+static __attribute__((always_inline)) inline void trace_rd_mem_u64(
+    RvState* restrict state, uint32_t addr, uint64_t val) {
+  record_mem_page(state->tracer, addr_to_local_page(addr));
+}
+
 /* ── Trace-only memory writes (record page in metered mode) ──────── */
 
 static __attribute__((always_inline)) inline void trace_wr_mem_u8(
@@ -249,6 +259,11 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u16(
 static __attribute__((always_inline)) inline void trace_wr_mem_u32(
     RvState* restrict state, uint32_t addr, uint32_t new_val) {
   record_mem_page(state->tracer, byte_addr_to_local_page(addr));
+}
+
+static __attribute__((always_inline)) inline void trace_wr_mem_u64(
+    RvState* restrict state, uint32_t addr, uint64_t new_val) {
+  record_mem_page(state->tracer, addr_to_local_page(addr));
 }
 
 /* ── Trace-only word-range memory access ──────────────────────────── */
@@ -287,6 +302,14 @@ static __attribute__((always_inline)) inline void trace_mem_access_u32_range(
     uint32_t addr_space) {
   assume(num_words > 0);
   uint32_t last_addr = base_addr + (num_words - 1) * WORD_SIZE;
+  record_page_range(state->tracer, addr_space, base_addr, last_addr);
+}
+
+static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
+    RvState* restrict state, uint32_t base_addr, uint32_t num_dwords,
+    uint32_t addr_space) {
+  assume(num_dwords > 0);
+  uint32_t last_addr = base_addr + (num_dwords - 1) * 8u;
   record_page_range(state->tracer, addr_space, base_addr, last_addr);
 }
 

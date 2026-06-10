@@ -152,7 +152,7 @@ impl EmitContext {
             name.to_string()
         } else {
             let var = self.next_var();
-            self.write_line(&format!("uint32_t {var} = reg_read(state, {idx});"));
+            self.write_line(&format!("uint64_t {var} = reg_read(state, {idx});"));
             self.write_line(&format!("trace_reg_read(state, {idx}, {var});"));
             var
         }
@@ -182,7 +182,7 @@ impl EmitContext {
             return;
         }
         let tmp = self.next_var();
-        self.write_line(&format!("uint32_t {tmp} = {val};"));
+        self.write_line(&format!("uint64_t {tmp} = {val};"));
         self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
         if self.hot_regs.contains(&idx) {
             let name = Self::abi_name(idx);
@@ -221,7 +221,9 @@ impl EmitContext {
             (1, true) => ("rd_mem_i8", "rd_mem_i8_traced", "int32_t"),
             (2, false) => ("rd_mem_u16", "rd_mem_u16_traced", "uint32_t"),
             (2, true) => ("rd_mem_i16", "rd_mem_i16_traced", "int32_t"),
-            (4, _) => ("rd_mem_u32", "rd_mem_u32_traced", "uint32_t"),
+            (4, false) => ("rd_mem_u32", "rd_mem_u32_traced", "uint32_t"),
+            (4, true) => ("rd_mem_i32", "rd_mem_i32_traced", "int32_t"),
+            (8, _) => ("rd_mem_u64", "rd_mem_u64_traced", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
         };
         let func = if traced { traced_func } else { raw_func };
@@ -233,6 +235,7 @@ impl EmitContext {
             1 => ("wr_mem_u8", "wr_mem_u8_traced", "uint8_t"),
             2 => ("wr_mem_u16", "wr_mem_u16_traced", "uint16_t"),
             4 => ("wr_mem_u32", "wr_mem_u32_traced", "uint32_t"),
+            8 => ("wr_mem_u64", "wr_mem_u64_traced", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
         };
         let func = if traced { traced_func } else { raw_func };
@@ -350,6 +353,19 @@ impl EmitContext {
         self.reload_page_locals();
     }
 
+    pub fn trace_mem_access_u64_range(
+        &mut self,
+        base_addr: &str,
+        num_dwords: &str,
+        addr_space: u32,
+    ) {
+        self.flush_page_locals();
+        self.write_line(&format!(
+            "trace_mem_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
+        ));
+        self.reload_page_locals();
+    }
+
     fn sorted_hot_regs(&self) -> Vec<u8> {
         let mut regs: Vec<u8> = self.hot_regs.iter().copied().collect();
         regs.sort();
@@ -436,5 +452,14 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
 
     fn trace_mem_access_u32_range(&mut self, base_addr: &str, num_words: &str, addr_space: u32) {
         EmitContext::trace_mem_access_u32_range(self, base_addr, num_words, addr_space);
+    }
+
+    fn trace_mem_access_u64_range(
+        &mut self,
+        base_addr: &str,
+        num_dwords: &str,
+        addr_space: u32,
+    ) {
+        EmitContext::trace_mem_access_u64_range(self, base_addr, num_dwords, addr_space);
     }
 }

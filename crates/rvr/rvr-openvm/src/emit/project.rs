@@ -215,7 +215,7 @@ impl CProject {
     fn hot_regs_param_list(&self) -> String {
         let mut s = "RvState* restrict state".to_string();
         for &(_, name) in &self.sorted_hot_regs() {
-            write!(s, ", uint32_t {name}").unwrap();
+            write!(s, ", uint64_t {name}").unwrap();
         }
         s
     }
@@ -229,9 +229,9 @@ impl CProject {
         }];
         for &(_, name) in &self.sorted_hot_regs() {
             params.push(if include_names {
-                format!("uint32_t {name}")
+                format!("uint64_t {name}")
             } else {
-                "uint32_t".to_string()
+                "uint64_t".to_string()
             });
         }
         if self.tracer_mode == TracerMode::Metered {

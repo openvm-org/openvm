@@ -1,5 +1,5 @@
 [package]
-name = "rvr-openvm-ext-rv32im"
+name = "rvr-openvm-ext-riscv"
 description = "rvr lifter for the OpenVM RISC-V I/O extension (HINT_STORED, HINT_BUFFER, REVEAL)"
 version.workspace = true
 authors.workspace = true

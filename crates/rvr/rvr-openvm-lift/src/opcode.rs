@@ -10,9 +10,9 @@ use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode, SysPhantom, SystemOpcode,
 };
 use openvm_riscv_transpiler::{
-    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
-    MulHOpcode, MulOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode,
-    ShiftOpcode,
+    BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
+    DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode,
+    Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom, ShiftOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
@@ -56,7 +56,7 @@ pub fn lift_instruction<F: PrimeField32>(
     // Decode the e field to determine R-type vs I-type
     let e = field_to_u32(insn.e);
 
-    // BaseAlu: ADD=0x200, SUB=0x201, XOR=0x202, OR=0x203, AND=0x204
+    // BaseAlu: ADD=0x200, SUB=0x201, XOR=0x202, OR=0x203, AND=0x204, ADDW=0x270, SUBW=0x271
     if opcode == BaseAluOpcode::ADD.global_opcode_usize() {
         return Some(lift_alu(insn, pc, e, AluOp::Add));
     }
@@ -72,8 +72,14 @@ pub fn lift_instruction<F: PrimeField32>(
     if opcode == BaseAluOpcode::AND.global_opcode_usize() {
         return Some(lift_alu(insn, pc, e, AluOp::And));
     }
+    if opcode == BaseAluWOpcode::ADDW.global_opcode_usize() {
+        return Some(lift_alu_w(insn, pc, e, AluOp::Add));
+    }
+    if opcode == BaseAluWOpcode::SUBW.global_opcode_usize() {
+        return Some(lift_alu_w(insn, pc, e, AluOp::Sub));
+    }
 
-    // Shift: SLL=0x205, SRL=0x206, SRA=0x207
+    // Shift: SLL=0x205, SRL=0x206, SRA=0x207, SLLW=0x275, SRLW=0x276, SRAW=0x277
     if opcode == ShiftOpcode::SLL.global_opcode_usize() {
         return Some(lift_shift(insn, pc, e, AluOp::Sll));
     }
@@ -82,6 +88,15 @@ pub fn lift_instruction<F: PrimeField32>(
     }
     if opcode == ShiftOpcode::SRA.global_opcode_usize() {
         return Some(lift_shift(insn, pc, e, AluOp::Sra));
+    }
+    if opcode == ShiftWOpcode::SLLW.global_opcode_usize() {
+        return Some(lift_shift_w(insn, pc, e, AluOp::Sll));
+    }
+    if opcode == ShiftWOpcode::SRLW.global_opcode_usize() {
+        return Some(lift_shift_w(insn, pc, e, AluOp::Srl));
+    }
+    if opcode == ShiftWOpcode::SRAW.global_opcode_usize() {
+        return Some(lift_shift_w(insn, pc, e, AluOp::Sra));
     }
 
     // LessThan: SLT=0x208, SLTU=0x209
@@ -92,10 +107,11 @@ pub fn lift_instruction<F: PrimeField32>(
         return Some(lift_alu(insn, pc, e, AluOp::Sltu));
     }
 
-    // LoadStore: LOADW=0x210, LOADBU=0x211, LOADHU=0x212, STOREW=0x213,
-    //            STOREH=0x214, STOREB=0x215, LOADB=0x216, LOADH=0x217
-    if opcode == Rv64LoadStoreOpcode::LOADW.global_opcode_usize() {
-        return Some(lift_load(insn, pc, MemWidth::Word, false));
+    // LoadStore: LOADD=0x210, LOADBU=0x211, LOADHU=0x212, LOADWU=0x213,
+    //            STORED=0x214, STOREW=0x215, STOREH=0x216, STOREB=0x217,
+    //            LOADB=0x218, LOADH=0x219, LOADW=0x21a
+    if opcode == Rv64LoadStoreOpcode::LOADD.global_opcode_usize() {
+        return Some(lift_load(insn, pc, MemWidth::Double, false));
     }
     if opcode == Rv64LoadStoreOpcode::LOADBU.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Byte, false));
@@ -103,11 +119,20 @@ pub fn lift_instruction<F: PrimeField32>(
     if opcode == Rv64LoadStoreOpcode::LOADHU.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Half, false));
     }
+    if opcode == Rv64LoadStoreOpcode::LOADWU.global_opcode_usize() {
+        return Some(lift_load(insn, pc, MemWidth::Word, false));
+    }
     if opcode == Rv64LoadStoreOpcode::LOADB.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Byte, true));
     }
     if opcode == Rv64LoadStoreOpcode::LOADH.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Half, true));
+    }
+    if opcode == Rv64LoadStoreOpcode::LOADW.global_opcode_usize() {
+        return Some(lift_load(insn, pc, MemWidth::Word, true));
+    }
+    if opcode == Rv64LoadStoreOpcode::STORED.global_opcode_usize() {
+        return Some(lift_store(insn, pc, MemWidth::Double));
     }
     if opcode == Rv64LoadStoreOpcode::STOREW.global_opcode_usize() {
         // e = RV64_MEMORY_AS is a normal store; e = AS_PUBLIC_VALUES is REVEAL,
@@ -167,6 +192,10 @@ pub fn lift_instruction<F: PrimeField32>(
     if opcode == MulOpcode::MUL.global_opcode_usize() {
         return Some(lift_muldiv(insn, pc, MulDivOp::Mul));
     }
+    // MULW=0x280
+    if opcode == MulWOpcode::MULW.global_opcode_usize() {
+        return Some(lift_muldiv_w(insn, pc, MulDivOp::Mul));
+    }
     // MULH=0x251, MULHSU=0x252, MULHU=0x253
     if opcode == MulHOpcode::MULH.global_opcode_usize() {
         return Some(lift_muldiv(insn, pc, MulDivOp::Mulh));
@@ -178,6 +207,7 @@ pub fn lift_instruction<F: PrimeField32>(
         return Some(lift_muldiv(insn, pc, MulDivOp::Mulhu));
     }
     // DIV=0x254, DIVU=0x255, REM=0x256, REMU=0x257
+    // DIVW=0x284, DIVUW=0x285, REMW=0x286, REMUW=0x287
     if opcode == DivRemOpcode::DIV.global_opcode_usize() {
         return Some(lift_muldiv(insn, pc, MulDivOp::Div));
     }
@@ -189,6 +219,18 @@ pub fn lift_instruction<F: PrimeField32>(
     }
     if opcode == DivRemOpcode::REMU.global_opcode_usize() {
         return Some(lift_muldiv(insn, pc, MulDivOp::Remu));
+    }
+    if opcode == DivRemWOpcode::DIVW.global_opcode_usize() {
+        return Some(lift_muldiv_w(insn, pc, MulDivOp::Div));
+    }
+    if opcode == DivRemWOpcode::DIVUW.global_opcode_usize() {
+        return Some(lift_muldiv_w(insn, pc, MulDivOp::Divu));
+    }
+    if opcode == DivRemWOpcode::REMW.global_opcode_usize() {
+        return Some(lift_muldiv_w(insn, pc, MulDivOp::Rem));
+    }
+    if opcode == DivRemWOpcode::REMUW.global_opcode_usize() {
+        return Some(lift_muldiv_w(insn, pc, MulDivOp::Remu));
     }
 
     // Fall through to registered extensions.
@@ -285,8 +327,8 @@ fn lift_shift<F: PrimeField32>(insn: &Instruction<F>, pc: u32, e: u32, op: AluOp
         }
         body(pc, Instr::AluReg { op, rd, rs1, rs2 })
     } else {
-        // I-type shamt: immediate in c (already just the shamt bits)
-        let shamt = (field_to_u32(insn.c) & 0x1f) as u8;
+        // I-type shamt: 6-bit for rv64 (registers are 64-bit wide)
+        let shamt = (field_to_u32(insn.c) & 0x3f) as u8;
         if rd == 0 {
             return body(pc, Instr::Nop);
         }
@@ -424,6 +466,65 @@ fn lift_auipc<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
         return body(pc, Instr::Nop);
     }
     body(pc, Instr::Auipc { rd, value })
+}
+
+/// Lift W-suffix ALU instruction (R-type when e!=0, I-type when e==0).
+/// Result is the low 32 bits of the operation, sign-extended to 64 bits.
+fn lift_alu_w<F: PrimeField32>(insn: &Instruction<F>, pc: u32, e: u32, op: AluOp) -> LiftedInstr {
+    let rd = decode_reg(insn.a);
+    let rs1 = decode_reg(insn.b);
+
+    if e != 0 {
+        let rs2 = decode_reg(insn.c);
+        if rd == 0 {
+            return body(pc, Instr::Nop);
+        }
+        body(pc, Instr::AluWReg { op, rd, rs1, rs2 })
+    } else {
+        let raw_imm = field_to_u32(insn.c) & 0xffffff;
+        let imm = sign_extend_12(raw_imm);
+        if rd == 0 {
+            return body(pc, Instr::Nop);
+        }
+        body(pc, Instr::AluWImm { op, rd, rs1, imm })
+    }
+}
+
+/// Lift W-suffix shift instruction (R-type when e!=0, I-type shamt when e==0).
+/// Shamt is 5-bit (W shifts operate on 32-bit values regardless of register width).
+fn lift_shift_w<F: PrimeField32>(
+    insn: &Instruction<F>,
+    pc: u32,
+    e: u32,
+    op: AluOp,
+) -> LiftedInstr {
+    let rd = decode_reg(insn.a);
+    let rs1 = decode_reg(insn.b);
+
+    if e != 0 {
+        let rs2 = decode_reg(insn.c);
+        if rd == 0 {
+            return body(pc, Instr::Nop);
+        }
+        body(pc, Instr::AluWReg { op, rd, rs1, rs2 })
+    } else {
+        let shamt = (field_to_u32(insn.c) & 0x1f) as u8;
+        if rd == 0 {
+            return body(pc, Instr::Nop);
+        }
+        body(pc, Instr::ShiftWImm { op, rd, rs1, shamt })
+    }
+}
+
+/// Lift W-suffix MUL/DIV/REM R-type instruction.
+fn lift_muldiv_w<F: PrimeField32>(insn: &Instruction<F>, pc: u32, op: MulDivOp) -> LiftedInstr {
+    let rd = decode_reg(insn.a);
+    let rs1 = decode_reg(insn.b);
+    let rs2 = decode_reg(insn.c);
+    if rd == 0 {
+        return body(pc, Instr::Nop);
+    }
+    body(pc, Instr::MulDivW { op, rd, rs1, rs2 })
 }
 
 // ============= System / IO Instructions =============

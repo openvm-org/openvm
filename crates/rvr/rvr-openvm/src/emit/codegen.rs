@@ -35,10 +35,10 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             ctx.write_reg(*rd, &shift_imm_expr(*op, &v, *shamt));
         }
         Instr::Lui { rd, value } => {
-            ctx.write_reg(*rd, &hex_u32(*value));
+            ctx.write_reg(*rd, &sext32(*value));
         }
         Instr::Auipc { rd, value } => {
-            ctx.write_reg(*rd, &hex_u32(*value));
+            ctx.write_reg(*rd, &sext32(*value));
         }
         Instr::Load {
             width,
@@ -61,8 +61,25 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             let val = ctx.read_reg(*rs2);
             ctx.write_mem(&base, *offset, &val, width.bytes());
         }
+        Instr::AluWReg { op, rd, rs1, rs2 } => {
+            let l = ctx.read_reg(*rs1);
+            let r = ctx.read_reg(*rs2);
+            ctx.write_reg(*rd, &alu_w_expr(*op, &l, &r));
+        }
+        Instr::AluWImm { op, rd, rs1, imm } => {
+            let l = ctx.read_reg(*rs1);
+            let r = imm_literal(*imm);
+            ctx.write_reg(*rd, &alu_w_expr(*op, &l, &r));
+        }
+        Instr::ShiftWImm { op, rd, rs1, shamt } => {
+            let v = ctx.read_reg(*rs1);
+            ctx.write_reg(*rd, &shift_w_imm_expr(*op, &v, *shamt));
+        }
         Instr::MulDiv { op, rd, rs1, rs2 } => {
             emit_muldiv(ctx, *op, *rd, *rs1, *rs2);
+        }
+        Instr::MulDivW { op, rd, rs1, rs2 } => {
+            emit_muldiv_w(ctx, *op, *rd, *rs1, *rs2);
         }
 
         // ── OpenVM system/IO instructions ────────────────────────────
@@ -211,12 +228,12 @@ fn alu_expr(op: AluOp, left: &str, right: &str) -> String {
     match op {
         AluOp::Add => format!("{left} + {right}"),
         AluOp::Sub => format!("{left} - {right}"),
-        AluOp::Sll => format!("{left} << ({right} & 0x1fu)"),
-        AluOp::Slt => format!("((int32_t){left} < (int32_t){right}) ? 1u : 0u"),
+        AluOp::Sll => format!("{left} << ({right} & 0x3fu)"),
+        AluOp::Slt => format!("((int64_t){left} < (int64_t){right}) ? 1u : 0u"),
         AluOp::Sltu => format!("({left} < {right}) ? 1u : 0u"),
         AluOp::Xor => format!("{left} ^ {right}"),
-        AluOp::Srl => format!("{left} >> ({right} & 0x1fu)"),
-        AluOp::Sra => format!("(uint32_t)((int32_t){left} >> ({right} & 0x1fu))"),
+        AluOp::Srl => format!("{left} >> ({right} & 0x3fu)"),
+        AluOp::Sra => format!("(uint64_t)((int64_t){left} >> ({right} & 0x3fu))"),
         AluOp::Or => format!("{left} | {right}"),
         AluOp::And => format!("{left} & {right}"),
     }
@@ -226,14 +243,44 @@ fn shift_imm_expr(op: AluOp, val: &str, shamt: u8) -> String {
     match op {
         AluOp::Sll => format!("{val} << {}", hex_u32(shamt as u32)),
         AluOp::Srl => format!("{val} >> {}", hex_u32(shamt as u32)),
-        AluOp::Sra => format!("(uint32_t)((int32_t){val} >> {})", hex_u32(shamt as u32)),
+        AluOp::Sra => format!("(uint64_t)((int64_t){val} >> {})", hex_u32(shamt as u32)),
         _ => unreachable!("invalid shift op {op:?}"),
     }
 }
 
-/// Format an i32 immediate as a C uint32_t literal.
+/// W-suffix ALU: low 32 bits, result sign-extended to 64.
+fn alu_w_expr(op: AluOp, left: &str, right: &str) -> String {
+    let inner = match op {
+        AluOp::Add => format!("(uint32_t){left} + (uint32_t){right}"),
+        AluOp::Sub => format!("(uint32_t){left} - (uint32_t){right}"),
+        AluOp::Sll => format!("(uint32_t){left} << ((uint32_t){right} & 0x1fu)"),
+        AluOp::Srl => format!("(uint32_t){left} >> ((uint32_t){right} & 0x1fu)"),
+        AluOp::Sra => format!("(uint32_t)((int32_t)(uint32_t){left} >> ((uint32_t){right} & 0x1fu))"),
+        _ => unreachable!("no W variant for alu op {op:?}"),
+    };
+    format!("(uint64_t)(int32_t)({inner})")
+}
+
+/// W-suffix shift immediate: low 32 bits, result sign-extended to 64.
+fn shift_w_imm_expr(op: AluOp, val: &str, shamt: u8) -> String {
+    let inner = match op {
+        AluOp::Sll => format!("(uint32_t){val} << {}", hex_u32(shamt as u32)),
+        AluOp::Srl => format!("(uint32_t){val} >> {}", hex_u32(shamt as u32)),
+        AluOp::Sra => format!("(uint32_t)((int32_t)(uint32_t){val} >> {})", hex_u32(shamt as u32)),
+        _ => unreachable!("invalid W shift op {op:?}"),
+    };
+    format!("(uint64_t)(int32_t)({inner})")
+}
+
+/// Format an i32 immediate as a sign-extended 64-bit C literal.
 fn imm_literal(imm: i32) -> String {
-    hex_u32(imm as u32)
+    sext32(imm as u32)
+}
+
+/// Sign-extend a u32 value to a 64-bit C literal (uint64_t).
+fn sext32(value: u32) -> String {
+    let extended = value as i32 as i64 as u64;
+    format!("0x{extended:016x}ull")
 }
 
 pub(super) fn hex_u32(value: u32) -> String {
@@ -244,8 +291,8 @@ fn branch_cond_expr(cond: BranchCond, left: &str, right: &str) -> String {
     match cond {
         BranchCond::Eq => format!("{left} == {right}"),
         BranchCond::Ne => format!("{left} != {right}"),
-        BranchCond::Lt => format!("(int32_t){left} < (int32_t){right}"),
-        BranchCond::Ge => format!("(int32_t){left} >= (int32_t){right}"),
+        BranchCond::Lt => format!("(int64_t){left} < (int64_t){right}"),
+        BranchCond::Ge => format!("(int64_t){left} >= (int64_t){right}"),
         BranchCond::Ltu => format!("{left} < {right}"),
         BranchCond::Geu => format!("{left} >= {right}"),
     }
@@ -259,32 +306,60 @@ fn emit_muldiv(ctx: &mut EmitContext, op: MulDivOp, rd: u8, rs1: u8, rs2: u8) {
 
     match op {
         MulDivOp::Mul => {
-            let expr = format!("(uint32_t)((int64_t)(int32_t){l} * (int64_t)(int32_t){r})");
-            ctx.write_reg(rd, &expr);
+            ctx.write_reg(rd, &format!("{l} * {r}"));
         }
         MulDivOp::Mulh => {
-            let expr = format!("(uint32_t)(((int64_t)(int32_t){l} * (int64_t)(int32_t){r}) >> 32)");
-            ctx.write_reg(rd, &expr);
+            ctx.write_reg(rd, &format!("rv_mulh((int64_t){l}, (int64_t){r})"));
         }
         MulDivOp::Mulhsu => {
-            let expr = format!("(uint32_t)(((int64_t)(int32_t){l} * (uint64_t){r}) >> 32)");
-            ctx.write_reg(rd, &expr);
+            ctx.write_reg(rd, &format!("rv_mulhsu((int64_t){l}, {r})"));
         }
         MulDivOp::Mulhu => {
-            let expr = format!("(uint32_t)(((uint64_t){l} * (uint64_t){r}) >> 32)");
-            ctx.write_reg(rd, &expr);
+            ctx.write_reg(rd, &format!("rv_mulhu({l}, {r})"));
         }
         MulDivOp::Div => {
-            ctx.write_reg(rd, &format!("rv_div((int32_t){l}, (int32_t){r})"));
+            ctx.write_reg(rd, &format!("rv_div((int64_t){l}, (int64_t){r})"));
         }
         MulDivOp::Divu => {
             ctx.write_reg(rd, &format!("rv_divu({l}, {r})"));
         }
         MulDivOp::Rem => {
-            ctx.write_reg(rd, &format!("rv_rem((int32_t){l}, (int32_t){r})"));
+            ctx.write_reg(rd, &format!("rv_rem((int64_t){l}, (int64_t){r})"));
         }
         MulDivOp::Remu => {
             ctx.write_reg(rd, &format!("rv_remu({l}, {r})"));
         }
+    }
+}
+
+fn emit_muldiv_w(ctx: &mut EmitContext, op: MulDivOp, rd: u8, rs1: u8, rs2: u8) {
+    let l = ctx.read_reg(rs1);
+    let r = ctx.read_reg(rs2);
+    match op {
+        MulDivOp::Mul => {
+            ctx.write_reg(
+                rd,
+                &format!("(uint64_t)(int32_t)((uint32_t){l} * (uint32_t){r})"),
+            );
+        }
+        MulDivOp::Div => {
+            ctx.write_reg(
+                rd,
+                &format!("rv_divw((int32_t)(uint32_t){l}, (int32_t)(uint32_t){r})"),
+            );
+        }
+        MulDivOp::Divu => {
+            ctx.write_reg(rd, &format!("rv_divuw((uint32_t){l}, (uint32_t){r})"));
+        }
+        MulDivOp::Rem => {
+            ctx.write_reg(
+                rd,
+                &format!("rv_remw((int32_t)(uint32_t){l}, (int32_t)(uint32_t){r})"),
+            );
+        }
+        MulDivOp::Remu => {
+            ctx.write_reg(rd, &format!("rv_remuw((uint32_t){l}, (uint32_t){r})"));
+        }
+        _ => unreachable!("no W variant for mul op {op:?}"),
     }
 }
