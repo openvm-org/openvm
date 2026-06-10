@@ -3,7 +3,6 @@
 
 use halo2_base::{
     gates::{range::RangeChip, GateInstructions, RangeInstructions},
-    safe_types::SafeBool,
     utils::ScalarField,
     AssignedValue, Context,
     QuantumCell::{self, Constant},
@@ -82,19 +81,6 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
             self.add_rc(ctx, gate, params.external_rc[r]);
             self.sbox(ctx, gate);
             self.matmul_external(ctx, gate);
-        }
-    }
-
-    /// Constrains and set self to a specific state if `selector` is true.
-    pub fn select(
-        &mut self,
-        ctx: &mut Context<F>,
-        gate: &impl GateInstructions<F>,
-        selector: SafeBool<F>,
-        set_to: &Self,
-    ) {
-        for i in 0..T {
-            self.s[i] = gate.select(ctx, set_to.s[i], self.s[i], *selector.as_ref());
         }
     }
 
