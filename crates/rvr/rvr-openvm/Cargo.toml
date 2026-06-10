@@ -13,7 +13,6 @@ rvr-openvm-ext-ffi-common.workspace = true
 rvr-openvm-ir.workspace = true
 rvr-openvm-lift.workspace = true
 
-openvm-instructions.workspace = true
 openvm-platform.workspace = true
 openvm-rv32im-guest = { workspace = true, default-features = false }
 openvm-stark-backend.workspace = true
