@@ -16,7 +16,7 @@ mod aot {
             DIGEST_WIDTH_BITS,
         },
     };
-    use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
+    use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 
     /// The minimum block size is 4, but RISC-V `lb` only requires alignment of 1 and `lh` only
     /// requires alignment of 2 because the instructions are implemented by doing an access of
@@ -107,16 +107,16 @@ mod aot {
         _address_space: u32,
     ) -> Result<String, AotError> {
         let min_block_size_bits = config.memory_config.min_block_size_bits();
-        if min_block_size_bits[RV32_REGISTER_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
-            println!("RV32_REGISTER_AS must have a minimum block size of 4");
+        if min_block_size_bits[RV64_REGISTER_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
+            println!("RV64_REGISTER_AS must have a minimum block size of 4");
             return Err(AotError::Other(String::from(
-                "RV32_REGISTER_AS must have a minimum block size of 4",
+                "RV64_REGISTER_AS must have a minimum block size of 4",
             )));
         }
-        if min_block_size_bits[RV32_MEMORY_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
-            println!("RV32_MEMORY_AS must have a minimum block size of 4");
+        if min_block_size_bits[RV64_MEMORY_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
+            println!("RV64_MEMORY_AS must have a minimum block size of 4");
             return Err(AotError::Other(String::from(
-                "RV32_MEMORY_AS must have a minimum block size of 4",
+                "RV64_MEMORY_AS must have a minimum block size of 4",
             )));
         }
         if min_block_size_bits[PUBLIC_VALUES_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
