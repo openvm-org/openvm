@@ -6,6 +6,7 @@ use halo2_base::{
         arithmetic::Field as _,
         halo2curves::{bn256::Fr, ff::PrimeField as _},
     },
+    safe_types::SafeBool,
     utils::{bigint_to_fe, biguint_to_fe, bit_length, fe_to_bigint, modulus, BigPrimeField},
     AssignedValue, Context, QuantumCell,
 };
@@ -165,6 +166,7 @@ impl BabyBearChip {
     }
 
     pub fn reduce(&self, ctx: &mut Context<Fr>, a: BabyBearWire) -> BabyBearWire {
+        assert!(a.max_bits <= Fr::CAPACITY as usize - RESERVED_HIGH_BITS);
         guarded_debug_assert!(fe_to_bigint(a.value.value()).bits() as usize <= a.max_bits);
         let (_, r) = signed_div_mod(&self.range, ctx, a.value, a.max_bits);
         let r = BabyBearWire {
@@ -191,6 +193,9 @@ impl BabyBearChip {
         mut a: BabyBearWire,
         mut b: BabyBearWire,
     ) -> BabyBearWire {
+        if a.max_bits < b.max_bits {
+            std::mem::swap(&mut a, &mut b);
+        }
         if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             a = self.reduce(ctx, a);
             if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
@@ -199,11 +204,8 @@ impl BabyBearChip {
         }
         let value = self.gate().add(ctx, a.value, b.value);
         let max_bits = a.max_bits.max(b.max_bits) + 1;
-        let mut c = BabyBearWire { value, max_bits };
+        let c = BabyBearWire { value, max_bits };
         guarded_debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() + b.to_baby_bear());
-        if c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-            c = self.reduce(ctx, c);
-        }
         c
     }
 
@@ -223,7 +225,14 @@ impl BabyBearChip {
         mut a: BabyBearWire,
         mut b: BabyBearWire,
     ) -> BabyBearWire {
+        #[cfg(debug_assertions)]
+        let expected = a.to_baby_bear() - b.to_baby_bear();
+        let mut negate_result = false;
         if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
+            if a.max_bits < b.max_bits {
+                std::mem::swap(&mut a, &mut b);
+                negate_result = true;
+            }
             a = self.reduce(ctx, a);
             if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
                 b = self.reduce(ctx, b);
@@ -232,10 +241,10 @@ impl BabyBearChip {
         let value = self.gate().sub(ctx, a.value, b.value);
         let max_bits = a.max_bits.max(b.max_bits) + 1;
         let mut c = BabyBearWire { value, max_bits };
-        guarded_debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() - b.to_baby_bear());
-        if c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-            c = self.reduce(ctx, c);
+        if negate_result {
+            c = self.neg(ctx, c);
         }
+        guarded_debug_assert_eq!(c.to_baby_bear(), expected);
         c
     }
 
@@ -257,10 +266,7 @@ impl BabyBearChip {
         let value = self.gate().mul(ctx, a.value, b.value);
         let max_bits = a.max_bits + b.max_bits;
 
-        let mut c = BabyBearWire { value, max_bits };
-        if c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-            c = self.reduce(ctx, c);
-        }
+        let c = BabyBearWire { value, max_bits };
         guarded_debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() * b.to_baby_bear());
         c
     }
@@ -287,10 +293,7 @@ impl BabyBearChip {
         let value = self.gate().mul_add(ctx, a.value, b.value, c.value);
         let max_bits = c.max_bits.max(a.max_bits + b.max_bits) + 1;
 
-        let mut d = BabyBearWire { value, max_bits };
-        if d.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-            d = self.reduce(ctx, d);
-        }
+        let d = BabyBearWire { value, max_bits };
         guarded_debug_assert_eq!(
             d.to_baby_bear(),
             a.to_baby_bear() * b.to_baby_bear() + c.to_baby_bear()
@@ -400,11 +403,11 @@ impl BabyBearChip {
     pub fn select(
         &self,
         ctx: &mut Context<Fr>,
-        cond: AssignedValue<Fr>,
+        cond: SafeBool<Fr>,
         a: BabyBearWire,
         b: BabyBearWire,
     ) -> BabyBearWire {
-        let value = self.gate().select(ctx, a.value, b.value, cond);
+        let value = self.gate().select(ctx, a.value, b.value, *cond.as_ref());
         let max_bits = a.max_bits.max(b.max_bits);
         BabyBearWire { value, max_bits }
     }
@@ -504,6 +507,7 @@ fn signed_div_mod<F>(
 where
     F: BigPrimeField,
 {
+    assert!(a_num_bits <= F::CAPACITY as usize - RESERVED_HIGH_BITS);
     // Proof sketch:
     //
     // Let `b = BabyBear::ORDER_U32`, `p = F::MODULUS`, and let

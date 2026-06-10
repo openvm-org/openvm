@@ -35,7 +35,7 @@ pub struct BatchConstraintIntermediatesWire {
 pub struct GkrProofWire {
     pub logup_pow_witness: ReducedBabyBearWire,
     pub q0_claim: ReducedBabyBearExtWire,
-    pub claims_per_layer: Vec<Vec<ReducedBabyBearExtWire>>,
+    pub claims_per_layer: Vec<[ReducedBabyBearExtWire; 4]>,
     pub sumcheck_polys: Vec<Vec<[ReducedBabyBearExtWire; 3]>>,
 }
 
@@ -60,7 +60,7 @@ pub(crate) fn load_gkr_proof_wire(
         .claims_per_layer
         .iter()
         .map(|claims| {
-            vec![
+            [
                 ext_chip.load_reduced_witness(ctx, claims.p_xi_0),
                 ext_chip.load_reduced_witness(ctx, claims.q_xi_0),
                 ext_chip.load_reduced_witness(ctx, claims.p_xi_1),
@@ -495,18 +495,18 @@ impl ConstraintEvaluatorWire<'_> {
         match symbolic_var.entry {
             Entry::Preprocessed { offset } => {
                 let value = &self.preprocessed.unwrap()[index];
-                if offset == 0 {
-                    value.local
-                } else {
-                    value.next
+                match offset {
+                    0 => value.local,
+                    1 => value.next,
+                    _ => panic!("unsupported preprocessed rotation offset {offset}"),
                 }
             }
             Entry::Main { part_index, offset } => {
                 let value = &self.partitioned_main[part_index][index];
-                if offset == 0 {
-                    value.local
-                } else {
-                    value.next
+                match offset {
+                    0 => value.local,
+                    1 => value.next,
+                    _ => panic!("unsupported main rotation offset {offset}"),
                 }
             }
             Entry::Public => {
@@ -684,7 +684,6 @@ pub(crate) fn constrain_batch_constraints_verification(
     let gkr_claims_per_layer = &gkr_wire.claims_per_layer;
     let gkr_sumcheck_polys = &gkr_wire.sumcheck_polys;
 
-    let zero = ext_chip.zero(ctx);
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let total_gkr_rounds = l_skip + n_logup_host;
     let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, mut xi) = {
@@ -799,9 +798,8 @@ pub(crate) fn constrain_batch_constraints_verification(
     }
     let gkr_numerator_residual = gkr_p_xi_claim;
     let gkr_denominator_claim = gkr_q_xi_claim;
-    let gkr_denominator_residual = ext_chip.sub(ctx, gkr_denominator_claim, alpha_logup);
-    ext_chip.assert_equal(ctx, gkr_numerator_residual, zero);
-    ext_chip.assert_equal(ctx, gkr_denominator_residual, zero);
+    ext_chip.assert_zero(ctx, gkr_numerator_residual);
+    ext_chip.assert_equal(ctx, gkr_denominator_claim, alpha_logup);
 
     let mu = transcript.sample_ext(ctx);
 
@@ -1180,8 +1178,7 @@ pub(crate) fn constrain_batch_constraints_verification(
         consistency_rhs = ext_chip.add(ctx, consistency_rhs, weighted_term);
         cur_mu_pow = ext_chip.mul(ctx, cur_mu_pow, mu);
     }
-    let consistency_residual = ext_chip.sub(ctx, consistency_lhs, consistency_rhs);
-    ext_chip.assert_equal(ctx, consistency_residual, zero);
+    ext_chip.assert_equal(ctx, consistency_lhs, consistency_rhs);
 
     profiler.pop(ctx.advice.len());
 

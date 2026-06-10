@@ -8,8 +8,13 @@
 use std::sync::Arc;
 
 use halo2_base::{
-    gates::circuit::CircuitBuilderStage,
-    halo2_proofs::plonk::{keygen_pk, keygen_vk},
+    gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
+    halo2_proofs::{
+        halo2curves::bn256::{Bn256, G1Affine},
+        plonk::{create_proof, keygen_pk, keygen_vk},
+        poly::kzg::{commitment::KZGCommitmentScheme, multiopen::ProverSHPLONK},
+        transcript::{Blake2bWrite, Challenge255, TranscriptWriterBuffer},
+    },
     utils::fs::gen_srs,
 };
 use openvm_stark_backend::{
@@ -29,9 +34,10 @@ use openvm_stark_sdk::{
 };
 use openvm_static_verifier::{
     field::baby_bear::{BabyBearChip, BabyBearExtChip},
-    log_heights_per_air_from_proof, Halo2ProvingMetadata, Halo2ProvingPinning,
-    StaticVerifierCircuit, StaticVerifierShape,
+    log_heights_per_air_from_proof, Fr, Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning,
+    StaticVerifierCircuit, StaticVerifierProof, StaticVerifierShape,
 };
+use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 
 const MIN_ROWS: usize = 20;
 
@@ -65,6 +71,49 @@ fn select_k_verify_stark(circuit: &StaticVerifierCircuit, proof: &Proof<RootConf
     }
     tracing::info!("Auto-tuned halo2 k={k} (verify-stark constraints only)");
     k
+}
+
+fn prove_verify_stark_constraints_only(
+    circuit: &StaticVerifierCircuit,
+    params: &Halo2Params,
+    pinning: &Halo2ProvingPinning,
+    proof: &Proof<RootConfig>,
+) -> StaticVerifierProof {
+    let mut builder = BaseCircuitBuilder::prover(
+        pinning.metadata.config_params.clone(),
+        pinning.metadata.break_points.clone(),
+    );
+    builder = builder.use_instance_columns(0);
+
+    let range = builder.range_chip();
+    let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
+    let ctx = builder.main(0);
+    let _ = circuit.populate_verify_stark_constraints(ctx, &ext_chip, proof);
+
+    let rng = ChaCha20Rng::from_seed(Default::default());
+    let instances: &[&[Fr]] = &[];
+    let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+    create_proof::<
+        KZGCommitmentScheme<Bn256>,
+        ProverSHPLONK<'_, Bn256>,
+        Challenge255<_>,
+        _,
+        Blake2bWrite<Vec<u8>, G1Affine, _>,
+        _,
+    >(
+        params,
+        &pinning.pk,
+        &[builder],
+        &[instances],
+        rng,
+        &mut transcript,
+    )
+    .expect("Halo2 proof generation should succeed");
+
+    StaticVerifierProof {
+        proof_bytes: transcript.finalize(),
+        public_inputs: Vec::new(),
+    }
 }
 
 #[test]
@@ -116,8 +165,9 @@ fn real_prover_keygen_prove_verify_roundtrip() {
             },
         }
     };
+    assert_eq!(shape.instance_columns, 0);
     let halo2_proof =
-        circuit.prove_verify_stark_constraints_only(&params, &pinning, &shape, &proof_prove);
+        prove_verify_stark_constraints_only(&circuit, &params, &pinning, &proof_prove);
 
     assert!(StaticVerifierCircuit::verify(
         &params,

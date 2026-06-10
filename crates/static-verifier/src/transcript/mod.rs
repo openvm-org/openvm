@@ -19,7 +19,7 @@ use crate::{
         ReducedBabyBearWire, BABY_BEAR_BITS, BABY_BEAR_MODULUS_U64,
     },
     hash::{
-        poseidon2::{Poseidon2State, DIGEST_WIDTH, POSEIDON2_RATE},
+        poseidon2::{pack_base_2_31_cells, Poseidon2State, DIGEST_WIDTH, POSEIDON2_RATE},
         POSEIDON2_PARAMS, POSEIDON2_WIDTH,
     },
     Fr,
@@ -183,25 +183,6 @@ fn decompose_bn254_to_base_baby_bear_digits(
     output_digits
 }
 
-/// Pack BabyBear values into a BN254 element using base-2^31 encoding.
-/// Result = values[0] + values[1]*2^31 + values[2]*2^62 + ...
-fn pack_base_2_31(
-    ctx: &mut Context<Fr>,
-    gate: &impl GateInstructions<Fr>,
-    values: &[ReducedBabyBearWire],
-) -> AssignedValue<Fr> {
-    gate.inner_product(
-        ctx,
-        values.iter().map(|v| v.value()),
-        gate.pow_of_two()
-            .iter()
-            .step_by(BABY_BEAR_BITS)
-            .take(values.len())
-            .copied()
-            .map(QuantumCell::Constant),
-    )
-}
-
 #[derive(Clone, Debug)]
 pub struct DigestWire {
     pub elems: [AssignedValue<Fr>; DIGEST_WIDTH],
@@ -296,7 +277,7 @@ impl TranscriptChip {
     fn flush_observe_buf(&mut self, ctx: &mut Context<Fr>) {
         if !self.observe_buf.is_empty() {
             let gate = self.baby_bear.range().gate();
-            let packed = pack_base_2_31(ctx, gate, &self.observe_buf);
+            let packed = pack_base_2_31_cells(ctx, gate, &self.observe_buf);
             self.sponge_absorb(ctx, packed);
             self.observe_buf.clear();
         }
@@ -362,10 +343,10 @@ impl TranscriptChip {
             "sample_bits requires (1 << bits) < modulus: bits={bits}"
         );
 
+        let sampled = self.sample(ctx);
         if bits == 0 {
             return ctx.load_zero();
         }
-        let sampled = self.sample(ctx);
         // PERF[jpw]: we could optimize this since the divisor is a power of 2
         let range = self.baby_bear.range();
         let divisor = BigUint::from(1u64) << bits;
