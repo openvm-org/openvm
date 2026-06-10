@@ -366,9 +366,6 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
 
         let poseidon2_trace =
             trace_span!("wrapper.generate_trace", air = "Poseidon2").in_scope(|| {
-                // TODO: This is unfortunately how we propagate span fields given our current
-                // tracing system. It would be extraordinarily helpful to update our
-                // metric outputs to contain the fields they define as labels.
                 trace_span!("generate_trace").in_scope(|| {
                     let (mut poseidon_states, poseidon_counts) = Self::dedup_poseidon_inputs(
                         poseidon2_perm_inputs,
