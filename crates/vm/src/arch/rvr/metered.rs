@@ -500,10 +500,12 @@ impl<F: PrimeField32> RvrMeteredSegmentInstance<'_, F> {
 
 #[cfg(all(test, feature = "rvr"))]
 mod tests {
+    use openvm_stark_backend::StarkEngine;
+
     use super::*;
     use crate::{
         arch::{execution_mode::metered::ctx::DEFAULT_PAGE_BITS, BOUNDARY_AIR_ID, MERKLE_AIR_ID},
-        utils::test_system_config,
+        utils::{test_cpu_engine, test_system_config},
     };
 
     fn make_segmentation_state() -> SegmentationState {
@@ -522,6 +524,7 @@ mod tests {
             vec![0; num_airs],
             vec![false; num_airs],
             &system_config,
+            test_cpu_engine().proving_memory_config(),
         );
         SegmentationState::new(ctx, &system_config)
     }
@@ -593,7 +596,7 @@ mod tests {
         let mut seg_state = make_segmentation_state();
         seg_state.segmentation_ctx.segment_check_insns = 1000;
         seg_state.segmentation_ctx.instrets_until_check = 1000;
-        seg_state.segmentation_ctx.config.limits.max_trace_height = 1;
+        seg_state.segmentation_ctx.limits.max_trace_height = 1;
         *seg_state.trace_heights.last_mut().unwrap() = 2;
         let mut tracer = MeteredTracerData {
             trace_heights: seg_state.trace_heights_ptr(),
