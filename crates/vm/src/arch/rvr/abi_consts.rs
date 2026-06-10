@@ -18,7 +18,7 @@ use crate::{
     arch::execution_mode::metered::{
         ctx::DEFAULT_PAGE_BITS, segment_ctx::DEFAULT_SEGMENT_CHECK_INSNS,
     },
-    system::memory::{merkle::public_values::PUBLIC_VALUES_AS, CHUNK},
+    system::memory::{merkle::public_values::PUBLIC_VALUES_AS, DIGEST_WIDTH},
 };
 
 // ── rvr-openvm-ext-ffi-common address-space identifiers ────────────────
@@ -29,6 +29,7 @@ const _: () = assert!(ffi::DEFERRAL_AS == DEFERRAL_AS);
 
 // ── rvr-openvm-ext-ffi-common word / digest sizes ──────────────────────
 const _: () = assert!(ffi::WORD_SIZE == openvm_platform::WORD_SIZE);
+const _: () = assert!(ffi::DEFERRAL_DIGEST_SIZE == DIGEST_WIDTH);
 // Gated: plain `rvr` doesn't pull `openvm-stark-sdk`.
 #[cfg(any(feature = "test-utils", feature = "cuda"))]
 const _: () = assert!(
@@ -36,6 +37,5 @@ const _: () = assert!(
 );
 
 // ── rvr-openvm-ext-ffi-common metered-execution layout ─────────────────
-const _: () = assert!(ffi::CHUNK == CHUNK);
 const _: () = assert!(ffi::DEFAULT_PAGE_BITS == DEFAULT_PAGE_BITS);
 const _: () = assert!(ffi::DEFAULT_SEGMENT_CHECK_INSNS as u64 == DEFAULT_SEGMENT_CHECK_INSNS);
