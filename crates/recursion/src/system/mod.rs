@@ -289,7 +289,6 @@ pub struct Preflight {
     /// The concatenated sequence of observes/samples. Not available during preflight; populated
     /// after.
     pub transcript: TranscriptLog<F, [F; POSEIDON2_WIDTH]>,
-    // TODO[jpw]: flatten and remove these preflight types if they are mostly trivial
     pub proof_shape: ProofShapePreflight,
     pub gkr: GkrPreflight,
     pub batch_constraint: BatchConstraintPreflight,
