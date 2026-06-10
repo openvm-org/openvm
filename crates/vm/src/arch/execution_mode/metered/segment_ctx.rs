@@ -93,6 +93,25 @@ pub struct SegmentationCtx {
     checkpoint_instret: u64,
 }
 
+#[cfg_attr(not(feature = "metrics"), allow(dead_code))]
+#[derive(Clone, Copy, Debug)]
+enum SegmentationTrigger {
+    Height { air_id: usize },
+    Memory,
+    Interactions,
+}
+
+#[cfg(feature = "metrics")]
+impl SegmentationTrigger {
+    fn reason(self) -> &'static str {
+        match self {
+            SegmentationTrigger::Height { .. } => "height",
+            SegmentationTrigger::Memory => "memory",
+            SegmentationTrigger::Interactions => "interactions",
+        }
+    }
+}
+
 #[cfg(feature = "metrics")]
 #[derive(Default)]
 struct MeteredCounts {
@@ -320,6 +339,17 @@ impl SegmentationCtx {
         trace_heights: &[u32],
         is_trace_height_constant: &[bool],
     ) -> bool {
+        self.segmentation_trigger(instret, trace_heights, is_trace_height_constant)
+            .is_some()
+    }
+
+    #[inline(always)]
+    fn segmentation_trigger(
+        &self,
+        instret: u64,
+        trace_heights: &[u32],
+        is_trace_height_constant: &[bool],
+    ) -> Option<SegmentationTrigger> {
         debug_assert_eq!(trace_heights.len(), is_trace_height_constant.len());
         debug_assert_eq!(trace_heights.len(), self.air_names.len());
         debug_assert_eq!(trace_heights.len(), self.widths.len());
@@ -334,7 +364,7 @@ impl SegmentationCtx {
 
         // Segment should contain at least one cycle
         if num_insns == 0 {
-            return false;
+            return None;
         }
 
         let mut main_cnt_with_rot = 0usize;
@@ -361,7 +391,7 @@ impl SegmentationCtx {
                     i,
                     air_name,
                 );
-                return true;
+                return Some(SegmentationTrigger::Height { air_id: i });
             }
             let main_cells = padded_height as usize * width;
             if need_rot {
@@ -383,7 +413,7 @@ impl SegmentationCtx {
                 ByteSize::b(main_memory as u64),
                 ByteSize::b(interaction_memory as u64),
             );
-            return true;
+            return Some(SegmentationTrigger::Memory);
         }
 
         let total_interactions = self.calculate_total_interactions(trace_heights);
@@ -394,10 +424,10 @@ impl SegmentationCtx {
                 total_interactions,
                 self.limits.max_interactions
             );
-            return true;
+            return Some(SegmentationTrigger::Interactions);
         }
 
-        false
+        None
     }
 
     #[inline(always)]
@@ -407,12 +437,20 @@ impl SegmentationCtx {
         trace_heights: &mut [u32],
         is_trace_height_constant: &[bool],
     ) -> bool {
-        let should_seg = self.should_segment(instret, trace_heights, is_trace_height_constant);
+        let trigger = self.segmentation_trigger(instret, trace_heights, is_trace_height_constant);
+        let should_segment = trigger.is_some();
 
-        if should_seg {
-            self.create_segment_from_checkpoint(instret, trace_heights);
+        #[cfg(feature = "metrics")]
+        if let Some(trigger) = trigger {
+            self.emit_segmentation_trigger_metric(trigger);
         }
-        should_seg
+
+        if should_segment {
+            self.create_segment_from_checkpoint(instret, trace_heights);
+            true
+        } else {
+            false
+        }
     }
 
     #[inline(always)]
@@ -585,6 +623,26 @@ impl SegmentationCtx {
 
 #[cfg(feature = "metrics")]
 impl SegmentationCtx {
+    fn emit_segmentation_trigger_metric(&self, trigger: SegmentationTrigger) {
+        let segment = self.segments.len().to_string();
+        let reason = trigger.reason();
+        match trigger {
+            SegmentationTrigger::Height { air_id } => {
+                let labels = [
+                    ("segment", segment),
+                    ("reason", reason.to_string()),
+                    ("air_id", air_id.to_string()),
+                    ("air_name", self.air_names[air_id].clone()),
+                ];
+                metrics::counter!("segmentation_trigger", &labels).absolute(1);
+            }
+            SegmentationTrigger::Memory | SegmentationTrigger::Interactions => {
+                let labels = [("segment", segment), ("reason", reason.to_string())];
+                metrics::counter!("segmentation_trigger", &labels).absolute(1);
+            }
+        }
+    }
+
     fn emit_metered_segment_metrics(&self, segment: &str, trace_heights: &[u32]) {
         let counts = self.calculate_count_breakdown(trace_heights);
         let memory = self.calculate_memory_breakdown(&counts);

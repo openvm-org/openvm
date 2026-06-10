@@ -74,7 +74,7 @@ jobs:
           nvidia-smi
           nvidia-smi -L
           nvcc --version
-          echo "CUDA_ARCH=75,86,89,120" >> $GITHUB_ENV
+          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
           echo "VPMM_PAGES=1" >> $GITHUB_ENV
 
       - name: Download and install risc64-elf-gcc
