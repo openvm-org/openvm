@@ -366,7 +366,7 @@ impl TryFrom<VersionedVmStarkProof> for VmStarkProof {
 
 // =================== Verification baseline JSON types ===================
 
-/// Hex-formatted [`VkCommit`](openvm_verify_stark_host::pvs::VkCommit) for JSON serialization.
+/// Hex-formatted [`VkCommit`] for JSON serialization.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VkCommitJson {
     #[serde(with = "hex_bytes32")]

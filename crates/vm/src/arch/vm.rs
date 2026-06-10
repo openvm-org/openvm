@@ -1,5 +1,6 @@
 //! [VmExecutor] is the struct that can execute an _arbitrary_ program, provided in the form of a
-//! [VmExe], for a fixed set of OpenVM instructions corresponding to a [VmExecutionConfig].
+//! [VmExe](openvm_instructions::exe::VmExe), for a fixed set of OpenVM instructions
+//! corresponding to a [VmExecutionConfig].
 //! Internally once it is given a program, it will preprocess the program to rewrite it into a more
 //! optimized format for runtime execution. This **instance** of the executor will be a separate
 //! struct specialized to running a _fixed_ program on different program inputs.
@@ -380,7 +381,7 @@ pub enum VirtualMachineError {
 /// The [VirtualMachine] struct contains the API to generate proofs for _arbitrary_ programs for a
 /// fixed set of OpenVM instructions and a fixed VM circuit corresponding to those instructions. The
 /// API is specific to a particular [StarkEngine], which specifies a fixed [StarkProtocolConfig] and
-/// [ProverBackend] via associated types. The [VmProverBuilder] also fixes the choice of
+/// [ProverBackend] via associated types. The [VmBuilder] also fixes the choice of
 /// `RecordArena` associated to the prover backend via an associated type.
 ///
 /// In other words, this struct _is_ the zkVM.

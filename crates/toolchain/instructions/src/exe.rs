@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::program::Program;
 
 // TODO[jpw]: delete this
-/// Memory image is a map from (address space, address * size_of<CellType>) to u8.
+/// Memory image is a map from `(address space, address * size_of<CellType>)` to u8.
 pub type SparseMemoryImage = BTreeMap<(u32, u32), u8>;
 /// Stores the starting address, end address, and name of a set of function.
 pub type FnBounds = BTreeMap<u32, FnBound>;
