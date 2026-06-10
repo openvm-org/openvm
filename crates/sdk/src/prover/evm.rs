@@ -62,7 +62,7 @@ where
 
     pub fn prove_unwrapped_with_stark_proof(
         &mut self,
-        mut stark_proof: VmStarkProof,
+        stark_proof: VmStarkProof,
         metadata: &mut InternalLayerMetadata,
     ) -> Result<Proof<RootSC>>
     where
@@ -70,39 +70,14 @@ where
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
-        let root_ctx = {
-            const MAX_ROOT_TRACEGEN_RETRIES: usize = 8;
-            let mut attempt = 0usize;
-            loop {
-                if let Some(ctx) = self.root_prover.generate_proving_ctx(stark_proof.clone()) {
-                    break ctx;
-                }
-                if attempt >= MAX_ROOT_TRACEGEN_RETRIES {
-                    return Err(eyre::eyre!(
-                        "root tracegen returned None after {MAX_ROOT_TRACEGEN_RETRIES} retries"
-                    ));
-                }
-                stark_proof = self
-                    .stark_prover
-                    .agg_prover
-                    .wrap_proof(stark_proof, metadata)?;
-                attempt += 1;
-            }
-        };
-
+        // Internal sanity (SDK tests only): the input proof must verify against
+        // the recursive-aggregation vk before we hand it to the root prover.
+        // Tracegen normally succeeds without wrapping, so this is the proof the
+        // root prover consumes; if a wrap does occur, root prove itself rejects
+        // a bad wrapped proof. (The post-tracegen height-match invariant now
+        // lives in `RootProver::prove_with_wrap_retry`.)
         #[cfg(test)]
         {
-            for ((air_idx, air_ctx), expected_height) in root_ctx
-                .per_trace
-                .iter()
-                .zip(self.root_prover.0.get_trace_heights().unwrap())
-            {
-                assert_eq!(
-                    air_ctx.height(),
-                    expected_height,
-                    "height mismatch at {air_idx}"
-                )
-            }
             let agg_vk = self
                 .stark_prover
                 .agg_prover
@@ -114,8 +89,12 @@ where
             crate::GenericSdk::<E, VB>::verify_proof(agg_vk, baseline, &stark_proof)?;
         }
 
-        let root_proof = self.root_prover.prove_from_ctx(root_ctx)?;
-        Ok(root_proof)
+        const MAX_ROOT_TRACEGEN_RETRIES: usize = 8;
+        let root_prover = Arc::clone(&self.root_prover);
+        let agg_prover = &self.stark_prover.agg_prover;
+        root_prover.prove_with_wrap_retry(stark_proof, MAX_ROOT_TRACEGEN_RETRIES, |p| {
+            agg_prover.wrap_proof(p, metadata)
+        })
     }
 
     pub fn prove_unwrapped(

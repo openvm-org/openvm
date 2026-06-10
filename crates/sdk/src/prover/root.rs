@@ -119,6 +119,62 @@ impl RootProver {
             .in_scope(|| info_span!("root").in_scope(|| self.0.root_prove_from_ctx::<E>(ctx)))?;
         Ok(proof)
     }
+
+    /// Prove the root layer for `stark_proof`, retrying with `wrap` when the
+    /// root verifier's tracegen can't fit the input.
+    ///
+    /// The root verifier is a fixed-shape circuit (its expected trace heights
+    /// are fixed at keygen), so `generate_proving_ctx` returns `None` when the
+    /// input proof's heights don't fit. On each `None`, `wrap` is applied to
+    /// grow the proof toward the canonical (root-ready) shape, up to
+    /// `max_retries` times, before failing.
+    ///
+    /// `wrap` is supplied by the caller because *how* a proof is wrapped (and
+    /// any layer bookkeeping) is caller-specific: the in-process [`EvmProver`]
+    /// delegates to [`AggProver::wrap_proof`]; a distributed prover that holds
+    /// only the recursive prover can call `agg_prove` with
+    /// [`ChildVkKind::RecursiveSelf`] on it directly.
+    ///
+    /// [`EvmProver`]: crate::prover::EvmProver
+    /// [`AggProver::wrap_proof`]: crate::prover::AggProver::wrap_proof
+    /// [`ChildVkKind::RecursiveSelf`]: openvm_continuations::prover::ChildVkKind::RecursiveSelf
+    pub fn prove_with_wrap_retry(
+        &self,
+        mut stark_proof: VmStarkProof,
+        max_retries: usize,
+        mut wrap: impl FnMut(VmStarkProof) -> Result<VmStarkProof>,
+    ) -> Result<Proof<RootSC>> {
+        let mut attempt = 0usize;
+        let ctx = loop {
+            if let Some(ctx) = self.generate_proving_ctx(stark_proof.clone()) {
+                break ctx;
+            }
+            if attempt >= max_retries {
+                return Err(eyre::eyre!(
+                    "root tracegen returned None after {max_retries} retries"
+                ));
+            }
+            stark_proof = wrap(stark_proof)?;
+            attempt += 1;
+        };
+
+        // Internal sanity (SDK tests only): a successful tracegen must land at
+        // exactly the root verifier's fixed, expected trace heights.
+        #[cfg(test)]
+        for ((air_idx, air_ctx), expected_height) in ctx
+            .per_trace
+            .iter()
+            .zip(self.0.get_trace_heights().unwrap())
+        {
+            assert_eq!(
+                air_ctx.height(),
+                expected_height,
+                "height mismatch at {air_idx}"
+            );
+        }
+
+        self.prove_from_ctx(ctx)
+    }
 }
 
 pub fn compute_root_proof_heights(
