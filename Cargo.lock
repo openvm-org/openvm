@@ -5928,7 +5928,6 @@ dependencies = [
  "openvm-instructions",
  "openvm-platform",
  "openvm-poseidon2-air",
- "openvm-rv32im-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "p3-baby-bear",
@@ -6693,7 +6692,6 @@ dependencies = [
  "openvm-transpiler",
  "serde",
  "strum 0.26.3",
- "tempfile",
  "test-case",
 ]
 
@@ -8947,7 +8945,6 @@ dependencies = [
 name = "rvr-openvm"
 version = "2.0.0-beta.2"
 dependencies = [
- "openvm-instructions",
  "openvm-platform",
  "openvm-rv32im-guest",
  "openvm-stark-backend",

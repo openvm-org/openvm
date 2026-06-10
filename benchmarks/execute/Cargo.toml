@@ -82,4 +82,4 @@ name = "execute"
 harness = false
 
 [package.metadata.cargo-shear]
-ignored = ["derive_more", "rand"]
+ignored = ["derive_more", "rand", "rvr-openvm-lift"]
