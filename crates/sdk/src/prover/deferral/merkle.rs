@@ -9,7 +9,8 @@ use openvm_verify_stark_host::deferral::DeferralMerkleProofs;
 /// Compute deferral merkle proofs from the initial and final memory merkle trees.
 ///
 /// Proofs have length `overall_height()`. When `depth > 0`, the first `depth` entries
-/// are zeros (skipped levels covered by the deferral subtree).
+/// are zeros (skipped levels covered by the deferral subtree). The final deferral
+/// subtree is required by the verifier to be rooted at node_idx 0.
 pub fn compute_deferral_merkle_proofs(
     memory_dimensions: MemoryDimensions,
     initial_merkle_tree: &MerkleTree<F, DIGEST_SIZE>,
