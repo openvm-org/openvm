@@ -266,10 +266,12 @@ impl<const PAGE_BITS: usize> MeteredExecutionCtxTrait for MeteredCtx<PAGE_BITS> 
 
 #[cfg(all(test, feature = "rvr"))]
 mod tests {
+    use openvm_stark_backend::StarkEngine;
+
     use super::*;
     use crate::{
         arch::{BOUNDARY_AIR_ID, MERKLE_AIR_ID},
-        utils::test_system_config,
+        utils::{test_cpu_engine, test_system_config},
     };
 
     #[test]
@@ -287,7 +289,8 @@ mod tests {
             vec![1; num_airs],
             vec![0; num_airs],
             vec![false; num_airs],
-            system_config.segmentation_config.clone(),
+            system_config.segmentation_limits.clone(),
+            test_cpu_engine().proving_memory_config(),
         );
         segmentation_ctx.instret = 123;
         segmentation_ctx.segment_check_insns = 1;
