@@ -111,7 +111,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.cuda == 'true' }}
     runs-on:
-      - runs-on=${{ github.run_id }}-cuda/image=ubuntu24-gpu-x64/family=g6.*+g5+g4dn+g6e/cpu=8/volume=40gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}-cuda/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=8/volume=40gb/spot=capacity-optimized/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -128,7 +128,7 @@ jobs:
         run: |
           nvidia-smi
           nvidia-smi -L
-          echo "CUDA_ARCH=75,86,89,120" >> $GITHUB_ENV
+          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
       - name: Run clippy
         run: |
           # includes GPU specific features cuda and touchemall

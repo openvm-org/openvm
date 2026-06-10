@@ -106,7 +106,7 @@ jobs:
           nvidia-smi
           nvidia-smi -L
           nvcc --version
-          echo "CUDA_ARCH=75,86,89,120" >> $GITHUB_ENV
+          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
           echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3" >> $GITHUB_ENV
           echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
           echo "VPMM_PAGES=1" >> $GITHUB_ENV
