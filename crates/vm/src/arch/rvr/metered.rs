@@ -8,7 +8,11 @@ use std::{
     sync::Arc,
 };
 
-use openvm_instructions::{exe::VmExe, riscv::RV32_MEMORY_AS, DEFERRAL_AS};
+use openvm_instructions::{
+    exe::VmExe,
+    riscv::{RV64_MEMORY_AS, RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    DEFERRAL_AS,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 use rvr_openvm_lift::ExtensionRegistry;
@@ -32,9 +36,10 @@ use crate::{
             MeteredCtx,
         },
         ExecutionError, Streams, SystemConfig, VmState, BOUNDARY_AIR_ID, MERKLE_AIR_ID,
+        U16_CELL_SIZE_BITS,
     },
     system::memory::{
-        merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, CHUNK as MERKLE_CHUNK,
+        merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, DIGEST_WIDTH_BITS,
     },
 };
 
@@ -134,7 +139,7 @@ pub struct SegmentationState {
     deferral_page_buf: Vec<u32>,
     address_height: u32,
     addr_space_height: u32,
-    chunk_bits: u32,
+    byte_space_leaf_bits: u32,
 }
 
 impl SegmentationState {
@@ -150,7 +155,7 @@ impl SegmentationState {
         let memory_dimensions = mem_config.memory_dimensions();
         let address_height = memory_dimensions.address_height as u32;
         let addr_space_height = mem_config.addr_space_height as u32;
-        let chunk_bits = MERKLE_CHUNK.ilog2();
+        let byte_space_leaf_bits = (U16_CELL_SIZE_BITS + DIGEST_WIDTH_BITS) as u32;
 
         Self {
             segmentation_ctx,
@@ -163,7 +168,7 @@ impl SegmentationState {
             deferral_page_buf: vec![0u32; DEFERRAL_PAGE_BUF_CAP],
             address_height,
             addr_space_height,
-            chunk_bits,
+            byte_space_leaf_bits,
         }
     }
 
@@ -205,24 +210,23 @@ impl SegmentationState {
     /// `add_register_merkle_heights` + `update_boundary_merkle_heights`).
     ///
     /// OpenVM records pages for the entire register space
-    /// (AS=1, ptr=0, size=32*4=128) at init and after each segment boundary.
+    /// at init and after each segment boundary.
     fn add_register_merkle_heights(&mut self) {
-        // RV32_REGISTER_AS=1, RV32_NUM_REGISTERS=32, RV32_REGISTER_NUM_LIMBS=4
-        const REG_AS: u32 = 1;
-        const REG_SIZE: u32 = 32 * 4; // 128 bytes
+        const REG_SIZE: u32 = (RV64_NUM_REGISTERS * RV64_REGISTER_NUM_LIMBS) as u32;
 
-        let chunk = 1u32 << self.chunk_bits;
-        let num_blocks = (REG_SIZE + chunk - 1) >> self.chunk_bits;
-        let start_chunk_id = 0u32; // ptr=0
-                                   // label_to_index: ((addr_space - 1) << address_height) + chunk_id
-        let start_block_id = ((REG_AS as u64 - 1) << self.address_height) + start_chunk_id as u64;
+        let leaf_ptrs = 1u32 << self.byte_space_leaf_bits;
+        let num_blocks = (REG_SIZE + leaf_ptrs - 1) >> self.byte_space_leaf_bits;
+        let start_leaf_id = 0u32; // ptr=0
+                                  // label_to_index: ((addr_space - 1) << address_height) + leaf_id
+        let start_block_id =
+            ((RV64_REGISTER_AS as u64 - 1) << self.address_height) + start_leaf_id as u64;
         let end_block_id = start_block_id + num_blocks as u64;
         let start_page_id = start_block_id >> DEFAULT_PAGE_BITS;
         let end_page_id = ((end_block_id - 1) >> DEFAULT_PAGE_BITS) + 1;
 
         for page_id in start_page_id..end_page_id {
             if self.memory_ctx.page_indices.insert(page_id as usize) {
-                self.memory_ctx.addr_space_access_count[REG_AS as usize] += 1;
+                self.memory_ctx.addr_space_access_count[RV64_REGISTER_AS as usize] += 1;
             }
         }
     }
@@ -233,7 +237,7 @@ impl SegmentationState {
         let num_as = self.memory_ctx.addr_space_access_count.len();
         let page_shift = self.address_height as usize - DEFAULT_PAGE_BITS;
         for &(buf_len, addr_space) in &[
-            (mem_len, RV32_MEMORY_AS),
+            (mem_len, RV64_MEMORY_AS),
             (pv_len, PUBLIC_VALUES_AS),
             (deferral_len, DEFERRAL_AS),
         ] {
@@ -243,7 +247,7 @@ impl SegmentationState {
             }
             let as_offset = (as_idx - 1) << page_shift;
             let buf = match addr_space {
-                RV32_MEMORY_AS => &self.mem_page_buf,
+                RV64_MEMORY_AS => &self.mem_page_buf,
                 PUBLIC_VALUES_AS => &self.pv_page_buf,
                 _ => &self.deferral_page_buf,
             };

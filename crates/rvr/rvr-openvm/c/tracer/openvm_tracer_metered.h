@@ -53,9 +53,22 @@ typedef struct TraceMemory {
 
 /* ── Page tracking ─────────────────────────────────────────────────── */
 
-static __attribute__((always_inline)) inline uint32_t addr_to_local_page(
+static __attribute__((always_inline)) inline uint32_t byte_addr_to_local_page(
     uint32_t ptr) {
-  return (ptr >> TRACER_CHUNK_BITS) >> TRACER_PAGE_BITS;
+  return (ptr >> TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS) >> TRACER_PAGE_BITS;
+}
+
+static __attribute__((always_inline)) inline uint32_t deferral_addr_to_local_page(
+    uint32_t ptr) {
+  return (ptr >> TRACER_DEFERRAL_PTRS_PER_LEAF_BITS) >> TRACER_PAGE_BITS;
+}
+
+static __attribute__((always_inline)) inline uint32_t addr_to_local_page(
+    uint32_t addr_space, uint32_t ptr) {
+  if (likely(addr_space == AS_MEMORY || addr_space == AS_PUBLIC_VALUES)) {
+    return byte_addr_to_local_page(ptr);
+  }
+  return deferral_addr_to_local_page(ptr);
 }
 
 /* ── Per-address-space page recording ─────────────────────────────── */
@@ -123,7 +136,7 @@ static __attribute__((always_inline)) inline void record_deferral_page_range(
  * every direct call site in generated C, so the branches below fold away. */
 static __attribute__((always_inline)) inline void record_page(
     Tracer* t, uint32_t addr_space, uint32_t ptr) {
-  uint32_t page = addr_to_local_page(ptr);
+  uint32_t page = addr_to_local_page(addr_space, ptr);
   if (likely(addr_space == AS_MEMORY)) {
     record_mem_page(t, page);
   } else if (addr_space == AS_PUBLIC_VALUES) {
@@ -137,8 +150,8 @@ static __attribute__((always_inline)) inline void record_page(
  * flush_page_buffer deduplicates via BitSet. */
 static __attribute__((always_inline)) inline void record_page_range(
     Tracer* t, uint32_t addr_space, uint32_t first_addr, uint32_t last_addr) {
-  uint32_t first_page = addr_to_local_page(first_addr);
-  uint32_t last_page = addr_to_local_page(last_addr);
+  uint32_t first_page = addr_to_local_page(addr_space, first_addr);
+  uint32_t last_page = addr_to_local_page(addr_space, last_addr);
   if (likely(addr_space == AS_MEMORY)) {
     record_mem_page_range(t, first_page, last_page);
   } else if (addr_space == AS_PUBLIC_VALUES) {
@@ -184,7 +197,7 @@ static __attribute__((always_inline)) inline void trace_memory_access_page(
 
 static __attribute__((always_inline)) inline void trace_memory_access(
     TraceMemory* restrict memory, uint32_t addr) {
-  trace_memory_access_page(memory, addr_to_local_page(addr));
+  trace_memory_access_page(memory, byte_addr_to_local_page(addr));
 }
 
 /* ── Trace-only register access (no-ops in metered mode) ─────────── */
@@ -198,44 +211,44 @@ static __attribute__((always_inline)) inline void trace_reg_write(
 
 static __attribute__((always_inline)) inline void trace_rd_mem_u8(
     RvState* restrict state, uint32_t addr, uint8_t val) {
-  record_mem_page(state->tracer, addr_to_local_page(addr));
+  record_mem_page(state->tracer, byte_addr_to_local_page(addr));
 }
 
 static __attribute__((always_inline)) inline void trace_rd_mem_i8(
     RvState* restrict state, uint32_t addr, int8_t val) {
-  record_mem_page(state->tracer, addr_to_local_page(addr));
+  record_mem_page(state->tracer, byte_addr_to_local_page(addr));
 }
 
 static __attribute__((always_inline)) inline void trace_rd_mem_u16(
     RvState* restrict state, uint32_t addr, uint16_t val) {
-  record_mem_page(state->tracer, addr_to_local_page(addr));
+  record_mem_page(state->tracer, byte_addr_to_local_page(addr));
 }
 
 static __attribute__((always_inline)) inline void trace_rd_mem_i16(
     RvState* restrict state, uint32_t addr, int16_t val) {
-  record_mem_page(state->tracer, addr_to_local_page(addr));
+  record_mem_page(state->tracer, byte_addr_to_local_page(addr));
 }
 
 static __attribute__((always_inline)) inline void trace_rd_mem_u32(
     RvState* restrict state, uint32_t addr, uint32_t val) {
-  record_mem_page(state->tracer, addr_to_local_page(addr));
+  record_mem_page(state->tracer, byte_addr_to_local_page(addr));
 }
 
 /* ── Trace-only memory writes (record page in metered mode) ──────── */
 
 static __attribute__((always_inline)) inline void trace_wr_mem_u8(
     RvState* restrict state, uint32_t addr, uint8_t new_val) {
-  record_mem_page(state->tracer, addr_to_local_page(addr));
+  record_mem_page(state->tracer, byte_addr_to_local_page(addr));
 }
 
 static __attribute__((always_inline)) inline void trace_wr_mem_u16(
     RvState* restrict state, uint32_t addr, uint16_t new_val) {
-  record_mem_page(state->tracer, addr_to_local_page(addr));
+  record_mem_page(state->tracer, byte_addr_to_local_page(addr));
 }
 
 static __attribute__((always_inline)) inline void trace_wr_mem_u32(
     RvState* restrict state, uint32_t addr, uint32_t new_val) {
-  record_mem_page(state->tracer, addr_to_local_page(addr));
+  record_mem_page(state->tracer, byte_addr_to_local_page(addr));
 }
 
 /* ── Trace-only word-range memory access ──────────────────────────── */
@@ -249,8 +262,8 @@ static __attribute__((always_inline)) inline void trace_rd_mem_u32_range(
     uint32_t num_words) {
   assume(num_words > 0);
   uint32_t last_addr = base_addr + (num_words - 1) * WORD_SIZE;
-  record_mem_page_range(state->tracer, addr_to_local_page(base_addr),
-                        addr_to_local_page(last_addr));
+  record_mem_page_range(state->tracer, byte_addr_to_local_page(base_addr),
+                        byte_addr_to_local_page(last_addr));
 }
 
 static __attribute__((always_inline)) inline void trace_wr_mem_u32_range(
@@ -258,8 +271,8 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u32_range(
     uint32_t num_words) {
   assume(num_words > 0);
   uint32_t last_addr = base_addr + (num_words - 1) * WORD_SIZE;
-  record_mem_page_range(state->tracer, addr_to_local_page(base_addr),
-                        addr_to_local_page(last_addr));
+  record_mem_page_range(state->tracer, byte_addr_to_local_page(base_addr),
+                        byte_addr_to_local_page(last_addr));
 }
 
 /* ── Trace-only operations ────────────────────────────────────────── */
