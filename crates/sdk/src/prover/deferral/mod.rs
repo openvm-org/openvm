@@ -3,7 +3,6 @@ use std::sync::Arc;
 use eyre::Result;
 use itertools::Itertools;
 use openvm_continuations::{
-    circuit::deferral::utils::def_leaf_compress,
     prover::{DeferralChildVkKind, DeferralCircuitProver},
     CommitBytes, SC,
 };
@@ -15,7 +14,9 @@ use openvm_stark_backend::{
     proof::Proof,
     SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::F;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    poseidon2_compress_with_capacity, DIGEST_SIZE, F,
+};
 use openvm_verify_stark_host::pvs::DeferralPvs;
 use tracing::info_span;
 
@@ -147,7 +148,7 @@ impl DeferralProver {
             .collect::<Result<Vec<_>>>()?;
 
         // For each circuit: do internal recursive aggregation then generate the hook proof
-        per_circuit
+        let mut per_circuit = per_circuit
             .into_iter()
             .enumerate()
             .map(|(def_idx, res)| {
@@ -155,15 +156,10 @@ impl DeferralProver {
                 if proofs.is_empty() {
                     let def_circuit_commit = self.single_circuit_provers[def_idx]
                         .circuit_commit(self.internal_recursive_prover.get_vk_commit(false));
-                    let input_acc_hash = poseidon2_hash_slice(&def_circuit_commit).0;
-                    let output_acc_hash = poseidon2_hash_slice(&[F::ZERO]).0;
-                    let combined_hash = def_leaf_compress(input_acc_hash, output_acc_hash).1;
-                    Ok(DeferralProof::Absent(DeferralPvs {
-                        initial_acc_hash: combined_hash,
-                        final_acc_hash: combined_hash,
-                        depth: F::ONE,
-                        node_idx: F::from_usize(def_idx),
-                    }))
+                    Ok(DeferralProof::Absent(absent_deferral_pvs(
+                        def_idx,
+                        def_circuit_commit,
+                    )))
                 } else {
                     let mut merkle_depth = 2usize;
                     let mut layer = 0usize;
@@ -220,7 +216,18 @@ impl DeferralProver {
                     ))
                 }
             })
-            .collect::<Result<Vec<_>>>()
+            .collect::<Result<Vec<_>>>()?;
+
+        // Pad returned vector up to a power of two length with absent deferral proofs
+        let target_length = per_circuit.len().next_power_of_two();
+        for def_idx in per_circuit.len()..target_length {
+            per_circuit.push(DeferralProof::Absent(absent_deferral_pvs(
+                def_idx,
+                [F::ZERO; DIGEST_SIZE],
+            )));
+        }
+
+        Ok(per_circuit)
     }
 
     pub fn make_extension(&self, fns: Vec<Arc<DeferralFn>>) -> DeferralExtension {
@@ -241,5 +248,17 @@ impl DeferralProver {
             fns,
             def_circuit_commits,
         }
+    }
+}
+
+fn absent_deferral_pvs(def_idx: usize, def_circuit_commit: [F; DIGEST_SIZE]) -> DeferralPvs<F> {
+    let input_acc_hash = poseidon2_hash_slice(&def_circuit_commit).0;
+    let output_acc_hash = poseidon2_hash_slice(&[F::ZERO]).0;
+    let combined_hash = poseidon2_compress_with_capacity(input_acc_hash, output_acc_hash).0;
+    DeferralPvs {
+        initial_acc_hash: combined_hash,
+        final_acc_hash: combined_hash,
+        depth: F::ONE,
+        node_idx: F::from_usize(def_idx),
     }
 }
