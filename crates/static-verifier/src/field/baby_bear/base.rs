@@ -193,6 +193,9 @@ impl BabyBearChip {
         mut a: BabyBearWire,
         mut b: BabyBearWire,
     ) -> BabyBearWire {
+        if a.max_bits < b.max_bits {
+            std::mem::swap(&mut a, &mut b);
+        }
         if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             a = self.reduce(ctx, a);
             if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
@@ -201,11 +204,8 @@ impl BabyBearChip {
         }
         let value = self.gate().add(ctx, a.value, b.value);
         let max_bits = a.max_bits.max(b.max_bits) + 1;
-        let mut c = BabyBearWire { value, max_bits };
+        let c = BabyBearWire { value, max_bits };
         guarded_debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() + b.to_baby_bear());
-        if c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-            c = self.reduce(ctx, c);
-        }
         c
     }
 
@@ -225,7 +225,14 @@ impl BabyBearChip {
         mut a: BabyBearWire,
         mut b: BabyBearWire,
     ) -> BabyBearWire {
+        #[cfg(debug_assertions)]
+        let expected = a.to_baby_bear() - b.to_baby_bear();
+        let mut negate_result = false;
         if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
+            if a.max_bits < b.max_bits {
+                std::mem::swap(&mut a, &mut b);
+                negate_result = true;
+            }
             a = self.reduce(ctx, a);
             if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
                 b = self.reduce(ctx, b);
@@ -234,10 +241,10 @@ impl BabyBearChip {
         let value = self.gate().sub(ctx, a.value, b.value);
         let max_bits = a.max_bits.max(b.max_bits) + 1;
         let mut c = BabyBearWire { value, max_bits };
-        guarded_debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() - b.to_baby_bear());
-        if c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-            c = self.reduce(ctx, c);
+        if negate_result {
+            c = self.neg(ctx, c);
         }
+        guarded_debug_assert_eq!(c.to_baby_bear(), expected);
         c
     }
 
@@ -259,10 +266,7 @@ impl BabyBearChip {
         let value = self.gate().mul(ctx, a.value, b.value);
         let max_bits = a.max_bits + b.max_bits;
 
-        let mut c = BabyBearWire { value, max_bits };
-        if c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-            c = self.reduce(ctx, c);
-        }
+        let c = BabyBearWire { value, max_bits };
         guarded_debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() * b.to_baby_bear());
         c
     }
@@ -289,10 +293,7 @@ impl BabyBearChip {
         let value = self.gate().mul_add(ctx, a.value, b.value, c.value);
         let max_bits = c.max_bits.max(a.max_bits + b.max_bits) + 1;
 
-        let mut d = BabyBearWire { value, max_bits };
-        if d.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-            d = self.reduce(ctx, d);
-        }
+        let d = BabyBearWire { value, max_bits };
         guarded_debug_assert_eq!(
             d.to_baby_bear(),
             a.to_baby_bear() * b.to_baby_bear() + c.to_baby_bear()
