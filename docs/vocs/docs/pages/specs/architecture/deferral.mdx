@@ -67,6 +67,7 @@ The actual `input_i_raw` is entirely unconstrained in the VM. The validity of th
 We provide the following guarantees on the opcodes defined above:
 
 - Reading an invalid `input_i_commit` or `output_i_commit` will result in an invalid proof
+- `CALL` only binds `output_i_commit` into the deferral accumulators; the returned `output_i_len` is an unauthenticated prover hint until an `OUTPUT` instruction reads the full `(output_i_commit, output_i_len)` key and authenticates it against the output bytes
 - Deferred outputs are only supported when `output_i_len` is divisible by `DIGEST_SIZE`
 - `OUTPUT` does not ensure the size of allocated write memory
 
