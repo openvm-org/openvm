@@ -74,7 +74,7 @@ pub unsafe extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: us
     }
 }
 
-/// Apply the Keccak-f[1600] permutation to the 200-byte state buffer.
+/// Apply the Keccak-f\[1600\] permutation to the 200-byte state buffer.
 ///
 /// # Safety
 ///
