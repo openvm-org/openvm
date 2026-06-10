@@ -47,6 +47,7 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 indicatif = "0.17"
 flate2 = "1"
 tar = "0.4"
+tempfile.workspace = true
 
 [features]
 default = ["parallel", "jemalloc", "evm-verify", "metrics"]
@@ -67,6 +68,3 @@ jemalloc = ["openvm-sdk/jemalloc"]
 jemalloc-prof = ["openvm-sdk/jemalloc-prof"]
 cuda = ["openvm-sdk/cuda"]
 ci = []
-
-[dev-dependencies]
-tempfile = "3.10.1"
