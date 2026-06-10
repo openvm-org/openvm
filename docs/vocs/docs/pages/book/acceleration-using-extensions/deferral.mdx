@@ -18,6 +18,10 @@ From the guest's perspective, the deferral acts like a black-box function call: 
 You must not use the `OutputKey.output_len` returned by `deferred_compute` to parse output, validate expected lengths, or choose code paths before `get_deferred_output`. It is an unauthenticated allocation hint until `get_deferred_output` authenticates the full output key. For fixed-size outputs, allocate the expected-size buffer directly. For dynamic-size outputs, use `output_len` only to size the buffer before `get_deferred_output`.
 :::
 
+:::warning
+Only pass `get_deferred_output` an `OutputKey` returned by `deferred_compute`. Manually constructed `OutputKey` values are **not** trusted deferral results.
+:::
+
 ## Guest Library
 
 The guest crate `openvm-deferral-guest` provides the following functions:
