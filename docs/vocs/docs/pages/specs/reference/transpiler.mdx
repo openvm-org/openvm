@@ -161,7 +161,7 @@ Each VM extension's behavior is specified below.
 
 ### Deferral Extension
 
-The 12-bit immediate encodes both the sub-opcode and deferral index: `imm[1:0]` selects CALL_RV32 (`0x0`) vs OUTPUT_RV32 (`0x1`), and `def_idx = imm[11:2]` identifies which [deferral function](/specs/architecture/deferral) to invoke. In addition to transpiling instructions, the deferral transpiler extension writes the initial input accumulator values (the `def_circuit_commit` for each configured deferral circuit) into the [deferral address space](/specs/openvm/isa#address-spaces) (address space `4`) via `modify_initial_memory`.
+The 12-bit immediate encodes both the sub-opcode and deferral index: `imm[1:0]` selects CALL_RV32 (`0x0`) vs OUTPUT_RV32 (`0x1`), and `def_idx = imm[11:2]` identifies which [deferral function](/specs/architecture/deferral) to invoke. The transpiler rejects `def_idx >= MAX_DEF_CIRCUITS`; this is currently 512. In addition to transpiling instructions, the deferral transpiler extension writes the initial input accumulator values (the `def_circuit_commit` for each configured deferral circuit) into the [deferral address space](/specs/openvm/isa#address-spaces) (address space `4`) via `modify_initial_memory`.
 
 | RISC-V Inst | OpenVM Instruction                             |
 | ----------- | ---------------------------------------------- |

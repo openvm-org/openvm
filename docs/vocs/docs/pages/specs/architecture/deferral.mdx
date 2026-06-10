@@ -72,7 +72,7 @@ We provide the following guarantees on the opcodes defined above:
 
 ### Extension Chips and Constraints
 
-The deferral extension contains several executor and peripheral chips to constrain the opcode functions and contracts above. It is configured with a `Vec<Arc<DeferralFn>>` defining the `f_i` functions and a `Vec<[u8; 32]>` containing the `def_circuit_commit` for each `C_i`.
+The deferral extension contains several executor and peripheral chips to constrain the opcode functions and contracts above. It is configured with a `Vec<Arc<DeferralFn>>` defining the `f_i` functions and a `Vec<[u8; 32]>` containing the `def_circuit_commit` for each `C_i`. The deferral index `i` must be less than `MAX_DEF_CIRCUITS`, currently 512.
 
 :::info
 Because the deferral extension has a single opcode for all deferral operations, in practice the `h_i` hash function is the Poseidon2 sponge hash of `Output_i` represented as bytes.
@@ -86,33 +86,35 @@ Each deferral circuit `C_i` must constrain that `f_i(input_i_raw) = output_i_raw
 The function `g_i` must be a collision-resistant hash. If `g_i` is not a true hash, an adversary could find distinct inputs that produce the same `input_i_commit`, allowing them to substitute a different input during aggregation while the VM accepts the original commit.
 :::
 
-`input_i_commit` and `output_i_commit` must be exposed as public values.
+`input_i_commit`, `output_i_commit`, and the deferral index `def_idx = i` must be exposed as public values. The circuit must constrain `def_idx` to a constant value.
 
 ## Aggregation Subcircuit and Tree
 
 The proofs for each `C_i` are aggregated separately. The leaf, internal-for-leaf, and internal-recursive layers use an aggregation subcircuit that:
 
 - Constrains the validity of each child proof
-- At the leaf layer, folds cached trace commits into each child's `input_i_commit` to produce a `folded_input_commit`, then compresses `(folded_input_commit, output_i_commit)` into a single `merkle_commit`. At internal layers, Merklizes child `merkle_commit`s into a single `merkle_commit`
-- Exposes `merkle_commit` and `num_def_circuit_proofs` as public values
+- At the leaf layer, folds cached trace commits into each child's `input_i_commit` to produce a `folded_input_commit`, then computes `merkle_commit = π(π(DEF_LEAF_TAG, folded_input_commit), output_i_commit)`. At internal layers, it Merklizes child `merkle_commit`s using `π(π(DEF_INTERNAL_TAG, left_child), right_child)`.
+- Exposes `merkle_commit`, `num_def_circuit_proofs`, `merkle_depth`, and `def_idx` as public values
 - Propagates `def_vk_commit`, `leaf_vk_commit`, and `internal_for_leaf_vk_commit` through the verifier subcircuit
 
-Note that because we are building a Merkle tree of input and output commits, tail proofs are combined with "non-present" proofs. The input and output commit of a non-present proof at a particular depth is the Merkle root of a zeroed tree of that depth.
+The `DEF_LEAF_TAG` and `DEF_INTERNAL_TAG` domain separators prevent a deferral leaf hash from being reinterpreted as an internal aggregation hash. All present children in a per-circuit deferral aggregation subtree must have the same `def_idx`, and `merkle_depth` is range-checked so the proof count and depth cannot wrap in the field.
+
+Note that because we are building a Merkle tree of input and output commits, tail proofs are combined with padding. A padding child is represented by the zero hash for the child subtree's depth, and the parent `merkle_depth` is constrained against that selected zero hash.
 
 The final internal-recursive layer is passed to a **deferral hook** layer, which:
 
 - Constrains its validity
 - Reconciles the input and output Merkle commits into the input and output **onion hashes**
 - Computes `def_circuit_commit` by hashing the VK commit components (`cached_commit` and `vk_pre_hash` for each of `def_vk_commit`, `leaf_vk_commit`, `internal_for_leaf_vk_commit`) via `hash_slice`
-- Exposes `DeferralPvs` containing `initial_acc_hash = π(π(def_circuit_commit, 0), π(0, 0))`, `final_acc_hash = π(π(input_onion, 0), π(output_onion, 0))`, and `depth = 1`
+- Exposes `DeferralPvs` containing `initial_acc_hash = π(π(def_circuit_commit, 0), π(0, 0))`, `final_acc_hash = π(π(input_onion, 0), π(output_onion, 0))`, `depth = 1`, and `node_idx = def_idx`
     - Note that `initial_acc_hash` and `final_acc_hash` are memory subtree Merkle leaves, with each leaf zero-padded before Merklization
 
 ![Deferral Aggregation Diagram](/deferral-aggregation-diagram.png)
 
-Each deferral hook proof is aggregated using the [**combined VM-deferral tree**](/specs/architecture/continuations#combined-vm-deferral-tree), which recursively exposes `π(initial_acc_hash_0, initial_acc_hash_1)` and `π(final_acc_hash_0, final_acc_hash_1)`. The root verifier constrains that the final `initial_acc_hash` and `final_acc_hash` were present in the initial and final memory state respectively.
+Each deferral hook proof is aggregated using the [**combined VM-deferral tree**](/specs/architecture/continuations#combined-vm-deferral-tree), which recursively exposes `π(initial_acc_hash_0, initial_acc_hash_1)` and `π(final_acc_hash_0, final_acc_hash_1)`. The tree also carries a canonical `node_idx`: hook leaves start at `def_idx`, siblings must have adjacent indices with an even left index, and parents carry the left child index divided by two. The root verifier constrains that `node_idx = 0` and that the final `initial_acc_hash` and `final_acc_hash` were present in the initial and final memory state respectively.
 
 :::info
-Deferral circuits that are not used are still included in the Merklization of accumulators, but in this case we constrain that `initial_acc_hash = final_acc_hash` (i.e. that those accumulators were left untouched).
+Deferral circuits that are not used are still included in the Merklization of accumulators, but in this case we constrain that `initial_acc_hash = final_acc_hash`, `depth = 1`, and `node_idx = def_idx` (i.e. that those accumulators were left untouched). If no configured deferral circuit is used at all, the main aggregation proof has `deferral_flag = 0`.
 :::
 
 ## Verify STARK
@@ -120,7 +122,7 @@ Deferral circuits that are not used are still included in the Merklization of ac
 STARK proof verification is implemented using the deferral framework. See the [Verify STARK guest library](/book/guest-libraries/verify-stark) for usage details.
 
 - `Input_i`: `Proof`
-- `Output_i`: `(app_exe_commit, app_vm_commit, user_pvs)` tuple
+- `Output_i`: `(app_exe_commit, app_vm_commit, user_pvs)` tuple, with `user_pvs` returned to the guest as bytes
 - `C_i`: a recursion circuit that exposes the compressed final transcript state as `input_i_commit` **and** constrains the listed public values against the `Proof`'s claimed public values
 
 The compressed final transcript state serves as `input_i_commit` because it deterministically binds the entire proof — any change to the proof produces a different transcript, so committing to it is equivalent to committing to the `Proof`.
