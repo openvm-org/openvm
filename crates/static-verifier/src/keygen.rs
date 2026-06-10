@@ -113,7 +113,7 @@ impl StaticVerifierProvingKey {
         )
     }
 
-    /// Produce a [`Snark`] for consumption by the wrapper circuit.
+    /// Produce a [`Snark`](snark_verifier_sdk::Snark) for consumption by the wrapper circuit.
     ///
     /// Unlike [`prove_for_evm_unwrapped`](Self::prove_for_evm_unwrapped), this
     /// returns a `Snark` (not a raw EVM proof), which should be fed into

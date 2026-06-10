@@ -62,7 +62,8 @@ const POSEIDON2_INSERTION_IDX: usize = 1;
 
 /// Trait for trace generation of all system AIRs. The system chip complex is special because we may
 /// not exactly following the exact matching between `Air` and `Chip`. Moreover we may require more
-/// flexibility than what is provided through the trait object [`AnyChip`].
+/// flexibility than what is provided through the trait object
+/// [`AnyChip`](openvm_circuit_primitives::AnyChip).
 ///
 /// The [SystemChipComplex] is meant to be constructible once the VM configuration is known, and it
 /// can be loaded with arbitrary programs supported by the instruction set available to its

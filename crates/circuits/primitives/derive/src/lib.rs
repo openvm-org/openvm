@@ -127,7 +127,7 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
 }
 
 /// `S` is the type the derive macro is being called on
-/// Implements Borrow<S> and BorrowMut<S> for [u8]
+/// Implements `Borrow<S>` and `BorrowMut<S>` for `[u8]`
 /// [u8] has to have (checked via `debug_assert!`s)
 /// - at least size_of(S) length
 /// - at least align_of(S) alignment

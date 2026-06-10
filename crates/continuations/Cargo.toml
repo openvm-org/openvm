@@ -35,13 +35,8 @@ openvm-rv32im-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32im-transpiler = { workspace = true }
 openvm-deferral-circuit = { workspace = true }
 openvm-deferral-transpiler = { workspace = true }
-openvm-instructions = { workspace = true }
-openvm-toolchain-tests = { workspace = true }
 openvm-transpiler = { workspace = true }
 test-case = { workspace = true }
-
-[build-dependencies]
-openvm-cuda-builder = { workspace = true, optional = true }
 
 [features]
 default = ["parallel"]
@@ -54,7 +49,6 @@ parallel = ["openvm-circuit/parallel", "openvm-recursion-circuit/parallel"]
 metrics = ["openvm-circuit/metrics"]
 
 cuda = [
-    "dep:openvm-cuda-builder",
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
     "openvm-circuit-primitives/cuda",

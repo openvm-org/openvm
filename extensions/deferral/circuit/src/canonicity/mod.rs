@@ -20,8 +20,8 @@ pub struct CanonicityIo<T> {
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
 pub struct CanonicityAuxCols<T> {
-    /// Marker for the first index where x[i] != order[i] (big-endian).
+    /// Marker for the first index where `x[i] != order[i]` (big-endian).
     pub diff_marker: [T; F_NUM_BYTES],
-    /// order[i] - x[i] at the first differing index, constrained to [1, 255].
+    /// `order[i] - x[i]` at the first differing index, constrained to `[1, 255]`.
     pub diff_val: T,
 }
