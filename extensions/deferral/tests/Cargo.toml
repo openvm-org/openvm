@@ -10,7 +10,6 @@ repository.workspace = true
 [dependencies]
 openvm-stark-sdk.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-circuit-derive.workspace = true
 openvm-instructions.workspace = true
 openvm-transpiler.workspace = true
 openvm-rv32im-circuit.workspace = true
@@ -20,8 +19,6 @@ openvm-deferral-transpiler.workspace = true
 openvm-toolchain-tests = { path = "../../../crates/toolchain/tests" }
 eyre.workspace = true
 itertools.workspace = true
-derive_more.workspace = true
-serde.workspace = true
 
 [features]
 default = ["parallel"]

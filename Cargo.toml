@@ -117,7 +117,6 @@ lto = "thin"
 [workspace.dependencies]
 # Stark Backend
 openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-codec-derive = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
 openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
 openvm-cpu-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
 openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
@@ -177,7 +176,6 @@ openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
 openvm-verify-stark-circuit = { path = "guest-libs/verify-stark/circuit", default-features = false }
-openvm-verify-stark-guest = { path = "guest-libs/verify-stark/guest", default-features = false }
 openvm-deferral-circuit = { path = "extensions/deferral/circuit", default-features = false }
 openvm-deferral-guest = { path = "extensions/deferral/guest", default-features = false }
 openvm-deferral-transpiler = { path = "extensions/deferral/transpiler", default-features = false }
@@ -190,19 +188,15 @@ p3-air = { version = "=0.4.3", default-features = false }
 p3-field = { version = "=0.4.3", default-features = false }
 p3-baby-bear = { version = "=0.4.3", default-features = false }
 p3-bn254 = { version = "=0.4.3", default-features = false }
-p3-dft = { version = "=0.4.3", default-features = false }
-p3-fri = { version = "=0.4.3", default-features = false }
 p3-keccak-air = { version = "=0.4.3", default-features = false }
 p3-matrix = { version = "=0.4.3", default-features = false }
 p3-maybe-rayon = { version = "=0.4.3", default-features = false }
-p3-merkle-tree = { version = "=0.4.3", default-features = false }
 p3-poseidon2 = { version = "=0.4.3", default-features = false }
 p3-poseidon2-air = { version = "=0.4.3", default-features = false }
 p3-symmetric = { version = "=0.4.3", default-features = false }
 
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
 snark-verifier-sdk = { version = "0.2.0", default-features = false, features = ["loader_halo2", "halo2-axiom"] }
-snark-verifier = { version = "0.2.0", default-features = false }
 halo2-base = { version = "0.5.0", default-features = false }
 halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.2" }
 struct-reflection = "0.1.0"
@@ -226,8 +220,6 @@ backtrace = "0.3.71"
 metrics = "0.23.0"
 cfg-if = "1.0.0"
 test-case = "3.3.1"
-test-log = "0.2.16"
-enum_dispatch = "0.3.13"
 eyre = "0.6.12"
 tempfile = "3.13.0"
 thiserror = "1.0.65"
@@ -272,9 +264,6 @@ num-traits = { version = "0.2.19", default-features = false }
 ff = { version = "0.13.1", default-features = false }
 sha2 = { version = "0.10", default-features = false }
 blstrs = { version = "0.7.1", default-features = true }
-
-# specific to CUDA and GPU
-cuda-runtime-sys = "0.3.0-alpha.1"
 
 [workspace.metadata.cargo-shear]
 ignored = ["cargo-openvm"]

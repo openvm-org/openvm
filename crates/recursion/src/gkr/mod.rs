@@ -5,7 +5,7 @@
 //! random point. This is done through a layer-by-layer recursive reduction, where each layer uses a
 //! sumcheck protocol.
 //!
-//! The GKR Air Module verifies the [`GkrProof`](openvm_stark_backend::proof::GkrProof) struct and
+//! The GKR Air Module verifies the [`GkrProof`] struct and
 //! consists of four AIRs:
 //!
 //! 1. **GkrInputAir** - Handles initial setup, coordinates other AIRs, and sends final claims to
@@ -13,7 +13,7 @@
 //! 2. **GkrLayerAir** - Manages layer-by-layer GKR reduction (verifies
 //!    [`verify_gkr`](openvm_stark_backend::verifier::fractional_sumcheck_gkr::verify_gkr))
 //! 3. **GkrLayerSumcheckAir** - Executes sumcheck protocol for each layer (verifies
-//!    [`verify_gkr_sumcheck`](openvm_stark_backend::verifier::fractional_sumcheck_gkr::verify_gkr_sumcheck))
+//!    `verify_gkr_sumcheck`)
 //! 4. **GkrXiSamplerAir** - Samples additional xi randomness challenges if required
 //!
 //! ## Architecture

@@ -400,7 +400,7 @@ where
     /// commitment to the App [VmExe] and aggregation verifiers. It does **not** depend on the
     /// `inputs`. It can be generated separately from the proof by creating a
     /// [`prover`](Self::prover) and calling
-    /// [`app_commit`](StarkProver::app_commit).
+    /// [`app_vm_commit`](StarkProver::app_vm_commit).
     ///
     /// If STARK aggregation is not needed and a proof whose size may grow linearly with the length
     /// of the program runtime is desired, create an [`app_prover`](Self::app_prover) and call

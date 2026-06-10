@@ -271,7 +271,7 @@ pub fn get_flag_pt_array(encoder: &Encoder, flag_idx: usize) -> Vec<u32> {
     encoder.get_flag_pt(flag_idx)
 }
 
-/// Constrain the addition of [C::WORD_BITS] bit words in 16-bit limbs
+/// Constrain the addition of `C::WORD_BITS` bit words in 16-bit limbs
 /// It takes in the terms some in bits some in 16-bit limbs,
 /// the expected sum in bits and the carries
 pub fn constraint_word_addition<AB: AirBuilder, C: Sha2BlockHasherSubairConfig>(

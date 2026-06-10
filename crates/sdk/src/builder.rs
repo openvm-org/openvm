@@ -283,8 +283,9 @@ where
 
     /// Builds the SDK without inferring a transpiler from the app source.
     ///
-    /// This is useful when callers only operate on pre-transpiled [`VmExe`] values and want ELF
-    /// conversion to remain unavailable unless a transpiler was explicitly supplied via
+    /// This is useful when callers only operate on pre-transpiled
+    /// [`VmExe`](openvm_circuit::arch::instructions::exe::VmExe) values and want ELF conversion
+    /// to remain unavailable unless a transpiler was explicitly supplied via
     /// [`Self::transpiler`].
     pub fn build_without_transpiler(self) -> Result<GenericSdk<E, VB>, SdkError>
     where

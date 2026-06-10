@@ -95,8 +95,8 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 /// Helper trait for CPU tracegen.
 pub trait TraceFiller<F>: Send + Sync {
     /// Populates `trace`. This function will always be called after
-    /// [`TraceExecutor::execute`], so the `trace` should already contain the records necessary to
-    /// fill in the rest of it.
+    /// [`PreflightExecutor::execute`](crate::arch::execution::PreflightExecutor::execute), so the
+    /// `trace` should already contain the records necessary to fill in the rest of it.
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -119,9 +119,10 @@ pub trait TraceFiller<F>: Send + Sync {
     }
 
     /// Populates `row_slice`. This function will always be called after
-    /// [`TraceExecutor::execute`], so the `row_slice` should already contain context necessary to
-    /// fill in the rest of the row. This function will be called for each row in the trace which
-    /// is being used, and for all other rows in the trace see `fill_dummy_trace_row`.
+    /// [`PreflightExecutor::execute`](crate::arch::execution::PreflightExecutor::execute), so the
+    /// `row_slice` should already contain context necessary to fill in the rest of the row.
+    /// This function will be called for each row in the trace which is being used, and for all
+    /// other rows in the trace see `fill_dummy_trace_row`.
     ///
     /// The provided `row_slice` will have length equal to the width of the AIR.
     fn fill_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, _row_slice: &mut [F]) {
@@ -168,9 +169,11 @@ where
 }
 
 /// A helper trait for expressing generic state accesses within the implementation of
-/// [TraceExecutor]. Note that this is only a helper trait when the same interface of state access
-/// is reused or shared by multiple implementations. It is not required to implement this trait if
-/// it is easier to implement the [TraceExecutor] trait directly without this trait.
+/// [PreflightExecutor](crate::arch::execution::PreflightExecutor). Note that this is only a helper
+/// trait when the same interface of state access is reused or shared by multiple implementations.
+/// It is not required to implement this trait if it is easier to implement the
+/// [PreflightExecutor](crate::arch::execution::PreflightExecutor) trait directly without this
+/// trait.
 pub trait AdapterTraceExecutor<F>: Clone {
     const WIDTH: usize;
     type ReadData;

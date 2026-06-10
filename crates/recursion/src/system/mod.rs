@@ -298,7 +298,7 @@ pub struct Preflight {
     pub poseidon2_perm_inputs: Vec<[F; POSEIDON2_WIDTH]>,
     pub poseidon2_compress_inputs: Vec<[F; POSEIDON2_WIDTH]>,
     pub initial_row_states: Vec<Vec<Vec<Vec<[F; POSEIDON2_WIDTH]>>>>,
-    /// Indexed by [round][query][coset]. Stores post-permutation state.
+    /// Indexed by `[round][query][coset]`. Stores post-permutation state.
     pub codeword_states: Vec<Vec<Vec<[F; POSEIDON2_WIDTH]>>>,
 }
 
