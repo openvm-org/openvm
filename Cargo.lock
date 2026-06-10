@@ -4984,7 +4984,6 @@ dependencies = [
  "openvm-instructions",
  "openvm-poseidon2-air",
  "openvm-riscv-circuit",
- "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "p3-field",
@@ -5521,7 +5520,6 @@ name = "openvm-riscv-guest"
 version = "2.1.0"
 dependencies = [
  "openvm-custom-insn",
- "p3-field",
  "strum_macros",
 ]
 
