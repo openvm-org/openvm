@@ -47,7 +47,7 @@ Retrieves the raw output bytes for a previous deferred call and authenticates th
 - `Commit = [u8; 32]` — a 32-byte commitment used as input/output identifier
 - `OutputKey { output_commit: Commit, output_len: u64 }` — returned by `deferred_compute`, passed to `get_deferred_output`
 
-`DEFERRAL_IDX` is a compile-time constant that identifies which deferral circuit to invoke. A VM configuration can support up to 512 deferral circuits. Each index corresponds to a specific `DeferralFn` registered in the `DeferralExtension`.
+`DEFERRAL_IDX` is a compile-time constant that identifies which deferral circuit to invoke. A VM configuration can support up to `MAX_DEF_CIRCUITS = 512` deferral circuits. Each index corresponds to a specific `DeferralFn` registered in the `DeferralExtension`.
 
 ## Configuration
 
