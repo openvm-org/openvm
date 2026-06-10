@@ -80,4 +80,4 @@ rvr = ["openvm-ecc-circuit/rvr", "openvm-sha2-circuit/rvr"]
 num-bigint = { workspace = true }
 
 [package.metadata.cargo-shear]
-ignored = ["openvm", "serde", "num-bigint", "derive_more", "rand"]
+ignored = ["openvm", "serde", "num-bigint", "derive_more", "rand", "rvr-openvm-lift"]

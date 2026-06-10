@@ -60,4 +60,4 @@ touchemall = [
 ]
 
 [package.metadata.cargo-shear]
-ignored = ["derive_more", "openvm-stark-backend", "rand"]
+ignored = ["derive_more", "openvm-stark-backend", "rand", "rvr-openvm-lift"]
