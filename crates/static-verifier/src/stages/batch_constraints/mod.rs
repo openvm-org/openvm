@@ -35,7 +35,7 @@ pub struct BatchConstraintIntermediatesWire {
 pub struct GkrProofWire {
     pub logup_pow_witness: ReducedBabyBearWire,
     pub q0_claim: ReducedBabyBearExtWire,
-    pub claims_per_layer: Vec<Vec<ReducedBabyBearExtWire>>,
+    pub claims_per_layer: Vec<[ReducedBabyBearExtWire; 4]>,
     pub sumcheck_polys: Vec<Vec<[ReducedBabyBearExtWire; 3]>>,
 }
 
@@ -60,7 +60,7 @@ pub(crate) fn load_gkr_proof_wire(
         .claims_per_layer
         .iter()
         .map(|claims| {
-            vec![
+            [
                 ext_chip.load_reduced_witness(ctx, claims.p_xi_0),
                 ext_chip.load_reduced_witness(ctx, claims.q_xi_0),
                 ext_chip.load_reduced_witness(ctx, claims.p_xi_1),
@@ -495,18 +495,18 @@ impl ConstraintEvaluatorWire<'_> {
         match symbolic_var.entry {
             Entry::Preprocessed { offset } => {
                 let value = &self.preprocessed.unwrap()[index];
-                if offset == 0 {
-                    value.local
-                } else {
-                    value.next
+                match offset {
+                    0 => value.local,
+                    1 => value.next,
+                    _ => panic!("unsupported preprocessed rotation offset {offset}"),
                 }
             }
             Entry::Main { part_index, offset } => {
                 let value = &self.partitioned_main[part_index][index];
-                if offset == 0 {
-                    value.local
-                } else {
-                    value.next
+                match offset {
+                    0 => value.local,
+                    1 => value.next,
+                    _ => panic!("unsupported main rotation offset {offset}"),
                 }
             }
             Entry::Public => {

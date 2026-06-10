@@ -2,8 +2,10 @@ use core::array;
 #[cfg(test)]
 use std::{cell::RefCell, vec::Vec};
 
+#[cfg(test)]
+use halo2_base::AssignedValue;
 use halo2_base::{
-    gates::range::RangeChip, halo2_proofs::halo2curves::bn256::Fr, AssignedValue, Context,
+    gates::range::RangeChip, halo2_proofs::halo2curves::bn256::Fr, safe_types::SafeBool, Context,
 };
 use itertools::Itertools;
 #[cfg(test)]
@@ -210,7 +212,7 @@ impl BabyBearExt4Chip {
     pub fn select(
         &self,
         ctx: &mut Context<Fr>,
-        cond: AssignedValue<Fr>,
+        cond: SafeBool<Fr>,
         a: BabyBearExt4Wire,
         b: BabyBearExt4Wire,
     ) -> BabyBearExt4Wire {

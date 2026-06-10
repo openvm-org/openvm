@@ -6,6 +6,7 @@ use halo2_base::{
         arithmetic::Field as _,
         halo2curves::{bn256::Fr, ff::PrimeField as _},
     },
+    safe_types::SafeBool,
     utils::{bigint_to_fe, biguint_to_fe, bit_length, fe_to_bigint, modulus, BigPrimeField},
     AssignedValue, Context, QuantumCell,
 };
@@ -165,6 +166,7 @@ impl BabyBearChip {
     }
 
     pub fn reduce(&self, ctx: &mut Context<Fr>, a: BabyBearWire) -> BabyBearWire {
+        assert!(a.max_bits <= Fr::CAPACITY as usize - RESERVED_HIGH_BITS);
         guarded_debug_assert!(fe_to_bigint(a.value.value()).bits() as usize <= a.max_bits);
         let (_, r) = signed_div_mod(&self.range, ctx, a.value, a.max_bits);
         let r = BabyBearWire {
@@ -400,11 +402,11 @@ impl BabyBearChip {
     pub fn select(
         &self,
         ctx: &mut Context<Fr>,
-        cond: AssignedValue<Fr>,
+        cond: SafeBool<Fr>,
         a: BabyBearWire,
         b: BabyBearWire,
     ) -> BabyBearWire {
-        let value = self.gate().select(ctx, a.value, b.value, cond);
+        let value = self.gate().select(ctx, a.value, b.value, *cond.as_ref());
         let max_bits = a.max_bits.max(b.max_bits);
         BabyBearWire { value, max_bits }
     }
@@ -504,6 +506,7 @@ fn signed_div_mod<F>(
 where
     F: BigPrimeField,
 {
+    assert!(a_num_bits <= F::CAPACITY as usize - RESERVED_HIGH_BITS);
     // Proof sketch:
     //
     // Let `b = BabyBear::ORDER_U32`, `p = F::MODULUS`, and let

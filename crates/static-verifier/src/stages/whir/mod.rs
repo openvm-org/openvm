@@ -46,7 +46,7 @@ pub struct WhirProofWire {
     pub mu_pow_witness: ReducedBabyBearWire,
     pub folding_pow_witnesses: Vec<ReducedBabyBearWire>,
     pub query_phase_pow_witnesses: Vec<ReducedBabyBearWire>,
-    pub whir_sumcheck_polys: Vec<Vec<ReducedBabyBearExtWire>>,
+    pub whir_sumcheck_polys: Vec<[ReducedBabyBearExtWire; 2]>,
     pub ood_values: Vec<ReducedBabyBearExtWire>,
     pub final_poly: Vec<ReducedBabyBearExtWire>,
     pub codeword_commitment_roots: Vec<AssignedValue<Fr>>,
@@ -82,6 +82,8 @@ pub(crate) fn load_whir_proof_wire(
             poly.iter()
                 .map(|&value| ext_chip.load_reduced_witness(ctx, value))
                 .collect::<Vec<_>>()
+                .try_into()
+                .expect("WHIR sumcheck polynomial must have two evaluations")
         })
         .collect::<Vec<_>>();
     let ood_values = whir_proof

@@ -206,6 +206,10 @@ pub(crate) fn pack_base_2_31_cells(
     gate: &impl GateInstructions<Fr>,
     values: &[ReducedBabyBearWire],
 ) -> AssignedValue<Fr> {
+    assert!(
+        values.len() <= MULTI_FIELD32_NUM_F_ELMS,
+        "base-2^31 packing supports at most {MULTI_FIELD32_NUM_F_ELMS} limbs"
+    );
     let base = Fr::from(1u64 << 31);
     gate.inner_product(
         ctx,
