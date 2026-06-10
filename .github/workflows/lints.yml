@@ -119,6 +119,10 @@ jobs:
         with:
           sccache: s3
       - uses: actions/checkout@v5
+      - name: Init rvr FFI submodules
+        run: |
+          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: dtolnay/rust-toolchain@stable
       - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
