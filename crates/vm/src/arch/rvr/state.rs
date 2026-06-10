@@ -8,7 +8,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_state::{InstretSuspender, Rv32, RvState, TracerState};
 
 use super::{
-    bridge::rv32_memory_ptr,
+    bridge::riscv_memory_ptr,
     metered::MeteredTracer,
     metered_cost::{MeteredCostMeter, PureTracer},
 };
@@ -70,7 +70,7 @@ impl<T> std::ops::DerefMut for TracerPtr<T> {
 }
 
 /// Build a `PureState` whose memory pointer aliases `vm_state`'s
-/// `RV32_MEMORY_AS` segment, with pc set to `pc`. Suspender is disabled by
+/// `RV64_MEMORY_AS` segment, with pc set to `pc`. Suspender is disabled by
 /// default; the caller may re-arm it via `state.suspender.set_target(_)`.
 ///
 /// The stored pointer is dereferenced later by the rvr C engine; the segment
@@ -79,7 +79,7 @@ pub fn init_rvr_state<F: PrimeField32>(
     vm_state: &mut VmState<F, GuestMemory>,
     pc: u32,
 ) -> PureState {
-    let memory_ptr = rv32_memory_ptr(vm_state);
+    let memory_ptr = riscv_memory_ptr(vm_state);
     let mut state = PureState::new();
     state.set_memory(memory_ptr);
     state.pc = pc;
@@ -91,7 +91,7 @@ pub fn init_rvr_state_with_metered_cost<F: PrimeField32>(
     vm_state: &mut VmState<F, GuestMemory>,
     pc: u32,
 ) -> MeteredCostState {
-    let memory_ptr = rv32_memory_ptr(vm_state);
+    let memory_ptr = riscv_memory_ptr(vm_state);
     let mut state = MeteredCostState::new();
     state.set_memory(memory_ptr);
     state.pc = pc;
@@ -103,7 +103,7 @@ pub fn init_rvr_state_with_metered<F: PrimeField32>(
     vm_state: &mut VmState<F, GuestMemory>,
     pc: u32,
 ) -> MeteredState {
-    let memory_ptr = rv32_memory_ptr(vm_state);
+    let memory_ptr = riscv_memory_ptr(vm_state);
     let mut state = MeteredState::new();
     state.set_memory(memory_ptr);
     state.pc = pc;
