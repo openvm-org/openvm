@@ -2,7 +2,10 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        testing::{
+            memory::gen_distinct_register_pointers, TestBuilder, TestChipHarness,
+            VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+        },
         Arena, ExecutionBridge, MemoryConfig, PreflightExecutor,
     },
     system::memory::{
@@ -18,9 +21,7 @@ use openvm_circuit_primitives::{
 };
 #[cfg(feature = "cuda")]
 use openvm_instructions::riscv::RV64_MEMORY_AS;
-use openvm_instructions::{
-    instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, DEFERRAL_AS,
-};
+use openvm_instructions::{instruction::Instruction, LocalOpcode, DEFERRAL_AS};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -160,15 +161,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let ptr_val = imm_ext.wrapping_add(rs1_low);
     let shift_amount = (ptr_val as usize) & (RV64_REGISTER_NUM_LIMBS - 1);
 
-    let max_addr = 1usize << tester.address_bits();
-    // `a`/`b` are register *locations* (instruction operands). They must be small: their AS-native
-    // cell pointer `loc/2` is sent on the memory bus as `[loc/2, 0]`, which is only canonical when
-    // `loc/2 < 2^16`.
-    let reg_loc_max = max_addr.min(1usize << 16);
-    let a = rng.random_range(0..(reg_loc_max - RV64_REGISTER_NUM_LIMBS)) / RV64_REGISTER_NUM_LIMBS
-        * RV64_REGISTER_NUM_LIMBS;
-    let b = rng.random_range(0..(reg_loc_max - RV64_REGISTER_NUM_LIMBS)) / RV64_REGISTER_NUM_LIMBS
-        * RV64_REGISTER_NUM_LIMBS;
+    // `a`/`b` are register *locations* (instruction operands).
+    let [a, b] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
     let is_load = [LOADD, LOADWU, LOADHU, LOADBU].contains(&opcode);
     // Store tests choose writable u16-celled address spaces.
@@ -265,7 +259,6 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 fn rand_loadstore_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 31;
     if [STORED, STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 31;
     }
@@ -297,9 +290,7 @@ fn rand_loadstore_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
 #[test]
 fn positive_loadwu_shift4_test() {
     let mut rng = create_seeded_rng();
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 31;
-    let mut tester = VmChipTestBuilder::from_config(mem_config);
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, bitwise) = create_harness(&mut tester);
 
     set_and_execute(
@@ -325,9 +316,7 @@ fn positive_loadwu_shift4_test() {
 #[test]
 fn positive_loadhu_shift6_test() {
     let mut rng = create_seeded_rng();
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 31;
-    let mut tester = VmChipTestBuilder::from_config(mem_config);
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, bitwise) = create_harness(&mut tester);
 
     set_and_execute(
@@ -354,7 +343,6 @@ fn positive_loadhu_shift6_test() {
 fn positive_storew_public_values_test() {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 31;
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 31;
     let mut tester = VmChipTestBuilder::from_config(mem_config);
     let (mut harness, bitwise) = create_harness(&mut tester);
@@ -385,7 +373,6 @@ fn positive_storew_public_values_test() {
 fn positive_stored_native_test() {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 31;
     mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 31;
     let mut tester = VmChipTestBuilder::from_config(mem_config);
     let (mut harness, bitwise) = create_harness(&mut tester);
@@ -439,7 +426,6 @@ fn run_negative_loadstore_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 31;
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 31;
     let mut tester = VmChipTestBuilder::from_config(mem_config);
     let (mut harness, bitwise) = create_harness(&mut tester);
@@ -881,7 +867,6 @@ fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usiz
         pointer_max_bits: 20,
         ..Default::default()
     };
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 20;
     mem_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = 1 << 20;
     if [STORED, STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 20;

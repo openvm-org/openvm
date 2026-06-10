@@ -1,5 +1,5 @@
 use openvm_circuit::arch::{
-    testing::{memory::gen_register_pointer, TestBuilder},
+    testing::{memory::gen_distinct_register_pointers, TestBuilder},
     BLOCK_FE_WIDTH,
 };
 use openvm_instructions::{instruction::Instruction, VmOpcode};
@@ -21,9 +21,8 @@ pub fn rv64_rand_write_register_or_imm(
 ) -> (Instruction<BabyBear>, usize) {
     let rs2_is_imm = imm.is_some();
 
-    let rs1 = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2 = imm.unwrap_or_else(|| gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS));
-    let rd = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let [rs1, rs2_reg, rd] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
+    let rs2 = imm.unwrap_or(rs2_reg);
 
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_u8));
     if !rs2_is_imm {

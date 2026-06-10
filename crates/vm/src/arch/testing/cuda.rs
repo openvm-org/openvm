@@ -25,7 +25,7 @@ use openvm_cuda_common::{
     common::get_device,
     stream::{device_synchronize, CudaStream, GpuDeviceCtx, StreamGuard},
 };
-use openvm_instructions::{program::PC_BITS, riscv::RV64_REGISTER_AS};
+use openvm_instructions::program::PC_BITS;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
@@ -55,7 +55,7 @@ use crate::{
         },
         to_byte_ptr_bits, Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
         MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmStateMut, BLOCK_FE_WIDTH,
-        MEMORY_BLOCK_BYTES, U16_CELL_SIZE,
+        MEMORY_BLOCK_BYTES,
     },
     system::{
         cuda::poseidon2::Poseidon2PeripheryChipGPU,
@@ -269,11 +269,7 @@ pub struct GpuChipTestBuilder {
 
 impl Default for GpuChipTestBuilder {
     fn default() -> Self {
-        let mut mem_config = MemoryConfig::default();
-        // Increasing the size of the register AS for testing since the `gen_register_pointer`
-        // function creates wider registers.
-        mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = (1 << 16) / U16_CELL_SIZE;
-        Self::new(mem_config, default_var_range_checker_bus())
+        Self::new(MemoryConfig::default(), default_var_range_checker_bus())
     }
 }
 
