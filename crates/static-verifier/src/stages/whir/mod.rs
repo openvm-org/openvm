@@ -730,8 +730,6 @@ pub(crate) fn constrain_whir_verification(
         alpha_offset += k_whir;
     }
 
-    let final_residual = ext_chip.sub(ctx, final_acc, final_claim);
-    let zero = ext_chip.zero(ctx);
-    ext_chip.assert_equal(ctx, final_residual, zero);
+    ext_chip.assert_equal(ctx, final_acc, final_claim);
     profiler.pop(ctx.advice.len());
 }

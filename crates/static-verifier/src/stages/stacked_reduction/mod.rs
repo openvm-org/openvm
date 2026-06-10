@@ -187,9 +187,7 @@ pub(crate) fn constrain_stacked_reduction(
     }
     let s_0_sum_eval =
         ext_chip.mul_base_const(ctx, s_0_sum_eval, RootF::from_u64(omega_order as u64));
-    let s_0_residual = ext_chip.sub(ctx, s_0, s_0_sum_eval);
-    let zero = ext_chip.zero(ctx);
-    ext_chip.assert_equal(ctx, s_0_residual, zero);
+    ext_chip.assert_equal(ctx, s_0, s_0_sum_eval);
 
     for coeff in univariate_round_coeffs {
         transcript.observe_ext(ctx, coeff);
@@ -309,8 +307,7 @@ pub(crate) fn constrain_stacked_reduction(
         }
     }
 
-    let final_residual = ext_chip.sub(ctx, final_claim, final_sum);
-    ext_chip.assert_equal(ctx, final_residual, zero);
+    ext_chip.assert_equal(ctx, final_claim, final_sum);
 
     profiler.pop(ctx.advice.len());
 

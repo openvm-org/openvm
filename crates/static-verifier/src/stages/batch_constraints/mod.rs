@@ -684,7 +684,6 @@ pub(crate) fn constrain_batch_constraints_verification(
     let gkr_claims_per_layer = &gkr_wire.claims_per_layer;
     let gkr_sumcheck_polys = &gkr_wire.sumcheck_polys;
 
-    let zero = ext_chip.zero(ctx);
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
     let total_gkr_rounds = l_skip + n_logup_host;
     let (mut gkr_p_xi_claim, mut gkr_q_xi_claim, mut xi) = {
@@ -799,9 +798,8 @@ pub(crate) fn constrain_batch_constraints_verification(
     }
     let gkr_numerator_residual = gkr_p_xi_claim;
     let gkr_denominator_claim = gkr_q_xi_claim;
-    let gkr_denominator_residual = ext_chip.sub(ctx, gkr_denominator_claim, alpha_logup);
-    ext_chip.assert_equal(ctx, gkr_numerator_residual, zero);
-    ext_chip.assert_equal(ctx, gkr_denominator_residual, zero);
+    ext_chip.assert_zero(ctx, gkr_numerator_residual);
+    ext_chip.assert_equal(ctx, gkr_denominator_claim, alpha_logup);
 
     let mu = transcript.sample_ext(ctx);
 
@@ -1180,8 +1178,7 @@ pub(crate) fn constrain_batch_constraints_verification(
         consistency_rhs = ext_chip.add(ctx, consistency_rhs, weighted_term);
         cur_mu_pow = ext_chip.mul(ctx, cur_mu_pow, mu);
     }
-    let consistency_residual = ext_chip.sub(ctx, consistency_lhs, consistency_rhs);
-    ext_chip.assert_equal(ctx, consistency_residual, zero);
+    ext_chip.assert_equal(ctx, consistency_lhs, consistency_rhs);
 
     profiler.pop(ctx.advice.len());
 
