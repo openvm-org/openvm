@@ -420,7 +420,8 @@ where
     }
 
     /// Compile `app_exe` for metered execution. The returned [`CompiledExeMetered`] bundles
-    /// a precomputed [`MeteredCtx`] so subsequent runs just clone it.
+    /// a precomputed [`MeteredCtx`](openvm_circuit::arch::execution_mode::MeteredCtx) so
+    /// subsequent runs just clone it.
     pub fn compile_metered(
         &self,
         app_exe: impl Into<ExecutableFormat>,

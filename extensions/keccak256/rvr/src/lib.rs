@@ -14,7 +14,7 @@ use rvr_openvm_lift::{
     RvrExtensionCtx,
 };
 
-/// keccak-f[1600]: read 200 bytes via `buffer_ptr_reg`, permute in place.
+/// keccak-f\[1600\]: read 200 bytes via `buffer_ptr_reg`, permute in place.
 #[derive(Debug, Clone)]
 pub struct KeccakfInstr {
     pub buffer_ptr_reg: Reg,
