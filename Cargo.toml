@@ -320,4 +320,13 @@ sha2 = { version = "0.10", default-features = false }
 blstrs = { version = "0.7.1", default-features = true }
 
 [workspace.metadata.cargo-shear]
-ignored = ["cargo-openvm"]
+ignored = [
+    "cargo-openvm",
+    "rvr-openvm-ext-sha2-ffi",
+    "rvr-openvm-ext-ecc-ffi",
+    "rvr-openvm-ext-bigint-ffi",
+    "rvr-openvm-ext-algebra-modular-ffi",
+    "rvr-openvm-ext-algebra-fp2-ffi",
+    "rvr-openvm-ext-pairing-ffi",
+    "rvr-openvm-ext-keccak-ffi",
+]
