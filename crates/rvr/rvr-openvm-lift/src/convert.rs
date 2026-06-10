@@ -1,4 +1,4 @@
-//! VmExe<F> -> Vec<LiftedInstr> conversion.
+//! `VmExe<F>` -> `Vec<LiftedInstr>` conversion.
 
 use std::collections::HashSet;
 
