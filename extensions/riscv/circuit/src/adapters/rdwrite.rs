@@ -45,7 +45,7 @@ pub struct Rv64CondRdWriteAdapterCols<T> {
     pub needs_write: T,
 }
 
-/// This adapter doesn't read anything, and writes to [a:8]_d, where d == 1
+/// This adapter doesn't read anything, and writes to \[a:8\]_d, where d == 1
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(Rv64RdWriteAdapterCols<u8>)]
 pub struct Rv64RdWriteAdapterAir {
@@ -53,7 +53,7 @@ pub struct Rv64RdWriteAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
 }
 
-/// This adapter doesn't read anything, and **maybe** writes to [a:8]_d, where d == 1
+/// This adapter doesn't read anything, and **maybe** writes to \[a:8\]_d, where d == 1
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(Rv64CondRdWriteAdapterCols<u8>)]
 pub struct Rv64CondRdWriteAdapterAir {
@@ -187,7 +187,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64CondRdWriteAdapterAir {
     }
 }
 
-/// This adapter doesn't read anything, and writes to [a:8]_d, where d == 1
+/// This adapter doesn't read anything, and writes to \[a:8\]_d, where d == 1
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug, Clone)]
 pub struct Rv64RdWriteAdapterRecord {
@@ -281,7 +281,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64RdWriteAdapterFiller {
     }
 }
 
-/// This adapter doesn't read anything, and **maybe** writes to [a:8]_d, where d == 1
+/// This adapter doesn't read anything, and **maybe** writes to \[a:8\]_d, where d == 1
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64CondRdWriteAdapterExecutor {
     inner: Rv64RdWriteAdapterExecutor,

@@ -140,7 +140,7 @@ where
 /// `(address, data, timestamp)` to the memory bus.
 /// Includes constraints for `timestamp_prev < timestamp`.
 ///
-/// The generic `T` type is intended to be `AB::Expr` where `AB` is the [AirBuilder].
+/// The generic `T` type is intended to be `AB::Expr` where `AB` is the `AirBuilder`.
 /// The auxiliary columns are not expected to be expressions, so the generic `V` type is intended
 /// to be `AB::Var`.
 pub struct MemoryReadOperation<'a, T, V> {
