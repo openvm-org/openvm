@@ -3,7 +3,7 @@ use std::{array::from_fn, sync::Arc};
 use openvm_circuit::arch::{
     deferral::{DeferralState, InputMapVal},
     testing::{
-        memory::{gen_pointer, gen_register_pointer},
+        memory::{gen_distinct_register_pointers, gen_pointer},
         TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
     Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
@@ -109,7 +109,6 @@ struct CudaHarnessBundle {
 
 fn test_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
-    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << config.pointer_max_bits;
     config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     config
 }
@@ -152,8 +151,7 @@ fn set_and_execute_call<RA, E>(
     RA: Arena,
     E: PreflightExecutor<F, RA>,
 {
-    let rd = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
-    let rs = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
+    let [rd, rs] = gen_distinct_register_pointers(rng, MEMORY_BLOCK_BYTES);
     let output_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let input_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = rng.random_range(0..num_deferrals);

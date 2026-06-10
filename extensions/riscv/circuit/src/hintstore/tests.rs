@@ -5,7 +5,7 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::{gen_pointer, gen_register_pointer},
+            memory::{gen_distinct_register_pointers, gen_pointer, gen_register_pointer},
             TestBuilder, TestChipHarness, VmChipTestBuilder,
         },
         Arena, ExecutionBridge, MatrixRecordArena, PreflightExecutor, BLOCK_FE_WIDTH,
@@ -102,20 +102,19 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         HINT_BUFFER => rng.random_range(1..28),
     } as u32;
 
+    let [a_reg, b] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
     let a = if opcode == HINT_BUFFER {
-        let a = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
         tester.write_bytes(
             RV64_REGISTER_AS as usize,
-            a,
+            a_reg,
             u64_to_rv64_limbs(num_words.into()),
         );
-        a
+        a_reg
     } else {
         0
     };
 
     let mem_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
-    let b = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
         b,
@@ -202,7 +201,7 @@ fn test_hint_buffer_exceeds_max_words() {
 
     let num_words = (MAX_HINT_BUFFER_DWORDS + 1) as u32;
 
-    let a = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    let [a, b] = gen_distinct_register_pointers(&mut rng, RV64_REGISTER_NUM_LIMBS);
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
         a,
@@ -210,7 +209,6 @@ fn test_hint_buffer_exceeds_max_words() {
     );
 
     let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
-    let b = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
         b,
@@ -240,7 +238,7 @@ fn test_hint_buffer_rem_words_range_check() {
     let mut harness = create_harness(&mut tester);
 
     let num_words: u32 = 1;
-    let a = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    let [a, b] = gen_distinct_register_pointers(&mut rng, RV64_REGISTER_NUM_LIMBS);
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
         a,
@@ -248,7 +246,6 @@ fn test_hint_buffer_rem_words_range_check() {
     );
 
     let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
-    let b = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
         b,
@@ -297,7 +294,7 @@ fn test_hint_buffer_mem_ptr_range_check() {
     let mut harness = create_harness(&mut tester);
 
     let num_words: u32 = 1;
-    let a = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    let [a, b] = gen_distinct_register_pointers(&mut rng, RV64_REGISTER_NUM_LIMBS);
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
         a,
@@ -305,7 +302,6 @@ fn test_hint_buffer_mem_ptr_range_check() {
     );
 
     let mem_ptr = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u32;
-    let b = gen_register_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
         b,

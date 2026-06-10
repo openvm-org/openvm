@@ -7,7 +7,7 @@ use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};
 use openvm_circuit::arch::{
     testing::{
-        memory::{gen_pointer, gen_register_pointer},
+        memory::{gen_distinct_register_pointers, gen_pointer},
         TestBuilder, TestChipHarness, VmChipTestBuilder,
     },
     Arena, MatrixRecordArena, PreflightExecutor, MEMORY_BLOCK_BYTES,
@@ -227,9 +227,8 @@ mod ec_addne_tests {
         let ptr_as = RV64_REGISTER_AS as usize;
         let data_as = RV64_MEMORY_AS as usize;
 
-        let rs1_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-        let rs2_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-        let rd_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+        let [rs1_ptr, rs2_ptr, rd_ptr] =
+            gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
         let p1_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
         let p2_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
@@ -645,8 +644,7 @@ mod ec_double_tests {
         let ptr_as = RV64_REGISTER_AS as usize;
         let data_as = RV64_MEMORY_AS as usize;
 
-        let rs1_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-        let rd_ptr = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+        let [rs1_ptr, rd_ptr] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
         let p1_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
         let result_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
