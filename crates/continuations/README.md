@@ -63,7 +63,7 @@ pub fn agg_prove(
 - `proofs` — child `Proof`s to aggregate
 - `child_vk_kind` — enum that indicates whether the child proofs are from the app layer (`App`), the same layer recursively (`RecursiveSelf`), or a different layer (`Standard`)
 - `proofs_type` — distinguishes VM-only, deferral-only, and mixed aggregation in the combined tree
-- `absent_trace_pvs` — optional absent-proof public values used when padding deferral proofs in the mixed tree
+- `absent_trace_pvs` — optional absent-proof public values used when padding deferral proofs in the mixed tree; absent deferral public values carry `initial_acc_hash == final_acc_hash`, `depth = 1`, and the canonical `node_idx` for the unused deferral circuit
 
 Each layer uses the following inputs:
 
@@ -97,7 +97,7 @@ pub fn new(
 - `system_params` — parent system parameters
 - `memory_dimensions` — the memory dimensions used for app execution, used to compute whether each sibling hash in the Merkle proof should be the left or right sibling
 - `num_user_pvs` — number of user public values
-- `def_hook_commit` — commitment hash of the deferral hook aggregation tree
+- `def_hook_commit` — expected commitment hash of the deferral hook aggregation tree; when present, the root circuit accepts either a combined VM/deferral child proof or a no-deferrals-used child proof with unset deferral public values
 - `trace_heights` - constant heights that the traces of the root proof must be
 
 The constructor pre-generates the parent proving and verifying keys, which can be saved.
@@ -116,7 +116,7 @@ pub fn generate_proving_ctx_no_def<PB>(
 pub fn root_prove_from_ctx<E>(&self, ctx: ProvingContext<E::PB>) -> Result<Proof<RootSC>>
 ```
 
-If deferrals are enabled, use `generate_proving_ctx(...)` instead and pass the deferral Merkle proofs.
+If deferrals are enabled, use `generate_proving_ctx(...)` instead and pass the deferral Merkle proofs. Deferral-aware root proofs also constrain the final deferral `node_idx` to be `0`, and they verify unchanged deferral memory when no deferral calls were used.
 
 - `proof` — the child internal-recursive `Proof`
 - `user_pvs_proof` — the user public values Merkle proof (proving presence in memory); generated at the app layer

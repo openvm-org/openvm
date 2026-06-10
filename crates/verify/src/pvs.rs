@@ -63,8 +63,8 @@ pub struct VerifierDefPvs<F> {
     /// has only VM public values defined, 1 if only deferral public values, and 2 if both.
     pub deferral_flag: F,
     /// Commit to the deferral hook verifying key, computed by hashing the cached_commit and
-    /// vk_pre_hash components of the app, leaf, and internal-for-leaf vk commits when
-    /// deferral_flag == 1. Is set exactly when internal_for_leaf_vk_commit is set.
+    /// vk_pre_hash components of the app-or-deferral, leaf, and internal-for-leaf vk commits
+    /// when deferral_flag == 1. It is propagated unchanged once set.
     pub def_hook_commit: [F; DIGEST_SIZE],
 }
 
@@ -109,6 +109,7 @@ pub struct DeferralPvs<F> {
     pub final_acc_hash: [F; DIGEST_SIZE],
     /// Depth of the Merkle subtrees above.
     pub depth: F,
-    /// Node index at the current depth of the Merkle memory tree.
+    /// Node index at the current depth of the deferral accumulator Merkle tree. Hook
+    /// proofs start at their def_idx; combined proofs end at node_idx 0.
     pub node_idx: F,
 }

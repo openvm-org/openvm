@@ -22,7 +22,12 @@ pub const COMMIT_NUM_BYTES: usize = 32;
 /// Commit type use as a raw deferral input/output identifier
 pub type Commit = [u8; COMMIT_NUM_BYTES];
 
-/// Key for looking up raw output
+/// Key for looking up raw output.
+///
+/// Trusted only when returned by `deferred_compute`. Manually constructed keys are
+/// not trusted deferral results: `get_deferred_output` authenticates output bytes
+/// against the key, but only `CALL` (via `deferred_compute`) establishes that the
+/// key came from a deferred computation.
 #[repr(C, align(4))]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct OutputKey {
@@ -31,6 +36,9 @@ pub struct OutputKey {
 }
 
 impl OutputKey {
+    /// Constructs an `OutputKey` value.
+    ///
+    /// This does not make the key a trusted deferral result.
     #[inline(always)]
     pub const fn new(output_commit: Commit, output_len: u64) -> Self {
         Self {

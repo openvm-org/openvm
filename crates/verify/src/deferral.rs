@@ -12,7 +12,8 @@ use crate::error::VerifyStarkError;
 /// Deferral Merkle proofs connecting `initial_acc_hash` and `final_acc_hash` to the
 /// initial and final memory roots. Both proofs have length `overall_height()`.
 /// When `depth > 0`, the first `depth` entries are zeros (skipped levels covered by
-/// the deferral subtree).
+/// the deferral subtree). The final aggregated deferral public values must have
+/// `node_idx == 0`; this proof starts from that canonical subtree location.
 #[derive(Clone, Debug)]
 pub struct DeferralMerkleProofs<F> {
     pub initial_merkle_proof: Vec<[F; DIGEST_SIZE]>,

@@ -130,7 +130,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
          * - has_verifier_pvs == 1 && internal_flag == 1: internal_for_leaf children
          * - has_verifier_pvs == 1 && internal_flag == 2: internal_recursive children
          *   - recursion_flag == 1: 2nd (i.e. index 1) internal_recursive layer
-         *   - recursion_flag == 1: 3rd internal_recursive layer or beyond
+         *   - recursion_flag == 2: 3rd internal_recursive layer or beyond
          */
         // constrain the verifier pvs flags and internal_recursive_vk_commit are the same
         // across all valid rows
