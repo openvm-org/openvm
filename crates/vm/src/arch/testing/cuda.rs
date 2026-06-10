@@ -55,7 +55,7 @@ use crate::{
         },
         to_byte_ptr_bits, Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
         MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmStateMut, BLOCK_FE_WIDTH,
-        MEMORY_BLOCK_BYTES,
+        MEMORY_BLOCK_BYTES, U16_CELL_SIZE,
     },
     system::{
         cuda::poseidon2::Poseidon2PeripheryChipGPU,
@@ -270,6 +270,8 @@ pub struct GpuChipTestBuilder {
 impl Default for GpuChipTestBuilder {
     fn default() -> Self {
         let mut mem_config = MemoryConfig::default();
+        // Increasing the size of the register AS for testing since the `gen_register_pointer` function creates wider registers.
+        mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = (1 << 16) / U16_CELL_SIZE;
         Self::new(mem_config, default_var_range_checker_bus())
     }
 }
