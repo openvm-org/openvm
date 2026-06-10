@@ -221,6 +221,34 @@ fn transcript_check_witness_zero_bits_matches_native() {
 }
 
 #[test]
+fn transcript_sample_bits_zero_matches_native() {
+    let mut native = default_transcript();
+    native.observe(RootF::from_u64(99));
+    let expected_bits = FiatShamirTranscript::<RootConfig>::sample_bits(&mut native, 0);
+    assert_eq!(expected_bits, 0);
+    let expected_followup = native.sample().as_canonical_u64();
+
+    run_mock(true, |builder| {
+        let range = builder.range_chip();
+        let baby_bear = BabyBearChip::new(Arc::new(range.clone()));
+
+        let ctx = builder.main(0);
+        let gate = range.gate();
+
+        let mut transcript = TranscriptChip::new(ctx, baby_bear.clone());
+
+        let obs = baby_bear.load_reduced_witness(ctx, RootF::from_u64(99));
+        transcript.observe(ctx, &obs);
+
+        let sampled_bits = transcript.sample_bits(ctx, 0);
+        gate.assert_is_const(ctx, &sampled_bits, &Fr::ZERO);
+
+        let followup = transcript.sample(ctx);
+        gate.assert_is_const(ctx, &followup.value, &Fr::from(expected_followup));
+    });
+}
+
+#[test]
 fn transcript_sample_bits_rejects_bits_equal_31() {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_mock(true, |builder| {

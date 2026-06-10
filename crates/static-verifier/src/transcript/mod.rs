@@ -343,10 +343,10 @@ impl TranscriptChip {
             "sample_bits requires (1 << bits) < modulus: bits={bits}"
         );
 
+        let sampled = self.sample(ctx);
         if bits == 0 {
             return ctx.load_zero();
         }
-        let sampled = self.sample(ctx);
         // PERF[jpw]: we could optimize this since the divisor is a power of 2
         let range = self.baby_bear.range();
         let divisor = BigUint::from(1u64) << bits;
