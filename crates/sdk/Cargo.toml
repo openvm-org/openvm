@@ -27,14 +27,12 @@ openvm-verify-stark-host = { workspace = true }
 openvm-verify-stark-circuit = { workspace = true }
 openvm-static-verifier = { workspace = true, optional = true }
 halo2-base = { workspace = true, optional = true, features = ["halo2-axiom"] }
-p3-bn254 = { workspace = true, optional = true }
 
 alloy-sol-types = { workspace = true, optional = true }
 forge-fmt = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 
 bitcode = { workspace = true }
-bon = { workspace = true }
 cfg-if = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 derivative = { workspace = true }
@@ -44,18 +42,12 @@ eyre = { workspace = true }
 getset = { workspace = true }
 hex = { workspace = true }
 itertools = { workspace = true }
-num-bigint = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true, features = ["hex"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 metrics = { workspace = true, optional = true }
-tokio = { workspace = true, features = ["rt", "sync"], optional = true }
-toml = { workspace = true }
-
-[dev-dependencies]
-openvm-toolchain-tests = { workspace = true }
 
 [features]
 default = ["parallel", "jemalloc"]
@@ -68,7 +60,6 @@ evm-prove = [
     "root-prover",
     "dep:openvm-static-verifier",
     "dep:halo2-base",
-    "dep:p3-bn254",
     "openvm-static-verifier/evm-prove",
 ]
 evm-verify = [
@@ -104,7 +95,6 @@ perf-metrics = [
 stark-debug = ["openvm-circuit/stark-debug"]
 test-utils = ["openvm-circuit/test-utils"]
 
-async = ["tokio"]
 parallel = ["openvm-continuations/parallel", "openvm-sdk-config/parallel"]
 mimalloc = ["openvm-circuit/mimalloc", "openvm-sdk-config/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc", "openvm-sdk-config/jemalloc"]

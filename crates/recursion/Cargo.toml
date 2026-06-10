@@ -22,7 +22,6 @@ openvm-poseidon2-air = { workspace = true }
 
 itertools.workspace = true
 tracing.workspace = true
-eyre.workspace = true
 derive-new.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
@@ -54,3 +53,7 @@ touchemall = [
     "openvm-cuda-backend/touchemall",
     "openvm-circuit/touchemall",
 ]
+
+# used only for feature forwarding (parallel/cuda/touchemall), which cargo-shear misses
+[package.metadata.cargo-shear]
+ignored = ["openvm-circuit"]

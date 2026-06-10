@@ -20,7 +20,6 @@ openvm-sdk.workspace = true
 openvm-sdk-config.workspace = true
 serde.workspace = true
 serde_with.workspace = true
-toml.workspace = true
 eyre.workspace = true
 hex-literal.workspace = true
 num-bigint.workspace = true
