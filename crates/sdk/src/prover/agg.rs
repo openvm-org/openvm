@@ -374,13 +374,13 @@ impl AggProver {
 }
 
 fn reduce_def_round<const N: usize>(
-    mut proofs: Vec<DeferralProof>,
+    proofs: Vec<DeferralProof>,
     kind: ChildVkKind,
     prover: &InnerAggregationProver<N>,
 ) -> Result<Vec<DeferralProof>> {
     if proofs.len() == 1 {
         // A singleton round can only happen when the entire round has one present input proof.
-        let DeferralProof::Present(p) = proofs.pop().unwrap() else {
+        let DeferralProof::Present(p) = proofs.into_iter().next().unwrap() else {
             panic!("singleton deferral round must contain a present proof");
         };
         return Ok(vec![DeferralProof::Present(prover.agg_prove::<E>(
@@ -422,6 +422,7 @@ fn reduce_def_round<const N: usize>(
             }
             (DeferralProof::Absent(pvs0), DeferralProof::Absent(pvs1)) => {
                 debug_assert_eq!(pvs0.depth, pvs1.depth);
+                debug_assert_eq!(pvs0.node_idx + F::ONE, pvs1.node_idx);
                 DeferralProof::Absent(DeferralPvs {
                     initial_acc_hash: poseidon2_compress_with_capacity(
                         pvs0.initial_acc_hash,
