@@ -236,12 +236,12 @@ static __attribute__((always_inline)) inline void trace_rd_mem_u32(
 
 static __attribute__((always_inline)) inline void trace_rd_mem_i32(
     RvState* restrict state, uint32_t addr, int32_t val) {
-  record_mem_page(state->tracer, addr_to_local_page(addr));
+  record_mem_page(state->tracer, byte_addr_to_local_page(addr));
 }
 
 static __attribute__((always_inline)) inline void trace_rd_mem_u64(
     RvState* restrict state, uint32_t addr, uint64_t val) {
-  record_mem_page(state->tracer, addr_to_local_page(addr));
+  record_mem_page(state->tracer, byte_addr_to_local_page(addr));
 }
 
 /* ── Trace-only memory writes (record page in metered mode) ──────── */
@@ -263,7 +263,7 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u32(
 
 static __attribute__((always_inline)) inline void trace_wr_mem_u64(
     RvState* restrict state, uint32_t addr, uint64_t new_val) {
-  record_mem_page(state->tracer, addr_to_local_page(addr));
+  record_mem_page(state->tracer, byte_addr_to_local_page(addr));
 }
 
 /* ── Trace-only word-range memory access ──────────────────────────── */

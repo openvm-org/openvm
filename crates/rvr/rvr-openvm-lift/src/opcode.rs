@@ -12,7 +12,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
     DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode,
-    Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom, ShiftOpcode, ShiftWOpcode,
+    Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
