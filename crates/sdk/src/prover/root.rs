@@ -119,6 +119,44 @@ impl RootProver {
             .in_scope(|| info_span!("root").in_scope(|| self.0.root_prove_from_ctx::<E>(ctx)))?;
         Ok(proof)
     }
+
+    pub fn prove(
+        &self,
+        mut stark_proof: VmStarkProof,
+        max_retries: usize,
+        mut wrap: impl FnMut(VmStarkProof) -> Result<VmStarkProof>,
+    ) -> Result<Proof<RootSC>> {
+        let mut attempt = 0usize;
+        let ctx = loop {
+            if let Some(ctx) = self.generate_proving_ctx(stark_proof.clone()) {
+                break ctx;
+            }
+            if attempt >= max_retries {
+                return Err(eyre::eyre!(
+                    "root tracegen returned None after {max_retries} retries"
+                ));
+            }
+            stark_proof = wrap(stark_proof)?;
+            attempt += 1;
+        };
+
+        // Internal sanity (SDK tests only): a successful tracegen must land at
+        // exactly the root verifier's fixed, expected trace heights.
+        #[cfg(test)]
+        for ((air_idx, air_ctx), expected_height) in ctx
+            .per_trace
+            .iter()
+            .zip(self.0.get_trace_heights().unwrap())
+        {
+            assert_eq!(
+                air_ctx.height(),
+                expected_height,
+                "height mismatch at {air_idx}"
+            );
+        }
+
+        self.prove_from_ctx(ctx)
+    }
 }
 
 pub fn compute_root_proof_heights(

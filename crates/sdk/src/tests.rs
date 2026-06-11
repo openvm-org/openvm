@@ -272,7 +272,7 @@ fn test_sdk_fibonacci() -> Result<()> {
     #[cfg(not(feature = "evm-verify"))]
     {
         let mut evm_prover = sdk.evm_prover(app_exe)?;
-        let proof = evm_prover.prove_unwrapped(stdin, &[])?;
+        let proof = evm_prover.prove_root(stdin, &[])?;
         let vk = evm_prover.root_prover.0.get_vk();
         let engine = RootE::new(vk.inner.params.clone());
         engine.verify(&vk, &proof)?;
@@ -302,7 +302,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
     let mut evm_prover = vs_sdk.evm_prover(vs_exe)?;
-    let vs_proof = evm_prover.prove_unwrapped(vs_stdin, &[def_input])?;
+    let vs_proof = evm_prover.prove_root(vs_stdin, &[def_input])?;
 
     let vk = evm_prover.root_prover.0.get_vk();
     let engine = RootE::new(vk.inner.params.clone());
@@ -452,7 +452,7 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
     stdin.write(&n);
 
     let mut evm_prover = sdk.evm_prover(app_exe)?;
-    let proof = evm_prover.prove_unwrapped(stdin, &[])?;
+    let proof = evm_prover.prove_root(stdin, &[])?;
 
     // ---- Step 3: Verify the final result ----
     let vk = evm_prover.root_prover.0.get_vk();
@@ -654,7 +654,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
             let mut stdin = StdIn::default();
             stdin.write(&n);
 
-            let root_proof = evm_prover.prove_unwrapped(stdin, &[])?;
+            let root_proof = evm_prover.prove_root(stdin, &[])?;
             let root_vk_arc = root_prover.0.get_vk();
             let root_vk = root_vk_arc.as_ref().clone();
 
