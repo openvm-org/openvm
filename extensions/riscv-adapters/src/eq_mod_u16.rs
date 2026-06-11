@@ -32,8 +32,8 @@ use openvm_instructions::{
 use openvm_riscv_circuit::adapters::{
     byte_ptr_to_u16_ptr_value, compute_pointer_carries, eval_add_const_u16_limbs,
     eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_rv64_block, ptr_to_field_u16_limbs,
-    ptr_to_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs, tracing_read_reg_ptr, tracing_read_u16,
-    tracing_write_u16, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    reg_byte_ptr_to_cell_ptr_limbs, tracing_read_reg_ptr, tracing_read_u16, tracing_write_u16,
+    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,

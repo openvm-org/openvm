@@ -13,8 +13,10 @@ fn main() {
             .include("../../../crates/circuits/primitives/cuda/include")
             .include("../../../crates/circuits/poseidon2-air/cuda/include")
             .include("../../../crates/vm/cuda/include")
+            .include("../../riscv-adapters/cuda/include")
             .include("cuda/include")
             .watch("cuda/src")
+            .watch("../../riscv-adapters/cuda")
             .library_name("tracegen_gpu_deferral")
             .files_from_glob("cuda/src/**/*.cu");
 

@@ -8,9 +8,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::Chip;
 use openvm_cpu_backend::CpuBackend;
-use openvm_riscv_circuit::adapters::{
-    compute_pointer_carries, ptr_to_u16_limbs,
-};
+use openvm_riscv_circuit::adapters::{compute_pointer_carries, ptr_to_u16_limbs};
 use openvm_sha2_air::{set_arrayview_from_u16_le_bytes, set_arrayview_from_u16_slice};
 use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},

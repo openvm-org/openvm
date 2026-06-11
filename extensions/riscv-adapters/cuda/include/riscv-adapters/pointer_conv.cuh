@@ -1,9 +1,8 @@
 #pragma once
 
 #include "primitives/constants.h"
+#include "primitives/histogram.cuh"
 #include "system/memory/params.cuh"
-
-using namespace riscv;
 
 // CUDA mirrors of the host-side pointer-conversion value helpers in
 // `openvm_riscv_circuit::adapters` (see `extensions/riscv/circuit/src/adapters/mod.rs`).
@@ -13,7 +12,7 @@ using namespace riscv;
 
 // Cell high-limb range-check bit width corresponding to a guest `byte_ptr_max_bits`.
 __device__ __forceinline__ uint32_t cell_ptr_hi_bits(size_t byte_ptr_max_bits) {
-    return uint32_t(byte_ptr_max_bits) - U16_CELL_SIZE_BITS - U16_BITS;
+    return uint32_t(byte_ptr_max_bits) - openvm::U16_CELL_SIZE_BITS - openvm::U16_BITS;
 }
 
 struct CellPtr {
@@ -31,7 +30,7 @@ __device__ __forceinline__ CellPtr byte_ptr_limbs_to_cell_ptr_limbs_value(
     uint32_t byte_hi
 ) {
     uint32_t carry = byte_hi & 1u;
-    uint32_t cell_lo = (byte_lo + (carry << U16_BITS)) >> 1;
+    uint32_t cell_lo = (byte_lo + (carry << openvm::U16_BITS)) >> 1;
     uint32_t cell_hi = byte_hi >> 1;
     return CellPtr{carry, {cell_lo, cell_hi}};
 }
@@ -45,6 +44,39 @@ __device__ __forceinline__ CellPtr add_const_u16_limbs_value(
     uint32_t constant
 ) {
     uint32_t sum_lo = lo + constant;
-    uint32_t carry = sum_lo >> U16_BITS;
+    uint32_t carry = sum_lo >> openvm::U16_BITS;
     return CellPtr{carry, {sum_lo & 0xffffu, hi + carry}};
+}
+
+__device__ __forceinline__ void compute_block_add_carries(
+    VariableRangeChecker &range_checker,
+    uint32_t base_cell_lo,
+    uint32_t num_blocks,
+    uint32_t cell_stride,
+    uint32_t *add_carry_out
+) {
+    for (uint32_t i = 0; i < num_blocks; i++) {
+        uint32_t sum_lo = base_cell_lo + i * cell_stride;
+        range_checker.add_count(sum_lo & 0xffffu, openvm::U16_BITS);
+        add_carry_out[i] = sum_lo >> openvm::U16_BITS;
+    }
+}
+
+// Returns the conversion carry; writes one add-carry per block into add_carry_out.
+__device__ __forceinline__ uint32_t compute_pointer_carries(
+    VariableRangeChecker &range_checker,
+    uint32_t byte_ptr,
+    size_t byte_ptr_max_bits,
+    uint32_t num_blocks,
+    uint32_t cell_stride,
+    uint32_t *add_carry_out
+) {
+    CellPtr conv = byte_ptr_limbs_to_cell_ptr_limbs_value(
+        byte_ptr & 0xffffu, byte_ptr >> openvm::U16_BITS
+    );
+    range_checker.add_count(conv.limbs[1], cell_ptr_hi_bits(byte_ptr_max_bits));
+    compute_block_add_carries(
+        range_checker, conv.limbs[0], num_blocks, cell_stride, add_carry_out
+    );
+    return conv.carry;
 }

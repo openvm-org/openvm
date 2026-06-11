@@ -23,8 +23,7 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{
-    compute_pointer_carries, ptr_to_field_u16_limbs, rv64_bytes_to_u32, timed_write,
-    tracing_read,
+    compute_pointer_carries, ptr_to_field_u16_limbs, rv64_bytes_to_u32, timed_write, tracing_read,
 };
 use openvm_stark_backend::{
     p3_field::PrimeField32,
@@ -265,8 +264,10 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                     self.pointer_max_bits,
                 );
                 local.buffer_cell_carry = F::from_u32(conv_carry);
-                for (col, &add_carry) in
-                    local.buffer_word_add_carry.iter_mut().zip(add_carries.iter())
+                for (col, &add_carry) in local
+                    .buffer_word_add_carry
+                    .iter_mut()
+                    .zip(add_carries.iter())
                 {
                     *col = F::from_u32(add_carry);
                 }

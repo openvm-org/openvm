@@ -12,6 +12,7 @@
 #include "primitives/fp_array.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -328,54 +329,43 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
     // Convert the heap `input` (rs_val) and `output` (rd_val) base byte pointers to AS-native u16
     // cell pointer limbs and emit the matching range-check counts. Mirrors the per-block carry
     // computation in the host `DeferralCallAdapterFiller`.
-    const size_t hi_bits = cell_ptr_hi_bits(address_bits);
     const uint32_t heap_cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
 
     {
-        uint32_t base_lo, base_hi;
-        const uint32_t conv_carry = byte_ptr_limbs_to_cell_ptr_limbs(
+        const uint32_t input_ptr =
             static_cast<uint32_t>(record.rs_val[0]) |
-                (static_cast<uint32_t>(record.rs_val[1]) << RV64_BYTE_BITS),
-            static_cast<uint32_t>(record.rs_val[2]) |
-                (static_cast<uint32_t>(record.rs_val[3]) << RV64_BYTE_BITS),
-            base_lo,
-            base_hi
+            (static_cast<uint32_t>(record.rs_val[1]) << RV64_BYTE_BITS) |
+            (static_cast<uint32_t>(record.rs_val[2]) << (2 * RV64_BYTE_BITS)) |
+            (static_cast<uint32_t>(record.rs_val[3]) << (3 * RV64_BYTE_BITS));
+        uint32_t add_carries[COMMIT_MEMORY_OPS];
+        const uint32_t conv_carry = compute_pointer_carries(
+            range_checker,
+            input_ptr,
+            address_bits,
+            COMMIT_MEMORY_OPS,
+            heap_cell_stride,
+            add_carries
         );
-        range_checker.add_count(base_hi, hi_bits);
         COL_WRITE_VALUE(row, DeferralCallAdapterCols, input_cell_carry, Fp(conv_carry));
-        Fp add_carries[COMMIT_MEMORY_OPS];
-#pragma unroll
-        for (size_t i = 0; i < COMMIT_MEMORY_OPS; ++i) {
-            uint32_t new_lo, new_hi;
-            add_carries[i] = Fp(add_const_u16_limbs(
-                base_lo, base_hi, static_cast<uint32_t>(i) * heap_cell_stride, new_lo, new_hi
-            ));
-            range_checker.add_count(new_lo, U16_BITS);
-        }
         COL_WRITE_ARRAY(row, DeferralCallAdapterCols, input_commit_add_carry, add_carries);
     }
 
     {
-        uint32_t base_lo, base_hi;
-        const uint32_t conv_carry = byte_ptr_limbs_to_cell_ptr_limbs(
+        const uint32_t output_ptr =
             static_cast<uint32_t>(record.rd_val[0]) |
-                (static_cast<uint32_t>(record.rd_val[1]) << RV64_BYTE_BITS),
-            static_cast<uint32_t>(record.rd_val[2]) |
-                (static_cast<uint32_t>(record.rd_val[3]) << RV64_BYTE_BITS),
-            base_lo,
-            base_hi
+            (static_cast<uint32_t>(record.rd_val[1]) << RV64_BYTE_BITS) |
+            (static_cast<uint32_t>(record.rd_val[2]) << (2 * RV64_BYTE_BITS)) |
+            (static_cast<uint32_t>(record.rd_val[3]) << (3 * RV64_BYTE_BITS));
+        uint32_t add_carries[OUTPUT_TOTAL_MEMORY_OPS];
+        const uint32_t conv_carry = compute_pointer_carries(
+            range_checker,
+            output_ptr,
+            address_bits,
+            OUTPUT_TOTAL_MEMORY_OPS,
+            heap_cell_stride,
+            add_carries
         );
-        range_checker.add_count(base_hi, hi_bits);
         COL_WRITE_VALUE(row, DeferralCallAdapterCols, output_cell_carry, Fp(conv_carry));
-        Fp add_carries[OUTPUT_TOTAL_MEMORY_OPS];
-#pragma unroll
-        for (size_t i = 0; i < OUTPUT_TOTAL_MEMORY_OPS; ++i) {
-            uint32_t new_lo, new_hi;
-            add_carries[i] = Fp(add_const_u16_limbs(
-                base_lo, base_hi, static_cast<uint32_t>(i) * heap_cell_stride, new_lo, new_hi
-            ));
-            range_checker.add_count(new_lo, U16_BITS);
-        }
         COL_WRITE_ARRAY(row, DeferralCallAdapterCols, output_add_carry, add_carries);
     }
 }

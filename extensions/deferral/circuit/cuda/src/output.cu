@@ -12,6 +12,7 @@
 #include "primitives/fp_array.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -268,28 +269,22 @@ __global__ void deferral_output_tracegen(
         // Convert the heap `input` (rs_val) base byte pointer to AS-native u16 cell pointer limbs
         // and emit the matching range-check counts. Mirrors the first-row branch of the host
         // `DeferralOutputFiller`.
-        const size_t hi_bits = cell_ptr_hi_bits(address_bits);
         const uint32_t heap_cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
-        uint32_t base_lo, base_hi;
-        const uint32_t conv_carry = byte_ptr_limbs_to_cell_ptr_limbs(
+        const uint32_t input_ptr =
             static_cast<uint32_t>(header.rs_val[0]) |
-                (static_cast<uint32_t>(header.rs_val[1]) << RV64_BYTE_BITS),
-            static_cast<uint32_t>(header.rs_val[2]) |
-                (static_cast<uint32_t>(header.rs_val[3]) << RV64_BYTE_BITS),
-            base_lo,
-            base_hi
+            (static_cast<uint32_t>(header.rs_val[1]) << RV64_BYTE_BITS) |
+            (static_cast<uint32_t>(header.rs_val[2]) << (2 * RV64_BYTE_BITS)) |
+            (static_cast<uint32_t>(header.rs_val[3]) << (3 * RV64_BYTE_BITS));
+        uint32_t add_carries[OUTPUT_TOTAL_MEMORY_OPS];
+        const uint32_t conv_carry = compute_pointer_carries(
+            range_checker,
+            input_ptr,
+            address_bits,
+            OUTPUT_TOTAL_MEMORY_OPS,
+            heap_cell_stride,
+            add_carries
         );
-        range_checker.add_count(base_hi, hi_bits);
         COL_WRITE_VALUE(row, DeferralOutputCols, input_cell_carry, Fp(conv_carry));
-        Fp add_carries[OUTPUT_TOTAL_MEMORY_OPS];
-#pragma unroll
-        for (size_t i = 0; i < OUTPUT_TOTAL_MEMORY_OPS; ++i) {
-            uint32_t new_lo, new_hi;
-            add_carries[i] = Fp(add_const_u16_limbs(
-                base_lo, base_hi, static_cast<uint32_t>(i) * heap_cell_stride, new_lo, new_hi
-            ));
-            range_checker.add_count(new_lo, U16_BITS);
-        }
         COL_WRITE_ARRAY(row, DeferralOutputCols, input_add_carry, add_carries);
 
         // The output write cell pointer is unconstrained on the first row (its constraints are
@@ -351,9 +346,9 @@ __global__ void deferral_output_tracegen(
         const uint32_t write_byte_ptr = rd_val + (section_idx - 1) * DIGEST_SIZE;
         const uint32_t write_cell = write_byte_ptr >> 1;
         const uint32_t write_cell_lo = write_cell & 0xffffu;
-        const uint32_t write_cell_hi = write_cell >> U16_BITS;
-        range_checker.add_count(write_cell_lo, U16_BITS);
-        range_checker.add_count(write_cell_hi, POINTER_MAX_BITS - U16_BITS);
+        const uint32_t write_cell_hi = write_cell >> openvm::U16_BITS;
+        range_checker.add_count(write_cell_lo, openvm::U16_BITS);
+        range_checker.add_count(write_cell_hi, POINTER_MAX_BITS - openvm::U16_BITS);
         const Fp write_cell_limbs[2] = {Fp(write_cell_lo), Fp(write_cell_hi)};
         COL_WRITE_ARRAY(row, DeferralOutputCols, write_cell_ptr, write_cell_limbs);
     }

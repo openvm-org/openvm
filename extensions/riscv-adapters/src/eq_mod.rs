@@ -30,10 +30,10 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    compute_pointer_carries, eval_add_const_u16_limbs,
-    eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_rv64_block, ptr_to_field_u16_limbs,
-    ptr_to_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs, tracing_read, tracing_read_reg_ptr,
-    tracing_write, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+    compute_pointer_carries, eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_u16_cell_ptr_limbs,
+    expand_to_rv64_block, ptr_to_field_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs, tracing_read,
+    tracing_read_reg_ptr, tracing_write, RV64_PTR_BITS, RV64_PTR_U16_LIMBS,
+    RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
