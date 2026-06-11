@@ -21,8 +21,8 @@ use crate::{
 
 /// EVM prover that produces a root STARK proof with Halo2 wrapping.
 ///
-/// [`EvmProver::root_prove`] outputs the unwrapped root STARK, while
-/// [`EvmProver::root_prove_with_stark_proof`] outputs the unwrapped root STARK from an
+/// [`EvmProver::prove_root`] outputs the unwrapped root STARK, while
+/// [`EvmProver::prove_root_from_vm_stark_proof`] outputs the unwrapped root STARK from an
 /// intermediate STARK proof, for more finegrained separation of work
 /// [`EvmProver::prove_evm`] produces an [`EvmProof`](crate::types::EvmProof)
 /// suitable for on-chain verification.
@@ -60,7 +60,7 @@ where
         })
     }
 
-    pub fn root_prove_with_stark_proof(
+    pub fn prove_root_from_vm_stark_proof(
         &mut self,
         stark_proof: VmStarkProof,
         metadata: &mut InternalLayerMetadata,
@@ -84,14 +84,14 @@ where
         }
 
         const MAX_ROOT_TRACEGEN_RETRIES: usize = 8;
-        let root_prover = Arc::clone(&self.root_prover);
         let agg_prover = &self.stark_prover.agg_prover;
-        root_prover.wrap_and_prove(stark_proof, MAX_ROOT_TRACEGEN_RETRIES, |p| {
-            agg_prover.wrap_proof(p, metadata)
-        })
+        self.root_prover
+            .prove(stark_proof, MAX_ROOT_TRACEGEN_RETRIES, |p| {
+                agg_prover.wrap_proof(p, metadata)
+            })
     }
 
-    pub fn root_prove(
+    pub fn prove_root(
         &mut self,
         input: StdIn<Val<SC>>,
         def_inputs: &[DeferralInput],
@@ -102,7 +102,7 @@ where
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
         let (stark_proof, mut internal_metadata) = self.stark_prover.prove(input, def_inputs)?;
-        self.root_prove_with_stark_proof(stark_proof, &mut internal_metadata)
+        self.prove_root_from_vm_stark_proof(stark_proof, &mut internal_metadata)
     }
 
     #[cfg(feature = "evm-prove")]
@@ -116,7 +116,7 @@ where
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
-        let root_proof = self.root_prove(input, def_inputs)?;
+        let root_proof = self.prove_root(input, def_inputs)?;
         let evm_proof = self
             .halo2_prover
             .as_ref()

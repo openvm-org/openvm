@@ -120,7 +120,7 @@ impl RootProver {
         Ok(proof)
     }
 
-    pub fn wrap_and_prove(
+    pub fn prove(
         &self,
         mut stark_proof: VmStarkProof,
         max_retries: usize,

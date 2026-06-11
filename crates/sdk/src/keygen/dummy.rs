@@ -142,6 +142,6 @@ where
     .expect("Failed to create dummy EVM prover");
 
     evm_prover
-        .root_prove(StdIn::default(), &[])
+        .prove_root(StdIn::default(), &[])
         .expect("Failed to generate dummy root proof")
 }
