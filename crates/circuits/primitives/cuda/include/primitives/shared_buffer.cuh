@@ -18,7 +18,8 @@ template <typename T> struct SharedBuffer {
     __device__ void push(T value) {
         uint32_t idx = atomicAdd(this->idx, 1);
         assert(idx < capacity && "SharedBuffer overflow");
-        // Host checks idx > capacity.
+        // On overflow, skip the write to avoid corrupting memory; the counter
+        // still advances, so the host sees a final count > capacity and panics.
         if (idx < capacity) {
             data[idx] = value;
         }
