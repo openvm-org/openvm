@@ -65,7 +65,7 @@ impl Sha2Config for Sha512Config {
 
         // `state` is a byte sub-slice of a record and is not guaranteed to be 8-byte aligned, so we
         // cannot reinterpret it in place as `&mut [u64; 8]`. Copy through an aligned buffer (using
-        // native-endian bytes, matching the in-place reinterpretation this replaces). We store the
+        // native-endian bytes). We store the
         // state as bytes in the record because the word size is not known at compile time (u32 for
         // Sha256, u64 for Sha512).
         let mut state_u64s = [0u64; 8];
