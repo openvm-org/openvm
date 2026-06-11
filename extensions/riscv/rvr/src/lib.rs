@@ -625,6 +625,7 @@ mod tests {
         assert_eq!(&io.public_values[6..10], &[0x44, 0x33, 0x22, 0x11]);
     }
 
+    #[test]
     fn hint_buffer_traces_u64_range() {
         let mut ctx = TestEmitCtx::default();
         HintBufferInstr {
