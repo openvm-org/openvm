@@ -11,9 +11,12 @@ use openvm_circuit_primitives::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
     },
 };
-use openvm_stark_backend::p3_field::Field;
+use openvm_stark_backend::p3_field::{Field, PrimeField32};
 
-use crate::{arch::MemoryConfig, system::memory::online::TracingMemory};
+use crate::{
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, MemoryConfig, VmState},
+    system::memory::{dimensions::MemoryDimensions, merkle::MerkleTree, online::TracingMemory},
+};
 
 pub fn default_var_range_checker_bus() -> VariableRangeCheckerBus {
     // setting default range_max_bits to 17 because that's the default decomp value in MemoryConfig
@@ -47,4 +50,18 @@ pub fn dummy_memory_helper<F: Field>(
 
 pub fn default_tracing_memory(mem_config: &MemoryConfig) -> TracingMemory {
     TracingMemory::new(mem_config)
+}
+
+/// Asserts that two final [`VmState`]s reached via different execution paths (e.g. interpreter
+/// vs AOT) are equivalent: same pc and same guest memory (compared via Merkle roots).
+pub fn assert_vm_states_equivalent<F: PrimeField32>(
+    state1: &VmState<F>,
+    state2: &VmState<F>,
+    memory_dimensions: &MemoryDimensions,
+) {
+    assert_eq!(state1.pc(), state2.pc(), "PCs differ");
+    let hasher = vm_poseidon2_hasher::<F>();
+    let root1 = MerkleTree::from_memory(&state1.memory.memory, memory_dimensions, &hasher).root();
+    let root2 = MerkleTree::from_memory(&state2.memory.memory, memory_dimensions, &hasher).root();
+    assert_eq!(root1, root2, "Memory states differ");
 }

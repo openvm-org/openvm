@@ -1,7 +1,7 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
 #[cfg(feature = "aot")]
-use openvm_circuit::arch::{VmExecutor, VmState};
+use openvm_circuit::arch::{testing::assert_vm_states_equivalent, VmExecutor, VmState};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
@@ -387,18 +387,7 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F
         .execute(vec![], None)
         .expect("AOT execution must succeed");
 
-    // TODO: add this code to AOT utils file for testing purposes to check equivalence of VMStates
-    assert_eq!(interp_state.pc(), aot_state.pc());
-    use openvm_circuit::{
-        arch::hasher::poseidon2::vm_poseidon2_hasher, system::memory::merkle::MerkleTree,
-    };
-
-    let hasher = vm_poseidon2_hasher::<BabyBear>();
-
-    let tree1 = MerkleTree::from_memory(&interp_state.memory.memory, &memory_dimensions, &hasher);
-    let tree2 = MerkleTree::from_memory(&aot_state.memory.memory, &memory_dimensions, &hasher);
-
-    assert_eq!(tree1.root(), tree2.root(), "Memory states differ");
+    assert_vm_states_equivalent(&interp_state, &aot_state, &memory_dimensions);
     (interp_state, aot_state)
 }
 

@@ -9,11 +9,9 @@ use openvm_stark_sdk::{
 };
 
 #[cfg(feature = "aot")]
+use crate::arch::testing::assert_vm_states_equivalent;
+#[cfg(feature = "aot")]
 use crate::arch::SystemConfig;
-#[cfg(feature = "aot")]
-use crate::arch::VmState;
-#[cfg(feature = "aot")]
-use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, verify_segments, vm::VirtualMachine, Executor,
@@ -119,6 +117,9 @@ where
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
+    let system_config: &SystemConfig = config.as_ref();
+    let memory_dimensions = system_config.memory_config.memory_dimensions();
+
     /*
     Assertions for Pure Execution AOT
     */
@@ -133,24 +134,12 @@ where
             .execute(input.clone(), None)
             .expect("Failed to execute");
 
-        let system_config: &SystemConfig = config.as_ref();
-        let addr_spaces = &system_config.memory_config.addr_spaces;
-        let assert_vm_state_eq =
-            |lhs: &VmState<Val<E::SC>, GuestMemory>, rhs: &VmState<Val<E::SC>, GuestMemory>| {
-                assert_eq!(lhs.pc(), rhs.pc());
-                for r in 0..addr_spaces[1].num_cells {
-                    let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
-                    let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
-                    assert_eq!(a, b);
-                }
-            };
-        assert_vm_state_eq(&interp_state_pure, &aot_state_pure);
+        assert_vm_states_equivalent(&interp_state_pure, &aot_state_pure, &memory_dimensions);
     }
 
     /*
     Assertions for Metered AOT
     */
-    println!("Checking metered AOT equivalence");
     {
         let metered_ctx = vm.build_metered_ctx(exe);
         let (aot_segments, aot_state_metered) = vm
@@ -161,16 +150,11 @@ where
             .naive_metered_interpreter(exe)?
             .execute_metered(input.clone(), metered_ctx.clone())?;
 
-        assert_eq!(interp_state_metered.pc(), aot_state_metered.pc());
-
-        let system_config: &SystemConfig = config.as_ref();
-        let addr_spaces = &system_config.memory_config.addr_spaces;
-
-        for r in 0..addr_spaces[1].num_cells {
-            let interp = unsafe { interp_state_metered.memory.read::<u8, 1>(1, r as u32) };
-            let aot_interp = unsafe { aot_state_metered.memory.read::<u8, 1>(1, r as u32) };
-            assert_eq!(interp, aot_interp);
-        }
+        assert_vm_states_equivalent(
+            &interp_state_metered,
+            &aot_state_metered,
+            &memory_dimensions,
+        );
 
         assert_eq!(segments.len(), aot_segments.len());
         for i in 0..segments.len() {
