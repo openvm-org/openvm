@@ -120,7 +120,6 @@ where
             c as isize
         };
         let next_pc = (pc as isize + imm) as u32;
-        // TODO: this should return an error instead.
         if d.as_canonical_u32() != RV32_REGISTER_AS {
             return Err(AotError::InvalidInstruction);
         }
