@@ -336,6 +336,45 @@ fn positive_loadhu_shift6_test() {
 }
 
 #[test]
+fn positive_loadstore_max_address_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    // The default config exposes the full 2^32-byte memory AS (`tester.address_bits()` = 32);
+    // deterministically touch its last addressable bytes, plus one rs1 + imm wrap past 2^32.
+    let top = 1u64 << tester.address_bits();
+    let imm = 8u32;
+    for (opcode, byte_addr) in [
+        (LOADD, top - 8),
+        (LOADBU, top - 1),
+        (STORED, top - 8),
+        (STOREB, top - 1),
+        (LOADWU, 4), // rs1 = 2^32 - 4, so rs1 + imm wraps past 2^32
+    ] {
+        let rs1 = (byte_addr as u32).wrapping_sub(imm).to_le_bytes();
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            opcode,
+            Some([rs1[0], rs1[1], rs1[2], rs1[3], 0, 0, 0, 0]),
+            Some(imm),
+            Some(0),
+            Some(2),
+        );
+    }
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
 fn positive_storew_public_values_test() {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
