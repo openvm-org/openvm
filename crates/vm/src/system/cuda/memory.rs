@@ -26,6 +26,7 @@ pub struct MemoryInventoryGPU {
     pub device_ctx: GpuDeviceCtx,
     pub boundary: BoundaryChipGPU,
     pub merkle_tree: MemoryMerkleTree,
+    pub hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
     pub initial_memory: Vec<DeviceBuffer<u8>>,
     pub merkle_records: Option<DeviceBuffer<u32>>,
     #[cfg(feature = "metrics")]
@@ -65,6 +66,7 @@ impl MemoryInventoryGPU {
             device_ctx: device_ctx.clone(),
             boundary: BoundaryChipGPU::new(hasher_chip.shared_buffer(), device_ctx.clone()),
             merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone(), device_ctx),
+            hasher_chip,
             initial_memory: Vec::new(),
             merkle_records: None,
             #[cfg(feature = "metrics")]
@@ -161,6 +163,7 @@ impl MemoryInventoryGPU {
             }
 
             self.boundary.finalize_records::<DIGEST_WIDTH>(Vec::new());
+            self.prepare_poseidon2_records(0, unpadded_merkle_height);
             mem.tracing_info("merkle update");
             self.merkle_tree.finalize();
             self.merkle_tree.update_with_touched_blocks(
@@ -268,6 +271,7 @@ impl MemoryInventoryGPU {
                 self.unpadded_merkle_height = unpadded_merkle_height;
             }
 
+            self.prepare_poseidon2_records(out_num_records, unpadded_merkle_height);
             mem.tracing_info("merkle update");
             self.merkle_tree.finalize();
             self.merkle_tree.update_with_touched_blocks(
@@ -285,6 +289,14 @@ impl MemoryInventoryGPU {
         self.initial_memory = Vec::new();
         mem.emit_metrics();
         ret
+    }
+
+    fn prepare_poseidon2_records(&self, boundary_records: usize, merkle_height: usize) {
+        let num_records = boundary_records
+            .checked_mul(2)
+            .and_then(|n| n.checked_add(merkle_height))
+            .expect("Poseidon2 records count overflow");
+        self.hasher_chip.prepare_records(num_records);
     }
 }
 
@@ -339,24 +351,11 @@ mod tests {
         );
         let expected_root = cpu_merkle_tree.root();
 
-        let max_buffer_size = (mem_config
-            .addr_spaces
-            .iter()
-            .map(|ashc| ashc.num_cells * 2 + mem_config.memory_dimensions().overall_height())
-            .sum::<usize>()
-            * 2)
-        .next_power_of_two()
-            * 2
-            * DIGEST_WIDTH;
         let device_ctx = GpuDeviceCtx {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
-        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
-            max_buffer_size,
-            1,
-            device_ctx.clone(),
-        ));
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
         let mut inventory =
             MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
         inventory.set_initial_memory(&memory.memory);
@@ -422,24 +421,11 @@ mod tests {
         );
         let expected_root = cpu_merkle_tree.root();
 
-        let max_buffer_size = (mem_config
-            .addr_spaces
-            .iter()
-            .map(|ashc| ashc.num_cells * 2 + mem_config.memory_dimensions().overall_height())
-            .sum::<usize>()
-            * 2)
-        .next_power_of_two()
-            * 2
-            * DIGEST_WIDTH;
         let device_ctx = GpuDeviceCtx {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
-        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
-            max_buffer_size,
-            1,
-            device_ctx.clone(),
-        ));
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
         let mut inventory =
             MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
         inventory.set_initial_memory(&memory.memory);

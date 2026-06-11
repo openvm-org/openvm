@@ -509,20 +509,14 @@ mod tests {
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
         let gpu_hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
-            (mem_config
-                .addr_spaces
-                .iter()
-                .map(|ashc| ashc.num_cells * 2 + mem_config.memory_dimensions().overall_height())
-                .sum::<usize>()
-                * 2)
-            .next_power_of_two()
-                * 2
-                * DIGEST_WIDTH, // max_buffer_size
             1, // sbox_regs
             device_ctx.clone(),
         ));
-        let mut gpu_merkle_tree =
-            MemoryMerkleTree::new(mem_config.clone(), gpu_hasher_chip, device_ctx.clone());
+        let mut gpu_merkle_tree = MemoryMerkleTree::new(
+            mem_config.clone(),
+            gpu_hasher_chip.clone(),
+            device_ctx.clone(),
+        );
         let mem_slices = initial_memory
             .memory
             .get_memory()
@@ -623,11 +617,9 @@ mod tests {
             .to_device_on(&gpu_merkle_tree.device_ctx)
             .unwrap();
 
-        gpu_merkle_tree.update_with_touched_blocks(
-            gpu_merkle_tree.calculate_unpadded_height(&touched_blocks),
-            &d_touched_blocks,
-            false,
-        );
+        let unpadded_height = gpu_merkle_tree.calculate_unpadded_height(&touched_blocks);
+        gpu_hasher_chip.prepare_records(unpadded_height);
+        gpu_merkle_tree.update_with_touched_blocks(unpadded_height, &d_touched_blocks, false);
 
         assert_eq!(
             cpu_merkle_tree.root(),
