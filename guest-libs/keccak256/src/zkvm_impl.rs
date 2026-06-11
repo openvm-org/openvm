@@ -100,17 +100,18 @@ impl Keccak256 {
 
     /// Finalizes the hash computation and writes the result to the output buffer.
     ///
-    /// # Safety
+    /// # Panics
     ///
-    /// `output` must be at least `KECCAK_OUTPUT_SIZE` (32) bytes long.
+    /// Panics if `output` is not exactly `KECCAK_OUTPUT_SIZE` (32) bytes long.
     #[inline(always)]
-    pub unsafe fn finalize(mut self, output: &mut [u8]) {
-        debug_assert!(
-            output.len() >= KECCAK_OUTPUT_SIZE,
-            "output buffer too small"
+    pub fn finalize(mut self, output: &mut [u8]) {
+        assert_eq!(
+            output.len(),
+            KECCAK_OUTPUT_SIZE,
+            "output must be exactly 32 bytes"
         );
-        // SAFETY: caller guarantees output is at least KECCAK_OUTPUT_SIZE bytes.
-        self.finalize_ptr(output.as_mut_ptr());
+        // SAFETY: the assert above guarantees output is exactly KECCAK_OUTPUT_SIZE bytes.
+        unsafe { self.finalize_ptr(output.as_mut_ptr()) };
     }
 }
 

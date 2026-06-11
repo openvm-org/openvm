@@ -3,7 +3,7 @@ use std::sync::Arc;
 use halo2_base::{
     gates::{
         circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
-        GateInstructions, RangeInstructions,
+        GateInstructions,
     },
     halo2_proofs::dev::MockProver,
 };
@@ -21,7 +21,7 @@ use openvm_stark_sdk::{
 use super::*;
 use crate::{
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS, STATIC_VERIFIER_NUM_ADVICE_COLS},
-    field::baby_bear::{BabyBearChip, BabyBearExt4Wire},
+    field::baby_bear::{BabyBearChip, BabyBearExtChip},
     RootEF, RootF,
 };
 
@@ -148,22 +148,23 @@ fn transcript_outputs_match_native_interleaved_flow() {
     run_mock(true, |builder| {
         let range = builder.range_chip();
         let baby_bear = BabyBearChip::new(Arc::new(range.clone()));
+        let baby_bear_ext = BabyBearExtChip::new(baby_bear.clone());
 
         let ctx = builder.main(0);
         let gate = range.gate();
 
         let mut transcript = TranscriptChip::new(ctx, baby_bear.clone());
 
-        let one = baby_bear.load_witness(ctx, RootF::from_u64(1));
-        let two = baby_bear.load_witness(ctx, RootF::from_u64(2));
-        let three = baby_bear.load_witness(ctx, RootF::from_u64(3));
+        let one = baby_bear.load_reduced_witness(ctx, RootF::from_u64(1));
+        let two = baby_bear.load_reduced_witness(ctx, RootF::from_u64(2));
+        let three = baby_bear.load_reduced_witness(ctx, RootF::from_u64(3));
         transcript.observe(ctx, &one);
         transcript.observe(ctx, &two);
         transcript.observe(ctx, &three);
 
-        let observed_ext = BabyBearExt4Wire(core::array::from_fn(|i| {
-            baby_bear.load_witness(ctx, RootF::from_u64(observed_ext_coeffs[i]))
-        }));
+        let observed_ext =
+            RootEF::from_basis_coefficients_fn(|i| RootF::from_u64(observed_ext_coeffs[i]));
+        let observed_ext = baby_bear_ext.load_reduced_witness(ctx, observed_ext);
         transcript.observe_ext(ctx, &observed_ext);
 
         let digest_wire = TranscriptChip::load_digest_witness(ctx, digest);
@@ -180,7 +181,7 @@ fn transcript_outputs_match_native_interleaved_flow() {
         let sampled_bits = transcript.sample_bits(ctx, 17);
         gate.assert_is_const(ctx, &sampled_bits, &Fr::from(expected_bits));
 
-        let pow_witness = baby_bear.load_witness(ctx, RootF::from_u64(witness_for_pow));
+        let pow_witness = baby_bear.load_reduced_witness(ctx, RootF::from_u64(witness_for_pow));
         transcript.check_witness(ctx, 9, &pow_witness);
 
         let followup = transcript.sample(ctx);
@@ -205,17 +206,45 @@ fn transcript_check_witness_zero_bits_matches_native() {
 
         let mut transcript = TranscriptChip::new(ctx, baby_bear.clone());
 
-        let obs = baby_bear.load_witness(ctx, RootF::from_u64(99));
+        let obs = baby_bear.load_reduced_witness(ctx, RootF::from_u64(99));
         transcript.observe(ctx, &obs);
 
         let first = transcript.sample(ctx);
         gate.assert_is_const(ctx, &first.value, &Fr::from(expected_first));
 
-        let witness = baby_bear.load_witness(ctx, RootF::from_u64(7));
+        let witness = baby_bear.load_reduced_witness(ctx, RootF::from_u64(7));
         transcript.check_witness(ctx, 0, &witness);
 
         let second = transcript.sample(ctx);
         gate.assert_is_const(ctx, &second.value, &Fr::from(expected_second));
+    });
+}
+
+#[test]
+fn transcript_sample_bits_zero_matches_native() {
+    let mut native = default_transcript();
+    native.observe(RootF::from_u64(99));
+    let expected_bits = FiatShamirTranscript::<RootConfig>::sample_bits(&mut native, 0);
+    assert_eq!(expected_bits, 0);
+    let expected_followup = native.sample().as_canonical_u64();
+
+    run_mock(true, |builder| {
+        let range = builder.range_chip();
+        let baby_bear = BabyBearChip::new(Arc::new(range.clone()));
+
+        let ctx = builder.main(0);
+        let gate = range.gate();
+
+        let mut transcript = TranscriptChip::new(ctx, baby_bear.clone());
+
+        let obs = baby_bear.load_reduced_witness(ctx, RootF::from_u64(99));
+        transcript.observe(ctx, &obs);
+
+        let sampled_bits = transcript.sample_bits(ctx, 0);
+        gate.assert_is_const(ctx, &sampled_bits, &Fr::ZERO);
+
+        let followup = transcript.sample(ctx);
+        gate.assert_is_const(ctx, &followup.value, &Fr::from(expected_followup));
     });
 }
 

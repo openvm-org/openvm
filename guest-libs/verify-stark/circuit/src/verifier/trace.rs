@@ -112,6 +112,7 @@ pub fn generate_proving_ctx(
     record: DeferredVerifyPvsRecord<F>,
     final_transcript_state: [F; POSEIDON2_WIDTH],
     output_commit: [F; DIGEST_SIZE],
+    def_idx: usize,
     deferral_enabled: bool,
 ) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
     let base_width = DeferredVerifyPvsCols::<u8>::width();
@@ -155,6 +156,7 @@ pub fn generate_proving_ctx(
     let (left, right) = poseidon2_input_to_digests(final_transcript_state);
     deferral_pvs.input_commit = poseidon2_compress_with_capacity(left, right).0;
     deferral_pvs.output_commit = output_commit;
+    deferral_pvs.def_idx = F::from_usize(def_idx);
 
     AirProvingContext {
         cached_mains: vec![],

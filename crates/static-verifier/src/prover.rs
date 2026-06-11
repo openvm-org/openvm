@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use halo2_base::{
     gates::{
         circuit::{builder::BaseCircuitBuilder, BaseCircuitParams, CircuitBuilderStage},
@@ -30,11 +28,7 @@ use openvm_stark_sdk::{
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{
-    circuit::StaticVerifierCircuit,
-    config::StaticVerifierShape,
-    field::baby_bear::{BabyBearChip, BabyBearExtChip},
-};
+use crate::{circuit::StaticVerifierCircuit, config::StaticVerifierShape};
 
 /// KZG parameters for the Halo2 BN256 proving system.
 pub type Halo2Params = ParamsKZG<Bn256>;
@@ -92,58 +86,6 @@ impl StaticVerifierCircuit {
         let prover = MockProver::run(shape.k as u32, &builder, vec![public_inputs.to_vec()])
             .expect("MockProver should initialize");
         prover.assert_satisfied();
-    }
-
-    /// Prove using only [`Self::populate_verify_stark_constraints`]. `shape.instance_columns` must
-    /// be `0`. [`StaticVerifierProof::public_inputs`] is empty.
-    pub fn prove_verify_stark_constraints_only(
-        &self,
-        params: &Halo2Params,
-        pinning: &Halo2ProvingPinning,
-        shape: &StaticVerifierShape,
-        proof: &Proof<RootConfig>,
-    ) -> StaticVerifierProof {
-        assert_eq!(
-            shape.instance_columns, 0,
-            "prove_verify_stark_constraints_only requires instance_columns == 0"
-        );
-        let mut builder = BaseCircuitBuilder::prover(
-            pinning.metadata.config_params.clone(),
-            pinning.metadata.break_points.clone(),
-        );
-        builder = builder.use_instance_columns(0);
-
-        let range = builder.range_chip();
-        let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
-        let ctx = builder.main(0);
-        let _ = self.populate_verify_stark_constraints(ctx, &ext_chip, proof);
-
-        let public_inputs = Vec::new();
-
-        let rng = ChaCha20Rng::from_seed(Default::default());
-        let instances: &[&[Fr]] = &[];
-        let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
-        create_proof::<
-            KZGCommitmentScheme<Bn256>,
-            ProverSHPLONK<'_, Bn256>,
-            Challenge255<_>,
-            _,
-            Blake2bWrite<Vec<u8>, G1Affine, _>,
-            _,
-        >(
-            params,
-            &pinning.pk,
-            &[builder],
-            &[instances],
-            rng,
-            &mut transcript,
-        )
-        .expect("Halo2 proof generation should succeed");
-
-        StaticVerifierProof {
-            proof_bytes: transcript.finalize(),
-            public_inputs,
-        }
     }
 
     /// Generate a Halo2 proof using a previously computed [`Halo2ProvingPinning`].

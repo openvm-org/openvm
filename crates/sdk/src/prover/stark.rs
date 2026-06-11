@@ -8,7 +8,6 @@ use openvm_circuit::{
     },
     system::memory::merkle::MerkleTree,
 };
-use openvm_recursion_circuit::utils::poseidon2_hash_slice;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, Val};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, F};
 use openvm_verify_stark_host::{
@@ -163,6 +162,7 @@ where
         VerificationBaseline {
             app_exe_commit: self.app_prover.app_exe_commit(),
             memory_dimensions: self.app_prover.memory_dimensions(),
+            num_user_pvs: self.app_prover.num_user_pvs(),
             app_vk_commit: self.agg_prover.leaf_prover.get_vk_commit(false),
             leaf_vk_commit: self
                 .agg_prover
@@ -181,25 +181,7 @@ where
     }
 
     pub fn app_vm_commit(&self) -> Digest {
-        let app_vk_commit = self.agg_prover.leaf_prover.get_vk_commit(false);
-        let leaf_vk_commit = self
-            .agg_prover
-            .internal_for_leaf_prover
-            .get_vk_commit(false);
-        let internal_for_leaf_vk_commit = self
-            .agg_prover
-            .internal_recursive_prover
-            .get_vk_commit(false);
-        let components = vec![
-            app_vk_commit.cached_commit,
-            app_vk_commit.vk_pre_hash,
-            leaf_vk_commit.cached_commit,
-            leaf_vk_commit.vk_pre_hash,
-            internal_for_leaf_vk_commit.cached_commit,
-            internal_for_leaf_vk_commit.vk_pre_hash,
-        ]
-        .into_flattened();
-        poseidon2_hash_slice(&components).0
+        self.agg_prover.vm_or_hook_commit()
     }
 }
 
@@ -209,24 +191,6 @@ impl DeferralPathProver {
     }
 
     pub fn def_hook_commit(&self) -> Digest {
-        let def_vk_commit = self.agg_prover.leaf_prover.get_vk_commit(false);
-        let leaf_vk_commit = self
-            .agg_prover
-            .internal_for_leaf_prover
-            .get_vk_commit(false);
-        let internal_for_leaf_vk_commit = self
-            .agg_prover
-            .internal_recursive_prover
-            .get_vk_commit(false);
-        let components = vec![
-            def_vk_commit.cached_commit,
-            def_vk_commit.vk_pre_hash,
-            leaf_vk_commit.cached_commit,
-            leaf_vk_commit.vk_pre_hash,
-            internal_for_leaf_vk_commit.cached_commit,
-            internal_for_leaf_vk_commit.vk_pre_hash,
-        ]
-        .into_flattened();
-        poseidon2_hash_slice(&components).0
+        self.agg_prover.vm_or_hook_commit()
     }
 }

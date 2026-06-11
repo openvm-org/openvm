@@ -443,7 +443,7 @@ The RV32IM extension defines the following phantom sub-instructions.
 
 The deferral extension enables guest programs to defer expensive computations to the proof aggregation phase. During app execution, the guest provides an input commitment and receives back a commitment to the output. The actual computation is performed later during aggregation and verified by a [deferral hook circuit](/specs/architecture/deferral).
 
-Each deferral instruction encodes a **deferral index** (`def_idx`) identifying which deferred function to invoke. The index and sub-opcode are packed into a 12-bit immediate as `[def_idx(10 bits) | opcode(2 bits)]`, supporting up to 1024 deferral circuits.
+Each deferral instruction encodes a **deferral index** (`def_idx`) identifying which deferred function to invoke. The index and sub-opcode are packed into a 12-bit immediate as `[def_idx(10 bits) | opcode(2 bits)]`. The continuations deferral aggregation circuit currently constrains the semantic range to `def_idx < MAX_DEF_CIRCUITS`, so a VM configuration can support up to `MAX_DEF_CIRCUITS` deferral circuits.
 
 The extension operates on address spaces `1` (registers) and `2` (user memory) and uses address space `4` (deferral) for accumulator state.
 

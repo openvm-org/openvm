@@ -18,9 +18,11 @@ Invokes a deferred call at deferral index `DEF_IDX` with the given `input_commit
 
 - `app_exe_commit: Commit` — commitment to the app executable whose execution is being verified
 - `app_vm_commit: Commit` — commitment to the app VM configuration
-- `user_public_values: Vec<u8>` — public values revealed by the verified app
+- `user_public_values: Vec<u8>` — user public values revealed by the verified app
 
 When correctly configured with the [`DeferredVerifyCircuit`](#circuit), verification is performed outside the VM circuit as part of the [deferral flow](/specs/architecture/deferral). From the guest perspective, this establishes that **there exists a proof** matching `input_commit` that verifies and yields the returned `ProofOutput`; the proof itself is never accessible from the guest program.
+
+The deferral circuit output stores each user public value byte as a field element, but the guest helper returns the dense byte representation. `ProofOutput.user_public_values` should therefore match the bytes revealed by the verified app.
 
 `DEF_IDX` must match the index of the corresponding `DeferralFn` in `DeferralExtension.fns`, as configured when [building the VM extension](#using-deferralextension). Each STARK verifying key will correspond to a different deferral circuit, and thus a different `DEF_IDX`.
 
@@ -44,14 +46,39 @@ There should be a unique `DeferredVerifyCircuit` for each STARK verifying key yo
 
 ### Using `DeferralExtension`
 
-To use `DeferredVerifyCircuit` in an app, you must wire it into your VM config via `DeferralExtension`. A VM config can support up to 1024 different deferral circuits at one time. `DeferralExtension` stores:
+To use `DeferredVerifyCircuit` in an app, you must wire it into your VM config via `DeferralExtension`. A VM config can support up to `MAX_DEF_CIRCUITS = 512` different deferral circuits at one time. `DeferralExtension` stores:
 
 - `fns: Vec<Arc<DeferralFn>>` - one function per deferral circuit
 - `def_circuit_commits: Vec<[u8; 32]>` - the corresponding `def_circuit_commit` values
 
 These vectors are aligned by index.
 
-It is **highly** recommended that guest programs that use deferrals are proved using the SDK. The flow is:
+It is **highly** recommended that guest programs that use deferrals are proved using the SDK.
+
+For verify-stark recursion, the simplest setup is `DeferralPathProver::verify_stark`, which derives the deferral-enabled internal-recursive verifying key and self-referential `def_hook_commit` needed to verify proofs from the same SDK, including proofs that themselves carry deferrals:
+
+```rust
+let deferral_path_prover = DeferralPathProver::verify_stark(
+    &agg_params,
+    hook_params,
+    memory_dimensions,
+    num_user_pvs,
+);
+let deferral_ext = deferral_path_prover
+    .deferral_prover
+    .make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
+
+let mut vm_config = SdkVmConfig::riscv32();
+vm_config.deferral = Some(deferral_ext);
+
+let sdk = CpuSdk::builder()
+    .app_config(AppConfig::new(vm_config, app_params))
+    .agg_params(agg_params)
+    .deferral_path_prover(deferral_path_prover)
+    .build()?;
+```
+
+The lower-level manual flow is:
 
 1. Build a `DeferralProver` whose single-circuit prover is a `DeferredVerifyCircuitProver`.
 2. Create the extension with `make_extension`, passing the deferral function(s).
@@ -87,6 +114,6 @@ let sdk = CpuSdk::builder()
     .build()?;
 ```
 
-Passing `None` to `DeferredVerify*Prover::new(..., None, def_idx)` means that child proofs are asserted to be non-deferral proofs, i.e. they must not expose deferral public values or deferral Merkle proofs. To enable nested verification of deferral-enabled child proofs, pass `Some(expected_def_hook_commit)` instead.
+Passing `None` to `DeferredVerify*Prover::new(..., None, def_idx)` means that child proofs are asserted to be non-deferral proofs, i.e. they must not expose deferral public values or deferral Merkle proofs. To enable nested verification of deferral-enabled child proofs, pass `Some(expected_def_hook_commit)` instead. The `DeferralPathProver::verify_stark` constructor computes this value for the self-recursive SDK case.
 
 Each guest call using `DEF_IDX` corresponds to the deferral circuit inserted at `DEF_IDX`. If there is exactly one deferral function registered (as above), `DEF_IDX = 0`.

@@ -15,11 +15,11 @@ use openvm_stark_sdk::{
 
 use crate::{
     field::baby_bear::{
-        BabyBearChip, BabyBearExt4Wire, BabyBearExtWire, BabyBearWire, BABY_BEAR_BITS,
-        BABY_BEAR_MODULUS_U64,
+        BabyBearChip, BabyBearExt4Wire, BabyBearExtWire, BabyBearWire, ReducedBabyBearExtWire,
+        ReducedBabyBearWire, BABY_BEAR_BITS, BABY_BEAR_MODULUS_U64,
     },
     hash::{
-        poseidon2::{Poseidon2State, DIGEST_WIDTH, POSEIDON2_RATE},
+        poseidon2::{pack_base_2_31_cells, Poseidon2State, DIGEST_WIDTH, POSEIDON2_RATE},
         POSEIDON2_PARAMS, POSEIDON2_WIDTH,
     },
     Fr,
@@ -183,25 +183,6 @@ fn decompose_bn254_to_base_baby_bear_digits(
     output_digits
 }
 
-/// Pack BabyBear values into a BN254 element using base-2^31 encoding.
-/// Result = values[0] + values[1]*2^31 + values[2]*2^62 + ...
-fn pack_base_2_31(
-    ctx: &mut Context<Fr>,
-    gate: &impl GateInstructions<Fr>,
-    values: &[BabyBearWire],
-) -> AssignedValue<Fr> {
-    gate.inner_product(
-        ctx,
-        values.iter().map(|v| v.value),
-        gate.pow_of_two()
-            .iter()
-            .step_by(BABY_BEAR_BITS)
-            .take(values.len())
-            .copied()
-            .map(QuantumCell::Constant),
-    )
-}
-
 #[derive(Clone, Debug)]
 pub struct DigestWire {
     pub elems: [AssignedValue<Fr>; DIGEST_WIDTH],
@@ -227,7 +208,7 @@ pub struct TranscriptChip {
     sponge_state: [AssignedValue<Fr>; POSEIDON2_WIDTH],
     absorb_idx: usize,
     sample_idx: usize,
-    observe_buf: Vec<BabyBearWire>,
+    observe_buf: Vec<ReducedBabyBearWire>,
     sample_buf: Vec<BabyBearWire>,
 }
 
@@ -296,7 +277,7 @@ impl TranscriptChip {
     fn flush_observe_buf(&mut self, ctx: &mut Context<Fr>) {
         if !self.observe_buf.is_empty() {
             let gate = self.baby_bear.range().gate();
-            let packed = pack_base_2_31(ctx, gate, &self.observe_buf);
+            let packed = pack_base_2_31_cells(ctx, gate, &self.observe_buf);
             self.sponge_absorb(ctx, packed);
             self.observe_buf.clear();
         }
@@ -310,7 +291,7 @@ impl TranscriptChip {
         }
     }
 
-    pub fn observe(&mut self, ctx: &mut Context<Fr>, value: &BabyBearWire) {
+    pub fn observe(&mut self, ctx: &mut Context<Fr>, value: &ReducedBabyBearWire) {
         self.invalidate_samples();
         self.observe_buf.push(*value);
         if self.observe_buf.len() == NUM_OBS_PER_WORD {
@@ -318,8 +299,8 @@ impl TranscriptChip {
         }
     }
 
-    pub fn observe_ext(&mut self, ctx: &mut Context<Fr>, value: &BabyBearExtWire) {
-        for coeff in &value.0 {
+    pub fn observe_ext(&mut self, ctx: &mut Context<Fr>, value: &ReducedBabyBearExtWire) {
+        for coeff in value.coeffs() {
             self.observe(ctx, coeff);
         }
     }
@@ -362,10 +343,10 @@ impl TranscriptChip {
             "sample_bits requires (1 << bits) < modulus: bits={bits}"
         );
 
+        let sampled = self.sample(ctx);
         if bits == 0 {
             return ctx.load_zero();
         }
-        let sampled = self.sample(ctx);
         // PERF[jpw]: we could optimize this since the divisor is a power of 2
         let range = self.baby_bear.range();
         let divisor = BigUint::from(1u64) << bits;
@@ -374,7 +355,12 @@ impl TranscriptChip {
     }
 
     /// Asserts that the PoW witness must pass.
-    pub fn check_witness(&mut self, ctx: &mut Context<Fr>, bits: usize, witness: &BabyBearWire) {
+    pub fn check_witness(
+        &mut self,
+        ctx: &mut Context<Fr>,
+        bits: usize,
+        witness: &ReducedBabyBearWire,
+    ) {
         if bits == 0 {
             return;
         }

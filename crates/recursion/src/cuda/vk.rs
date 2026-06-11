@@ -12,9 +12,6 @@ use crate::cuda::types::AirData;
  * circuit, i.e. regardless of the number of proofs.
  */
 pub struct VerifyingKeyGpu {
-    // TODO[TEMP]: cpu vk for hybrid usage; remove this when no longer needed
-    // If you need something from `cpu` for actual cuda tracegen, move it to a direct field of
-    // VerifyingKeyGpu. Host and/or device types allowed.
     pub cpu: MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     pub per_air: DeviceBuffer<AirData>,
     pub system_params: SystemParams,

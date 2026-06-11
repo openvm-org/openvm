@@ -1,101 +1,28 @@
-use std::{cmp::max, mem::size_of};
-
 use bytesize::ByteSize;
 use getset::{Setters, WithSetters};
-use openvm_stark_backend::p3_field::PrimeField32;
+#[cfg(feature = "metrics")]
+use openvm_stark_backend::memory_metering::INTERACTION_MEMORY_OVERHEAD;
+use openvm_stark_backend::{
+    memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts},
+    p3_field::PrimeField32,
+};
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
 
-/// Extension field size.
-const D_EF: usize = 4;
+use crate::utils::{add_one_or_zero, next_power_of_two_or_zero};
+
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
 pub const DEFAULT_MAX_TRACE_HEIGHT_BITS: u8 = 22;
 pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << DEFAULT_MAX_TRACE_HEIGHT_BITS;
 pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
-const DEFAULT_MAIN_CELL_WEIGHT: usize = 3; // 1 + 2^{log_blowup=1}
-/// `main_cnt` in the metering = Σ(padded_height × width) in `F` cells (base field elements).
-///
-/// The mat_eval in bytes:
-/// ```
-/// mat_eval_bytes = (padded_height / 2^l_skip) × ((1 + need_rot) × width) × sizeof(EF)
-///               = (padded_height / 16) × ((1 + need_rot) × width) × 16   (with l_skip = 4)
-///               = (1 + need_rot) × padded_height × width
-///               = (1 + need_rot) × main_cnt bytes     (per trace, summed)
-/// ```
-///
-/// This accounts for the extra memory after `fold_ple` in stark-backend
-/// crates/cuda-backend/src/logup_zerocheck/mod.rs.
-///
-/// While the `mat_eval` is not dropped, inside `sumcheck_polys_batch_eval` we need to interpolate
-/// each MLE matrix further which takes `(constraint_degree \* padded_height / 2^l_skip / 2) \*
-/// (width \* (1 + need_rot))` extension field elements. Re-writing, this interpolated buffer has
-/// size `(constraint_degree / 2) \* mat_eval_bytes`. We use max constraint degree of 4, so this is
-/// `2 \* mat_eval_bytes`.
-///
-/// In total we have `3 \* mat_eval_bytes = 3 \* (1 + need_rot) \* main_cnt` bytes. The base weight
-/// (per PCS opening, in base field elements of 4 bytes) is `3 / 4 = 0.75`. AIRs with
-/// `need_rot = true` commit 2 openings per column so use `2 \* 0.75 = 1.5`; `need_rot = false`
-/// AIRs use `0.75`. The split is applied per-AIR in [`SegmentationCtx::counts_to_memory`].
-const DEFAULT_MAIN_CELL_SECONDARY_WEIGHT: f64 = 0.75;
-/// Each interaction contributes `2 * D_EF` base field elements to the real GKR fractional
-/// sumcheck leaves (`Frac<EF> = (p, q)` pairs). The CUDA GKR prover virtualizes input padding, so
-/// this is weighted by the real interaction count instead of the next power of two.
-///
-/// The remaining scratch buffers are still sized from the logical power-of-two length. With
-/// precompute-M enabled, `work_buffer` is at most `logical_len / 16` leaves, and
-/// `tmp_block_sums` is approximately `logical_len / 256` leaves. Since
-/// `logical_len <= 2 * real_len`, the worst-case scratch overhead is
-/// `2 * (1 / 16 + 1 / 256)` of the real leaf memory.
-const DEFAULT_INTERACTION_CELL_WEIGHT: f64 =
-    (2 * D_EF) as f64 * (1.0 + 2.0 * (1.0 / 16.0 + 1.0 / 256.0));
-/// Constant overhead for interaction memory: sqrt-decomposed eq buffers, M matrix,
-/// and misc small buffers. Bounded by ~2 MB assuming fewer than 2^32 leaves.
-const DEFAULT_INTERACTION_CONSTANT_OVERHEAD: usize = 2 << 20; // 2 MiB
-
-/// Returns `ceil(cell_count * base_field_size * weight)`.
-fn ceil_weighted_bytes(cell_count: usize, base_field_size: usize, weight: f64) -> usize {
-    ((cell_count * base_field_size) as f64 * weight).ceil() as usize
-}
 
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
 pub struct Segment {
     pub instret_start: u64,
     pub num_insns: u64,
     pub trace_heights: Vec<u32>,
-}
-
-#[derive(Clone, Debug, WithSetters)]
-pub struct SegmentationConfig {
-    pub limits: SegmentationLimits,
-    /// Weight multiplier for main trace cells in memory calculation.
-    #[getset(set_with = "pub")]
-    pub main_cell_weight: usize,
-    /// Second order memory contribution per main cell, per PCS opening. AIRs with
-    /// `need_rot = true` open 2 cells per column (so contribute `2 *` this weight); AIRs with
-    /// `need_rot = false` contribute `1 *` this weight. Maxed with the weighted interaction
-    /// contribution.
-    #[getset(set_with = "pub")]
-    pub main_cell_secondary_weight: f64,
-    /// Weight multiplier for interaction cells in memory calculation.
-    #[getset(set_with = "pub")]
-    pub interaction_cell_weight: f64,
-    /// Size of the base field in bytes. Used to convert cell count to memory bytes.
-    #[getset(set_with = "pub")]
-    pub base_field_size: usize,
-}
-
-impl Default for SegmentationConfig {
-    fn default() -> Self {
-        Self {
-            limits: SegmentationLimits::default(),
-            main_cell_weight: DEFAULT_MAIN_CELL_WEIGHT,
-            main_cell_secondary_weight: DEFAULT_MAIN_CELL_SECONDARY_WEIGHT,
-            interaction_cell_weight: DEFAULT_INTERACTION_CELL_WEIGHT,
-            base_field_size: size_of::<u32>(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, WithSetters, Setters)]
@@ -155,7 +82,8 @@ pub struct SegmentationCtx {
     pub(crate) widths: Vec<usize>,
     interactions: Vec<usize>,
     need_rot: Vec<bool>,
-    pub(crate) config: SegmentationConfig,
+    pub(crate) limits: SegmentationLimits,
+    pub(crate) memory_config: ProvingMemoryConfig,
     pub instret: u64,
     pub instrets_until_check: u64,
     pub(super) segment_check_insns: u64,
@@ -165,13 +93,64 @@ pub struct SegmentationCtx {
     checkpoint_instret: u64,
 }
 
+#[cfg_attr(not(feature = "metrics"), allow(dead_code))]
+#[derive(Clone, Copy, Debug)]
+enum SegmentationTrigger {
+    Height { air_id: usize },
+    Memory,
+    Interactions,
+}
+
+#[cfg(feature = "metrics")]
+impl SegmentationTrigger {
+    fn reason(self) -> &'static str {
+        match self {
+            SegmentationTrigger::Height { .. } => "height",
+            SegmentationTrigger::Memory => "memory",
+            SegmentationTrigger::Interactions => "interactions",
+        }
+    }
+}
+
+#[cfg(feature = "metrics")]
+#[derive(Default)]
+struct MeteredCounts {
+    /// Rows before power-of-two padding.
+    unpadded_rows: usize,
+    /// Rows added by power-of-two padding.
+    padding_rows: usize,
+    /// Main trace cells for AIRs that open next-row rotations, before padding.
+    main_unpadded_with_rot: usize,
+    /// Main trace cells for AIRs that open next-row rotations, from padding rows.
+    main_padding_with_rot: usize,
+    /// Main trace cells for AIRs without next-row rotations, before padding.
+    main_unpadded_no_rot: usize,
+    /// Main trace cells for AIRs without next-row rotations, from padding rows.
+    main_padding_no_rot: usize,
+    /// Metered row-interaction slots before padding.
+    interaction_cells_unpadded: usize,
+    /// Metered row-interaction slots from padding rows.
+    interaction_cells_padding: usize,
+}
+
+#[cfg(feature = "metrics")]
+struct MeteredMemoryBreakdown {
+    /// Total selected segment memory estimate.
+    total: usize,
+    /// Unpadded-row contribution to the selected memory estimate.
+    unpadded: usize,
+    /// Padding-row contribution to the selected memory estimate.
+    padding: usize,
+}
+
 impl SegmentationCtx {
     pub fn new(
         air_names: Vec<String>,
         widths: Vec<usize>,
         interactions: Vec<usize>,
         need_rot: Vec<bool>,
-        config: SegmentationConfig,
+        limits: SegmentationLimits,
+        memory_config: ProvingMemoryConfig,
     ) -> Self {
         assert_eq!(air_names.len(), widths.len());
         assert_eq!(air_names.len(), interactions.len());
@@ -184,7 +163,8 @@ impl SegmentationCtx {
             widths,
             interactions,
             need_rot,
-            config,
+            limits,
+            memory_config,
             instret: 0,
             instrets_until_check: DEFAULT_SEGMENT_CHECK_INSNS,
             segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
@@ -194,31 +174,15 @@ impl SegmentationCtx {
     }
 
     pub fn set_max_trace_height(&mut self, max_trace_height: u32) {
-        self.config.limits.set_max_trace_height(max_trace_height);
+        self.limits.set_max_trace_height(max_trace_height);
     }
 
     pub fn set_max_memory(&mut self, max_memory: usize) {
-        self.config.limits.max_memory = max_memory;
+        self.limits.max_memory = max_memory;
     }
 
     pub fn set_max_interactions(&mut self, max_interactions: usize) {
-        self.config.limits.max_interactions = max_interactions;
-    }
-
-    pub fn set_main_cell_weight(&mut self, weight: usize) {
-        self.config.main_cell_weight = weight;
-    }
-
-    pub fn set_main_cell_secondary_weight(&mut self, weight: f64) {
-        self.config.main_cell_secondary_weight = weight;
-    }
-
-    pub fn set_interaction_cell_weight(&mut self, weight: f64) {
-        self.config.interaction_cell_weight = weight;
-    }
-
-    pub fn set_base_field_size(&mut self, base_field_size: usize) {
-        self.config.base_field_size = base_field_size;
+        self.limits.max_interactions = max_interactions;
     }
 
     /// Calculate the maximum trace height and corresponding air name
@@ -227,52 +191,70 @@ impl SegmentationCtx {
         trace_heights
             .iter()
             .enumerate()
-            .map(|(i, &height)| (height.next_power_of_two(), i))
+            .map(|(i, &height)| (next_power_of_two_or_zero(height as usize) as u32, i))
             .max_by_key(|(height, _)| *height)
             .map(|(height, idx)| (height, self.air_names[idx].as_str()))
             .unwrap_or((0, "unknown"))
     }
 
-    /// Convert main and interaction cell counts to memory bytes.
-    /// Formula: base_field_size * (main_cell_weight * main_cells + interaction_cell_weight *
-    /// interaction_cells). `main_cnt_with_rot` cells commit 2 PCS openings per column so use
-    /// `2 * main_cell_secondary_weight`; `main_cnt_no_rot` cells use the base weight.
+    /// Convert main trace cells and interaction cells to memory bytes.
     #[inline(always)]
     fn counts_to_memory(
         &self,
         main_cnt_with_rot: usize,
         main_cnt_no_rot: usize,
-        interaction_cnt: usize,
+        interaction_cells: usize,
     ) -> (
         usize, /* memory */
         usize, /* main */
         usize, /* interaction */
     ) {
-        let main_weight = self.config.main_cell_weight;
-        let main_secondary_weight = self.config.main_cell_secondary_weight;
-        let interaction_weight = self.config.interaction_cell_weight;
-        let base_field_size = self.config.base_field_size;
-
-        let main_cnt = main_cnt_with_rot + main_cnt_no_rot;
-        let main_memory = main_cnt * main_weight * base_field_size;
-        let main_secondary_memory =
-            ceil_weighted_bytes(
-                main_cnt_with_rot,
-                base_field_size,
-                2.0 * main_secondary_weight,
-            ) + ceil_weighted_bytes(main_cnt_no_rot, base_field_size, main_secondary_weight);
-        let interaction_memory =
-            ceil_weighted_bytes(interaction_cnt, base_field_size, interaction_weight)
-                + DEFAULT_INTERACTION_CONSTANT_OVERHEAD;
-        (
-            main_memory + max(main_secondary_memory, interaction_memory),
-            main_memory,
-            interaction_memory,
-        )
+        let estimate = self.memory_config.estimate(ProvingMemoryCounts::new(
+            main_cnt_with_rot,
+            main_cnt_no_rot,
+            interaction_cells,
+        ));
+        (estimate.total, estimate.main, estimate.interaction)
     }
 
-    /// Sum padded main and interaction cell counts across all chips, splitting main cells by
-    /// per-AIR `need_rot`.
+    /// Sum padded main trace cells and interaction cells across all chips, splitting main
+    /// cells by per-AIR `need_rot`.
+    #[cfg(feature = "metrics")]
+    #[inline(always)]
+    fn calculate_count_breakdown(&self, trace_heights: &[u32]) -> MeteredCounts {
+        debug_assert_eq!(trace_heights.len(), self.widths.len());
+        debug_assert_eq!(trace_heights.len(), self.interactions.len());
+        debug_assert_eq!(trace_heights.len(), self.need_rot.len());
+
+        let mut counts = MeteredCounts::default();
+        for (((&height, &width), &interactions), &need_rot) in trace_heights
+            .iter()
+            .zip(self.widths.iter())
+            .zip(self.interactions.iter())
+            .zip(self.need_rot.iter())
+        {
+            let padded_height = next_power_of_two_or_zero(height as usize);
+            let unpadded_height = height as usize;
+            let padding_height = padded_height - unpadded_height;
+            counts.unpadded_rows += unpadded_height;
+            counts.padding_rows += padding_height;
+            let main_unpadded_cells = unpadded_height * width;
+            let main_padding_cells = padding_height * width;
+            if need_rot {
+                counts.main_unpadded_with_rot += main_unpadded_cells;
+                counts.main_padding_with_rot += main_padding_cells;
+            } else {
+                counts.main_unpadded_no_rot += main_unpadded_cells;
+                counts.main_padding_no_rot += main_padding_cells;
+            }
+            counts.interaction_cells_unpadded += unpadded_height * interactions;
+            counts.interaction_cells_padding += padding_height * interactions;
+        }
+        counts
+    }
+
+    /// Sum padded main trace cells and interaction cells across all chips, splitting main
+    /// cells by per-AIR `need_rot`.
     #[inline(always)]
     fn calculate_cell_counts(&self, trace_heights: &[u32]) -> (usize, usize, usize) {
         debug_assert_eq!(trace_heights.len(), self.widths.len());
@@ -281,23 +263,23 @@ impl SegmentationCtx {
 
         let mut main_cnt_with_rot = 0;
         let mut main_cnt_no_rot = 0;
-        let mut interaction_cnt = 0;
+        let mut interaction_cells = 0;
         for (((&height, &width), &interactions), &need_rot) in trace_heights
             .iter()
             .zip(self.widths.iter())
             .zip(self.interactions.iter())
             .zip(self.need_rot.iter())
         {
-            let padded_height = height.next_power_of_two() as usize;
+            let padded_height = next_power_of_two_or_zero(height as usize);
             let main_cells = padded_height * width;
             if need_rot {
                 main_cnt_with_rot += main_cells;
             } else {
                 main_cnt_no_rot += main_cells;
             }
-            interaction_cnt += padded_height * interactions;
+            interaction_cells += padded_height * interactions;
         }
-        (main_cnt_with_rot, main_cnt_no_rot, interaction_cnt)
+        (main_cnt_with_rot, main_cnt_no_rot, interaction_cells)
     }
 
     /// Calculate total memory in bytes based on trace heights and widths.
@@ -310,9 +292,30 @@ impl SegmentationCtx {
         usize, /* main */
         usize, /* interaction */
     ) {
-        let (main_cnt_with_rot, main_cnt_no_rot, interaction_cnt) =
+        let (main_cnt_with_rot, main_cnt_no_rot, interaction_cells) =
             self.calculate_cell_counts(trace_heights);
-        self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cnt)
+        self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells)
+    }
+
+    #[cfg(feature = "metrics")]
+    #[inline(always)]
+    fn calculate_memory_breakdown(&self, counts: &MeteredCounts) -> MeteredMemoryBreakdown {
+        let unpadded = self.memory_config.estimate(ProvingMemoryCounts::new(
+            counts.main_unpadded_with_rot,
+            counts.main_unpadded_no_rot,
+            counts.interaction_cells_unpadded,
+        ));
+        let total = self.memory_config.estimate(ProvingMemoryCounts::new(
+            counts.main_unpadded_with_rot + counts.main_padding_with_rot,
+            counts.main_unpadded_no_rot + counts.main_padding_no_rot,
+            counts.interaction_cells_unpadded + counts.interaction_cells_padding,
+        ));
+
+        MeteredMemoryBreakdown {
+            total: total.total,
+            unpadded: unpadded.total,
+            padding: total.total - unpadded.total,
+        }
     }
 
     /// Calculate the total interactions based on trace heights
@@ -325,7 +328,7 @@ impl SegmentationCtx {
         trace_heights
             .iter()
             .zip(self.interactions.iter())
-            .map(|(&height, &interactions)| (height + 1) as usize * interactions)
+            .map(|(&height, &interactions)| add_one_or_zero(height) * interactions)
             .sum()
     }
 
@@ -336,6 +339,17 @@ impl SegmentationCtx {
         trace_heights: &[u32],
         is_trace_height_constant: &[bool],
     ) -> bool {
+        self.segmentation_trigger(instret, trace_heights, is_trace_height_constant)
+            .is_some()
+    }
+
+    #[inline(always)]
+    fn segmentation_trigger(
+        &self,
+        instret: u64,
+        trace_heights: &[u32],
+        is_trace_height_constant: &[bool],
+    ) -> Option<SegmentationTrigger> {
         debug_assert_eq!(trace_heights.len(), is_trace_height_constant.len());
         debug_assert_eq!(trace_heights.len(), self.air_names.len());
         debug_assert_eq!(trace_heights.len(), self.widths.len());
@@ -350,15 +364,15 @@ impl SegmentationCtx {
 
         // Segment should contain at least one cycle
         if num_insns == 0 {
-            return false;
+            return None;
         }
 
         let mut main_cnt_with_rot = 0usize;
         let mut main_cnt_no_rot = 0usize;
-        let mut interaction_cnt = 0usize;
+        let mut interaction_cells = 0usize;
         for (i, ((((padded_height, width), interactions), is_constant), &need_rot)) in trace_heights
             .iter()
-            .map(|&height| height.next_power_of_two())
+            .map(|&height| next_power_of_two_or_zero(height as usize) as u32)
             .zip(self.widths.iter())
             .zip(self.interactions.iter())
             .zip(is_trace_height_constant.iter())
@@ -367,17 +381,17 @@ impl SegmentationCtx {
         {
             // Only segment if the height is not constant and exceeds the maximum height after
             // padding
-            if !is_constant && padded_height > self.config.limits.max_trace_height {
+            if !is_constant && padded_height > self.limits.max_trace_height {
                 let air_name = unsafe { self.air_names.get_unchecked(i) };
                 tracing::info!(
                     "overshoot: instret {:10} | height ({:8}) > max ({:8}) | chip {:3} ({}) ",
                     instret,
                     padded_height,
-                    self.config.limits.max_trace_height,
+                    self.limits.max_trace_height,
                     i,
                     air_name,
                 );
-                return true;
+                return Some(SegmentationTrigger::Height { air_id: i });
             }
             let main_cells = padded_height as usize * width;
             if need_rot {
@@ -385,35 +399,35 @@ impl SegmentationCtx {
             } else {
                 main_cnt_no_rot += main_cells;
             }
-            interaction_cnt += padded_height as usize * interactions;
+            interaction_cells += padded_height as usize * interactions;
         }
 
         let (total_memory, main_memory, interaction_memory) =
-            self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cnt);
-        if total_memory > self.config.limits.max_memory {
+            self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells);
+        if total_memory > self.limits.max_memory {
             tracing::info!(
                 "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5})",
                 instret,
                 ByteSize::b(total_memory as u64),
-                ByteSize::b(self.config.limits.max_memory as u64),
+                ByteSize::b(self.limits.max_memory as u64),
                 ByteSize::b(main_memory as u64),
                 ByteSize::b(interaction_memory as u64),
             );
-            return true;
+            return Some(SegmentationTrigger::Memory);
         }
 
         let total_interactions = self.calculate_total_interactions(trace_heights);
-        if total_interactions > self.config.limits.max_interactions {
+        if total_interactions > self.limits.max_interactions {
             tracing::info!(
                 "overshoot: instret {:10} | total interactions ({:10}) > max ({:10})",
                 instret,
                 total_interactions,
-                self.config.limits.max_interactions
+                self.limits.max_interactions
             );
-            return true;
+            return Some(SegmentationTrigger::Interactions);
         }
 
-        false
+        None
     }
 
     #[inline(always)]
@@ -423,12 +437,20 @@ impl SegmentationCtx {
         trace_heights: &mut [u32],
         is_trace_height_constant: &[bool],
     ) -> bool {
-        let should_seg = self.should_segment(instret, trace_heights, is_trace_height_constant);
+        let trigger = self.segmentation_trigger(instret, trace_heights, is_trace_height_constant);
+        let should_segment = trigger.is_some();
 
-        if should_seg {
-            self.create_segment_from_checkpoint(instret, trace_heights);
+        #[cfg(feature = "metrics")]
+        if let Some(trigger) = trigger {
+            self.emit_segmentation_trigger_metric(trigger);
         }
-        should_seg
+
+        if should_segment {
+            self.create_segment_from_checkpoint(instret, trace_heights);
+            true
+        } else {
+            false
+        }
     }
 
     #[inline(always)]
@@ -532,6 +554,12 @@ impl SegmentationCtx {
         );
 
         self.log_segment_info::<IS_FINAL>(instret_start, num_insns, &trace_heights);
+        #[cfg(feature = "metrics")]
+        {
+            let segment = self.segments.len().to_string();
+            self.emit_metered_segment_metrics(&segment, &trace_heights);
+            self.emit_metered_air_metrics(&segment, &trace_heights);
+        }
         self.segments.push(Segment {
             instret_start,
             num_insns,
@@ -549,7 +577,7 @@ impl SegmentationCtx {
             .zip(self.widths.iter())
             .map(|(&height, &width)| {
                 let used = height as usize * width;
-                let padded = height.next_power_of_two() as usize * width;
+                let padded = next_power_of_two_or_zero(height as usize) * width;
                 (used, padded)
             })
             .fold((0, 0), |(u, p), (used, padded)| (u + used, p + padded));
@@ -590,5 +618,101 @@ impl SegmentationCtx {
             utilization,
             final_marker
         );
+    }
+}
+
+#[cfg(feature = "metrics")]
+impl SegmentationCtx {
+    fn emit_segmentation_trigger_metric(&self, trigger: SegmentationTrigger) {
+        let segment = self.segments.len().to_string();
+        let reason = trigger.reason();
+        match trigger {
+            SegmentationTrigger::Height { air_id } => {
+                let labels = [
+                    ("segment", segment),
+                    ("reason", reason.to_string()),
+                    ("air_id", air_id.to_string()),
+                    ("air_name", self.air_names[air_id].clone()),
+                ];
+                metrics::counter!("segmentation_trigger", &labels).absolute(1);
+            }
+            SegmentationTrigger::Memory | SegmentationTrigger::Interactions => {
+                let labels = [("segment", segment), ("reason", reason.to_string())];
+                metrics::counter!("segmentation_trigger", &labels).absolute(1);
+            }
+        }
+    }
+
+    fn emit_metered_segment_metrics(&self, segment: &str, trace_heights: &[u32]) {
+        let counts = self.calculate_count_breakdown(trace_heights);
+        let memory = self.calculate_memory_breakdown(&counts);
+        let labels = [("segment", segment.to_string())];
+        metrics::counter!("metered_memory_bytes", &labels).absolute(memory.total as u64);
+        metrics::counter!("metered_memory_unpadded_bytes", &labels)
+            .absolute(memory.unpadded as u64);
+        metrics::counter!("metered_memory_padding_bytes", &labels).absolute(memory.padding as u64);
+        metrics::counter!("metered_interaction_memory_overhead_bytes", &labels)
+            .absolute(INTERACTION_MEMORY_OVERHEAD as u64);
+    }
+
+    fn emit_metered_air_metrics(&self, segment: &str, trace_heights: &[u32]) {
+        let memory_config = self.memory_config;
+
+        for (air_id, ((((&height, &width), &interactions), &need_rot), air_name)) in trace_heights
+            .iter()
+            .zip(self.widths.iter())
+            .zip(self.interactions.iter())
+            .zip(self.need_rot.iter())
+            .zip(self.air_names.iter())
+            .enumerate()
+        {
+            let padded_height = next_power_of_two_or_zero(height as usize);
+            let unpadded_height = height as usize;
+            let padding_height = padded_height - unpadded_height;
+            if padded_height == 0 {
+                continue;
+            }
+            let labels = [
+                ("air_name", air_name.clone()),
+                ("air_id", air_id.to_string()),
+                ("segment", segment.to_string()),
+            ];
+            let unpadded_cells = unpadded_height * width;
+            let padding_cells = padding_height * width;
+            // One interaction cell is one metered row-interaction slot.
+            let interaction_cells_unpadded = unpadded_height * interactions;
+            let interaction_cells_padding = padding_height * interactions;
+            let main_secondary_unpadded =
+                memory_config.main_secondary_memory_bytes_for_rot(unpadded_cells, need_rot);
+            let main_secondary = memory_config
+                .main_secondary_memory_bytes_for_rot(unpadded_cells + padding_cells, need_rot);
+            let interaction_unpadded =
+                memory_config.interaction_memory_bytes_without_overhead(interaction_cells_unpadded);
+            let interaction_total = memory_config.interaction_memory_bytes_without_overhead(
+                interaction_cells_unpadded + interaction_cells_padding,
+            );
+
+            metrics::counter!("metered_rows_unpadded", &labels).absolute(height as u64);
+            metrics::counter!("metered_rows_padding", &labels).absolute(padding_height as u64);
+            metrics::counter!("metered_main_cells_unpadded", &labels)
+                .absolute(unpadded_cells as u64);
+            metrics::counter!("metered_main_cells_padding", &labels).absolute(padding_cells as u64);
+            metrics::counter!("metered_interaction_cells_unpadded", &labels)
+                .absolute(interaction_cells_unpadded as u64);
+            metrics::counter!("metered_interaction_cells_padding", &labels)
+                .absolute(interaction_cells_padding as u64);
+            metrics::counter!("metered_main_memory_unpadded_bytes", &labels)
+                .absolute(memory_config.main_memory_bytes(unpadded_cells) as u64);
+            metrics::counter!("metered_main_memory_padding_bytes", &labels)
+                .absolute(memory_config.main_memory_bytes(padding_cells) as u64);
+            metrics::counter!("metered_main_secondary_memory_unpadded_bytes", &labels)
+                .absolute(main_secondary_unpadded as u64);
+            metrics::counter!("metered_main_secondary_memory_padding_bytes", &labels)
+                .absolute((main_secondary - main_secondary_unpadded) as u64);
+            metrics::counter!("metered_interaction_memory_unpadded_bytes", &labels)
+                .absolute(interaction_unpadded as u64);
+            metrics::counter!("metered_interaction_memory_padding_bytes", &labels)
+                .absolute((interaction_total - interaction_unpadded) as u64);
+        }
     }
 }

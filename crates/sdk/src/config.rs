@@ -90,6 +90,15 @@ impl Default for AggregationTreeConfig {
     }
 }
 
+impl AggregationTreeConfig {
+    pub const fn deferral() -> Self {
+        Self {
+            num_children_leaf: 2,
+            num_children_internal: 2,
+        }
+    }
+}
+
 /// Configuration for the Halo2 proving and wrapper keygen.
 #[cfg(feature = "evm-prove")]
 #[derive(Clone, Debug, Serialize, Deserialize)]

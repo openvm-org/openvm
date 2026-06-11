@@ -42,25 +42,35 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use std::borrow::Borrow;
         use crate::{
-            circuit::deferral::{DeferralAggregationPvs, DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID},
+            circuit::deferral::{
+                DeferralAggregationPvs, DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID,
+                utils::{
+                    def_internal_compress, def_leaf_compress, def_zero_hash,
+                },
+            },
             prover::{
                 DeferralChildVkKind, DeferralInnerGpuProver as DeferralInnerProver,
                 InnerGpuProver as InnerProver,
             },
-            utils::zero_hash, CommitBytes,
+            CommitBytes,
         };
 
         #[cfg(feature = "root-prover")]
         use {
-            crate::prover::{DeferralHookGpuProver as DeferralHookProver, RootGpuProver as RootProver},
+            crate::{
+                prover::{
+                    DeferralHookGpuProver as DeferralHookProver, RootGpuProver as RootProver,
+                },
+                utils::zero_hash,
+            },
             openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine,
+            openvm_stark_sdk::config::baby_bear_poseidon2::poseidon2_compress_with_capacity,
             openvm_verify_stark_host::pvs::{DeferralPvs, VerifierBasePvs},
         };
 
         use openvm_recursion_circuit::utils::poseidon2_hash_slice_with_states;
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
         use openvm_stark_backend::prover::CommittedTraceData;
-        use openvm_stark_sdk::config::baby_bear_poseidon2::poseidon2_compress_with_capacity;
         use openvm_verify_stark_host::pvs::VERIFIER_PVS_AIR_ID;
         use p3_field::PrimeField32;
 
@@ -482,7 +492,7 @@ pub(in crate::tests) fn generate_deferral_internal_recursive_proof_from_copies(
 #[cfg(feature = "cuda")]
 fn expected_deferral_leaf_merkle_commit(def_proof: &Proof<SC>) -> [F; DIGEST_SIZE] {
     let (folded_input_commit, output_commit) = expected_deferral_leaf_io_commit(def_proof);
-    poseidon2_compress_with_capacity(folded_input_commit, output_commit).0
+    def_leaf_compress(folded_input_commit, output_commit).1
 }
 
 #[cfg(feature = "cuda")]
@@ -523,14 +533,20 @@ fn expected_deferral_inner_merkle_commit_from_copies(
                 let right = if chunk.len() == 2 {
                     chunk[1]
                 } else {
-                    zero_hash(child_merkle_depth + 1)
+                    def_zero_hash(child_merkle_depth + 1)
                 };
-                poseidon2_compress_with_capacity(chunk[0], right).0
+                def_internal_compress(chunk[0], right).1
             })
             .collect();
         child_merkle_depth += 1;
     }
     commits[0]
+}
+
+#[cfg(feature = "cuda")]
+fn expected_deferral_inner_merkle_depth(num_copies: usize) -> u32 {
+    assert!(num_copies > 0, "num_copies must be non-zero");
+    num_copies.next_power_of_two().ilog2()
 }
 
 #[cfg(feature = "cuda")]
@@ -566,6 +582,10 @@ fn test_deferral_leaf_prover(num_children: usize) -> Result<()> {
         num_children as u32,
         wrapped_pvs.num_def_circuit_proofs.as_canonical_u32()
     );
+    assert_eq!(
+        expected_deferral_inner_merkle_depth(num_children),
+        wrapped_pvs.merkle_depth.as_canonical_u32()
+    );
 
     Ok(())
 }
@@ -597,6 +617,10 @@ fn test_deferral_aggregation(num_children: usize) -> Result<()> {
     assert_eq!(
         num_children as u32,
         wrapped_pvs.num_def_circuit_proofs.as_canonical_u32()
+    );
+    assert_eq!(
+        expected_deferral_inner_merkle_depth(num_children),
+        wrapped_pvs.merkle_depth.as_canonical_u32()
     );
 
     Ok(())

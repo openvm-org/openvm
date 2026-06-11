@@ -30,9 +30,9 @@ mod tests;
 #[derive(AlignedBorrow, StructReflection, Copy, Clone)]
 #[repr(C)]
 pub struct BitwiseOperationLookupCols<T, const NUM_BITS: usize> {
-    /// Binary decomposition of x (x_bits[0] is LSB, x_bits[NUM_BITS-1] is MSB)
+    /// Binary decomposition of x (`x_bits[0]` is LSB, `x_bits[NUM_BITS-1]` is MSB)
     pub x_bits: [T; NUM_BITS],
-    /// Binary decomposition of y (y_bits[0] is LSB, y_bits[NUM_BITS-1] is MSB)
+    /// Binary decomposition of y (`y_bits[0]` is LSB, `y_bits[NUM_BITS-1]` is MSB)
     pub y_bits: [T; NUM_BITS],
     /// Number of range check operations requested for each (x, y) pair
     pub mult_range: T,

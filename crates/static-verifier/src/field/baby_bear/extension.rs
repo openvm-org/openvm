@@ -1,8 +1,11 @@
+use core::array;
 #[cfg(test)]
 use std::{cell::RefCell, vec::Vec};
 
+#[cfg(test)]
+use halo2_base::AssignedValue;
 use halo2_base::{
-    gates::range::RangeChip, halo2_proofs::halo2curves::bn256::Fr, AssignedValue, Context,
+    gates::range::RangeChip, halo2_proofs::halo2curves::bn256::Fr, safe_types::SafeBool, Context,
 };
 use itertools::Itertools;
 #[cfg(test)]
@@ -16,7 +19,7 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    field::baby_bear::{BabyBearChip, BabyBearWire},
+    field::baby_bear::{BabyBearChip, BabyBearWire, ReducedBabyBearWire},
     utils::guarded_debug_assert_eq,
 };
 
@@ -49,12 +52,39 @@ pub struct BabyBearExt4Chip {
 
 #[derive(Copy, Clone, Debug)]
 pub struct BabyBearExt4Wire(pub [BabyBearWire; 4]);
+
+/// An extension-field wire whose BabyBear basis coefficients are all reduced.
+///
+/// This is the extension-field analogue of `ReducedBabyBearWire`: it is safe for
+/// transcript/hash absorption coefficient-by-coefficient. Converting via
+/// `BabyBearExt4Wire::from` drops that evidence when the value is used by arithmetic
+/// helpers.
+#[derive(Copy, Clone, Debug)]
+pub struct ReducedBabyBearExt4Wire([ReducedBabyBearWire; 4]);
 pub type BabyBearExt4 = BinomialExtensionField<BabyBear, 4>;
 
 impl BabyBearExt4Wire {
     pub fn to_extension_field(&self) -> BabyBearExt4 {
-        let b_val = (0..4).map(|i| self.0[i].to_baby_bear()).collect_vec();
-        BabyBearExt4::from_basis_coefficients_slice(&b_val).unwrap()
+        BabyBearExt4::from_basis_coefficients_fn(|i| self.0[i].to_baby_bear())
+    }
+}
+
+impl ReducedBabyBearExt4Wire {
+    pub fn coeffs(&self) -> &[ReducedBabyBearWire; 4] {
+        &self.0
+    }
+}
+
+impl From<ReducedBabyBearExt4Wire> for BabyBearExt4Wire {
+    /// Drops the canonicality evidence and returns the underlying arithmetic wire.
+    fn from(wire: ReducedBabyBearExt4Wire) -> Self {
+        BabyBearExt4Wire(wire.0.map(BabyBearWire::from))
+    }
+}
+
+impl From<&ReducedBabyBearExt4Wire> for BabyBearExt4Wire {
+    fn from(wire: &ReducedBabyBearExt4Wire) -> Self {
+        (*wire).into()
     }
 }
 
@@ -62,27 +92,46 @@ impl BabyBearExt4Chip {
     pub fn new(base_chip: BabyBearChip) -> Self {
         BabyBearExt4Chip { base: base_chip }
     }
+
+    /// Loads each BabyBear coefficient and constrains only that its assigned
+    /// advice cell fits in 31 bits.
+    ///
+    /// The Rust input is canonicalized for the honest witness assignment, but the
+    /// circuit does not prove each advice cell is `< p`. Use
+    /// `load_reduced_witness` for transcript/hash inputs.
     pub fn load_witness(&self, ctx: &mut Context<Fr>, value: BabyBearExt4) -> BabyBearExt4Wire {
-        BabyBearExt4Wire(
-            value
-                .as_basis_coefficients_slice()
-                .iter()
-                .map(|x| self.base.load_witness(ctx, *x))
-                .collect_vec()
-                .try_into()
-                .unwrap(),
-        )
+        let coeffs = value.as_basis_coefficients_slice();
+        BabyBearExt4Wire(array::from_fn(|i| self.base.load_witness(ctx, coeffs[i])))
+    }
+
+    /// Loads each coefficient and constrains it to the canonical BabyBear range.
+    pub fn load_reduced_witness(
+        &self,
+        ctx: &mut Context<Fr>,
+        value: BabyBearExt4,
+    ) -> ReducedBabyBearExt4Wire {
+        let coeffs = value.as_basis_coefficients_slice();
+        ReducedBabyBearExt4Wire(array::from_fn(|i| {
+            self.base.load_reduced_witness(ctx, coeffs[i])
+        }))
+    }
+
+    /// Loads canonical BabyBear constants for each coefficient and returns them
+    /// with reduced type evidence.
+    pub fn load_reduced_constant(
+        &self,
+        ctx: &mut Context<Fr>,
+        value: BabyBearExt4,
+    ) -> ReducedBabyBearExt4Wire {
+        let coeffs = value.as_basis_coefficients_slice();
+        // Constants are canonical by construction.
+        ReducedBabyBearExt4Wire(array::from_fn(|i| {
+            self.base.load_reduced_constant(ctx, coeffs[i])
+        }))
     }
     pub fn load_constant(&self, ctx: &mut Context<Fr>, value: BabyBearExt4) -> BabyBearExt4Wire {
-        BabyBearExt4Wire(
-            value
-                .as_basis_coefficients_slice()
-                .iter()
-                .map(|x| self.base.load_constant(ctx, *x))
-                .collect_vec()
-                .try_into()
-                .unwrap(),
-        )
+        let coeffs = value.as_basis_coefficients_slice();
+        BabyBearExt4Wire(array::from_fn(|i| self.base.load_constant(ctx, coeffs[i])))
     }
     pub fn add(
         &self,
@@ -163,7 +212,7 @@ impl BabyBearExt4Chip {
     pub fn select(
         &self,
         ctx: &mut Context<Fr>,
-        cond: AssignedValue<Fr>,
+        cond: SafeBool<Fr>,
         a: BabyBearExt4Wire,
         b: BabyBearExt4Wire,
     ) -> BabyBearExt4Wire {

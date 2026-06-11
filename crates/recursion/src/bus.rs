@@ -442,7 +442,7 @@ define_typed_per_proof_permutation_bus!(MerkleVerifyBus, MerkleVerifyBusMessage)
 pub struct AirShapeBusMessage<T> {
     pub sort_idx: T,
     /// The property this message encodes.
-    /// See associated enum [AirShapeProperty].
+    /// See associated enum `AirShapeProperty`.
     pub property_idx: T,
     /// The value of the corresponding property.
     pub value: T,

@@ -1,7 +1,7 @@
 use std::ops::RangeInclusive;
 
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
+    p3_air::AirBuilder,
     p3_field::{Field, PrimeCharacteristicRing},
 };
 
@@ -84,7 +84,7 @@ impl Encoder {
     /// Construct the multivariate Lagrange polynomial for a specific point
     /// This polynomial equals 1 at the given point and 0 at all other points
     /// in our solution set
-    fn expression_for_point<AB: InteractionBuilder>(
+    fn expression_for_point<AB: AirBuilder<F: Field, Var: Copy>>(
         &self,
         pt: &[u32],
         vars: &[AB::Var],
@@ -116,7 +116,7 @@ impl Encoder {
 
     /// Get the polynomial expression that equals 1 when the variables encode the flag at index
     /// flag_idx
-    pub fn get_flag_expr<AB: InteractionBuilder>(
+    pub fn get_flag_expr<AB: AirBuilder<F: Field, Var: Copy>>(
         &self,
         flag_idx: usize,
         vars: &[AB::Var],
@@ -133,13 +133,13 @@ impl Encoder {
 
     /// Returns an expression that is 1 if the variables encode a valid flag and 0 if they encode
     /// the invalid point
-    pub fn is_valid<AB: InteractionBuilder>(&self, vars: &[AB::Var]) -> AB::Expr {
+    pub fn is_valid<AB: AirBuilder<F: Field, Var: Copy>>(&self, vars: &[AB::Var]) -> AB::Expr {
         debug_assert!(self.reserve_invalid);
         AB::Expr::ONE - self.expression_for_point::<AB>(&self.pts[0], vars)
     }
 
     /// Returns all flag expressions for the given variables
-    pub fn flags<AB: InteractionBuilder>(&self, vars: &[AB::Var]) -> Vec<AB::Expr> {
+    pub fn flags<AB: AirBuilder<F: Field, Var: Copy>>(&self, vars: &[AB::Var]) -> Vec<AB::Expr> {
         (0..self.flag_cnt)
             .map(|i| self.get_flag_expr::<AB>(i, vars))
             .collect()
@@ -147,7 +147,7 @@ impl Encoder {
 
     /// Returns the sum of expressions for all unused points
     /// This is used to ensure that variables encode only valid flags
-    pub fn sum_of_unused<AB: InteractionBuilder>(&self, vars: &[AB::Var]) -> AB::Expr {
+    pub fn sum_of_unused<AB: AirBuilder<F: Field, Var: Copy>>(&self, vars: &[AB::Var]) -> AB::Expr {
         let mut expr = AB::Expr::ZERO;
         for i in (self.flag_cnt + self.reserve_invalid as usize)..self.pts.len() {
             expr += self.expression_for_point::<AB>(&self.pts[i], vars);
@@ -161,7 +161,7 @@ impl Encoder {
     }
 
     /// Returns an expression that is 1 if `flag_idxs` contains the encoded flag and 0 otherwise
-    pub fn contains_flag<AB: InteractionBuilder>(
+    pub fn contains_flag<AB: AirBuilder<F: Field, Var: Copy>>(
         &self,
         vars: &[AB::Var],
         flag_idxs: &[usize],
@@ -172,7 +172,7 @@ impl Encoder {
     }
 
     /// Returns an expression that is 1 if (l..=r) contains the encoded flag and 0 otherwise
-    pub fn contains_flag_range<AB: InteractionBuilder>(
+    pub fn contains_flag_range<AB: AirBuilder<F: Field, Var: Copy>>(
         &self,
         vars: &[AB::Var],
         range: RangeInclusive<usize>,
@@ -183,7 +183,7 @@ impl Encoder {
     /// Returns an expression that is 0 if `flag_idxs_vals` doesn't contain the encoded flag
     /// and the corresponding val if it does
     /// `flag_idxs_vals` is a list of tuples (flag_idx, val)
-    pub fn flag_with_val<AB: InteractionBuilder>(
+    pub fn flag_with_val<AB: AirBuilder<F: Field, Var: Copy>>(
         &self,
         vars: &[AB::Var],
         flag_idx_vals: &[(usize, usize)],
@@ -196,7 +196,7 @@ impl Encoder {
     }
 }
 
-impl<AB: InteractionBuilder> SubAir<AB> for Encoder {
+impl<AB: AirBuilder<F: Field, Var: Copy>> SubAir<AB> for Encoder {
     type AirContext<'a>
         = &'a [AB::Var]
     where

@@ -20,15 +20,18 @@ use crate::{
     },
     system::memory::online::GuestMemory,
 };
-static_assertions::assert_impl_all!(AotInstance<p3_baby_bear::BabyBear, MeteredCtx>: Send, Sync);
+static_assertions::assert_impl_all!(
+    AotInstance<'static, p3_baby_bear::BabyBear, MeteredCtx>: Send,
+    Sync
+);
 
-impl<F> AotInstance<F, MeteredCtx>
+impl<'a, F> AotInstance<'a, F, MeteredCtx>
 where
     F: PrimeField32,
 {
     /// Creates a new instance for metered execution.
     pub fn new_metered<E>(
-        inventory: &ExecutorInventory<E>,
+        inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<Self, StaticProgramError>
@@ -63,7 +66,7 @@ where
             start.elapsed().as_millis()
         );
         Ok(Self {
-            system_config: inventory.config().clone(),
+            system_config: inventory.config(),
             pre_compute_buf,
             pre_compute_insns,
             pc_start: exe.pc_start,
@@ -71,7 +74,7 @@ where
             lib,
         })
     }
-    pub fn create_metered_asm<E>(
+    fn create_metered_asm<E>(
         exe: &VmExe<F>,
         inventory: &ExecutorInventory<E>,
         executor_idx_to_air_idx: &[usize],

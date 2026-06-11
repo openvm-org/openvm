@@ -128,9 +128,9 @@ pub struct ProofShapeVarColsMut<'a, F> {
 ///
 /// The bound is enforced via a limb-decomposed comparison (see `eval` on `is_last`).
 ///
-/// [`VerifierSubCircuit::new_with_options`] also asserts at verifier-circuit construction time
-/// that every `LinearConstraint` in the child VK's `trace_height_constraints` is implied by this
-/// bound. Otherwise, construction fails.
+/// [`VerifierSubCircuit::new_with_options`](crate::system::VerifierSubCircuit::new_with_options)
+/// also asserts at verifier-circuit construction time that every `LinearConstraint` in the child
+/// VK's `trace_height_constraints` is implied by this bound. Otherwise, construction fails.
 pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     // Parameters derived from vk
     pub per_air: Vec<AirMetadata>,

@@ -257,15 +257,15 @@ fn build_merkle_logs(preflight: &Preflight, params: &SystemParams) -> Vec<Merkle
 // to produce arr[result_layer][result_index].
 #[derive(Debug, PartialEq)]
 pub struct CombinationIndices {
-    /// The index of the array (vector) containing the two elements to be combined (arr[j]).
+    /// The index of the array (vector) containing the two elements to be combined (`arr[j]`).
     pub source_layer: usize,
-    /// The index of the left element in the source layer (arr[j][2*c]).
+    /// The index of the left element in the source layer (`arr[j][2*c]`).
     pub left_source_index: usize,
-    /// The index of the right element in the source layer (arr[j][2*c + 1]).
+    /// The index of the right element in the source layer (`arr[j][2*c + 1]`).
     pub right_source_index: usize,
-    /// The index of the array (vector) where the result is stored (arr[j+1]).
+    /// The index of the array (vector) where the result is stored (`arr[j+1]`).
     pub result_layer: usize,
-    /// The index of the result element in the result layer (arr[j+1][c]).
+    /// The index of the result element in the result layer (`arr[j+1][c]`).
     pub result_index: usize,
 }
 

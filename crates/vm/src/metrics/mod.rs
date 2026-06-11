@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, mem};
 
 use backtrace::Backtrace;
 use cycle_tracker::CycleTracker;
+#[cfg(feature = "perf-metrics")]
 use itertools::Itertools;
 use metrics::counter;
 use openvm_instructions::{
@@ -27,7 +28,9 @@ pub struct VmMetrics {
     pub debug_infos: ProgramDebugInfo,
     #[cfg(feature = "perf-metrics")]
     pub(crate) num_sys_airs: usize,
+    #[cfg(feature = "perf-metrics")]
     pub(crate) main_widths: Vec<usize>,
+    #[cfg(feature = "perf-metrics")]
     pub(crate) total_widths: Vec<usize>,
 
     // Dynamic stats
@@ -38,6 +41,7 @@ pub struct VmMetrics {
     /// Metric collection tools. Only collected when "perf-metrics" feature is enabled.
     pub cycle_tracker: CycleTracker,
 
+    #[cfg(feature = "perf-metrics")]
     pub(crate) current_trace_cells: Vec<usize>,
 
     /// Backtrace for guest debug panic display
@@ -107,32 +111,50 @@ where
     state.metrics.current_trace_cells.fill(0);
 }
 
+#[cfg(feature = "metrics")]
+pub fn emit_opcode_counts(metrics: &VmMetrics, counts: BTreeMap<(usize, String), u64>) {
+    for ((air_idx, opcode), count) in counts {
+        let Some(air_name) = metrics.air_names.get(air_idx) else {
+            continue;
+        };
+        let labels = [
+            ("air_name", air_name.clone()),
+            ("air_id", air_idx.to_string()),
+            ("opcode", opcode),
+        ];
+        counter!("opcode_count", &labels).absolute(count);
+    }
+}
+
 impl VmMetrics {
-    pub fn set_pk_info<PB: ProverBackend>(&mut self, pk: &DeviceMultiStarkProvingKey<PB>) {
-        let (air_names, main_widths, total_widths): (Vec<_>, Vec<_>, Vec<_>) = pk
+    #[cfg(feature = "metrics")]
+    pub fn set_pk_air_names<PB: ProverBackend>(&mut self, pk: &DeviceMultiStarkProvingKey<PB>) {
+        self.air_names = pk.per_air.iter().map(|pk| pk.air_name.clone()).collect();
+    }
+
+    #[cfg(feature = "perf-metrics")]
+    pub fn set_pk_trace_info<PB: ProverBackend>(&mut self, pk: &DeviceMultiStarkProvingKey<PB>) {
+        let (main_widths, total_widths): (Vec<_>, Vec<_>) = pk
             .per_air
             .iter()
             .map(|pk| {
-                let air_names = pk.air_name.clone();
                 let width = &pk.vk.params.width;
-                let main_width = width.main_width();
-                let total_width = width.total_width();
-                (air_names, main_width, total_width)
+                (width.main_width(), width.total_width())
             })
-            .multiunzip();
-        self.air_names = air_names;
+            .unzip();
         self.main_widths = main_widths;
         self.total_widths = total_widths;
         self.current_trace_cells = vec![0; self.air_names.len()];
     }
 
+    #[cfg(feature = "perf-metrics")]
     pub fn update_trace_cells(
         &mut self,
         now_trace_cells: Vec<usize>,
         opcode_name: String,
         dsl_instr: Option<String>,
     ) {
-        let key = (dsl_instr, opcode_name);
+        let key = (dsl_instr, opcode_name.clone());
         self.cycle_tracker.increment_opcode(&key);
         *self.counts.entry(key.clone()).or_insert(0) += 1;
 
@@ -140,10 +162,10 @@ impl VmMetrics {
             itertools::izip!(&self.air_names, &now_trace_cells, &self.current_trace_cells)
         {
             if prev_value != now_value {
+                let cells_used = now_value - prev_value;
                 let key = (key.0.clone(), key.1.clone(), air_name.to_owned());
-                self.cycle_tracker
-                    .increment_cells_used(&key, now_value - prev_value);
-                *self.trace_cells.entry(key).or_insert(0) += now_value - prev_value;
+                self.cycle_tracker.increment_cells_used(&key, cells_used);
+                *self.trace_cells.entry(key).or_insert(0) += cells_used;
             }
         }
         self.current_trace_cells = now_trace_cells;

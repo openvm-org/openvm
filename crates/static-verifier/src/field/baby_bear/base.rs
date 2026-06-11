@@ -6,7 +6,8 @@ use halo2_base::{
         arithmetic::Field as _,
         halo2curves::{bn256::Fr, ff::PrimeField as _},
     },
-    utils::{bigint_to_fe, biguint_to_fe, bit_length, fe_to_bigint, BigPrimeField},
+    safe_types::SafeBool,
+    utils::{bigint_to_fe, biguint_to_fe, bit_length, fe_to_bigint, modulus, BigPrimeField},
     AssignedValue, Context, QuantumCell,
 };
 use itertools::Itertools;
@@ -17,6 +18,7 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 
+use super::BABY_BEAR_MODULUS_U64;
 use crate::utils::{guarded_debug_assert, guarded_debug_assert_eq};
 
 pub(crate) const BABYBEAR_MAX_BITS: usize = 31;
@@ -37,6 +39,34 @@ pub struct BabyBearWire {
     pub value: AssignedValue<Fr>,
     /// The value is guaranteed to be less than 2^max_bits.
     pub max_bits: usize,
+}
+
+/// A BabyBear wire constrained to its canonical representative in `[0, p)`.
+///
+/// This type marks values that are safe to absorb into BabyBear-domain transcript
+/// and hash inputs. Arithmetic may still use the underlying `BabyBearWire`; converting
+/// via `BabyBearWire::from` only drops this type-level evidence and does not add or
+/// remove constraints.
+#[derive(Copy, Clone, Debug)]
+pub struct ReducedBabyBearWire(BabyBearWire);
+
+impl ReducedBabyBearWire {
+    pub fn value(&self) -> AssignedValue<Fr> {
+        self.0.value
+    }
+}
+
+impl From<ReducedBabyBearWire> for BabyBearWire {
+    /// Drops the canonicality evidence and returns the underlying arithmetic wire.
+    fn from(wire: ReducedBabyBearWire) -> Self {
+        wire.0
+    }
+}
+
+impl From<&ReducedBabyBearWire> for BabyBearWire {
+    fn from(wire: &ReducedBabyBearWire) -> Self {
+        (*wire).into()
+    }
 }
 
 impl BabyBearWire {
@@ -76,6 +106,12 @@ impl BabyBearChip {
         &self.range
     }
 
+    /// Loads a BabyBear witness and constrains only that the assigned advice cell
+    /// fits in 31 bits.
+    ///
+    /// The Rust input is canonicalized for the honest witness assignment, but the
+    /// circuit does not prove the advice cell is `< p`. Use `load_reduced_witness`
+    /// for values that will be absorbed into transcripts or hashes.
     pub fn load_witness(&self, ctx: &mut Context<Fr>, value: BabyBear) -> BabyBearWire {
         let value = ctx.load_witness(Fr::from(PrimeField64::as_canonical_u64(&value)));
         self.range.range_check(ctx, value, BABYBEAR_MAX_BITS);
@@ -83,6 +119,21 @@ impl BabyBearChip {
             value,
             max_bits: BABYBEAR_MAX_BITS,
         }
+    }
+
+    /// Loads a witness and constrains it to the canonical BabyBear range `[0, p)`.
+    pub fn load_reduced_witness(
+        &self,
+        ctx: &mut Context<Fr>,
+        value: BabyBear,
+    ) -> ReducedBabyBearWire {
+        let value = ctx.load_witness(Fr::from(PrimeField64::as_canonical_u64(&value)));
+        self.range
+            .check_less_than_safe(ctx, value, BABY_BEAR_MODULUS_U64);
+        ReducedBabyBearWire(BabyBearWire {
+            value,
+            max_bits: BABYBEAR_MAX_BITS,
+        })
     }
 
     pub fn load_constant(&self, ctx: &mut Context<Fr>, value: BabyBear) -> BabyBearWire {
@@ -104,7 +155,18 @@ impl BabyBearChip {
         wire
     }
 
+    /// Loads a canonical BabyBear constant and returns it with reduced type evidence.
+    pub fn load_reduced_constant(
+        &self,
+        ctx: &mut Context<Fr>,
+        value: BabyBear,
+    ) -> ReducedBabyBearWire {
+        // Constants are canonical by construction.
+        ReducedBabyBearWire(self.load_constant(ctx, value))
+    }
+
     pub fn reduce(&self, ctx: &mut Context<Fr>, a: BabyBearWire) -> BabyBearWire {
+        assert!(a.max_bits <= Fr::CAPACITY as usize - RESERVED_HIGH_BITS);
         guarded_debug_assert!(fe_to_bigint(a.value.value()).bits() as usize <= a.max_bits);
         let (_, r) = signed_div_mod(&self.range, ctx, a.value, a.max_bits);
         let r = BabyBearWire {
@@ -131,6 +193,9 @@ impl BabyBearChip {
         mut a: BabyBearWire,
         mut b: BabyBearWire,
     ) -> BabyBearWire {
+        if a.max_bits < b.max_bits {
+            std::mem::swap(&mut a, &mut b);
+        }
         if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             a = self.reduce(ctx, a);
             if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
@@ -139,11 +204,8 @@ impl BabyBearChip {
         }
         let value = self.gate().add(ctx, a.value, b.value);
         let max_bits = a.max_bits.max(b.max_bits) + 1;
-        let mut c = BabyBearWire { value, max_bits };
+        let c = BabyBearWire { value, max_bits };
         guarded_debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() + b.to_baby_bear());
-        if c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-            c = self.reduce(ctx, c);
-        }
         c
     }
 
@@ -163,7 +225,14 @@ impl BabyBearChip {
         mut a: BabyBearWire,
         mut b: BabyBearWire,
     ) -> BabyBearWire {
+        #[cfg(debug_assertions)]
+        let expected = a.to_baby_bear() - b.to_baby_bear();
+        let mut negate_result = false;
         if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
+            if a.max_bits < b.max_bits {
+                std::mem::swap(&mut a, &mut b);
+                negate_result = true;
+            }
             a = self.reduce(ctx, a);
             if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
                 b = self.reduce(ctx, b);
@@ -172,10 +241,10 @@ impl BabyBearChip {
         let value = self.gate().sub(ctx, a.value, b.value);
         let max_bits = a.max_bits.max(b.max_bits) + 1;
         let mut c = BabyBearWire { value, max_bits };
-        guarded_debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() - b.to_baby_bear());
-        if c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-            c = self.reduce(ctx, c);
+        if negate_result {
+            c = self.neg(ctx, c);
         }
+        guarded_debug_assert_eq!(c.to_baby_bear(), expected);
         c
     }
 
@@ -197,10 +266,7 @@ impl BabyBearChip {
         let value = self.gate().mul(ctx, a.value, b.value);
         let max_bits = a.max_bits + b.max_bits;
 
-        let mut c = BabyBearWire { value, max_bits };
-        if c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-            c = self.reduce(ctx, c);
-        }
+        let c = BabyBearWire { value, max_bits };
         guarded_debug_assert_eq!(c.to_baby_bear(), a.to_baby_bear() * b.to_baby_bear());
         c
     }
@@ -227,10 +293,7 @@ impl BabyBearChip {
         let value = self.gate().mul_add(ctx, a.value, b.value, c.value);
         let max_bits = c.max_bits.max(a.max_bits + b.max_bits) + 1;
 
-        let mut d = BabyBearWire { value, max_bits };
-        if d.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-            d = self.reduce(ctx, d);
-        }
+        let d = BabyBearWire { value, max_bits };
         guarded_debug_assert_eq!(
             d.to_baby_bear(),
             a.to_baby_bear() * b.to_baby_bear() + c.to_baby_bear()
@@ -254,13 +317,13 @@ impl BabyBearChip {
 
         // Constrain a = b * c (mod p)
         let mut c = self.load_witness(ctx, a.to_baby_bear() * b_inv_val);
-        if a.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
+        if a.max_bits + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             a = self.reduce(ctx, a);
         }
-        if b.max_bits + c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
+        if b.max_bits + c.max_bits + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             b = self.reduce(ctx, b);
         }
-        if b.max_bits + c.max_bits > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
+        if b.max_bits + c.max_bits + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             c = self.reduce(ctx, c);
         }
         let diff = self.gate().sub_mul(ctx, a.value, b.value, c.value);
@@ -340,11 +403,11 @@ impl BabyBearChip {
     pub fn select(
         &self,
         ctx: &mut Context<Fr>,
-        cond: AssignedValue<Fr>,
+        cond: SafeBool<Fr>,
         a: BabyBearWire,
         b: BabyBearWire,
     ) -> BabyBearWire {
-        let value = self.gate().select(ctx, a.value, b.value, cond);
+        let value = self.gate().select(ctx, a.value, b.value, *cond.as_ref());
         let max_bits = a.max_bits.max(b.max_bits);
         BabyBearWire { value, max_bits }
     }
@@ -417,14 +480,24 @@ impl BabyBearChip {
     }
 }
 
-/// Constrains and returns `(c, r)` such that `a = BabyBear::ORDER_U32 * c + r`.
+/// Constrains and returns `(div, rem)` encoding integers `D` and `R` such that
+/// `A = BabyBear::ORDER_U32 * D + R` with `0 <= R < BabyBear::ORDER_U32`, where
+/// `A = fe_to_bigint(a)` is the canonical signed representative of `a` in
+/// `(-p/2, p/2]` and `p = F::MODULUS`.
 ///
-/// * a: [QuantumCell] value to divide
-/// * a_num_bits: number of bits needed to represent the absolute value of `a`
+/// The returned `div` cell encodes the possibly negative integer `D` modulo
+/// `p`; the returned `rem` cell encodes the canonical nonnegative integer `R`.
 ///
-/// ## Assumptions
-/// * `a_max_bits < F::CAPACITY = F::NUM_BITS - RESERVED_HIGH_BITS`
-///   * Unsafe behavior if `a_max_bits >= F::CAPACITY`
+/// # Arguments
+///
+/// * `a` - the [`QuantumCell`] value to divide.
+/// * `a_num_bits` - a bound such that `|A| < 2^a_num_bits`.
+///
+/// # Preconditions
+///
+/// This function does not itself range-check `a`. The caller must ensure,
+/// either by prior constraints or by construction, that the canonical signed
+/// representative `A = fe_to_bigint(a)` satisfies `|A| < 2^a_num_bits`.
 fn signed_div_mod<F>(
     range: &RangeChip<F>,
     ctx: &mut Context<F>,
@@ -434,42 +507,73 @@ fn signed_div_mod<F>(
 where
     F: BigPrimeField,
 {
-    // Proof of correctness:
-    // Let `b` be the order of `BabyBear` and `p` be the order of `Fr`.
-    // First we introduce witness `div` and `rem`.
-    // We constraint:
-    // (1) `div * b + rem ≡ a (mod p)`
-    // (2) `0 <= rem < b`
-    // Logically we want `div = a // b`. Because (2) and `a` could be negative, `div` could
-    // be negative. Therefore, we have `|div| = |a // b| = |a| // b < 2^max_bits // b = bound` and
-    // we can say `shifted_div = div + bound` is in `[0, 2 * bound)`.
-    // In practice, it's expensive to assert `shifted_div` is less than `2 * bound` which is not a
-    // power of 2s. Instead, we add a looser constraint:
-    // (3) `shifted_div < 2^max_bits/2^(BABYBEAR_ORDER_BITS-1)=2^(max_bits-BABYBEAR_ORDER_BITS+1)`
+    assert!(a_num_bits <= F::CAPACITY as usize - RESERVED_HIGH_BITS);
+    // Proof sketch:
     //
-    // Let's check if |div * b + rem| can overflow:
-    // - `div` has at most `max_bits-BABYBEAR_ORDER_BITS` bits
-    // - `b` has `BABYBEAR_ORDER_BITS` bits.
-    // - `rem` has at most `BABYBEAR_ORDER_BITS` bits.
-    // When `max_bits > BABYBEAR_ORDER_BITS`, `|div * b + rem|` has at most `max_bits+1` bits.
-    // Because of the invariant `max_bits <= Fr::CAPACITY - RESERVED_HIGH_BITS`, `|div * b + rem|`
-    // cannot overflow.
+    // Let `b = BabyBear::ORDER_U32`, `p = F::MODULUS`, and let
+    // `A = fe_to_bigint(a)` be the canonical signed representative of `a`.
+    // Assume `|A| < 2^a_num_bits`.
     //
-    // Let's check if the looser constraint will cause some problem:
-    // Assume there are other `div'` and `rem'` satisfying:
-    // `div * b + rem ≡ div' * b + rem' (mod p)`
-    // Then we have:
-    // `(div - div') * b ≡ rem' - rem (mod p)`
-    // (3) => `|(div - div') * b| < 2^(max_bits+1) < p`
-    // (2) => `|rem' - rem| < b`
-    // There could be 3 cases:
-    // a. `-b < (div - div') * b < b` or;
-    // b. `0 < (div - div') * b + p < b` or;
-    // c. `-b < (div - div') * b - p < 0`
-    // Case (a) is impossible because `div != div'`.
-    // Case (b) and (c) imply:
-    // |div - div'|  > (p-b) // b > 2^(Fr::CAPACITY - (BABYBEAR_ORDER_BITS - 1) - 1) = 2^(Fr::CAPACITY - BABYBEAR_ORDER_BITS)
-    // (3) also constrains that this is impossible.
+    // The intended witnesses are the Euclidean quotient and remainder:
+    //
+    //   div = floor(A / b),   rem = A mod b,   0 <= rem < b.
+    //
+    // We enforce:
+    //
+    //   (1) rem + b * div = a      over F
+    //   (2) 0 <= rem < b
+    //   (3) 0 <= div + bound < 2^k
+    //
+    // where
+    //
+    //   bound = ceil((2^a_num_bits - 1) / b)
+    //   k     = bits(2 * bound + 1).
+    //
+    // Completeness is immediate: since `|A| <= 2^a_num_bits - 1`, the honest
+    // quotient satisfies `|div| <= bound`, so `div + bound` lies in
+    // `[0, 2 * bound]` and passes the `k`-bit range check.
+    //
+    // For soundness, note that the `k`-bit check is slightly looser than
+    // `div + bound <= 2 * bound`. For any satisfying assignment, let `S` be the
+    // canonical integer value of `div + bound`, so `0 <= S < 2^k`, and set
+    // `D = S - bound`. Since `2^k <= 4 * bound + 2`, we have
+    //
+    //   -bound <= D <= 3 * bound + 1.
+    //
+    // Thus any two satisfying assignments `(D, R)` and `(D', R')` obey
+    //
+    //   |D - D'| <= 4 * bound + 1,
+    //   |R - R'| < b.
+    //
+    // Both assignments satisfy:
+    //
+    //   R  + b * D  = a mod p
+    //   R' + b * D' = a mod p
+    //
+    // Subtracting the second congruence from the first gives
+    //
+    //   (D - D') * b - (R' - R) = 0 mod p.
+    //
+    // Equivalently, this integer is some multiple of `p`:
+    //
+    //   (D - D') * b - (R' - R) = m * p.
+    //
+    // Its magnitude is bounded by
+    //
+    //   |(D - D') * b - (R' - R)| < (4 * bound + 2) * b.
+    //
+    // The runtime assertion
+    //
+    //   assert!((4 * bound + 2) * b <= p)
+    //
+    // ensures this magnitude is strictly less than `p`. The only multiple of `p`
+    // with magnitude less than `p` is zero, so `m = 0`. Therefore
+    //
+    //   (D - D') * b = R' - R.
+    //
+    // The left side is divisible by `b`, while the right side has magnitude `< b`.
+    // Hence both sides are zero, so `D = D'` and `R = R'`.
+    assert!(a_num_bits <= F::CAPACITY as usize - RESERVED_HIGH_BITS);
     let a = a.into();
     let b = BigUint::from(BabyBear::ORDER_U32);
     let a_val = fe_to_bigint(a.value());
@@ -487,8 +591,11 @@ where
     );
     let rem = ctx.get(-4);
     let div = ctx.get(-2);
-    // Constrain that `abs(div) <= 2 ** (2 ** a_num_bits / b).bits()`.
-    let bound = (BigUint::from(1u32) << (a_num_bits as u32)) / &b;
+    // `bound = ceil((2^a_num_bits - 1) / b)`; the bit-length range check below admits
+    // `div in [-bound, 3*bound+1]`, and the assertion enforces the no-wrap headroom
+    // `(4 * bound + 2) * b <= p`. See the proof above for both.
+    let bound = ((BigUint::from(1u32) << a_num_bits) - 1u32).div_ceil(&b);
+    assert!((&bound * 4u32 + 2u32) * &b <= modulus::<F>());
     let shifted_div = range
         .gate()
         .add(ctx, div, QuantumCell::Constant(biguint_to_fe(&bound)));

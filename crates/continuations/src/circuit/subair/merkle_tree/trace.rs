@@ -4,6 +4,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 use p3_field::PrimeCharacteristicRing;
 
 use super::MerkleTreeCols;
+use crate::circuit::deferral::{utils::def_tagged_compress, DEF_INTERNAL_TAG, DEF_LEAF_TAG};
 
 /// Build Merkle-tree rows from leaf `(left_child, right_child)` inputs using
 /// Poseidon2 compression over BabyBear.
@@ -13,6 +14,7 @@ use super::MerkleTreeCols;
 /// terminal row (`send_type = receive_type = 0`).
 pub fn generate_cols_from_leaf_children(
     leaf_children: Vec<([F; DIGEST_SIZE], [F; DIGEST_SIZE])>,
+    tagged: bool,
 ) -> Vec<MerkleTreeCols<F>> {
     let num_leaves = leaf_children.len();
     debug_assert!(num_leaves > 0);
@@ -20,9 +22,11 @@ pub fn generate_cols_from_leaf_children(
 
     let mut rows = Vec::with_capacity(2 * num_leaves);
     let mut next_layer = Vec::with_capacity(num_leaves);
+    let leaf_tag = tagged.then_some(DEF_LEAF_TAG);
+    let internal_tag = tagged.then_some(DEF_INTERNAL_TAG);
 
     for (row_idx, (left, right)) in leaf_children.into_iter().enumerate() {
-        let parent = poseidon2_compress_with_capacity(left, right).0;
+        let parent = compress_with_optional_tag(left, right, leaf_tag);
         rows.push(MerkleTreeCols {
             row_idx: F::from_usize(row_idx),
             send_type: if num_leaves == 1 { F::TWO } else { F::ONE },
@@ -41,7 +45,7 @@ pub fn generate_cols_from_leaf_children(
         for parent_idx in 0..parent_layer_len {
             let left = next_layer[2 * parent_idx];
             let right = next_layer[2 * parent_idx + 1];
-            let parent = poseidon2_compress_with_capacity(left, right).0;
+            let parent = compress_with_optional_tag(left, right, internal_tag);
 
             rows.push(MerkleTreeCols {
                 row_idx: F::from_usize(row_idx),
@@ -70,4 +74,15 @@ pub fn generate_cols_from_leaf_children(
     });
 
     rows
+}
+
+fn compress_with_optional_tag(
+    left: [F; DIGEST_SIZE],
+    right: [F; DIGEST_SIZE],
+    tag: Option<[u8; DIGEST_SIZE]>,
+) -> [F; DIGEST_SIZE] {
+    match tag {
+        Some(tag) => def_tagged_compress(tag, left, right).1,
+        None => poseidon2_compress_with_capacity(left, right).0,
+    }
 }

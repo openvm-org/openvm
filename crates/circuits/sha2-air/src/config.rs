@@ -42,7 +42,8 @@ pub trait Sha2BlockHasherSubairConfig: Send + Sync + Clone {
     const ROUNDS_PER_BLOCK: usize;
     /// Number of words in a SHA hash
     const HASH_WORDS: usize;
-    /// Number of vars needed to encode the row index with [Encoder]
+    /// Number of vars needed to encode the row index with
+    /// [`Encoder`](openvm_circuit_primitives::encoder::Encoder)
     const ROW_VAR_CNT: usize;
 
     /// We also store the SHA constants K and H
@@ -102,7 +103,8 @@ impl Sha2BlockHasherSubairConfig for Sha256Config {
     const ROUNDS_PER_BLOCK: usize = 64;
     /// Number of words in a SHA256 hash
     const HASH_WORDS: usize = 8;
-    /// Number of vars needed to encode the row index with [Encoder]
+    /// Number of vars needed to encode the row index with
+    /// [`Encoder`](openvm_circuit_primitives::encoder::Encoder)
     const ROW_VAR_CNT: usize = 5;
 
     fn get_k() -> &'static [u32] {
@@ -145,7 +147,8 @@ impl Sha2BlockHasherSubairConfig for Sha512Config {
     const ROUNDS_PER_BLOCK: usize = 80;
     /// Number of words in a SHA512 hash
     const HASH_WORDS: usize = 8;
-    /// Number of vars needed to encode the row index with [Encoder]
+    /// Number of vars needed to encode the row index with
+    /// [`Encoder`](openvm_circuit_primitives::encoder::Encoder)
     const ROW_VAR_CNT: usize = 6;
 
     fn get_k() -> &'static [u64] {
@@ -267,7 +270,8 @@ impl Sha2BlockHasherSubairConfig for Sha384Config {
     const ROUNDS_PER_BLOCK: usize = <Sha512Config as Sha2BlockHasherSubairConfig>::ROUNDS_PER_BLOCK;
     /// Number of words in a SHA384 hash
     const HASH_WORDS: usize = <Sha512Config as Sha2BlockHasherSubairConfig>::HASH_WORDS;
-    /// Number of vars needed to encode the row index with [Encoder]
+    /// Number of vars needed to encode the row index with
+    /// [`Encoder`](openvm_circuit_primitives::encoder::Encoder)
     const ROW_VAR_CNT: usize = <Sha512Config as Sha2BlockHasherSubairConfig>::ROW_VAR_CNT;
 
     fn get_k() -> &'static [u64] {

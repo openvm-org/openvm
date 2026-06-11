@@ -91,7 +91,7 @@ where
     C::Point: WeierstrassPoint + Group + FromCompressed<Coordinate<C>>,
     Coordinate<C>: IntMod,
 {
-    /// Convert an [`AffinePoint`] into a [`PublicKey`].
+    /// Convert an `AffinePoint` into a [`PublicKey`].
     /// In addition, for `Coordinate<C>` implementing `IntMod`, this function will assert that the
     /// affine coordinates of `point` are both in canonical form.
     pub fn from_affine(point: AffinePoint<C>) -> Result<Self> {
@@ -274,7 +274,7 @@ where
     }
 }
 
-/// To match the RustCrypto trait [VerifyPrimitive]. Certain curves have special verification logic
+/// To match the RustCrypto trait `VerifyPrimitive`. Certain curves have special verification logic
 /// outside of the general ECDSA verification algorithm. This trait provides a hook for such logic.
 ///
 /// This trait is intended to be implemented on type which can access

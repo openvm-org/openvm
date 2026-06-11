@@ -14,22 +14,16 @@ const EXPECTED_OUTPUT_2: [u8; 8] = [9, 18, 27, 36, 45, 54, 63, 72];
 
 pub fn main() {
     let output_key_0 = deferred_compute::<0>(&INPUT_COMMIT_0);
-    assert_eq!(output_key_0.output_len as usize, EXPECTED_OUTPUT_0.len());
-
     let mut output_0 = [0u8; EXPECTED_OUTPUT_0.len()];
     get_deferred_output::<0>(&mut output_0, &output_key_0);
     assert_eq!(output_0, EXPECTED_OUTPUT_0);
 
     let output_key_1 = deferred_compute::<0>(&INPUT_COMMIT_1);
-    assert_eq!(output_key_1.output_len as usize, EXPECTED_OUTPUT_1.len());
-
     let mut output_1 = [0u8; EXPECTED_OUTPUT_1.len()];
     get_deferred_output::<0>(&mut output_1, &output_key_1);
     assert_eq!(output_1, EXPECTED_OUTPUT_1);
 
     let output_key_2 = deferred_compute::<0>(&INPUT_COMMIT_2);
-    assert_eq!(output_key_2.output_len as usize, EXPECTED_OUTPUT_2.len());
-
     let mut output_2 = [0u8; EXPECTED_OUTPUT_2.len()];
     get_deferred_output::<0>(&mut output_2, &output_key_2);
     assert_eq!(output_2, EXPECTED_OUTPUT_2);

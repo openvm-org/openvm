@@ -16,6 +16,7 @@ pub struct SubCircuitTraceData<PB: ProverBackend> {
     pub air_proving_ctxs: Vec<AirProvingContext<PB>>,
     pub poseidon2_compress_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
     pub poseidon2_permute_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
+    pub range_check_inputs: Vec<usize>,
 }
 
 pub struct SingleAirTraceData<PB: ProverBackend> {

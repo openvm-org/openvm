@@ -67,7 +67,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for DeferralTranspilerExtension {
         }
 
         // Deferral immediates are encoded as [def_idx(10 bits) | imm_code(2 bits)],
-        // where imm_code determines which DeferralOpcode is being called.
+        // where imm_code determines which DeferralOpcode is being called. The semantic
+        // def_idx range is further constrained by MAX_DEF_CIRCUITS.
         let imm12 = ((instruction_u32 >> 20) & 0xfff) as usize;
         let imm_code = imm12 & 0b11;
         let def_idx = imm12 >> 2;

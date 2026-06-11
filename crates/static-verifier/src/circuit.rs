@@ -242,7 +242,9 @@ impl StaticVerifierCircuit {
             .zip_eq(self.internal_recursive_dag_onion_commit)
         {
             let loaded_const = ext_chip.base().load_constant(ctx, bb_const);
-            ext_chip.base().assert_equal(ctx, bb_wire, loaded_const);
+            ext_chip
+                .base()
+                .assert_equal(ctx, bb_wire.into(), loaded_const);
         }
         profiler.pop(ctx.advice.len());
 

@@ -365,8 +365,8 @@ mod tests {
         let boundary_ctx = ctxs.first().expect("missing boundary ctx");
         assert_eq!(
             boundary_ctx.common_main.height(),
-            0,
-            "boundary trace should be empty for empty touched memory"
+            1,
+            "boundary trace should be a single padding row for empty touched memory"
         );
         assert!(
             boundary_ctx.public_values.is_empty(),

@@ -27,7 +27,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow_ref }}-docs-${{ github.ref }}
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=test-gpu-nvidia/cpu=32/extras=s3-cache
+      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=32/volume=40gb/spot=capacity-optimized/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -36,6 +36,11 @@ jobs:
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
       - uses: mozilla-actions/sccache-action@v0.0.9
+      - name: Verify GPU setup
+        run: |
+          nvidia-smi
+          nvidia-smi -L
+          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
 
       - name: Cargo check
         run: cargo check

@@ -20,7 +20,7 @@ use openvm_stark_sdk::{
 use crate::{
     field::baby_bear::{
         BabyBearChip, BabyBearExt4Wire, BabyBearExtChip, BabyBearExtWire, BabyBearWire,
-        BABY_BEAR_EXT_DEGREE,
+        ReducedBabyBearExtWire, ReducedBabyBearWire, BABY_BEAR_EXT_DEGREE,
     },
     hash::poseidon2::{compress_bn254_digests, hash_babybear_slice_to_digest},
     profiling::CellProfiler,
@@ -37,18 +37,18 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub struct MerklePathWire {
-    pub leaf_values: Vec<Vec<BabyBearWire>>,
+    pub leaf_values: Vec<Vec<ReducedBabyBearWire>>,
     pub siblings: Vec<AssignedValue<Fr>>,
 }
 
 #[derive(Clone, Debug)]
 pub struct WhirProofWire {
-    pub mu_pow_witness: BabyBearWire,
-    pub folding_pow_witnesses: Vec<BabyBearWire>,
-    pub query_phase_pow_witnesses: Vec<BabyBearWire>,
-    pub whir_sumcheck_polys: Vec<Vec<BabyBearExtWire>>,
-    pub ood_values: Vec<BabyBearExtWire>,
-    pub final_poly: Vec<BabyBearExtWire>,
+    pub mu_pow_witness: ReducedBabyBearWire,
+    pub folding_pow_witnesses: Vec<ReducedBabyBearWire>,
+    pub query_phase_pow_witnesses: Vec<ReducedBabyBearWire>,
+    pub whir_sumcheck_polys: Vec<[ReducedBabyBearExtWire; 2]>,
+    pub ood_values: Vec<ReducedBabyBearExtWire>,
+    pub final_poly: Vec<ReducedBabyBearExtWire>,
     pub codeword_commitment_roots: Vec<AssignedValue<Fr>>,
     pub initial_round_merkle_paths: Vec<Vec<MerklePathWire>>,
     pub codeword_merkle_paths: Vec<Vec<MerklePathWire>>,
@@ -60,35 +60,41 @@ pub(crate) fn load_whir_proof_wire(
     ext_chip: &BabyBearExtChip,
     whir_proof: &WhirProof<RootConfig>,
 ) -> WhirProofWire {
-    let mu_pow_witness = base_chip.load_witness(ctx, whir_proof.mu_pow_witness);
+    let mu_pow_witness = base_chip.load_reduced_witness(ctx, whir_proof.mu_pow_witness);
     let folding_pow_witnesses = whir_proof
         .folding_pow_witnesses
         .iter()
-        .map(|&witness| base_chip.load_witness(ctx, RootF::from_u64(witness.as_canonical_u64())))
+        .map(|&witness| {
+            base_chip.load_reduced_witness(ctx, RootF::from_u64(witness.as_canonical_u64()))
+        })
         .collect::<Vec<_>>();
     let query_phase_pow_witnesses = whir_proof
         .query_phase_pow_witnesses
         .iter()
-        .map(|&witness| base_chip.load_witness(ctx, RootF::from_u64(witness.as_canonical_u64())))
+        .map(|&witness| {
+            base_chip.load_reduced_witness(ctx, RootF::from_u64(witness.as_canonical_u64()))
+        })
         .collect::<Vec<_>>();
     let whir_sumcheck_polys = whir_proof
         .whir_sumcheck_polys
         .iter()
         .map(|poly| {
             poly.iter()
-                .map(|&value| ext_chip.load_witness(ctx, value))
+                .map(|&value| ext_chip.load_reduced_witness(ctx, value))
                 .collect::<Vec<_>>()
+                .try_into()
+                .expect("WHIR sumcheck polynomial must have two evaluations")
         })
         .collect::<Vec<_>>();
     let ood_values = whir_proof
         .ood_values
         .iter()
-        .map(|&value| ext_chip.load_witness(ctx, value))
+        .map(|&value| ext_chip.load_reduced_witness(ctx, value))
         .collect::<Vec<_>>();
     let final_poly = whir_proof
         .final_poly
         .iter()
-        .map(|&value| ext_chip.load_witness(ctx, value))
+        .map(|&value| ext_chip.load_reduced_witness(ctx, value))
         .collect::<Vec<_>>();
     let codeword_commitment_roots = whir_proof
         .codeword_commits
@@ -109,8 +115,8 @@ pub(crate) fn load_whir_proof_wire(
                         .iter()
                         .map(|row| {
                             row.iter()
-                                .map(|&value| base_chip.load_witness(ctx, value))
-                                .collect::<Vec<BabyBearWire>>()
+                                .map(|&value| base_chip.load_reduced_witness(ctx, value))
+                                .collect::<Vec<ReducedBabyBearWire>>()
                         })
                         .collect::<Vec<_>>();
                     let siblings = merkle_proof
@@ -140,8 +146,10 @@ pub(crate) fn load_whir_proof_wire(
                         .map(|value| {
                             ext_to_coeffs(*value)
                                 .iter()
-                                .map(|&coeff| base_chip.load_witness(ctx, RootF::from_u64(coeff)))
-                                .collect::<Vec<BabyBearWire>>()
+                                .map(|&coeff| {
+                                    base_chip.load_reduced_witness(ctx, RootF::from_u64(coeff))
+                                })
+                                .collect::<Vec<ReducedBabyBearWire>>()
                         })
                         .collect::<Vec<_>>();
                     let siblings = merkle_proof
@@ -402,7 +410,7 @@ pub(crate) fn constrain_whir_verification(
     transcript: &mut TranscriptChip,
     mvk0: &MultiStarkVerifyingKey0<RootConfig>,
     whir_wire: &WhirProofWire,
-    stacking_openings: &[Vec<BabyBearExtWire>],
+    stacking_openings: &[Vec<ReducedBabyBearExtWire>],
     initial_commitment_roots: &[AssignedValue<Fr>],
     u_cube: &[BabyBearExtWire],
     profiler: &mut CellProfiler,
@@ -422,7 +430,11 @@ pub(crate) fn constrain_whir_verification(
     let query_phase_pow_witnesses = &whir_wire.query_phase_pow_witnesses;
     let whir_sumcheck_polys = &whir_wire.whir_sumcheck_polys;
     let ood_values = &whir_wire.ood_values;
-    let final_poly = &whir_wire.final_poly;
+    let final_poly_reduced = &whir_wire.final_poly;
+    let final_poly = final_poly_reduced
+        .iter()
+        .map(|coeff| coeff.into())
+        .collect::<Vec<_>>();
     let codeword_commitment_roots = &whir_wire.codeword_commitment_roots;
     let codeword_commitment_digests = codeword_commitment_roots
         .iter()
@@ -445,9 +457,9 @@ pub(crate) fn constrain_whir_verification(
     for commit_openings in stacking_openings {
         for opening in commit_openings {
             let weighted = if mu_idx == 0 {
-                *opening
+                (*opening).into()
             } else {
-                ext_chip.mul(ctx, *opening, mu_pows[mu_idx])
+                ext_chip.mul(ctx, opening.into(), mu_pows[mu_idx])
             };
             final_claim = ext_chip.add(ctx, final_claim, weighted);
             mu_idx += 1;
@@ -493,6 +505,8 @@ pub(crate) fn constrain_whir_verification(
                 alphas_round.push(alpha);
                 folding_alphas.push(alpha);
 
+                let ev1 = ev1.into();
+                let ev2 = ev2.into();
                 let ev0 = ext_chip.sub(ctx, final_claim, ev1);
                 final_claim = interpolate_quadratic_at_012_assigned(
                     ctx,
@@ -507,7 +521,7 @@ pub(crate) fn constrain_whir_verification(
         profiler.pop(ctx.advice.len());
 
         let y0 = if is_final_round {
-            for coeff in final_poly {
+            for coeff in final_poly_reduced {
                 transcript.observe_ext(ctx, coeff);
             }
             None
@@ -568,7 +582,7 @@ pub(crate) fn constrain_whir_verification(
                         let mu_pow = mu_pows[mu_power_idx];
                         let is_first_mu = mu_power_idx == 0;
                         for (row_idx, row) in merkle_path.leaf_values.iter().enumerate() {
-                            let opened_base = row[col_idx];
+                            let opened_base = row[col_idx].into();
                             codeword_vals[row_idx] = if let Some(prev) = codeword_vals[row_idx] {
                                 Some(ext_chip.scalar_mul_add(ctx, mu_pow, opened_base, prev))
                             } else if is_first_mu {
@@ -596,7 +610,7 @@ pub(crate) fn constrain_whir_verification(
                 let opened_values = merkle_path
                     .leaf_values
                     .iter()
-                    .map(|row| BabyBearExt4Wire(core::array::from_fn(|idx| row[idx])))
+                    .map(|row| BabyBearExt4Wire(core::array::from_fn(|idx| row[idx].into())))
                     .collect::<Vec<_>>();
                 binary_k_fold_assigned(ctx, ext_chip, opened_values, &alphas_round, zi_root)
             };
@@ -609,7 +623,7 @@ pub(crate) fn constrain_whir_verification(
         profiler.push("gamma_accumulation", ctx.advice.len());
         let gamma = transcript.sample_ext(ctx);
         if let Some(y0) = y0 {
-            let y0_term = ext_chip.mul(ctx, y0, gamma);
+            let y0_term = ext_chip.mul(ctx, y0.into(), gamma);
             final_claim = ext_chip.add(ctx, final_claim, y0_term);
         }
         let mut gamma_pow = ext_chip.mul(ctx, gamma, gamma);
@@ -633,7 +647,7 @@ pub(crate) fn constrain_whir_verification(
 
     profiler.push("eq_mle_prefix_suffix", ctx.advice.len());
     let prefix = eval_mobius_eq_mle_assigned(ctx, ext_chip, &u_cube[..t], &folding_alphas[..t]);
-    let suffix = eval_mle_evals_at_point_assigned(ctx, ext_chip, final_poly, &u_cube[t..]);
+    let suffix = eval_mle_evals_at_point_assigned(ctx, ext_chip, &final_poly, &u_cube[t..]);
     let mut final_acc = ext_chip.mul(ctx, prefix, suffix);
     profiler.pop(ctx.advice.len());
 
@@ -668,7 +682,7 @@ pub(crate) fn constrain_whir_verification(
                 alpha_slc,
                 &z0_pows_reduced[..z0_pows_reduced.len().saturating_sub(1)],
             );
-            let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, final_poly, &z0_max);
+            let poly_eval = horner_eval_ext_poly_assigned(ctx, ext_chip, &final_poly, &z0_max);
             let term = ext_chip.mul(ctx, *gamma, eq);
             let term = ext_chip.mul(ctx, term, poly_eval);
             final_acc = ext_chip.add(ctx, final_acc, term);
@@ -701,7 +715,7 @@ pub(crate) fn constrain_whir_verification(
             let poly_eval = horner_eval_ext_poly_f_assigned(
                 ctx,
                 ext_chip,
-                final_poly,
+                &final_poly,
                 zi_pows_reduced.last().unwrap(),
             );
 
@@ -716,8 +730,6 @@ pub(crate) fn constrain_whir_verification(
         alpha_offset += k_whir;
     }
 
-    let final_residual = ext_chip.sub(ctx, final_acc, final_claim);
-    let zero = ext_chip.zero(ctx);
-    ext_chip.assert_equal(ctx, final_residual, zero);
+    ext_chip.assert_equal(ctx, final_acc, final_claim);
     profiler.pop(ctx.advice.len());
 }

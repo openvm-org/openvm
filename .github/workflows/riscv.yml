@@ -30,18 +30,18 @@ jobs:
       matrix:
         platform:
           - {
-              runner: "64cpu-linux-x64",
+              labels: "runner=64cpu-linux-x64/image=ubuntu24-full-x64",
               image: "ubuntu24-full-x64",
               features: "aot",
             }
           - {
-              runner: "test-gpu-nvidia",
+              labels: "image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized",
               image: "ubuntu24-gpu-x64",
               features: "cuda,touchemall",
             }
 
     runs-on:
-      - runs-on=${{ github.run_id }}-riscv-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache
+      - runs-on=${{ github.run_id }}-riscv-${{ github.run_attempt }}-${{ strategy.job-index }}/${{ matrix.platform.labels }}/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -69,9 +69,12 @@ jobs:
           fi
 
       - name: Set VPMM_PAGES for GPU
-        if: contains(matrix.platform.runner, 'gpu')
+        if: contains(matrix.platform.features, 'cuda')
         run: |
+          nvidia-smi
+          nvidia-smi -L
           nvcc --version
+          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
           echo "VPMM_PAGES=1" >> $GITHUB_ENV
 
       - name: Download and install risc64-elf-gcc
@@ -94,7 +97,7 @@ jobs:
         working-directory: crates/toolchain/tests
         run: |
           rustup component add rust-src --toolchain nightly-2026-01-18
-          if [[ ${{ matrix.platform.runner }} == *"gpu"* ]]; then
+          if [[ "${{ matrix.platform.features }}" == *"cuda"* ]]; then
             TEST_NAME=test_rv32im_riscv_vector_prove
           else
             TEST_NAME=test_rv32im_riscv_vector_runtime

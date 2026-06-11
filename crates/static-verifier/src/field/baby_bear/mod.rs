@@ -10,6 +10,7 @@ pub(crate) const BABY_BEAR_BITS: usize = BABYBEAR_MAX_BITS;
 
 pub type BabyBearExtChip = BabyBearExt4Chip;
 pub type BabyBearExtWire = BabyBearExt4Wire;
+pub type ReducedBabyBearExtWire = ReducedBabyBearExt4Wire;
 
 #[cfg(test)]
 mod tests;

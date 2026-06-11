@@ -34,7 +34,7 @@ jobs:
           - { names: "k256 p256" }
           - { names: "ff_derive pairing" }
     runs-on:
-      - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=test-gpu-nvidia/cpu=8+32/family=g6.*+g5+g6e/extras=s3-cache
+      - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/image=ubuntu24-gpu-x64/cpu=8+32/family=g6.*+g5+g6e/volume=40gb/spot=capacity-optimized/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -114,7 +114,10 @@ jobs:
 
       - name: Check CUDA status and set environment variables
         run: |
+          nvidia-smi
+          nvidia-smi -L
           nvcc --version
+          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
           echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3" >> $GITHUB_ENV
           echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
 

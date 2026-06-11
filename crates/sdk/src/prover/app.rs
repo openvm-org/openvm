@@ -21,9 +21,10 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
 use tracing::instrument;
 
 use crate::{
+    keygen::AppVerifyingKey,
     prover::vm::{new_local_prover, types::VmProvingKey},
     util::check_max_constraint_degrees,
-    StdIn, F, SC,
+    SdkError, StdIn, F, SC,
 };
 
 #[derive(Getters)]
@@ -108,6 +109,10 @@ where
             .memory_dimensions()
     }
 
+    pub fn num_user_pvs(&self) -> usize {
+        self.instance.vm.config().as_ref().num_public_values
+    }
+
     /// Generates proof for every continuation segment
     #[instrument(
         name = "app_prove",
@@ -129,8 +134,13 @@ where
         );
         let proof = ContinuationVmProver::prove(&mut self.instance, input)?;
         #[cfg(debug_assertions)]
-        let _ = verify_app_proof::<E>(&self.app_vm_vk, self.memory_dimensions(), &proof)
-            .expect("app proof verification failed");
+        let _ = verify_app_proof_inner::<E>(
+            &self.app_vm_vk,
+            self.memory_dimensions(),
+            self.num_user_pvs(),
+            &proof,
+        )
+        .expect("app proof verification failed");
         Ok(proof)
     }
 
@@ -152,10 +162,25 @@ where
 
 /// Verifies a ContinuationVmProof and returns the app_exe_commit
 pub fn verify_app_proof<E: StarkEngine<SC = SC>>(
+    app_vk: &AppVerifyingKey,
+    proof: &ContinuationVmProof<E::SC>,
+) -> Result<Digest, SdkError> {
+    verify_app_proof_inner::<E>(
+        &app_vk.vk,
+        app_vk.memory_dimensions,
+        app_vk.num_user_pvs,
+        proof,
+    )
+}
+
+/// Verifies a ContinuationVmProof from the borrowed components of an
+/// [`AppVerifyingKey`], returning the app_exe_commit.
+fn verify_app_proof_inner<E: StarkEngine<SC = SC>>(
     vk: &MultiStarkVerifyingKey<SC>,
     memory_dimensions: MemoryDimensions,
+    num_user_pvs: usize,
     proof: &ContinuationVmProof<E::SC>,
-) -> Result<Digest, VmVerificationError<SC>> {
+) -> Result<Digest, SdkError> {
     static POSEIDON2_HASHER: OnceLock<Poseidon2Hasher<F>> = OnceLock::new();
     let engine = E::new(vk.inner.params.clone());
     let VerifiedExecutionPayload {
@@ -163,11 +188,22 @@ pub fn verify_app_proof<E: StarkEngine<SC = SC>>(
         final_memory_root,
     } = verify_segments(&engine, vk, &proof.per_segment)?;
 
-    proof.user_public_values.verify(
-        POSEIDON2_HASHER.get_or_init(vm_poseidon2_hasher),
-        memory_dimensions,
-        final_memory_root,
-    )?;
+    if proof.user_public_values.public_values.len() != num_user_pvs {
+        return Err(SdkError::Other(eyre::eyre!(
+            "wrong number of user public values (expected: {}, actual: {})",
+            num_user_pvs,
+            proof.user_public_values.public_values.len()
+        )));
+    }
+
+    proof
+        .user_public_values
+        .verify(
+            POSEIDON2_HASHER.get_or_init(vm_poseidon2_hasher),
+            memory_dimensions,
+            final_memory_root,
+        )
+        .map_err(VmVerificationError::from)?;
 
     Ok(exe_commit)
 }

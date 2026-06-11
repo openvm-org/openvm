@@ -10,7 +10,6 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-openvm = { workspace = true }
 openvm-sha2-guest = { workspace = true }
 sha2 = { workspace = true, default-features = false, optional = true }
 

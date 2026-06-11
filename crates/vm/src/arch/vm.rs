@@ -1,5 +1,6 @@
 //! [VmExecutor] is the struct that can execute an _arbitrary_ program, provided in the form of a
-//! [VmExe], for a fixed set of OpenVM instructions corresponding to a [VmExecutionConfig].
+//! [VmExe](openvm_instructions::exe::VmExe), for a fixed set of OpenVM instructions
+//! corresponding to a [VmExecutionConfig].
 //! Internally once it is given a program, it will preprocess the program to rewrite it into a more
 //! optimized format for runtime execution. This **instance** of the executor will be a separate
 //! struct specialized to running a _fixed_ program on different program inputs.
@@ -16,10 +17,8 @@ use openvm_instructions::{
     program::Program,
 };
 use openvm_stark_backend::{
-    keygen::{
-        types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
-        MultiStarkKeygenBuilder,
-    },
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+    memory_metering::ProvingMemoryConfig,
     p3_field::{InjectiveMonomial, PrimeCharacteristicRing, PrimeField32, TwoAdicField},
     p3_util::log2_ceil_usize,
     proof::Proof,
@@ -45,9 +44,13 @@ use super::{
     AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
     ExecutorInventory, ExecutorInventoryError, MemoryConfig, MeteredExecutor, PreflightExecutor,
     StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecState,
-    VmExecutionConfig, VmState, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
+    VmExecutionConfig, VmState, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
     PROGRAM_CACHED_TRACE_INDEX,
 };
+#[cfg(feature = "metrics")]
+use crate::metrics::emit_opcode_counts;
+#[cfg(feature = "perf-metrics")]
+use crate::metrics::end_segment_metrics;
 use crate::{
     arch::deferral::DeferralState,
     execute_spanned,
@@ -193,6 +196,7 @@ where
         widths: &[usize],
         interactions: &[usize],
         need_rot: &[bool],
+        memory_config: ProvingMemoryConfig,
     ) -> MeteredCtx {
         MeteredCtx::new(
             constant_trace_heights.to_vec(),
@@ -201,6 +205,7 @@ where
             interactions.to_vec(),
             need_rot.to_vec(),
             self.config.as_ref(),
+            memory_config,
         )
     }
 
@@ -223,7 +228,7 @@ where
     pub fn instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, F, ExecutionCtx>, StaticProgramError> {
         InterpretedInstance::new(&self.inventory, exe)
     }
 
@@ -231,7 +236,7 @@ where
     pub fn interpreter_instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, F, ExecutionCtx>, StaticProgramError> {
         InterpretedInstance::new(&self.inventory, exe)
     }
 
@@ -239,7 +244,7 @@ where
     pub fn instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
+    ) -> Result<AotInstance<'_, F, ExecutionCtx>, StaticProgramError> {
         Self::aot_instance(self, exe)
     }
 }
@@ -253,7 +258,7 @@ where
     pub fn aot_instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
+    ) -> Result<AotInstance<'_, F, ExecutionCtx>, StaticProgramError> {
         AotInstance::new(&self.inventory, exe)
     }
 }
@@ -270,7 +275,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, F, MeteredCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -279,7 +284,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, F, MeteredCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -288,7 +293,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
+    ) -> Result<AotInstance<'_, F, MeteredCtx>, StaticProgramError> {
         Self::metered_aot_instance(self, exe, executor_idx_to_air_idx)
     }
 
@@ -298,7 +303,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
+    ) -> Result<AotInstance<'_, F, MeteredCtx>, StaticProgramError> {
         AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -308,7 +313,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<InterpretedInstance<F, MeteredCostCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, F, MeteredCostCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 }
@@ -376,7 +381,7 @@ pub enum VirtualMachineError {
 /// The [VirtualMachine] struct contains the API to generate proofs for _arbitrary_ programs for a
 /// fixed set of OpenVM instructions and a fixed VM circuit corresponding to those instructions. The
 /// API is specific to a particular [StarkEngine], which specifies a fixed [StarkProtocolConfig] and
-/// [ProverBackend] via associated types. The [VmProverBuilder] also fixes the choice of
+/// [ProverBackend] via associated types. The [VmBuilder] also fixes the choice of
 /// `RecordArena` associated to the prover backend via an associated type.
 ///
 /// In other words, this struct _is_ the zkVM.
@@ -424,17 +429,8 @@ where
         builder: VB,
         config: VB::VmConfig,
     ) -> Result<(Self, MultiStarkProvingKey<E::SC>), VirtualMachineError> {
-        let system_config = config.as_ref();
-        let mut keygen_builder = MultiStarkKeygenBuilder::new(engine.config().clone());
         let circuit = config.create_airs()?;
-        for (air_id, air) in circuit.into_airs().enumerate() {
-            if system_config.is_required_air_id(air_id) {
-                keygen_builder.add_required_air(air.clone());
-            } else {
-                keygen_builder.add_air(air.clone());
-            }
-        }
-        let pk = keygen_builder.generate_pk().unwrap();
+        let pk = circuit.keygen(engine.config());
         let _vk = pk.get_vk();
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let vm = Self::new(engine, builder, config, d_pk)?;
@@ -450,7 +446,7 @@ where
     pub fn interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -463,7 +459,7 @@ where
     pub fn naive_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -476,7 +472,7 @@ where
     pub fn interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    ) -> Result<AotInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -488,7 +484,7 @@ where
     pub fn get_aot_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    ) -> Result<AotInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -500,7 +496,7 @@ where
     pub fn metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -514,7 +510,7 @@ where
     pub fn metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<AotInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -529,7 +525,7 @@ where
     pub fn get_metered_aot_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<AotInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -543,7 +539,7 @@ where
     pub fn naive_metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -556,7 +552,7 @@ where
     pub fn metered_cost_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCostCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCostCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -629,9 +625,14 @@ where
         interpreter.reset_execution_frequencies();
         execute_spanned!("execute_preflight", interpreter, &mut exec_state)?;
         let filtered_exec_frequencies = interpreter.filtered_execution_frequencies();
+        #[cfg(feature = "metrics")]
+        emit_opcode_counts(
+            &exec_state.vm_state.metrics,
+            interpreter.opcode_counts_by_air::<VB::RecordArena>(),
+        );
         let touched_memory = exec_state.vm_state.memory.finalize::<Val<E::SC>>();
         #[cfg(feature = "perf-metrics")]
-        crate::metrics::end_segment_metrics(&mut exec_state);
+        end_segment_metrics(&mut exec_state);
 
         let pc = exec_state.vm_state.pc();
         let memory = exec_state.vm_state.memory;
@@ -683,9 +684,13 @@ where
             state.metrics.fn_bounds = exe.fn_bounds.clone();
             state.metrics.debug_infos = exe.program.debug_infos();
         }
+        #[cfg(feature = "metrics")]
+        {
+            state.metrics.set_pk_air_names(&self.pk);
+        }
         #[cfg(feature = "perf-metrics")]
         {
-            state.metrics.set_pk_info(&self.pk);
+            state.metrics.set_pk_trace_info(&self.pk);
             state.metrics.num_sys_airs = self.config().as_ref().num_airs();
         }
         state
@@ -904,6 +909,7 @@ where
             &widths,
             &interactions,
             &need_rot,
+            self.engine.proving_memory_config(),
         )
     }
 
@@ -1181,6 +1187,7 @@ where
 
         let mut program_air_present = false;
         let mut connector_air_present = false;
+        let mut boundary_air_present = false;
         let mut merkle_air_present = false;
 
         // Check public values.
@@ -1237,6 +1244,14 @@ where
                         actual: pvs.exit_code.as_canonical_u32(),
                     });
                 }
+            } else if air_idx == BOUNDARY_AIR_ID {
+                boundary_air_present = vdata.is_some();
+                if !pvs.is_empty() {
+                    return Err(VmVerificationError::UnexpectedPvs {
+                        expected: 0,
+                        actual: pvs.len(),
+                    });
+                }
             } else if air_idx == MERKLE_AIR_ID {
                 merkle_air_present = true;
                 let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
@@ -1269,6 +1284,11 @@ where
         if !connector_air_present {
             return Err(VmVerificationError::SystemAirMissing {
                 air_id: CONNECTOR_AIR_ID,
+            });
+        }
+        if !boundary_air_present {
+            return Err(VmVerificationError::SystemAirMissing {
+                air_id: BOUNDARY_AIR_ID,
             });
         }
         if !merkle_air_present {

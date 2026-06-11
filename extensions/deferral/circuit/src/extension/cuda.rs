@@ -62,11 +62,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
         inventory.add_periphery_chip(count_chip);
 
         inventory.next_air::<DeferralPoseidon2Air<CudaF>>()?;
-        let max_trace_height = inventory
-            .config()
-            .segmentation_config
-            .limits
-            .max_trace_height as usize;
+        let max_trace_height = inventory.config().segmentation_limits.max_trace_height as usize;
         let poseidon2_chip = Arc::new(DeferralPoseidon2ChipGpu::new(
             max_trace_height.max(1),
             1,

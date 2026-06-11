@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use itertools::Itertools;
 use openvm_circuit::{
     arch::{AirInventoryError, SystemConfig, VmCircuitConfig},
     system::memory::dimensions::MemoryDimensions,
@@ -9,7 +8,7 @@ use openvm_circuit::{
 use openvm_continuations::RootSC;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
-    AirRef, StarkEngine,
+    StarkEngine,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
 use serde::{Deserialize, Serialize};
@@ -31,6 +30,7 @@ pub struct AppProvingKey<VC> {
 pub struct AppVerifyingKey {
     pub vk: MultiStarkVerifyingKey<SC>,
     pub memory_dimensions: MemoryDimensions,
+    pub num_user_pvs: usize,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -59,16 +59,10 @@ where
     pub fn keygen(config: AppConfig<VC>) -> Result<Self, AirInventoryError> {
         let app_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(config.system_params);
         let app_vm_pk = {
-            let vm_pk = app_engine
-                .keygen(
-                    &config
-                        .app_vm_config
-                        .create_airs()?
-                        .into_airs()
-                        .map(|a| a as AirRef<_>)
-                        .collect_vec(),
-                )
-                .0;
+            let vm_pk = config
+                .app_vm_config
+                .create_airs()?
+                .keygen(app_engine.config());
             VmProvingKey {
                 vm_config: config.app_vm_config.clone(),
                 vm_pk: Arc::new(vm_pk),
@@ -84,14 +78,11 @@ where
     }
 
     pub fn get_app_vk(&self) -> AppVerifyingKey {
+        let system_config = self.app_vm_pk.vm_config.as_ref();
         AppVerifyingKey {
             vk: self.app_vm_pk.vm_pk.get_vk(),
-            memory_dimensions: self
-                .app_vm_pk
-                .vm_config
-                .as_ref()
-                .memory_config
-                .memory_dimensions(),
+            memory_dimensions: system_config.memory_config.memory_dimensions(),
+            num_user_pvs: system_config.num_public_values,
         }
     }
 

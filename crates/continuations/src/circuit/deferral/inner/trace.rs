@@ -14,16 +14,17 @@ use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, ProverBackend},
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
 use openvm_verify_stark_host::pvs::VkCommit;
+use p3_field::PrimeCharacteristicRing;
 
 use crate::{
     circuit::deferral::{
+        utils::{def_leaf_compress, def_tagged_compress, def_zero_hash},
         DeferralAggregationPvs, DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID, DEF_CIRCUIT_PVS_AIR_ID,
+        DEF_INTERNAL_TAG, DEF_LEAF_TAG,
     },
-    utils::{digests_to_poseidon2_input, zero_hash},
+    utils::digests_to_poseidon2_input,
 };
 
 pub struct DeferralInnerPreCtx<PB: ProverBackend> {
@@ -32,6 +33,7 @@ pub struct DeferralInnerPreCtx<PB: ProverBackend> {
     pub input_ctx: AirProvingContext<PB>,
     pub poseidon2_compress_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
     pub poseidon2_permute_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
+    pub range_check_inputs: Vec<usize>,
 }
 
 fn fold_leaf_input_commit(
@@ -65,8 +67,19 @@ fn child_merkle_commit(
             .as_slice()
             .borrow();
         let (folded_input_commit, _) = fold_leaf_input_commit(proof, child_pvs.input_commit);
-        poseidon2_compress_with_capacity(folded_input_commit, child_pvs.output_commit).0
+        def_leaf_compress(folded_input_commit, child_pvs.output_commit).1
     }
+}
+
+fn push_deferral_compress_inputs(
+    inputs: &mut Vec<[F; POSEIDON2_WIDTH]>,
+    tag: [u8; DIGEST_SIZE],
+    left: [F; DIGEST_SIZE],
+    right: [F; DIGEST_SIZE],
+) {
+    let (tagged_left, _) = def_tagged_compress(tag, left, right);
+    inputs.push(digests_to_poseidon2_input(tag.map(F::from_u8), left));
+    inputs.push(digests_to_poseidon2_input(tagged_left, right));
 }
 
 fn generate_poseidon2_inputs(
@@ -91,10 +104,12 @@ fn generate_poseidon2_inputs(
         poseidon2_permute_inputs.extend(input_permute_inputs);
 
         // DeferralAggPvsAir (leaf): hash folded input_commit and output_commit into merkle_commit.
-        poseidon2_compress_inputs.push(digests_to_poseidon2_input(
+        push_deferral_compress_inputs(
+            &mut poseidon2_compress_inputs,
+            DEF_LEAF_TAG,
             folded_input_commit,
             child_pvs.output_commit,
-        ));
+        );
     }
 
     // DeferralAggPvsAir: hash child merkle commits when this is not a wrapper.
@@ -103,9 +118,14 @@ fn generate_poseidon2_inputs(
         let right_merkle = if proofs.len() == 2 {
             child_merkle_commit(&proofs[1], child_is_agg)
         } else {
-            zero_hash(depth + 1)
+            def_zero_hash(depth + 1)
         };
-        poseidon2_compress_inputs.push(digests_to_poseidon2_input(left_merkle, right_merkle));
+        push_deferral_compress_inputs(
+            &mut poseidon2_compress_inputs,
+            DEF_INTERNAL_TAG,
+            left_merkle,
+            right_merkle,
+        );
     }
 
     (poseidon2_compress_inputs, poseidon2_permute_inputs)
@@ -141,20 +161,22 @@ impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for Deferral
     ) -> DeferralInnerPreCtx<CpuBackend<BabyBearPoseidon2Config>> {
         let (poseidon2_compress_inputs, poseidon2_permute_inputs) =
             generate_poseidon2_inputs(proofs, child_is_agg, child_merkle_depth);
+        let super::def_pvs::DeferralAggPvsTraceCtx {
+            proving_ctx: def_pvs_ctx,
+            range_check_inputs,
+        } = super::def_pvs::generate_proving_ctx(proofs, child_is_agg, child_merkle_depth);
+
         DeferralInnerPreCtx {
             verifier_pvs_ctx: super::verifier::generate_proving_ctx(
                 proofs,
                 child_is_agg,
                 child_vk_commit,
             ),
-            def_pvs_ctx: super::def_pvs::generate_proving_ctx(
-                proofs,
-                child_is_agg,
-                child_merkle_depth,
-            ),
+            def_pvs_ctx,
             input_ctx: super::input::generate_proving_ctx(proofs, child_is_agg),
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
+            range_check_inputs,
         }
     }
 }
@@ -179,6 +201,7 @@ impl DeferralInnerTraceGen<GpuBackend, GpuDeviceCtx> for DeferralInnerTraceGenIm
             input_ctx,
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
+            range_check_inputs,
         } = <Self as DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()>>::pre_verifier_subcircuit_tracegen(
             self,
             proofs,
@@ -193,6 +216,7 @@ impl DeferralInnerTraceGen<GpuBackend, GpuDeviceCtx> for DeferralInnerTraceGenIm
             input_ctx: cpu_proving_ctx_to_gpu(input_ctx, device_ctx),
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
+            range_check_inputs,
         }
     }
 }
