@@ -480,8 +480,7 @@ fn simple_process_instr(instr: &Instr, regs: &mut [Option<u64>; NUM_REGS]) {
             if rd == 0 {
                 return;
             }
-            let val =
-                regs[*rs1 as usize].map(|a| compute_binary_op_w(*op, a, *imm as i64 as u64));
+            let val = regs[*rs1 as usize].map(|a| compute_binary_op_w(*op, a, *imm as i64 as u64));
             regs[rd as usize] = val;
         }
         Instr::ShiftImm { op, rd, rs1, shamt } => {
@@ -497,8 +496,7 @@ fn simple_process_instr(instr: &Instr, regs: &mut [Option<u64>; NUM_REGS]) {
             if rd == 0 {
                 return;
             }
-            let val =
-                regs[*rs1 as usize].map(|a| compute_binary_op_w(*op, a, u64::from(*shamt)));
+            let val = regs[*rs1 as usize].map(|a| compute_binary_op_w(*op, a, u64::from(*shamt)));
             regs[rd as usize] = val;
         }
         Instr::Lui { rd, value } => {
@@ -553,7 +551,11 @@ fn simple_eval_jumpdyn(regs: &[Option<u64>; NUM_REGS], rs1: u8, imm: i32) -> Opt
     regs[rs1 as usize].and_then(|base| {
         let target = base.wrapping_add(imm as i64 as u64) & !1u64;
         debug_assert!(target < (1u64 << PC_BITS));
-        if target < (1u64 << PC_BITS) { Some(target as u32) } else { None }
+        if target < (1u64 << PC_BITS) {
+            Some(target as u32)
+        } else {
+            None
+        }
     })
 }
 
@@ -924,7 +926,11 @@ fn get_successors(
                             .iter()
                             .filter_map(|&t| {
                                 let pc32 = t as u32;
-                                if ctx.pc_to_idx.contains_key(&pc32) { Some(pc32) } else { None }
+                                if ctx.pc_to_idx.contains_key(&pc32) {
+                                    Some(pc32)
+                                } else {
+                                    None
+                                }
                             })
                             .collect();
 
@@ -984,7 +990,11 @@ fn eval_jumpdyn_multi(state: &RegisterState, rs1: u8, imm: i32) -> RegisterValue
     let compute = |v: u64| -> Option<u64> {
         let target = v.wrapping_add(imm as u64) & !1u64;
         debug_assert!(target < (1u64 << PC_BITS));
-        if target < (1u64 << PC_BITS) { Some(target) } else { None }
+        if target < (1u64 << PC_BITS) {
+            Some(target)
+        } else {
+            None
+        }
     };
 
     let first = match compute(base.values[0]) {

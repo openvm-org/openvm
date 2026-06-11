@@ -454,12 +454,7 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
         EmitContext::trace_mem_access_u32_range(self, base_addr, num_words, addr_space);
     }
 
-    fn trace_mem_access_u64_range(
-        &mut self,
-        base_addr: &str,
-        num_dwords: &str,
-        addr_space: u32,
-    ) {
+    fn trace_mem_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32) {
         EmitContext::trace_mem_access_u64_range(self, base_addr, num_dwords, addr_space);
     }
 }

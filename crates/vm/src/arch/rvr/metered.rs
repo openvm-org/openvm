@@ -8,7 +8,11 @@ use std::{
     sync::Arc,
 };
 
-use openvm_instructions::{exe::VmExe, riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS}, DEFERRAL_AS};
+use openvm_instructions::{
+    exe::VmExe,
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    DEFERRAL_AS,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 use rvr_openvm_lift::ExtensionRegistry;

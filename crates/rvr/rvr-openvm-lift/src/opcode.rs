@@ -492,12 +492,7 @@ fn lift_alu_w<F: PrimeField32>(insn: &Instruction<F>, pc: u32, e: u32, op: AluOp
 
 /// Lift W-suffix shift instruction (R-type when e!=0, I-type shamt when e==0).
 /// Shamt is 5-bit (W shifts operate on 32-bit values regardless of register width).
-fn lift_shift_w<F: PrimeField32>(
-    insn: &Instruction<F>,
-    pc: u32,
-    e: u32,
-    op: AluOp,
-) -> LiftedInstr {
+fn lift_shift_w<F: PrimeField32>(insn: &Instruction<F>, pc: u32, e: u32, op: AluOp) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
 

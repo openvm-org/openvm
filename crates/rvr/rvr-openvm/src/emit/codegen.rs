@@ -255,7 +255,9 @@ fn alu_w_expr(op: AluOp, left: &str, right: &str) -> String {
         AluOp::Sub => format!("(uint32_t){left} - (uint32_t){right}"),
         AluOp::Sll => format!("(uint32_t){left} << ((uint32_t){right} & 0x1fu)"),
         AluOp::Srl => format!("(uint32_t){left} >> ((uint32_t){right} & 0x1fu)"),
-        AluOp::Sra => format!("(uint32_t)((int32_t)(uint32_t){left} >> ((uint32_t){right} & 0x1fu))"),
+        AluOp::Sra => {
+            format!("(uint32_t)((int32_t)(uint32_t){left} >> ((uint32_t){right} & 0x1fu))")
+        }
         _ => unreachable!("no W variant for alu op {op:?}"),
     };
     format!("(uint64_t)(int32_t)({inner})")
@@ -266,7 +268,10 @@ fn shift_w_imm_expr(op: AluOp, val: &str, shamt: u8) -> String {
     let inner = match op {
         AluOp::Sll => format!("(uint32_t){val} << {}", hex_u32(shamt as u32)),
         AluOp::Srl => format!("(uint32_t){val} >> {}", hex_u32(shamt as u32)),
-        AluOp::Sra => format!("(uint32_t)((int32_t)(uint32_t){val} >> {})", hex_u32(shamt as u32)),
+        AluOp::Sra => format!(
+            "(uint32_t)((int32_t)(uint32_t){val} >> {})",
+            hex_u32(shamt as u32)
+        ),
         _ => unreachable!("invalid W shift op {op:?}"),
     };
     format!("(uint64_t)(int32_t)({inner})")
