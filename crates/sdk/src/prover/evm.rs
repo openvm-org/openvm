@@ -21,8 +21,8 @@ use crate::{
 
 /// EVM prover that produces a root STARK proof with Halo2 wrapping.
 ///
-/// [`EvmProver::prove_unwrapped`] outputs the unwrapped root STARK, while
-/// [`EvmProver::prove_unwrapped_with_stark_proof`] outputs the unwrapped root STARK from an
+/// [`EvmProver::prove_root`] outputs the unwrapped root STARK, while
+/// [`EvmProver::prove_root_from_vm_stark_proof`] outputs the unwrapped root STARK from an
 /// intermediate STARK proof, for more finegrained separation of work
 /// [`EvmProver::prove_evm`] produces an [`EvmProof`](crate::types::EvmProof)
 /// suitable for on-chain verification.
@@ -60,9 +60,9 @@ where
         })
     }
 
-    pub fn prove_unwrapped_with_stark_proof(
+    pub fn prove_root_from_vm_stark_proof(
         &mut self,
-        mut stark_proof: VmStarkProof,
+        stark_proof: VmStarkProof,
         metadata: &mut InternalLayerMetadata,
     ) -> Result<Proof<RootSC>>
     where
@@ -70,39 +70,8 @@ where
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
-        let root_ctx = {
-            const MAX_ROOT_TRACEGEN_RETRIES: usize = 8;
-            let mut attempt = 0usize;
-            loop {
-                if let Some(ctx) = self.root_prover.generate_proving_ctx(stark_proof.clone()) {
-                    break ctx;
-                }
-                if attempt >= MAX_ROOT_TRACEGEN_RETRIES {
-                    return Err(eyre::eyre!(
-                        "root tracegen returned None after {MAX_ROOT_TRACEGEN_RETRIES} retries"
-                    ));
-                }
-                stark_proof = self
-                    .stark_prover
-                    .agg_prover
-                    .wrap_proof(stark_proof, metadata)?;
-                attempt += 1;
-            }
-        };
-
         #[cfg(test)]
         {
-            for ((air_idx, air_ctx), expected_height) in root_ctx
-                .per_trace
-                .iter()
-                .zip(self.root_prover.0.get_trace_heights().unwrap())
-            {
-                assert_eq!(
-                    air_ctx.height(),
-                    expected_height,
-                    "height mismatch at {air_idx}"
-                )
-            }
             let agg_vk = self
                 .stark_prover
                 .agg_prover
@@ -114,11 +83,15 @@ where
             crate::GenericSdk::<E, VB>::verify_proof(agg_vk, baseline, &stark_proof)?;
         }
 
-        let root_proof = self.root_prover.prove_from_ctx(root_ctx)?;
-        Ok(root_proof)
+        const MAX_ROOT_TRACEGEN_RETRIES: usize = 8;
+        let agg_prover = &self.stark_prover.agg_prover;
+        self.root_prover
+            .prove(stark_proof, MAX_ROOT_TRACEGEN_RETRIES, |p| {
+                agg_prover.wrap_proof(p, metadata)
+            })
     }
 
-    pub fn prove_unwrapped(
+    pub fn prove_root(
         &mut self,
         input: StdIn<Val<SC>>,
         def_inputs: &[DeferralInput],
@@ -129,7 +102,7 @@ where
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
         let (stark_proof, mut internal_metadata) = self.stark_prover.prove(input, def_inputs)?;
-        self.prove_unwrapped_with_stark_proof(stark_proof, &mut internal_metadata)
+        self.prove_root_from_vm_stark_proof(stark_proof, &mut internal_metadata)
     }
 
     #[cfg(feature = "evm-prove")]
@@ -143,7 +116,7 @@ where
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
-        let root_proof = self.prove_unwrapped(input, def_inputs)?;
+        let root_proof = self.prove_root(input, def_inputs)?;
         let evm_proof = self
             .halo2_prover
             .as_ref()
