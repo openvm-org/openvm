@@ -2,6 +2,16 @@ name: OpenVM SDK Tests
 
 on:
   workflow_call:
+  workflow_dispatch:
+    inputs:
+      x86_family:
+        description: "x86 EC2 instance family"
+        type: string
+        default: "m7a.24xlarge"
+      arm_family:
+        description: "ARM EC2 instance family"
+        type: string
+        default: "m8g.24xlarge"
   push:
     branches: ["main"]
   pull_request:
@@ -27,9 +37,18 @@ jobs:
     strategy:
       matrix:
         mode: ["default", "ignored", "aot"]
+        arch: ["x86", "arm"]
+        exclude:
+          - mode: aot
+            arch: arm
+        include:
+          - arch: x86
+            image: ubuntu24-full-x64
+          - arch: arm
+            image: ubuntu24-full-arm64
 
     runs-on:
-      - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=m7a.24xlarge/image=ubuntu24-full-x64/disk=large/extras=s3-cache
+      - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ matrix.arch == 'x86' && (inputs.x86_family || 'm7a.24xlarge') || (inputs.arm_family || 'm8g.24xlarge') }}/image=${{ matrix.image }}/disk=large/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
