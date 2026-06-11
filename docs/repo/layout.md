@@ -161,7 +161,6 @@ Forked or custom libraries optimized for guest program execution inside the VM.
 - [`openvm-keccak256`](../../guest-libs/keccak256): OpenVM library for keccak256.
 - [`p256`](../../guest-libs/p256): OpenVM fork of `p256`.
 - [`openvm-pairing`](../../guest-libs/pairing): OpenVM library for elliptic curve pairing.
-- [`ruint`](../../guest-libs/ruint): OpenVM fork of `ruint`.
 - [`openvm-sha2`](../../guest-libs/sha2): OpenVM library for SHA-2.
 - [`openvm-verify-stark-circuit`](../../guest-libs/verify-stark/circuit): Circuit extension for verifying STARKs in-guest.
 - [`openvm-verify-stark-guest`](../../guest-libs/verify-stark/guest): Guest library for verifying STARKs.
