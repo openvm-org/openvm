@@ -7,7 +7,9 @@ use openvm_circuit::{
         online::{GuestMemory, TracingMemory},
     },
 };
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+};
 pub use openvm_circuit_primitives::U16_BITS;
 use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
@@ -402,6 +404,25 @@ pub fn add_const_u16_limbs_value(limbs: PtrLimbs<u32>, constant: u32) -> (u32, P
     (carry, [sum_lo & 0xffff, limbs[1] + carry])
 }
 
+/// Computes one add-carry per memory block from an already-converted base cell pointer,
+/// registering the matching range checks for each block's new low limb.
+pub fn compute_block_add_carries(
+    range_checker: &SharedVariableRangeCheckerChip,
+    base_cell: [u16; 2],
+    num_blocks: usize,
+    cell_stride: u32,
+) -> Vec<u32> {
+    let base_cell = base_cell.map(u32::from);
+    (0..num_blocks)
+        .map(|i| {
+            let (add_carry, block_cell_ptr) =
+                add_const_u16_limbs_value(base_cell, i as u32 * cell_stride);
+            range_checker.add_count(block_cell_ptr[0], U16_BITS);
+            add_carry
+        })
+        .collect()
+}
+
 /// Value form of [`eval_byte_ptr_limbs_to_u16_cell_ptr_limbs`]. Returns
 /// `(carry, [cell_lo, cell_hi])` for an aligned byte pointer given as little-endian 16-bit limb
 /// values. The caller is responsible for registering the matching range-check for `cell_hi`
@@ -412,6 +433,32 @@ pub fn byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs: PtrLimbs<u32>) -> (u32
     let cell_lo = (byte_limbs[0] + (carry << U16_BITS)) >> 1;
     let cell_hi = byte_limbs[1] >> 1;
     (carry, [cell_lo, cell_hi])
+}
+
+/// Computes the byte->cell conversion carry and one add-carry per block for a heap
+/// access group, registering the matching range checks.
+///
+/// Returns `(conv_carry, add_carries)`.
+///
+/// Column writes are left to the caller because vec_heap-family fillers must buffer
+/// carries before overwriting their records.
+pub fn compute_pointer_carries(
+    range_checker: &SharedVariableRangeCheckerChip,
+    byte_ptr: u32,
+    num_blocks: usize,
+    cell_stride: u32,
+    byte_ptr_max_bits: usize,
+) -> (u32, Vec<u32>) {
+    let byte_limbs = u32_to_ptr_limbs(byte_ptr);
+    let (conv_carry, base_cell) = byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs);
+    range_checker.add_count(base_cell[1], cell_ptr_hi_bits(byte_ptr_max_bits));
+    let add_carries = compute_block_add_carries(
+        range_checker,
+        base_cell.map(|limb| limb as u16),
+        num_blocks,
+        cell_stride,
+    );
+    (conv_carry, add_carries)
 }
 
 /// Expand `N` limbs to `RV64_REGISTER_NUM_LIMBS` (8) by zero-padding the upper limbs. Used for

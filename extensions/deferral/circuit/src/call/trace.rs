@@ -18,7 +18,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
-    AlignedBytesBorrow, U16_BITS,
+    AlignedBytesBorrow,
 };
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
@@ -30,8 +30,7 @@ use openvm_instructions::{
     },
 };
 use openvm_riscv_circuit::adapters::{
-    add_const_u16_limbs_value, byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits,
-    rv64_bytes_to_u32, tracing_read, tracing_write, u32_to_ptr_limbs,
+    compute_pointer_carries, rv64_bytes_to_u32, tracing_read, tracing_write,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -440,26 +439,21 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
         // Byte -> cell pointer conversion carries and per-block cell-offset carries for the heap
         // `input`/`output` pointers, plus matching range-check counts. Must read the record values
         // here before any column overwrites; carry columns are written at the very end.
-        let hi_bits = cell_ptr_hi_bits(self.address_bits);
         let heap_cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
-        let compute_heap_carries = |val: u32, num_blocks: usize| -> (u32, Vec<u32>) {
-            let byte_limbs = u32_to_ptr_limbs(val);
-            let (conv_carry, base_cell) = byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs);
-            self.range_checker_chip.add_count(base_cell[1], hi_bits);
-            let add_carries = (0..num_blocks)
-                .map(|j| {
-                    let (add_carry, block_cell_ptr) =
-                        add_const_u16_limbs_value(base_cell, j as u32 * heap_cell_stride);
-                    self.range_checker_chip
-                        .add_count(block_cell_ptr[0], U16_BITS);
-                    add_carry
-                })
-                .collect();
-            (conv_carry, add_carries)
-        };
-        let (input_conv, input_add) = compute_heap_carries(record.rs_val, COMMIT_MEMORY_OPS);
-        let (output_conv, output_add) =
-            compute_heap_carries(record.rd_val, OUTPUT_TOTAL_MEMORY_OPS);
+        let (input_conv, input_add) = compute_pointer_carries(
+            &self.range_checker_chip,
+            record.rs_val,
+            COMMIT_MEMORY_OPS,
+            heap_cell_stride,
+            self.address_bits,
+        );
+        let (output_conv, output_add) = compute_pointer_carries(
+            &self.range_checker_chip,
+            record.rd_val,
+            OUTPUT_TOTAL_MEMORY_OPS,
+            heap_cell_stride,
+            self.address_bits,
+        );
 
         // The DEFERRAL_AS accumulator cell pointers are bounded below 2^16 (see the static assert
         // in `super`), so they need no limb decomposition, range checks, or add-carry columns.

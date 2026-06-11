@@ -11,7 +11,7 @@ use openvm_circuit::{
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::{AlignedBytesBorrow, U16_BITS};
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -19,7 +19,7 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
-    add_const_u16_limbs_value, byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits,
+    byte_ptr_limbs_to_cell_ptr_limbs_value, compute_block_add_carries, compute_pointer_carries,
     ptr_to_field_u16_limbs, read_rv64_register_as_u32, rv64_bytes_to_u32, tracing_read,
     tracing_write, u32_to_ptr_limbs,
 };
@@ -320,49 +320,57 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         // per-block `should_read`/`should_write` (degree 2) to stay within the max constraint
         // degree. So add carries (and their range checks) are computed for *every* block, padding
         // or not, matching the AIR's `is_enabled`-gated `eval_add_const_u16_limbs` for all blocks.
-        let hi_bits = cell_ptr_hi_bits(self.pointer_max_bits);
         let cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
-        // Computes the base-pointer conversion carry, registers the base high-limb range check,
-        // and fills the per-block add carries (one per block) plus their range checks.
-        let fill_pointer_carries = |ptr: u32, cell_carry_col: &mut F, add_carry_cols: &mut [F]| {
-            let byte_limbs = u32_to_ptr_limbs(ptr);
-            let (conv_carry, base_cell) = byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs);
-            self.range_checker_chip.add_count(base_cell[1], hi_bits);
-            *cell_carry_col = F::from_u32(conv_carry);
-            for (i, col) in add_carry_cols.iter_mut().enumerate() {
-                let (add_carry, block_cell_ptr) =
-                    add_const_u16_limbs_value(base_cell, i as u32 * cell_stride);
-                self.range_checker_chip
-                    .add_count(block_cell_ptr[0], U16_BITS);
-                *col = F::from_u32(add_carry);
-            }
-        };
-        fill_pointer_carries(
+        let (buffer_conv, buffer_add) = compute_pointer_carries(
+            &self.range_checker_chip,
             record.buffer,
-            &mut trace_row.mem_oc.buffer_cell_carry,
-            &mut trace_row.mem_oc.buffer_read_add_carry,
+            KECCAK_RATE_MEM_OPS,
+            cell_stride,
+            self.pointer_max_bits,
         );
-        fill_pointer_carries(
+        trace_row.mem_oc.buffer_cell_carry = F::from_u32(buffer_conv);
+        for (col, &add_carry) in trace_row
+            .mem_oc
+            .buffer_read_add_carry
+            .iter_mut()
+            .zip(buffer_add.iter())
+        {
+            *col = F::from_u32(add_carry);
+        }
+        let (input_conv, input_add) = compute_pointer_carries(
+            &self.range_checker_chip,
             record.input,
-            &mut trace_row.mem_oc.input_cell_carry,
-            &mut trace_row.mem_oc.input_read_add_carry,
+            KECCAK_RATE_MEM_OPS,
+            cell_stride,
+            self.pointer_max_bits,
         );
+        trace_row.mem_oc.input_cell_carry = F::from_u32(input_conv);
+        for (col, &add_carry) in trace_row
+            .mem_oc
+            .input_read_add_carry
+            .iter_mut()
+            .zip(input_add.iter())
+        {
+            *col = F::from_u32(add_carry);
+        }
         // The write reuses the converted `buffer` base cell pointer; only register the per-block
         // write add carries (and their range checks). The base conversion carry is already filled
         // above for the buffer read group.
         {
             let byte_limbs = u32_to_ptr_limbs(record.buffer);
             let (_conv_carry, base_cell) = byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs);
-            for (i, col) in trace_row
+            let buffer_write_add = compute_block_add_carries(
+                &self.range_checker_chip,
+                base_cell.map(|limb| limb as u16),
+                KECCAK_RATE_MEM_OPS,
+                cell_stride,
+            );
+            for (col, &add_carry) in trace_row
                 .mem_oc
                 .buffer_write_add_carry
                 .iter_mut()
-                .enumerate()
+                .zip(buffer_write_add.iter())
             {
-                let (add_carry, block_cell_ptr) =
-                    add_const_u16_limbs_value(base_cell, i as u32 * cell_stride);
-                self.range_checker_chip
-                    .add_count(block_cell_ptr[0], U16_BITS);
                 *col = F::from_u32(add_carry);
             }
         }

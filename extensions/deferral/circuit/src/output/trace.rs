@@ -32,9 +32,8 @@ use openvm_instructions::{
     },
 };
 use openvm_riscv_circuit::adapters::{
-    add_const_u16_limbs_value, byte_ptr_limbs_to_cell_ptr_limbs_value, byte_ptr_to_u16_ptr_value,
-    cell_ptr_hi_bits, memory_read, read_rv64_register_as_u32, rv64_bytes_to_u32, tracing_read,
-    tracing_write, u32_to_ptr_limbs,
+    byte_ptr_to_u16_ptr_value, compute_pointer_carries, memory_read, read_rv64_register_as_u32,
+    rv64_bytes_to_u32, tracing_read, tracing_write, u32_to_ptr_limbs,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
@@ -386,21 +385,18 @@ where
 
                     // Byte -> cell pointer conversion carry and per-block cell-offset carries for
                     // the `input` base pointer (read on the first row), plus matching range checks.
-                    let hi_bits = cell_ptr_hi_bits(self.address_bits);
                     let heap_cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
-                    let input_byte_limbs = u32_to_ptr_limbs(header.rs_val);
-                    let (input_conv, input_base_cell) =
-                        byte_ptr_limbs_to_cell_ptr_limbs_value(input_byte_limbs);
-                    self.range_checker_chip
-                        .add_count(input_base_cell[1], hi_bits);
+                    let (input_conv, input_add) = compute_pointer_carries(
+                        &self.range_checker_chip,
+                        header.rs_val,
+                        OUTPUT_TOTAL_MEMORY_OPS,
+                        heap_cell_stride,
+                        self.address_bits,
+                    );
                     cols.input_cell_carry = F::from_u32(input_conv);
-                    for (chunk_idx, carry_col) in cols.input_add_carry.iter_mut().enumerate() {
-                        let (add_carry, block_cell_ptr) = add_const_u16_limbs_value(
-                            input_base_cell,
-                            chunk_idx as u32 * heap_cell_stride,
-                        );
-                        self.range_checker_chip
-                            .add_count(block_cell_ptr[0], U16_BITS);
+                    for (carry_col, &add_carry) in
+                        cols.input_add_carry.iter_mut().zip(input_add.iter())
+                    {
                         *carry_col = F::from_u32(add_carry);
                     }
                 } else {
