@@ -1,6 +1,9 @@
-use openvm_circuit::arch::{
-    aot::common::{convert_x86_reg, Width, RISCV_TO_X86_OVERRIDE_MAP},
-    AotError, AotExecutor, AotMeteredExecutor, SystemConfig,
+use openvm_circuit::{
+    arch::{
+        aot::common::{convert_x86_reg, Width, RISCV_TO_X86_OVERRIDE_MAP},
+        AotError, AotExecutor, AotMeteredExecutor, SystemConfig,
+    },
+    system::memory::merkle::public_values::PUBLIC_VALUES_AS,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -28,7 +31,9 @@ where
                 .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
         match local_opcode {
-            Rv32LoadStoreOpcode::LOADB | Rv32LoadStoreOpcode::LOADH => true,
+            Rv32LoadStoreOpcode::LOADB | Rv32LoadStoreOpcode::LOADH => {
+                inst.e.as_canonical_u32() != PUBLIC_VALUES_AS
+            }
             _ => unreachable!(),
         }
     }

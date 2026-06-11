@@ -13,13 +13,17 @@ pub const CELL_STRIDE: usize = 1;
 #[derive(Debug)]
 pub struct MmapMemory {
     mmap: MmapMut,
+    size: usize,
 }
 
 impl Clone for MmapMemory {
     fn clone(&self) -> Self {
         let mut new_mmap = MmapMut::map_anon(self.mmap.len()).unwrap();
         new_mmap.copy_from_slice(&self.mmap);
-        Self { mmap: new_mmap }
+        Self {
+            mmap: new_mmap,
+            size: self.size,
+        }
     }
 }
 
@@ -60,24 +64,25 @@ impl MmapMemory {
 impl LinearMemory for MmapMemory {
     /// Create a new MmapMemory with the given `size` in bytes.
     /// We round `size` up to be a multiple of the mmap page size (4kb by default).
-    fn new(mut size: usize) -> Self {
-        size = size.div_ceil(PAGE_SIZE) * PAGE_SIZE;
+    fn new(size: usize) -> Self {
+        let mmap_size = size.div_ceil(PAGE_SIZE) * PAGE_SIZE;
         // anonymous mapping means pages are zero-initialized on first use
         Self {
-            mmap: MmapMut::map_anon(size).unwrap(),
+            mmap: MmapMut::map_anon(mmap_size).unwrap(),
+            size,
         }
     }
 
     fn size(&self) -> usize {
-        self.mmap.len()
+        self.size
     }
 
     fn as_slice(&self) -> &[u8] {
-        &self.mmap
+        &self.mmap[..self.size]
     }
 
     fn as_mut_slice(&mut self) -> &mut [u8] {
-        &mut self.mmap
+        &mut self.mmap[..self.size]
     }
 
     #[cfg(target_os = "linux")]
