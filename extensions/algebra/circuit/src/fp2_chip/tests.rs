@@ -33,8 +33,8 @@ use test_case::test_case;
 
 use crate::{
     fp2_chip::{
-        get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, get_fp2_muldiv_air,
-        get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Chip, Fp2Executor,
+        get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_executor, get_fp2_muldiv_air,
+        get_fp2_muldiv_chip, get_fp2_muldiv_executor, Fp2Air, Fp2Chip, Fp2Executor,
     },
     FP2_BLOCKS_32, FP2_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
@@ -74,7 +74,7 @@ fn create_addsub_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         tester.address_bits(),
         offset,
     );
-    let executor = get_fp2_addsub_step(
+    let executor = get_fp2_addsub_executor(
         config.clone(),
         tester.range_checker().bus(),
         tester.address_bits(),
@@ -117,7 +117,7 @@ fn create_muldiv_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         tester.address_bits(),
         offset,
     );
-    let executor = get_fp2_muldiv_step(
+    let executor = get_fp2_muldiv_executor(
         config.clone(),
         tester.range_checker().bus(),
         tester.address_bits(),
@@ -402,7 +402,7 @@ mod cuda_tests {
             offset,
         );
         let executor =
-            get_fp2_addsub_step(config.clone(), range_bus, tester.address_bits(), offset);
+            get_fp2_addsub_executor(config.clone(), range_bus, tester.address_bits(), offset);
 
         let cpu_chip = get_fp2_addsub_chip(
             config.clone(),
@@ -449,7 +449,7 @@ mod cuda_tests {
             offset,
         );
         let executor =
-            get_fp2_muldiv_step(config.clone(), range_bus, tester.address_bits(), offset);
+            get_fp2_muldiv_executor(config.clone(), range_bus, tester.address_bits(), offset);
 
         let cpu_chip = get_fp2_muldiv_chip(
             config.clone(),

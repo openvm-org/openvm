@@ -127,7 +127,7 @@ pub fn get_fp2_muldiv_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     )
 }
 
-pub fn get_fp2_muldiv_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_fp2_muldiv_executor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,

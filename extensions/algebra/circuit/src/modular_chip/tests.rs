@@ -45,8 +45,8 @@ use {
 
 use crate::{
     modular_chip::{
-        get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
-        get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
+        get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_executor,
+        get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_executor, ModularAir,
         ModularChip, ModularExecutor, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
         ModularIsEqualCoreCols, ModularIsEqualFiller, VmModularIsEqualExecutor,
     },
@@ -95,7 +95,7 @@ mod addsub_tests {
             tester.address_bits(),
             offset,
         );
-        let executor = get_modular_addsub_step(
+        let executor = get_modular_addsub_executor(
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),
@@ -147,7 +147,7 @@ mod addsub_tests {
             offset,
         );
         let executor =
-            get_modular_addsub_step(config.clone(), range_bus, tester.address_bits(), offset);
+            get_modular_addsub_executor(config.clone(), range_bus, tester.address_bits(), offset);
 
         let cpu_chip = get_modular_addsub_chip(
             config.clone(),
@@ -469,7 +469,7 @@ mod muldiv_tests {
             offset,
         );
 
-        let executor = get_modular_muldiv_step(
+        let executor = get_modular_muldiv_executor(
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),
@@ -522,7 +522,7 @@ mod muldiv_tests {
             offset,
         );
         let executor =
-            get_modular_muldiv_step(config.clone(), range_bus, tester.address_bits(), offset);
+            get_modular_muldiv_executor(config.clone(), range_bus, tester.address_bits(), offset);
 
         let cpu_chip = get_modular_muldiv_chip(
             config.clone(),

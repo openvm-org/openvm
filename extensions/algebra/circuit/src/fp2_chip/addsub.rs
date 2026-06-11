@@ -87,8 +87,7 @@ pub fn get_fp2_addsub_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     )
 }
 
-// TODO[arayi]: rename step->executor (for all algebra and ecc functions)
-pub fn get_fp2_addsub_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_fp2_addsub_executor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
