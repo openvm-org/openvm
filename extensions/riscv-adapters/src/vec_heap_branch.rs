@@ -27,10 +27,10 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_riscv_circuit::adapters::{
-    add_const_u16_limbs_value, byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits,
-    eval_add_const_u16_limbs, eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_rv64_block,
-    ptr_to_field_u16_limbs, ptr_to_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs, tracing_read,
-    tracing_read_reg_ptr, RV64_PTR_U16_LIMBS, U16_BITS,
+    compute_pointer_carries, eval_add_const_u16_limbs,
+    eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_rv64_block, ptr_to_field_u16_limbs,
+    ptr_to_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs, tracing_read, tracing_read_reg_ptr,
+    RV64_PTR_U16_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -298,25 +298,16 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS_PER_READ: usize> Adap
         // Byte -> cell pointer conversion carries and per-block cell-offset carries, plus matching
         // range-check counts. **NOTE**: Must read the record values before overwriting them below.
         // `carry` columns are written near the end (after all record reads), so store them here.
-        let hi_bits = cell_ptr_hi_bits(self.pointer_max_bits);
         let cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
-        let compute_pointer_carries = |val: u32, num_blocks: usize| -> (u32, Vec<u32>) {
-            let byte_limbs = ptr_to_u16_limbs(val).map(u32::from);
-            let (conv_carry, base_cell) = byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs);
-            self.range_checker_chip.add_count(base_cell[1], hi_bits);
-            let add_carries = (0..num_blocks)
-                .map(|j| {
-                    let (add_carry, block_cell_ptr) =
-                        add_const_u16_limbs_value(base_cell, j as u32 * cell_stride);
-                    self.range_checker_chip
-                        .add_count(block_cell_ptr[0], U16_BITS);
-                    add_carry
-                })
-                .collect();
-            (conv_carry, add_carries)
-        };
-        let rs_carries: [(u32, Vec<u32>); NUM_READS] =
-            from_fn(|i| compute_pointer_carries(record.rs_vals[i], BLOCKS_PER_READ));
+        let rs_carries: [(u32, Vec<u32>); NUM_READS] = from_fn(|i| {
+            compute_pointer_carries(
+                &self.range_checker_chip,
+                record.rs_vals[i],
+                BLOCKS_PER_READ,
+                cell_stride,
+                self.pointer_max_bits,
+            )
+        });
 
         let timestamp_delta = NUM_READS + NUM_READS * BLOCKS_PER_READ;
         let mut timestamp = record.from_timestamp + timestamp_delta as u32;
