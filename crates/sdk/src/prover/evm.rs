@@ -70,12 +70,6 @@ where
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
-        // Internal sanity (SDK tests only): the input proof must verify against
-        // the recursive-aggregation vk before we hand it to the root prover.
-        // Tracegen normally succeeds without wrapping, so this is the proof the
-        // root prover consumes; if a wrap does occur, root prove itself rejects
-        // a bad wrapped proof. (The post-tracegen height-match invariant now
-        // lives in `RootProver::prove_with_wrap_retry`.)
         #[cfg(test)]
         {
             let agg_vk = self

@@ -120,24 +120,6 @@ impl RootProver {
         Ok(proof)
     }
 
-    /// Prove the root layer for `stark_proof`, retrying with `wrap` when the
-    /// root verifier's tracegen can't fit the input.
-    ///
-    /// The root verifier is a fixed-shape circuit (its expected trace heights
-    /// are fixed at keygen), so `generate_proving_ctx` returns `None` when the
-    /// input proof's heights don't fit. On each `None`, `wrap` is applied to
-    /// grow the proof toward the canonical (root-ready) shape, up to
-    /// `max_retries` times, before failing.
-    ///
-    /// `wrap` is supplied by the caller because *how* a proof is wrapped (and
-    /// any layer bookkeeping) is caller-specific: the in-process [`EvmProver`]
-    /// delegates to [`AggProver::wrap_proof`]; a distributed prover that holds
-    /// only the recursive prover can call `agg_prove` with
-    /// [`ChildVkKind::RecursiveSelf`] on it directly.
-    ///
-    /// [`EvmProver`]: crate::prover::EvmProver
-    /// [`AggProver::wrap_proof`]: crate::prover::AggProver::wrap_proof
-    /// [`ChildVkKind::RecursiveSelf`]: openvm_continuations::prover::ChildVkKind::RecursiveSelf
     pub fn prove_with_wrap_retry(
         &self,
         mut stark_proof: VmStarkProof,
