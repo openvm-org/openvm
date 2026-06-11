@@ -12,9 +12,11 @@ fn main() {
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
             .include("../../../crates/circuits/primitives/cuda/include")
             .include("../../../crates/vm/cuda/include")
+            .include("../../riscv-adapters/cuda/include")
             .include("cuda/include")
             .watch("cuda")
             .watch("../../../crates/circuits/primitives/cuda")
+            .watch("../../riscv-adapters/cuda")
             .watch("../../../crates/vm/cuda")
             .library_name("tracegen_gpu_keccak256")
             .files_from_glob("cuda/src/*.cu");

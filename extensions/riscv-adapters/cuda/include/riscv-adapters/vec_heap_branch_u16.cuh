@@ -63,22 +63,23 @@ template <size_t NUM_READS, size_t BLOCKS_PER_READ> struct Rv64VecHeapBranchU16A
     ) {
         // Byte -> cell pointer conversion carries and per-block cell-offset carries, plus matching
         // range-check counts. Mirrors the host filler in vec_heap_branch_u16.rs.
-        uint32_t hi_bits = cell_ptr_hi_bits(pointer_max_bits);
         const uint32_t cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
 
 #pragma unroll
         for (size_t i = 0; i < NUM_READS; i++) {
-            CellPtr conv = byte_ptr_limbs_to_cell_ptr_limbs_value(
-                uint16_t(record.rs_vals[i]), uint16_t(record.rs_vals[i] >> U16_BITS)
+            uint32_t add_carries[BLOCKS_PER_READ];
+            uint32_t conv_carry = compute_pointer_carries(
+                range_checker,
+                record.rs_vals[i],
+                pointer_max_bits,
+                BLOCKS_PER_READ,
+                cell_stride,
+                add_carries
             );
-            range_checker.add_count(conv.limbs[1], hi_bits);
-            COL_WRITE_VALUE(row, Cols, rs_cell_carry[i], conv.carry);
+            COL_WRITE_VALUE(row, Cols, rs_cell_carry[i], conv_carry);
 #pragma unroll
             for (size_t j = 0; j < BLOCKS_PER_READ; j++) {
-                CellPtr add =
-                    add_const_u16_limbs_value(conv.limbs[0], conv.limbs[1], j * cell_stride);
-                range_checker.add_count(add.limbs[0], U16_BITS);
-                COL_WRITE_VALUE(row, Cols, reads_add_carry[i][j], add.carry);
+                COL_WRITE_VALUE(row, Cols, reads_add_carry[i][j], add_carries[j]);
             }
         }
 

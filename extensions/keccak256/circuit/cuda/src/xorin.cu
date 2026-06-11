@@ -5,6 +5,7 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "xorin.cuh"
 #include <cassert>
@@ -15,43 +16,11 @@ using namespace xorin;
 using namespace riscv;
 using namespace keccak256;
 using namespace program;
-using openvm::U16_BITS;
 
 #define XORIN_WRITE(FIELD, VALUE) COL_WRITE_VALUE(row, XorinVmCols, FIELD, VALUE)
 #define XORIN_WRITE_ARRAY(FIELD, VALUES) COL_WRITE_ARRAY(row, XorinVmCols, FIELD, VALUES)
 #define XORIN_FILL_ZERO(FIELD) COL_FILL_ZERO(row, XorinVmCols, FIELD)
 #define XORIN_SLICE(FIELD) row.slice_from(COL_INDEX(XorinVmCols, FIELD))
-
-// Computes the byte->cell base-pointer conversion carry and the per-block cell-offset add carries
-// for one heap access group, registering the matching range-check counts. Mirrors the CPU
-// `fill_pointer_carries` closure in `xorin/trace.rs`. The per-block add carries (and their range
-// checks) are computed for *every* block, padding or not, to match the AIR's `is_enabled`-gated
-// `eval_add_const_u16_limbs`. The base high-limb range check is skipped when `register_base` is
-// false (the buffer write group reuses the buffer read group's base conversion). Returns the base
-// conversion carry.
-__device__ __forceinline__ uint32_t xorin_fill_pointer_carries(
-    VariableRangeChecker &range_checker,
-    uint32_t ptr,
-    uint32_t hi_bits,
-    bool register_base,
-    uint32_t add_carry_out[KECCAK_RATE_MEM_OPS]
-) {
-    uint32_t byte_limbs[RV64_PTR_U16_LIMBS];
-    ptr_to_u16_limbs(byte_limbs, ptr);
-    uint32_t conv_carry = byte_limbs[1] & 1u;
-    uint32_t base_cell_lo = (byte_limbs[0] + (conv_carry << U16_BITS)) >> 1;
-    uint32_t base_cell_hi = byte_limbs[1] >> 1;
-    if (register_base) {
-        range_checker.add_count(base_cell_hi, hi_bits);
-    }
-    uint32_t cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
-    for (uint32_t i = 0; i < KECCAK_RATE_MEM_OPS; i++) {
-        uint32_t sum_lo = base_cell_lo + i * cell_stride;
-        range_checker.add_count(sum_lo & 0xffffu, U16_BITS);
-        add_carry_out[i] = sum_lo >> U16_BITS;
-    }
-    return conv_carry;
-}
 
 __global__ void xorin_tracegen(
     Fp *d_trace,
@@ -189,24 +158,45 @@ __global__ void xorin_tracegen(
 
         // Byte -> cell pointer conversion carries and per-block cell-offset carries, plus matching
         // range-check counts. Mirrors `xorin/trace.rs`.
-        uint32_t hi_bits = uint32_t(pointer_max_bits) - U16_CELL_SIZE_BITS - U16_BITS;
+        uint32_t cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
 
         uint32_t buffer_add_carry[KECCAK_RATE_MEM_OPS];
-        uint32_t buffer_conv_carry =
-            xorin_fill_pointer_carries(range_checker, rec.buffer, hi_bits, true, buffer_add_carry);
+        uint32_t buffer_conv_carry = compute_pointer_carries(
+            range_checker,
+            rec.buffer,
+            pointer_max_bits,
+            KECCAK_RATE_MEM_OPS,
+            cell_stride,
+            buffer_add_carry
+        );
         XORIN_WRITE(mem_oc.buffer_cell_carry, buffer_conv_carry);
         XORIN_WRITE_ARRAY(mem_oc.buffer_read_add_carry, buffer_add_carry);
 
         uint32_t input_add_carry[KECCAK_RATE_MEM_OPS];
-        uint32_t input_conv_carry =
-            xorin_fill_pointer_carries(range_checker, rec.input, hi_bits, true, input_add_carry);
+        uint32_t input_conv_carry = compute_pointer_carries(
+            range_checker,
+            rec.input,
+            pointer_max_bits,
+            KECCAK_RATE_MEM_OPS,
+            cell_stride,
+            input_add_carry
+        );
         XORIN_WRITE(mem_oc.input_cell_carry, input_conv_carry);
         XORIN_WRITE_ARRAY(mem_oc.input_read_add_carry, input_add_carry);
 
         // The write reuses the converted `buffer` base cell pointer; only the per-block write add
         // carries (and their range checks) are needed. The base conversion was registered above.
         uint32_t buffer_write_add_carry[KECCAK_RATE_MEM_OPS];
-        xorin_fill_pointer_carries(range_checker, rec.buffer, hi_bits, false, buffer_write_add_carry);
+        CellPtr buffer_cell = byte_ptr_limbs_to_cell_ptr_limbs_value(
+            rec.buffer & 0xffffu, rec.buffer >> openvm::U16_BITS
+        );
+        compute_block_add_carries(
+            range_checker,
+            buffer_cell.limbs[0],
+            KECCAK_RATE_MEM_OPS,
+            cell_stride,
+            buffer_write_add_carry
+        );
         XORIN_WRITE_ARRAY(mem_oc.buffer_write_add_carry, buffer_write_add_carry);
 
     } else {
