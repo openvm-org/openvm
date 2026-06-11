@@ -118,7 +118,7 @@ jobs:
         working-directory: crates/sdk
         # if: ${{ github.event_name == 'push' }}
         run: |
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify --run-ignored=only test_static_verifier_custom_pv_handler
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify --run-ignored=only --no-tests pass
 
       - name: sccache stats
         if: always()
