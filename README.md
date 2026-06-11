@@ -2,8 +2,8 @@
 
 [![Telegram Chat][tg-badge]][tg-url] [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/openvm-org/openvm)
 
-[**Install**](https://book.openvm.dev/getting-started/install)
-| [Book](https://book.openvm.dev)
+[**Install**](https://docs.openvm.dev/book/getting-started/install)
+| [Book](https://docs.openvm.dev/book/getting-started/introduction)
 | [Contributor Docs](./docs)
 | [Rustdocs](https://docs.openvm.dev/openvm)
 | [Whitepaper](https://openvm.dev/whitepaper.pdf)
@@ -37,7 +37,7 @@ As of February 2026, the OpenVM RV32IM extension has been formally verified in [
 
 ## For Users
 
-See the [Book](https://book.openvm.dev) for more information on how to use OpenVM.
+See the [Book](https://docs.openvm.dev/book/getting-started/introduction) for more information on how to use OpenVM.
 
 ## For Contributors
 
