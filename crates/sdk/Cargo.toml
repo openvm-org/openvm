@@ -6,7 +6,6 @@ edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-# TODO[jpw]: fix examples for v2
 autoexamples = false
 
 [dependencies]
@@ -112,10 +111,18 @@ cell-profiling = [
     "openvm-static-verifier/cell-profiling",
 ]
 
-# [[example]]
-# name = "sdk_evm"
-# path = "examples/sdk_evm.rs"
-# required-features = ["evm-verify"]
+[[example]]
+name = "sdk_app"
+path = "examples/sdk_app.rs"
+
+[[example]]
+name = "sdk_stark"
+path = "examples/sdk_stark.rs"
+
+[[example]]
+name = "sdk_evm"
+path = "examples/sdk_evm.rs"
+required-features = ["evm-verify"]
 
 # [package.metadata.cargo-shear]
 # ignored = ["derive_more", "rand"]
