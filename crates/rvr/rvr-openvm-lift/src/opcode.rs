@@ -4,7 +4,7 @@
 //! - RISC-V base instructions
 //! - System instructions: TERMINATE, PHANTOM, PUBLISH
 //! - System phantom sub-instructions: Nop, DebugPanic, CtStart, CtEnd
-//! - STOREW e=2 dispatch (normal memory store)
+//! - STORED/STOREW e=2 dispatch (normal memory store; e=3 falls through to extensions for REVEAL)
 
 use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode, SysPhantom, SystemOpcode,
@@ -132,15 +132,15 @@ pub fn lift_instruction<F: PrimeField32>(
         return Some(lift_load(insn, pc, MemWidth::Word, true));
     }
     if opcode == Rv64LoadStoreOpcode::STORED.global_opcode_usize() {
-        return Some(lift_store(insn, pc, MemWidth::Double));
-    }
-    if opcode == Rv64LoadStoreOpcode::STOREW.global_opcode_usize() {
         // e = RV64_MEMORY_AS is a normal store; e = AS_PUBLIC_VALUES is REVEAL,
         // handled by `Rv64IoExtension`.
         let addr_space = field_to_u32(insn.e);
         if addr_space != AS_PUBLIC_VALUES {
-            return Some(lift_store(insn, pc, MemWidth::Word));
+            return Some(lift_store(insn, pc, MemWidth::Double));
         }
+    }
+    if opcode == Rv64LoadStoreOpcode::STOREW.global_opcode_usize() {
+        return Some(lift_store(insn, pc, MemWidth::Word));
     }
     if opcode == Rv64LoadStoreOpcode::STOREH.global_opcode_usize() {
         return Some(lift_store(insn, pc, MemWidth::Half));

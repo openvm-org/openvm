@@ -221,8 +221,8 @@ impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
             }));
         }
 
-        // REVEAL: STOREW with address-space e = AS_PUBLIC_VALUES.
-        if opcode == Rv64LoadStoreOpcode::STOREW.global_opcode_usize()
+        // REVEAL: STORED with address-space e = AS_PUBLIC_VALUES.
+        if opcode == Rv64LoadStoreOpcode::STORED.global_opcode_usize()
             && insn.e.as_canonical_u32() == AS_PUBLIC_VALUES
         {
             let src_reg = decode_reg(insn.a);
@@ -368,7 +368,7 @@ pub struct Rv64IPhantomCallbacks {
 pub struct Rv64IoHostCallbacks {
     pub hint_storew: extern "C" fn(*mut c_void, u32),
     pub hint_buffer: extern "C" fn(*mut c_void, u32, u32),
-    pub reveal: extern "C" fn(*mut c_void, u32, u32, u32),
+    pub reveal: extern "C" fn(*mut c_void, u64, u32, u32),
 }
 
 // ── Callback implementations ────────────────────────────────────────────────
@@ -459,13 +459,13 @@ pub extern "C" fn host_hint_buffer<F: PrimeField32>(
 /// byte slice. Cost corrections handled in C.
 pub extern "C" fn host_reveal<F: PrimeField32>(
     ctx: *mut c_void,
-    src_val: u32,
+    src_val: u64,
     ptr: u32,
     offset: u32,
 ) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
     let start = ptr as usize + offset as usize;
-    let end = start + WORD_SIZE;
+    let end = start + RV64_REGISTER_NUM_LIMBS;
     assert!(
         end <= io.public_values.len(),
         "reveal out of bounds: writing bytes [{start}..{end}) but public_values size is {} (configured via SystemConfig::with_public_values)",
