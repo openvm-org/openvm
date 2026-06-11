@@ -250,7 +250,6 @@ impl<M: LinearMemory> AddressMap<M> {
             .copy_nonoverlapping(start, data);
     }
 
-    // TODO[jpw]: stabilize the boundary memory image format and how to construct
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
