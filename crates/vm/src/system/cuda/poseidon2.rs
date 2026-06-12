@@ -1,6 +1,6 @@
 #[cfg(feature = "metrics")]
 use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use openvm_circuit::{
     primitives::Chip, system::poseidon2::columns::Poseidon2PeripheryCols,
@@ -19,35 +19,60 @@ use crate::cuda_abi::poseidon2;
 
 #[derive(Clone)]
 pub struct SharedBuffer<T> {
-    pub buffer: Arc<DeviceBuffer<T>>,
+    buffer: Arc<Mutex<Option<Arc<DeviceBuffer<T>>>>>,
     pub idx: Arc<DeviceBuffer<u32>>,
+}
+
+impl<T> SharedBuffer<T> {
+    pub fn records(&self) -> Arc<DeviceBuffer<T>> {
+        let records = self.buffer.lock().unwrap();
+        records
+            .clone()
+            .expect("Poseidon2 records buffer must be prepared before tracegen")
+    }
 }
 
 pub struct Poseidon2ChipGPU<const SBOX_REGISTERS: usize> {
     pub device_ctx: GpuDeviceCtx,
-    pub records: Arc<DeviceBuffer<F>>,
+    pub records: Arc<Mutex<Option<Arc<DeviceBuffer<F>>>>>,
     pub idx: Arc<DeviceBuffer<u32>>,
     #[cfg(feature = "metrics")]
     pub(crate) current_trace_height: Arc<AtomicUsize>,
 }
 
 impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
-    /// Creates a new Poseidon2 chip with a device buffer of `max_buffer_size` field elements.
-    /// Each Poseidon2 record occupies `POSEIDON2_WIDTH` (16) field elements, so the buffer
-    /// can hold `max_buffer_size / POSEIDON2_WIDTH` records.
-    pub fn new(max_buffer_size: usize, device_ctx: GpuDeviceCtx) -> Self {
+    pub fn new(device_ctx: GpuDeviceCtx) -> Self {
         let idx = Arc::new(DeviceBuffer::<u32>::with_capacity_on(1, &device_ctx));
         idx.fill_zero_on(&device_ctx).unwrap();
         Self {
             device_ctx: device_ctx.clone(),
-            records: Arc::new(DeviceBuffer::<F>::with_capacity_on(
-                max_buffer_size,
-                &device_ctx,
-            )),
+            records: Arc::new(Mutex::new(None)),
             idx,
             #[cfg(feature = "metrics")]
             current_trace_height: Arc::new(AtomicUsize::new(0)),
         }
+    }
+
+    /// Prepare an exact one-segment scratch buffer for Poseidon2 records.
+    ///
+    /// Each Poseidon2 record occupies `POSEIDON2_WIDTH` field elements.
+    pub fn prepare_records(&self, num_records: usize) {
+        self.idx.fill_zero_on(&self.device_ctx).unwrap();
+        let mut records = self.records.lock().unwrap();
+        assert!(
+            records.is_none(),
+            "Poseidon2 records buffer already prepared"
+        );
+        if num_records == 0 {
+            return;
+        }
+        let num_elements = num_records
+            .checked_mul(POSEIDON2_WIDTH)
+            .expect("Poseidon2 records buffer size overflow");
+        records.replace(Arc::new(DeviceBuffer::<F>::with_capacity_on(
+            num_elements,
+            &self.device_ctx,
+        )));
     }
 
     pub fn shared_buffer(&self) -> SharedBuffer<F> {
@@ -64,8 +89,19 @@ impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
 
 impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<SBOX_REGISTERS> {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
+        let Some(records) = self.records.lock().unwrap().take() else {
+            self.idx.fill_zero_on(&self.device_ctx).unwrap();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        };
+        debug_assert_eq!(records.len() % POSEIDON2_WIDTH, 0);
+        let capacity_records = records.len() / POSEIDON2_WIDTH;
         let mut num_records = self.idx.to_host_on(&self.device_ctx).unwrap()[0] as usize;
+        assert!(
+            num_records <= capacity_records,
+            "Poseidon2 records buffer overflow: pushed {num_records} records into capacity {capacity_records}"
+        );
         if num_records == 0 {
+            self.idx.fill_zero_on(&self.device_ctx).unwrap();
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         let counts = DeviceBuffer::<u32>::with_capacity_on(num_records, &self.device_ctx);
@@ -76,7 +112,7 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
             let d_num_records = [num_records].to_device_on(&self.device_ctx).unwrap();
             let mut temp_bytes = 0;
             poseidon2::deduplicate_records_get_temp_bytes(
-                &self.records,
+                &records,
                 &counts,
                 num_records,
                 &d_num_records,
@@ -90,7 +126,7 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
                 DeviceBuffer::<u8>::with_capacity_on(temp_bytes, &self.device_ctx)
             };
             poseidon2::deduplicate_records(
-                &self.records,
+                &records,
                 &counts,
                 &dedup_records,
                 &dedup_counts,
@@ -107,6 +143,8 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
                 .first()
                 .unwrap();
         }
+        drop(records);
+        drop(counts);
         #[cfg(feature = "metrics")]
         self.current_trace_height
             .store(num_records, std::sync::atomic::Ordering::Relaxed);
@@ -142,11 +180,18 @@ pub enum Poseidon2PeripheryChipGPU {
 }
 
 impl Poseidon2PeripheryChipGPU {
-    pub fn new(max_buffer_size: usize, sbox_registers: usize, device_ctx: GpuDeviceCtx) -> Self {
+    pub fn new(sbox_registers: usize, device_ctx: GpuDeviceCtx) -> Self {
         match sbox_registers {
-            0 => Self::Register0(Poseidon2ChipGPU::new(max_buffer_size, device_ctx)),
-            1 => Self::Register1(Poseidon2ChipGPU::new(max_buffer_size, device_ctx)),
+            0 => Self::Register0(Poseidon2ChipGPU::new(device_ctx)),
+            1 => Self::Register1(Poseidon2ChipGPU::new(device_ctx)),
             _ => panic!("Invalid number of sbox registers: {sbox_registers}"),
+        }
+    }
+
+    pub fn prepare_records(&self, num_records: usize) {
+        match self {
+            Self::Register0(chip) => chip.prepare_records(num_records),
+            Self::Register1(chip) => chip.prepare_records(num_records),
         }
     }
 

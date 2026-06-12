@@ -176,6 +176,7 @@ pub mod merkle_tree {
         )?;
         let tmp_storage = DeviceBuffer::<u8>::with_capacity_on(need_tmp_storage_bytes, device_ctx);
         let actual_heights = actual_heights.to_device_on(device_ctx).unwrap();
+        let poseidon2_records = hasher_buffer.records();
         CudaError::from_result(_update_merkle_tree(
             num_leaves,
             touched_blocks.as_mut_ptr(),
@@ -191,10 +192,10 @@ pub mod merkle_tree {
             top_roots.as_mut_ptr() as *mut u32,
             zero_hash.as_ptr() as *mut u32,
             actual_heights.as_ptr(),
-            hasher_buffer.buffer.as_mut_raw_ptr(),
+            poseidon2_records.as_mut_raw_ptr(),
             hasher_buffer.idx.as_mut_ptr(),
             // Length in F elements; the CUDA side converts to record count.
-            hasher_buffer.buffer.len(),
+            poseidon2_records.len(),
             device_ctx.stream.as_raw(),
         ))
     }

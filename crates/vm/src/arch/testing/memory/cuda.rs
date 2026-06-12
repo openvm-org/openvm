@@ -51,7 +51,6 @@ impl DeviceMemoryTester {
         let range_bus = range_checker.cpu_chip.as_ref().unwrap().bus();
         let sbox_regs = 1;
         let poseidon2_periphery = Arc::new(Poseidon2PeripheryChipGPU::new(
-            1 << 20, // probably enough for our tests
             sbox_regs,
             device_ctx.clone(),
         ));

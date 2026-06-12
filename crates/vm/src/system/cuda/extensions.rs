@@ -17,9 +17,7 @@ use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_baby_bear::BabyBear;
 
-use super::{
-    phantom::PhantomChipGPU, Poseidon2PeripheryChipGPU, SystemChipInventoryGPU, DIGEST_WIDTH,
-};
+use super::{phantom::PhantomChipGPU, Poseidon2PeripheryChipGPU, SystemChipInventoryGPU};
 
 /// A utility method to get the `VariableRangeCheckerChipGPU` from [ChipInventory].
 /// Note, `VariableRangeCheckerChipGPU` always will always exist in the inventory.
@@ -97,9 +95,6 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         inventory.next_air::<VariableRangeCheckerAir>()?;
         inventory.add_periphery_chip(range_checker.clone());
 
-        let max_buffer_size = (config.segmentation_limits.max_trace_height as usize)
-            .next_power_of_two() * 2 // seems like a reliable estimate
-            * (DIGEST_WIDTH * 2); // size of one record
         assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
         let sbox_registers = if config.max_constraint_degree >= 7 {
             0
@@ -117,7 +112,6 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
                 .bus
         };
         let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
-            max_buffer_size,
             sbox_registers,
             device_ctx.clone(),
         ));
