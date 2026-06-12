@@ -4,9 +4,11 @@ use eyre::Result;
 use openvm_circuit::system::memory::{
     dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof,
 };
+#[cfg(debug_assertions)]
+use openvm_continuations::prover::debug_constraints;
 use openvm_continuations::{
     circuit::{deferral::DeferralMerkleProofs, Circuit},
-    prover::{debug_constraints, DeferralCircuitProver},
+    prover::DeferralCircuitProver,
     CommitBytes, VkCommitBytes, SC,
 };
 use openvm_cpu_backend::CpuBackend;

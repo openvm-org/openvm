@@ -35,8 +35,8 @@ use strum::EnumCount;
 
 use crate::{
     modular_chip::{
-        get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
-        get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
+        get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_executor,
+        get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_executor, ModularAir,
         ModularExecutor, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
         ModularIsEqualFiller, VmModularIsEqualExecutor,
     },
@@ -109,7 +109,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                     num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
-                let addsub = get_modular_addsub_step::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
+                let addsub = get_modular_addsub_executor::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -123,7 +123,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_modular_muldiv_step::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
+                let muldiv = get_modular_muldiv_executor::<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -163,7 +163,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                     num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
-                let addsub = get_modular_addsub_step::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
+                let addsub = get_modular_addsub_executor::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -177,7 +177,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_modular_muldiv_step::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
+                let muldiv = get_modular_muldiv_executor::<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,

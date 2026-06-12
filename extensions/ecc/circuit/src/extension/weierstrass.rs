@@ -31,9 +31,9 @@ use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
 use crate::{
-    get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
-    get_ec_double_step, EcAddNeExecutor, EcDoubleExecutor, EccCpuProverExt, WeierstrassAir,
-    ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
+    get_ec_addne_air, get_ec_addne_chip, get_ec_addne_executor, get_ec_double_air,
+    get_ec_double_chip, get_ec_double_executor, EcAddNeExecutor, EcDoubleExecutor, EccCpuProverExt,
+    WeierstrassAir, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
 #[serde_as]
@@ -127,7 +127,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                     num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
-                let addne = get_ec_addne_step(
+                let addne = get_ec_addne_executor(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -141,7 +141,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let double = get_ec_double_step(
+                let double = get_ec_double_executor(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -161,7 +161,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                     num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
-                let addne = get_ec_addne_step(
+                let addne = get_ec_addne_executor(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -175,7 +175,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let double = get_ec_double_step(
+                let double = get_ec_double_executor(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,

@@ -2,6 +2,8 @@ use std::{fs::read_dir, path::PathBuf};
 
 use eyre::Result;
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::{testing::assert_vm_states_equivalent, SystemConfig};
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -43,20 +45,14 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
 
                 #[cfg(feature = "aot")]
                 {
-                    use openvm_circuit::{arch::VmState, system::memory::online::GuestMemory};
                     let naive_interpreter = executor.interpreter_instance(&exe)?;
                     let naive_state = naive_interpreter.execute(vec![], None)?;
-                    let assert_vm_state_eq =
-                        |lhs: &VmState<BabyBear, GuestMemory>,
-                         rhs: &VmState<BabyBear, GuestMemory>| {
-                            assert_eq!(lhs.pc(), rhs.pc());
-                            for r in 0..32 {
-                                let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
-                                let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
-                                assert_eq!(a, b);
-                            }
-                        };
-                    assert_vm_state_eq(&state, &naive_state);
+                    let system_config: &SystemConfig = config.as_ref();
+                    assert_vm_states_equivalent(
+                        &state,
+                        &naive_state,
+                        &system_config.memory_config.memory_dimensions(),
+                    );
                 }
 
                 Ok(())
