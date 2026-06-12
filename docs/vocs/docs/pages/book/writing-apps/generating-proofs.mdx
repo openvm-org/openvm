@@ -66,7 +66,8 @@ cargo openvm setup [--evm]
 ```
 
 If called without the `--evm` flag, it writes the internal-recursive aggregation proving key used by
-`cargo openvm prove stark` and `cargo openvm verify stark`. If called with the `--evm` flag, it also
+`cargo openvm prove stark` along with the corresponding verifying key used by
+`cargo openvm verify stark`. If called with the `--evm` flag, it also
 writes the root proving key, downloads Halo2 parameters, and generates or downloads the Solidity
 verifier artifacts used by the EVM flow.
 
@@ -80,6 +81,7 @@ In addition to writing the proving keys needed by the CLI, `cargo openvm setup -
 generates a smart contract verifier for EVM chains. Upon a successful run, the command will write the files
 
 - `internal_recursive.pk`
+- `internal_recursive.vk`
 - `root.pk`
 - `halo2/src/[OPENVM_VERSION]/Halo2Verifier.sol`
 - `halo2/src/[OPENVM_VERSION]/OpenVmHalo2Verifier.sol`
@@ -92,7 +94,8 @@ to `~/.openvm/`, where `~` is the directory specified by environment variable `$
 look for them in this directory. The smart contract verifier is also available via the
 [OpenVM Solidity SDK](/book/writing-apps/solidity-sdk) for released versions of OpenVM.
 
-The file `internal_recursive.pk` is the proving key for the internal-recursive aggregation layer.
+The file `internal_recursive.pk` is the proving key for the internal-recursive aggregation layer, and
+`internal_recursive.vk` is the corresponding verifying key read by `cargo openvm verify stark`.
 The file `root.pk` is the proving key for the root layer used during EVM proof generation.
 The `params` directory contains various trusted setup KZG parameters needed to guarantee Halo2's cryptographic security.
 The `OpenVmHalo2Verifier.sol` file contains a Solidity contract to verify the final EVM proof. The contract is named `OpenVmHalo2Verifier` and it implements the `IOpenVmHalo2Verifier` interface.
