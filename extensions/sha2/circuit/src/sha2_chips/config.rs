@@ -63,16 +63,21 @@ impl Sha2Config for Sha512Config {
         debug_assert!(state.len() >= Sha512Config::STATE_BYTES);
         debug_assert!(input.len() == Sha512Config::BLOCK_BYTES);
 
-        // SAFETY:
-        //   This is safe because state points to a [u64; 8].
-        //   The only reason we have a &[u8] instead is that we read it from a record, where
-        //   we store the state as bytes since we don't know the word size at compile time (u32 for
-        //   Sha256, u64 for Sha512)
-        let state_u64s: &mut [u64; 8] = unsafe { &mut *(state.as_mut_ptr() as *mut [u64; 8]) };
+        // `state` may only be 4-byte aligned, so copy through an aligned `u64` buffer.
+        // We store the state as bytes in the record because the word size is
+        // not known at compile time (u32 for Sha256, u64 for Sha512).
+        let mut state_u64s = [0u64; 8];
+        for (w, chunk) in state_u64s.iter_mut().zip(state.chunks_exact(8)) {
+            *w = u64::from_ne_bytes(chunk.try_into().unwrap());
+        }
 
         let input_array = GenericArray::from_slice(input);
 
-        compress512(state_u64s, &[*input_array]);
+        compress512(&mut state_u64s, &[*input_array]);
+
+        for (w, chunk) in state_u64s.iter().zip(state.chunks_exact_mut(8)) {
+            chunk.copy_from_slice(&w.to_ne_bytes());
+        }
     }
 
     // returns the digest as big-endian words
