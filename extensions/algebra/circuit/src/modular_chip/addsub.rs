@@ -84,7 +84,7 @@ pub fn get_modular_addsub_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     )
 }
 
-pub fn get_modular_addsub_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_modular_addsub_executor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,

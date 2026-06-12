@@ -28,8 +28,8 @@ use strum::EnumCount;
 
 use crate::{
     fp2_chip::{
-        get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, get_fp2_muldiv_air,
-        get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Executor,
+        get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_executor, get_fp2_muldiv_air,
+        get_fp2_muldiv_chip, get_fp2_muldiv_executor, Fp2Air, Fp2Executor,
     },
     AlgebraCpuProverExt, ModularExtension, FP2_BLOCKS_32, FP2_BLOCKS_48, NUM_LIMBS_32,
     NUM_LIMBS_48,
@@ -109,7 +109,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                     num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
-                let addsub = get_fp2_addsub_step(
+                let addsub = get_fp2_addsub_executor(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -122,7 +122,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_fp2_muldiv_step(
+                let muldiv = get_fp2_muldiv_executor(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -140,7 +140,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                     num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
-                let addsub = get_fp2_addsub_step(
+                let addsub = get_fp2_addsub_executor(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -153,7 +153,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_fp2_muldiv_step(
+                let muldiv = get_fp2_muldiv_executor(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,

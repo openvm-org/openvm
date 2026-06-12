@@ -40,9 +40,9 @@ use {
 };
 
 use crate::{
-    get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
-    get_ec_double_step, EcDoubleExecutor, WeierstrassAir, WeierstrassChip, ECC_BLOCKS_32,
-    ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
+    get_ec_addne_air, get_ec_addne_chip, get_ec_addne_executor, get_ec_double_air,
+    get_ec_double_chip, get_ec_double_executor, EcDoubleExecutor, WeierstrassAir, WeierstrassChip,
+    ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
 const LIMB_BITS: usize = 8;
@@ -136,7 +136,7 @@ mod ec_addne_tests {
             tester.address_bits(),
             offset,
         );
-        let executor = get_ec_addne_step::<BLOCKS, BLOCK_SIZE>(
+        let executor = get_ec_addne_executor::<BLOCKS, BLOCK_SIZE>(
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),
@@ -192,7 +192,8 @@ mod ec_addne_tests {
             tester.address_bits(),
             offset,
         );
-        let executor = get_ec_addne_step(config.clone(), range_bus, tester.address_bits(), offset);
+        let executor =
+            get_ec_addne_executor(config.clone(), range_bus, tester.address_bits(), offset);
 
         let cpu_chip = get_ec_addne_chip(
             config.clone(),
@@ -519,7 +520,7 @@ mod ec_addne_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let executor = get_ec_addne_step::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }>(
+        let executor = get_ec_addne_executor::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }>(
             config,
             tester.range_checker().bus(),
             tester.address_bits(),
@@ -583,7 +584,7 @@ mod ec_double_tests {
             offset,
             a_biguint.clone(),
         );
-        let executor = get_ec_double_step(
+        let executor = get_ec_double_executor(
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),
@@ -638,7 +639,7 @@ mod ec_double_tests {
             offset,
             a_biguint.clone(),
         );
-        let executor = get_ec_double_step(
+        let executor = get_ec_double_executor(
             config.clone(),
             range_bus,
             tester.address_bits(),
@@ -1047,7 +1048,7 @@ mod ec_double_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let executor = get_ec_double_step::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }>(
+        let executor = get_ec_double_executor::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }>(
             config,
             tester.range_checker().bus(),
             tester.address_bits(),
@@ -1079,7 +1080,7 @@ mod ec_double_tests {
         )
         .unwrap();
 
-        let executor = get_ec_double_step::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }>(
+        let executor = get_ec_double_executor::<{ ECC_BLOCKS_32 }, { DEFAULT_BLOCK_SIZE }>(
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),

@@ -333,7 +333,7 @@ pub trait VmAdapterInterface<T> {
 pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
     type Interface: VmAdapterInterface<AB::Expr>;
 
-    /// [Air](openvm_stark_backend::p3_air::Air) constraints owned by the adapter.
+    /// `Air` constraints owned by the adapter.
     /// The `interface` is given as abstract expressions so it can be directly used in other AIR
     /// constraints.
     ///

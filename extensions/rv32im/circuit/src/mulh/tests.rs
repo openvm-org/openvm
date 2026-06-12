@@ -3,12 +3,8 @@ use std::collections::HashMap;
 use std::{borrow::BorrowMut, sync::Arc};
 
 #[cfg(feature = "aot")]
-use openvm_circuit::arch::VirtualMachine;
-#[cfg(feature = "aot")]
-use openvm_circuit::arch::{VmExecutor, VmState};
-#[cfg(feature = "aot")]
-use openvm_circuit::{
-    arch::hasher::poseidon2::vm_poseidon2_hasher, system::memory::merkle::MerkleTree,
+use openvm_circuit::arch::{
+    testing::assert_vm_states_equivalent, VirtualMachine, VmExecutor, VmState,
 };
 use openvm_circuit::{
     arch::{
@@ -527,12 +523,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
         .execute(vec![], None)
         .expect("AOT execution must succeed");
 
-    assert_eq!(interp_state.pc(), aot_state.pc());
-
-    let hasher = vm_poseidon2_hasher::<BabyBear>();
-    let tree1 = MerkleTree::from_memory(&interp_state.memory.memory, &memory_dimensions, &hasher);
-    let tree2 = MerkleTree::from_memory(&aot_state.memory.memory, &memory_dimensions, &hasher);
-    assert_eq!(tree1.root(), tree2.root(), "Memory states differ");
+    assert_vm_states_equivalent(&interp_state, &aot_state, &memory_dimensions);
 
     // Also test metered execution (interpreter and AOT) produce identical final state
     let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
@@ -556,27 +547,10 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
     let (_, metered_aot_state) = metered_aot
         .execute_metered(vec![], metered_ctx.clone())
         .expect("metered AOT execution must succeed");
-    println!(
-        "interp_state.pc(): {}, metered_interp_state.pc(): {}",
-        interp_state.pc(),
-        metered_interp_state.pc()
-    );
-    assert_eq!(metered_aot_state.pc(), metered_interp_state.pc());
-    let tree_mi = MerkleTree::from_memory(
-        &metered_interp_state.memory.memory,
+    assert_vm_states_equivalent(
+        &metered_interp_state,
+        &metered_aot_state,
         &memory_dimensions,
-        &hasher,
-    );
-    let tree_ma = MerkleTree::from_memory(
-        &metered_aot_state.memory.memory,
-        &memory_dimensions,
-        &hasher,
-    );
-
-    assert_eq!(
-        tree_ma.root(),
-        tree_mi.root(),
-        "Metered interpreter memory differs"
     );
     (interp_state, aot_state)
 }

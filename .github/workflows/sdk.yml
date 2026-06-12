@@ -84,6 +84,12 @@ jobs:
           export RUST_MIN_STACK=8388608
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify
 
+      - name: Build openvm-sdk examples
+        if: ${{ matrix.mode == 'default' }}
+        working-directory: crates/sdk
+        run: |
+          cargo build --release --examples --features parallel,root-prover,evm-verify
+
       - name: Run openvm-sdk crate tests (AOT)
         if: ${{ matrix.mode == 'aot' }}
         working-directory: crates/sdk
