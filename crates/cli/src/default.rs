@@ -28,6 +28,10 @@ pub fn default_internal_recursive_pk_path() -> String {
     env::var("HOME").unwrap() + "/.openvm/internal_recursive.pk"
 }
 
+pub fn default_internal_recursive_vk_path() -> String {
+    env::var("HOME").unwrap() + "/.openvm/internal_recursive.vk"
+}
+
 pub fn default_root_pk_path() -> String {
     env::var("HOME").unwrap() + "/.openvm/root.pk"
 }

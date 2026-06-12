@@ -25,6 +25,7 @@ use openvm_circuit::{
     },
     system::memory::merkle::public_values::extract_public_values,
 };
+use openvm_continuations::CommitBytes;
 use openvm_sdk_config::{SdkVmConfig, SdkVmCpuBuilder, TranspilerConfig};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, StarkEngine, SystemParams};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
@@ -45,7 +46,7 @@ use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey},
     prover::{AggProver, AppProver, DeferralPathProver, StarkProver},
-    types::ExecutableFormat,
+    types::{AppExecutionCommit, ExecutableFormat},
 };
 #[cfg(feature = "evm-prove")]
 use crate::{halo2_params::CacheHalo2ParamsReader, keygen::Halo2ProvingKey, prover::Halo2Prover};
@@ -690,6 +691,20 @@ where
         self.halo2_prover().pk()
     }
 
+    /// Generates the [`AppExecutionCommit`] for the given executable.
+    ///
+    /// This function will generate the app_pk if it does not already exist.
+    pub fn app_commit(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<AppExecutionCommit, SdkError> {
+        let prover = self.prover(app_exe)?;
+        Ok(AppExecutionCommit {
+            app_exe_commit: CommitBytes::from(prover.generate_baseline().app_exe_commit),
+            app_vm_commit: CommitBytes::from(prover.app_vm_commit()),
+        })
+    }
+
     // ======================== Verification Methods ========================
 
     /// Verifies aggregate STARK proof of VM execution.
@@ -719,11 +734,20 @@ where
     /// Uses the `verify(..)` interface of the `OpenVmHalo2Verifier` contract.
     ///
     /// Requires the `evm-verify` feature. Internally deploys the verifier bytecode in a local EVM
-    /// and executes the verification call.
+    /// and executes the verification call. If expected_app_commit is provided, it will check the
+    /// proof's app_commit against it.
     pub fn verify_evm_halo2_proof(
         openvm_verifier: &types::EvmHalo2Verifier,
         evm_proof: types::EvmProof,
+        expected_app_commit: Option<AppExecutionCommit>,
     ) -> Result<u64, SdkError> {
+        if let Some(expected_app_commit) = expected_app_commit {
+            if expected_app_commit != evm_proof.app_commit {
+                return Err(
+                    eyre::eyre!("EVM proof verification failed: mismatching app commits").into(),
+                );
+            }
+        }
         solidity::verify_evm_halo2_proof(openvm_verifier, evm_proof)
     }
 }

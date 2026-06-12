@@ -18,7 +18,7 @@ use openvm_sdk::{
 
 use crate::default::{
     default_app_config, default_evm_halo2_verifier_path, default_internal_recursive_pk_path,
-    default_params_dir, default_root_pk_path,
+    default_internal_recursive_vk_path, default_params_dir, default_root_pk_path,
 };
 
 /// The maximum value of `k` to download Halo2 KZG trusted setup parameters for. This depends on the
@@ -54,12 +54,22 @@ impl SetupCmd {
     pub async fn run(&self) -> Result<()> {
         let sdk = Sdk::new(default_app_config(), AggregationSystemParams::default())?;
 
+        let internal_recursive_pk = sdk.agg_pk().internal_recursive;
+        let internal_recursive_vk = internal_recursive_pk.get_vk();
+
         let internal_recursive_pk_path = PathBuf::from(default_internal_recursive_pk_path());
         println!(
             "Writing internal-recursive proving key to {}",
             internal_recursive_pk_path.display()
         );
-        write_object_to_file(&internal_recursive_pk_path, sdk.agg_pk().internal_recursive)?;
+        write_object_to_file(&internal_recursive_pk_path, internal_recursive_pk)?;
+
+        let internal_recursive_vk_path = PathBuf::from(default_internal_recursive_vk_path());
+        println!(
+            "Writing internal-recursive verifying key to {}",
+            internal_recursive_vk_path.display()
+        );
+        write_object_to_file(&internal_recursive_vk_path, internal_recursive_vk)?;
 
         if !self.evm {
             return Ok(());
