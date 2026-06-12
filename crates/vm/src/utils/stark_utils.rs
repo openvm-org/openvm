@@ -85,7 +85,8 @@ where
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
-    let params = SystemParams::new_for_testing(22); // max log_trace_height=22
+    let params =
+        SystemParams::new_for_testing(config.as_ref().segmentation_limits.max_trace_height_bits());
     let debug = std::env::var("OPENVM_SKIP_DEBUG") != Result::Ok(String::from("1"));
     let (final_memory, _) = air_test_impl::<TestStarkEngine, VB>(
         params,
