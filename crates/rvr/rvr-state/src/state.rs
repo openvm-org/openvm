@@ -13,9 +13,6 @@ pub enum ExecutionStatus {
     Trapped = 3,
 }
 
-/// Number of CSRs.
-pub const NUM_CSRS: usize = 4096;
-
 /// Number of registers for I extension (32 GPRs).
 pub const NUM_REGS_I: usize = 32;
 
@@ -46,40 +43,17 @@ pub struct RvState<
     /// Suspender state (ZST when S = (), real struct when suspending).
     pub suspender: S,
 
-    // TODO(follow-up): dead field — remove once rv32 no longer required.
-    /// Reservation address for LR/SC.
-    pub reservation_addr: u32,
-
-    // TODO(follow-up): dead field — remove once rv32 no longer required.
-    /// Reservation valid flag for LR/SC.
-    pub reservation_valid: u8,
-
     /// Legacy execution-status byte.
     pub has_exited: u8,
 
     /// Legacy result payload byte.
     pub exit_code: u8,
 
-    /// Alignment padding.
-    _pad0: u8,
-
-    // TODO(follow-up): dead field — remove once rv32 no longer required.
-    /// Current heap break.
-    pub brk: u32,
-
-    // TODO(follow-up): dead field — remove once rv32 no longer required.
-    /// Initial heap break.
-    pub start_brk: u32,
-
     /// Guest memory pointer (cold).
     pub memory: *mut u8,
 
     /// Tracer state (ZST when T = (), real struct when tracing).
     pub tracer: T,
-
-    // TODO(follow-up): dead field — remove once rv32 no longer required.
-    /// Control and status registers (cold).
-    pub csrs: [u32; NUM_CSRS],
 }
 
 impl<X: Xlen, T: TracerState, S: SuspenderState, const NUM_REGS: usize> RvState<X, T, S, NUM_REGS> {
@@ -99,16 +73,10 @@ impl<X: Xlen, T: TracerState, S: SuspenderState, const NUM_REGS: usize> Default
             pc: X::from_u64(0),
             instret: 0,
             suspender: S::default(),
-            reservation_addr: 0,
-            reservation_valid: 0,
             has_exited: 0,
             exit_code: 0,
-            _pad0: 0,
-            brk: 0,
-            start_brk: 0,
             memory: std::ptr::null_mut(),
             tracer: T::default(),
-            csrs: [0; NUM_CSRS],
         }
     }
 }

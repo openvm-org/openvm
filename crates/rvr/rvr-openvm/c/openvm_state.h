@@ -40,18 +40,12 @@ typedef struct RvState {
    * InstretSuspender. Replace this flattened field with a generated suspender
    * state layout once non-instret suspenders need runtime state. */
   uint64_t target_instret;
-  uint32_t reservation_addr;
-  uint8_t reservation_valid;
   /* Field name preserved for ABI compatibility with rvr's RvState.
    * Semantically stores an OpenVmExecStatus value. */
   uint8_t has_exited;
   uint8_t exit_code;
-  uint8_t _pad0;
-  uint32_t brk;
-  uint32_t start_brk;
   uint8_t* memory;
   struct Tracer* tracer;
-  uint32_t csrs[4096];
 } RvState;
 
 static __attribute__((always_inline)) inline void rv_set_status(
