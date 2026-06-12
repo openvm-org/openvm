@@ -11,14 +11,10 @@ on:
           - x86
           - arm
         default: x86
-      x86_family:
-        description: "x86 EC2 instance family"
+      family:
+        description: "EC2 instance family (must match selected arch)"
         type: string
         default: "m7a.24xlarge"
-      arm_family:
-        description: "ARM EC2 instance family"
-        type: string
-        default: "m8g.24xlarge"
   push:
     branches: ["main"]
   # pull_request:
@@ -46,7 +42,7 @@ jobs:
         mode: ["default", "ignored", "aot"]
 
     runs-on:
-      - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ (inputs.arch || 'x86') == 'arm' && (inputs.arm_family || 'm8g.24xlarge') || (inputs.x86_family || 'm7a.24xlarge') }}/image=${{ (inputs.arch || 'x86') == 'arm' && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/disk=large/extras=s3-cache
+      - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ inputs.family || 'm7a.24xlarge' }}/image=${{ (inputs.arch || 'x86') == 'arm' && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/disk=large/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
