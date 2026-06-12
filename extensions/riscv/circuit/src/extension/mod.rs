@@ -165,7 +165,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
         let add_sub =
-            Rv64AddSubExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+            Rv64AddSubExecutor::new(Rv64BaseAluU16AdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
         inventory.add_executor(
             add_sub,
             [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|x| x.global_opcode()),
@@ -289,8 +289,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         };
 
         let add_sub = Rv64AddSubAir::new(
-            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            AddSubCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
+            Rv64BaseAluU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
+            AddSubCoreAir::new(range_checker, BaseAluOpcode::CLASS_OFFSET),
         );
         inventory.add_air(add_sub);
 
@@ -424,8 +424,8 @@ where
         inventory.next_air::<Rv64AddSubAir>()?;
         let add_sub = Rv64AddSubChip::new(
             AddSubFiller::new(
-                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
-                bitwise_lu.clone(),
+                Rv64BaseAluU16AdapterFiller::new(range_checker.clone()),
+                range_checker.clone(),
                 BaseAluOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),

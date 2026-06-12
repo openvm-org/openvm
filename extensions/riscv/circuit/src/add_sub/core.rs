@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    iter::zip,
 };
 
 use openvm_circuit::{
@@ -9,7 +8,7 @@ use openvm_circuit::{
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -36,7 +35,7 @@ pub struct AddSubCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(AddSubCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
 pub struct AddSubCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub bus: BitwiseOperationLookupBus,
+    pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
 }
 
@@ -114,18 +113,12 @@ where
                 .assert_bool(carry_sub[i].clone());
         }
 
-        // Interaction with BitwiseOperationLookup to range check a: the carry constraints
-        // above only prove a[i] = (b[i] op c[i]) mod 2^LIMB_BITS given 0 <= a[i] < 2^LIMB_BITS.
+        // Range check a to [0, 2^LIMB_BITS): the carry constraints above only prove
+        // a[i] = (b[i] op c[i]) mod 2^LIMB_BITS given this bound, and `a` is written to
+        // memory, which requires canonical u16 cells.
         for &a_limb in a.iter() {
-            self.bus
-                .send_xor(a_limb, a_limb, AB::Expr::ZERO)
-                .eval(builder, is_valid.clone());
-        }
-
-        // Memory bus checks only packed u16 values; ADD/SUB read bytes need separate bounds.
-        for (&b_limb, &c_limb) in zip(b, c) {
-            self.bus
-                .send_range(b_limb, c_limb)
+            self.range_bus
+                .range_check(a_limb, LIMB_BITS)
                 .eval(builder, is_valid.clone());
         }
 
@@ -152,11 +145,11 @@ where
     }
 }
 
-#[repr(C, align(4))]
+#[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct AddSubCoreRecord<const NUM_LIMBS: usize> {
-    pub b: [u8; NUM_LIMBS],
-    pub c: [u8; NUM_LIMBS],
+    pub b: [u16; NUM_LIMBS],
+    pub c: [u16; NUM_LIMBS],
     // Use u8 instead of usize for better packing
     pub local_opcode: u8,
 }
@@ -170,7 +163,7 @@ pub struct AddSubExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 #[derive(derive_new::new)]
 pub struct AddSubFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
     pub offset: usize,
 }
 
@@ -181,8 +174,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
+            ReadData: Into<[[u16; NUM_LIMBS]; 2]>,
+            WriteData: From<[[u16; NUM_LIMBS]; 1]>,
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -260,26 +253,21 @@ where
         core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
 
         for a_val in a {
-            self.bitwise_lookup_chip
-                .request_xor(a_val as u32, a_val as u32);
+            self.range_checker_chip.add_count(a_val as u32, LIMB_BITS);
         }
-        for (b_val, c_val) in zip(record.b, record.c) {
-            self.bitwise_lookup_chip
-                .request_range(b_val as u32, c_val as u32);
-        }
-        core_row.c = record.c.map(F::from_u8);
-        core_row.b = record.b.map(F::from_u8);
-        core_row.a = a.map(F::from_u8);
+        core_row.c = record.c.map(F::from_u16);
+        core_row.b = record.b.map(F::from_u16);
+        core_row.a = a.map(F::from_u16);
     }
 }
 
 #[inline(always)]
 pub(super) fn run_add_sub<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: BaseAluOpcode,
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
-) -> [u8; NUM_LIMBS] {
-    debug_assert!(LIMB_BITS <= 8, "specialize for bytes");
+    x: &[u16; NUM_LIMBS],
+    y: &[u16; NUM_LIMBS],
+) -> [u16; NUM_LIMBS] {
+    debug_assert!(LIMB_BITS <= 16, "specialize for u16 limbs");
     match opcode {
         BaseAluOpcode::ADD => run_add::<NUM_LIMBS, LIMB_BITS>(x, y),
         BaseAluOpcode::SUB => run_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
@@ -289,35 +277,34 @@ pub(super) fn run_add_sub<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 
 #[inline(always)]
 fn run_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
-) -> [u8; NUM_LIMBS] {
-    let mut z = [0u8; NUM_LIMBS];
-    let mut carry = [0u8; NUM_LIMBS];
+    x: &[u16; NUM_LIMBS],
+    y: &[u16; NUM_LIMBS],
+) -> [u16; NUM_LIMBS] {
+    let mut z = [0u16; NUM_LIMBS];
+    let mut carry = [0u32; NUM_LIMBS];
     for i in 0..NUM_LIMBS {
-        let mut overflow =
-            (x[i] as u16) + (y[i] as u16) + if i > 0 { carry[i - 1] as u16 } else { 0 };
-        carry[i] = (overflow >> LIMB_BITS) as u8;
-        overflow &= (1u16 << LIMB_BITS) - 1;
-        z[i] = overflow as u8;
+        let mut overflow = (x[i] as u32) + (y[i] as u32) + if i > 0 { carry[i - 1] } else { 0 };
+        carry[i] = overflow >> LIMB_BITS;
+        overflow &= (1u32 << LIMB_BITS) - 1;
+        z[i] = overflow as u16;
     }
     z
 }
 
 #[inline(always)]
 fn run_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
-) -> [u8; NUM_LIMBS] {
-    let mut z = [0u8; NUM_LIMBS];
-    let mut carry = [0u8; NUM_LIMBS];
+    x: &[u16; NUM_LIMBS],
+    y: &[u16; NUM_LIMBS],
+) -> [u16; NUM_LIMBS] {
+    let mut z = [0u16; NUM_LIMBS];
+    let mut carry = [0u32; NUM_LIMBS];
     for i in 0..NUM_LIMBS {
-        let rhs = y[i] as u16 + if i > 0 { carry[i - 1] as u16 } else { 0 };
-        if x[i] as u16 >= rhs {
-            z[i] = x[i] - rhs as u8;
+        let rhs = y[i] as u32 + if i > 0 { carry[i - 1] } else { 0 };
+        if x[i] as u32 >= rhs {
+            z[i] = (x[i] as u32 - rhs) as u16;
             carry[i] = 0;
         } else {
-            z[i] = (x[i] as u16 + (1u16 << LIMB_BITS) - rhs) as u8;
+            z[i] = (x[i] as u32 + (1u32 << LIMB_BITS) - rhs) as u16;
             carry[i] = 1;
         }
     }
