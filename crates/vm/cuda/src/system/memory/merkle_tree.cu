@@ -149,6 +149,7 @@ template <typename T> struct MerkleCols {
     T expand_direction;
     T height_section;
     T parent_height;
+    T parent_height_inv;
     T is_root;
     T parent_as_label;
     T parent_address_label;
@@ -248,6 +249,7 @@ __device__ void fill_merkle_trace_row(
     COL_WRITE_VALUE(row, MerkleCols, expand_direction, new_values ? Fp::neg_one() : Fp::one());
     COL_WRITE_VALUE(row, MerkleCols, height_section, false);
     COL_WRITE_VALUE(row, MerkleCols, parent_height, parent_height);
+    COL_WRITE_VALUE(row, MerkleCols, parent_height_inv, inv(Fp(parent_height)));
     COL_WRITE_VALUE(row, MerkleCols, is_root, false);
     COL_WRITE_VALUE(row, MerkleCols, parent_as_label, as_label);
     COL_WRITE_VALUE(row, MerkleCols, parent_address_label, parent_label);
