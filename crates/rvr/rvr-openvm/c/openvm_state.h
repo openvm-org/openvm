@@ -34,7 +34,7 @@ static_assert(OPENVM_EXEC_TRAPPED == 3,
 
 typedef struct RvState {
   uint64_t regs[32];
-  uint32_t pc;
+  uint64_t pc;
   uint64_t instret;
   /* TODO(rvr-suspender): this generated ABI is currently hard-coded to
    * InstretSuspender. Replace this flattened field with a generated suspender
@@ -61,7 +61,7 @@ static __attribute__((always_inline)) inline void rv_set_status(
 }
 
 static __attribute__((always_inline)) inline void rv_set_status_at(
-    RvState* restrict state, uint32_t pc, OpenVmExecStatus status,
+    RvState* restrict state, uint64_t pc, OpenVmExecStatus status,
     uint8_t exit_code) {
   state->pc = pc;
   rv_set_status(state, status, exit_code);
