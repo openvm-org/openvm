@@ -919,10 +919,10 @@ fn get_successors(
                             .values
                             .iter()
                             .filter_map(|&t| {
-                                if t >= (1u64 << PC_BITS) {
-                                    // Target exceeds PC address space; not a valid branch.
-                                    return None;
-                                }
+                                assert!(
+                                    t < (1u64 << PC_BITS),
+                                    "JumpDyn target {t:#x} exceeds PC address space"
+                                );
                                 let pc32 = t as u32;
                                 if ctx.pc_to_idx.contains_key(&pc32) {
                                     Some(pc32)
@@ -981,7 +981,6 @@ fn get_successors(
 /// the result exceeds the valid PC address space.
 fn eval_jumpdyn_target(base: u64, imm: i32) -> Option<u64> {
     let target = base.wrapping_add(imm as i64 as u64) & !1u64;
-    debug_assert!(target < (1u64 << PC_BITS));
     if target < (1u64 << PC_BITS) {
         Some(target)
     } else {
