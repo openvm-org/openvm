@@ -548,15 +548,9 @@ fn simple_process_instr(instr: &Instr, regs: &mut [Option<u64>; NUM_REGS]) {
 
 /// Evaluate the JumpDyn target address: (state[rs1] + imm) & !1.
 fn simple_eval_jumpdyn(regs: &[Option<u64>; NUM_REGS], rs1: u8, imm: i32) -> Option<u32> {
-    regs[rs1 as usize].and_then(|base| {
-        let target = base.wrapping_add(imm as i64 as u64) & !1u64;
-        debug_assert!(target < (1u64 << PC_BITS));
-        if target < (1u64 << PC_BITS) {
-            Some(target as u32)
-        } else {
-            None
-        }
-    })
+    regs[rs1 as usize]
+        .and_then(|base| eval_jumpdyn_target(base, imm))
+        .map(|t| t as u32)
 }
 
 // ── Phase 1: collect_potential_targets ─────────────────────────────────────
@@ -925,6 +919,10 @@ fn get_successors(
                             .values
                             .iter()
                             .filter_map(|&t| {
+                                if t >= (1u64 << PC_BITS) {
+                                    // Target exceeds PC address space; not a valid branch.
+                                    return None;
+                                }
                                 let pc32 = t as u32;
                                 if ctx.pc_to_idx.contains_key(&pc32) {
                                     Some(pc32)
@@ -979,6 +977,18 @@ fn get_successors(
     result
 }
 
+/// Compute a single JumpDyn target: `(base + imm) & !1`, returning `None` if
+/// the result exceeds the valid PC address space.
+fn eval_jumpdyn_target(base: u64, imm: i32) -> Option<u64> {
+    let target = base.wrapping_add(imm as i64 as u64) & !1u64;
+    debug_assert!(target < (1u64 << PC_BITS));
+    if target < (1u64 << PC_BITS) {
+        Some(target)
+    } else {
+        None
+    }
+}
+
 /// Evaluate the JumpDyn target as a multi-value register value:
 /// for each possible value of rs1, compute (val + imm) & !1.
 fn eval_jumpdyn_multi(state: &RegisterState, rs1: u8, imm: i32) -> RegisterValue {
@@ -987,23 +997,13 @@ fn eval_jumpdyn_multi(state: &RegisterState, rs1: u8, imm: i32) -> RegisterValue
         return RegisterValue::unknown();
     }
 
-    let compute = |v: u64| -> Option<u64> {
-        let target = v.wrapping_add(imm as u64) & !1u64;
-        debug_assert!(target < (1u64 << PC_BITS));
-        if target < (1u64 << PC_BITS) {
-            Some(target)
-        } else {
-            None
-        }
-    };
-
-    let first = match compute(base.values[0]) {
+    let first = match eval_jumpdyn_target(base.values[0], imm) {
         Some(t) => t,
         None => return RegisterValue::unknown(),
     };
     let mut result = RegisterValue::constant(first);
     for &v in base.values.iter().skip(1) {
-        match compute(v) {
+        match eval_jumpdyn_target(v, imm) {
             Some(t) => {
                 result.add_value(t);
                 if !result.is_constant() {

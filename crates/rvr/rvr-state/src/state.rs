@@ -38,7 +38,7 @@ pub struct RvState<
     pub regs: [X::Reg; NUM_REGS],
 
     /// Program counter (hot).
-    pub pc: u32,
+    pub pc: u64,
 
     /// Instructions retired counter (hot).
     pub instret: u64,
@@ -46,11 +46,11 @@ pub struct RvState<
     /// Suspender state (ZST when S = (), real struct when suspending).
     pub suspender: S,
 
-    // TODO: Is it a dead field? set to u32 to match the rv32 version
+    // TODO(follow-up): dead field — remove once rv32 no longer required.
     /// Reservation address for LR/SC.
     pub reservation_addr: u32,
 
-    // TODO: Is it a dead field? set to u32 to match the rv32 version
+    // TODO(follow-up): dead field — remove once rv32 no longer required.
     /// Reservation valid flag for LR/SC.
     pub reservation_valid: u8,
 
@@ -63,11 +63,11 @@ pub struct RvState<
     /// Alignment padding.
     _pad0: u8,
 
-    // TODO: Is it a dead field? set to u32 to match the rv32 version
+    // TODO(follow-up): dead field — remove once rv32 no longer required.
     /// Current heap break.
     pub brk: u32,
 
-    // TODO: Is it a dead field? set to u32 to match the rv32 version
+    // TODO(follow-up): dead field — remove once rv32 no longer required.
     /// Initial heap break.
     pub start_brk: u32,
 
@@ -77,7 +77,7 @@ pub struct RvState<
     /// Tracer state (ZST when T = (), real struct when tracing).
     pub tracer: T,
 
-    // TODO: Is it a dead field? set to u32 to match the rv32 version
+    // TODO(follow-up): dead field — remove once rv32 no longer required.
     /// Control and status registers (cold).
     pub csrs: [u32; NUM_CSRS],
 }

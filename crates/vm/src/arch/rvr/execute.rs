@@ -141,12 +141,12 @@ where
     match status {
         ExecutionStatus::Terminated if exit_code == 0 => {
             write_rv64_registers(vm_state, &state.regs);
-            vm_state.set_pc(state.pc);
+            vm_state.set_pc(u32::try_from(state.pc).expect("PC must be within u32 range after C bounds check"));
             Ok(status)
         }
         ExecutionStatus::Suspended if allow_suspended => {
             write_rv64_registers(vm_state, &state.regs);
-            vm_state.set_pc(state.pc);
+            vm_state.set_pc(u32::try_from(state.pc).expect("PC must be within u32 range after C bounds check"));
             Ok(status)
         }
         _ => Err(if status == ExecutionStatus::Terminated {

@@ -13,7 +13,6 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, SystemOpcode,
 };
-use openvm_platform::WORD_SIZE;
 use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, Rv64Phantom};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::Rng;

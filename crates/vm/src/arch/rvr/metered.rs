@@ -10,7 +10,7 @@ use std::{
 
 use openvm_instructions::{
     exe::VmExe,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     DEFERRAL_AS,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -212,8 +212,7 @@ impl SegmentationState {
     /// OpenVM records pages for the entire register space
     /// (AS=1, ptr=0, size=32*8=256) at init and after each segment boundary.
     fn add_register_merkle_heights(&mut self) {
-        // RV64_REGISTER_AS=1, RV64_NUM_REGISTERS=32, RV64_REGISTER_NUM_LIMBS=8
-        const REG_SIZE: u32 = 32 * 8; // 256 bytes
+        const REG_SIZE: u32 = (RV64_NUM_REGISTERS * RV64_REGISTER_NUM_LIMBS) as u32;
 
         let leaf_ptrs = 1u32 << self.byte_space_leaf_bits;
         let num_blocks = (REG_SIZE + leaf_ptrs - 1) >> self.byte_space_leaf_bits;

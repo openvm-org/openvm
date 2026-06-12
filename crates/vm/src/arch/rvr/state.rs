@@ -82,7 +82,7 @@ pub fn init_rvr_state<F: PrimeField32>(
     let memory_ptr = rv64_memory_ptr(vm_state);
     let mut state = PureState::new();
     state.set_memory(memory_ptr);
-    state.pc = pc;
+    state.pc = pc as u64;
     state.suspender.disable();
     state
 }
@@ -94,7 +94,7 @@ pub fn init_rvr_state_with_metered_cost<F: PrimeField32>(
     let memory_ptr = rv64_memory_ptr(vm_state);
     let mut state = MeteredCostState::new();
     state.set_memory(memory_ptr);
-    state.pc = pc;
+    state.pc = pc as u64;
     state.suspender.disable();
     state
 }
@@ -106,7 +106,7 @@ pub fn init_rvr_state_with_metered<F: PrimeField32>(
     let memory_ptr = rv64_memory_ptr(vm_state);
     let mut state = MeteredState::new();
     state.set_memory(memory_ptr);
-    state.pc = pc;
+    state.pc = pc as u64;
     state.suspender.disable();
     state
 }
