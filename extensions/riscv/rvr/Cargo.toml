@@ -14,7 +14,6 @@ rvr-openvm-lift = { workspace = true, optional = true }
 
 openvm-circuit = { workspace = true, optional = true }
 openvm-instructions = { workspace = true, optional = true }
-openvm-platform = { workspace = true, optional = true }
 openvm-riscv-transpiler = { workspace = true, optional = true }
 openvm-stark-backend = { workspace = true, optional = true }
 
@@ -32,7 +31,6 @@ rvr = [
     "dep:rvr-openvm-lift",
     "openvm-circuit/rvr",
     "dep:openvm-instructions",
-    "dep:openvm-platform",
     "dep:openvm-riscv-transpiler",
     "dep:openvm-stark-backend",
     "dep:libloading",

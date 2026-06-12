@@ -9008,7 +9008,6 @@ dependencies = [
  "libloading 0.8.8",
  "openvm-circuit",
  "openvm-instructions",
- "openvm-platform",
  "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "p3-baby-bear",
