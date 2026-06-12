@@ -136,10 +136,10 @@ for more detailed profiling we generate special flamegraphs that visualize VM-sp
 The benchmark must be run with special configuration so that additional metrics are collected for profiling. Note that the additional metric collection will slow down the benchmark. To run a benchmark with the additional profiling, run the following command:
 
 ```bash
-OUTPUT_PATH="metrics.json" GUEST_SYMBOLS_PATH="guest.syms" cargo run --release --bin <benchmark_name> --features perf-metrics -- --profiling
+OUTPUT_PATH="metrics.json" GUEST_SYMBOLS_PATH="guest.syms" cargo run --release --bin <benchmark_name> --features perf-metrics
 ```
 
-The `perf-metrics` feature tells the VM to run with additional metric collection. The `--profiling` CLI argument tells the script to build the guest program with `profile=profiling` so that the guest program is compiled without stripping debug symbols. When the `perf-metrics` feature is enabled, the `GUEST_SYMBOLS_PATH` environment variable must be set to the file path where function symbols of the guest program will be exported. Those symbols are then used to annotate the flamegraph with function names.
+The `perf-metrics` feature tells the VM to run with additional metric collection. When the `perf-metrics` feature is enabled, the `GUEST_SYMBOLS_PATH` environment variable must be set to the file path where function symbols of the guest program will be exported. Those symbols are then used to annotate the flamegraph with function names.
 
 After the collected metrics are written to `$OUTPUT_PATH`, these flamegraphs can be generated if you have [inferno-flamegraph](https://crates.io/crates/inferno) installed. Install via
 
