@@ -277,4 +277,18 @@ mod tests {
             .verify(&hasher, memory_dimensions, final_memory_root)
             .unwrap();
     }
+
+    #[test]
+    #[should_panic]
+    fn test_public_values_write_beyond_num_public_values_is_rejected() {
+        let num_public_values = 16;
+        let mut addr_spaces_config = MemoryConfig::empty_address_space_configs(4);
+        addr_spaces_config[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
+        let mut memory = GuestMemory {
+            memory: AddressMap::new(addr_spaces_config),
+        };
+        unsafe {
+            memory.write::<u8, 4>(PUBLIC_VALUES_AS, num_public_values as u32 + 4, [0, 0, 0, 1]);
+        }
+    }
 }
