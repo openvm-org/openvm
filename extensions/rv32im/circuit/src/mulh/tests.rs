@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use std::{borrow::BorrowMut, sync::Arc};
 
 #[cfg(feature = "aot")]
-use openvm_circuit::arch::VirtualMachine;
-#[cfg(feature = "aot")]
-use openvm_circuit::arch::{testing::assert_vm_states_equivalent, VmExecutor, VmState};
+use openvm_circuit::arch::{
+    testing::assert_vm_states_equivalent, VirtualMachine, VmExecutor, VmState,
+};
 use openvm_circuit::{
     arch::{
         testing::{
