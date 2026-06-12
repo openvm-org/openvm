@@ -27,44 +27,44 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluAdapterRecord, BaseAluCoreRecord, Rv64BaseAluChipGpu},
+    crate::{adapters::Rv64BaseAluAdapterRecord, AddSubCoreRecord, Rv64AddSubChipGpu},
     openvm_circuit::arch::{
         testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
     },
 };
 
-use super::{core::run_alu, BaseAluCoreAir, Rv64BaseAluChip, Rv64BaseAluExecutor};
+use super::{core::run_add_sub, AddSubCoreAir, Rv64AddSubChip, Rv64AddSubExecutor};
 use crate::{
     adapters::{
         Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
         RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
-    base_alu::BaseAluCoreCols,
+    add_sub::AddSubCoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
-    BaseAluFiller, Rv64BaseAluAir,
+    AddSubFiller, Rv64AddSubAir,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv64BaseAluExecutor, Rv64BaseAluAir, Rv64BaseAluChip<F>>;
+type Harness = TestChipHarness<F, Rv64AddSubExecutor, Rv64AddSubAir, Rv64AddSubChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64BaseAluAir, Rv64BaseAluExecutor, Rv64BaseAluChip<F>) {
-    let air = Rv64BaseAluAir::new(
+) -> (Rv64AddSubAir, Rv64AddSubExecutor, Rv64AddSubChip<F>) {
+    let air = Rv64AddSubAir::new(
         Rv64BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
-        BaseAluCoreAir::new(bitwise_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
+        AddSubCoreAir::new(bitwise_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64BaseAluExecutor::new(
+    let executor = Rv64AddSubExecutor::new(
         Rv64BaseAluAdapterExecutor::new(),
         BaseAluOpcode::CLASS_OFFSET,
     );
-    let chip = Rv64BaseAluChip::new(
-        BaseAluFiller::new(
+    let chip = Rv64AddSubChip::new(
+        AddSubFiller::new(
             Rv64BaseAluAdapterFiller::new(bitwise_chip.clone()),
             bitwise_chip,
             BaseAluOpcode::CLASS_OFFSET,
@@ -135,7 +135,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(executor, arena, &instruction);
 
-    let a = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(opcode, &b, &c).map(F::from_u8);
+    let a = run_add_sub::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(opcode, &b, &c).map(F::from_u8);
     assert_eq!(a, tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd))
 }
 
@@ -148,10 +148,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
 #[test_case(ADD, 100)]
 #[test_case(SUB, 100)]
-#[test_case(XOR, 100)]
-#[test_case(OR, 100)]
-#[test_case(AND, 100)]
-fn rand_rv64_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
+fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
 
     let mut tester = VmChipTestBuilder::default();
@@ -188,10 +185,7 @@ fn rand_rv64_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
 
 #[test_case(ADD, 100)]
 #[test_case(SUB, 100)]
-#[test_case(XOR, 100)]
-#[test_case(OR, 100)]
-#[test_case(AND, 100)]
-fn rand_rv64_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
+fn rand_rv64_add_sub_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
 
     let mut tester = VmChipTestBuilder::default();
@@ -234,13 +228,13 @@ fn rand_rv64_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[allow(clippy::too_many_arguments)]
-fn run_negative_alu_test(
+fn run_negative_add_sub_test(
     opcode: BaseAluOpcode,
     prank_a: [u32; RV64_REGISTER_NUM_LIMBS],
     b: [u8; RV64_REGISTER_NUM_LIMBS],
     c: [u8; RV64_REGISTER_NUM_LIMBS],
     prank_c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
-    prank_opcode_flags: Option<[bool; 5]>,
+    prank_opcode_flags: Option<[bool; 2]>,
     is_imm: Option<bool>,
     _interaction_error: bool,
 ) {
@@ -262,7 +256,7 @@ fn run_negative_alu_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut BaseAluCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
+        let cols: &mut AddSubCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         cols.a = prank_a.map(F::from_u32);
         if let Some(prank_c) = prank_c {
@@ -270,10 +264,7 @@ fn run_negative_alu_test(
         }
         if let Some(prank_opcode_flags) = prank_opcode_flags {
             cols.opcode_add_flag = F::from_bool(prank_opcode_flags[0]);
-            cols.opcode_and_flag = F::from_bool(prank_opcode_flags[1]);
-            cols.opcode_or_flag = F::from_bool(prank_opcode_flags[2]);
-            cols.opcode_sub_flag = F::from_bool(prank_opcode_flags[3]);
-            cols.opcode_xor_flag = F::from_bool(prank_opcode_flags[4]);
+            cols.opcode_sub_flag = F::from_bool(prank_opcode_flags[1]);
         }
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -290,8 +281,8 @@ fn run_negative_alu_test(
 }
 
 #[test]
-fn rv64_alu_add_wrong_negative_test() {
-    run_negative_alu_test(
+fn rv64_add_sub_add_wrong_negative_test() {
+    run_negative_add_sub_test(
         ADD,
         [246, 0, 0, 0, 0, 0, 0, 0],
         [250, 0, 0, 0, 0, 0, 0, 0],
@@ -304,8 +295,8 @@ fn rv64_alu_add_wrong_negative_test() {
 }
 
 #[test]
-fn rv64_alu_add_out_of_range_negative_test() {
-    run_negative_alu_test(
+fn rv64_add_sub_add_out_of_range_negative_test() {
+    run_negative_add_sub_test(
         ADD,
         [500, 0, 0, 0, 0, 0, 0, 0],
         [250, 0, 0, 0, 0, 0, 0, 0],
@@ -318,8 +309,8 @@ fn rv64_alu_add_out_of_range_negative_test() {
 }
 
 #[test]
-fn rv64_alu_sub_wrong_negative_test() {
-    run_negative_alu_test(
+fn rv64_add_sub_sub_wrong_negative_test() {
+    run_negative_add_sub_test(
         SUB,
         [255, 0, 0, 0, 0, 0, 0, 0],
         [1, 0, 0, 0, 0, 0, 0, 0],
@@ -332,8 +323,8 @@ fn rv64_alu_sub_wrong_negative_test() {
 }
 
 #[test]
-fn rv64_alu_sub_out_of_range_negative_test() {
-    run_negative_alu_test(
+fn rv64_add_sub_sub_out_of_range_negative_test() {
+    run_negative_add_sub_test(
         SUB,
         [F::NEG_ONE.as_canonical_u32(), 0, 0, 0, 0, 0, 0, 0],
         [1, 0, 0, 0, 0, 0, 0, 0],
@@ -346,50 +337,8 @@ fn rv64_alu_sub_out_of_range_negative_test() {
 }
 
 #[test]
-fn rv64_alu_xor_wrong_negative_test() {
-    run_negative_alu_test(
-        XOR,
-        [255, 255, 255, 255, 255, 255, 255, 255],
-        [0, 0, 1, 0, 0, 0, 0, 0],
-        [255, 255, 255, 255, 255, 255, 255, 255],
-        None,
-        None,
-        None,
-        true,
-    );
-}
-
-#[test]
-fn rv64_alu_or_wrong_negative_test() {
-    run_negative_alu_test(
-        OR,
-        [255, 255, 255, 255, 255, 255, 255, 255],
-        [255, 255, 255, 254, 255, 255, 255, 255],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        None,
-        None,
-        None,
-        true,
-    );
-}
-
-#[test]
-fn rv64_alu_and_wrong_negative_test() {
-    run_negative_alu_test(
-        AND,
-        [255, 255, 255, 255, 255, 255, 255, 255],
-        [0, 0, 1, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        None,
-        None,
-        None,
-        true,
-    );
-}
-
-#[test]
-fn rv64_alu_adapter_unconstrained_imm_limb_test() {
-    run_negative_alu_test(
+fn rv64_add_sub_adapter_unconstrained_imm_limb_test() {
+    run_negative_add_sub_test(
         ADD,
         [255, 7, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
@@ -402,25 +351,25 @@ fn rv64_alu_adapter_unconstrained_imm_limb_test() {
 }
 
 #[test]
-fn rv64_alu_adapter_unconstrained_rs2_read_test() {
-    run_negative_alu_test(
+fn rv64_add_sub_adapter_unconstrained_rs2_read_test() {
+    run_negative_add_sub_test(
         ADD,
         [2, 2, 2, 2, 2, 2, 2, 2],
         [1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1],
         None,
-        Some([false, false, false, false, false]),
+        Some([false, false]),
         Some(false),
         false,
     );
 }
 
 #[test]
-fn rv64_alu_adapter_imm_sign_extension_negative_test() {
+fn rv64_add_sub_adapter_imm_sign_extension_negative_test() {
     // Prank c[4] = 1 while sign byte (c[2]) = 0. The adapter must catch that
     // limbs 4-7 don't match the sign byte. Also prank a[4] = 1 so the ADD core
     // constraint (a = b + c) still holds.
-    run_negative_alu_test(
+    run_negative_add_sub_test(
         ADD,
         [5, 0, 0, 0, 1, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
@@ -443,7 +392,7 @@ fn run_add_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [23, 205, 73, 49, 219, 69, 50, 155];
-    let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(ADD, &x, &y);
+    let result = run_add_sub::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(ADD, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
@@ -454,40 +403,7 @@ fn run_sub_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [179, 118, 240, 172, 71, 255, 255, 254];
-    let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(SUB, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
-        assert_eq!(z[i], result[i])
-    }
-}
-
-#[test]
-fn run_xor_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [215, 138, 49, 173, 216, 1, 0, 3];
-    let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(XOR, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
-        assert_eq!(z[i], result[i])
-    }
-}
-
-#[test]
-fn run_or_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [247, 171, 61, 239, 217, 35, 25, 207];
-    let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(OR, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
-        assert_eq!(z[i], result[i])
-    }
-}
-
-#[test]
-fn run_and_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [32, 33, 12, 66, 1, 34, 25, 204];
-    let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(AND, &x, &y);
+    let result = run_add_sub::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(SUB, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
@@ -500,13 +416,8 @@ fn run_and_sanity_test() {
 // ////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(feature = "cuda")]
-type GpuHarness = GpuTestChipHarness<
-    F,
-    Rv64BaseAluExecutor,
-    Rv64BaseAluAir,
-    Rv64BaseAluChipGpu,
-    Rv64BaseAluChip<F>,
->;
+type GpuHarness =
+    GpuTestChipHarness<F, Rv64AddSubExecutor, Rv64AddSubAir, Rv64AddSubChipGpu, Rv64AddSubChip<F>>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
@@ -521,7 +432,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_bitwise_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64BaseAluChipGpu::new(
+    let gpu_chip = Rv64AddSubChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -533,10 +444,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[cfg(feature = "cuda")]
 #[test_case(BaseAluOpcode::ADD, 100)]
 #[test_case(BaseAluOpcode::SUB, 100)]
-#[test_case(BaseAluOpcode::XOR, 100)]
-#[test_case(BaseAluOpcode::OR, 100)]
-#[test_case(BaseAluOpcode::AND, 100)]
-fn test_cuda_rand_alu_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
+fn test_cuda_rand_add_sub_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
@@ -557,7 +465,7 @@ fn test_cuda_rand_alu_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
 
     type Record<'a> = (
         &'a mut Rv64BaseAluAdapterRecord,
-        &'a mut BaseAluCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+        &'a mut AddSubCoreRecord<RV64_REGISTER_NUM_LIMBS>,
     );
 
     harness

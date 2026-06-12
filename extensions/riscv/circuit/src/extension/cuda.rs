@@ -11,7 +11,7 @@ use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engi
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{
-    Rv64AuipcAir, Rv64AuipcChipGpu, Rv64BaseAluAir, Rv64BaseAluChipGpu, Rv64BaseAluWAir,
+    Rv64AddSubAir, Rv64AddSubChipGpu, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64BaseAluWAir,
     Rv64BaseAluWChipGpu, Rv64BranchEqualAir, Rv64BranchEqualChipGpu, Rv64BranchLessThanAir,
     Rv64BranchLessThanChipGpu, Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemWAir,
     Rv64DivRemWChipGpu, Rv64HintStoreAir, Rv64HintStoreChipGpu, Rv64I, Rv64Io, Rv64JalLuiAir,
@@ -19,6 +19,7 @@ use crate::{
     Rv64LoadSignExtendAir, Rv64LoadSignExtendChipGpu, Rv64LoadStoreAir, Rv64LoadStoreChipGpu,
     Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir, Rv64MulWChipGpu, Rv64MultiplicationAir,
     Rv64MultiplicationChipGpu, Rv64ShiftAir, Rv64ShiftChipGpu, Rv64ShiftWAir, Rv64ShiftWChipGpu,
+    Rv64XorOrAndAir, Rv64XorOrAndChipGpu,
 };
 
 pub struct Rv64ImGpuProverExt;
@@ -39,13 +40,21 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
-        inventory.next_air::<Rv64BaseAluAir>()?;
-        let base_alu = Rv64BaseAluChipGpu::new(
+        inventory.next_air::<Rv64AddSubAir>()?;
+        let add_sub = Rv64AddSubChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
         );
-        inventory.add_executor_chip(base_alu);
+        inventory.add_executor_chip(add_sub);
+
+        inventory.next_air::<Rv64XorOrAndAir>()?;
+        let xor_or_and = Rv64XorOrAndChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(xor_or_and);
 
         inventory.next_air::<Rv64BaseAluWAir>()?;
         let base_alu_w = Rv64BaseAluWChipGpu::new(
