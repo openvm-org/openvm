@@ -1,16 +1,13 @@
-use std::{array, borrow::BorrowMut, sync::Arc};
+use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, PreflightExecutor,
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
+        Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
-};
+use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::BaseAluOpcode::{self, *};
 use openvm_stark_backend::{
@@ -27,18 +24,21 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluAdapterRecord, AddSubCoreRecord, Rv64AddSubChipGpu},
+    crate::{adapters::Rv64BaseAluU16AdapterRecord, AddSubCoreRecord, Rv64AddSubChipGpu},
     openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
+        testing::{GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
     },
+    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+    std::sync::Arc,
 };
 
 use super::{core::run_add_sub, AddSubCoreAir, Rv64AddSubChip, Rv64AddSubExecutor};
 use crate::{
     adapters::{
-        Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
-        RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
+        rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, Rv64BaseAluU16AdapterAir,
+        Rv64BaseAluU16AdapterExecutor, Rv64BaseAluU16AdapterFiller, RV64_REGISTER_NUM_LIMBS,
+        U16_BITS,
     },
     add_sub::AddSubCoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
@@ -52,21 +52,19 @@ type Harness = TestChipHarness<F, Rv64AddSubExecutor, Rv64AddSubAir, Rv64AddSubC
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64AddSubAir, Rv64AddSubExecutor, Rv64AddSubChip<F>) {
     let air = Rv64AddSubAir::new(
-        Rv64BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
-        AddSubCoreAir::new(bitwise_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
+        Rv64BaseAluU16AdapterAir::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
+        AddSubCoreAir::new(range_checker_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64AddSubExecutor::new(
-        Rv64BaseAluAdapterExecutor::new(),
-        BaseAluOpcode::CLASS_OFFSET,
-    );
+    let executor =
+        Rv64AddSubExecutor::new(Rv64BaseAluU16AdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
     let chip = Rv64AddSubChip::new(
         AddSubFiller::new(
-            Rv64BaseAluAdapterFiller::new(bitwise_chip.clone()),
-            bitwise_chip,
+            Rv64BaseAluU16AdapterFiller::new(range_checker_chip.clone()),
+            range_checker_chip,
             BaseAluOpcode::CLASS_OFFSET,
         ),
         memory_helper,
@@ -74,29 +72,15 @@ fn create_harness_fields(
     (air, executor, chip)
 }
 
-fn create_harness(
-    tester: &VmChipTestBuilder<F>,
-) -> (
-    Harness,
-    (
-        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
-        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-    ),
-) {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
-
+fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
+    let range_checker = tester.range_checker();
     let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        bitwise_chip.clone(),
+        range_checker,
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
-
-    (harness, (bitwise_chip.air, bitwise_chip))
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -135,8 +119,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(executor, arena, &instruction);
 
-    let a = run_add_sub::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(opcode, &b, &c).map(F::from_u8);
-    assert_eq!(a, tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd))
+    let b_u16 = rv64_bytes_to_u16_block(b);
+    let c_u16 = rv64_bytes_to_u16_block(c);
+    let a = run_add_sub::<BLOCK_FE_WIDTH, U16_BITS>(opcode, &b_u16, &c_u16);
+    let a_bytes = rv64_u16_block_to_bytes(a).map(F::from_u8);
+    assert_eq!(a_bytes, tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd))
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -152,7 +139,7 @@ fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
 
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&tester);
+    let mut harness = create_harness(&tester);
 
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write_bytes(2, 1024, [F::ONE; 8]);
@@ -175,11 +162,7 @@ fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
         );
     }
 
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -193,17 +176,18 @@ fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
 #[allow(clippy::too_many_arguments)]
 fn run_negative_add_sub_test(
     opcode: BaseAluOpcode,
-    prank_a: [u32; RV64_REGISTER_NUM_LIMBS],
+    prank_a: [u32; BLOCK_FE_WIDTH],
     b: [u8; RV64_REGISTER_NUM_LIMBS],
     c: [u8; RV64_REGISTER_NUM_LIMBS],
-    prank_c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prank_b: Option<[u32; BLOCK_FE_WIDTH]>,
+    prank_c: Option<[u32; BLOCK_FE_WIDTH]>,
     prank_opcode_flags: Option<[bool; 2]>,
     is_imm: Option<bool>,
     _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&tester);
+    let mut harness = create_harness(&tester);
 
     set_and_execute(
         &mut tester,
@@ -219,9 +203,12 @@ fn run_negative_add_sub_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut AddSubCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
+        let cols: &mut AddSubCoreCols<F, BLOCK_FE_WIDTH, U16_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         cols.a = prank_a.map(F::from_u32);
+        if let Some(prank_b) = prank_b {
+            cols.b = prank_b.map(F::from_u32);
+        }
         if let Some(prank_c) = prank_c {
             cols.c = prank_c.map(F::from_u32);
         }
@@ -236,7 +223,6 @@ fn run_negative_add_sub_test(
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
         .finalize();
     tester
         .simple_test()
@@ -247,9 +233,10 @@ fn run_negative_add_sub_test(
 fn rv64_add_sub_add_wrong_negative_test() {
     run_negative_add_sub_test(
         ADD,
-        [246, 0, 0, 0, 0, 0, 0, 0],
+        [499, 0, 0, 0],
         [250, 0, 0, 0, 0, 0, 0, 0],
         [250, 0, 0, 0, 0, 0, 0, 0],
+        None,
         None,
         None,
         None,
@@ -259,11 +246,15 @@ fn rv64_add_sub_add_wrong_negative_test() {
 
 #[test]
 fn rv64_add_sub_add_out_of_range_negative_test() {
+    // b[0] = c[0] = 65535; the correct result is [65534, 1, 0, 0]. Pranking
+    // a = [131070, 0, 0, 0] satisfies every carry constraint (all carries 0),
+    // so only the 16-bit range check on a[0] can catch it.
     run_negative_add_sub_test(
         ADD,
-        [500, 0, 0, 0, 0, 0, 0, 0],
-        [250, 0, 0, 0, 0, 0, 0, 0],
-        [250, 0, 0, 0, 0, 0, 0, 0],
+        [131070, 0, 0, 0],
+        [255, 255, 0, 0, 0, 0, 0, 0],
+        [255, 255, 0, 0, 0, 0, 0, 0],
+        None,
         None,
         None,
         None,
@@ -275,9 +266,10 @@ fn rv64_add_sub_add_out_of_range_negative_test() {
 fn rv64_add_sub_sub_wrong_negative_test() {
     run_negative_add_sub_test(
         SUB,
-        [255, 0, 0, 0, 0, 0, 0, 0],
+        [65535, 0, 0, 0],
         [1, 0, 0, 0, 0, 0, 0, 0],
         [2, 0, 0, 0, 0, 0, 0, 0],
+        None,
         None,
         None,
         None,
@@ -287,28 +279,17 @@ fn rv64_add_sub_sub_wrong_negative_test() {
 
 #[test]
 fn rv64_add_sub_sub_out_of_range_negative_test() {
+    // a[0] = -1 in the field satisfies the SUB carry constraints for 1 - 2, but is
+    // not a canonical u16, so only the range check on a[0] can catch it.
     run_negative_add_sub_test(
         SUB,
-        [F::NEG_ONE.as_canonical_u32(), 0, 0, 0, 0, 0, 0, 0],
+        [F::NEG_ONE.as_canonical_u32(), 0, 0, 0],
         [1, 0, 0, 0, 0, 0, 0, 0],
         [2, 0, 0, 0, 0, 0, 0, 0],
         None,
         None,
         None,
-        true,
-    );
-}
-
-#[test]
-fn rv64_add_sub_adapter_unconstrained_imm_limb_test() {
-    run_negative_add_sub_test(
-        ADD,
-        [255, 7, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [255, 7, 0, 0, 0, 0, 0, 0],
-        Some([511, 6, 0, 0, 0, 0, 0, 0]),
         None,
-        Some(true),
         true,
     );
 }
@@ -317,9 +298,10 @@ fn rv64_add_sub_adapter_unconstrained_imm_limb_test() {
 fn rv64_add_sub_adapter_unconstrained_rs2_read_test() {
     run_negative_add_sub_test(
         ADD,
-        [2, 2, 2, 2, 2, 2, 2, 2],
+        [514, 514, 514, 514],
         [1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1],
+        None,
         None,
         Some([false, false]),
         Some(false),
@@ -329,18 +311,38 @@ fn rv64_add_sub_adapter_unconstrained_rs2_read_test() {
 
 #[test]
 fn rv64_add_sub_adapter_imm_sign_extension_negative_test() {
-    // Prank c[4] = 1 while sign byte (c[2]) = 0. The adapter must catch that
-    // limbs 4-7 don't match the sign byte. Also prank a[4] = 1 so the ADD core
+    // Prank c[2] = 1 while the imm sign cell is 0. The adapter must catch that
+    // cells 1-3 don't match the sign cell. Also prank a[2] = 1 so the ADD core
     // constraint (a = b + c) still holds.
     run_negative_add_sub_test(
         ADD,
-        [5, 0, 0, 0, 1, 0, 0, 0],
+        [5, 0, 1, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
         [5, 0, 0, 0, 0, 0, 0, 0],
-        Some([5, 0, 0, 0, 1, 0, 0, 0]),
+        None,
+        Some([5, 0, 1, 0]),
         None,
         Some(true),
         false,
+    );
+}
+
+#[test]
+fn rv64_add_sub_noncanonical_b_negative_test() {
+    // Prank b[0] = 2^16 with a = [0, 1, 0, 0] as compensation: every carry constraint
+    // holds (carry[0] = 1) and all a cells are canonical, so only the memory bus read
+    // interaction can catch that b doesn't match the rs1 register contents. This is
+    // the binding that lets the core skip range checks on b and c entirely.
+    run_negative_add_sub_test(
+        ADD,
+        [0, 1, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        Some([1 << U16_BITS, 0, 0, 0]),
+        None,
+        None,
+        Some(false),
+        true,
     );
 }
 
@@ -352,22 +354,22 @@ fn rv64_add_sub_adapter_imm_sign_extension_negative_test() {
 
 #[test]
 fn run_add_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [23, 205, 73, 49, 219, 69, 50, 155];
-    let result = run_add_sub::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(ADD, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
+    let x = rv64_bytes_to_u16_block([229, 33, 29, 111, 145, 34, 25, 205]);
+    let y = rv64_bytes_to_u16_block([50, 171, 44, 194, 73, 35, 25, 206]);
+    let z = rv64_bytes_to_u16_block([23, 205, 73, 49, 219, 69, 50, 155]);
+    let result = run_add_sub::<BLOCK_FE_WIDTH, U16_BITS>(ADD, &x, &y);
+    for i in 0..BLOCK_FE_WIDTH {
         assert_eq!(z[i], result[i])
     }
 }
 
 #[test]
 fn run_sub_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [179, 118, 240, 172, 71, 255, 255, 254];
-    let result = run_add_sub::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(SUB, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
+    let x = rv64_bytes_to_u16_block([229, 33, 29, 111, 145, 34, 25, 205]);
+    let y = rv64_bytes_to_u16_block([50, 171, 44, 194, 73, 35, 25, 206]);
+    let z = rv64_bytes_to_u16_block([179, 118, 240, 172, 71, 255, 255, 254]);
+    let result = run_add_sub::<BLOCK_FE_WIDTH, U16_BITS>(SUB, &x, &y);
+    for i in 0..BLOCK_FE_WIDTH {
         assert_eq!(z[i], result[i])
     }
 }
@@ -384,22 +386,17 @@ type GpuHarness =
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
-    let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        openvm_circuit::arch::testing::default_var_range_checker_bus(),
     ));
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
-        dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64AddSubChipGpu::new(
-        tester.range_checker(),
-        tester.bitwise_op_lookup(),
-        tester.timestamp_max_bits(),
-    );
+    let gpu_chip = Rv64AddSubChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }
@@ -409,8 +406,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[test_case(BaseAluOpcode::SUB, 100)]
 fn test_cuda_rand_add_sub_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let mut tester =
-        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let mut tester = GpuChipTestBuilder::default();
 
     let mut harness = create_cuda_harness(&tester);
     for _ in 0..num_ops {
@@ -427,8 +423,8 @@ fn test_cuda_rand_add_sub_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut Rv64BaseAluAdapterRecord,
-        &'a mut AddSubCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+        &'a mut Rv64BaseAluU16AdapterRecord,
+        &'a mut AddSubCoreRecord<BLOCK_FE_WIDTH>,
     );
 
     harness
@@ -436,7 +432,7 @@ fn test_cuda_rand_add_sub_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluAdapterExecutor<RV64_BYTE_BITS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new(),
         );
 
     tester

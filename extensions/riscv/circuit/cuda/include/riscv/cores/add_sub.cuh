@@ -6,47 +6,46 @@
 
 using namespace riscv;
 
-template <size_t NUM_LIMBS>
+template <size_t NUM_LIMBS, size_t LIMB_BITS>
 __device__ __forceinline__ void run_add(
-    const uint8_t *x,
-    const uint8_t *y,
-    uint8_t *out,
-    uint8_t *carry
+    const uint16_t *x,
+    const uint16_t *y,
+    uint16_t *out,
+    uint32_t *carry
 ) {
 #pragma unroll
     for (size_t i = 0; i < NUM_LIMBS; i++) {
         uint32_t res = (i > 0) ? carry[i - 1] : 0;
         res += static_cast<uint32_t>(x[i]) + static_cast<uint32_t>(y[i]);
-        carry[i] = res >> RV64_BYTE_BITS;
-        out[i] = static_cast<uint8_t>(res & ((1u << RV64_BYTE_BITS) - 1));
+        carry[i] = res >> LIMB_BITS;
+        out[i] = static_cast<uint16_t>(res & ((1u << LIMB_BITS) - 1));
     }
 }
 
-template <size_t NUM_LIMBS>
+template <size_t NUM_LIMBS, size_t LIMB_BITS>
 __device__ __forceinline__ void run_sub(
-    const uint8_t *x,
-    const uint8_t *y,
-    uint8_t *out,
-    uint8_t *carry
+    const uint16_t *x,
+    const uint16_t *y,
+    uint16_t *out,
+    uint32_t *carry
 ) {
 #pragma unroll
     for (size_t i = 0; i < NUM_LIMBS; i++) {
         uint32_t rhs = static_cast<uint32_t>(y[i]) + ((i > 0) ? carry[i - 1] : 0);
         if (static_cast<uint32_t>(x[i]) >= rhs) {
-            out[i] = static_cast<uint8_t>(static_cast<uint32_t>(x[i]) - rhs);
+            out[i] = static_cast<uint16_t>(static_cast<uint32_t>(x[i]) - rhs);
             carry[i] = 0;
         } else {
-            uint32_t wrap =
-                (static_cast<uint32_t>(1u << RV64_BYTE_BITS) + static_cast<uint32_t>(x[i]) - rhs);
-            out[i] = static_cast<uint8_t>(wrap);
+            uint32_t wrap = (1u << LIMB_BITS) + static_cast<uint32_t>(x[i]) - rhs;
+            out[i] = static_cast<uint16_t>(wrap);
             carry[i] = 1;
         }
     }
 }
 
 template <size_t NUM_LIMBS> struct AddSubCoreRecord {
-    uint8_t b[NUM_LIMBS];
-    uint8_t c[NUM_LIMBS];
+    uint16_t b[NUM_LIMBS];
+    uint16_t c[NUM_LIMBS];
     uint8_t local_opcode;
 };
 
@@ -58,21 +57,21 @@ template <typename T, size_t NUM_LIMBS> struct AddSubCoreCols {
     T opcode_sub_flag;
 };
 
-template <size_t NUM_LIMBS> struct AddSubCore {
-    BitwiseOperationLookup bitwise_lookup;
+template <size_t NUM_LIMBS, size_t LIMB_BITS> struct AddSubCore {
+    VariableRangeChecker range_checker;
 
     template <typename T> using Cols = AddSubCoreCols<T, NUM_LIMBS>;
 
-    __device__ AddSubCore(BitwiseOperationLookup lookup) : bitwise_lookup(lookup) {}
+    __device__ AddSubCore(VariableRangeChecker rc) : range_checker(rc) {}
 
     __device__ void fill_trace_row(RowSlice row, AddSubCoreRecord<NUM_LIMBS> record) {
-        uint8_t a[NUM_LIMBS];
-        uint8_t carry_buf[NUM_LIMBS];
+        uint16_t a[NUM_LIMBS];
+        uint32_t carry_buf[NUM_LIMBS];
 
         if (record.local_opcode == 0) {
-            run_add<NUM_LIMBS>(record.b, record.c, a, carry_buf);
+            run_add<NUM_LIMBS, LIMB_BITS>(record.b, record.c, a, carry_buf);
         } else {
-            run_sub<NUM_LIMBS>(record.b, record.c, a, carry_buf);
+            run_sub<NUM_LIMBS, LIMB_BITS>(record.b, record.c, a, carry_buf);
         }
 
         COL_WRITE_ARRAY(row, Cols, a, a);
@@ -84,9 +83,9 @@ template <size_t NUM_LIMBS> struct AddSubCore {
 
 #pragma unroll
         for (size_t i = 0; i < NUM_LIMBS; i++) {
-            bitwise_lookup.add_xor(a[i], a[i]);
-            // Memory bus checks only packed u16 values; read bytes need separate bounds.
-            bitwise_lookup.add_range(record.b[i], record.c[i]);
+            // The carry constraints only bound a[i] mod 2^LIMB_BITS; the written cells
+            // must be canonical. b and c are pinned by the memory bus.
+            range_checker.add_count(a[i], LIMB_BITS);
         }
     }
 };

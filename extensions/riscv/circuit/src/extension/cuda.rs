@@ -41,11 +41,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
         inventory.next_air::<Rv64AddSubAir>()?;
-        let add_sub = Rv64AddSubChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            timestamp_max_bits,
-        );
+        let add_sub = Rv64AddSubChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(add_sub);
 
         inventory.next_air::<Rv64XorOrAndAir>()?;
