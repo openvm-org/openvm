@@ -36,7 +36,6 @@ env:
 
 jobs:
   tests:
-    if: ${{ !(matrix.mode == 'aot' && (inputs.arch || 'x86') == 'arm') }}
     strategy:
       matrix:
         mode: ["default", "ignored", "aot"]
@@ -101,7 +100,7 @@ jobs:
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify
 
       - name: Run openvm-sdk crate tests (AOT)
-        if: ${{ matrix.mode == 'aot' }}
+        if: ${{ matrix.mode == 'aot' && inputs.arch == 'x86' }}
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
