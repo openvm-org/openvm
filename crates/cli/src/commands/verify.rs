@@ -14,7 +14,7 @@ use crate::{
     args::ManifestArgs,
     default::{APP_PROOF_EXT, STARK_PROOF_EXT},
     util::{
-        get_app_baseline_path, get_app_commit_path, get_app_vk_path, get_manifest_path_and_dir,
+        get_app_baseline_path, get_app_vk_path, get_manifest_path_and_dir,
         get_single_target_name_raw, get_target_dir, get_target_output_dir, resolve_proof_path,
     },
 };
@@ -270,7 +270,7 @@ impl VerifyCmd {
                                 &cargo_args.manifest.manifest_path,
                                 &cargo_args.package,
                             )?;
-                            get_app_commit_path(&target_output_dir, target_name)
+                            crate::util::get_app_commit_path(&target_output_dir, target_name)
                         };
                         let app_commit: AppExecutionCommit = read_from_file_json(&commit_path)
                             .with_context(|| {
