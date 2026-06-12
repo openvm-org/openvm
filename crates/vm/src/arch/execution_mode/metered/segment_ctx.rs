@@ -13,7 +13,7 @@ use crate::utils::{add_one_or_zero, next_power_of_two_or_zero};
 
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
-pub const DEFAULT_MAX_TRACE_HEIGHT_BITS: u8 = 22;
+pub const DEFAULT_MAX_TRACE_HEIGHT_BITS: u8 = 24;
 pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << DEFAULT_MAX_TRACE_HEIGHT_BITS;
 pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
