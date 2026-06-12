@@ -1,6 +1,9 @@
-use openvm_circuit::arch::{
-    aot::common::{convert_x86_reg, Width, RISCV_TO_X86_OVERRIDE_MAP},
-    AotError, AotExecutor, AotMeteredExecutor, SystemConfig,
+use openvm_circuit::{
+    arch::{
+        aot::common::{convert_x86_reg, Width, RISCV_TO_X86_OVERRIDE_MAP},
+        AotError, AotExecutor, AotMeteredExecutor, SystemConfig,
+    },
+    system::memory::merkle::public_values::PUBLIC_VALUES_AS,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -18,8 +21,8 @@ impl<F, A, const NUM_CELLS: usize> AotExecutor<F> for LoadStoreExecutor<A, NUM_C
 where
     F: PrimeField32,
 {
-    fn is_aot_supported(&self, inst: &openvm_instructions::instruction::Instruction<F>) -> bool {
-        true
+    fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
+        is_aot_supported_impl(inst)
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
@@ -31,7 +34,7 @@ where
     F: PrimeField32,
 {
     fn is_aot_metered_supported(&self, inst: &Instruction<F>) -> bool {
-        true
+        is_aot_supported_impl(inst)
     }
     fn generate_x86_metered_asm(
         &self,
@@ -57,10 +60,8 @@ where
     }
 }
 
-fn is_aot_supported_impl<F: PrimeField32>(
-    _inst: &openvm_instructions::instruction::Instruction<F>,
-) -> bool {
-    true
+fn is_aot_supported_impl<F: PrimeField32>(inst: &Instruction<F>) -> bool {
+    inst.e.as_canonical_u32() != PUBLIC_VALUES_AS
 }
 
 // arguments of `update_boundary_merkle_heights_f`:

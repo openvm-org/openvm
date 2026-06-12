@@ -208,9 +208,31 @@ mod tests {
         Ok(())
     }
 
+    // AOT reaches the same check via fallback, but the panic aborts across its C ABI callback.
+    #[cfg_attr(feature = "aot", ignore)]
+    #[test]
+    #[should_panic(expected = "Memory access out of bounds")]
+    fn test_reveal_beyond_num_public_values_errors() {
+        let config = test_rv32im_config();
+        let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config).unwrap();
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )
+        .unwrap();
+
+        let executor = VmExecutor::new(config).unwrap();
+        let instance = executor.instance(&exe).unwrap();
+        instance.execute(vec![], None).unwrap();
+    }
+
     #[test]
     fn test_reveal() -> Result<()> {
-        let config = test_rv32im_config();
+        let mut config = test_rv32im_config();
+        config.rv32i.system = config.rv32i.system.with_public_values(64);
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
         let exe = VmExe::from_elf(
             elf,
