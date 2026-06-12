@@ -223,9 +223,6 @@ pub struct SystemConfig {
     /// Public values are stored in a special address space.
     /// `num_public_values` indicates the number of allowed addresses in that address space.
     pub num_public_values: usize,
-    /// Whether to collect detailed profiling metrics.
-    /// **Warning**: this slows down the runtime.
-    pub profiling: bool,
     /// Segmentation limits
     /// This field is skipped in serde as it's only used in execution and
     /// not needed after any serialize/deserialize.
@@ -249,7 +246,6 @@ impl SystemConfig {
             max_constraint_degree,
             memory_config,
             num_public_values,
-            profiling: false,
             segmentation_limits: SegmentationLimits::default(),
         }
     }
@@ -271,16 +267,6 @@ impl SystemConfig {
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
         self.segmentation_limits
             .set_max_trace_height(max_segment_len as u32);
-        self
-    }
-
-    pub fn with_profiling(mut self) -> Self {
-        self.profiling = true;
-        self
-    }
-
-    pub fn without_profiling(mut self) -> Self {
-        self.profiling = false;
         self
     }
 
