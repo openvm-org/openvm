@@ -917,7 +917,11 @@ impl CProject {
         writeln!(src, "        rv_trap({args_from_state});").unwrap();
         writeln!(src, "        return;").unwrap();
         writeln!(src, "    }}").unwrap();
-        writeln!(src, "    uint32_t idx = rv_dispatch_index((uint32_t)state->pc);").unwrap();
+        writeln!(
+            src,
+            "    uint32_t idx = rv_dispatch_index((uint32_t)state->pc);"
+        )
+        .unwrap();
         writeln!(src, "    dispatch_table[idx]({args_from_state});").unwrap();
         writeln!(src, "    return;").unwrap();
         writeln!(src, "}}").unwrap();

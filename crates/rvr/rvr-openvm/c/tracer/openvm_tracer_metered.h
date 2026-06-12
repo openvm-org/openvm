@@ -276,6 +276,9 @@ static __attribute__((always_inline)) inline void trace_rd_mem_u32_range(
     RvState* restrict state, uint32_t base_addr, const uint32_t* vals,
     uint32_t num_words) {
   assume(num_words > 0);
+  /* TODO(follow-up): WORD_SIZE == 8 (rv64 register width), but the stride
+   * here should be sizeof(uint32_t) == 4. Currently tracks 2x the actual
+   * page range. Fix to: base_addr + (num_words - 1) * sizeof(uint32_t). */
   uint32_t last_addr = base_addr + (num_words - 1) * WORD_SIZE;
   record_mem_page_range(state->tracer, byte_addr_to_local_page(base_addr),
                         byte_addr_to_local_page(last_addr));
@@ -285,6 +288,7 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u32_range(
     RvState* restrict state, uint32_t base_addr, const uint32_t* vals,
     uint32_t num_words) {
   assume(num_words > 0);
+  /* TODO(follow-up): same WORD_SIZE stride bug as trace_rd_mem_u32_range. */
   uint32_t last_addr = base_addr + (num_words - 1) * WORD_SIZE;
   record_mem_page_range(state->tracer, byte_addr_to_local_page(base_addr),
                         byte_addr_to_local_page(last_addr));
@@ -301,6 +305,7 @@ static __attribute__((always_inline)) inline void trace_mem_access_u32_range(
     RvState* restrict state, uint32_t base_addr, uint32_t num_words,
     uint32_t addr_space) {
   assume(num_words > 0);
+  /* TODO(follow-up): same WORD_SIZE stride bug as trace_rd_mem_u32_range. */
   uint32_t last_addr = base_addr + (num_words - 1) * WORD_SIZE;
   record_page_range(state->tracer, addr_space, base_addr, last_addr);
 }

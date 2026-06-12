@@ -38,7 +38,7 @@ pub struct RvState<
     pub regs: [X::Reg; NUM_REGS],
 
     /// Program counter (hot).
-    pub pc: u64,
+    pub pc: X::Reg,
 
     /// Instructions retired counter (hot).
     pub instret: u64,
@@ -96,7 +96,7 @@ impl<X: Xlen, T: TracerState, S: SuspenderState, const NUM_REGS: usize> Default
     fn default() -> Self {
         Self {
             regs: [X::from_u64(0); NUM_REGS],
-            pc: 0,
+            pc: X::from_u64(0),
             instret: 0,
             suspender: S::default(),
             reservation_addr: 0,
