@@ -7,6 +7,11 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ## Unreleased
 
+## v1.7.0
+
+### Changed
+- (Circuits/Memory) Fix a soundness issue in `MemoryMerkleAir` by rejecting Merkle expansion rows below the leaf layer, preventing malformed traces from changing the committed memory root without a corresponding memory operation.
+
 ## v1.6.0
 
 ### Changed
