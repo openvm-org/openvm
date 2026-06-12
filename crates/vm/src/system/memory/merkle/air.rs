@@ -115,6 +115,11 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
             AB::Expr::from_usize(self.memory_dimensions.overall_height()),
         );
 
+        // parent height should not be zero when `expand_direction` != 0
+        builder
+            .when_ne(local.expand_direction, AB::F::ZERO)
+            .assert_eq(local.parent_height * local.parent_height_inv, AB::F::ONE);
+
         // constrain public values
         let &MemoryMerklePvs::<_, CHUNK> {
             initial_root,

@@ -12,6 +12,7 @@ pub struct MemoryMerkleCols<T, const CHUNK: usize> {
     // height_section = 0 indicates that address_label is being expanded
     pub height_section: T,
     pub parent_height: T,
+    pub parent_height_inv: T,
     pub is_root: T,
 
     pub parent_as_label: T,
