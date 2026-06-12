@@ -64,7 +64,7 @@ impl Sha2Config for Sha512Config {
         debug_assert!(input.len() == Sha512Config::BLOCK_BYTES);
 
         // `state` may only be 4-byte aligned, so copy through an aligned `u64` buffer.
-        // We store the state as bytes in the record because the word size is 
+        // We store the state as bytes in the record because the word size is
         // not known at compile time (u32 for Sha256, u64 for Sha512).
         let mut state_u64s = [0u64; 8];
         for (w, chunk) in state_u64s.iter_mut().zip(state.chunks_exact(8)) {
