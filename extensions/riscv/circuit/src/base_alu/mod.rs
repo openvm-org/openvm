@@ -1,34 +1,6 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
-
-use super::adapters::{
-    Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller, RV64_BYTE_BITS,
-    RV64_REGISTER_NUM_LIMBS,
-};
+//! The BaseAlu core chip is no longer used by the RV64 extension itself (the 64-bit ALU is
+//! split into the `add_sub` and `xor_or_and` chips), but the core AIR/executor/filler are
+//! still used by the bigint (INT256) extension.
 
 mod core;
-mod execution;
 pub use core::*;
-
-#[cfg(feature = "cuda")]
-mod cuda;
-#[cfg(feature = "cuda")]
-pub use cuda::*;
-
-#[cfg(test)]
-mod tests;
-
-pub type Rv64BaseAluAir =
-    VmAirWrapper<Rv64BaseAluAdapterAir, BaseAluCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>;
-pub type Rv64BaseAluExecutor = BaseAluExecutor<
-    Rv64BaseAluAdapterExecutor<RV64_BYTE_BITS>,
-    RV64_REGISTER_NUM_LIMBS,
-    RV64_BYTE_BITS,
->;
-pub type Rv64BaseAluChip<F> = VmChipWrapper<
-    F,
-    BaseAluFiller<
-        Rv64BaseAluAdapterFiller<RV64_BYTE_BITS>,
-        RV64_REGISTER_NUM_LIMBS,
-        RV64_BYTE_BITS,
-    >,
->;

@@ -18,25 +18,25 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use crate::{
     adapters::{imm_to_rv64_bytes, imm_to_rv64_u64},
     common::*,
-    BaseAluExecutor,
+    XorOrAndExecutor,
 };
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-pub(super) struct BaseAluPreCompute {
+pub(super) struct XorOrAndPreCompute {
     c: u64,
     a: u8,
     b: u8,
 }
 
-impl<A, const LIMB_BITS: usize> BaseAluExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<A, const LIMB_BITS: usize> XorOrAndExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     /// Return `is_imm`, true if `e` is RV64_IMM_AS.
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut BaseAluPreCompute,
+        data: &mut XorOrAndPreCompute,
     ) -> Result<bool, StaticProgramError> {
         let Instruction { a, b, c, d, e, .. } = inst;
         let e_u32 = e.as_canonical_u32();
@@ -47,7 +47,7 @@ impl<A, const LIMB_BITS: usize> BaseAluExecutor<A, { RV64_REGISTER_NUM_LIMBS }, 
         }
         let is_imm = e_u32 == RV64_IMM_AS;
         let c_u32 = c.as_canonical_u32();
-        *data = BaseAluPreCompute {
+        *data = XorOrAndPreCompute {
             c: if is_imm {
                 imm_to_rv64_u64(c_u32)
             } else {
@@ -67,29 +67,26 @@ macro_rules! dispatch {
                 $is_imm,
                 BaseAluOpcode::from_usize($opcode.local_opcode_idx($offset)),
             ) {
-                (true, BaseAluOpcode::ADD) => $execute_impl::<_, _, true, AddOp>,
-                (false, BaseAluOpcode::ADD) => $execute_impl::<_, _, false, AddOp>,
-                (true, BaseAluOpcode::SUB) => $execute_impl::<_, _, true, SubOp>,
-                (false, BaseAluOpcode::SUB) => $execute_impl::<_, _, false, SubOp>,
                 (true, BaseAluOpcode::XOR) => $execute_impl::<_, _, true, XorOp>,
                 (false, BaseAluOpcode::XOR) => $execute_impl::<_, _, false, XorOp>,
                 (true, BaseAluOpcode::OR) => $execute_impl::<_, _, true, OrOp>,
                 (false, BaseAluOpcode::OR) => $execute_impl::<_, _, false, OrOp>,
                 (true, BaseAluOpcode::AND) => $execute_impl::<_, _, true, AndOp>,
                 (false, BaseAluOpcode::AND) => $execute_impl::<_, _, false, AndOp>,
+                _ => unreachable!("XorOrAndExecutor received non-XOR/OR/AND opcode"),
             },
         )
     };
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for BaseAluExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for XorOrAndExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
-        size_of::<BaseAluPreCompute>()
+        size_of::<XorOrAndPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -102,7 +99,7 @@ where
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut BaseAluPreCompute = data.borrow_mut();
+        let data: &mut XorOrAndPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
 
         dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
@@ -118,7 +115,7 @@ where
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut BaseAluPreCompute = data.borrow_mut();
+        let data: &mut XorOrAndPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
 
         dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
@@ -126,13 +123,13 @@ where
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for BaseAluExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for XorOrAndExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<BaseAluPreCompute>>()
+        size_of::<E2PreCompute<XorOrAndPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -146,7 +143,7 @@ where
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<XorOrAndPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
@@ -164,7 +161,7 @@ where
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<XorOrAndPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
@@ -174,7 +171,7 @@ where
 
 #[cfg(feature = "aot")]
 impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
-    for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for XorOrAndExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -202,11 +199,7 @@ where
         };
 
         let mut asm_opcode = String::new();
-        if inst.opcode == BaseAluOpcode::ADD.global_opcode() {
-            asm_opcode += "add";
-        } else if inst.opcode == BaseAluOpcode::SUB.global_opcode() {
-            asm_opcode += "sub";
-        } else if inst.opcode == BaseAluOpcode::AND.global_opcode() {
+        if inst.opcode == BaseAluOpcode::AND.global_opcode() {
             asm_opcode += "and";
         } else if inst.opcode == BaseAluOpcode::OR.global_opcode() {
             asm_opcode += "or";
@@ -242,7 +235,7 @@ where
 
 #[cfg(feature = "aot")]
 impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
-    for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for XorOrAndExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -269,7 +262,7 @@ unsafe fn execute_e12_impl<
     const IS_IMM: bool,
     OP: AluOp,
 >(
-    pre_compute: &BaseAluPreCompute,
+    pre_compute: &XorOrAndPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
@@ -298,8 +291,8 @@ unsafe fn execute_e1_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &BaseAluPreCompute =
-        std::slice::from_raw_parts(pre_compute, size_of::<BaseAluPreCompute>()).borrow();
+    let pre_compute: &XorOrAndPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<XorOrAndPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, exec_state);
 }
 
@@ -314,8 +307,8 @@ unsafe fn execute_e2_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<BaseAluPreCompute> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<BaseAluPreCompute>>())
+    let pre_compute: &E2PreCompute<XorOrAndPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<XorOrAndPreCompute>>())
             .borrow();
     exec_state
         .ctx
@@ -326,23 +319,9 @@ unsafe fn execute_e2_impl<
 trait AluOp {
     fn compute(rs1: u64, rs2: u64) -> u64;
 }
-struct AddOp;
-struct SubOp;
 struct XorOp;
 struct OrOp;
 struct AndOp;
-impl AluOp for AddOp {
-    #[inline(always)]
-    fn compute(rs1: u64, rs2: u64) -> u64 {
-        rs1.wrapping_add(rs2)
-    }
-}
-impl AluOp for SubOp {
-    #[inline(always)]
-    fn compute(rs1: u64, rs2: u64) -> u64 {
-        rs1.wrapping_sub(rs2)
-    }
-}
 impl AluOp for XorOp {
     #[inline(always)]
     fn compute(rs1: u64, rs2: u64) -> u64 {
