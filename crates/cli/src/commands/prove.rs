@@ -390,10 +390,7 @@ fn load_required_root_pk() -> Result<RootProvingKey> {
 impl From<SegmentationArgs> for SegmentationLimits {
     fn from(args: SegmentationArgs) -> Self {
         SegmentationLimits::default()
-            .with_max_trace_height(
-                1u32.checked_shl(args.segment_max_height_bits as u32)
-                    .expect("segment_max_height_bits too large"),
-            )
+            .with_max_trace_height_bits(args.segment_max_height_bits)
             .with_max_memory(args.segment_max_memory)
     }
 }

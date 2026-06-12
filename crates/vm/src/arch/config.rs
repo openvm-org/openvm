@@ -265,8 +265,11 @@ impl SystemConfig {
     }
 
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
+        let max_segment_len: u32 = max_segment_len
+            .try_into()
+            .expect("max_segment_len must fit in u32");
         self.segmentation_limits
-            .set_max_trace_height(max_segment_len as u32);
+            .set_max_trace_height(max_segment_len);
         self
     }
 

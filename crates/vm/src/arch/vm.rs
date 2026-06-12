@@ -905,14 +905,30 @@ where
             }
         }
 
-        self.executor().build_metered_ctx(
-            &constant_trace_heights,
-            &air_names,
-            &widths,
-            &interactions,
-            &need_rot,
-            self.engine.proving_memory_config(),
-        )
+        let stacked_max_trace_height_bits = self
+            .engine
+            .params()
+            .log_stacked_height()
+            .try_into()
+            .expect("log_stacked_height must fit in u8");
+        let configured_max_trace_height_bits = self
+            .config()
+            .as_ref()
+            .segmentation_limits
+            .max_trace_height_bits;
+        self.executor()
+            .build_metered_ctx(
+                &constant_trace_heights,
+                &air_names,
+                &widths,
+                &interactions,
+                &need_rot,
+                self.engine.proving_memory_config(),
+            )
+            .with_max_trace_height_bits_bound(
+                configured_max_trace_height_bits,
+                stacked_max_trace_height_bits,
+            )
     }
 
     /// Convenience method to construct a [MeteredCostCtx] using data from the stored proving key.

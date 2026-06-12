@@ -27,7 +27,7 @@ pub struct Segment {
 
 #[derive(Clone, Debug, WithSetters, Setters)]
 pub struct SegmentationLimits {
-    pub max_trace_height: u32,
+    pub max_trace_height_bits: u8,
     #[getset(set = "pub", set_with = "pub")]
     pub max_memory: usize,
     #[getset(set_with = "pub")]
@@ -37,7 +37,7 @@ pub struct SegmentationLimits {
 impl Default for SegmentationLimits {
     fn default() -> Self {
         Self {
-            max_trace_height: DEFAULT_MAX_TRACE_HEIGHT,
+            max_trace_height_bits: DEFAULT_MAX_TRACE_HEIGHT_BITS,
             max_memory: DEFAULT_MAX_MEMORY,
             max_interactions: DEFAULT_MAX_INTERACTIONS,
         }
@@ -45,25 +45,46 @@ impl Default for SegmentationLimits {
 }
 
 impl SegmentationLimits {
-    pub fn new(max_trace_height: u32, max_memory: usize, max_interactions: usize) -> Self {
+    pub fn new(max_trace_height_bits: u8, max_memory: usize, max_interactions: usize) -> Self {
         assert!(
-            max_trace_height.is_power_of_two(),
-            "max_trace_height should be a power of two"
+            max_trace_height_bits < u32::BITS as u8,
+            "max_trace_height_bits must be less than {}",
+            u32::BITS
         );
         Self {
-            max_trace_height,
+            max_trace_height_bits,
             max_memory,
             max_interactions,
         }
     }
 
-    pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
+    pub fn max_trace_height(&self) -> u32 {
+        1u32.checked_shl(u32::from(self.max_trace_height_bits))
+            .expect("max_trace_height_bits must fit in u32 trace height")
+    }
+
+    pub fn with_max_trace_height_bits(mut self, max_trace_height_bits: u8) -> Self {
         assert!(
-            max_trace_height.is_power_of_two(),
-            "max_trace_height should be a power of two"
+            max_trace_height_bits < u32::BITS as u8,
+            "max_trace_height_bits must be less than {}",
+            u32::BITS
         );
-        self.max_trace_height = max_trace_height;
+        self.max_trace_height_bits = max_trace_height_bits;
         self
+    }
+
+    pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
+        self.set_max_trace_height(max_trace_height);
+        self
+    }
+
+    pub fn set_max_trace_height_bits(&mut self, max_trace_height_bits: u8) {
+        assert!(
+            max_trace_height_bits < u32::BITS as u8,
+            "max_trace_height_bits must be less than {}",
+            u32::BITS
+        );
+        self.max_trace_height_bits = max_trace_height_bits;
     }
 
     pub fn set_max_trace_height(&mut self, max_trace_height: u32) {
@@ -71,11 +92,7 @@ impl SegmentationLimits {
             max_trace_height.is_power_of_two(),
             "max_trace_height should be a power of two"
         );
-        self.max_trace_height = max_trace_height;
-    }
-
-    pub fn max_trace_height_bits(&self) -> usize {
-        self.max_trace_height.ilog2() as usize
+        self.set_max_trace_height_bits(max_trace_height.ilog2() as u8);
     }
 }
 
@@ -177,8 +194,8 @@ impl SegmentationCtx {
         }
     }
 
-    pub fn set_max_trace_height(&mut self, max_trace_height: u32) {
-        self.limits.set_max_trace_height(max_trace_height);
+    pub fn set_max_trace_height_bits(&mut self, max_trace_height_bits: u8) {
+        self.limits.set_max_trace_height_bits(max_trace_height_bits);
     }
 
     pub fn set_max_memory(&mut self, max_memory: usize) {
@@ -385,13 +402,13 @@ impl SegmentationCtx {
         {
             // Only segment if the height is not constant and exceeds the maximum height after
             // padding
-            if !is_constant && padded_height > self.limits.max_trace_height {
+            if !is_constant && padded_height > self.limits.max_trace_height() {
                 let air_name = unsafe { self.air_names.get_unchecked(i) };
                 tracing::info!(
                     "overshoot: instret {:10} | height ({:8}) > max ({:8}) | chip {:3} ({}) ",
                     instret,
                     padded_height,
-                    self.limits.max_trace_height,
+                    self.limits.max_trace_height(),
                     i,
                     air_name,
                 );

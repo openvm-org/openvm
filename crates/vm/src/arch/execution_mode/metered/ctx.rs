@@ -89,13 +89,32 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     /// This changes the frequency of segment checks. BE CAREFUL when you change this during
     /// execution!
-    pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
-        self.segmentation_ctx.set_max_trace_height(max_trace_height);
+    pub fn with_max_trace_height_bits(mut self, max_trace_height_bits: u8) -> Self {
+        self.segmentation_ctx
+            .set_max_trace_height_bits(max_trace_height_bits);
+        let max_trace_height = self.segmentation_ctx.limits.max_trace_height();
         let max_check_freq = (max_trace_height / 2) as u64;
         if max_check_freq < self.segmentation_ctx.segment_check_insns {
             self = self.with_segment_check_insns(max_check_freq);
         }
         self
+    }
+
+    /// Sets max trace-height bits, capped by another log2 bound.
+    pub fn with_max_trace_height_bits_bound(
+        self,
+        max_trace_height_bits: u8,
+        max_trace_height_bits_bound: u8,
+    ) -> Self {
+        if max_trace_height_bits > max_trace_height_bits_bound {
+            tracing::warn!(
+                configured_max_trace_height_bits = max_trace_height_bits,
+                max_trace_height_bits_bound,
+                "configured max trace-height bits exceeds bound; using bounded value for segmentation"
+            );
+            return self.with_max_trace_height_bits(max_trace_height_bits_bound);
+        }
+        self.with_max_trace_height_bits(max_trace_height_bits)
     }
 
     pub fn with_max_memory(mut self, max_memory: usize) -> Self {
