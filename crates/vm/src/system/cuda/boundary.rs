@@ -96,6 +96,7 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
             DeviceMatrix::<F>::with_capacity_on(trace_height, self.trace_width(), &self.device_ctx);
         trace.buffer().fill_zero_on(&self.device_ctx).unwrap();
         let mem_ptrs = self.initial_leaves.to_device_on(&self.device_ctx).unwrap();
+        let poseidon2_records = self.poseidon2_buffer.records();
         unsafe {
             persistent_boundary_tracegen(
                 trace.buffer(),
@@ -104,7 +105,7 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
                 &mem_ptrs,
                 self.records.as_ref().unwrap(),
                 num_records,
-                &self.poseidon2_buffer.buffer,
+                &poseidon2_records,
                 &self.poseidon2_buffer.idx,
                 self.device_ctx.stream.as_raw(),
             )
