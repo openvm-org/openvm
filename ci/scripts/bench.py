@@ -42,8 +42,6 @@ def run_cargo_command(
         command.extend(["--evm"])
     if kzg_params_dir is not None:
         command.extend(["--kzg-params-dir", kzg_params_dir])
-    if "perf-metrics" in feature_flags:
-        command.extend(["--profiling"])
 
     output_path_old = None
     # Create the output directory if it doesn't exist

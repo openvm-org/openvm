@@ -35,10 +35,6 @@ pub struct BenchmarkCli {
     #[arg(long)]
     pub evm: bool,
 
-    /// Whether to execute with additional profiling metric collection
-    #[arg(long)]
-    pub profiling: bool,
-
     /// Halo2 wrapper circuit degree `k` (for e2e proving). If omitted, auto-tuned.
     #[arg(long)]
     pub halo2_wrapper_k: Option<usize>,
@@ -60,7 +56,6 @@ impl BenchmarkCli {
             .as_mut()
             .segmentation_limits
             .set_max_trace_height(max_height);
-        vm_config.as_mut().profiling = self.profiling;
     }
 
     pub fn run(&self, mut vm_config: SdkVmConfig, elf: Elf, stdin: StdIn) -> eyre::Result<()> {
