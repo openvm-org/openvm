@@ -40,6 +40,9 @@ pub trait ExtEmitCtx {
 
     /// Emit a word-range memory-page trace.
     fn trace_mem_access_u32_range(&mut self, base_addr: &str, num_words: &str, addr_space: u32);
+
+    /// Emit a dword-range memory-page trace (rv64: each unit is 8 bytes).
+    fn trace_mem_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32);
 }
 
 /// Trait for extension IR nodes. Implemented by each extension's instruction types.
