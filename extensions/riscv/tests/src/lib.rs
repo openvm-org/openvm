@@ -69,6 +69,12 @@ mod tests {
         instance.execute(vec![], None).unwrap();
     }
 
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_fibonacci() {
+        execute_rvr_example("fibonacci");
+    }
+
     #[cfg(feature = "rvr")]
     fn assert_child_aborts(test_name: &str) {
         let output = Command::new(env::current_exe().unwrap())

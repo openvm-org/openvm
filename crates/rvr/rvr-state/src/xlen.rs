@@ -1,6 +1,6 @@
-//! 32-bit register width marker.
+//! 64-bit register width marker.
 //!
-//! OpenVM only uses RV32, so we keep just the trait + RV32 marker that
+//! OpenVM uses RV64, so we keep just the trait + RV64 marker that
 //! the `RvState` layout needs.
 
 use std::{
@@ -8,17 +8,17 @@ use std::{
     hash::Hash,
 };
 
-/// Marker type for 32-bit register width.
+/// Marker type for 64-bit register width.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct Rv32;
+pub struct Rv64;
 
 /// Trait for register-width-dependent operations.
 ///
 /// Uses marker types with associated types (rather than const generics) so
-/// the register type can be `u32` for downstream code without a generic
+/// the register type can be `u64` for downstream code without a generic
 /// width parameter.
 pub trait Xlen: Copy + Clone + Send + Sync + Default + Debug + 'static {
-    /// Register type (u32 for Rv32).
+    /// Register type (u64 for Rv64).
     type Reg: Copy
         + Clone
         + Default
@@ -29,10 +29,10 @@ pub trait Xlen: Copy + Clone + Send + Sync + Default + Debug + 'static {
         + Display
         + Send
         + Sync
-        + From<u32>
+        + From<u64>
         + Into<u64>;
 
-    /// XLEN value (32).
+    /// XLEN value (64).
     const VALUE: u8;
 
     /// Bytes per register.
@@ -45,18 +45,18 @@ pub trait Xlen: Copy + Clone + Send + Sync + Default + Debug + 'static {
     fn to_u64(val: Self::Reg) -> u64;
 }
 
-impl Xlen for Rv32 {
-    type Reg = u32;
-    const VALUE: u8 = 32;
-    const REG_BYTES: usize = 4;
+impl Xlen for Rv64 {
+    type Reg = u64;
+    const VALUE: u8 = 64;
+    const REG_BYTES: usize = 8;
 
     #[inline]
-    fn from_u64(val: u64) -> u32 {
-        val as u32
+    fn from_u64(val: u64) -> u64 {
+        val
     }
 
     #[inline]
-    fn to_u64(val: u32) -> u64 {
-        u64::from(val)
+    fn to_u64(val: u64) -> u64 {
+        val
     }
 }

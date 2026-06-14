@@ -210,7 +210,7 @@ impl SegmentationState {
     /// `add_register_merkle_heights` + `update_boundary_merkle_heights`).
     ///
     /// OpenVM records pages for the entire register space
-    /// at init and after each segment boundary.
+    /// (AS=1, ptr=0, size=32*8=256) at init and after each segment boundary.
     fn add_register_merkle_heights(&mut self) {
         const REG_SIZE: u32 = (RV64_NUM_REGISTERS * RV64_REGISTER_NUM_LIMBS) as u32;
 

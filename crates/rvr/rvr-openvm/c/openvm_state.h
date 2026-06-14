@@ -33,8 +33,8 @@ static_assert(OPENVM_EXEC_TRAPPED == 3,
               "must match rvr_state::ExecutionStatus::Trapped");
 
 typedef struct RvState {
-  uint32_t regs[32];
-  uint32_t pc;
+  uint64_t regs[32];
+  uint64_t pc;
   uint64_t instret;
   /* TODO(rvr-suspender): this generated ABI is currently hard-coded to
    * InstretSuspender. Replace this flattened field with a generated suspender
@@ -61,7 +61,7 @@ static __attribute__((always_inline)) inline void rv_set_status(
 }
 
 static __attribute__((always_inline)) inline void rv_set_status_at(
-    RvState* restrict state, uint32_t pc, OpenVmExecStatus status,
+    RvState* restrict state, uint64_t pc, OpenVmExecStatus status,
     uint8_t exit_code) {
   state->pc = pc;
   rv_set_status(state, status, exit_code);
@@ -85,13 +85,13 @@ static __attribute__((always_inline)) inline uint8_t* mem_ptr(
 
 /* ── Register access ─────────────────────────────────────────────── */
 
-static __attribute__((always_inline)) inline uint32_t reg_read(
+static __attribute__((always_inline)) inline uint64_t reg_read(
     RvState* restrict state, uint8_t idx) {
   return state->regs[idx];
 }
 
 static __attribute__((always_inline)) inline void reg_write(
-    RvState* restrict state, uint8_t idx, uint32_t val) {
+    RvState* restrict state, uint8_t idx, uint64_t val) {
   state->regs[idx] = val;
 }
 
@@ -127,12 +127,30 @@ static __attribute__((always_inline)) inline int16_t rd_mem_i16(
   return v;
 }
 
+static __attribute__((always_inline)) inline int32_t rd_mem_i32(
+    uint8_t* restrict memory, uint32_t addr) {
+  check_mem_bounds_u32(addr);
+  int32_t v;
+  const void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(v));
+  memcpy(&v, p, sizeof(v));
+  return v;
+}
+
 static __attribute__((always_inline)) inline uint32_t rd_mem_u32(
     uint8_t* restrict memory, uint32_t addr) {
   /* TODO(rvr): handle unaligned RV32 word load/store semantics in opcode
    * codegen if needed; this generic helper assumes aligned callers. */
   check_mem_bounds_u32(addr);
   uint32_t v;
+  const void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(v));
+  memcpy(&v, p, sizeof(v));
+  return v;
+}
+
+static __attribute__((always_inline)) inline uint64_t rd_mem_u64(
+    uint8_t* restrict memory, uint32_t addr) {
+  check_mem_bounds_u64(addr);
+  uint64_t v;
   const void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(v));
   memcpy(&v, p, sizeof(v));
   return v;
@@ -158,6 +176,13 @@ static __attribute__((always_inline)) inline void wr_mem_u32(
   /* TODO(rvr): handle unaligned RV32 word load/store semantics in opcode
    * codegen if needed; this generic helper assumes aligned callers. */
   check_mem_bounds_u32(addr);
+  void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(val));
+  memcpy(p, &val, sizeof(val));
+}
+
+static __attribute__((always_inline)) inline void wr_mem_u64(
+    uint8_t* restrict memory, uint32_t addr, uint64_t val) {
+  check_mem_bounds_u64(addr);
   void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(val));
   memcpy(p, &val, sizeof(val));
 }
@@ -196,12 +221,18 @@ static __attribute__((always_inline)) inline void trace_rd_mem_i16(
     RvState* restrict state, uint32_t addr, int16_t val);
 static __attribute__((always_inline)) inline void trace_rd_mem_u32(
     RvState* restrict state, uint32_t addr, uint32_t val);
+static __attribute__((always_inline)) inline void trace_rd_mem_i32(
+    RvState* restrict state, uint32_t addr, int32_t val);
+static __attribute__((always_inline)) inline void trace_rd_mem_u64(
+    RvState* restrict state, uint32_t addr, uint64_t val);
 static __attribute__((always_inline)) inline void trace_wr_mem_u8(
     RvState* restrict state, uint32_t addr, uint8_t val);
 static __attribute__((always_inline)) inline void trace_wr_mem_u16(
     RvState* restrict state, uint32_t addr, uint16_t val);
 static __attribute__((always_inline)) inline void trace_wr_mem_u32(
     RvState* restrict state, uint32_t addr, uint32_t val);
+static __attribute__((always_inline)) inline void trace_wr_mem_u64(
+    RvState* restrict state, uint32_t addr, uint64_t val);
 static __attribute__((always_inline)) inline void trace_rd_mem_u32_range(
     RvState* restrict state, uint32_t base_addr, const uint32_t* vals,
     uint32_t num_words);
@@ -238,10 +269,24 @@ static __attribute__((always_inline)) inline int32_t rd_mem_i16_traced(
   return v;
 }
 
+static __attribute__((always_inline)) inline int32_t rd_mem_i32_traced(
+    RvState* restrict state, uint32_t addr) {
+  int32_t v = rd_mem_i32(state->memory, addr);
+  trace_rd_mem_i32(state, addr, v);
+  return v;
+}
+
 static __attribute__((always_inline)) inline uint32_t rd_mem_u32_traced(
     RvState* restrict state, uint32_t addr) {
   uint32_t v = rd_mem_u32(state->memory, addr);
   trace_rd_mem_u32(state, addr, v);
+  return v;
+}
+
+static __attribute__((always_inline)) inline uint64_t rd_mem_u64_traced(
+    RvState* restrict state, uint32_t addr) {
+  uint64_t v = rd_mem_u64(state->memory, addr);
+  trace_rd_mem_u64(state, addr, v);
   return v;
 }
 
@@ -261,6 +306,12 @@ static __attribute__((always_inline)) inline void wr_mem_u32_traced(
     RvState* restrict state, uint32_t addr, uint32_t val) {
   trace_wr_mem_u32(state, addr, val);
   wr_mem_u32(state->memory, addr, val);
+}
+
+static __attribute__((always_inline)) inline void wr_mem_u64_traced(
+    RvState* restrict state, uint32_t addr, uint64_t val) {
+  trace_wr_mem_u64(state, addr, val);
+  wr_mem_u64(state->memory, addr, val);
 }
 
 static __attribute__((always_inline)) inline void rd_mem_u32_range_traced(

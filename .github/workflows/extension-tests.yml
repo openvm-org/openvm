@@ -54,11 +54,19 @@ jobs:
     strategy:
       matrix:
         extension: ${{ fromJSON(needs.changes.outputs.extensions) }}
-        # TODO(rvr): restore the rvr mode once RV64 RVR support lands.
-        mode: [default]
+        mode: [default, rvr]
         exclude:
           - { extension: shared, mode: default }
           - { extension: cuda, mode: default }
+          - { extension: shared, mode: rvr }
+          - { extension: cuda, mode: rvr }
+          - { extension: keccak256, mode: rvr }
+          - { extension: sha2, mode: rvr }
+          - { extension: bigint, mode: rvr }
+          - { extension: algebra, mode: rvr }
+          - { extension: ecc, mode: rvr }
+          - { extension: pairing, mode: rvr }
+          - { extension: deferral, mode: rvr }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
     uses: ./.github/workflows/extension-tests.group.yml

@@ -51,6 +51,14 @@ static __attribute__((always_inline)) inline void check_mem_bounds_u32(
   assume(start <= OPENVM_MEM_SIZE - sizeof(uint32_t));
 }
 
+static __attribute__((always_inline)) inline void check_mem_bounds_u64(
+    uint32_t start) {
+  if (unlikely(start > OPENVM_MEM_SIZE - sizeof(uint64_t))) {
+    abort_oob(start, sizeof(uint64_t), OPENVM_MEM_SIZE);
+  }
+  assume(start <= OPENVM_MEM_SIZE - sizeof(uint64_t));
+}
+
 static __attribute__((always_inline)) inline void check_mem_bounds_range(
     uint32_t start, size_t size) {
   if (unlikely(start > OPENVM_MEM_SIZE || size > OPENVM_MEM_SIZE - start)) {
