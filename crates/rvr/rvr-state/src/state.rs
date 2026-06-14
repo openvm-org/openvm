@@ -23,7 +23,7 @@ pub const NUM_REGS_I: usize = 32;
 ///
 /// This struct has a C-compatible layout matching the generated C header.
 /// The layout is parameterized by:
-/// - `X`: Register width (Rv32)
+/// - `X`: Register width (Rv64)
 /// - `T`: Tracer state type (ZST when `()`, real struct when tracing)
 /// - `S`: Suspender state type (ZST when `()`, real struct when suspending)
 /// - `NUM_REGS`: Number of general-purpose registers
@@ -46,9 +46,11 @@ pub struct RvState<
     /// Suspender state (ZST when S = (), real struct when suspending).
     pub suspender: S,
 
+    // TODO(follow-up): dead field — remove once rv32 no longer required.
     /// Reservation address for LR/SC.
-    pub reservation_addr: X::Reg,
+    pub reservation_addr: u32,
 
+    // TODO(follow-up): dead field — remove once rv32 no longer required.
     /// Reservation valid flag for LR/SC.
     pub reservation_valid: u8,
 
@@ -61,11 +63,13 @@ pub struct RvState<
     /// Alignment padding.
     _pad0: u8,
 
+    // TODO(follow-up): dead field — remove once rv32 no longer required.
     /// Current heap break.
-    pub brk: X::Reg,
+    pub brk: u32,
 
+    // TODO(follow-up): dead field — remove once rv32 no longer required.
     /// Initial heap break.
-    pub start_brk: X::Reg,
+    pub start_brk: u32,
 
     /// Guest memory pointer (cold).
     pub memory: *mut u8,
@@ -73,8 +77,9 @@ pub struct RvState<
     /// Tracer state (ZST when T = (), real struct when tracing).
     pub tracer: T,
 
+    // TODO(follow-up): dead field — remove once rv32 no longer required.
     /// Control and status registers (cold).
-    pub csrs: [X::Reg; NUM_CSRS],
+    pub csrs: [u32; NUM_CSRS],
 }
 
 impl<X: Xlen, T: TracerState, S: SuspenderState, const NUM_REGS: usize> RvState<X, T, S, NUM_REGS> {
@@ -94,16 +99,16 @@ impl<X: Xlen, T: TracerState, S: SuspenderState, const NUM_REGS: usize> Default
             pc: X::from_u64(0),
             instret: 0,
             suspender: S::default(),
-            reservation_addr: X::from_u64(0),
+            reservation_addr: 0,
             reservation_valid: 0,
             has_exited: 0,
             exit_code: 0,
             _pad0: 0,
-            brk: X::from_u64(0),
-            start_brk: X::from_u64(0),
+            brk: 0,
+            start_brk: 0,
             memory: std::ptr::null_mut(),
             tracer: T::default(),
-            csrs: [X::from_u64(0); NUM_CSRS],
+            csrs: [0; NUM_CSRS],
         }
     }
 }
@@ -146,5 +151,5 @@ impl<X: Xlen, T: TracerState, S: SuspenderState, const NUM_REGS: usize> RvState<
     }
 }
 
-/// Type alias for RV32I state (32-bit, 32 registers, no tracer, no suspender).
-pub type Rv32State = RvState<crate::xlen::Rv32, (), (), NUM_REGS_I>;
+/// Type alias for RV64I state (64-bit registers, 32 GPRs, no tracer, no suspender).
+pub type Rv64State = RvState<crate::xlen::Rv64, (), (), NUM_REGS_I>;
