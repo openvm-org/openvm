@@ -11,7 +11,7 @@ mod tracer;
 mod xlen;
 
 pub use memory::{GuardedMemory, MemoryError, GUARD_SIZE};
-pub use state::{ExecutionStatus, Rv64State, RvState, NUM_CSRS, NUM_REGS_I};
+pub use state::{ExecutionStatus, Rv64State, RvState, NUM_REGS_I};
 pub use suspender::{InstretSuspender, SuspenderState};
 pub use tracer::TracerState;
 pub use xlen::{Rv64, Xlen};
