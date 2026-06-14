@@ -11,7 +11,7 @@
 
 use std::ffi::c_void;
 
-/// Word size for memory access (4 bytes).
+/// Word size for memory access (8 bytes — `sizeof(u64)` per platform definition).
 pub use openvm_platform::WORD_SIZE;
 
 // TODO(dedup): make a common crate that is imported by rvr and openvm-circuit
@@ -20,7 +20,9 @@ pub use openvm_platform::WORD_SIZE;
 /// BabyBear Poseidon2 digest size in field elements.
 pub const DEFERRAL_DIGEST_SIZE: usize = 8;
 
-/// Commit size in bytes (DIGEST_SIZE field elements × 4 bytes each).
+/// Commit size in bytes.
+/// TODO(follow-up): should be `DEFERRAL_DIGEST_SIZE * size_of::<u32>()` (= 32) since
+/// each field element is 4 bytes, but currently uses `WORD_SIZE = 8`, giving 64.
 pub const DEFERRAL_COMMIT_NUM_BYTES: usize = DEFERRAL_DIGEST_SIZE * WORD_SIZE;
 
 /// Output key size in bytes (commit + u64 length).

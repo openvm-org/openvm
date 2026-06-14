@@ -37,6 +37,10 @@ static __attribute__((always_inline)) inline void trace_rd_mem_i16(
     RvState* restrict state, uint32_t addr, int16_t val) {}
 static __attribute__((always_inline)) inline void trace_rd_mem_u32(
     RvState* restrict state, uint32_t addr, uint32_t val) {}
+static __attribute__((always_inline)) inline void trace_rd_mem_i32(
+    RvState* restrict state, uint32_t addr, int32_t val) {}
+static __attribute__((always_inline)) inline void trace_rd_mem_u64(
+    RvState* restrict state, uint32_t addr, uint64_t val) {}
 
 /* ── Trace-only memory writes (no-ops in metered cost mode) ──────── */
 
@@ -46,6 +50,8 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u16(
     RvState* restrict state, uint32_t addr, uint16_t new_val) {}
 static __attribute__((always_inline)) inline void trace_wr_mem_u32(
     RvState* restrict state, uint32_t addr, uint32_t new_val) {}
+static __attribute__((always_inline)) inline void trace_wr_mem_u64(
+    RvState* restrict state, uint32_t addr, uint64_t new_val) {}
 
 /* ── Trace-only word-range memory access (no-ops in metered cost mode) */
 
@@ -63,6 +69,10 @@ static __attribute__((always_inline)) inline void trace_mem_access(
 
 static __attribute__((always_inline)) inline void trace_mem_access_u32_range(
     RvState* restrict state, uint32_t base_addr, uint32_t num_words,
+    uint32_t addr_space) {}
+
+static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
+    RvState* restrict state, uint32_t base_addr, uint32_t num_dwords,
     uint32_t addr_space) {}
 
 static __attribute__((always_inline)) inline void trace_pc(
