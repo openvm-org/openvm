@@ -9,9 +9,10 @@ use std::{ffi::c_void, io::Write};
 
 use openvm_circuit::arch::rvr::io::{check_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV64_MEMORY_AS, LocalOpcode, SystemOpcode,
+    instruction::Instruction,
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode, SystemOpcode,
 };
-use openvm_platform::WORD_SIZE;
 use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, Rv64Phantom};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::Rng;
@@ -22,7 +23,7 @@ use rvr_openvm_lift::{
     RvrExtension, RvrExtensionCtx,
 };
 
-/// HINT_STORED: pop one register word from the hint stream into `mem[reg[ptr_reg]]`.
+/// HINT_STORED: pop one register word (8 bytes) from the hint stream into `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
 pub struct HintStoreWInstr {
     pub ptr_reg: Reg,
@@ -44,7 +45,7 @@ impl ExtInstr for HintStoreWInstr {
     }
 }
 
-/// HINT_BUFFER: pop `WORD_SIZE * reg[num_words_reg]` bytes from the hint stream and
+/// HINT_BUFFER: pop `8 * reg[num_words_reg]` bytes from the hint stream and
 /// write them sequentially starting at `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
 pub struct HintBufferInstr {
@@ -68,7 +69,7 @@ impl ExtInstr for HintBufferInstr {
         ctx.trace_chip(chip_idx, &format!("{n} - 1"));
         ctx.write_line("}");
         ctx.write_line(&format!("if ({n} > 0) {{"));
-        ctx.trace_mem_access_u32_range(&ptr, &n, RV64_MEMORY_AS);
+        ctx.trace_mem_access_u64_range(&ptr, &n, RV64_MEMORY_AS);
         ctx.write_line("}");
         ctx.extern_call("openvm_hint_buffer", &[&ptr, &n]);
     }
@@ -219,8 +220,8 @@ impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
             }));
         }
 
-        // REVEAL: STOREW with address-space e = AS_PUBLIC_VALUES.
-        if opcode == Rv64LoadStoreOpcode::STOREW.global_opcode_usize()
+        // REVEAL: STORED with address-space e = AS_PUBLIC_VALUES.
+        if opcode == Rv64LoadStoreOpcode::STORED.global_opcode_usize()
             && insn.e.as_canonical_u32() == AS_PUBLIC_VALUES
         {
             let src_reg = decode_reg(insn.a);
@@ -366,28 +367,26 @@ pub struct Rv64IPhantomCallbacks {
 pub struct Rv64IoHostCallbacks {
     pub hint_storew: extern "C" fn(*mut c_void, u32),
     pub hint_buffer: extern "C" fn(*mut c_void, u32, u32),
-    pub reveal: extern "C" fn(*mut c_void, u32, u32, u32),
+    pub reveal: extern "C" fn(*mut c_void, u64, u32, u32),
 }
 
 // ── Callback implementations ────────────────────────────────────────────────
 
 /// HintInput: pop next input record from VmState's input_stream and overwrite
-/// the active hint stream with `[len: u32 LE][data][padding to 4-byte align]`,
+/// the active hint stream with `[len: u64 LE][data][padding to 8-byte align]`,
 /// each byte stored as one field element.
 pub extern "C" fn host_hint_input<F: PrimeField32>(ctx: *mut c_void) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
     io.hint_stream.clear();
-    if let Some(vec) = io.input_stream.pop_front() {
+    if let Some(mut vec) = io.input_stream.pop_front() {
         let data_len = vec.len();
-        let padded_len = (data_len + 3) & !3;
-        let len_bytes = (data_len as u32).to_le_bytes();
+        let len_bytes = (data_len as u64).to_le_bytes();
         for &b in &len_bytes {
             io.hint_stream.push_back(F::from_u8(b));
         }
+        let padded_len = data_len.div_ceil(RV64_REGISTER_NUM_LIMBS) * RV64_REGISTER_NUM_LIMBS;
+        vec.resize(padded_len, F::ZERO);
         io.hint_stream.extend(vec);
-        for _ in data_len..padded_len {
-            io.hint_stream.push_back(F::ZERO);
-        }
     }
 }
 
@@ -403,27 +402,26 @@ pub extern "C" fn host_print_str<F: PrimeField32>(ctx: *mut c_void, ptr: u32, le
     }
 }
 
-/// HintRandom: refill the hint stream with `num_words * WORD_SIZE` random
-/// bytes drawn from VmState's persistent RNG (matches openvm's
-/// `Rv64HintRandomSubEx`).
+/// HintRandom: refill the hint stream with `num_words * RV64_REGISTER_NUM_LIMBS` random
+/// bytes drawn from VmState's persistent RNG.
 pub extern "C" fn host_hint_random<F: PrimeField32>(ctx: *mut c_void, num_words: u32) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
-    let nbytes = num_words as usize * WORD_SIZE;
+    let nbytes = num_words as usize * RV64_REGISTER_NUM_LIMBS;
     io.hint_stream.clear();
     for _ in 0..nbytes {
         io.hint_stream.push_back(F::from_u8(io.rng.random::<u8>()));
     }
 }
 
-/// HINT_STOREW: pop one word from the hint stream as bytes and write it to
-/// guest memory at `dest_addr`.
+/// HINT_STOREW: pop one rv64 register-width word (8 bytes) from the hint stream
+/// and write it to guest memory at `dest_addr`.
 pub extern "C" fn host_hint_storew<F: PrimeField32>(ctx: *mut c_void, dest_addr: u32) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
-    if io.hint_stream.len() < WORD_SIZE || io.memory_ptr.is_null() {
+    if io.hint_stream.len() < RV64_REGISTER_NUM_LIMBS || io.memory_ptr.is_null() {
         return;
     }
-    check_mem_bounds_range(dest_addr, WORD_SIZE);
-    let mut bytes = [0u8; WORD_SIZE];
+    check_mem_bounds_range(dest_addr, RV64_REGISTER_NUM_LIMBS);
+    let mut bytes = [0u8; RV64_REGISTER_NUM_LIMBS];
     for byte in &mut bytes {
         *byte = io.hint_stream.pop_front().unwrap().as_canonical_u32() as u8;
     }
@@ -436,7 +434,7 @@ pub extern "C" fn host_hint_storew<F: PrimeField32>(ctx: *mut c_void, dest_addr:
     }
 }
 
-/// HINT_BUFFER: pop `num_words * WORD_SIZE` field elements from the hint stream
+/// HINT_BUFFER: pop `num_words * RV64_REGISTER_NUM_LIMBS` field elements from the hint stream
 /// and copy them as bytes into guest memory.
 pub extern "C" fn host_hint_buffer<F: PrimeField32>(
     ctx: *mut c_void,
@@ -444,7 +442,7 @@ pub extern "C" fn host_hint_buffer<F: PrimeField32>(
     num_words: u32,
 ) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
-    let nbytes = num_words as usize * WORD_SIZE;
+    let nbytes = num_words as usize * RV64_REGISTER_NUM_LIMBS;
     if io.hint_stream.len() < nbytes || io.memory_ptr.is_null() {
         return;
     }
@@ -460,13 +458,13 @@ pub extern "C" fn host_hint_buffer<F: PrimeField32>(
 /// byte slice. Cost corrections handled in C.
 pub extern "C" fn host_reveal<F: PrimeField32>(
     ctx: *mut c_void,
-    src_val: u32,
+    src_val: u64,
     ptr: u32,
     offset: u32,
 ) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
     let start = ptr as usize + offset as usize;
-    let end = start + WORD_SIZE;
+    let end = start + RV64_REGISTER_NUM_LIMBS;
     assert!(
         end <= io.public_values.len(),
         "reveal out of bounds: writing bytes [{start}..{end}) but public_values size is {} (configured via SystemConfig::with_public_values)",
@@ -566,6 +564,17 @@ mod tests {
                 "trace_mem_access_u32_range(state, {base_addr}, {num_words}, {addr_space}u);"
             ));
         }
+
+        fn trace_mem_access_u64_range(
+            &mut self,
+            base_addr: &str,
+            num_dwords: &str,
+            addr_space: u32,
+        ) {
+            self.write_line(&format!(
+                "trace_mem_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
+            ));
+        }
     }
 
     #[test]
@@ -613,5 +622,31 @@ mod tests {
         );
 
         assert_eq!(&io.public_values[6..10], &[0x44, 0x33, 0x22, 0x11]);
+    }
+
+    #[test]
+    fn hint_buffer_traces_u64_range() {
+        let mut ctx = TestEmitCtx::default();
+        HintBufferInstr {
+            ptr_reg: 1,
+            num_words_reg: 2,
+            chip_idx: None,
+        }
+        .emit_c(&mut ctx);
+
+        assert!(
+            ctx.lines
+                .iter()
+                .any(|l| l.contains("trace_mem_access_u64_range")),
+            "expected trace_mem_access_u64_range, got: {:#?}",
+            ctx.lines
+        );
+        assert!(
+            !ctx.lines
+                .iter()
+                .any(|l| l.contains("trace_mem_access_u32_range")),
+            "unexpected trace_mem_access_u32_range in: {:#?}",
+            ctx.lines
+        );
     }
 }
