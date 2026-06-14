@@ -7,7 +7,8 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use openvm_instructions::{
-    program::DEFAULT_PC_STEP as INSTR_SIZE, riscv::RV64_NUM_REGISTERS as NUM_REGS,
+    program::{DEFAULT_PC_STEP as INSTR_SIZE, PC_BITS},
+    riscv::RV64_NUM_REGISTERS as NUM_REGS,
 };
 use rvr_openvm_ir::{AluOp, Block, Instr, InstrAt, LiftedInstr, MulDivOp, Terminator};
 
@@ -26,7 +27,7 @@ enum ValueKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RegisterValue {
     kind: ValueKind,
-    values: Vec<u32>,
+    values: Vec<u64>,
 }
 
 impl RegisterValue {
@@ -37,7 +38,7 @@ impl RegisterValue {
         }
     }
 
-    fn constant(value: u32) -> Self {
+    fn constant(value: u64) -> Self {
         Self {
             kind: ValueKind::Constant,
             values: vec![value],
@@ -48,7 +49,7 @@ impl RegisterValue {
         self.kind == ValueKind::Constant
     }
 
-    fn add_value(&mut self, value: u32) {
+    fn add_value(&mut self, value: u64) {
         if self.kind != ValueKind::Constant {
             return;
         }
@@ -169,20 +170,26 @@ impl RegisterState {
     }
 }
 
-// ── Binary operation evaluation (u32) ─────────────────────────────────────
+/// Sign-extend a 32-bit value to 64 bits.
+#[inline(always)]
+fn sext32(value: u32) -> u64 {
+    value as i32 as u64
+}
 
-fn compute_binary_op(op: AluOp, left: u32, right: u32) -> u32 {
+// ── Binary operation evaluation (u64) ─────────────────────────────────────
+
+fn compute_binary_op(op: AluOp, left: u64, right: u64) -> u64 {
     match op {
         AluOp::Add => left.wrapping_add(right),
         AluOp::Sub => left.wrapping_sub(right),
         AluOp::And => left & right,
         AluOp::Or => left | right,
         AluOp::Xor => left ^ right,
-        AluOp::Sll => left.wrapping_shl(right & 0x1f),
-        AluOp::Srl => left.wrapping_shr(right & 0x1f),
-        AluOp::Sra => ((left as i32).wrapping_shr(right & 0x1f)) as u32,
+        AluOp::Sll => left.wrapping_shl((right & 0x3f) as u32),
+        AluOp::Srl => left.wrapping_shr((right & 0x3f) as u32),
+        AluOp::Sra => ((left as i64).wrapping_shr((right & 0x3f) as u32)) as u64,
         AluOp::Slt => {
-            if (left as i32) < (right as i32) {
+            if (left as i64) < (right as i64) {
                 1
             } else {
                 0
@@ -237,35 +244,112 @@ fn eval_binary_multi(op: AluOp, lv: &RegisterValue, rv: &RegisterValue) -> Regis
     result
 }
 
+/// Same as `eval_binary_multi` but using W-suffix semantics (32-bit arithmetic, sign-extended).
+fn eval_binary_multi_w(op: AluOp, lv: &RegisterValue, rv: &RegisterValue) -> RegisterValue {
+    if !lv.is_constant() || !rv.is_constant() || lv.values.is_empty() || rv.values.is_empty() {
+        return RegisterValue::unknown();
+    }
+
+    let mut result = RegisterValue::constant(compute_binary_op_w(op, lv.values[0], rv.values[0]));
+    'outer: for l in &lv.values {
+        for r in &rv.values {
+            if *l == lv.values[0] && *r == rv.values[0] {
+                continue;
+            }
+            result.add_value(compute_binary_op_w(op, *l, *r));
+            if !result.is_constant() {
+                break 'outer;
+            }
+        }
+    }
+    result
+}
+
+fn compute_binary_op_w(op: AluOp, left: u64, right: u64) -> u64 {
+    let rs1 = left as u32;
+    let rs2 = right as u32;
+    let result: u32 = match op {
+        AluOp::Add => rs1.wrapping_add(rs2),
+        AluOp::Sub => rs1.wrapping_sub(rs2),
+        AluOp::Sll => rs1 << (rs2 & 0x1f),
+        AluOp::Srl => rs1 >> (rs2 & 0x1f),
+        AluOp::Sra => ((rs1 as i32) >> (rs2 & 0x1f)) as u32,
+        _ => unreachable!(),
+    };
+    sext32(result)
+}
+
+fn compute_muldiv_op_w(op: MulDivOp, left: u64, right: u64) -> u64 {
+    let rs1 = left as u32;
+    let rs2 = right as u32;
+    let result: u32 = match op {
+        MulDivOp::Mul => rs1.wrapping_mul(rs2),
+        MulDivOp::Div => {
+            let rs1_i32 = rs1 as i32;
+            let rs2_i32 = rs2 as i32;
+            match (rs1_i32, rs2_i32) {
+                (_, 0) => u32::MAX,
+                (i32::MIN, -1) => rs1,
+                _ => (rs1_i32 / rs2_i32) as u32,
+            }
+        }
+        MulDivOp::Divu => {
+            if rs2 == 0 {
+                u32::MAX
+            } else {
+                rs1 / rs2
+            }
+        }
+        MulDivOp::Rem => {
+            let rs1_i32 = rs1 as i32;
+            let rs2_i32 = rs2 as i32;
+            match (rs1_i32, rs2_i32) {
+                (_, 0) => rs1,
+                (i32::MIN, -1) => 0,
+                _ => (rs1_i32 % rs2_i32) as u32,
+            }
+        }
+        MulDivOp::Remu => {
+            if rs2 == 0 {
+                rs1
+            } else {
+                rs1 % rs2
+            }
+        }
+        _ => unreachable!(),
+    };
+    sext32(result)
+}
+
 /// Compute a mul/div op if both operands are known (single-value only for simplicity).
-fn compute_muldiv_op(op: MulDivOp, left: u32, right: u32) -> u32 {
+fn compute_muldiv_op(op: MulDivOp, left: u64, right: u64) -> u64 {
     match op {
         MulDivOp::Mul => left.wrapping_mul(right),
         MulDivOp::Mulh => {
-            let a = left as i32 as i64;
-            let b = right as i32 as i64;
-            ((a.wrapping_mul(b)) >> 32) as u32
+            let a = left as i64 as i128;
+            let b = right as i64 as i128;
+            ((a.wrapping_mul(b)) >> 64) as u64
         }
         MulDivOp::Mulhsu => {
-            let a = left as i32 as i64;
-            let b = right as u64 as i64;
-            ((a.wrapping_mul(b)) >> 32) as u32
+            let a = left as i64 as i128;
+            let b = right as i128;
+            ((a.wrapping_mul(b)) >> 64) as u64
         }
         MulDivOp::Mulhu => {
-            let a = left as u64;
-            let b = right as u64;
-            ((a.wrapping_mul(b)) >> 32) as u32
+            let a = left as u128;
+            let b = right as u128;
+            ((a.wrapping_mul(b)) >> 64) as u64
         }
         MulDivOp::Div => {
             if right == 0 {
-                u32::MAX // RISC-V div by zero
+                u64::MAX
             } else {
-                (left as i32).wrapping_div(right as i32) as u32
+                (left as i64).wrapping_div(right as i64) as u64
             }
         }
         MulDivOp::Divu => {
             if right == 0 {
-                u32::MAX
+                u64::MAX
             } else {
                 left.wrapping_div(right)
             }
@@ -274,7 +358,7 @@ fn compute_muldiv_op(op: MulDivOp, left: u32, right: u32) -> u32 {
             if right == 0 {
                 left
             } else {
-                (left as i32).wrapping_rem(right as i32) as u32
+                (left as i64).wrapping_rem(right as i64) as u64
             }
         }
         MulDivOp::Remu => {
@@ -336,7 +420,7 @@ fn is_control_flow(li: &LiftedInstr) -> bool {
 // ── Simple register tracking (phase 1, single-value) ──────────────────────
 
 /// Process a single instruction for simple single-value register tracking.
-fn simple_process(li: &LiftedInstr, regs: &mut [Option<u32>; NUM_REGS]) {
+fn simple_process(li: &LiftedInstr, regs: &mut [Option<u64>; NUM_REGS]) {
     match li {
         LiftedInstr::Body(InstrAt { instr, .. }) => {
             simple_process_instr(instr, regs);
@@ -359,7 +443,7 @@ fn simple_process(li: &LiftedInstr, regs: &mut [Option<u32>; NUM_REGS]) {
     }
 }
 
-fn simple_process_instr(instr: &Instr, regs: &mut [Option<u32>; NUM_REGS]) {
+fn simple_process_instr(instr: &Instr, regs: &mut [Option<u64>; NUM_REGS]) {
     match instr {
         Instr::AluReg { op, rd, rs1, rs2 } => {
             let rd = *rd;
@@ -372,12 +456,31 @@ fn simple_process_instr(instr: &Instr, regs: &mut [Option<u32>; NUM_REGS]) {
             };
             regs[rd as usize] = val;
         }
+        Instr::AluWReg { op, rd, rs1, rs2 } => {
+            let rd = *rd;
+            if rd == 0 {
+                return;
+            }
+            let val = match (regs[*rs1 as usize], regs[*rs2 as usize]) {
+                (Some(a), Some(b)) => Some(compute_binary_op_w(*op, a, b)),
+                _ => None,
+            };
+            regs[rd as usize] = val;
+        }
         Instr::AluImm { op, rd, rs1, imm } => {
             let rd = *rd;
             if rd == 0 {
                 return;
             }
-            let val = regs[*rs1 as usize].map(|a| compute_binary_op(*op, a, *imm as u32));
+            let val = regs[*rs1 as usize].map(|a| compute_binary_op(*op, a, *imm as i64 as u64));
+            regs[rd as usize] = val;
+        }
+        Instr::AluWImm { op, rd, rs1, imm } => {
+            let rd = *rd;
+            if rd == 0 {
+                return;
+            }
+            let val = regs[*rs1 as usize].map(|a| compute_binary_op_w(*op, a, *imm as i64 as u64));
             regs[rd as usize] = val;
         }
         Instr::ShiftImm { op, rd, rs1, shamt } => {
@@ -385,7 +488,15 @@ fn simple_process_instr(instr: &Instr, regs: &mut [Option<u32>; NUM_REGS]) {
             if rd == 0 {
                 return;
             }
-            let val = regs[*rs1 as usize].map(|a| compute_binary_op(*op, a, u32::from(*shamt)));
+            let val = regs[*rs1 as usize].map(|a| compute_binary_op(*op, a, u64::from(*shamt)));
+            regs[rd as usize] = val;
+        }
+        Instr::ShiftWImm { op, rd, rs1, shamt } => {
+            let rd = *rd;
+            if rd == 0 {
+                return;
+            }
+            let val = regs[*rs1 as usize].map(|a| compute_binary_op_w(*op, a, u64::from(*shamt)));
             regs[rd as usize] = val;
         }
         Instr::Lui { rd, value } => {
@@ -393,14 +504,14 @@ fn simple_process_instr(instr: &Instr, regs: &mut [Option<u32>; NUM_REGS]) {
             if rd == 0 {
                 return;
             }
-            regs[rd as usize] = Some(*value);
+            regs[rd as usize] = Some(*value as i32 as i64 as u64);
         }
         Instr::Auipc { rd, value } => {
             let rd = *rd;
             if rd == 0 {
                 return;
             }
-            regs[rd as usize] = Some(*value);
+            regs[rd as usize] = Some(*value as u64);
         }
         Instr::Load { rd, .. } => {
             let rd = *rd;
@@ -419,14 +530,27 @@ fn simple_process_instr(instr: &Instr, regs: &mut [Option<u32>; NUM_REGS]) {
             };
             regs[rd as usize] = val;
         }
+        Instr::MulDivW { op, rd, rs1, rs2 } => {
+            let rd = *rd;
+            if rd == 0 {
+                return;
+            }
+            let val = match (regs[*rs1 as usize], regs[*rs2 as usize]) {
+                (Some(a), Some(b)) => Some(compute_muldiv_op_w(*op, a, b)),
+                _ => None,
+            };
+            regs[rd as usize] = val;
+        }
         // IO / system instructions: most don't write general registers
         Instr::Store { .. } | Instr::Nop | Instr::Ext(_) => {}
     }
 }
 
 /// Evaluate the JumpDyn target address: (state[rs1] + imm) & !1.
-fn simple_eval_jumpdyn(regs: &[Option<u32>; NUM_REGS], rs1: u8, imm: i32) -> Option<u32> {
-    regs[rs1 as usize].map(|base| base.wrapping_add(imm as u32) & !1u32)
+fn simple_eval_jumpdyn(regs: &[Option<u64>; NUM_REGS], rs1: u8, imm: i32) -> Option<u32> {
+    regs[rs1 as usize]
+        .and_then(|base| eval_jumpdyn_target(base, imm))
+        .map(|t| t as u32)
 }
 
 // ── Phase 1: collect_potential_targets ─────────────────────────────────────
@@ -443,7 +567,7 @@ fn collect_potential_targets(
         function_entries.insert(first.pc());
     }
 
-    let mut regs: [Option<u32>; NUM_REGS] = [None; NUM_REGS];
+    let mut regs: [Option<u64>; NUM_REGS] = [None; NUM_REGS];
     regs[0] = Some(0);
 
     for li in instructions {
@@ -662,13 +786,31 @@ fn transfer_instr(instr: &Instr, state: &mut RegisterState) {
             let result = eval_binary_multi(*op, &lv, &rv);
             state.set(*rd, result);
         }
+        Instr::AluWReg { op, rd, rs1, rs2 } => {
+            if *rd == 0 {
+                return;
+            }
+            let lv = state.get(*rs1);
+            let rv = state.get(*rs2);
+            let result = eval_binary_multi_w(*op, &lv, &rv);
+            state.set(*rd, result);
+        }
         Instr::AluImm { op, rd, rs1, imm } => {
             if *rd == 0 {
                 return;
             }
             let lv = state.get(*rs1);
-            let rv = RegisterValue::constant(*imm as u32);
+            let rv = RegisterValue::constant(*imm as u64);
             let result = eval_binary_multi(*op, &lv, &rv);
+            state.set(*rd, result);
+        }
+        Instr::AluWImm { op, rd, rs1, imm } => {
+            if *rd == 0 {
+                return;
+            }
+            let lv = state.get(*rs1);
+            let rv = RegisterValue::constant(*imm as u64);
+            let result = eval_binary_multi_w(*op, &lv, &rv);
             state.set(*rd, result);
         }
         Instr::ShiftImm { op, rd, rs1, shamt } => {
@@ -676,21 +818,30 @@ fn transfer_instr(instr: &Instr, state: &mut RegisterState) {
                 return;
             }
             let lv = state.get(*rs1);
-            let rv = RegisterValue::constant(u32::from(*shamt));
+            let rv = RegisterValue::constant(u64::from(*shamt));
             let result = eval_binary_multi(*op, &lv, &rv);
+            state.set(*rd, result);
+        }
+        Instr::ShiftWImm { op, rd, rs1, shamt } => {
+            if *rd == 0 {
+                return;
+            }
+            let lv = state.get(*rs1);
+            let rv = RegisterValue::constant(u64::from(*shamt));
+            let result = eval_binary_multi_w(*op, &lv, &rv);
             state.set(*rd, result);
         }
         Instr::Lui { rd, value } => {
             if *rd == 0 {
                 return;
             }
-            state.set(*rd, RegisterValue::constant(*value));
+            state.set(*rd, RegisterValue::constant(sext32(*value)));
         }
         Instr::Auipc { rd, value } => {
             if *rd == 0 {
                 return;
             }
-            state.set(*rd, RegisterValue::constant(*value));
+            state.set(*rd, RegisterValue::constant(*value as u64));
         }
         Instr::Load { rd, .. } => {
             if *rd != 0 {
@@ -706,6 +857,20 @@ fn transfer_instr(instr: &Instr, state: &mut RegisterState) {
             if lv.is_constant() && rv.is_constant() && lv.values.len() == 1 && rv.values.len() == 1
             {
                 let result = compute_muldiv_op(*op, lv.values[0], rv.values[0]);
+                state.set(*rd, RegisterValue::constant(result));
+            } else {
+                state.set_unknown(*rd);
+            }
+        }
+        Instr::MulDivW { op, rd, rs1, rs2 } => {
+            if *rd == 0 {
+                return;
+            }
+            let lv = state.get(*rs1);
+            let rv = state.get(*rs2);
+            if lv.is_constant() && rv.is_constant() && lv.values.len() == 1 && rv.values.len() == 1
+            {
+                let result = compute_muldiv_op_w(*op, lv.values[0], rv.values[0]);
                 state.set(*rd, RegisterValue::constant(result));
             } else {
                 state.set_unknown(*rd);
@@ -753,8 +918,18 @@ fn get_successors(
                         let targets: Vec<u32> = addr_val
                             .values
                             .iter()
-                            .filter(|t| ctx.pc_to_idx.contains_key(t))
-                            .copied()
+                            .filter_map(|&t| {
+                                assert!(
+                                    t < (1u64 << PC_BITS),
+                                    "JumpDyn target {t:#x} exceeds PC address space"
+                                );
+                                let pc32 = t as u32;
+                                if ctx.pc_to_idx.contains_key(&pc32) {
+                                    Some(pc32)
+                                } else {
+                                    None
+                                }
+                            })
                             .collect();
 
                         if !targets.is_empty() {
@@ -802,6 +977,17 @@ fn get_successors(
     result
 }
 
+/// Compute a single JumpDyn target: `(base + imm) & !1`, returning `None` if
+/// the result exceeds the valid PC address space.
+fn eval_jumpdyn_target(base: u64, imm: i32) -> Option<u64> {
+    let target = base.wrapping_add(imm as i64 as u64) & !1u64;
+    if target < (1u64 << PC_BITS) {
+        Some(target)
+    } else {
+        None
+    }
+}
+
 /// Evaluate the JumpDyn target as a multi-value register value:
 /// for each possible value of rs1, compute (val + imm) & !1.
 fn eval_jumpdyn_multi(state: &RegisterState, rs1: u8, imm: i32) -> RegisterValue {
@@ -810,11 +996,20 @@ fn eval_jumpdyn_multi(state: &RegisterState, rs1: u8, imm: i32) -> RegisterValue
         return RegisterValue::unknown();
     }
 
-    let mut result = RegisterValue::constant(base.values[0].wrapping_add(imm as u32) & !1u32);
-    for v in base.values.iter().skip(1) {
-        result.add_value(v.wrapping_add(imm as u32) & !1u32);
-        if !result.is_constant() {
-            return RegisterValue::unknown();
+    let first = match eval_jumpdyn_target(base.values[0], imm) {
+        Some(t) => t,
+        None => return RegisterValue::unknown(),
+    };
+    let mut result = RegisterValue::constant(first);
+    for &v in base.values.iter().skip(1) {
+        match eval_jumpdyn_target(v, imm) {
+            Some(t) => {
+                result.add_value(t);
+                if !result.is_constant() {
+                    return RegisterValue::unknown();
+                }
+            }
+            None => return RegisterValue::unknown(),
         }
     }
     result
