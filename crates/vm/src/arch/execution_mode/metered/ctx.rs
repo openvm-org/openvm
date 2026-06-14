@@ -5,7 +5,7 @@ use openvm_stark_backend::memory_metering::ProvingMemoryConfig;
 
 use super::{
     memory_ctx::MemoryCtx,
-    segment_ctx::{Segment, SegmentationCtx},
+    segment_ctx::{Segment, SegmentationCtx, SegmentationLimits},
 };
 use crate::{
     arch::{
@@ -33,7 +33,7 @@ pub struct MeteredCtxInputs<'a> {
     pub widths: &'a [usize],
     pub interactions: &'a [usize],
     pub need_rot: &'a [bool],
-    pub max_trace_height_bits: u8,
+    pub segmentation_limits: SegmentationLimits,
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
@@ -60,8 +60,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             inputs.widths.to_vec(),
             inputs.interactions.to_vec(),
             inputs.need_rot.to_vec(),
-            inputs.max_trace_height_bits,
-            config.segmentation_limits.clone(),
+            inputs.segmentation_limits,
             memory_config,
         );
         let memory_ctx = MemoryCtx::new(config, segmentation_ctx.segment_check_insns());
@@ -96,11 +95,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     pub fn with_max_memory(mut self, max_memory: usize) -> Self {
         self.segmentation_ctx.set_max_memory(max_memory);
-        self
-    }
-
-    pub fn with_max_interactions(mut self, max_interactions: usize) -> Self {
-        self.segmentation_ctx.set_max_interactions(max_interactions);
         self
     }
 

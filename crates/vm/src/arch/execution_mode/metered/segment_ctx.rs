@@ -1,12 +1,7 @@
 use bytesize::ByteSize;
-use getset::{Setters, WithSetters};
 #[cfg(feature = "metrics")]
 use openvm_stark_backend::memory_metering::INTERACTION_MEMORY_OVERHEAD;
-use openvm_stark_backend::{
-    memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts},
-    p3_field::PrimeField32,
-};
-use p3_baby_bear::BabyBear;
+use openvm_stark_backend::memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts};
 use serde::{Deserialize, Serialize};
 
 use crate::utils::{add_one_or_zero, next_power_of_two_or_zero};
@@ -14,7 +9,6 @@ use crate::utils::{add_one_or_zero, next_power_of_two_or_zero};
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
 pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
-const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
 pub struct Segment {
@@ -23,30 +17,11 @@ pub struct Segment {
     pub trace_heights: Vec<u32>,
 }
 
-#[derive(Clone, Debug, WithSetters, Setters)]
+#[derive(Clone, Copy, Debug)]
 pub struct SegmentationLimits {
-    #[getset(set = "pub", set_with = "pub")]
+    pub max_trace_height_bits: u8,
     pub max_memory: usize,
-    #[getset(set_with = "pub")]
-    pub max_interactions: usize,
-}
-
-impl Default for SegmentationLimits {
-    fn default() -> Self {
-        Self {
-            max_memory: DEFAULT_MAX_MEMORY,
-            max_interactions: DEFAULT_MAX_INTERACTIONS,
-        }
-    }
-}
-
-impl SegmentationLimits {
-    pub fn new(max_memory: usize, max_interactions: usize) -> Self {
-        Self {
-            max_memory,
-            max_interactions,
-        }
-    }
+    pub max_interactions: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -55,9 +30,10 @@ struct SegmentationParams {
     widths: Vec<usize>,
     interactions: Vec<usize>,
     need_rot: Vec<bool>,
-    limits: SegmentationLimits,
-    memory_config: ProvingMemoryConfig,
     max_trace_height: u32,
+    max_memory: usize,
+    max_interactions: u32,
+    memory_config: ProvingMemoryConfig,
     segment_check_insns: u64,
 }
 
@@ -67,7 +43,6 @@ impl SegmentationParams {
         widths: Vec<usize>,
         interactions: Vec<usize>,
         need_rot: Vec<bool>,
-        max_trace_height_bits: u8,
         limits: SegmentationLimits,
         memory_config: ProvingMemoryConfig,
     ) -> Self {
@@ -75,13 +50,13 @@ impl SegmentationParams {
         assert_eq!(air_names.len(), interactions.len());
         assert_eq!(air_names.len(), need_rot.len());
         assert!(
-            max_trace_height_bits < u32::BITS as u8,
+            limits.max_trace_height_bits < u32::BITS as u8,
             "max_trace_height_bits must be less than {}",
             u32::BITS
         );
 
         let max_trace_height = 1u32
-            .checked_shl(u32::from(max_trace_height_bits))
+            .checked_shl(u32::from(limits.max_trace_height_bits))
             .expect("max_trace_height_bits must fit in u32 trace height");
         assert!(
             u64::from(max_trace_height) >= 2 * DEFAULT_SEGMENT_CHECK_INSNS,
@@ -93,9 +68,10 @@ impl SegmentationParams {
             widths,
             interactions,
             need_rot,
-            limits,
-            memory_config,
             max_trace_height,
+            max_memory: limits.max_memory,
+            max_interactions: limits.max_interactions,
+            memory_config,
             segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
         }
     }
@@ -169,7 +145,6 @@ impl SegmentationCtx {
         widths: Vec<usize>,
         interactions: Vec<usize>,
         need_rot: Vec<bool>,
-        max_trace_height_bits: u8,
         limits: SegmentationLimits,
         memory_config: ProvingMemoryConfig,
     ) -> Self {
@@ -179,7 +154,6 @@ impl SegmentationCtx {
             widths,
             interactions,
             need_rot,
-            max_trace_height_bits,
             limits,
             memory_config,
         );
@@ -209,11 +183,7 @@ impl SegmentationCtx {
     }
 
     pub fn set_max_memory(&mut self, max_memory: usize) {
-        self.params.limits.max_memory = max_memory;
-    }
-
-    pub fn set_max_interactions(&mut self, max_interactions: usize) {
-        self.params.limits.max_interactions = max_interactions;
+        self.params.max_memory = max_memory;
     }
 
     /// Calculate the maximum trace height and corresponding air name
@@ -353,13 +323,13 @@ impl SegmentationCtx {
     /// All padding rows contribute a single message to the interactions (+1) since
     /// we assume chips don't send/receive with nonzero multiplicity on padding rows.
     #[inline(always)]
-    fn calculate_total_interactions(&self, trace_heights: &[u32]) -> usize {
+    fn calculate_total_interactions(&self, trace_heights: &[u32]) -> u64 {
         debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
 
         trace_heights
             .iter()
             .zip(self.params.interactions.iter())
-            .map(|(&height, &interactions)| add_one_or_zero(height) * interactions)
+            .map(|(&height, &interactions)| add_one_or_zero(height) as u64 * interactions as u64)
             .sum()
     }
 
@@ -435,12 +405,12 @@ impl SegmentationCtx {
 
         let (total_memory, main_memory, interaction_memory) =
             self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells);
-        if total_memory > self.params.limits.max_memory {
+        if total_memory > self.params.max_memory {
             tracing::info!(
                 "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5})",
                 instret,
                 ByteSize::b(total_memory as u64),
-                ByteSize::b(self.params.limits.max_memory as u64),
+                ByteSize::b(self.params.max_memory as u64),
                 ByteSize::b(main_memory as u64),
                 ByteSize::b(interaction_memory as u64),
             );
@@ -448,12 +418,12 @@ impl SegmentationCtx {
         }
 
         let total_interactions = self.calculate_total_interactions(trace_heights);
-        if total_interactions > self.params.limits.max_interactions {
+        if total_interactions > u64::from(self.params.max_interactions) {
             tracing::info!(
                 "overshoot: instret {:10} | total interactions ({:10}) > max ({:10})",
                 instret,
                 total_interactions,
-                self.params.limits.max_interactions
+                self.params.max_interactions
             );
             return Some(SegmentationTrigger::Interactions);
         }

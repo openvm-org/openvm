@@ -7,7 +7,7 @@ mod pure;
 
 pub use metered::{
     ctx::{MeteredCtx, MeteredCtxInputs},
-    segment_ctx::Segment,
+    segment_ctx::{Segment, SegmentationLimits},
 };
 pub use metered_cost::MeteredCostCtx;
 pub use preflight::PreflightCtx;

@@ -41,6 +41,7 @@ use super::aot::AotInstance;
 use super::{
     execution_mode::{
         ExecutionCtx, MeteredCostCtx, MeteredCtx, MeteredCtxInputs, PreflightCtx, Segment,
+        SegmentationLimits,
     },
     hasher::poseidon2::vm_poseidon2_hasher,
     interpreter::InterpretedInstance,
@@ -849,7 +850,10 @@ where
     }
 
     /// Convenience method to construct a [MeteredCtx] using data from the stored proving key.
-    pub fn build_metered_ctx(&self, exe: &VmExe<Val<E::SC>>) -> MeteredCtx {
+    pub fn build_metered_ctx(&self, exe: &VmExe<Val<E::SC>>) -> MeteredCtx
+    where
+        Val<E::SC>: PrimeField32,
+    {
         let program_len = exe.program.num_defined_instructions();
 
         let (mut constant_trace_heights, air_names, widths, interactions, need_rot): (
@@ -908,7 +912,11 @@ where
                 widths: &widths,
                 interactions: &interactions,
                 need_rot: &need_rot,
-                max_trace_height_bits: log_stacked_height,
+                segmentation_limits: SegmentationLimits {
+                    max_trace_height_bits: log_stacked_height,
+                    max_memory: self.config().as_ref().segmentation_max_memory,
+                    max_interactions: <Val<E::SC> as PrimeField32>::ORDER_U32,
+                },
             },
             self.engine.proving_memory_config(),
         )
