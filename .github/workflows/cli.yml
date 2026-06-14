@@ -42,7 +42,7 @@ jobs:
           sccache: s3
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: ./.github/actions/sccache
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true

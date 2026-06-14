@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: ./.github/actions/sccache
       - name: Verify GPU setup
         run: |
           nvidia-smi

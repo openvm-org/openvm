@@ -169,6 +169,10 @@ jobs:
           ref: ${{ env.CURRENT_SHA }}
           repository: ${{ env.REPO }}
       - uses: dtolnay/rust-toolchain@stable
+      - name: Configure sccache
+        run: |
+          printf 'server_startup_timeout_ms = 30000\n' > "$RUNNER_TEMP/sccache.conf"
+          echo "SCCACHE_CONF=$RUNNER_TEMP/sccache.conf" >> "$GITHUB_ENV"
       - uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Build openvm-prof
