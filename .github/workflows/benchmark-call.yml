@@ -17,11 +17,6 @@ on:
         required: false
         description: Memory allocator to use (mimalloc or jemalloc)
         default: jemalloc
-      max_segment_length:
-        type: number
-        required: false
-        description: Max segment length for continuations (default 2^20 = 1048576)
-        default: 1048576
       e2e_bench:
         type: boolean
         required: false
@@ -55,11 +50,6 @@ on:
         required: false
         description: Memory allocator to use (mimalloc or jemalloc)
         default: jemalloc
-      max_segment_length:
-        type: number
-        required: false
-        description: Max segment length for continuations (default 2^20 = 1048576)
-        default: 1048576
       e2e_bench:
         type: boolean
         required: false
@@ -187,9 +177,8 @@ jobs:
       - name: Set input args
         run: |
           FEATURES="--features $FEATURE_FLAGS"
-          MAX_SEGMENT_LENGTH="--max_segment_length ${{ inputs.max_segment_length }}"
           OUTPUT_PATH="--output_path $(pwd)/$METRIC_PATH"
-          echo "INPUT_ARGS=${FEATURES} ${MAX_SEGMENT_LENGTH} ${OUTPUT_PATH} ${INPUT_ARGS}" >> $GITHUB_ENV
+          echo "INPUT_ARGS=${FEATURES} ${OUTPUT_PATH} ${INPUT_ARGS}" >> $GITHUB_ENV
           echo "VPMM_PAGES=2048" >> $GITHUB_ENV # 4GB
 
       ##########################################################################

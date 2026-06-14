@@ -106,8 +106,7 @@ jobs:
                 features: $features,
                 id: $id,
                 instance_type: .instance_type,
-                memory_allocator: .memory_allocator,
-                max_segment_length: (.max_segment_length // 1048576)
+                memory_allocator: .memory_allocator
               }
             ]
           ' ./ci/benchmark-config.json)
@@ -128,7 +127,6 @@ jobs:
       benchmark_id: ${{ matrix.benchmark_run.id }}
       instance_type: ${{ matrix.benchmark_run.instance_type }}
       memory_allocator: ${{ matrix.benchmark_run.memory_allocator }}
-      max_segment_length: ${{ matrix.benchmark_run.max_segment_length }}
       e2e_bench: ${{ matrix.benchmark_run.e2e_bench || false }}
       features: ${{ matrix.benchmark_run.features }}
       is_merge_queue: ${{ inputs.is_merge_queue || false }}

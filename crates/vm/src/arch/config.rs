@@ -264,15 +264,6 @@ impl SystemConfig {
         self
     }
 
-    pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
-        let max_segment_len: u32 = max_segment_len
-            .try_into()
-            .expect("max_segment_len must fit in u32");
-        self.segmentation_limits
-            .set_max_trace_height(max_segment_len);
-        self
-    }
-
     /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
     pub fn memory_boundary_air_id(&self) -> usize {
         BOUNDARY_AIR_ID

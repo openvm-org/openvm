@@ -3,9 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use clap::Parser;
 use eyre::{eyre, Result};
 use openvm_circuit::arch::{
-    execution_mode::metered::segment_ctx::{
-        SegmentationLimits, DEFAULT_MAX_MEMORY, DEFAULT_MAX_TRACE_HEIGHT_BITS,
-    },
+    execution_mode::metered::segment_ctx::{SegmentationLimits, DEFAULT_MAX_MEMORY},
     instructions::exe::VmExe,
 };
 use openvm_continuations::CommitBytes;
@@ -122,15 +120,6 @@ enum ProveSubCommand {
 
 #[derive(Clone, Copy, Parser)]
 pub struct SegmentationArgs {
-    /// Trace height threshold, in bits, across all chips for triggering segmentation for
-    /// continuations in the app proof. These thresholds are not exceeded except when they are too
-    /// small.
-    #[arg(
-        long,
-        default_value_t = DEFAULT_MAX_TRACE_HEIGHT_BITS,
-        help_heading = "OpenVM Options"
-    )]
-    pub segment_max_height_bits: u8,
     /// Total memory in bytes used across all chips for triggering segmentation for continuations
     /// in the app proof. These thresholds are not exceeded except when they are too small.
     #[arg(
@@ -389,8 +378,6 @@ fn load_required_root_pk() -> Result<RootProvingKey> {
 
 impl From<SegmentationArgs> for SegmentationLimits {
     fn from(args: SegmentationArgs) -> Self {
-        SegmentationLimits::default()
-            .with_max_trace_height_bits(args.segment_max_height_bits)
-            .with_max_memory(args.segment_max_memory)
+        SegmentationLimits::default().with_max_memory(args.segment_max_memory)
     }
 }

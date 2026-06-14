@@ -27,49 +27,56 @@ pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     suspend_on_segment: bool,
 }
 
+pub struct MeteredCtxInputs<'a> {
+    pub constant_trace_heights: &'a [Option<usize>],
+    pub air_names: &'a [String],
+    pub widths: &'a [usize],
+    pub interactions: &'a [usize],
+    pub need_rot: &'a [bool],
+    pub max_trace_height_bits: u8,
+}
+
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
-    // Note[jpw]: prefer to use `build_metered_ctx` in `VmExecutor` or `VirtualMachine`.
+    // Note: prefer to use `build_metered_ctx` in `VmExecutor` or `VirtualMachine`.
     pub fn new(
-        constant_trace_heights: Vec<Option<usize>>,
-        air_names: Vec<String>,
-        widths: Vec<usize>,
-        interactions: Vec<usize>,
-        need_rot: Vec<bool>,
+        inputs: MeteredCtxInputs<'_>,
         config: &SystemConfig,
         memory_config: ProvingMemoryConfig,
     ) -> Self {
-        let (trace_heights, is_trace_height_constant): (Vec<u32>, Vec<bool>) =
-            constant_trace_heights
-                .iter()
-                .map(|&constant_height| {
-                    if let Some(height) = constant_height {
-                        (height as u32, true)
-                    } else {
-                        (0, false)
-                    }
-                })
-                .unzip();
+        let (trace_heights, is_trace_height_constant): (Vec<u32>, Vec<bool>) = inputs
+            .constant_trace_heights
+            .iter()
+            .map(|&constant_height| {
+                if let Some(height) = constant_height {
+                    (height as u32, true)
+                } else {
+                    (0, false)
+                }
+            })
+            .unzip();
 
         let segmentation_ctx = SegmentationCtx::new(
-            air_names,
-            widths,
-            interactions,
-            need_rot,
+            inputs.air_names.to_vec(),
+            inputs.widths.to_vec(),
+            inputs.interactions.to_vec(),
+            inputs.need_rot.to_vec(),
+            inputs.max_trace_height_bits,
             config.segmentation_limits.clone(),
             memory_config,
         );
-        let memory_ctx = MemoryCtx::new(config, segmentation_ctx.segment_check_insns);
+        let memory_ctx = MemoryCtx::new(config, segmentation_ctx.segment_check_insns());
 
         // Assert that the indices are correct
+        let air_names = segmentation_ctx.air_names();
         debug_assert!(
-            segmentation_ctx.air_names[BOUNDARY_AIR_ID].contains("Boundary"),
+            air_names[BOUNDARY_AIR_ID].contains("Boundary"),
             "air_name={}",
-            segmentation_ctx.air_names[BOUNDARY_AIR_ID]
+            air_names[BOUNDARY_AIR_ID]
         );
         debug_assert!(
-            segmentation_ctx.air_names[MERKLE_AIR_ID].contains("Merkle"),
+            air_names[MERKLE_AIR_ID].contains("Merkle"),
             "air_name={}",
-            segmentation_ctx.air_names[MERKLE_AIR_ID]
+            air_names[MERKLE_AIR_ID]
         );
         let mut ctx = Self {
             trace_heights,
@@ -87,36 +94,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         ctx
     }
 
-    /// This changes the frequency of segment checks. BE CAREFUL when you change this during
-    /// execution!
-    pub fn with_max_trace_height_bits(mut self, max_trace_height_bits: u8) -> Self {
-        self.segmentation_ctx
-            .set_max_trace_height_bits(max_trace_height_bits);
-        let max_trace_height = self.segmentation_ctx.limits.max_trace_height();
-        let max_check_freq = (max_trace_height / 2) as u64;
-        if max_check_freq < self.segmentation_ctx.segment_check_insns {
-            self = self.with_segment_check_insns(max_check_freq);
-        }
-        self
-    }
-
-    /// Sets max trace-height bits, capped by another log2 bound.
-    pub fn with_max_trace_height_bits_bound(
-        self,
-        max_trace_height_bits: u8,
-        max_trace_height_bits_bound: u8,
-    ) -> Self {
-        if max_trace_height_bits > max_trace_height_bits_bound {
-            tracing::warn!(
-                configured_max_trace_height_bits = max_trace_height_bits,
-                max_trace_height_bits_bound,
-                "configured max trace-height bits exceeds bound; using bounded value for segmentation"
-            );
-            return self.with_max_trace_height_bits(max_trace_height_bits_bound);
-        }
-        self.with_max_trace_height_bits(max_trace_height_bits)
-    }
-
     pub fn with_max_memory(mut self, max_memory: usize) -> Self {
         self.segmentation_ctx.set_max_memory(max_memory);
         self
@@ -124,20 +101,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     pub fn with_max_interactions(mut self, max_interactions: usize) -> Self {
         self.segmentation_ctx.set_max_interactions(max_interactions);
-        self
-    }
-
-    pub fn with_segment_check_insns(mut self, segment_check_insns: u64) -> Self {
-        self.segmentation_ctx.segment_check_insns = segment_check_insns;
-        self.segmentation_ctx.instrets_until_check = segment_check_insns;
-
-        // Update memory context with new segment check instructions
-        let page_indices_since_checkpoint_cap =
-            MemoryCtx::<PAGE_BITS>::calculate_checkpoint_capacity(segment_check_insns);
-
-        self.memory_ctx.page_indices_since_checkpoint =
-            vec![0; page_indices_since_checkpoint_cap].into_boxed_slice();
-        self.memory_ctx.page_indices_since_checkpoint_len = 0;
         self
     }
 
@@ -156,8 +119,9 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         if self.segmentation_ctx.instrets_until_check > 0 {
             return false;
         }
-        self.segmentation_ctx.instrets_until_check = self.segmentation_ctx.segment_check_insns;
-        self.segmentation_ctx.instret += self.segmentation_ctx.segment_check_insns;
+        let segment_check_insns = self.segmentation_ctx.segment_check_insns();
+        self.segmentation_ctx.instrets_until_check = segment_check_insns;
+        self.segmentation_ctx.instret += segment_check_insns;
 
         self.memory_ctx
             .lazy_update_boundary_heights(&mut self.trace_heights);
@@ -182,7 +146,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 let trace_heights_str = self
                     .trace_heights
                     .iter()
-                    .zip(self.segmentation_ctx.air_names.iter())
+                    .zip(self.segmentation_ctx.air_names().iter())
                     .filter(|(&height, _)| height > 0)
                     .map(|(&height, name)| format!("  {name} = {height}"))
                     .collect::<Vec<_>>()
@@ -214,10 +178,10 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         println!("{}", "-".repeat(80));
         for ((&width, &height), air_name) in self
             .segmentation_ctx
-            .widths
+            .widths()
             .iter()
             .zip_eq(self.trace_heights.iter())
-            .zip_eq(self.segmentation_ctx.air_names.iter())
+            .zip_eq(self.segmentation_ctx.air_names().iter())
         {
             println!("{:>10} {:>10} {:<30}", width, height, air_name.as_str());
         }

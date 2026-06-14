@@ -80,8 +80,7 @@
       "run_params": [
         {
           "instance_type": "g6.2xlarge",
-          "memory_allocator": "jemalloc",
-          "max_segment_length": 4194304
+          "memory_allocator": "jemalloc"
         }
       ]
     },
@@ -141,8 +140,7 @@
       "run_params": [
         {
           "instance_type": "g6e.4xlarge",
-          "memory_allocator": "jemalloc",
-          "max_segment_length": 4194304
+          "memory_allocator": "jemalloc"
         }
       ]
     }

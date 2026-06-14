@@ -39,7 +39,9 @@ use tracing::{info_span, instrument};
 #[cfg(feature = "aot")]
 use super::aot::AotInstance;
 use super::{
-    execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx, Segment},
+    execution_mode::{
+        ExecutionCtx, MeteredCostCtx, MeteredCtx, MeteredCtxInputs, PreflightCtx, Segment,
+    },
     hasher::poseidon2::vm_poseidon2_hasher,
     interpreter::InterpretedInstance,
     interpreter_preflight::PreflightInterpretedInstance,
@@ -193,22 +195,10 @@ where
 {
     pub fn build_metered_ctx(
         &self,
-        constant_trace_heights: &[Option<usize>],
-        air_names: &[String],
-        widths: &[usize],
-        interactions: &[usize],
-        need_rot: &[bool],
+        inputs: MeteredCtxInputs<'_>,
         memory_config: ProvingMemoryConfig,
     ) -> MeteredCtx {
-        MeteredCtx::new(
-            constant_trace_heights.to_vec(),
-            air_names.to_vec(),
-            widths.to_vec(),
-            interactions.to_vec(),
-            need_rot.to_vec(),
-            self.config.as_ref(),
-            memory_config,
-        )
+        MeteredCtx::new(inputs, self.config.as_ref(), memory_config)
     }
 
     pub fn build_metered_cost_ctx(&self, widths: &[usize]) -> MeteredCostCtx {
@@ -905,30 +895,23 @@ where
             }
         }
 
-        let stacked_max_trace_height_bits = self
+        let log_stacked_height = self
             .engine
             .params()
             .log_stacked_height()
             .try_into()
             .expect("log_stacked_height must fit in u8");
-        let configured_max_trace_height_bits = self
-            .config()
-            .as_ref()
-            .segmentation_limits
-            .max_trace_height_bits;
-        self.executor()
-            .build_metered_ctx(
-                &constant_trace_heights,
-                &air_names,
-                &widths,
-                &interactions,
-                &need_rot,
-                self.engine.proving_memory_config(),
-            )
-            .with_max_trace_height_bits_bound(
-                configured_max_trace_height_bits,
-                stacked_max_trace_height_bits,
-            )
+        self.executor().build_metered_ctx(
+            MeteredCtxInputs {
+                constant_trace_heights: &constant_trace_heights,
+                air_names: &air_names,
+                widths: &widths,
+                interactions: &interactions,
+                need_rot: &need_rot,
+                max_trace_height_bits: log_stacked_height,
+            },
+            self.engine.proving_memory_config(),
+        )
     }
 
     /// Convenience method to construct a [MeteredCostCtx] using data from the stored proving key.
