@@ -33,7 +33,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: ./.github/actions/sccache
       - uses: ./.github/actions/rust-cache-cuda
       - uses: taiki-e/install-action@nextest
       - name: Verify GPU setup

@@ -18,8 +18,8 @@ struct ParallelCli {
 }
 
 fn main() -> eyre::Result<()> {
-    let par_args = ParallelCli::parse();
-    let mut vm_config = SdkVmConfig::builder()
+    let ParallelCli { inner, concurrency } = ParallelCli::parse();
+    let vm_config = SdkVmConfig::builder()
         .system(Default::default())
         .rv32i(Default::default())
         .rv32m(Default::default())
@@ -27,18 +27,19 @@ fn main() -> eyre::Result<()> {
         .keccak(Default::default())
         .build()
         .optimize();
-    let args = par_args.inner;
-    let concurrency = par_args.concurrency;
 
     let elf = Elf::decode(
         include_bytes!("../../../guest/keccak256_iter/elf/openvm-keccak256-iter-program.elf"),
         MEM_SIZE as u32,
     )?;
-    args.apply_config(&mut vm_config);
 
     let num_keccak_iters: u64 = 1 << 12;
     let mut stdin = StdIn::default();
     stdin.write(&num_keccak_iters);
+
+    if !inner.app_only {
+        return inner.run(vm_config, elf, stdin);
+    }
 
     let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
     let app_config = AppConfig::new(vm_config, default_bench_app_params());

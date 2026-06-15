@@ -124,21 +124,19 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
         let bitset_size = 1 << (merkle_height.saturating_sub(PAGE_BITS));
         let addr_space_size = (1 << memory_dimensions.addr_space_height) + 1;
-        let page_indices_since_checkpoint_cap =
-            Self::calculate_checkpoint_capacity(segment_check_insns);
+        let checkpoint_capacity = Self::calculate_checkpoint_capacity(segment_check_insns);
 
         Self {
             memory_dimensions,
             page_indices: BitSet::new(bitset_size),
             addr_space_access_count: vec![0; addr_space_size].into(),
-            page_indices_since_checkpoint: vec![0; page_indices_since_checkpoint_cap]
-                .into_boxed_slice(),
+            page_indices_since_checkpoint: vec![0; checkpoint_capacity].into_boxed_slice(),
             page_indices_since_checkpoint_len: 0,
         }
     }
 
     #[inline(always)]
-    pub(super) fn calculate_checkpoint_capacity(segment_check_insns: u64) -> usize {
+    fn calculate_checkpoint_capacity(segment_check_insns: u64) -> usize {
         segment_check_insns as usize * MAX_MEM_PAGE_OPS_PER_INSN
     }
 

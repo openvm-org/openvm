@@ -3,10 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use clap::Parser;
 use eyre::{eyre, Result};
 use openvm_circuit::arch::{
-    execution_mode::metered::segment_ctx::{
-        SegmentationLimits, DEFAULT_MAX_MEMORY, DEFAULT_MAX_TRACE_HEIGHT_BITS,
-    },
-    instructions::exe::VmExe,
+    execution_mode::metered::segment_ctx::DEFAULT_MAX_MEMORY, instructions::exe::VmExe,
 };
 use openvm_continuations::CommitBytes;
 #[cfg(feature = "evm-prove")]
@@ -122,15 +119,6 @@ enum ProveSubCommand {
 
 #[derive(Clone, Copy, Parser)]
 pub struct SegmentationArgs {
-    /// Trace height threshold, in bits, across all chips for triggering segmentation for
-    /// continuations in the app proof. These thresholds are not exceeded except when they are too
-    /// small.
-    #[arg(
-        long,
-        default_value_t = DEFAULT_MAX_TRACE_HEIGHT_BITS,
-        help_heading = "OpenVM Options"
-    )]
-    pub segment_max_height_bits: u8,
     /// Total memory in bytes used across all chips for triggering segmentation for continuations
     /// in the app proof. These thresholds are not exceeded except when they are too small.
     #[arg(
@@ -318,7 +306,7 @@ fn configure_app_pk(app_pk: &mut AppProvingKey<SdkVmConfig>, segmentation_args: 
         .vm_config
         .system
         .config
-        .set_segmentation_limits((*segmentation_args).into());
+        .set_segmentation_max_memory(segmentation_args.segment_max_memory);
 }
 
 fn target_dir_from_cargo_args(cargo_args: &RunCargoArgs) -> Result<PathBuf> {
@@ -385,15 +373,4 @@ fn load_required_root_pk() -> Result<RootProvingKey> {
             root_pk_path.display()
         )
     })
-}
-
-impl From<SegmentationArgs> for SegmentationLimits {
-    fn from(args: SegmentationArgs) -> Self {
-        SegmentationLimits::default()
-            .with_max_trace_height(
-                1u32.checked_shl(args.segment_max_height_bits as u32)
-                    .expect("segment_max_height_bits too large"),
-            )
-            .with_max_memory(args.segment_max_memory)
-    }
 }

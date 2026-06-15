@@ -7,7 +7,6 @@ import subprocess
 def run_cargo_command(
     bin_name,
     feature_flags,
-    max_segment_length,
     output_path,
     app_only,
     evm,
@@ -34,8 +33,6 @@ def run_cargo_command(
         "--",
     ]
 
-    if max_segment_length is not None:
-        command.extend(["--max_segment_length", max_segment_length])
     if app_only:
         command.extend(["--app-only"])
     if evm:
@@ -71,9 +68,6 @@ def bench():
     parser = argparse.ArgumentParser()
     parser.add_argument("bench_name", type=str, help="Name of the benchmark to run")
     parser.add_argument(
-        "--max_segment_length", type=str, help="Max segment length for continuations"
-    )
-    parser.add_argument(
         "--kzg-params-dir",
         type=str,
         help="Directory containing KZG trusted setup files",
@@ -105,7 +99,6 @@ def bench():
     run_cargo_command(
         args.bench_name,
         feature_flags,
-        args.max_segment_length,
         args.output_path,
         args.app_only,
         args.evm,

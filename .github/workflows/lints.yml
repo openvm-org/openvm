@@ -43,7 +43,7 @@ jobs:
           skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf
           ignore_words_file: .codespellignore
       - uses: dtolnay/rust-toolchain@stable
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: ./.github/actions/sccache
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -112,7 +112,7 @@ jobs:
           sccache: s3
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: ./.github/actions/sccache
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -143,7 +143,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: ./.github/actions/sccache
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true

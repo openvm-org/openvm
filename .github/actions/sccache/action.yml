@@ -1,0 +1,13 @@
+name: "Setup sccache"
+description: "Configures sccache startup timeout and delegates to mozilla-actions/sccache-action."
+
+runs:
+  using: "composite"
+  steps:
+    - name: Configure sccache
+      shell: bash
+      run: |
+        printf 'server_startup_timeout_ms = 30000\n' > "$RUNNER_TEMP/sccache.conf"
+        echo "SCCACHE_CONF=$RUNNER_TEMP/sccache.conf" >> "$GITHUB_ENV"
+
+    - uses: mozilla-actions/sccache-action@v0.0.9

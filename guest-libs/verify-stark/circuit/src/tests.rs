@@ -62,13 +62,12 @@ cfg_if::cfg_if! {
     }
 }
 
-const LOG_MAX_TRACE_HEIGHT: usize = 20;
 const DEFAULT_MAX_NUM_PROOFS: usize = 4;
 
 fn test_rv32im_config() -> Rv32ImConfig {
     Rv32ImConfig {
         rv32i: Rv32IConfig {
-            system: test_system_config().with_max_segment_len(1 << LOG_MAX_TRACE_HEIGHT),
+            system: test_system_config(),
             ..Default::default()
         },
         ..Default::default()
