@@ -36,11 +36,11 @@ jobs:
               features: "",
             }
           # TODO(rvr): re-enable once RV64 RVR support lands.
-          # - {
-          #     labels: "runner=64cpu-linux-x64/image=ubuntu24-full-x64",
-          #     image: "ubuntu24-full-x64",
-          #     features: "rvr",
-          #   }
+          - {
+              labels: "runner=64cpu-linux-x64/image=ubuntu24-full-x64",
+              image: "ubuntu24-full-x64",
+              features: "rvr",
+            }
           - {
               labels: "image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized",
               image: "ubuntu24-gpu-x64",
