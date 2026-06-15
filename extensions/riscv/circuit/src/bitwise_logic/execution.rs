@@ -18,25 +18,25 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use crate::{
     adapters::{imm_to_rv64_bytes, imm_to_rv64_u64},
     common::*,
-    XorOrAndExecutor,
+    BitwiseLogicExecutor,
 };
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-pub(super) struct XorOrAndPreCompute {
+pub(super) struct BitwiseLogicPreCompute {
     c: u64,
     a: u8,
     b: u8,
 }
 
-impl<A, const LIMB_BITS: usize> XorOrAndExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<A, const LIMB_BITS: usize> BitwiseLogicExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     /// Return `is_imm`, true if `e` is RV64_IMM_AS.
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut XorOrAndPreCompute,
+        data: &mut BitwiseLogicPreCompute,
     ) -> Result<bool, StaticProgramError> {
         let Instruction { a, b, c, d, e, .. } = inst;
         let e_u32 = e.as_canonical_u32();
@@ -47,7 +47,7 @@ impl<A, const LIMB_BITS: usize> XorOrAndExecutor<A, { RV64_REGISTER_NUM_LIMBS },
         }
         let is_imm = e_u32 == RV64_IMM_AS;
         let c_u32 = c.as_canonical_u32();
-        *data = XorOrAndPreCompute {
+        *data = BitwiseLogicPreCompute {
             c: if is_imm {
                 imm_to_rv64_u64(c_u32)
             } else {
@@ -73,20 +73,20 @@ macro_rules! dispatch {
                 (false, BaseAluOpcode::OR) => $execute_impl::<_, _, false, OrOp>,
                 (true, BaseAluOpcode::AND) => $execute_impl::<_, _, true, AndOp>,
                 (false, BaseAluOpcode::AND) => $execute_impl::<_, _, false, AndOp>,
-                _ => unreachable!("XorOrAndExecutor received non-XOR/OR/AND opcode"),
+                _ => unreachable!("BitwiseLogicExecutor received non-XOR/OR/AND opcode"),
             },
         )
     };
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for XorOrAndExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for BitwiseLogicExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
-        size_of::<XorOrAndPreCompute>()
+        size_of::<BitwiseLogicPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -99,7 +99,7 @@ where
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut XorOrAndPreCompute = data.borrow_mut();
+        let data: &mut BitwiseLogicPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
 
         dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
@@ -115,7 +115,7 @@ where
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut XorOrAndPreCompute = data.borrow_mut();
+        let data: &mut BitwiseLogicPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
 
         dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
@@ -123,13 +123,13 @@ where
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for XorOrAndExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for BitwiseLogicExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<XorOrAndPreCompute>>()
+        size_of::<E2PreCompute<BitwiseLogicPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -143,7 +143,7 @@ where
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<XorOrAndPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<BitwiseLogicPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
@@ -161,7 +161,7 @@ where
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<XorOrAndPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<BitwiseLogicPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
@@ -171,7 +171,7 @@ where
 
 #[cfg(feature = "aot")]
 impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
-    for XorOrAndExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for BitwiseLogicExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -235,7 +235,7 @@ where
 
 #[cfg(feature = "aot")]
 impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
-    for XorOrAndExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for BitwiseLogicExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -262,7 +262,7 @@ unsafe fn execute_e12_impl<
     const IS_IMM: bool,
     OP: AluOp,
 >(
-    pre_compute: &XorOrAndPreCompute,
+    pre_compute: &BitwiseLogicPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
@@ -291,8 +291,8 @@ unsafe fn execute_e1_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &XorOrAndPreCompute =
-        std::slice::from_raw_parts(pre_compute, size_of::<XorOrAndPreCompute>()).borrow();
+    let pre_compute: &BitwiseLogicPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<BitwiseLogicPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, exec_state);
 }
 
@@ -307,9 +307,11 @@ unsafe fn execute_e2_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<XorOrAndPreCompute> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<XorOrAndPreCompute>>())
-            .borrow();
+    let pre_compute: &E2PreCompute<BitwiseLogicPreCompute> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<BitwiseLogicPreCompute>>(),
+    )
+    .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

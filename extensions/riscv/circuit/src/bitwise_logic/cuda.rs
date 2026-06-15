@@ -9,26 +9,26 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
-use super::{XorOrAndCoreCols, XorOrAndCoreRecord};
+use super::{BitwiseLogicCoreCols, BitwiseLogicCoreRecord};
 use crate::{
     adapters::{
         Rv64BaseAluAdapterCols, Rv64BaseAluAdapterRecord, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
-    cuda_abi::xor_or_and_cuda::tracegen,
+    cuda_abi::bitwise_logic_cuda::tracegen,
 };
 
 #[derive(new)]
-pub struct Rv64XorOrAndChipGpu {
+pub struct Rv64BitwiseLogicChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64XorOrAndChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv64BitwiseLogicChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
             Rv64BaseAluAdapterRecord,
-            XorOrAndCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+            BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
@@ -36,8 +36,9 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64XorOrAndChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = XorOrAndCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>::width()
-            + Rv64BaseAluAdapterCols::<F>::width();
+        let trace_width =
+            BitwiseLogicCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>::width()
+                + Rv64BaseAluAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
