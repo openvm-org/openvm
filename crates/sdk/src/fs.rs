@@ -113,8 +113,7 @@ pub fn write_object_to_file<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> R
     write_to_file_bitcode(path, data)
 }
 
-/// Writes a [`Halo2ProvingKey`](crate::keygen::Halo2ProvingKey) to `path` in the streaming
-/// Halo2-PK format.
+/// Writes a [`Halo2ProvingKey`] to `path` in the streaming Halo2 pk format.
 #[cfg(feature = "evm-prove")]
 pub fn write_halo2_pk_to_file<P: AsRef<Path>>(path: P, halo2_pk: &Halo2ProvingKey) -> Result<()> {
     if let Some(parent) = path.as_ref().parent() {
@@ -129,8 +128,7 @@ pub fn write_halo2_pk_to_file<P: AsRef<Path>>(path: P, halo2_pk: &Halo2ProvingKe
     Ok(())
 }
 
-/// Reads a [`Halo2ProvingKey`](crate::keygen::Halo2ProvingKey) written by
-/// [`write_halo2_pk_to_file`].
+/// Reads a [`Halo2ProvingKey`] written by [`write_halo2_pk_to_file`].
 #[cfg(feature = "evm-prove")]
 pub fn read_halo2_pk_from_file<P: AsRef<Path>>(path: P) -> Result<Halo2ProvingKey> {
     let file = File::open(&path).map_err(|e| read_error(&path, e.into()))?;
