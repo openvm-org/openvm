@@ -36,6 +36,10 @@ pub fn default_root_pk_path() -> String {
     env::var("HOME").unwrap() + "/.openvm/root.pk"
 }
 
+pub fn default_halo2_pk_path() -> String {
+    env::var("HOME").unwrap() + "/.openvm/halo2.pk"
+}
+
 pub fn default_evm_halo2_verifier_path() -> String {
     env::var("HOME").unwrap() + "/.openvm/halo2/"
 }

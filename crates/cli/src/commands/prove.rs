@@ -232,10 +232,12 @@ impl ProveCmd {
                 configure_app_pk(&mut app_pk, segmentation_args);
                 let agg_pk = load_required_agg_pk(&keys.agg_prefix_pk, cargo_args)?;
                 let root_pk = load_required_root_pk()?;
+                let halo2_pk = load_required_halo2_pk()?;
                 let sdk = Sdk::builder()
                     .app_pk(app_pk)
                     .agg_pk(agg_pk)
                     .root_pk(root_pk)
+                    .halo2_pk(halo2_pk)
                     .agg_tree_config(*agg_tree_config)
                     .build()?;
                 let mut prover = sdk.evm_prover(exe)?;
@@ -371,6 +373,17 @@ fn load_required_root_pk() -> Result<RootProvingKey> {
         eyre!(
             "Failed to read root proving key from {}: {e}\nRun 'cargo openvm setup --evm' first to generate it",
             root_pk_path.display()
+        )
+    })
+}
+
+#[cfg(feature = "evm-prove")]
+fn load_required_halo2_pk() -> Result<openvm_sdk::keygen::Halo2ProvingKey> {
+    let halo2_pk_path = PathBuf::from(crate::default::default_halo2_pk_path());
+    openvm_sdk::fs::read_halo2_pk_from_file(&halo2_pk_path).map_err(|e| {
+        eyre!(
+            "Failed to read Halo2 proving key from {}: {e}\nRun 'cargo openvm setup --evm' first to generate it",
+            halo2_pk_path.display()
         )
     })
 }

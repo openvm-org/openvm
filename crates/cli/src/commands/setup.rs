@@ -81,6 +81,18 @@ impl SetupCmd {
 
         Self::download_params(10, MAX_HALO2_VERIFIER_K_FOR_DOWNLOAD as u32).await?;
 
+        let halo2_pk_path = PathBuf::from(crate::default::default_halo2_pk_path());
+        if !self.force && halo2_pk_path.exists() {
+            println!(
+                "Halo2 proving key already exists in {}",
+                halo2_pk_path.display()
+            );
+        } else if self.download {
+            Self::download_halo2_pk(&halo2_pk_path).await?;
+        } else {
+            Self::generate_halo2_pk(&sdk, &halo2_pk_path)?;
+        }
+
         let verifier_dir = PathBuf::from(default_evm_halo2_verifier_path());
         let versioned_verifier_dir = verifier_dir.join("src").join(format!("v{OPENVM_VERSION}"));
         if !self.force && Self::verifier_artifacts_exist(&versioned_verifier_dir) {
@@ -88,10 +100,7 @@ impl SetupCmd {
                 "EVM verifier artifacts already exist in {}",
                 verifier_dir.display()
             );
-            return Ok(());
-        }
-
-        if self.download {
+        } else if self.download {
             Self::download_verifier(&versioned_verifier_dir).await?;
         } else {
             Self::generate_verifier(&sdk, &verifier_dir)?;
@@ -151,6 +160,27 @@ impl SetupCmd {
         }
     }
 
+    fn generate_halo2_pk(sdk: &Sdk, halo2_pk_path: &Path) -> Result<()> {
+        #[cfg(feature = "evm-prove")]
+        {
+            use openvm_sdk::fs::write_halo2_pk_to_file;
+
+            println!("Generating Halo2 proving key locally. Tip: use `--download` to download a pre-built key from S3 instead.");
+            println!("Writing Halo2 proving key to {}", halo2_pk_path.display());
+            write_halo2_pk_to_file(halo2_pk_path, &sdk.halo2_pk())?;
+            Ok(())
+        }
+
+        #[cfg(not(feature = "evm-prove"))]
+        {
+            let _ = sdk;
+            let _ = halo2_pk_path;
+            Err(eyre!(
+                "this cargo-openvm build does not include local Halo2 proving key generation support; rerun with --download"
+            ))
+        }
+    }
+
     async fn download_verifier(versioned_verifier_dir: &PathBuf) -> Result<()> {
         create_dir_all(versioned_verifier_dir)?;
         let interface_dir = versioned_verifier_dir.join("interfaces");
@@ -205,6 +235,39 @@ impl SetupCmd {
                 write(local_path, data.into_bytes())?;
             }
         }
+
+        Ok(())
+    }
+
+    async fn download_halo2_pk(halo2_pk_path: &Path) -> Result<()> {
+        if let Some(parent) = halo2_pk_path.parent() {
+            create_dir_all(parent)?;
+        }
+
+        let config = defaults(BehaviorVersion::latest())
+            .region(Region::new("us-east-1"))
+            .no_credentials()
+            .load()
+            .await;
+        let client = Client::new(&config);
+
+        const ARTIFACTS_BUCKET: &str = "openvm-public-artifacts-us-east-1";
+        const FULL_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+        let key = format!("v{FULL_VERSION}/halo2/v{OPENVM_VERSION}/halo2.pk");
+        println!(
+            "Downloading Halo2 proving key to {}",
+            halo2_pk_path.display()
+        );
+        let resp = client
+            .get_object()
+            .bucket(ARTIFACTS_BUCKET)
+            .key(&key)
+            .send()
+            .await
+            .map_err(|e| eyre!("Failed to download s3://{ARTIFACTS_BUCKET}/{key}: {e}"))?;
+        let data = resp.body.collect().await?;
+        write(halo2_pk_path, data.into_bytes())?;
 
         Ok(())
     }
