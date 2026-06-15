@@ -1,3 +1,5 @@
+#[cfg(feature = "evm-prove")]
+use std::io::{BufReader, BufWriter, Write};
 use std::{
     fs::{create_dir_all, read, write, File},
     path::Path,
@@ -9,6 +11,7 @@ use serde::{de::DeserializeOwned, Serialize};
 
 #[cfg(feature = "evm-prove")]
 use crate::{
+    keygen::Halo2ProvingKey,
     types::{EvmHalo2Verifier, EvmVerifierByteCode},
     OPENVM_VERSION,
 };
@@ -108,6 +111,31 @@ pub fn read_object_from_file<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Re
 
 pub fn write_object_to_file<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Result<()> {
     write_to_file_bitcode(path, data)
+}
+
+/// Writes a [`Halo2ProvingKey`](crate::keygen::Halo2ProvingKey) to `path` in the streaming
+/// Halo2-PK format.
+#[cfg(feature = "evm-prove")]
+pub fn write_halo2_pk_to_file<P: AsRef<Path>>(path: P, halo2_pk: &Halo2ProvingKey) -> Result<()> {
+    if let Some(parent) = path.as_ref().parent() {
+        create_dir_all(parent).map_err(|e| write_error(&path, e.into()))?;
+    }
+    let file = File::create(&path).map_err(|e| write_error(&path, e.into()))?;
+    let mut writer = BufWriter::new(file);
+    halo2_pk
+        .encode(&mut writer)
+        .map_err(|e| write_error(&path, e.into()))?;
+    writer.flush().map_err(|e| write_error(&path, e.into()))?;
+    Ok(())
+}
+
+/// Reads a [`Halo2ProvingKey`](crate::keygen::Halo2ProvingKey) written by
+/// [`write_halo2_pk_to_file`].
+#[cfg(feature = "evm-prove")]
+pub fn read_halo2_pk_from_file<P: AsRef<Path>>(path: P) -> Result<Halo2ProvingKey> {
+    let file = File::open(&path).map_err(|e| read_error(&path, e.into()))?;
+    let mut reader = BufReader::new(file);
+    Halo2ProvingKey::decode(&mut reader).map_err(|e| read_error(&path, e.into()))
 }
 
 fn read_from_file_bitcode<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {

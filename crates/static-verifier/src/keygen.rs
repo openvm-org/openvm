@@ -47,7 +47,7 @@ impl StaticVerifierCircuit {
 
 /// High-level proving key that owns a [`StaticVerifierCircuit`], [`Halo2ProvingPinning`], and
 /// [`StaticVerifierShape`].
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct StaticVerifierProvingKey {
     pub circuit: StaticVerifierCircuit,
     pub pinning: Halo2ProvingPinning,
