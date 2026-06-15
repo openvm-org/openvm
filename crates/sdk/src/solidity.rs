@@ -216,7 +216,9 @@ pub(crate) fn verify_evm_halo2_proof(
     let deployment_code = &openvm_verifier.artifact.bytecode;
 
     let gas_cost = openvm_static_verifier::keygen::evm_verify(deployment_code, &raw_evm_proof)
-        .map_err(|reason| SdkError::Other(eyre::eyre!("Sdk::verify_openvm_evm_proof: {reason}")))?;
+        .map_err(|reason| {
+            SdkError::Other(eyre::eyre!("EVM proof verification failed: {reason}"))
+        })?;
 
     Ok(gas_cost)
 }

@@ -188,7 +188,7 @@ pub fn run_evm_benchmark(
         let sdk = builder.build()?;
         let evm_proof = sdk.prove_evm(exe, stdin, &[])?;
         let verifier = sdk.generate_halo2_verifier_solidity()?;
-        let gas_cost = Sdk::verify_evm_halo2_proof(&verifier, evm_proof)?;
+        let gas_cost = Sdk::verify_evm_halo2_proof(&verifier, evm_proof, None)?;
         tracing::info!("EVM verification gas cost: {gas_cost}");
         Ok(())
     })
