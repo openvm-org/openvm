@@ -18,10 +18,7 @@ struct ParallelCli {
 }
 
 fn main() -> eyre::Result<()> {
-    let ParallelCli {
-        inner: _,
-        concurrency,
-    } = ParallelCli::parse();
+    let ParallelCli { inner, concurrency } = ParallelCli::parse();
     let vm_config = SdkVmConfig::builder()
         .system(Default::default())
         .rv32i(Default::default())
@@ -39,6 +36,10 @@ fn main() -> eyre::Result<()> {
     let num_keccak_iters: u64 = 1 << 12;
     let mut stdin = StdIn::default();
     stdin.write(&num_keccak_iters);
+
+    if !inner.app_only {
+        return inner.run(vm_config, elf, stdin);
+    }
 
     let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
     let app_config = AppConfig::new(vm_config, default_bench_app_params());
