@@ -101,14 +101,13 @@ jobs:
         run: |
           "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
           EXTRA_ARGS=()
-          # TODO(rvr): restore this branch when the rvr matrix entries above are re-enabled.
           if [[ "${{ matrix.crate.rvr }}" == 'true' ]]; then
             if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
               EXTRA_ARGS+=(--features=bn254,bls12_381,rvr -E 'not test(fallback)')
             else
               EXTRA_ARGS+=(--features=rvr)
             fi
-          if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
+          elif [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
             EXTRA_ARGS+=(--features=bn254,bls12_381 -E 'not test(fallback)')
           fi
 
