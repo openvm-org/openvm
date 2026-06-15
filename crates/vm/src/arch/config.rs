@@ -16,7 +16,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
 use crate::{
     arch::{
-        execution_mode::metered::segment_ctx::SegmentationLimits, AirInventory, AirInventoryError,
+        execution_mode::metered::segment_ctx::DEFAULT_MAX_MEMORY, AirInventory, AirInventoryError,
         Arena, ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
     },
     system::{
@@ -33,6 +33,10 @@ pub const DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 pub const POSEIDON2_WIDTH: usize = 16;
 /// Offset for address space indices. This is used to distinguish between different memory spaces.
 pub const ADDR_SPACE_OFFSET: u32 = 1;
+
+fn default_segmentation_max_memory() -> usize {
+    DEFAULT_MAX_MEMORY
+}
 /// Returns a Poseidon2 config for the VM.
 pub fn vm_poseidon2_config<F: Field>() -> Poseidon2Config<F> {
     Poseidon2Config::default()
@@ -223,12 +227,12 @@ pub struct SystemConfig {
     /// Public values are stored in a special address space.
     /// `num_public_values` indicates the number of allowed addresses in that address space.
     pub num_public_values: usize,
-    /// Segmentation limits
+    /// Max memory in bytes used across all chips for triggering segmentation.
     /// This field is skipped in serde as it's only used in execution and
     /// not needed after any serialize/deserialize.
-    #[serde(skip, default)]
+    #[serde(skip, default = "default_segmentation_max_memory")]
     #[getset(set = "pub")]
-    pub segmentation_limits: SegmentationLimits,
+    pub segmentation_max_memory: usize,
 }
 
 impl SystemConfig {
@@ -246,7 +250,7 @@ impl SystemConfig {
             max_constraint_degree,
             memory_config,
             num_public_values,
-            segmentation_limits: SegmentationLimits::default(),
+            segmentation_max_memory: DEFAULT_MAX_MEMORY,
         }
     }
 
@@ -261,12 +265,6 @@ impl SystemConfig {
     pub fn with_public_values(mut self, num_public_values: usize) -> Self {
         self.num_public_values = num_public_values;
         self.memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
-        self
-    }
-
-    pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
-        self.segmentation_limits
-            .set_max_trace_height(max_segment_len as u32);
         self
     }
 

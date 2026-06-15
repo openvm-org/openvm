@@ -34,7 +34,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: ./.github/actions/sccache
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
@@ -66,7 +66,7 @@ jobs:
       # - name: Run async concurrency test
       #   working-directory: benchmarks/prove
       #   run: |
-      #     CUDA_OPT_LEVEL=3 MAX_CONCURRENCY=5 cargo run --bin async_regex --features cuda,async -- --max-segment-length $((1<<20)) --segment-max-memory 16106127360
+      #     CUDA_OPT_LEVEL=3 MAX_CONCURRENCY=5 cargo run --bin async_regex --features cuda,async -- --segment-max-memory 16106127360
 
       - name: sccache stats
         if: always()

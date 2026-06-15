@@ -17,16 +17,11 @@ use openvm_stark_sdk::{
 use openvm_transpiler::{elf::Elf, FromElf};
 use openvm_verify_stark_host::{verify_vm_stark_proof_decoded, vk::VmStarkVerifyingKey};
 
-pub const DEFAULT_MAX_SEGMENT: u32 = 1 << 20;
 pub const DEFAULT_LOG_STACKED_HEIGHT: usize = 21;
 
 #[derive(Parser, Debug)]
 #[command(allow_external_subcommands = true)]
 pub struct BenchmarkCli {
-    /// Max trace height per chip in segment for continuations
-    #[arg(long, alias = "max_segment_length")]
-    pub max_segment_length: Option<u32>,
-
     /// Only runs the app proof
     #[arg(long)]
     pub app_only: bool,
@@ -45,21 +40,7 @@ pub struct BenchmarkCli {
 }
 
 impl BenchmarkCli {
-    /// Applies CLI-specified segmentation config to the VM config.
-    /// The max trace height is always rounded up to the next power of two.
-    pub fn apply_config(&self, vm_config: &mut SdkVmConfig) {
-        let max_height = self
-            .max_segment_length
-            .unwrap_or(DEFAULT_MAX_SEGMENT)
-            .next_power_of_two();
-        vm_config
-            .as_mut()
-            .segmentation_limits
-            .set_max_trace_height(max_height);
-    }
-
-    pub fn run(&self, mut vm_config: SdkVmConfig, elf: Elf, stdin: StdIn) -> eyre::Result<()> {
-        self.apply_config(&mut vm_config);
+    pub fn run(&self, vm_config: SdkVmConfig, elf: Elf, stdin: StdIn) -> eyre::Result<()> {
         if self.app_only {
             run_default_app_benchmark(vm_config, elf, stdin)
         } else if self.evm {

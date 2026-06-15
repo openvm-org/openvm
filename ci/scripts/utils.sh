@@ -12,21 +12,18 @@ add_metadata_and_flamegraphs() {
     inputs=$(echo "$matrix" | jq -r --arg id "$id" '.[] |
       select(.id == $id) |
       {
-        max_segment_length: .max_segment_length,
         instance_type: .instance_type,
         memory_allocator: .memory_allocator
       }')
     echo "inputs: $inputs"
 
     if [ ! -z "$inputs" ]; then
-      max_segment_length=$(echo "$inputs" | jq -r '.max_segment_length')
       instance_type=$(echo "$inputs" | jq -r '.instance_type')
       memory_allocator=$(echo "$inputs" | jq -r '.memory_allocator')
 
       # Call add_metadata for each file with its corresponding data
       add_metadata \
         "$md_path" \
-        "$max_segment_length" \
         "$instance_type" \
         "$memory_allocator" \
         "$commit_url" \
@@ -36,11 +33,10 @@ add_metadata_and_flamegraphs() {
 
 add_metadata() {
     local result_path="$1"
-    local max_segment_length="$2"
-    local instance_type="$3"
-    local memory_allocator="$4"
-    local commit_url="$5"
-    local benchmark_workflow_url="$6"
+    local instance_type="$2"
+    local memory_allocator="$3"
+    local commit_url="$4"
+    local benchmark_workflow_url="$5"
     # vars: $FLAMEGRAPHS, $S3_PUBLIC_PATH_BASE, $S3_PUBLIC_URL_BASE, $CURRENT_SHA
 
     # Upload memory chart SVG to S3 and update md link
@@ -68,8 +64,6 @@ add_metadata() {
         echo "" >> $result_path
     fi
     echo "Commit: ${commit_url}" >> $result_path
-    echo "" >> $result_path
-    echo "Max Segment Length: $max_segment_length" >> $result_path
     echo "" >> $result_path
     echo "Instance Type: $instance_type" >> $result_path
     echo "" >> $result_path
