@@ -124,5 +124,9 @@ name = "sdk_evm"
 path = "examples/sdk_evm.rs"
 required-features = ["evm-verify"]
 
+[[bin]]
+name = "compute_vk_soundness"
+path = "src/bin/compute_vk_soundness.rs"
+
 # [package.metadata.cargo-shear]
 # ignored = ["derive_more", "rand"]
