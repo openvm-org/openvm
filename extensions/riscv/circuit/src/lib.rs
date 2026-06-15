@@ -36,7 +36,8 @@ mod loadstore;
 mod mul;
 mod mul_w;
 mod mulh;
-mod shift;
+mod shift_left;
+mod shift_right;
 mod shift_w;
 
 pub use auipc::*;
@@ -55,7 +56,8 @@ pub use loadstore::*;
 pub use mul::*;
 pub use mul_w::*;
 pub use mulh::*;
-pub use shift::*;
+pub use shift_left::*;
+pub use shift_right::*;
 pub use shift_w::*;
 
 mod extension;

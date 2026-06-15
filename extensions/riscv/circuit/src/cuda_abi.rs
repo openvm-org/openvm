@@ -283,7 +283,19 @@ pub mod shift_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_shift_tracegen(
+        fn _rv64_shift_left_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            d_bitwise_lookup: *mut u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _rv64_shift_right_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -296,7 +308,7 @@ pub mod shift_cuda {
         ) -> i32;
     }
 
-    pub unsafe fn tracegen(
+    pub unsafe fn tracegen_left(
         d_trace: &DeviceBuffer<F>,
         height: usize,
         d_records: &DeviceBuffer<u8>,
@@ -305,7 +317,29 @@ pub mod shift_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_shift_tracegen(
+        CudaError::from_result(_rv64_shift_left_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+
+    pub unsafe fn tracegen_right(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_range_checker: &DeviceBuffer<F>,
+        d_bitwise_lookup: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rv64_shift_right_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -655,7 +689,19 @@ pub mod shift_w_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_shift_w_tracegen(
+        fn _rv64_shift_w_left_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            d_bitwise_lookup: *mut u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _rv64_shift_w_right_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -668,7 +714,7 @@ pub mod shift_w_cuda {
         ) -> i32;
     }
 
-    pub unsafe fn tracegen(
+    pub unsafe fn tracegen_left(
         d_trace: &DeviceBuffer<F>,
         height: usize,
         d_records: &DeviceBuffer<u8>,
@@ -677,7 +723,29 @@ pub mod shift_w_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_shift_w_tracegen(
+        CudaError::from_result(_rv64_shift_w_left_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+
+    pub unsafe fn tracegen_right(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_range_checker: &DeviceBuffer<F>,
+        d_bitwise_lookup: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rv64_shift_w_right_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,

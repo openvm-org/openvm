@@ -33,6 +33,7 @@ use openvm_riscv_adapters::{
     Rv64VecHeapBranchU16AdapterFiller, Rv64VecHeapU16AdapterAir, Rv64VecHeapU16AdapterExecutor,
 };
 use openvm_riscv_circuit::Rv64ImCpuProverExt;
+use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::VmRvrExtension;
@@ -105,7 +106,8 @@ pub enum Int256Executor {
     BranchEqual256(Rv64BranchEqual256Executor),
     BranchLessThan256(Rv64BranchLessThan256Executor),
     Multiplication256(Rv64Multiplication256Executor),
-    Shift256(Rv64Shift256Executor),
+    ShiftLeft256(Rv64ShiftLeft256Executor),
+    ShiftRight256(Rv64ShiftRight256Executor),
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
@@ -157,11 +159,27 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         );
         inventory.add_executor(mult, Rv64Mul256Opcode::iter().map(|x| x.global_opcode()))?;
 
-        let shift = Rv64Shift256Executor::new(
+        let shift_left = Rv64ShiftLeft256Executor::new(
             AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(byte_ptr_max_bits)),
             Rv64Shift256Opcode::CLASS_OFFSET,
         );
-        inventory.add_executor(shift, Rv64Shift256Opcode::iter().map(|x| x.global_opcode()))?;
+        inventory.add_executor(
+            shift_left,
+            [Rv64Shift256Opcode(ShiftOpcode::SLL)].map(|x| x.global_opcode()),
+        )?;
+
+        let shift_right = Rv64ShiftRight256Executor::new(
+            AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(byte_ptr_max_bits)),
+            Rv64Shift256Opcode::CLASS_OFFSET,
+        );
+        inventory.add_executor(
+            shift_right,
+            [
+                Rv64Shift256Opcode(ShiftOpcode::SRL),
+                Rv64Shift256Opcode(ShiftOpcode::SRA),
+            ]
+            .map(|x| x.global_opcode()),
+        )?;
 
         Ok(())
     }
@@ -269,16 +287,27 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
         );
         inventory.add_air(mult);
 
-        let shift = Rv64Shift256Air::new(
+        let shift_left = Rv64ShiftLeft256Air::new(
             AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
                 exec_bridge,
                 memory_bridge,
                 range_checker,
                 byte_ptr_max_bits,
             )),
-            ShiftCoreAir::new(bitwise_lu, range_checker, Rv64Shift256Opcode::CLASS_OFFSET),
+            ShiftLeftCoreAir::new(bitwise_lu, range_checker, Rv64Shift256Opcode::CLASS_OFFSET),
         );
-        inventory.add_air(shift);
+        inventory.add_air(shift_left);
+
+        let shift_right = Rv64ShiftRight256Air::new(
+            AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
+                exec_bridge,
+                memory_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            )),
+            ShiftRightCoreAir::new(bitwise_lu, range_checker, Rv64Shift256Opcode::CLASS_OFFSET),
+        );
+        inventory.add_air(shift_right);
 
         Ok(())
     }
@@ -393,9 +422,9 @@ where
         );
         inventory.add_executor_chip(mult);
 
-        inventory.next_air::<Rv64Shift256Air>()?;
-        let shift = Rv64Shift256Chip::new(
-            ShiftFiller::new(
+        inventory.next_air::<Rv64ShiftLeft256Air>()?;
+        let shift_left = Rv64ShiftLeft256Chip::new(
+            ShiftLeftFiller::new(
                 Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 bitwise_lu.clone(),
                 range_checker.clone(),
@@ -403,7 +432,19 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift);
+        inventory.add_executor_chip(shift_left);
+
+        inventory.next_air::<Rv64ShiftRight256Air>()?;
+        let shift_right = Rv64ShiftRight256Chip::new(
+            ShiftRightFiller::new(
+                Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                bitwise_lu.clone(),
+                range_checker.clone(),
+                Rv64Shift256Opcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(shift_right);
         Ok(())
     }
 }

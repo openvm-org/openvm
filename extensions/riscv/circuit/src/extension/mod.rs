@@ -118,8 +118,10 @@ pub enum Rv64IExecutor {
     BaseAlu(Rv64BaseAluExecutor),
     BaseAluW(Rv64BaseAluWExecutor),
     LessThan(Rv64LessThanExecutor),
-    Shift(Rv64ShiftExecutor),
-    ShiftW(Rv64ShiftWExecutor),
+    ShiftLeft(Rv64ShiftLeftExecutor),
+    ShiftRight(Rv64ShiftRightExecutor),
+    ShiftWLeft(Rv64ShiftWLeftExecutor),
+    ShiftWRight(Rv64ShiftWRightExecutor),
     BranchEqual(Rv64BranchEqualExecutor),
     BranchLessThan(Rv64BranchLessThanExecutor),
     JalLui(Rv64JalLuiExecutor),
@@ -178,14 +180,34 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             Rv64LessThanExecutor::new(Rv64BaseAluU16AdapterExecutor, LessThanOpcode::CLASS_OFFSET);
         inventory.add_executor(lt, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let shift = Rv64ShiftExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
-        inventory.add_executor(shift, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
+        let shift_left =
+            Rv64ShiftLeftExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
+        inventory.add_executor(shift_left, [ShiftOpcode::SLL].map(|x| x.global_opcode()))?;
 
-        let shift_w = Rv64ShiftWExecutor::new(
+        let shift_right =
+            Rv64ShiftRightExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
+        inventory.add_executor(
+            shift_right,
+            [ShiftOpcode::SRL, ShiftOpcode::SRA].map(|x| x.global_opcode()),
+        )?;
+
+        let shift_w_left = Rv64ShiftWLeftExecutor::new(
             Rv64BaseAluWAdapterExecutor::new(),
             ShiftWOpcode::CLASS_OFFSET,
         );
-        inventory.add_executor(shift_w, ShiftWOpcode::iter().map(|x| x.global_opcode()))?;
+        inventory.add_executor(
+            shift_w_left,
+            [ShiftWOpcode::SLLW].map(|x| x.global_opcode()),
+        )?;
+
+        let shift_w_right = Rv64ShiftWRightExecutor::new(
+            Rv64BaseAluWAdapterExecutor::new(),
+            ShiftWOpcode::CLASS_OFFSET,
+        );
+        inventory.add_executor(
+            shift_w_right,
+            [ShiftWOpcode::SRLW, ShiftWOpcode::SRAW].map(|x| x.global_opcode()),
+        )?;
 
         let load_store = Rv64LoadStoreExecutor::new(
             Rv64LoadStoreAdapterExecutor::new(byte_ptr_max_bits),
@@ -295,21 +317,37 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         );
         inventory.add_air(lt);
 
-        let shift = Rv64ShiftAir::new(
+        let shift_left = Rv64ShiftLeftAir::new(
             Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            ShiftCoreAir::new(bitwise_lu, range_checker, ShiftOpcode::CLASS_OFFSET),
+            ShiftLeftCoreAir::new(bitwise_lu, range_checker, ShiftOpcode::CLASS_OFFSET),
         );
-        inventory.add_air(shift);
+        inventory.add_air(shift_left);
 
-        let shift_w = Rv64ShiftWAir::new(
+        let shift_right = Rv64ShiftRightAir::new(
+            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            ShiftRightCoreAir::new(bitwise_lu, range_checker, ShiftOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(shift_right);
+
+        let shift_w_left = Rv64ShiftWLeftAir::new(
             Rv64BaseAluWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            crate::shift_w::ShiftWCoreAir::new(
+            crate::shift_w::ShiftWLeftCoreAir::new(
                 bitwise_lu,
                 range_checker,
                 ShiftWOpcode::CLASS_OFFSET,
             ),
         );
-        inventory.add_air(shift_w);
+        inventory.add_air(shift_w_left);
+
+        let shift_w_right = Rv64ShiftWRightAir::new(
+            Rv64BaseAluWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            crate::shift_w::ShiftWRightCoreAir::new(
+                bitwise_lu,
+                range_checker,
+                ShiftWOpcode::CLASS_OFFSET,
+            ),
+        );
+        inventory.add_air(shift_w_right);
 
         let load_store = Rv64LoadStoreAir::new(
             Rv64LoadStoreAdapterAir::new(
@@ -437,9 +475,9 @@ where
         );
         inventory.add_executor_chip(lt);
 
-        inventory.next_air::<Rv64ShiftAir>()?;
-        let shift = Rv64ShiftChip::new(
-            ShiftFiller::new(
+        inventory.next_air::<Rv64ShiftLeftAir>()?;
+        let shift_left = Rv64ShiftLeftChip::new(
+            ShiftLeftFiller::new(
                 Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 range_checker.clone(),
@@ -447,11 +485,23 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift);
+        inventory.add_executor_chip(shift_left);
 
-        inventory.next_air::<Rv64ShiftWAir>()?;
-        let shift_w = Rv64ShiftWChip::new(
-            crate::shift_w::ShiftWFiller::new(
+        inventory.next_air::<Rv64ShiftRightAir>()?;
+        let shift_right = Rv64ShiftRightChip::new(
+            ShiftRightFiller::new(
+                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                range_checker.clone(),
+                ShiftOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(shift_right);
+
+        inventory.next_air::<Rv64ShiftWLeftAir>()?;
+        let shift_w_left = Rv64ShiftWLeftChip::new(
+            crate::shift_w::ShiftWLeftFiller::new(
                 Rv64BaseAluWAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 range_checker.clone(),
@@ -459,7 +509,19 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift_w);
+        inventory.add_executor_chip(shift_w_left);
+
+        inventory.next_air::<Rv64ShiftWRightAir>()?;
+        let shift_w_right = Rv64ShiftWRightChip::new(
+            crate::shift_w::ShiftWRightFiller::new(
+                Rv64BaseAluWAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                range_checker.clone(),
+                ShiftWOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(shift_w_right);
 
         inventory.next_air::<Rv64LoadStoreAir>()?;
         let load_store_chip = Rv64LoadStoreChip::new(

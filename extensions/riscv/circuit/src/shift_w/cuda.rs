@@ -13,22 +13,31 @@ use crate::{
     adapters::{
         Rv64BaseAluWAdapterCols, Rv64BaseAluWAdapterRecord, RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS,
     },
-    cuda_abi::shift_w_cuda::tracegen as rv64_shift_w_tracegen,
-    ShiftCoreCols, ShiftCoreRecord,
+    cuda_abi::shift_w_cuda::{
+        tracegen_left as rv64_shift_w_left_tracegen, tracegen_right as rv64_shift_w_right_tracegen,
+    },
+    ShiftLeftCoreCols, ShiftLeftCoreRecord, ShiftRightCoreCols, ShiftRightCoreRecord,
 };
 
 #[derive(new)]
-pub struct Rv64ShiftWChipGpu {
+pub struct Rv64ShiftWLeftChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWChipGpu {
+#[derive(new)]
+pub struct Rv64ShiftWRightChipGpu {
+    pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
+    pub timestamp_max_bits: usize,
+}
+
+impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWLeftChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
             Rv64BaseAluWAdapterRecord,
-            ShiftCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
+            ShiftLeftCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
@@ -37,14 +46,50 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = Rv64BaseAluWAdapterCols::<F>::width()
-            + ShiftCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width();
+            + ShiftLeftCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
         let d_records = records.to_device_on(device_ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
-            rv64_shift_w_tracegen(
+            rv64_shift_w_left_tracegen(
+                d_trace.buffer(),
+                trace_height,
+                &d_records,
+                &self.range_checker.count,
+                &self.bitwise_lookup.count,
+                self.timestamp_max_bits as u32,
+                device_ctx.stream.as_raw(),
+            )
+            .unwrap();
+        }
+
+        AirProvingContext::simple_no_pis(d_trace)
+    }
+}
+
+impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWRightChipGpu {
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        const RECORD_SIZE: usize = size_of::<(
+            Rv64BaseAluWAdapterRecord,
+            ShiftRightCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
+        )>();
+        let records = arena.allocated();
+        if records.is_empty() {
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        }
+        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
+
+        let trace_width = Rv64BaseAluWAdapterCols::<F>::width()
+            + ShiftRightCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width();
+        let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+        let device_ctx = &self.range_checker.device_ctx;
+
+        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+        unsafe {
+            rv64_shift_w_right_tracegen(
                 d_trace.buffer(),
                 trace_height,
                 &d_records,

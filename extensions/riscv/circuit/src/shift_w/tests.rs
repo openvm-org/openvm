@@ -30,7 +30,10 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluWAdapterRecord, Rv64ShiftWChipGpu, ShiftCoreRecord},
+    crate::{
+        adapters::Rv64BaseAluWAdapterRecord, Rv64ShiftWLeftChipGpu, Rv64ShiftWRightChipGpu,
+        ShiftLeftCoreRecord, ShiftRightCoreRecord,
+    },
     openvm_circuit::arch::{
         testing::{
             default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
@@ -40,22 +43,30 @@ use {
     },
 };
 
-use super::{Rv64ShiftWChip, ShiftWCoreAir, ShiftWFiller};
+use super::{
+    Rv64ShiftWLeftAir, Rv64ShiftWLeftChip, Rv64ShiftWLeftExecutor, Rv64ShiftWRightAir,
+    Rv64ShiftWRightChip, Rv64ShiftWRightExecutor, ShiftWLeftCoreAir, ShiftWLeftFiller,
+    ShiftWRightCoreAir, ShiftWRightFiller,
+};
 use crate::{
     adapters::{
         pack_high_u16, Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterCols,
         Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller, RV64_BYTE_BITS,
         RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
-    shift::ShiftCoreCols,
+    shift_left::ShiftLeftCoreCols,
+    shift_right::ShiftRightCoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
-    Rv64ShiftWAir, Rv64ShiftWExecutor,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
-type Harness = TestChipHarness<F, Rv64ShiftWExecutor, Rv64ShiftWAir, Rv64ShiftWChip<F>>;
-type ShiftWCoreCols<T> = ShiftCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+type LeftHarness =
+    TestChipHarness<F, Rv64ShiftWLeftExecutor, Rv64ShiftWLeftAir, Rv64ShiftWLeftChip<F>>;
+type RightHarness =
+    TestChipHarness<F, Rv64ShiftWRightExecutor, Rv64ShiftWRightAir, Rv64ShiftWRightChip<F>>;
+type ShiftWLeftCoreCols<T> = ShiftLeftCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+type ShiftWRightCoreCols<T> = ShiftRightCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 
 #[inline(always)]
 fn run_shift_w(
@@ -83,27 +94,31 @@ fn get_shift_w(y0: u8) -> (usize, usize) {
     (shift / RV64_BYTE_BITS, shift % RV64_BYTE_BITS)
 }
 
-fn create_harness_fields(
+fn create_left_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     range_checker: Arc<VariableRangeCheckerChip>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64ShiftWAir, Rv64ShiftWExecutor, Rv64ShiftWChip<F>) {
-    let air = Rv64ShiftWAir::new(
+) -> (
+    Rv64ShiftWLeftAir,
+    Rv64ShiftWLeftExecutor,
+    Rv64ShiftWLeftChip<F>,
+) {
+    let air = Rv64ShiftWLeftAir::new(
         Rv64BaseAluWAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
-        ShiftWCoreAir::new(
+        ShiftWLeftCoreAir::new(
             bitwise_chip.bus(),
             range_checker.bus(),
             ShiftWOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64ShiftWExecutor::new(
+    let executor = Rv64ShiftWLeftExecutor::new(
         Rv64BaseAluWAdapterExecutor::new(),
         ShiftWOpcode::CLASS_OFFSET,
     );
-    let chip = Rv64ShiftWChip::<F>::new(
-        ShiftWFiller::new(
+    let chip = Rv64ShiftWLeftChip::<F>::new(
+        ShiftWLeftFiller::new(
             Rv64BaseAluWAdapterFiller::new(bitwise_chip.clone()),
             bitwise_chip,
             range_checker,
@@ -114,10 +129,45 @@ fn create_harness_fields(
     (air, executor, chip)
 }
 
-fn create_harness(
+fn create_right_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    range_checker: Arc<VariableRangeCheckerChip>,
+    memory_helper: SharedMemoryHelper<F>,
+) -> (
+    Rv64ShiftWRightAir,
+    Rv64ShiftWRightExecutor,
+    Rv64ShiftWRightChip<F>,
+) {
+    let air = Rv64ShiftWRightAir::new(
+        Rv64BaseAluWAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
+        ShiftWRightCoreAir::new(
+            bitwise_chip.bus(),
+            range_checker.bus(),
+            ShiftWOpcode::CLASS_OFFSET,
+        ),
+    );
+    let executor = Rv64ShiftWRightExecutor::new(
+        Rv64BaseAluWAdapterExecutor::new(),
+        ShiftWOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv64ShiftWRightChip::<F>::new(
+        ShiftWRightFiller::new(
+            Rv64BaseAluWAdapterFiller::new(bitwise_chip.clone()),
+            bitwise_chip,
+            range_checker,
+            ShiftWOpcode::CLASS_OFFSET,
+        ),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_left_harness(
     tester: &VmChipTestBuilder<F>,
 ) -> (
-    Harness,
+    LeftHarness,
     (
         BitwiseOperationLookupAir<RV64_BYTE_BITS>,
         SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
@@ -129,14 +179,41 @@ fn create_harness(
         bitwise_bus,
     ));
 
-    let (air, executor, chip) = create_harness_fields(
+    let (air, executor, chip) = create_left_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         bitwise_chip.clone(),
         range_checker,
         tester.memory_helper(),
     );
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = LeftHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+
+    (harness, (bitwise_chip.air, bitwise_chip))
+}
+
+fn create_right_harness(
+    tester: &VmChipTestBuilder<F>,
+) -> (
+    RightHarness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
+    let range_checker = tester.range_checker().clone();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
+
+    let (air, executor, chip) = create_right_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        bitwise_chip.clone(),
+        range_checker,
+        tester.memory_helper(),
+    );
+    let harness = RightHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
     (harness, (bitwise_chip.air, bitwise_chip))
 }
@@ -196,27 +273,48 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 fn run_rv64w_shift_rand_test(opcode: ShiftWOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise_chip) = create_harness(&tester);
 
-    for _ in 0..num_ops {
-        set_and_execute(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.arena,
-            &mut rng,
-            opcode,
-            None,
-            None,
-            None,
-        );
+    if opcode == SLLW {
+        let (mut harness, bitwise_chip) = create_left_harness(&tester);
+        for _ in 0..num_ops {
+            set_and_execute(
+                &mut tester,
+                &mut harness.executor,
+                &mut harness.arena,
+                &mut rng,
+                opcode,
+                None,
+                None,
+                None,
+            );
+        }
+        let tester = tester
+            .build()
+            .load(harness)
+            .load_periphery(bitwise_chip)
+            .finalize();
+        tester.simple_test().expect("Verification failed");
+    } else {
+        let (mut harness, bitwise_chip) = create_right_harness(&tester);
+        for _ in 0..num_ops {
+            set_and_execute(
+                &mut tester,
+                &mut harness.executor,
+                &mut harness.arena,
+                &mut rng,
+                opcode,
+                None,
+                None,
+                None,
+            );
+        }
+        let tester = tester
+            .build()
+            .load(harness)
+            .load_periphery(bitwise_chip)
+            .finalize();
+        tester.simple_test().expect("Verification failed");
     }
-
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise_chip)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -246,9 +344,26 @@ fn run_negative_shift_test(
     prank_vals: ShiftPrankValues,
     _interaction_error: bool,
 ) {
+    if opcode == SLLW {
+        run_negative_shift_left_test(opcode, prank_a, b, c, prank_b, prank_c, prank_vals);
+    } else {
+        run_negative_shift_right_test(opcode, prank_a, b, c, prank_b, prank_c, prank_vals);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_negative_shift_left_test(
+    opcode: ShiftWOpcode,
+    prank_a: [u32; RV64_WORD_NUM_LIMBS],
+    b: [u8; RV64_REGISTER_NUM_LIMBS],
+    c: [u8; RV64_REGISTER_NUM_LIMBS],
+    prank_b: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prank_c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prank_vals: ShiftPrankValues,
+) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&tester);
+    let (mut harness, bitwise) = create_left_harness(&tester);
 
     set_and_execute(
         &mut tester,
@@ -266,7 +381,7 @@ fn run_negative_shift_test(
         let mut values = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
-        let cols: &mut ShiftWCoreCols<F> = core_row.borrow_mut();
+        let cols: &mut ShiftWLeftCoreCols<F> = core_row.borrow_mut();
 
         cols.a = prank_a.map(F::from_u32);
         if let Some(prank_b) = prank_b {
@@ -286,10 +401,86 @@ fn run_negative_shift_test(
             adapter_cols.rs2_high = pack_high_u16(&prank_rs2_high);
         }
         if let Some(bit_multiplier_left) = prank_vals.bit_multiplier_left {
-            cols.bit_multiplier_left = F::from_u32(bit_multiplier_left);
+            cols.bit_multiplier = F::from_u32(bit_multiplier_left);
+        }
+        if let Some(result_sign) = prank_vals.result_sign {
+            adapter_cols.result_sign = F::from_u32(result_sign);
+        }
+        if let Some(bit_shift_marker) = prank_vals.bit_shift_marker {
+            cols.bit_shift_marker = bit_shift_marker.map(F::from_u32);
+        }
+        if let Some(limb_shift_marker) = prank_vals.limb_shift_marker {
+            cols.limb_shift_marker = limb_shift_marker.map(F::from_u32);
+        }
+        if let Some(bit_shift_carry) = prank_vals.bit_shift_carry {
+            cols.bit_shift_carry = bit_shift_carry.map(F::from_u32);
+        }
+
+        *trace = RowMajorMatrix::new(values, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_negative_shift_right_test(
+    opcode: ShiftWOpcode,
+    prank_a: [u32; RV64_WORD_NUM_LIMBS],
+    b: [u8; RV64_REGISTER_NUM_LIMBS],
+    c: [u8; RV64_REGISTER_NUM_LIMBS],
+    prank_b: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prank_c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prank_vals: ShiftPrankValues,
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_right_harness(&tester);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        opcode,
+        Some(b),
+        Some(false),
+        Some(c),
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut values = trace.row_slice(0).unwrap().to_vec();
+        let (adapter_row, core_row) = values.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
+        let cols: &mut ShiftWRightCoreCols<F> = core_row.borrow_mut();
+
+        cols.a = prank_a.map(F::from_u32);
+        if let Some(prank_b) = prank_b {
+            let prank_b_word: [u32; RV64_WORD_NUM_LIMBS] =
+                prank_b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+            cols.b = prank_b_word.map(F::from_u32);
+            let prank_rs1_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
+                prank_b[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
+            adapter_cols.rs1_high = pack_high_u16(&prank_rs1_high);
+        }
+        if let Some(prank_c) = prank_c {
+            let prank_c_word: [u32; RV64_WORD_NUM_LIMBS] =
+                prank_c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+            cols.c = prank_c_word.map(F::from_u32);
+            let prank_rs2_high: [u32; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS] =
+                prank_c[RV64_WORD_NUM_LIMBS..].try_into().unwrap();
+            adapter_cols.rs2_high = pack_high_u16(&prank_rs2_high);
         }
         if let Some(bit_multiplier_right) = prank_vals.bit_multiplier_right {
-            cols.bit_multiplier_right = F::from_u32(bit_multiplier_right);
+            cols.bit_multiplier = F::from_u32(bit_multiplier_right);
         }
         if let Some(b_sign) = prank_vals.b_sign {
             cols.b_sign = F::from_u32(b_sign);
@@ -476,21 +667,6 @@ fn rv64_shiftw_wrong_upper_sign_extension_negative_test() {
 
 #[test]
 fn rv64_shiftw_b_sign_only_prank_negative_test() {
-    // SLLW: b_sign must be zero (same semantics as non-W shift core).
-    run_negative_shift_test(
-        SLLW,
-        [2, 0, 0, 0],
-        [1, 0, 0, 0, 0, 0, 0, 0],
-        [1, 0, 0, 0, 0, 0, 0, 0],
-        None,
-        None,
-        ShiftPrankValues {
-            b_sign: Some(1),
-            ..Default::default()
-        },
-        false,
-    );
-
     // SRLW: b_sign must be zero.
     run_negative_shift_test(
         SRLW,
@@ -655,11 +831,25 @@ fn run_sraw_sanity_test() {
 // ////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(feature = "cuda")]
-type GpuHarness =
-    GpuTestChipHarness<F, Rv64ShiftWExecutor, Rv64ShiftWAir, Rv64ShiftWChipGpu, Rv64ShiftWChip<F>>;
+type GpuLeftHarness = GpuTestChipHarness<
+    F,
+    Rv64ShiftWLeftExecutor,
+    Rv64ShiftWLeftAir,
+    Rv64ShiftWLeftChipGpu,
+    Rv64ShiftWLeftChip<F>,
+>;
 
 #[cfg(feature = "cuda")]
-fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+type GpuRightHarness = GpuTestChipHarness<
+    F,
+    Rv64ShiftWRightExecutor,
+    Rv64ShiftWRightAir,
+    Rv64ShiftWRightChipGpu,
+    Rv64ShiftWRightChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_left_harness(tester: &GpuChipTestBuilder) -> GpuLeftHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_bus = default_var_range_checker_bus();
 
@@ -668,14 +858,40 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     ));
     let dummy_range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
-    let (air, executor, cpu_chip) = create_harness_fields(
+    let (air, executor, cpu_chip) = create_left_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         dummy_bitwise_chip,
         dummy_range_checker,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64ShiftWChipGpu::new(
+    let gpu_chip = Rv64ShiftWLeftChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+fn create_cuda_right_harness(tester: &GpuChipTestBuilder) -> GpuRightHarness {
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let range_bus = default_var_range_checker_bus();
+
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
+    let dummy_range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+
+    let (air, executor, cpu_chip) = create_right_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_bitwise_chip,
+        dummy_range_checker,
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv64ShiftWRightChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -693,37 +909,73 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
     let mut tester =
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
-    let mut harness = create_cuda_harness(&tester);
+    if opcode == SLLW {
+        let mut harness = create_cuda_left_harness(&tester);
 
-    for _ in 0..num_ops {
-        set_and_execute(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &mut rng,
-            opcode,
-            None,
-            None,
-            None,
+        for _ in 0..num_ops {
+            set_and_execute(
+                &mut tester,
+                &mut harness.executor,
+                &mut harness.dense_arena,
+                &mut rng,
+                opcode,
+                None,
+                None,
+                None,
+            );
+        }
+
+        type Record<'a> = (
+            &'a mut Rv64BaseAluWAdapterRecord,
+            &'a mut ShiftLeftCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
         );
+        harness
+            .dense_arena
+            .get_record_seeker::<Record, _>()
+            .transfer_to_matrix_arena(
+                &mut harness.matrix_arena,
+                EmptyAdapterCoreLayout::<F, Rv64BaseAluWAdapterExecutor>::new(),
+            );
+
+        tester
+            .build()
+            .load_gpu_harness(harness)
+            .finalize()
+            .simple_test()
+            .unwrap();
+    } else {
+        let mut harness = create_cuda_right_harness(&tester);
+
+        for _ in 0..num_ops {
+            set_and_execute(
+                &mut tester,
+                &mut harness.executor,
+                &mut harness.dense_arena,
+                &mut rng,
+                opcode,
+                None,
+                None,
+                None,
+            );
+        }
+
+        type Record<'a> = (
+            &'a mut Rv64BaseAluWAdapterRecord,
+            &'a mut ShiftRightCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
+        );
+        harness
+            .dense_arena
+            .get_record_seeker::<Record, _>()
+            .transfer_to_matrix_arena(
+                &mut harness.matrix_arena,
+                EmptyAdapterCoreLayout::<F, Rv64BaseAluWAdapterExecutor>::new(),
+            );
+
+        tester
+            .build()
+            .load_gpu_harness(harness)
+            .finalize()
+            .simple_test()
+            .unwrap();
     }
-
-    type Record<'a> = (
-        &'a mut Rv64BaseAluWAdapterRecord,
-        &'a mut ShiftCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
-    );
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluWAdapterExecutor>::new(),
-        );
-
-    tester
-        .build()
-        .load_gpu_harness(harness)
-        .finalize()
-        .simple_test()
-        .unwrap();
 }

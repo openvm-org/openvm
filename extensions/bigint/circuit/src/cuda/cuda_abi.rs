@@ -182,7 +182,20 @@ pub mod shift256 {
     use super::*;
 
     extern "C" {
-        fn _shift256_tracegen(
+        fn _shift256_left_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_range_checker: *const u32,
+            range_checker_bins: usize,
+            d_bitwise_lookup: *const u32,
+            pointer_max_bits: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _shift256_right_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -197,7 +210,7 @@ pub mod shift256 {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub unsafe fn tracegen(
+    pub unsafe fn tracegen_left(
         d_trace: &DeviceBuffer<F>,
         height: usize,
         d_records: &DeviceBuffer<u8>,
@@ -208,7 +221,33 @@ pub mod shift256 {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
-        CudaError::from_result(_shift256_tracegen(
+        CudaError::from_result(_shift256_left_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len(),
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            pointer_max_bits,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn tracegen_right(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_range_checker: &DeviceBuffer<F>,
+        d_bitwise_lookup: &DeviceBuffer<F>,
+        pointer_max_bits: u32,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        assert!(height.is_power_of_two() || height == 0);
+        CudaError::from_result(_shift256_right_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,

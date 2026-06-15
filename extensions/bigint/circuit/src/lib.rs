@@ -24,7 +24,8 @@ use openvm_riscv_circuit::{
     BranchEqualFiller, BranchLessThanCoreAir, BranchLessThanExecutor, BranchLessThanFiller,
     LessThanCoreAir, LessThanExecutor, LessThanFiller, MultiplicationCoreAir,
     MultiplicationExecutor, MultiplicationFiller, Rv64I, Rv64IExecutor, Rv64Io, Rv64IoExecutor,
-    Rv64M, Rv64MExecutor, ShiftCoreAir, ShiftExecutor, ShiftFiller,
+    Rv64M, Rv64MExecutor, ShiftLeftCoreAir, ShiftLeftExecutor, ShiftLeftFiller, ShiftRightCoreAir,
+    ShiftRightExecutor, ShiftRightFiller,
 };
 use serde::{Deserialize, Serialize};
 
@@ -169,15 +170,29 @@ pub type Rv64Multiplication256Chip<F> = VmChipWrapper<
 >;
 
 /// Shift256
-pub type Rv64Shift256Air =
-    VmAirWrapper<AluAdapterAir, ShiftCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
+pub type Rv64ShiftLeft256Air =
+    VmAirWrapper<AluAdapterAir, ShiftLeftCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
+pub type Rv64ShiftRight256Air =
+    VmAirWrapper<AluAdapterAir, ShiftRightCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv64Shift256Executor(
-    ShiftExecutor<AluAdapterExecutor, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>,
+pub struct Rv64ShiftLeft256Executor(
+    ShiftLeftExecutor<AluAdapterExecutor, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>,
 );
-pub type Rv64Shift256Chip<F> = VmChipWrapper<
+#[derive(Clone, PreflightExecutor)]
+pub struct Rv64ShiftRight256Executor(
+    ShiftRightExecutor<AluAdapterExecutor, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>,
+);
+pub type Rv64ShiftLeft256Chip<F> = VmChipWrapper<
     F,
-    ShiftFiller<
+    ShiftLeftFiller<
+        Rv64VecHeapAdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
+        INT256_NUM_U8_LIMBS,
+        RV64_BYTE_BITS,
+    >,
+>;
+pub type Rv64ShiftRight256Chip<F> = VmChipWrapper<
+    F,
+    ShiftRightFiller<
         Rv64VecHeapAdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
         INT256_NUM_U8_LIMBS,
         RV64_BYTE_BITS,

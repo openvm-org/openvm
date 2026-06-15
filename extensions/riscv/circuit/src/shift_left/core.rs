@@ -9,7 +9,6 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    utils::not,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
@@ -22,25 +21,18 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     BaseAirWithPublicValues,
 };
-use strum::IntoEnumIterator;
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
-pub struct ShiftCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftLeftCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
     pub c: [T; NUM_LIMBS],
 
-    pub opcode_sll_flag: T,
-    pub opcode_srl_flag: T,
-    pub opcode_sra_flag: T,
+    pub is_valid: T,
 
     // bit_multiplier = 2^bit_shift
-    pub bit_multiplier_left: T,
-    pub bit_multiplier_right: T,
-
-    // Sign of x for SRA
-    pub b_sign: T,
+    pub bit_multiplier: T,
 
     // Boolean columns that are 1 exactly at the index of the bit/limb shift amount
     pub bit_shift_marker: [T; LIMB_BITS],
@@ -50,31 +42,31 @@ pub struct ShiftCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bit_shift_carry: [T; NUM_LIMBS],
 }
 
-/// Shift AIR.
+/// Shift-left AIR.
 /// Note: when the shift amount from operand is greater than the number of bits, only shift
-/// `shift_amount % num_bits` bits. This matches the RISC-V specs for SLL/SRL/SRA.
+/// `shift_amount % num_bits` bits. This matches the RISC-V specs for SLL.
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(ShiftCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
-pub struct ShiftCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+#[columns_via(ShiftLeftCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
+pub struct ShiftLeftCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftLeftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
-        ShiftCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
+        ShiftLeftCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftLeftCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for ShiftCoreAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftLeftCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -88,23 +80,13 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &ShiftCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
-        let flags = [
-            cols.opcode_sll_flag,
-            cols.opcode_srl_flag,
-            cols.opcode_sra_flag,
-        ];
-
-        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
-            builder.assert_bool(flag);
-            acc + flag.into()
-        });
-        builder.assert_bool(is_valid.clone());
+        let cols: &ShiftLeftCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
+        builder.assert_bool(cols.is_valid);
+        let is_valid: AB::Expr = cols.is_valid.into();
 
         let a = &cols.a;
         let b = &cols.b;
         let c = &cols.c;
-        let right_shift = cols.opcode_srl_flag + cols.opcode_sra_flag;
 
         // Constrain that bit_shift, bit_multiplier are correct, i.e. that bit_multiplier =
         // 1 << bit_shift. Because the sum of all bit_shift_marker[i] is constrained to be
@@ -119,17 +101,13 @@ where
 
             let mut when_bit_shift = builder.when(cols.bit_shift_marker[i]);
             when_bit_shift.assert_eq(
-                cols.bit_multiplier_left,
-                AB::Expr::from_usize(1 << i) * cols.opcode_sll_flag,
-            );
-            when_bit_shift.assert_eq(
-                cols.bit_multiplier_right,
-                AB::Expr::from_usize(1 << i) * right_shift.clone(),
+                cols.bit_multiplier,
+                AB::Expr::from_usize(1 << i) * is_valid.clone(),
             );
         }
-        builder.when(is_valid.clone()).assert_one(bit_marker_sum);
+        builder.assert_eq(bit_marker_sum, is_valid.clone());
 
-        // Check that a[i] = b[i] <</>> c[i] both on the bit and limb shift level if c <
+        // Check that a[i] = b[i] << c[i] both on the bit and limb shift level if c <
         // NUM_LIMBS * LIMB_BITS.
         let mut limb_marker_sum = AB::Expr::ZERO;
         let mut limb_shift = AB::Expr::ZERO;
@@ -141,39 +119,20 @@ where
             let mut when_limb_shift = builder.when(cols.limb_shift_marker[i]);
 
             for j in 0..NUM_LIMBS {
-                // SLL constraints
                 if j < i {
-                    when_limb_shift.assert_zero(a[j] * cols.opcode_sll_flag);
+                    when_limb_shift.assert_zero(a[j]);
                 } else {
-                    let expected_a_left = if j - i == 0 {
+                    let expected_a = if j - i == 0 {
                         AB::Expr::ZERO
                     } else {
-                        cols.bit_shift_carry[j - i - 1].into() * cols.opcode_sll_flag
-                    } + b[j - i] * cols.bit_multiplier_left
-                        - AB::Expr::from_usize(1 << LIMB_BITS)
-                            * cols.bit_shift_carry[j - i]
-                            * cols.opcode_sll_flag;
-                    when_limb_shift.assert_eq(a[j] * cols.opcode_sll_flag, expected_a_left);
-                }
-
-                // SRL and SRA constraints. Combining with above would require an additional column.
-                if j + i > NUM_LIMBS - 1 {
-                    when_limb_shift.assert_eq(
-                        a[j] * right_shift.clone(),
-                        cols.b_sign * AB::F::from_usize((1 << LIMB_BITS) - 1),
-                    );
-                } else {
-                    let expected_a_right = if j + i == NUM_LIMBS - 1 {
-                        cols.b_sign * (cols.bit_multiplier_right - AB::F::ONE)
-                    } else {
-                        cols.bit_shift_carry[j + i + 1].into() * right_shift.clone()
-                    } * AB::F::from_usize(1 << LIMB_BITS)
-                        + right_shift.clone() * (b[j + i] - cols.bit_shift_carry[j + i]);
-                    when_limb_shift.assert_eq(a[j] * cols.bit_multiplier_right, expected_a_right);
+                        cols.bit_shift_carry[j - i - 1].into()
+                    } + b[j - i] * cols.bit_multiplier
+                        - AB::Expr::from_usize(1 << LIMB_BITS) * cols.bit_shift_carry[j - i];
+                    when_limb_shift.assert_eq(a[j], expected_a);
                 }
             }
         }
-        builder.when(is_valid.clone()).assert_one(limb_marker_sum);
+        builder.assert_eq(limb_marker_sum, is_valid.clone());
 
         // Check that bit_shift and limb_shift are correct.
         let num_bits = AB::F::from_usize(NUM_LIMBS * LIMB_BITS);
@@ -184,22 +143,6 @@ where
                 LIMB_BITS - ((NUM_LIMBS * LIMB_BITS) as u32).ilog2() as usize,
             )
             .eval(builder, is_valid.clone());
-
-        // Check b_sign & b[NUM_LIMBS - 1] == b_sign using XOR
-        builder.assert_bool(cols.b_sign);
-        builder
-            .when(not(cols.opcode_sra_flag))
-            .assert_zero(cols.b_sign);
-
-        let mask = AB::F::from_u32(1 << (LIMB_BITS - 1));
-        let b_sign_shifted = cols.b_sign * mask;
-        self.bitwise_lookup_bus
-            .send_xor(
-                b[NUM_LIMBS - 1],
-                mask,
-                b[NUM_LIMBS - 1] + mask - (AB::Expr::from_u32(2) * b_sign_shifted),
-            )
-            .eval(builder, cols.opcode_sra_flag);
 
         for i in 0..(NUM_LIMBS / 2) {
             self.bitwise_lookup_bus
@@ -225,12 +168,7 @@ where
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            flags
-                .iter()
-                .zip(ShiftOpcode::iter())
-                .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
-                    acc + (*flag).into() * AB::Expr::from_u8(opcode as u8)
-                }),
+            AB::Expr::from_u8(ShiftOpcode::SLL as u8),
         );
 
         AdapterAirContext {
@@ -252,34 +190,34 @@ where
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct ShiftCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftLeftCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub b: [u8; NUM_LIMBS],
     pub c: [u8; NUM_LIMBS],
     pub local_opcode: u8,
 }
 
 #[derive(Clone, Copy)]
-pub struct ShiftExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftLeftExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
 }
 
 #[derive(Clone)]
-pub struct ShiftFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftLeftFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftExecutor<A, NUM_LIMBS, LIMB_BITS> {
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftLeftExecutor<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(adapter: A, offset: usize) -> Self {
         assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
         Self { adapter, offset }
     }
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftFiller<A, NUM_LIMBS, LIMB_BITS> {
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftLeftFiller<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
         adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
@@ -297,7 +235,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftFiller<A, NUM_LIMBS
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
+    for ShiftLeftExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
@@ -311,7 +249,7 @@ where
         EmptyAdapterCoreLayout<F, A>,
         (
             A::RecordMut<'buf>,
-            &'buf mut ShiftCoreRecord<NUM_LIMBS, LIMB_BITS>,
+            &'buf mut ShiftLeftCoreRecord<NUM_LIMBS, LIMB_BITS>,
         ),
     >,
 {
@@ -327,6 +265,7 @@ where
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        debug_assert_eq!(local_opcode, ShiftOpcode::SLL);
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
@@ -337,7 +276,7 @@ where
             .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let (output, _, _) = run_shift::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
+        let (output, _, _) = run_shift_left::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
 
         core_record.b = rs1;
         core_record.c = rs2;
@@ -356,32 +295,28 @@ where
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for ShiftFiller<A, NUM_LIMBS, LIMB_BITS>
+    for ShiftLeftFiller<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // ShiftCoreCols::width() elements
+        // ShiftLeftCoreCols::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid ShiftCoreRecord written by the executor
+        // SAFETY: core_row contains a valid ShiftLeftCoreRecord written by the executor
         // during trace generation
-        let record: &ShiftCoreRecord<NUM_LIMBS, LIMB_BITS> =
+        let record: &ShiftLeftCoreRecord<NUM_LIMBS, LIMB_BITS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
 
-        let core_row: &mut ShiftCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-
-        let opcode = ShiftOpcode::from_usize(record.local_opcode as usize);
         let (a, limb_shift, bit_shift) =
-            run_shift::<NUM_LIMBS, LIMB_BITS>(opcode, &record.b, &record.c);
+            run_shift_left::<NUM_LIMBS, LIMB_BITS>(&record.b, &record.c);
 
         for pair in a.chunks_exact(2) {
             self.bitwise_lookup_chip
                 .request_range(pair[0] as u32, pair[1] as u32);
         }
-
         for pair in record.b.chunks_exact(2) {
             self.bitwise_lookup_chip
                 .request_range(pair[0] as u32, pair[1] as u32);
@@ -397,47 +332,30 @@ where
             LIMB_BITS - num_bits_log as usize,
         );
 
-        core_row.bit_shift_carry = if bit_shift == 0 {
+        let bit_shift_carry: [F; NUM_LIMBS] = if bit_shift == 0 {
             for _ in 0..NUM_LIMBS {
                 self.range_checker_chip.add_count(0, 0);
             }
             [F::ZERO; NUM_LIMBS]
         } else {
             array::from_fn(|i| {
-                let carry = match opcode {
-                    ShiftOpcode::SLL => record.b[i] >> (LIMB_BITS - bit_shift),
-                    _ => record.b[i] % (1 << bit_shift),
-                };
+                let carry = record.b[i] >> (LIMB_BITS - bit_shift);
                 self.range_checker_chip.add_count(carry as u32, bit_shift);
                 F::from_u8(carry)
             })
         };
 
-        core_row.limb_shift_marker = [F::ZERO; NUM_LIMBS];
-        core_row.limb_shift_marker[limb_shift] = F::ONE;
-        core_row.bit_shift_marker = [F::ZERO; LIMB_BITS];
-        core_row.bit_shift_marker[bit_shift] = F::ONE;
+        let mut limb_shift_marker = [F::ZERO; NUM_LIMBS];
+        limb_shift_marker[limb_shift] = F::ONE;
+        let mut bit_shift_marker = [F::ZERO; LIMB_BITS];
+        bit_shift_marker[bit_shift] = F::ONE;
 
-        core_row.b_sign = F::ZERO;
-        if opcode == ShiftOpcode::SRA {
-            core_row.b_sign = F::from_u8(record.b[NUM_LIMBS - 1] >> (LIMB_BITS - 1));
-            self.bitwise_lookup_chip
-                .request_xor(record.b[NUM_LIMBS - 1] as u32, 1 << (LIMB_BITS - 1));
-        }
-
-        core_row.bit_multiplier_right = match opcode {
-            ShiftOpcode::SLL => F::ZERO,
-            _ => F::from_usize(1 << bit_shift),
-        };
-        core_row.bit_multiplier_left = match opcode {
-            ShiftOpcode::SLL => F::from_usize(1 << bit_shift),
-            _ => F::ZERO,
-        };
-
-        core_row.opcode_sra_flag = F::from_bool(opcode == ShiftOpcode::SRA);
-        core_row.opcode_srl_flag = F::from_bool(opcode == ShiftOpcode::SRL);
-        core_row.opcode_sll_flag = F::from_bool(opcode == ShiftOpcode::SLL);
-
+        let core_row: &mut ShiftLeftCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+        core_row.is_valid = F::ONE;
+        core_row.bit_multiplier = F::from_usize(1 << bit_shift);
+        core_row.bit_shift_marker = bit_shift_marker;
+        core_row.limb_shift_marker = limb_shift_marker;
+        core_row.bit_shift_carry = bit_shift_carry;
         core_row.c = record.c.map(F::from_u8);
         core_row.b = record.b.map(F::from_u8);
         core_row.a = a.map(F::from_u8);
@@ -446,20 +364,7 @@ where
 
 // Returns (result, limb_shift, bit_shift)
 #[inline(always)]
-pub(super) fn run_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    opcode: ShiftOpcode,
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
-) -> ([u8; NUM_LIMBS], usize, usize) {
-    match opcode {
-        ShiftOpcode::SLL => run_shift_left::<NUM_LIMBS, LIMB_BITS>(x, y),
-        ShiftOpcode::SRL => run_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, true),
-        ShiftOpcode::SRA => run_shift_right::<NUM_LIMBS, LIMB_BITS>(x, y, false),
-    }
-}
-
-#[inline(always)]
-fn run_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
 ) -> ([u8; NUM_LIMBS], usize, usize) {
@@ -475,35 +380,6 @@ fn run_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         } else {
             ((x[i - limb_shift] as u16) << bit_shift) % (1u16 << LIMB_BITS)
         } as u8;
-    }
-    (result, limb_shift, bit_shift)
-}
-
-#[inline(always)]
-fn run_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
-    logical: bool,
-) -> ([u8; NUM_LIMBS], usize, usize) {
-    let fill = if logical {
-        0
-    } else {
-        (((1u16 << LIMB_BITS) - 1) as u8) * (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1))
-    };
-    let mut result = [fill; NUM_LIMBS];
-
-    let (limb_shift, bit_shift) = get_shift::<NUM_LIMBS, LIMB_BITS>(y);
-
-    for i in 0..(NUM_LIMBS - limb_shift) {
-        let res = if i + limb_shift + 1 < NUM_LIMBS {
-            (((x[i + limb_shift] >> bit_shift) as u16)
-                | ((x[i + limb_shift + 1] as u16) << (LIMB_BITS - bit_shift)))
-                % (1u16 << LIMB_BITS)
-        } else {
-            (((x[i + limb_shift] >> bit_shift) as u16) | ((fill as u16) << (LIMB_BITS - bit_shift)))
-                % (1u16 << LIMB_BITS)
-        };
-        result[i] = res as u8;
     }
     (result, limb_shift, bit_shift)
 }

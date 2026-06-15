@@ -231,7 +231,8 @@ impl ExtInstr for Int256BranchLtInstr {
 /// The Int256 extension. Register this with the `ExtensionRegistry`.
 pub struct Int256Extension {
     base_alu_chip_idx: Option<AirIndex>,
-    shift_chip_idx: Option<AirIndex>,
+    shift_left_chip_idx: Option<AirIndex>,
+    shift_right_chip_idx: Option<AirIndex>,
     less_than_chip_idx: Option<AirIndex>,
     mul_chip_idx: Option<AirIndex>,
     branch_eq_chip_idx: Option<AirIndex>,
@@ -241,7 +242,8 @@ pub struct Int256Extension {
 impl Int256Extension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
         let base_alu_chip_idx = opcode_air_idx(ctx, Rv64BaseAlu256Opcode(BaseAluOpcode::ADD))?;
-        let shift_chip_idx = opcode_air_idx(ctx, Rv64Shift256Opcode(ShiftOpcode::SLL))?;
+        let shift_left_chip_idx = opcode_air_idx(ctx, Rv64Shift256Opcode(ShiftOpcode::SLL))?;
+        let shift_right_chip_idx = opcode_air_idx(ctx, Rv64Shift256Opcode(ShiftOpcode::SRL))?;
         let less_than_chip_idx = opcode_air_idx(ctx, Rv64LessThan256Opcode(LessThanOpcode::SLT))?;
         let mul_chip_idx = opcode_air_idx(ctx, Rv64Mul256Opcode(MulOpcode::MUL))?;
         let branch_eq_chip_idx =
@@ -251,7 +253,8 @@ impl Int256Extension {
 
         Ok(Self {
             base_alu_chip_idx,
-            shift_chip_idx,
+            shift_left_chip_idx,
+            shift_right_chip_idx,
             less_than_chip_idx,
             mul_chip_idx,
             branch_eq_chip_idx,
@@ -270,8 +273,12 @@ impl Int256Extension {
 
         if opcode >= base_alu_start && opcode < base_alu_start + BaseAluOpcode::COUNT {
             self.base_alu_chip_idx
-        } else if opcode >= shift_start && opcode < shift_start + ShiftOpcode::COUNT {
-            self.shift_chip_idx
+        } else if opcode == Rv64Shift256Opcode(ShiftOpcode::SLL).global_opcode_usize() {
+            self.shift_left_chip_idx
+        } else if opcode == Rv64Shift256Opcode(ShiftOpcode::SRL).global_opcode_usize()
+            || opcode == Rv64Shift256Opcode(ShiftOpcode::SRA).global_opcode_usize()
+        {
+            self.shift_right_chip_idx
         } else if opcode >= lt_start && opcode < lt_start + LessThanOpcode::COUNT {
             self.less_than_chip_idx
         } else if opcode >= beq_start && opcode < beq_start + BranchEqualOpcode::COUNT {

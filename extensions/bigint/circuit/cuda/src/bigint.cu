@@ -42,8 +42,10 @@ using Multiplication256Core = MultiplicationCore<INT256_NUM_U8_LIMBS>;
 template <typename T> using Multiplication256CoreCols = MultiplicationCoreCols<T, INT256_NUM_U8_LIMBS>;
 
 using Shift256CoreRecord = ShiftCoreRecord<INT256_NUM_U8_LIMBS>;
-using Shift256Core = ShiftCore<INT256_NUM_U8_LIMBS>;
-template <typename T> using Shift256CoreCols = ShiftCoreCols<T, INT256_NUM_U8_LIMBS>;
+using ShiftLeft256Core = ShiftLeftCore<INT256_NUM_U8_LIMBS>;
+using ShiftRight256Core = ShiftRightCore<INT256_NUM_U8_LIMBS>;
+template <typename T> using ShiftLeft256CoreCols = ShiftLeftCoreCols<T, INT256_NUM_U8_LIMBS>;
+template <typename T> using ShiftRight256CoreCols = ShiftRightCoreCols<T, INT256_NUM_U8_LIMBS>;
 
 using BranchLessThan256CoreRecord =
     BranchLessThanCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
@@ -342,9 +344,14 @@ extern "C" int _branch_less_than256_tracegen(
     return CHECK_KERNEL();
 }
 
-template <typename T> struct Shift256Cols {
+template <typename T> struct ShiftLeft256Cols {
     Rv64VecHeapAdapter256Cols<T> adapter;
-    Shift256CoreCols<T> core;
+    ShiftLeft256CoreCols<T> core;
+};
+
+template <typename T> struct ShiftRight256Cols {
+    Rv64VecHeapAdapter256Cols<T> adapter;
+    ShiftRight256CoreCols<T> core;
 };
 
 struct Shift256Record {
@@ -352,7 +359,7 @@ struct Shift256Record {
     Shift256CoreRecord core;
 };
 
-__global__ void shift256_tracegen(
+__global__ void shift256_left_tracegen(
     Fp *d_trace,
     size_t height,
     DeviceBufferConstView<Shift256Record> d_records,
@@ -374,17 +381,49 @@ __global__ void shift256_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        Shift256Core core(
+        ShiftLeft256Core core(
             BitwiseOperationLookup(d_bitwise_lookup_ptr),
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins)
         );
-        core.fill_trace_row(row.slice_from(COL_INDEX(Shift256Cols, core)), rec.core);
+        core.fill_trace_row(row.slice_from(COL_INDEX(ShiftLeft256Cols, core)), rec.core);
     } else {
-        row.fill_zero(0, sizeof(Shift256Cols<uint8_t>));
+        row.fill_zero(0, sizeof(ShiftLeft256Cols<uint8_t>));
     }
 }
 
-extern "C" int _shift256_tracegen(
+__global__ void shift256_right_tracegen(
+    Fp *d_trace,
+    size_t height,
+    DeviceBufferConstView<Shift256Record> d_records,
+    uint32_t *d_range_checker_ptr,
+    size_t range_checker_bins,
+    uint32_t *d_bitwise_lookup_ptr,
+    uint32_t pointer_max_bits,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(d_trace + idx, height);
+    if (idx < d_records.len()) {
+        auto const &rec = d_records[idx];
+
+        Rv64VecHeapAdapter256 adapter(
+            pointer_max_bits,
+            VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
+            timestamp_max_bits
+        );
+        adapter.fill_trace_row(row, rec.adapter);
+
+        ShiftRight256Core core(
+            BitwiseOperationLookup(d_bitwise_lookup_ptr),
+            VariableRangeChecker(d_range_checker_ptr, range_checker_bins)
+        );
+        core.fill_trace_row(row.slice_from(COL_INDEX(ShiftRight256Cols, core)), rec.core);
+    } else {
+        row.fill_zero(0, sizeof(ShiftRight256Cols<uint8_t>));
+    }
+}
+
+extern "C" int _shift256_left_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
@@ -396,10 +435,38 @@ extern "C" int _shift256_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Shift256Cols<uint8_t>));
+    assert(width == sizeof(ShiftLeft256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
-    shift256_tracegen<<<grid, block, 0, stream>>>(
+    shift256_left_tracegen<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        d_records,
+        d_range_checker_ptr,
+        range_checker_bins,
+        d_bitwise_lookup_ptr,
+        pointer_max_bits,
+        timestamp_max_bits
+    );
+    return CHECK_KERNEL();
+}
+
+extern "C" int _shift256_right_tracegen(
+    Fp *d_trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<Shift256Record> d_records,
+    uint32_t *d_range_checker_ptr,
+    size_t range_checker_bins,
+    uint32_t *d_bitwise_lookup_ptr,
+    uint32_t pointer_max_bits,
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
+) {
+    assert(width == sizeof(ShiftRight256Cols<uint8_t>));
+
+    auto [grid, block] = kernel_launch_params(height, 256);
+    shift256_right_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
