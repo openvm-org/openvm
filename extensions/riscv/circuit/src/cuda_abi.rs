@@ -355,10 +355,10 @@ pub mod add_sub_cuda {
     }
 }
 
-pub mod xor_or_and_cuda {
+pub mod bitwise_logic_cuda {
     use super::*;
     extern "C" {
-        fn _xor_or_and_tracegen(
+        fn _bitwise_logic_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -382,7 +382,7 @@ pub mod xor_or_and_cuda {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         let width = d_trace.len() / height;
-        CudaError::from_result(_xor_or_and_tracegen(
+        CudaError::from_result(_bitwise_logic_tracegen(
             d_trace.as_mut_ptr(),
             height,
             width,

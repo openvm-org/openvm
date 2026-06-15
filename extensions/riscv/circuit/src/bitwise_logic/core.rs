@@ -24,7 +24,7 @@ use openvm_stark_backend::{
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
-pub struct XorOrAndCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BitwiseLogicCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
     pub c: [T; NUM_LIMBS],
@@ -35,26 +35,26 @@ pub struct XorOrAndCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(XorOrAndCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
-pub struct XorOrAndCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+#[columns_via(BitwiseLogicCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
+pub struct BitwiseLogicCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: BitwiseOperationLookupBus,
     pub offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for XorOrAndCoreAir<NUM_LIMBS, LIMB_BITS>
+    for BitwiseLogicCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
-        XorOrAndCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
+        BitwiseLogicCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for XorOrAndCoreAir<NUM_LIMBS, LIMB_BITS>
+    for BitwiseLogicCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for XorOrAndCoreAir<NUM_LIMBS, LIMB_BITS>
+    for BitwiseLogicCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -68,7 +68,7 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &XorOrAndCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
+        let cols: &BitwiseLogicCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
         let flags = [
             cols.opcode_xor_flag,
             cols.opcode_or_flag,
@@ -126,7 +126,7 @@ where
 
 #[repr(C, align(4))]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct XorOrAndCoreRecord<const NUM_LIMBS: usize> {
+pub struct BitwiseLogicCoreRecord<const NUM_LIMBS: usize> {
     pub b: [u8; NUM_LIMBS],
     pub c: [u8; NUM_LIMBS],
     // Use u8 instead of usize for better packing
@@ -134,20 +134,20 @@ pub struct XorOrAndCoreRecord<const NUM_LIMBS: usize> {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct XorOrAndExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BitwiseLogicExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
 }
 
 #[derive(derive_new::new)]
-pub struct XorOrAndFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BitwiseLogicFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub offset: usize,
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for XorOrAndExecutor<A, NUM_LIMBS, LIMB_BITS>
+    for BitwiseLogicExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
@@ -159,7 +159,10 @@ where
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut XorOrAndCoreRecord<NUM_LIMBS>),
+        (
+            A::RecordMut<'buf>,
+            &'buf mut BitwiseLogicCoreRecord<NUM_LIMBS>,
+        ),
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -188,7 +191,7 @@ where
             .into();
 
         let rd =
-            run_xor_or_and::<NUM_LIMBS, LIMB_BITS>(local_opcode, &core_record.b, &core_record.c);
+            run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(local_opcode, &core_record.b, &core_record.c);
 
         core_record.local_opcode = local_opcode as u8;
 
@@ -202,21 +205,21 @@ where
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for XorOrAndFiller<A, NUM_LIMBS, LIMB_BITS>
+    for BitwiseLogicFiller<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // XorOrAndCoreCols::width() elements
+        // BitwiseLogicCoreCols::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid XorOrAndCoreRecord written by the executor
+        // SAFETY: core_row contains a valid BitwiseLogicCoreRecord written by the executor
         // during trace generation
-        let record: &XorOrAndCoreRecord<NUM_LIMBS> =
+        let record: &BitwiseLogicCoreRecord<NUM_LIMBS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
-        let core_row: &mut XorOrAndCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+        let core_row: &mut BitwiseLogicCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
         // SAFETY: the following is highly unsafe. We are going to cast `core_row` to a record
         // buffer, and then do an _overlapping_ write to the `core_row` as a row of field elements.
         // This requires:
@@ -227,7 +230,7 @@ where
         //   otherwise)
 
         let local_opcode = BaseAluOpcode::from_usize(record.local_opcode as usize);
-        let a = run_xor_or_and::<NUM_LIMBS, LIMB_BITS>(local_opcode, &record.b, &record.c);
+        let a = run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(local_opcode, &record.b, &record.c);
         // PERF: needless conversion
         core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
         core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
@@ -244,7 +247,7 @@ where
 }
 
 #[inline(always)]
-pub(super) fn run_xor_or_and<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_bitwise_logic<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: BaseAluOpcode,
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
@@ -254,7 +257,7 @@ pub(super) fn run_xor_or_and<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
         BaseAluOpcode::XOR => run_xor::<NUM_LIMBS>(x, y),
         BaseAluOpcode::OR => run_or::<NUM_LIMBS>(x, y),
         BaseAluOpcode::AND => run_and::<NUM_LIMBS>(x, y),
-        _ => unreachable!("XorOrAndExecutor received non-XOR/OR/AND opcode"),
+        _ => unreachable!("BitwiseLogicExecutor received non-XOR/OR/AND opcode"),
     }
 }
 

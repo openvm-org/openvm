@@ -116,7 +116,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for Rv64M {}
 )]
 pub enum Rv64IExecutor {
     AddSub(Rv64AddSubExecutor),
-    XorOrAnd(Rv64XorOrAndExecutor),
+    BitwiseLogic(Rv64BitwiseLogicExecutor),
     BaseAluW(Rv64BaseAluWExecutor),
     LessThan(Rv64LessThanExecutor),
     Shift(Rv64ShiftExecutor),
@@ -171,10 +171,10 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|x| x.global_opcode()),
         )?;
 
-        let xor_or_and =
-            Rv64XorOrAndExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+        let bitwise_logic =
+            Rv64BitwiseLogicExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
         inventory.add_executor(
-            xor_or_and,
+            bitwise_logic,
             [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND].map(|x| x.global_opcode()),
         )?;
 
@@ -294,11 +294,11 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         );
         inventory.add_air(add_sub);
 
-        let xor_or_and = Rv64XorOrAndAir::new(
+        let bitwise_logic = Rv64BitwiseLogicAir::new(
             Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            XorOrAndCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
+            BitwiseLogicCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
         );
-        inventory.add_air(xor_or_and);
+        inventory.add_air(bitwise_logic);
 
         let base_alu_w = Rv64BaseAluWAir::new(
             Rv64BaseAluWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
@@ -432,16 +432,16 @@ where
         );
         inventory.add_executor_chip(add_sub);
 
-        inventory.next_air::<Rv64XorOrAndAir>()?;
-        let xor_or_and = Rv64XorOrAndChip::new(
-            XorOrAndFiller::new(
+        inventory.next_air::<Rv64BitwiseLogicAir>()?;
+        let bitwise_logic = Rv64BitwiseLogicChip::new(
+            BitwiseLogicFiller::new(
                 Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 BaseAluOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(xor_or_and);
+        inventory.add_executor_chip(bitwise_logic);
 
         inventory.next_air::<Rv64BaseAluWAir>()?;
         let base_alu_w = Rv64BaseAluWChip::new(

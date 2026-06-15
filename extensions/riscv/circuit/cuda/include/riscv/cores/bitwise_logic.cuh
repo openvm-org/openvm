@@ -30,13 +30,13 @@ __device__ __forceinline__ void run_and(const uint8_t *x, const uint8_t *y, uint
     }
 }
 
-template <size_t NUM_LIMBS> struct XorOrAndCoreRecord {
+template <size_t NUM_LIMBS> struct BitwiseLogicCoreRecord {
     uint8_t b[NUM_LIMBS];
     uint8_t c[NUM_LIMBS];
     uint8_t local_opcode;
 };
 
-template <typename T, size_t NUM_LIMBS> struct XorOrAndCoreCols {
+template <typename T, size_t NUM_LIMBS> struct BitwiseLogicCoreCols {
     T a[NUM_LIMBS];
     T b[NUM_LIMBS];
     T c[NUM_LIMBS];
@@ -45,14 +45,14 @@ template <typename T, size_t NUM_LIMBS> struct XorOrAndCoreCols {
     T opcode_and_flag;
 };
 
-template <size_t NUM_LIMBS> struct XorOrAndCore {
+template <size_t NUM_LIMBS> struct BitwiseLogicCore {
     BitwiseOperationLookup bitwise_lookup;
 
-    template <typename T> using Cols = XorOrAndCoreCols<T, NUM_LIMBS>;
+    template <typename T> using Cols = BitwiseLogicCoreCols<T, NUM_LIMBS>;
 
-    __device__ XorOrAndCore(BitwiseOperationLookup lookup) : bitwise_lookup(lookup) {}
+    __device__ BitwiseLogicCore(BitwiseOperationLookup lookup) : bitwise_lookup(lookup) {}
 
-    __device__ void fill_trace_row(RowSlice row, XorOrAndCoreRecord<NUM_LIMBS> record) {
+    __device__ void fill_trace_row(RowSlice row, BitwiseLogicCoreRecord<NUM_LIMBS> record) {
         uint8_t a[NUM_LIMBS];
 
         switch (record.local_opcode) {
