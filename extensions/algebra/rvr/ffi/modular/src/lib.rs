@@ -21,9 +21,14 @@ use rvr_openvm_ext_algebra_ffi_common::{
 };
 use rvr_openvm_ext_ffi_common::{
     // TODO(follow-up): migrate modular to rd_mem_words_traced / wr_mem_words_traced ([u64])
-    ext_hint_stream_set, rd_mem_u32_range_wrapper, trace_mem_access_range,
-    trace_rd_mem_u32_range_wrapper, trace_wr_mem_u32_range_wrapper, wr_mem_u32_range_wrapper,
-    AS_MEMORY, WORD_SIZE,
+    ext_hint_stream_set,
+    rd_mem_u32_range_wrapper,
+    trace_mem_access_range,
+    trace_rd_mem_u32_range_wrapper,
+    trace_wr_mem_u32_range_wrapper,
+    wr_mem_u32_range_wrapper,
+    AS_MEMORY,
+    WORD_SIZE,
 };
 
 // ── Field structs ────────────────────────────────────────────────────────────

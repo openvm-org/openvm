@@ -17,8 +17,11 @@ use rvr_openvm_ext_algebra_ffi_common::{
 };
 use rvr_openvm_ext_ffi_common::{
     // TODO(follow-up): migrate ecc to rd_mem_words_traced / wr_mem_words_traced ([u64])
-    rd_mem_u32_range_wrapper, trace_rd_mem_u32_range_wrapper, trace_wr_mem_u32_range_wrapper,
-    wr_mem_u32_range_wrapper, WORD_SIZE,
+    rd_mem_u32_range_wrapper,
+    trace_rd_mem_u32_range_wrapper,
+    trace_wr_mem_u32_range_wrapper,
+    wr_mem_u32_range_wrapper,
+    WORD_SIZE,
 };
 
 /// Affine point: two field coordinates (x, y).

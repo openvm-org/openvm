@@ -7,8 +7,11 @@ use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use rvr_openvm_ext_ffi_common::{
     // TODO(follow-up): migrate algebra to rd_mem_words_traced / wr_mem_words_traced ([u64])
-    rd_mem_u32_range_wrapper, trace_rd_mem_u32_range_wrapper, trace_wr_mem_u32_range_wrapper,
-    wr_mem_u32_range_wrapper, WORD_SIZE,
+    rd_mem_u32_range_wrapper,
+    trace_rd_mem_u32_range_wrapper,
+    trace_wr_mem_u32_range_wrapper,
+    wr_mem_u32_range_wrapper,
+    WORD_SIZE,
 };
 
 /// Size of a 256-bit field element in bytes.
