@@ -5,7 +5,11 @@ use std::ffi::c_void;
 use halo2curves_axiom::ff::PrimeField;
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
-use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced, WORD_SIZE};
+use rvr_openvm_ext_ffi_common::{
+    // TODO(follow-up): migrate algebra to rd_mem_words_traced / wr_mem_words_traced ([u64])
+    rd_mem_u32_range_wrapper, trace_rd_mem_u32_range_wrapper, trace_wr_mem_u32_range_wrapper,
+    wr_mem_u32_range_wrapper, WORD_SIZE,
+};
 
 /// Size of a 256-bit field element in bytes.
 pub const FIELD_256_BYTES: usize = 32;
@@ -46,7 +50,8 @@ pub trait FieldArith {
 #[inline(always)]
 pub unsafe fn read_field_256<F: PrimeField<Repr = [u8; 32]>>(state: *mut c_void, ptr: u32) -> F {
     let mut words = [0u32; FIELD_256_WORDS];
-    rd_mem_words_traced(state, ptr, &mut words);
+    rd_mem_u32_range_wrapper(state, ptr, words.as_mut_ptr(), FIELD_256_WORDS as u32);
+    trace_rd_mem_u32_range_wrapper(state, ptr, words.as_ptr(), FIELD_256_WORDS as u32);
     let mut bytes = [0u8; FIELD_256_BYTES];
     for (i, &w) in words.iter().enumerate() {
         bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&w.to_le_bytes());
@@ -82,7 +87,8 @@ pub unsafe fn write_field_256<F: PrimeField<Repr = [u8; 32]>>(
                 .unwrap(),
         );
     }
-    wr_mem_words_traced(state, ptr, &words);
+    trace_wr_mem_u32_range_wrapper(state, ptr, words.as_ptr(), FIELD_256_WORDS as u32);
+    wr_mem_u32_range_wrapper(state, ptr, words.as_ptr(), FIELD_256_WORDS as u32);
 }
 
 /// Read a BLS12-381 Fq element (48 bytes) from guest memory (traced).
@@ -92,7 +98,8 @@ pub unsafe fn write_field_256<F: PrimeField<Repr = [u8; 32]>>(
 #[inline(always)]
 pub unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u32) -> blstrs::Fp {
     let mut words = [0u32; BLS12_381_ELEM_WORDS];
-    rd_mem_words_traced(state, ptr, &mut words);
+    rd_mem_u32_range_wrapper(state, ptr, words.as_mut_ptr(), BLS12_381_ELEM_WORDS as u32);
+    trace_rd_mem_u32_range_wrapper(state, ptr, words.as_ptr(), BLS12_381_ELEM_WORDS as u32);
     let mut bytes = [0u8; BLS12_381_ELEM_BYTES];
     for (i, &w) in words.iter().enumerate() {
         bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&w.to_le_bytes());
@@ -123,7 +130,8 @@ pub unsafe fn write_bls12_381_fq(state: *mut c_void, ptr: u32, val: &blstrs::Fp)
                 .unwrap(),
         );
     }
-    wr_mem_words_traced(state, ptr, &words);
+    trace_wr_mem_u32_range_wrapper(state, ptr, words.as_ptr(), BLS12_381_ELEM_WORDS as u32);
+    wr_mem_u32_range_wrapper(state, ptr, words.as_ptr(), BLS12_381_ELEM_WORDS as u32);
 }
 
 // ── BigUint helpers (for unknown-modulus fallbacks) ──────────────────────────
@@ -137,7 +145,8 @@ pub unsafe fn write_bls12_381_fq(state: *mut c_void, ptr: u32, val: &blstrs::Fp)
 pub unsafe fn read_bigint(state: *mut c_void, ptr: u32, num_limbs: u32) -> BigUint {
     let num_words = (num_limbs / WORD_SIZE as u32) as usize;
     let mut words = vec![0u32; num_words];
-    rd_mem_words_traced(state, ptr, &mut words);
+    rd_mem_u32_range_wrapper(state, ptr, words.as_mut_ptr(), num_words as u32);
+    trace_rd_mem_u32_range_wrapper(state, ptr, words.as_ptr(), num_words as u32);
     let mut bytes = vec![0u8; num_limbs as usize];
     for (i, &w) in words.iter().enumerate() {
         bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&w.to_le_bytes());
@@ -163,7 +172,8 @@ pub unsafe fn write_bigint(state: *mut c_void, ptr: u32, value: &BigUint, num_li
                 .unwrap(),
         );
     }
-    wr_mem_words_traced(state, ptr, &words);
+    trace_wr_mem_u32_range_wrapper(state, ptr, words.as_ptr(), num_words as u32);
+    wr_mem_u32_range_wrapper(state, ptr, words.as_ptr(), num_words as u32);
 }
 
 /// Modular inverse of `a` modulo `p` via extended GCD. Caller must ensure

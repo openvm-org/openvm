@@ -54,7 +54,7 @@ extern "C" {
     pub fn trace_wr_mem_u32_wrapper(state: *mut c_void, addr: u32, new_val: u32);
     pub fn trace_mem_access_u32_wrapper(state: *mut c_void, addr: u32, addr_space: u32);
 
-    // ── Memory access (word-aligned ranges, data) ─────────────────────
+    // ── Memory access (u32 ranges, data) ─────────────────────────────
     pub fn rd_mem_u32_range_wrapper(
         state: *mut c_void,
         base_addr: u32,
@@ -68,7 +68,7 @@ extern "C" {
         num_words: u32,
     );
 
-    // ── Memory access (word-aligned ranges, trace-only) ───────────────
+    // ── Memory access (u32 ranges, trace-only) ────────────────────────
     pub fn trace_rd_mem_u32_range_wrapper(
         state: *mut c_void,
         base_addr: u32,
@@ -86,6 +86,34 @@ extern "C" {
         base_addr: u32,
         num_words: u32,
         addr_space: u32,
+    );
+
+    // ── Memory access (u64-word ranges, data) — WORD_SIZE = 8 bytes ──
+    pub fn rd_mem_u64_range_wrapper(
+        state: *mut c_void,
+        base_addr: u32,
+        out: *mut u64,
+        num_words: u32,
+    );
+    pub fn wr_mem_u64_range_wrapper(
+        state: *mut c_void,
+        base_addr: u32,
+        vals: *const u64,
+        num_words: u32,
+    );
+
+    // ── Memory access (u64-word ranges, trace-only) ───────────────────
+    pub fn trace_rd_mem_u64_range_wrapper(
+        state: *mut c_void,
+        base_addr: u32,
+        vals: *const u64,
+        num_words: u32,
+    );
+    pub fn trace_wr_mem_u64_range_wrapper(
+        state: *mut c_void,
+        base_addr: u32,
+        vals: *const u64,
+        num_words: u32,
     );
 
     // ── Instruction dispatch / chip cost ──────────────────────────────
@@ -157,8 +185,9 @@ pub fn u32s_as_u64s(words: &[u32]) -> &[u64] {
 
 // ── Ergonomic batched memory helpers ─────────────────────────────────────
 
-/// Read `out.len()` consecutive u32 words from guest memory into `out`,
-/// then trace each as a memory read.
+/// Read `out.len()` consecutive u64 words from guest memory into `out`,
+/// then trace each as a memory read. A word is 8 bytes (`WORD_SIZE`),
+/// matching the circuit's `MEMORY_BLOCK_BYTES` granularity.
 ///
 /// `out` must be non-empty; the C trace functions assume `num_words >= 1`
 /// to avoid an underflow check on the hot path. Callers handling
@@ -168,33 +197,34 @@ pub fn u32s_as_u64s(words: &[u32]) -> &[u64] {
 /// # Safety
 /// `state` must be a valid `RvState` pointer; the byte range
 /// `[base_addr, base_addr + out.len()*WORD_SIZE)` must lie within guest memory.
-pub unsafe fn rd_mem_words_traced(state: *mut c_void, base_addr: u32, out: &mut [u32]) {
+pub unsafe fn rd_mem_words_traced(state: *mut c_void, base_addr: u32, out: &mut [u64]) {
     debug_assert!(
         !out.is_empty(),
         "rd_mem_words_traced requires a non-empty range"
     );
     let n = out.len() as u32;
-    rd_mem_u32_range_wrapper(state, base_addr, out.as_mut_ptr(), n);
-    trace_rd_mem_u32_range_wrapper(state, base_addr, out.as_ptr(), n);
+    rd_mem_u64_range_wrapper(state, base_addr, out.as_mut_ptr(), n);
+    trace_rd_mem_u64_range_wrapper(state, base_addr, out.as_ptr(), n);
 }
 
 /// Trace each value in `vals` as a write at `base_addr + i*WORD_SIZE`,
 /// then write them to guest memory. Trace-before-write so future tracers
-/// can read the old value before it is overwritten.
+/// can read the old value before it is overwritten. A word is 8 bytes
+/// (`WORD_SIZE`), matching the circuit's `MEMORY_BLOCK_BYTES` granularity.
 ///
 /// `vals` must be non-empty; see [`rd_mem_words_traced`] for rationale.
 ///
 /// # Safety
 /// `state` must be a valid `RvState` pointer; the byte range
 /// `[base_addr, base_addr + vals.len()*WORD_SIZE)` must lie within guest memory.
-pub unsafe fn wr_mem_words_traced(state: *mut c_void, base_addr: u32, vals: &[u32]) {
+pub unsafe fn wr_mem_words_traced(state: *mut c_void, base_addr: u32, vals: &[u64]) {
     debug_assert!(
         !vals.is_empty(),
         "wr_mem_words_traced requires a non-empty range"
     );
     let n = vals.len() as u32;
-    trace_wr_mem_u32_range_wrapper(state, base_addr, vals.as_ptr(), n);
-    wr_mem_u32_range_wrapper(state, base_addr, vals.as_ptr(), n);
+    trace_wr_mem_u64_range_wrapper(state, base_addr, vals.as_ptr(), n);
+    wr_mem_u64_range_wrapper(state, base_addr, vals.as_ptr(), n);
 }
 
 /// Trace `num_words` consecutive memory-access notifications (no value)

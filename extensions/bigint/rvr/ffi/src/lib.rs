@@ -12,8 +12,14 @@ use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced, WORD_S
 /// Number of bytes in a 256-bit integer.
 const INT256_BYTES: usize = 32;
 
-/// Number of 4-byte words in a 256-bit integer.
+/// Number of 8-byte (u64) words in a 256-bit integer; matches MEMORY_BLOCK_BYTES granularity.
 const INT256_WORDS: usize = INT256_BYTES / WORD_SIZE;
+
+/// Bytes in one u32 limb.
+const U32_LIMB_BYTES: usize = size_of::<u32>();
+
+/// Number of 4-byte (u32) limbs in a 256-bit integer; used for multiplication.
+const INT256_NUM_U32_LIMBS: usize = INT256_BYTES / U32_LIMB_BYTES;
 
 /// Bytes in one u64 limb.
 const U64_LIMB_BYTES: usize = size_of::<u64>();
@@ -36,7 +42,7 @@ const SIGN_BIT_MASK: u8 = 1 << SIGN_BIT_SHIFT;
 /// Read a 256-bit value from memory as INT256_WORDS LE words.
 #[inline]
 unsafe fn read_int256(state: *mut c_void, ptr: u32) -> [u8; INT256_BYTES] {
-    let mut words = [0u32; INT256_WORDS];
+    let mut words = [0u64; INT256_WORDS];
     rd_mem_words_traced(state, ptr, &mut words);
     let mut bytes = [0u8; INT256_BYTES];
     for (i, w) in words.iter().enumerate() {
@@ -48,9 +54,9 @@ unsafe fn read_int256(state: *mut c_void, ptr: u32) -> [u8; INT256_BYTES] {
 /// Write a 256-bit value to memory as INT256_WORDS LE words.
 #[inline]
 unsafe fn write_int256(state: *mut c_void, ptr: u32, bytes: &[u8; INT256_BYTES]) {
-    let mut words = [0u32; INT256_WORDS];
+    let mut words = [0u64; INT256_WORDS];
     for (i, w) in words.iter_mut().enumerate() {
-        *w = u32::from_le_bytes(
+        *w = u64::from_le_bytes(
             bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE]
                 .try_into()
                 .unwrap(),
@@ -84,19 +90,23 @@ fn from_u64(a: &[u64; INT256_U64_LIMBS]) -> [u8; INT256_BYTES] {
 }
 
 #[inline]
-fn to_u32_arr(b: &[u8; INT256_BYTES]) -> [u32; INT256_WORDS] {
-    let mut out = [0u32; INT256_WORDS];
-    for i in 0..INT256_WORDS {
-        out[i] = u32::from_le_bytes(b[i * WORD_SIZE..(i + 1) * WORD_SIZE].try_into().unwrap());
+fn to_u32_arr(b: &[u8; INT256_BYTES]) -> [u32; INT256_NUM_U32_LIMBS] {
+    let mut out = [0u32; INT256_NUM_U32_LIMBS];
+    for i in 0..INT256_NUM_U32_LIMBS {
+        out[i] = u32::from_le_bytes(
+            b[i * U32_LIMB_BYTES..(i + 1) * U32_LIMB_BYTES]
+                .try_into()
+                .unwrap(),
+        );
     }
     out
 }
 
 #[inline]
-fn from_u32_arr(a: &[u32; INT256_WORDS]) -> [u8; INT256_BYTES] {
+fn from_u32_arr(a: &[u32; INT256_NUM_U32_LIMBS]) -> [u8; INT256_BYTES] {
     let mut out = [0u8; INT256_BYTES];
-    for i in 0..INT256_WORDS {
-        out[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&a[i].to_le_bytes());
+    for i in 0..INT256_NUM_U32_LIMBS {
+        out[i * U32_LIMB_BYTES..(i + 1) * U32_LIMB_BYTES].copy_from_slice(&a[i].to_le_bytes());
     }
     out
 }
@@ -232,10 +242,10 @@ fn u256_sltu(a: &[u8; INT256_BYTES], b: &[u8; INT256_BYTES]) -> [u8; INT256_BYTE
 fn u256_mul(a: &[u8; INT256_BYTES], b: &[u8; INT256_BYTES]) -> [u8; INT256_BYTES] {
     let a = to_u32_arr(a);
     let b = to_u32_arr(b);
-    let mut r = [0u32; INT256_WORDS];
-    for i in 0..INT256_WORDS {
+    let mut r = [0u32; INT256_NUM_U32_LIMBS];
+    for i in 0..INT256_NUM_U32_LIMBS {
         let mut carry = 0u64;
-        for j in 0..(INT256_WORDS - i) {
+        for j in 0..(INT256_NUM_U32_LIMBS - i) {
             let res = a[i] as u64 * b[j] as u64 + r[i + j] as u64 + carry;
             r[i + j] = res as u32;
             carry = res >> u32::BITS;
@@ -347,7 +357,7 @@ mod tests {
 
     fn shift_arg(shift: u32) -> [u8; INT256_BYTES] {
         let mut bytes = [0u8; INT256_BYTES];
-        bytes[..WORD_SIZE].copy_from_slice(&shift.to_le_bytes());
+        bytes[..U32_LIMB_BYTES].copy_from_slice(&shift.to_le_bytes());
         bytes
     }
 
@@ -355,7 +365,7 @@ mod tests {
     fn test_u256_add_and_sub_across_limbs() {
         let a = u256_from_u64s([u64::MAX, u64::MAX, 0, 0]);
         let one = u256_from_u64s([1, 0, 0, 0]);
-        let sum = u256_add(&a, &one);
+        let sum: [u8; 32] = u256_add(&a, &one);
         assert_eq!(to_u64(&sum), [0, 0, 1, 0]);
 
         let back = u256_sub(&sum, &one);

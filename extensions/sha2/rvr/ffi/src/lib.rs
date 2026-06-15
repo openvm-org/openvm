@@ -9,7 +9,9 @@ use std::ffi::c_void;
 
 use generic_array::GenericArray;
 use rvr_openvm_ext_ffi_common::{
-    rd_mem_words_traced, trace_chip_wrapper, u64s_as_u32s, u64s_as_u32s_mut, wr_mem_words_traced,
+    // TODO(follow-up): migrate sha2 to rd_mem_words_traced / wr_mem_words_traced ([u64])
+    rd_mem_u32_range_wrapper, trace_chip_wrapper, trace_rd_mem_u32_range_wrapper,
+    trace_wr_mem_u32_range_wrapper, u64s_as_u32s, u64s_as_u32s_mut, wr_mem_u32_range_wrapper,
 };
 use sha2::{compress256, compress512};
 
@@ -58,9 +60,11 @@ pub unsafe extern "C" fn rvr_ext_sha256(
 ) {
     // Read state (8 u32) and input block (16 u32) from memory.
     let mut state_words = [0u32; SHA256_STATE_WORDS];
-    rd_mem_words_traced(state, state_ptr, &mut state_words);
+    rd_mem_u32_range_wrapper(state, state_ptr, state_words.as_mut_ptr(), SHA256_STATE_WORDS as u32);
+    trace_rd_mem_u32_range_wrapper(state, state_ptr, state_words.as_ptr(), SHA256_STATE_WORDS as u32);
     let mut block_words = [0u32; SHA256_BLOCK_WORDS];
-    rd_mem_words_traced(state, input_ptr, &mut block_words);
+    rd_mem_u32_range_wrapper(state, input_ptr, block_words.as_mut_ptr(), SHA256_BLOCK_WORDS as u32);
+    trace_rd_mem_u32_range_wrapper(state, input_ptr, block_words.as_ptr(), SHA256_BLOCK_WORDS as u32);
 
     // compress256 wants the block as `GenericArray<u8, U64>`. Reinterpret the
     // u32 buffer as bytes (zero-copy on LE).
@@ -68,7 +72,8 @@ pub unsafe extern "C" fn rvr_ext_sha256(
         GenericArray::from_slice(u32_words_as_bytes(&block_words));
     compress256(&mut state_words, &[*block_array]);
 
-    wr_mem_words_traced(state, dst_ptr, &state_words);
+    trace_wr_mem_u32_range_wrapper(state, dst_ptr, state_words.as_ptr(), SHA256_STATE_WORDS as u32);
+    wr_mem_u32_range_wrapper(state, dst_ptr, state_words.as_ptr(), SHA256_STATE_WORDS as u32);
 
     // Trace chip height for metering.
     // The per-instruction Sha2Main cost (1 row) is covered by the per-block
@@ -98,15 +103,24 @@ pub unsafe extern "C" fn rvr_ext_sha512(
     // u64-aligned scratch holds the SHA-512 state; reinterpret as u32 words at
     // the FFI boundary (zero-copy on LE).
     let mut state_u64s = [0u64; HASH_STATE_LEN];
-    rd_mem_words_traced(state, state_ptr, u64s_as_u32s_mut(&mut state_u64s));
+    {
+        let s = u64s_as_u32s_mut(&mut state_u64s);
+        rd_mem_u32_range_wrapper(state, state_ptr, s.as_mut_ptr(), s.len() as u32);
+        trace_rd_mem_u32_range_wrapper(state, state_ptr, s.as_ptr(), s.len() as u32);
+    }
     let mut block_words = [0u32; SHA512_BLOCK_WORDS];
-    rd_mem_words_traced(state, input_ptr, &mut block_words);
+    rd_mem_u32_range_wrapper(state, input_ptr, block_words.as_mut_ptr(), SHA512_BLOCK_WORDS as u32);
+    trace_rd_mem_u32_range_wrapper(state, input_ptr, block_words.as_ptr(), SHA512_BLOCK_WORDS as u32);
 
     let block_array: &GenericArray<u8, _> =
         GenericArray::from_slice(u32_words_as_bytes(&block_words));
     compress512(&mut state_u64s, &[*block_array]);
 
-    wr_mem_words_traced(state, dst_ptr, u64s_as_u32s(&state_u64s));
+    {
+        let s = u64s_as_u32s(&state_u64s);
+        trace_wr_mem_u32_range_wrapper(state, dst_ptr, s.as_ptr(), s.len() as u32);
+        wr_mem_u32_range_wrapper(state, dst_ptr, s.as_ptr(), s.len() as u32);
+    }
 
     // Trace chip height for metering.
     trace_chip_wrapper(state, block_hasher_chip_idx, SHA512_ROWS_PER_BLOCK);

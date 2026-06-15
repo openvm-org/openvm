@@ -14,7 +14,9 @@ use rvr_openvm_ext_algebra_ffi_common::{
     write_bls12_381_fq, write_field_256, FieldArith, BLS12_381_ELEM_BYTES, FIELD_256_BYTES,
 };
 use rvr_openvm_ext_ffi_common::{
-    rd_mem_words_traced, trace_mem_access_range, wr_mem_words_traced, AS_MEMORY, WORD_SIZE,
+    // TODO(follow-up): migrate fp2 to rd_mem_words_traced / wr_mem_words_traced ([u64])
+    rd_mem_u32_range_wrapper, trace_mem_access_range, trace_rd_mem_u32_range_wrapper,
+    trace_wr_mem_u32_range_wrapper, wr_mem_u32_range_wrapper, AS_MEMORY, WORD_SIZE,
 };
 
 // ── Field structs ───────────────────────────────────────────────────────────
@@ -232,7 +234,8 @@ pub unsafe extern "C" fn rvr_ext_fp2_setup(
     debug_assert!(num_words >= 1);
 
     let mut input_words = vec![0u32; num_words as usize];
-    rd_mem_words_traced(state, rs1_ptr, &mut input_words);
+    rd_mem_u32_range_wrapper(state, rs1_ptr, input_words.as_mut_ptr(), num_words);
+    trace_rd_mem_u32_range_wrapper(state, rs1_ptr, input_words.as_ptr(), num_words);
     trace_mem_access_range(state, rs2_ptr, num_words, AS_MEMORY);
 
     // Setup validates that the guest-provided base-field modulus and setup
@@ -242,5 +245,6 @@ pub unsafe extern "C" fn rvr_ext_fp2_setup(
     // slot is the modulus p read from rs1. VM evaluates inputs modulo p,
     // so each setup coordinate writes p % p = 0.
     let output_words = vec![0u32; num_words as usize];
-    wr_mem_words_traced(state, rd_ptr, &output_words);
+    trace_wr_mem_u32_range_wrapper(state, rd_ptr, output_words.as_ptr(), num_words);
+    wr_mem_u32_range_wrapper(state, rd_ptr, output_words.as_ptr(), num_words);
 }
