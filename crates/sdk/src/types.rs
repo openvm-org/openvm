@@ -97,7 +97,7 @@ pub mod hex_bytes32 {
 }
 
 /// Application execution commitment pair (big-endian 32-byte values).
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AppExecutionCommit {
     #[serde(with = "hex_bytes32")]
     pub app_exe_commit: openvm_continuations::CommitBytes,

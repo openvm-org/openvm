@@ -62,7 +62,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let proof = sdk.prove_evm(elf, stdin, &[])?;
 
     // 7. Verify the EVM proof
-    Sdk::verify_evm_halo2_proof(&verifier, proof)?;
+    // NOTE: you may compare the proof's executable and VM commits against an expected value by
+    // passing Some(app_commit) — e.g. `sdk.app_commit(elf)?` instead of None.
+    Sdk::verify_evm_halo2_proof(&verifier, proof, None)?;
     // [!endregion evm_verification]
 
     Ok(())

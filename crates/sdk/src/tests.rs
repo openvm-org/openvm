@@ -279,9 +279,10 @@ fn test_sdk_fibonacci() -> Result<()> {
     }
     #[cfg(feature = "evm-verify")]
     {
+        let app_commit = sdk.app_commit(app_exe.clone())?;
         let evm_proof = sdk.prove_evm(app_exe, stdin, &[])?;
         let openvm_verifier = sdk.generate_halo2_verifier_solidity()?;
-        let _gas_cost = Sdk::verify_evm_halo2_proof(&openvm_verifier, evm_proof)?;
+        let _gas_cost = Sdk::verify_evm_halo2_proof(&openvm_verifier, evm_proof, Some(app_commit))?;
     }
 
     Ok(())
