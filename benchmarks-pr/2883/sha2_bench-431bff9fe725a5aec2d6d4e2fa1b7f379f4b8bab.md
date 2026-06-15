@@ -1,0 +1,821 @@
+| Summary | Proof Time (s) | Parallel Proof Time (s) | Parallel Proof Time (32 provers) (s) |
+|:---|---:|---:|---:|
+| Total |  10.71 |  4.72 |  4.72 |
+| app_proof |  8.88 |  2.90 |  2.90 |
+| leaf |  1.15 |  1.15 |  1.15 |
+| internal_for_leaf |  0.35 |  0.35 |  0.35 |
+| internal_recursive.0 |  0.18 |  0.18 |  0.18 |
+| internal_recursive.1 |  0.15 |  0.15 |  0.15 |
+
+
+| app_proof |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  2,196.25 |  8,785 |  2,800 |  557 |
+| `compile_metered_time_ms` |  4 |  4 |  4 |  4 |
+| `execute_metered_time_ms` |  100 | -          | -          | -          |
+| `execute_metered_insns` |  11,167,961 | -          | -          | -          |
+| `execute_metered_insn_mi/s` |  111.38 | -          |  111.38 |  111.38 |
+| `execute_preflight_insns` |  2,791,990.25 |  11,167,961 |  3,562,000 |  481,961 |
+| `execute_preflight_time_ms` |  165 |  660 |  272 |  32 |
+| `execute_preflight_insn_mi/s` |  35.74 | -          |  37.28 |  33.43 |
+| `trace_gen_time_ms   ` |  72.25 |  289 |  85 |  66 |
+| `memory_finalize_time_ms` |  0 |  0 |  0 |  0 |
+| __Prover__ |||||
+| `stark_prove_excluding_trace_time_ms` |  1,892.75 |  7,571 |  2,463 |  398 |
+| `prover.main_trace_commit_time_ms` |  486.75 |  1,947 |  625 |  80 |
+| `prover.rap_constraints_time_ms` |  1,015.50 |  4,062 |  1,283 |  233 |
+| `prover.openings_time_ms` |  389.25 |  1,557 |  567 |  84 |
+| `prover.rap_constraints.logup_gkr_time_ms` |  248.75 |  995 |  307 |  76 |
+| `prover.rap_constraints.round0_time_ms` |  568.25 |  2,273 |  728 |  113 |
+| `prover.rap_constraints.mle_rounds_time_ms` |  197.25 |  789 |  250 |  42 |
+| `prover.openings.stacked_reduction_time_ms` |  79.50 |  318 |  101 |  16 |
+| `prover.openings.stacked_reduction.round0_time_ms` |  47.50 |  190 |  61 |  8 |
+| `prover.openings.stacked_reduction.mle_rounds_time_ms` |  31.50 |  126 |  40 |  8 |
+| `prover.openings.whir_time_ms` |  309.25 |  1,237 |  466 |  67 |
+
+| leaf |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  1,148 |  1,148 |  1,148 |  1,148 |
+| `execute_preflight_time_ms` |  2 |  2 |  2 |  2 |
+| `trace_gen_time_ms   ` |  123 |  123 |  123 |  123 |
+| `generate_blob_total_time_ms` |  18 |  18 |  18 |  18 |
+| __Prover__ |||||
+| `stark_prove_excluding_trace_time_ms` |  1,024 |  1,024 |  1,024 |  1,024 |
+| `prover.main_trace_commit_time_ms` |  413 |  413 |  413 |  413 |
+| `prover.rap_constraints_time_ms` |  286 |  286 |  286 |  286 |
+| `prover.openings_time_ms` |  325 |  325 |  325 |  325 |
+| `prover.rap_constraints.logup_gkr_time_ms` |  74 |  74 |  74 |  74 |
+| `prover.rap_constraints.round0_time_ms` |  131 |  131 |  131 |  131 |
+| `prover.rap_constraints.mle_rounds_time_ms` |  81 |  81 |  81 |  81 |
+| `prover.openings.stacked_reduction_time_ms` |  41 |  41 |  41 |  41 |
+| `prover.openings.stacked_reduction.round0_time_ms` |  22 |  22 |  22 |  22 |
+| `prover.openings.stacked_reduction.mle_rounds_time_ms` |  19 |  19 |  19 |  19 |
+| `prover.openings.whir_time_ms` |  283 |  283 |  283 |  283 |
+
+| internal_for_leaf |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  346 |  346 |  346 |  346 |
+| `execute_preflight_time_ms` |  2 |  2 |  2 |  2 |
+| `trace_gen_time_ms   ` |  22 |  22 |  22 |  22 |
+| `generate_blob_total_time_ms` |  1 |  1 |  1 |  1 |
+| __Prover__ |||||
+| `stark_prove_excluding_trace_time_ms` |  324 |  324 |  324 |  324 |
+| `prover.main_trace_commit_time_ms` |  118 |  118 |  118 |  118 |
+| `prover.rap_constraints_time_ms` |  107 |  107 |  107 |  107 |
+| `prover.openings_time_ms` |  98 |  98 |  98 |  98 |
+| `prover.rap_constraints.logup_gkr_time_ms` |  20 |  20 |  20 |  20 |
+| `prover.rap_constraints.round0_time_ms` |  35 |  35 |  35 |  35 |
+| `prover.rap_constraints.mle_rounds_time_ms` |  51 |  51 |  51 |  51 |
+| `prover.openings.stacked_reduction_time_ms` |  13 |  13 |  13 |  13 |
+| `prover.openings.stacked_reduction.round0_time_ms` |  3 |  3 |  3 |  3 |
+| `prover.openings.stacked_reduction.mle_rounds_time_ms` |  9 |  9 |  9 |  9 |
+| `prover.openings.whir_time_ms` |  84 |  84 |  84 |  84 |
+
+| internal_recursive.0 |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  180 |  180 |  180 |  180 |
+| `execute_preflight_time_ms` |  2 |  2 |  2 |  2 |
+| `trace_gen_time_ms   ` |  10 |  10 |  10 |  10 |
+| `generate_blob_total_time_ms` |  0 |  0 |  0 |  0 |
+| __Prover__ |||||
+| `stark_prove_excluding_trace_time_ms` |  169 |  169 |  169 |  169 |
+| `prover.main_trace_commit_time_ms` |  48 |  48 |  48 |  48 |
+| `prover.rap_constraints_time_ms` |  68 |  68 |  68 |  68 |
+| `prover.openings_time_ms` |  53 |  53 |  53 |  53 |
+| `prover.rap_constraints.logup_gkr_time_ms` |  14 |  14 |  14 |  14 |
+| `prover.rap_constraints.round0_time_ms` |  25 |  25 |  25 |  25 |
+| `prover.rap_constraints.mle_rounds_time_ms` |  28 |  28 |  28 |  28 |
+| `prover.openings.stacked_reduction_time_ms` |  8 |  8 |  8 |  8 |
+| `prover.openings.stacked_reduction.round0_time_ms` |  1 |  1 |  1 |  1 |
+| `prover.openings.stacked_reduction.mle_rounds_time_ms` |  6 |  6 |  6 |  6 |
+| `prover.openings.whir_time_ms` |  45 |  45 |  45 |  45 |
+
+| internal_recursive.1 |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  148 |  148 |  148 |  148 |
+| `execute_preflight_time_ms` |  2 |  2 |  2 |  2 |
+| `trace_gen_time_ms   ` |  9 |  9 |  9 |  9 |
+| `generate_blob_total_time_ms` |  0 |  0 |  0 |  0 |
+| __Prover__ |||||
+| `stark_prove_excluding_trace_time_ms` |  138 |  138 |  138 |  138 |
+| `prover.main_trace_commit_time_ms` |  32 |  32 |  32 |  32 |
+| `prover.rap_constraints_time_ms` |  63 |  63 |  63 |  63 |
+| `prover.openings_time_ms` |  42 |  42 |  42 |  42 |
+| `prover.rap_constraints.logup_gkr_time_ms` |  14 |  14 |  14 |  14 |
+| `prover.rap_constraints.round0_time_ms` |  23 |  23 |  23 |  23 |
+| `prover.rap_constraints.mle_rounds_time_ms` |  25 |  25 |  25 |  25 |
+| `prover.openings.stacked_reduction_time_ms` |  7 |  7 |  7 |  7 |
+| `prover.openings.stacked_reduction.round0_time_ms` |  1 |  1 |  1 |  1 |
+| `prover.openings.stacked_reduction.mle_rounds_time_ms` |  5 |  5 |  5 |  5 |
+| `prover.openings.whir_time_ms` |  35 |  35 |  35 |  35 |
+
+| agg_keygen |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+
+
+
+## GPU Memory Usage
+
+![GPU Memory Usage](https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github/charts/431bff9fe725a5aec2d6d4e2fa1b7f379f4b8bab/sha2_bench-431bff9fe725a5aec2d6d4e2fa1b7f379f4b8bab.memory.svg)
+
+| Module | Max (GB) | Max At |
+| --- | ---: | --- |
+| prover.stacked_commit | 7.50 | app_proof.prover.0 |
+| frac_sumcheck.gkr_rounds | 6.40 | app_proof.prover.0 |
+| prover.batch_constraints.before_round0 | 6.40 | app_proof.prover.0 |
+| frac_sumcheck.segment_tree | 6.31 | app_proof.prover.0 |
+| prover.gkr_input_evals | 6.31 | app_proof.prover.0 |
+| prover.rap_constraints | 5.55 | app_proof.prover.0 |
+| prover.batch_constraints.fold_ple_evals | 5.55 | app_proof.prover.0 |
+| prover.batch_constraints.round0 | 5.55 | app_proof.prover.0 |
+| prover.merkle_tree | 5.15 | app_proof.prover.0 |
+| prover.prove_whir_opening | 5.15 | app_proof.prover.0 |
+| prover.openings | 5.15 | app_proof.prover.0 |
+| prover.rs_code_matrix | 5.15 | app_proof.prover.0 |
+| generate mem proving ctxs | 2.74 | app_proof.3 |
+| set initial memory | 2.74 | app_proof.1 |
+| prover.before_gkr_input_evals | 2.68 | app_proof.prover.0 |
+| tracegen.pow_checker | 1.38 | leaf.0 |
+| tracegen.exp_bits_len | 1.38 | leaf.0 |
+| tracegen.whir_final_poly_query_eval | 1.38 | leaf.0 |
+| tracegen.whir_folding | 1.12 | leaf.0 |
+| tracegen.whir_non_initial_opened_values | 1.12 | leaf.0 |
+| tracegen.whir_initial_opened_values | 1.12 | leaf.0 |
+| tracegen.range_checker | 0.95 | leaf.0 |
+| tracegen.proof_shape | 0.95 | leaf.0 |
+| tracegen.public_values | 0.95 | leaf.0 |
+
+<details>
+<summary>Detailed Metrics</summary>
+
+| transport_pk_to_device_time_ms | stacked_commit_time_ms | rs_code_matrix_time_ms | proof_size_bytes.total | proof_size_bytes.compressed | merkle_tree_time_ms | memory_to_vec_partition_time_ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| 128 | 9 | 0 | 267,175 | 227,905 | 9 | 83 | 
+
+| air_id | air_name | need_rot | interactions | constraints | constraint_deg |
+| --- | --- | --- | --- | --- | --- |
+| 0 | ProgramAir |  | 1 |  | 1 | 
+| 1 | VmConnectorAir | 1 | 5 | 9 | 3 | 
+| 10 | Sha2MainAir<Sha512Config> | 1 | 149 | 39 | 3 | 
+| 11 | Sha2BlockHasherVmAir<Sha512Config> | 1 | 53 | 1,481 | 3 | 
+| 12 | Sha2MainAir<Sha256Config> | 1 | 85 | 23 | 3 | 
+| 13 | Sha2BlockHasherVmAir<Sha256Config> | 1 | 29 | 754 | 3 | 
+| 14 | Rv64HintStoreAir | 1 | 17 | 15 | 3 | 
+| 15 | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> |  | 14 | 5 | 3 | 
+| 16 | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> |  | 15 | 9 | 3 | 
+| 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> |  | 12 | 11 | 2 | 
+| 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> |  | 14 | 25 | 3 | 
+| 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> |  | 11 | 11 | 3 | 
+| 2 | PersistentBoundaryAir<8> |  | 4 | 3 | 3 | 
+| 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> |  | 22 | 22 | 3 | 
+| 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> |  | 25 | 31 | 3 | 
+| 22 | VmAirWrapper<Rv64BaseAluWAdapterAir, ShiftCoreAir<4, 8> |  | 29 | 77 | 3 | 
+| 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> |  | 38 | 180 | 3 | 
+| 24 | VmAirWrapper<Rv64BaseAluU16AdapterAir, LessThanCoreAir<4, 16> |  | 19 | 30 | 3 | 
+| 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> |  | 25 | 23 | 3 | 
+| 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> |  | 24 | 16 | 3 | 
+| 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> |  | 20 | 21 | 3 | 
+| 28 | BitwiseOperationLookupAir<8> | 1 | 2 | 19 | 2 | 
+| 29 | PhantomAir |  | 3 | 1 | 2 | 
+| 3 | MemoryMerkleAir<8> | 1 | 4 | 35 | 3 | 
+| 30 | Poseidon2PeripheryAir<BabyBearParameters>, 1> |  | 1 | 282 | 3 | 
+| 31 | VariableRangeCheckerAir | 1 | 1 | 10 | 3 | 
+| 4 | VmAirWrapper<Rv64MultWAdapterAir, DivRemCoreAir<4, 8> |  | 30 | 65 | 3 | 
+| 5 | VmAirWrapper<Rv64MultAdapterAir, DivRemCoreAir<8, 8> |  | 41 | 104 | 3 | 
+| 6 | VmAirWrapper<Rv64MultAdapterAir, MulHCoreAir<8, 8> |  | 40 | 11 | 2 | 
+| 7 | VmAirWrapper<Rv64MultWAdapterAir, MultiplicationCoreAir<4, 8> |  | 24 | 5 | 2 | 
+| 8 | VmAirWrapper<Rv64MultAdapterAir, MultiplicationCoreAir<8, 8> |  | 31 | 4 | 2 | 
+| 9 | RangeTupleCheckerAir<2> | 1 | 1 | 8 | 3 | 
+
+| group | transport_pk_to_device_time_ms | stacked_commit_time_ms | single_leaf_agg_time_ms | single_internal_agg_time_ms | rs_code_matrix_time_ms | prove_segment_time_ms | new_time_ms | merkle_tree_time_ms | execute_metered_time_ms | execute_metered_insns | execute_metered_insn_mi/s | compute_user_public_values_proof_time_ms | app_prove_time_ms | agg_layer_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| agg_keygen | 67 | 9 |  |  | 0 |  | 336 | 9 |  |  |  |  |  |  | 
+| app_proof |  |  |  |  |  | 557 |  |  | 100 | 11,167,961 | 111.38 | 0 | 8,892 |  | 
+| internal_for_leaf |  |  |  | 346 |  |  |  |  |  |  |  |  |  | 346 | 
+| internal_recursive.0 |  |  |  | 180 |  |  |  |  |  |  |  |  |  | 181 | 
+| internal_recursive.1 |  |  |  | 148 |  |  |  |  |  |  |  |  |  | 148 | 
+| leaf |  |  | 1,148 |  |  |  |  |  |  |  |  |  |  | 1,148 | 
+
+| group | air | generate_cached_trace_time_ms |
+| --- | --- | --- |
+| agg_keygen | SymbolicExpressionAir | 0 | 
+
+| group | air | segment | single_trace_gen_time_ms |
+| --- | --- | --- | --- |
+| app_proof | PhantomAir | 0 | 0 | 
+| app_proof | Rv64HintStoreAir | 0 | 0 | 
+| app_proof | Sha2MainAir<Sha256Config> | 0 | 3 | 
+| app_proof | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | 0 | 1 | 
+| app_proof | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | 0 | 1 | 
+| app_proof | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | 0 | 5 | 
+| app_proof | VmAirWrapper<Rv64BaseAluU16AdapterAir, LessThanCoreAir<4, 16> | 0 | 0 | 
+| app_proof | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | 0 | 0 | 
+| app_proof | VmAirWrapper<Rv64BaseAluWAdapterAir, ShiftCoreAir<4, 8> | 0 | 0 | 
+| app_proof | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | 0 | 1 | 
+| app_proof | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | 0 | 0 | 
+| app_proof | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | 0 | 0 | 
+| app_proof | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | 0 | 28 | 
+| app_proof | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | 0 | 0 | 
+| app_proof | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | 0 | 6 | 
+| app_proof | VmAirWrapper<Rv64MultAdapterAir, MultiplicationCoreAir<8, 8> | 0 | 1 | 
+| app_proof | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | 0 | 12 | 
+| app_proof | Sha2MainAir<Sha256Config> | 1 | 1 | 
+| app_proof | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | 1 | 1 | 
+| app_proof | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | 1 | 1 | 
+| app_proof | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | 1 | 5 | 
+| app_proof | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | 1 | 0 | 
+| app_proof | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | 1 | 1 | 
+| app_proof | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | 1 | 0 | 
+| app_proof | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | 1 | 0 | 
+| app_proof | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | 1 | 41 | 
+| app_proof | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | 1 | 0 | 
+| app_proof | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | 1 | 6 | 
+| app_proof | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | 1 | 0 | 
+| app_proof | Sha2MainAir<Sha256Config> | 2 | 1 | 
+| app_proof | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | 2 | 1 | 
+| app_proof | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | 2 | 1 | 
+| app_proof | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | 2 | 5 | 
+| app_proof | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | 2 | 0 | 
+| app_proof | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | 2 | 1 | 
+| app_proof | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | 2 | 0 | 
+| app_proof | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | 2 | 0 | 
+| app_proof | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | 2 | 41 | 
+| app_proof | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | 2 | 0 | 
+| app_proof | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | 2 | 6 | 
+| app_proof | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | 2 | 0 | 
+| app_proof | Sha2MainAir<Sha256Config> | 3 | 0 | 
+| app_proof | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | 3 | 0 | 
+| app_proof | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | 3 | 0 | 
+| app_proof | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | 3 | 0 | 
+| app_proof | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | 3 | 0 | 
+| app_proof | VmAirWrapper<Rv64BaseAluWAdapterAir, ShiftCoreAir<4, 8> | 3 | 0 | 
+| app_proof | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | 3 | 0 | 
+| app_proof | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | 3 | 0 | 
+| app_proof | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | 3 | 5 | 
+| app_proof | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | 3 | 0 | 
+| app_proof | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | 3 | 0 | 
+| app_proof | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | 3 | 0 | 
+| app_proof | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | 3 | 0 | 
+
+| group | air_id | air_name | need_rot | interactions | constraints | constraint_deg |
+| --- | --- | --- | --- | --- | --- | --- |
+| agg_keygen | 0 | VerifierPvsAir | 1 | 69 | 213 | 4 | 
+| agg_keygen | 1 | VmPvsAir | 1 | 30 | 54 | 4 | 
+| agg_keygen | 10 | EqSharpUniReceiverAir | 1 | 3 | 25 | 4 | 
+| agg_keygen | 11 | EqUniAir | 1 | 3 | 31 | 4 | 
+| agg_keygen | 12 | ExpressionClaimAir | 1 | 7 | 68 | 4 | 
+| agg_keygen | 13 | InteractionsFoldingAir | 1 | 13 | 94 | 4 | 
+| agg_keygen | 14 | ConstraintsFoldingAir | 1 | 10 | 42 | 4 | 
+| agg_keygen | 15 | EqNegAir | 1 | 8 | 83 | 4 | 
+| agg_keygen | 16 | TranscriptAir | 1 | 17 | 84 | 4 | 
+| agg_keygen | 17 | Poseidon2Air<BabyBearParameters>, 1> |  | 2 | 282 | 3 | 
+| agg_keygen | 18 | MerkleVerifyAir |  | 6 | 22 | 3 | 
+| agg_keygen | 19 | ProofShapeAir<4, 8> | 1 | 78 | 88 | 4 | 
+| agg_keygen | 2 | UnsetPvsAir | 1 | 1 | 2 | 2 | 
+| agg_keygen | 20 | PublicValuesAir | 1 | 4 | 18 | 4 | 
+| agg_keygen | 21 | RangeCheckerAir<8> | 1 | 1 | 3 | 2 | 
+| agg_keygen | 22 | GkrInputAir | 1 | 19 | 19 | 4 | 
+| agg_keygen | 23 | GkrLayerAir | 1 | 30 | 38 | 4 | 
+| agg_keygen | 24 | GkrLayerSumcheckAir | 1 | 21 | 59 | 4 | 
+| agg_keygen | 25 | GkrXiSamplerAir | 1 | 7 | 17 | 4 | 
+| agg_keygen | 26 | OpeningClaimsAir | 1 | 22 | 98 | 4 | 
+| agg_keygen | 27 | UnivariateRoundAir | 1 | 13 | 54 | 4 | 
+| agg_keygen | 28 | SumcheckRoundsAir | 1 | 21 | 69 | 4 | 
+| agg_keygen | 29 | StackingClaimsAir | 1 | 17 | 57 | 4 | 
+| agg_keygen | 3 | SymbolicExpressionAir<BabyBearParameters> | 1 | 52 | 32 | 4 | 
+| agg_keygen | 30 | EqBaseAir | 1 | 8 | 89 | 4 | 
+| agg_keygen | 31 | EqBitsAir | 1 | 5 | 24 | 4 | 
+| agg_keygen | 32 | WhirRoundAir | 1 | 31 | 28 | 4 | 
+| agg_keygen | 33 | SumcheckAir | 1 | 19 | 47 | 4 | 
+| agg_keygen | 34 | WhirQueryAir | 1 | 5 | 51 | 4 | 
+| agg_keygen | 35 | InitialOpenedValuesAir | 1 | 13 | 145 | 4 | 
+| agg_keygen | 36 | NonInitialOpenedValuesAir | 1 | 4 | 42 | 4 | 
+| agg_keygen | 37 | WhirFoldingAir |  | 4 | 15 | 3 | 
+| agg_keygen | 38 | FinalPolyMleEvalAir |  | 13 | 19 | 4 | 
+| agg_keygen | 39 | FinalPolyQueryEvalAir | 1 | 5 | 120 | 4 | 
+| agg_keygen | 4 | FractionsFolderAir | 1 | 17 | 41 | 4 | 
+| agg_keygen | 40 | PowerCheckerAir<2, 32> | 1 | 2 | 5 | 2 | 
+| agg_keygen | 41 | ExpBitsLenAir | 1 | 2 | 44 | 3 | 
+| agg_keygen | 5 | UnivariateSumcheckAir | 1 | 14 | 46 | 4 | 
+| agg_keygen | 6 | MultilinearSumcheckAir | 1 | 14 | 60 | 4 | 
+| agg_keygen | 7 | EqNsAir | 1 | 10 | 65 | 4 | 
+| agg_keygen | 8 | Eq3bAir | 1 | 3 | 65 | 4 | 
+| agg_keygen | 9 | EqSharpUniAir | 1 | 5 | 48 | 4 | 
+
+| group | air_id | air_name | idx | phase | rows | main_cols | cells |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| internal_for_leaf | 0 | VerifierPvsAir | 0 | prover | 1 | 69 | 69 | 
+| internal_for_leaf | 1 | VmPvsAir | 0 | prover | 1 | 32 | 32 | 
+| internal_for_leaf | 10 | EqSharpUniReceiverAir | 0 | prover | 16 | 17 | 272 | 
+| internal_for_leaf | 11 | EqUniAir | 0 | prover | 8 | 16 | 128 | 
+| internal_for_leaf | 12 | ExpressionClaimAir | 0 | prover | 128 | 32 | 4,096 | 
+| internal_for_leaf | 13 | InteractionsFoldingAir | 0 | prover | 8,192 | 37 | 303,104 | 
+| internal_for_leaf | 14 | ConstraintsFoldingAir | 0 | prover | 4,096 | 25 | 102,400 | 
+| internal_for_leaf | 15 | EqNegAir | 0 | prover | 16 | 40 | 640 | 
+| internal_for_leaf | 16 | TranscriptAir | 0 | prover | 4,096 | 44 | 180,224 | 
+| internal_for_leaf | 17 | Poseidon2Air<BabyBearParameters>, 1> | 0 | prover | 65,536 | 301 | 19,726,336 | 
+| internal_for_leaf | 18 | MerkleVerifyAir | 0 | prover | 16,384 | 37 | 606,208 | 
+| internal_for_leaf | 19 | ProofShapeAir<4, 8> | 0 | prover | 64 | 45 | 2,880 | 
+| internal_for_leaf | 2 | UnsetPvsAir | 0 | prover | 1 | 2 | 2 | 
+| internal_for_leaf | 20 | PublicValuesAir | 0 | prover | 128 | 8 | 1,024 | 
+| internal_for_leaf | 21 | RangeCheckerAir<8> | 0 | prover | 256 | 2 | 512 | 
+| internal_for_leaf | 22 | GkrInputAir | 0 | prover | 1 | 26 | 26 | 
+| internal_for_leaf | 23 | GkrLayerAir | 0 | prover | 32 | 46 | 1,472 | 
+| internal_for_leaf | 24 | GkrLayerSumcheckAir | 0 | prover | 512 | 45 | 23,040 | 
+| internal_for_leaf | 25 | GkrXiSamplerAir | 0 | prover | 1 | 10 | 10 | 
+| internal_for_leaf | 26 | OpeningClaimsAir | 0 | prover | 2,048 | 63 | 129,024 | 
+| internal_for_leaf | 27 | UnivariateRoundAir | 0 | prover | 32 | 27 | 864 | 
+| internal_for_leaf | 28 | SumcheckRoundsAir | 0 | prover | 32 | 57 | 1,824 | 
+| internal_for_leaf | 29 | StackingClaimsAir | 0 | prover | 2,048 | 35 | 71,680 | 
+| internal_for_leaf | 3 | SymbolicExpressionAir<BabyBearParameters> | 0 | prover | 32,768 | 48 | 1,572,864 | 
+| internal_for_leaf | 30 | EqBaseAir | 0 | prover | 8 | 51 | 408 | 
+| internal_for_leaf | 31 | EqBitsAir | 0 | prover | 2,048 | 16 | 32,768 | 
+| internal_for_leaf | 32 | WhirRoundAir | 0 | prover | 4 | 46 | 184 | 
+| internal_for_leaf | 33 | SumcheckAir | 0 | prover | 16 | 38 | 608 | 
+| internal_for_leaf | 34 | WhirQueryAir | 0 | prover | 512 | 32 | 16,384 | 
+| internal_for_leaf | 35 | InitialOpenedValuesAir | 0 | prover | 32,768 | 89 | 2,916,352 | 
+| internal_for_leaf | 36 | NonInitialOpenedValuesAir | 0 | prover | 4,096 | 28 | 114,688 | 
+| internal_for_leaf | 37 | WhirFoldingAir | 0 | prover | 8,192 | 31 | 253,952 | 
+| internal_for_leaf | 38 | FinalPolyMleEvalAir | 0 | prover | 1,024 | 34 | 34,816 | 
+| internal_for_leaf | 39 | FinalPolyQueryEvalAir | 0 | prover | 262,144 | 45 | 11,796,480 | 
+| internal_for_leaf | 4 | FractionsFolderAir | 0 | prover | 64 | 29 | 1,856 | 
+| internal_for_leaf | 40 | PowerCheckerAir<2, 32> | 0 | prover | 32 | 4 | 128 | 
+| internal_for_leaf | 41 | ExpBitsLenAir | 0 | prover | 16,384 | 16 | 262,144 | 
+| internal_for_leaf | 5 | UnivariateSumcheckAir | 0 | prover | 128 | 24 | 3,072 | 
+| internal_for_leaf | 6 | MultilinearSumcheckAir | 0 | prover | 128 | 33 | 4,224 | 
+| internal_for_leaf | 7 | EqNsAir | 0 | prover | 32 | 41 | 1,312 | 
+| internal_for_leaf | 8 | Eq3bAir | 0 | prover | 16,384 | 25 | 409,600 | 
+| internal_for_leaf | 9 | EqSharpUniAir | 0 | prover | 16 | 17 | 272 | 
+| internal_recursive.0 | 0 | VerifierPvsAir | 1 | prover | 1 | 69 | 69 | 
+| internal_recursive.0 | 1 | VmPvsAir | 1 | prover | 1 | 32 | 32 | 
+| internal_recursive.0 | 10 | EqSharpUniReceiverAir | 1 | prover | 4 | 17 | 68 | 
+| internal_recursive.0 | 11 | EqUniAir | 1 | prover | 4 | 16 | 64 | 
+| internal_recursive.0 | 12 | ExpressionClaimAir | 1 | prover | 128 | 32 | 4,096 | 
+| internal_recursive.0 | 13 | InteractionsFoldingAir | 1 | prover | 8,192 | 37 | 303,104 | 
+| internal_recursive.0 | 14 | ConstraintsFoldingAir | 1 | prover | 4,096 | 25 | 102,400 | 
+| internal_recursive.0 | 15 | EqNegAir | 1 | prover | 8 | 40 | 320 | 
+| internal_recursive.0 | 16 | TranscriptAir | 1 | prover | 4,096 | 44 | 180,224 | 
+| internal_recursive.0 | 17 | Poseidon2Air<BabyBearParameters>, 1> | 1 | prover | 32,768 | 301 | 9,863,168 | 
+| internal_recursive.0 | 18 | MerkleVerifyAir | 1 | prover | 8,192 | 37 | 303,104 | 
+| internal_recursive.0 | 19 | ProofShapeAir<4, 8> | 1 | prover | 64 | 45 | 2,880 | 
+| internal_recursive.0 | 2 | UnsetPvsAir | 1 | prover | 1 | 2 | 2 | 
+| internal_recursive.0 | 20 | PublicValuesAir | 1 | prover | 128 | 8 | 1,024 | 
+| internal_recursive.0 | 21 | RangeCheckerAir<8> | 1 | prover | 256 | 2 | 512 | 
+| internal_recursive.0 | 22 | GkrInputAir | 1 | prover | 1 | 26 | 26 | 
+| internal_recursive.0 | 23 | GkrLayerAir | 1 | prover | 32 | 46 | 1,472 | 
+| internal_recursive.0 | 24 | GkrLayerSumcheckAir | 1 | prover | 256 | 45 | 11,520 | 
+| internal_recursive.0 | 25 | GkrXiSamplerAir | 1 | prover | 1 | 10 | 10 | 
+| internal_recursive.0 | 26 | OpeningClaimsAir | 1 | prover | 2,048 | 63 | 129,024 | 
+| internal_recursive.0 | 27 | UnivariateRoundAir | 1 | prover | 8 | 27 | 216 | 
+| internal_recursive.0 | 28 | SumcheckRoundsAir | 1 | prover | 32 | 57 | 1,824 | 
+| internal_recursive.0 | 29 | StackingClaimsAir | 1 | prover | 512 | 35 | 17,920 | 
+| internal_recursive.0 | 3 | SymbolicExpressionAir<BabyBearParameters> | 1 | prover | 32,768 | 48 | 1,572,864 | 
+| internal_recursive.0 | 30 | EqBaseAir | 1 | prover | 4 | 51 | 204 | 
+| internal_recursive.0 | 31 | EqBitsAir | 1 | prover | 2,048 | 16 | 32,768 | 
+| internal_recursive.0 | 32 | WhirRoundAir | 1 | prover | 4 | 46 | 184 | 
+| internal_recursive.0 | 33 | SumcheckAir | 1 | prover | 16 | 38 | 608 | 
+| internal_recursive.0 | 34 | WhirQueryAir | 1 | prover | 128 | 32 | 4,096 | 
+| internal_recursive.0 | 35 | InitialOpenedValuesAir | 1 | prover | 16,384 | 89 | 1,458,176 | 
+| internal_recursive.0 | 36 | NonInitialOpenedValuesAir | 1 | prover | 1,024 | 28 | 28,672 | 
+| internal_recursive.0 | 37 | WhirFoldingAir | 1 | prover | 2,048 | 31 | 63,488 | 
+| internal_recursive.0 | 38 | FinalPolyMleEvalAir | 1 | prover | 256 | 34 | 8,704 | 
+| internal_recursive.0 | 39 | FinalPolyQueryEvalAir | 1 | prover | 16,384 | 45 | 737,280 | 
+| internal_recursive.0 | 4 | FractionsFolderAir | 1 | prover | 64 | 29 | 1,856 | 
+| internal_recursive.0 | 40 | PowerCheckerAir<2, 32> | 1 | prover | 32 | 4 | 128 | 
+| internal_recursive.0 | 41 | ExpBitsLenAir | 1 | prover | 8,192 | 16 | 131,072 | 
+| internal_recursive.0 | 5 | UnivariateSumcheckAir | 1 | prover | 16 | 24 | 384 | 
+| internal_recursive.0 | 6 | MultilinearSumcheckAir | 1 | prover | 128 | 33 | 4,224 | 
+| internal_recursive.0 | 7 | EqNsAir | 1 | prover | 32 | 41 | 1,312 | 
+| internal_recursive.0 | 8 | Eq3bAir | 1 | prover | 16,384 | 25 | 409,600 | 
+| internal_recursive.0 | 9 | EqSharpUniAir | 1 | prover | 4 | 17 | 68 | 
+| internal_recursive.1 | 0 | VerifierPvsAir | 1 | prover | 1 | 69 | 69 | 
+| internal_recursive.1 | 1 | VmPvsAir | 1 | prover | 1 | 32 | 32 | 
+| internal_recursive.1 | 10 | EqSharpUniReceiverAir | 1 | prover | 4 | 17 | 68 | 
+| internal_recursive.1 | 11 | EqUniAir | 1 | prover | 4 | 16 | 64 | 
+| internal_recursive.1 | 12 | ExpressionClaimAir | 1 | prover | 128 | 32 | 4,096 | 
+| internal_recursive.1 | 13 | InteractionsFoldingAir | 1 | prover | 8,192 | 37 | 303,104 | 
+| internal_recursive.1 | 14 | ConstraintsFoldingAir | 1 | prover | 4,096 | 25 | 102,400 | 
+| internal_recursive.1 | 15 | EqNegAir | 1 | prover | 8 | 40 | 320 | 
+| internal_recursive.1 | 16 | TranscriptAir | 1 | prover | 4,096 | 44 | 180,224 | 
+| internal_recursive.1 | 17 | Poseidon2Air<BabyBearParameters>, 1> | 1 | prover | 16,384 | 301 | 4,931,584 | 
+| internal_recursive.1 | 18 | MerkleVerifyAir | 1 | prover | 8,192 | 37 | 303,104 | 
+| internal_recursive.1 | 19 | ProofShapeAir<4, 8> | 1 | prover | 64 | 45 | 2,880 | 
+| internal_recursive.1 | 2 | UnsetPvsAir | 1 | prover | 1 | 2 | 2 | 
+| internal_recursive.1 | 20 | PublicValuesAir | 1 | prover | 128 | 8 | 1,024 | 
+| internal_recursive.1 | 21 | RangeCheckerAir<8> | 1 | prover | 256 | 2 | 512 | 
+| internal_recursive.1 | 22 | GkrInputAir | 1 | prover | 1 | 26 | 26 | 
+| internal_recursive.1 | 23 | GkrLayerAir | 1 | prover | 32 | 46 | 1,472 | 
+| internal_recursive.1 | 24 | GkrLayerSumcheckAir | 1 | prover | 256 | 45 | 11,520 | 
+| internal_recursive.1 | 25 | GkrXiSamplerAir | 1 | prover | 1 | 10 | 10 | 
+| internal_recursive.1 | 26 | OpeningClaimsAir | 1 | prover | 2,048 | 63 | 129,024 | 
+| internal_recursive.1 | 27 | UnivariateRoundAir | 1 | prover | 8 | 27 | 216 | 
+| internal_recursive.1 | 28 | SumcheckRoundsAir | 1 | prover | 32 | 57 | 1,824 | 
+| internal_recursive.1 | 29 | StackingClaimsAir | 1 | prover | 512 | 35 | 17,920 | 
+| internal_recursive.1 | 3 | SymbolicExpressionAir<BabyBearParameters> | 1 | prover | 32,768 | 48 | 1,572,864 | 
+| internal_recursive.1 | 30 | EqBaseAir | 1 | prover | 4 | 51 | 204 | 
+| internal_recursive.1 | 31 | EqBitsAir | 1 | prover | 4,096 | 16 | 65,536 | 
+| internal_recursive.1 | 32 | WhirRoundAir | 1 | prover | 4 | 46 | 184 | 
+| internal_recursive.1 | 33 | SumcheckAir | 1 | prover | 16 | 38 | 608 | 
+| internal_recursive.1 | 34 | WhirQueryAir | 1 | prover | 128 | 32 | 4,096 | 
+| internal_recursive.1 | 35 | InitialOpenedValuesAir | 1 | prover | 8,192 | 89 | 729,088 | 
+| internal_recursive.1 | 36 | NonInitialOpenedValuesAir | 1 | prover | 1,024 | 28 | 28,672 | 
+| internal_recursive.1 | 37 | WhirFoldingAir | 1 | prover | 2,048 | 31 | 63,488 | 
+| internal_recursive.1 | 38 | FinalPolyMleEvalAir | 1 | prover | 256 | 34 | 8,704 | 
+| internal_recursive.1 | 39 | FinalPolyQueryEvalAir | 1 | prover | 16,384 | 45 | 737,280 | 
+| internal_recursive.1 | 4 | FractionsFolderAir | 1 | prover | 64 | 29 | 1,856 | 
+| internal_recursive.1 | 40 | PowerCheckerAir<2, 32> | 1 | prover | 32 | 4 | 128 | 
+| internal_recursive.1 | 41 | ExpBitsLenAir | 1 | prover | 8,192 | 16 | 131,072 | 
+| internal_recursive.1 | 5 | UnivariateSumcheckAir | 1 | prover | 16 | 24 | 384 | 
+| internal_recursive.1 | 6 | MultilinearSumcheckAir | 1 | prover | 128 | 33 | 4,224 | 
+| internal_recursive.1 | 7 | EqNsAir | 1 | prover | 32 | 41 | 1,312 | 
+| internal_recursive.1 | 8 | Eq3bAir | 1 | prover | 16,384 | 25 | 409,600 | 
+| internal_recursive.1 | 9 | EqSharpUniAir | 1 | prover | 4 | 17 | 68 | 
+| leaf | 0 | VerifierPvsAir | 0 | prover | 4 | 69 | 276 | 
+| leaf | 1 | VmPvsAir | 0 | prover | 4 | 32 | 128 | 
+| leaf | 10 | EqSharpUniReceiverAir | 0 | prover | 64 | 17 | 1,088 | 
+| leaf | 11 | EqUniAir | 0 | prover | 32 | 16 | 512 | 
+| leaf | 12 | ExpressionClaimAir | 0 | prover | 512 | 32 | 16,384 | 
+| leaf | 13 | InteractionsFoldingAir | 0 | prover | 16,384 | 37 | 606,208 | 
+| leaf | 14 | ConstraintsFoldingAir | 0 | prover | 8,192 | 25 | 204,800 | 
+| leaf | 15 | EqNegAir | 0 | prover | 64 | 40 | 2,560 | 
+| leaf | 16 | TranscriptAir | 0 | prover | 16,384 | 44 | 720,896 | 
+| leaf | 17 | Poseidon2Air<BabyBearParameters>, 1> | 0 | prover | 524,288 | 301 | 157,810,688 | 
+| leaf | 18 | MerkleVerifyAir | 0 | prover | 131,072 | 37 | 4,849,664 | 
+| leaf | 19 | ProofShapeAir<4, 8> | 0 | prover | 256 | 44 | 11,264 | 
+| leaf | 2 | UnsetPvsAir | 0 | prover | 1 | 2 | 2 | 
+| leaf | 20 | PublicValuesAir | 0 | prover | 128 | 8 | 1,024 | 
+| leaf | 21 | RangeCheckerAir<8> | 0 | prover | 256 | 2 | 512 | 
+| leaf | 22 | GkrInputAir | 0 | prover | 4 | 26 | 104 | 
+| leaf | 23 | GkrLayerAir | 0 | prover | 128 | 46 | 5,888 | 
+| leaf | 24 | GkrLayerSumcheckAir | 0 | prover | 2,048 | 45 | 92,160 | 
+| leaf | 25 | GkrXiSamplerAir | 0 | prover | 4 | 10 | 40 | 
+| leaf | 26 | OpeningClaimsAir | 0 | prover | 8,192 | 63 | 516,096 | 
+| leaf | 27 | UnivariateRoundAir | 0 | prover | 128 | 27 | 3,456 | 
+| leaf | 28 | SumcheckRoundsAir | 0 | prover | 128 | 57 | 7,296 | 
+| leaf | 29 | StackingClaimsAir | 0 | prover | 8,192 | 35 | 286,720 | 
+| leaf | 3 | SymbolicExpressionAir<BabyBearParameters> | 0 | prover | 65,536 | 60 | 3,932,160 | 
+| leaf | 30 | EqBaseAir | 0 | prover | 32 | 51 | 1,632 | 
+| leaf | 31 | EqBitsAir | 0 | prover | 4,096 | 16 | 65,536 | 
+| leaf | 32 | WhirRoundAir | 0 | prover | 16 | 46 | 736 | 
+| leaf | 33 | SumcheckAir | 0 | prover | 64 | 38 | 2,432 | 
+| leaf | 34 | WhirQueryAir | 0 | prover | 2,048 | 32 | 65,536 | 
+| leaf | 35 | InitialOpenedValuesAir | 0 | prover | 524,288 | 89 | 46,661,632 | 
+| leaf | 36 | NonInitialOpenedValuesAir | 0 | prover | 16,384 | 28 | 458,752 | 
+| leaf | 37 | WhirFoldingAir | 0 | prover | 32,768 | 31 | 1,015,808 | 
+| leaf | 38 | FinalPolyMleEvalAir | 0 | prover | 4,096 | 34 | 139,264 | 
+| leaf | 39 | FinalPolyQueryEvalAir | 0 | prover | 1,048,576 | 45 | 47,185,920 | 
+| leaf | 4 | FractionsFolderAir | 0 | prover | 128 | 29 | 3,712 | 
+| leaf | 40 | PowerCheckerAir<2, 32> | 0 | prover | 32 | 4 | 128 | 
+| leaf | 41 | ExpBitsLenAir | 0 | prover | 65,536 | 16 | 1,048,576 | 
+| leaf | 5 | UnivariateSumcheckAir | 0 | prover | 256 | 24 | 6,144 | 
+| leaf | 6 | MultilinearSumcheckAir | 0 | prover | 512 | 33 | 16,896 | 
+| leaf | 7 | EqNsAir | 0 | prover | 128 | 41 | 5,248 | 
+| leaf | 8 | Eq3bAir | 0 | prover | 65,536 | 25 | 1,638,400 | 
+| leaf | 9 | EqSharpUniAir | 0 | prover | 64 | 17 | 1,088 | 
+
+| group | air_id | air_name | opcode | segment | opcode_count |
+| --- | --- | --- | --- | --- | --- |
+| app_proof | 12 | Sha2MainAir<Sha256Config> | SHA256 | 0 | 52,250 | 
+| app_proof | 14 | Rv64HintStoreAir | HINT_BUFFER | 0 | 1 | 
+| app_proof | 14 | Rv64HintStoreAir | HINT_STORED | 0 | 1 | 
+| app_proof | 15 | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | AUIPC | 0 | 52,263 | 
+| app_proof | 16 | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | JALR | 0 | 156,756 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | JAL | 0 | 157,568 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | LUI | 0 | 53,073 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | BGEU | 0 | 52,252 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | BLTU | 0 | 157,570 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | BEQ | 0 | 209,819 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | BNE | 0 | 104,568 | 
+| app_proof | 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | LOADW | 0 | 52,250 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | LOADD | 0 | 523,326 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | STORED | 0 | 523,860 | 
+| app_proof | 22 | VmAirWrapper<Rv64BaseAluWAdapterAir, ShiftCoreAir<4, 8> | SRL | 0 | 1 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | SLL | 0 | 52,251 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | SRL | 0 | 52,253 | 
+| app_proof | 24 | VmAirWrapper<Rv64BaseAluU16AdapterAir, LessThanCoreAir<4, 16> | SLTU | 0 | 2 | 
+| app_proof | 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | ADD | 0 | 1 | 
+| app_proof | 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | SUB | 0 | 52,250 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | AND | 0 | 261,258 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | OR | 0 | 1 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | ADD | 0 | 891,673 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | SUB | 0 | 156,751 | 
+| app_proof | 29 | PhantomAir | PHANTOM | 0 | 1 | 
+| app_proof | 8 | VmAirWrapper<Rv64MultAdapterAir, MultiplicationCoreAir<8, 8> | MUL | 0 | 1 | 
+| app_proof | 12 | Sha2MainAir<Sha256Config> | SHA256 | 1 | 52,262 | 
+| app_proof | 15 | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | AUIPC | 1 | 52,263 | 
+| app_proof | 16 | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | JALR | 1 | 156,787 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | JAL | 1 | 157,603 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | LUI | 1 | 53,079 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | BGEU | 1 | 52,263 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | BLTU | 1 | 157,605 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | BEQ | 1 | 209,866 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | BNE | 1 | 104,524 | 
+| app_proof | 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | LOADW | 1 | 52,262 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | LOADD | 1 | 523,438 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | STORED | 1 | 523,437 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | SLL | 1 | 52,262 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | SRL | 1 | 52,262 | 
+| app_proof | 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | SUB | 1 | 52,262 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | AND | 1 | 261,310 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | ADD | 1 | 891,727 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | SUB | 1 | 156,788 | 
+| app_proof | 12 | Sha2MainAir<Sha256Config> | SHA256 | 2 | 52,262 | 
+| app_proof | 15 | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | AUIPC | 2 | 52,262 | 
+| app_proof | 16 | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | JALR | 2 | 156,787 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | JAL | 2 | 157,603 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | LUI | 2 | 53,079 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | BGEU | 2 | 52,262 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | BLTU | 2 | 157,603 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | BEQ | 2 | 209,866 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | BNE | 2 | 104,524 | 
+| app_proof | 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | LOADW | 2 | 52,263 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | LOADD | 2 | 523,439 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | STORED | 2 | 523,437 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | SLL | 2 | 52,263 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | SRL | 2 | 52,263 | 
+| app_proof | 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | SUB | 2 | 52,263 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | AND | 2 | 261,313 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | ADD | 2 | 891,724 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | SUB | 2 | 156,787 | 
+| app_proof | 12 | Sha2MainAir<Sha256Config> | SHA256 | 3 | 7,067 | 
+| app_proof | 15 | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | AUIPC | 3 | 7,070 | 
+| app_proof | 16 | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | JALR | 3 | 21,206 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | JAL | 3 | 21,313 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | LUI | 3 | 7,178 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | BGEU | 3 | 7,067 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | BLT | 3 | 1 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | BLTU | 3 | 21,313 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | BEQ | 3 | 28,382 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | BNE | 3 | 14,149 | 
+| app_proof | 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | LOADB | 3 | 8 | 
+| app_proof | 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | LOADW | 3 | 7,074 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | LOADD | 3 | 70,821 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | STOREB | 3 | 40 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | STORED | 3 | 70,809 | 
+| app_proof | 22 | VmAirWrapper<Rv64BaseAluWAdapterAir, ShiftCoreAir<4, 8> | SLL | 3 | 1 | 
+| app_proof | 22 | VmAirWrapper<Rv64BaseAluWAdapterAir, ShiftCoreAir<4, 8> | SRL | 3 | 2 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | SLL | 3 | 7,080 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | SRL | 3 | 7,104 | 
+| app_proof | 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | SUB | 3 | 7,067 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | AND | 3 | 35,344 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | OR | 3 | 14 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | ADD | 3 | 120,646 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | SUB | 3 | 21,204 | 
+
+| group | air_id | air_name | phase | segment | rows | main_cols | cells |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| app_proof | 0 | ProgramAir | prover | 0 | 16,384 | 10 | 163,840 | 
+| app_proof | 1 | VmConnectorAir | prover | 0 | 2 | 6 | 12 | 
+| app_proof | 12 | Sha2MainAir<Sha256Config> | prover | 0 | 65,536 | 150 | 9,830,400 | 
+| app_proof | 13 | Sha2BlockHasherVmAir<Sha256Config> | prover | 0 | 1,048,576 | 456 | 478,150,656 | 
+| app_proof | 14 | Rv64HintStoreAir | prover | 0 | 2 | 27 | 54 | 
+| app_proof | 15 | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | prover | 0 | 65,536 | 17 | 1,114,112 | 
+| app_proof | 16 | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | prover | 0 | 262,144 | 24 | 6,291,456 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | prover | 0 | 262,144 | 18 | 4,718,592 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | prover | 0 | 262,144 | 32 | 8,388,608 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | prover | 0 | 524,288 | 26 | 13,631,488 | 
+| app_proof | 2 | PersistentBoundaryAir<8> | prover | 0 | 1,024 | 21 | 21,504 | 
+| app_proof | 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | prover | 0 | 65,536 | 46 | 3,014,656 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | prover | 0 | 1,048,576 | 54 | 56,623,104 | 
+| app_proof | 22 | VmAirWrapper<Rv64BaseAluWAdapterAir, ShiftCoreAir<4, 8> | prover | 0 | 1 | 58 | 58 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | prover | 0 | 131,072 | 73 | 9,568,256 | 
+| app_proof | 24 | VmAirWrapper<Rv64BaseAluU16AdapterAir, LessThanCoreAir<4, 16> | prover | 0 | 2 | 38 | 76 | 
+| app_proof | 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | prover | 0 | 65,536 | 41 | 2,686,976 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | prover | 0 | 262,144 | 46 | 12,058,624 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | prover | 0 | 1,048,576 | 34 | 35,651,584 | 
+| app_proof | 28 | BitwiseOperationLookupAir<8> | prover | 0 | 65,536 | 18 | 1,179,648 | 
+| app_proof | 29 | PhantomAir | prover | 0 | 1 | 6 | 6 | 
+| app_proof | 3 | MemoryMerkleAir<8> | prover | 0 | 1,024 | 32 | 32,768 | 
+| app_proof | 30 | Poseidon2PeripheryAir<BabyBearParameters>, 1> | prover | 0 | 256 | 300 | 76,800 | 
+| app_proof | 31 | VariableRangeCheckerAir | prover | 0 | 262,144 | 4 | 1,048,576 | 
+| app_proof | 8 | VmAirWrapper<Rv64MultAdapterAir, MultiplicationCoreAir<8, 8> | prover | 0 | 1 | 43 | 43 | 
+| app_proof | 9 | RangeTupleCheckerAir<2> | prover | 0 | 1,048,576 | 3 | 3,145,728 | 
+| app_proof | 0 | ProgramAir | prover | 1 | 16,384 | 10 | 163,840 | 
+| app_proof | 1 | VmConnectorAir | prover | 1 | 2 | 6 | 12 | 
+| app_proof | 12 | Sha2MainAir<Sha256Config> | prover | 1 | 65,536 | 150 | 9,830,400 | 
+| app_proof | 13 | Sha2BlockHasherVmAir<Sha256Config> | prover | 1 | 1,048,576 | 456 | 478,150,656 | 
+| app_proof | 15 | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | prover | 1 | 65,536 | 17 | 1,114,112 | 
+| app_proof | 16 | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | prover | 1 | 262,144 | 24 | 6,291,456 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | prover | 1 | 262,144 | 18 | 4,718,592 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | prover | 1 | 262,144 | 32 | 8,388,608 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | prover | 1 | 524,288 | 26 | 13,631,488 | 
+| app_proof | 2 | PersistentBoundaryAir<8> | prover | 1 | 1,024 | 21 | 21,504 | 
+| app_proof | 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | prover | 1 | 65,536 | 46 | 3,014,656 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | prover | 1 | 1,048,576 | 54 | 56,623,104 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | prover | 1 | 131,072 | 73 | 9,568,256 | 
+| app_proof | 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | prover | 1 | 65,536 | 41 | 2,686,976 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | prover | 1 | 262,144 | 46 | 12,058,624 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | prover | 1 | 1,048,576 | 34 | 35,651,584 | 
+| app_proof | 28 | BitwiseOperationLookupAir<8> | prover | 1 | 65,536 | 18 | 1,179,648 | 
+| app_proof | 3 | MemoryMerkleAir<8> | prover | 1 | 1,024 | 32 | 32,768 | 
+| app_proof | 30 | Poseidon2PeripheryAir<BabyBearParameters>, 1> | prover | 1 | 256 | 300 | 76,800 | 
+| app_proof | 31 | VariableRangeCheckerAir | prover | 1 | 262,144 | 4 | 1,048,576 | 
+| app_proof | 9 | RangeTupleCheckerAir<2> | prover | 1 | 1,048,576 | 3 | 3,145,728 | 
+| app_proof | 0 | ProgramAir | prover | 2 | 16,384 | 10 | 163,840 | 
+| app_proof | 1 | VmConnectorAir | prover | 2 | 2 | 6 | 12 | 
+| app_proof | 12 | Sha2MainAir<Sha256Config> | prover | 2 | 65,536 | 150 | 9,830,400 | 
+| app_proof | 13 | Sha2BlockHasherVmAir<Sha256Config> | prover | 2 | 1,048,576 | 456 | 478,150,656 | 
+| app_proof | 15 | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | prover | 2 | 65,536 | 17 | 1,114,112 | 
+| app_proof | 16 | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | prover | 2 | 262,144 | 24 | 6,291,456 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | prover | 2 | 262,144 | 18 | 4,718,592 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | prover | 2 | 262,144 | 32 | 8,388,608 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | prover | 2 | 524,288 | 26 | 13,631,488 | 
+| app_proof | 2 | PersistentBoundaryAir<8> | prover | 2 | 1,024 | 21 | 21,504 | 
+| app_proof | 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | prover | 2 | 65,536 | 46 | 3,014,656 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | prover | 2 | 1,048,576 | 54 | 56,623,104 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | prover | 2 | 131,072 | 73 | 9,568,256 | 
+| app_proof | 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | prover | 2 | 65,536 | 41 | 2,686,976 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | prover | 2 | 262,144 | 46 | 12,058,624 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | prover | 2 | 1,048,576 | 34 | 35,651,584 | 
+| app_proof | 28 | BitwiseOperationLookupAir<8> | prover | 2 | 65,536 | 18 | 1,179,648 | 
+| app_proof | 3 | MemoryMerkleAir<8> | prover | 2 | 1,024 | 32 | 32,768 | 
+| app_proof | 30 | Poseidon2PeripheryAir<BabyBearParameters>, 1> | prover | 2 | 256 | 300 | 76,800 | 
+| app_proof | 31 | VariableRangeCheckerAir | prover | 2 | 262,144 | 4 | 1,048,576 | 
+| app_proof | 9 | RangeTupleCheckerAir<2> | prover | 2 | 1,048,576 | 3 | 3,145,728 | 
+| app_proof | 0 | ProgramAir | prover | 3 | 16,384 | 10 | 163,840 | 
+| app_proof | 1 | VmConnectorAir | prover | 3 | 2 | 6 | 12 | 
+| app_proof | 12 | Sha2MainAir<Sha256Config> | prover | 3 | 8,192 | 150 | 1,228,800 | 
+| app_proof | 13 | Sha2BlockHasherVmAir<Sha256Config> | prover | 3 | 131,072 | 456 | 59,768,832 | 
+| app_proof | 15 | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | prover | 3 | 8,192 | 17 | 139,264 | 
+| app_proof | 16 | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | prover | 3 | 32,768 | 24 | 786,432 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | prover | 3 | 32,768 | 18 | 589,824 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | prover | 3 | 32,768 | 32 | 1,048,576 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | prover | 3 | 65,536 | 26 | 1,703,936 | 
+| app_proof | 2 | PersistentBoundaryAir<8> | prover | 3 | 1,024 | 21 | 21,504 | 
+| app_proof | 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | prover | 3 | 8,192 | 46 | 376,832 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | prover | 3 | 262,144 | 54 | 14,155,776 | 
+| app_proof | 22 | VmAirWrapper<Rv64BaseAluWAdapterAir, ShiftCoreAir<4, 8> | prover | 3 | 4 | 58 | 232 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | prover | 3 | 16,384 | 73 | 1,196,032 | 
+| app_proof | 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | prover | 3 | 8,192 | 41 | 335,872 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | prover | 3 | 65,536 | 46 | 3,014,656 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | prover | 3 | 262,144 | 34 | 8,912,896 | 
+| app_proof | 28 | BitwiseOperationLookupAir<8> | prover | 3 | 65,536 | 18 | 1,179,648 | 
+| app_proof | 3 | MemoryMerkleAir<8> | prover | 3 | 1,024 | 32 | 32,768 | 
+| app_proof | 30 | Poseidon2PeripheryAir<BabyBearParameters>, 1> | prover | 3 | 256 | 300 | 76,800 | 
+| app_proof | 31 | VariableRangeCheckerAir | prover | 3 | 262,144 | 4 | 1,048,576 | 
+| app_proof | 9 | RangeTupleCheckerAir<2> | prover | 3 | 1,048,576 | 3 | 3,145,728 | 
+
+| group | air_id | air_name | reason | segment | segmentation_trigger |
+| --- | --- | --- | --- | --- | --- |
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | height | 0 | 1 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | height | 1 | 1 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | height | 2 | 1 | 
+
+| group | air_id | air_name | segment | metered_rows_unpadded | metered_rows_padding | metered_main_secondary_memory_unpadded_bytes | metered_main_secondary_memory_padding_bytes | metered_main_memory_unpadded_bytes | metered_main_memory_padding_bytes | metered_main_cells_unpadded | metered_main_cells_padding | metered_interaction_memory_unpadded_bytes | metered_interaction_memory_padding_bytes | metered_interaction_cells_unpadded | metered_interaction_cells_padding |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| app_proof | 0 | ProgramAir | 0 | 9,244 | 7,140 | 231,100 | 178,500 | 369,760 | 285,600 | 92,440 | 71,400 | 335,095 | 258,825 | 9,244 | 7,140 | 
+| app_proof | 1 | VmConnectorAir | 0 | 2 |  | 60 |  | 48 |  | 12 |  | 363 |  | 10 |  | 
+| app_proof | 12 | Sha2MainAir<Sha256Config> | 0 | 52,250 | 13,286 | 39,187,500 | 9,964,500 | 31,350,000 | 7,971,600 | 7,837,500 | 1,992,900 | 160,995,313 | 40,937,487 | 4,441,250 | 1,129,310 | 
+| app_proof | 13 | Sha2BlockHasherVmAir<Sha256Config> | 0 | 888,250 | 160,326 | 2,025,210,000 | 365,543,280 | 1,620,168,000 | 292,434,624 | 405,042,000 | 73,108,656 | 933,772,813 | 168,542,707 | 25,759,250 | 4,649,454 | 
+| app_proof | 14 | Rv64HintStoreAir | 0 | 2 |  | 270 |  | 216 |  | 54 |  | 1,233 |  | 34 |  | 
+| app_proof | 15 | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | 0 | 52,263 | 13,273 | 2,221,178 | 564,102 | 3,553,884 | 902,564 | 888,471 | 225,641 | 26,523,473 | 6,736,047 | 731,682 | 185,822 | 
+| app_proof | 16 | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | 0 | 156,756 | 105,388 | 9,405,360 | 6,323,280 | 15,048,576 | 10,117,248 | 3,762,144 | 2,529,312 | 85,236,075 | 57,304,725 | 2,351,340 | 1,580,820 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | 0 | 210,641 | 51,503 | 9,478,845 | 2,317,635 | 15,166,152 | 3,708,216 | 3,791,538 | 927,054 | 91,628,835 | 22,403,805 | 2,527,692 | 618,036 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | 0 | 209,822 | 52,322 | 16,785,760 | 4,185,760 | 26,857,216 | 6,697,216 | 6,714,304 | 1,674,304 | 106,484,665 | 26,553,415 | 2,937,508 | 732,508 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | 0 | 314,387 | 209,901 | 20,435,155 | 13,643,565 | 32,696,248 | 21,829,704 | 8,174,062 | 5,457,426 | 125,361,817 | 83,698,023 | 3,458,257 | 2,308,911 | 
+| app_proof | 2 | PersistentBoundaryAir<8> | 0 | 1,152 | 896 | 60,480 | 47,040 | 96,768 | 75,264 | 24,192 | 18,816 | 167,040 | 129,920 | 4,608 | 3,584 | 
+| app_proof | 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | 0 | 52,250 | 13,286 | 6,008,750 | 1,527,890 | 9,614,000 | 2,444,624 | 2,403,500 | 611,156 | 41,669,375 | 10,595,585 | 1,149,500 | 292,292 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | 0 | 1,047,186 | 1,390 | 141,370,110 | 187,650 | 226,192,176 | 300,240 | 56,548,044 | 75,060 | 949,012,313 | 1,259,687 | 26,179,650 | 34,750 | 
+| app_proof | 22 | VmAirWrapper<Rv64BaseAluWAdapterAir, ShiftCoreAir<4, 8> | 0 | 1 |  | 145 |  | 232 |  | 58 |  | 1,052 |  | 29 |  | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | 0 | 104,504 | 26,568 | 19,071,980 | 4,848,660 | 30,515,168 | 7,757,856 | 7,628,792 | 1,939,464 | 143,954,260 | 36,597,420 | 3,971,152 | 1,009,584 | 
+| app_proof | 24 | VmAirWrapper<Rv64BaseAluU16AdapterAir, LessThanCoreAir<4, 16> | 0 | 2 |  | 190 |  | 304 |  | 76 |  | 1,378 |  | 38 |  | 
+| app_proof | 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | 0 | 52,251 | 13,285 | 5,355,728 | 1,361,712 | 8,569,164 | 2,178,740 | 2,142,291 | 544,685 | 47,352,469 | 12,039,531 | 1,306,275 | 332,125 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | 0 | 261,259 | 885 | 30,044,785 | 101,775 | 48,071,656 | 162,840 | 12,017,914 | 40,710 | 227,295,330 | 769,950 | 6,270,216 | 21,240 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | 0 | 1,048,424 | 152 | 89,116,040 | 12,920 | 142,585,664 | 20,672 | 35,646,416 | 5,168 | 760,107,400 | 110,200 | 20,968,480 | 3,040 | 
+| app_proof | 28 | BitwiseOperationLookupAir<8> | 0 | 65,536 |  | 5,898,240 |  | 4,718,592 |  | 1,179,648 |  | 4,751,360 |  | 131,072 |  | 
+| app_proof | 29 | PhantomAir | 0 | 1 |  | 15 |  | 24 |  | 6 |  | 109 |  | 3 |  | 
+| app_proof | 3 | MemoryMerkleAir<8> | 0 | 1,530 | 518 | 244,800 | 82,880 | 195,840 | 66,304 | 48,960 | 16,576 | 221,850 | 75,110 | 6,120 | 2,072 | 
+| app_proof | 30 | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 0 | 2,682 | 1,414 | 2,011,500 | 1,060,500 | 3,218,400 | 1,696,800 | 804,600 | 424,200 | 97,223 | 51,257 | 2,682 | 1,414 | 
+| app_proof | 31 | VariableRangeCheckerAir | 0 | 262,144 |  | 5,242,880 |  | 4,194,304 |  | 1,048,576 |  | 9,502,720 |  | 262,144 |  | 
+| app_proof | 8 | VmAirWrapper<Rv64MultAdapterAir, MultiplicationCoreAir<8, 8> | 0 | 1 |  | 108 |  | 172 |  | 43 |  | 1,124 |  | 31 |  | 
+| app_proof | 9 | RangeTupleCheckerAir<2> | 0 | 1,048,576 |  | 15,728,640 |  | 12,582,912 |  | 3,145,728 |  | 38,010,880 |  | 1,048,576 |  | 
+| app_proof | 0 | ProgramAir | 1 | 9,244 | 7,140 | 231,100 | 178,500 | 369,760 | 285,600 | 92,440 | 71,400 | 335,095 | 258,825 | 9,244 | 7,140 | 
+| app_proof | 1 | VmConnectorAir | 1 | 2 |  | 60 |  | 48 |  | 12 |  | 363 |  | 10 |  | 
+| app_proof | 12 | Sha2MainAir<Sha256Config> | 1 | 52,262 | 13,274 | 39,196,500 | 9,955,500 | 31,357,200 | 7,964,400 | 7,839,300 | 1,991,100 | 161,032,288 | 40,900,512 | 4,442,270 | 1,128,290 | 
+| app_proof | 13 | Sha2BlockHasherVmAir<Sha256Config> | 1 | 888,454 | 160,122 | 2,025,675,120 | 365,078,160 | 1,620,540,096 | 292,062,528 | 405,135,024 | 73,015,632 | 933,987,268 | 168,328,252 | 25,765,166 | 4,643,538 | 
+| app_proof | 15 | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | 1 | 52,263 | 13,273 | 2,221,178 | 564,102 | 3,553,884 | 902,564 | 888,471 | 225,641 | 26,523,473 | 6,736,047 | 731,682 | 185,822 | 
+| app_proof | 16 | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | 1 | 156,787 | 105,357 | 9,407,220 | 6,321,420 | 15,051,552 | 10,114,272 | 3,762,888 | 2,528,568 | 85,252,932 | 57,287,868 | 2,351,805 | 1,580,355 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | 1 | 210,682 | 51,462 | 9,480,690 | 2,315,790 | 15,169,104 | 3,705,264 | 3,792,276 | 926,316 | 91,646,670 | 22,385,970 | 2,528,184 | 617,544 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | 1 | 209,868 | 52,276 | 16,789,440 | 4,182,080 | 26,863,104 | 6,691,328 | 6,715,776 | 1,672,832 | 106,508,010 | 26,530,070 | 2,938,152 | 731,864 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | 1 | 314,390 | 209,898 | 20,435,350 | 13,643,370 | 32,696,560 | 21,829,392 | 8,174,140 | 5,457,348 | 125,363,013 | 83,696,827 | 3,458,290 | 2,308,878 | 
+| app_proof | 2 | PersistentBoundaryAir<8> | 1 | 1,024 |  | 53,760 |  | 86,016 |  | 21,504 |  | 148,480 |  | 4,096 |  | 
+| app_proof | 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | 1 | 52,262 | 13,274 | 6,010,130 | 1,526,510 | 9,616,208 | 2,442,416 | 2,404,052 | 610,604 | 41,678,945 | 10,586,015 | 1,149,764 | 292,028 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | 1 | 1,046,875 | 1,701 | 141,328,125 | 229,635 | 226,125,000 | 367,416 | 56,531,250 | 91,854 | 948,730,469 | 1,541,531 | 26,171,875 | 42,525 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | 1 | 104,524 | 26,548 | 19,075,630 | 4,845,010 | 30,521,008 | 7,752,016 | 7,630,252 | 1,938,004 | 143,981,810 | 36,569,870 | 3,971,912 | 1,008,824 | 
+| app_proof | 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | 1 | 52,262 | 13,274 | 5,356,855 | 1,360,585 | 8,570,968 | 2,176,936 | 2,142,742 | 544,234 | 47,362,438 | 12,029,562 | 1,306,550 | 331,850 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | 1 | 261,310 | 834 | 30,050,650 | 95,910 | 48,081,040 | 153,456 | 12,020,260 | 38,364 | 227,339,700 | 725,580 | 6,271,440 | 20,016 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | 1 | 1,048,515 | 61 | 89,123,775 | 5,185 | 142,598,040 | 8,296 | 35,649,510 | 2,074 | 760,173,375 | 44,225 | 20,970,300 | 1,220 | 
+| app_proof | 28 | BitwiseOperationLookupAir<8> | 1 | 65,536 |  | 5,898,240 |  | 4,718,592 |  | 1,179,648 |  | 4,751,360 |  | 131,072 |  | 
+| app_proof | 3 | MemoryMerkleAir<8> | 1 | 1,360 | 688 | 217,600 | 110,080 | 174,080 | 88,064 | 43,520 | 22,016 | 197,200 | 99,760 | 5,440 | 2,752 | 
+| app_proof | 30 | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 1 | 2,384 | 1,712 | 1,788,000 | 1,284,000 | 2,860,800 | 2,054,400 | 715,200 | 513,600 | 86,420 | 62,060 | 2,384 | 1,712 | 
+| app_proof | 31 | VariableRangeCheckerAir | 1 | 262,144 |  | 5,242,880 |  | 4,194,304 |  | 1,048,576 |  | 9,502,720 |  | 262,144 |  | 
+| app_proof | 9 | RangeTupleCheckerAir<2> | 1 | 1,048,576 |  | 15,728,640 |  | 12,582,912 |  | 3,145,728 |  | 38,010,880 |  | 1,048,576 |  | 
+| app_proof | 0 | ProgramAir | 2 | 9,244 | 7,140 | 231,100 | 178,500 | 369,760 | 285,600 | 92,440 | 71,400 | 335,095 | 258,825 | 9,244 | 7,140 | 
+| app_proof | 1 | VmConnectorAir | 2 | 2 |  | 60 |  | 48 |  | 12 |  | 363 |  | 10 |  | 
+| app_proof | 12 | Sha2MainAir<Sha256Config> | 2 | 52,262 | 13,274 | 39,196,500 | 9,955,500 | 31,357,200 | 7,964,400 | 7,839,300 | 1,991,100 | 161,032,288 | 40,900,512 | 4,442,270 | 1,128,290 | 
+| app_proof | 13 | Sha2BlockHasherVmAir<Sha256Config> | 2 | 888,454 | 160,122 | 2,025,675,120 | 365,078,160 | 1,620,540,096 | 292,062,528 | 405,135,024 | 73,015,632 | 933,987,268 | 168,328,252 | 25,765,166 | 4,643,538 | 
+| app_proof | 15 | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | 2 | 52,262 | 13,274 | 2,221,135 | 564,145 | 3,553,816 | 902,632 | 888,454 | 225,658 | 26,522,965 | 6,736,555 | 731,668 | 185,836 | 
+| app_proof | 16 | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | 2 | 156,787 | 105,357 | 9,407,220 | 6,321,420 | 15,051,552 | 10,114,272 | 3,762,888 | 2,528,568 | 85,252,932 | 57,287,868 | 2,351,805 | 1,580,355 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | 2 | 210,682 | 51,462 | 9,480,690 | 2,315,790 | 15,169,104 | 3,705,264 | 3,792,276 | 926,316 | 91,646,670 | 22,385,970 | 2,528,184 | 617,544 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | 2 | 209,865 | 52,279 | 16,789,200 | 4,182,320 | 26,862,720 | 6,691,712 | 6,715,680 | 1,672,928 | 106,506,488 | 26,531,592 | 2,938,110 | 731,906 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | 2 | 314,390 | 209,898 | 20,435,350 | 13,643,370 | 32,696,560 | 21,829,392 | 8,174,140 | 5,457,348 | 125,363,013 | 83,696,827 | 3,458,290 | 2,308,878 | 
+| app_proof | 2 | PersistentBoundaryAir<8> | 2 | 1,024 |  | 53,760 |  | 86,016 |  | 21,504 |  | 148,480 |  | 4,096 |  | 
+| app_proof | 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | 2 | 52,263 | 13,273 | 6,010,245 | 1,526,395 | 9,616,392 | 2,442,232 | 2,404,098 | 610,558 | 41,679,743 | 10,585,217 | 1,149,786 | 292,006 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | 2 | 1,046,876 | 1,700 | 141,328,260 | 229,500 | 226,125,216 | 367,200 | 56,531,304 | 91,800 | 948,731,375 | 1,540,625 | 26,171,900 | 42,500 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | 2 | 104,526 | 26,546 | 19,075,995 | 4,844,645 | 30,521,592 | 7,751,432 | 7,630,398 | 1,937,858 | 143,984,565 | 36,567,115 | 3,971,988 | 1,008,748 | 
+| app_proof | 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | 2 | 52,263 | 13,273 | 5,356,958 | 1,360,482 | 8,571,132 | 2,176,772 | 2,142,783 | 544,193 | 47,363,344 | 12,028,656 | 1,306,575 | 331,825 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | 2 | 261,313 | 831 | 30,050,995 | 95,565 | 48,081,592 | 152,904 | 12,020,398 | 38,226 | 227,342,310 | 722,970 | 6,271,512 | 19,944 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | 2 | 1,048,511 | 65 | 89,123,435 | 5,525 | 142,597,496 | 8,840 | 35,649,374 | 2,210 | 760,170,475 | 47,125 | 20,970,220 | 1,300 | 
+| app_proof | 28 | BitwiseOperationLookupAir<8> | 2 | 65,536 |  | 5,898,240 |  | 4,718,592 |  | 1,179,648 |  | 4,751,360 |  | 131,072 |  | 
+| app_proof | 3 | MemoryMerkleAir<8> | 2 | 1,360 | 688 | 217,600 | 110,080 | 174,080 | 88,064 | 43,520 | 22,016 | 197,200 | 99,760 | 5,440 | 2,752 | 
+| app_proof | 30 | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 2 | 2,384 | 1,712 | 1,788,000 | 1,284,000 | 2,860,800 | 2,054,400 | 715,200 | 513,600 | 86,420 | 62,060 | 2,384 | 1,712 | 
+| app_proof | 31 | VariableRangeCheckerAir | 2 | 262,144 |  | 5,242,880 |  | 4,194,304 |  | 1,048,576 |  | 9,502,720 |  | 262,144 |  | 
+| app_proof | 9 | RangeTupleCheckerAir<2> | 2 | 1,048,576 |  | 15,728,640 |  | 12,582,912 |  | 3,145,728 |  | 38,010,880 |  | 1,048,576 |  | 
+| app_proof | 0 | ProgramAir | 3 | 9,244 | 7,140 | 231,100 | 178,500 | 369,760 | 285,600 | 92,440 | 71,400 | 335,095 | 258,825 | 9,244 | 7,140 | 
+| app_proof | 1 | VmConnectorAir | 3 | 2 |  | 60 |  | 48 |  | 12 |  | 363 |  | 10 |  | 
+| app_proof | 12 | Sha2MainAir<Sha256Config> | 3 | 7,067 | 1,125 | 5,300,250 | 843,750 | 4,240,200 | 675,000 | 1,060,050 | 168,750 | 21,775,194 | 3,466,406 | 600,695 | 95,625 | 
+| app_proof | 13 | Sha2BlockHasherVmAir<Sha256Config> | 3 | 120,139 | 10,933 | 273,916,920 | 24,927,240 | 219,133,536 | 19,941,792 | 54,783,384 | 4,985,448 | 126,296,124 | 11,493,316 | 3,484,031 | 317,057 | 
+| app_proof | 15 | VmAirWrapper<Rv64RdWriteAdapterAir, Rv64AuipcCoreAir> | 3 | 7,070 | 1,122 | 300,475 | 47,685 | 480,760 | 76,296 | 120,190 | 19,074 | 3,588,025 | 569,415 | 98,980 | 15,708 | 
+| app_proof | 16 | VmAirWrapper<Rv64JalrAdapterAir, Rv64JalrCoreAir> | 3 | 21,206 | 11,562 | 1,272,360 | 693,720 | 2,035,776 | 1,109,952 | 508,944 | 277,488 | 11,530,763 | 6,286,837 | 318,090 | 173,430 | 
+| app_proof | 17 | VmAirWrapper<Rv64CondRdWriteAdapterAir, Rv64JalLuiCoreAir> | 3 | 28,491 | 4,277 | 1,282,095 | 192,465 | 2,051,352 | 307,944 | 512,838 | 76,986 | 12,393,585 | 1,860,495 | 341,892 | 51,324 | 
+| app_proof | 18 | VmAirWrapper<Rv64BranchAdapterAir, BranchLessThanCoreAir<4, 16> | 3 | 28,381 | 4,387 | 2,270,480 | 350,960 | 3,632,768 | 561,536 | 908,192 | 140,384 | 14,403,358 | 2,226,402 | 397,334 | 61,418 | 
+| app_proof | 19 | VmAirWrapper<Rv64BranchAdapterAir, BranchEqualCoreAir<4> | 3 | 42,531 | 23,005 | 2,764,515 | 1,495,325 | 4,423,224 | 2,392,520 | 1,105,806 | 598,130 | 16,959,237 | 9,173,243 | 467,841 | 253,055 | 
+| app_proof | 2 | PersistentBoundaryAir<8> | 3 | 1,024 |  | 53,760 |  | 86,016 |  | 21,504 |  | 148,480 |  | 4,096 |  | 
+| app_proof | 20 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendCoreAir<8, 8> | 3 | 7,082 | 1,110 | 814,430 | 127,650 | 1,303,088 | 204,240 | 325,772 | 51,060 | 5,647,895 | 885,225 | 155,804 | 24,420 | 
+| app_proof | 21 | VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8> | 3 | 141,670 | 120,474 | 19,125,450 | 16,263,990 | 30,600,720 | 26,022,384 | 7,650,180 | 6,505,596 | 128,388,438 | 109,179,562 | 3,541,750 | 3,011,850 | 
+| app_proof | 22 | VmAirWrapper<Rv64BaseAluWAdapterAir, ShiftCoreAir<4, 8> | 3 | 3 | 1 | 435 | 145 | 696 | 232 | 174 | 58 | 3,154 | 1,051 | 87 | 29 | 
+| app_proof | 23 | VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<8, 8> | 3 | 14,184 | 2,200 | 2,588,580 | 401,500 | 4,141,728 | 642,400 | 1,035,432 | 160,600 | 19,538,460 | 3,030,500 | 538,992 | 83,600 | 
+| app_proof | 25 | VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluCoreAir<4, 8> | 3 | 7,067 | 1,125 | 724,368 | 115,312 | 1,158,988 | 184,500 | 289,747 | 46,125 | 6,404,469 | 1,019,531 | 176,675 | 28,125 | 
+| app_proof | 26 | VmAirWrapper<Rv64BaseAluAdapterAir, BitwiseLogicCoreAir<8, 8> | 3 | 35,358 | 30,178 | 4,066,170 | 3,470,470 | 6,505,872 | 5,552,752 | 1,626,468 | 1,388,188 | 30,761,460 | 26,254,860 | 848,592 | 724,272 | 
+| app_proof | 27 | VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<4, 16> | 3 | 141,850 | 120,294 | 12,057,250 | 10,224,990 | 19,291,600 | 16,359,984 | 4,822,900 | 4,089,996 | 102,841,250 | 87,213,150 | 2,837,000 | 2,405,880 | 
+| app_proof | 28 | BitwiseOperationLookupAir<8> | 3 | 65,536 |  | 5,898,240 |  | 4,718,592 |  | 1,179,648 |  | 4,751,360 |  | 131,072 |  | 
+| app_proof | 3 | MemoryMerkleAir<8> | 3 | 1,360 | 688 | 217,600 | 110,080 | 174,080 | 88,064 | 43,520 | 22,016 | 197,200 | 99,760 | 5,440 | 2,752 | 
+| app_proof | 30 | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 3 | 2,384 | 1,712 | 1,788,000 | 1,284,000 | 2,860,800 | 2,054,400 | 715,200 | 513,600 | 86,420 | 62,060 | 2,384 | 1,712 | 
+| app_proof | 31 | VariableRangeCheckerAir | 3 | 262,144 |  | 5,242,880 |  | 4,194,304 |  | 1,048,576 |  | 9,502,720 |  | 262,144 |  | 
+| app_proof | 9 | RangeTupleCheckerAir<2> | 3 | 1,048,576 |  | 15,728,640 |  | 12,582,912 |  | 3,145,728 |  | 38,010,880 |  | 1,048,576 |  | 
+
+| group | backend | compile_metered_time_ms |
+| --- | --- | --- |
+| app_proof | interpreter | 4 | 
+
+| group | idx | trace_gen_time_ms | total_proof_time_ms | subcircuit_generate_proving_ctxs_time_ms | generate_proving_ctxs_time_ms | generate_blob_time_ms | execute_preflight_time_ms | compute_merkle_precomputation_cuda_time_ms | apply_merkle_precomputation_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| internal_for_leaf | 0 | 22 | 346 | 22 | 6 | 1 | 2 | 3 | 3 | 
+| internal_recursive.0 | 1 | 10 | 180 | 10 | 1 | 0 | 2 | 1 | 1 | 
+| internal_recursive.1 | 1 | 9 | 148 | 9 | 1 | 0 | 2 | 0 | 0 | 
+| leaf | 0 | 123 | 1,148 | 123 | 43 | 18 | 2 | 1 | 1 | 
+
+| group | idx | phase | total_cells | stark_prove_excluding_trace_time_ms | stacked_commit_time_ms | s'_0 -> s_0 cpu interpolations_time_ms | rs_code_matrix_time_ms | prover.rap_constraints_time_ms | prover.rap_constraints.round0_time_ms | prover.rap_constraints.ple_round0_time_ms | prover.rap_constraints.mle_rounds_time_ms | prover.rap_constraints.logup_gkr_time_ms | prover.rap_constraints.logup_gkr.input_evals_time_ms | prover.openings_time_ms | prover.openings.whir_time_ms | prover.openings.stacked_reduction_time_ms | prover.openings.stacked_reduction.round0_time_ms | prover.openings.stacked_reduction.mle_rounds_time_ms | prover.main_trace_commit_time_ms | prove_zerocheck_and_logup_gpu_time_ms | opened_rows_d2h_time_ms | merkle_tree_time_ms | fractional_sumcheck_gpu_time_ms | batch_open_rows_time_ms | LogupZerocheck::sumcheck_polys_batch_eval_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| internal_for_leaf | 0 | prover | 38,577,979 | 324 | 117 | 0 | 0 | 107 | 35 | 35 | 51 | 20 | 0 | 98 | 84 | 13 | 3 | 9 | 118 | 107 | 0 | 3 | 19 | 0 | 0 | 
+| internal_recursive.0 | 1 | prover | 15,378,767 | 169 | 47 | 0 | 0 | 68 | 25 | 24 | 28 | 14 | 0 | 53 | 45 | 8 | 1 | 6 | 48 | 68 | 0 | 2 | 13 | 0 | 0 | 
+| internal_recursive.1 | 1 | prover | 9,750,863 | 138 | 32 | 0 | 0 | 63 | 23 | 23 | 25 | 14 | 0 | 42 | 35 | 7 | 1 | 5 | 32 | 63 | 0 | 3 | 13 | 0 | 0 | 
+| leaf | 0 | prover | 267,387,366 | 1,024 | 412 | 0 | 0 | 286 | 131 | 130 | 81 | 74 | 0 | 325 | 283 | 41 | 22 | 19 | 413 | 286 | 0 | 13 | 73 | 0 | 0 | 
+
+| group | idx | phase | trace_height_constraint | weighted_sum | threshold |
+| --- | --- | --- | --- | --- | --- |
+| internal_for_leaf | 0 | prover | 0 | 3,723,586 | 2,013,265,921 | 
+| internal_recursive.0 | 1 | prover | 0 | 2,068,382 | 2,013,265,921 | 
+| internal_recursive.1 | 1 | prover | 0 | 1,939,358 | 2,013,265,921 | 
+| leaf | 0 | prover | 0 | 18,896,069 | 2,013,265,921 | 
+
+| group | phase | segment | total_cells | stark_prove_excluding_trace_time_ms | stacked_commit_time_ms | s'_0 -> s_0 cpu interpolations_time_ms | rs_code_matrix_time_ms | prover.rap_constraints_time_ms | prover.rap_constraints.round0_time_ms | prover.rap_constraints.ple_round0_time_ms | prover.rap_constraints.mle_rounds_time_ms | prover.rap_constraints.logup_gkr_time_ms | prover.rap_constraints.logup_gkr.input_evals_time_ms | prover.openings_time_ms | prover.openings.whir_time_ms | prover.openings.stacked_reduction_time_ms | prover.openings.stacked_reduction.round0_time_ms | prover.openings.stacked_reduction.mle_rounds_time_ms | prover.main_trace_commit_time_ms | prove_zerocheck_and_logup_gpu_time_ms | opened_rows_d2h_time_ms | merkle_tree_time_ms | fractional_sumcheck_gpu_time_ms | batch_open_rows_time_ms | LogupZerocheck::sumcheck_polys_batch_eval_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| app_proof | prover | 0 | 647,397,625 | 2,463 | 625 | 0 | 72 | 1,269 | 713 | 713 | 248 | 307 | 0 | 567 | 466 | 101 | 61 | 40 | 625 | 1,269 | 0 | 5 | 306 | 0 | 0 | 
+| app_proof | prover | 1 | 647,397,388 | 2,353 | 619 | 0 | 0 | 1,277 | 719 | 719 | 250 | 307 | 0 | 455 | 354 | 101 | 61 | 39 | 620 | 1,277 | 0 | 6 | 306 | 0 | 0 | 
+| app_proof | prover | 2 | 647,397,388 | 2,357 | 622 | 0 | 0 | 1,283 | 728 | 728 | 249 | 305 | 0 | 451 | 350 | 100 | 60 | 39 | 622 | 1,283 | 0 | 6 | 304 | 0 | 0 | 
+| app_proof | prover | 3 | 98,926,836 | 398 | 80 | 0 | 0 | 233 | 113 | 112 | 42 | 76 | 0 | 84 | 67 | 16 | 8 | 8 | 80 | 233 | 0 | 3 | 76 | 0 | 0 | 
+
+| group | phase | segment | trace_height_constraint | weighted_sum | threshold |
+| --- | --- | --- | --- | --- | --- |
+| app_proof | prover | 0 | 0 | 116,416,913 | 2,013,265,921 | 
+| app_proof | prover | 1 | 0 | 116,416,778 | 2,013,265,921 | 
+| app_proof | prover | 2 | 0 | 116,416,778 | 2,013,265,921 | 
+| app_proof | prover | 3 | 0 | 22,520,190 | 2,013,265,921 | 
+
+| group | segment | trace_gen_time_ms | total_proof_time_ms | system_trace_gen_time_ms | set_initial_memory_time_ms | metered_memory_unpadded_bytes | metered_memory_padding_bytes | metered_memory_bytes | metered_interaction_memory_overhead_bytes | memory_finalize_time_ms | generate_proving_ctxs_time_ms | execute_preflight_time_ms | execute_preflight_insns | execute_preflight_insn_mi/s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| app_proof | 0 | 72 | 2,800 | 72 | 137 | 6,707,296,428 | 1,075,950,336 | 7,783,246,764 | 2,097,152 | 0 | 3 | 126 | 3,562,000 | 33.43 | 
+| app_proof | 1 | 66 | 2,733 | 66 | 41 | 6,707,190,828 | 1,075,795,044 | 7,782,985,872 | 2,097,152 | 0 | 1 | 272 | 3,562,000 | 37.28 | 
+| app_proof | 2 | 66 | 2,695 | 66 | 41 | 6,707,192,940 | 1,075,792,932 | 7,782,985,872 | 2,097,152 | 0 | 1 | 230 | 3,562,000 | 37.07 | 
+| app_proof | 3 | 85 | 557 | 85 | 41 | 971,960,460 | 247,227,676 | 1,219,188,136 | 2,097,152 | 0 | 2 | 32 | 481,961 | 35.20 | 
+
+</details>
+
+
+
+Commit: https://github.com/openvm-org/openvm/commit/431bff9fe725a5aec2d6d4e2fa1b7f379f4b8bab
+
+Max Segment Length: 1048576
+
+Instance Type: g6.2xlarge
+
+Memory Allocator: jemalloc
+
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/27571351819)
