@@ -6,6 +6,7 @@ use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::proof::Proof,
 };
+#[cfg(feature = "evm-prove")]
 use serde::{Deserialize, Serialize};
 
 use crate::{

@@ -1,7 +1,6 @@
-use std::{
-    io::{self, Read, Write},
-    sync::Arc,
-};
+#[cfg(feature = "evm-prove")]
+use std::io::{self, Read, Write};
+use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{AirInventoryError, SystemConfig, VmCircuitConfig},
@@ -9,8 +8,9 @@ use openvm_circuit::{
 };
 #[cfg(feature = "root-prover")]
 use openvm_continuations::RootSC;
+#[cfg(feature = "evm-prove")]
+use openvm_stark_backend::codec::{Decode, Encode};
 use openvm_stark_backend::{
-    codec::{Decode, Encode},
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     StarkEngine,
 };
