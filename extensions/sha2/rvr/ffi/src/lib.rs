@@ -29,7 +29,7 @@ const SHA512_ROWS_PER_BLOCK: u32 = 21;
 
 #[inline(always)]
 fn u64_words_as_bytes(words: &[u64]) -> &[u8] {
-    let len = words.len() * core::mem::size_of::<u64>();
+    let len = std::mem::size_of_val(words);
     // SAFETY: u64 alignment is stricter than u8 alignment, total bytes match,
     // and the FFI backend is only supported on little-endian hosts.
     unsafe { core::slice::from_raw_parts(words.as_ptr().cast::<u8>(), len) }
