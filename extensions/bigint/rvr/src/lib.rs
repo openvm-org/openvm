@@ -232,7 +232,8 @@ impl ExtInstr for Int256BranchLtInstr {
 pub struct Int256Extension {
     add_sub_chip_idx: Option<AirIndex>,
     bitwise_logic_chip_idx: Option<AirIndex>,
-    shift_chip_idx: Option<AirIndex>,
+    shift_logical_chip_idx: Option<AirIndex>,
+    shift_arithmetic_right_chip_idx: Option<AirIndex>,
     less_than_chip_idx: Option<AirIndex>,
     mul_chip_idx: Option<AirIndex>,
     branch_eq_chip_idx: Option<AirIndex>,
@@ -243,7 +244,9 @@ impl Int256Extension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
         let add_sub_chip_idx = opcode_air_idx(ctx, Rv64BaseAlu256Opcode(BaseAluOpcode::ADD))?;
         let bitwise_logic_chip_idx = opcode_air_idx(ctx, Rv64BaseAlu256Opcode(BaseAluOpcode::XOR))?;
-        let shift_chip_idx = opcode_air_idx(ctx, Rv64Shift256Opcode(ShiftOpcode::SLL))?;
+        let shift_logical_chip_idx = opcode_air_idx(ctx, Rv64Shift256Opcode(ShiftOpcode::SLL))?;
+        let shift_arithmetic_right_chip_idx =
+            opcode_air_idx(ctx, Rv64Shift256Opcode(ShiftOpcode::SRA))?;
         let less_than_chip_idx = opcode_air_idx(ctx, Rv64LessThan256Opcode(LessThanOpcode::SLT))?;
         let mul_chip_idx = opcode_air_idx(ctx, Rv64Mul256Opcode(MulOpcode::MUL))?;
         let branch_eq_chip_idx =
@@ -254,7 +257,8 @@ impl Int256Extension {
         Ok(Self {
             add_sub_chip_idx,
             bitwise_logic_chip_idx,
-            shift_chip_idx,
+            shift_logical_chip_idx,
+            shift_arithmetic_right_chip_idx,
             less_than_chip_idx,
             mul_chip_idx,
             branch_eq_chip_idx,
@@ -272,14 +276,15 @@ impl Int256Extension {
         let mul_start = Rv64Mul256Opcode::CLASS_OFFSET;
 
         if opcode >= base_alu_start && opcode < base_alu_start + BaseAluOpcode::COUNT {
-            // BaseAlu256 class is shared by two AIRs: ADD(0)/SUB(1) → add_sub,
-            // XOR(2)/OR(3)/AND(4) → bitwise_logic.
             match opcode - base_alu_start {
                 0..=1 => self.add_sub_chip_idx,
                 _ => self.bitwise_logic_chip_idx,
             }
         } else if opcode >= shift_start && opcode < shift_start + ShiftOpcode::COUNT {
-            self.shift_chip_idx
+            match opcode - shift_start {
+                0..=1 => self.shift_logical_chip_idx,
+                _ => self.shift_arithmetic_right_chip_idx,
+            }
         } else if opcode >= lt_start && opcode < lt_start + LessThanOpcode::COUNT {
             self.less_than_chip_idx
         } else if opcode >= beq_start && opcode < beq_start + BranchEqualOpcode::COUNT {

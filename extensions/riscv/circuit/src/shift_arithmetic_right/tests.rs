@@ -30,7 +30,10 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluAdapterRecord, Rv64ShiftChipGpu, ShiftCoreRecord},
+    crate::{
+        adapters::Rv64BaseAluAdapterRecord, Rv64ShiftArithmeticRightChipGpu,
+        ShiftArithmeticRightCoreRecord,
+    },
     openvm_circuit::arch::{
         testing::{
             default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
@@ -40,19 +43,27 @@ use {
     },
 };
 
-use super::{core::run_shift, Rv64ShiftChip, ShiftCoreAir, ShiftCoreCols};
+use super::{
+    core::run_shift_arithmetic_right, Rv64ShiftArithmeticRightChip, ShiftArithmeticRightCoreAir,
+    ShiftArithmeticRightCoreCols,
+};
 use crate::{
     adapters::{
         Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
         RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
-    Rv64ShiftAir, Rv64ShiftExecutor, ShiftFiller,
+    Rv64ShiftArithmeticRightAir, Rv64ShiftArithmeticRightExecutor, ShiftArithmeticRightFiller,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
-type Harness = TestChipHarness<F, Rv64ShiftExecutor, Rv64ShiftAir, Rv64ShiftChip<F>>;
+type Harness = TestChipHarness<
+    F,
+    Rv64ShiftArithmeticRightExecutor,
+    Rv64ShiftArithmeticRightAir,
+    Rv64ShiftArithmeticRightChip<F>,
+>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
@@ -60,18 +71,25 @@ fn create_harness_fields(
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     range_checker: Arc<VariableRangeCheckerChip>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64ShiftAir, Rv64ShiftExecutor, Rv64ShiftChip<F>) {
-    let air = Rv64ShiftAir::new(
+) -> (
+    Rv64ShiftArithmeticRightAir,
+    Rv64ShiftArithmeticRightExecutor,
+    Rv64ShiftArithmeticRightChip<F>,
+) {
+    let air = Rv64ShiftArithmeticRightAir::new(
         Rv64BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
-        ShiftCoreAir::new(
+        ShiftArithmeticRightCoreAir::new(
             bitwise_chip.bus(),
             range_checker.bus(),
             ShiftOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64ShiftExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
-    let chip = Rv64ShiftChip::<F>::new(
-        ShiftFiller::new(
+    let executor = Rv64ShiftArithmeticRightExecutor::new(
+        Rv64BaseAluAdapterExecutor,
+        ShiftOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv64ShiftArithmeticRightChip::<F>::new(
+        ShiftArithmeticRightFiller::new(
             Rv64BaseAluAdapterFiller::new(bitwise_chip.clone()),
             bitwise_chip,
             range_checker,
@@ -144,7 +162,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(executor, arena, &instruction);
 
-    let (a, _, _) = run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(opcode, &b, &c);
+    let (a, _, _) = run_shift_arithmetic_right::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(&b, &c);
     assert_eq!(
         a.map(F::from_u8),
         tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd)
@@ -157,10 +175,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 // Randomly generate computations and execute, ensuring that the generated trace
 // passes all constraints.
 //////////////////////////////////////////////////////////////////////////////////////
-#[test_case(SLL, 100)]
-#[test_case(SRL, 100)]
 #[test_case(SRA, 100)]
-fn run_rv64_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
+fn run_rv64_shift_arithmetic_right_rand_test(opcode: ShiftOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise_chip) = create_harness(&tester);
@@ -196,8 +212,7 @@ fn run_rv64_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
 #[derive(Clone, Copy, Default, PartialEq)]
 struct ShiftPrankValues<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bit_shift: Option<u32>,
-    pub bit_multiplier_left: Option<u32>,
-    pub bit_multiplier_right: Option<u32>,
+    pub bit_multiplier: Option<u32>,
     pub b_sign: Option<u32>,
     pub bit_shift_marker: Option<[u32; LIMB_BITS]>,
     pub limb_shift_marker: Option<[u32; NUM_LIMBS]>,
@@ -231,15 +246,12 @@ fn run_negative_shift_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut ShiftCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
+        let cols: &mut ShiftArithmeticRightCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
         cols.a = prank_a.map(F::from_u32);
-        if let Some(bit_multiplier_left) = prank_vals.bit_multiplier_left {
-            cols.bit_multiplier_left = F::from_u32(bit_multiplier_left);
-        }
-        if let Some(bit_multiplier_right) = prank_vals.bit_multiplier_right {
-            cols.bit_multiplier_right = F::from_u32(bit_multiplier_right);
+        if let Some(bit_multiplier) = prank_vals.bit_multiplier {
+            cols.bit_multiplier = F::from_u32(bit_multiplier);
         }
         if let Some(b_sign) = prank_vals.b_sign {
             cols.b_sign = F::from_u32(b_sign);
@@ -269,125 +281,24 @@ fn run_negative_shift_test(
 }
 
 #[test]
-fn rv64_shift_wrong_negative_test() {
+fn rv64_sra_wrong_negative_test() {
     let a = [1, 0, 0, 0, 0, 0, 0, 0];
     let b = [1, 0, 0, 0, 0, 0, 0, 0];
     let c = [1, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = Default::default();
-    run_negative_shift_test(SLL, a, b, c, prank_vals, false);
-    run_negative_shift_test(SRL, a, b, c, prank_vals, false);
-    run_negative_shift_test(SRA, a, b, c, prank_vals, false);
-}
-
-#[test]
-fn rv64_sll_wrong_bit_shift_negative_test() {
-    let a = [0, 4, 4, 4, 4, 0, 0, 0];
-    let b = [1, 1, 1, 1, 0, 0, 0, 0];
-    let c = [9, 10, 100, 0, 0, 0, 0, 0];
-    let prank_vals = ShiftPrankValues {
-        bit_shift: Some(2),
-        bit_multiplier_left: Some(4),
-        bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
-        ..Default::default()
-    };
-    run_negative_shift_test(SLL, a, b, c, prank_vals, true);
-}
-
-#[test]
-fn rv64_sll_wrong_limb_shift_negative_test() {
-    let a = [0, 0, 2, 2, 2, 2, 0, 0];
-    let b = [1, 1, 1, 1, 0, 0, 0, 0];
-    let c = [9, 0, 0, 0, 0, 0, 0, 0];
-    let prank_vals = ShiftPrankValues {
-        limb_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
-        ..Default::default()
-    };
-    run_negative_shift_test(SLL, a, b, c, prank_vals, true);
-}
-
-#[test]
-fn rv64_sll_wrong_bit_carry_negative_test() {
-    let a = [0, 510, 510, 510, 510, 510, 510, 510];
-    let b = [255, 255, 255, 255, 255, 255, 255, 255];
-    let c = [9, 0, 0, 0, 0, 0, 0, 0];
-    let prank_vals = ShiftPrankValues {
-        bit_shift_carry: Some([0, 0, 0, 0, 0, 0, 0, 0]),
-        ..Default::default()
-    };
-    run_negative_shift_test(SLL, a, b, c, prank_vals, true);
-}
-
-#[test]
-fn rv64_sll_wrong_bit_mult_side_negative_test() {
-    let a = [128, 128, 128, 0, 0, 0, 0, 0];
-    let b = [1, 1, 1, 1, 0, 0, 0, 0];
-    let c = [9, 0, 0, 0, 0, 0, 0, 0];
-    let prank_vals = ShiftPrankValues {
-        bit_multiplier_left: Some(0),
-        bit_multiplier_right: Some(1),
-        ..Default::default()
-    };
-    run_negative_shift_test(SLL, a, b, c, prank_vals, false);
-}
-
-#[test]
-fn rv64_srl_wrong_bit_shift_negative_test() {
-    // SRL([0,0,0,128,0,...], 9) correct result: [0,0,64,0,...].
-    // Prank bit_shift=2 (shift=10): SRL by 10 gives [0,0,32,0,...].
-    // Constraint on bit_multiplier_right catches mismatch.
-    let a = [0, 0, 32, 0, 0, 0, 0, 0];
-    let b = [0, 0, 0, 128, 0, 0, 0, 0];
-    let c = [9, 0, 0, 0, 0, 0, 0, 0];
-    let prank_vals = ShiftPrankValues {
-        bit_shift: Some(2),
-        bit_multiplier_left: Some(4),
-        bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
-        ..Default::default()
-    };
-    run_negative_shift_test(SRL, a, b, c, prank_vals, false);
-}
-
-#[test]
-fn rv64_srl_wrong_limb_shift_negative_test() {
-    // SRL([0,0,0,128,0,...], 9) correct: [0,0,64,0,...].
-    // Prank a places the 64 one limb lower, exposing wrong limb alignment.
-    let a = [0, 64, 0, 0, 0, 0, 0, 0];
-    let b = [0, 0, 0, 128, 0, 0, 0, 0];
-    let c = [9, 0, 0, 0, 0, 0, 0, 0];
-    let prank_vals = ShiftPrankValues {
-        limb_shift_marker: Some([0, 1, 0, 0, 0, 0, 0, 0]),
-        ..Default::default()
-    };
-    run_negative_shift_test(SRL, a, b, c, prank_vals, false);
-}
-
-#[test]
-fn rv64_srx_wrong_bit_mult_side_negative_test() {
-    // Prank bit_multiplier_left=1, bit_multiplier_right=0 for right shifts.
-    // a=all zeros is wrong, constraint catches mismatch.
-    let a = [0, 0, 0, 0, 0, 0, 0, 0];
-    let b = [0, 0, 0, 0, 0, 0, 0, 128];
-    let c = [9, 0, 0, 0, 0, 0, 0, 0];
-    let prank_vals = ShiftPrankValues {
-        bit_multiplier_left: Some(1),
-        bit_multiplier_right: Some(0),
-        ..Default::default()
-    };
-    run_negative_shift_test(SRL, a, b, c, prank_vals, false);
     run_negative_shift_test(SRA, a, b, c, prank_vals, false);
 }
 
 #[test]
 fn rv64_sra_wrong_bit_shift_negative_test() {
     // SRA([0,...,0,128], 9) correct: [0,...,192,255] (sign-extended).
-    // Prank bit_shift=2 (shift=10): SRA by 10 gives [0,...,224,255].
-    // Constraint on bit_multiplier_right catches mismatch.
+    // Prank bit_shift_marker to index 2 (bit_shift=2): the bit_multiplier constraint now
+    // expects 4, but the real bit_multiplier is 2, so verification fails.
     let a = [0, 0, 0, 0, 0, 0, 224, 255];
     let b = [0, 0, 0, 0, 0, 0, 0, 128];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         bit_shift: Some(2),
-        bit_multiplier_left: Some(4),
         bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
         ..Default::default()
     };
@@ -409,6 +320,19 @@ fn rv64_sra_wrong_limb_shift_negative_test() {
 }
 
 #[test]
+fn rv64_sra_wrong_bit_mult_negative_test() {
+    // Prank bit_multiplier to a wrong value; the bit_multiplier marker constraint catches it.
+    let a = [0, 0, 0, 0, 0, 0, 64, 0];
+    let b = [0, 0, 0, 0, 0, 0, 0, 128];
+    let c = [9, 0, 0, 0, 0, 0, 0, 0];
+    let prank_vals = ShiftPrankValues {
+        bit_multiplier: Some(0),
+        ..Default::default()
+    };
+    run_negative_shift_test(SRA, a, b, c, prank_vals, false);
+}
+
+#[test]
 fn rv64_sra_wrong_sign_negative_test() {
     // a is the SRL result for this input (SRA would sign-extend instead).
     // b is negative (byte 7 has sign bit set), so b_sign should be 1.
@@ -423,46 +347,6 @@ fn rv64_sra_wrong_sign_negative_test() {
     run_negative_shift_test(SRA, a, b, c, prank_vals, true);
 }
 
-#[test]
-fn rv64_shift_adapter_imm_sign_extension_negative_test() {
-    // Execute SLL with an immediate (shift by 1), then prank c[4] = 1 while sign byte
-    // (c[2]) = 0. The shift core only uses c[0] so core constraints still hold, but
-    // the adapter must catch that limbs 4-7 don't match the sign byte.
-    let mut rng = create_seeded_rng();
-    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&tester);
-
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        &mut rng,
-        SLL,
-        Some([1, 0, 0, 0, 0, 0, 0, 0]),
-        Some(true),
-        Some([1, 0, 0, 0, 0, 0, 0, 0]),
-    );
-
-    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut ShiftCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
-            values.split_at_mut(adapter_width).1.borrow_mut();
-        cols.c[4] = F::ONE;
-        *trace = RowMajorMatrix::new(values, trace.width());
-    };
-
-    disable_debug_builder();
-    let tester = tester
-        .build()
-        .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
-        .finalize();
-    tester
-        .simple_test()
-        .expect_err("Expected verification to fail, but it passed");
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
 ///
@@ -470,42 +354,12 @@ fn rv64_shift_adapter_imm_sign_extension_negative_test() {
 ///////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-fn run_sll_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 7, 61, 186, 31, 190, 221, 200];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [91, 0, 100, 0, 49, 190, 190, 113];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 104, 57, 232, 209, 253];
-    let (result, limb_shift, bit_shift) =
-        run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(SLL, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
-        assert_eq!(z[i], result[i])
-    }
-    let shift = (y[0] as usize) % (RV64_REGISTER_NUM_LIMBS * RV64_BYTE_BITS);
-    assert_eq!(shift / RV64_BYTE_BITS, limb_shift);
-    assert_eq!(shift % RV64_BYTE_BITS, bit_shift);
-}
-
-#[test]
-fn run_srl_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [31, 190, 221, 200, 45, 7, 61, 186];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [81, 190, 190, 190, 113, 20, 50, 80];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [110, 228, 150, 131, 30, 93, 0, 0];
-    let (result, limb_shift, bit_shift) =
-        run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(SRL, &x, &y);
-    for i in 0..RV64_REGISTER_NUM_LIMBS {
-        assert_eq!(z[i], result[i])
-    }
-    let shift = (y[0] as usize) % (RV64_REGISTER_NUM_LIMBS * RV64_BYTE_BITS);
-    assert_eq!(shift / RV64_BYTE_BITS, limb_shift);
-    assert_eq!(shift % RV64_BYTE_BITS, bit_shift);
-}
-
-#[test]
 fn run_sra_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [31, 190, 221, 200, 45, 7, 61, 186];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [81, 20, 50, 80, 49, 190, 190, 113];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [110, 228, 150, 131, 30, 221, 255, 255];
     let (result, limb_shift, bit_shift) =
-        run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(SRA, &x, &y);
+        run_shift_arithmetic_right::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(&x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
@@ -521,8 +375,13 @@ fn run_sra_sanity_test() {
 // ////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(feature = "cuda")]
-type GpuHarness =
-    GpuTestChipHarness<F, Rv64ShiftExecutor, Rv64ShiftAir, Rv64ShiftChipGpu, Rv64ShiftChip<F>>;
+type GpuHarness = GpuTestChipHarness<
+    F,
+    Rv64ShiftArithmeticRightExecutor,
+    Rv64ShiftArithmeticRightAir,
+    Rv64ShiftArithmeticRightChipGpu,
+    Rv64ShiftArithmeticRightChip<F>,
+>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
@@ -541,7 +400,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_checker,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64ShiftChipGpu::new(
+    let gpu_chip = Rv64ShiftArithmeticRightChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -551,10 +410,8 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 }
 
 #[cfg(feature = "cuda")]
-#[test_case(ShiftOpcode::SLL, 100)]
-#[test_case(ShiftOpcode::SRL, 100)]
 #[test_case(ShiftOpcode::SRA, 100)]
-fn test_cuda_rand_shift_tracegen(opcode: ShiftOpcode, num_ops: usize) {
+fn test_cuda_rand_shift_arithmetic_right_tracegen(opcode: ShiftOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
@@ -576,7 +433,7 @@ fn test_cuda_rand_shift_tracegen(opcode: ShiftOpcode, num_ops: usize) {
 
     type Record<'a> = (
         &'a mut Rv64BaseAluAdapterRecord,
-        &'a mut ShiftCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+        &'a mut ShiftArithmeticRightCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
     );
     harness
         .dense_arena

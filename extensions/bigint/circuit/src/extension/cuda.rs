@@ -97,14 +97,23 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         );
         inventory.add_executor_chip(mult);
 
-        inventory.next_air::<Rv64Shift256Air>()?;
-        let shift = Shift256ChipGpu::new(
+        inventory.next_air::<Rv64ShiftLogical256Air>()?;
+        let shift_logical = ShiftLogical256ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );
-        inventory.add_executor_chip(shift);
+        inventory.add_executor_chip(shift_logical);
+
+        inventory.next_air::<Rv64ShiftArithmeticRight256Air>()?;
+        let shift_arithmetic_right = ShiftArithmeticRight256ChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(shift_arithmetic_right);
 
         Ok(())
     }

@@ -25,7 +25,8 @@ use openvm_riscv_circuit::{
     BranchLessThanCoreAir, BranchLessThanExecutor, BranchLessThanFiller, LessThanCoreAir,
     LessThanExecutor, LessThanFiller, MultiplicationCoreAir, MultiplicationExecutor,
     MultiplicationFiller, Rv64I, Rv64IExecutor, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
-    ShiftCoreAir, ShiftExecutor, ShiftFiller,
+    ShiftArithmeticRightCoreAir, ShiftArithmeticRightExecutor,
+    ShiftArithmeticRightFiller, ShiftLogicalCoreAir, ShiftLogicalExecutor, ShiftLogicalFiller,
 };
 use serde::{Deserialize, Serialize};
 
@@ -187,15 +188,29 @@ pub type Rv64Multiplication256Chip<F> = VmChipWrapper<
 >;
 
 /// Shift256
-pub type Rv64Shift256Air =
-    VmAirWrapper<AluAdapterAir, ShiftCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
+pub type Rv64ShiftLogical256Air =
+    VmAirWrapper<AluAdapterAir, ShiftLogicalCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
+pub type Rv64ShiftArithmeticRight256Air =
+    VmAirWrapper<AluAdapterAir, ShiftArithmeticRightCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv64Shift256Executor(
-    ShiftExecutor<AluAdapterExecutor, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>,
+pub struct Rv64ShiftLogical256Executor(
+    ShiftLogicalExecutor<AluAdapterExecutor, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>,
 );
-pub type Rv64Shift256Chip<F> = VmChipWrapper<
+#[derive(Clone, PreflightExecutor)]
+pub struct Rv64ShiftArithmeticRight256Executor(
+    ShiftArithmeticRightExecutor<AluAdapterExecutor, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>,
+);
+pub type Rv64ShiftLogical256Chip<F> = VmChipWrapper<
     F,
-    ShiftFiller<
+    ShiftLogicalFiller<
+        Rv64VecHeapAdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
+        INT256_NUM_U8_LIMBS,
+        RV64_BYTE_BITS,
+    >,
+>;
+pub type Rv64ShiftArithmeticRight256Chip<F> = VmChipWrapper<
+    F,
+    ShiftArithmeticRightFiller<
         Rv64VecHeapAdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
         INT256_NUM_U8_LIMBS,
         RV64_BYTE_BITS,

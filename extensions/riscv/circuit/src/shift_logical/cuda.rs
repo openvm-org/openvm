@@ -13,22 +13,22 @@ use crate::{
     adapters::{
         Rv64BaseAluAdapterCols, Rv64BaseAluAdapterRecord, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
-    cuda_abi::shift_cuda::tracegen as rv64_shift_tracegen,
-    ShiftCoreCols, ShiftCoreRecord,
+    cuda_abi::shift_cuda::tracegen_logical as rv64_shift_logical_tracegen,
+    ShiftLogicalCoreCols, ShiftLogicalCoreRecord,
 };
 
 #[derive(new)]
-pub struct Rv64ShiftChipGpu {
+pub struct Rv64ShiftLogicalChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftLogicalChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
             Rv64BaseAluAdapterRecord,
-            ShiftCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+            ShiftLogicalCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
@@ -37,7 +37,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = Rv64BaseAluAdapterCols::<F>::width()
-            + ShiftCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>::width();
+            + ShiftLogicalCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
@@ -46,7 +46,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftChipGpu {
             .unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
-            rv64_shift_tracegen(
+            rv64_shift_logical_tracegen(
                 d_trace.buffer(),
                 trace_height,
                 &d_records,

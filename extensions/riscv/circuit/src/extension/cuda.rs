@@ -18,8 +18,10 @@ use crate::{
     Rv64I, Rv64Io, Rv64JalLuiAir, Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir,
     Rv64LessThanChipGpu, Rv64LoadSignExtendAir, Rv64LoadSignExtendChipGpu, Rv64LoadStoreAir,
     Rv64LoadStoreChipGpu, Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir, Rv64MulWChipGpu,
-    Rv64MultiplicationAir, Rv64MultiplicationChipGpu, Rv64ShiftAir, Rv64ShiftChipGpu,
-    Rv64ShiftWAir, Rv64ShiftWChipGpu,
+    Rv64MultiplicationAir, Rv64MultiplicationChipGpu, Rv64ShiftArithmeticRightAir,
+    Rv64ShiftArithmeticRightChipGpu, Rv64ShiftLogicalAir, Rv64ShiftLogicalChipGpu,
+    Rv64ShiftWArithmeticRightAir, Rv64ShiftWArithmeticRightChipGpu, Rv64ShiftWLogicalAir,
+    Rv64ShiftWLogicalChipGpu,
 };
 
 pub struct Rv64ImGpuProverExt;
@@ -60,21 +62,37 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let lt = Rv64LessThanChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(lt);
 
-        inventory.next_air::<Rv64ShiftAir>()?;
-        let shift = Rv64ShiftChipGpu::new(
+        inventory.next_air::<Rv64ShiftLogicalAir>()?;
+        let shift_logical = Rv64ShiftLogicalChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
         );
-        inventory.add_executor_chip(shift);
+        inventory.add_executor_chip(shift_logical);
 
-        inventory.next_air::<Rv64ShiftWAir>()?;
-        let shift_w = Rv64ShiftWChipGpu::new(
+        inventory.next_air::<Rv64ShiftArithmeticRightAir>()?;
+        let shift_arithmetic_right = Rv64ShiftArithmeticRightChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
         );
-        inventory.add_executor_chip(shift_w);
+        inventory.add_executor_chip(shift_arithmetic_right);
+
+        inventory.next_air::<Rv64ShiftWLogicalAir>()?;
+        let shift_w_logical = Rv64ShiftWLogicalChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(shift_w_logical);
+
+        inventory.next_air::<Rv64ShiftWArithmeticRightAir>()?;
+        let shift_w_arithmetic_right = Rv64ShiftWArithmeticRightChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(shift_w_arithmetic_right);
 
         inventory.next_air::<Rv64LoadStoreAir>()?;
         let load_store_chip = Rv64LoadStoreChipGpu::new(

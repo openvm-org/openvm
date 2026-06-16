@@ -17,14 +17,20 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64ShiftAir =
-    VmAirWrapper<Rv64BaseAluAdapterAir, ShiftCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>;
-pub type Rv64ShiftExecutor = ShiftExecutor<
+pub type Rv64ShiftLogicalAir = VmAirWrapper<
+    Rv64BaseAluAdapterAir,
+    ShiftLogicalCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+>;
+pub type Rv64ShiftLogicalExecutor = ShiftLogicalExecutor<
     Rv64BaseAluAdapterExecutor<RV64_BYTE_BITS>,
     RV64_REGISTER_NUM_LIMBS,
     RV64_BYTE_BITS,
 >;
-pub type Rv64ShiftChip<F> = VmChipWrapper<
+pub type Rv64ShiftLogicalChip<F> = VmChipWrapper<
     F,
-    ShiftFiller<Rv64BaseAluAdapterFiller<RV64_BYTE_BITS>, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+    ShiftLogicalFiller<
+        Rv64BaseAluAdapterFiller<RV64_BYTE_BITS>,
+        RV64_REGISTER_NUM_LIMBS,
+        RV64_BYTE_BITS,
+    >,
 >;
