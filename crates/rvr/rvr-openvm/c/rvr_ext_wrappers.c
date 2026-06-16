@@ -85,6 +85,12 @@ void trace_wr_mem_u64_range_wrapper(RvState* s, uint32_t base_addr,
   trace_wr_mem_u64_range(s, base_addr, vals, num_words);
 }
 
+void trace_mem_access_u64_range_wrapper(RvState* s, uint32_t base_addr,
+                                        uint32_t num_words,
+                                        uint32_t addr_space) {
+  trace_mem_access_u64_range(s, base_addr, num_words, addr_space);
+}
+
 /* ── Instruction dispatch / chip cost ──────────────────────────────── */
 
 void trace_pc_wrapper(RvState* s, uint32_t pc) { trace_pc(s, pc); }

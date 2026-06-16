@@ -101,6 +101,12 @@ extern "C" {
         vals: *const u64,
         num_words: u32,
     );
+    pub fn trace_mem_access_u64_range_wrapper(
+        state: *mut c_void,
+        base_addr: u32,
+        num_words: u32,
+        addr_space: u32,
+    );
 
     // ── Memory access (u64-word ranges, trace-only) ───────────────────
     pub fn trace_rd_mem_u64_range_wrapper(
@@ -244,5 +250,5 @@ pub unsafe fn trace_mem_access_range(
         num_words >= 1,
         "trace_mem_access_range requires num_words >= 1"
     );
-    trace_mem_access_u32_range_wrapper(state, base_addr, num_words, addr_space);
+    trace_mem_access_u64_range_wrapper(state, base_addr, num_words, addr_space);
 }
