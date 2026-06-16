@@ -20,13 +20,8 @@ use rvr_openvm_ext_algebra_ffi_common::{
     write_bls12_381_fq, write_field_256, FieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
-    ext_hint_stream_set,
-    rd_mem_words_traced,
-    wr_mem_words_traced,
-    rd_mem_u64_range_wrapper,
-    trace_mem_access_range,
-    AS_MEMORY,
-    WORD_SIZE,
+    ext_hint_stream_set, rd_mem_u64_range_wrapper, rd_mem_words_traced, trace_mem_access_range,
+    wr_mem_words_traced, AS_MEMORY, WORD_SIZE,
 };
 
 // ── Field structs ────────────────────────────────────────────────────────────

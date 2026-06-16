@@ -5,11 +5,7 @@ use std::ffi::c_void;
 use halo2curves_axiom::ff::PrimeField;
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
-use rvr_openvm_ext_ffi_common::{
-    rd_mem_words_traced,
-    wr_mem_words_traced,
-    WORD_SIZE,
-};
+use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced, WORD_SIZE};
 
 /// Size of a 256-bit field element in bytes.
 pub const FIELD_256_BYTES: usize = 32;
