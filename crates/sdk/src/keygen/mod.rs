@@ -1,3 +1,5 @@
+#[cfg(feature = "evm-prove")]
+use std::io::{self, Read, Write};
 use std::sync::Arc;
 
 use openvm_circuit::{
@@ -6,6 +8,8 @@ use openvm_circuit::{
 };
 #[cfg(feature = "root-prover")]
 use openvm_continuations::RootSC;
+#[cfg(feature = "evm-prove")]
+use openvm_stark_backend::codec::{Decode, Encode};
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     StarkEngine,
@@ -98,9 +102,8 @@ where
     }
 }
 
-/// Attention: the serialized size of this struct is VERY large, usually >10GB.
 #[cfg(feature = "evm-prove")]
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Halo2ProvingKey {
     /// Static verifier to verify a stark proof of the root verifier.
     pub verifier: Arc<openvm_static_verifier::StaticVerifierProvingKey>,
@@ -109,4 +112,28 @@ pub struct Halo2ProvingKey {
     pub wrapper: Arc<openvm_static_verifier::Halo2WrapperProvingKey>,
     /// Whether to collect detailed profiling metrics.
     pub profiling: bool,
+}
+
+#[cfg(feature = "evm-prove")]
+impl Encode for Halo2ProvingKey {
+    fn encode<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        self.profiling.encode(writer)?;
+        self.verifier.encode(writer)?;
+        self.wrapper.encode(writer)
+    }
+}
+
+#[cfg(feature = "evm-prove")]
+impl Decode for Halo2ProvingKey {
+    fn decode<R: Read>(reader: &mut R) -> io::Result<Self> {
+        Ok(Self {
+            profiling: bool::decode(reader)?,
+            verifier: Arc::new(openvm_static_verifier::StaticVerifierProvingKey::decode(
+                reader,
+            )?),
+            wrapper: Arc::new(openvm_static_verifier::Halo2WrapperProvingKey::decode(
+                reader,
+            )?),
+        })
+    }
 }

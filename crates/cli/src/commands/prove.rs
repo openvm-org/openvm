@@ -103,6 +103,22 @@ enum ProveSubCommand {
         #[command(flatten)]
         keys: ProvingKeyArgs,
 
+        #[arg(
+            long,
+            action,
+            help = "Path to root proving key, by default will be ${HOME}/.openvm/root.pk",
+            help_heading = "OpenVM Options"
+        )]
+        root_pk: Option<PathBuf>,
+
+        #[arg(
+            long,
+            action,
+            help = "Path to Halo2 proving key, by default will be ${HOME}/.openvm/halo2.pk",
+            help_heading = "OpenVM Options"
+        )]
+        halo2_pk: Option<PathBuf>,
+
         #[command(flatten)]
         run_args: RunArgs,
 
@@ -173,7 +189,7 @@ impl ProveCmd {
                 let mut app_pk = load_app_pk(&keys.app_pk, cargo_args)?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
                 configure_app_pk(&mut app_pk, segmentation_args);
-                let agg_pk = load_required_agg_pk(&keys.agg_prefix_pk, cargo_args)?;
+                let agg_pk = load_required_agg_pk(&keys.agg_prefix_pk, &keys.agg_pk, cargo_args)?;
                 let sdk = Sdk::builder()
                     .app_pk(app_pk)
                     .agg_pk(agg_pk)
@@ -220,6 +236,8 @@ impl ProveCmd {
             ProveSubCommand::Evm {
                 keys,
                 proof,
+                root_pk,
+                halo2_pk,
                 run_args,
                 cargo_args,
                 segmentation_args,
@@ -230,12 +248,14 @@ impl ProveCmd {
 
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
                 configure_app_pk(&mut app_pk, segmentation_args);
-                let agg_pk = load_required_agg_pk(&keys.agg_prefix_pk, cargo_args)?;
-                let root_pk = load_required_root_pk()?;
+                let agg_pk = load_required_agg_pk(&keys.agg_prefix_pk, &keys.agg_pk, cargo_args)?;
+                let root_pk = load_required_root_pk(root_pk)?;
+                let halo2_pk = load_required_halo2_pk(halo2_pk)?;
                 let sdk = Sdk::builder()
                     .app_pk(app_pk)
                     .agg_pk(agg_pk)
                     .root_pk(root_pk)
+                    .halo2_pk(halo2_pk)
                     .agg_tree_config(*agg_tree_config)
                     .build()?;
                 let mut prover = sdk.evm_prover(exe)?;
@@ -331,10 +351,11 @@ fn resolve_agg_prefix_pk_path(
 
 pub(crate) fn load_required_agg_pk(
     agg_prefix_pk: &Option<PathBuf>,
+    agg_pk: &Option<PathBuf>,
     cargo_args: &RunCargoArgs,
 ) -> Result<AggProvingKey> {
     let prefix_pk = load_required_agg_prefix_pk(agg_prefix_pk, cargo_args)?;
-    let internal_recursive_pk = load_required_internal_recursive_pk()?;
+    let internal_recursive_pk = load_required_internal_recursive_pk(agg_pk)?;
     Ok(AggProvingKey {
         prefix: prefix_pk,
         internal_recursive: internal_recursive_pk,
@@ -354,8 +375,12 @@ pub(crate) fn load_required_agg_prefix_pk(
     })
 }
 
-pub(crate) fn load_required_internal_recursive_pk() -> Result<Arc<MultiStarkProvingKey<SC>>> {
-    let internal_recursive_pk_path = PathBuf::from(default_internal_recursive_pk_path());
+pub(crate) fn load_required_internal_recursive_pk(
+    agg_pk: &Option<PathBuf>,
+) -> Result<Arc<MultiStarkProvingKey<SC>>> {
+    let internal_recursive_pk_path = agg_pk
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(default_internal_recursive_pk_path()));
     read_object_from_file(&internal_recursive_pk_path).map_err(|e| {
         eyre!(
             "Failed to read internal-recursive proving key from {}: {e}\nRun 'cargo openvm setup' first to generate it",
@@ -365,12 +390,29 @@ pub(crate) fn load_required_internal_recursive_pk() -> Result<Arc<MultiStarkProv
 }
 
 #[cfg(feature = "evm-prove")]
-fn load_required_root_pk() -> Result<RootProvingKey> {
-    let root_pk_path = PathBuf::from(crate::default::default_root_pk_path());
+fn load_required_root_pk(root_pk: &Option<PathBuf>) -> Result<RootProvingKey> {
+    let root_pk_path = root_pk
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(crate::default::default_root_pk_path()));
     read_object_from_file(&root_pk_path).map_err(|e| {
         eyre!(
             "Failed to read root proving key from {}: {e}\nRun 'cargo openvm setup --evm' first to generate it",
             root_pk_path.display()
+        )
+    })
+}
+
+#[cfg(feature = "evm-prove")]
+fn load_required_halo2_pk(
+    halo2_pk: &Option<PathBuf>,
+) -> Result<openvm_sdk::keygen::Halo2ProvingKey> {
+    let halo2_pk_path = halo2_pk
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(crate::default::default_halo2_pk_path()));
+    openvm_sdk::fs::read_halo2_pk_from_file(&halo2_pk_path).map_err(|e| {
+        eyre!(
+            "Failed to read Halo2 proving key from {}: {e}\nRun 'cargo openvm setup --evm' first to generate it",
+            halo2_pk_path.display()
         )
     })
 }
