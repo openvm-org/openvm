@@ -21,6 +21,8 @@ mod context_tree;
 pub mod profiling;
 
 mod circuit;
+#[cfg(feature = "evm-prove")]
+pub mod codec;
 pub mod config;
 pub mod field;
 pub mod hash;

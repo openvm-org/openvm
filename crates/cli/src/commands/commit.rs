@@ -62,7 +62,11 @@ impl CommitCmd {
             get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
         let target_dir = get_target_dir(&self.cargo_args.manifest.target_dir, &manifest_path);
 
-        let agg_pk = load_required_agg_pk(&self.keys.agg_prefix_pk, &self.cargo_args)?;
+        let agg_pk = load_required_agg_pk(
+            &self.keys.agg_prefix_pk,
+            &self.keys.agg_pk,
+            &self.cargo_args,
+        )?;
         let sdk = Sdk::builder().app_pk(app_pk).agg_pk(agg_pk).build()?;
 
         let prover = sdk.prover(exe)?;

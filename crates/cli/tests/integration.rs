@@ -58,6 +58,14 @@ fn test_cli_stark_e2e_no_commit() -> Result<()> {
     run_script("cli_stark_e2e_no_commit.sh", &[])
 }
 
+#[cfg(feature = "evm-verify")]
+#[test]
+#[ignore = "expensive: generates an EVM proof"]
+fn test_cli_evm_e2e_simplified() -> Result<()> {
+    install_cli();
+    run_script("cli_evm_e2e_simplified.sh", &[])
+}
+
 #[test]
 fn test_cli_init_build() -> Result<()> {
     install_cli();

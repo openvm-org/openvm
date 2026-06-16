@@ -6,6 +6,7 @@ use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::proof::Proof,
 };
+#[cfg(feature = "evm-prove")]
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -47,7 +48,7 @@ impl StaticVerifierCircuit {
 
 /// High-level proving key that owns a [`StaticVerifierCircuit`], [`Halo2ProvingPinning`], and
 /// [`StaticVerifierShape`].
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct StaticVerifierProvingKey {
     pub circuit: StaticVerifierCircuit,
     pub pinning: Halo2ProvingPinning,

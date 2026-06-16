@@ -18,7 +18,6 @@ use halo2_base::{
         transcript::{
             Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
         },
-        SerdeFormat,
     },
 };
 use openvm_stark_sdk::{
@@ -26,7 +25,7 @@ use openvm_stark_sdk::{
     openvm_stark_backend::proof::Proof,
 };
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 use crate::{circuit::StaticVerifierCircuit, config::StaticVerifierShape};
 
@@ -46,8 +45,6 @@ pub struct Halo2ProvingMetadata {
 
 /// A proving key together with the metadata needed to reconstruct prover
 /// circuits.
-///
-/// ATTN: Deserializer of this struct is not generic. It only works for verifier/wrappr circuit.
 #[derive(Debug, Clone)]
 pub struct Halo2ProvingPinning {
     pub pk: ProvingKey<G1Affine>,
@@ -175,51 +172,9 @@ impl StaticVerifierCircuit {
 }
 
 impl Halo2ProvingPinning {
-    /// Serialize the proving key to raw bytes.
-    ///
-    /// Use this together with [`Halo2ProvingMetadata`] (which is
-    /// `Serialize`/`Deserialize`) for persistence.  Re-create the pinning via
-    /// [`StaticVerifierCircuit::keygen`] when loading.
+    /// Return the proving key as raw Halo2 bytes.
     pub fn pk_to_bytes(&self) -> Vec<u8> {
         use halo2_base::halo2_proofs::SerdeFormat;
         self.pk.to_bytes(SerdeFormat::RawBytes)
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-struct SerializedHalo2ProvingPinning {
-    pk_bytes: Vec<u8>,
-    metadata: Halo2ProvingMetadata,
-}
-
-impl Serialize for Halo2ProvingPinning {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let serialized = SerializedHalo2ProvingPinning {
-            pk_bytes: self.pk.to_bytes(SerdeFormat::RawBytes),
-            metadata: self.metadata.clone(),
-        };
-        serialized.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for Halo2ProvingPinning {
-    fn deserialize<D>(deserializer: D) -> Result<Halo2ProvingPinning, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let SerializedHalo2ProvingPinning { pk_bytes, metadata } =
-            SerializedHalo2ProvingPinning::deserialize(deserializer)?;
-
-        let pk = ProvingKey::<G1Affine>::from_bytes::<BaseCircuitBuilder<Fr>>(
-            &pk_bytes,
-            SerdeFormat::RawBytes,
-            metadata.config_params.clone(),
-        )
-        .map_err(|e| de::Error::custom(format!("invalid bytes for proving key: {e}")))?;
-
-        Ok(Halo2ProvingPinning { pk, metadata })
     }
 }
