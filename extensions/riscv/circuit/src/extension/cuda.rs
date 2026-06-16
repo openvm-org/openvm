@@ -18,7 +18,8 @@ use crate::{
     Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir, Rv64LessThanChipGpu,
     Rv64LoadSignExtendAir, Rv64LoadSignExtendChipGpu, Rv64LoadStoreAir, Rv64LoadStoreChipGpu,
     Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir, Rv64MulWChipGpu, Rv64MultiplicationAir,
-    Rv64MultiplicationChipGpu, Rv64ShiftAir, Rv64ShiftChipGpu, Rv64ShiftWAir, Rv64ShiftWChipGpu,
+    Rv64MultiplicationChipGpu, Rv64ShiftWAir, Rv64ShiftWChipGpu, Rv64SllAir, Rv64SllChipGpu,
+    Rv64SraAir, Rv64SraChipGpu, Rv64SrlAir, Rv64SrlChipGpu,
 };
 
 pub struct Rv64ImGpuProverExt;
@@ -59,13 +60,29 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let lt = Rv64LessThanChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(lt);
 
-        inventory.next_air::<Rv64ShiftAir>()?;
-        let shift = Rv64ShiftChipGpu::new(
+        inventory.next_air::<Rv64SllAir>()?;
+        let sll = Rv64SllChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
         );
-        inventory.add_executor_chip(shift);
+        inventory.add_executor_chip(sll);
+
+        inventory.next_air::<Rv64SrlAir>()?;
+        let srl = Rv64SrlChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(srl);
+
+        inventory.next_air::<Rv64SraAir>()?;
+        let sra = Rv64SraChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(sra);
 
         inventory.next_air::<Rv64ShiftWAir>()?;
         let shift_w = Rv64ShiftWChipGpu::new(

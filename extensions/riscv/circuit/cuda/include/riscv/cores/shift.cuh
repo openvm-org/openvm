@@ -185,3 +185,183 @@ template <size_t NUM_LIMBS> struct ShiftCore {
         COL_WRITE_ARRAY(row, Cols, a, a);
     }
 };
+
+// ---------------------------------------------------------------------------
+// Split per-opcode shift chips (SLL / SRL / SRA).
+//
+// These mirror the Rust `ShiftCols`/`ShiftSraCols`/`ShiftSplitRecord` layouts. Compared to the
+// combined `ShiftCoreCols` they drop the three opcode flags, merge the two directional
+// `bit_multiplier`s into one, and keep `b_sign` only for SRA.
+// ---------------------------------------------------------------------------
+
+template <typename T, size_t NUM_LIMBS> struct ShiftCols {
+    T a[NUM_LIMBS];
+    T b[NUM_LIMBS];
+    T c[NUM_LIMBS];
+
+    T bit_multiplier;
+
+    T bit_shift_marker[RV64_BYTE_BITS];
+    T limb_shift_marker[NUM_LIMBS];
+
+    T bit_shift_carry[NUM_LIMBS];
+};
+
+template <typename T, size_t NUM_LIMBS> struct ShiftSraCols {
+    T a[NUM_LIMBS];
+    T b[NUM_LIMBS];
+    T c[NUM_LIMBS];
+
+    T bit_multiplier;
+    T b_sign;
+
+    T bit_shift_marker[RV64_BYTE_BITS];
+    T limb_shift_marker[NUM_LIMBS];
+
+    T bit_shift_carry[NUM_LIMBS];
+};
+
+template <size_t NUM_LIMBS> struct ShiftSplitRecord {
+    uint8_t b[NUM_LIMBS];
+    uint8_t c[NUM_LIMBS];
+};
+
+// Byte-range and shift-amount range checks shared by all three split chips.
+template <size_t NUM_LIMBS>
+__forceinline__ __device__ void shift_request_ranges(
+    BitwiseOperationLookup &bitwise_lookup,
+    VariableRangeChecker &range_checker,
+    const uint8_t a[NUM_LIMBS],
+    const uint8_t b[NUM_LIMBS],
+    const uint8_t c[NUM_LIMBS],
+    size_t limb_shift,
+    size_t bit_shift
+) {
+#pragma unroll
+    for (size_t i = 0; i + 1 < NUM_LIMBS; i += 2) {
+        bitwise_lookup.add_range(a[i], a[i + 1]);
+    }
+#pragma unroll
+    for (size_t i = 0; i + 1 < NUM_LIMBS; i += 2) {
+        bitwise_lookup.add_range(b[i], b[i + 1]);
+        bitwise_lookup.add_range(c[i], c[i + 1]);
+    }
+
+    size_t combined_bits = NUM_LIMBS * RV64_BYTE_BITS;
+    size_t num_bits_log = 0;
+    while ((1u << num_bits_log) < combined_bits) {
+        ++num_bits_log;
+    }
+    range_checker.add_count(
+        ((uint32_t)c[0] - (uint32_t)bit_shift - (uint32_t)(limb_shift * RV64_BYTE_BITS)) >>
+            num_bits_log,
+        RV64_BYTE_BITS - num_bits_log
+    );
+}
+
+// Per-limb bit-shift carries (and their range checks) shared by all three split chips.
+template <size_t NUM_LIMBS>
+__forceinline__ __device__ void shift_fill_carries(
+    VariableRangeChecker &range_checker,
+    bool is_left,
+    const uint8_t b[NUM_LIMBS],
+    size_t bit_shift,
+    uint8_t carry_out[NUM_LIMBS]
+) {
+    if (bit_shift == 0) {
+#pragma unroll
+        for (size_t i = 0; i < NUM_LIMBS; i++) {
+            range_checker.add_count(0u, 0u);
+            carry_out[i] = 0u;
+        }
+    } else {
+#pragma unroll
+        for (size_t i = 0; i < NUM_LIMBS; i++) {
+            uint8_t carry = is_left ? (b[i] >> (RV64_BYTE_BITS - bit_shift))
+                                    : (b[i] & ((1u << bit_shift) - 1u));
+            range_checker.add_count((uint32_t)carry, bit_shift);
+            carry_out[i] = carry;
+        }
+    }
+}
+
+template <size_t NUM_LIMBS, bool IS_LEFT> struct LogicalShiftCore {
+    BitwiseOperationLookup bitwise_lookup;
+    VariableRangeChecker range_checker;
+
+    template <typename T> using Cols = ShiftCols<T, NUM_LIMBS>;
+
+    __device__ LogicalShiftCore(BitwiseOperationLookup lookup, VariableRangeChecker range)
+        : bitwise_lookup(lookup), range_checker(range) {}
+
+    __device__ void fill_trace_row(RowSlice row, ShiftSplitRecord<NUM_LIMBS> record) {
+        uint8_t a[NUM_LIMBS];
+        size_t limb_shift = 0, bit_shift = 0;
+        if (IS_LEFT) {
+            run_shift_left<NUM_LIMBS>(record.b, record.c, a, limb_shift, bit_shift);
+        } else {
+            run_shift_right<NUM_LIMBS>(record.b, record.c, a, limb_shift, bit_shift, true);
+        }
+
+        shift_request_ranges<NUM_LIMBS>(
+            bitwise_lookup, range_checker, a, record.b, record.c, limb_shift, bit_shift
+        );
+
+        uint8_t carry_arr[NUM_LIMBS];
+        shift_fill_carries<NUM_LIMBS>(range_checker, IS_LEFT, record.b, bit_shift, carry_arr);
+        COL_WRITE_ARRAY(row, Cols, bit_shift_carry, carry_arr);
+
+        uint8_t limb_marker[NUM_LIMBS] = {0};
+        limb_marker[limb_shift] = 1u;
+        COL_WRITE_ARRAY(row, Cols, limb_shift_marker, limb_marker);
+        uint8_t bit_marker[RV64_BYTE_BITS] = {0};
+        bit_marker[bit_shift] = 1u;
+        COL_WRITE_ARRAY(row, Cols, bit_shift_marker, bit_marker);
+
+        COL_WRITE_VALUE(row, Cols, bit_multiplier, 1u << bit_shift);
+
+        COL_WRITE_ARRAY(row, Cols, b, record.b);
+        COL_WRITE_ARRAY(row, Cols, c, record.c);
+        COL_WRITE_ARRAY(row, Cols, a, a);
+    }
+};
+
+template <size_t NUM_LIMBS> struct ArithShiftCore {
+    BitwiseOperationLookup bitwise_lookup;
+    VariableRangeChecker range_checker;
+
+    template <typename T> using Cols = ShiftSraCols<T, NUM_LIMBS>;
+
+    __device__ ArithShiftCore(BitwiseOperationLookup lookup, VariableRangeChecker range)
+        : bitwise_lookup(lookup), range_checker(range) {}
+
+    __device__ void fill_trace_row(RowSlice row, ShiftSplitRecord<NUM_LIMBS> record) {
+        uint8_t a[NUM_LIMBS];
+        size_t limb_shift = 0, bit_shift = 0;
+        run_shift_right<NUM_LIMBS>(record.b, record.c, a, limb_shift, bit_shift, false);
+
+        shift_request_ranges<NUM_LIMBS>(
+            bitwise_lookup, range_checker, a, record.b, record.c, limb_shift, bit_shift
+        );
+
+        uint8_t carry_arr[NUM_LIMBS];
+        shift_fill_carries<NUM_LIMBS>(range_checker, false, record.b, bit_shift, carry_arr);
+        COL_WRITE_ARRAY(row, Cols, bit_shift_carry, carry_arr);
+
+        uint8_t limb_marker[NUM_LIMBS] = {0};
+        limb_marker[limb_shift] = 1u;
+        COL_WRITE_ARRAY(row, Cols, limb_shift_marker, limb_marker);
+        uint8_t bit_marker[RV64_BYTE_BITS] = {0};
+        bit_marker[bit_shift] = 1u;
+        COL_WRITE_ARRAY(row, Cols, bit_shift_marker, bit_marker);
+
+        uint8_t b_sign_val = record.b[NUM_LIMBS - 1] >> (RV64_BYTE_BITS - 1);
+        bitwise_lookup.add_xor(record.b[NUM_LIMBS - 1], 1u << (RV64_BYTE_BITS - 1));
+        COL_WRITE_VALUE(row, Cols, b_sign, b_sign_val);
+        COL_WRITE_VALUE(row, Cols, bit_multiplier, 1u << bit_shift);
+
+        COL_WRITE_ARRAY(row, Cols, b, record.b);
+        COL_WRITE_ARRAY(row, Cols, c, record.c);
+        COL_WRITE_ARRAY(row, Cols, a, a);
+    }
+};

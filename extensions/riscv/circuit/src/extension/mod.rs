@@ -118,7 +118,9 @@ pub enum Rv64IExecutor {
     BaseAlu(Rv64BaseAluExecutor),
     BaseAluW(Rv64BaseAluWExecutor),
     LessThan(Rv64LessThanExecutor),
-    Shift(Rv64ShiftExecutor),
+    Sll(Rv64SllExecutor),
+    Srl(Rv64SrlExecutor),
+    Sra(Rv64SraExecutor),
     ShiftW(Rv64ShiftWExecutor),
     BranchEqual(Rv64BranchEqualExecutor),
     BranchLessThan(Rv64BranchLessThanExecutor),
@@ -178,8 +180,12 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             Rv64LessThanExecutor::new(Rv64BaseAluU16AdapterExecutor, LessThanOpcode::CLASS_OFFSET);
         inventory.add_executor(lt, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let shift = Rv64ShiftExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
-        inventory.add_executor(shift, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
+        let sll = Rv64SllExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
+        inventory.add_executor(sll, [ShiftOpcode::SLL.global_opcode()])?;
+        let srl = Rv64SrlExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
+        inventory.add_executor(srl, [ShiftOpcode::SRL.global_opcode()])?;
+        let sra = Rv64SraExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
+        inventory.add_executor(sra, [ShiftOpcode::SRA.global_opcode()])?;
 
         let shift_w = Rv64ShiftWExecutor::new(
             Rv64BaseAluWAdapterExecutor::new(),
@@ -295,11 +301,23 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         );
         inventory.add_air(lt);
 
-        let shift = Rv64ShiftAir::new(
+        let sll = Rv64SllAir::new(
             Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            ShiftCoreAir::new(bitwise_lu, range_checker, ShiftOpcode::CLASS_OFFSET),
+            LogicalShiftCoreAir::new(bitwise_lu, range_checker, ShiftOpcode::CLASS_OFFSET),
         );
-        inventory.add_air(shift);
+        inventory.add_air(sll);
+
+        let srl = Rv64SrlAir::new(
+            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            LogicalShiftCoreAir::new(bitwise_lu, range_checker, ShiftOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(srl);
+
+        let sra = Rv64SraAir::new(
+            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            SraCoreAir::new(bitwise_lu, range_checker, ShiftOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(sra);
 
         let shift_w = Rv64ShiftWAir::new(
             Rv64BaseAluWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
@@ -437,9 +455,9 @@ where
         );
         inventory.add_executor_chip(lt);
 
-        inventory.next_air::<Rv64ShiftAir>()?;
-        let shift = Rv64ShiftChip::new(
-            ShiftFiller::new(
+        inventory.next_air::<Rv64SllAir>()?;
+        let sll = Rv64SllChip::new(
+            LogicalShiftFiller::new(
                 Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 range_checker.clone(),
@@ -447,7 +465,31 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift);
+        inventory.add_executor_chip(sll);
+
+        inventory.next_air::<Rv64SrlAir>()?;
+        let srl = Rv64SrlChip::new(
+            LogicalShiftFiller::new(
+                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                range_checker.clone(),
+                ShiftOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(srl);
+
+        inventory.next_air::<Rv64SraAir>()?;
+        let sra = Rv64SraChip::new(
+            ArithShiftFiller::new(
+                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                range_checker.clone(),
+                ShiftOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(sra);
 
         inventory.next_air::<Rv64ShiftWAir>()?;
         let shift_w = Rv64ShiftWChip::new(
