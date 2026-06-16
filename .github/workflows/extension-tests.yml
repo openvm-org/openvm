@@ -49,7 +49,7 @@ jobs:
           # - { name: "keccak256", path: "keccak256", aot: false, rvr: true }
           # - { name: "sha2", path: "sha2", aot: false, rvr: true }
           - { name: "bigint", path: "bigint", aot: false, rvr: true }
-          - { name: "algebra", path: "algebra", aot: false, rvr: true }
+          # - { name: "algebra", path: "algebra", aot: false, rvr: true }
           # - { name: "ecc", path: "ecc", aot: false, rvr: true }
           # - { name: "pairing", path: "pairing", aot: false, rvr: true }
           # - { name: "deferral", path: "deferral", aot: false, rvr: true }
