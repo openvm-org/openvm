@@ -189,7 +189,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         inventory.add_executor(lt, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
         let shift_logical =
-            Rv64ShiftLogicalExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
+            Rv64ShiftLogicalExecutor::new(Rv64BaseAluU16AdapterExecutor, ShiftOpcode::CLASS_OFFSET);
         inventory.add_executor(
             shift_logical,
             [ShiftOpcode::SLL, ShiftOpcode::SRL].map(|x| x.global_opcode()),
@@ -337,8 +337,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(lt);
 
         let shift_logical = Rv64ShiftLogicalAir::new(
-            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            ShiftLogicalCoreAir::new(bitwise_lu, range_checker, ShiftOpcode::CLASS_OFFSET),
+            Rv64BaseAluU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
+            ShiftLogicalU16CoreAir::new(range_checker, ShiftOpcode::CLASS_OFFSET),
         );
         inventory.add_air(shift_logical);
 
@@ -507,9 +507,8 @@ where
 
         inventory.next_air::<Rv64ShiftLogicalAir>()?;
         let shift_logical = Rv64ShiftLogicalChip::new(
-            ShiftLogicalFiller::new(
-                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
-                bitwise_lu.clone(),
+            ShiftLogicalU16Filler::new(
+                Rv64BaseAluU16AdapterFiller::new(range_checker.clone()),
                 range_checker.clone(),
                 ShiftOpcode::CLASS_OFFSET,
             ),
