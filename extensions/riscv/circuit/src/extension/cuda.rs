@@ -53,11 +53,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.add_executor_chip(bitwise_logic);
 
         inventory.next_air::<Rv64BaseAluWAir>()?;
-        let base_alu_w = Rv64BaseAluWChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            timestamp_max_bits,
-        );
+        let base_alu_w = Rv64BaseAluWChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(base_alu_w);
 
         inventory.next_air::<Rv64LessThanAir>()?;

@@ -655,8 +655,7 @@ pub mod alu_w_cuda {
             width: usize,
             d_records: DeviceBufferView,
             d_range_checker: *mut u32,
-            range_checker_bins: usize,
-            d_bitwise_lookup: *mut u32,
+            range_checker_num_bins: u32,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -667,20 +666,16 @@ pub mod alu_w_cuda {
         height: usize,
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
-        range_bins: usize,
-        d_bitwise_lookup: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        let width = d_trace.len() / height;
         CudaError::from_result(_rv64_alu_w_tracegen(
             d_trace.as_mut_ptr(),
             height,
-            width,
+            d_trace.len() / height,
             d_records.view(),
             d_range_checker.as_mut_ptr() as *mut u32,
-            range_bins,
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
             timestamp_max_bits,
             stream,
         ))

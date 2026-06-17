@@ -2,16 +2,18 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::{
     adapters::{
-        Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller,
-        RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS,
+        Rv64BaseAluWU16AdapterAir, Rv64BaseAluWU16AdapterExecutor, Rv64BaseAluWU16AdapterFiller,
+        RV64_WORD_U16_LIMBS, U16_BITS,
     },
-    base_alu::{BaseAluCoreAir, BaseAluExecutor, BaseAluFiller},
+    add_sub::{AddSubCoreAir, AddSubFiller},
 };
 
 mod execution;
-pub type BaseAluWCoreAir = BaseAluCoreAir<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type BaseAluWExecutor<A> = BaseAluExecutor<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type BaseAluWFiller<A> = BaseAluFiller<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+mod preflight;
+pub use preflight::*;
+
+pub type BaseAluWCoreAir = AddSubCoreAir<RV64_WORD_U16_LIMBS, U16_BITS>;
+pub type BaseAluWFiller<A> = AddSubFiller<A, RV64_WORD_U16_LIMBS, U16_BITS>;
 
 #[cfg(feature = "cuda")]
 mod cuda;
@@ -21,6 +23,6 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64BaseAluWAir = VmAirWrapper<Rv64BaseAluWAdapterAir, BaseAluWCoreAir>;
-pub type Rv64BaseAluWExecutor = BaseAluWExecutor<Rv64BaseAluWAdapterExecutor>;
-pub type Rv64BaseAluWChip<F> = VmChipWrapper<F, BaseAluWFiller<Rv64BaseAluWAdapterFiller>>;
+pub type Rv64BaseAluWAir = VmAirWrapper<Rv64BaseAluWU16AdapterAir, BaseAluWCoreAir>;
+pub type Rv64BaseAluWExecutor = BaseAluWExecutor<Rv64BaseAluWU16AdapterExecutor>;
+pub type Rv64BaseAluWChip<F> = VmChipWrapper<F, BaseAluWFiller<Rv64BaseAluWU16AdapterFiller>>;

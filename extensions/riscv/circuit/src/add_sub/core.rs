@@ -262,7 +262,7 @@ where
 }
 
 #[inline(always)]
-pub(super) fn run_add_sub<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(crate) fn run_add_sub<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: BaseAluOpcode,
     x: &[u16; NUM_LIMBS],
     y: &[u16; NUM_LIMBS],

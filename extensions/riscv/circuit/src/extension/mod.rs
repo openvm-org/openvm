@@ -179,7 +179,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         )?;
 
         let base_alu_w =
-            Rv64BaseAluWExecutor::new(Rv64BaseAluWAdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
+            Rv64BaseAluWExecutor::new(Rv64BaseAluWU16AdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
         inventory.add_executor(
             base_alu_w,
             BaseAluWOpcode::iter().map(|x| x.global_opcode()),
@@ -301,8 +301,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(bitwise_logic);
 
         let base_alu_w = Rv64BaseAluWAir::new(
-            Rv64BaseAluWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            crate::base_alu_w::BaseAluWCoreAir::new(bitwise_lu, BaseAluWOpcode::CLASS_OFFSET),
+            Rv64BaseAluWU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
+            crate::base_alu_w::BaseAluWCoreAir::new(range_checker, BaseAluWOpcode::CLASS_OFFSET),
         );
         inventory.add_air(base_alu_w);
 
@@ -446,8 +446,8 @@ where
         inventory.next_air::<Rv64BaseAluWAir>()?;
         let base_alu_w = Rv64BaseAluWChip::new(
             crate::base_alu_w::BaseAluWFiller::new(
-                Rv64BaseAluWAdapterFiller::new(bitwise_lu.clone()),
-                bitwise_lu.clone(),
+                Rv64BaseAluWU16AdapterFiller::new(range_checker.clone()),
+                range_checker.clone(),
                 BaseAluWOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
