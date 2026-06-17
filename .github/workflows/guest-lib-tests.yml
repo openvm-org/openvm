@@ -37,8 +37,8 @@ jobs:
           - { name: "pairing", path: "pairing", rvr: false }
           - { name: "verify-stark", path: "verify-stark/circuit", rvr: false }
           # TODO(rvr): re-enable these once RV64 RVR support lands.
-          # - { name: "sha2", path: "sha2", rvr: true }
           - { name: "keccak256", path: "keccak256", rvr: true }
+          - { name: "sha2", path: "sha2", rvr: true }
           # - { name: "ff_derive", path: "ff_derive", rvr: true }
           # - { name: "k256", path: "k256", rvr: true }
           # - { name: "p256", path: "p256", rvr: true }
@@ -101,6 +101,7 @@ jobs:
         run: |
           "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
           EXTRA_ARGS=()
+          # TODO(rvr): restore this branch when the rvr matrix entries above are re-enabled.
           if [[ "${{ matrix.crate.rvr }}" == 'true' ]]; then
             if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
               EXTRA_ARGS+=(--features=bn254,bls12_381,rvr -E 'not test(fallback)')
