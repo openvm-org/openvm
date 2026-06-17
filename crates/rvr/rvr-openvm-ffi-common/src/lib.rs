@@ -54,6 +54,10 @@ extern "C" {
     pub fn trace_wr_mem_u32_wrapper(state: *mut c_void, addr: u32, new_val: u32);
     pub fn trace_mem_access_u32_wrapper(state: *mut c_void, addr: u32, addr_space: u32);
 
+    // ── Memory access (single u64 word, data)
+    pub fn rd_mem_u64_wrapper(state: *mut c_void, addr: u32) -> u64;
+    pub fn trace_rd_mem_u64_wrapper(state: *mut c_void, addr: u32, val: u64);
+
     // ── Memory access (u32 ranges, data) ─────────────────────────────
     pub fn rd_mem_u32_range_wrapper(
         state: *mut c_void,
