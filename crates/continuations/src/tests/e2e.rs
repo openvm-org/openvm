@@ -312,11 +312,8 @@ fn test_deferral_e2e() -> Result<()> {
     // =========================================================================
     // SECTION 1: Set up Rv32DeferralConfig, build ELF, set up deferral streams.
     // =========================================================================
-    let mut system = test_system_config();
-    system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
-
     let config = Rv32DeferralConfig {
-        system: system.clone(),
+        system: test_system_config(),
         rv32i: Rv32I,
         rv32m: Rv32M::default(),
         io: Rv32Io,

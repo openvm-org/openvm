@@ -15,7 +15,7 @@ mod tests {
         DeferralExtension, DeferralFn, Rv32DeferralBuilder, Rv32DeferralConfig,
     };
     use openvm_deferral_transpiler::DeferralTranspilerExtension;
-    use openvm_instructions::{exe::VmExe, DEFERRAL_AS};
+    use openvm_instructions::exe::VmExe;
     use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -39,10 +39,8 @@ mod tests {
     const INPUT_RAW_2: [u8; 8] = [9, 9, 9, 9, 9, 9, 9, 9];
 
     fn make_config(num_deferrals: usize) -> Rv32DeferralConfig {
-        let mut system = test_system_config();
-        system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
         Rv32DeferralConfig {
-            system,
+            system: test_system_config(),
             rv32i: Rv32I,
             rv32m: Rv32M::default(),
             io: Rv32Io,

@@ -107,7 +107,6 @@ struct CudaHarnessBundle {
 fn test_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
     config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-    config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     config
 }
 

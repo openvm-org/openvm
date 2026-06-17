@@ -4,7 +4,7 @@ use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtensi
 use openvm_bigint_circuit::*;
 use openvm_bigint_transpiler::*;
 use openvm_circuit::{
-    arch::*,
+    arch::{instructions::DEFERRAL_AS, *},
     derive::VmConfig,
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
@@ -22,7 +22,7 @@ use openvm_rv32im_transpiler::*;
 use openvm_sha2_circuit::*;
 use openvm_sha2_transpiler::*;
 use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig, Val};
-use openvm_stark_sdk::config::baby_bear_poseidon2::F;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 cfg_if::cfg_if! {
@@ -234,6 +234,17 @@ impl SdkVmConfig {
             rv32m.range_tuple_checker_sizes[1] =
                 rv32m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
             bigint.range_tuple_checker_sizes = rv32m.range_tuple_checker_sizes;
+        }
+
+        const DEFERRAL_AS_USIZE: usize = DEFERRAL_AS as usize;
+        let addr_spaces = &mut self.system.config.memory_config.addr_spaces;
+        let deferral_as_exists = addr_spaces.len() > DEFERRAL_AS_USIZE;
+        if let Some(deferral) = self.deferral.as_ref() {
+            assert!(deferral_as_exists);
+            let def_num_cells = deferral.def_circuit_commits.len() * DIGEST_SIZE * 2;
+            addr_spaces[DEFERRAL_AS_USIZE].num_cells = def_num_cells;
+        } else if deferral_as_exists {
+            addr_spaces[DEFERRAL_AS_USIZE].num_cells = 0;
         }
     }
 

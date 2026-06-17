@@ -2,7 +2,6 @@ use std::{slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
-use openvm_circuit::arch::instructions::DEFERRAL_AS;
 use openvm_continuations::prover::DeferralCircuitProver;
 use openvm_deferral_circuit::DeferralFn;
 use openvm_stark_backend::{codec::Encode, StarkEngine, SystemParams};
@@ -140,7 +139,6 @@ fn make_deferral_enabled_sdk_with_count(
 
     let mut vm_config = openvm_sdk_config::SdkVmConfig::riscv32();
     vm_config.deferral = Some(deferral_ext);
-    vm_config.system.config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
 
     Ok(Sdk::builder()
         .app_config(AppConfig::new(vm_config, app_params))
@@ -154,7 +152,6 @@ fn make_verify_stark_path_sdk(
     agg_params: AggregationSystemParams,
 ) -> Result<Sdk> {
     let mut vm_config = openvm_sdk_config::SdkVmConfig::riscv32();
-    vm_config.system.config.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
     let memory_dimensions = vm_config.system.config.memory_config.memory_dimensions();
     let num_user_pvs = vm_config.system.config.num_public_values;
 
