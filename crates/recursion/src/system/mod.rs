@@ -1348,9 +1348,7 @@ pub mod cuda_tracegen {
         where
             GpuDeviceCtx: From<EngineDeviceCtx<E>>,
         {
-            let device_ctx: GpuDeviceCtx = engine.device().device_ctx().clone().into();
-            self.batch_constraint
-                .commit_child_vk_gpu(engine, child_vk, &device_ctx)
+            self.batch_constraint.commit_child_vk(engine, child_vk)
         }
 
         fn cached_trace_record(

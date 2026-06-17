@@ -8,7 +8,10 @@ use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
     poly_common::{eval_eq_sharp_uni, eval_eq_uni, eval_eq_uni_at_one},
     proof::{column_openings_by_rot, BatchConstraintProof, Proof},
-    prover::{AirProvingContext, CommittedTraceData, TraceCommitter},
+    prover::{
+        AirProvingContext, ColMajorMatrix, CommittedTraceData, DeviceDataTransporter,
+        TraceCommitter,
+    },
     AirRef, FiatShamirTranscript, StarkEngine, StarkProtocolConfig, TranscriptHistory,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, EF, F};
@@ -76,6 +79,27 @@ mod cuda_utils;
 
 /// AIR index within the BatchConstraintModule
 pub(crate) const LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX: usize = 0;
+
+pub fn commit_child_vk<E>(
+    engine: &E,
+    child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    has_cached: bool,
+) -> CommittedTraceData<E::PB>
+where
+    E: StarkEngine,
+    E::SC: StarkProtocolConfig<F = F>,
+{
+    let cached_trace_record = expr_eval::build_cached_trace_record(child_vk, has_cached);
+    let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(&cached_trace_record);
+    let cached_trace = ColMajorMatrix::from_row_major(&cached_trace);
+    let cached_trace = engine.device().transport_matrix_to_device(&cached_trace);
+    let (commitment, data) = engine.device().commit(&[&cached_trace]).unwrap();
+    CommittedTraceData {
+        commitment,
+        data: Arc::new(data),
+        trace: cached_trace,
+    }
+}
 
 pub struct BatchConstraintModule {
     transcript_bus: TranscriptBus,
@@ -751,22 +775,16 @@ impl BatchConstraintModule {
 
     /// Generates and then commits to the cache trace for `SymbolicExpressionAir`. Returns the
     /// committed PCS data.
-    pub fn commit_child_vk<E, SC: StarkProtocolConfig<F = F>>(
+    pub fn commit_child_vk<E>(
         &self,
         engine: &E,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-    ) -> CommittedTraceData<CpuBackend<SC>>
+    ) -> CommittedTraceData<E::PB>
     where
-        E: StarkEngine<SC = SC, PB = CpuBackend<SC>>,
+        E: StarkEngine,
+        E::SC: StarkProtocolConfig<F = F>,
     {
-        let cached_trace =
-            expr_eval::generate_symbolic_expr_cached_trace(&self.cached_trace_record(child_vk));
-        let (commitment, data) = engine.device().commit(&[&cached_trace]).unwrap();
-        CommittedTraceData {
-            commitment,
-            data: Arc::new(data),
-            trace: cached_trace,
-        }
+        commit_child_vk(engine, child_vk, self.has_cached)
     }
 }
 
@@ -897,7 +915,7 @@ pub mod cuda_tracegen {
     use super::*;
     use crate::{
         batch_constraint::expr_eval::{
-            build_cached_trace_record, constraints_folding::cuda::ConstraintsFoldingBlobGpu,
+            constraints_folding::cuda::ConstraintsFoldingBlobGpu,
             interactions_folding::cuda::InteractionsFoldingBlobGpu,
         },
         cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
@@ -1132,36 +1150,6 @@ pub mod cuda_tracegen {
                 .sorted_by(|a, b| a.0.cmp(&b.0))
                 .map(|(_index, ctx)| ctx)
                 .collect()
-        }
-    }
-
-    impl BatchConstraintModule {
-        /// Generates and then commits to the cache trace for `SymbolicExpressionAir`. Returns the
-        /// committed PCS data. The engine may use any GPU backend (e.g. BabyBear Poseidon2 or
-        /// BabyBear Bn254 Poseidon2) — only its `device().commit()` method is called.
-        pub fn commit_child_vk_gpu<E>(
-            &self,
-            engine: &E,
-            child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-            device_ctx: &GpuDeviceCtx,
-        ) -> CommittedTraceData<E::PB>
-        where
-            E: StarkEngine,
-            E::PB: openvm_stark_backend::prover::ProverBackend<
-                Val = F,
-                Matrix = openvm_cuda_backend::base::DeviceMatrix<F>,
-            >,
-            E::PD: TraceCommitter<E::PB>,
-        {
-            let cached_trace_record = build_cached_trace_record(child_vk, self.has_cached);
-            let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(&cached_trace_record);
-            let d_cached_trace = transport_matrix_h2d_row(&cached_trace, device_ctx).unwrap();
-            let (commitment, data) = engine.device().commit(&[&d_cached_trace]).unwrap();
-            CommittedTraceData {
-                commitment,
-                trace: d_cached_trace,
-                data: Arc::new(data),
-            }
         }
     }
 }

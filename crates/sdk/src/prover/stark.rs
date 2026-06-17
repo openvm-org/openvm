@@ -17,7 +17,7 @@ use openvm_verify_stark_host::{
 };
 
 use crate::{
-    config::AggregationTreeConfig,
+    config::{AggregationConfig, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey},
     prover::{
         deferral::compute_deferral_merkle_proofs, vm::types::VmProvingKey, AggProver, AppProver,
@@ -196,6 +196,19 @@ impl DeferralPathProver {
             },
             internal_recursive: self.agg_prover.internal_recursive_prover.get_pk(),
         }
+    }
+
+    pub fn from_config(
+        agg_config: AggregationConfig,
+        deferral_prover: Arc<DeferralProver>,
+    ) -> Self {
+        let agg_prover = AggProver::new(
+            deferral_prover.def_hook_prover.get_vk(),
+            agg_config,
+            AggregationTreeConfig::deferral(),
+            Some(deferral_prover.def_hook_prover.get_cached_commit()),
+        );
+        DeferralPathProver::new(deferral_prover, Arc::new(agg_prover))
     }
 
     pub fn from_pk(pk: AggProvingKey, deferral_prover: Arc<DeferralProver>) -> DeferralPathProver {

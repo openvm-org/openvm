@@ -158,6 +158,12 @@ impl SdkVmConfig {
         let wrapper: SdkVmConfigWrapper = toml::from_str(openvm_toml)?;
         Ok(wrapper.app_vm_config)
     }
+
+    pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
+        toml::to_string_pretty(&SdkVmConfigWrapper {
+            app_vm_config: self.clone(),
+        })
+    }
 }
 
 pub trait TranspilerConfig<F> {

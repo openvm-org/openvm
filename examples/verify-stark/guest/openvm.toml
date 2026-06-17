@@ -1,0 +1,100 @@
+[app_vm_config.system.config]
+max_constraint_degree = 3
+num_public_values = 32
+
+[app_vm_config.system.config.memory_config]
+addr_space_height = 3
+pointer_max_bits = 29
+timestamp_max_bits = 29
+decomp = 17
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 0
+layout = "Null"
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 128
+layout = "U8"
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 536870912
+layout = "U8"
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 32
+layout = "U8"
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 16
+
+[app_vm_config.system.config.memory_config.addr_spaces.layout.F]
+size = 4
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 0
+
+[app_vm_config.system.config.memory_config.addr_spaces.layout.F]
+size = 4
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 0
+
+[app_vm_config.system.config.memory_config.addr_spaces.layout.F]
+size = 4
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 0
+
+[app_vm_config.system.config.memory_config.addr_spaces.layout.F]
+size = 4
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 0
+
+[app_vm_config.system.config.memory_config.addr_spaces.layout.F]
+size = 4
+
+[app_vm_config.rv32i]
+
+[app_vm_config.io]
+
+[app_vm_config.rv32m]
+range_tuple_checker_sizes = [256, 2048]
+
+[app_vm_config.deferral]
+def_circuit_commits = [
+    [
+        2,
+        23,
+        138,
+        43,
+        93,
+        17,
+        19,
+        16,
+        152,
+        101,
+        66,
+        75,
+        81,
+        193,
+        123,
+        75,
+        165,
+        59,
+        28,
+        96,
+        250,
+        73,
+        118,
+        61,
+        6,
+        85,
+        228,
+        3,
+        72,
+        209,
+        176,
+        24,
+    ],
+]

@@ -71,6 +71,7 @@ members = [
     "guest-libs/sha2/",
     "guest-libs/verify-stark/circuit",
     "guest-libs/verify-stark/guest",
+    "examples/verify-stark/host", # TODO: remove this
     "crates/static-verifier",
     "scripts",
 ]
