@@ -369,9 +369,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             * half;
         let is_pvs_internal_flag_one =
             (AB::Expr::TWO - internal_flag.clone()) * internal_flag.clone();
-        let is_internal_flag_two = (local.child_pvs.internal_flag - AB::Expr::ONE)
-            * local.child_pvs.internal_flag.clone()
-            * half;
+        let is_internal_flag_two =
+            (local.child_pvs.internal_flag - AB::Expr::ONE) * local.child_pvs.internal_flag * half;
 
         let vk_pre_hash = from_fn(|i| {
             is_pvs_internal_flag_zero.clone() * def_vk_commit.vk_pre_hash[i].into()

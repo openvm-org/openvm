@@ -144,7 +144,10 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>, ()> for DeferredVerifyTraceGenImpl {
                 .into_iter()
                 .chain(output_p2_inputs)
                 .collect_vec(),
-            range_inputs: verifier_range_inputs.into_iter().chain(range_inputs).collect_vec(),
+            range_inputs: verifier_range_inputs
+                .into_iter()
+                .chain(range_inputs)
+                .collect_vec(),
             verifier_pvs_record,
             output_commit,
         }

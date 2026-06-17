@@ -35,6 +35,7 @@ pub struct DeferredVerifyPvsRecord<F> {
     pub app_vm_commit: [F; DIGEST_SIZE],
 }
 
+#[allow(clippy::type_complexity)]
 pub fn generate_record(
     proof: &Proof<BabyBearPoseidon2Config>,
 ) -> (
