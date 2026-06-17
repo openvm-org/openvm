@@ -4,7 +4,7 @@ use eyre::Result;
 use itertools::Itertools;
 use openvm_continuations::{
     prover::{DeferralChildVkKind, DeferralCircuitProver},
-    CommitBytes, SC,
+    SC,
 };
 use openvm_deferral_circuit::{DeferralExtension, DeferralFn};
 use openvm_recursion_circuit::utils::poseidon2_hash_slice;
@@ -20,7 +20,11 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 use openvm_verify_stark_host::pvs::DeferralPvs;
 use tracing::info_span;
 
-use crate::{config::AggregationConfig, keygen::AggProvingKey, DeferralInput};
+use crate::{
+    config::AggregationConfig,
+    keygen::{AggPrefixProvingKey, DeferralCircuitProvingKey, DeferralProvingKey},
+    DeferralInput,
+};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -39,8 +43,6 @@ mod merkle;
 mod verify_stark;
 pub use circuit::*;
 pub use merkle::*;
-
-pub type DefAggProvingKey = AggProvingKey;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone)]
@@ -90,21 +92,25 @@ impl DeferralProver {
 
     pub fn from_pks<DP: DeferralCircuitProver<SC> + Send + Sync + 'static>(
         def_circuit_prover: DP,
-        def_agg_pk: DefAggProvingKey,
+        def_prefix_pk: AggPrefixProvingKey,
+        def_internal_recursive_pk: Arc<MultiStarkProvingKey<SC>>,
         def_hook_pk: Arc<MultiStarkProvingKey<SC>>,
-        internal_recursive_cached_commit: CommitBytes,
     ) -> Self {
         assert_eq!(def_circuit_prover.get_def_idx(), 0);
         let single_circuit_prover = SingleDefCircuitProver::from_pks(
             def_circuit_prover,
-            def_agg_pk.prefix.leaf,
-            def_agg_pk.prefix.internal_for_leaf,
+            def_prefix_pk.leaf,
+            def_prefix_pk.internal_for_leaf,
         );
         let internal_recursive_prover = DeferralInnerProver::from_pk::<E>(
             single_circuit_prover.internal_for_leaf_prover.get_vk(),
-            def_agg_pk.internal_recursive,
-            false,
+            def_internal_recursive_pk,
+            true,
         );
+        let internal_recursive_cached_commit = internal_recursive_prover
+            .get_vk_commit(true)
+            .cached_commit
+            .into();
         let def_hook_prover = DeferralHookProver::from_pk::<E>(
             internal_recursive_prover.get_vk(),
             internal_recursive_cached_commit,
@@ -134,6 +140,24 @@ impl DeferralProver {
         let internal_params = self.internal_recursive_prover.get_vk().inner.params.clone();
         let single_circuit_prover =
             SingleDefCircuitProver::new(def_circuit_prover, leaf_params, internal_params);
+        self.single_circuit_provers.push(single_circuit_prover);
+        self
+    }
+
+    pub fn with_prover_from_pk<DP: DeferralCircuitProver<SC> + Send + Sync + 'static>(
+        mut self,
+        def_circuit_prover: DP,
+        def_prefix_pk: AggPrefixProvingKey,
+    ) -> Self {
+        assert_eq!(
+            def_circuit_prover.get_def_idx(),
+            self.single_circuit_provers.len()
+        );
+        let single_circuit_prover = SingleDefCircuitProver::from_pks(
+            def_circuit_prover,
+            def_prefix_pk.leaf,
+            def_prefix_pk.internal_for_leaf,
+        );
         self.single_circuit_provers.push(single_circuit_prover);
         self
     }
@@ -247,6 +271,25 @@ impl DeferralProver {
         DeferralExtension {
             fns,
             def_circuit_commits,
+        }
+    }
+
+    pub fn get_pk(&self) -> DeferralProvingKey {
+        let circuits = self
+            .single_circuit_provers
+            .iter()
+            .map(|single_circuit_prover| DeferralCircuitProvingKey {
+                def_circuit_pk: single_circuit_prover.def_circuit_prover.get_pk(),
+                agg_prefix_pk: AggPrefixProvingKey {
+                    leaf: single_circuit_prover.leaf_prover.get_pk(),
+                    internal_for_leaf: single_circuit_prover.internal_for_leaf_prover.get_pk(),
+                },
+            })
+            .collect();
+        DeferralProvingKey {
+            circuits,
+            def_internal_recursive_pk: self.internal_recursive_prover.get_pk(),
+            def_hook_pk: self.def_hook_prover.get_pk(),
         }
     }
 }

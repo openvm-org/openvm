@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, proof::Proof, StarkProtocolConfig,
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+    proof::Proof,
+    StarkProtocolConfig,
 };
 
 mod hook;
@@ -10,6 +12,7 @@ pub use hook::*;
 pub use inner::*;
 
 pub trait DeferralCircuitProver<SC: StarkProtocolConfig> {
+    fn get_pk(&self) -> Arc<MultiStarkProvingKey<SC>>;
     fn get_vk(&self) -> Arc<MultiStarkVerifyingKey<SC>>;
     fn prove(&self, input_bytes: &[u8]) -> Proof<SC>;
     fn get_def_idx(&self) -> usize;

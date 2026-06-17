@@ -17,6 +17,8 @@ use openvm_verify_stark_host::{
 };
 
 use crate::{
+    config::AggregationTreeConfig,
+    keygen::{AggPrefixProvingKey, AggProvingKey},
     prover::{
         deferral::compute_deferral_merkle_proofs, vm::types::VmProvingKey, AggProver, AppProver,
         DeferralProver, InternalLayerMetadata,
@@ -186,6 +188,26 @@ where
 }
 
 impl DeferralPathProver {
+    pub fn get_pk(&self) -> AggProvingKey {
+        AggProvingKey {
+            prefix: AggPrefixProvingKey {
+                leaf: self.agg_prover.leaf_prover.get_pk(),
+                internal_for_leaf: self.agg_prover.internal_for_leaf_prover.get_pk(),
+            },
+            internal_recursive: self.agg_prover.internal_recursive_prover.get_pk(),
+        }
+    }
+
+    pub fn from_pk(pk: AggProvingKey, deferral_prover: Arc<DeferralProver>) -> DeferralPathProver {
+        let agg_prover = AggProver::from_pk(
+            deferral_prover.def_hook_prover.get_vk(),
+            pk,
+            AggregationTreeConfig::deferral(),
+            Some(deferral_prover.def_hook_prover.get_cached_commit()),
+        );
+        DeferralPathProver::new(deferral_prover, Arc::new(agg_prover))
+    }
+
     pub fn def_hook_cached_commit(&self) -> Digest {
         self.deferral_prover.def_hook_prover.get_cached_commit()
     }

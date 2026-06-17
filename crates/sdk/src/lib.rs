@@ -44,7 +44,7 @@ use openvm_verify_stark_host::{
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
-    keygen::{AggPrefixProvingKey, AggProvingKey},
+    keygen::{AggPrefixProvingKey, AggProvingKey, SdkCachedProvingKey},
     prover::{AggProver, AppProver, DeferralPathProver, StarkProver},
     types::{AppExecutionCommit, ExecutableFormat},
 };
@@ -246,6 +246,37 @@ where
     /// Returns the deferral hook commit derived from the deferral aggregation path.
     pub fn def_hook_commit(&self) -> Option<Digest> {
         self.def_path_prover.as_ref().map(|p| p.def_hook_commit())
+    }
+
+    /// Returns the serde-serializable proving keys already cached by this SDK without generating
+    /// missing keys.
+    ///
+    /// Halo2 proving keys are intentionally excluded; use `write_halo2_pk_to_file` and
+    /// `read_halo2_pk_from_file` for those.
+    pub fn cached_proving_key(&self) -> SdkCachedProvingKey<VB::VmConfig> {
+        SdkCachedProvingKey {
+            app_pk: self.app_pk.get().cloned(),
+            agg_pk: self.agg_prover.get().map(|agg_prover| AggProvingKey {
+                prefix: AggPrefixProvingKey {
+                    leaf: agg_prover.leaf_prover.get_pk(),
+                    internal_for_leaf: agg_prover.internal_for_leaf_prover.get_pk(),
+                },
+                internal_recursive: agg_prover.internal_recursive_prover.get_pk(),
+            }),
+            deferral_pk: self
+                .def_path_prover
+                .as_ref()
+                .map(|def_path_prover| def_path_prover.deferral_prover.get_pk()),
+            deferral_agg_pk: self
+                .def_path_prover
+                .as_ref()
+                .map(|def_path_prover| def_path_prover.get_pk()),
+            #[cfg(feature = "root-prover")]
+            root_pk: self.root_prover.get().map(|root_prover| RootProvingKey {
+                root_pk: root_prover.0.get_pk(),
+                trace_heights: root_prover.0.get_trace_heights().unwrap_or_default(),
+            }),
+        }
     }
 
     /// Builds the guest package located at `pkg_dir`. This function requires that the build target

@@ -4,7 +4,11 @@ use openvm_circuit::system::memory::dimensions::MemoryDimensions;
 use openvm_continuations::{
     circuit::deferral::dummy::dummy_deferral_circuit_vk, prover::DeferralCircuitProver, SC,
 };
-use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof, SystemParams};
+use openvm_stark_backend::{
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+    proof::Proof,
+    SystemParams,
+};
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
@@ -102,6 +106,10 @@ struct DummyDefCircuitProver {
 }
 
 impl DeferralCircuitProver<SC> for DummyDefCircuitProver {
+    fn get_pk(&self) -> Arc<MultiStarkProvingKey<SC>> {
+        unreachable!("DummyDefCircuitProver does not have proving material")
+    }
+
     fn get_vk(&self) -> Arc<MultiStarkVerifyingKey<SC>> {
         self.vk.clone()
     }

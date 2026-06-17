@@ -272,6 +272,10 @@ where
     E: StarkEngine<PB = PB, SC = SC>,
     PB::Matrix: Clone,
 {
+    fn get_pk(&self) -> Arc<MultiStarkProvingKey<SC>> {
+        self.prover.get_pk()
+    }
+
     fn get_vk(&self) -> Arc<MultiStarkVerifyingKey<SC>> {
         self.prover.get_vk()
     }
