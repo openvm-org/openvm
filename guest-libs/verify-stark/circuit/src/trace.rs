@@ -83,8 +83,12 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>, ()> for DeferredVerifyTraceGenImpl {
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
         _device_ctx: &(),
     ) -> PreVerifierData<CpuBackend<SC>> {
-        let (verifier_pvs_record, verifier_p2_compress_inputs, verifier_p2_permute_inputs) =
-            generate_record(proof);
+        let (
+            verifier_pvs_record,
+            verifier_p2_compress_inputs,
+            verifier_p2_permute_inputs,
+            verifier_range_inputs,
+        ) = generate_record(proof);
         let (commit_ctx, commit_p2_inputs) =
             super::commit::generate_proving_ctx(user_pvs_proof.public_values.clone());
         let (memory_ctx, memory_p2_inputs) = memory::generate_proving_input(
@@ -140,7 +144,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>, ()> for DeferredVerifyTraceGenImpl {
                 .into_iter()
                 .chain(output_p2_inputs)
                 .collect_vec(),
-            range_inputs,
+            range_inputs: verifier_range_inputs.into_iter().chain(range_inputs).collect_vec(),
             verifier_pvs_record,
             output_commit,
         }

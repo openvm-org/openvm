@@ -23,6 +23,7 @@ pub struct SingleAirTraceData<PB: ProverBackend> {
     pub air_proving_ctx: AirProvingContext<PB>,
     pub poseidon2_compress_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
     pub poseidon2_permute_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
+    pub range_check_inputs: Vec<usize>,
 }
 
 // TODO: move to stark-backend-v2

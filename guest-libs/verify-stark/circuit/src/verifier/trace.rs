@@ -18,7 +18,7 @@ use openvm_verify_stark_host::pvs::{
     DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID,
     VM_PVS_AIR_ID,
 };
-use p3_field::PrimeCharacteristicRing;
+use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::verifier::{DeferredVerifyPvsCols, RecursiveDeferredVerifyCols};
@@ -41,12 +41,15 @@ pub fn generate_record(
     DeferredVerifyPvsRecord<F>,
     Vec<[F; POSEIDON2_WIDTH]>,
     Vec<[F; POSEIDON2_WIDTH]>,
+    Vec<usize>,
 ) {
     let (base_pvs_slice, _) = proof.public_values[VERIFIER_PVS_AIR_ID]
         .as_slice()
         .split_at(VerifierBasePvs::<u8>::width());
     let child_verifier_pvs: &VerifierBasePvs<F> = base_pvs_slice.borrow();
     let child_vm_pvs: &VmPvs<F> = proof.public_values[VM_PVS_AIR_ID].as_slice().borrow();
+    let depth_minus_one = child_verifier_pvs.recursion_depth - F::ONE;
+    let range_check_inputs = vec![depth_minus_one.as_canonical_u32() as usize];
 
     let padded_program_commit = pad_slice_to_poseidon2_input(&child_vm_pvs.program_commit, F::ZERO);
     let padded_initial_root = pad_slice_to_poseidon2_input(&child_vm_pvs.initial_root, F::ZERO);
@@ -104,6 +107,7 @@ pub fn generate_record(
         },
         poseidon2_compress_inputs,
         poseidon2_permute_inputs,
+        range_check_inputs,
     )
 }
 
@@ -131,6 +135,12 @@ pub fn generate_proving_ctx(
 
     cols.child_verifier_pvs = *child_verifier_pvs;
     cols.child_vm_pvs = *child_vm_pvs;
+    let depth_minus_one = child_verifier_pvs.recursion_depth - F::ONE;
+    cols.recursion_depth_minus_one_inv = if depth_minus_one == F::ZERO {
+        F::ZERO
+    } else {
+        depth_minus_one.inverse()
+    };
     cols.program_commit_hash = record.program_commit_hash;
     cols.initial_root_hash = record.initial_root_hash;
     cols.initial_pc_hash = record.initial_pc_hash;

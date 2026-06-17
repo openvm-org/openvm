@@ -10,7 +10,7 @@ use openvm_verify_stark_host::pvs::{
     DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID,
     VM_PVS_AIR_ID,
 };
-use p3_field::PrimeCharacteristicRing;
+use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
@@ -45,6 +45,13 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
 
     cols.child_verifier_pvs = *child_verifier_pvs;
     cols.child_vm_pvs = *child_vm_pvs;
+    let depth_minus_one = child_verifier_pvs.recursion_depth - F::ONE;
+    cols.recursion_depth_minus_one_inv = if depth_minus_one == F::ZERO {
+        F::ZERO
+    } else {
+        depth_minus_one.inverse()
+    };
+    let range_check_inputs = vec![depth_minus_one.as_canonical_u32() as usize];
 
     let padded_program_commit = pad_slice_to_poseidon2_input(&child_vm_pvs.program_commit, F::ZERO);
     let padded_initial_root = pad_slice_to_poseidon2_input(&child_vm_pvs.initial_root, F::ZERO);
@@ -120,5 +127,6 @@ pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
         },
         poseidon2_compress_inputs,
         poseidon2_permute_inputs,
+        range_check_inputs,
     }
 }

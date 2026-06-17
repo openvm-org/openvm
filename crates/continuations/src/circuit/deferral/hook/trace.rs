@@ -107,9 +107,12 @@ impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for DeferralH
                     air_proving_ctx: verifier_pvs_ctx,
                     poseidon2_compress_inputs: verifier_p2_compress_inputs,
                     poseidon2_permute_inputs: verifier_p2_permute_inputs,
+                    mut range_check_inputs,
                 },
             ..
         } = super::verifier::generate_proving_ctx(proof, input_onion, output_onion);
+
+        range_check_inputs.push(max_depth_minus_merkle_depth);
 
         DeferralHookPreCtx {
             verifier_pvs_ctx,
@@ -121,7 +124,7 @@ impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for DeferralH
                 .chain(onion_p2_inputs)
                 .collect(),
             poseidon2_permute_inputs: verifier_p2_permute_inputs,
-            range_check_inputs: vec![max_depth_minus_merkle_depth],
+            range_check_inputs,
             power_check_inputs: vec![merkle_depth],
         }
     }
