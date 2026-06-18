@@ -12,7 +12,7 @@ on:
       - "crates/recursion/**"
       - "crates/continuations/**"
       - "crates/verify/**"
-      - "extensions/rv32im/**"
+      - "extensions/riscv/**"
       - "extensions/riscv-adapters/**"
       - "extensions/deferral/**"
       - "extensions/keccak256/**"
@@ -65,11 +65,13 @@ jobs:
     strategy:
       matrix:
         crate: ${{ fromJSON(needs.changes.outputs.crates) }}
-        # TODO(rvr): restore the rvr mode once RV64 RVR support lands.
-        mode: [default]
+        mode: [default, rvr]
         exclude:
           - { crate: shared, mode: default }
           - { crate: cuda, mode: default }
+          - { crate: shared, mode: rvr }
+          - { crate: cuda, mode: rvr }
+          - { crate: verify-stark, mode: rvr }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
     uses: ./.github/workflows/guest-lib-tests.group.yml
