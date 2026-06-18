@@ -33,8 +33,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-sdk-tests') }}
     strategy:
       matrix:
-        mode: ["default", "ignored"]
-        # TODO(rvr): add "rvr" here once RV64 RVR support lands.
+        mode: ["default", "ignored", "rvr"]
 
     runs-on:
       - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ inputs.family || 'm7a.24xlarge' }}/image=${{ (inputs.arch || 'x86') == 'arm' && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/volume=80gb/extras=s3-cache
@@ -110,17 +109,15 @@ jobs:
         run: |
           export RUST_BACKTRACE=1
           export RUST_MIN_STACK=8388608
-          # TODO(rvr): switch back to this feature-selection block when "rvr" mode is re-enabled.
-          # FEATURES="parallel,root-prover,evm-verify"
-          # if [[ "${{ matrix.mode }}" == "default" ]]; then
-          #   : # no additional features
-          # elif [[ "${{ matrix.mode }}" == "rvr" ]]; then
-          #   FEATURES="$FEATURES,rvr"
-          # else
-          #   echo "Unknown matrix mode: ${{ matrix.mode }}" && exit 1
-          # fi
-          # CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features "$FEATURES"
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify
+          FEATURES="parallel,root-prover,evm-verify"
+          if [[ "${{ matrix.mode }}" == "default" ]]; then
+            : # no additional features
+          elif [[ "${{ matrix.mode }}" == "rvr" ]]; then
+            FEATURES="$FEATURES,rvr"
+          else
+            echo "Unknown matrix mode: ${{ matrix.mode }}" && exit 1
+          fi
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features "$FEATURES"
 
       - name: Build openvm-sdk examples
         if: ${{ matrix.mode == 'default' }}

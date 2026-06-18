@@ -9,12 +9,12 @@ use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced, WORD_S
 
 /// Size of a 256-bit field element in bytes.
 pub const FIELD_256_BYTES: usize = 32;
-/// Number of 4-byte words in a 256-bit field element.
+/// Number of 8-byte words in a 256-bit field element.
 pub const FIELD_256_WORDS: usize = FIELD_256_BYTES / WORD_SIZE;
 
 /// Size of a BLS12-381 Fq element in bytes.
 pub const BLS12_381_ELEM_BYTES: usize = 48;
-/// Number of 4-byte words in a BLS12-381 Fq element.
+/// Number of 8-byte words in a BLS12-381 Fq element.
 pub const BLS12_381_ELEM_WORDS: usize = BLS12_381_ELEM_BYTES / WORD_SIZE;
 
 // ── FieldArith trait ─────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ pub trait FieldArith {
 /// `state` must be a valid pointer to the C `RvState` struct.
 #[inline(always)]
 pub unsafe fn read_field_256<F: PrimeField<Repr = [u8; 32]>>(state: *mut c_void, ptr: u32) -> F {
-    let mut words = [0u32; FIELD_256_WORDS];
+    let mut words = [0u64; FIELD_256_WORDS];
     rd_mem_words_traced(state, ptr, &mut words);
     let mut bytes = [0u8; FIELD_256_BYTES];
     for (i, &w) in words.iter().enumerate() {
@@ -74,9 +74,9 @@ pub unsafe fn write_field_256<F: PrimeField<Repr = [u8; 32]>>(
     val: &F,
 ) {
     let bytes = val.to_repr();
-    let mut words = [0u32; FIELD_256_WORDS];
+    let mut words = [0u64; FIELD_256_WORDS];
     for (i, w) in words.iter_mut().enumerate() {
-        *w = u32::from_le_bytes(
+        *w = u64::from_le_bytes(
             bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE]
                 .try_into()
                 .unwrap(),
@@ -91,7 +91,7 @@ pub unsafe fn write_field_256<F: PrimeField<Repr = [u8; 32]>>(
 /// `state` must be a valid pointer to the C `RvState` struct.
 #[inline(always)]
 pub unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u32) -> blstrs::Fp {
-    let mut words = [0u32; BLS12_381_ELEM_WORDS];
+    let mut words = [0u64; BLS12_381_ELEM_WORDS];
     rd_mem_words_traced(state, ptr, &mut words);
     let mut bytes = [0u8; BLS12_381_ELEM_BYTES];
     for (i, &w) in words.iter().enumerate() {
@@ -115,9 +115,9 @@ pub unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u32) -> blstrs::Fp {
 #[inline(always)]
 pub unsafe fn write_bls12_381_fq(state: *mut c_void, ptr: u32, val: &blstrs::Fp) {
     let bytes = val.to_bytes_le();
-    let mut words = [0u32; BLS12_381_ELEM_WORDS];
+    let mut words = [0u64; BLS12_381_ELEM_WORDS];
     for (i, w) in words.iter_mut().enumerate() {
-        *w = u32::from_le_bytes(
+        *w = u64::from_le_bytes(
             bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE]
                 .try_into()
                 .unwrap(),
@@ -136,7 +136,7 @@ pub unsafe fn write_bls12_381_fq(state: *mut c_void, ptr: u32, val: &blstrs::Fp)
 #[inline]
 pub unsafe fn read_bigint(state: *mut c_void, ptr: u32, num_limbs: u32) -> BigUint {
     let num_words = (num_limbs / WORD_SIZE as u32) as usize;
-    let mut words = vec![0u32; num_words];
+    let mut words = vec![0u64; num_words];
     rd_mem_words_traced(state, ptr, &mut words);
     let mut bytes = vec![0u8; num_limbs as usize];
     for (i, &w) in words.iter().enumerate() {
@@ -155,9 +155,9 @@ pub unsafe fn write_bigint(state: *mut c_void, ptr: u32, value: &BigUint, num_li
     let num_words = (num_limbs / WORD_SIZE as u32) as usize;
     let mut bytes = value.to_bytes_le();
     bytes.resize(num_limbs as usize, 0);
-    let mut words = vec![0u32; num_words];
+    let mut words = vec![0u64; num_words];
     for (i, w) in words.iter_mut().enumerate() {
-        *w = u32::from_le_bytes(
+        *w = u64::from_le_bytes(
             bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE]
                 .try_into()
                 .unwrap(),
