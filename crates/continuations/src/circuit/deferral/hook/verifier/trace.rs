@@ -6,7 +6,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
     poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
 };
 use openvm_verify_stark_host::pvs::{DeferralPvs, VerifierBasePvs};
-use p3_field::{PrimeCharacteristicRing, PrimeField32};
+use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
@@ -65,6 +65,13 @@ pub fn generate_proving_ctx(
     let cols: &mut DeferralHookPvsCols<F> = trace.as_mut_slice().borrow_mut();
     cols.verifier_pvs = *verifier_pvs;
     cols.def_pvs = *def_pvs;
+    let depth_minus_one = verifier_pvs.recursion_depth - F::ONE;
+    cols.recursion_depth_minus_one_inv = if depth_minus_one == F::ZERO {
+        F::ZERO
+    } else {
+        depth_minus_one.inverse()
+    };
+    let range_check_inputs = vec![depth_minus_one.as_canonical_u32() as usize];
     cols.num_merkle_leaves =
         F::from_usize(1usize << def_pvs.merkle_depth.as_canonical_u32() as usize);
     cols.input_onion = input_onion;
@@ -118,6 +125,7 @@ pub fn generate_proving_ctx(
             },
             poseidon2_compress_inputs,
             poseidon2_permute_inputs,
+            range_check_inputs,
         },
         def_circuit_commit,
     }

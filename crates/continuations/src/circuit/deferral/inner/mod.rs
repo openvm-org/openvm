@@ -32,6 +32,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
             public_values_bus: bus_inventory.public_values_bus,
             cached_commit_bus: bus_inventory.cached_commit_bus,
             pre_hash_bus: bus_inventory.pre_hash_bus,
+            range_bus: bus_inventory.range_checker_bus,
             def_pvs_consistency_bus,
         };
 

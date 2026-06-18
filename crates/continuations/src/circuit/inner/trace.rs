@@ -66,6 +66,7 @@ impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for InnerTraceGenImp
             air_proving_ctx: verifier_pvs_ctx,
             mut poseidon2_compress_inputs,
             poseidon2_permute_inputs,
+            mut range_check_inputs,
         } = super::verifier::generate_proving_ctx(
             proofs,
             proofs_type,
@@ -80,7 +81,6 @@ impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for InnerTraceGenImp
             self.deferral_enabled,
         );
 
-        let mut range_check_inputs = vec![];
         let idx2_ctx = if self.deferral_enabled {
             let (def_pvs_ctx, def_poseidon2_inputs, def_range_check_inputs) =
                 super::def_pvs::generate_proving_ctx(
@@ -90,7 +90,7 @@ impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for InnerTraceGenImp
                     absent_trace_pvs,
                 );
             poseidon2_compress_inputs.extend_from_slice(&def_poseidon2_inputs);
-            range_check_inputs = def_range_check_inputs;
+            range_check_inputs.extend(def_range_check_inputs);
             def_pvs_ctx
         } else {
             super::unset::generate_proving_ctx(&[], child_is_app)

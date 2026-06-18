@@ -67,6 +67,7 @@ impl<SC: StarkProtocolConfig<F = F>> RootTraceGen<CpuBackend<SC>, ()> for RootTr
             air_proving_ctx: verifier_ctx,
             poseidon2_compress_inputs: verifier_compress_inputs,
             poseidon2_permute_inputs: verifier_permute_inputs,
+            range_check_inputs,
         } = super::verifier::generate_proving_ctx(proof, self.deferral_enabled);
         let (commit_ctx, commit_inputs) =
             commit::generate_proving_ctx(user_pvs_proof.public_values.clone());
@@ -84,7 +85,7 @@ impl<SC: StarkProtocolConfig<F = F>> RootTraceGen<CpuBackend<SC>, ()> for RootTr
                 .chain(memory_inputs)
                 .collect_vec(),
             poseidon2_permute_inputs: verifier_permute_inputs,
-            range_check_inputs: vec![],
+            range_check_inputs,
         }
     }
 

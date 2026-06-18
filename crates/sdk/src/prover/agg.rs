@@ -292,19 +292,20 @@ impl AggProver {
         mut vm_proof: VmStarkProof,
         def_proof: DeferralProof,
         metadata: &mut InternalLayerMetadata,
-        def_internal_recursive_layer: u32,
+        mut def_internal_recursive_layer: u32,
     ) -> Result<VmStarkProof> {
         let DeferralProof::Present(mut def_inner) = def_proof else {
             return Ok(vm_proof);
         };
 
-        // The VM and deferral proofs must be at the same stage in internal recursion, i.e.
-        // both have to be the parent of either internal-for-leaf or internal-recursive child
-        // proofs. If this is not the case, we wrap the internal-for-leaf parent proof here.
-        if metadata.internal_recursive_layer == 1 && def_internal_recursive_layer != 1 {
-            vm_proof = self.wrap_proof(vm_proof, metadata)?
-        } else if def_internal_recursive_layer == 1 && metadata.internal_recursive_layer != 1 {
-            def_inner = self.wrap_def_inner(def_inner, def_internal_recursive_layer)?
+        // Aggregation requires equal child recursion_depth values, so we wrap the
+        // shallower side until both proofs are at the same internal-recursive depth.
+        while metadata.internal_recursive_layer < def_internal_recursive_layer {
+            vm_proof = self.wrap_proof(vm_proof, metadata)?;
+        }
+        while def_internal_recursive_layer < metadata.internal_recursive_layer {
+            def_inner = self.wrap_def_inner(def_inner, def_internal_recursive_layer)?;
+            def_internal_recursive_layer += 1;
         }
 
         vm_proof.inner = info_span!(

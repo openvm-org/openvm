@@ -22,7 +22,8 @@ use crate::{
     error::VerifyStarkError,
     pvs::{
         DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, CONSTRAINT_EVAL_AIR_ID,
-        CONSTRAINT_EVAL_CACHED_INDEX, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID,
+        CONSTRAINT_EVAL_CACHED_INDEX, DEF_PVS_AIR_ID, MAX_RECURSION_DEPTH, VERIFIER_PVS_AIR_ID,
+        VM_PVS_AIR_ID,
     },
     vk::VmStarkVerifyingKey,
 };
@@ -107,7 +108,7 @@ pub fn verify_vm_stark_proof_pvs(
         app_vk_commit,
         leaf_vk_commit,
         internal_for_leaf_vk_commit,
-        recursion_flag,
+        recursion_depth,
         internal_recursive_vk_commit,
     } = verifier_base_pvs_slice.borrow();
 
@@ -223,15 +224,37 @@ pub fn verify_vm_stark_proof_pvs(
             });
         };
 
-    // Check that recursion_flag is 1 or 2, i.e. that the penultimate layer is
-    // internal-for-leaf or internal-recursive.
-    if recursion_flag != F::ONE && recursion_flag != F::TWO {
-        return Err(VerifyStarkError::InvalidRecursionFlag(recursion_flag));
+    // Check that recursion_depth is within [1, MAX_RECURSION_DEPTH]. If
+    // recursion_depth == 1 then the penultimate layer is internal-for-leaf,
+    // else it is internal-recursive.
+    let recursion_depth_u32 = recursion_depth.as_canonical_u32();
+    if recursion_depth_u32 == 0 || recursion_depth_u32 > MAX_RECURSION_DEPTH {
+        return Err(VerifyStarkError::InvalidRecursionDepth {
+            actual: recursion_depth,
+            max: MAX_RECURSION_DEPTH,
+        });
     }
 
-    // Check internal_recursive_vk_commit against expected_commits if recursion_flag
-    // is 2, and check it is unset if recursion_flag is 1.
-    if recursion_flag == F::TWO {
+    // Check that internal_recursive_vk_commit is unset if recursion_depth == 1,
+    // and against expected_commits otherwise.
+    if recursion_depth == F::ONE {
+        if !is_unset(&internal_recursive_vk_commit.cached_commit) {
+            return Err(VerifyStarkError::InternalRecursiveVkCachedCommitSet {
+                actual: internal_recursive_vk_commit.cached_commit,
+            });
+        }
+        if !is_unset(&internal_recursive_vk_commit.vk_pre_hash) {
+            return Err(VerifyStarkError::InternalRecursiveVkPreHashSet {
+                actual: internal_recursive_vk_commit.vk_pre_hash,
+            });
+        }
+        if proof_cached_commit != vk.baseline.internal_for_leaf_vk_commit.cached_commit {
+            return Err(VerifyStarkError::ProofCachedCommitMismatch {
+                expected: vk.baseline.internal_for_leaf_vk_commit.cached_commit,
+                actual: proof_cached_commit,
+            });
+        }
+    } else {
         if internal_recursive_vk_commit.cached_commit
             != vk.baseline.internal_recursive_vk_commit.cached_commit
         {
@@ -251,23 +274,6 @@ pub fn verify_vm_stark_proof_pvs(
         if proof_cached_commit != vk.baseline.internal_recursive_vk_commit.cached_commit {
             return Err(VerifyStarkError::ProofCachedCommitMismatch {
                 expected: vk.baseline.internal_recursive_vk_commit.cached_commit,
-                actual: proof_cached_commit,
-            });
-        }
-    } else {
-        if !is_unset(&internal_recursive_vk_commit.cached_commit) {
-            return Err(VerifyStarkError::InternalRecursiveVkCachedCommitSet {
-                actual: internal_recursive_vk_commit.cached_commit,
-            });
-        }
-        if !is_unset(&internal_recursive_vk_commit.vk_pre_hash) {
-            return Err(VerifyStarkError::InternalRecursiveVkPreHashSet {
-                actual: internal_recursive_vk_commit.vk_pre_hash,
-            });
-        }
-        if proof_cached_commit != vk.baseline.internal_for_leaf_vk_commit.cached_commit {
-            return Err(VerifyStarkError::ProofCachedCommitMismatch {
-                expected: vk.baseline.internal_for_leaf_vk_commit.cached_commit,
                 actual: proof_cached_commit,
             });
         }
