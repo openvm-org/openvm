@@ -189,7 +189,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             .when(local.recursion_flag)
             .assert_eq(local.child_pvs.internal_flag, AB::F::TWO);
         builder
-            .when((local.recursion_flag - AB::F::ONE) * (local.recursion_flag - AB::F::TWO))
+            .when_ne(local.recursion_flag, AB::F::ONE)
+            .when_ne(local.recursion_flag, AB::F::TWO)
             .assert_bool(local.child_pvs.internal_flag);
 
         // constrain that child commits are 0 when they shouldn't be defined
