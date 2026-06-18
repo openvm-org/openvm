@@ -271,7 +271,7 @@ fn test_sdk_fibonacci() -> Result<()> {
 
     #[cfg(not(feature = "evm-verify"))]
     {
-        let mut evm_prover = sdk.evm_prover(app_exe)?;
+        let mut evm_prover = sdk.evm_prover_without_halo2(app_exe)?;
         let proof = evm_prover.prove_root(stdin, &[])?;
         let vk = evm_prover.root_prover.0.get_vk();
         let engine = RootE::new(vk.inner.params.clone());
@@ -302,7 +302,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     )?;
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
-    let mut evm_prover = vs_sdk.evm_prover(vs_exe)?;
+    let mut evm_prover = vs_sdk.evm_prover_without_halo2(vs_exe)?;
     let vs_proof = evm_prover.prove_root(vs_stdin, &[def_input])?;
 
     let vk = evm_prover.root_prover.0.get_vk();
@@ -452,7 +452,7 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
 
-    let mut evm_prover = sdk.evm_prover(app_exe)?;
+    let mut evm_prover = sdk.evm_prover_without_halo2(app_exe)?;
     let proof = evm_prover.prove_root(stdin, &[])?;
 
     // ---- Step 3: Verify the final result ----
