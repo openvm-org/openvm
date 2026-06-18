@@ -185,8 +185,8 @@ where
             builder,
             local.proof_idx,
             EqNegBaseRandMessage {
-                u: local.u_pow.map(Into::into),
-                r_squared: ext_field_multiply::<AB::Expr>(local.r_pow, local.r_pow),
+                u: local.u_pow,
+                r: local.r_pow,
             },
             local.is_first,
         );

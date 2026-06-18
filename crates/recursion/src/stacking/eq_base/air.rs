@@ -173,7 +173,7 @@ where
 
         /*
          * Receive the values of u_0 and r_0 from the AIRs that sample them. Send u_0
-         * and r_0^2 to EqNegAir.
+         * and r_0 to EqNegAir.
          */
         self.constraint_randomness_bus.receive(
             builder,
@@ -202,8 +202,8 @@ where
             builder,
             local.proof_idx,
             EqNegBaseRandMessage {
-                u: local.u_pow.map(Into::into),
-                r_squared: ext_field_multiply(local.r_pow, local.r_pow),
+                u: local.u_pow,
+                r: local.r_pow,
             },
             local.is_first,
         );
