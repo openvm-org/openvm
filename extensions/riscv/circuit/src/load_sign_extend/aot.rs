@@ -11,7 +11,7 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 #[allow(unused_imports)]
-use crate::{adapters::imm_to_rv64_bytes, common::*, BaseAluExecutor};
+use crate::{adapters::imm_to_rv64_bytes, common::*};
 use crate::{
     common::{address_space_start_to_gpr, gpr_to_rv32_register},
     LoadSignExtendExecutor,
