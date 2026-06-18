@@ -635,8 +635,8 @@ define_typed_per_proof_permutation_bus!(EqNegResultBus, EqNegResultMessage);
 pub struct EqNegBaseRandMessage<T> {
     // sampled value u_0
     pub u: [T; D_EF],
-    // sampled value r_0^2
-    pub r_squared: [T; D_EF],
+    // sampled value r_0
+    pub r: [T; D_EF],
 }
 
 define_typed_per_proof_permutation_bus!(EqNegBaseRandBus, EqNegBaseRandMessage);
