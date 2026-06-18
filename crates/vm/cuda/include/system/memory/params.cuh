@@ -60,6 +60,9 @@ inline constexpr size_t BLOCK_FE_WIDTH = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
 // Blocks per merkle leaf.
 inline constexpr size_t BLOCKS_PER_LEAF = DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
+// Number of bottom merkle levels omitted from large GPU subtree buffers.
+inline constexpr size_t OMITTED_BOTTOM_LEVELS = 3;
+
 // Address space ID for the F-celled deferral AS. Matches
 // `openvm_instructions::DEFERRAL_AS`.
 inline constexpr uint32_t DEFERRAL_AS = 4;
