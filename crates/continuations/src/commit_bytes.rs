@@ -29,8 +29,13 @@ impl CommitBytes {
         &self.0
     }
 
-    pub fn as_raw(self) -> [u8; COMMIT_NUM_BYTES] {
-        self.0
+    pub fn to_field_le_bytes(self) -> [u8; COMMIT_NUM_BYTES] {
+        let digest: [F; DIGEST_SIZE] = self.into();
+        let mut bytes = [0u8; COMMIT_NUM_BYTES];
+        for (i, limb) in digest.into_iter().enumerate() {
+            bytes[4 * i..4 * (i + 1)].copy_from_slice(&limb.to_unique_u32().to_le_bytes());
+        }
+        bytes
     }
 }
 

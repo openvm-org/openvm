@@ -37,7 +37,7 @@ impl DeferralConfig {
             def_circuit_commits: self
                 .circuits
                 .iter()
-                .map(|circuit| circuit.commit.as_raw())
+                .map(|circuit| circuit.commit.to_field_le_bytes())
                 .collect(),
         }
     }

@@ -61,40 +61,6 @@ size = 4
 [app_vm_config.rv32m]
 range_tuple_checker_sizes = [256, 2048]
 
-[app_vm_config.deferral]
-def_circuit_commits = [
-    [
-        2,
-        23,
-        138,
-        43,
-        93,
-        17,
-        19,
-        16,
-        152,
-        101,
-        66,
-        75,
-        81,
-        193,
-        123,
-        75,
-        165,
-        59,
-        28,
-        96,
-        250,
-        73,
-        118,
-        61,
-        6,
-        85,
-        228,
-        3,
-        72,
-        209,
-        176,
-        24,
-    ],
-]
+[[app_vm_config.deferral.circuits]]
+def_type = "VerifyStark"
+commit = "0x007235bee74d03960e9214401c05cdd1d3ac40fc43fd1e24a5ca5cd0551a8eee"
