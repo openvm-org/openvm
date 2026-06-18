@@ -51,7 +51,7 @@ jobs:
           - { name: "bigint", path: "bigint", aot: false, rvr: true }
           - { name: "algebra", path: "algebra", aot: false, rvr: true }
           - { name: "ecc", path: "ecc", aot: false, rvr: true }
-          # - { name: "pairing", path: "pairing", aot: false, rvr: true }
+          - { name: "pairing", path: "pairing", aot: false, rvr: true }
           # - { name: "deferral", path: "deferral", aot: false, rvr: true }
         platform:
           - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }

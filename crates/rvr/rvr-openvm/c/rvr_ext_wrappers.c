@@ -34,6 +34,13 @@ void trace_wr_mem_u32_wrapper(RvState* s, uint32_t addr, uint32_t val) {
   trace_wr_mem_u32(s, addr, val);
 }
 
+uint64_t rd_mem_u64_wrapper(RvState* s, uint32_t addr) {
+  return rd_mem_u64(s->memory, addr);
+}
+void trace_rd_mem_u64_wrapper(RvState* s, uint32_t addr, uint64_t val) {
+  trace_rd_mem_u64(s, addr, val);
+}
+
 /* ── Memory access (u32 ranges, inline-backed) ─────────────────────── */
 
 void rd_mem_u32_range_wrapper(RvState* s, uint32_t base_addr, uint32_t* out,

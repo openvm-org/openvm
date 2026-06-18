@@ -13,7 +13,7 @@ use openvm_pairing_guest::{
 };
 use rvr_openvm_ext_algebra_ffi_common::{BLS12_381_ELEM_BYTES, FIELD_256_BYTES};
 use rvr_openvm_ext_ffi_common::{
-    ext_hint_stream_set, rd_mem_u32_range_wrapper, rd_mem_u32_wrapper, WORD_SIZE,
+    ext_hint_stream_set, rd_mem_u64_range_wrapper, rd_mem_u64_wrapper, WORD_SIZE,
 };
 
 /// BN254 base field element size in bytes.
@@ -47,8 +47,8 @@ unsafe fn read_bytes<const N: usize>(state: *mut c_void, ptr: u32) -> [u8; N] {
         );
     }
     let num_words = N / WORD_SIZE;
-    let mut words = vec![0u32; num_words];
-    rd_mem_u32_range_wrapper(state, ptr, words.as_mut_ptr(), num_words as u32);
+    let mut words = vec![0u64; num_words];
+    rd_mem_u64_range_wrapper(state, ptr, words.as_mut_ptr(), num_words as u32);
     let mut bytes = [0u8; N];
     for (i, &w) in words.iter().enumerate() {
         bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&w.to_le_bytes());
@@ -68,17 +68,18 @@ unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u32) -> Option<bls12_381::F
     Option::from(bls12_381::Fq::from_repr(bytes.into()))
 }
 
-fn point_base(ptr: u32, idx: u32, words_per_point: u32) -> Option<u32> {
-    idx.checked_mul(words_per_point)?.checked_add(ptr)
+fn point_base(ptr: u64, idx: u64, words_per_point: u32) -> Option<u32> {
+    let offset = idx.checked_mul(words_per_point as u64)?;
+    ptr.checked_add(offset)?.try_into().ok()
 }
 
 // ── BN254 pairing hint ──────────────────────────────────────────────────
 
 unsafe fn hint_bn254(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Option<Vec<u8>> {
-    let p_ptr = rd_mem_u32_wrapper(state, rs1_val);
-    let p_len = rd_mem_u32_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
-    let q_ptr = rd_mem_u32_wrapper(state, rs2_val);
-    let q_len = rd_mem_u32_wrapper(state, rs2_val + SLICE_LEN_OFFSET);
+    let p_ptr = rd_mem_u64_wrapper(state, rs1_val);
+    let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
+    let q_ptr = rd_mem_u64_wrapper(state, rs2_val);
+    let q_len = rd_mem_u64_wrapper(state, rs2_val + SLICE_LEN_OFFSET);
 
     if p_len != q_len {
         return None;
@@ -127,10 +128,10 @@ unsafe fn hint_bn254(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Option<V
 // ── BLS12-381 pairing hint ──────────────────────────────────────────────
 
 unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Option<Vec<u8>> {
-    let p_ptr = rd_mem_u32_wrapper(state, rs1_val);
-    let p_len = rd_mem_u32_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
-    let q_ptr = rd_mem_u32_wrapper(state, rs2_val);
-    let q_len = rd_mem_u32_wrapper(state, rs2_val + SLICE_LEN_OFFSET);
+    let p_ptr = rd_mem_u64_wrapper(state, rs1_val);
+    let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
+    let q_ptr = rd_mem_u64_wrapper(state, rs2_val);
+    let q_len = rd_mem_u64_wrapper(state, rs2_val + SLICE_LEN_OFFSET);
 
     if p_len != q_len {
         return None;
