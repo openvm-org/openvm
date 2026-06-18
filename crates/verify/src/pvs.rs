@@ -10,6 +10,9 @@ pub const CONSTRAINT_EVAL_AIR_ID: usize = 3;
 
 pub const CONSTRAINT_EVAL_CACHED_INDEX: usize = 0;
 
+pub const LOG_MAX_RECURSION_DEPTH: u8 = 8;
+pub const MAX_RECURSION_DEPTH: u32 = 1 << LOG_MAX_RECURSION_DEPTH;
+
 #[repr(C)]
 #[derive(
     AlignedBorrow, StructReflection, Clone, Copy, Debug, Serialize, Deserialize, PartialEq,
@@ -44,10 +47,10 @@ pub struct VerifierBasePvs<F> {
     //////////////////////////////////////////////////////////////////////
     /// VERIFIER-SPECIFIC RECURSION PVS
     //////////////////////////////////////////////////////////////////////
-    /// Ternary flag to indicate which internal-recursive layer this Proof is for. Should be
-    /// 1 for the first (i.e. index 0) internal-recursive layer, 2 for subsequent layers, and
-    /// 0 everywhere else.
-    pub recursion_flag: F,
+    /// Depth of the internal-recursive layer this Proof is for: 0 for non-internal-recursive
+    /// layers, 1 for the first (i.e. index 0) internal-recursive layer, 2 for the second (i.e.
+    /// index 1) internal-recursive layer, and so on.
+    pub recursion_depth: F,
     /// Commit to the internal_recursive_vk's DAG and its pre-hash, exposed by subsequent (i.e.
     /// index > 0) internal-recursive layer verifiers.
     pub internal_recursive_vk_commit: VkCommit<F>,

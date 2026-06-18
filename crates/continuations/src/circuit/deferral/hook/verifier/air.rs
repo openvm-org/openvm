@@ -18,7 +18,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use openvm_verify_stark_host::pvs::{
     DeferralPvs, VerifierBasePvs, VkCommit, CONSTRAINT_EVAL_AIR_ID, CONSTRAINT_EVAL_CACHED_INDEX,
-    VERIFIER_PVS_AIR_ID,
+    LOG_MAX_RECURSION_DEPTH, VERIFIER_PVS_AIR_ID,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
@@ -47,6 +47,7 @@ pub struct DeferralHookPvsCols<F> {
     pub def_pvs: DeferralAggregationPvs<F>,
 
     pub num_merkle_leaves: F,
+    pub recursion_depth_minus_one_inv: F,
 
     pub intermediate_vk_states: [[F; POSEIDON2_WIDTH]; NUM_DIGESTS_IN_VM_COMMIT - 1],
     pub def_circuit_commit: [F; DIGEST_SIZE],
@@ -133,10 +134,27 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         /*
          * Check that the final proof is computed by the internal recursive prover, i.e.
-         * that internal_flag is 2 and recursion flag is 1 or 2.
+         * that internal_flag is 2 and that recursion_depth is in [1, MAX_RECURSION_DEPTH].
          */
         builder.assert_eq(local.verifier_pvs.internal_flag, AB::F::TWO);
-        builder.assert_bool(local.verifier_pvs.recursion_flag - AB::F::ONE);
+
+        let depth_minus_one = local.verifier_pvs.recursion_depth - AB::F::ONE;
+        let is_depth_not_one = depth_minus_one.clone() * local.recursion_depth_minus_one_inv;
+        let is_depth_one = AB::Expr::ONE - is_depth_not_one.clone();
+
+        builder.assert_bool(is_depth_one.clone());
+        builder
+            .when(is_depth_one.clone())
+            .assert_one(local.verifier_pvs.recursion_depth);
+
+        self.range_checker_bus.lookup_key(
+            builder,
+            RangeCheckerBusMessage {
+                value: depth_minus_one,
+                max_bits: AB::Expr::from_u8(LOG_MAX_RECURSION_DEPTH),
+            },
+            AB::F::ONE,
+        );
 
         /*
          * We need to receive public values from ProofShapeModule to ensure the values read
@@ -174,20 +192,19 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         /*
          * We also need to receive the cached commit from ProofShapeModule, which is either for
-         * the internal-for-leaf (i.e. if recursion_flag == 1) or internal-recursive layer. In
+         * the internal-for-leaf (i.e. if recursion_depth == 1) or internal-recursive layer. In
          * the former case we constrain verifier_pvs.internal_recursive_vk_commit to be unset
          * (i.e. all 0), and in the latter we constrain it to be equal to a pre-generated
          * constant as it should be the same regardless of def_vk (provided internal system
          * params are the same).
          */
         let cached_commit = from_fn(|i| {
-            local.verifier_pvs.internal_for_leaf_vk_commit.cached_commit[i]
-                * (AB::Expr::TWO - local.verifier_pvs.recursion_flag)
+            local.verifier_pvs.internal_for_leaf_vk_commit.cached_commit[i] * is_depth_one.clone()
                 + local
                     .verifier_pvs
                     .internal_recursive_vk_commit
                     .cached_commit[i]
-                    * (local.verifier_pvs.recursion_flag - AB::F::ONE)
+                    * is_depth_not_one.clone()
         });
         self.cached_commit_bus.receive(
             builder,
@@ -214,12 +231,12 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         assert_vk_commit_unset(
-            &mut builder.when_ne(local.verifier_pvs.recursion_flag, AB::F::TWO),
+            &mut builder.when(is_depth_one),
             local.verifier_pvs.internal_recursive_vk_commit,
         );
 
         assert_vk_commit_eq(
-            &mut builder.when_ne(local.verifier_pvs.recursion_flag, AB::F::ONE),
+            &mut builder.when(is_depth_not_one),
             local.verifier_pvs.internal_recursive_vk_commit,
             VkCommit::<AB::Expr>::from(self.expected_internal_recursive_vk_commit),
         );

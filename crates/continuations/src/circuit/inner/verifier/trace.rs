@@ -7,7 +7,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use openvm_verify_stark_host::pvs::{
     VerifierBasePvs, VerifierDefPvs, VkCommit, VERIFIER_PVS_AIR_ID,
 };
-use p3_field::PrimeCharacteristicRing;
+use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::circuit::{
@@ -69,6 +69,7 @@ pub fn generate_proving_ctx(
     let mut chunks = trace.chunks_exact_mut(width);
     let mut poseidon2_compress_inputs = vec![];
     let mut poseidon2_permute_inputs = vec![];
+    let mut range_check_inputs = vec![];
     let mut trailing_deferral_flag = F::ZERO;
 
     for (proof_idx, proof) in proofs.iter().enumerate() {
@@ -103,6 +104,15 @@ pub fn generate_proving_ctx(
                 trailing_deferral_flag = def_pvs.deferral_flag;
             }
         }
+
+        let depth = cols.child_pvs.recursion_depth.as_canonical_u32();
+        cols.recursion_flag = F::from_u32(depth.min(2));
+        cols.depth_inv = if depth >= 2 {
+            (cols.child_pvs.recursion_depth * (cols.child_pvs.recursion_depth - F::ONE)).inverse()
+        } else {
+            F::ZERO
+        };
+        range_check_inputs.push(depth as usize);
     }
 
     if deferral_enabled {
@@ -127,12 +137,12 @@ pub fn generate_proving_ctx(
         VerifierChildLevel::InternalForLeaf => {
             base_pvs.internal_for_leaf_vk_commit = child_vk_commit;
             base_pvs.internal_flag = F::TWO;
-            base_pvs.recursion_flag = F::ONE;
+            base_pvs.recursion_depth = F::ONE;
         }
         VerifierChildLevel::InternalRecursive => {
             base_pvs.internal_recursive_vk_commit = child_vk_commit;
             base_pvs.internal_flag = F::TWO;
-            base_pvs.recursion_flag = F::TWO;
+            base_pvs.recursion_depth = first_row.child_pvs.recursion_depth + F::ONE;
         }
     }
 
@@ -212,5 +222,6 @@ pub fn generate_proving_ctx(
         },
         poseidon2_compress_inputs,
         poseidon2_permute_inputs,
+        range_check_inputs,
     }
 }

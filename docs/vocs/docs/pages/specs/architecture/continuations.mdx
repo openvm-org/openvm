@@ -208,20 +208,20 @@ Public values are processed by `VmPvsAir` and `VerifierPvsAir`. The inner subcir
     - `leaf_vk_commit: VkCommit` — VK commit for the internal-for-leaf verifier subcircuit, derived from `leaf_vk`
     - `internal_for_leaf_vk_commit: VkCommit` — VK commit for the first (index 0) internal-recursive layer verifier subcircuit, derived from `internal_for_leaf_vk`
 - **Internal Recursion-Related Public Values**
-    - `recursion_flag: F` — ternary flag indicating which internal-recursive layer this proof is for:
+    - `recursion_depth: F` — depth of the internal-recursive layer this proof is for:
       - `0` for non-internal-recursive layers
       - `1` for the first (index 0) internal-recursive layer
-      - `2` for subsequent internal-recursive layers
+      - `2` for the second (index 1) internal-recursive layer, and so on
     - `internal_recursive_vk_commit: VkCommit` — VK commit for each subsequent (index > 0) internal-recursive layer verifier subcircuit, derived from `internal_recursive_vk`
 
 The `program_commit` should be set at every layer, but the flags and `*_vk_commits` should be set according to which layer we are currently proving for. Unset `*_vk_commits` are filled with 0s.
 
-| Layer | `internal_flag` | `recursion_flag` | `app` | `leaf` | `internal_for_leaf` | `internal_recursive` |
+| Layer | `internal_flag` | `recursion_depth` | `app` | `leaf` | `internal_for_leaf` | `internal_recursive` |
 |-------|-----------------|------------------|-------|--------|---------------------|----------------------|
 | leaf | 0 | 0 | set | unset | unset | unset |
 | internal-for-leaf | 1 | 0 | set | set | unset | unset |
 | internal-recursive (layer 0) | 2 | 1 | set | set | set | unset |
-| internal-recursive (layer 1+) | 2 | 2 | set | set | set | set |
+| internal-recursive (layer 1+) | 2 | 2+ | set | set | set | set |
 
 #### Constraints
 
@@ -255,10 +255,10 @@ The root subcircuit exposes a new set of public values for the static verifier. 
 The root subcircuit constrains the child proof's public values:
 
 - `is_terminate == 1` and `exit_code == ExitCode::Success` (successful app termination)
-- `internal_flag == 2` and `recursion_flag` is `1` or `2` (child is internal-recursive)
-- The verifier subcircuit's `SymbolicExpressionAir` cached commit and `internal_recursive_vk_commit` are verified depending on `recursion_flag`:
-  - `recursion_flag == 1`: cached commit is verified against `internal_for_leaf_vk_commit.cached_commit`, and `internal_recursive_vk_commit` must be unset (all zeros)
-  - `recursion_flag == 2`: cached commit is verified against `internal_recursive_vk_commit.cached_commit`, and `internal_recursive_vk_commit` (both `cached_commit` and `vk_pre_hash`) matches a pre-generated constant
+- `internal_flag == 2` and `recursion_depth` is in `[1, MAX_RECURSION_DEPTH]` (child is internal-recursive)
+- The verifier subcircuit's `SymbolicExpressionAir` cached commit and `internal_recursive_vk_commit` are verified depending on `recursion_depth`:
+  - `recursion_depth == 1`: cached commit is verified against `internal_for_leaf_vk_commit.cached_commit`, and `internal_recursive_vk_commit` must be unset (all zeros)
+  - `recursion_depth > 1`: cached commit is verified against `internal_recursive_vk_commit.cached_commit`, and `internal_recursive_vk_commit` (both `cached_commit` and `vk_pre_hash`) matches a pre-generated constant
 
 The root subcircuit also constrains its own public values:
 

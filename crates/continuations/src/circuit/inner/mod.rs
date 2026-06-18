@@ -69,6 +69,7 @@ impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for I
             public_values_bus,
             cached_commit_bus,
             pre_hash_bus,
+            range_bus,
             pvs_air_consistency_bus,
             deferral_config,
         });

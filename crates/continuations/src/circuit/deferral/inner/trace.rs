@@ -163,15 +163,16 @@ impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>, ()> for Deferral
             generate_poseidon2_inputs(proofs, child_is_agg, child_merkle_depth);
         let super::def_pvs::DeferralAggPvsTraceCtx {
             proving_ctx: def_pvs_ctx,
-            range_check_inputs,
+            mut range_check_inputs,
         } = super::def_pvs::generate_proving_ctx(proofs, child_is_agg, child_merkle_depth);
+        let super::verifier::DeferralVerifierPvsTraceCtx {
+            proving_ctx: verifier_pvs_ctx,
+            range_check_inputs: verifier_range_check_inputs,
+        } = super::verifier::generate_proving_ctx(proofs, child_is_agg, child_vk_commit);
+        range_check_inputs.extend(verifier_range_check_inputs);
 
         DeferralInnerPreCtx {
-            verifier_pvs_ctx: super::verifier::generate_proving_ctx(
-                proofs,
-                child_is_agg,
-                child_vk_commit,
-            ),
+            verifier_pvs_ctx,
             def_pvs_ctx,
             input_ctx: super::input::generate_proving_ctx(proofs, child_is_agg),
             poseidon2_compress_inputs,

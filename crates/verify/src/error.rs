@@ -43,8 +43,8 @@ pub enum VerifyStarkError {
     ExecutionUnsuccessful(F),
     #[error("Invalid internal flag {0}, should be 2")]
     InvalidInternalFlag(F),
-    #[error("Invalid recursion flag {0}, should be 1 or 2")]
-    InvalidRecursionFlag(F),
+    #[error("Invalid recursion depth {actual}, should be in [1, {max}]")]
+    InvalidRecursionDepth { actual: F, max: u32 },
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     #[error("Other error: {0}")]

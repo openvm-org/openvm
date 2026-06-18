@@ -21,7 +21,7 @@ The final internal-recursive proof will expose the following public values:
 - `initial_root`: Merkle root of VM memory at the start of app execution
 - `final_root`: Merkle root of VM memory after app execution
 - `internal_flag`: Internal aggregation layer indicator (0, 1, or 2)
-- `recursion_flag`: Internal aggregation recursive layer indicator (0, 1, or 2). For the final proof verified by this crate, it should be 1 or 2.
+- `recursion_depth`: Internal aggregation recursive depth. For the final proof verified by this crate, it should be in `[1, MAX_RECURSION_DEPTH]`.
 - `app_vk_commit`, `leaf_vk_commit`, `internal_for_leaf_vk_commit`, `internal_recursive_vk_commit`: Each is a `VkCommit` containing a `cached_commit` (PCS commitment of the parent verifier circuit's cached trace) and a `vk_pre_hash` (field pre-hash of the child `MultiStarkVerifyingKey`), for the app, leaf, internal-for-leaf, and internal-recursive layers respectively
 - If deferrals are enabled: `deferral_flag`, `def_hook_commit`, and `DeferralPvs { initial_acc_hash, final_acc_hash, depth, node_idx }`
 
@@ -39,8 +39,8 @@ Given a fixed VM and executable, we must check certain exposed public values aga
 - `program_commit`, `initial_root`, and `initial_pc` are hash-compressed and compared against a baseline `app_exe_commit`, which is derived from the `VmConfig`, `VmExe`, `MemoryConfig`, and application `SystemParams`.
 - `app_vk_commit`, `leaf_vk_commit`, and `internal_for_leaf_vk_commit` (each containing both `cached_commit` and `vk_pre_hash`) are compared against pre-computed baselines
 - `internal_recursive_vk_commit` is checked conditionally:
-  - if `recursion_flag == 2`, it is compared against the pre-computed baseline
-  - if `recursion_flag == 1`, it must be unset (all zeros)
+  - if `recursion_depth > 1`, it is compared against the pre-computed baseline
+  - if `recursion_depth == 1`, it must be unset (all zeros)
 
 **Other Public Values Validation:**
 
@@ -48,7 +48,7 @@ The other public values are checked for completeness.
 
 - `exit_code` is checked to be 0 (success) and `is_terminate` is checked to be true.
 - `internal_flag` is checked to be 2, i.e. the final layer must be internal-recursive
-- `recursion_flag` is checked to be 1 or 2
+- `recursion_depth` is checked to be in `[1, 256]`
 
 Note there is no expected value for `final_pc`, and thus it is left unchecked.
 

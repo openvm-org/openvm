@@ -4,16 +4,21 @@ use openvm_cpu_backend::CpuBackend;
 use openvm_stark_backend::{proof::Proof, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use openvm_verify_stark_host::pvs::{VerifierBasePvs, VkCommit, VERIFIER_PVS_AIR_ID};
-use p3_field::PrimeCharacteristicRing;
+use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::circuit::deferral::inner::verifier::air::{DeferralChildLevel, DeferralVerifierPvsCols};
+
+pub struct DeferralVerifierPvsTraceCtx {
+    pub proving_ctx: AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
+    pub range_check_inputs: Vec<usize>,
+}
 
 pub fn generate_proving_ctx(
     proofs: &[Proof<BabyBearPoseidon2Config>],
     child_is_agg: bool,
     child_vk_commit: VkCommit<F>,
-) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
+) -> DeferralVerifierPvsTraceCtx {
     let num_proofs = proofs.len();
     let height = num_proofs.next_power_of_two();
     let width = DeferralVerifierPvsCols::<u8>::width();
@@ -21,6 +26,7 @@ pub fn generate_proving_ctx(
     debug_assert!(num_proofs > 0);
 
     let mut trace = vec![F::ZERO; height * width];
+    let mut range_check_inputs = vec![];
     let mut child_level = DeferralChildLevel::App;
 
     for (proof_idx, (proof, chunk)) in proofs.iter().zip(trace.chunks_exact_mut(width)).enumerate()
@@ -43,6 +49,15 @@ pub fn generate_proving_ctx(
                 _ => unreachable!(),
             };
         }
+
+        let depth = cols.child_pvs.recursion_depth.as_canonical_u32();
+        cols.recursion_flag = F::from_u32(depth.min(2));
+        cols.depth_inv = if depth >= 2 {
+            (cols.child_pvs.recursion_depth * (cols.child_pvs.recursion_depth - F::ONE)).inverse()
+        } else {
+            F::ZERO
+        };
+        range_check_inputs.push(depth as usize);
     }
 
     let last_row: &DeferralVerifierPvsCols<F> =
@@ -61,18 +76,21 @@ pub fn generate_proving_ctx(
         DeferralChildLevel::InternalForLeaf => {
             pvs.internal_for_leaf_vk_commit = child_vk_commit;
             pvs.internal_flag = F::TWO;
-            pvs.recursion_flag = F::ONE;
+            pvs.recursion_depth = F::ONE;
         }
         DeferralChildLevel::InternalRecursive => {
             pvs.internal_recursive_vk_commit = child_vk_commit;
             pvs.internal_flag = F::TWO;
-            pvs.recursion_flag = F::TWO;
+            pvs.recursion_depth = last_row.child_pvs.recursion_depth + F::ONE;
         }
     }
 
-    AirProvingContext {
-        cached_mains: vec![],
-        common_main: RowMajorMatrix::new(trace, width),
-        public_values: pvs.to_vec(),
+    DeferralVerifierPvsTraceCtx {
+        proving_ctx: AirProvingContext {
+            cached_mains: vec![],
+            common_main: RowMajorMatrix::new(trace, width),
+            public_values: pvs.to_vec(),
+        },
+        range_check_inputs,
     }
 }
