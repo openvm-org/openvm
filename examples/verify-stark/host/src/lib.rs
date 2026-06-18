@@ -2,26 +2,23 @@ use std::{path::PathBuf, slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm_build::GuestOptions;
-use openvm_continuations::CommitBytes;
-use openvm_deferral_circuit::DeferralFn;
+use openvm_continuations::{prover::DeferralCircuitProver, CommitBytes};
 use openvm_recursion_circuit::batch_constraint::commit_child_vk;
 use openvm_sdk::{
     config::{AggregationConfig, AppConfig},
-    keygen::{AppProvingKey, SdkCachedProvingKey},
+    keygen::SdkCachedProvingKey,
     openvm_circuit::arch::instructions::exe::VmExe,
-    prover::{vm::types::VmProvingKey, DeferralPathProver, DeferralProver},
+    prover::{DeferralPathProver, DeferralProver},
     types::VersionedVmStarkProof,
     DefaultStarkEngine as E, DeferralInput, Sdk, StdIn, F, SC,
 };
-use openvm_sdk_config::{SdkSystemConfig, SdkVmConfig};
+use openvm_sdk_config::{deferral::SupportedDeferral, SdkSystemConfig, SdkVmConfig};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, StarkEngine};
 use openvm_stark_sdk::config::{
     app_params_with_100_bits_security, hook_params_with_100_bits_security,
     internal_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT,
 };
-use openvm_verify_stark_circuit::extension::{
-    get_deferral_state, get_raw_deferral_results, verify_stark_deferral_fn,
-};
+use openvm_verify_stark_circuit::extension::{get_deferral_state, get_raw_deferral_results};
 use openvm_verify_stark_host::{
     vk::{VerificationBaseline, VmStarkVerifyingKey},
     VmStarkProof,
@@ -41,7 +38,6 @@ cfg_if::cfg_if! {
     }
 }
 
-pub type Proof = VmStarkProof;
 pub const VERIFY_STARK_DEF_IDX: usize = 0;
 
 pub fn verify_stark_example_dir() -> PathBuf {
@@ -87,16 +83,20 @@ pub fn keygen(
             agg_config.clone(),
             hook_params_with_100_bits_security(),
         ));
-        DeferralPathProver::from_config(agg_config.clone(), deferral_prover)
+        DeferralPathProver::new(agg_config.clone(), deferral_prover)
     };
 
-    let deferral_fn = Arc::new(DeferralFn::new(verify_stark_deferral_fn));
-    let deferral_ext = deferral_path_prover
+    let deferral_config = deferral_path_prover
         .deferral_prover
-        .make_extension(vec![deferral_fn]);
-    let mut vm_config = SdkVmConfig::riscv32();
-    vm_config.deferral = Some(deferral_ext);
-    vm_config = vm_config.optimize();
+        .make_config(vec![SupportedDeferral::VerifyStark]);
+    let vm_config = SdkVmConfig::builder()
+        .system(Default::default())
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .io(Default::default())
+        .deferral(deferral_config)
+        .build()
+        .optimize();
 
     let sdk = Sdk::builder()
         .app_config(AppConfig::new(vm_config.clone(), app_params))
@@ -109,55 +109,23 @@ pub fn keygen(
     Ok((sdk.cached_proving_key(), vm_config, agg_vk))
 }
 
-pub fn sdk_from_cache(
-    cached_pk: SdkCachedProvingKey<SdkVmConfig>,
-    child_agg_vk: Arc<MultiStarkVerifyingKey<SC>>,
-) -> Result<Sdk> {
+pub fn sdk_from_cache(cached_pk: SdkCachedProvingKey<SdkVmConfig>) -> Result<Sdk> {
     let app_pk = cached_pk.app_pk.unwrap();
     let agg_pk: openvm_sdk::keygen::AggProvingKey = cached_pk.agg_pk.unwrap();
     let deferral_pk = cached_pk.deferral_pk.unwrap();
     let deferral_agg_pk = cached_pk.deferral_agg_pk.unwrap();
 
-    let default_config = SdkSystemConfig::default();
-    let memory_dimensions = default_config.config.memory_config.memory_dimensions();
-    let num_user_pvs = default_config.config.num_public_values;
-
-    let child_internal_recursive_cached_commit = cached_commit(&child_agg_vk);
-    let verify_prover = VerifyProver::from_pk::<E>(
-        child_agg_vk,
-        child_internal_recursive_cached_commit,
-        deferral_pk.circuits[VERIFY_STARK_DEF_IDX]
-            .def_circuit_pk
-            .clone(),
-        memory_dimensions,
-        num_user_pvs,
-        None,
-        VERIFY_STARK_DEF_IDX,
-    );
-    let verify_circuit_prover = VerifyCircuitProver::new(verify_prover);
+    let verify_stark_pk = &deferral_pk.circuits[VERIFY_STARK_DEF_IDX];
+    let verify_circuit_pk = verify_stark_pk.def_circuit_pk.as_ref().clone();
+    let verify_circuit_prover =
+        <VerifyCircuitProver as DeferralCircuitProver<SC>>::from_pk(verify_circuit_pk);
     let deferral_prover = Arc::new(DeferralProver::from_pks(
         verify_circuit_prover,
-        deferral_pk.circuits[VERIFY_STARK_DEF_IDX]
-            .agg_prefix_pk
-            .clone(),
+        verify_stark_pk.agg_prefix_pk.clone(),
         deferral_pk.def_internal_recursive_pk.clone(),
         deferral_pk.def_hook_pk.clone(),
     ));
     let deferral_path_prover = DeferralPathProver::from_pk(deferral_agg_pk, deferral_prover);
-
-    let deferral_fn = Arc::new(DeferralFn::new(verify_stark_deferral_fn));
-    let mut app_vm_config = app_pk.app_vm_pk.vm_config.clone();
-    app_vm_config
-        .deferral
-        .as_mut()
-        .expect("cached verify-stark app proving key should include deferral extension")
-        .fns = vec![deferral_fn];
-    let app_pk = AppProvingKey {
-        app_vm_pk: Arc::new(VmProvingKey {
-            vm_config: app_vm_config,
-            vm_pk: app_pk.app_vm_pk.vm_pk.clone(),
-        }),
-    };
 
     let sdk = Sdk::builder()
         .app_pk(app_pk)
@@ -169,9 +137,8 @@ pub fn sdk_from_cache(
 
 pub fn build(
     cached_pk: SdkCachedProvingKey<SdkVmConfig>,
-    child_agg_vk: Arc<MultiStarkVerifyingKey<SC>>,
 ) -> Result<(Arc<VmExe<F>>, VerificationBaseline)> {
-    let sdk = sdk_from_cache(cached_pk, child_agg_vk.clone())?;
+    let sdk = sdk_from_cache(cached_pk)?;
     let elf = sdk.build(
         GuestOptions::default(),
         verify_stark_guest_dir(),
@@ -191,7 +158,7 @@ pub fn prove(
     child_baseline: VerificationBaseline,
     input_proof: VersionedVmStarkProof,
 ) -> Result<VersionedVmStarkProof> {
-    let sdk = sdk_from_cache(cached_pk, child_agg_vk.clone())?;
+    let sdk = sdk_from_cache(cached_pk)?;
     let (stdin, def_input) = verify_stark_guest_inputs(
         &input_proof.try_into()?,
         child_agg_vk.as_ref().clone(),

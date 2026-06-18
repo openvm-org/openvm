@@ -2,13 +2,11 @@ use std::sync::Arc;
 
 use openvm_circuit::system::memory::dimensions::MemoryDimensions;
 use openvm_continuations::{
-    circuit::deferral::dummy::dummy_deferral_circuit_vk, prover::DeferralCircuitProver, SC,
+    circuit::deferral::dummy::dummy_deferral_circuit_vk,
+    prover::{DeferralCircuitProver, DeferralCircuitProverKey},
+    SC,
 };
-use openvm_stark_backend::{
-    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
-    proof::Proof,
-    SystemParams,
-};
+use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof, SystemParams};
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
@@ -78,7 +76,7 @@ impl DeferralPathProver {
             agg_params.internal.clone(),
             memory_dimensions,
             num_user_pvs,
-            Some(def_hook_commit),
+            Some(def_hook_commit.into()),
             0,
         );
         let verify_stark_prover = VerifyCircuitProver::new(deferred_verify_prover);
@@ -94,7 +92,10 @@ impl DeferralPathProver {
         );
 
         // Return the deferral-enabled verify-stark DeferralPathProver.
-        Self::new(Arc::new(deferral_prover), agg_prover)
+        Self {
+            deferral_prover: Arc::new(deferral_prover),
+            agg_prover,
+        }
     }
 }
 
@@ -106,7 +107,14 @@ struct DummyDefCircuitProver {
 }
 
 impl DeferralCircuitProver<SC> for DummyDefCircuitProver {
-    fn get_pk(&self) -> Arc<MultiStarkProvingKey<SC>> {
+    fn get_pk(&self) -> Arc<DeferralCircuitProverKey<SC>> {
+        unreachable!("DummyDefCircuitProver does not have proving material")
+    }
+
+    fn from_pk(_encoded_pk: DeferralCircuitProverKey<SC>) -> Self
+    where
+        Self: Sized,
+    {
         unreachable!("DummyDefCircuitProver does not have proving material")
     }
 

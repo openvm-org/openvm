@@ -1,9 +1,9 @@
-use std::{slice::from_ref, sync::Arc};
+use std::slice::from_ref;
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
 use openvm_continuations::prover::DeferralCircuitProver;
-use openvm_deferral_circuit::DeferralFn;
+use openvm_sdk_config::deferral::SupportedDeferral;
 use openvm_stark_backend::{codec::Encode, StarkEngine, SystemParams};
 use openvm_stark_sdk::{
     config::{
@@ -13,9 +13,7 @@ use openvm_stark_sdk::{
     utils::setup_tracing,
 };
 use openvm_transpiler::elf::Elf;
-use openvm_verify_stark_circuit::extension::{
-    get_deferral_state, get_raw_deferral_results, verify_stark_deferral_fn,
-};
+use openvm_verify_stark_circuit::extension::{get_deferral_state, get_raw_deferral_results};
 use openvm_verify_stark_host::{
     vk::{VerificationBaseline, VmStarkVerifyingKey},
     VmStarkProof,
@@ -132,13 +130,11 @@ fn make_deferral_enabled_sdk_with_count(
 ) -> Result<Sdk> {
     let deferral_prover =
         make_deferral_prover_with_count(fib_sdk, &agg_params, num_deferral_circuits);
-    let deferral_fns = (0..num_deferral_circuits)
-        .map(|_| Arc::new(DeferralFn::new(verify_stark_deferral_fn)))
-        .collect();
-    let deferral_ext = deferral_prover.make_extension(deferral_fns);
+    let supported_deferrals = vec![SupportedDeferral::VerifyStark; num_deferral_circuits];
+    let deferral_config = deferral_prover.make_config(supported_deferrals);
 
     let mut vm_config = openvm_sdk_config::SdkVmConfig::riscv32();
-    vm_config.deferral = Some(deferral_ext);
+    vm_config.deferral = Some(deferral_config);
 
     Ok(Sdk::builder()
         .app_config(AppConfig::new(vm_config, app_params))
@@ -161,10 +157,10 @@ fn make_verify_stark_path_sdk(
         memory_dimensions,
         num_user_pvs,
     );
-    let deferral_ext = deferral_path_prover
+    let deferral_config = deferral_path_prover
         .deferral_prover
-        .make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
-    vm_config.deferral = Some(deferral_ext);
+        .make_config(vec![SupportedDeferral::VerifyStark]);
+    vm_config.deferral = Some(deferral_config);
 
     Ok(Sdk::builder()
         .app_config(AppConfig::new(vm_config, app_params))
@@ -386,7 +382,7 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
         internal_params_with_100_bits_security(),
         vs_system_config.memory_config.memory_dimensions(),
         vs_system_config.num_public_values,
-        Some(expected_def_hook_commit),
+        Some(expected_def_hook_commit.into()),
         0,
     );
     let nested_verify_circuit_prover = VerifyCircuitProver::new(nested_verify_prover);
@@ -628,7 +624,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
             let memory_dimensions = system_config.memory_config.memory_dimensions();
             let num_user_pvs = system_config.num_public_values;
 
-            let root_prover = Arc::new(RootProver::from_pk(
+            let root_prover = std::sync::Arc::new(RootProver::from_pk(
                 ir_vk,
                 vk_commit,
                 root_pk,
@@ -688,7 +684,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
         .use_lookup_bits(21)
         .use_instance_columns(0);
     let range = builder.range_chip();
-    let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
+    let ext_chip = BabyBearExtChip::new(BabyBearChip::new(std::sync::Arc::new(range)));
     let ctx = builder.main(0);
 
     let initial_cells = ctx.advice.len();

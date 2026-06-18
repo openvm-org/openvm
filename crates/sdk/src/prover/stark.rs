@@ -36,7 +36,6 @@ where
     pub def_prover: Option<Arc<DeferralPathProver>>,
 }
 
-#[derive(derive_new::new)]
 pub struct DeferralPathProver {
     pub deferral_prover: Arc<DeferralProver>,
     pub agg_prover: Arc<AggProver>,
@@ -198,17 +197,17 @@ impl DeferralPathProver {
         }
     }
 
-    pub fn from_config(
-        agg_config: AggregationConfig,
-        deferral_prover: Arc<DeferralProver>,
-    ) -> Self {
+    pub fn new(agg_config: AggregationConfig, deferral_prover: Arc<DeferralProver>) -> Self {
         let agg_prover = AggProver::new(
             deferral_prover.def_hook_prover.get_vk(),
             agg_config,
             AggregationTreeConfig::deferral(),
             Some(deferral_prover.def_hook_prover.get_cached_commit()),
         );
-        DeferralPathProver::new(deferral_prover, Arc::new(agg_prover))
+        DeferralPathProver {
+            deferral_prover,
+            agg_prover: Arc::new(agg_prover),
+        }
     }
 
     pub fn from_pk(pk: AggProvingKey, deferral_prover: Arc<DeferralProver>) -> DeferralPathProver {
@@ -218,7 +217,10 @@ impl DeferralPathProver {
             AggregationTreeConfig::deferral(),
             Some(deferral_prover.def_hook_prover.get_cached_commit()),
         );
-        DeferralPathProver::new(deferral_prover, Arc::new(agg_prover))
+        DeferralPathProver {
+            deferral_prover,
+            agg_prover: Arc::new(agg_prover),
+        }
     }
 
     pub fn def_hook_cached_commit(&self) -> Digest {

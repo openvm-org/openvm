@@ -8,6 +8,7 @@ use openvm_continuations::{
 };
 use openvm_deferral_circuit::{DeferralExtension, DeferralFn};
 use openvm_recursion_circuit::utils::poseidon2_hash_slice;
+use openvm_sdk_config::deferral::{DeferralCircuitConfig, DeferralConfig, SupportedDeferral};
 use openvm_stark_backend::{
     keygen::types::MultiStarkProvingKey,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -252,6 +253,23 @@ impl DeferralProver {
         }
 
         Ok(per_circuit)
+    }
+
+    pub fn make_config(&self, supported_deferrals: Vec<SupportedDeferral>) -> DeferralConfig {
+        let vk_commit = self.internal_recursive_prover.get_vk_commit(false);
+        let circuits = self
+            .single_circuit_provers
+            .iter()
+            .zip_eq(supported_deferrals)
+            .map(|(p, deferral)| {
+                let commit = p.circuit_commit(vk_commit).into();
+                DeferralCircuitConfig {
+                    def_type: deferral,
+                    commit,
+                }
+            })
+            .collect();
+        DeferralConfig::new(circuits)
     }
 
     pub fn make_extension(&self, fns: Vec<Arc<DeferralFn>>) -> DeferralExtension {

@@ -25,6 +25,10 @@ use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig, Va
 use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
+
+pub mod deferral;
+use deferral::DeferralConfig;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_algebra_circuit::AlgebraProverExt;
@@ -76,9 +80,10 @@ pub struct SdkVmConfig {
     pub pairing: Option<PairingExtension>,
     pub ecc: Option<WeierstrassExtension>,
 
-    /// NOTE: Not all fields for this extension are **not** serializable. If this config is
-    /// initialized via a deserialize, each DeferralFn must be set and added.
-    pub deferral: Option<DeferralExtension>,
+    /// NOTE: Only deferral configurations enumerated by SupportedDeferral are fully serializable
+    /// and deserializable. For custom deferral circuits stored as SupportedDeferral::Other, the
+    /// circuit's DeferralFn must be manually replaced in the extension after deserialization.
+    pub deferral: Option<DeferralConfig>,
 }
 
 impl SdkVmConfig {
@@ -205,7 +210,7 @@ impl TranspilerConfig<F> for SdkVmConfig {
         }
         if let Some(ext) = &self.deferral {
             transpiler = transpiler.with_extension(DeferralTranspilerExtension::new(
-                ext.def_circuit_commits.clone(),
+                ext.to_extension().def_circuit_commits,
             ));
         }
         transpiler
@@ -247,7 +252,7 @@ impl SdkVmConfig {
         let deferral_as_exists = addr_spaces.len() > DEFERRAL_AS_USIZE;
         if let Some(deferral) = self.deferral.as_ref() {
             assert!(deferral_as_exists);
-            let def_num_cells = deferral.def_circuit_commits.len() * DIGEST_SIZE * 2;
+            let def_num_cells = deferral.circuits.len() * DIGEST_SIZE * 2;
             addr_spaces[DEFERRAL_AS_USIZE].num_cells = def_num_cells;
         } else if deferral_as_exists {
             addr_spaces[DEFERRAL_AS_USIZE].num_cells = 0;
@@ -267,7 +272,7 @@ impl SdkVmConfig {
         let fp2 = config.fp2.clone();
         let pairing = config.pairing.clone();
         let ecc = config.ecc.clone();
-        let deferral = config.deferral.clone();
+        let deferral = config.deferral.as_ref().map(DeferralConfig::to_extension);
 
         SdkVmConfigInner {
             system,
@@ -585,7 +590,7 @@ struct SdkVmConfigWithDefaultDeser {
     pub pairing: Option<PairingExtension>,
     pub ecc: Option<WeierstrassExtension>,
 
-    pub deferral: Option<DeferralExtension>,
+    pub deferral: Option<DeferralConfig>,
 }
 
 impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {

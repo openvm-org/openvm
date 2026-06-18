@@ -43,9 +43,6 @@ struct BuildCmd {
     sdk_pk: PathBuf,
 
     #[arg(long, required = true)]
-    child_agg_vk: PathBuf,
-
-    #[arg(long, required = true)]
     vmexe: PathBuf,
 
     #[arg(long, required = true)]
@@ -92,8 +89,7 @@ fn main() -> Result<()> {
         }
         Command::Build(cmd) => {
             let cached_pk = read_object_from_file(cmd.sdk_pk)?;
-            let child_agg_vk = read_object_from_file(cmd.child_agg_vk)?;
-            let (vmexe, baseline) = build(cached_pk, child_agg_vk)?;
+            let (vmexe, baseline) = build(cached_pk)?;
             let baseline_json: VerificationBaselineJson = baseline.into();
             write_object_to_file(cmd.vmexe, vmexe)?;
             write_to_file_json(cmd.baseline, baseline_json)?;

@@ -18,6 +18,8 @@ openvm-ecc-circuit = { workspace = true }
 openvm-ecc-transpiler = { workspace = true }
 openvm-deferral-circuit = { workspace = true }
 openvm-deferral-transpiler = { workspace = true }
+openvm-continuations = { workspace = true }
+openvm-verify-stark-circuit = { workspace = true }
 openvm-keccak256-circuit = { workspace = true }
 openvm-keccak256-transpiler = { workspace = true }
 openvm-sha2-circuit = { workspace = true }

@@ -3833,7 +3833,7 @@ checksum = "53010ccb100b96a67bc32c0175f0ed1426b31b655d562898e57325f81c023ac0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.106",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -6008,8 +6008,10 @@ name = "openvm-continuations"
 version = "2.0.0-beta.2"
 dependencies = [
  "cfg-if 1.0.1",
+ "derivative",
  "derive-new 0.6.0",
  "eyre",
+ "hex",
  "itertools 0.14.0",
  "num-bigint 0.4.6",
  "openvm-circuit",
@@ -6032,6 +6034,7 @@ dependencies = [
  "p3-bn254",
  "p3-field",
  "p3-matrix",
+ "serde",
  "test-case",
  "tracing",
 ]
@@ -6766,6 +6769,7 @@ dependencies = [
  "openvm-bigint-circuit",
  "openvm-bigint-transpiler",
  "openvm-circuit",
+ "openvm-continuations",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
  "openvm-deferral-circuit",
@@ -6783,6 +6787,7 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
+ "openvm-verify-stark-circuit",
  "serde",
  "toml 0.8.23",
 ]
@@ -7002,6 +7007,7 @@ dependencies = [
 name = "openvm-verify-stark-circuit"
 version = "2.0.0-beta.2"
 dependencies = [
+ "bitcode",
  "cfg-if 1.0.1",
  "derive-new 0.6.0",
  "eyre",
@@ -7025,6 +7031,7 @@ dependencies = [
  "p3-air",
  "p3-field",
  "p3-matrix",
+ "serde",
  "test-case",
  "tracing",
 ]
@@ -10828,7 +10835,7 @@ dependencies = [
 name = "verify-stark-host-example"
 version = "0.0.0"
 dependencies = [
- "cfg-if",
+ "cfg-if 1.0.1",
  "clap",
  "eyre",
  "openvm-build",

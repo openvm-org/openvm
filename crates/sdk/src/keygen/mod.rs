@@ -6,6 +6,7 @@ use openvm_circuit::{
     arch::{AirInventoryError, SystemConfig, VmCircuitConfig},
     system::memory::dimensions::MemoryDimensions,
 };
+use openvm_continuations::prover::DeferralCircuitProverKey;
 #[cfg(feature = "root-prover")]
 use openvm_continuations::RootSC;
 #[cfg(feature = "evm-prove")]
@@ -51,7 +52,7 @@ pub struct AggProvingKey {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct DeferralCircuitProvingKey {
-    pub def_circuit_pk: Arc<MultiStarkProvingKey<SC>>,
+    pub def_circuit_pk: Arc<DeferralCircuitProverKey<SC>>,
     pub agg_prefix_pk: AggPrefixProvingKey,
 }
 
