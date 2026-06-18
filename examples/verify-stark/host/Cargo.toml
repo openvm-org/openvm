@@ -4,6 +4,7 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
+cfg-if = { workspace = true }
 clap = { version = "4.6.1", features = ["derive"] }
 eyre = "0.6.12"
 openvm-build = { path = "../../../crates/toolchain/build" }
@@ -18,3 +19,10 @@ openvm-verify-stark-circuit = { path = "../../../guest-libs/verify-stark/circuit
 openvm-verify-stark-host = { path = "../../../crates/verify" }
 serde = { version = "1.0.201", features = ["derive"] }
 toml.workspace = true
+
+[features]
+default = []
+cuda = [
+    "openvm-sdk/cuda",
+    "openvm-verify-stark-circuit/cuda",
+]

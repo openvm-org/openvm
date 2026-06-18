@@ -10828,6 +10828,7 @@ dependencies = [
 name = "verify-stark-host-example"
 version = "0.0.0"
 dependencies = [
+ "cfg-if",
  "clap",
  "eyre",
  "openvm-build",

@@ -2,10 +2,11 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use eyre::Result;
-use openvm_sdk::fs::{
-    read_from_file_json, read_object_from_file, write_object_to_file, write_to_file_json,
+use openvm_sdk::{
+    fs::{read_from_file_json, read_object_from_file, write_object_to_file, write_to_file_json},
+    types::VerificationBaselineJson,
 };
-use verify_stark_host_example::{keygen, prove};
+use verify_stark_host_example::{build, keygen, prove};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -17,6 +18,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     Keygen(KeygenCmd),
+    Build(BuildCmd),
     Prove(ProveCmd),
 }
 
@@ -36,9 +38,27 @@ struct KeygenCmd {
 }
 
 #[derive(Parser)]
+struct BuildCmd {
+    #[arg(long, required = true)]
+    sdk_pk: PathBuf,
+
+    #[arg(long, required = true)]
+    child_agg_vk: PathBuf,
+
+    #[arg(long, required = true)]
+    vmexe: PathBuf,
+
+    #[arg(long, required = true)]
+    baseline: PathBuf,
+}
+
+#[derive(Parser)]
 struct ProveCmd {
     #[arg(long, required = true)]
     sdk_pk: PathBuf,
+
+    #[arg(long, required = true)]
+    vmexe: PathBuf,
 
     #[arg(long, required = true)]
     child_agg_vk: PathBuf,
@@ -47,7 +67,7 @@ struct ProveCmd {
     child_baseline: PathBuf,
 
     #[arg(long, required = true)]
-    inupt_proof: PathBuf,
+    input_proof: PathBuf,
 
     #[arg(long, required = true)]
     output_proof: PathBuf,
@@ -70,12 +90,28 @@ fn main() -> Result<()> {
             write_object_to_file(cmd.agg_vk, agg_vk)?;
             println!("verify-stark deferral proving keys written");
         }
-        Command::Prove(cmd) => {
+        Command::Build(cmd) => {
             let cached_pk = read_object_from_file(cmd.sdk_pk)?;
             let child_agg_vk = read_object_from_file(cmd.child_agg_vk)?;
-            let child_baseline = read_object_from_file(cmd.child_baseline)?;
-            let input_proof = read_from_file_json(cmd.inupt_proof)?;
-            let output_proof = prove(cached_pk, child_agg_vk, child_baseline, input_proof)?;
+            let (vmexe, baseline) = build(cached_pk, child_agg_vk)?;
+            let baseline_json: VerificationBaselineJson = baseline.into();
+            write_object_to_file(cmd.vmexe, vmexe)?;
+            write_to_file_json(cmd.baseline, baseline_json)?;
+            println!("verify-stark vmexe written");
+        }
+        Command::Prove(cmd) => {
+            let cached_pk = read_object_from_file(cmd.sdk_pk)?;
+            let vmexe = read_object_from_file(cmd.vmexe)?;
+            let child_agg_vk = read_object_from_file(cmd.child_agg_vk)?;
+            let child_baseline: VerificationBaselineJson = read_from_file_json(cmd.child_baseline)?;
+            let input_proof = read_from_file_json(cmd.input_proof)?;
+            let output_proof = prove(
+                cached_pk,
+                vmexe,
+                child_agg_vk,
+                child_baseline.into(),
+                input_proof,
+            )?;
             write_to_file_json(cmd.output_proof, output_proof)?;
             println!("verify-stark proof written");
         }

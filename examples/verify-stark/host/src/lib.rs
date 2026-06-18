@@ -7,26 +7,39 @@ use openvm_deferral_circuit::DeferralFn;
 use openvm_recursion_circuit::batch_constraint::commit_child_vk;
 use openvm_sdk::{
     config::{AggregationConfig, AppConfig},
-    keygen::SdkCachedProvingKey,
-    prover::{DeferralPathProver, DeferralProver},
+    keygen::{AppProvingKey, SdkCachedProvingKey},
+    openvm_circuit::arch::instructions::exe::VmExe,
+    prover::{vm::types::VmProvingKey, DeferralPathProver, DeferralProver},
     types::VersionedVmStarkProof,
-    DeferralInput, Sdk, StdIn, SC,
+    DefaultStarkEngine as E, DeferralInput, Sdk, StdIn, F, SC,
 };
 use openvm_sdk_config::{SdkSystemConfig, SdkVmConfig};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, StarkEngine};
 use openvm_stark_sdk::config::{
-    app_params_with_100_bits_security, baby_bear_poseidon2::BabyBearPoseidon2CpuEngine,
-    hook_params_with_100_bits_security, internal_params_with_100_bits_security,
-    MAX_APP_LOG_STACKED_HEIGHT,
+    app_params_with_100_bits_security, hook_params_with_100_bits_security,
+    internal_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT,
 };
-use openvm_verify_stark_circuit::{
-    extension::{get_deferral_state, get_raw_deferral_results, verify_stark_deferral_fn},
-    prover::{DeferredVerifyCpuCircuitProver, DeferredVerifyCpuProver},
+use openvm_verify_stark_circuit::extension::{
+    get_deferral_state, get_raw_deferral_results, verify_stark_deferral_fn,
 };
 use openvm_verify_stark_host::{
     vk::{VerificationBaseline, VmStarkVerifyingKey},
     VmStarkProof,
 };
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        use openvm_verify_stark_circuit::prover::{
+            DeferredVerifyGpuCircuitProver as VerifyCircuitProver,
+            DeferredVerifyGpuProver as VerifyProver,
+        };
+    } else {
+        use openvm_verify_stark_circuit::prover::{
+            DeferredVerifyCpuCircuitProver as VerifyCircuitProver,
+            DeferredVerifyCpuProver as VerifyProver,
+        };
+    }
+}
 
 pub type Proof = VmStarkProof;
 pub const VERIFY_STARK_DEF_IDX: usize = 0;
@@ -59,7 +72,7 @@ pub fn keygen(
 
     let deferral_path_prover = {
         let child_internal_recursive_cached_commit = cached_commit(&child_agg_vk);
-        let verify_prover = DeferredVerifyCpuProver::new::<BabyBearPoseidon2CpuEngine>(
+        let verify_prover = VerifyProver::new::<E>(
             child_agg_vk,
             child_internal_recursive_cached_commit,
             verify_prover_params,
@@ -68,7 +81,7 @@ pub fn keygen(
             None,
             VERIFY_STARK_DEF_IDX,
         );
-        let verify_circuit_prover = DeferredVerifyCpuCircuitProver::new(verify_prover);
+        let verify_circuit_prover = VerifyCircuitProver::new(verify_prover);
         let deferral_prover = Arc::new(DeferralProver::new(
             verify_circuit_prover,
             agg_config.clone(),
@@ -77,7 +90,10 @@ pub fn keygen(
         DeferralPathProver::from_config(agg_config.clone(), deferral_prover)
     };
 
-    let deferral_ext = deferral_path_prover.deferral_prover.make_extension(vec![]);
+    let deferral_fn = Arc::new(DeferralFn::new(verify_stark_deferral_fn));
+    let deferral_ext = deferral_path_prover
+        .deferral_prover
+        .make_extension(vec![deferral_fn]);
     let mut vm_config = SdkVmConfig::riscv32();
     vm_config.deferral = Some(deferral_ext);
     vm_config = vm_config.optimize();
@@ -107,7 +123,7 @@ pub fn sdk_from_cache(
     let num_user_pvs = default_config.config.num_public_values;
 
     let child_internal_recursive_cached_commit = cached_commit(&child_agg_vk);
-    let verify_prover = DeferredVerifyCpuProver::from_pk::<BabyBearPoseidon2CpuEngine>(
+    let verify_prover = VerifyProver::from_pk::<E>(
         child_agg_vk,
         child_internal_recursive_cached_commit,
         deferral_pk.circuits[VERIFY_STARK_DEF_IDX]
@@ -118,7 +134,7 @@ pub fn sdk_from_cache(
         None,
         VERIFY_STARK_DEF_IDX,
     );
-    let verify_circuit_prover = DeferredVerifyCpuCircuitProver::new(verify_prover);
+    let verify_circuit_prover = VerifyCircuitProver::new(verify_prover);
     let deferral_prover = Arc::new(DeferralProver::from_pks(
         verify_circuit_prover,
         deferral_pk.circuits[VERIFY_STARK_DEF_IDX]
@@ -130,10 +146,18 @@ pub fn sdk_from_cache(
     let deferral_path_prover = DeferralPathProver::from_pk(deferral_agg_pk, deferral_prover);
 
     let deferral_fn = Arc::new(DeferralFn::new(verify_stark_deferral_fn));
-    let deferral_ext = deferral_path_prover
-        .deferral_prover
-        .make_extension(vec![deferral_fn]);
-    app_pk.app_config().app_vm_config.deferral = Some(deferral_ext);
+    let mut app_vm_config = app_pk.app_vm_pk.vm_config.clone();
+    app_vm_config
+        .deferral
+        .as_mut()
+        .expect("cached verify-stark app proving key should include deferral extension")
+        .fns = vec![deferral_fn];
+    let app_pk = AppProvingKey {
+        app_vm_pk: Arc::new(VmProvingKey {
+            vm_config: app_vm_config,
+            vm_pk: app_pk.app_vm_pk.vm_pk.clone(),
+        }),
+    };
 
     let sdk = Sdk::builder()
         .app_pk(app_pk)
@@ -143,8 +167,26 @@ pub fn sdk_from_cache(
     Ok(sdk)
 }
 
+pub fn build(
+    cached_pk: SdkCachedProvingKey<SdkVmConfig>,
+    child_agg_vk: Arc<MultiStarkVerifyingKey<SC>>,
+) -> Result<(Arc<VmExe<F>>, VerificationBaseline)> {
+    let sdk = sdk_from_cache(cached_pk, child_agg_vk.clone())?;
+    let elf = sdk.build(
+        GuestOptions::default(),
+        verify_stark_guest_dir(),
+        &None,
+        None,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+    let prover = sdk.prover(exe.clone())?;
+    let baseline = prover.generate_baseline();
+    Ok((exe, baseline))
+}
+
 pub fn prove(
     cached_pk: SdkCachedProvingKey<SdkVmConfig>,
+    exe: Arc<VmExe<F>>,
     child_agg_vk: Arc<MultiStarkVerifyingKey<SC>>,
     child_baseline: VerificationBaseline,
     input_proof: VersionedVmStarkProof,
@@ -155,13 +197,6 @@ pub fn prove(
         child_agg_vk.as_ref().clone(),
         child_baseline,
     )?;
-    let elf = sdk.build(
-        GuestOptions::default(),
-        verify_stark_guest_dir(),
-        &None,
-        None,
-    )?;
-    let exe = sdk.convert_to_exe(elf)?;
     let (proof, _) = sdk.prove(exe, stdin, &[def_input])?;
     VersionedVmStarkProof::new(proof)
 }
@@ -189,9 +224,8 @@ fn verify_stark_guest_inputs(
 }
 
 fn cached_commit(child_agg_vk: &Arc<MultiStarkVerifyingKey<SC>>) -> CommitBytes {
-    let engine: BabyBearPoseidon2CpuEngine =
-        BabyBearPoseidon2CpuEngine::new(child_agg_vk.inner.params.clone());
-    commit_child_vk(&engine, &child_agg_vk, false)
+    let engine = <E as StarkEngine>::new(child_agg_vk.inner.params.clone());
+    commit_child_vk(&engine, &child_agg_vk, true)
         .commitment
         .into()
 }
