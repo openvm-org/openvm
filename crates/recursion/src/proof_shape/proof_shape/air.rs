@@ -635,7 +635,7 @@ where
         // Note that log_lifted_height = max(log_height, l_skip) is constrained to be
         // at most n_stack + l_skip in the stacking module by EqBitsAir.
         let lifted_height = select(
-            local.n_sign_bit,
+            and(local.n_sign_bit, local.is_present),
             AB::F::from_usize(1 << self.l_skip),
             local.height,
         );
