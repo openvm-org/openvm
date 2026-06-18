@@ -15,14 +15,7 @@ use rvr_openvm_ext_algebra_ffi_common::{
     read_bls12_381_fq, read_field_256, write_bls12_381_fq, write_field_256, BLS12_381_ELEM_BYTES,
     FIELD_256_BYTES,
 };
-use rvr_openvm_ext_ffi_common::{
-    // TODO(follow-up): migrate ecc to rd_mem_words_traced / wr_mem_words_traced ([u64])
-    rd_mem_u32_range_wrapper,
-    trace_rd_mem_u32_range_wrapper,
-    trace_wr_mem_u32_range_wrapper,
-    wr_mem_u32_range_wrapper,
-    WORD_SIZE,
-};
+use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced, WORD_SIZE};
 
 /// Affine point: two field coordinates (x, y).
 const AFFINE_COORDS: u32 = 2;
@@ -131,9 +124,8 @@ const P256_A_ABS: u64 = 3;
 unsafe fn trace_read_bytes(state: *mut c_void, ptr: u32, len: u32) -> Vec<u8> {
     debug_assert_eq!(len % WORD_SIZE as u32, 0);
     let num_words = (len as usize) / WORD_SIZE;
-    let mut words = vec![0u32; num_words];
-    rd_mem_u32_range_wrapper(state, ptr, words.as_mut_ptr(), num_words as u32);
-    trace_rd_mem_u32_range_wrapper(state, ptr, words.as_ptr(), num_words as u32);
+    let mut words = vec![0u64; num_words];
+    rd_mem_words_traced(state, ptr, &mut words);
     let mut bytes = Vec::with_capacity(len as usize);
     for &w in &words {
         bytes.extend_from_slice(&w.to_le_bytes());
@@ -143,12 +135,11 @@ unsafe fn trace_read_bytes(state: *mut c_void, ptr: u32, len: u32) -> Vec<u8> {
 
 unsafe fn trace_write_bytes(state: *mut c_void, ptr: u32, bytes: &[u8]) {
     debug_assert_eq!(bytes.len() % WORD_SIZE, 0);
-    let words: Vec<u32> = bytes
+    let words: Vec<u64> = bytes
         .chunks_exact(WORD_SIZE)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
         .collect();
-    trace_wr_mem_u32_range_wrapper(state, ptr, words.as_ptr(), words.len() as u32);
-    wr_mem_u32_range_wrapper(state, ptr, words.as_ptr(), words.len() as u32);
+    wr_mem_words_traced(state, ptr, &words);
 }
 
 fn ecc_setup_expr(point_bytes: u32, setup_bytes: &[u8], is_double: bool) -> Vec<u8> {
