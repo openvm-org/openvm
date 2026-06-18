@@ -20,18 +20,20 @@ use openvm_riscv_adapters::{
 };
 use openvm_riscv_circuit::{
     adapters::{RV64_BYTE_BITS, U16_BITS},
-    BaseAluCoreAir, BaseAluExecutor, BaseAluFiller, BranchEqualCoreAir, BranchEqualExecutor,
-    BranchEqualFiller, BranchLessThanCoreAir, BranchLessThanExecutor, BranchLessThanFiller,
-    LessThanCoreAir, LessThanExecutor, LessThanFiller, MultiplicationCoreAir,
-    MultiplicationExecutor, MultiplicationFiller, Rv64I, Rv64IExecutor, Rv64Io, Rv64IoExecutor,
-    Rv64M, Rv64MExecutor, ShiftCoreAir, ShiftExecutor, ShiftFiller,
+    AddSubCoreAir, AddSubExecutor, AddSubFiller, BitwiseLogicCoreAir, BitwiseLogicExecutor,
+    BitwiseLogicFiller, BranchEqualCoreAir, BranchEqualExecutor, BranchEqualFiller,
+    BranchLessThanCoreAir, BranchLessThanExecutor, BranchLessThanFiller, LessThanCoreAir,
+    LessThanExecutor, LessThanFiller, MultiplicationCoreAir, MultiplicationExecutor,
+    MultiplicationFiller, Rv64I, Rv64IExecutor, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
+    ShiftCoreAir, ShiftExecutor, ShiftFiller,
 };
 use serde::{Deserialize, Serialize};
 
 mod extension;
 pub use extension::*;
 
-mod base_alu;
+mod add_sub;
+mod bitwise_logic;
 mod branch_eq;
 mod branch_lt;
 pub(crate) mod common;
@@ -120,16 +122,32 @@ type BranchAdapterExecutor = VecToFlatBranchAdapterExecutor<
     INT256_NUM_U16_LIMBS,
 >;
 
-/// BaseAlu256
-pub type Rv64BaseAlu256Air =
-    VmAirWrapper<AluAdapterAir, BaseAluCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
+/// AddSub256 — u16 limbs, range checker (shares the AluU16 adapter with LessThan256)
+pub type Rv64AddSub256Air =
+    VmAirWrapper<AluU16AdapterAir, AddSubCoreAir<INT256_NUM_U16_LIMBS, U16_BITS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv64BaseAlu256Executor(
-    BaseAluExecutor<AluAdapterExecutor, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>,
+pub struct Rv64AddSub256Executor(
+    AddSubExecutor<AluU16AdapterExecutor, INT256_NUM_U16_LIMBS, U16_BITS>,
 );
-pub type Rv64BaseAlu256Chip<F> = VmChipWrapper<
+pub type Rv64AddSub256Chip<F> = VmChipWrapper<
     F,
-    BaseAluFiller<
+    AddSubFiller<
+        Rv64VecHeapU16AdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
+        INT256_NUM_U16_LIMBS,
+        U16_BITS,
+    >,
+>;
+
+/// BitwiseLogic256 — byte limbs, bitwise lookup (the old base_alu adapter/core shape)
+pub type Rv64BitwiseLogic256Air =
+    VmAirWrapper<AluAdapterAir, BitwiseLogicCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
+#[derive(Clone, PreflightExecutor)]
+pub struct Rv64BitwiseLogic256Executor(
+    BitwiseLogicExecutor<AluAdapterExecutor, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>,
+);
+pub type Rv64BitwiseLogic256Chip<F> = VmChipWrapper<
+    F,
+    BitwiseLogicFiller<
         Rv64VecHeapAdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
         INT256_NUM_U8_LIMBS,
         RV64_BYTE_BITS,
