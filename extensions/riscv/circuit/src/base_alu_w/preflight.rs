@@ -10,7 +10,7 @@ use crate::{
 };
 
 /// Executor for the RV64 `ADDW`/`SUBW` chip. The arithmetic is identical to the low 32 bits of
-/// `add_sub`, so trace generation reuses [`run_add_sub`] and [`AddSubCoreRecord`]; the adapter
+/// `add_sub`, so trace generation reuses `run_add_sub` and [`AddSubCoreRecord`]; the adapter
 /// rebuilds the sign-extended 64-bit write. This is a distinct type from `AddSubExecutor` because
 /// its pure/metered interpreter (see `execution.rs`) has W-specific 32->64 sign-extension
 /// semantics, which would conflict with `AddSubExecutor`'s blanket interpreter impls.
