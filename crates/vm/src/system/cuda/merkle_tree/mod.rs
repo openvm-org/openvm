@@ -58,19 +58,15 @@ pub struct MemoryMerkleSubTree {
     pub height: usize,
     pub path_len: usize,
     layout: MemoryMerkleSubTreeLayout,
-    /// Shared handle to the initial-memory buffer (`d_data`) captured in [`Self::build_async`].
-    /// `None` for empty/dummy subtrees that have no backing buffer.
+    /// Shared handle to the initial-memory buffer (`d_data`) from [`Self::build_async`], or
+    /// `None` for empty/dummy subtrees. Co-owning the buffer keeps the host from freeing it: under
+    /// `OmitBottomLevels` the omitted levels aren't in `buf` and are recomputed from this buffer
+    /// during [`MemoryMerkleTree::update_with_touched_blocks`] (`recompute_omitted_node` in
+    /// `merkle_tree.cu`).
     ///
-    /// Holding an `Arc` makes the subtree a co-owner of the buffer, so the host cannot free it
-    /// while the subtree is alive. Under the `OmitBottomLevels` layout the omitted bottom levels
-    /// are never materialized into `buf`; they are recomputed on demand from this buffer during
-    /// [`MemoryMerkleTree::update_with_touched_blocks`] (see `recompute_omitted_node` in
-    /// `merkle_tree.cu`), so the buffer must stay alive until that update completes.
-    ///
-    /// NOTE: this only fixes host-side ownership. The buffer is also consumed by GPU kernels
-    /// enqueued on the stream, so it must additionally outlive those kernels — that ordering is
-    /// guaranteed by the `stream.synchronize()` in [`MemoryMerkleTree::drop_subtrees`], not by the
-    /// `Arc`. Drop the subtrees (which releases these handles) only after that sync.
+    /// This only covers host-side ownership; the buffer also feeds GPU kernels on the stream, so
+    /// drop the subtrees (releasing these handles) only after the `stream.synchronize()` in
+    /// [`MemoryMerkleTree::drop_subtrees`].
     initial_data: Option<Arc<DeviceBuffer<u8>>>,
 }
 
@@ -220,32 +216,6 @@ impl MemoryMerkleSubTree {
             }
         }
         self.build_completion_event = Some(event);
-    }
-
-    /// Returns the bounds [start, end) of the layer at the given depth.
-    /// These bounds correspond to the indices of the layer in the buffer.
-    /// depth: 0 = root, 1 = root's children, ..., height-1 = leaves
-    pub fn layer_bounds(&self, depth: usize) -> (usize, usize) {
-        let global_height = self.height + self.path_len;
-        assert!(
-            depth < global_height,
-            "Depth {depth} out of bounds for height {global_height}",
-        );
-        if depth >= self.path_len {
-            // depth is within the heap-ordered subtree
-            let d = depth - self.path_len;
-            let max_stored_depth = self.stored_heap_height();
-            assert!(
-                d <= max_stored_depth,
-                "Depth {depth} is in an omitted subtree layer"
-            );
-            let start = self.path_len + ((1 << d) - 1);
-            let end = self.path_len + ((1 << (d + 1)) - 1);
-            (start, end)
-        } else {
-            // vertical path layer: single node per level
-            (depth, depth + 1)
-        }
     }
 }
 
