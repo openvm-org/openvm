@@ -36,13 +36,12 @@ jobs:
           - { name: "p256", path: "p256", rvr: false }
           - { name: "pairing", path: "pairing", rvr: false }
           - { name: "verify-stark", path: "verify-stark/circuit", rvr: false }
-          # TODO(rvr): re-enable these once RV64 RVR support lands.
-          # - { name: "sha2", path: "sha2", rvr: true }
-          # - { name: "keccak256", path: "keccak256", rvr: true }
-          # - { name: "ff_derive", path: "ff_derive", rvr: true }
-          # - { name: "k256", path: "k256", rvr: true }
-          # - { name: "p256", path: "p256", rvr: true }
-          # - { name: "pairing", path: "pairing", rvr: true }
+          - { name: "keccak256", path: "keccak256", rvr: true }
+          - { name: "sha2", path: "sha2", rvr: true }
+          - { name: "ff_derive", path: "ff_derive", rvr: true }
+          - { name: "k256", path: "k256", rvr: true }
+          - { name: "p256", path: "p256", rvr: true }
+          - { name: "pairing", path: "pairing", rvr: true }
         platform:
           - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails
@@ -101,14 +100,13 @@ jobs:
         run: |
           "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
           EXTRA_ARGS=()
-          # TODO(rvr): restore this branch when the rvr matrix entries above are re-enabled.
-          # if [[ "${{ matrix.crate.rvr }}" == 'true' ]]; then
-          #   if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
-          #     EXTRA_ARGS+=(--features=bn254,bls12_381,rvr -E 'not test(fallback)')
-          #   else
-          #     EXTRA_ARGS+=(--features=rvr)
-          #   fi
-          if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
+          if [[ "${{ matrix.crate.rvr }}" == 'true' ]]; then
+            if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
+              EXTRA_ARGS+=(--features=bn254,bls12_381,rvr -E 'not test(fallback)')
+            else
+              EXTRA_ARGS+=(--features=rvr)
+            fi
+          elif [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
             EXTRA_ARGS+=(--features=bn254,bls12_381 -E 'not test(fallback)')
           fi
 
