@@ -105,6 +105,7 @@ cuda = [
     "openvm-sdk-config/cuda",
     "openvm-continuations/cuda",
     "openvm-verify-stark-circuit/cuda",
+    "openvm-static-verifier?/cuda",
 ]
 cell-profiling = [
     "evm-prove",
