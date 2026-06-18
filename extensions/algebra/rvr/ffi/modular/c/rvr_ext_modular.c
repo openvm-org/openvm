@@ -13,7 +13,9 @@
 #error "k256 guest limb codecs require a little-endian host"
 #endif
 
-static constexpr uint32_t RVR_WORD_SIZE = 4;
+// TODO(follow-up): add some kind of checker during build time to ensure that
+//    RVR_WORD_SIZE and OpenVM WORD_SIZE don't differ from each other
+static constexpr uint32_t RVR_WORD_SIZE = 8;
 static constexpr uint32_t SECP256K1_ELEM_BYTES = 32;
 static constexpr uint32_t SECP256K1_ELEM_WORDS =
     SECP256K1_ELEM_BYTES / RVR_WORD_SIZE;
@@ -38,8 +40,8 @@ static inline void bytes_reverse_32(uint8_t out[SECP256K1_ELEM_BYTES],
 }
 
 static inline secp256k1_fe fe_read(RvState* state, uint32_t ptr) {
-  uint32_t words[SECP256K1_ELEM_WORDS];
-  rd_mem_u32_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
+  uint64_t words[SECP256K1_ELEM_WORDS];
+  rd_mem_u64_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
   uint8_t le[SECP256K1_ELEM_BYTES];
   memcpy(le, words, SECP256K1_ELEM_BYTES);
   uint8_t be[SECP256K1_ELEM_BYTES];
@@ -58,9 +60,9 @@ static inline void fe_write(RvState* state, uint32_t ptr,
   secp256k1_fe_get_b32(be, &t);
   uint8_t le[SECP256K1_ELEM_BYTES];
   bytes_reverse_32(le, be);
-  uint32_t words[SECP256K1_ELEM_WORDS];
+  uint64_t words[SECP256K1_ELEM_WORDS];
   memcpy(words, le, SECP256K1_ELEM_BYTES);
-  wr_mem_u32_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
+  wr_mem_u64_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
 }
 
 static inline secp256k1_fe fe_add(secp256k1_fe a, const secp256k1_fe* b) {
@@ -101,8 +103,8 @@ static inline int fe_is_zero(const secp256k1_fe* a) {
 /* ── k256 scalar (mod n) helpers ─────────────────────────────────────── */
 
 static inline secp256k1_scalar scalar_read(RvState* state, uint32_t ptr) {
-  uint32_t words[SECP256K1_ELEM_WORDS];
-  rd_mem_u32_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
+  uint64_t words[SECP256K1_ELEM_WORDS];
+  rd_mem_u64_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
   uint8_t le[SECP256K1_ELEM_BYTES];
   memcpy(le, words, SECP256K1_ELEM_BYTES);
   uint8_t be[SECP256K1_ELEM_BYTES];
@@ -118,9 +120,9 @@ static inline void scalar_write(RvState* state, uint32_t ptr,
   secp256k1_scalar_get_b32(be, val);
   uint8_t le[SECP256K1_ELEM_BYTES];
   bytes_reverse_32(le, be);
-  uint32_t words[SECP256K1_ELEM_WORDS];
+  uint64_t words[SECP256K1_ELEM_WORDS];
   memcpy(words, le, SECP256K1_ELEM_BYTES);
-  wr_mem_u32_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
+  wr_mem_u64_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
 }
 
 /* ── Modular arithmetic: secp256k1 coordinate field (mod p) ──────────── */
