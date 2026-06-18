@@ -294,6 +294,24 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u32_range(
                         byte_addr_to_local_page(last_addr));
 }
 
+static __attribute__((always_inline)) inline void trace_rd_mem_u64_range(
+    RvState* restrict state, uint32_t base_addr, const uint64_t* vals,
+    uint32_t num_words) {
+  assume(num_words > 0);
+  uint32_t last_addr = base_addr + (num_words - 1) * sizeof(uint64_t);
+  record_mem_page_range(state->tracer, byte_addr_to_local_page(base_addr),
+                        byte_addr_to_local_page(last_addr));
+}
+
+static __attribute__((always_inline)) inline void trace_wr_mem_u64_range(
+    RvState* restrict state, uint32_t base_addr, const uint64_t* vals,
+    uint32_t num_words) {
+  assume(num_words > 0);
+  uint32_t last_addr = base_addr + (num_words - 1) * sizeof(uint64_t);
+  record_mem_page_range(state->tracer, byte_addr_to_local_page(base_addr),
+                        byte_addr_to_local_page(last_addr));
+}
+
 /* ── Trace-only operations ────────────────────────────────────────── */
 
 static __attribute__((always_inline)) inline void trace_mem_access(

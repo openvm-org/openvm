@@ -124,7 +124,7 @@ const P256_A_ABS: u64 = 3;
 unsafe fn trace_read_bytes(state: *mut c_void, ptr: u32, len: u32) -> Vec<u8> {
     debug_assert_eq!(len % WORD_SIZE as u32, 0);
     let num_words = (len as usize) / WORD_SIZE;
-    let mut words = vec![0u32; num_words];
+    let mut words = vec![0u64; num_words];
     rd_mem_words_traced(state, ptr, &mut words);
     let mut bytes = Vec::with_capacity(len as usize);
     for &w in &words {
@@ -135,9 +135,9 @@ unsafe fn trace_read_bytes(state: *mut c_void, ptr: u32, len: u32) -> Vec<u8> {
 
 unsafe fn trace_write_bytes(state: *mut c_void, ptr: u32, bytes: &[u8]) {
     debug_assert_eq!(bytes.len() % WORD_SIZE, 0);
-    let words: Vec<u32> = bytes
+    let words: Vec<u64> = bytes
         .chunks_exact(WORD_SIZE)
-        .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
         .collect();
     wr_mem_words_traced(state, ptr, &words);
 }
