@@ -738,8 +738,8 @@ mod tests {
 
     fn small_segmentation_ctx() -> SegmentationCtx {
         let limits = SegmentationLimits {
-            max_trace_height_bits: 4,
-            max_memory: usize::MAX,
+            max_trace_height_bits: 11,
+            max_memory: 1,
             max_interactions: u32::MAX,
         };
         let memory_config = ProvingMemoryConfig {
