@@ -386,7 +386,6 @@ fn test_sdk_compiled_metered_cost_save_load_roundtrip() -> Result<()> {
     Ok(())
 }
 
-
 #[test]
 fn test_sdk_compiled_metered_execute() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();

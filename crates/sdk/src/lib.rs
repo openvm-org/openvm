@@ -349,6 +349,22 @@ where
             .map_err(SdkError::from)
     }
 
+    /// Like [`Self::compile_pure`] but checks `cache_dir` for a previously
+    /// built artifact before invoking `make`. On a miss the freshly compiled
+    /// artifact is stored in `cache_dir` for future reuse.
+    #[cfg(feature = "rvr")]
+    pub fn compile_pure_cached(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+        cache_dir: Option<&std::path::Path>,
+    ) -> Result<CompiledExePure<'_, F>, SdkError> {
+        let exe = self.convert_to_exe(app_exe)?;
+        self.executor
+            .rvr_instance_cached(&exe, cache_dir)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
     /// Run a [`CompiledExePure`] against `inputs` and extract the user public values.
     pub fn execute_compiled(
         &self,
@@ -415,6 +431,29 @@ where
         let instance = self
             .executor
             .load_metered_instance(lib_path, &exe, &executor_idx_to_air_idx)
+            .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMetered { instance, ctx })
+    }
+
+    /// Like [`Self::compile_metered`] but checks `cache_dir` for a previously
+    /// built artifact before invoking `make`. On a miss the freshly compiled
+    /// artifact is stored in `cache_dir` for future reuse.
+    #[cfg(feature = "rvr")]
+    pub fn compile_metered_cached(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+        cache_dir: Option<&std::path::Path>,
+    ) -> Result<CompiledExeMetered<'_>, SdkError> {
+        let app_prover = self.app_prover(app_exe)?;
+
+        let vm = app_prover.vm();
+        let exe = app_prover.exe();
+
+        let ctx = vm.build_metered_ctx(&exe);
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        let instance = self
+            .executor
+            .metered_rvr_instance_cached(&exe, &executor_idx_to_air_idx, cache_dir)
             .map_err(VirtualMachineError::from)?;
         Ok(CompiledExeMetered { instance, ctx })
     }
@@ -490,6 +529,34 @@ where
         let instance = self
             .executor
             .load_metered_cost_instance(lib_path, &exe, &executor_idx_to_air_idx, &ctx.widths)
+            .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMeteredCost { instance, ctx })
+    }
+
+    /// Like [`Self::compile_metered_cost`] but checks `cache_dir` for a
+    /// previously built artifact before invoking `make`. On a miss the freshly
+    /// compiled artifact is stored in `cache_dir` for future reuse.
+    #[cfg(feature = "rvr")]
+    pub fn compile_metered_cost_cached(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+        cache_dir: Option<&std::path::Path>,
+    ) -> Result<CompiledExeMeteredCost<'_>, SdkError> {
+        let app_prover = self.app_prover(app_exe)?;
+
+        let vm = app_prover.vm();
+        let exe = app_prover.exe();
+
+        let ctx = vm.build_metered_cost_ctx();
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        let instance = self
+            .executor
+            .metered_cost_rvr_instance_cached(
+                &exe,
+                &executor_idx_to_air_idx,
+                &ctx.widths,
+                cache_dir,
+            )
             .map_err(VirtualMachineError::from)?;
         Ok(CompiledExeMeteredCost { instance, ctx })
     }

@@ -4,11 +4,10 @@
 //! run is a cold compile; the second should be a cache hit. Three assertions
 //! verify the fix:
 //!
-//! 1. The cache dir still contains exactly one artifact after the second run —
-//!    no second file was created, so the probe did not recompile.
+//! 1. The cache dir still contains exactly one artifact after the second run — no second file was
+//!    created, so the probe did not recompile.
 //! 2. The artifact mtime is unchanged — the existing file was not rewritten.
-//! 3. Both runs produce the same public values — the loaded artifact is
-//!    functionally correct.
+//! 3. Both runs produce the same public values — the loaded artifact is functionally correct.
 
 #[cfg(feature = "rvr")]
 mod tests {
@@ -21,7 +20,10 @@ mod tests {
             .unwrap()
             .flatten()
             .map(|e| e.path())
-            .filter(|p| p.extension().map_or(false, |ext| ext == "so" || ext == "dylib"))
+            .filter(|p| {
+                p.extension()
+                    .map_or(false, |ext| ext == "so" || ext == "dylib")
+            })
             .collect()
     }
 
@@ -49,7 +51,11 @@ mod tests {
             let pv_cold = run_probe(mode, cache_dir.path());
 
             let arts = artifacts(cache_dir.path());
-            assert_eq!(arts.len(), 1, "[{mode}] expected one artifact after cold compile");
+            assert_eq!(
+                arts.len(),
+                1,
+                "[{mode}] expected one artifact after cold compile"
+            );
             let mtime_before = std::fs::metadata(&arts[0]).unwrap().modified().unwrap();
 
             let pv_warm = run_probe(mode, cache_dir.path());
@@ -61,11 +67,17 @@ mod tests {
                 "[{mode}] second run created a new artifact — fingerprint not stable across processes"
             );
             assert_eq!(
-                std::fs::metadata(&arts_after[0]).unwrap().modified().unwrap(),
+                std::fs::metadata(&arts_after[0])
+                    .unwrap()
+                    .modified()
+                    .unwrap(),
                 mtime_before,
                 "[{mode}] artifact was rewritten — second run recompiled instead of reusing cache"
             );
-            assert_eq!(pv_cold, pv_warm, "[{mode}] second run produced different public values");
+            assert_eq!(
+                pv_cold, pv_warm,
+                "[{mode}] second run produced different public values"
+            );
         }
     }
 }

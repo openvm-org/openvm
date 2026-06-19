@@ -20,8 +20,13 @@ use openvm_transpiler::elf::Elf;
 
 fn main() -> eyre::Result<()> {
     let mut args = std::env::args().skip(1);
-    let mode = args.next().expect("usage: rvr_cache_probe <mode> <cache_dir>");
-    let cache_dir = PathBuf::from(args.next().expect("usage: rvr_cache_probe <mode> <cache_dir>"));
+    let mode = args
+        .next()
+        .expect("usage: rvr_cache_probe <mode> <cache_dir>");
+    let cache_dir = PathBuf::from(
+        args.next()
+            .expect("usage: rvr_cache_probe <mode> <cache_dir>"),
+    );
 
     let elf_bytes = include_bytes!("../../programs/examples/fibonacci.elf");
     let elf = Elf::decode(elf_bytes, MEM_SIZE as u32)?;
@@ -29,7 +34,7 @@ fn main() -> eyre::Result<()> {
     // Must match make_fib_sdk() exactly so the fingerprint is identical.
     let n_stack = 19;
     let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
-    let sdk = Sdk::riscv32(app_params, AggregationSystemParams::default());
+    let sdk = Sdk::riscv64(app_params, AggregationSystemParams::default());
     let exe = sdk.convert_to_exe(elf)?;
 
     let mut stdin = StdIn::default();
