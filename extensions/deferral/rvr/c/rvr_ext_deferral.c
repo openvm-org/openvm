@@ -17,8 +17,10 @@
 /* DEFERRAL_DIGEST_SIZE (digest size in field elements) and WORD_SIZE come from
  * openvm_constants.h via openvm.h. The rest are derived here, mirroring
  * rvr-openvm-ffi-common. */
+// TODO(rvr): update to better formula/solution instead of defining field element size here
+static constexpr uint32_t F_NUM_BYTES = 4;
 static constexpr uint32_t DEFERRAL_COMMIT_NUM_BYTES =
-    DEFERRAL_DIGEST_SIZE * WORD_SIZE;
+    DEFERRAL_DIGEST_SIZE * F_NUM_BYTES;
 /* output_key layout: commit ++ u64 output length. */
 static constexpr uint32_t DEFERRAL_OUTPUT_KEY_BYTES =
     DEFERRAL_COMMIT_NUM_BYTES + (uint32_t)sizeof(uint64_t);
@@ -48,8 +50,8 @@ void rvr_ext_deferral_call(RvState* restrict state, uint32_t output_ptr,
                            uint32_t input_ptr, uint32_t def_idx,
                            uint32_t poseidon2_chip_idx) {
   /* Read input_commit (COMMIT_WORDS words) from guest memory. */
-  uint32_t commit_words[COMMIT_WORDS];
-  rd_mem_u32_range_traced(state, input_ptr, commit_words, COMMIT_WORDS);
+  uint64_t commit_words[COMMIT_WORDS];
+  rd_mem_u64_range_traced(state, input_ptr, commit_words, COMMIT_WORDS);
 
   /* Trace DEFERRAL_AS reads (old input_acc + old output_acc). Slot offsets
    * are in field-element units.
@@ -58,23 +60,23 @@ void rvr_ext_deferral_call(RvState* restrict state, uint32_t output_ptr,
    * chunk geometry is correct for field-element-typed cells. */
   uint32_t input_acc_ptr = 2u * def_idx * DEFERRAL_DIGEST_SIZE;
   uint32_t output_acc_ptr = input_acc_ptr + DEFERRAL_DIGEST_SIZE;
-  trace_mem_access_u32_range(state, input_acc_ptr, DIGEST_MEMORY_OPS,
+  trace_mem_access_u64_range(state, input_acc_ptr, DIGEST_MEMORY_OPS,
                              AS_DEFERRAL);
-  trace_mem_access_u32_range(state, output_acc_ptr, DIGEST_MEMORY_OPS,
+  trace_mem_access_u64_range(state, output_acc_ptr, DIGEST_MEMORY_OPS,
                              AS_DEFERRAL);
 
   /* Look up output_key + update accumulators (Rust side, on byte buffers). */
-  uint32_t key_words[OUTPUT_KEY_WORDS];
+  uint64_t key_words[OUTPUT_KEY_WORDS];
   g_deferral.call_lookup(g_deferral.ctx, openvm_get_io_ctx(), def_idx,
                          (const uint8_t*)commit_words, (uint8_t*)key_words);
 
   /* Write output_key (OUTPUT_KEY_WORDS words) to guest memory. */
-  wr_mem_u32_range_traced(state, output_ptr, key_words, OUTPUT_KEY_WORDS);
+  wr_mem_u64_range_traced(state, output_ptr, key_words, OUTPUT_KEY_WORDS);
 
   /* Trace DEFERRAL_AS writes (new input_acc + new output_acc). */
-  trace_mem_access_u32_range(state, input_acc_ptr, DIGEST_MEMORY_OPS,
+  trace_mem_access_u64_range(state, input_acc_ptr, DIGEST_MEMORY_OPS,
                              AS_DEFERRAL);
-  trace_mem_access_u32_range(state, output_acc_ptr, DIGEST_MEMORY_OPS,
+  trace_mem_access_u64_range(state, output_acc_ptr, DIGEST_MEMORY_OPS,
                              AS_DEFERRAL);
 
   trace_chip(state, poseidon2_chip_idx, 2);
@@ -86,12 +88,11 @@ void rvr_ext_deferral_output(RvState* restrict state, uint32_t output_ptr,
                              uint32_t output_chip_idx,
                              uint32_t poseidon2_chip_idx) {
   /* Read output_key (OUTPUT_KEY_WORDS words) from guest memory. */
-  uint32_t key_words[OUTPUT_KEY_WORDS];
-  rd_mem_u32_range_traced(state, input_ptr, key_words, OUTPUT_KEY_WORDS);
+  uint64_t key_words[OUTPUT_KEY_WORDS];
+  rd_mem_u64_range_traced(state, input_ptr, key_words, OUTPUT_KEY_WORDS);
 
   /* output_len is the u64 LE stored right after the commit. */
-  uint64_t output_len = (uint64_t)key_words[COMMIT_WORDS] |
-                        ((uint64_t)key_words[COMMIT_WORDS + 1] << 32);
+  uint64_t output_len = key_words[COMMIT_WORDS];
 
   /* Look up the raw output into a heap buffer sized to output_len. The
    * output_commit is the leading DEFERRAL_COMMIT_NUM_BYTES of output_key. */
@@ -104,11 +105,11 @@ void rvr_ext_deferral_output(RvState* restrict state, uint32_t output_ptr,
   /* Write raw output to guest memory in DEFERRAL_DIGEST_SIZE-byte rows. Each
    * row is an independent batched write (the trace API is per-row). */
   uint32_t num_data_rows = (uint32_t)(output_len / DEFERRAL_DIGEST_SIZE);
-  uint32_t row_words[DIGEST_MEMORY_OPS];
+  uint64_t row_words[DIGEST_MEMORY_OPS];
   for (uint32_t row_idx = 0; row_idx < num_data_rows; row_idx++) {
     uint32_t row_byte_base = row_idx * DEFERRAL_DIGEST_SIZE;
     memcpy(row_words, output_raw + row_byte_base, DEFERRAL_DIGEST_SIZE);
-    wr_mem_u32_range_traced(state, output_ptr + row_byte_base, row_words,
+    wr_mem_u64_range_traced(state, output_ptr + row_byte_base, row_words,
                             DIGEST_MEMORY_OPS);
   }
   free(output_raw);
