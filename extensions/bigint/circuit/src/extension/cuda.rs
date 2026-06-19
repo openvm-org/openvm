@@ -52,14 +52,19 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
             }
         };
 
-        inventory.next_air::<Rv64BaseAlu256Air>()?;
-        let base_alu = BaseAlu256ChipGpu::new(
+        inventory.next_air::<Rv64AddSub256Air>()?;
+        let add_sub =
+            AddSub256ChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
+        inventory.add_executor_chip(add_sub);
+
+        inventory.next_air::<Rv64BitwiseLogic256Air>()?;
+        let bitwise = BitwiseLogic256ChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );
-        inventory.add_executor_chip(base_alu);
+        inventory.add_executor_chip(bitwise);
 
         inventory.next_air::<Rv64LessThan256Air>()?;
         let lt =
