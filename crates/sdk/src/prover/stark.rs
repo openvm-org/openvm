@@ -17,11 +17,10 @@ use openvm_verify_stark_host::{
 };
 
 use crate::{
-    config::{AggregationConfig, AggregationTreeConfig},
-    keygen::{AggPrefixProvingKey, AggProvingKey},
     prover::{
-        deferral::compute_deferral_merkle_proofs, vm::types::VmProvingKey, AggProver, AppProver,
-        DeferralProver, InternalLayerMetadata,
+        deferral::{compute_deferral_merkle_proofs, DeferralAggProver},
+        vm::types::VmProvingKey,
+        AggProver, AppProver, InternalLayerMetadata,
     },
     DeferralInput, StdIn, SC,
 };
@@ -33,12 +32,7 @@ where
 {
     pub app_prover: AppProver<E, VB>,
     pub agg_prover: Arc<AggProver>,
-    pub def_prover: Option<Arc<DeferralPathProver>>,
-}
-
-pub struct DeferralPathProver {
-    pub deferral_prover: Arc<DeferralProver>,
-    pub agg_prover: Arc<AggProver>,
+    pub def_prover: Option<Arc<DeferralAggProver>>,
 }
 
 impl<E, VB> StarkProver<E, VB>
@@ -52,7 +46,7 @@ where
         app_vm_pk: &VmProvingKey<VB::VmConfig>,
         app_exe: Arc<VmExe<Val<SC>>>,
         agg_prover: Arc<AggProver>,
-        def_prover: Option<Arc<DeferralPathProver>>,
+        def_prover: Option<Arc<DeferralAggProver>>,
     ) -> Result<Self> {
         Ok(Self {
             app_prover: AppProver::new(vm_builder, app_vm_pk, app_exe)?,
@@ -109,10 +103,12 @@ where
             self.agg_prover.prove_vm(continuation_proof)?;
 
         if !def_inputs.is_empty() {
-            let def_prover = self.def_prover.as_ref().unwrap();
-            let def_hook_proofs = def_prover.deferral_prover.prove(def_inputs)?;
+            let def_agg_prover = self.def_prover.as_ref().unwrap();
+            let def_hook_proofs = def_agg_prover
+                .multi_deferral_circuit_prover
+                .prove(def_inputs)?;
             let (def_proof, def_internal_recursive_layer) =
-                def_prover.agg_prover.prove_def(def_hook_proofs)?;
+                def_agg_prover.agg_prover.prove_def(def_hook_proofs)?;
             stark_proof = self.agg_prover.prove_mixed(
                 stark_proof,
                 def_proof,
@@ -182,52 +178,6 @@ where
     }
 
     pub fn app_vm_commit(&self) -> Digest {
-        self.agg_prover.vm_or_hook_commit()
-    }
-}
-
-impl DeferralPathProver {
-    pub fn get_pk(&self) -> AggProvingKey {
-        AggProvingKey {
-            prefix: AggPrefixProvingKey {
-                leaf: self.agg_prover.leaf_prover.get_pk(),
-                internal_for_leaf: self.agg_prover.internal_for_leaf_prover.get_pk(),
-            },
-            internal_recursive: self.agg_prover.internal_recursive_prover.get_pk(),
-        }
-    }
-
-    pub fn new(agg_config: AggregationConfig, deferral_prover: Arc<DeferralProver>) -> Self {
-        let agg_prover = AggProver::new(
-            deferral_prover.def_hook_prover.get_vk(),
-            agg_config,
-            AggregationTreeConfig::deferral(),
-            Some(deferral_prover.def_hook_prover.get_cached_commit()),
-        );
-        DeferralPathProver {
-            deferral_prover,
-            agg_prover: Arc::new(agg_prover),
-        }
-    }
-
-    pub fn from_pk(pk: AggProvingKey, deferral_prover: Arc<DeferralProver>) -> DeferralPathProver {
-        let agg_prover = AggProver::from_pk(
-            deferral_prover.def_hook_prover.get_vk(),
-            pk,
-            AggregationTreeConfig::deferral(),
-            Some(deferral_prover.def_hook_prover.get_cached_commit()),
-        );
-        DeferralPathProver {
-            deferral_prover,
-            agg_prover: Arc::new(agg_prover),
-        }
-    }
-
-    pub fn def_hook_cached_commit(&self) -> Digest {
-        self.deferral_prover.def_hook_prover.get_cached_commit()
-    }
-
-    pub fn def_hook_commit(&self) -> Digest {
         self.agg_prover.vm_or_hook_commit()
     }
 }

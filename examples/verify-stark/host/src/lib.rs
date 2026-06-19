@@ -8,7 +8,7 @@ use openvm_sdk::{
     config::{AggregationConfig, AppConfig},
     keygen::SdkCachedProvingKey,
     openvm_circuit::arch::instructions::exe::VmExe,
-    prover::{DeferralPathProver, DeferralProver},
+    prover::{DeferralAggProver, MultiDeferralCircuitProver},
     types::VersionedVmStarkProof,
     DefaultStarkEngine as E, DeferralInput, Sdk, StdIn, F, SC,
 };
@@ -66,7 +66,7 @@ pub fn keygen(
     let app_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let agg_config = AggregationConfig::default();
 
-    let deferral_path_prover = {
+    let deferral_agg_prover = {
         let child_internal_recursive_cached_commit = cached_commit(&child_agg_vk);
         let verify_prover = VerifyProver::new::<E>(
             child_agg_vk,
@@ -78,16 +78,16 @@ pub fn keygen(
             VERIFY_STARK_DEF_IDX,
         );
         let verify_circuit_prover = VerifyCircuitProver::new(verify_prover);
-        let deferral_prover = Arc::new(DeferralProver::new(
+        let multi_deferral_circuit_prover = Arc::new(MultiDeferralCircuitProver::new(
             verify_circuit_prover,
             agg_config.clone(),
             hook_params_with_100_bits_security(),
         ));
-        DeferralPathProver::new(agg_config.clone(), deferral_prover)
+        DeferralAggProver::new(agg_config.clone(), multi_deferral_circuit_prover)
     };
 
-    let deferral_config = deferral_path_prover
-        .deferral_prover
+    let deferral_config = deferral_agg_prover
+        .multi_deferral_circuit_prover
         .make_config(vec![SupportedDeferral::VerifyStark]);
     let vm_config = SdkVmConfig::builder()
         .system(Default::default())
@@ -101,7 +101,7 @@ pub fn keygen(
     let sdk = Sdk::builder()
         .app_config(AppConfig::new(vm_config.clone(), app_params))
         .agg_params(agg_config.params)
-        .deferral_path_prover(deferral_path_prover)
+        .deferral_agg_prover(deferral_agg_prover)
         .build()?;
     let _ = sdk.app_keygen();
     let _ = sdk.agg_pk();

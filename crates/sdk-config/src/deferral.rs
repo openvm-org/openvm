@@ -11,7 +11,7 @@ pub enum SupportedDeferral {
     Other(String),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DeferralCircuitConfig {
     pub def_type: SupportedDeferral,
     pub commit: CommitBytes,

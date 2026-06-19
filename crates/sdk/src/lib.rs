@@ -45,7 +45,7 @@ use openvm_verify_stark_host::{
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey, SdkCachedProvingKey},
-    prover::{AggProver, AppProver, DeferralPathProver, StarkProver},
+    prover::{AggProver, AppProver, DeferralAggProver, StarkProver},
     types::{AppExecutionCommit, ExecutableFormat},
 };
 #[cfg(feature = "evm-prove")]
@@ -152,7 +152,7 @@ where
     #[cfg(feature = "root-prover")]
     root_prover: OnceLock<Arc<RootProver>>,
 
-    def_path_prover: Option<Arc<DeferralPathProver>>,
+    def_agg_prover: Option<Arc<DeferralAggProver>>,
 
     #[cfg(feature = "evm-prove")]
     #[getset(get = "pub")]
@@ -238,14 +238,14 @@ where
 
     /// Returns the def_hook_prover cached commit.
     pub fn def_hook_cached_commit(&self) -> Option<Digest> {
-        self.def_path_prover
+        self.def_agg_prover
             .as_ref()
             .map(|p| p.def_hook_cached_commit())
     }
 
     /// Returns the deferral hook commit derived from the deferral aggregation path.
     pub fn def_hook_commit(&self) -> Option<Digest> {
-        self.def_path_prover.as_ref().map(|p| p.def_hook_commit())
+        self.def_agg_prover.as_ref().map(|p| p.def_hook_commit())
     }
 
     /// Returns serde-serializable proving keys for this SDK.
@@ -275,13 +275,13 @@ where
                 internal_recursive: agg_prover.internal_recursive_prover.get_pk(),
             },
             deferral_pk: self
-                .def_path_prover
+                .def_agg_prover
                 .as_ref()
-                .map(|def_path_prover| def_path_prover.deferral_prover.get_pk()),
+                .map(|def_agg_prover| def_agg_prover.multi_deferral_circuit_prover.get_pk()),
             deferral_agg_pk: self
-                .def_path_prover
+                .def_agg_prover
                 .as_ref()
-                .map(|def_path_prover| def_path_prover.get_pk()),
+                .map(|def_agg_prover| def_agg_prover.get_pk()),
             #[cfg(feature = "root-prover")]
             root_pk: self.root_prover.get().map(|root_prover| RootProvingKey {
                 root_pk: root_prover.0.get_pk(),
@@ -507,7 +507,7 @@ where
             &app_pk.app_vm_pk,
             app_exe,
             self.agg_prover(),
-            self.def_path_prover.clone(),
+            self.def_agg_prover.clone(),
         )?;
         Ok(stark_prover)
     }
@@ -526,7 +526,7 @@ where
             &app_pk.app_vm_pk,
             app_exe,
             self.agg_prover(),
-            self.def_path_prover.clone(),
+            self.def_agg_prover.clone(),
             self.root_prover(),
             #[cfg(feature = "evm-prove")]
             None,
@@ -581,7 +581,7 @@ where
                     &app_pk.app_vm_pk,
                     agg_prover.clone(),
                     root_params.clone(),
-                    self.def_path_prover.clone(),
+                    self.def_agg_prover.clone(),
                 )
                 .expect("Trace heights did not generate properly");
 
@@ -622,7 +622,7 @@ where
                     self.app_vm_builder.clone(),
                     &self.app_pk().app_vm_pk,
                     agg_prover.clone(),
-                    self.def_path_prover.clone(),
+                    self.def_agg_prover.clone(),
                     root_prover,
                 );
 

@@ -29,7 +29,7 @@ use tracing::info_span;
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},
     keygen::AppProvingKey,
-    prover::{AggProver, DeferralPathProver, StarkProver},
+    prover::{AggProver, DeferralAggProver, StarkProver},
     StdIn,
 };
 
@@ -164,7 +164,7 @@ pub fn compute_root_proof_heights(
     agg_params: AggregationSystemParams,
     agg_tree_config: AggregationTreeConfig,
     root_params: SystemParams,
-    def_prover: Option<Arc<DeferralPathProver>>,
+    def_prover: Option<Arc<DeferralAggProver>>,
 ) -> Result<Vec<usize>> {
     let dummy_program = Program::<F>::from_instructions(&[Instruction::from_isize(
         SystemOpcode::TERMINATE.global_opcode(),

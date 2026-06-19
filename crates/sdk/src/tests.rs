@@ -21,7 +21,7 @@ use openvm_verify_stark_host::{
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AppConfig, DEFAULT_APP_L_SKIP},
-    prover::{DeferralPathProver, DeferralProof, DeferralProver},
+    prover::{DeferralAggProver, DeferralProof, MultiDeferralCircuitProver},
     DeferralInput, Sdk, StdIn,
 };
 
@@ -87,13 +87,13 @@ fn make_verify_stark_circuit_prover(
     VerifyCircuitProver::new(deferred_verify_prover)
 }
 
-/// Builds a DeferralProver from a base SDK with `num_deferral_circuits` copies of the
+/// Builds a MultiDeferralCircuitProver from a base SDK with `num_deferral_circuits` copies of the
 /// verify-stark deferral circuit.
-fn make_deferral_prover_with_count(
+fn make_multi_deferral_circuit_prover_with_count(
     sdk: &Sdk,
     agg_params: &AggregationSystemParams,
     num_deferral_circuits: usize,
-) -> DeferralProver {
+) -> MultiDeferralCircuitProver {
     assert!(num_deferral_circuits > 0);
     let def_circuit_params = internal_params_with_100_bits_security();
     let verify_stark_prover = make_verify_stark_circuit_prover(sdk, def_circuit_params.clone(), 0);
@@ -101,15 +101,14 @@ fn make_deferral_prover_with_count(
     let agg_config = AggregationConfig {
         params: agg_params.clone(),
     };
-    let mut deferral_prover = DeferralProver::new(verify_stark_prover, agg_config, hook_params);
+    let mut multi_deferral_circuit_prover =
+        MultiDeferralCircuitProver::new(verify_stark_prover, agg_config, hook_params);
     for def_idx in 1..num_deferral_circuits {
-        deferral_prover = deferral_prover.with_prover(make_verify_stark_circuit_prover(
-            sdk,
-            def_circuit_params.clone(),
-            def_idx,
-        ));
+        multi_deferral_circuit_prover = multi_deferral_circuit_prover.with_prover(
+            make_verify_stark_circuit_prover(sdk, def_circuit_params.clone(), def_idx),
+        );
     }
-    deferral_prover
+    multi_deferral_circuit_prover
 }
 
 /// Builds a deferral-enabled riscv32 SDK whose App VM inventory includes the
@@ -128,10 +127,10 @@ fn make_deferral_enabled_sdk_with_count(
     agg_params: AggregationSystemParams,
     num_deferral_circuits: usize,
 ) -> Result<Sdk> {
-    let deferral_prover =
-        make_deferral_prover_with_count(fib_sdk, &agg_params, num_deferral_circuits);
+    let multi_deferral_circuit_prover =
+        make_multi_deferral_circuit_prover_with_count(fib_sdk, &agg_params, num_deferral_circuits);
     let supported_deferrals = vec![SupportedDeferral::VerifyStark; num_deferral_circuits];
-    let deferral_config = deferral_prover.make_config(supported_deferrals);
+    let deferral_config = multi_deferral_circuit_prover.make_config(supported_deferrals);
 
     let mut vm_config = openvm_sdk_config::SdkVmConfig::riscv32();
     vm_config.deferral = Some(deferral_config);
@@ -139,7 +138,7 @@ fn make_deferral_enabled_sdk_with_count(
     Ok(Sdk::builder()
         .app_config(AppConfig::new(vm_config, app_params))
         .agg_params(agg_params)
-        .deferral_prover(deferral_prover)
+        .multi_deferral_circuit_prover(multi_deferral_circuit_prover)
         .build()?)
 }
 
@@ -151,21 +150,21 @@ fn make_verify_stark_path_sdk(
     let memory_dimensions = vm_config.system.config.memory_config.memory_dimensions();
     let num_user_pvs = vm_config.system.config.num_public_values;
 
-    let deferral_path_prover = DeferralPathProver::verify_stark(
+    let deferral_agg_prover = DeferralAggProver::verify_stark(
         &agg_params,
         hook_params_with_100_bits_security(),
         memory_dimensions,
         num_user_pvs,
     );
-    let deferral_config = deferral_path_prover
-        .deferral_prover
+    let deferral_config = deferral_agg_prover
+        .multi_deferral_circuit_prover
         .make_config(vec![SupportedDeferral::VerifyStark]);
     vm_config.deferral = Some(deferral_config);
 
     Ok(Sdk::builder()
         .app_config(AppConfig::new(vm_config, app_params))
         .agg_params(agg_params)
-        .deferral_path_prover(deferral_path_prover)
+        .deferral_agg_prover(deferral_agg_prover)
         .build()?)
 }
 
@@ -479,8 +478,10 @@ fn test_prove_mixed_vm_def_depth_mismatch() -> Result<()> {
     // internal_recursive layer is needed to fully aggregate its proof.
     assert_eq!(internal_layer_metadata.internal_recursive_layer, 1);
 
-    let def_prover = vs_sdk.def_path_prover.unwrap();
-    let def_hook_proofs = def_prover.deferral_prover.prove(&[def_input])?;
+    let def_prover = vs_sdk.def_agg_prover.unwrap();
+    let def_hook_proofs = def_prover
+        .multi_deferral_circuit_prover
+        .prove(&[def_input])?;
     let (def_proof, mut def_internal_recursive_layer) =
         def_prover.agg_prover.prove_def(def_hook_proofs)?;
     assert_eq!(def_internal_recursive_layer, 1);

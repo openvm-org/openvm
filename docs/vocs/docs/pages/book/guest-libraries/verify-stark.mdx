@@ -55,17 +55,17 @@ These vectors are aligned by index.
 
 It is **highly** recommended that guest programs that use deferrals are proved using the SDK.
 
-For verify-stark recursion, the simplest setup is `DeferralPathProver::verify_stark`, which derives the deferral-enabled internal-recursive verifying key and self-referential `def_hook_commit` needed to verify proofs from the same SDK, including proofs that themselves carry deferrals:
+For verify-stark recursion, the simplest setup is `DeferralAggProver::verify_stark`, which derives the deferral-enabled internal-recursive verifying key and self-referential `def_hook_commit` needed to verify proofs from the same SDK, including proofs that themselves carry deferrals:
 
 ```rust
-let deferral_path_prover = DeferralPathProver::verify_stark(
+let deferral_agg_prover = DeferralAggProver::verify_stark(
     &agg_params,
     hook_params,
     memory_dimensions,
     num_user_pvs,
 );
-let deferral_ext = deferral_path_prover
-    .deferral_prover
+let deferral_ext = deferral_agg_prover
+    .multi_deferral_circuit_prover
     .make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
 
 let mut vm_config = SdkVmConfig::riscv32();
@@ -74,16 +74,16 @@ vm_config.deferral = Some(deferral_ext);
 let sdk = CpuSdk::builder()
     .app_config(AppConfig::new(vm_config, app_params))
     .agg_params(agg_params)
-    .deferral_path_prover(deferral_path_prover)
+    .deferral_agg_prover(deferral_agg_prover)
     .build()?;
 ```
 
 The lower-level manual flow is:
 
-1. Build a `DeferralProver` whose single-circuit prover is a `DeferredVerifyCircuitProver`.
+1. Build a `MultiDeferralCircuitProver` whose single-circuit prover is a `DeferredVerifyCircuitProver`.
 2. Create the extension with `make_extension`, passing the deferral function(s).
 3. Set `SdkVmConfig.deferral = Some(deferral_ext)`.
-4. Build your SDK with `Sdk::builder().deferral_prover(deferral_prover)`.
+4. Build your SDK with `Sdk::builder().multi_deferral_circuit_prover(multi_deferral_circuit_prover)`.
 
 For example, to initialize the SDK with the `verify-stark` deferral circuit:
 
@@ -100,9 +100,9 @@ let deferred_verify_prover = DeferredVerifyCpuProver::new::<E>(
 );
 let verify_stark_prover = DeferredVerifyCpuCircuitProver::new(deferred_verify_prover);
 
-let deferral_prover = DeferralProver::new(verify_stark_prover, agg_config, hook_params);
+let multi_deferral_circuit_prover = MultiDeferralCircuitProver::new(verify_stark_prover, agg_config, hook_params);
 let deferral_ext =
-    deferral_prover.make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
+    multi_deferral_circuit_prover.make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
 
 let mut vm_config = SdkVmConfig::riscv32();
 vm_config.deferral = Some(deferral_ext);
@@ -110,10 +110,10 @@ vm_config.deferral = Some(deferral_ext);
 let sdk = CpuSdk::builder()
     .app_config(AppConfig::new(vm_config, app_params))
     .agg_params(agg_params)
-    .deferral_prover(deferral_prover)
+    .multi_deferral_circuit_prover(multi_deferral_circuit_prover)
     .build()?;
 ```
 
-Passing `None` to `DeferredVerify*Prover::new(..., None, def_idx)` means that child proofs are asserted to be non-deferral proofs, i.e. they must not expose deferral public values or deferral Merkle proofs. To enable nested verification of deferral-enabled child proofs, pass `Some(expected_def_hook_commit)` instead. The `DeferralPathProver::verify_stark` constructor computes this value for the self-recursive SDK case.
+Passing `None` to `DeferredVerify*Prover::new(..., None, def_idx)` means that child proofs are asserted to be non-deferral proofs, i.e. they must not expose deferral public values or deferral Merkle proofs. To enable nested verification of deferral-enabled child proofs, pass `Some(expected_def_hook_commit)` instead. The `DeferralAggProver::verify_stark` constructor computes this value for the self-recursive SDK case.
 
 Each guest call using `DEF_IDX` corresponds to the deferral circuit inserted at `DEF_IDX`. If there is exactly one deferral function registered (as above), `DEF_IDX = 0`.
