@@ -1,16 +1,19 @@
 use std::sync::Arc;
 
+use eyre::{eyre, Result};
 use openvm_circuit::system::memory::dimensions::MemoryDimensions;
 use openvm_continuations::{
     circuit::deferral::dummy::dummy_deferral_circuit_vk,
     prover::{DeferralCircuitProver, DeferralCircuitProverKey},
     SC,
 };
+use openvm_sdk_config::deferral::{DeferralConfig, SupportedDeferral};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof, SystemParams};
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
-    prover::{AggProver, DeferralPathProver, DeferralProver},
+    keygen::{AggProvingKey, DeferralCircuitProvingKey, DeferralProvingKey},
+    prover::{AggProver, DeferralPathProver, DeferralProver, SingleDefCircuitProver},
 };
 
 cfg_if::cfg_if! {
@@ -26,6 +29,69 @@ cfg_if::cfg_if! {
 }
 
 impl DeferralPathProver {
+    pub(crate) fn from_supported_deferral_pks(
+        deferral_config: &DeferralConfig,
+        deferral_pk: DeferralProvingKey,
+        deferral_agg_pk: AggProvingKey,
+    ) -> Result<Self> {
+        if deferral_config.circuits.len() != deferral_pk.circuits.len() {
+            return Err(eyre!(
+                "cached deferral proving key circuit count does not match app VM deferral config"
+            ));
+        }
+
+        let mut deferral_circuit_pks = deferral_pk.circuits.into_iter();
+        let first_config = deferral_config
+            .circuits
+            .first()
+            .ok_or_else(|| eyre!("app VM deferral config has no circuits"))?;
+        let first_pk = deferral_circuit_pks
+            .next()
+            .ok_or_else(|| eyre!("cached deferral proving key has no circuits"))?;
+        let mut deferral_prover = DeferralProver::from_single_circuit_pks(
+            Self::supported_deferral_circuit_prover_from_pk(&first_config.def_type, first_pk)?,
+            deferral_pk.def_internal_recursive_pk,
+            deferral_pk.def_hook_pk,
+        );
+
+        for (config, circuit_pk) in deferral_config
+            .circuits
+            .iter()
+            .skip(1)
+            .zip(deferral_circuit_pks)
+        {
+            deferral_prover = deferral_prover.with_single_circuit_prover(
+                Self::supported_deferral_circuit_prover_from_pk(&config.def_type, circuit_pk)?,
+            );
+        }
+
+        Ok(DeferralPathProver::from_pk(
+            deferral_agg_pk,
+            Arc::new(deferral_prover),
+        ))
+    }
+
+    fn supported_deferral_circuit_prover_from_pk(
+        def_type: &SupportedDeferral,
+        circuit_pk: DeferralCircuitProvingKey,
+    ) -> Result<SingleDefCircuitProver> {
+        match def_type {
+            SupportedDeferral::VerifyStark => {
+                let verify_circuit_pk = circuit_pk.def_circuit_pk.as_ref().clone();
+                let verify_circuit_prover =
+                    <VerifyCircuitProver as DeferralCircuitProver<SC>>::from_pk(verify_circuit_pk);
+                Ok(SingleDefCircuitProver::from_pks(
+                    verify_circuit_prover,
+                    circuit_pk.agg_prefix_pk.leaf,
+                    circuit_pk.agg_prefix_pk.internal_for_leaf,
+                ))
+            }
+            SupportedDeferral::Other(name) => Err(eyre!(
+                "custom deferral circuit provers need to be manually created for deferral `{name}`"
+            )),
+        }
+    }
+
     /// Builds a [`DeferralPathProver`] backed by the verify-stark circuit, configured so an SDK
     /// with the given params can recursively verify the VM STARK proofs it produces, including its
     /// own deferral-carrying proofs.

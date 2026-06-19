@@ -103,6 +103,19 @@ impl DeferralProver {
             def_prefix_pk.leaf,
             def_prefix_pk.internal_for_leaf,
         );
+        Self::from_single_circuit_pks(
+            single_circuit_prover,
+            def_internal_recursive_pk,
+            def_hook_pk,
+        )
+    }
+
+    pub fn from_single_circuit_pks(
+        single_circuit_prover: SingleDefCircuitProver,
+        def_internal_recursive_pk: Arc<MultiStarkProvingKey<SC>>,
+        def_hook_pk: Arc<MultiStarkProvingKey<SC>>,
+    ) -> Self {
+        assert_eq!(single_circuit_prover.def_circuit_prover.get_def_idx(), 0);
         let internal_recursive_prover = DeferralInnerProver::from_pk::<E>(
             single_circuit_prover.internal_for_leaf_prover.get_vk(),
             def_internal_recursive_pk,
@@ -146,7 +159,7 @@ impl DeferralProver {
     }
 
     pub fn with_prover_from_pk<DP: DeferralCircuitProver<SC> + Send + Sync + 'static>(
-        mut self,
+        self,
         def_circuit_prover: DP,
         def_prefix_pk: AggPrefixProvingKey,
     ) -> Self {
@@ -158,6 +171,17 @@ impl DeferralProver {
             def_circuit_prover,
             def_prefix_pk.leaf,
             def_prefix_pk.internal_for_leaf,
+        );
+        self.with_single_circuit_prover(single_circuit_prover)
+    }
+
+    pub fn with_single_circuit_prover(
+        mut self,
+        single_circuit_prover: SingleDefCircuitProver,
+    ) -> Self {
+        assert_eq!(
+            single_circuit_prover.def_circuit_prover.get_def_idx(),
+            self.single_circuit_provers.len()
         );
         self.single_circuit_provers.push(single_circuit_prover);
         self

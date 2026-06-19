@@ -5,7 +5,7 @@ use std::{
 
 use eyre::eyre;
 use openvm_circuit::arch::{VmBuilder, VmExecutionConfig, VmExecutor};
-use openvm_sdk_config::TranspilerConfig;
+use openvm_sdk_config::{SdkVmConfig, TranspilerConfig};
 use openvm_stark_backend::StarkEngine;
 use openvm_transpiler::transpiler::Transpiler;
 #[cfg(feature = "evm-prove")]
@@ -26,7 +26,7 @@ use {
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},
-    keygen::{AggProvingKey, AppProvingKey},
+    keygen::{AggProvingKey, AppProvingKey, SdkCachedProvingKey},
     prover::{AggProver, DeferralPathProver, DeferralProver},
     GenericSdk, SdkError, F, SC,
 };
@@ -558,5 +558,101 @@ where
     /// Returns a builder for constructing an immutable [`GenericSdk`].
     pub fn builder() -> GenericSdkBuilder<E, VB> {
         GenericSdkBuilder::new()
+    }
+
+    /// Builds an SDK from cached proving keys without deferral prover reconstruction.
+    ///
+    /// This generic constructor requires the cached key to have no deferral proving keys. Use
+    /// `from_deferral_cached_proving_key` for [`SdkVmConfig`] caches that include
+    /// supported deferral provers.
+    pub fn from_cached_proving_key(
+        cached_pk: SdkCachedProvingKey<VB::VmConfig>,
+    ) -> Result<Self, SdkError>
+    where
+        VB: Default,
+        VB::VmConfig: TranspilerConfig<F>,
+    {
+        let SdkCachedProvingKey {
+            app_pk,
+            agg_pk,
+            deferral_pk,
+            deferral_agg_pk,
+            #[cfg(feature = "root-prover")]
+            root_pk,
+        } = cached_pk;
+
+        if deferral_pk.is_some() || deferral_agg_pk.is_some() {
+            return Err(SdkError::Other(eyre!(
+                "generic cached SDK cannot include deferral keys"
+            )));
+        }
+
+        let builder = Self::builder().app_pk(app_pk).agg_pk(agg_pk);
+        #[cfg(feature = "root-prover")]
+        let builder = if let Some(root_pk) = root_pk {
+            builder.root_pk(root_pk)
+        } else {
+            builder
+        };
+
+        builder.build()
+    }
+}
+
+impl<E, VB> GenericSdk<E, VB>
+where
+    E: StarkEngine<SC = SC>,
+    VB: VmBuilder<E, VmConfig = SdkVmConfig>,
+{
+    /// Builds an SDK from proving keys returned by [`GenericSdk::cached_proving_key`].
+    ///
+    /// If the cached key includes deferral proving keys, the SDK reads the app VM deferral config
+    /// to initialize the corresponding supported deferral provers. Custom deferral circuit provers
+    /// must be manually created and supplied through [`GenericSdkBuilder::deferral_path_prover`].
+    pub fn from_deferral_cached_proving_key(
+        cached_pk: SdkCachedProvingKey<SdkVmConfig>,
+    ) -> Result<Self, SdkError>
+    where
+        VB: Default,
+    {
+        let SdkCachedProvingKey {
+            app_pk,
+            agg_pk,
+            deferral_pk,
+            deferral_agg_pk,
+            #[cfg(feature = "root-prover")]
+            root_pk,
+        } = cached_pk;
+
+        let deferral_config = app_pk.app_vm_pk.vm_config.deferral.clone();
+
+        let builder = Self::builder().app_pk(app_pk).agg_pk(agg_pk);
+        #[cfg(feature = "root-prover")]
+        let builder = if let Some(root_pk) = root_pk {
+            builder.root_pk(root_pk)
+        } else {
+            builder
+        };
+
+        let builder = match (deferral_pk, deferral_agg_pk) {
+            (Some(deferral_pk), Some(deferral_agg_pk)) => {
+                let deferral_config = deferral_config.ok_or_else(|| {
+                    SdkError::Other(eyre!("cached deferral keys require a deferral config"))
+                })?;
+                builder.deferral_path_prover(DeferralPathProver::from_supported_deferral_pks(
+                    &deferral_config,
+                    deferral_pk,
+                    deferral_agg_pk,
+                )?)
+            }
+            (None, None) => builder,
+            _ => {
+                return Err(SdkError::Other(eyre!(
+                    "cached deferral keys are incomplete"
+                )));
+            }
+        };
+
+        builder.build()
     }
 }

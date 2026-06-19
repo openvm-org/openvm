@@ -2,7 +2,7 @@ use std::{path::PathBuf, slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm_build::GuestOptions;
-use openvm_continuations::{prover::DeferralCircuitProver, CommitBytes};
+use openvm_continuations::CommitBytes;
 use openvm_recursion_circuit::batch_constraint::commit_child_vk;
 use openvm_sdk::{
     config::{AggregationConfig, AppConfig},
@@ -106,39 +106,13 @@ pub fn keygen(
     let _ = sdk.app_keygen();
     let _ = sdk.agg_pk();
     let agg_vk = sdk.agg_vk().as_ref().clone();
-    Ok((sdk.cached_proving_key(), vm_config, agg_vk))
-}
-
-pub fn sdk_from_cache(cached_pk: SdkCachedProvingKey<SdkVmConfig>) -> Result<Sdk> {
-    let app_pk = cached_pk.app_pk.unwrap();
-    let agg_pk: openvm_sdk::keygen::AggProvingKey = cached_pk.agg_pk.unwrap();
-    let deferral_pk = cached_pk.deferral_pk.unwrap();
-    let deferral_agg_pk = cached_pk.deferral_agg_pk.unwrap();
-
-    let verify_stark_pk = &deferral_pk.circuits[VERIFY_STARK_DEF_IDX];
-    let verify_circuit_pk = verify_stark_pk.def_circuit_pk.as_ref().clone();
-    let verify_circuit_prover =
-        <VerifyCircuitProver as DeferralCircuitProver<SC>>::from_pk(verify_circuit_pk);
-    let deferral_prover = Arc::new(DeferralProver::from_pks(
-        verify_circuit_prover,
-        verify_stark_pk.agg_prefix_pk.clone(),
-        deferral_pk.def_internal_recursive_pk.clone(),
-        deferral_pk.def_hook_pk.clone(),
-    ));
-    let deferral_path_prover = DeferralPathProver::from_pk(deferral_agg_pk, deferral_prover);
-
-    let sdk = Sdk::builder()
-        .app_pk(app_pk)
-        .agg_pk(agg_pk)
-        .deferral_path_prover(deferral_path_prover)
-        .build()?;
-    Ok(sdk)
+    Ok((sdk.cached_proving_key()?, vm_config, agg_vk))
 }
 
 pub fn build(
     cached_pk: SdkCachedProvingKey<SdkVmConfig>,
 ) -> Result<(Arc<VmExe<F>>, VerificationBaseline)> {
-    let sdk = sdk_from_cache(cached_pk)?;
+    let sdk = Sdk::from_deferral_cached_proving_key(cached_pk)?;
     let elf = sdk.build(
         GuestOptions::default(),
         verify_stark_guest_dir(),
@@ -158,7 +132,7 @@ pub fn prove(
     child_baseline: VerificationBaseline,
     input_proof: VersionedVmStarkProof,
 ) -> Result<VersionedVmStarkProof> {
-    let sdk = sdk_from_cache(cached_pk)?;
+    let sdk = Sdk::from_deferral_cached_proving_key(cached_pk)?;
     let (stdin, def_input) = verify_stark_guest_inputs(
         &input_proof.try_into()?,
         child_agg_vk.as_ref().clone(),

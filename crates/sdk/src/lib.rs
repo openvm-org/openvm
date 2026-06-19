@@ -248,21 +248,32 @@ where
         self.def_path_prover.as_ref().map(|p| p.def_hook_commit())
     }
 
-    /// Returns the serde-serializable proving keys already cached by this SDK without generating
-    /// missing keys.
+    /// Returns serde-serializable proving keys for this SDK.
+    ///
+    /// This errors if `app_pk` or `agg_pk` have not already been generated or seeded into the SDK.
+    /// Optional keys are returned only if they are already cached or were seeded into the SDK.
     ///
     /// Halo2 proving keys are intentionally excluded; use `write_halo2_pk_to_file` and
     /// `read_halo2_pk_from_file` for those.
-    pub fn cached_proving_key(&self) -> SdkCachedProvingKey<VB::VmConfig> {
-        SdkCachedProvingKey {
-            app_pk: self.app_pk.get().cloned(),
-            agg_pk: self.agg_prover.get().map(|agg_prover| AggProvingKey {
+    pub fn cached_proving_key(&self) -> Result<SdkCachedProvingKey<VB::VmConfig>, SdkError> {
+        let app_pk = self
+            .app_pk
+            .get()
+            .ok_or_else(|| SdkError::Other(eyre::eyre!("app_pk is not generated")))?
+            .clone();
+        let agg_prover = self
+            .agg_prover
+            .get()
+            .ok_or_else(|| SdkError::Other(eyre::eyre!("agg_pk is not generated")))?;
+        Ok(SdkCachedProvingKey {
+            app_pk,
+            agg_pk: AggProvingKey {
                 prefix: AggPrefixProvingKey {
                     leaf: agg_prover.leaf_prover.get_pk(),
                     internal_for_leaf: agg_prover.internal_for_leaf_prover.get_pk(),
                 },
                 internal_recursive: agg_prover.internal_recursive_prover.get_pk(),
-            }),
+            },
             deferral_pk: self
                 .def_path_prover
                 .as_ref()
@@ -276,7 +287,7 @@ where
                 root_pk: root_prover.0.get_pk(),
                 trace_heights: root_prover.0.get_trace_heights().unwrap_or_default(),
             }),
-        }
+        })
     }
 
     /// Builds the guest package located at `pkg_dir`. This function requires that the build target
