@@ -70,16 +70,17 @@ fn base_baby_bear_decomp_bounds() -> &'static BaseBabyBearDecompBounds {
 /// witness-and-verify (hint) approach.
 ///
 /// This helper only computes the decomposition off-circuit and loads the resulting
-/// digits plus top quotient as witnesses. Constraints must be enforced separately.
+/// raw digit cells plus top quotient as witnesses. Constraints must be enforced
+/// separately before the digits are wrapped as `BabyBearWire`s.
 fn load_base_baby_bear_decomposition_witness(
     ctx: &mut Context<Fr>,
     packed: AssignedValue<Fr>,
-) -> ([BabyBearWire; NUM_SAMPLES_PER_WORD], AssignedValue<Fr>) {
+) -> ([AssignedValue<Fr>; NUM_SAMPLES_PER_WORD], AssignedValue<Fr>) {
     let p = BigUint::from(BABY_BEAR_MODULUS_U64);
 
     // Witness: compute digits and top quotient out-of-circuit.
     let mut value = fe_to_biguint(packed.value());
-    let output_digits_big: [BigUint; NUM_SAMPLES_PER_WORD] = array::from_fn(|_| {
+    let digit_witnesses_big: [BigUint; NUM_SAMPLES_PER_WORD] = array::from_fn(|_| {
         let digit = &value % &p;
         value /= &p;
         digit
@@ -87,17 +88,12 @@ fn load_base_baby_bear_decomposition_witness(
     let top_quotient_big = value;
 
     // Load each digit witness.
-    let output_digits = array::from_fn(|idx| {
-        let digit = ctx.load_witness(biguint_to_fe(&output_digits_big[idx]));
-        BabyBearWire {
-            value: digit,
-            max_bits: BABY_BEAR_BITS,
-        }
-    });
+    let digit_witnesses =
+        array::from_fn(|idx| ctx.load_witness(biguint_to_fe(&digit_witnesses_big[idx])));
 
     // Load top quotient witness.
     let top_quotient = ctx.load_witness(biguint_to_fe(&top_quotient_big));
-    (output_digits, top_quotient)
+    (digit_witnesses, top_quotient)
 }
 
 fn constrain_base_baby_bear_decomposition(
@@ -105,15 +101,15 @@ fn constrain_base_baby_bear_decomposition(
     gate: &impl GateInstructions<Fr>,
     range: &impl RangeInstructions<Fr>,
     packed: AssignedValue<Fr>,
-    output_digits: &[BabyBearWire; NUM_SAMPLES_PER_WORD],
+    digit_witnesses: [AssignedValue<Fr>; NUM_SAMPLES_PER_WORD],
     top_quotient: AssignedValue<Fr>,
     bounds: &BaseBabyBearDecompBounds,
-) {
+) -> [BabyBearWire; NUM_SAMPLES_PER_WORD] {
     let p = BigUint::from(BABY_BEAR_MODULUS_U64);
     let one = BigUint::from(1u64);
 
-    for digit in output_digits {
-        range.check_less_than_safe(ctx, digit.value, BABY_BEAR_MODULUS_U64);
+    for &digit in &digit_witnesses {
+        range.check_less_than_safe(ctx, digit, BABY_BEAR_MODULUS_U64);
     }
     let top_quotient_valid =
         range.is_big_less_than_safe(ctx, top_quotient, bounds.top_quotient_max_plus_one.clone());
@@ -122,7 +118,7 @@ fn constrain_base_baby_bear_decomposition(
     // Verify recomposition: lower = sum(digit_i * p^i)
     let lower = gate.inner_product(
         ctx,
-        output_digits.iter().map(|d| d.value),
+        digit_witnesses.iter().copied(),
         iter::successors(Some(one), |power| Some(power * &p))
             .take(NUM_SAMPLES_PER_WORD)
             .map(|power| QuantumCell::Constant(biguint_to_fe(&power))),
@@ -159,6 +155,11 @@ fn constrain_base_baby_bear_decomposition(
     let lower_is_invalid = gate.not(ctx, lower_is_valid);
     let lower_violation = gate.mul(ctx, at_top_boundary, lower_is_invalid);
     gate.assert_is_const(ctx, &lower_violation, &Fr::ZERO);
+
+    digit_witnesses.map(|value| BabyBearWire {
+        value,
+        max_bits: BABY_BEAR_BITS,
+    })
 }
 
 fn decompose_bn254_to_base_baby_bear_digits(
@@ -169,18 +170,16 @@ fn decompose_bn254_to_base_baby_bear_digits(
     let bounds = base_baby_bear_decomp_bounds();
     let range = baby_bear.range();
     let gate = range.gate();
-    let (output_digits, top_quotient) = load_base_baby_bear_decomposition_witness(ctx, packed);
+    let (digit_witnesses, top_quotient) = load_base_baby_bear_decomposition_witness(ctx, packed);
     constrain_base_baby_bear_decomposition(
         ctx,
         gate,
         range,
         packed,
-        &output_digits,
+        digit_witnesses,
         top_quotient,
         bounds,
-    );
-
-    output_digits
+    )
 }
 
 #[derive(Clone, Debug)]
