@@ -25,6 +25,11 @@ pub trait Arena {
     fn current_trace_height(&self) -> usize {
         0
     }
+
+    #[cfg(feature = "metrics")]
+    fn allocated_bytes(&self) -> Option<usize> {
+        None
+    }
 }
 
 /// Given some minimum layout of type `Layout`, the `RecordArena` should allocate a buffer, of
@@ -256,6 +261,11 @@ impl Arena for DenseRecordArena {
 
     fn is_empty(&self) -> bool {
         self.allocated().is_empty()
+    }
+
+    #[cfg(feature = "metrics")]
+    fn allocated_bytes(&self) -> Option<usize> {
+        Some(self.allocated().len())
     }
 }
 

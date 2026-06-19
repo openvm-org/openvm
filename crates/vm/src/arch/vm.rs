@@ -601,7 +601,8 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
-        let ctx = PreflightCtx::new_with_capacity(&capacities, num_insns);
+        let ctx = info_span!("record_arena.alloc")
+            .in_scope(|| PreflightCtx::new_with_capacity(&capacities, num_insns));
 
         let pc = state.pc();
         let memory = TracingMemory::from_image(state.memory);
@@ -831,6 +832,7 @@ where
         self.chip_complex.system.load_program(cached_program_trace);
     }
 
+    #[instrument(name = "vm.transport_init_memory", skip_all)]
     pub fn transport_init_memory_to_device(&mut self, memory: &GuestMemory) {
         self.chip_complex
             .system
