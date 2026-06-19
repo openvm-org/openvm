@@ -166,7 +166,7 @@ fn verify_stark_guest_inputs(
 
 fn cached_commit(child_agg_vk: &Arc<MultiStarkVerifyingKey<SC>>) -> CommitBytes {
     let engine = <E as StarkEngine>::new(child_agg_vk.inner.params.clone());
-    commit_child_vk(&engine, &child_agg_vk, true)
+    commit_child_vk(&engine, child_agg_vk, true)
         .commitment
         .into()
 }
