@@ -89,10 +89,12 @@ pub struct SegmentationCtx {
     checkpoint_instret: u64,
 }
 
-#[cfg_attr(not(feature = "metrics"), allow(dead_code))]
 #[derive(Clone, Copy, Debug)]
 enum SegmentationTrigger {
-    Height { air_id: usize },
+    Height {
+        #[cfg(feature = "metrics")]
+        air_id: usize,
+    },
     Memory,
     Interactions,
 }
@@ -108,7 +110,6 @@ impl SegmentationTrigger {
     }
 }
 
-#[cfg(feature = "metrics")]
 #[derive(Default)]
 struct MeteredCounts {
     /// Rows before power-of-two padding.
@@ -129,14 +130,11 @@ struct MeteredCounts {
     interaction_cells_padding: usize,
 }
 
-#[cfg(feature = "metrics")]
 struct MeteredMemoryBreakdown {
     /// Total selected segment memory estimate.
     total: usize,
     /// Unpadded-row contribution to the selected memory estimate.
     unpadded: usize,
-    /// Padding-row contribution to the selected memory estimate.
-    padding: usize,
 }
 
 impl SegmentationCtx {
@@ -220,7 +218,6 @@ impl SegmentationCtx {
 
     /// Sum padded main trace cells and interaction cells across all chips, splitting main
     /// cells by per-AIR `need_rot`.
-    #[cfg(feature = "metrics")]
     #[inline(always)]
     fn calculate_count_breakdown(&self, trace_heights: &[u32]) -> MeteredCounts {
         debug_assert_eq!(trace_heights.len(), self.params.widths.len());
@@ -298,7 +295,6 @@ impl SegmentationCtx {
         self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells)
     }
 
-    #[cfg(feature = "metrics")]
     #[inline(always)]
     fn calculate_memory_breakdown(&self, counts: &MeteredCounts) -> MeteredMemoryBreakdown {
         let unpadded = self.params.memory_config.estimate(ProvingMemoryCounts::new(
@@ -315,7 +311,6 @@ impl SegmentationCtx {
         MeteredMemoryBreakdown {
             total: total.total,
             unpadded: unpadded.total,
-            padding: total.total - unpadded.total,
         }
     }
 
@@ -392,7 +387,10 @@ impl SegmentationCtx {
                     i,
                     air_name,
                 );
-                return Some(SegmentationTrigger::Height { air_id: i });
+                return Some(SegmentationTrigger::Height {
+                    #[cfg(feature = "metrics")]
+                    air_id: i,
+                });
             }
             let main_cells = padded_height as usize * width;
             if need_rot {
@@ -568,24 +566,17 @@ impl SegmentationCtx {
         });
     }
 
-    /// Calculate trace utilization: ratio of used cells to padded cells (as percentage).
-    /// This measures how efficiently the trace is packed before padding to power of two.
-    /// Note: this is an overestimate because memory-related trace heights are overestimated.
+    /// Calculate memory utilization: ratio of unpadded memory estimate to padded memory estimate.
+    /// This measures how much of the selected proving memory estimate is useful work vs
+    /// power-of-two trace padding. Note: this inherits memory-related trace-height overestimates.
     #[inline(always)]
-    fn calculate_trace_utilization(&self, trace_heights: &[u32]) -> f64 {
-        let (used, padded) = trace_heights
-            .iter()
-            .zip(self.params.widths.iter())
-            .map(|(&height, &width)| {
-                let used = height as usize * width;
-                let padded = next_power_of_two_or_zero(height as usize) * width;
-                (used, padded)
-            })
-            .fold((0, 0), |(u, p), (used, padded)| (u + used, p + padded));
-        if padded == 0 {
+    fn calculate_memory_utilization(&self, trace_heights: &[u32]) -> f64 {
+        let counts = self.calculate_count_breakdown(trace_heights);
+        let memory = self.calculate_memory_breakdown(&counts);
+        if memory.total == 0 {
             0.0
         } else {
-            100.0 * used as f64 / padded as f64
+            100.0 * memory.unpadded as f64 / memory.total as f64
         }
     }
 
@@ -601,12 +592,12 @@ impl SegmentationCtx {
         let (total_memory, main_memory, interaction_memory) =
             self.calculate_total_memory(trace_heights);
         let total_interactions = self.calculate_total_interactions(trace_heights);
-        let utilization = self.calculate_trace_utilization(trace_heights);
+        let utilization = self.calculate_memory_utilization(trace_heights);
 
         let final_marker = if IS_FINAL { " [TERMINATED]" } else { "" };
 
         tracing::info!(
-            "Segment {:3} | instret {:10} | {:8} instructions | {:5} memory ({:5}, {:5}) | {:10} interactions | {:8} max height ({}) | {:.2}% utilization{}",
+            "Segment {:3} | instret {:10} | {:8} instructions | {:5} memory ({:5}, {:5}) | {:10} interactions | {:8} max height ({}) | {:.2}% memory util{}",
             self.segments.len(),
             instret_start,
             num_insns,
@@ -647,11 +638,12 @@ impl SegmentationCtx {
     fn emit_metered_segment_metrics(&self, segment: &str, trace_heights: &[u32]) {
         let counts = self.calculate_count_breakdown(trace_heights);
         let memory = self.calculate_memory_breakdown(&counts);
+        let padding = memory.total - memory.unpadded;
         let labels = [("segment", segment.to_string())];
         metrics::counter!("metered_memory_bytes", &labels).absolute(memory.total as u64);
         metrics::counter!("metered_memory_unpadded_bytes", &labels)
             .absolute(memory.unpadded as u64);
-        metrics::counter!("metered_memory_padding_bytes", &labels).absolute(memory.padding as u64);
+        metrics::counter!("metered_memory_padding_bytes", &labels).absolute(padding as u64);
         metrics::counter!("metered_interaction_memory_overhead_bytes", &labels)
             .absolute(INTERACTION_MEMORY_OVERHEAD as u64);
     }
