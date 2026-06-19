@@ -31,8 +31,10 @@ use openvm_riscv_adapters::{
     Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
     Rv64VecHeapBranchU16AdapterAir, Rv64VecHeapBranchU16AdapterExecutor,
     Rv64VecHeapBranchU16AdapterFiller, Rv64VecHeapU16AdapterAir, Rv64VecHeapU16AdapterExecutor,
+    Rv64VecHeapU16AdapterFiller,
 };
 use openvm_riscv_circuit::Rv64ImCpuProverExt;
+use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::VmRvrExtension;
@@ -100,7 +102,8 @@ impl<F: PrimeField32> VmRvrExtension<F> for Int256 {
     )
 )]
 pub enum Int256Executor {
-    BaseAlu256(Rv64BaseAlu256Executor),
+    AddSub256(Rv64AddSub256Executor),
+    BitwiseLogic256(Rv64BitwiseLogic256Executor),
     LessThan256(Rv64LessThan256Executor),
     BranchEqual256(Rv64BranchEqual256Executor),
     BranchLessThan256(Rv64BranchLessThan256Executor),
@@ -117,11 +120,25 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
-        let alu = Rv64BaseAlu256Executor::new(
+        let add_sub = Rv64AddSub256Executor::new(
+            AluU16AdapterExecutor::new(Rv64VecHeapU16AdapterExecutor::new(byte_ptr_max_bits)),
+            Rv64BaseAlu256Opcode::CLASS_OFFSET,
+        );
+        inventory.add_executor(
+            add_sub,
+            [BaseAluOpcode::ADD, BaseAluOpcode::SUB]
+                .map(|op| Rv64BaseAlu256Opcode(op).global_opcode()),
+        )?;
+
+        let bitwise = Rv64BitwiseLogic256Executor::new(
             AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(byte_ptr_max_bits)),
             Rv64BaseAlu256Opcode::CLASS_OFFSET,
         );
-        inventory.add_executor(alu, Rv64BaseAlu256Opcode::iter().map(|x| x.global_opcode()))?;
+        inventory.add_executor(
+            bitwise,
+            [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
+                .map(|op| Rv64BaseAlu256Opcode(op).global_opcode()),
+        )?;
 
         let lt = Rv64LessThan256Executor::new(
             AluU16AdapterExecutor::new(Rv64VecHeapU16AdapterExecutor::new(byte_ptr_max_bits)),
@@ -210,16 +227,27 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
             }
         };
 
-        let alu = Rv64BaseAlu256Air::new(
+        let add_sub = Rv64AddSub256Air::new(
+            AluU16AdapterAir::new(Rv64VecHeapU16AdapterAir::new(
+                exec_bridge,
+                memory_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            )),
+            AddSubCoreAir::new(range_checker, Rv64BaseAlu256Opcode::CLASS_OFFSET),
+        );
+        inventory.add_air(add_sub);
+
+        let bitwise = Rv64BitwiseLogic256Air::new(
             AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
                 exec_bridge,
                 memory_bridge,
                 range_checker,
                 byte_ptr_max_bits,
             )),
-            BaseAluCoreAir::new(bitwise_lu, Rv64BaseAlu256Opcode::CLASS_OFFSET),
+            BitwiseLogicCoreAir::new(bitwise_lu, Rv64BaseAlu256Opcode::CLASS_OFFSET),
         );
-        inventory.add_air(alu);
+        inventory.add_air(bitwise);
 
         let lt = Rv64LessThan256Air::new(
             AluU16AdapterAir::new(Rv64VecHeapU16AdapterAir::new(
@@ -337,16 +365,27 @@ where
             }
         };
 
-        inventory.next_air::<Rv64BaseAlu256Air>()?;
-        let alu = Rv64BaseAlu256Chip::new(
-            BaseAluFiller::new(
+        inventory.next_air::<Rv64AddSub256Air>()?;
+        let add_sub = Rv64AddSub256Chip::new(
+            AddSubFiller::new(
+                Rv64VecHeapU16AdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                range_checker.clone(),
+                Rv64BaseAlu256Opcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(add_sub);
+
+        inventory.next_air::<Rv64BitwiseLogic256Air>()?;
+        let bitwise = Rv64BitwiseLogic256Chip::new(
+            BitwiseLogicFiller::new(
                 Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 bitwise_lu.clone(),
                 Rv64BaseAlu256Opcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(alu);
+        inventory.add_executor_chip(bitwise);
 
         inventory.next_air::<Rv64LessThan256Air>()?;
         let lt = Rv64LessThan256Chip::new(

@@ -17,16 +17,18 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64BaseAluAir =
-    VmAirWrapper<Rv64BaseAluAdapterAir, BaseAluCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>;
-pub type Rv64BaseAluExecutor = BaseAluExecutor<
+pub type Rv64BitwiseLogicAir = VmAirWrapper<
+    Rv64BaseAluAdapterAir,
+    BitwiseLogicCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+>;
+pub type Rv64BitwiseLogicExecutor = BitwiseLogicExecutor<
     Rv64BaseAluAdapterExecutor<RV64_BYTE_BITS>,
     RV64_REGISTER_NUM_LIMBS,
     RV64_BYTE_BITS,
 >;
-pub type Rv64BaseAluChip<F> = VmChipWrapper<
+pub type Rv64BitwiseLogicChip<F> = VmChipWrapper<
     F,
-    BaseAluFiller<
+    BitwiseLogicFiller<
         Rv64BaseAluAdapterFiller<RV64_BYTE_BITS>,
         RV64_REGISTER_NUM_LIMBS,
         RV64_BYTE_BITS,
