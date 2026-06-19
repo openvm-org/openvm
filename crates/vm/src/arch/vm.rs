@@ -601,8 +601,7 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
-        let ctx = info_span!("record_arena.alloc")
-            .in_scope(|| PreflightCtx::new_with_capacity(&capacities, num_insns));
+        let ctx = PreflightCtx::new_with_capacity(&capacities, num_insns);
 
         let pc = state.pc();
         let memory = TracingMemory::from_image(state.memory);

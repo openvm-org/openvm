@@ -432,15 +432,26 @@ impl AggregateMetrics {
 
         let metric_names = metric_names.to_vec();
         for (group_name, summaries) in self.to_vec() {
-            writeln!(writer, "| {group_name} |||||")?;
-            writeln!(writer, "|:---|---:|---:|---:|---:|")?;
-            writeln!(writer, "|metric|avg|sum|max|min|")?;
+            if group_name.contains("keygen") {
+                continue;
+            }
 
             let names: Vec<&str> = if metric_names.is_empty() {
                 summaries.keys().map(|s| s.as_str()).collect()
             } else {
                 metric_names.clone()
             };
+            let names: Vec<&str> = names
+                .into_iter()
+                .filter(|name| summaries.contains_key(*name))
+                .collect();
+            if names.is_empty() {
+                continue;
+            }
+
+            writeln!(writer, "| {group_name} |||||")?;
+            writeln!(writer, "|:---|---:|---:|---:|---:|")?;
+            writeln!(writer, "|metric|avg|sum|max|min|")?;
 
             // Group metrics by phase
             let get_phase = |name: &str| -> Option<&str> {
@@ -648,7 +659,6 @@ pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
 pub const EXECUTE_METERED_INSN_MI_S_LABEL: &str = "execute_metered_insn_mi/s";
 pub const EXECUTE_PREFLIGHT_TIME_LABEL: &str = "execute_preflight_time_ms";
 pub const EXECUTE_PREFLIGHT_INSN_MI_S_LABEL: &str = "execute_preflight_insn_mi/s";
-pub const RECORD_ARENA_ALLOC_TIME_LABEL: &str = "record_arena.alloc_time_ms";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
 pub const GENERATE_BLOB_TIME_LABEL: &str = "generate_blob_total_time_ms";
 pub const MEM_FIN_TIME_LABEL: &str = "memory_finalize_time_ms";
@@ -671,7 +681,6 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     EXECUTE_PREFLIGHT_INSNS_LABEL,
     EXECUTE_PREFLIGHT_TIME_LABEL,
     EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
-    RECORD_ARENA_ALLOC_TIME_LABEL,
     TRACE_GEN_TIME_LABEL,
     GENERATE_BLOB_TIME_LABEL,
     MEM_FIN_TIME_LABEL,
