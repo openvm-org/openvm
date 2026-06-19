@@ -6805,7 +6805,6 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-static-verifier",
- "openvm-toolchain-tests",
  "openvm-transpiler",
  "openvm-verify-stark-circuit",
  "openvm-verify-stark-host",
