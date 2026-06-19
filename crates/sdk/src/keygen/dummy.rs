@@ -75,6 +75,7 @@ where
         agg_prover.clone(),
         def_prover,
     )?;
+    stark_prover.set_program_name("root_keygen");
     let (agg_proof, _) = stark_prover.prove(StdIn::default(), &[])?;
 
     let root_prover = RootInnerProver::new::<RootE>(
@@ -140,6 +141,7 @@ where
         None,
     )
     .expect("Failed to create dummy EVM prover");
+    evm_prover.stark_prover.set_program_name("halo2_keygen");
 
     evm_prover
         .prove_root(StdIn::default(), &[])
