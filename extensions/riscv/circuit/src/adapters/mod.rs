@@ -20,6 +20,7 @@ use openvm_stark_backend::{
 mod alu;
 mod alu_u16;
 mod alu_w;
+mod alu_w_u16;
 mod branch;
 mod jalr;
 mod loadstore;
@@ -30,6 +31,7 @@ mod rdwrite;
 pub use alu::*;
 pub use alu_u16::*;
 pub use alu_w::*;
+pub use alu_w_u16::*;
 pub use branch::*;
 pub use jalr::*;
 pub use loadstore::*;
@@ -44,6 +46,9 @@ pub use rdwrite::*;
 pub const RV64_PTR_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 /// Bit width covered by [`RV64_PTR_U16_LIMBS`].
 pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
+/// Number of u16 limbs in a 32-bit RV64 word (e.g. an `ADDW`/`SUBW` operand, or one half of a
+/// register). Numerically equal to [`RV64_PTR_U16_LIMBS`], but named for arithmetic-word use.
+pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 
 /// Packs two little-endian u8 limbs into one u16-shaped field element.
 #[inline(always)]
@@ -72,6 +77,27 @@ where
         high[0].clone().into(),
         high[1].clone().into(),
     ]
+}
+
+/// Concatenates the low-word u16 limbs with the upper u16 limbs into a full RV64 register block.
+/// Unlike [`pack_rv64_u16_block`], the low word is already u16-celled, so no byte packing occurs.
+#[inline(always)]
+pub fn concat_rv64_u16_block<L, H, T>(
+    low_word: &[L; RV64_WORD_U16_LIMBS],
+    high: &[H; RV64_WORD_U16_LIMBS],
+) -> [T; BLOCK_FE_WIDTH]
+where
+    L: Clone + Into<T>,
+    H: Clone + Into<T>,
+    T: PrimeCharacteristicRing,
+{
+    std::array::from_fn(|i| {
+        if i < RV64_WORD_U16_LIMBS {
+            low_word[i].clone().into()
+        } else {
+            high[i - RV64_WORD_U16_LIMBS].clone().into()
+        }
+    })
 }
 
 #[inline(always)]

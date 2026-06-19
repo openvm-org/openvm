@@ -32,9 +32,10 @@ use openvm_riscv_adapters::{
     Rv64VecHeapU16AdapterAir, Rv64VecHeapU16AdapterExecutor, Rv64VecHeapU16AdapterFiller,
 };
 use openvm_riscv_circuit::{
-    adapters::RV_B_TYPE_IMM_BITS, BaseAluCoreAir, BaseAluFiller, BranchEqualCoreAir,
-    BranchEqualFiller, BranchLessThanCoreAir, BranchLessThanFiller, LessThanCoreAir,
-    LessThanFiller, MultiplicationCoreAir, MultiplicationFiller, ShiftCoreAir, ShiftFiller,
+    adapters::RV_B_TYPE_IMM_BITS, AddSubCoreAir, AddSubFiller, BitwiseLogicCoreAir,
+    BitwiseLogicFiller, BranchEqualCoreAir, BranchEqualFiller, BranchLessThanCoreAir,
+    BranchLessThanFiller, LessThanCoreAir, LessThanFiller, MultiplicationCoreAir,
+    MultiplicationFiller, ShiftCoreAir, ShiftFiller,
 };
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
@@ -46,7 +47,8 @@ use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
     crate::{
-        BaseAlu256AdapterRecord, BaseAlu256ChipGpu, BaseAlu256CoreRecord,
+        AddSub256AdapterRecord, AddSub256ChipGpu, AddSub256CoreRecord,
+        BitwiseLogic256AdapterRecord, BitwiseLogic256ChipGpu, BitwiseLogic256CoreRecord,
         BranchEqual256AdapterRecord, BranchEqual256ChipGpu, BranchEqual256CoreRecord,
         BranchLessThan256AdapterRecord, BranchLessThan256ChipGpu, BranchLessThan256CoreRecord,
         LessThan256AdapterRecord, LessThan256ChipGpu, LessThan256CoreRecord,
@@ -65,7 +67,8 @@ use {
 
 use crate::{
     AluAdapterAir, AluAdapterExecutor, AluU16AdapterAir, AluU16AdapterExecutor, BranchAdapterAir,
-    BranchAdapterExecutor, Rv64BaseAlu256Air, Rv64BaseAlu256Chip, Rv64BaseAlu256Executor,
+    BranchAdapterExecutor, Rv64AddSub256Air, Rv64AddSub256Chip, Rv64AddSub256Executor,
+    Rv64BitwiseLogic256Air, Rv64BitwiseLogic256Chip, Rv64BitwiseLogic256Executor,
     Rv64BranchEqual256Air, Rv64BranchEqual256Chip, Rv64BranchEqual256Executor,
     Rv64BranchLessThan256Air, Rv64BranchLessThan256Chip, Rv64BranchLessThan256Executor,
     Rv64LessThan256Air, Rv64LessThan256Chip, Rv64LessThan256Executor, Rv64Multiplication256Air,
@@ -81,7 +84,42 @@ const RANGE_TUPLE_SIZES: [u32; 2] = [
     (INT256_NUM_U8_LIMBS * (1 << RV64_BYTE_BITS)) as u32,
 ];
 
-fn create_alu_harness_fields(
+fn create_add_sub_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    range_checker_chip: SharedVariableRangeCheckerChip,
+    memory_helper: SharedMemoryHelper<F>,
+    address_bits: usize,
+) -> (
+    Rv64AddSub256Air,
+    Rv64AddSub256Executor,
+    Rv64AddSub256Chip<F>,
+) {
+    let air = Rv64AddSub256Air::new(
+        AluU16AdapterAir::new(Rv64VecHeapU16AdapterAir::new(
+            execution_bridge,
+            memory_bridge,
+            range_checker_chip.bus(),
+            address_bits,
+        )),
+        AddSubCoreAir::new(range_checker_chip.bus(), Rv64BaseAlu256Opcode::CLASS_OFFSET),
+    );
+    let executor = Rv64AddSub256Executor::new(
+        AluU16AdapterExecutor::new(Rv64VecHeapU16AdapterExecutor::new(address_bits)),
+        Rv64BaseAlu256Opcode::CLASS_OFFSET,
+    );
+    let chip = Rv64AddSub256Chip::new(
+        AddSubFiller::new(
+            Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
+            range_checker_chip,
+            Rv64BaseAlu256Opcode::CLASS_OFFSET,
+        ),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_bitwise_logic_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
@@ -89,25 +127,25 @@ fn create_alu_harness_fields(
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
-    Rv64BaseAlu256Air,
-    Rv64BaseAlu256Executor,
-    Rv64BaseAlu256Chip<F>,
+    Rv64BitwiseLogic256Air,
+    Rv64BitwiseLogic256Executor,
+    Rv64BitwiseLogic256Chip<F>,
 ) {
-    let air = Rv64BaseAlu256Air::new(
+    let air = Rv64BitwiseLogic256Air::new(
         AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
             execution_bridge,
             memory_bridge,
             range_checker_chip.bus(),
             address_bits,
         )),
-        BaseAluCoreAir::new(bitwise_chip.bus(), Rv64BaseAlu256Opcode::CLASS_OFFSET),
+        BitwiseLogicCoreAir::new(bitwise_chip.bus(), Rv64BaseAlu256Opcode::CLASS_OFFSET),
     );
-    let executor = Rv64BaseAlu256Executor::new(
+    let executor = Rv64BitwiseLogic256Executor::new(
         AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(address_bits)),
         Rv64BaseAlu256Opcode::CLASS_OFFSET,
     );
-    let chip = Rv64BaseAlu256Chip::new(
-        BaseAluFiller::new(
+    let chip = Rv64BitwiseLogic256Chip::new(
+        BitwiseLogicFiller::new(
             Rv64VecHeapAdapterFiller::new(address_bits, range_checker_chip),
             bitwise_chip,
             Rv64BaseAlu256Opcode::CLASS_OFFSET,
@@ -392,10 +430,7 @@ fn set_and_execute_rand<RA: Arena, E: PreflightExecutor<F, RA>>(
 
 #[test_case(BaseAluOpcode::ADD, 24)]
 #[test_case(BaseAluOpcode::SUB, 24)]
-#[test_case(BaseAluOpcode::XOR, 24)]
-#[test_case(BaseAluOpcode::OR, 24)]
-#[test_case(BaseAluOpcode::AND, 24)]
-fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
+fn run_add_sub_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let offset = Rv64BaseAlu256Opcode::CLASS_OFFSET;
@@ -405,7 +440,47 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
         bitwise_bus,
     ));
 
-    let (air, executor, chip) = create_alu_harness_fields(
+    let (air, executor, chip) = create_add_sub_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        tester.range_checker(),
+        tester.memory_helper(),
+        tester.address_bits(),
+    );
+    let mut harness = TestChipHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+
+    for _ in 0..num_ops {
+        set_and_execute_rand(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            opcode.local_usize() + offset,
+            None,
+        );
+    }
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery((bitwise_chip.air, bitwise_chip))
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test_case(BaseAluOpcode::XOR, 24)]
+#[test_case(BaseAluOpcode::OR, 24)]
+#[test_case(BaseAluOpcode::AND, 24)]
+fn run_bitwise_logic_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let offset = Rv64BaseAlu256Opcode::CLASS_OFFSET;
+
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
+
+    let (air, executor, chip) = create_bitwise_logic_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         bitwise_chip.clone(),
@@ -642,10 +717,63 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
 #[cfg(feature = "cuda")]
 #[test_case(BaseAluOpcode::ADD, 24)]
 #[test_case(BaseAluOpcode::SUB, 24)]
+fn run_add_sub_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
+    ));
+    let (air, executor, cpu_chip) = create_add_sub_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_range_checker_chip,
+        tester.dummy_memory_helper(),
+        tester.address_bits(),
+    );
+    let gpu_chip = AddSub256ChipGpu::new(
+        tester.range_checker(),
+        tester.address_bits(),
+        tester.timestamp_max_bits(),
+    );
+    let mut harness =
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY);
+
+    for _ in 0..num_ops {
+        set_and_execute_rand(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode.local_usize() + Rv64BaseAlu256Opcode::CLASS_OFFSET,
+            None,
+        );
+    }
+
+    type Record<'a> = (&'a mut AddSub256AdapterRecord, &'a mut AddSub256CoreRecord);
+
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, AluU16AdapterExecutor>::new(),
+        );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[cfg(feature = "cuda")]
 #[test_case(BaseAluOpcode::XOR, 24)]
 #[test_case(BaseAluOpcode::OR, 24)]
 #[test_case(BaseAluOpcode::AND, 24)]
-fn run_alu_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
+fn run_bitwise_logic_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
@@ -657,7 +785,7 @@ fn run_alu_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(
         default_var_range_checker_bus(),
     ));
-    let (air, executor, cpu_chip) = create_alu_harness_fields(
+    let (air, executor, cpu_chip) = create_bitwise_logic_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         dummy_bitwise_chip,
@@ -665,7 +793,7 @@ fn run_alu_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
-    let gpu_chip = BaseAlu256ChipGpu::new(
+    let gpu_chip = BitwiseLogic256ChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.address_bits(),
@@ -686,8 +814,8 @@ fn run_alu_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut BaseAlu256AdapterRecord,
-        &'a mut BaseAlu256CoreRecord,
+        &'a mut BitwiseLogic256AdapterRecord,
+        &'a mut BitwiseLogic256CoreRecord,
     );
 
     harness
