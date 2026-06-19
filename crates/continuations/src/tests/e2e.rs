@@ -746,7 +746,7 @@ fn test_deferral_e2e() -> Result<()> {
         None,
     );
     let root_vk = root_prover.get_vk();
-    let engine = RootEngine::new(root_vk.inner.params.clone());
+    let engine = root_prover.create_engine::<RootEngine>();
     let proving_ctx = root_prover.generate_proving_ctx::<<RootEngine as StarkEngine>::PB, _>(
         combined_proof,
         &user_pvs_proof,
@@ -754,7 +754,8 @@ fn test_deferral_e2e() -> Result<()> {
         engine_device_ctx(&engine),
     );
     warn!("proving root (GPU)");
-    let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(proving_ctx.unwrap())?;
+    let root_proof =
+        root_prover.root_prove_from_ctx::<RootEngine>(proving_ctx.unwrap(), &engine)?;
     engine.verify(&root_vk, &root_proof)?;
 
     Ok(())

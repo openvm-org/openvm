@@ -92,7 +92,7 @@ where
         None,
     );
 
-    let engine = RootE::new(root_prover.get_pk().params.clone());
+    let engine = root_prover.create_engine::<RootE>();
     let root_proving_ctx: ProvingContext<<RootE as StarkEngine>::PB> = root_prover
         .generate_proving_ctx(
             agg_proof.inner,

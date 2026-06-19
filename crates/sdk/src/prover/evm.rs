@@ -85,8 +85,9 @@ where
 
         const MAX_ROOT_TRACEGEN_RETRIES: usize = 8;
         let agg_prover = &self.stark_prover.agg_prover;
+        let root_engine = self.root_prover.create_engine();
         self.root_prover
-            .prove(stark_proof, MAX_ROOT_TRACEGEN_RETRIES, |p| {
+            .prove(stark_proof, &root_engine, MAX_ROOT_TRACEGEN_RETRIES, |p| {
                 agg_prover.wrap_proof(p, metadata)
             })
     }
