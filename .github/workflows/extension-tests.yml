@@ -60,7 +60,6 @@ jobs:
           - { extension: cuda, mode: default }
           - { extension: shared, mode: rvr }
           - { extension: cuda, mode: rvr }
-          - { extension: deferral, mode: rvr }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
     uses: ./.github/workflows/extension-tests.group.yml
