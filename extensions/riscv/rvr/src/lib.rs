@@ -467,7 +467,7 @@ pub extern "C" fn host_reveal<F: PrimeField32>(
     let end = start + RV64_REGISTER_NUM_LIMBS;
     assert!(
         end <= io.public_values.len(),
-        "reveal out of bounds: writing bytes [{start}..{end}) but public_values size is {} (configured via SystemConfig::with_public_values)",
+        "reveal out of bounds: writing bytes [{start}..{end}) but public_values size is {} (configured via SystemConfig::with_public_values_bytes or SystemConfig::with_public_values)",
         io.public_values.len(),
     );
     io.public_values[start..end].copy_from_slice(&src_val.to_le_bytes());
