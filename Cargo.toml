@@ -71,11 +71,13 @@ members = [
     "guest-libs/sha2/",
     "guest-libs/verify-stark/circuit",
     "guest-libs/verify-stark/guest",
-    "examples/verify-stark/host", # TODO: remove this
     "crates/static-verifier",
     "scripts",
 ]
-exclude = ["crates/sdk/example", "benchmarks/guest/**"]
+exclude = [
+    "crates/sdk/example",
+    "benchmarks/guest/**",
+]
 resolver = "2"
 
 # Fastest runtime configuration

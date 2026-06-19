@@ -10832,27 +10832,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "verify-stark-host-example"
-version = "0.0.0"
-dependencies = [
- "cfg-if 1.0.1",
- "clap",
- "eyre",
- "openvm-build",
- "openvm-continuations",
- "openvm-deferral-circuit",
- "openvm-recursion-circuit",
- "openvm-sdk",
- "openvm-sdk-config",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "openvm-verify-stark-circuit",
- "openvm-verify-stark-host",
- "serde",
- "toml 0.8.23",
-]
-
-[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
