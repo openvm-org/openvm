@@ -47,7 +47,9 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32DivRemChipGpu {
         let tuple_checker_sizes = UInt2::new(tuple_checker_sizes[0], tuple_checker_sizes[1]);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records = tracing::info_span!("trace_gen.h2d_records")
+            .in_scope(|| records.to_device_on(device_ctx))
+            .unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(padded_height, trace_width, device_ctx);
         unsafe {
             tracegen(

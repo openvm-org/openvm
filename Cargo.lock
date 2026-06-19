@@ -6633,6 +6633,7 @@ dependencies = [
  "serde",
  "strum 0.26.3",
  "test-case",
+ "tracing",
 ]
 
 [[package]]

@@ -39,7 +39,9 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadStoreChipGpu {
         let padded_height = next_power_of_two_or_zero(height);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records = tracing::info_span!("trace_gen.h2d_records")
+            .in_scope(|| records.to_device_on(device_ctx))
+            .unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(padded_height, trace_width, device_ctx);
 
         unsafe {
