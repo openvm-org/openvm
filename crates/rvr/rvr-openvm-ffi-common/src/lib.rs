@@ -21,9 +21,8 @@ pub use openvm_platform::WORD_SIZE;
 pub const DEFERRAL_DIGEST_SIZE: usize = 8;
 
 /// Commit size in bytes.
-/// TODO(follow-up): should be `DEFERRAL_DIGEST_SIZE * size_of::<u32>()` (= 32) since
-/// each field element is 4 bytes, but currently uses `WORD_SIZE = 8`, giving 64.
-pub const DEFERRAL_COMMIT_NUM_BYTES: usize = DEFERRAL_DIGEST_SIZE * WORD_SIZE;
+const F_NUM_BYTES: usize = 4;
+pub const DEFERRAL_COMMIT_NUM_BYTES: usize = DEFERRAL_DIGEST_SIZE * F_NUM_BYTES;
 
 /// Output key size in bytes (commit + u64 length).
 pub const DEFERRAL_OUTPUT_KEY_BYTES: usize = DEFERRAL_COMMIT_NUM_BYTES + 8;
