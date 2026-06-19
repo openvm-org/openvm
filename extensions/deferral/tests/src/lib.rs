@@ -7,7 +7,7 @@ mod tests {
     use openvm_circuit::{
         arch::{
             deferral::{DeferralResult, DeferralState},
-            Streams,
+            Streams, DEFAULT_DEFERRAL_ADDR_SPACE_CELLS,
         },
         utils::{air_test_with_min_segments, test_system_config},
     };
@@ -41,7 +41,7 @@ mod tests {
     fn make_config(num_deferrals: usize) -> Rv32DeferralConfig {
         let mut system = test_system_config();
         system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells =
-            num_deferrals * DIGEST_SIZE * 2;
+            DEFAULT_DEFERRAL_ADDR_SPACE_CELLS;
         Rv32DeferralConfig {
             system,
             rv32i: Rv32I,
