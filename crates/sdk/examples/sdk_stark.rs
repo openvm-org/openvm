@@ -55,7 +55,7 @@ fn main() -> eyre::Result<()> {
     stdin.write(&my_input);
 
     // 4. Run the program
-    let output = sdk.execute(exe.clone(), stdin.clone())?;
+    let output = sdk.compile_and_execute(exe.clone(), stdin.clone())?;
     println!("public values output: {output:?}");
     // [!endregion execution]
 
