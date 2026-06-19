@@ -17,7 +17,7 @@ use rvr_openvm_lift::{
     ExtensionRegistry, TraceChipIndex,
 };
 
-use super::debug::GuestDebugMap;
+use super::{artifact_cache::compute_fingerprint, debug::GuestDebugMap};
 use crate::arch::ExecutorInventory;
 
 /// A compiled rvr shared library ready for execution.
@@ -29,6 +29,8 @@ pub struct RvrCompiled {
     /// Directory holding generated C sources and build artifacts, if this
     /// library was compiled. `None` for libraries loaded from disk.
     artifact_dir: Option<ArtifactDir>,
+    /// Content fingerprint computed from the generated C project + toolchain.
+    fingerprint: Option<String>,
 }
 
 enum ArtifactDir {
@@ -46,6 +48,16 @@ impl ArtifactDir {
 }
 
 impl RvrCompiled {
+    /// Path to the shared library file backing this instance.
+    pub fn lib_path(&self) -> &Path {
+        &self.lib_path
+    }
+
+    /// Content fingerprint, if known.
+    pub fn fingerprint(&self) -> Option<&str> {
+        self.fingerprint.as_deref()
+    }
+
     /// Path to the directory holding generated C sources and build artifacts,
     /// if this library was compiled (rather than loaded from an existing path).
     /// Valid while the returned [`RvrCompiled`] is alive.
@@ -83,7 +95,7 @@ impl RvrCompiled {
 
     /// Copy the compiled shared library into `dest_lib`, creating parent
     /// directories if it doesn't exist. Returns the path of the copied
-    /// library. Works for both freshly compiled artifacts and ones loaded from disk.
+    /// library. Works for both freshly compiled artifacts and ones loaded from disk.  
     pub fn save_artifact(&self, dest_lib: &Path) -> Result<PathBuf, CompileError> {
         if let Some(parent) = dest_lib.parent() {
             fs::create_dir_all(parent).map_err(|source| CompileError::CProject {
@@ -91,10 +103,20 @@ impl RvrCompiled {
                 source,
             })?;
         }
-        fs::copy(&self.lib_path, dest_lib).map_err(|source| CompileError::CProject {
-            path: dest_lib.to_path_buf(),
+        // Write to a temp file then atomically rename so concurrent readers never
+        // see a half-written shared library.
+        let tmp = dest_lib.with_extension(format!("tmp.{}", std::process::id()));
+        fs::copy(&self.lib_path, &tmp).map_err(|source| CompileError::CProject {
+            path: tmp.clone(),
             source,
         })?;
+        if let Err(e) = fs::rename(&tmp, dest_lib) {
+            let _ = fs::remove_file(&tmp);
+            return Err(CompileError::CProject {
+                path: dest_lib.to_path_buf(),
+                source: e,
+            });
+        }
         Ok(dest_lib.to_path_buf())
     }
 }
@@ -188,6 +210,8 @@ pub struct CompileOptions<'a, F: PrimeField32> {
     /// Keep the generated native project after the compiled library is dropped.
     pub keep_artifacts: bool,
     pub suspend_policy: Option<SuspendPolicy>,
+    /// Directory for storing artifacts
+    pub cache_dir: Option<&'a Path>,
 }
 
 pub fn compile_with_options<F: PrimeField32>(
@@ -197,24 +221,12 @@ pub fn compile_with_options<F: PrimeField32>(
     compile_impl(exe, &opts)
 }
 
-/// Compile a VmExe into a shared library (pure execution, optional suspension).
+/// Compile a VmExe into a shared library (pure execution).
 pub fn compile<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry<F>,
 ) -> Result<RvrCompiled, CompileError> {
-    compile_impl(
-        exe,
-        &CompileOptions {
-            base_name: None,
-            tracer_mode: TracerMode::Pure,
-            extensions,
-            chips: None,
-            guest_debug_map: None,
-            native_debug_info: false,
-            keep_artifacts: false,
-            suspend_policy: None,
-        },
-    )
+    compile_cached(exe, extensions, None)
 }
 
 /// Compile a VmExe with per-chip metered execution.
@@ -223,19 +235,7 @@ pub fn compile_metered<F: PrimeField32>(
     extensions: &ExtensionRegistry<F>,
     chips: &ChipMapping,
 ) -> Result<RvrCompiled, CompileError> {
-    compile_impl(
-        exe,
-        &CompileOptions {
-            base_name: None,
-            tracer_mode: TracerMode::Metered,
-            extensions,
-            chips: Some(chips),
-            guest_debug_map: None,
-            native_debug_info: false,
-            keep_artifacts: false,
-            suspend_policy: None,
-        },
-    )
+    compile_metered_cached(exe, extensions, chips, None)
 }
 
 /// Compile a VmExe with per-chip metered execution and segment-boundary suspension.
@@ -255,6 +255,7 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
             native_debug_info: false,
             keep_artifacts: false,
             suspend_policy: Some(SuspendPolicy::SegmentBoundary),
+            cache_dir: None,
         },
     )
 }
@@ -264,6 +265,62 @@ pub fn compile_metered_cost<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry<F>,
     chips: &ChipMapping,
+) -> Result<RvrCompiled, CompileError> {
+    compile_metered_cost_cached(exe, extensions, chips, None)
+}
+
+/// Like [`compile`] but checks `cache_dir` for a previously built artifact before running `make`.
+/// On a miss the result is stored in `cache_dir` for future reuse.
+pub fn compile_cached<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry<F>,
+    cache_dir: Option<&Path>,
+) -> Result<RvrCompiled, CompileError> {
+    compile_impl(
+        exe,
+        &CompileOptions {
+            base_name: None,
+            tracer_mode: TracerMode::Pure,
+            extensions,
+            chips: None,
+            guest_debug_map: None,
+            native_debug_info: false,
+            keep_artifacts: false,
+            suspend_policy: None,
+            cache_dir,
+        },
+    )
+}
+
+/// Like [`compile_metered`] but checks `cache_dir` before running `make`.
+pub fn compile_metered_cached<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry<F>,
+    chips: &ChipMapping,
+    cache_dir: Option<&Path>,
+) -> Result<RvrCompiled, CompileError> {
+    compile_impl(
+        exe,
+        &CompileOptions {
+            base_name: None,
+            tracer_mode: TracerMode::Metered,
+            extensions,
+            chips: Some(chips),
+            guest_debug_map: None,
+            native_debug_info: false,
+            keep_artifacts: false,
+            suspend_policy: None,
+            cache_dir,
+        },
+    )
+}
+
+/// Like [`compile_metered_cost`] but checks `cache_dir` before running `make`.
+pub fn compile_metered_cost_cached<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry<F>,
+    chips: &ChipMapping,
+    cache_dir: Option<&Path>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(
         exe,
@@ -276,6 +333,7 @@ pub fn compile_metered_cost<F: PrimeField32>(
             native_debug_info: false,
             keep_artifacts: false,
             suspend_policy: None,
+            cache_dir,
         },
     )
 }
@@ -295,10 +353,17 @@ pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileEr
         libloading::Library::new(lib_path)
             .map_err(|e| CompileError::LibLoad(format!("{}: {}", lib_path.display(), e)))?
     };
+    // Recover fingerprint from filename if this is a content-addressed artifact.
+    let fingerprint = lib_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .and_then(|s| s.strip_prefix("rvr-"))
+        .map(str::to_owned);
     Ok(RvrCompiled {
         lib,
         lib_path: lib_path.to_path_buf(),
         artifact_dir: None,
+        fingerprint,
     })
 }
 
@@ -306,8 +371,113 @@ fn compile_impl<F: PrimeField32>(
     exe: &VmExe<F>,
     opts: &CompileOptions<'_, F>,
 ) -> Result<RvrCompiled, CompileError> {
-    let toolchain = ensure_toolchain_available()?;
+    // Validate mode / suspension policy combination.
+    let effective_policy = opts
+        .suspend_policy
+        .unwrap_or_else(|| opts.tracer_mode.default_suspend_policy());
+    match (opts.tracer_mode, effective_policy) {
+        (TracerMode::Metered, SuspendPolicy::InstretLimit) => {
+            return Err(CompileError::InvalidOptions(
+                "metered rvr cannot use instret-limit suspension",
+            ));
+        }
+        (TracerMode::Pure | TracerMode::MeteredCost, SuspendPolicy::SegmentBoundary) => {
+            return Err(CompileError::InvalidOptions(
+                "segment-boundary suspension requires metered rvr",
+            ));
+        }
+        _ => {}
+    }
 
+    let toolchain = ensure_toolchain_available()?;
+    let ext_cflags = opts.extensions.extra_cflags();
+    let (temp_dir, make_args) = setup_project(exe, opts, &ext_cflags)?;
+
+    // EXT_LIBS contains absolute paths into a random temp directory (process-dependent);
+    // EXT_SRCS lists plain filenames already written into project_dir.
+    // Both are fully captured by hash_dir_into, so we omit them from the make_args fingerprint.
+    let fingerprint_args: Vec<String> = make_args
+        .iter()
+        .filter(|a| !a.starts_with("EXT_LIBS=") && !a.starts_with("EXT_SRCS="))
+        .cloned()
+        .collect();
+
+    // Always compute fingerprint: cheap (file hashing) and needed by save_artifact.
+    // must be done before `compile_generated_project`!
+    let fingerprint = compute_fingerprint(
+        temp_dir.path(),
+        &toolchain,
+        opts.native_debug_info,
+        &fingerprint_args,
+    )
+    .map_err(|source| CompileError::CProject {
+        path: temp_dir.path().to_path_buf(),
+        source,
+    })?;
+
+    // Cache hit: skip compilation entirely.
+    if let Some(cache_dir) = opts.cache_dir {
+        let cache_ext = if cfg!(target_os = "macos") {
+            "dylib"
+        } else {
+            "so"
+        };
+        let cache_path = cache_dir.join(format!("rvr-{fingerprint}.{cache_ext}"));
+        if cache_path.exists() {
+            tracing::debug!(path = %cache_path.display(), "rvr cache hit");
+            return load_compiled_from_path(&cache_path);
+        }
+        tracing::debug!(path = %cache_path.display(), "rvr cache miss, compiling");
+    }
+
+    compile_generated_project(temp_dir.path(), &make_args, &toolchain)?;
+
+    let lib_path = find_shared_lib(temp_dir.path())?;
+    let lib = unsafe {
+        libloading::Library::new(&lib_path)
+            .map_err(|e| CompileError::LibLoad(format!("{}: {}", lib_path.display(), e)))?
+    };
+
+    let artifact_dir = if opts.keep_artifacts {
+        let path = temp_dir.keep();
+        tracing::info!(
+            path = %path.display(),
+            "kept rvr generated native project"
+        );
+        ArtifactDir::Kept(path)
+    } else {
+        ArtifactDir::Temp(temp_dir)
+    };
+
+    let compiled = RvrCompiled {
+        lib,
+        lib_path,
+        artifact_dir: Some(artifact_dir),
+        fingerprint: Some(fingerprint.clone()),
+    };
+
+    // Cache store: copy to cache dir for future reuse.
+    if let Some(cache_dir) = opts.cache_dir {
+        let cache_ext = if cfg!(target_os = "macos") {
+            "dylib"
+        } else {
+            "so"
+        };
+        let cache_path = cache_dir.join(format!("rvr-{fingerprint}.{cache_ext}"));
+        compiled.save_artifact(&cache_path)?;
+    }
+
+    Ok(compiled)
+}
+
+/// Generate the C project directory: IR → blocks → C files + extension
+/// staticlibs. Returns the temp directory and the `make` arguments needed
+/// to build it.
+fn setup_project<F: PrimeField32>(
+    exe: &VmExe<F>,
+    opts: &CompileOptions<'_, F>,
+    ext_cflags: &[String],
+) -> Result<(tempfile::TempDir, Vec<String>), CompileError> {
     let base_name = sanitize_base_name(opts.base_name.unwrap_or("openvm"));
 
     let ir = convert_vmexe_to_ir_with_debug(exe, opts.extensions, |pc| {
@@ -334,19 +504,6 @@ fn compile_impl<F: PrimeField32>(
     if let Some(suspend_policy) = opts.suspend_policy {
         project.suspend_policy = suspend_policy;
     }
-    match (opts.tracer_mode, project.suspend_policy) {
-        (TracerMode::Metered, SuspendPolicy::InstretLimit) => {
-            return Err(CompileError::InvalidOptions(
-                "metered rvr cannot use instret-limit suspension",
-            ));
-        }
-        (TracerMode::Pure | TracerMode::MeteredCost, SuspendPolicy::SegmentBoundary) => {
-            return Err(CompileError::InvalidOptions(
-                "segment-boundary suspension requires metered rvr",
-            ));
-        }
-        _ => {}
-    }
 
     match opts.tracer_mode {
         TracerMode::Pure => {}
@@ -359,6 +516,9 @@ fn compile_impl<F: PrimeField32>(
         }
     }
 
+    if cfg!(target_os = "macos") {
+        project.enable_lto = false;
+    }
     project.native_debug_info = opts.native_debug_info;
 
     let entry_point = exe.pc_start;
@@ -394,36 +554,10 @@ fn compile_impl<F: PrimeField32>(
                 .map(|(filename, _)| filename.to_string()),
         )
         .collect();
-    let ext_cflags = opts.extensions.extra_cflags();
 
-    compile_generated_project(
-        output_dir,
-        &project.make_args_with_extensions(&ext_staticlibs, &ext_sources, &ext_cflags),
-        &toolchain,
-    )?;
+    let make_args = project.make_args_with_extensions(&ext_staticlibs, &ext_sources, ext_cflags);
 
-    let lib_path = find_shared_lib(output_dir)?;
-    let lib = unsafe {
-        libloading::Library::new(&lib_path)
-            .map_err(|e| CompileError::LibLoad(format!("{}: {}", lib_path.display(), e)))?
-    };
-
-    let artifact_dir = if opts.keep_artifacts {
-        let path = temp_dir.keep();
-        tracing::info!(
-            path = %path.display(),
-            "kept rvr generated native project"
-        );
-        ArtifactDir::Kept(path)
-    } else {
-        ArtifactDir::Temp(temp_dir)
-    };
-
-    Ok(RvrCompiled {
-        lib,
-        lib_path,
-        artifact_dir: Some(artifact_dir),
-    })
+    Ok((temp_dir, make_args))
 }
 
 pub fn ensure_toolchain_available() -> Result<rvr_openvm::RuntimeToolchain, CompileError> {

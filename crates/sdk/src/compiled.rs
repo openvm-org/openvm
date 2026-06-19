@@ -40,9 +40,7 @@ pub struct CompiledExeMeteredCost<'a> {
 #[cfg(feature = "rvr")]
 impl CompiledExeMetered<'_> {
     /// Persist the compiled shared library into `dir`. Returns the path of
-    /// the copied `.so`/`.dylib`. The `MeteredCtx` is not persisted — it is
-    /// rebuilt from the proving key on load via
-    /// [`Sdk::load_compiled_metered`](crate::Sdk::load_compiled_metered).
+    /// the copied `.so`/`.dylib`.
     pub fn save(
         &self,
         dir: &std::path::Path,
@@ -54,9 +52,7 @@ impl CompiledExeMetered<'_> {
 #[cfg(feature = "rvr")]
 impl CompiledExeMeteredCost<'_> {
     /// Persist the compiled shared library into `dir`. Returns the path of
-    /// the copied `.so`/`.dylib`. The `MeteredCostCtx` is not persisted — it
-    /// is rebuilt on load via
-    /// [`Sdk::load_compiled_metered_cost`](crate::Sdk::load_compiled_metered_cost).
+    /// the copied `.so`/`.dylib`.
     pub fn save(
         &self,
         dir: &std::path::Path,

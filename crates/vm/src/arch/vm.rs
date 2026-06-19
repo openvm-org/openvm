@@ -42,10 +42,11 @@ use tracing::{info_span, instrument};
 use super::aot::AotInstance;
 #[cfg(feature = "rvr")]
 use super::rvr::{
-    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
-    compile_metered_cost, compile_metered_segment_boundary, load_compiled_from_path, ChipMapping,
-    RunToCompletion, RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance,
-    RvrPureInstance, SegmentBoundary,
+    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_cached, compile_metered,
+    compile_metered_cached, compile_metered_cost, compile_metered_cost_cached,
+    compile_metered_segment_boundary, load_compiled_from_path, ChipMapping, RunToCompletion,
+    RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
+    SegmentBoundary,
 };
 use super::{
     execution_mode::{
@@ -318,6 +319,28 @@ where
             extensions,
         })
     }
+
+    /// Like [`Self::rvr_instance`] but checks `cache_dir` for a previously
+    /// built artifact before invoking `make`. On a miss the freshly compiled
+    /// artifact is stored in `cache_dir` for future reuse.
+    pub fn rvr_instance_cached(
+        &self,
+        exe: &VmExe<F>,
+        cache_dir: Option<&std::path::Path>,
+    ) -> Result<RvrPureInstance<'_, F>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span = tracing::info_span!("compile_pure", backend = "rvr").entered();
+        let extensions = self.build_rvr_extensions(None);
+        let compiled =
+            compile_cached(exe, &extensions, cache_dir).map_err(map_rvr_compile_error)?;
+
+        Ok(RvrPureInstance {
+            system_config: self.inventory.config(),
+            exe: Arc::new(exe.clone()),
+            compiled,
+            extensions,
+        })
+    }
 }
 
 #[cfg(feature = "aot")]
@@ -455,6 +478,35 @@ where
         })
     }
 
+    /// Like [`Self::metered_rvr_instance`] but checks `cache_dir` for a
+    /// previously built artifact before invoking `make`. On a miss the freshly
+    /// compiled artifact is stored in `cache_dir` for future reuse.
+    pub fn metered_rvr_instance_cached(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        cache_dir: Option<&std::path::Path>,
+    ) -> Result<RvrMeteredInstance<'_, F>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span = tracing::info_span!("compile_metered", backend = "rvr").entered();
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let chips = ChipMapping {
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                .map_err(map_rvr_compile_error)?,
+            chip_widths: None,
+        };
+        let compiled = compile_metered_cached(exe, &extensions, &chips, cache_dir)
+            .map_err(map_rvr_compile_error)?;
+
+        Ok(RvrMeteredInstance {
+            system_config: self.inventory.config(),
+            exe: Arc::new(exe.clone()),
+            extensions,
+            compiled,
+            _mode: PhantomData::<RunToCompletion>,
+        })
+    }
+
     pub fn metered_segment_rvr_instance(
         &self,
         exe: &VmExe<F>,
@@ -550,6 +602,38 @@ where
         };
         let compiled =
             compile_metered_cost(exe, &extensions, &chips).map_err(map_rvr_compile_error)?;
+
+        Ok(RvrMeteredCostInstance {
+            system_config: self.inventory.config(),
+            exe: Arc::new(exe.clone()),
+            extensions,
+            compiled,
+            widths,
+        })
+    }
+
+    /// Like [`Self::metered_cost_rvr_instance`] but checks `cache_dir` for a
+    /// previously built artifact before invoking `make`. On a miss the freshly
+    /// compiled artifact is stored in `cache_dir` for future reuse.
+    pub fn metered_cost_rvr_instance_cached(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        widths: &[usize],
+        cache_dir: Option<&std::path::Path>,
+    ) -> Result<RvrMeteredCostInstance<'_, F>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_metered_cost", backend = "rvr").entered();
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
+        let chips = ChipMapping {
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                .map_err(map_rvr_compile_error)?,
+            chip_widths: Some(widths.clone()),
+        };
+        let compiled = compile_metered_cost_cached(exe, &extensions, &chips, cache_dir)
+            .map_err(map_rvr_compile_error)?;
 
         Ok(RvrMeteredCostInstance {
             system_config: self.inventory.config(),
