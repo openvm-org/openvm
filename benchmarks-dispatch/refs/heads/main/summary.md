@@ -1,12 +1,12 @@
 | group | app.proof_time_ms | app.cycles | app.cells_used | leaf.proof_time_ms | leaf.cycles | leaf.cells_used |
 | -- | -- | -- | -- | -- | -- | -- |
-| [verify_fibair](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/main/verify_fibair-7548bdf844db53c0a6fc9ed9f153c54422c6cfa4.md) |<span style='color: red'>(+930 [+78.3%])</span> 2,117 |  334,086 |  17,676,626 |- | - | - |
-| [fibonacci](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/main/fibonacci-7548bdf844db53c0a6fc9ed9f153c54422c6cfa4.md) |<span style='color: red'>(+4542 [+181.0%])</span> 7,052 |  1,500,277 |  50,589,567 |- | - | - |
-| [regex](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/main/regex-7548bdf844db53c0a6fc9ed9f153c54422c6cfa4.md) |<span style='color: red'>(+13865 [+188.3%])</span> 21,230 | <span style='color: red'>(+41121 [+1.0%])</span> 4,206,347 | <span style='color: red'>(+1401618 [+0.8%])</span> 167,912,770 |- | - | - |
-| [ecrecover](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/main/ecrecover-7548bdf844db53c0a6fc9ed9f153c54422c6cfa4.md) |<span style='color: red'>(+964 [+69.4%])</span> 2,353 |  289,567 |  14,477,516 |- | - | - |
-| [pairing](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/main/pairing-7548bdf844db53c0a6fc9ed9f153c54422c6cfa4.md) |<span style='color: red'>(+6119 [+136.1%])</span> 10,616 |  1,820,695 |  95,901,985 |- | - | - |
+| [verify_fibair](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/main/verify_fibair-3ed7e109084cc571b29b02e614d281bac3fea866.md) |<span style='color: red'>(+343 [+33.8%])</span> 1,358 |  622,156 |  3,615,122 |- | - | - |
+| [fibonacci](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/main/fibonacci-3ed7e109084cc571b29b02e614d281bac3fea866.md) |<span style='color: green'>(-294 [-11.4%])</span> 2,281 |  1,500,209 |  2,100,402 |- | - | - |
+| [regex](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/main/regex-3ed7e109084cc571b29b02e614d281bac3fea866.md) |<span style='color: red'>(+1060 [+22.6%])</span> 5,749 |  4,137,472 | <span style='color: red'>(+63728 [+0.4%])</span> 17,753,258 |- | - | - |
+| [ecrecover](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/main/ecrecover-3ed7e109084cc571b29b02e614d281bac3fea866.md) |<span style='color: red'>(+25 [+1.8%])</span> 1,419 |  126,560 | <span style='color: green'>(-7176 [-0.3%])</span> 2,262,862 |- | - | - |
+| [pairing](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/main/pairing-3ed7e109084cc571b29b02e614d281bac3fea866.md) |<span style='color: red'>(+154 [+5.8%])</span> 2,809 |  1,772,025 |  25,508,512 |- | - | - |
 
 
-Commit: https://github.com/openvm-org/openvm/commit/7548bdf844db53c0a6fc9ed9f153c54422c6cfa4
+Commit: https://github.com/openvm-org/openvm/commit/3ed7e109084cc571b29b02e614d281bac3fea866
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/15311030212)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/27853677776)
