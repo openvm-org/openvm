@@ -9,26 +9,26 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
+use super::{BitwiseLogicCoreCols, BitwiseLogicCoreRecord};
 use crate::{
     adapters::{
-        Rv64BaseAluWAdapterCols, Rv64BaseAluWAdapterRecord, RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS,
+        Rv64BaseAluAdapterCols, Rv64BaseAluAdapterRecord, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
-    cuda_abi::alu_w_cuda::tracegen,
-    BaseAluCoreCols, BaseAluCoreRecord,
+    cuda_abi::bitwise_logic_cuda::tracegen,
 };
 
 #[derive(new)]
-pub struct Rv64BaseAluWChipGpu {
+pub struct Rv64BitwiseLogicChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64BaseAluWChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv64BitwiseLogicChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv64BaseAluWAdapterRecord,
-            BaseAluCoreRecord<RV64_WORD_NUM_LIMBS>,
+            Rv64BaseAluAdapterRecord,
+            BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
@@ -36,12 +36,15 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64BaseAluWChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = BaseAluCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width()
-            + Rv64BaseAluWAdapterCols::<F>::width();
+        let trace_width =
+            BitwiseLogicCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>::width()
+                + Rv64BaseAluAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records = tracing::info_span!("trace_gen.h2d_records")
+            .in_scope(|| records.to_device_on(device_ctx))
+            .unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
