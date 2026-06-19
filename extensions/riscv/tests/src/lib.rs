@@ -270,6 +270,7 @@ mod tests {
     #[cfg_attr(feature = "aot", ignore)]
     #[test]
     #[should_panic(expected = "Memory access out of bounds")]
+    #[cfg(not(feature = "rvr"))]
     fn test_reveal_beyond_num_public_values_errors() {
         let mut config = test_rv64im_config();
         config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
@@ -286,6 +287,33 @@ mod tests {
         let executor = VmExecutor::new(config).unwrap();
         let instance = executor.instance(&exe).unwrap();
         instance.execute(vec![], None).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "reveal out of bounds")]
+    #[cfg(feature = "rvr")]
+    fn test_reveal_beyond_num_public_values_errors() {
+        if env::var(RVR_OOB_CHILD_ENV).is_ok() {
+            let mut config = test_rv64im_config();
+            config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
+            let elf =
+                build_example_program_at_path(get_programs_dir!(), "reveal", &config).unwrap();
+            let exe = VmExe::from_elf(
+                elf,
+                Transpiler::<F>::default()
+                    .with_extension(Rv64ITranspilerExtension)
+                    .with_extension(Rv64MTranspilerExtension)
+                    .with_extension(Rv64IoTranspilerExtension),
+            )
+            .unwrap();
+
+            let executor = VmExecutor::new(config).unwrap();
+            let instance = executor.instance(&exe).unwrap();
+            instance.execute(vec![], None).unwrap();
+            return; // unreachable: abort fired
+        }
+
+        assert_child_aborts("tests::test_reveal_beyond_num_public_values_errors");
     }
 
     #[test]
