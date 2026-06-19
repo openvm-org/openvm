@@ -115,8 +115,9 @@ impl<F: PrimeField32> VmRvrExtension<F> for Rv64M {}
     )
 )]
 pub enum Rv64IExecutor {
-    BaseAlu(Rv64BaseAluExecutor),
-    BaseAluW(Rv64BaseAluWExecutor),
+    AddSub(Rv64AddSubExecutor),
+    BitwiseLogic(Rv64BitwiseLogicExecutor),
+    AddSubW(Rv64AddSubWExecutor),
     LessThan(Rv64LessThanExecutor),
     Shift(Rv64ShiftExecutor),
     ShiftW(Rv64ShiftWExecutor),
@@ -163,16 +164,23 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
-        let base_alu =
-            Rv64BaseAluExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
-        inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
-
-        let base_alu_w =
-            Rv64BaseAluWExecutor::new(Rv64BaseAluWAdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
+        let add_sub =
+            Rv64AddSubExecutor::new(Rv64BaseAluU16AdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
         inventory.add_executor(
-            base_alu_w,
-            BaseAluWOpcode::iter().map(|x| x.global_opcode()),
+            add_sub,
+            [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|x| x.global_opcode()),
         )?;
+
+        let bitwise_logic =
+            Rv64BitwiseLogicExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+        inventory.add_executor(
+            bitwise_logic,
+            [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND].map(|x| x.global_opcode()),
+        )?;
+
+        let add_sub_w =
+            Rv64AddSubWExecutor::new(Rv64BaseAluWU16AdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
+        inventory.add_executor(add_sub_w, BaseAluWOpcode::iter().map(|x| x.global_opcode()))?;
 
         let lt =
             Rv64LessThanExecutor::new(Rv64BaseAluU16AdapterExecutor, LessThanOpcode::CLASS_OFFSET);
@@ -277,17 +285,23 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
             }
         };
 
-        let base_alu = Rv64BaseAluAir::new(
-            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            BaseAluCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
+        let add_sub = Rv64AddSubAir::new(
+            Rv64BaseAluU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
+            AddSubCoreAir::new(range_checker, BaseAluOpcode::CLASS_OFFSET),
         );
-        inventory.add_air(base_alu);
+        inventory.add_air(add_sub);
 
-        let base_alu_w = Rv64BaseAluWAir::new(
-            Rv64BaseAluWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            crate::base_alu_w::BaseAluWCoreAir::new(bitwise_lu, BaseAluWOpcode::CLASS_OFFSET),
+        let bitwise_logic = Rv64BitwiseLogicAir::new(
+            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            BitwiseLogicCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
         );
-        inventory.add_air(base_alu_w);
+        inventory.add_air(bitwise_logic);
+
+        let add_sub_w = Rv64AddSubWAir::new(
+            Rv64BaseAluWU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
+            crate::add_sub_w::AddSubWCoreAir::new(range_checker, BaseAluWOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(add_sub_w);
 
         let lt = Rv64LessThanAir::new(
             Rv64BaseAluU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
@@ -404,27 +418,38 @@ where
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
-        inventory.next_air::<Rv64BaseAluAir>()?;
-        let base_alu = Rv64BaseAluChip::new(
-            BaseAluFiller::new(
+        inventory.next_air::<Rv64AddSubAir>()?;
+        let add_sub = Rv64AddSubChip::new(
+            AddSubFiller::new(
+                Rv64BaseAluU16AdapterFiller::new(range_checker.clone()),
+                range_checker.clone(),
+                BaseAluOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(add_sub);
+
+        inventory.next_air::<Rv64BitwiseLogicAir>()?;
+        let bitwise_logic = Rv64BitwiseLogicChip::new(
+            BitwiseLogicFiller::new(
                 Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 BaseAluOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(base_alu);
+        inventory.add_executor_chip(bitwise_logic);
 
-        inventory.next_air::<Rv64BaseAluWAir>()?;
-        let base_alu_w = Rv64BaseAluWChip::new(
-            crate::base_alu_w::BaseAluWFiller::new(
-                Rv64BaseAluWAdapterFiller::new(bitwise_lu.clone()),
-                bitwise_lu.clone(),
+        inventory.next_air::<Rv64AddSubWAir>()?;
+        let add_sub_w = Rv64AddSubWChip::new(
+            crate::add_sub_w::AddSubWFiller::new(
+                Rv64BaseAluWU16AdapterFiller::new(range_checker.clone()),
+                range_checker.clone(),
                 BaseAluWOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(base_alu_w);
+        inventory.add_executor_chip(add_sub_w);
 
         inventory.next_air::<Rv64LessThanAir>()?;
         let lt = Rv64LessThanChip::new(

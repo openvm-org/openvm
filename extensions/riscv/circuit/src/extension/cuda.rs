@@ -11,14 +11,15 @@ use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engi
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{
-    Rv64AuipcAir, Rv64AuipcChipGpu, Rv64BaseAluAir, Rv64BaseAluChipGpu, Rv64BaseAluWAir,
-    Rv64BaseAluWChipGpu, Rv64BranchEqualAir, Rv64BranchEqualChipGpu, Rv64BranchLessThanAir,
-    Rv64BranchLessThanChipGpu, Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemWAir,
-    Rv64DivRemWChipGpu, Rv64HintStoreAir, Rv64HintStoreChipGpu, Rv64I, Rv64Io, Rv64JalLuiAir,
-    Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir, Rv64LessThanChipGpu,
-    Rv64LoadSignExtendAir, Rv64LoadSignExtendChipGpu, Rv64LoadStoreAir, Rv64LoadStoreChipGpu,
-    Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir, Rv64MulWChipGpu, Rv64MultiplicationAir,
-    Rv64MultiplicationChipGpu, Rv64ShiftAir, Rv64ShiftChipGpu, Rv64ShiftWAir, Rv64ShiftWChipGpu,
+    Rv64AddSubAir, Rv64AddSubChipGpu, Rv64AddSubWAir, Rv64AddSubWChipGpu, Rv64AuipcAir,
+    Rv64AuipcChipGpu, Rv64BitwiseLogicAir, Rv64BitwiseLogicChipGpu, Rv64BranchEqualAir,
+    Rv64BranchEqualChipGpu, Rv64BranchLessThanAir, Rv64BranchLessThanChipGpu, Rv64DivRemAir,
+    Rv64DivRemChipGpu, Rv64DivRemWAir, Rv64DivRemWChipGpu, Rv64HintStoreAir, Rv64HintStoreChipGpu,
+    Rv64I, Rv64Io, Rv64JalLuiAir, Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir,
+    Rv64LessThanChipGpu, Rv64LoadSignExtendAir, Rv64LoadSignExtendChipGpu, Rv64LoadStoreAir,
+    Rv64LoadStoreChipGpu, Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir, Rv64MulWChipGpu,
+    Rv64MultiplicationAir, Rv64MultiplicationChipGpu, Rv64ShiftAir, Rv64ShiftChipGpu,
+    Rv64ShiftWAir, Rv64ShiftWChipGpu,
 };
 
 pub struct Rv64ImGpuProverExt;
@@ -39,21 +40,21 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
-        inventory.next_air::<Rv64BaseAluAir>()?;
-        let base_alu = Rv64BaseAluChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            timestamp_max_bits,
-        );
-        inventory.add_executor_chip(base_alu);
+        inventory.next_air::<Rv64AddSubAir>()?;
+        let add_sub = Rv64AddSubChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(add_sub);
 
-        inventory.next_air::<Rv64BaseAluWAir>()?;
-        let base_alu_w = Rv64BaseAluWChipGpu::new(
+        inventory.next_air::<Rv64BitwiseLogicAir>()?;
+        let bitwise_logic = Rv64BitwiseLogicChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
         );
-        inventory.add_executor_chip(base_alu_w);
+        inventory.add_executor_chip(bitwise_logic);
+
+        inventory.next_air::<Rv64AddSubWAir>()?;
+        let add_sub_w = Rv64AddSubWChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(add_sub_w);
 
         inventory.next_air::<Rv64LessThanAir>()?;
         let lt = Rv64LessThanChipGpu::new(range_checker.clone(), timestamp_max_bits);
