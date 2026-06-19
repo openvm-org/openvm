@@ -130,7 +130,6 @@ impl Rv64IConfig {
             io: Default::default(),
         }
     }
-
 }
 
 impl Rv64ImConfig {
@@ -140,7 +139,6 @@ impl Rv64ImConfig {
             mul: Default::default(),
         }
     }
-
 }
 
 #[derive(Clone)]

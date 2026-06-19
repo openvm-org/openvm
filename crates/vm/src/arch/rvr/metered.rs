@@ -315,7 +315,7 @@ impl SegmentationState {
         deferral_len: u32,
         remaining_counter: u32,
     ) -> bool {
-        let seg_check_insns = self.segmentation_ctx.segment_check_insns;
+        let seg_check_insns = self.segmentation_ctx.segment_check_insns();
         let insns_since_last_check = seg_check_insns - remaining_counter as u64;
         let instret = self.segmentation_ctx.instret + insns_since_last_check;
         self.segmentation_ctx.instret = instret;
@@ -392,10 +392,10 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) -> u8
     let did_segment =
         seg_state.on_periodic_check(mem_len, pv_len, deferral_len, tracer.check_counter);
 
-    let segment_check_insns = seg_state.segmentation_ctx.segment_check_insns as u32;
+    let segment_check_insns = seg_state.segmentation_ctx.segment_check_insns() as u32;
     debug_assert_eq!(
         u64::from(segment_check_insns),
-        seg_state.segmentation_ctx.segment_check_insns
+        seg_state.segmentation_ctx.segment_check_insns()
     );
 
     // We are at the start of a block that would cross the old countdown.
