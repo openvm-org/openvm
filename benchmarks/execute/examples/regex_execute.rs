@@ -29,7 +29,7 @@ fn main() {
 
     // let timer = std::time::Instant::now();
     // executor
-    //     .execute(exe.clone(), StdIn::from_bytes(data.as_bytes()))
+    //     .compile_and_execute(exe.clone(), StdIn::from_bytes(data.as_bytes()))
     //     .unwrap();
     // println!("execute_time: {:?}", timer.elapsed());
 }
