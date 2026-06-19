@@ -5,8 +5,9 @@
 #include "riscv-adapters/vec_heap.cuh"
 #include "riscv-adapters/vec_heap_branch_u16.cuh"
 #include "riscv-adapters/vec_heap_u16.cuh"
-#include "riscv/cores/alu.cuh"
+#include "riscv/cores/add_sub.cuh"
 #include "riscv/cores/beq.cuh"
+#include "riscv/cores/bitwise_logic.cuh"
 #include "riscv/cores/blt.cuh"
 #include "riscv/cores/less_than.cuh"
 #include "riscv/cores/mul.cuh"
@@ -21,9 +22,10 @@ constexpr size_t INT256_NUM_MEMORY_BLOCKS = INT256_NUM_U8_LIMBS / MEMORY_BLOCK_B
 constexpr size_t INT256_NUM_U16_LIMBS = INT256_NUM_U8_LIMBS / sizeof(uint16_t);
 constexpr size_t NUM_READS = 2;
 
-using BaseAlu256CoreRecord = BaseAluCoreRecord<INT256_NUM_U8_LIMBS>;
-using BaseAlu256Core = BaseAluCore<INT256_NUM_U8_LIMBS>;
-template <typename T> using BaseAlu256CoreCols = BaseAluCoreCols<T, INT256_NUM_U8_LIMBS>;
+using BitwiseLogic256CoreRecord = BitwiseLogicCoreRecord<INT256_NUM_U8_LIMBS>;
+using BitwiseLogic256Core = BitwiseLogicCore<INT256_NUM_U8_LIMBS>;
+template <typename T>
+using BitwiseLogic256CoreCols = BitwiseLogicCoreCols<T, INT256_NUM_U8_LIMBS>;
 
 using BranchEqual256Core = BranchEqualCore<INT256_NUM_U16_LIMBS>;
 template <typename T>
@@ -67,20 +69,20 @@ using Rv64VecHeapAdapter256Record = Rv64VecHeapAdapterRecord<
     INT256_NUM_MEMORY_BLOCKS,
     INT256_NUM_MEMORY_BLOCKS>;
 
-template <typename T> struct BaseAlu256Cols {
+template <typename T> struct BitwiseLogic256Cols {
     Rv64VecHeapAdapter256Cols<T> adapter;
-    BaseAlu256CoreCols<T> core;
+    BitwiseLogic256CoreCols<T> core;
 };
 
-struct BaseAlu256Record {
+struct BitwiseLogic256Record {
     Rv64VecHeapAdapter256Record adapter;
-    BaseAlu256CoreRecord core;
+    BitwiseLogic256CoreRecord core;
 };
 
-__global__ void alu256_tracegen(
+__global__ void bitwise_logic256_tracegen(
     Fp *d_trace,
     size_t height,
-    DeviceBufferConstView<BaseAlu256Record> d_records,
+    DeviceBufferConstView<BitwiseLogic256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -99,18 +101,18 @@ __global__ void alu256_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        BaseAlu256Core core{BitwiseOperationLookup(d_bitwise_lookup_ptr)};
-        core.fill_trace_row(row.slice_from(COL_INDEX(BaseAlu256Cols, core)), rec.core);
+        BitwiseLogic256Core core{BitwiseOperationLookup(d_bitwise_lookup_ptr)};
+        core.fill_trace_row(row.slice_from(COL_INDEX(BitwiseLogic256Cols, core)), rec.core);
     } else {
-        row.fill_zero(0, sizeof(BaseAlu256Cols<uint8_t>));
+        row.fill_zero(0, sizeof(BitwiseLogic256Cols<uint8_t>));
     }
 }
 
-extern "C" int _alu256_tracegen(
+extern "C" int _bitwise_logic256_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<BaseAlu256Record> d_records,
+    DeviceBufferConstView<BitwiseLogic256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -118,10 +120,10 @@ extern "C" int _alu256_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(BaseAlu256Cols<uint8_t>));
+    assert(width == sizeof(BitwiseLogic256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
-    alu256_tracegen<<<grid, block, 0, stream>>>(
+    bitwise_logic256_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
@@ -267,6 +269,74 @@ extern "C" int _less_than256_tracegen(
 
     auto [grid, block] = kernel_launch_params(height, 256);
     less_than256_tracegen<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        d_records,
+        d_range_checker_ptr,
+        range_checker_bins,
+        pointer_max_bits,
+        timestamp_max_bits
+    );
+    return CHECK_KERNEL();
+}
+
+using AddSub256CoreRecord = AddSubCoreRecord<INT256_NUM_U16_LIMBS>;
+using AddSub256Core = AddSubCore<INT256_NUM_U16_LIMBS, U16_BITS>;
+template <typename T> using AddSub256CoreCols = AddSubCoreCols<T, INT256_NUM_U16_LIMBS>;
+
+template <typename T> struct AddSub256Cols {
+    Rv64VecHeapU16Adapter256Cols<T> adapter;
+    AddSub256CoreCols<T> core;
+};
+
+struct AddSub256Record {
+    Rv64VecHeapU16Adapter256Record adapter;
+    AddSub256CoreRecord core;
+};
+
+__global__ void add_sub256_tracegen(
+    Fp *d_trace,
+    size_t height,
+    DeviceBufferConstView<AddSub256Record> d_records,
+    uint32_t *d_range_checker_ptr,
+    size_t range_checker_bins,
+    uint32_t pointer_max_bits,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(d_trace + idx, height);
+    if (idx < d_records.len()) {
+        auto const &rec = d_records[idx];
+
+        Rv64VecHeapU16Adapter256 adapter(
+            pointer_max_bits,
+            VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
+            timestamp_max_bits
+        );
+        adapter.fill_trace_row(row, rec.adapter);
+
+        AddSub256Core core(VariableRangeChecker(d_range_checker_ptr, range_checker_bins));
+        core.fill_trace_row(row.slice_from(COL_INDEX(AddSub256Cols, core)), rec.core);
+    } else {
+        row.fill_zero(0, sizeof(AddSub256Cols<uint8_t>));
+    }
+}
+
+extern "C" int _add_sub256_tracegen(
+    Fp *d_trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<AddSub256Record> d_records,
+    uint32_t *d_range_checker_ptr,
+    size_t range_checker_bins,
+    uint32_t pointer_max_bits,
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
+) {
+    assert(width == sizeof(AddSub256Cols<uint8_t>));
+
+    auto [grid, block] = kernel_launch_params(height, 256);
+    add_sub256_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
