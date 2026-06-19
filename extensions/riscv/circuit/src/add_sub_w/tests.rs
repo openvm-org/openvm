@@ -24,7 +24,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluWU16AdapterRecord, AddSubCoreRecord, Rv64BaseAluWChipGpu},
+    crate::{adapters::Rv64BaseAluWU16AdapterRecord, AddSubCoreRecord, Rv64AddSubWChipGpu},
     openvm_circuit::arch::{
         testing::{GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -33,7 +33,7 @@ use {
     std::sync::Arc,
 };
 
-use super::{BaseAluWCoreAir, BaseAluWFiller, Rv64BaseAluWChip, Rv64BaseAluWExecutor};
+use super::{AddSubWCoreAir, AddSubWFiller, Rv64AddSubWChip, Rv64AddSubWExecutor};
 use crate::{
     adapters::{
         Rv64BaseAluWU16AdapterAir, Rv64BaseAluWU16AdapterCols, Rv64BaseAluWU16AdapterExecutor,
@@ -42,13 +42,13 @@ use crate::{
     },
     add_sub::AddSubCoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
-    Rv64BaseAluWAir,
+    Rv64AddSubWAir,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv64BaseAluWExecutor, Rv64BaseAluWAir, Rv64BaseAluWChip<F>>;
-type BaseAluWCoreCols<T> = AddSubCoreCols<T, RV64_WORD_U16_LIMBS, U16_BITS>;
+type Harness = TestChipHarness<F, Rv64AddSubWExecutor, Rv64AddSubWAir, Rv64AddSubWChip<F>>;
+type AddSubWCoreCols<T> = AddSubCoreCols<T, RV64_WORD_U16_LIMBS, U16_BITS>;
 
 #[inline(always)]
 fn run_alu_w(
@@ -70,15 +70,15 @@ fn create_harness_fields(
     execution_bridge: ExecutionBridge,
     range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64BaseAluWAir, Rv64BaseAluWExecutor, Rv64BaseAluWChip<F>) {
-    let air = Rv64BaseAluWAir::new(
+) -> (Rv64AddSubWAir, Rv64AddSubWExecutor, Rv64AddSubWChip<F>) {
+    let air = Rv64AddSubWAir::new(
         Rv64BaseAluWU16AdapterAir::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
-        BaseAluWCoreAir::new(range_checker_chip.bus(), BaseAluWOpcode::CLASS_OFFSET),
+        AddSubWCoreAir::new(range_checker_chip.bus(), BaseAluWOpcode::CLASS_OFFSET),
     );
     let executor =
-        Rv64BaseAluWExecutor::new(Rv64BaseAluWU16AdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
-    let chip = Rv64BaseAluWChip::new(
-        BaseAluWFiller::new(
+        Rv64AddSubWExecutor::new(Rv64BaseAluWU16AdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
+    let chip = Rv64AddSubWChip::new(
+        AddSubWFiller::new(
             Rv64BaseAluWU16AdapterFiller::new(range_checker_chip.clone()),
             range_checker_chip,
             BaseAluWOpcode::CLASS_OFFSET,
@@ -154,7 +154,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
 #[test_case(ADDW, 100)]
 #[test_case(SUBW, 100)]
-fn rand_rv64w_alu_test(opcode: BaseAluWOpcode, num_ops: usize) {
+fn rand_rv64_add_sub_w_test(opcode: BaseAluWOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
 
     let mut tester = VmChipTestBuilder::default();
@@ -225,7 +225,7 @@ fn run_negative_alu_w_test(
         let mut values = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64BaseAluWU16AdapterCols<F> = adapter_row.borrow_mut();
-        let cols: &mut BaseAluWCoreCols<F> = core_row.borrow_mut();
+        let cols: &mut AddSubWCoreCols<F> = core_row.borrow_mut();
         cols.a = prank_a.map(F::from_u32);
         if let Some(prank_b) = prank_b {
             cols.b = prank_b.map(F::from_u32);
@@ -462,10 +462,10 @@ fn run_subw_noncanonical_upper_bytes_sanity_test() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv64BaseAluWExecutor,
-    Rv64BaseAluWAir,
-    Rv64BaseAluWChipGpu,
-    Rv64BaseAluWChip<F>,
+    Rv64AddSubWExecutor,
+    Rv64AddSubWAir,
+    Rv64AddSubWChipGpu,
+    Rv64AddSubWChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -480,7 +480,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64BaseAluWChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+    let gpu_chip = Rv64AddSubWChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }
@@ -488,7 +488,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 #[cfg(feature = "cuda")]
 #[test_case(BaseAluWOpcode::ADDW, 100)]
 #[test_case(BaseAluWOpcode::SUBW, 100)]
-fn test_cuda_rand_alu_w_tracegen(opcode: BaseAluWOpcode, num_ops: usize) {
+fn test_cuda_rand_add_sub_w_tracegen(opcode: BaseAluWOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = GpuChipTestBuilder::default();
 

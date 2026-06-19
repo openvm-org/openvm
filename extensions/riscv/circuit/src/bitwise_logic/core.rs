@@ -231,10 +231,9 @@ where
 
         let local_opcode = BaseAluOpcode::from_usize(record.local_opcode as usize);
         let a = run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(local_opcode, &record.b, &record.c);
-        // PERF: needless conversion
-        core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
-        core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
-        core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
+        core_row.opcode_and_flag = F::from_bool(record.local_opcode == BaseAluOpcode::AND as u8);
+        core_row.opcode_or_flag = F::from_bool(record.local_opcode == BaseAluOpcode::OR as u8);
+        core_row.opcode_xor_flag = F::from_bool(record.local_opcode == BaseAluOpcode::XOR as u8);
 
         for (b_val, c_val) in zip(record.b, record.c) {
             self.bitwise_lookup_chip

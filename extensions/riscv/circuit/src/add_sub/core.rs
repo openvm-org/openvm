@@ -248,9 +248,8 @@ where
 
         let local_opcode = BaseAluOpcode::from_usize(record.local_opcode as usize);
         let a = run_add_sub::<NUM_LIMBS, LIMB_BITS>(local_opcode, &record.b, &record.c);
-        // PERF: needless conversion
-        core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
-        core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
+        core_row.opcode_sub_flag = F::from_bool(record.local_opcode == BaseAluOpcode::SUB as u8);
+        core_row.opcode_add_flag = F::from_bool(record.local_opcode == BaseAluOpcode::ADD as u8);
 
         for a_val in a {
             self.range_checker_chip.add_count(a_val as u32, LIMB_BITS);

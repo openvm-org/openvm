@@ -11,24 +11,24 @@ using namespace riscv;
 
 // Concrete type aliases for the 32-bit word variant on RV64. The low word is two u16 limbs and
 // reuses the add_sub core; the adapter rebuilds the sign-extended 64-bit register write.
-using Rv64BaseAluWCoreRecord = AddSubCoreRecord<RV64_WORD_U16_LIMBS>;
-using Rv64BaseAluWCore = AddSubCore<RV64_WORD_U16_LIMBS, U16_BITS>;
-template <typename T> using Rv64BaseAluWCoreCols = AddSubCoreCols<T, RV64_WORD_U16_LIMBS>;
+using Rv64AddSubWCoreRecord = AddSubCoreRecord<RV64_WORD_U16_LIMBS>;
+using Rv64AddSubWCore = AddSubCore<RV64_WORD_U16_LIMBS, U16_BITS>;
+template <typename T> using Rv64AddSubWCoreCols = AddSubCoreCols<T, RV64_WORD_U16_LIMBS>;
 
-template <typename T> struct Rv64BaseAluWCols {
+template <typename T> struct Rv64AddSubWCols {
     Rv64BaseAluWU16AdapterCols<T> adapter;
-    Rv64BaseAluWCoreCols<T> core;
+    Rv64AddSubWCoreCols<T> core;
 };
 
-struct Rv64BaseAluWRecord {
+struct Rv64AddSubWRecord {
     Rv64BaseAluWU16AdapterRecord adapter;
-    Rv64BaseAluWCoreRecord core;
+    Rv64AddSubWCoreRecord core;
 };
 
-__global__ void rv64_alu_w_tracegen(
+__global__ void rv64_add_sub_w_tracegen(
     Fp *d_trace,
     size_t height,
-    DeviceBufferConstView<Rv64BaseAluWRecord> d_records,
+    DeviceBufferConstView<Rv64AddSubWRecord> d_records,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits
@@ -43,26 +43,26 @@ __global__ void rv64_alu_w_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        Rv64BaseAluWCore core(VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins));
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64BaseAluWCols, core)), rec.core);
+        Rv64AddSubWCore core(VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins));
+        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64AddSubWCols, core)), rec.core);
     } else {
-        row.fill_zero(0, sizeof(Rv64BaseAluWCols<uint8_t>));
+        row.fill_zero(0, sizeof(Rv64AddSubWCols<uint8_t>));
     }
 }
 
-extern "C" int _rv64_alu_w_tracegen(
+extern "C" int _rv64_add_sub_w_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Rv64BaseAluWRecord> d_records,
+    DeviceBufferConstView<Rv64AddSubWRecord> d_records,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(Rv64BaseAluWCols<uint8_t>));
+    assert(width == sizeof(Rv64AddSubWCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
-    rv64_alu_w_tracegen<<<grid, block, 0, stream>>>(
+    rv64_add_sub_w_tracegen<<<grid, block, 0, stream>>>(
         d_trace, height, d_records, d_range_checker_ptr, range_checker_num_bins, timestamp_max_bits
     );
     return CHECK_KERNEL();

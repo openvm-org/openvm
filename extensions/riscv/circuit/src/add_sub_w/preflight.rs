@@ -15,12 +15,12 @@ use crate::{
 /// its pure/metered interpreter (see `execution.rs`) has W-specific 32->64 sign-extension
 /// semantics, which would conflict with `AddSubExecutor`'s blanket interpreter impls.
 #[derive(Clone, Copy, derive_new::new)]
-pub struct BaseAluWExecutor<A> {
+pub struct AddSubWExecutor<A> {
     adapter: A,
     pub offset: usize,
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for BaseAluWExecutor<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for AddSubWExecutor<A>
 where
     F: PrimeField32,
     A: 'static

@@ -646,10 +646,10 @@ pub mod mulh_cuda {
     }
 }
 
-pub mod alu_w_cuda {
+pub mod add_sub_w_cuda {
     use super::*;
     extern "C" {
-        fn _rv64_alu_w_tracegen(
+        fn _rv64_add_sub_w_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -669,7 +669,7 @@ pub mod alu_w_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_alu_w_tracegen(
+        CudaError::from_result(_rv64_add_sub_w_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,

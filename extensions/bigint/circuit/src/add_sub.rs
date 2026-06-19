@@ -28,7 +28,7 @@ impl Rv64AddSub256Executor {
 }
 
 #[derive(AlignedBytesBorrow)]
-struct BaseAluPreCompute {
+struct AddSubPreCompute {
     a: u8,
     b: u8,
     c: u8,
@@ -46,7 +46,7 @@ macro_rules! dispatch {
 
 impl<F: PrimeField32> InterpreterExecutor<F> for Rv64AddSub256Executor {
     fn pre_compute_size(&self) -> usize {
-        size_of::<BaseAluPreCompute>()
+        size_of::<AddSubPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -59,7 +59,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64AddSub256Executor {
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut BaseAluPreCompute = data.borrow_mut();
+        let data: &mut AddSubPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
 
         dispatch!(execute_e1_handler, local_opcode)
@@ -75,7 +75,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64AddSub256Executor {
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut BaseAluPreCompute = data.borrow_mut();
+        let data: &mut AddSubPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
 
         dispatch!(execute_e1_handler, local_opcode)
@@ -87,7 +87,7 @@ impl<F: PrimeField32> AotExecutor<F> for Rv64AddSub256Executor {}
 
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64AddSub256Executor {
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<BaseAluPreCompute>>()
+        size_of::<E2PreCompute<AddSubPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -101,7 +101,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64AddSub256Executor {
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<AddSubPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
@@ -119,7 +119,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64AddSub256Executor {
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<AddSubPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
@@ -131,7 +131,7 @@ impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64AddSub256Executor {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
-    pre_compute: &BaseAluPreCompute,
+    pre_compute: &AddSubPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1_ptr =
@@ -154,8 +154,8 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &BaseAluPreCompute =
-        std::slice::from_raw_parts(pre_compute, size_of::<BaseAluPreCompute>()).borrow();
+    let pre_compute: &AddSubPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<AddSubPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);
 }
 
@@ -165,8 +165,8 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Al
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<BaseAluPreCompute> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<BaseAluPreCompute>>())
+    let pre_compute: &E2PreCompute<AddSubPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<AddSubPreCompute>>())
             .borrow();
     exec_state
         .ctx
@@ -179,7 +179,7 @@ impl Rv64AddSub256Executor {
         &self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut BaseAluPreCompute,
+        data: &mut AddSubPreCompute,
     ) -> Result<BaseAluOpcode, StaticProgramError> {
         let Instruction {
             opcode,
@@ -194,7 +194,7 @@ impl Rv64AddSub256Executor {
         if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        *data = BaseAluPreCompute {
+        *data = AddSubPreCompute {
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
             c: c.as_canonical_u32() as u8,

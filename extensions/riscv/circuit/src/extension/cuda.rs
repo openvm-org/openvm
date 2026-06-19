@@ -11,8 +11,8 @@ use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engi
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{
-    Rv64AddSubAir, Rv64AddSubChipGpu, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64BaseAluWAir,
-    Rv64BaseAluWChipGpu, Rv64BitwiseLogicAir, Rv64BitwiseLogicChipGpu, Rv64BranchEqualAir,
+    Rv64AddSubAir, Rv64AddSubChipGpu, Rv64AddSubWAir, Rv64AddSubWChipGpu, Rv64AuipcAir,
+    Rv64AuipcChipGpu, Rv64BitwiseLogicAir, Rv64BitwiseLogicChipGpu, Rv64BranchEqualAir,
     Rv64BranchEqualChipGpu, Rv64BranchLessThanAir, Rv64BranchLessThanChipGpu, Rv64DivRemAir,
     Rv64DivRemChipGpu, Rv64DivRemWAir, Rv64DivRemWChipGpu, Rv64HintStoreAir, Rv64HintStoreChipGpu,
     Rv64I, Rv64Io, Rv64JalLuiAir, Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir,
@@ -52,9 +52,9 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         );
         inventory.add_executor_chip(bitwise_logic);
 
-        inventory.next_air::<Rv64BaseAluWAir>()?;
-        let base_alu_w = Rv64BaseAluWChipGpu::new(range_checker.clone(), timestamp_max_bits);
-        inventory.add_executor_chip(base_alu_w);
+        inventory.next_air::<Rv64AddSubWAir>()?;
+        let add_sub_w = Rv64AddSubWChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(add_sub_w);
 
         inventory.next_air::<Rv64LessThanAir>()?;
         let lt = Rv64LessThanChipGpu::new(range_checker.clone(), timestamp_max_bits);

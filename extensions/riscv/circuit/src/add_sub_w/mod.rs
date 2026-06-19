@@ -12,8 +12,8 @@ mod execution;
 mod preflight;
 pub use preflight::*;
 
-pub type BaseAluWCoreAir = AddSubCoreAir<RV64_WORD_U16_LIMBS, U16_BITS>;
-pub type BaseAluWFiller<A> = AddSubFiller<A, RV64_WORD_U16_LIMBS, U16_BITS>;
+pub type AddSubWCoreAir = AddSubCoreAir<RV64_WORD_U16_LIMBS, U16_BITS>;
+pub type AddSubWFiller<A> = AddSubFiller<A, RV64_WORD_U16_LIMBS, U16_BITS>;
 
 #[cfg(feature = "cuda")]
 mod cuda;
@@ -23,6 +23,6 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64BaseAluWAir = VmAirWrapper<Rv64BaseAluWU16AdapterAir, BaseAluWCoreAir>;
-pub type Rv64BaseAluWExecutor = BaseAluWExecutor<Rv64BaseAluWU16AdapterExecutor>;
-pub type Rv64BaseAluWChip<F> = VmChipWrapper<F, BaseAluWFiller<Rv64BaseAluWU16AdapterFiller>>;
+pub type Rv64AddSubWAir = VmAirWrapper<Rv64BaseAluWU16AdapterAir, AddSubWCoreAir>;
+pub type Rv64AddSubWExecutor = AddSubWExecutor<Rv64BaseAluWU16AdapterExecutor>;
+pub type Rv64AddSubWChip<F> = VmChipWrapper<F, AddSubWFiller<Rv64BaseAluWU16AdapterFiller>>;

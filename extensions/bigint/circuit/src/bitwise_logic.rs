@@ -28,7 +28,7 @@ impl Rv64BitwiseLogic256Executor {
 }
 
 #[derive(AlignedBytesBorrow)]
-struct BaseAluPreCompute {
+struct BitwiseLogicPreCompute {
     a: u8,
     b: u8,
     c: u8,
@@ -47,7 +47,7 @@ macro_rules! dispatch {
 
 impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BitwiseLogic256Executor {
     fn pre_compute_size(&self) -> usize {
-        size_of::<BaseAluPreCompute>()
+        size_of::<BitwiseLogicPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -60,7 +60,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BitwiseLogic256Executor {
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut BaseAluPreCompute = data.borrow_mut();
+        let data: &mut BitwiseLogicPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
 
         dispatch!(execute_e1_handler, local_opcode)
@@ -76,7 +76,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BitwiseLogic256Executor {
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut BaseAluPreCompute = data.borrow_mut();
+        let data: &mut BitwiseLogicPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
 
         dispatch!(execute_e1_handler, local_opcode)
@@ -88,7 +88,7 @@ impl<F: PrimeField32> AotExecutor<F> for Rv64BitwiseLogic256Executor {}
 
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BitwiseLogic256Executor {
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<BaseAluPreCompute>>()
+        size_of::<E2PreCompute<BitwiseLogicPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -102,7 +102,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BitwiseLogic256Execu
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<BitwiseLogicPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
@@ -120,7 +120,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BitwiseLogic256Execu
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<BitwiseLogicPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
@@ -132,7 +132,7 @@ impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64BitwiseLogic256Executor {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
-    pre_compute: &BaseAluPreCompute,
+    pre_compute: &BitwiseLogicPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1_ptr =
@@ -155,8 +155,8 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &BaseAluPreCompute =
-        std::slice::from_raw_parts(pre_compute, size_of::<BaseAluPreCompute>()).borrow();
+    let pre_compute: &BitwiseLogicPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<BitwiseLogicPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);
 }
 
@@ -166,9 +166,11 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Al
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<BaseAluPreCompute> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<BaseAluPreCompute>>())
-            .borrow();
+    let pre_compute: &E2PreCompute<BitwiseLogicPreCompute> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<BitwiseLogicPreCompute>>(),
+    )
+    .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
@@ -180,7 +182,7 @@ impl Rv64BitwiseLogic256Executor {
         &self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut BaseAluPreCompute,
+        data: &mut BitwiseLogicPreCompute,
     ) -> Result<BaseAluOpcode, StaticProgramError> {
         let Instruction {
             opcode,
@@ -195,7 +197,7 @@ impl Rv64BitwiseLogic256Executor {
         if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        *data = BaseAluPreCompute {
+        *data = BitwiseLogicPreCompute {
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
             c: c.as_canonical_u32() as u8,

@@ -11,17 +11,17 @@ use crate::{
     adapters::{
         Rv64BaseAluWU16AdapterCols, Rv64BaseAluWU16AdapterRecord, RV64_WORD_U16_LIMBS, U16_BITS,
     },
-    cuda_abi::alu_w_cuda::tracegen,
+    cuda_abi::add_sub_w_cuda::tracegen,
     AddSubCoreCols, AddSubCoreRecord,
 };
 
 #[derive(new)]
-pub struct Rv64BaseAluWChipGpu {
+pub struct Rv64AddSubWChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64BaseAluWChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv64AddSubWChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
             Rv64BaseAluWU16AdapterRecord,

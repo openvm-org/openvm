@@ -138,7 +138,7 @@ pub type Rv64AddSub256Chip<F> = VmChipWrapper<
     >,
 >;
 
-/// BitwiseLogic256 — byte limbs, bitwise lookup (the old base_alu adapter/core shape)
+/// BitwiseLogic256 — byte limbs, bitwise lookup for XOR/OR/AND.
 pub type Rv64BitwiseLogic256Air =
     VmAirWrapper<AluAdapterAir, BitwiseLogicCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
 #[derive(Clone, PreflightExecutor)]

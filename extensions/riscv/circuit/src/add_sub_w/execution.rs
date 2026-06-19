@@ -14,25 +14,25 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::BaseAluWOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::BaseAluWExecutor;
+use super::AddSubWExecutor;
 use crate::adapters::imm_to_rv64_u64;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-pub(super) struct BaseAluWPreCompute {
+pub(super) struct AddSubWPreCompute {
     c: u64,
     a: u8,
     b: u8,
 }
 
-impl<A> BaseAluWExecutor<A> {
+impl<A> AddSubWExecutor<A> {
     /// Return `is_imm`, true if `e` is RV64_IMM_AS.
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut BaseAluWPreCompute,
+        data: &mut AddSubWPreCompute,
     ) -> Result<bool, StaticProgramError> {
         let Instruction { a, b, c, d, e, .. } = inst;
         let e_u32 = e.as_canonical_u32();
@@ -43,7 +43,7 @@ impl<A> BaseAluWExecutor<A> {
         }
         let is_imm = e_u32 == RV64_IMM_AS;
         let c_u32 = c.as_canonical_u32();
-        *data = BaseAluWPreCompute {
+        *data = AddSubWPreCompute {
             c: if is_imm {
                 imm_to_rv64_u64(c_u32)
             } else {
@@ -72,13 +72,13 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> InterpreterExecutor<F> for BaseAluWExecutor<A>
+impl<F, A> InterpreterExecutor<F> for AddSubWExecutor<A>
 where
     F: PrimeField32,
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
-        size_of::<BaseAluWPreCompute>()
+        size_of::<AddSubWPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -91,7 +91,7 @@ where
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut BaseAluWPreCompute = data.borrow_mut();
+        let data: &mut AddSubWPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
 
         dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
@@ -107,20 +107,20 @@ where
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut BaseAluWPreCompute = data.borrow_mut();
+        let data: &mut AddSubWPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
 
         dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for BaseAluWExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for AddSubWExecutor<A>
 where
     F: PrimeField32,
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<BaseAluWPreCompute>>()
+        size_of::<E2PreCompute<AddSubWPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -134,7 +134,7 @@ where
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<BaseAluWPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<AddSubWPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
@@ -152,7 +152,7 @@ where
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let data: &mut E2PreCompute<BaseAluWPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<AddSubWPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
@@ -167,7 +167,7 @@ unsafe fn execute_e12_impl<
     const IS_IMM: bool,
     OP: AluWOp,
 >(
-    pre_compute: &BaseAluWPreCompute,
+    pre_compute: &AddSubWPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 =
@@ -205,8 +205,8 @@ unsafe fn execute_e1_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &BaseAluWPreCompute =
-        std::slice::from_raw_parts(pre_compute, size_of::<BaseAluWPreCompute>()).borrow();
+    let pre_compute: &AddSubWPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<AddSubWPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, exec_state);
 }
 
@@ -221,8 +221,8 @@ unsafe fn execute_e2_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<BaseAluWPreCompute> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<BaseAluWPreCompute>>())
+    let pre_compute: &E2PreCompute<AddSubWPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<AddSubWPreCompute>>())
             .borrow();
     exec_state
         .ctx
