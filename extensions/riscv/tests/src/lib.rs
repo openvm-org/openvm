@@ -271,14 +271,15 @@ mod tests {
     #[test]
     #[should_panic(expected = "Memory access out of bounds")]
     fn test_reveal_beyond_num_public_values_errors() {
-        let config = test_rv32im_config();
+        let mut config = test_rv64im_config();
+        config.rv64i.system = config.rv64i.system.with_public_values(16);
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension),
         )
         .unwrap();
 

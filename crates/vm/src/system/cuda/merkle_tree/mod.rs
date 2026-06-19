@@ -804,19 +804,7 @@ mod tests {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
-        let gpu_hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
-            (mem_config
-                .addr_spaces
-                .iter()
-                .map(|ashc| ashc.num_cells * 2 + mem_config.memory_dimensions().overall_height())
-                .sum::<usize>()
-                * 2)
-            .next_power_of_two()
-                * 2
-                * DIGEST_WIDTH, // max_buffer_size
-            1, // sbox_regs
-            device_ctx.clone(),
-        ));
+        let gpu_hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
         let mut gpu_merkle_tree =
             MemoryMerkleTree::new(mem_config.clone(), gpu_hasher_chip, device_ctx.clone());
         let mem_slices = initial_memory

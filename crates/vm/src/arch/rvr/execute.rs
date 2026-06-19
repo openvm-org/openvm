@@ -273,10 +273,10 @@ fn execute_metered_impl<F: PrimeField32>(
                 seg_state.segmentation_ctx.instrets_until_check
             ))
         })?;
-    let _ = u32::try_from(seg_state.segmentation_ctx.segment_check_insns).map_err(|_| {
+    let _ = u32::try_from(seg_state.segmentation_ctx.segment_check_insns()).map_err(|_| {
         ExecuteError::InvalidMeteredContext(format!(
             "segment_check_insns {} exceeds rvr tracer u32 counter",
-            seg_state.segmentation_ctx.segment_check_insns
+            seg_state.segmentation_ctx.segment_check_insns()
         ))
     })?;
 

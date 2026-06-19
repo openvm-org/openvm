@@ -26,7 +26,7 @@ fn keccak256(input: &[u8]) -> [u8; 32] {
         output
     }
     #[cfg(not(openvm_intrinsics))] {
-        // Regular Keccak-256 implementation
+        unimplemented!("native keccak256 is only available with openvm intrinsics")
     }
 }
 ```

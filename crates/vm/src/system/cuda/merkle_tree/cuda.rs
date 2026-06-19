@@ -187,6 +187,7 @@ pub mod merkle_tree {
         let actual_heights = actual_heights.to_device_on(device_ctx).unwrap();
         let subtree_layouts = subtree_layouts.to_device_on(device_ctx).unwrap();
         let initial_data_ptrs = initial_data_ptrs.to_device_on(device_ctx).unwrap();
+        let poseidon2_records = hasher_buffer.records();
         CudaError::from_result(_update_merkle_tree(
             num_leaves,
             touched_blocks.as_mut_ptr(),
@@ -204,10 +205,10 @@ pub mod merkle_tree {
             actual_heights.as_ptr(),
             subtree_layouts.as_ptr(),
             initial_data_ptrs.as_ptr(),
-            hasher_buffer.buffer.as_mut_raw_ptr(),
+            poseidon2_records.as_mut_raw_ptr(),
             hasher_buffer.idx.as_mut_ptr(),
             // Length in F elements; the CUDA side converts to record count.
-            hasher_buffer.buffer.len(),
+            poseidon2_records.len(),
             device_ctx.stream.as_raw(),
         ))
     }
