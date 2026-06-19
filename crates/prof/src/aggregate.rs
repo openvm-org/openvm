@@ -655,6 +655,7 @@ pub const COMPILE_METERED_SEGMENT_TIME_LABEL: &str = "compile_metered_segment_ti
 pub const COMPILE_METERED_COST_TIME_LABEL: &str = "compile_metered_cost_time_ms";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
 pub const GENERATE_BLOB_TIME_LABEL: &str = "generate_blob_total_time_ms";
+pub const SET_INITIAL_MEMORY_TIME_LABEL: &str = "set_initial_memory_time_ms";
 pub const MEM_FIN_TIME_LABEL: &str = "memory_finalize_time_ms";
 pub const BOUNDARY_FIN_TIME_LABEL: &str = "boundary_finalize_time_ms";
 pub const MERKLE_FIN_TIME_LABEL: &str = "merkle_finalize_time_ms";
@@ -681,6 +682,7 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
     TRACE_GEN_TIME_LABEL,
     GENERATE_BLOB_TIME_LABEL,
+    SET_INITIAL_MEMORY_TIME_LABEL,
     MEM_FIN_TIME_LABEL,
     BOUNDARY_FIN_TIME_LABEL,
     MERKLE_FIN_TIME_LABEL,
