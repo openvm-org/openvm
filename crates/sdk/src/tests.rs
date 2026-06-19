@@ -317,15 +317,15 @@ fn test_sdk_compiled_pure_save_load_roundtrip() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&100u64);
 
-    let compiled_a = sdk.compile_pure(exe.clone())?;
-    let baseline = sdk.execute_compiled(&compiled_a, stdin.clone())?;
+    let compiled_a = sdk.compile(exe.clone())?;
+    let baseline = sdk.execute(&compiled_a, stdin.clone())?;
 
     let tmp = tempfile::tempdir()?;
     let lib_path = compiled_a.save(tmp.path())?;
     drop(compiled_a);
 
-    let compiled_b = sdk.load_compiled_pure(&lib_path, exe)?;
-    let reloaded = sdk.execute_compiled(&compiled_b, stdin)?;
+    let compiled_b = sdk.load_compiled(&lib_path, exe)?;
+    let reloaded = sdk.execute(&compiled_b, stdin)?;
 
     assert_eq!(baseline, reloaded);
     Ok(())
@@ -345,15 +345,14 @@ fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
     stdin.write(&100u64);
 
     let compiled_a = sdk.compile_metered(exe.clone())?;
-    let (baseline_pv, baseline_segments) =
-        sdk.execute_compiled_metered(&compiled_a, stdin.clone())?;
+    let (baseline_pv, baseline_segments) = sdk.execute_metered(&compiled_a, stdin.clone())?;
 
     let tmp = tempfile::tempdir()?;
     let lib_path = compiled_a.save(tmp.path())?;
     drop(compiled_a);
 
     let compiled_b = sdk.load_compiled_metered(&lib_path, exe)?;
-    let (reloaded_pv, reloaded_segments) = sdk.execute_compiled_metered(&compiled_b, stdin)?;
+    let (reloaded_pv, reloaded_segments) = sdk.execute_metered(&compiled_b, stdin)?;
 
     assert_eq!(baseline_pv, reloaded_pv);
     assert_eq!(baseline_segments.len(), reloaded_segments.len());
@@ -379,15 +378,14 @@ fn test_sdk_compiled_metered_cost_save_load_roundtrip() -> Result<()> {
     stdin.write(&100u64);
 
     let compiled_a = sdk.compile_metered_cost(exe.clone())?;
-    let (baseline_pv, baseline_cost) =
-        sdk.execute_compiled_metered_cost(&compiled_a, stdin.clone())?;
+    let (baseline_pv, baseline_cost) = sdk.execute_metered_cost(&compiled_a, stdin.clone())?;
 
     let tmp = tempfile::tempdir()?;
     let lib_path = compiled_a.save(tmp.path())?;
     drop(compiled_a);
 
     let compiled_b = sdk.load_compiled_metered_cost(&lib_path, exe)?;
-    let (reloaded_pv, reloaded_cost) = sdk.execute_compiled_metered_cost(&compiled_b, stdin)?;
+    let (reloaded_pv, reloaded_cost) = sdk.execute_metered_cost(&compiled_b, stdin)?;
 
     assert_eq!(baseline_pv, reloaded_pv);
     assert_eq!(baseline_cost, reloaded_cost);
@@ -407,7 +405,7 @@ fn test_sdk_compiled_metered_execute() -> Result<()> {
     stdin.write(&100u64);
 
     let compiled = sdk.compile_metered(exe)?;
-    let (_, segments) = sdk.execute_compiled_metered(&compiled, stdin)?;
+    let (_, segments) = sdk.execute_metered(&compiled, stdin)?;
     assert!(!segments.is_empty());
     Ok(())
 }
@@ -425,7 +423,7 @@ fn test_sdk_compiled_metered_cost_execute() -> Result<()> {
     stdin.write(&100u64);
 
     let compiled = sdk.compile_metered_cost(exe)?;
-    let (_, (_, instret)) = sdk.execute_compiled_metered_cost(&compiled, stdin)?;
+    let (_, (_, instret)) = sdk.execute_metered_cost(&compiled, stdin)?;
     assert!(instret > 0);
     Ok(())
 }
