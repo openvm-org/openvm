@@ -765,29 +765,6 @@ impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>
     }
 }
 
-impl BatchConstraintModule {
-    pub fn cached_trace_record(
-        &self,
-        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-    ) -> CachedTraceRecord {
-        expr_eval::build_cached_trace_record(child_vk, self.has_cached)
-    }
-
-    /// Generates and then commits to the cache trace for `SymbolicExpressionAir`. Returns the
-    /// committed PCS data.
-    pub fn commit_child_vk<E>(
-        &self,
-        engine: &E,
-        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-    ) -> CommittedTraceData<E::PB>
-    where
-        E: StarkEngine,
-        E::SC: StarkProtocolConfig<F = F>,
-    {
-        commit_child_vk(engine, child_vk, self.has_cached)
-    }
-}
-
 // NOTE: ordering of enum must match AIR ordering
 #[derive(strum_macros::Display, EnumDiscriminants)]
 #[strum_discriminants(derive(strum_macros::EnumCount))]
