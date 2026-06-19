@@ -27,7 +27,9 @@ use crate::{
     },
     system::{
         memory::{
-            merkle::public_values::{assert_public_values_shape, PUBLIC_VALUES_AS},
+            merkle::public_values::{
+                assert_public_values_shape, public_values_cells_from_bytes, PUBLIC_VALUES_AS,
+            },
             num_memory_airs, DIGEST_WIDTH, POINTER_MAX_BITS,
         },
         SystemChipComplex,
@@ -331,6 +333,10 @@ impl SystemConfig {
         self.num_public_values = num_public_values;
         self.memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         self
+    }
+
+    pub fn with_public_values_bytes(self, num_public_values_bytes: usize) -> Self {
+        self.with_public_values(public_values_cells_from_bytes(num_public_values_bytes))
     }
 
     /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.

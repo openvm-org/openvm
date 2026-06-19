@@ -272,7 +272,7 @@ mod tests {
     #[should_panic(expected = "Memory access out of bounds")]
     fn test_reveal_beyond_num_public_values_errors() {
         let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values(16);
+        config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn test_reveal() -> Result<()> {
         let mut config = test_rv64im_config();
-        config.rv64i.system = config.rv64i.system.with_public_values(64);
+        config.rv64i.system = config.rv64i.system.with_public_values_bytes(64);
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
         let exe = VmExe::from_elf(
             elf,
