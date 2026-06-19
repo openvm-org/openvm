@@ -742,6 +742,19 @@ where
                             let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
                             info_span!("single_trace_gen", air = air_name).entered()
                         });
+                        #[cfg(feature = "metrics")]
+                        if let Some(allocated_bytes) = (!records.is_empty())
+                            .then(|| records.allocated_bytes())
+                            .flatten()
+                        {
+                            let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
+                            let labels = [
+                                ("air_name", air_name.to_string()),
+                                ("air_id", (num_sys_airs + insertion_idx).to_string()),
+                            ];
+                            metrics::counter!("trace_gen.record_arena_bytes", &labels)
+                                .absolute(allocated_bytes as u64);
+                        }
                         chip.generate_proving_ctx(records)
                     },
                 ),

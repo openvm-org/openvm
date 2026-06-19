@@ -58,7 +58,9 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32HintStoreChipGpu {
         }
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records = tracing::info_span!("trace_gen.h2d_records")
+            .in_scope(|| records.to_device_on(device_ctx))
+            .unwrap();
         let d_record_offsets = offsets.to_device_on(device_ctx).unwrap();
 
         let trace_height = next_power_of_two_or_zero(offsets.len());
