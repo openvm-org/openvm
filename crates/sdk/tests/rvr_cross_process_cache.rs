@@ -22,7 +22,7 @@ mod tests {
             .map(|e| e.path())
             .filter(|p| {
                 p.extension()
-                    .map_or(false, |ext| ext == "so" || ext == "dylib")
+                    .is_some_and(|ext| ext == "so" || ext == "dylib")
             })
             .collect()
     }
