@@ -7,18 +7,34 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SupportedDeferral {
+    /// The built-in deferral circuit for recursively verifying OpenVM STARK proofs.
     VerifyStark,
+    /// A custom deferral circuit.
+    ///
+    /// This variant can preserve the config shape through serialization, but the corresponding
+    /// [`DeferralFn`] must be supplied manually after deserialization.
     Other(String),
 }
 
+/// A serializable deferral circuit entry in an [`SdkVmConfig`](crate::SdkVmConfig).
+///
+/// Entries are indexed by their position in [`DeferralConfig::circuits`]. Guest programs pass that
+/// index to deferral guest APIs.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DeferralCircuitConfig {
+    /// The supported deferral function this circuit computes.
     pub def_type: SupportedDeferral,
+    /// The commitment to the deferral circuit proving key expected by the guest VM.
     pub commit: CommitBytes,
 }
 
+/// Serializable SDK configuration for the deferral extension.
+///
+/// The SDK converts this into the lower-level [`DeferralExtension`] when building execution,
+/// transpiler, and prover components.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeferralConfig {
+    /// Ordered deferral circuits available to the VM.
     pub circuits: Vec<DeferralCircuitConfig>,
 }
 

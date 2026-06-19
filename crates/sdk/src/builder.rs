@@ -469,9 +469,9 @@ where
     }
 
     /// Enables deferrals in this SDK build. The [`MultiDeferralCircuitProver`] must be created
-    /// ahead of time because the [`openvm_deferral_circuit::DeferralExtension`] should be
-    /// created using [`MultiDeferralCircuitProver::make_extension`], which generates the
-    /// `def_circuit_commits` needed by the VM config.
+    /// ahead of time because the [`openvm_sdk_config::deferral::DeferralConfig`] should be created
+    /// using [`MultiDeferralCircuitProver::make_config`], which generates the `def_circuit_commits`
+    /// needed by the VM config.
     pub fn multi_deferral_circuit_prover(
         mut self,
         multi_deferral_circuit_prover: MultiDeferralCircuitProver,

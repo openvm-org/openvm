@@ -19,7 +19,7 @@ mkdir -p "$artifacts_dir"
 
 cargo openvm setup --force
 
-cargo build --locked --release --manifest-path "$host_manifest" --features "$host_features" --bin main
+cargo build --release --manifest-path "$host_manifest" --features "$host_features" --bin main
 
 "$host_bin" keygen \
   --child-agg-vk "$child_agg_vk" \
