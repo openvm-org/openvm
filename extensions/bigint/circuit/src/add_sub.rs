@@ -12,18 +12,18 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::{adapters::rv64_bytes_to_u32, BaseAluExecutor};
+use openvm_riscv_circuit::{adapters::rv64_bytes_to_u32, AddSubExecutor};
 use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
-    AluAdapterExecutor, Rv64BaseAlu256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
+    AluU16AdapterExecutor, Rv64AddSub256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
 };
 
-impl Rv64BaseAlu256Executor {
-    pub fn new(adapter: AluAdapterExecutor, offset: usize) -> Self {
-        Self(BaseAluExecutor::new(adapter, offset))
+impl Rv64AddSub256Executor {
+    pub fn new(adapter: AluU16AdapterExecutor, offset: usize) -> Self {
+        Self(AddSubExecutor::new(adapter, offset))
     }
 }
 
@@ -39,14 +39,12 @@ macro_rules! dispatch {
         Ok(match $local_opcode {
             BaseAluOpcode::ADD => $execute_impl::<_, _, AddOp>,
             BaseAluOpcode::SUB => $execute_impl::<_, _, SubOp>,
-            BaseAluOpcode::XOR => $execute_impl::<_, _, XorOp>,
-            BaseAluOpcode::OR => $execute_impl::<_, _, OrOp>,
-            BaseAluOpcode::AND => $execute_impl::<_, _, AndOp>,
+            _ => unreachable!("Rv64AddSub256Executor received non-ADD/SUB opcode"),
         })
     };
 }
 
-impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BaseAlu256Executor {
+impl<F: PrimeField32> InterpreterExecutor<F> for Rv64AddSub256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<BaseAluPreCompute>()
     }
@@ -85,9 +83,9 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BaseAlu256Executor {
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32> AotExecutor<F> for Rv64BaseAlu256Executor {}
+impl<F: PrimeField32> AotExecutor<F> for Rv64AddSub256Executor {}
 
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BaseAlu256Executor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64AddSub256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BaseAluPreCompute>>()
     }
@@ -129,7 +127,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BaseAlu256Executor {
     }
 }
 #[cfg(feature = "aot")]
-impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64BaseAlu256Executor {}
+impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64AddSub256Executor {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
@@ -176,7 +174,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Al
     execute_e12_impl::<F, CTX, OP>(&pre_compute.data, exec_state);
 }
 
-impl Rv64BaseAlu256Executor {
+impl Rv64AddSub256Executor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -215,9 +213,6 @@ trait AluOp {
 }
 struct AddOp;
 struct SubOp;
-struct XorOp;
-struct OrOp;
-struct AndOp;
 impl AluOp for AddOp {
     #[inline(always)]
     fn compute(
@@ -254,54 +249,6 @@ impl AluOp for SubOp {
             let (res2, c2) = res1.overflowing_sub(borrow as u64);
             borrow = c1 || c2;
             rd_u64[i] = res2;
-        }
-        u64_array_to_bytes(rd_u64)
-    }
-}
-impl AluOp for XorOp {
-    #[inline(always)]
-    fn compute(
-        rs1: [u8; INT256_NUM_U8_LIMBS],
-        rs2: [u8; INT256_NUM_U8_LIMBS],
-    ) -> [u8; INT256_NUM_U8_LIMBS] {
-        let rs1_u64 = bytes_to_u64_array(rs1);
-        let rs2_u64 = bytes_to_u64_array(rs2);
-        let mut rd_u64 = [0u64; INT256_NUM_U64_LIMBS];
-        // Compiler will expand this loop.
-        for i in 0..INT256_NUM_U64_LIMBS {
-            rd_u64[i] = rs1_u64[i] ^ rs2_u64[i];
-        }
-        u64_array_to_bytes(rd_u64)
-    }
-}
-impl AluOp for OrOp {
-    #[inline(always)]
-    fn compute(
-        rs1: [u8; INT256_NUM_U8_LIMBS],
-        rs2: [u8; INT256_NUM_U8_LIMBS],
-    ) -> [u8; INT256_NUM_U8_LIMBS] {
-        let rs1_u64 = bytes_to_u64_array(rs1);
-        let rs2_u64 = bytes_to_u64_array(rs2);
-        let mut rd_u64 = [0u64; INT256_NUM_U64_LIMBS];
-        // Compiler will expand this loop.
-        for i in 0..INT256_NUM_U64_LIMBS {
-            rd_u64[i] = rs1_u64[i] | rs2_u64[i];
-        }
-        u64_array_to_bytes(rd_u64)
-    }
-}
-impl AluOp for AndOp {
-    #[inline(always)]
-    fn compute(
-        rs1: [u8; INT256_NUM_U8_LIMBS],
-        rs2: [u8; INT256_NUM_U8_LIMBS],
-    ) -> [u8; INT256_NUM_U8_LIMBS] {
-        let rs1_u64 = bytes_to_u64_array(rs1);
-        let rs2_u64 = bytes_to_u64_array(rs2);
-        let mut rd_u64 = [0u64; INT256_NUM_U64_LIMBS];
-        // Compiler will expand this loop.
-        for i in 0..INT256_NUM_U64_LIMBS {
-            rd_u64[i] = rs1_u64[i] & rs2_u64[i];
         }
         u64_array_to_bytes(rd_u64)
     }
