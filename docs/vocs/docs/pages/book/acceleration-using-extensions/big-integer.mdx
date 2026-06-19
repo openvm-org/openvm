@@ -51,7 +51,7 @@ fn wrapping_add(a: &CustomU256, b: &CustomU256) -> CustomU256 {
         unsafe { result.assume_init() }
     }
     #[cfg(not(openvm_intrinsics))] {
-        // Regular wrapping add implementation
+        unimplemented!("native bigint ops are only available with openvm intrinsics")
     }
 }
 ```
