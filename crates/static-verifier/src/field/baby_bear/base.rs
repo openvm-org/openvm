@@ -193,14 +193,11 @@ impl BabyBearChip {
         mut a: BabyBearWire,
         mut b: BabyBearWire,
     ) -> BabyBearWire {
-        if a.max_bits < b.max_bits {
-            std::mem::swap(&mut a, &mut b);
-        }
-        if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
+        if a.max_bits + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             a = self.reduce(ctx, a);
-            if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-                b = self.reduce(ctx, b);
-            }
+        }
+        if b.max_bits + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
+            b = self.reduce(ctx, b);
         }
         let value = self.gate().add(ctx, a.value, b.value);
         let max_bits = a.max_bits.max(b.max_bits) + 1;
@@ -227,23 +224,15 @@ impl BabyBearChip {
     ) -> BabyBearWire {
         #[cfg(debug_assertions)]
         let expected = a.to_baby_bear() - b.to_baby_bear();
-        let mut negate_result = false;
-        if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-            if a.max_bits < b.max_bits {
-                std::mem::swap(&mut a, &mut b);
-                negate_result = true;
-            }
+        if a.max_bits + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
             a = self.reduce(ctx, a);
-            if a.max_bits.max(b.max_bits) + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
-                b = self.reduce(ctx, b);
-            }
+        }
+        if b.max_bits + 1 > Fr::CAPACITY as usize - RESERVED_HIGH_BITS {
+            b = self.reduce(ctx, b);
         }
         let value = self.gate().sub(ctx, a.value, b.value);
         let max_bits = a.max_bits.max(b.max_bits) + 1;
-        let mut c = BabyBearWire { value, max_bits };
-        if negate_result {
-            c = self.neg(ctx, c);
-        }
+        let c = BabyBearWire { value, max_bits };
         guarded_debug_assert_eq!(c.to_baby_bear(), expected);
         c
     }
@@ -413,13 +402,14 @@ impl BabyBearChip {
     }
 
     pub fn assert_zero(&self, ctx: &mut Context<Fr>, a: BabyBearWire) {
-        // The proof of correctness of this function is listed in `signed_div_mod`.
         guarded_debug_assert_eq!(a.to_baby_bear(), BabyBear::ZERO);
         assert!(a.max_bits <= Fr::CAPACITY as usize - RESERVED_HIGH_BITS);
         let a_num_bits = a.max_bits;
         let b: BigUint = BabyBear::ORDER_U32.into();
         let a_val = fe_to_bigint(a.value.value());
         assert!(a_val.bits() <= a_num_bits as u64);
+        // The honest input is congruent to zero modulo the BabyBear prime, so
+        // Euclidean division by `b` has exact remainder zero.
         let (div, _) = a_val.div_mod_floor(&b.clone().into());
         let div = bigint_to_fe(&div);
         ctx.assign_region(
@@ -432,7 +422,7 @@ impl BabyBearChip {
             [0],
         );
         let div = ctx.get(-2);
-        // Constrain that `abs(div) <= 2 ** (2 ** a_num_bits / b).bits()`.
+        // Constrain the exact quotient to the range implied by `|a| < 2^a_num_bits`.
         let bound = (BigUint::from(1u32) << (a_num_bits as u32)) / &b;
         let shifted_div =
             self.range
@@ -573,7 +563,6 @@ where
     //
     // The left side is divisible by `b`, while the right side has magnitude `< b`.
     // Hence both sides are zero, so `D = D'` and `R = R'`.
-    assert!(a_num_bits <= F::CAPACITY as usize - RESERVED_HIGH_BITS);
     let a = a.into();
     let b = BigUint::from(BabyBear::ORDER_U32);
     let a_val = fe_to_bigint(a.value());
