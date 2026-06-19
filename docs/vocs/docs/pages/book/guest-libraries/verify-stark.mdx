@@ -64,12 +64,18 @@ let deferral_agg_prover = DeferralAggProver::verify_stark(
     memory_dimensions,
     num_user_pvs,
 );
-let deferral_ext = deferral_agg_prover
+let deferral_config = deferral_agg_prover
     .multi_deferral_circuit_prover
-    .make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
+    .make_config(vec![SupportedDeferral::VerifyStark]);
 
-let mut vm_config = SdkVmConfig::riscv32();
-vm_config.deferral = Some(deferral_ext);
+let vm_config = SdkVmConfig::builder()
+    .system(Default::default())
+    .rv32i(Default::default())
+    .rv32m(Default::default())
+    .io(Default::default())
+    .deferral(deferral_config)
+    .build()
+    .optimize();
 
 let sdk = CpuSdk::builder()
     .app_config(AppConfig::new(vm_config, app_params))
@@ -81,8 +87,8 @@ let sdk = CpuSdk::builder()
 The lower-level manual flow is:
 
 1. Build a `MultiDeferralCircuitProver` whose single-circuit prover is a `DeferredVerifyCircuitProver`.
-2. Create the extension with `make_extension`, passing the deferral function(s).
-3. Set `SdkVmConfig.deferral = Some(deferral_ext)`.
+2. Create the deferral config with `make_config`, passing the supported deferral type(s).
+3. Build `SdkVmConfig` with `.deferral(deferral_config)` before calling `.optimize()`.
 4. Build your SDK with `Sdk::builder().multi_deferral_circuit_prover(multi_deferral_circuit_prover)`.
 
 For example, to initialize the SDK with the `verify-stark` deferral circuit:
@@ -101,11 +107,17 @@ let deferred_verify_prover = DeferredVerifyCpuProver::new::<E>(
 let verify_stark_prover = DeferredVerifyCpuCircuitProver::new(deferred_verify_prover);
 
 let multi_deferral_circuit_prover = MultiDeferralCircuitProver::new(verify_stark_prover, agg_config, hook_params);
-let deferral_ext =
-    multi_deferral_circuit_prover.make_extension(vec![Arc::new(DeferralFn::new(verify_stark_deferral_fn))]);
+let deferral_config =
+    multi_deferral_circuit_prover.make_config(vec![SupportedDeferral::VerifyStark]);
 
-let mut vm_config = SdkVmConfig::riscv32();
-vm_config.deferral = Some(deferral_ext);
+let vm_config = SdkVmConfig::builder()
+    .system(Default::default())
+    .rv32i(Default::default())
+    .rv32m(Default::default())
+    .io(Default::default())
+    .deferral(deferral_config)
+    .build()
+    .optimize();
 
 let sdk = CpuSdk::builder()
     .app_config(AppConfig::new(vm_config, app_params))

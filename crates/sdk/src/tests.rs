@@ -3,7 +3,10 @@ use std::slice::from_ref;
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
 use openvm_continuations::prover::DeferralCircuitProver;
-use openvm_sdk_config::deferral::SupportedDeferral;
+use openvm_sdk_config::{
+    deferral::{DeferralConfig, SupportedDeferral},
+    SdkVmConfig,
+};
 use openvm_stark_backend::{codec::Encode, StarkEngine, SystemParams};
 use openvm_stark_sdk::{
     config::{
@@ -59,6 +62,17 @@ fn generate_fib_vm_stark_proof(fib_sdk: &Sdk) -> Result<(VmStarkProof, Verificat
     let mut stdin = StdIn::default();
     stdin.write(&n);
     Ok(fib_sdk.prove(fib_exe, stdin, &[])?)
+}
+
+fn riscv32_config_with_deferral(deferral: DeferralConfig) -> SdkVmConfig {
+    SdkVmConfig::builder()
+        .system(Default::default())
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .io(Default::default())
+        .deferral(deferral)
+        .build()
+        .optimize()
 }
 
 fn make_verify_stark_circuit_prover(
@@ -132,8 +146,7 @@ fn make_deferral_enabled_sdk_with_count(
     let supported_deferrals = vec![SupportedDeferral::VerifyStark; num_deferral_circuits];
     let deferral_config = multi_deferral_circuit_prover.make_config(supported_deferrals);
 
-    let mut vm_config = openvm_sdk_config::SdkVmConfig::riscv32();
-    vm_config.deferral = Some(deferral_config);
+    let vm_config = riscv32_config_with_deferral(deferral_config);
 
     Ok(Sdk::builder()
         .app_config(AppConfig::new(vm_config, app_params))
@@ -146,10 +159,9 @@ fn make_verify_stark_path_sdk(
     app_params: SystemParams,
     agg_params: AggregationSystemParams,
 ) -> Result<Sdk> {
-    let mut vm_config = openvm_sdk_config::SdkVmConfig::riscv32();
+    let vm_config = SdkVmConfig::riscv32();
     let memory_dimensions = vm_config.system.config.memory_config.memory_dimensions();
     let num_user_pvs = vm_config.system.config.num_public_values;
-
     let deferral_agg_prover = DeferralAggProver::verify_stark(
         &agg_params,
         hook_params_with_100_bits_security(),
@@ -159,7 +171,7 @@ fn make_verify_stark_path_sdk(
     let deferral_config = deferral_agg_prover
         .multi_deferral_circuit_prover
         .make_config(vec![SupportedDeferral::VerifyStark]);
-    vm_config.deferral = Some(deferral_config);
+    let vm_config = riscv32_config_with_deferral(deferral_config);
 
     Ok(Sdk::builder()
         .app_config(AppConfig::new(vm_config, app_params))

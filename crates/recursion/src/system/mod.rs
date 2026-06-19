@@ -1227,7 +1227,6 @@ pub mod cuda_tracegen {
     use std::iter::zip;
 
     use openvm_cuda_backend::{hash_scheme::GpuHashScheme, GenericGpuBackend, GpuBackend};
-    use openvm_stark_backend::prover::ProverDevice;
 
     use super::*;
     use crate::{

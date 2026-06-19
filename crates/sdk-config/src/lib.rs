@@ -22,7 +22,7 @@ use openvm_rv32im_transpiler::*;
 use openvm_sha2_circuit::*;
 use openvm_sha2_transpiler::*;
 use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig, Val};
-use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 
@@ -250,10 +250,8 @@ impl SdkVmConfig {
         const DEFERRAL_AS_USIZE: usize = DEFERRAL_AS as usize;
         let addr_spaces = &mut self.system.config.memory_config.addr_spaces;
         let deferral_as_exists = addr_spaces.len() > DEFERRAL_AS_USIZE;
-        if let Some(deferral) = self.deferral.as_ref() {
+        if self.deferral.is_some() {
             assert!(deferral_as_exists);
-            let def_num_cells = deferral.circuits.len() * DIGEST_SIZE * 2;
-            addr_spaces[DEFERRAL_AS_USIZE].num_cells = def_num_cells;
         } else if deferral_as_exists {
             addr_spaces[DEFERRAL_AS_USIZE].num_cells = 0;
         }
