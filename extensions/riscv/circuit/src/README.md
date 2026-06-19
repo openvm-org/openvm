@@ -31,7 +31,39 @@ This circuit proves the following:
 - A memory write to register `rd` is performed with the result of the operation
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
 
-#### 2. [Branch adapter](./adapters/branch.rs)
+#### 2. [ALU u16 adapter](./adapters/alu_u16.rs)
+
+Given
+
+- `rs1`, `rs2`, and `rd` are register addresses
+- `rs2_as` is a boolean indicating if `rs2` is an immediate value
+- `from_pc` is the current program address
+
+This circuit proves the following:
+
+- A u16-cell memory read from register `rs1` is performed
+- If `rs2_as` is false, a u16-cell memory read from register `rs2` is performed
+- If `rs2_as` is true, the low u16 immediate limb is range-checked and the remaining u16 limbs are constrained to the sign-extension value
+- A u16-cell memory write to register `rd` is performed with the result of the operation
+- The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
+
+#### 3. [ALU W u16 adapter](./adapters/alu_w_u16.rs)
+
+Given
+
+- `rs1`, `rs2`, and `rd` are register addresses
+- `rs2_as` is a boolean indicating if `rs2` is an immediate value
+- `from_pc` is the current program address
+
+This circuit proves the following:
+
+- A u16-cell memory read from register `rs1` is performed and its upper 32 bits are preserved for the read interaction
+- If `rs2_as` is false, a u16-cell memory read from register `rs2` is performed and its upper 32 bits are preserved for the read interaction
+- If `rs2_as` is true, the low u16 immediate limb is range-checked and the high low-word u16 limb is constrained to the sign-extension value
+- The low 32-bit result is sign-extended to a full 64-bit u16-cell register write by constraining the result sign bit from the most significant low-word limb
+- The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
+
+#### 4. [Branch adapter](./adapters/branch.rs)
 
 Given
 
@@ -45,7 +77,7 @@ This circuit proves the following:
 - A memory read from register `rs2` is performed
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `to_pc`.
 
-#### 3. [JALR adapter](./adapters/jalr.rs)
+#### 5. [JALR adapter](./adapters/jalr.rs)
 
 Given
 
@@ -59,7 +91,7 @@ This circuit proves the following:
 - A memory write to register `rd` is performed if `rd` is not `x0`
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `to_pc`
 
-#### 4. [Load/store adapter](./adapters/loadstore.rs)
+#### 6. [Load/store adapter](./adapters/loadstore.rs)
 
 Given
 
@@ -85,7 +117,7 @@ This circuit proves the following:
   - A memory write to `mem_as` is performed at address `val(rs1) + imm` where `val(rs1)` is the value read from register `rs1`
   - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
 
-#### 5. [Multiplication adapter](./adapters/mul.rs)
+#### 7. [Multiplication adapter](./adapters/mul.rs)
 
 Given
 
@@ -99,7 +131,7 @@ This circuit proves the following:
 - A memory write to register `rd` is performed with the result of the multiplication
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
 
-#### 6. [Rdwrite adapter](./adapters/rdwrite.rs)
+#### 8. [Rdwrite adapter](./adapters/rdwrite.rs)
 
 Given
 
@@ -116,20 +148,35 @@ This circuit proves the following:
 
 **Note:** For the core chips, it is not necessary to constrain the instruction operands (as specified in the statement), because the adapter already constrains them via the execution bus. The primary objective is to ensure that the result conforms to the instruction's specification.
 
-#### 1. [Base ALU](./base_alu/core.rs)
+#### 1. [Add/Sub](./add_sub/core.rs)
 
 Given:
 
-- `b` and `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^RV64_BYTE_BITS)`
+- `b` and `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^U16_BITS)`
 - `a` is the decomposition of the result
-- `opcode` indicates the operation to be performed
+- `opcode_add_flag` and `opcode_sub_flag` indicate if the instruction is `add` or `sub`
 
 This circuit proves that:
 
-- `compose(a) == compose(b) op compose(c)`
-- Each limb of `a` is within the range `[0, 2^RV64_BYTE_BITS)`
+- `compose(a) == compose(b) + compose(c)` for `add`, modulo the register width
+- `compose(a) == compose(b) - compose(c)` for `sub`, modulo the register width
+- Each limb of `a` is within the range `[0, 2^U16_BITS)`
 
-#### 2. [Branch Eq](./branch_eq/core.rs)
+#### 2. [Bitwise Logic](./bitwise_logic/core.rs)
+
+Given:
+
+- `b` and `c` are byte decompositions of the operands, with their limbs range-checked by the bitwise lookup
+- `a` is the byte decomposition of the result
+- `opcode_xor_flag`, `opcode_or_flag`, and `opcode_and_flag` indicate if the instruction is `xor`, `or`, or `and`
+
+This circuit proves that:
+
+- `a[i] == b[i] ^ c[i]` for `xor`
+- `a[i] == b[i] | c[i]` for `or`
+- `a[i] == b[i] & c[i]` for `and`
+
+#### 3. [Branch Eq](./branch_eq/core.rs)
 
 Given:
 
@@ -143,7 +190,7 @@ This circuit proves that:
 - If `opcode_beq_flag` is true and `a` is equal to `b`, then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
 - If `opcode_bne_flag` is true and `a` is not equal to `b`, then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
 
-#### 3. [Branch Lt](./branch_lt/core.rs)
+#### 4. [Branch Lt](./branch_lt/core.rs)
 
 Given:
 
@@ -159,7 +206,7 @@ This circuit proves that:
 - If the instruction is `bge` and `compose(a) >= compose(b)` (signed comparison), then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
 - If the instruction is `bgeu` and `compose(a) >= compose(b)` (unsigned comparison), then `to_pc == pc + imm`, otherwise `to_pc == pc + 4`
 
-#### 4. [Divrem](./divrem/core.rs)
+#### 5. [Divrem](./divrem/core.rs)
 
 Given:
 
@@ -178,7 +225,7 @@ This circuit proves that:
 - `a = q` if the instruction is `div` or `divu`
 - `a = r` if the instruction is `rem` or `remu`
 
-#### 5. [JAL_LUI](./jal_lui/core.rs)
+#### 6. [JAL_LUI](./jal_lui/core.rs)
 
 Given:
 
@@ -198,7 +245,7 @@ This circuit proves that:
   - `to_pc == pc + 4`
   - `compose(rd) == imm * 2^12`
 
-#### 6. [JALR](./jalr/core.rs)
+#### 7. [JALR](./jalr/core.rs)
 
 Given:
 
@@ -218,7 +265,7 @@ This circuit proves that:
 - `to_pc_limbs[0]` is in the range `[0, 2^15)`
 - `to_pc_limbs[1]` is in the range `[0, 2^(PC_BITS - 16))`
 
-#### 7. [AUIPC](./auipc/core.rs)
+#### 8. [AUIPC](./auipc/core.rs)
 
 Given:
 
@@ -233,7 +280,7 @@ This circuit proves that:
 - Each limb of `rd`, `imm_limbs`, and `pc_limbs` is in the range `[0, 2^RV64_BYTE_BITS)`
 - The most significant limb of `pc_limbs` is in the range `[0, 2^(PC_BITS - RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1))`
 
-#### 8. [Less than](./less_than/core.rs)
+#### 9. [Less than](./less_than/core.rs)
 
 Given:
 
@@ -247,7 +294,7 @@ This circuit proves that:
 - If `opcode` is `sltu` and `compose(b) < compose(c)` (unsigned comparison), then `a` is 1.
 - Otherwise, `a` is 0.
 
-#### 9. [Load sign extend](./load_sign_extend/core.rs) and [Loadstore](./loadstore/core.rs)
+#### 10. [Load sign extend](./load_sign_extend/core.rs) and [Loadstore](./loadstore/core.rs)
 
 Given:
 
@@ -257,7 +304,7 @@ Given:
 
 This circuit proves that `write_data` equals `shift(read_data)`, where the shift amount is adjusted according to the instruction.
 
-#### 10. [Multiplication](./mul/core.rs)
+#### 11. [Multiplication](./mul/core.rs)
 
 Given:
 
@@ -270,7 +317,7 @@ This circuit proves that:
 - `compose(a) == (compose(b) * compose(c)) % 2^64`
 - Each limb of `a` is in the range `[0, 2^RV64_BYTE_BITS)`
 
-#### 11. [MULH](./mulh/core.rs)
+#### 12. [MULH](./mulh/core.rs)
 
 Given:
 
@@ -286,7 +333,7 @@ This circuit proves that:
 - If `opcode` is `mulhu`, then `compose(a) = floor((u64(b) * u64(c)) / 2^64)`.
 - Each limb of `a` is in the range `[0, 2^RV64_BYTE_BITS)`
 
-#### 12. [Shift](./shift/core.rs)
+#### 13. [Shift](./shift/core.rs)
 
 Given:
 
