@@ -112,7 +112,7 @@ pub const OPENVM_VERSION: &str = concat!(
 /// that depends on the program executable.
 ///
 /// Some commonly used methods are:
-/// - [`execute`](Self::execute)
+/// - [`compile_and_execute`](Self::compile_and_execute)
 /// - [`prove`](Self::prove)
 /// - [`verify_proof`](Self::verify_proof)
 #[derive(Getters)]
@@ -313,18 +313,19 @@ where
     <VB::VmConfig as VmExecutionConfig<F>>::Executor:
         Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
 {
-    /// Returns the user public values as field elements.
-    pub fn execute(
+    /// Compile `app_exe` and execute it, returning the user public values as bytes.
+    pub fn compile_and_execute(
         &self,
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<Vec<u8>, SdkError> {
-        let compiled = self.compile_pure(app_exe)?;
-        self.execute_compiled(&compiled, inputs)
+        let compiled = self.compile(app_exe)?;
+        self.execute(&compiled, inputs)
     }
 
     /// Compile `app_exe` for pure execution.
-    pub fn compile_pure(
+    #[tracing::instrument(name = "sdk.compile", level = "info", skip_all)]
+    pub fn compile(
         &self,
         app_exe: impl Into<ExecutableFormat>,
     ) -> Result<CompiledExePure<'_, F>, SdkError> {
@@ -337,7 +338,7 @@ where
 
     /// Load a previously saved pure-mode rvr artifact. No compatibility validation is performed.
     #[cfg(feature = "rvr")]
-    pub fn load_compiled_pure(
+    pub fn load_compiled(
         &self,
         lib_path: &std::path::Path,
         app_exe: impl Into<ExecutableFormat>,
@@ -350,7 +351,8 @@ where
     }
 
     /// Run a [`CompiledExePure`] against `inputs` and extract the user public values.
-    pub fn execute_compiled(
+    #[tracing::instrument(name = "sdk.execute", level = "info", skip_all)]
+    pub fn execute(
         &self,
         compiled: &CompiledExePure<'_, F>,
         inputs: StdIn,
@@ -368,18 +370,19 @@ where
 
     /// Executes with segmentation for proof generation.
     /// Returns both user public values and segments with instruction counts and trace heights.
-    pub fn execute_metered(
+    pub fn compile_and_execute_metered(
         &self,
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
         let compiled = self.compile_metered(app_exe)?;
-        self.execute_compiled_metered(&compiled, inputs)
+        self.execute_metered(&compiled, inputs)
     }
 
     /// Compile `app_exe` for metered execution. The returned [`CompiledExeMetered`] bundles
     /// a precomputed [`MeteredCtx`](openvm_circuit::arch::execution_mode::MeteredCtx) so
     /// subsequent runs just clone it.
+    #[tracing::instrument(name = "sdk.compile_metered", level = "info", skip_all)]
     pub fn compile_metered(
         &self,
         app_exe: impl Into<ExecutableFormat>,
@@ -420,7 +423,8 @@ where
     }
 
     /// Run a [`CompiledExeMetered`] against `inputs`.
-    pub fn execute_compiled_metered(
+    #[tracing::instrument(name = "sdk.execute_metered", level = "info", skip_all)]
+    pub fn execute_metered(
         &self,
         compiled: &CompiledExeMetered<'_>,
         inputs: StdIn,
@@ -439,16 +443,17 @@ where
 
     /// Executes with cost metering to measure computational cost in trace cells.
     /// Returns both user public values, and cost along with instruction count.
-    pub fn execute_metered_cost(
+    pub fn compile_and_execute_metered_cost(
         &self,
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
         let compiled = self.compile_metered_cost(app_exe)?;
-        self.execute_compiled_metered_cost(&compiled, inputs)
+        self.execute_metered_cost(&compiled, inputs)
     }
 
     /// Compile `app_exe` for metered-cost execution. See [`Self::compile_metered`].
+    #[tracing::instrument(name = "sdk.compile_metered_cost", level = "info", skip_all)]
     pub fn compile_metered_cost(
         &self,
         app_exe: impl Into<ExecutableFormat>,
@@ -495,7 +500,8 @@ where
     }
 
     /// Run a [`CompiledExeMeteredCost`] against `inputs`.
-    pub fn execute_compiled_metered_cost(
+    #[tracing::instrument(name = "sdk.execute_metered_cost", level = "info", skip_all)]
+    pub fn execute_metered_cost(
         &self,
         compiled: &CompiledExeMeteredCost<'_>,
         inputs: StdIn,
