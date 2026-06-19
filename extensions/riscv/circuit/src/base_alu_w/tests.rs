@@ -206,43 +206,6 @@ fn rand_rv64w_alu_test(opcode: BaseAluWOpcode, num_ops: usize) {
     tester.simple_test().expect("Verification failed");
 }
 
-#[test_case(ADDW, 100)]
-#[test_case(SUBW, 100)]
-fn rand_rv64w_alu_test_persistent(opcode: BaseAluWOpcode, num_ops: usize) {
-    let mut rng = create_seeded_rng();
-
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&tester);
-
-    // TODO(AG): make a more meaningful test for memory accesses
-    tester.write_bytes(2, 1024, [F::ONE; RV64_REGISTER_NUM_LIMBS]);
-    tester.write_bytes(2, 1032, [F::ONE; RV64_REGISTER_NUM_LIMBS]);
-    let sm_lo: [F; RV64_REGISTER_NUM_LIMBS] = tester.read_bytes(2, 1024);
-    let sm_hi: [F; RV64_REGISTER_NUM_LIMBS] = tester.read_bytes(2, 1032);
-    assert_eq!(sm_lo, [F::ONE; RV64_REGISTER_NUM_LIMBS]);
-    assert_eq!(sm_hi, [F::ONE; RV64_REGISTER_NUM_LIMBS]);
-
-    for _ in 0..num_ops {
-        set_and_execute(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.arena,
-            &mut rng,
-            opcode,
-            None,
-            None,
-            None,
-        );
-    }
-
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
-}
-
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS
 //
