@@ -29,7 +29,7 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
     uint256 private constant FULL_PROOF_LENGTH = (12 + 2 + PUBLIC_VALUES_LENGTH + 43) * 32;
 
     /// @dev The version of OpenVM that generated this verifier.
-    string public constant OPENVM_VERSION = "{OPENVM_VERSION}";
+    string private constant OPENVM_VERSION = "{OPENVM_VERSION}";
 
     /// @notice A wrapper that constructs the proof into the right format for
     /// use with the `snark-verifier` verification.
@@ -51,6 +51,22 @@ contract OpenVmHalo2Verifier is Halo2Verifier, IOpenVmHalo2Verifier {
     function verify(bytes calldata publicValues, bytes calldata proofData, bytes32 appExeCommit, bytes32 appVmCommit) external view {
         if (publicValues.length != PUBLIC_VALUES_LENGTH) revert InvalidPublicValuesLength(PUBLIC_VALUES_LENGTH, publicValues.length);
         if (proofData.length != PROOF_DATA_LENGTH) revert InvalidProofDataLength(PROOF_DATA_LENGTH, proofData.length);
+
+        // Other than the fallback() in `Halo2Verifier`, there is only one
+        // function selector on the external ABI: `verify(..)`, which has
+        // selector 0x24270d54. If `proofData` ever began with 0x24270d54, this
+        // function would be called again instead of hitting the fallback. 
+        //
+        // If a valid proof ever began with 0x24270d54, it would fail to verify.
+        // However, `snark-verifier`'s proof structure guarantees that the first
+        // 12 words of the proof are the KZG accumulator limbs. Each limb holds
+        // 88 bits, so the first 4 bytes of the proof will always be
+        // 0x00000000.
+        //
+        // As an extra layer of protection, we assert that the first 4 bytes of
+        // `proofData` are 0x00000000 before self-calling into the fallback
+        // verifier.
+        assert(bytes4(proofData[0:4]) == bytes4(0x00000000));
 
         // We will format the public values and construct the full proof payload
         // below.

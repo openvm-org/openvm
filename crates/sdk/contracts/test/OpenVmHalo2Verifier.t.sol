@@ -2,7 +2,7 @@
 pragma solidity 0.8.19;
 
 import { LibString } from "./helpers/LibString.sol";
-import { Test, console2, safeconsole as console } from "forge-std/Test.sol";
+import { Test, console2, safeconsole as console, stdError } from "forge-std/Test.sol";
 import { IOpenVmHalo2Verifier } from "../src/IOpenVmHalo2Verifier.sol";
 
 contract TemplateTest is Test {
@@ -41,9 +41,8 @@ contract TemplateTest is Test {
 
         IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValuesLength);
 
-        (bool success,) = address(verifier).delegatecall(
-            abi.encodeCall(IOpenVmHalo2Verifier.verify, (guestPvs, proofData, appExeCommit, appVmCommit))
-        );
+        (bool success,) = address(verifier)
+            .delegatecall(abi.encodeCall(IOpenVmHalo2Verifier.verify, (guestPvs, proofData, appExeCommit, appVmCommit)));
         require(success, "Verification failed");
     }
 
@@ -114,10 +113,64 @@ contract TemplateTest is Test {
         verifier.verify(pvs, _proofData, appExeCommit, appVmCommit);
     }
 
+    function test_OnlyVerifySelectorIsExposed() public {
+        bytes memory methodIdentifiers = _compiledOpenVmVerifierMethodIdentifiers(32);
+        assertEq(string(methodIdentifiers), "24270d54: verify(bytes,bytes,bytes32,bytes32)");
+    }
+
+    function test_RevertWhen_ProofDataPrefixIsNonZero() public {
+        publicValuesLength = 32;
+        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValuesLength);
+
+        bytes memory pvs = new bytes(publicValuesLength);
+        bytes memory invalidProofData = proofData;
+        invalidProofData[0] = bytes1(uint8(1));
+
+        vm.expectRevert(stdError.assertionError);
+        verifier.verify(pvs, invalidProofData, appExeCommit, appVmCommit);
+    }
+
     function _compileAndDeployOpenVmVerifier(uint256 _publicValuesLength)
         private
         returns (IOpenVmHalo2Verifier verifier)
     {
+        string memory inlinedCode = _inlinedOpenVmVerifierCode(_publicValuesLength);
+
+        // Must use solc 0.8.19
+        string[] memory commands = new string[](3);
+        commands[0] = "sh";
+        commands[1] = "-c";
+        commands[2] = string.concat(
+            "cat <<'SOL' | solc --no-optimize-yul --bin --optimize --optimize-runs 100000 - ",
+            " | awk 'BEGIN{found=0} /:OpenVmHalo2Verifier/ {found=1; next} found && /^Binary:/ {getline; print; exit}'\n",
+            inlinedCode,
+            "\nSOL\n"
+        );
+
+        bytes memory compiledVerifier = vm.ffi(commands);
+
+        assembly {
+            verifier := create(0, add(compiledVerifier, 0x20), mload(compiledVerifier))
+            if iszero(extcodesize(verifier)) { revert(0, 0) }
+        }
+    }
+
+    function _compiledOpenVmVerifierMethodIdentifiers(uint256 _publicValuesLength) private returns (bytes memory) {
+        string memory inlinedCode = _inlinedOpenVmVerifierCode(_publicValuesLength);
+
+        string[] memory commands = new string[](3);
+        commands[0] = "sh";
+        commands[1] = "-c";
+        commands[2] = string.concat(
+            "cat <<'SOL' | solc --combined-json hashes - | jq -r '.contracts[\"<stdin>:OpenVmHalo2Verifier\"].hashes | to_entries | sort_by(.key) | map(\"\\(.value): \\(.key)\") | join(\"\\n\")'\n",
+            inlinedCode,
+            "\nSOL\n"
+        );
+
+        return vm.ffi(commands);
+    }
+
+    function _inlinedOpenVmVerifierCode(uint256 _publicValuesLength) private view returns (string memory) {
         string memory code = LibString.replace(_code, "{PUBLIC_VALUES_LENGTH}", LibString.toString(_publicValuesLength));
 
         // `code` will look like this:
@@ -132,30 +185,10 @@ contract TemplateTest is Test {
         //
         // We want to replace the `import` statements with inlined deps for JIT
         // compilation.
-        string memory inlinedCode = LibString.replace(
+        return LibString.replace(
             code,
             "import { Halo2Verifier } from \"./Halo2Verifier.sol\";\nimport { IOpenVmHalo2Verifier } from \"./interfaces/IOpenVmHalo2Verifier.sol\";",
             deps
         );
-
-        // Must use solc 0.8.19
-        string[] memory commands = new string[](3);
-        commands[0] = "sh";
-        commands[1] = "-c";
-        commands[2] = string.concat(
-            "echo ",
-            "'",
-            inlinedCode,
-            "'",
-            " | solc --no-optimize-yul --bin --optimize --optimize-runs 100000 - ",
-            " | awk 'BEGIN{found=0} /:OpenVmHalo2Verifier/ {found=1; next} found && /^Binary:/ {getline; print; exit}'"
-        );
-
-        bytes memory compiledVerifier = vm.ffi(commands);
-
-        assembly {
-            verifier := create(0, add(compiledVerifier, 0x20), mload(compiledVerifier))
-            if iszero(extcodesize(verifier)) { revert(0, 0) }
-        }
     }
 }
