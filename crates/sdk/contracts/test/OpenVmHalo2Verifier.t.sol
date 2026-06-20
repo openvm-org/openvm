@@ -6,11 +6,14 @@ import { Test, console2, safeconsole as console, stdError } from "forge-std/Test
 import { IOpenVmHalo2Verifier } from "../src/IOpenVmHalo2Verifier.sol";
 
 contract TemplateTest is Test {
-    bytes proofData;
-    bytes32 appExeCommit = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-    bytes32 appVmCommit = 0xEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE;
-    bytes guestPvs;
+    // BN254 scalar field modulus (Fr), as specified in EIP-197:
+    // https://eips.ethereum.org/EIPS/eip-197
+    uint256 constant BN254_SCALAR_MODULUS = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001;
 
+    bytes proofData;
+    bytes32 appExeCommit = 0x2222222222222222222222222222222222222222222222222222222222222222;
+    bytes32 appVmCommit = 0x1111111111111111111111111111111111111111111111111111111111111111;
+    bytes guestPvs;
     uint256 publicValuesLength;
     uint256 fullProofWords;
     uint256 fullProofLength;
@@ -113,6 +116,32 @@ contract TemplateTest is Test {
         verifier.verify(pvs, _proofData, appExeCommit, appVmCommit);
     }
 
+    function test_RevertWhen_InvalidAppExeCommit() public {
+        publicValuesLength = 32;
+        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValuesLength);
+
+        bytes memory pvs = new bytes(publicValuesLength);
+        bytes memory _proofData = new bytes(55 * 32);
+        bytes32 invalidAppExeCommit = bytes32(BN254_SCALAR_MODULUS);
+        bytes4 sig = bytes4(keccak256("InvalidAppExeCommit(bytes32)"));
+
+        vm.expectRevert(abi.encodeWithSelector(sig, invalidAppExeCommit));
+        verifier.verify(pvs, _proofData, invalidAppExeCommit, appVmCommit);
+    }
+
+    function test_RevertWhen_InvalidAppVmCommit() public {
+        publicValuesLength = 32;
+        IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValuesLength);
+
+        bytes memory pvs = new bytes(publicValuesLength);
+        bytes memory _proofData = new bytes(55 * 32);
+        bytes32 invalidAppVmCommit = bytes32(BN254_SCALAR_MODULUS);
+        bytes4 sig = bytes4(keccak256("InvalidAppVmCommit(bytes32)"));
+
+        vm.expectRevert(abi.encodeWithSelector(sig, invalidAppVmCommit));
+        verifier.verify(pvs, _proofData, appExeCommit, invalidAppVmCommit);
+    }
+
     function test_OnlyVerifySelectorIsExposed() public {
         bytes memory methodIdentifiers = _compiledOpenVmVerifierMethodIdentifiers(32);
         assertEq(string(methodIdentifiers), "24270d54: verify(bytes,bytes,bytes32,bytes32)");
@@ -128,6 +157,16 @@ contract TemplateTest is Test {
 
         vm.expectRevert(stdError.assertionError);
         verifier.verify(pvs, invalidProofData, appExeCommit, appVmCommit);
+    }
+
+    function test_Bn254ScalarModulusMatchesEcmulPrecompile() public view {
+        (uint256 qx, uint256 qy) = _ecMul(1, 2, BN254_SCALAR_MODULUS);
+        assertEq(qx, 0, "q * G should be point at infinity");
+        assertEq(qy, 0, "q * G should be point at infinity");
+
+        (uint256 qPlusOneX, uint256 qPlusOneY) = _ecMul(1, 2, BN254_SCALAR_MODULUS + 1);
+        assertEq(qPlusOneX, 1, "(q + 1) * G should wrap to G");
+        assertEq(qPlusOneY, 2, "(q + 1) * G should wrap to G");
     }
 
     function _compileAndDeployOpenVmVerifier(uint256 _publicValuesLength)
@@ -190,5 +229,11 @@ contract TemplateTest is Test {
             "import { Halo2Verifier } from \"./Halo2Verifier.sol\";\nimport { IOpenVmHalo2Verifier } from \"./interfaces/IOpenVmHalo2Verifier.sol\";",
             deps
         );
+    }
+
+    function _ecMul(uint256 x, uint256 y, uint256 scalar) private view returns (uint256 rx, uint256 ry) {
+        (bool success, bytes memory result) = address(0x07).staticcall(abi.encode(x, y, scalar));
+        require(success, "ecmul precompile failed");
+        (rx, ry) = abi.decode(result, (uint256, uint256));
     }
 }
