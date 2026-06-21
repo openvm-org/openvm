@@ -117,7 +117,18 @@ where
         let pre_compute_insns_ptr = format!("{:p}", pre_compute_insns_ptr as *const ());
         let instret_left_ptr = format!("{:p}", set_instret_left_shim::<F> as *const ());
 
-        for pc_idx in 0..num_pc_slots {
+        // `None` pc slots below `pc_base`
+        if base_idx > 0 {
+            for i in 0..base_idx - 1 {
+                asm_str += &format!("asm_execute_pc_{}:\n", i as u32 * DEFAULT_PC_STEP);
+            }
+            let pc = (base_idx - 1) as u32 * DEFAULT_PC_STEP;
+            asm_str += &format!("asm_execute_pc_{pc}:\n");
+            asm_str += &format!("    mov {REG_THIRD_ARG}, {pc}\n");
+            asm_str += "    jmp asm_dead_pc_handler\n";
+        }
+
+        for pc_idx in base_idx..num_pc_slots {
             /* Preprocessing step, to check if we should suspend or not */
             let pc = pc_idx as u32 * DEFAULT_PC_STEP;
             let instruction = pc_idx.checked_sub(base_idx).and_then(|idx| {
@@ -126,9 +137,7 @@ where
                     .map(|(instruction, _)| instruction)
             });
 
-            // Dead pc slot: either below `pc_base` or a hole in the program. Emit a tiny stub
-            // that records its pc in `REG_THIRD_ARG` and jumps to the single shared dead-pc
-            // handler below.
+            // a `None` slot at or above `pc_base`
             let Some(instruction) = instruction else {
                 asm_str += &format!("asm_execute_pc_{pc}:\n");
                 asm_str += &format!("    mov {REG_THIRD_ARG}, {pc}\n");
