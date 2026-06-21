@@ -67,6 +67,25 @@ impl ProvingMemoryConfigData {
     fn estimate(&self, counts: ProvingMemoryCounts) -> ProvingMemoryEstimate {
         ProvingMemoryConfig::from(*self).estimate(counts)
     }
+
+    #[cfg(feature = "metrics")]
+    #[inline(always)]
+    fn main_memory_bytes(&self, main_cells: usize) -> usize {
+        ProvingMemoryConfig::from(*self).main_memory_bytes(main_cells)
+    }
+
+    #[cfg(feature = "metrics")]
+    #[inline(always)]
+    fn main_secondary_memory_bytes_for_rot(&self, main_cells: usize, need_rot: bool) -> usize {
+        ProvingMemoryConfig::from(*self).main_secondary_memory_bytes_for_rot(main_cells, need_rot)
+    }
+
+    #[cfg(feature = "metrics")]
+    #[inline(always)]
+    fn interaction_memory_bytes_without_overhead(&self, interaction_cells: usize) -> usize {
+        ProvingMemoryConfig::from(*self)
+            .interaction_memory_bytes_without_overhead(interaction_cells)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
