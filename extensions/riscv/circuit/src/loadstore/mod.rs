@@ -1,25 +1,25 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+pub mod aligned;
+pub mod byte;
+pub mod common;
+pub mod doubleword;
+pub mod halfword;
+pub mod word;
 
-use super::adapters::RV64_REGISTER_NUM_LIMBS;
-use crate::adapters::{Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterExecutor};
+pub use byte::*;
+pub use common::{LoadStoreExecutor, LoadStoreRecord};
+pub use doubleword::*;
+pub use halfword::*;
+pub use word::*;
 
-mod core;
 mod execution;
-
-pub use core::*;
 
 #[cfg(feature = "cuda")]
 mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
+
 #[cfg(feature = "aot")]
 mod aot;
 
 #[cfg(test)]
 mod tests;
-
-pub type Rv64LoadStoreAir =
-    VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreCoreAir<RV64_REGISTER_NUM_LIMBS>>;
-pub type Rv64LoadStoreExecutor =
-    LoadStoreExecutor<Rv64LoadStoreAdapterExecutor, RV64_REGISTER_NUM_LIMBS>;
-pub type Rv64LoadStoreChip<F> = VmChipWrapper<F, LoadStoreFiller>;

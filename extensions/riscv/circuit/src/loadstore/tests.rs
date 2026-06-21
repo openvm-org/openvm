@@ -3,24 +3,19 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, ExecutionBridge, MemoryConfig, PreflightExecutor,
+        Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
     },
-    system::memory::{
-        merkle::public_values::PUBLIC_VALUES_AS, offline_checker::MemoryBridge, SharedMemoryHelper,
-    },
+    system::memory::merkle::public_values::PUBLIC_VALUES_AS,
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::{
-        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-        SharedBitwiseOperationLookupChip,
-    },
-    var_range::VariableRangeCheckerChip,
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{PrimeCharacteristicRing, PrimeField32},
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -30,123 +25,207 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, seq::IndexedRandom, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
-use {
-    crate::{adapters::Rv64LoadStoreAdapterRecord, LoadStoreCoreRecord, Rv64LoadStoreChipGpu},
-    openvm_circuit::arch::{
-        testing::{
-            default_bitwise_lookup_bus, default_var_range_checker_bus, dummy_range_checker,
-            GpuChipTestBuilder, GpuTestChipHarness,
-        },
-        EmptyAdapterCoreLayout,
-    },
-    openvm_instructions::riscv::RV64_MEMORY_AS,
-};
 
 use super::{
-    run_write_data, selector_point_for_opcode_shift, LoadStoreCoreAir, LoadStoreCoreCols,
-    Rv64LoadStoreChip, LOADSTORE_SELECTOR_WIDTH,
-};
-use crate::{
-    adapters::{
-        pack_u8_pair_u32, rv64_bytes_to_u32, sign_extend_imm16, Rv64LoadStoreAdapterAir,
-        Rv64LoadStoreAdapterCols, Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller,
-        RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+    aligned::LoadStoreAlignedCoreCols,
+    byte::{LoadStoreByteCoreAir, LoadStoreByteCoreCols, LoadStoreByteFiller},
+    common::run_write_data,
+    doubleword::{
+        LoadStoreDoublewordCoreAir, LoadStoreDoublewordCoreCols, LoadStoreDoublewordFiller,
     },
-    LoadStoreFiller, Rv64LoadStoreAir, Rv64LoadStoreExecutor,
+    halfword::{LoadStoreHalfwordCoreAir, LoadStoreHalfwordFiller, HALFWORD_SELECTOR_WIDTH},
+    word::{LoadStoreWordCoreAir, LoadStoreWordFiller, WORD_SELECTOR_WIDTH},
+    Rv64LoadStoreByteAir, Rv64LoadStoreByteChip, Rv64LoadStoreByteExecutor,
+    Rv64LoadStoreDoublewordAir, Rv64LoadStoreDoublewordChip, Rv64LoadStoreDoublewordExecutor,
+    Rv64LoadStoreHalfwordAir, Rv64LoadStoreHalfwordChip, Rv64LoadStoreHalfwordExecutor,
+    Rv64LoadStoreWordAir, Rv64LoadStoreWordChip, Rv64LoadStoreWordExecutor,
+};
+use crate::adapters::{
+    rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
+    Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller,
+    RV64_BYTE_BITS,
 };
 
 const IMM_BITS: usize = 16;
 const MAX_INS_CAPACITY: usize = 128;
-
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv64LoadStoreExecutor, Rv64LoadStoreAir, Rv64LoadStoreChip<F>>;
 
-fn create_harness_fields(
-    memory_bridge: MemoryBridge,
-    execution_bridge: ExecutionBridge,
-    range_checker_chip: Arc<VariableRangeCheckerChip>,
-    bitwise_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-    memory_helper: SharedMemoryHelper<F>,
-    address_bits: usize,
-) -> (
-    Rv64LoadStoreAir,
-    Rv64LoadStoreExecutor,
-    Rv64LoadStoreChip<F>,
-) {
-    let air = Rv64LoadStoreAir::new(
-        Rv64LoadStoreAdapterAir::new(
-            memory_bridge,
-            execution_bridge,
-            range_checker_chip.bus(),
-            address_bits,
-        ),
-        LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
-    );
-    let executor = Rv64LoadStoreExecutor::new(
-        Rv64LoadStoreAdapterExecutor::new(address_bits),
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-    );
-    let chip = Rv64LoadStoreChip::<F>::new(
-        LoadStoreFiller::new(
-            Rv64LoadStoreAdapterFiller::new(address_bits, range_checker_chip.clone()),
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
-            bitwise_chip,
-        ),
-        memory_helper,
-    );
-    (air, executor, chip)
+type ByteHarness =
+    TestChipHarness<F, Rv64LoadStoreByteExecutor, Rv64LoadStoreByteAir, Rv64LoadStoreByteChip<F>>;
+type HalfwordHarness = TestChipHarness<
+    F,
+    Rv64LoadStoreHalfwordExecutor,
+    Rv64LoadStoreHalfwordAir,
+    Rv64LoadStoreHalfwordChip<F>,
+>;
+type WordHarness =
+    TestChipHarness<F, Rv64LoadStoreWordExecutor, Rv64LoadStoreWordAir, Rv64LoadStoreWordChip<F>>;
+type DoublewordHarness = TestChipHarness<
+    F,
+    Rv64LoadStoreDoublewordExecutor,
+    Rv64LoadStoreDoublewordAir,
+    Rv64LoadStoreDoublewordChip<F>,
+>;
+
+fn u16_block_to_f_bytes(block: [u16; BLOCK_FE_WIDTH]) -> [F; 8] {
+    rv64_u16_block_to_bytes(block).map(F::from_u8)
 }
 
-fn create_harness(
+fn create_byte_harness(
     tester: &mut VmChipTestBuilder<F>,
 ) -> (
-    Harness,
+    ByteHarness,
     (
         BitwiseOperationLookupAir<RV64_BYTE_BITS>,
         SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
 ) {
+    let range_checker = tester.range_checker();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
-    let (air, executor, chip) = create_harness_fields(
-        tester.memory_bridge(),
-        tester.execution_bridge(),
-        tester.range_checker(),
-        bitwise_chip.clone(),
+    let air = Rv64LoadStoreByteAir::new(
+        Rv64LoadStoreAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        LoadStoreByteCoreAir::new(
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.bus(),
+            range_checker.bus(),
+        ),
+    );
+    let executor = Rv64LoadStoreByteExecutor::new(
+        Rv64LoadStoreAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv64LoadStoreByteChip::<F>::new(
+        LoadStoreByteFiller::new(
+            Rv64LoadStoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.clone(),
+            range_checker,
+        ),
         tester.memory_helper(),
-        tester.address_bits(),
     );
     (
-        Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        ByteHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
         (bitwise_chip.air, bitwise_chip),
     )
 }
 
+fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> HalfwordHarness {
+    let range_checker = tester.range_checker();
+    let air = Rv64LoadStoreHalfwordAir::new(
+        Rv64LoadStoreAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        LoadStoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
+    );
+    let executor = Rv64LoadStoreHalfwordExecutor::new(
+        Rv64LoadStoreAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv64LoadStoreHalfwordChip::<F>::new(
+        LoadStoreHalfwordFiller::new(
+            Rv64LoadStoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            range_checker,
+        ),
+        tester.memory_helper(),
+    );
+    HalfwordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+}
+
+fn create_word_harness(tester: &mut VmChipTestBuilder<F>) -> WordHarness {
+    let range_checker = tester.range_checker();
+    let air = Rv64LoadStoreWordAir::new(
+        Rv64LoadStoreAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        LoadStoreWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
+    );
+    let executor = Rv64LoadStoreWordExecutor::new(
+        Rv64LoadStoreAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv64LoadStoreWordChip::<F>::new(
+        LoadStoreWordFiller::new(
+            Rv64LoadStoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            range_checker,
+        ),
+        tester.memory_helper(),
+    );
+    WordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+}
+
+fn create_doubleword_harness(tester: &mut VmChipTestBuilder<F>) -> DoublewordHarness {
+    let range_checker = tester.range_checker();
+    let air = Rv64LoadStoreDoublewordAir::new(
+        Rv64LoadStoreAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        LoadStoreDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
+    );
+    let executor = Rv64LoadStoreDoublewordExecutor::new(
+        Rv64LoadStoreAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv64LoadStoreDoublewordChip::<F>::new(
+        LoadStoreDoublewordFiller::new(
+            Rv64LoadStoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            range_checker,
+        ),
+        tester.memory_helper(),
+    );
+    DoublewordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
-    tester: &mut impl TestBuilder<F>,
+    tester: &mut VmChipTestBuilder<F>,
     executor: &mut E,
     arena: &mut RA,
     rng: &mut StdRng,
     opcode: Rv64LoadStoreOpcode,
-    rs1: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
+) {
+    set_and_execute_with(tester, executor, arena, rng, opcode, None, None, None, None);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn set_and_execute_with<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut VmChipTestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
+    rng: &mut StdRng,
+    opcode: Rv64LoadStoreOpcode,
+    rs1: Option<[u8; 8]>,
     imm: Option<u32>,
     imm_sign: Option<u32>,
     mem_as: Option<usize>,
 ) {
-    let imm = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS)));
-    let imm_sign = imm_sign.unwrap_or(rng.random_range(0..2));
+    let imm = imm.unwrap_or_else(|| rng.random_range(0..(1 << IMM_BITS)));
+    let imm_sign = imm_sign.unwrap_or_else(|| rng.random_range(0..2));
     let imm_ext = sign_extend_imm16(imm, imm_sign);
-
     let alignment = match opcode {
         LOADD | STORED => 3,
-        LOADWU | STOREW => 2,
-        LOADHU | STOREH => 1,
-        LOADBU | STOREB => 0,
-        _ => unreachable!("loadstore tests should not handle sign-extension load opcodes"),
+        LOADW | LOADWU | STOREW => 2,
+        LOADH | LOADHU | STOREH => 1,
+        LOADB | LOADBU | STOREB => 0,
     };
 
     let ptr_val: u32 = rng.random_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
@@ -154,45 +233,51 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let rs1 = rs1.unwrap_or([ptr[0], ptr[1], ptr[2], ptr[3], 0, 0, 0, 0]);
     let rs1_low = rv64_bytes_to_u32(rs1);
     let ptr_val = imm_ext.wrapping_add(rs1_low);
-    let shift_amount = (ptr_val as usize) & (RV64_REGISTER_NUM_LIMBS - 1);
+    let shift_amount = (ptr_val as usize) & 7;
+    let base_ptr = (ptr_val as usize) - shift_amount;
 
     let max_addr = 1usize << tester.address_bits();
-    let a = rng.random_range(0..(max_addr - RV64_REGISTER_NUM_LIMBS)) / RV64_REGISTER_NUM_LIMBS
-        * RV64_REGISTER_NUM_LIMBS;
-    let b = rng.random_range(0..(max_addr - RV64_REGISTER_NUM_LIMBS)) / RV64_REGISTER_NUM_LIMBS
-        * RV64_REGISTER_NUM_LIMBS;
-
-    let is_load = [LOADD, LOADWU, LOADHU, LOADBU].contains(&opcode);
-    // Store tests choose writable u16-celled address spaces.
-    let mem_as = mem_as.unwrap_or(if is_load {
-        2
-    } else {
-        *[2, 3].choose(rng).unwrap()
+    let a = rng.random_range(0..(max_addr - 8)) / 8 * 8;
+    let b = rng.random_range(0..(max_addr - 8)) / 8 * 8;
+    let is_load = matches!(
+        opcode,
+        LOADD | LOADW | LOADH | LOADB | LOADWU | LOADHU | LOADBU
+    );
+    let mem_as: usize = mem_as.unwrap_or_else(|| {
+        if is_load {
+            2
+        } else {
+            *[2usize, PUBLIC_VALUES_AS as usize].choose(rng).unwrap()
+        }
     });
 
-    tester.write_bytes(1, b, rs1.map(F::from_u8));
+    tester.write_bytes(RV64_REGISTER_AS as usize, b, rs1.map(F::from_u8));
 
-    let mut prev_data: [F; RV64_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_BYTE_BITS))));
-    let mut read_data: [F; RV64_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_BYTE_BITS))));
-
+    let mut prev_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|_| rng.random());
+    let mut read_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|_| rng.random());
     if is_load {
         if a == 0 {
-            prev_data = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
+            prev_data = [0; BLOCK_FE_WIDTH];
         }
-        tester.write_bytes(1, a, prev_data);
-        tester.write_bytes(mem_as, (ptr_val as usize) - shift_amount, read_data);
+        tester.write_bytes(
+            RV64_REGISTER_AS as usize,
+            a,
+            u16_block_to_f_bytes(prev_data),
+        );
+        tester.write_bytes(mem_as, base_ptr, u16_block_to_f_bytes(read_data));
     } else {
         if a == 0 {
-            read_data = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
+            read_data = [0; BLOCK_FE_WIDTH];
         }
-        tester.write_bytes(mem_as, (ptr_val as usize) - shift_amount, prev_data);
-        tester.write_bytes(1, a, read_data);
+        tester.write_bytes(mem_as, base_ptr, u16_block_to_f_bytes(prev_data));
+        tester.write_bytes(
+            RV64_REGISTER_AS as usize,
+            a,
+            u16_block_to_f_bytes(read_data),
+        );
     }
 
-    let enabled_write = !(is_load & (a == 0));
-
+    let enabled_write = !(is_load && a == 0);
     tester.execute(
         executor,
         arena,
@@ -202,7 +287,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
                 a,
                 b,
                 imm as usize,
-                1,
+                RV64_REGISTER_AS as usize,
                 mem_as,
                 enabled_write as usize,
                 imm_sign as usize,
@@ -210,57 +295,43 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         ),
     );
 
-    let write_data = run_write_data(
-        opcode,
-        read_data.map(|x| x.as_canonical_u32() as u8),
-        prev_data.map(|x| x.as_canonical_u32() as u8),
-        shift_amount,
-    )
-    .map(F::from_u8);
+    let write_data = run_write_data(opcode, read_data, prev_data, shift_amount);
     if is_load {
-        if enabled_write {
-            assert_eq!(
-                write_data,
-                tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, a)
-            );
+        let expected = if enabled_write {
+            u16_block_to_f_bytes(write_data)
         } else {
-            assert_eq!(
-                [F::ZERO; RV64_REGISTER_NUM_LIMBS],
-                tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, a)
-            );
-        }
+            [F::ZERO; 8]
+        };
+        assert_eq!(
+            expected,
+            tester.read_bytes::<8>(RV64_REGISTER_AS as usize, a)
+        );
     } else {
         assert_eq!(
-            write_data,
-            tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(mem_as, (ptr_val as usize) - shift_amount)
+            u16_block_to_f_bytes(write_data),
+            tester.read_bytes::<8>(mem_as, base_ptr)
         );
     }
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// POSITIVE TESTS
-///
-/// Randomly generate computations and execute, ensuring that the generated trace
-/// passes all constraints.
-///////////////////////////////////////////////////////////////////////////////////////
-#[test_case(LOADBU, 100)]
-#[test_case(LOADHU, 100)]
-#[test_case(LOADD, 100)]
-#[test_case(LOADWU, 100)]
-#[test_case(STOREB, 100)]
-#[test_case(STOREH, 100)]
-#[test_case(STORED, 100)]
-#[test_case(STOREW, 100)]
-fn rand_loadstore_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
-    let mut rng = create_seeded_rng();
+fn memory_config_for(opcodes: &[Rv64LoadStoreOpcode]) -> MemoryConfig {
     let mut mem_config = MemoryConfig::default();
     mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
-    if [STORED, STOREW, STOREB, STOREH].contains(&opcode) {
+    if opcodes
+        .iter()
+        .any(|opcode| matches!(opcode, STORED | STOREW | STOREH | STOREB))
+    {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
-    let mut tester = VmChipTestBuilder::from_config(mem_config);
-    let (mut harness, bitwise) = create_harness(&mut tester);
+    mem_config
+}
 
+#[test_case(LOADBU, 100)]
+#[test_case(STOREB, 100)]
+fn rand_loadstore_byte_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(memory_config_for(&[opcode]));
+    let (mut harness, bitwise) = create_byte_harness(&mut tester);
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
@@ -268,30 +339,23 @@ fn rand_loadstore_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
             &mut harness.arena,
             &mut rng,
             opcode,
-            None,
-            None,
-            None,
-            None,
         );
     }
-
-    let tester = tester
+    tester
         .build()
         .load(harness)
         .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
 
 #[test]
 fn positive_loadwu_shift4_test() {
     let mut rng = create_seeded_rng();
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
-    let mut tester = VmChipTestBuilder::from_config(mem_config);
-    let (mut harness, bitwise) = create_harness(&mut tester);
-
-    set_and_execute(
+    let mut tester = VmChipTestBuilder::from_config(memory_config_for(&[LOADWU]));
+    let mut harness = create_word_harness(&mut tester);
+    set_and_execute_with(
         &mut tester,
         &mut harness.executor,
         &mut harness.arena,
@@ -302,24 +366,20 @@ fn positive_loadwu_shift4_test() {
         Some(0),
         Some(2),
     );
-
-    let tester = tester
+    tester
         .build()
         .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
 
 #[test]
 fn positive_loadhu_shift6_test() {
     let mut rng = create_seeded_rng();
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
-    let mut tester = VmChipTestBuilder::from_config(mem_config);
-    let (mut harness, bitwise) = create_harness(&mut tester);
-
-    set_and_execute(
+    let mut tester = VmChipTestBuilder::from_config(memory_config_for(&[LOADHU]));
+    let mut harness = create_halfword_harness(&mut tester);
+    set_and_execute_with(
         &mut tester,
         &mut harness.executor,
         &mut harness.arena,
@@ -330,25 +390,20 @@ fn positive_loadhu_shift6_test() {
         Some(0),
         Some(2),
     );
-
-    let tester = tester
+    tester
         .build()
         .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
 
 #[test]
 fn positive_storew_public_values_test() {
     let mut rng = create_seeded_rng();
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
-    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
-    let mut tester = VmChipTestBuilder::from_config(mem_config);
-    let (mut harness, bitwise) = create_harness(&mut tester);
-
-    set_and_execute(
+    let mut tester = VmChipTestBuilder::from_config(memory_config_for(&[STOREW]));
+    let mut harness = create_word_harness(&mut tester);
+    set_and_execute_with(
         &mut tester,
         &mut harness.executor,
         &mut harness.arena,
@@ -357,547 +412,434 @@ fn positive_storew_public_values_test() {
         Some([4, 0, 0, 0, 0, 0, 0, 0]),
         Some(0),
         Some(0),
-        Some(3),
+        Some(PUBLIC_VALUES_AS as usize),
     );
-
-    let tester = tester
+    tester
         .build()
         .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
-}
-
-//////////////////////////////////////////////////////////////////////////////////////
-// NEGATIVE TESTS
-//
-// Given a fake trace of a single operation, setup a chip and run the test. We replace
-// part of the trace and check that the chip throws the expected error.
-//////////////////////////////////////////////////////////////////////////////////////
-
-#[derive(Clone, Copy, Default, PartialEq)]
-struct LoadStorePrankValues {
-    rs1_data: Option<[u32; RV64_WORD_NUM_LIMBS]>,
-    read_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
-    prev_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
-    write_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
-    flags: Option<[u32; LOADSTORE_SELECTOR_WIDTH]>,
-    is_load: Option<bool>,
-    mem_as: Option<u32>,
-}
-
-#[allow(clippy::too_many_arguments)]
-fn run_negative_loadstore_test(
-    opcode: Rv64LoadStoreOpcode,
-    rs1: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-    imm: Option<u32>,
-    imm_sign: Option<u32>,
-    prank_vals: LoadStorePrankValues,
-    _interaction_error: bool,
-) {
-    let mut rng = create_seeded_rng();
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
-    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
-    let mut tester = VmChipTestBuilder::from_config(mem_config);
-    let (mut harness, bitwise) = create_harness(&mut tester);
-
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        &mut rng,
-        opcode,
-        rs1,
-        imm,
-        imm_sign,
-        None,
-    );
-
-    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
-
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
-        let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
-        let core_cols: &mut LoadStoreCoreCols<F, RV64_REGISTER_NUM_LIMBS> = core_row.borrow_mut();
-
-        if let Some(rs1_data) = prank_vals.rs1_data {
-            adapter_cols.rs1_data =
-                array::from_fn(|i| pack_u8_pair_u32(rs1_data[2 * i], rs1_data[2 * i + 1]));
-        }
-        if let Some(read_data) = prank_vals.read_data {
-            core_cols.read_data = read_data.map(F::from_u32);
-        }
-        if let Some(prev_data) = prank_vals.prev_data {
-            core_cols.prev_data = prev_data.map(F::from_u32);
-        }
-        if let Some(write_data) = prank_vals.write_data {
-            core_cols.write_data = write_data.map(F::from_u32);
-        }
-        if let Some(flags) = prank_vals.flags {
-            core_cols.selector = flags.map(F::from_u32);
-        }
-        if let Some(is_load) = prank_vals.is_load {
-            core_cols.is_load = F::from_bool(is_load);
-        }
-        if let Some(mem_as) = prank_vals.mem_as {
-            adapter_cols.mem_as = F::from_u32(mem_as);
-        }
-
-        *trace = RowMajorMatrix::new(trace_row, trace.width());
-    };
-
-    disable_debug_builder();
-    let tester = tester
-        .build()
-        .load_and_prank_trace(harness, modify_trace)
-        .load_periphery(bitwise)
-        .finalize();
-    tester
+        .finalize()
         .simple_test()
-        .expect_err("Expected verification to fail, but it passed");
+        .unwrap();
 }
 
-#[test]
-fn negative_wrong_opcode_tests() {
-    run_negative_loadstore_test(
-        LOADD,
-        None,
-        None,
-        None,
-        LoadStorePrankValues {
-            is_load: Some(false),
-            ..Default::default()
-        },
-        false,
-    );
-
-    run_negative_loadstore_test(
-        LOADBU,
-        Some([4, 0, 0, 0, 0, 0, 0, 0]),
-        Some(1),
-        None,
-        LoadStorePrankValues {
-            flags: Some(selector_point_for_opcode_shift(LOADBU, 0)),
-            ..Default::default()
-        },
-        false,
-    );
-
-    run_negative_loadstore_test(
-        STOREH,
-        Some([11, 169, 76, 28, 0, 0, 0, 0]),
-        Some(37121),
-        None,
-        LoadStorePrankValues {
-            flags: Some(selector_point_for_opcode_shift(STOREH, 0)),
-            is_load: Some(true),
-            ..Default::default()
-        },
-        false,
-    );
-
-    run_negative_loadstore_test(
-        LOADWU,
-        Some([4, 0, 0, 0, 0, 0, 0, 0]),
-        Some(0),
-        Some(0),
-        LoadStorePrankValues {
-            flags: Some(selector_point_for_opcode_shift(LOADWU, 0)),
-            ..Default::default()
-        },
-        false,
-    );
+#[test_case(LOADHU, 100)]
+#[test_case(STOREH, 100)]
+fn rand_loadstore_halfword_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(memory_config_for(&[opcode]));
+    let mut harness = create_halfword_harness(&mut tester);
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            opcode,
+        );
+    }
+    tester
+        .build()
+        .load(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
 
-#[test]
-fn negative_write_data_tests() {
-    run_negative_loadstore_test(
-        LOADHU,
-        Some([13, 11, 156, 23, 0, 0, 0, 0]),
-        Some(43641),
-        None,
-        LoadStorePrankValues {
-            rs1_data: None,
-            read_data: Some([175, 33, 198, 250, 131, 74, 186, 29]),
-            prev_data: Some([90, 121, 64, 205, 159, 213, 89, 34]),
-            write_data: Some([175, 33, 0, 0, 0, 0, 0, 0]),
-            flags: Some(selector_point_for_opcode_shift(LOADHU, 0)),
-            is_load: Some(true),
-            mem_as: None,
-        },
-        true,
-    );
-
-    run_negative_loadstore_test(
-        STOREB,
-        Some([45, 123, 87, 24, 0, 0, 0, 0]),
-        Some(28122),
-        Some(0),
-        LoadStorePrankValues {
-            rs1_data: None,
-            read_data: Some([175, 33, 198, 250, 131, 74, 186, 29]),
-            prev_data: Some([90, 121, 64, 205, 159, 213, 89, 34]),
-            write_data: Some([175, 121, 64, 205, 159, 213, 89, 34]),
-            flags: Some(selector_point_for_opcode_shift(STOREB, 3)),
-            is_load: None,
-            mem_as: None,
-        },
-        false,
-    );
-
-    run_negative_loadstore_test(
-        LOADWU,
-        Some([4, 0, 0, 0, 0, 0, 0, 0]),
-        Some(0),
-        Some(0),
-        LoadStorePrankValues {
-            rs1_data: None,
-            read_data: Some([138, 45, 202, 76, 131, 74, 186, 29]),
-            prev_data: Some([159, 213, 89, 34, 142, 67, 210, 88]),
-            write_data: Some([138, 45, 202, 76, 0, 0, 0, 0]),
-            flags: Some(selector_point_for_opcode_shift(LOADWU, 4)),
-            is_load: Some(true),
-            mem_as: None,
-        },
-        false,
-    );
+#[test_case(LOADWU, 100)]
+#[test_case(STOREW, 100)]
+fn rand_loadstore_word_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(memory_config_for(&[opcode]));
+    let mut harness = create_word_harness(&mut tester);
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            opcode,
+        );
+    }
+    tester
+        .build()
+        .load(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
 
-#[test]
-#[should_panic(expected = "effective address exceeds implemented memory address space")]
-fn negative_32_bit_address_wraparound_test() {
-    run_negative_loadstore_test(
-        LOADBU,
-        Some([0xf8, 0xff, 0xff, 0xff, 0, 0, 0, 0]),
-        Some(16),
-        Some(0),
-        LoadStorePrankValues::default(),
-        false,
-    );
+#[test_case(LOADD, 100)]
+#[test_case(STORED, 100)]
+fn rand_loadstore_doubleword_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(memory_config_for(&[opcode]));
+    let mut harness = create_doubleword_harness(&mut tester);
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            opcode,
+        );
+    }
+    tester
+        .build()
+        .load(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
 
-#[test]
-fn negative_wrong_address_space_tests() {
-    run_negative_loadstore_test(
-        LOADD,
-        None,
-        None,
-        None,
-        LoadStorePrankValues {
-            mem_as: Some(3),
-            ..Default::default()
-        },
-        false,
-    );
-
-    run_negative_loadstore_test(
-        LOADWU,
-        None,
-        None,
-        None,
-        LoadStorePrankValues {
-            mem_as: Some(4),
-            ..Default::default()
-        },
-        false,
-    );
-
-    run_negative_loadstore_test(
-        STOREW,
-        None,
-        None,
-        None,
-        LoadStorePrankValues {
-            mem_as: Some(1),
-            ..Default::default()
-        },
-        false,
-    );
-
-    run_negative_loadstore_test(
-        STORED,
-        None,
-        None,
-        None,
-        LoadStorePrankValues {
-            mem_as: Some(1),
-            ..Default::default()
-        },
-        false,
-    );
-
-    run_negative_loadstore_test(
-        STOREW,
-        None,
-        None,
-        None,
-        LoadStorePrankValues {
-            mem_as: Some(4),
-            ..Default::default()
-        },
-        false,
-    );
+fn b(bytes: [u8; 8]) -> [u16; BLOCK_FE_WIDTH] {
+    rv64_bytes_to_u16_block(bytes)
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// SANITY TESTS
-///
-/// Ensure that solve functions produce the correct results.
-///////////////////////////////////////////////////////////////////////////////////////
 #[test]
 fn run_loadd_stored_sanity_test() {
-    let read_data = [138, 45, 202, 76, 131, 74, 186, 29];
-    let prev_data = [159, 213, 89, 34, 142, 67, 210, 88];
+    let read_data = b([138, 45, 202, 76, 131, 74, 186, 29]);
+    let prev_data = b([159, 213, 89, 34, 142, 67, 210, 88]);
     assert_eq!(run_write_data(LOADD, read_data, prev_data, 0), read_data);
     assert_eq!(run_write_data(STORED, read_data, prev_data, 0), read_data);
 }
 
 #[test]
 fn run_loadwu_storew_sanity_test() {
-    let read_data = [138, 45, 202, 76, 131, 74, 186, 29];
-    let prev_data = [159, 213, 89, 34, 142, 67, 210, 88];
-
+    let read_data = b([138, 45, 202, 76, 131, 74, 186, 29]);
+    let prev_data = b([159, 213, 89, 34, 142, 67, 210, 88]);
     assert_eq!(
         run_write_data(LOADWU, read_data, prev_data, 0),
-        [138, 45, 202, 76, 0, 0, 0, 0]
+        b([138, 45, 202, 76, 0, 0, 0, 0])
     );
     assert_eq!(
         run_write_data(LOADWU, read_data, prev_data, 4),
-        [131, 74, 186, 29, 0, 0, 0, 0]
+        b([131, 74, 186, 29, 0, 0, 0, 0])
     );
     assert_eq!(
         run_write_data(STOREW, read_data, prev_data, 0),
-        [138, 45, 202, 76, 142, 67, 210, 88]
+        b([138, 45, 202, 76, 142, 67, 210, 88])
     );
     assert_eq!(
         run_write_data(STOREW, read_data, prev_data, 4),
-        [159, 213, 89, 34, 138, 45, 202, 76]
+        b([159, 213, 89, 34, 138, 45, 202, 76])
     );
 }
 
 #[test]
 fn run_storeh_sanity_test() {
-    let read_data = [250, 123, 67, 198, 175, 33, 198, 250];
-    let prev_data = [144, 56, 175, 92, 90, 121, 64, 205];
-
+    let read_data = b([250, 123, 67, 198, 175, 33, 198, 250]);
+    let prev_data = b([144, 56, 175, 92, 90, 121, 64, 205]);
     assert_eq!(
         run_write_data(STOREH, read_data, prev_data, 0),
-        [250, 123, 175, 92, 90, 121, 64, 205]
+        b([250, 123, 175, 92, 90, 121, 64, 205])
     );
     assert_eq!(
         run_write_data(STOREH, read_data, prev_data, 2),
-        [144, 56, 250, 123, 90, 121, 64, 205]
+        b([144, 56, 250, 123, 90, 121, 64, 205])
     );
     assert_eq!(
         run_write_data(STOREH, read_data, prev_data, 4),
-        [144, 56, 175, 92, 250, 123, 64, 205]
+        b([144, 56, 175, 92, 250, 123, 64, 205])
     );
     assert_eq!(
         run_write_data(STOREH, read_data, prev_data, 6),
-        [144, 56, 175, 92, 90, 121, 250, 123]
+        b([144, 56, 175, 92, 90, 121, 250, 123])
     );
 }
 
 #[test]
 fn run_storeb_sanity_test() {
-    let read_data = [221, 104, 58, 147, 175, 33, 198, 250];
-    let prev_data = [199, 83, 243, 12, 90, 121, 64, 205];
-
+    let read_data = b([221, 104, 58, 147, 175, 33, 198, 250]);
+    let prev_data = b([199, 83, 243, 12, 90, 121, 64, 205]);
     assert_eq!(
         run_write_data(STOREB, read_data, prev_data, 0),
-        [221, 83, 243, 12, 90, 121, 64, 205]
+        b([221, 83, 243, 12, 90, 121, 64, 205])
     );
     assert_eq!(
         run_write_data(STOREB, read_data, prev_data, 1),
-        [199, 221, 243, 12, 90, 121, 64, 205]
+        b([199, 221, 243, 12, 90, 121, 64, 205])
     );
     assert_eq!(
         run_write_data(STOREB, read_data, prev_data, 2),
-        [199, 83, 221, 12, 90, 121, 64, 205]
+        b([199, 83, 221, 12, 90, 121, 64, 205])
     );
     assert_eq!(
         run_write_data(STOREB, read_data, prev_data, 3),
-        [199, 83, 243, 221, 90, 121, 64, 205]
+        b([199, 83, 243, 221, 90, 121, 64, 205])
     );
     assert_eq!(
         run_write_data(STOREB, read_data, prev_data, 4),
-        [199, 83, 243, 12, 221, 121, 64, 205]
+        b([199, 83, 243, 12, 221, 121, 64, 205])
     );
     assert_eq!(
         run_write_data(STOREB, read_data, prev_data, 5),
-        [199, 83, 243, 12, 90, 221, 64, 205]
+        b([199, 83, 243, 12, 90, 221, 64, 205])
     );
     assert_eq!(
         run_write_data(STOREB, read_data, prev_data, 6),
-        [199, 83, 243, 12, 90, 121, 221, 205]
+        b([199, 83, 243, 12, 90, 121, 221, 205])
     );
     assert_eq!(
         run_write_data(STOREB, read_data, prev_data, 7),
-        [199, 83, 243, 12, 90, 121, 64, 221]
+        b([199, 83, 243, 12, 90, 121, 64, 221])
     );
 }
 
 #[test]
 fn run_loadhu_sanity_test() {
-    let read_data = [175, 33, 198, 250, 131, 74, 186, 29];
-    let prev_data = [90, 121, 64, 205, 142, 67, 210, 88];
-
+    let read_data = b([175, 33, 198, 250, 131, 74, 186, 29]);
+    let prev_data = b([90, 121, 64, 205, 142, 67, 210, 88]);
     assert_eq!(
         run_write_data(LOADHU, read_data, prev_data, 0),
-        [175, 33, 0, 0, 0, 0, 0, 0]
+        b([175, 33, 0, 0, 0, 0, 0, 0])
     );
     assert_eq!(
         run_write_data(LOADHU, read_data, prev_data, 2),
-        [198, 250, 0, 0, 0, 0, 0, 0]
+        b([198, 250, 0, 0, 0, 0, 0, 0])
     );
     assert_eq!(
         run_write_data(LOADHU, read_data, prev_data, 4),
-        [131, 74, 0, 0, 0, 0, 0, 0]
+        b([131, 74, 0, 0, 0, 0, 0, 0])
     );
     assert_eq!(
         run_write_data(LOADHU, read_data, prev_data, 6),
-        [186, 29, 0, 0, 0, 0, 0, 0]
+        b([186, 29, 0, 0, 0, 0, 0, 0])
     );
 }
 
 #[test]
 fn run_loadbu_sanity_test() {
-    let read_data = [131, 74, 186, 29, 138, 45, 202, 76];
-    let prev_data = [142, 67, 210, 88, 159, 213, 89, 34];
+    let read_data = b([131, 74, 186, 29, 138, 45, 202, 76]);
+    let prev_data = b([142, 67, 210, 88, 159, 213, 89, 34]);
+    for (shift, expected) in [
+        (0, [131, 0, 0, 0, 0, 0, 0, 0]),
+        (1, [74, 0, 0, 0, 0, 0, 0, 0]),
+        (2, [186, 0, 0, 0, 0, 0, 0, 0]),
+        (3, [29, 0, 0, 0, 0, 0, 0, 0]),
+        (4, [138, 0, 0, 0, 0, 0, 0, 0]),
+        (5, [45, 0, 0, 0, 0, 0, 0, 0]),
+        (6, [202, 0, 0, 0, 0, 0, 0, 0]),
+        (7, [76, 0, 0, 0, 0, 0, 0, 0]),
+    ] {
+        assert_eq!(
+            run_write_data(LOADBU, read_data, prev_data, shift),
+            b(expected)
+        );
+    }
+}
 
+#[test]
+fn load_sign_extend_sanity_tests() {
+    let read_data = b([34, 159, 237, 151, 100, 200, 50, 25]);
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 0),
-        [131, 0, 0, 0, 0, 0, 0, 0]
+        run_write_data(LOADH, read_data, [0; BLOCK_FE_WIDTH], 0),
+        b([34, 159, 255, 255, 255, 255, 255, 255])
     );
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 1),
-        [74, 0, 0, 0, 0, 0, 0, 0]
+        run_write_data(LOADH, read_data, [0; BLOCK_FE_WIDTH], 2),
+        b([237, 151, 255, 255, 255, 255, 255, 255])
     );
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 2),
-        [186, 0, 0, 0, 0, 0, 0, 0]
+        run_write_data(LOADH, read_data, [0; BLOCK_FE_WIDTH], 4),
+        b([100, 200, 255, 255, 255, 255, 255, 255])
     );
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 3),
-        [29, 0, 0, 0, 0, 0, 0, 0]
+        run_write_data(LOADH, read_data, [0; BLOCK_FE_WIDTH], 6),
+        b([50, 25, 0, 0, 0, 0, 0, 0])
+    );
+
+    let read_data = b([45, 82, 99, 127, 200, 150, 180, 210]);
+    for shift in 0..8 {
+        let byte = rv64_u16_block_to_bytes(read_data)[shift];
+        assert_eq!(
+            rv64_u16_block_to_bytes(run_write_data(LOADB, read_data, [0; BLOCK_FE_WIDTH], shift)),
+            (byte as i8 as i64).to_le_bytes(),
+            "LOADB shift={shift}"
+        );
+    }
+
+    let read_data = b([0x01, 0x02, 0x03, 0x84, 0xAA, 0xBB, 0xCC, 0xDD]);
+    assert_eq!(
+        run_write_data(LOADW, read_data, [0; BLOCK_FE_WIDTH], 0),
+        b([0x01, 0x02, 0x03, 0x84, 0xFF, 0xFF, 0xFF, 0xFF])
     );
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 4),
-        [138, 0, 0, 0, 0, 0, 0, 0]
+        run_write_data(LOADW, read_data, [0; BLOCK_FE_WIDTH], 4),
+        b([0xAA, 0xBB, 0xCC, 0xDD, 0xFF, 0xFF, 0xFF, 0xFF])
+    );
+
+    let read_data = b([0x01, 0x02, 0x03, 0x04, 0xAA, 0xBB, 0xCC, 0x7D]);
+    assert_eq!(
+        run_write_data(LOADW, read_data, [0; BLOCK_FE_WIDTH], 0),
+        b([0x01, 0x02, 0x03, 0x04, 0, 0, 0, 0])
     );
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 5),
-        [45, 0, 0, 0, 0, 0, 0, 0]
-    );
-    assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 6),
-        [202, 0, 0, 0, 0, 0, 0, 0]
-    );
-    assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 7),
-        [76, 0, 0, 0, 0, 0, 0, 0]
+        run_write_data(LOADW, read_data, [0; BLOCK_FE_WIDTH], 4),
+        b([0xAA, 0xBB, 0xCC, 0x7D, 0, 0, 0, 0])
     );
 }
 
-// ////////////////////////////////////////////////////////////////////////////////////
-//  CUDA TESTS
-//
-//  Ensure GPU tracegen is equivalent to CPU tracegen
-// ////////////////////////////////////////////////////////////////////////////////////
-
-#[cfg(feature = "cuda")]
-type GpuHarness = GpuTestChipHarness<
-    F,
-    Rv64LoadStoreExecutor,
-    Rv64LoadStoreAir,
-    Rv64LoadStoreChipGpu,
-    Rv64LoadStoreChip<F>,
->;
-
-#[cfg(feature = "cuda")]
-fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
-    let range_bus = default_var_range_checker_bus();
-    let dummy_range_checker_chip = dummy_range_checker(range_bus);
-    let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        bitwise_bus,
-    ));
-
-    let (air, executor, cpu_chip) = create_harness_fields(
-        tester.memory_bridge(),
-        tester.execution_bridge(),
-        dummy_range_checker_chip,
-        dummy_bitwise_chip,
-        tester.dummy_memory_helper(),
-        tester.address_bits(),
-    );
-    let gpu_chip = Rv64LoadStoreChipGpu::new(
-        tester.range_checker(),
-        tester.bitwise_op_lookup(),
-        tester.address_bits(),
-        tester.timestamp_max_bits(),
-    );
-
-    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+#[test]
+#[should_panic]
+fn solve_loadw_rejects_shift_2() {
+    run_write_data(LOADW, b([1, 2, 3, 4, 5, 6, 7, 8]), [0; BLOCK_FE_WIDTH], 2);
 }
 
-#[cfg(feature = "cuda")]
-#[test_case(LOADD, 100)]
-#[test_case(LOADBU, 100)]
-#[test_case(LOADHU, 100)]
-#[test_case(LOADWU, 100)]
-#[test_case(STORED, 100)]
-#[test_case(STOREW, 100)]
-#[test_case(STOREB, 100)]
-#[test_case(STOREH, 100)]
-fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+#[test]
+#[should_panic]
+fn solve_loadw_rejects_shift_6() {
+    run_write_data(LOADW, b([1, 2, 3, 4, 5, 6, 7, 8]), [0; BLOCK_FE_WIDTH], 6);
+}
+
+#[test]
+fn accepted_shift_sets() {
+    let read_data = b([0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80]);
+    for shift in 0..8 {
+        let _ = run_write_data(LOADB, read_data, [0; BLOCK_FE_WIDTH], shift);
+    }
+    for shift in [0, 2, 4, 6] {
+        let _ = run_write_data(LOADH, read_data, [0; BLOCK_FE_WIDTH], shift);
+        let _ = run_write_data(LOADHU, read_data, [0; BLOCK_FE_WIDTH], shift);
+    }
+    for shift in [0, 4] {
+        let _ = run_write_data(LOADW, read_data, [0; BLOCK_FE_WIDTH], shift);
+        let _ = run_write_data(LOADWU, read_data, [0; BLOCK_FE_WIDTH], shift);
+    }
+}
+
+fn assert_pranked_byte_fails(
+    opcode: Rv64LoadStoreOpcode,
+    prank: impl Fn(&mut LoadStoreByteCoreCols<F>),
+) {
     let mut rng = create_seeded_rng();
-    let mut mem_config = MemoryConfig {
-        pointer_max_bits: 20,
-        ..Default::default()
-    };
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 20;
-    mem_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = 1 << 20;
-    if [STORED, STOREW, STOREB, STOREH].contains(&opcode) {
-        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 20;
-    }
-    let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus())
-        .with_bitwise_op_lookup(default_bitwise_lookup_bus());
-
-    let mut harness = create_cuda_harness(&tester);
-    for _ in 0..num_ops {
-        set_and_execute(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &mut rng,
-            opcode,
-            None,
-            None,
-            None,
-            None,
-        );
-    }
-
-    type Record<'a> = (
-        &'a mut Rv64LoadStoreAdapterRecord,
-        &'a mut LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+    let mut tester = VmChipTestBuilder::from_config(memory_config_for(&[opcode]));
+    let (mut harness, bitwise) = create_byte_harness(&mut tester);
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        opcode,
     );
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new(),
-        );
-
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
+        let (_, core_row) = trace_row.split_at_mut(adapter_width);
+        prank(core_row.borrow_mut());
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+    disable_debug_builder();
     tester
         .build()
-        .load_gpu_harness(harness)
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .finalize()
         .simple_test()
-        .unwrap();
+        .expect_err("pranked byte loadstore trace should fail");
+}
+
+fn assert_pranked_halfword_fails(
+    opcode: Rv64LoadStoreOpcode,
+    prank: impl Fn(&mut LoadStoreAlignedCoreCols<F, HALFWORD_SELECTOR_WIDTH>),
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(memory_config_for(&[opcode]));
+    let mut harness = create_halfword_harness(&mut tester);
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        opcode,
+    );
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
+        let (_, core_row) = trace_row.split_at_mut(adapter_width);
+        prank(core_row.borrow_mut());
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+    disable_debug_builder();
+    tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .finalize()
+        .simple_test()
+        .expect_err("pranked halfword loadstore trace should fail");
+}
+
+fn assert_pranked_word_fails(
+    opcode: Rv64LoadStoreOpcode,
+    prank: impl Fn(&mut LoadStoreAlignedCoreCols<F, WORD_SELECTOR_WIDTH>),
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(memory_config_for(&[opcode]));
+    let mut harness = create_word_harness(&mut tester);
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        opcode,
+    );
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
+        let (_, core_row) = trace_row.split_at_mut(adapter_width);
+        prank(core_row.borrow_mut());
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+    disable_debug_builder();
+    tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .finalize()
+        .simple_test()
+        .expect_err("pranked word loadstore trace should fail");
+}
+
+fn assert_pranked_doubleword_fails(
+    opcode: Rv64LoadStoreOpcode,
+    prank: impl Fn(&mut LoadStoreDoublewordCoreCols<F>),
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(memory_config_for(&[opcode]));
+    let mut harness = create_doubleword_harness(&mut tester);
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        opcode,
+    );
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
+        let (_, core_row) = trace_row.split_at_mut(adapter_width);
+        prank(core_row.borrow_mut());
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+    disable_debug_builder();
+    tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .finalize()
+        .simple_test()
+        .expect_err("pranked doubleword loadstore trace should fail");
+}
+
+#[test]
+fn negative_split_write_data_tests() {
+    assert_pranked_byte_fails(STOREB, |core| core.read_data[0] += F::ONE);
+    assert_pranked_halfword_fails(LOADHU, |core| core.read_data[0] += F::ONE);
+    assert_pranked_word_fails(LOADWU, |core| core.read_data[0] += F::ONE);
+    assert_pranked_doubleword_fails(LOADD, |core| core.read_data[0] += F::ONE);
+}
+
+#[test]
+fn negative_split_opcode_role_tests() {
+    assert_pranked_byte_fails(LOADBU, |core| core.is_load = F::ZERO);
+    assert_pranked_halfword_fails(STOREH, |core| core.is_load = F::ONE);
+    assert_pranked_word_fails(LOADWU, |core| core.is_load = F::ZERO);
+    assert_pranked_doubleword_fails(LOADD, |core| core.is_load = F::ZERO);
 }

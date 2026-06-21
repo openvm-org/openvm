@@ -372,6 +372,22 @@ pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr
 }
 
 #[inline(always)]
+pub fn memory_read_u16<const N: usize>(
+    memory: &GuestMemory,
+    address_space: u32,
+    ptr: u32,
+) -> [u16; N] {
+    debug_assert!(
+        address_space == RV64_REGISTER_AS
+            || address_space == RV64_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS,
+    );
+
+    // SAFETY: these address spaces are u16-celled and `ptr` is an AS-native cell pointer.
+    unsafe { memory.read::<u16, N>(address_space, ptr) }
+}
+
+#[inline(always)]
 pub fn memory_write<const N: usize>(
     memory: &mut GuestMemory,
     address_space: u32,

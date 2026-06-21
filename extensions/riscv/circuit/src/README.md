@@ -294,15 +294,17 @@ This circuit proves that:
 - If `opcode` is `sltu` and `compose(b) < compose(c)` (unsigned comparison), then `a` is 1.
 - Otherwise, `a` is 0.
 
-#### 10. [Load sign extend](./load_sign_extend/core.rs) and [Loadstore](./loadstore/core.rs)
+#### 10. [Load/store](./loadstore/mod.rs) and [Load sign extend](./load_sign_extend/mod.rs)
+
+The RV64 load/store circuit is split by access width: [byte](./loadstore/byte/core.rs), [halfword](./loadstore/halfword/mod.rs), [word](./loadstore/word/mod.rs), and [doubleword](./loadstore/doubleword/core.rs). Signed loads stay in separate sign-extension chips split by width: [byte](./load_sign_extend/byte/core.rs), [halfword](./load_sign_extend/halfword/mod.rs), and [word](./load_sign_extend/word/mod.rs).
 
 Given:
 
 - `read_data` is the data read from `mem_as[aligned(val(rs1) + imm)]` if the instruction is load, otherwise it is the data read from register `rd`
-- `write_data` is the data to be written to register `rd` if the instruction is load, otherwise it is the data to be written to `mem_as[aligned(val(rs1) + imm)]`
+- `prev_data` is the previous write target block, either register `rd` for loads or `mem_as[aligned(val(rs1) + imm)]` for stores
 - `opcode` indicates the operation to be performed
 
-This circuit proves that `write_data` equals `shift(read_data)`, where the shift amount is adjusted according to the instruction.
+These circuits prove that the block written by the adapter matches the width-specific load extension or store merge for the selected opcode and alignment.
 
 #### 11. [Multiplication](./mul/core.rs)
 

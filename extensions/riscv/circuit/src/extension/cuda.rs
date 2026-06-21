@@ -16,9 +16,13 @@ use crate::{
     Rv64BranchEqualChipGpu, Rv64BranchLessThanAir, Rv64BranchLessThanChipGpu, Rv64DivRemAir,
     Rv64DivRemChipGpu, Rv64DivRemWAir, Rv64DivRemWChipGpu, Rv64HintStoreAir, Rv64HintStoreChipGpu,
     Rv64I, Rv64Io, Rv64JalLuiAir, Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir,
-    Rv64LessThanChipGpu, Rv64LoadSignExtendAir, Rv64LoadSignExtendChipGpu, Rv64LoadStoreAir,
-    Rv64LoadStoreChipGpu, Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir, Rv64MulWChipGpu,
-    Rv64MultiplicationAir, Rv64MultiplicationChipGpu, Rv64ShiftLogicalAir, Rv64ShiftLogicalChipGpu,
+    Rv64LessThanChipGpu, Rv64LoadSignExtendByteAir, Rv64LoadSignExtendByteChipGpu,
+    Rv64LoadSignExtendHalfwordAir, Rv64LoadSignExtendHalfwordChipGpu, Rv64LoadSignExtendWordAir,
+    Rv64LoadSignExtendWordChipGpu, Rv64LoadStoreByteAir, Rv64LoadStoreByteChipGpu,
+    Rv64LoadStoreDoublewordAir, Rv64LoadStoreDoublewordChipGpu, Rv64LoadStoreHalfwordAir,
+    Rv64LoadStoreHalfwordChipGpu, Rv64LoadStoreWordAir, Rv64LoadStoreWordChipGpu, Rv64M,
+    Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir, Rv64MulWChipGpu, Rv64MultiplicationAir,
+    Rv64MultiplicationChipGpu, Rv64ShiftLogicalAir, Rv64ShiftLogicalChipGpu,
     Rv64ShiftRightArithmeticAir, Rv64ShiftRightArithmeticChipGpu, Rv64ShiftWLogicalAir,
     Rv64ShiftWLogicalChipGpu, Rv64ShiftWRightArithmeticAir, Rv64ShiftWRightArithmeticChipGpu,
 };
@@ -80,23 +84,63 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             Rv64ShiftWRightArithmeticChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(shift_w_right_arithmetic);
 
-        inventory.next_air::<Rv64LoadStoreAir>()?;
-        let load_store_chip = Rv64LoadStoreChipGpu::new(
+        inventory.next_air::<Rv64LoadSignExtendByteAir>()?;
+        let load_sign_extend_byte = Rv64LoadSignExtendByteChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );
-        inventory.add_executor_chip(load_store_chip);
+        inventory.add_executor_chip(load_sign_extend_byte);
 
-        inventory.next_air::<Rv64LoadSignExtendAir>()?;
-        let load_sign_extend = Rv64LoadSignExtendChipGpu::new(
+        inventory.next_air::<Rv64LoadStoreByteAir>()?;
+        let load_store_byte = Rv64LoadStoreByteChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );
-        inventory.add_executor_chip(load_sign_extend);
+        inventory.add_executor_chip(load_store_byte);
+
+        inventory.next_air::<Rv64LoadSignExtendHalfwordAir>()?;
+        let load_sign_extend_halfword = Rv64LoadSignExtendHalfwordChipGpu::new(
+            range_checker.clone(),
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(load_sign_extend_halfword);
+
+        inventory.next_air::<Rv64LoadStoreHalfwordAir>()?;
+        let load_store_halfword = Rv64LoadStoreHalfwordChipGpu::new(
+            range_checker.clone(),
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(load_store_halfword);
+
+        inventory.next_air::<Rv64LoadSignExtendWordAir>()?;
+        let load_sign_extend_word = Rv64LoadSignExtendWordChipGpu::new(
+            range_checker.clone(),
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(load_sign_extend_word);
+
+        inventory.next_air::<Rv64LoadStoreWordAir>()?;
+        let load_store_word = Rv64LoadStoreWordChipGpu::new(
+            range_checker.clone(),
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(load_store_word);
+
+        inventory.next_air::<Rv64LoadStoreDoublewordAir>()?;
+        let load_store_doubleword = Rv64LoadStoreDoublewordChipGpu::new(
+            range_checker.clone(),
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(load_store_doubleword);
 
         inventory.next_air::<Rv64BranchEqualAir>()?;
         let beq = Rv64BranchEqualChipGpu::new(range_checker.clone(), timestamp_max_bits);
