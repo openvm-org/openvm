@@ -44,8 +44,8 @@ use super::aot::AotInstance;
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
     compile_metered_cost, compile_metered_segment_boundary, load_compiled_from_path, ChipMapping,
-    RunToCompletion, RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance,
-    RvrPureInstance, SegmentBoundary,
+    GuestDebugMap, RunToCompletion, RvrMeteredCostInstance, RvrMeteredInstance,
+    RvrMeteredSegmentInstance, RvrPureInstance, SegmentBoundary,
 };
 use super::{
     execution_mode::{
@@ -258,7 +258,7 @@ where
 
     #[cfg(feature = "rvr")]
     pub fn instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<'_, F>, StaticProgramError> {
-        Self::rvr_instance(self, exe)
+        Self::rvr_instance(self, exe, None)
     }
 }
 
@@ -286,11 +286,12 @@ where
     pub fn rvr_instance(
         &self,
         exe: &VmExe<F>,
+        guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrPureInstance<'_, F>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span = tracing::info_span!("compile_pure", backend = "rvr").entered();
         let extensions = self.build_rvr_extensions(None);
-        let compiled = compile(exe, &extensions).map_err(map_rvr_compile_error)?;
+        let compiled = compile(exe, &extensions, guest_debug_map).map_err(map_rvr_compile_error)?;
 
         Ok(RvrPureInstance {
             system_config: self.inventory.config(),
@@ -428,13 +429,14 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<RvrMeteredInstance<'_, F>, StaticProgramError> {
-        self.metered_rvr_instance(exe, executor_idx_to_air_idx)
+        self.metered_rvr_instance(exe, executor_idx_to_air_idx, None)
     }
 
     pub fn metered_rvr_instance(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
+        guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrMeteredInstance<'_, F>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span = tracing::info_span!("compile_metered", backend = "rvr").entered();
@@ -444,7 +446,8 @@ where
                 .map_err(map_rvr_compile_error)?,
             chip_widths: None,
         };
-        let compiled = compile_metered(exe, &extensions, &chips).map_err(map_rvr_compile_error)?;
+        let compiled = compile_metered(exe, &extensions, &chips, guest_debug_map)
+            .map_err(map_rvr_compile_error)?;
 
         Ok(RvrMeteredInstance {
             system_config: self.inventory.config(),
@@ -459,6 +462,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
+        guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrMeteredSegmentInstance<'_, F>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
@@ -469,7 +473,7 @@ where
                 .map_err(map_rvr_compile_error)?,
             chip_widths: None,
         };
-        let compiled = compile_metered_segment_boundary(exe, &extensions, &chips)
+        let compiled = compile_metered_segment_boundary(exe, &extensions, &chips, guest_debug_map)
             .map_err(map_rvr_compile_error)?;
 
         Ok(RvrMeteredSegmentInstance {
@@ -487,7 +491,7 @@ where
         executor_idx_to_air_idx: &[usize],
         widths: &[usize],
     ) -> Result<RvrMeteredCostInstance<'_, F>, StaticProgramError> {
-        self.metered_cost_rvr_instance(exe, executor_idx_to_air_idx, widths)
+        self.metered_cost_rvr_instance(exe, executor_idx_to_air_idx, widths, None)
     }
 
     /// Load a previously saved metered-mode artifact. Caller supplies `exe` and
@@ -537,6 +541,7 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
         widths: &[usize],
+        guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrMeteredCostInstance<'_, F>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
@@ -548,8 +553,8 @@ where
                 .map_err(map_rvr_compile_error)?,
             chip_widths: Some(widths.clone()),
         };
-        let compiled =
-            compile_metered_cost(exe, &extensions, &chips).map_err(map_rvr_compile_error)?;
+        let compiled = compile_metered_cost(exe, &extensions, &chips, guest_debug_map)
+            .map_err(map_rvr_compile_error)?;
 
         Ok(RvrMeteredCostInstance {
             system_config: self.inventory.config(),
@@ -718,7 +723,7 @@ where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
-        self.executor().rvr_instance(exe)
+        self.executor().rvr_instance(exe, None)
     }
 
     // Pure AOT / RVR execution
@@ -798,7 +803,7 @@ where
     {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         self.executor()
-            .metered_rvr_instance(exe, &executor_idx_to_air_idx)
+            .metered_rvr_instance(exe, &executor_idx_to_air_idx, None)
     }
 
     #[cfg(feature = "rvr")]
@@ -812,7 +817,7 @@ where
     {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         self.executor()
-            .metered_segment_rvr_instance(exe, &executor_idx_to_air_idx)
+            .metered_segment_rvr_instance(exe, &executor_idx_to_air_idx, None)
     }
 
     #[cfg(feature = "rvr")]
@@ -916,7 +921,7 @@ where
             .map(|pk| pk.vk.params.width.total_width())
             .collect();
         self.executor()
-            .metered_cost_rvr_instance(exe, &executor_idx_to_air_idx, &widths)
+            .metered_cost_rvr_instance(exe, &executor_idx_to_air_idx, &widths, None)
     }
 
     #[cfg(feature = "rvr")]

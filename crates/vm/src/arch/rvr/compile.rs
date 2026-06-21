@@ -239,6 +239,7 @@ pub fn compile_with_options<F: PrimeField32>(
 pub fn compile<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry<F>,
+    guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(
         exe,
@@ -247,7 +248,7 @@ pub fn compile<F: PrimeField32>(
             tracer_mode: TracerMode::Pure,
             extensions,
             chips: None,
-            guest_debug_map: None,
+            guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
             suspend_policy: None,
@@ -260,6 +261,7 @@ pub fn compile_metered<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry<F>,
     chips: &ChipMapping,
+    guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(
         exe,
@@ -268,7 +270,7 @@ pub fn compile_metered<F: PrimeField32>(
             tracer_mode: TracerMode::Metered,
             extensions,
             chips: Some(chips),
-            guest_debug_map: None,
+            guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
             suspend_policy: None,
@@ -281,6 +283,7 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry<F>,
     chips: &ChipMapping,
+    guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(
         exe,
@@ -289,7 +292,7 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
             tracer_mode: TracerMode::Metered,
             extensions,
             chips: Some(chips),
-            guest_debug_map: None,
+            guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
             suspend_policy: Some(SuspendPolicy::SegmentBoundary),
@@ -302,6 +305,7 @@ pub fn compile_metered_cost<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry<F>,
     chips: &ChipMapping,
+    guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(
         exe,
@@ -310,7 +314,7 @@ pub fn compile_metered_cost<F: PrimeField32>(
             tracer_mode: TracerMode::MeteredCost,
             extensions,
             chips: Some(chips),
-            guest_debug_map: None,
+            guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
             suspend_policy: None,

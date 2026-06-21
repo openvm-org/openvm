@@ -4,7 +4,7 @@
 use std::{
     fs::read,
     marker::PhantomData,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, OnceLock},
 };
 
@@ -42,6 +42,7 @@ use openvm_verify_stark_host::{
     vk::{VerificationBaseline, VmStarkVerifyingKey},
     VmStarkProof,
 };
+pub use types::{ExecutableFormat, ExecutableInput};
 
 #[cfg(feature = "rvr")]
 use crate::compiled::load_metered_artifact_metadata;
@@ -49,7 +50,7 @@ use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey},
     prover::{AggProver, AppProver, DeferralPathProver, StarkProver},
-    types::{AppExecutionCommit, ExecutableFormat},
+    types::AppExecutionCommit,
 };
 #[cfg(feature = "evm-prove")]
 use crate::{halo2_params::CacheHalo2ParamsReader, keygen::Halo2ProvingKey, prover::Halo2Prover};
@@ -58,6 +59,10 @@ use crate::{
     keygen::{dummy::compute_root_proof_heights, RootProvingKey},
     prover::{EvmProver, RootProver},
 };
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::instructions::program::DEFAULT_PC_STEP;
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::rvr::{default_addr2line_cmd, GuestDebugMap};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -100,6 +105,11 @@ pub const OPENVM_VERSION: &str = concat!(
     ".",
     env!("CARGO_PKG_VERSION_MINOR")
 );
+
+struct CompileInput {
+    executable: ExecutableFormat,
+    elf_path: Option<PathBuf>,
+}
 
 // The SDK is only generic in the engine for the non-root SC. The root SC is fixed to
 // BabyBearPoseidon2RootEngine right now.
@@ -305,6 +315,61 @@ where
         };
         Ok(exe)
     }
+
+    fn compile_input(
+        &self,
+        executable: impl Into<ExecutableInput>,
+    ) -> Result<CompileInput, SdkError> {
+        let executable = executable.into();
+        match executable {
+            ExecutableInput::Format(format) => Ok(CompileInput {
+                executable: format,
+                elf_path: None,
+            }),
+            ExecutableInput::ElfFile(path) => {
+                let bytes = read(&path)?;
+                let elf = Elf::decode(&bytes, MEM_SIZE as u32)?;
+                Ok(CompileInput {
+                    executable: ExecutableFormat::Elf(elf),
+                    elf_path: Some(path),
+                })
+            }
+            ExecutableInput::WithElfPath {
+                executable,
+                elf_path,
+            } => Ok(CompileInput {
+                executable,
+                elf_path: Some(elf_path),
+            }),
+        }
+    }
+
+    #[cfg(feature = "rvr")]
+    fn guest_debug_map(
+        &self,
+        elf_path: Option<&Path>,
+        exe: &VmExe<F>,
+    ) -> Result<Option<GuestDebugMap>, SdkError> {
+        if !cfg!(feature = "profiling") {
+            return Ok(None);
+        }
+        let Some(elf_path) = elf_path else {
+            return Ok(None);
+        };
+        let pcs = exe
+            .program
+            .instructions_and_debug_infos
+            .iter()
+            .enumerate()
+            .filter_map(|(index, slot)| {
+                slot.as_ref()
+                    .map(|_| exe.program.pc_base + (index as u32) * DEFAULT_PC_STEP)
+            })
+            .collect::<Vec<_>>();
+        let map = GuestDebugMap::from_elf(elf_path, &pcs, &default_addr2line_cmd())
+            .map_err(|err| SdkError::Other(eyre::eyre!(err)))?;
+        Ok(Some(map))
+    }
 }
 
 // The SDK is only functional for SC = BabyBearPoseidon2Config because that is what recursive
@@ -319,7 +384,7 @@ where
     /// Compile `app_exe` and execute it, returning the user public values as bytes.
     pub fn compile_and_execute(
         &self,
-        app_exe: impl Into<ExecutableFormat>,
+        app_exe: impl Into<ExecutableInput>,
         inputs: StdIn,
     ) -> Result<Vec<u8>, SdkError> {
         let compiled = self.compile(app_exe)?;
@@ -330,9 +395,23 @@ where
     #[tracing::instrument(name = "sdk.compile", level = "info", skip_all)]
     pub fn compile(
         &self,
-        app_exe: impl Into<ExecutableFormat>,
+        app_exe: impl Into<ExecutableInput>,
     ) -> Result<CompiledExePure<'_, F>, SdkError> {
-        let exe = self.convert_to_exe(app_exe)?;
+        let CompileInput {
+            executable,
+            elf_path,
+        } = self.compile_input(app_exe)?;
+        let exe = self.convert_to_exe(executable)?;
+        #[cfg(feature = "rvr")]
+        {
+            let guest_debug_map = self.guest_debug_map(elf_path.as_deref(), &exe)?;
+            return self
+                .executor
+                .rvr_instance(&exe, guest_debug_map.as_ref())
+                .map_err(VirtualMachineError::from)
+                .map_err(SdkError::from);
+        }
+        #[cfg(not(feature = "rvr"))]
         self.executor
             .instance(&exe)
             .map_err(VirtualMachineError::from)
@@ -375,7 +454,7 @@ where
     /// Returns both user public values and segments with instruction counts and trace heights.
     pub fn compile_and_execute_metered(
         &self,
-        app_exe: impl Into<ExecutableFormat>,
+        app_exe: impl Into<ExecutableInput>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
         let compiled = self.compile_metered(app_exe)?;
@@ -388,15 +467,27 @@ where
     #[tracing::instrument(name = "sdk.compile_metered", level = "info", skip_all)]
     pub fn compile_metered(
         &self,
-        app_exe: impl Into<ExecutableFormat>,
+        app_exe: impl Into<ExecutableInput>,
     ) -> Result<CompiledExeMetered<'_>, SdkError> {
-        let app_prover = self.app_prover(app_exe)?;
+        let CompileInput {
+            executable,
+            elf_path,
+        } = self.compile_input(app_exe)?;
+        let app_prover = self.app_prover(executable)?;
 
         let vm = app_prover.vm();
         let exe = app_prover.exe();
 
         let ctx = vm.build_metered_ctx(&exe);
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        #[cfg(feature = "rvr")]
+        let guest_debug_map = self.guest_debug_map(elf_path.as_deref(), &exe)?;
+        #[cfg(feature = "rvr")]
+        let instance = self
+            .executor
+            .metered_rvr_instance(&exe, &executor_idx_to_air_idx, guest_debug_map.as_ref())
+            .map_err(VirtualMachineError::from)?;
+        #[cfg(not(feature = "rvr"))]
         let instance = self
             .executor
             .metered_instance(&exe, &executor_idx_to_air_idx)
@@ -455,7 +546,7 @@ where
     /// Returns both user public values, and cost along with instruction count.
     pub fn compile_and_execute_metered_cost(
         &self,
-        app_exe: impl Into<ExecutableFormat>,
+        app_exe: impl Into<ExecutableInput>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
         let compiled = self.compile_metered_cost(app_exe)?;
@@ -466,9 +557,13 @@ where
     #[tracing::instrument(name = "sdk.compile_metered_cost", level = "info", skip_all)]
     pub fn compile_metered_cost(
         &self,
-        app_exe: impl Into<ExecutableFormat>,
+        app_exe: impl Into<ExecutableInput>,
     ) -> Result<CompiledExeMeteredCost<'_>, SdkError> {
-        let app_prover = self.app_prover(app_exe)?;
+        let CompileInput {
+            executable,
+            elf_path,
+        } = self.compile_input(app_exe)?;
+        let app_prover = self.app_prover(executable)?;
 
         let vm = app_prover.vm();
         let exe = app_prover.exe();
@@ -476,9 +571,16 @@ where
         let ctx = vm.build_metered_cost_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         #[cfg(feature = "rvr")]
+        let guest_debug_map = self.guest_debug_map(elf_path.as_deref(), &exe)?;
+        #[cfg(feature = "rvr")]
         let instance = self
             .executor
-            .metered_cost_instance(&exe, &executor_idx_to_air_idx, &ctx.widths)
+            .metered_cost_rvr_instance(
+                &exe,
+                &executor_idx_to_air_idx,
+                &ctx.widths,
+                guest_debug_map.as_ref(),
+            )
             .map_err(VirtualMachineError::from)?;
         #[cfg(not(feature = "rvr"))]
         let instance = self

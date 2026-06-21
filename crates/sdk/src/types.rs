@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use derive_more::derive::From;
 use eyre::Result;
@@ -39,6 +42,52 @@ impl<'a> From<&'a [u8]> for ExecutableFormat {
 impl From<Vec<u8>> for ExecutableFormat {
     fn from(bytes: Vec<u8>) -> Self {
         ExecutableFormat::from(&bytes[..])
+    }
+}
+
+/// Input accepted by SDK compile methods.
+pub enum ExecutableInput {
+    /// An in-memory executable.
+    Format(ExecutableFormat),
+    /// An ELF file path. Path provenance is preserved for profiling source maps.
+    ElfFile(PathBuf),
+    /// An in-memory executable with the ELF file it was built from.
+    WithElfPath {
+        executable: ExecutableFormat,
+        elf_path: PathBuf,
+    },
+}
+
+impl ExecutableInput {
+    pub fn with_elf_path(
+        executable: impl Into<ExecutableFormat>,
+        elf_path: impl Into<PathBuf>,
+    ) -> Self {
+        Self::WithElfPath {
+            executable: executable.into(),
+            elf_path: elf_path.into(),
+        }
+    }
+}
+
+impl From<&Path> for ExecutableInput {
+    fn from(path: &Path) -> Self {
+        Self::ElfFile(path.to_path_buf())
+    }
+}
+
+impl From<PathBuf> for ExecutableInput {
+    fn from(path: PathBuf) -> Self {
+        Self::ElfFile(path)
+    }
+}
+
+impl<T> From<T> for ExecutableInput
+where
+    ExecutableFormat: From<T>,
+{
+    fn from(value: T) -> Self {
+        Self::Format(value.into())
     }
 }
 
