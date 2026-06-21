@@ -31,13 +31,11 @@ use openvm_stark_backend::{
     },
     utils::disable_debug_builder,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 #[cfg(feature = "aot")]
-use openvm_stark_sdk::config::{
-    baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters,
-};
+use openvm_stark_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters};
 #[cfg(feature = "aot")]
 use openvm_stark_sdk::engine::StarkFriEngine;
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
@@ -52,8 +50,6 @@ use {
 };
 
 use super::Rv32JalrCoreAir;
-#[cfg(feature = "aot")]
-use crate::{Rv32ImBuilder, Rv32ImConfig};
 use crate::{
     adapters::{
         compose, Rv32JalrAdapterAir, Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller,
@@ -62,6 +58,8 @@ use crate::{
     jalr::{run_jalr, Rv32JalrChip, Rv32JalrCoreCols, Rv32JalrExecutor},
     Rv32JalrAir, Rv32JalrFiller,
 };
+#[cfg(feature = "aot")]
+use crate::{Rv32ImBuilder, Rv32ImConfig};
 
 const IMM_BITS: usize = 16;
 const MAX_INS_CAPACITY: usize = 128;
@@ -417,7 +415,11 @@ fn test_aot_dispatch_rejects_dead_pc_slots() {
         ),
         (
             VmExe::new(Program::new_without_debug_infos_with_option(
-                &[Some(terminate_instruction()), None, Some(terminate_instruction())],
+                &[
+                    Some(terminate_instruction()),
+                    None,
+                    Some(terminate_instruction()),
+                ],
                 0,
             ))
             .with_pc_start(4),
@@ -428,8 +430,7 @@ fn test_aot_dispatch_rejects_dead_pc_slots() {
     let config = Rv32ImConfig::default();
     let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
-    let (vm, _) =
-        VirtualMachine::new_with_keygen(engine, Rv32ImBuilder, config).expect("vm init");
+    let (vm, _) = VirtualMachine::new_with_keygen(engine, Rv32ImBuilder, config).expect("vm init");
     let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
 
     for (exe, dead_pc) in cases {
