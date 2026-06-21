@@ -15,7 +15,10 @@ use openvm_circuit_primitives::{
     SubAir,
 };
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode,
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode, DEFERRAL_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -365,7 +368,7 @@ pub struct LoadStoreCoreRecord<const NUM_CELLS: usize> {
     pub local_opcode: u8,
     pub shift_amount: u8,
     pub read_data: [u8; NUM_CELLS],
-    // Note: `prev_data` can be from native address space, so we need to use u32.
+    // `prev_data` is u32 so load/store core logic can be shared across byte cells.
     pub prev_data: [u32; NUM_CELLS],
 }
 
@@ -429,7 +432,18 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
+        let Instruction { opcode, d, e, .. } = instruction;
+        let e_u32 = e.as_canonical_u32();
+        if d.as_canonical_u32() != RV64_REGISTER_AS
+            || e_u32 == RV64_IMM_AS
+            || e_u32 == RV64_REGISTER_AS
+            || e_u32 == DEFERRAL_AS
+        {
+            return Err(ExecutionError::Fail {
+                pc: *state.pc,
+                msg: "Invalid LoadStore instruction",
+            });
+        }
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 

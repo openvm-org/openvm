@@ -18,9 +18,7 @@ use openvm_circuit_primitives::{
 };
 #[cfg(feature = "cuda")]
 use openvm_instructions::riscv::RV64_MEMORY_AS;
-use openvm_instructions::{
-    instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, DEFERRAL_AS,
-};
+use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -187,9 +185,6 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         tester.write_bytes(1, a, prev_data);
         tester.write_bytes(mem_as, (ptr_val as usize) - shift_amount, read_data);
     } else {
-        if mem_as == 4 {
-            prev_data = array::from_fn(|_| rng.random());
-        }
         if a == 0 {
             read_data = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
         }
@@ -364,37 +359,6 @@ fn positive_storew_public_values_test() {
         Some(0),
         Some(0),
         Some(3),
-    );
-
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
-}
-
-// TODO: Remove STORED-to-DEFERRAL_AS support from loadstore.
-#[ignore = "STORED-to-DEFERRAL_AS path needs the F-celled boundary write shape"]
-#[test]
-fn positive_stored_native_test() {
-    let mut rng = create_seeded_rng();
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
-    mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
-    let mut tester = VmChipTestBuilder::from_config(mem_config);
-    let (mut harness, bitwise) = create_harness(&mut tester);
-
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        &mut rng,
-        STORED,
-        Some([0, 0, 0, 0, 0, 0, 0, 0]),
-        Some(0),
-        Some(0),
-        Some(4),
     );
 
     let tester = tester
@@ -651,6 +615,18 @@ fn negative_wrong_address_space_tests() {
         },
         false,
     );
+
+    run_negative_loadstore_test(
+        STOREW,
+        None,
+        None,
+        None,
+        LoadStorePrankValues {
+            mem_as: Some(4),
+            ..Default::default()
+        },
+        false,
+    );
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -880,7 +856,6 @@ fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usiz
     mem_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = 1 << 20;
     if [STORED, STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 20;
-        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     }
     let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus())
         .with_bitwise_op_lookup(default_bitwise_lookup_bus());

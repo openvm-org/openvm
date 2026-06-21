@@ -29,7 +29,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
-    LocalOpcode, DEFERRAL_AS,
+    LocalOpcode,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -211,10 +211,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         let mem_ptr = local_cols.mem_ptr_limbs[0]
             + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1u32 << U16_BITS);
 
-        let is_store = is_valid.clone() - is_load.clone();
-        // constrain mem_as to be in {0, 1, 2} if the instruction is a load,
-        // and in {2, 3, 4} if the instruction is a store
-        builder.assert_tern(local_cols.mem_as - is_store * AB::Expr::TWO);
+        // Constrain loads to address space 2 and stores to address spaces 2 or 3.
+        let mem_as_minus_two = local_cols.mem_as - AB::Expr::TWO;
+        builder
+            .when(is_valid.clone())
+            .assert_bool(mem_as_minus_two.clone());
+        builder
+            .when(is_load.clone())
+            .assert_zero(mem_as_minus_two.clone());
         builder
             .when(not::<AB::Expr>(is_valid.clone()))
             .assert_zero(local_cols.mem_as);
@@ -416,10 +420,6 @@ where
                 let e = e.as_canonical_u32();
                 debug_assert_ne!(e, RV64_IMM_AS);
                 debug_assert_ne!(e, RV64_REGISTER_AS);
-                if e == DEFERRAL_AS {
-                    // TODO: Remove loadstore read/write support for DEFERRAL_AS.
-                    unreachable!("STORE to DEFERRAL_AS is unsupported");
-                }
                 record.mem_as = e as u8;
                 let read_data = tracing_read(
                     memory,
@@ -468,10 +468,6 @@ where
                     let imm_extended = sign_extend_imm16(record.imm as u32, record.imm_sign as u32);
                     let ptr = record.rs1_val.wrapping_add(imm_extended)
                         & !(RV64_REGISTER_NUM_LIMBS as u32 - 1);
-                    if record.mem_as == DEFERRAL_AS as u8 {
-                        // TODO: Remove loadstore read/write support for DEFERRAL_AS.
-                        unreachable!("STORE to DEFERRAL_AS is unsupported");
-                    }
                     timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
                 }
                 LOADD | LOADW | LOADB | LOADH | LOADWU | LOADBU | LOADHU => {
