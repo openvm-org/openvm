@@ -36,6 +36,8 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use openvm_stark_sdk::config::{
     baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters,
 };
+#[cfg(feature = "aot")]
+use openvm_stark_sdk::engine::StarkFriEngine;
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
