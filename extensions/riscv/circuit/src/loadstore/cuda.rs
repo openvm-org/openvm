@@ -1,67 +1,71 @@
-use std::{mem::size_of, sync::Arc};
+use std::sync::Arc;
 
 use derive_new::new;
-use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
+use openvm_circuit::arch::DenseRecordArena;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
-use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_instructions::riscv::RV64_REGISTER_NUM_LIMBS;
+use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
 use openvm_stark_backend::prover::AirProvingContext;
 
-use crate::{
-    adapters::{Rv64LoadStoreAdapterCols, Rv64LoadStoreAdapterRecord, RV64_BYTE_BITS},
-    cuda_abi::loadstore_cuda::tracegen,
-    LoadStoreCoreCols, LoadStoreCoreRecord,
-};
+use crate::adapters::RV64_BYTE_BITS;
+
+fn unsupported_split_loadstore_ctx(arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+    if arena.allocated().is_empty() {
+        return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+    }
+    unimplemented!("CUDA trace generation for split RV64 loadstore chips is not implemented")
+}
 
 #[derive(new)]
-pub struct Rv64LoadStoreChipGpu {
+pub struct Rv64LoadStoreByteChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadStoreChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadStoreByteChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(
-            Rv64LoadStoreAdapterRecord,
-            LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-        )>();
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
+        unsupported_split_loadstore_ctx(arena)
+    }
+}
 
-        let trace_width = Rv64LoadStoreAdapterCols::<F>::width()
-            + LoadStoreCoreCols::<F, RV64_REGISTER_NUM_LIMBS>::width();
-        let height = records.len() / RECORD_SIZE;
-        let padded_height = next_power_of_two_or_zero(height);
-        let device_ctx = &self.range_checker.device_ctx;
+#[derive(new)]
+pub struct Rv64LoadStoreHalfwordChipGpu {
+    pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    pub pointer_max_bits: usize,
+    pub timestamp_max_bits: usize,
+}
 
-        let d_records = tracing::info_span!("trace_gen.h2d_records")
-            .in_scope(|| records.to_device_on(device_ctx))
-            .unwrap();
-        let d_trace = DeviceMatrix::<F>::with_capacity_on(padded_height, trace_width, device_ctx);
+impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadStoreHalfwordChipGpu {
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        unsupported_split_loadstore_ctx(arena)
+    }
+}
 
-        unsafe {
-            tracegen(
-                d_trace.buffer(),
-                padded_height,
-                trace_width,
-                &d_records,
-                self.pointer_max_bits,
-                &self.range_checker.count,
-                &self.bitwise_lookup.count,
-                self.timestamp_max_bits as u32,
-                device_ctx.stream.as_raw(),
-            )
-            .unwrap();
-        }
+#[derive(new)]
+pub struct Rv64LoadStoreWordChipGpu {
+    pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    pub pointer_max_bits: usize,
+    pub timestamp_max_bits: usize,
+}
 
-        AirProvingContext::simple_no_pis(d_trace)
+impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadStoreWordChipGpu {
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        unsupported_split_loadstore_ctx(arena)
+    }
+}
+
+#[derive(new)]
+pub struct Rv64LoadStoreDoublewordChipGpu {
+    pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    pub pointer_max_bits: usize,
+    pub timestamp_max_bits: usize,
+}
+
+impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadStoreDoublewordChipGpu {
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        unsupported_split_loadstore_ctx(arena)
     }
 }
