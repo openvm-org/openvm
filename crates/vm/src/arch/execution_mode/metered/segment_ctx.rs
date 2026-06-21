@@ -1,9 +1,7 @@
 use bytesize::ByteSize;
 #[cfg(feature = "metrics")]
 use openvm_stark_backend::memory_metering::INTERACTION_MEMORY_OVERHEAD;
-use openvm_stark_backend::memory_metering::{
-    ProvingMemoryConfig, ProvingMemoryCounts, ProvingMemoryEstimate,
-};
+use openvm_stark_backend::memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts};
 use serde::{Deserialize, Serialize};
 
 use crate::utils::{add_one_or_zero, next_power_of_two_or_zero};
@@ -26,66 +24,15 @@ pub struct SegmentationLimits {
     pub max_interactions: u32,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct ProvingMemoryConfigData {
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "ProvingMemoryConfig")]
+struct ProvingMemoryConfigSerde {
     base_field_size: usize,
     extension_degree: usize,
     log_blowup: usize,
     l_skip: usize,
     max_constraint_degree: usize,
     cache_rs_code_matrix: bool,
-}
-
-impl From<ProvingMemoryConfig> for ProvingMemoryConfigData {
-    fn from(config: ProvingMemoryConfig) -> Self {
-        Self {
-            base_field_size: config.base_field_size,
-            extension_degree: config.extension_degree,
-            log_blowup: config.log_blowup,
-            l_skip: config.l_skip,
-            max_constraint_degree: config.max_constraint_degree,
-            cache_rs_code_matrix: config.cache_rs_code_matrix,
-        }
-    }
-}
-
-impl From<ProvingMemoryConfigData> for ProvingMemoryConfig {
-    fn from(config: ProvingMemoryConfigData) -> Self {
-        Self {
-            base_field_size: config.base_field_size,
-            extension_degree: config.extension_degree,
-            log_blowup: config.log_blowup,
-            l_skip: config.l_skip,
-            max_constraint_degree: config.max_constraint_degree,
-            cache_rs_code_matrix: config.cache_rs_code_matrix,
-        }
-    }
-}
-
-impl ProvingMemoryConfigData {
-    #[inline(always)]
-    fn estimate(&self, counts: ProvingMemoryCounts) -> ProvingMemoryEstimate {
-        ProvingMemoryConfig::from(*self).estimate(counts)
-    }
-
-    #[cfg(feature = "metrics")]
-    #[inline(always)]
-    fn main_memory_bytes(&self, main_cells: usize) -> usize {
-        ProvingMemoryConfig::from(*self).main_memory_bytes(main_cells)
-    }
-
-    #[cfg(feature = "metrics")]
-    #[inline(always)]
-    fn main_secondary_memory_bytes_for_rot(&self, main_cells: usize, need_rot: bool) -> usize {
-        ProvingMemoryConfig::from(*self).main_secondary_memory_bytes_for_rot(main_cells, need_rot)
-    }
-
-    #[cfg(feature = "metrics")]
-    #[inline(always)]
-    fn interaction_memory_bytes_without_overhead(&self, interaction_cells: usize) -> usize {
-        ProvingMemoryConfig::from(*self)
-            .interaction_memory_bytes_without_overhead(interaction_cells)
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -97,7 +44,8 @@ pub struct SegmentationConfig {
     max_trace_height: u32,
     max_memory: usize,
     max_interactions: u32,
-    memory_config: ProvingMemoryConfigData,
+    #[serde(with = "ProvingMemoryConfigSerde")]
+    memory_config: ProvingMemoryConfig,
     segment_check_insns: u64,
 }
 
@@ -135,7 +83,7 @@ impl SegmentationConfig {
             max_trace_height,
             max_memory: limits.max_memory,
             max_interactions: limits.max_interactions,
-            memory_config: memory_config.into(),
+            memory_config,
             segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
         }
     }
