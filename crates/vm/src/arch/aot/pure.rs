@@ -125,6 +125,17 @@ where
                     .as_ref()
                     .map(|(instruction, _)| instruction)
             });
+
+            // Dead pc slot: either below `pc_base` or a hole in the program. Emit a tiny stub
+            // that records its pc in `REG_THIRD_ARG` and jumps to the single shared dead-pc
+            // handler below.
+            let Some(instruction) = instruction else {
+                asm_str += &format!("asm_execute_pc_{pc}:\n");
+                asm_str += &format!("    mov {REG_THIRD_ARG}, {pc}\n");
+                asm_str += "    jmp asm_dead_pc_handler\n";
+                continue;
+            };
+
             asm_str += &format!("asm_execute_pc_{pc}:\n");
 
             // Check if we should suspend or not
@@ -133,65 +144,61 @@ where
             asm_str += &format!("    je asm_run_end_{pc}\n");
             asm_str += &format!("    dec {REG_INSTRET_END}\n");
 
-            if let Some(instruction) = instruction {
-                if instruction.opcode.as_usize() == 0 {
-                    // terminal opcode has no associated executor, so can handle with default
-                    // fallback
-                    asm_str += &Self::xmm_to_rv32_regs();
-                    asm_str += &Self::push_address_space_start();
-                    asm_str += &Self::push_internal_registers();
+            if instruction.opcode.as_usize() == 0 {
+                // terminal opcode has no associated executor, so can handle with default
+                // fallback
+                asm_str += &Self::xmm_to_rv32_regs();
+                asm_str += &Self::push_address_space_start();
+                asm_str += &Self::push_internal_registers();
 
-                    asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
-                    asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSTRET_END}\n");
-                    asm_str += &format!("   mov {REG_D}, {instret_left_ptr}\n");
-                    asm_str += &format!("   call {REG_D}\n");
+                asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+                asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSTRET_END}\n");
+                asm_str += &format!("   mov {REG_D}, {instret_left_ptr}\n");
+                asm_str += &format!("   call {REG_D}\n");
 
-                    asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
-                    asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
-                    asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
-                    asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n");
-                    asm_str += &format!("   call {REG_D}\n");
-                    asm_str += &format!("   cmp {REG_RETURN_VAL}, 1\n");
+                asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+                asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
+                asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
+                asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n");
+                asm_str += &format!("   call {REG_D}\n");
+                asm_str += &format!("   cmp {REG_RETURN_VAL}, 1\n");
 
-                    asm_str += &Self::pop_internal_registers();
-                    asm_str += &Self::pop_address_space_start();
-                    asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
-                    asm_str += &format!("   mov {REG_SECOND_ARG}, {pc}\n");
-                    asm_str += &format!("   mov {REG_D}, {set_pc_ptr}\n");
-                    asm_str += &format!("   call {REG_D}\n");
-                    asm_str += &format!("   xor {REG_RETURN_VAL}, {REG_RETURN_VAL}\n");
-                    asm_str += &Self::pop_external_registers();
-                    asm_str += "    ret\n";
+                asm_str += &Self::pop_internal_registers();
+                asm_str += &Self::pop_address_space_start();
+                asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+                asm_str += &format!("   mov {REG_SECOND_ARG}, {pc}\n");
+                asm_str += &format!("   mov {REG_D}, {set_pc_ptr}\n");
+                asm_str += &format!("   call {REG_D}\n");
+                asm_str += &format!("   xor {REG_RETURN_VAL}, {REG_RETURN_VAL}\n");
+                asm_str += &Self::pop_external_registers();
+                asm_str += "    ret\n";
 
-                    continue;
-                }
+                continue;
+            }
 
-                let executor = inventory
-                    .get_executor(instruction.opcode)
-                    .expect("executor not found for opcode");
+            let executor = inventory
+                .get_executor(instruction.opcode)
+                .expect("executor not found for opcode");
 
-                if executor.is_aot_supported(instruction) {
-                    let segment =
-                        executor
-                            .generate_x86_asm(instruction, pc)
-                            .map_err(|err| match err {
-                                AotError::InvalidInstruction => {
-                                    StaticProgramError::InvalidInstruction(pc)
-                                }
-                                AotError::NotSupported => StaticProgramError::DisabledOperation {
-                                    pc,
-                                    opcode: instruction.opcode,
-                                },
-                                AotError::NoExecutorFound(opcode) => {
-                                    StaticProgramError::ExecutorNotFound { opcode }
-                                }
-                                AotError::Other(_message) => {
-                                    StaticProgramError::InvalidInstruction(pc)
-                                }
-                            })?;
-                    asm_str += &segment;
-                    continue;
-                }
+            if executor.is_aot_supported(instruction) {
+                let segment =
+                    executor
+                        .generate_x86_asm(instruction, pc)
+                        .map_err(|err| match err {
+                            AotError::InvalidInstruction => {
+                                StaticProgramError::InvalidInstruction(pc)
+                            }
+                            AotError::NotSupported => StaticProgramError::DisabledOperation {
+                                pc,
+                                opcode: instruction.opcode,
+                            },
+                            AotError::NoExecutorFound(opcode) => {
+                                StaticProgramError::ExecutorNotFound { opcode }
+                            }
+                            AotError::Other(_message) => StaticProgramError::InvalidInstruction(pc),
+                        })?;
+                asm_str += &segment;
+                continue;
             }
 
             {
@@ -219,9 +226,54 @@ where
             }
         }
 
-        // asm_run_end part
+        // Shared dead-pc handler. Reached from a dead-slot stub with the dead pc held in
+        // `REG_THIRD_ARG` (= `REG_C`). It mirrors the real-instruction suspend check, then
+        // dispatches to `extern_handler`, whose pre-compute table holds an `unreachable_handler`
+        // for every dead pc, so it records `ExecutionError::Unreachable(pc)` and returns 1. The
+        // pc in `REG_C` survives the calls below because `push_internal_registers` saves it.
+        asm_str += "asm_dead_pc_handler:\n";
+        asm_str += &format!("    cmp {REG_INSTRET_END}, 0\n");
+        asm_str += "    je asm_dead_pc_exit\n";
+        asm_str += &format!("    dec {REG_INSTRET_END}\n");
+        asm_str += &Self::xmm_to_rv32_regs();
+        asm_str += &Self::push_address_space_start();
+        asm_str += &Self::push_internal_registers();
+        asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+        asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
+        // `REG_THIRD_ARG` already holds the dead pc.
+        asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n");
+        asm_str += &format!("   call {REG_D}\n");
+        asm_str += &Self::pop_internal_registers();
+        asm_str += &Self::pop_address_space_start();
+        asm_str += &Self::rv32_regs_to_xmm();
+        // `extern_handler` always reports an error for a dead pc, so fall through to the exit.
+
+        // Exit path: set_pc runs before set_instret_left so the pc in `REG_C` is consumed before
+        // the call clobbers it (`REG_INSTRET_END` is callee-saved and survives).
+        asm_str += "asm_dead_pc_exit:\n";
+        asm_str += &Self::xmm_to_rv32_regs();
+        asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+        asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_C}\n");
+        asm_str += &format!("   mov {REG_D}, {set_pc_ptr}\n");
+        asm_str += &format!("   call {REG_D}\n");
+        asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+        asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSTRET_END}\n");
+        asm_str += &format!("   mov {REG_D}, {instret_left_ptr}\n");
+        asm_str += &format!("   call {REG_D}\n");
+        asm_str += &Self::pop_external_registers();
+        asm_str += &format!("   xor {REG_RETURN_VAL}, {REG_RETURN_VAL}\n");
+        asm_str += "    ret\n";
+
+        // asm_run_end part. Only real instructions reach a per-pc suspend target; dead slots
+        // use the shared exit path inside the dead-pc handler instead.
         for pc_idx in 0..num_pc_slots {
             let pc = pc_idx as u32 * DEFAULT_PC_STEP;
+            let is_real = pc_idx
+                .checked_sub(base_idx)
+                .is_some_and(|idx| exe.program.instructions_and_debug_infos[idx].is_some());
+            if !is_real {
+                continue;
+            }
             asm_str += &format!("asm_run_end_{pc}:\n");
             asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
             asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSTRET_END}\n");
