@@ -35,8 +35,8 @@ use openvm_riscv_circuit::{
     adapters::RV_B_TYPE_IMM_BITS, AddSubCoreAir, AddSubFiller, BitwiseLogicCoreAir,
     BitwiseLogicFiller, BranchEqualCoreAir, BranchEqualFiller, BranchLessThanCoreAir,
     BranchLessThanFiller, LessThanCoreAir, LessThanFiller, MultiplicationCoreAir,
-    MultiplicationFiller, ShiftArithmeticRightCoreAir,
-    ShiftArithmeticRightFiller, ShiftLogicalCoreAir, ShiftLogicalFiller,
+    MultiplicationFiller, ShiftArithmeticRightCoreAir, ShiftArithmeticRightFiller,
+    ShiftLogicalCoreAir, ShiftLogicalFiller,
 };
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,

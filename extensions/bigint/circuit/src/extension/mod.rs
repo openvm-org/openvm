@@ -34,8 +34,7 @@ use openvm_riscv_adapters::{
     Rv64VecHeapU16AdapterFiller,
 };
 use openvm_riscv_circuit::Rv64ImCpuProverExt;
-use openvm_riscv_transpiler::BaseAluOpcode;
-use openvm_riscv_transpiler::ShiftOpcode;
+use openvm_riscv_transpiler::{BaseAluOpcode, ShiftOpcode};
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::VmRvrExtension;

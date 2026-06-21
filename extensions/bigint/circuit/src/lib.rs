@@ -25,8 +25,8 @@ use openvm_riscv_circuit::{
     BranchLessThanCoreAir, BranchLessThanExecutor, BranchLessThanFiller, LessThanCoreAir,
     LessThanExecutor, LessThanFiller, MultiplicationCoreAir, MultiplicationExecutor,
     MultiplicationFiller, Rv64I, Rv64IExecutor, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
-    ShiftArithmeticRightCoreAir, ShiftArithmeticRightExecutor,
-    ShiftArithmeticRightFiller, ShiftLogicalCoreAir, ShiftLogicalExecutor, ShiftLogicalFiller,
+    ShiftArithmeticRightCoreAir, ShiftArithmeticRightExecutor, ShiftArithmeticRightFiller,
+    ShiftLogicalCoreAir, ShiftLogicalExecutor, ShiftLogicalFiller,
 };
 use serde::{Deserialize, Serialize};
 

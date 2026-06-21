@@ -17,8 +17,8 @@ use openvm_riscv_circuit::{
     AddSubCoreCols, AddSubCoreRecord, BitwiseLogicCoreCols, BitwiseLogicCoreRecord,
     BranchEqualCoreCols, BranchEqualCoreRecord, BranchLessThanCoreCols, BranchLessThanCoreRecord,
     LessThanCoreCols, LessThanCoreRecord, MultiplicationCoreCols, MultiplicationCoreRecord,
-    ShiftArithmeticRightCoreCols,
-    ShiftArithmeticRightCoreRecord, ShiftLogicalCoreCols, ShiftLogicalCoreRecord,
+    ShiftArithmeticRightCoreCols, ShiftArithmeticRightCoreRecord, ShiftLogicalCoreCols,
+    ShiftLogicalCoreRecord,
 };
 use openvm_stark_backend::prover::AirProvingContext;
 
