@@ -19,9 +19,10 @@ pub use openvm_build::{cargo_command, get_rustup_toolchain_name};
 pub use openvm_circuit;
 use openvm_circuit::{
     arch::{
-        execution_mode::Segment, instructions::exe::VmExe, Executor, InitFileGenerator,
-        MeteredExecutor, PreflightExecutor, VirtualMachineError, VmBuilder, VmExecutionConfig,
-        VmExecutor, U16_CELL_SIZE,
+        execution_mode::{MeteredCtx, Segment},
+        instructions::exe::VmExe,
+        Executor, InitFileGenerator, MeteredExecutor, PreflightExecutor, VirtualMachineError,
+        VmBuilder, VmExecutionConfig, VmExecutor, U16_CELL_SIZE,
     },
     system::memory::merkle::public_values::extract_public_values,
 };
@@ -42,6 +43,8 @@ use openvm_verify_stark_host::{
     VmStarkProof,
 };
 
+#[cfg(feature = "rvr")]
+use crate::compiled::load_metered_artifact_metadata;
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey},
@@ -340,7 +343,7 @@ where
     #[cfg(feature = "rvr")]
     pub fn load_compiled(
         &self,
-        lib_path: &std::path::Path,
+        lib_path: &Path,
         app_exe: impl Into<ExecutableFormat>,
     ) -> Result<CompiledExePure<'_, F>, SdkError> {
         let exe = self.convert_to_exe(app_exe)?;
@@ -398,7 +401,12 @@ where
             .executor
             .metered_instance(&exe, &executor_idx_to_air_idx)
             .map_err(VirtualMachineError::from)?;
-        Ok(CompiledExeMetered { instance, ctx })
+        Ok(CompiledExeMetered {
+            instance,
+            ctx,
+            #[cfg(feature = "rvr")]
+            executor_idx_to_air_idx,
+        })
     }
 
     /// Load a previously saved metered-mode artifact. The `MeteredCtx`
@@ -406,20 +414,22 @@ where
     #[cfg(feature = "rvr")]
     pub fn load_compiled_metered(
         &self,
-        lib_path: &std::path::Path,
+        lib_path: &Path,
         app_exe: impl Into<ExecutableFormat>,
     ) -> Result<CompiledExeMetered<'_>, SdkError> {
-        let app_prover = self.app_prover(app_exe)?;
-        let vm = app_prover.vm();
-        let exe = app_prover.exe();
-
-        let ctx = vm.build_metered_ctx(&exe);
-        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        let metadata = load_metered_artifact_metadata(lib_path).map_err(SdkError::Other)?;
+        let exe = self.convert_to_exe(app_exe)?;
+        let ctx =
+            MeteredCtx::from_config(metadata.metered_ctx_config, self.executor.config.as_ref());
         let instance = self
             .executor
-            .load_metered_instance(lib_path, &exe, &executor_idx_to_air_idx)
+            .load_metered_instance(lib_path, &exe, &metadata.executor_idx_to_air_idx)
             .map_err(VirtualMachineError::from)?;
-        Ok(CompiledExeMetered { instance, ctx })
+        Ok(CompiledExeMetered {
+            instance,
+            ctx,
+            executor_idx_to_air_idx: metadata.executor_idx_to_air_idx,
+        })
     }
 
     /// Run a [`CompiledExeMetered`] against `inputs`.
@@ -483,7 +493,7 @@ where
     #[cfg(feature = "rvr")]
     pub fn load_compiled_metered_cost(
         &self,
-        lib_path: &std::path::Path,
+        lib_path: &Path,
         app_exe: impl Into<ExecutableFormat>,
     ) -> Result<CompiledExeMeteredCost<'_>, SdkError> {
         let app_prover = self.app_prover(app_exe)?;

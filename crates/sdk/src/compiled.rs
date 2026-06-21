@@ -1,6 +1,20 @@
+#[cfg(feature = "rvr")]
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+
+#[cfg(feature = "rvr")]
+use eyre::{Context, Result};
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::execution_mode::MeteredCtxConfig;
 use openvm_circuit::arch::execution_mode::{MeteredCostCtx, MeteredCtx};
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::rvr::CompileError;
 #[cfg(not(feature = "rvr"))]
 use openvm_circuit::arch::{execution_mode::ExecutionCtx, InterpretedInstance};
+#[cfg(feature = "rvr")]
+use serde::{Deserialize, Serialize};
 
 use crate::F;
 
@@ -30,6 +44,8 @@ cfg_if::cfg_if! {
 pub struct CompiledExeMetered<'a> {
     pub instance: MeteredInstance<'a, F>,
     pub ctx: MeteredCtx,
+    #[cfg(feature = "rvr")]
+    pub executor_idx_to_air_idx: Vec<usize>,
 }
 
 pub struct CompiledExeMeteredCost<'a> {
@@ -38,16 +54,39 @@ pub struct CompiledExeMeteredCost<'a> {
 }
 
 #[cfg(feature = "rvr")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MeteredArtifactMetadata {
+    pub metered_ctx_config: MeteredCtxConfig,
+    pub executor_idx_to_air_idx: Vec<usize>,
+}
+
+#[cfg(feature = "rvr")]
+pub fn metered_artifact_metadata_path(lib_path: &Path) -> PathBuf {
+    lib_path.with_extension("json")
+}
+
+#[cfg(feature = "rvr")]
+pub fn load_metered_artifact_metadata(lib_path: &Path) -> Result<MeteredArtifactMetadata> {
+    let path = metered_artifact_metadata_path(lib_path);
+    let data = fs::read(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    serde_json::from_slice(&data).with_context(|| format!("failed to parse {}", path.display()))
+}
+
+#[cfg(feature = "rvr")]
 impl CompiledExeMetered<'_> {
-    /// Persist the compiled shared library into `dir`. Returns the path of
-    /// the copied `.so`/`.dylib`. The `MeteredCtx` is not persisted — it is
-    /// rebuilt from the proving key on load via
-    /// [`Sdk::load_compiled_metered`](crate::Sdk::load_compiled_metered).
-    pub fn save(
-        &self,
-        dir: &std::path::Path,
-    ) -> Result<std::path::PathBuf, openvm_circuit::arch::rvr::CompileError> {
-        self.instance.save(dir)
+    /// Persist the compiled shared library and static metering metadata into `dir`.
+    /// Returns the path of the copied `.so`/`.dylib`.
+    pub fn save(&self, dir: &Path) -> Result<PathBuf> {
+        let lib_path = self.instance.save(dir)?;
+        let metadata = MeteredArtifactMetadata {
+            metered_ctx_config: self.ctx.config.clone(),
+            executor_idx_to_air_idx: self.executor_idx_to_air_idx.clone(),
+        };
+        let metadata_path = metered_artifact_metadata_path(&lib_path);
+        let data = serde_json::to_vec_pretty(&metadata)?;
+        fs::write(&metadata_path, data)
+            .with_context(|| format!("failed to write {}", metadata_path.display()))?;
+        Ok(lib_path)
     }
 }
 
@@ -57,10 +96,7 @@ impl CompiledExeMeteredCost<'_> {
     /// the copied `.so`/`.dylib`. The `MeteredCostCtx` is not persisted — it
     /// is rebuilt on load via
     /// [`Sdk::load_compiled_metered_cost`](crate::Sdk::load_compiled_metered_cost).
-    pub fn save(
-        &self,
-        dir: &std::path::Path,
-    ) -> Result<std::path::PathBuf, openvm_circuit::arch::rvr::CompileError> {
+    pub fn save(&self, dir: &Path) -> Result<PathBuf, CompileError> {
         self.instance.save(dir)
     }
 }

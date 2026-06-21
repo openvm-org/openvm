@@ -29,7 +29,7 @@ use crate::{
     arch::{
         execution_mode::{
             metered::{
-                ctx::{MeteredCtxParts, DEFAULT_PAGE_BITS},
+                ctx::{MeteredCtxConfig, MeteredCtxParts, DEFAULT_PAGE_BITS},
                 memory_ctx::MemoryCtx,
                 segment_ctx::{Segment, SegmentationCtx},
             },
@@ -128,11 +128,10 @@ pub type MeteredTracer = TracerPtr<MeteredTracerData>;
 // buffers (one per additional address space) instead of hardcoding
 // pv + deferral. The memory AS buffer stays separate as the hot path.
 pub struct SegmentationState {
+    config: MeteredCtxConfig,
     pub segmentation_ctx: SegmentationCtx,
     trace_heights: Vec<u32>,
-    is_trace_height_constant: Vec<bool>,
     memory_ctx: MemoryCtx<DEFAULT_PAGE_BITS>,
-    suspend_on_segment: bool,
     /// Per-address-space page buffers. Each entry = 1 u32 page id.
     mem_page_buf: Vec<u32>,
     pv_page_buf: Vec<u32>,
@@ -145,11 +144,10 @@ pub struct SegmentationState {
 impl SegmentationState {
     pub fn new(ctx: MeteredCtx, system_config: &SystemConfig) -> Self {
         let ctx = ctx.into_parts();
+        let config = ctx.config;
         let segmentation_ctx = ctx.segmentation_ctx;
         let trace_heights = ctx.trace_heights;
-        let is_trace_height_constant = ctx.is_trace_height_constant;
         let memory_ctx = ctx.memory_ctx;
-        let suspend_on_segment = ctx.suspend_on_segment;
 
         let mem_config = &system_config.memory_config;
         let memory_dimensions = mem_config.memory_dimensions();
@@ -158,11 +156,10 @@ impl SegmentationState {
         let byte_space_leaf_bits = (U16_CELL_SIZE_BITS + DIGEST_WIDTH_BITS) as u32;
 
         Self {
+            config,
             segmentation_ctx,
             trace_heights,
-            is_trace_height_constant,
             memory_ctx,
-            suspend_on_segment,
             mem_page_buf: vec![0u32; MEM_PAGE_BUF_CAP],
             pv_page_buf: vec![0u32; PV_PAGE_BUF_CAP],
             deferral_page_buf: vec![0u32; DEFERRAL_PAGE_BUF_CAP],
@@ -174,16 +171,15 @@ impl SegmentationState {
 
     pub fn into_metered_ctx(self) -> MeteredCtx {
         MeteredCtx::from_parts(MeteredCtxParts {
+            config: self.config,
             trace_heights: self.trace_heights,
-            is_trace_height_constant: self.is_trace_height_constant,
             memory_ctx: self.memory_ctx,
             segmentation_ctx: self.segmentation_ctx,
-            suspend_on_segment: self.suspend_on_segment,
         })
     }
 
     pub(crate) fn suspend_on_segment(&self) -> bool {
-        self.suspend_on_segment
+        self.config.suspend_on_segment
     }
 
     /// Get mutable pointer to trace_heights for the C tracer.
@@ -327,18 +323,20 @@ impl SegmentationState {
         let did_segment = self.segmentation_ctx.check_and_segment(
             instret,
             &mut self.trace_heights,
-            &self.is_trace_height_constant,
+            &self.config.is_trace_height_constant,
         );
 
         if did_segment {
-            self.segmentation_ctx
-                .initialize_segment(&mut self.trace_heights, &self.is_trace_height_constant);
+            self.segmentation_ctx.initialize_segment(
+                &mut self.trace_heights,
+                &self.config.is_trace_height_constant,
+            );
             self.initialize_segment_memory(mem_len, pv_len, deferral_len);
 
             self.segmentation_ctx.warn_if_exceeds_limits(
                 instret,
                 &self.trace_heights,
-                &self.is_trace_height_constant,
+                &self.config.is_trace_height_constant,
             );
         }
 
