@@ -97,6 +97,44 @@ impl RvrCompiled {
         })?;
         Ok(dest_lib.to_path_buf())
     }
+
+    /// Copy generated C sources for inspection.
+    pub fn save_generated_sources(&self, dest_dir: &Path) -> Result<(), CompileError> {
+        let source_dir = self.artifact_dir().ok_or_else(|| {
+            CompileError::LibLoad("loaded rvr artifacts do not contain generated sources".into())
+        })?;
+        fs::create_dir_all(dest_dir).map_err(|source| CompileError::CProject {
+            path: dest_dir.to_path_buf(),
+            source,
+        })?;
+        for entry in fs::read_dir(source_dir).map_err(|source| CompileError::CProject {
+            path: source_dir.to_path_buf(),
+            source,
+        })? {
+            let entry = entry.map_err(|source| CompileError::CProject {
+                path: source_dir.to_path_buf(),
+                source,
+            })?;
+            let path = entry.path();
+            let copy = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name == "Makefile")
+                || path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(|ext| matches!(ext, "c" | "h"));
+            if copy {
+                fs::copy(&path, dest_dir.join(entry.file_name())).map_err(|source| {
+                    CompileError::CProject {
+                        path: dest_dir.to_path_buf(),
+                        source,
+                    }
+                })?;
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Error during compilation.

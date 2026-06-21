@@ -423,6 +423,11 @@ impl<F: PrimeField32, S> RvrMeteredInstanceWith<'_, F, S> {
         let dest_lib = self.compiled.lib_file_name_with_suffix("metered")?;
         self.compiled.save_artifact(&dir.join(dest_lib))
     }
+
+    /// Persist generated C sources for inspection.
+    pub fn save_generated_sources(&self, dir: &Path) -> Result<(), super::CompileError> {
+        self.compiled.save_generated_sources(dir)
+    }
 }
 
 impl<F: PrimeField32> RvrMeteredInstance<'_, F> {

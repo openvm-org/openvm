@@ -88,6 +88,11 @@ impl CompiledExeMetered<'_> {
             .with_context(|| format!("failed to write {}", metadata_path.display()))?;
         Ok(lib_path)
     }
+
+    /// Persist generated C sources for inspection.
+    pub fn save_generated_sources(&self, dir: &Path) -> Result<(), CompileError> {
+        self.instance.save_generated_sources(dir)
+    }
 }
 
 #[cfg(feature = "rvr")]
