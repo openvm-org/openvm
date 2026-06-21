@@ -84,7 +84,7 @@ rvr = [
     "openvm-circuit/rvr",
     "openvm-sdk-config/rvr",
 ]
-profiling = ["rvr", "openvm-circuit/profiling"]
+profiling = ["openvm-circuit/profiling"]
 tco = [
     "openvm-circuit/tco",
     "openvm-sdk-config/tco",
