@@ -1,10 +1,12 @@
 #![cfg_attr(feature = "tco", allow(incomplete_features))]
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 
+#[cfg(feature = "rvr")]
+use std::path::PathBuf;
 use std::{
     fs::read,
     marker::PhantomData,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, OnceLock},
 };
 
@@ -17,12 +19,17 @@ use openvm_build::{
 // Re-exports
 pub use openvm_build::{cargo_command, get_rustup_toolchain_name};
 pub use openvm_circuit;
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::execution_mode::MeteredCtx;
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::instructions::program::DEFAULT_PC_STEP;
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::rvr::{default_addr2line_cmd, GuestDebugMap};
 use openvm_circuit::{
     arch::{
-        execution_mode::{MeteredCtx, Segment},
-        instructions::exe::VmExe,
-        Executor, InitFileGenerator, MeteredExecutor, PreflightExecutor, VirtualMachineError,
-        VmBuilder, VmExecutionConfig, VmExecutor, U16_CELL_SIZE,
+        execution_mode::Segment, instructions::exe::VmExe, Executor, InitFileGenerator,
+        MeteredExecutor, PreflightExecutor, VirtualMachineError, VmBuilder, VmExecutionConfig,
+        VmExecutor, U16_CELL_SIZE,
     },
     system::memory::merkle::public_values::extract_public_values,
 };
@@ -59,10 +66,6 @@ use crate::{
     keygen::{dummy::compute_root_proof_heights, RootProvingKey},
     prover::{EvmProver, RootProver},
 };
-#[cfg(feature = "rvr")]
-use openvm_circuit::arch::instructions::program::DEFAULT_PC_STEP;
-#[cfg(feature = "rvr")]
-use openvm_circuit::arch::rvr::{default_addr2line_cmd, GuestDebugMap};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -108,6 +111,7 @@ pub const OPENVM_VERSION: &str = concat!(
 
 struct CompileInput {
     executable: ExecutableFormat,
+    #[cfg(feature = "rvr")]
     elf_path: Option<PathBuf>,
 }
 
@@ -324,6 +328,7 @@ where
         match executable {
             ExecutableInput::Format(format) => Ok(CompileInput {
                 executable: format,
+                #[cfg(feature = "rvr")]
                 elf_path: None,
             }),
             ExecutableInput::ElfFile(path) => {
@@ -331,9 +336,11 @@ where
                 let elf = Elf::decode(&bytes, MEM_SIZE as u32)?;
                 Ok(CompileInput {
                     executable: ExecutableFormat::Elf(elf),
+                    #[cfg(feature = "rvr")]
                     elf_path: Some(path),
                 })
             }
+            #[cfg(feature = "rvr")]
             ExecutableInput::WithElfPath {
                 executable,
                 elf_path,
@@ -341,6 +348,8 @@ where
                 executable,
                 elf_path: Some(elf_path),
             }),
+            #[cfg(not(feature = "rvr"))]
+            ExecutableInput::WithElfPath { executable, .. } => Ok(CompileInput { executable }),
         }
     }
 
@@ -397,14 +406,11 @@ where
         &self,
         app_exe: impl Into<ExecutableInput>,
     ) -> Result<CompiledExePure<'_, F>, SdkError> {
-        let CompileInput {
-            executable,
-            elf_path,
-        } = self.compile_input(app_exe)?;
-        let exe = self.convert_to_exe(executable)?;
+        let input = self.compile_input(app_exe)?;
+        let exe = self.convert_to_exe(input.executable)?;
         #[cfg(feature = "rvr")]
         {
-            let guest_debug_map = self.guest_debug_map(elf_path.as_deref(), &exe)?;
+            let guest_debug_map = self.guest_debug_map(input.elf_path.as_deref(), &exe)?;
             return self
                 .executor
                 .rvr_instance(&exe, guest_debug_map.as_ref())
@@ -462,18 +468,14 @@ where
     }
 
     /// Compile `app_exe` for metered execution. The returned [`CompiledExeMetered`] bundles
-    /// a precomputed [`MeteredCtx`](openvm_circuit::arch::execution_mode::MeteredCtx) so
-    /// subsequent runs just clone it.
+    /// a precomputed `MeteredCtx` so subsequent runs just clone it.
     #[tracing::instrument(name = "sdk.compile_metered", level = "info", skip_all)]
     pub fn compile_metered(
         &self,
         app_exe: impl Into<ExecutableInput>,
     ) -> Result<CompiledExeMetered<'_>, SdkError> {
-        let CompileInput {
-            executable,
-            elf_path,
-        } = self.compile_input(app_exe)?;
-        let app_prover = self.app_prover(executable)?;
+        let input = self.compile_input(app_exe)?;
+        let app_prover = self.app_prover(input.executable)?;
 
         let vm = app_prover.vm();
         let exe = app_prover.exe();
@@ -481,7 +483,7 @@ where
         let ctx = vm.build_metered_ctx(&exe);
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         #[cfg(feature = "rvr")]
-        let guest_debug_map = self.guest_debug_map(elf_path.as_deref(), &exe)?;
+        let guest_debug_map = self.guest_debug_map(input.elf_path.as_deref(), &exe)?;
         #[cfg(feature = "rvr")]
         let instance = self
             .executor
@@ -559,11 +561,8 @@ where
         &self,
         app_exe: impl Into<ExecutableInput>,
     ) -> Result<CompiledExeMeteredCost<'_>, SdkError> {
-        let CompileInput {
-            executable,
-            elf_path,
-        } = self.compile_input(app_exe)?;
-        let app_prover = self.app_prover(executable)?;
+        let input = self.compile_input(app_exe)?;
+        let app_prover = self.app_prover(input.executable)?;
 
         let vm = app_prover.vm();
         let exe = app_prover.exe();
@@ -571,7 +570,7 @@ where
         let ctx = vm.build_metered_cost_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         #[cfg(feature = "rvr")]
-        let guest_debug_map = self.guest_debug_map(elf_path.as_deref(), &exe)?;
+        let guest_debug_map = self.guest_debug_map(input.elf_path.as_deref(), &exe)?;
         #[cfg(feature = "rvr")]
         let instance = self
             .executor
