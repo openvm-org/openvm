@@ -1,5 +1,5 @@
-//! rvr lifter for the RISC-V I/O sub-extension (HINT_STORED, HINT_BUFFER,
-//! REVEAL).
+//! rvr lifter for the RISC-V I/O sub-extension: HINT_STORED, HINT_BUFFER,
+//! and public-values stores.
 //!
 //! TODO: check if other RISC-V instructions/opcodes can be separated into
 //! extensions.
@@ -17,7 +17,7 @@ use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, Rv64Phan
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::Rng;
 use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
+use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, MemWidth, Reg};
 use rvr_openvm_lift::{
     air_index_to_c, decode_imm_cg, decode_reg, opcode_air_idx, AirIndex, ExtensionError,
     RvrExtension, RvrExtensionCtx,
@@ -79,13 +79,14 @@ impl ExtInstr for HintBufferInstr {
     }
 }
 
-/// REVEAL: write `reg[src_reg]` to user public-output
-/// address space at `reg[ptr_reg] + offset`.
+/// Public-values store: write bytes from `reg[src_reg]` to address space `AS_PUBLIC_VALUES`
+/// at `reg[ptr_reg] + offset`.
 #[derive(Debug, Clone)]
 pub struct RevealInstr {
     pub src_reg: Reg,
     pub ptr_reg: Reg,
     pub offset: u32,
+    pub width: MemWidth,
 }
 
 impl ExtInstr for RevealInstr {
@@ -107,7 +108,8 @@ impl ExtInstr for RevealInstr {
         };
         ctx.trace_mem_access(&addr, AS_PUBLIC_VALUES);
         let offset = format!("0x{:08x}u", self.offset);
-        ctx.extern_call("openvm_reveal", &[&src, &ptr, &offset]);
+        let width = self.width.bytes().to_string();
+        ctx.extern_call("openvm_reveal", &[&src, &ptr, &offset, &width]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -179,7 +181,7 @@ impl ExtInstr for HintRandomInstr {
 }
 
 /// rvr extension for the RISC-V I/O instructions HINT_STORED, HINT_BUFFER, and
-/// REVEAL.
+/// public-values stores.
 pub struct Rv64IoExtension {
     hint_store_chip_idx: Option<AirIndex>,
 }
@@ -220,22 +222,33 @@ impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
             }));
         }
 
-        // REVEAL: STORED with address-space e = AS_PUBLIC_VALUES.
-        if opcode == Rv64LoadStoreOpcode::STORED.global_opcode_usize()
-            && insn.e.as_canonical_u32() == AS_PUBLIC_VALUES
-        {
-            let src_reg = decode_reg(insn.a);
-            let ptr_reg = decode_reg(insn.b);
-            let offset = decode_imm_cg(insn);
-            return Some(LiftedInstr::Body(InstrAt {
-                pc,
-                instr: Instr::Ext(Box::new(RevealInstr {
-                    src_reg,
-                    ptr_reg,
-                    offset,
-                })),
-                source_loc: None,
-            }));
+        if insn.e.as_canonical_u32() == AS_PUBLIC_VALUES {
+            let width = match Rv64LoadStoreOpcode::from_usize(
+                insn.opcode
+                    .local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            ) {
+                Rv64LoadStoreOpcode::STORED => Some(MemWidth::Double),
+                Rv64LoadStoreOpcode::STOREW => Some(MemWidth::Word),
+                Rv64LoadStoreOpcode::STOREH => Some(MemWidth::Half),
+                Rv64LoadStoreOpcode::STOREB => Some(MemWidth::Byte),
+                _ => None,
+            };
+
+            if let Some(width) = width {
+                let src_reg = decode_reg(insn.a);
+                let ptr_reg = decode_reg(insn.b);
+                let offset = decode_imm_cg(insn);
+                return Some(LiftedInstr::Body(InstrAt {
+                    pc,
+                    instr: Instr::Ext(Box::new(RevealInstr {
+                        src_reg,
+                        ptr_reg,
+                        offset,
+                        width,
+                    })),
+                    source_loc: None,
+                }));
+            }
         }
 
         None
@@ -367,7 +380,7 @@ pub struct Rv64IPhantomCallbacks {
 pub struct Rv64IoHostCallbacks {
     pub hint_storew: extern "C" fn(*mut c_void, u32),
     pub hint_buffer: extern "C" fn(*mut c_void, u32, u32),
-    pub reveal: extern "C" fn(*mut c_void, u64, u32, u32),
+    pub reveal: extern "C" fn(*mut c_void, u64, u32, u32, u32),
 }
 
 // ── Callback implementations ────────────────────────────────────────────────
@@ -454,23 +467,25 @@ pub extern "C" fn host_hint_buffer<F: PrimeField32>(
     }
 }
 
-/// REVEAL: write public output bytes directly into the guest's `PUBLIC_VALUES_AS`
-/// byte slice. Cost corrections handled in C.
+/// Public-values store: write bytes directly into the guest's `PUBLIC_VALUES_AS` byte slice.
+/// Cost corrections handled in C.
 pub extern "C" fn host_reveal<F: PrimeField32>(
     ctx: *mut c_void,
     src_val: u64,
     ptr: u32,
     offset: u32,
+    width: u32,
 ) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
     let start = ptr as usize + offset as usize;
-    let end = start + RV64_REGISTER_NUM_LIMBS;
+    let width = width as usize;
+    let end = start + width;
     assert!(
         end <= io.public_values.len(),
         "reveal out of bounds: writing bytes [{start}..{end}) but public_values size is {} (configured via SystemConfig::with_public_values_bytes or SystemConfig::with_public_values)",
         io.public_values.len(),
     );
-    io.public_values[start..end].copy_from_slice(&src_val.to_le_bytes());
+    io.public_values[start..end].copy_from_slice(&src_val.to_le_bytes()[..width]);
 }
 
 /// HINT_STREAM_SET: replace the hint stream contents (used by extension phantoms).
@@ -567,12 +582,45 @@ mod tests {
     }
 
     #[test]
+    fn rv64io_lifts_public_values_store_widths() {
+        let ext = Rv64IoExtension::new(None).unwrap();
+
+        for (opcode, width) in [
+            (Rv64LoadStoreOpcode::STORED, 8),
+            (Rv64LoadStoreOpcode::STOREW, 4),
+            (Rv64LoadStoreOpcode::STOREH, 2),
+            (Rv64LoadStoreOpcode::STOREB, 1),
+        ] {
+            let inst = Instruction::<BabyBear>::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, 1, AS_PUBLIC_VALUES as usize, 1, 0],
+            );
+            let lifted = ext.try_lift(&inst, 0x100).unwrap();
+            let LiftedInstr::Body(InstrAt {
+                instr: Instr::Ext(instr),
+                ..
+            }) = lifted
+            else {
+                panic!("expected public-values store extension instruction");
+            };
+
+            let mut ctx = TestEmitCtx::default();
+            instr.emit_c(&mut ctx);
+            assert_eq!(
+                ctx.lines[1],
+                format!("openvm_reveal(r1, r2, 0x00000000u, {width});")
+            );
+        }
+    }
+
+    #[test]
     fn reveal_traces_the_offset_public_values_address() {
         let mut ctx = TestEmitCtx::default();
         RevealInstr {
             src_reg: 5,
             ptr_reg: 10,
             offset: 12,
+            width: MemWidth::Word,
         }
         .emit_c(&mut ctx);
 
@@ -580,7 +628,7 @@ mod tests {
             ctx.lines[0],
             format!("trace_mem_access(state, (r10 + 0x0000000cu), {AS_PUBLIC_VALUES}u);")
         );
-        assert_eq!(ctx.lines[1], "openvm_reveal(r5, r10, 0x0000000cu);");
+        assert_eq!(ctx.lines[1], "openvm_reveal(r5, r10, 0x0000000cu, 4);");
     }
 
     #[test]
@@ -608,9 +656,42 @@ mod tests {
             0x11223344,
             4,
             2,
+            4,
         );
 
         assert_eq!(&io.public_values[6..10], &[0x44, 0x33, 0x22, 0x11]);
+    }
+
+    #[test]
+    fn host_reveal_honors_store_width() {
+        let mut input_stream = VecDeque::new();
+        let mut hint_stream = VecDeque::new();
+        let mut rng = StdRng::seed_from_u64(0);
+        let mut memory = vec![0u8; 16];
+        let mut public_values = vec![0u8; 16];
+        let mut deferrals = Vec::new();
+
+        let mut io = OpenVmIoState::<BabyBear> {
+            input_stream: &mut input_stream,
+            hint_stream: &mut hint_stream,
+            rng: &mut rng,
+            memory_ptr: memory.as_mut_ptr(),
+            public_values: &mut public_values,
+            deferral_memory: std::ptr::null_mut(),
+            deferral_memory_len: 0,
+            deferrals: &mut deferrals,
+        };
+
+        host_reveal::<BabyBear>(
+            &mut io as *mut OpenVmIoState<'_, BabyBear> as *mut c_void,
+            0x1122334455667788,
+            3,
+            0,
+            2,
+        );
+
+        assert_eq!(&io.public_values[3..5], &[0x88, 0x77]);
+        assert_eq!(io.public_values[5], 0);
     }
 
     #[test]

@@ -10,8 +10,8 @@ use openvm_instructions::{
 };
 use openvm_riscv_guest::{
     PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3, HINT_STORED_IMM,
-    NATIVE_STORED_FUNCT3, NATIVE_STORED_FUNCT7, PHANTOM_FUNCT3, REVEAL_FUNCT3, RV64M_FUNCT7,
-    RV64_ALU_OPCODE, RV64_ALU_OP_32, SYSTEM_OPCODE, TERMINATE_FUNCT3,
+    PHANTOM_FUNCT3, REVEAL_FUNCT3, RV64M_FUNCT7, RV64_ALU_OPCODE, RV64_ALU_OP_32, SYSTEM_OPCODE,
+    TERMINATE_FUNCT3,
 };
 pub use openvm_riscv_guest::{MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -188,26 +188,45 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64IoTranspilerExtension {
                     (dec_insn.imm < 0) as isize,
                 ))
             }
-            NATIVE_STORED_FUNCT3 => {
-                // NATIVE_STORED is a pseudo-instruction for STORED_RV64 a,b,0,1,4
-                let dec_insn = RType::new(instruction_u32);
-                if dec_insn.funct7 != NATIVE_STORED_FUNCT7 {
-                    return None;
-                }
-                Some(Instruction::large_from_isize(
-                    Rv64LoadStoreOpcode::STORED.global_opcode(),
-                    (RV64_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
-                    (RV64_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
-                    0,
-                    1,
-                    4,
-                    1,
-                    0,
-                ))
-            }
             _ => return None,
         };
 
         instruction.map(TranspilerOutput::one_to_one)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_riscv_guest::{NATIVE_STORED_FUNCT3, NATIVE_STORED_FUNCT7, SYSTEM_OPCODE};
+    use openvm_transpiler::transpiler::{Transpiler, TranspilerError};
+    use p3_baby_bear::BabyBear;
+
+    use super::Rv64IoTranspilerExtension;
+
+    fn encode_r_type(opcode: u8, funct3: u8, funct7: u32, rd: u32, rs1: u32, rs2: u32) -> u32 {
+        opcode as u32
+            | (rd << 7)
+            | ((funct3 as u32) << 12)
+            | (rs1 << 15)
+            | (rs2 << 20)
+            | (funct7 << 25)
+    }
+
+    #[test]
+    fn native_stored_transpiles_to_parse_error() {
+        let instruction = encode_r_type(
+            SYSTEM_OPCODE,
+            NATIVE_STORED_FUNCT3,
+            NATIVE_STORED_FUNCT7,
+            1,
+            2,
+            2,
+        );
+        let err = Transpiler::<BabyBear>::new()
+            .with_extension(Rv64IoTranspilerExtension)
+            .transpile(&[instruction])
+            .unwrap_err();
+
+        assert!(matches!(err, TranspilerError::ParseError(parsed) if parsed == instruction));
     }
 }

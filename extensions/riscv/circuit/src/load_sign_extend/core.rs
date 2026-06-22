@@ -17,7 +17,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
@@ -290,11 +290,17 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
+        let Instruction { opcode, d, e, .. } = instruction;
 
         let local_opcode = Rv64LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
         );
+        if d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_MEMORY_AS {
+            return Err(ExecutionError::Fail {
+                pc: *state.pc,
+                msg: "Invalid LoadSignExtend instruction",
+            });
+        }
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 

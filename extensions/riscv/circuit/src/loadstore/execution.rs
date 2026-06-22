@@ -9,8 +9,8 @@ use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    LocalOpcode, DEFERRAL_AS,
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -48,18 +48,20 @@ impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
         } = inst;
         let enabled = !f.is_zero();
 
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS
-            || e_u32 == RV64_IMM_AS
-            || e_u32 == RV64_REGISTER_AS
-            || e_u32 == DEFERRAL_AS
-        {
-            return Err(StaticProgramError::InvalidInstruction(pc));
-        }
-
         let local_opcode = Rv64LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
         );
+        let e_u32 = e.as_canonical_u32();
+        let valid_address_space = match local_opcode {
+            LOADD | LOADWU | LOADHU | LOADBU => e_u32 == RV64_MEMORY_AS,
+            STORED | STOREW | STOREH | STOREB => {
+                e_u32 == RV64_MEMORY_AS || e_u32 == PUBLIC_VALUES_AS
+            }
+            _ => false,
+        };
+        if d.as_canonical_u32() != RV64_REGISTER_AS || !valid_address_space {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
         match local_opcode {
             LOADD | LOADWU | LOADHU | LOADBU => {}
             STORED | STOREW | STOREH | STOREB => {
@@ -454,43 +456,45 @@ mod tests {
     use openvm_instructions::{
         instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, DEFERRAL_AS,
     };
-    use openvm_riscv_transpiler::Rv64LoadStoreOpcode::STORED;
+    use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{LOADWU, STORED};
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::{LoadStorePreCompute, Rv64LoadStoreOpcode};
     use crate::{adapters::Rv64LoadStoreAdapterExecutor, Rv64LoadStoreExecutor};
 
     #[test]
-    fn precompute_rejects_deferral_address_space() {
+    fn precompute_enforces_address_space_domain() {
         const PC: u32 = 0x100;
 
         let executor = Rv64LoadStoreExecutor::new(
             Rv64LoadStoreAdapterExecutor::new(29),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
-        let inst = Instruction::<BabyBear>::from_usize(
-            STORED.global_opcode(),
-            [
-                8,
-                16,
-                0,
-                RV64_REGISTER_AS as usize,
-                DEFERRAL_AS as usize,
-                1,
-                0,
-            ],
-        );
-        let mut data = LoadStorePreCompute {
-            imm_extended: 0,
-            a: 0,
-            b: 0,
-            e: 0,
-        };
+        for opcode in [LOADWU, STORED] {
+            let inst = Instruction::<BabyBear>::from_usize(
+                opcode.global_opcode(),
+                [
+                    8,
+                    16,
+                    0,
+                    RV64_REGISTER_AS as usize,
+                    DEFERRAL_AS as usize,
+                    1,
+                    0,
+                ],
+            );
+            let mut data = LoadStorePreCompute {
+                imm_extended: 0,
+                a: 0,
+                b: 0,
+                e: 0,
+            };
 
-        let err = executor
-            .pre_compute_impl(PC, &inst, &mut data)
-            .expect_err("deferral address-space stores should be statically rejected");
+            let err = executor
+                .pre_compute_impl(PC, &inst, &mut data)
+                .expect_err("load/store address-space domain should be enforced");
 
-        assert!(matches!(err, StaticProgramError::InvalidInstruction(PC)));
+            assert!(matches!(err, StaticProgramError::InvalidInstruction(PC)));
+        }
     }
 }

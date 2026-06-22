@@ -338,8 +338,8 @@ We define `w32(x)` where `x: [F; 8]` to mean `u32(x[0:4])`, i.e., the lower 32 b
 #### Load/Store
 
 For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1`.
-The address space `e` is `2` for load instructions, and can be `2` or `3` for store instructions. Load/store
-instructions cannot access the [deferral address space](#address-spaces).
+The address space `e` is `2` for load instructions. Store instructions use `e = 2` for user memory and
+`e = 3` for public values.
 
 The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking
 the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering

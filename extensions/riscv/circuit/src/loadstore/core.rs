@@ -17,8 +17,8 @@ use openvm_circuit_primitives::{
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    LocalOpcode, DEFERRAL_AS,
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -433,12 +433,16 @@ where
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         let Instruction { opcode, d, e, .. } = instruction;
+        let local_opcode = Rv64LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS
-            || e_u32 == RV64_IMM_AS
-            || e_u32 == RV64_REGISTER_AS
-            || e_u32 == DEFERRAL_AS
-        {
+        let valid_address_space = match local_opcode {
+            LOADD | LOADWU | LOADHU | LOADBU => e_u32 == RV64_MEMORY_AS,
+            STORED | STOREW | STOREH | STOREB => {
+                e_u32 == RV64_MEMORY_AS || e_u32 == PUBLIC_VALUES_AS
+            }
+            _ => false,
+        };
+        if d.as_canonical_u32() != RV64_REGISTER_AS || !valid_address_space {
             return Err(ExecutionError::Fail {
                 pc: *state.pc,
                 msg: "Invalid LoadStore instruction",
@@ -456,7 +460,6 @@ where
             .adapter
             .read(state.memory, instruction, &mut adapter_record);
 
-        let local_opcode = Rv64LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         core_record.local_opcode = local_opcode as u8;
 
         let write_data = run_write_data(
