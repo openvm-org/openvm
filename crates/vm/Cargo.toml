@@ -79,6 +79,7 @@ metrics = [
     "openvm-stark-backend/metrics",
     "openvm-stark-sdk?/metrics",
 ]
+profiling = []
 # turns on more invasive profiling for fine-grained guest metrics
 perf-metrics = ["metrics"]
 # use basic memory instead of mmap:

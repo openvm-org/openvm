@@ -97,6 +97,44 @@ impl RvrCompiled {
         })?;
         Ok(dest_lib.to_path_buf())
     }
+
+    /// Copy generated C sources for inspection.
+    pub fn save_generated_sources(&self, dest_dir: &Path) -> Result<(), CompileError> {
+        let source_dir = self.artifact_dir().ok_or_else(|| {
+            CompileError::LibLoad("loaded rvr artifacts do not contain generated sources".into())
+        })?;
+        fs::create_dir_all(dest_dir).map_err(|source| CompileError::CProject {
+            path: dest_dir.to_path_buf(),
+            source,
+        })?;
+        for entry in fs::read_dir(source_dir).map_err(|source| CompileError::CProject {
+            path: source_dir.to_path_buf(),
+            source,
+        })? {
+            let entry = entry.map_err(|source| CompileError::CProject {
+                path: source_dir.to_path_buf(),
+                source,
+            })?;
+            let path = entry.path();
+            let copy = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name == "Makefile")
+                || path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(|ext| matches!(ext, "c" | "h"));
+            if copy {
+                fs::copy(&path, dest_dir.join(entry.file_name())).map_err(|source| {
+                    CompileError::CProject {
+                        path: dest_dir.to_path_buf(),
+                        source,
+                    }
+                })?;
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Error during compilation.
@@ -201,6 +239,7 @@ pub fn compile_with_options<F: PrimeField32>(
 pub fn compile<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry<F>,
+    guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(
         exe,
@@ -209,8 +248,8 @@ pub fn compile<F: PrimeField32>(
             tracer_mode: TracerMode::Pure,
             extensions,
             chips: None,
-            guest_debug_map: None,
-            native_debug_info: false,
+            guest_debug_map,
+            native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
             suspend_policy: None,
         },
@@ -222,6 +261,7 @@ pub fn compile_metered<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry<F>,
     chips: &ChipMapping,
+    guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(
         exe,
@@ -230,8 +270,8 @@ pub fn compile_metered<F: PrimeField32>(
             tracer_mode: TracerMode::Metered,
             extensions,
             chips: Some(chips),
-            guest_debug_map: None,
-            native_debug_info: false,
+            guest_debug_map,
+            native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
             suspend_policy: None,
         },
@@ -243,6 +283,7 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry<F>,
     chips: &ChipMapping,
+    guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(
         exe,
@@ -251,8 +292,8 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
             tracer_mode: TracerMode::Metered,
             extensions,
             chips: Some(chips),
-            guest_debug_map: None,
-            native_debug_info: false,
+            guest_debug_map,
+            native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
             suspend_policy: Some(SuspendPolicy::SegmentBoundary),
         },
@@ -264,6 +305,7 @@ pub fn compile_metered_cost<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry<F>,
     chips: &ChipMapping,
+    guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(
         exe,
@@ -272,8 +314,8 @@ pub fn compile_metered_cost<F: PrimeField32>(
             tracer_mode: TracerMode::MeteredCost,
             extensions,
             chips: Some(chips),
-            guest_debug_map: None,
-            native_debug_info: false,
+            guest_debug_map,
+            native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
             suspend_policy: None,
         },
