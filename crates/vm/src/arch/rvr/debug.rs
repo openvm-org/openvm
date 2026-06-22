@@ -55,7 +55,7 @@ impl GuestDebugMap {
     /// `pcs` — the set of OpenVM PCs to resolve (typically all instruction PCs).
     /// `addr2line_cmd` — the llvm-addr2line binary (e.g. "llvm-addr2line" or "llvm-addr2line-20").
     ///
-    /// For standard RV32IM transpilation, OpenVM PCs equal ELF PCs, so
+    /// For standard RISC-V transpilation, OpenVM PCs equal ELF PCs, so
     /// this can be called directly with the PCs from the lifted IR.
     pub fn from_elf(elf_path: &Path, pcs: &[u32], addr2line_cmd: &str) -> Result<Self, String> {
         if pcs.is_empty() {

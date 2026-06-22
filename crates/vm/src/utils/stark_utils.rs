@@ -309,7 +309,7 @@ where
         let air_names: Vec<&str> = vm.air_names().collect();
         let num_chips = interp_segments[0].trace_heights.len();
         for chip in 0..num_chips {
-            if metered_ctx.is_trace_height_constant[chip] {
+            if metered_ctx.config.is_trace_height_constant[chip] {
                 continue;
             }
             let air_name = air_names.get(chip).copied().unwrap_or("unknown");

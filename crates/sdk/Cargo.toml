@@ -80,6 +80,7 @@ rvr = [
     "openvm-sdk-config/rvr",
 ]
 aot = ["openvm-circuit/aot", "openvm-sdk-config/aot"]
+profiling = ["openvm-circuit/profiling"]
 tco = ["openvm-circuit/tco", "openvm-sdk-config/tco"]
 unprotected = ["openvm-circuit/unprotected"]
 
