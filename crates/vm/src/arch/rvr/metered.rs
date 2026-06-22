@@ -29,7 +29,7 @@ use crate::{
     arch::{
         execution_mode::{
             metered::{
-                ctx::{MeteredCtxParts, DEFAULT_PAGE_BITS},
+                ctx::{MeteredCtxConfig, MeteredCtxParts, DEFAULT_PAGE_BITS},
                 memory_ctx::MemoryCtx,
                 segment_ctx::{Segment, SegmentationCtx},
             },
@@ -128,11 +128,10 @@ pub type MeteredTracer = TracerPtr<MeteredTracerData>;
 // buffers (one per additional address space) instead of hardcoding
 // pv + deferral. The memory AS buffer stays separate as the hot path.
 pub struct SegmentationState {
+    config: MeteredCtxConfig,
     pub segmentation_ctx: SegmentationCtx,
     trace_heights: Vec<u32>,
-    is_trace_height_constant: Vec<bool>,
     memory_ctx: MemoryCtx<DEFAULT_PAGE_BITS>,
-    suspend_on_segment: bool,
     /// Per-address-space page buffers. Each entry = 1 u32 page id.
     mem_page_buf: Vec<u32>,
     pv_page_buf: Vec<u32>,
@@ -145,11 +144,10 @@ pub struct SegmentationState {
 impl SegmentationState {
     pub fn new(ctx: MeteredCtx, system_config: &SystemConfig) -> Self {
         let ctx = ctx.into_parts();
+        let config = ctx.config;
         let segmentation_ctx = ctx.segmentation_ctx;
         let trace_heights = ctx.trace_heights;
-        let is_trace_height_constant = ctx.is_trace_height_constant;
         let memory_ctx = ctx.memory_ctx;
-        let suspend_on_segment = ctx.suspend_on_segment;
 
         let mem_config = &system_config.memory_config;
         let memory_dimensions = mem_config.memory_dimensions();
@@ -158,11 +156,10 @@ impl SegmentationState {
         let byte_space_leaf_bits = (U16_CELL_SIZE_BITS + DIGEST_WIDTH_BITS) as u32;
 
         Self {
+            config,
             segmentation_ctx,
             trace_heights,
-            is_trace_height_constant,
             memory_ctx,
-            suspend_on_segment,
             mem_page_buf: vec![0u32; MEM_PAGE_BUF_CAP],
             pv_page_buf: vec![0u32; PV_PAGE_BUF_CAP],
             deferral_page_buf: vec![0u32; DEFERRAL_PAGE_BUF_CAP],
@@ -174,16 +171,15 @@ impl SegmentationState {
 
     pub fn into_metered_ctx(self) -> MeteredCtx {
         MeteredCtx::from_parts(MeteredCtxParts {
+            config: self.config,
             trace_heights: self.trace_heights,
-            is_trace_height_constant: self.is_trace_height_constant,
             memory_ctx: self.memory_ctx,
             segmentation_ctx: self.segmentation_ctx,
-            suspend_on_segment: self.suspend_on_segment,
         })
     }
 
     pub(crate) fn suspend_on_segment(&self) -> bool {
-        self.suspend_on_segment
+        self.config.suspend_on_segment
     }
 
     /// Get mutable pointer to trace_heights for the C tracer.
@@ -327,18 +323,20 @@ impl SegmentationState {
         let did_segment = self.segmentation_ctx.check_and_segment(
             instret,
             &mut self.trace_heights,
-            &self.is_trace_height_constant,
+            &self.config.is_trace_height_constant,
         );
 
         if did_segment {
-            self.segmentation_ctx
-                .initialize_segment(&mut self.trace_heights, &self.is_trace_height_constant);
+            self.segmentation_ctx.initialize_segment(
+                &mut self.trace_heights,
+                &self.config.is_trace_height_constant,
+            );
             self.initialize_segment_memory(mem_len, pv_len, deferral_len);
 
             self.segmentation_ctx.warn_if_exceeds_limits(
                 instret,
                 &self.trace_heights,
-                &self.is_trace_height_constant,
+                &self.config.is_trace_height_constant,
             );
         }
 
@@ -425,6 +423,11 @@ impl<F: PrimeField32, S> RvrMeteredInstanceWith<'_, F, S> {
         let dest_lib = self.compiled.lib_file_name_with_suffix("metered")?;
         self.compiled.save_artifact(&dir.join(dest_lib))
     }
+
+    /// Persist generated C sources for inspection.
+    pub fn save_generated_sources(&self, dir: &Path) -> Result<(), super::CompileError> {
+        self.compiled.save_generated_sources(dir)
+    }
 }
 
 impl<F: PrimeField32> RvrMeteredInstance<'_, F> {
@@ -508,7 +511,13 @@ mod tests {
 
     use super::*;
     use crate::{
-        arch::{execution_mode::metered::ctx::DEFAULT_PAGE_BITS, BOUNDARY_AIR_ID, MERKLE_AIR_ID},
+        arch::{
+            execution_mode::metered::{
+                ctx::{MeteredCtxInputs, DEFAULT_PAGE_BITS},
+                segment_ctx::{SegmentationLimits, DEFAULT_MAX_MEMORY},
+            },
+            BOUNDARY_AIR_ID, MERKLE_AIR_ID,
+        },
         utils::{test_cpu_engine, test_system_config},
     };
 
@@ -520,13 +529,24 @@ mod tests {
             .collect::<Vec<_>>();
         air_names[BOUNDARY_AIR_ID] = "Memory Boundary".to_string();
         air_names[MERKLE_AIR_ID] = "Memory Merkle".to_string();
+        let constant_trace_heights = vec![None; num_airs];
+        let widths = vec![1; num_airs];
+        let interactions = vec![0; num_airs];
+        let need_rot = vec![false; num_airs];
 
         let ctx = MeteredCtx::<DEFAULT_PAGE_BITS>::new(
-            vec![None; num_airs],
-            air_names,
-            vec![1; num_airs],
-            vec![0; num_airs],
-            vec![false; num_airs],
+            MeteredCtxInputs {
+                constant_trace_heights: &constant_trace_heights,
+                air_names: &air_names,
+                widths: &widths,
+                interactions: &interactions,
+                need_rot: &need_rot,
+                segmentation_limits: SegmentationLimits {
+                    max_trace_height_bits: 11,
+                    max_memory: DEFAULT_MAX_MEMORY,
+                    max_interactions: u32::MAX,
+                },
+            },
             &system_config,
             test_cpu_engine().proving_memory_config(),
         );
@@ -560,7 +580,6 @@ mod tests {
     #[test]
     fn test_periodic_check_records_block_boundary_instret() {
         let mut seg_state = make_segmentation_state();
-        seg_state.segmentation_ctx.segment_check_insns = 1000;
         seg_state.segmentation_ctx.instrets_until_check = 1000;
 
         assert!(!seg_state.on_periodic_check(0, 0, 0, 250));
@@ -572,7 +591,6 @@ mod tests {
     #[test]
     fn test_periodic_callback_starts_next_interval_at_block_boundary() {
         let mut seg_state = make_segmentation_state();
-        seg_state.segmentation_ctx.segment_check_insns = 1000;
         seg_state.segmentation_ctx.instrets_until_check = 1000;
         let mut tracer = MeteredTracerData {
             trace_heights: seg_state.trace_heights_ptr(),
@@ -598,10 +616,8 @@ mod tests {
     #[test]
     fn test_periodic_callback_starts_next_interval_when_suspending() {
         let mut seg_state = make_segmentation_state();
-        seg_state.segmentation_ctx.segment_check_insns = 1000;
         seg_state.segmentation_ctx.instrets_until_check = 1000;
-        seg_state.segmentation_ctx.limits.max_trace_height = 1;
-        *seg_state.trace_heights.last_mut().unwrap() = 2;
+        *seg_state.trace_heights.last_mut().unwrap() = 4096;
         let mut tracer = MeteredTracerData {
             trace_heights: seg_state.trace_heights_ptr(),
             mem_page_buf: seg_state.mem_page_buf_ptr(),
