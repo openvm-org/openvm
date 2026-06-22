@@ -110,8 +110,7 @@ where
         }
         builder.assert_eq(bit_marker_sum, is_valid.clone());
 
-        // Check that a[i] = b[i] >> c[i] both on the bit and limb shift level if c <
-        // NUM_LIMBS * LIMB_BITS.
+        // Check that a is the result of SRA b c.
         let mut limb_marker_sum = AB::Expr::ZERO;
         let mut limb_shift = AB::Expr::ZERO;
         for i in 0..NUM_LIMBS {

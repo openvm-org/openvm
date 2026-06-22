@@ -36,7 +36,7 @@ use openvm_riscv_circuit::{
     BitwiseLogicFiller, BranchEqualCoreAir, BranchEqualFiller, BranchLessThanCoreAir,
     BranchLessThanFiller, LessThanCoreAir, LessThanFiller, MultiplicationCoreAir,
     MultiplicationFiller, ShiftArithmeticRightCoreAir, ShiftArithmeticRightFiller,
-    ShiftLogicalCoreAir, ShiftLogicalFiller,
+    ShiftLogicalU16CoreAir, ShiftLogicalU16Filler,
 };
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
@@ -55,7 +55,8 @@ use {
         LessThan256AdapterRecord, LessThan256ChipGpu, LessThan256CoreRecord,
         Multiplication256AdapterRecord, Multiplication256ChipGpu, Multiplication256CoreRecord,
         Shift256AdapterRecord, ShiftArithmeticRight256ChipGpu, ShiftArithmeticRight256CoreRecord,
-        ShiftLogical256ChipGpu, ShiftLogical256CoreRecord, INT256_NUM_MEMORY_BLOCKS, NUM_READS,
+        ShiftLogical256ChipGpu, ShiftLogical256CoreRecord, ShiftLogical256U16AdapterRecord,
+        INT256_NUM_MEMORY_BLOCKS, NUM_READS,
     },
     openvm_circuit::arch::{
         testing::{
@@ -241,8 +242,7 @@ fn create_mul_harness_fields(
 fn create_shift_logical_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
-    range_checker_chip: Arc<VariableRangeCheckerChip>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
@@ -251,27 +251,22 @@ fn create_shift_logical_harness_fields(
     Rv64ShiftLogical256Chip<F>,
 ) {
     let air = Rv64ShiftLogical256Air::new(
-        AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
+        AluU16AdapterAir::new(Rv64VecHeapU16AdapterAir::new(
             execution_bridge,
             memory_bridge,
             range_checker_chip.bus(),
             address_bits,
         )),
-        ShiftLogicalCoreAir::new(
-            bitwise_chip.bus(),
-            range_checker_chip.bus(),
-            Rv64Shift256Opcode::CLASS_OFFSET,
-        ),
+        ShiftLogicalU16CoreAir::new(range_checker_chip.bus(), Rv64Shift256Opcode::CLASS_OFFSET),
     );
     let executor = Rv64ShiftLogical256Executor::new(
-        AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(address_bits)),
+        AluU16AdapterExecutor::new(Rv64VecHeapU16AdapterExecutor::new(address_bits)),
         Rv64Shift256Opcode::CLASS_OFFSET,
     );
     let chip = Rv64ShiftLogical256Chip::new(
-        ShiftLogicalFiller::new(
-            Rv64VecHeapAdapterFiller::new(address_bits, range_checker_chip.clone()),
-            bitwise_chip.clone(),
-            range_checker_chip.clone(),
+        ShiftLogicalU16Filler::new(
+            Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
+            range_checker_chip,
             Rv64Shift256Opcode::CLASS_OFFSET,
         ),
         memory_helper,
@@ -652,6 +647,8 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         bitwise_bus,
     ));
 
+    // SLL/SRL use the u16 logical core (no bitwise lookup); SRA keeps the byte arithmetic-right
+    // core, which uses the bitwise lookup. The two harnesses have distinct types.
     if opcode == ShiftOpcode::SRA {
         let (air, executor, chip) = create_shift_arithmetic_right_harness_fields(
             tester.memory_bridge(),
@@ -684,7 +681,6 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         let (air, executor, chip) = create_shift_logical_harness_fields(
             tester.memory_bridge(),
             tester.execution_bridge(),
-            bitwise_chip.clone(),
             range_checker_chip.clone(),
             tester.memory_helper(),
             tester.address_bits(),
@@ -702,11 +698,7 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             );
         }
 
-        let tester = tester
-            .build()
-            .load(harness)
-            .load_periphery((bitwise_chip.air, bitwise_chip))
-            .finalize();
+        let tester = tester.build().load(harness).finalize();
         tester.simple_test().expect("Verification failed");
     }
 }
@@ -1107,14 +1099,12 @@ fn run_shift_256_rand_test_cuda(opcode: ShiftOpcode, num_ops: usize) {
         let (air, executor, cpu_chip) = create_shift_logical_harness_fields(
             tester.memory_bridge(),
             tester.execution_bridge(),
-            dummy_bitwise_chip,
             dummy_range_checker_chip,
             tester.dummy_memory_helper(),
             tester.address_bits(),
         );
         let gpu_chip = ShiftLogical256ChipGpu::new(
             tester.range_checker(),
-            tester.bitwise_op_lookup(),
             tester.address_bits(),
             tester.timestamp_max_bits(),
         );
@@ -1133,7 +1123,7 @@ fn run_shift_256_rand_test_cuda(opcode: ShiftOpcode, num_ops: usize) {
         }
 
         type Record<'a> = (
-            &'a mut Shift256AdapterRecord,
+            &'a mut ShiftLogical256U16AdapterRecord,
             &'a mut ShiftLogical256CoreRecord,
         );
 
@@ -1142,7 +1132,7 @@ fn run_shift_256_rand_test_cuda(opcode: ShiftOpcode, num_ops: usize) {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, AluAdapterExecutor>::new(),
+                EmptyAdapterCoreLayout::<F, AluU16AdapterExecutor>::new(),
             );
 
         tester

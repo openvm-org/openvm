@@ -100,7 +100,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         inventory.next_air::<Rv64ShiftLogical256Air>()?;
         let shift_logical = ShiftLogical256ChipGpu::new(
             range_checker.clone(),
-            bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );

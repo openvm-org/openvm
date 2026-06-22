@@ -17,8 +17,8 @@ use openvm_riscv_circuit::{
     AddSubCoreCols, AddSubCoreRecord, BitwiseLogicCoreCols, BitwiseLogicCoreRecord,
     BranchEqualCoreCols, BranchEqualCoreRecord, BranchLessThanCoreCols, BranchLessThanCoreRecord,
     LessThanCoreCols, LessThanCoreRecord, MultiplicationCoreCols, MultiplicationCoreRecord,
-    ShiftArithmeticRightCoreCols, ShiftArithmeticRightCoreRecord, ShiftLogicalCoreCols,
-    ShiftLogicalCoreRecord,
+    ShiftArithmeticRightCoreCols, ShiftArithmeticRightCoreRecord, ShiftLogicalU16CoreCols,
+    ShiftLogicalU16CoreRecord,
 };
 use openvm_stark_backend::prover::AirProvingContext;
 
@@ -294,14 +294,16 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 pub type Shift256AdapterRecord =
     Rv64VecHeapAdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
-pub type ShiftLogical256CoreRecord = ShiftLogicalCoreRecord<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>;
+/// SLL/SRL use the u16 vec-heap adapter (shared shape with AddSub256/LessThan256).
+pub type ShiftLogical256U16AdapterRecord =
+    Rv64VecHeapU16AdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
+pub type ShiftLogical256CoreRecord = ShiftLogicalU16CoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
 pub type ShiftArithmeticRight256CoreRecord =
     ShiftArithmeticRightCoreRecord<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>;
 
 #[derive(new)]
 pub struct ShiftLogical256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
@@ -316,15 +318,16 @@ pub struct ShiftArithmeticRight256ChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for ShiftLogical256ChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(Shift256AdapterRecord, ShiftLogical256CoreRecord)>();
+        const RECORD_SIZE: usize =
+            size_of::<(ShiftLogical256U16AdapterRecord, ShiftLogical256CoreRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = ShiftLogicalCoreCols::<F, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>::width()
-            + Rv64VecHeapAdapterCols::<
+        let trace_width = ShiftLogicalU16CoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width()
+            + Rv64VecHeapU16AdapterCols::<
                 F,
                 NUM_READS,
                 INT256_NUM_MEMORY_BLOCKS,
@@ -342,7 +345,6 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftLogical256ChipGpu {
                 trace_height,
                 &d_records,
                 &self.range_checker.count,
-                &self.bitwise_lookup.count,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),

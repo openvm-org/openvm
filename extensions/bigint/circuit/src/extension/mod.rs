@@ -176,7 +176,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         inventory.add_executor(mult, Rv64Mul256Opcode::iter().map(|x| x.global_opcode()))?;
 
         let shift_logical = Rv64ShiftLogical256Executor::new(
-            AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(byte_ptr_max_bits)),
+            AluU16AdapterExecutor::new(Rv64VecHeapU16AdapterExecutor::new(byte_ptr_max_bits)),
             Rv64Shift256Opcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -315,13 +315,13 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
         inventory.add_air(mult);
 
         let shift_logical = Rv64ShiftLogical256Air::new(
-            AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
+            AluU16AdapterAir::new(Rv64VecHeapU16AdapterAir::new(
                 exec_bridge,
                 memory_bridge,
                 range_checker,
                 byte_ptr_max_bits,
             )),
-            ShiftLogicalCoreAir::new(bitwise_lu, range_checker, Rv64Shift256Opcode::CLASS_OFFSET),
+            ShiftLogicalU16CoreAir::new(range_checker, Rv64Shift256Opcode::CLASS_OFFSET),
         );
         inventory.add_air(shift_logical);
 
@@ -466,9 +466,8 @@ where
 
         inventory.next_air::<Rv64ShiftLogical256Air>()?;
         let shift_logical = Rv64ShiftLogical256Chip::new(
-            ShiftLogicalFiller::new(
-                Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
-                bitwise_lu.clone(),
+            ShiftLogicalU16Filler::new(
+                Rv64VecHeapU16AdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 range_checker.clone(),
                 Rv64Shift256Opcode::CLASS_OFFSET,
             ),

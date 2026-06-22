@@ -205,7 +205,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         )?;
 
         let shift_w_logical = Rv64ShiftWLogicalExecutor::new(
-            Rv64BaseAluWAdapterExecutor::new(),
+            Rv64BaseAluWU16AdapterExecutor::new(),
             ShiftWOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -349,12 +349,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(shift_arithmetic_right);
 
         let shift_w_logical = Rv64ShiftWLogicalAir::new(
-            Rv64BaseAluWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            crate::shift_w::ShiftWLogicalCoreAir::new(
-                bitwise_lu,
-                range_checker,
-                ShiftWOpcode::CLASS_OFFSET,
-            ),
+            Rv64BaseAluWU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
+            crate::shift_w::ShiftWLogicalCoreAir::new(range_checker, ShiftWOpcode::CLASS_OFFSET),
         );
         inventory.add_air(shift_w_logical);
 
@@ -531,8 +527,7 @@ where
         inventory.next_air::<Rv64ShiftWLogicalAir>()?;
         let shift_w_logical = Rv64ShiftWLogicalChip::new(
             crate::shift_w::ShiftWLogicalFiller::new(
-                Rv64BaseAluWAdapterFiller::new(bitwise_lu.clone()),
-                bitwise_lu.clone(),
+                Rv64BaseAluWU16AdapterFiller::new(range_checker.clone()),
                 range_checker.clone(),
                 ShiftWOpcode::CLASS_OFFSET,
             ),

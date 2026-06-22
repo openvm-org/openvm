@@ -408,7 +408,7 @@ where
 
 // Returns (result, limb_shift, bit_shift)
 #[inline(always)]
-pub(super) fn run_shift_logical_u16<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(crate) fn run_shift_logical_u16<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: ShiftOpcode,
     x: &[u16; NUM_LIMBS],
     y: &[u16; NUM_LIMBS],

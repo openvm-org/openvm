@@ -44,11 +44,14 @@ using Multiplication256Core = MultiplicationCore<INT256_NUM_U8_LIMBS>;
 template <typename T> using Multiplication256CoreCols = MultiplicationCoreCols<T, INT256_NUM_U8_LIMBS>;
 
 using Shift256CoreRecord = ShiftCoreRecord<INT256_NUM_U8_LIMBS>;
-using ShiftLogical256Core = ShiftLogicalCore<INT256_NUM_U8_LIMBS>;
 using ShiftArithmeticRight256Core = ShiftArithmeticRightCore<INT256_NUM_U8_LIMBS>;
-template <typename T> using ShiftLogical256CoreCols = ShiftLogicalCoreCols<T, INT256_NUM_U8_LIMBS>;
 template <typename T>
 using ShiftArithmeticRight256CoreCols = ShiftArithmeticRightCoreCols<T, INT256_NUM_U8_LIMBS>;
+// SLL/SRL use the u16 logical core (16 limbs of 16 bits) over the u16 vec-heap adapter.
+using ShiftLogical256U16Core = ShiftLogicalU16Core<INT256_NUM_U16_LIMBS, U16_BITS>;
+using ShiftLogical256U16CoreRecord = ShiftLogicalU16CoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
+template <typename T>
+using ShiftLogical256U16CoreCols = ShiftLogicalU16CoreCols<T, INT256_NUM_U16_LIMBS, U16_BITS>;
 
 using BranchLessThan256CoreRecord =
     BranchLessThanCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
@@ -416,13 +419,18 @@ extern "C" int _branch_less_than256_tracegen(
 }
 
 template <typename T> struct ShiftLogical256Cols {
-    Rv64VecHeapAdapter256Cols<T> adapter;
-    ShiftLogical256CoreCols<T> core;
+    Rv64VecHeapU16Adapter256Cols<T> adapter;
+    ShiftLogical256U16CoreCols<T> core;
 };
 
 template <typename T> struct ShiftArithmeticRight256Cols {
     Rv64VecHeapAdapter256Cols<T> adapter;
     ShiftArithmeticRight256CoreCols<T> core;
+};
+
+struct ShiftLogical256Record {
+    Rv64VecHeapU16Adapter256Record adapter;
+    ShiftLogical256U16CoreRecord core;
 };
 
 struct Shift256Record {
@@ -433,10 +441,9 @@ struct Shift256Record {
 __global__ void shift256_logical_tracegen(
     Fp *d_trace,
     size_t height,
-    DeviceBufferConstView<Shift256Record> d_records,
+    DeviceBufferConstView<ShiftLogical256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
-    uint32_t *d_bitwise_lookup_ptr,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -445,17 +452,14 @@ __global__ void shift256_logical_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        Rv64VecHeapAdapter256 adapter(
+        Rv64VecHeapU16Adapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        ShiftLogical256Core core(
-            BitwiseOperationLookup(d_bitwise_lookup_ptr),
-            VariableRangeChecker(d_range_checker_ptr, range_checker_bins)
-        );
+        ShiftLogical256U16Core core(VariableRangeChecker(d_range_checker_ptr, range_checker_bins));
         core.fill_trace_row(row.slice_from(COL_INDEX(ShiftLogical256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(ShiftLogical256Cols<uint8_t>));
@@ -500,10 +504,9 @@ extern "C" int _shift256_logical_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Shift256Record> d_records,
+    DeviceBufferConstView<ShiftLogical256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
-    uint32_t *d_bitwise_lookup_ptr,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
@@ -517,7 +520,6 @@ extern "C" int _shift256_logical_tracegen(
         d_records,
         d_range_checker_ptr,
         range_checker_bins,
-        d_bitwise_lookup_ptr,
         pointer_max_bits,
         timestamp_max_bits
     );
