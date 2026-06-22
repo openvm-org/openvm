@@ -533,8 +533,11 @@ fn test_record_arena_allocation_patterns() {
     // Test with maximum inputs
     let max_inputs = vec![BigUint::one(); 40]; // MAX_INPUT_LIMBS / 4
     let mut max_buffer = vec![0u8; 2048];
-    let max_record =
-        FieldExpressionCoreRecordMut::new_from_execution_data(&mut max_buffer, &max_inputs, 4);
+    let max_record = FieldExpressionCoreRecordMut::<u8>::new_from_execution_data(
+        &mut max_buffer,
+        &max_inputs,
+        4,
+    );
     assert_eq!(*max_record.opcode, 0);
 
     // Test input reconstruction

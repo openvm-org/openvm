@@ -8,9 +8,11 @@ use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     instructions::LocalOpcode,
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
-    Arena, PreflightExecutor, MEMORY_BLOCK_BYTES,
+    Arena, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
 };
-use openvm_circuit_primitives::bigint::utils::{secp256k1_coord_prime, secp256k1_scalar_prime};
+use openvm_circuit_primitives::bigint::utils::{
+    big_uint_to_num_limbs, secp256k1_coord_prime, secp256k1_scalar_prime,
+};
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
@@ -23,13 +25,13 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_pairing_guest::{bls12_381::BLS12_381_MODULUS, bn254::BN254_MODULUS};
 use openvm_riscv_adapters::{rv64_write_u16_heap_default, write_ptr_reg};
-use openvm_riscv_circuit::adapters::RV64_REGISTER_NUM_LIMBS;
+use openvm_riscv_circuit::adapters::{RV64_REGISTER_NUM_LIMBS, U16_BITS};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::extension::{HybridModularChip, HybridModularIsEqualChip},
+    crate::extension::{HybridModularChip, HybridModularIsEqualChip, HybridModularU16Chip},
     openvm_circuit::arch::testing::{
         default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
@@ -39,10 +41,11 @@ use {
 use crate::{
     modular_chip::{
         get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_executor,
+        get_modular_addsub_u16_air, get_modular_addsub_u16_chip, get_modular_addsub_u16_executor,
         get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_executor, ModularAir,
         ModularChip, ModularExecutor, ModularIsEqualCoreAir, ModularIsEqualCoreCols,
-        ModularIsEqualFiller, ModularIsEqualU16Air, ModularIsEqualU16Chip,
-        VmModularIsEqualU16Executor,
+        ModularIsEqualFiller, ModularIsEqualU16Air, ModularIsEqualU16Chip, ModularU16Air,
+        ModularU16Chip, ModularU16Executor, VmModularIsEqualU16Executor,
     },
     MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_32_U16, NUM_LIMBS_48,
     NUM_LIMBS_48_U16,
@@ -58,15 +61,26 @@ mod addsub_tests {
 
     const ADD_LOCAL: usize = Rv64ModularArithmeticOpcode::ADD as usize;
 
-    type Harness<const BLOCKS: usize> =
-        TestChipHarness<F, ModularExecutor<BLOCKS>, ModularAir<BLOCKS>, ModularChip<F, BLOCKS>>;
+    fn biguint_to_u16_array<const NUM_LIMBS: usize>(value: &BigUint) -> [F; NUM_LIMBS] {
+        let limbs: [usize; NUM_LIMBS] = big_uint_to_num_limbs(value, U16_BITS, NUM_LIMBS)
+            .try_into()
+            .unwrap();
+        limbs.map(|limb| F::from_u32(limb as u32))
+    }
+
+    type Harness<const BLOCKS: usize> = TestChipHarness<
+        F,
+        ModularU16Executor<BLOCKS>,
+        ModularU16Air<BLOCKS>,
+        ModularU16Chip<F, BLOCKS>,
+    >;
 
     fn create_harness<const BLOCKS: usize>(
         tester: &VmChipTestBuilder<F>,
         config: ExprBuilderConfig,
         offset: usize,
     ) -> Harness<BLOCKS> {
-        let air = get_modular_addsub_air(
+        let air = get_modular_addsub_u16_air(
             tester.execution_bridge(),
             tester.memory_bridge(),
             config.clone(),
@@ -74,13 +88,13 @@ mod addsub_tests {
             tester.address_bits(),
             offset,
         );
-        let executor = get_modular_addsub_executor(
+        let executor = get_modular_addsub_u16_executor(
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),
             offset,
         );
-        let chip = get_modular_addsub_chip(
+        let chip = get_modular_addsub_u16_chip(
             config,
             tester.memory_helper(),
             tester.range_checker(),
@@ -90,7 +104,62 @@ mod addsub_tests {
     }
 
     #[cfg(feature = "cuda")]
-    type GpuHarness<const BLOCKS: usize> = GpuTestChipHarness<
+    type GpuU16Harness<const BLOCKS: usize> = GpuTestChipHarness<
+        F,
+        ModularU16Executor<BLOCKS>,
+        ModularU16Air<BLOCKS>,
+        HybridModularU16Chip<F, BLOCKS>,
+        ModularU16Chip<F, BLOCKS>,
+    >;
+
+    #[cfg(feature = "cuda")]
+    fn create_cuda_u16_harness<const BLOCKS: usize>(
+        tester: &GpuChipTestBuilder,
+        config: ExprBuilderConfig,
+        offset: usize,
+    ) -> GpuU16Harness<BLOCKS> {
+        // getting bus from tester since `gpu_chip` and `air` must use the same bus
+        let range_bus = default_var_range_checker_bus();
+        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+        let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
+
+        let air = get_modular_addsub_u16_air(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            config.clone(),
+            range_bus,
+            tester.address_bits(),
+            offset,
+        );
+        let executor = get_modular_addsub_u16_executor(
+            config.clone(),
+            range_bus,
+            tester.address_bits(),
+            offset,
+        );
+
+        let cpu_chip = get_modular_addsub_u16_chip(
+            config.clone(),
+            tester.dummy_memory_helper(),
+            dummy_range_checker_chip,
+            tester.address_bits(),
+        );
+
+        let hybrid_chip = HybridModularU16Chip::new(
+            get_modular_addsub_u16_chip(
+                config,
+                tester.cpu_memory_helper(),
+                tester.cpu_range_checker(),
+                tester.address_bits(),
+            ),
+            tester.range_checker().device_ctx.clone(),
+        );
+
+        GpuU16Harness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+    }
+
+    #[cfg(feature = "cuda")]
+    type GpuByteHarness<const BLOCKS: usize> = GpuTestChipHarness<
         F,
         ModularExecutor<BLOCKS>,
         ModularAir<BLOCKS>,
@@ -99,11 +168,11 @@ mod addsub_tests {
     >;
 
     #[cfg(feature = "cuda")]
-    fn create_cuda_harness<const BLOCKS: usize>(
+    fn create_cuda_byte_harness<const BLOCKS: usize>(
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
         offset: usize,
-    ) -> GpuHarness<BLOCKS> {
+    ) -> GpuByteHarness<BLOCKS> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
@@ -127,7 +196,6 @@ mod addsub_tests {
             tester.address_bits(),
         );
 
-        // Use hybrid chip wrapping the CPU chip
         let hybrid_chip = HybridModularChip::new(
             get_modular_addsub_chip(
                 config,
@@ -138,19 +206,19 @@ mod addsub_tests {
             tester.range_checker().device_ctx.clone(),
         );
 
-        GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuByteHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     fn set_and_execute_addsub<const BLOCKS: usize, const NUM_LIMBS: usize, RA: Arena>(
         tester: &mut impl TestBuilder<F>,
-        executor: &mut ModularExecutor<BLOCKS>,
+        executor: &mut ModularU16Executor<BLOCKS>,
         arena: &mut RA,
         rng: &mut StdRng,
         modulus: &BigUint,
         is_setup: bool,
         offset: usize,
     ) where
-        ModularExecutor<BLOCKS>: PreflightExecutor<F, RA>,
+        ModularU16Executor<BLOCKS>: PreflightExecutor<F, RA>,
     {
         let (a, b, op) = if is_setup {
             (modulus.clone(), BigUint::zero(), ADD_LOCAL + 2)
@@ -174,6 +242,146 @@ mod addsub_tests {
         // 1. address_ptr which stores the actual address
         // 2. actual address which stores the biguint limbs
         // The write of result r is done in the chip.
+        let ptr_as = RV64_REGISTER_AS as usize;
+        let addr_ptr1 = 0;
+        let addr_ptr2 = 3 * RV64_REGISTER_NUM_LIMBS;
+        let addr_ptr3 = 6 * RV64_REGISTER_NUM_LIMBS;
+
+        let data_as = RV64_MEMORY_AS as usize;
+        let address1 = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u32;
+        let address2 = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u32;
+        let address3 = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u32;
+
+        write_ptr_reg(tester, ptr_as, addr_ptr1, address1.into());
+        write_ptr_reg(tester, ptr_as, addr_ptr2, address2.into());
+        write_ptr_reg(tester, ptr_as, addr_ptr3, address3.into());
+
+        let a_limbs = biguint_to_u16_array::<NUM_LIMBS>(&a);
+        let b_limbs = biguint_to_u16_array::<NUM_LIMBS>(&b);
+
+        for i in (0..NUM_LIMBS).step_by(BLOCK_FE_WIDTH) {
+            tester.write::<{ BLOCK_FE_WIDTH }>(
+                data_as,
+                address1 as usize / 2 + i,
+                a_limbs[i..i + BLOCK_FE_WIDTH].try_into().unwrap(),
+            );
+            tester.write::<{ BLOCK_FE_WIDTH }>(
+                data_as,
+                address2 as usize / 2 + i,
+                b_limbs[i..i + BLOCK_FE_WIDTH].try_into().unwrap(),
+            );
+        }
+
+        let instruction = Instruction::from_isize(
+            VmOpcode::from_usize(offset + op),
+            addr_ptr3 as isize,
+            addr_ptr1 as isize,
+            addr_ptr2 as isize,
+            ptr_as as isize,
+            data_as as isize,
+        );
+        tester.execute(executor, arena, &instruction);
+
+        let expected_limbs = biguint_to_u16_array::<NUM_LIMBS>(&expected_answer);
+
+        for i in (0..NUM_LIMBS).step_by(BLOCK_FE_WIDTH) {
+            let read_vals = tester.read::<{ BLOCK_FE_WIDTH }>(data_as, address3 as usize / 2 + i);
+            let expected_limbs: [F; BLOCK_FE_WIDTH] =
+                expected_limbs[i..i + BLOCK_FE_WIDTH].try_into().unwrap();
+            assert_eq!(read_vals, expected_limbs);
+        }
+    }
+
+    fn run_addsub_test<const BLOCKS: usize, const NUM_LIMBS: usize>(
+        opcode_offset: usize,
+        modulus: BigUint,
+        num_ops: usize,
+    ) {
+        let mut rng = create_seeded_rng();
+        let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let config = ExprBuilderConfig {
+            modulus: modulus.clone(),
+            num_limbs: NUM_LIMBS,
+            limb_bits: U16_BITS,
+        };
+
+        let mut harness = create_harness::<BLOCKS>(&tester, config, offset);
+
+        for i in 0..num_ops {
+            set_and_execute_addsub::<BLOCKS, NUM_LIMBS, _>(
+                &mut tester,
+                &mut harness.executor,
+                &mut harness.arena,
+                &mut rng,
+                &modulus,
+                i == 0,
+                offset,
+            );
+        }
+
+        let tester = tester.build().load(harness).finalize();
+        tester.simple_test().expect("Verification failed");
+    }
+
+    type ByteHarness<const BLOCKS: usize> =
+        TestChipHarness<F, ModularExecutor<BLOCKS>, ModularAir<BLOCKS>, ModularChip<F, BLOCKS>>;
+
+    fn create_byte_harness<const BLOCKS: usize>(
+        tester: &VmChipTestBuilder<F>,
+        config: ExprBuilderConfig,
+        offset: usize,
+    ) -> ByteHarness<BLOCKS> {
+        let air = get_modular_addsub_air(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            config.clone(),
+            tester.range_checker().bus(),
+            tester.address_bits(),
+            offset,
+        );
+        let executor = get_modular_addsub_executor(
+            config.clone(),
+            tester.range_checker().bus(),
+            tester.address_bits(),
+            offset,
+        );
+        let chip = get_modular_addsub_chip(
+            config,
+            tester.memory_helper(),
+            tester.range_checker(),
+            tester.address_bits(),
+        );
+        ByteHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    }
+
+    fn set_and_execute_addsub_byte<const BLOCKS: usize, const NUM_LIMBS: usize, RA: Arena>(
+        tester: &mut impl TestBuilder<F>,
+        executor: &mut ModularExecutor<BLOCKS>,
+        arena: &mut RA,
+        rng: &mut StdRng,
+        modulus: &BigUint,
+        is_setup: bool,
+        offset: usize,
+    ) where
+        ModularExecutor<BLOCKS>: PreflightExecutor<F, RA>,
+    {
+        let (a, b, op) = if is_setup {
+            (modulus.clone(), BigUint::zero(), ADD_LOCAL + 2)
+        } else {
+            let a = generate_random_biguint(modulus);
+            let b = generate_random_biguint(modulus);
+            let op = rng.random_range(0..2) + ADD_LOCAL;
+            (a, b, op)
+        };
+
+        let expected_answer = match op - ADD_LOCAL {
+            0 => (&a + &b) % modulus,
+            1 => (&a + modulus - &b) % modulus,
+            2 => a.clone() % modulus,
+            _ => panic!(),
+        };
+
         let ptr_as = RV64_REGISTER_AS as usize;
         let addr_ptr1 = 0;
         let addr_ptr2 = 3 * RV64_REGISTER_NUM_LIMBS;
@@ -235,7 +443,7 @@ mod addsub_tests {
         }
     }
 
-    fn run_addsub_test<const BLOCKS: usize, const NUM_LIMBS: usize>(
+    fn run_addsub_byte_test<const BLOCKS: usize, const NUM_LIMBS: usize>(
         opcode_offset: usize,
         modulus: BigUint,
         num_ops: usize,
@@ -249,10 +457,10 @@ mod addsub_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let mut harness = create_harness::<BLOCKS>(&tester, config, offset);
+        let mut harness = create_byte_harness::<BLOCKS>(&tester, config, offset);
 
         for i in 0..num_ops {
-            set_and_execute_addsub::<BLOCKS, NUM_LIMBS, _>(
+            set_and_execute_addsub_byte::<BLOCKS, NUM_LIMBS, _>(
                 &mut tester,
                 &mut harness.executor,
                 &mut harness.arena,
@@ -269,7 +477,7 @@ mod addsub_tests {
 
     #[test]
     fn test_modular_addsub_32limb_small() {
-        run_addsub_test::<MODULAR_BLOCKS_32, NUM_LIMBS_32>(
+        run_addsub_byte_test::<MODULAR_BLOCKS_32, NUM_LIMBS_32>(
             0,
             BigUint::from_str("357686312646216567629137").unwrap(),
             50,
@@ -278,22 +486,71 @@ mod addsub_tests {
 
     #[test]
     fn test_modular_addsub_32limb_secp256k1() {
-        run_addsub_test::<MODULAR_BLOCKS_32, NUM_LIMBS_32>(0, secp256k1_coord_prime(), 50);
-        run_addsub_test::<MODULAR_BLOCKS_32, NUM_LIMBS_32>(4, secp256k1_scalar_prime(), 50);
+        run_addsub_test::<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>(0, secp256k1_coord_prime(), 50);
+        run_addsub_test::<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>(4, secp256k1_scalar_prime(), 50);
     }
 
     #[test]
     fn test_modular_addsub_32limb_bn254() {
-        run_addsub_test::<MODULAR_BLOCKS_32, NUM_LIMBS_32>(0, BN254_MODULUS.clone(), 50);
+        run_addsub_test::<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>(0, BN254_MODULUS.clone(), 50);
     }
 
     #[test]
     fn test_modular_addsub_48limb_bls12_381() {
-        run_addsub_test::<MODULAR_BLOCKS_48, NUM_LIMBS_48>(0, BLS12_381_MODULUS.clone(), 50);
+        run_addsub_test::<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>(0, BLS12_381_MODULUS.clone(), 50);
     }
 
     #[cfg(feature = "cuda")]
-    fn run_cuda_addsub_test_with_config<const BLOCKS: usize, const NUM_LIMBS: usize>(
+    fn run_cuda_addsub_u16_test_with_config<const BLOCKS: usize, const NUM_LIMBS: usize>(
+        opcode_offset: usize,
+        modulus: BigUint,
+        num_ops: usize,
+    ) {
+        use crate::AlgebraU16Record;
+
+        let mut rng = create_seeded_rng();
+
+        let mut tester = GpuChipTestBuilder::default();
+
+        let offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+        let config = ExprBuilderConfig {
+            modulus: modulus.clone(),
+            num_limbs: NUM_LIMBS,
+            limb_bits: U16_BITS,
+        };
+
+        let mut harness = create_cuda_u16_harness::<BLOCKS>(&tester, config, offset);
+
+        for i in 0..num_ops {
+            set_and_execute_addsub::<BLOCKS, NUM_LIMBS, _>(
+                &mut tester,
+                &mut harness.executor,
+                &mut harness.dense_arena,
+                &mut rng,
+                &modulus,
+                i == 0,
+                offset,
+            );
+        }
+
+        harness
+            .dense_arena
+            .get_record_seeker::<AlgebraU16Record<2, BLOCKS>, _>()
+            .transfer_to_matrix_arena(
+                &mut harness.matrix_arena,
+                harness.executor.get_record_layout::<F>(),
+            );
+
+        tester
+            .build()
+            .load_gpu_harness(harness)
+            .finalize()
+            .simple_test()
+            .unwrap();
+    }
+
+    #[cfg(feature = "cuda")]
+    fn run_cuda_addsub_byte_test_with_config<const BLOCKS: usize, const NUM_LIMBS: usize>(
         opcode_offset: usize,
         modulus: BigUint,
         num_ops: usize,
@@ -311,10 +568,10 @@ mod addsub_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let mut harness = create_cuda_harness::<BLOCKS>(&tester, config, offset);
+        let mut harness = create_cuda_byte_harness::<BLOCKS>(&tester, config, offset);
 
         for i in 0..num_ops {
-            set_and_execute_addsub::<BLOCKS, NUM_LIMBS, _>(
+            set_and_execute_addsub_byte::<BLOCKS, NUM_LIMBS, _>(
                 &mut tester,
                 &mut harness.executor,
                 &mut harness.dense_arena,
@@ -344,27 +601,27 @@ mod addsub_tests {
     #[cfg(feature = "cuda")]
     #[test]
     fn cuda_test_modular_addsub() {
-        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_32, NUM_LIMBS_32>(
+        run_cuda_addsub_byte_test_with_config::<MODULAR_BLOCKS_32, NUM_LIMBS_32>(
             0,
             BigUint::from_str("357686312646216567629137").unwrap(),
             50,
         );
-        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_32, NUM_LIMBS_32>(
+        run_cuda_addsub_u16_test_with_config::<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>(
             0,
             secp256k1_coord_prime(),
             50,
         );
-        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_32, NUM_LIMBS_32>(
+        run_cuda_addsub_u16_test_with_config::<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>(
             4,
             secp256k1_scalar_prime(),
             50,
         );
-        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_32, NUM_LIMBS_32>(
+        run_cuda_addsub_u16_test_with_config::<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>(
             0,
             BN254_MODULUS.clone(),
             50,
         );
-        run_cuda_addsub_test_with_config::<MODULAR_BLOCKS_48, NUM_LIMBS_48>(
+        run_cuda_addsub_u16_test_with_config::<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>(
             0,
             BLS12_381_MODULUS.clone(),
             50,

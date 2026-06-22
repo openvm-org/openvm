@@ -8,14 +8,19 @@
 
 use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
 use openvm_circuit::{
-    arch::{ExecutionError, PreflightExecutor, RecordArena, VmStateMut, MEMORY_BLOCK_BYTES},
+    arch::{
+        ExecutionError, PreflightExecutor, RecordArena, VmStateMut, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
+    },
     system::memory::online::TracingMemory,
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_mod_circuit_builder::{
-    run_field_expression_precomputed, FieldExpressionCoreRecordMut, FieldExpressionRecordLayout,
+    run_field_expression_precomputed_bytes, run_field_expression_precomputed_limbs,
+    FieldExpressionCoreRecordMut, FieldExpressionRecordLayout,
 };
-use openvm_riscv_adapters::Rv64VecHeapAdapterExecutor;
+use openvm_riscv_adapters::{Rv64VecHeapAdapterExecutor, Rv64VecHeapU16AdapterExecutor};
+use openvm_riscv_circuit::adapters::{rv64_bytes_to_u16_block, rv64_u16_block_to_bytes};
 use openvm_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
@@ -234,13 +239,101 @@ where
                     })
                     .unwrap_or_else(|| self.inner.expr.num_flags());
 
-                run_field_expression_precomputed::<true>(
+                run_field_expression_precomputed_bytes::<true>(
                     &self.inner.expr,
                     flag_idx,
                     read_data.as_flattened().as_flattened(),
                 )
                 .into()
             };
+
+        self.inner.adapter().write(
+            state.memory,
+            instruction,
+            output,
+            &mut adapter_record,
+        );
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        Ok(())
+    }
+
+    fn get_opcode_name(&self, _opcode: usize) -> String {
+        self.inner.name.clone()
+    }
+}
+
+impl<F, RA, const BLOCKS: usize> PreflightExecutor<F, RA>
+    for FieldExprVecHeapExecutor<BLOCKS, false, Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS>>
+where
+    F: PrimeField32,
+    for<'buf> RA: RecordArena<
+        'buf,
+        FieldExpressionRecordLayout<
+            F,
+            Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS>,
+        >,
+        (
+            <Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS> as openvm_circuit::arch::AdapterTraceExecutor<F>>::RecordMut<'buf>,
+            FieldExpressionCoreRecordMut<'buf, u16>,
+        ),
+    >,
+{
+    fn execute(
+        &self,
+        state: VmStateMut<F, TracingMemory, RA>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError> {
+        use openvm_circuit::arch::AdapterTraceExecutor;
+
+        let (mut adapter_record, mut core_record) =
+            state.ctx.alloc(self.inner.get_record_layout());
+
+        <Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS> as AdapterTraceExecutor<F>>::start(
+            *state.pc,
+            state.memory,
+            &mut adapter_record,
+        );
+
+        let read_data: [[[u16; BLOCK_FE_WIDTH]; BLOCKS]; 2] = self
+            .inner
+            .adapter()
+            .read(state.memory, instruction, &mut adapter_record);
+
+        let local_opcode = instruction.opcode.local_opcode_idx(self.inner.offset);
+        core_record
+            .fill_from_execution_data(local_opcode as u8, read_data.as_flattened().as_flattened());
+
+        let output: [[u16; BLOCK_FE_WIDTH]; BLOCKS] = if let Some(output) =
+            compute_output_fast::<BLOCKS, false>(
+                self.cached_field_type,
+                local_opcode_to_modular_operation(local_opcode),
+                read_data.map(|read| read.map(rv64_u16_block_to_bytes)),
+            )
+        {
+            output.map(rv64_bytes_to_u16_block)
+        } else {
+            let flag_idx = self
+                .inner
+                .local_opcode_idx
+                .iter()
+                .position(|&idx| idx == local_opcode)
+                .and_then(|pos| {
+                    if pos < self.inner.opcode_flag_idx.len() {
+                        Some(self.inner.opcode_flag_idx[pos])
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_else(|| self.inner.expr.num_flags());
+
+            run_field_expression_precomputed_limbs::<true, u16>(
+                &self.inner.expr,
+                flag_idx,
+                read_data.as_flattened().as_flattened(),
+            )
+            .into()
+        };
 
         self.inner.adapter().write(
             state.memory,

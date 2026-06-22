@@ -26,17 +26,19 @@ use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_riscv_adapters::{
     Rv64IsEqualModU16AdapterCols, Rv64IsEqualModU16AdapterExecutor, Rv64IsEqualModU16AdapterFiller,
     Rv64IsEqualModU16AdapterRecord, Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor,
+    Rv64VecHeapU16AdapterCols, Rv64VecHeapU16AdapterExecutor,
 };
 use openvm_riscv_circuit::{adapters::U16_BITS, Rv64ImGpuProverExt};
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 use strum::EnumCount;
 
+use super::modular::modular_addsub_configs;
 use crate::{
     fp2_chip::{get_fp2_addsub_chip, get_fp2_muldiv_chip, Fp2Air, Fp2Chip},
     modular_chip::*,
-    AlgebraRecord, Fp2Extension, ModularExtension, Rv64ModularConfig, Rv64ModularWithFp2Config,
-    FP2_BLOCKS_32, FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32,
-    NUM_LIMBS_32_U16, NUM_LIMBS_48, NUM_LIMBS_48_U16,
+    AlgebraRecord, AlgebraU16Record, Fp2Extension, ModularExtension, Rv64ModularConfig,
+    Rv64ModularWithFp2Config, FP2_BLOCKS_32, FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48,
+    NUM_LIMBS_32, NUM_LIMBS_32_U16, NUM_LIMBS_48, NUM_LIMBS_48_U16,
 };
 
 #[derive(derive_new::new)]
@@ -74,6 +76,48 @@ impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for HybridModularCh
             FieldExpressionMetadata<F, Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
         >>();
         let adapter_width = Rv64VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS>::width();
+        let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
+        let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
+        seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
+        let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
+        cpu_proving_ctx_to_gpu(cpu_ctx, &self.device_ctx)
+    }
+}
+
+#[derive(derive_new::new)]
+pub struct HybridModularU16Chip<F, const BLOCKS: usize> {
+    cpu: ModularU16Chip<F, BLOCKS>,
+    device_ctx: GpuDeviceCtx,
+}
+
+impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for HybridModularU16Chip<F, BLOCKS> {
+    fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        let total_input_limbs =
+            self.cpu.inner.num_inputs() * self.cpu.inner.expr.canonical_num_limbs();
+        let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
+            F,
+            Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS>,
+        >::new(total_input_limbs));
+
+        let record_size = RecordSeeker::<
+            DenseRecordArena,
+            AlgebraU16Record<2, BLOCKS>,
+            _,
+        >::get_aligned_record_size(&layout);
+
+        let records = arena.allocated();
+        if records.is_empty() {
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        }
+        debug_assert_eq!(records.len() % record_size, 0);
+
+        let num_records = records.len() / record_size;
+
+        let height = num_records.next_power_of_two();
+        let mut seeker = arena.get_record_seeker::<AlgebraU16Record<2, BLOCKS>, AdapterCoreLayout<
+            FieldExpressionMetadata<F, Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS>>,
+        >>();
+        let adapter_width = Rv64VecHeapU16AdapterCols::<F, 2, BLOCKS, BLOCKS>::width();
         let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
@@ -147,24 +191,37 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
             let modulus_limbs = big_uint_to_limbs(modulus, U16_BITS);
 
             if bytes <= NUM_LIMBS_32 {
-                let config = ExprBuilderConfig {
-                    modulus: modulus.clone(),
-                    num_limbs: NUM_LIMBS_32,
-                    limb_bits: 8,
-                };
-
-                inventory.next_air::<ModularAir<MODULAR_BLOCKS_32>>()?;
-                let addsub = get_modular_addsub_chip::<F, MODULAR_BLOCKS_32>(
-                    config.clone(),
-                    mem_helper.clone(),
-                    range_checker.clone(),
-                    byte_ptr_max_bits,
+                let addsub_configs = modular_addsub_configs(
+                    modulus,
+                    NUM_LIMBS_32,
+                    NUM_LIMBS_32_U16,
+                    range_checker.bus(),
                 );
-                inventory.add_executor_chip(HybridModularChip::new(addsub, device_ctx.clone()));
+
+                if addsub_configs.use_u16 {
+                    inventory.next_air::<ModularU16Air<MODULAR_BLOCKS_32>>()?;
+                    let addsub = get_modular_addsub_u16_chip::<F, MODULAR_BLOCKS_32>(
+                        addsub_configs.u16,
+                        mem_helper.clone(),
+                        range_checker.clone(),
+                        byte_ptr_max_bits,
+                    );
+                    inventory
+                        .add_executor_chip(HybridModularU16Chip::new(addsub, device_ctx.clone()));
+                } else {
+                    inventory.next_air::<ModularAir<MODULAR_BLOCKS_32>>()?;
+                    let addsub = get_modular_addsub_chip::<F, MODULAR_BLOCKS_32>(
+                        addsub_configs.byte.clone(),
+                        mem_helper.clone(),
+                        range_checker.clone(),
+                        byte_ptr_max_bits,
+                    );
+                    inventory.add_executor_chip(HybridModularChip::new(addsub, device_ctx.clone()));
+                }
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_32>>()?;
                 let muldiv = get_modular_muldiv_chip::<F, MODULAR_BLOCKS_32>(
-                    config,
+                    addsub_configs.byte,
                     mem_helper.clone(),
                     range_checker.clone(),
                     byte_ptr_max_bits,
@@ -195,24 +252,37 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 inventory
                     .add_executor_chip(HybridModularIsEqualChip::new(is_eq, device_ctx.clone()));
             } else if bytes <= NUM_LIMBS_48 {
-                let config = ExprBuilderConfig {
-                    modulus: modulus.clone(),
-                    num_limbs: NUM_LIMBS_48,
-                    limb_bits: 8,
-                };
-
-                inventory.next_air::<ModularAir<MODULAR_BLOCKS_48>>()?;
-                let addsub = get_modular_addsub_chip::<F, MODULAR_BLOCKS_48>(
-                    config.clone(),
-                    mem_helper.clone(),
-                    range_checker.clone(),
-                    byte_ptr_max_bits,
+                let addsub_configs = modular_addsub_configs(
+                    modulus,
+                    NUM_LIMBS_48,
+                    NUM_LIMBS_48_U16,
+                    range_checker.bus(),
                 );
-                inventory.add_executor_chip(HybridModularChip::new(addsub, device_ctx.clone()));
+
+                if addsub_configs.use_u16 {
+                    inventory.next_air::<ModularU16Air<MODULAR_BLOCKS_48>>()?;
+                    let addsub = get_modular_addsub_u16_chip::<F, MODULAR_BLOCKS_48>(
+                        addsub_configs.u16,
+                        mem_helper.clone(),
+                        range_checker.clone(),
+                        byte_ptr_max_bits,
+                    );
+                    inventory
+                        .add_executor_chip(HybridModularU16Chip::new(addsub, device_ctx.clone()));
+                } else {
+                    inventory.next_air::<ModularAir<MODULAR_BLOCKS_48>>()?;
+                    let addsub = get_modular_addsub_chip::<F, MODULAR_BLOCKS_48>(
+                        addsub_configs.byte.clone(),
+                        mem_helper.clone(),
+                        range_checker.clone(),
+                        byte_ptr_max_bits,
+                    );
+                    inventory.add_executor_chip(HybridModularChip::new(addsub, device_ctx.clone()));
+                }
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_48>>()?;
                 let muldiv = get_modular_muldiv_chip::<F, MODULAR_BLOCKS_48>(
-                    config,
+                    addsub_configs.byte,
                     mem_helper.clone(),
                     range_checker.clone(),
                     byte_ptr_max_bits,

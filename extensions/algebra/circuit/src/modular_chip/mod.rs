@@ -3,7 +3,8 @@ use openvm_circuit_derive::PreflightExecutor;
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
 use openvm_riscv_adapters::{
     Rv64IsEqualModU16AdapterAir, Rv64IsEqualModU16AdapterExecutor, Rv64IsEqualModU16AdapterFiller,
-    Rv64VecHeapAdapterAir, Rv64VecHeapAdapterFiller,
+    Rv64VecHeapAdapterAir, Rv64VecHeapAdapterFiller, Rv64VecHeapU16AdapterAir,
+    Rv64VecHeapU16AdapterExecutor, Rv64VecHeapU16AdapterFiller,
 };
 use openvm_riscv_circuit::adapters::U16_BITS;
 
@@ -24,8 +25,17 @@ pub type ModularAir<const BLOCKS: usize> =
 
 pub type ModularExecutor<const BLOCKS: usize> = FieldExprVecHeapExecutor<BLOCKS, false>;
 
+pub type ModularU16Air<const BLOCKS: usize> =
+    VmAirWrapper<Rv64VecHeapU16AdapterAir<2, BLOCKS, BLOCKS>, FieldExpressionCoreAir>;
+
+pub type ModularU16Executor<const BLOCKS: usize> =
+    FieldExprVecHeapExecutor<BLOCKS, false, Rv64VecHeapU16AdapterExecutor<2, BLOCKS, BLOCKS>>;
+
 pub type ModularChip<F, const BLOCKS: usize> =
     VmChipWrapper<F, FieldExpressionFiller<Rv64VecHeapAdapterFiller<2, BLOCKS, BLOCKS>>>;
+
+pub type ModularU16Chip<F, const BLOCKS: usize> =
+    VmChipWrapper<F, FieldExpressionFiller<Rv64VecHeapU16AdapterFiller<2, BLOCKS, BLOCKS>, u16>>;
 
 /// U16-shaped is_eq wrapper: two heap operands, one BLOCK_FE_WIDTH-cell register write.
 pub type ModularIsEqualU16Air<const NUM_LANES: usize, const TOTAL_LIMBS: usize> = VmAirWrapper<

@@ -12,7 +12,7 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
-use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpr};
+use openvm_mod_circuit_builder::{run_field_expression_precomputed_bytes, FieldExpr};
 use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -152,7 +152,7 @@ struct FieldExpressionPreCompute<'a> {
     flag_idx: u8,
 }
 
-impl<'a, const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCKS, IS_FP2> {
+impl<'a, A, const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCKS, IS_FP2, A> {
     fn pre_compute_impl<F: PrimeField32>(
         &'a self,
         pc: u32,
@@ -241,8 +241,8 @@ impl<'a, const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCK
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterExecutor<F>
-    for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
+impl<F: PrimeField32, A, const BLOCKS: usize, const IS_FP2: bool> InterpreterExecutor<F>
+    for FieldExprVecHeapExecutor<BLOCKS, IS_FP2, A>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
@@ -300,8 +300,8 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> AotExecutor<F>
 {
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterMeteredExecutor<F>
-    for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
+impl<F: PrimeField32, A, const BLOCKS: usize, const IS_FP2: bool> InterpreterMeteredExecutor<F>
+    for FieldExprVecHeapExecutor<BLOCKS, IS_FP2, A>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
@@ -429,7 +429,7 @@ unsafe fn execute_e12_generic_impl<F: PrimeField32, CTX: ExecutionCtxTrait, cons
     });
     let read_data_dyn: DynArray<u8> = read_data.into();
 
-    let writes = run_field_expression_precomputed::<true>(
+    let writes = run_field_expression_precomputed_bytes::<true>(
         pre_compute.expr,
         pre_compute.flag_idx as usize,
         &read_data_dyn.0,
@@ -491,7 +491,7 @@ unsafe fn execute_e12_setup_impl<
 
     let read_data_dyn: DynArray<u8> = read_data.into();
 
-    let writes = run_field_expression_precomputed::<true>(
+    let writes = run_field_expression_precomputed_bytes::<true>(
         pre_compute.expr,
         pre_compute.flag_idx as usize,
         &read_data_dyn.0,

@@ -34,9 +34,11 @@ use strum::EnumCount;
 use crate::{
     modular_chip::{
         get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_executor,
-        get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_executor, ModularAir,
-        ModularExecutor, ModularIsEqualCoreAir, ModularIsEqualFiller, ModularIsEqualU16Air,
-        ModularIsEqualU16Chip, VmModularIsEqualU16Executor,
+        get_modular_addsub_u16_air, get_modular_addsub_u16_chip, get_modular_addsub_u16_executor,
+        get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_executor,
+        is_modular_addsub_u16_supported, ModularAir, ModularExecutor, ModularIsEqualCoreAir,
+        ModularIsEqualFiller, ModularIsEqualU16Air, ModularIsEqualU16Chip, ModularU16Air,
+        ModularU16Executor, VmModularIsEqualU16Executor,
     },
     AlgebraCpuProverExt, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_32_U16,
     NUM_LIMBS_48, NUM_LIMBS_48_U16,
@@ -63,6 +65,58 @@ impl ModularExtension {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct ModularAddSubConfigs {
+    pub byte: ExprBuilderConfig,
+    pub u16: ExprBuilderConfig,
+    pub use_u16: bool,
+}
+
+pub(crate) fn modular_addsub_configs(
+    modulus: &BigUint,
+    byte_limbs: usize,
+    u16_limbs: usize,
+    range_checker_bus: VariableRangeCheckerBus,
+) -> ModularAddSubConfigs {
+    let byte = ExprBuilderConfig {
+        modulus: modulus.clone(),
+        num_limbs: byte_limbs,
+        limb_bits: 8,
+    };
+    let u16 = ExprBuilderConfig {
+        modulus: modulus.clone(),
+        num_limbs: u16_limbs,
+        limb_bits: U16_BITS,
+    };
+    let use_u16 = is_modular_addsub_u16_supported(u16.clone(), range_checker_bus);
+
+    ModularAddSubConfigs { byte, u16, use_u16 }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use openvm_pairing_guest::bn254::BN254_MODULUS;
+
+    use super::*;
+
+    #[test]
+    fn modular_addsub_configs_select_supported_limb_shape() {
+        let range_bus = VariableRangeCheckerBus::new(u16::MAX, U16_BITS);
+        let small_modulus = BigUint::from_str("357686312646216567629137").unwrap();
+
+        assert!(
+            !modular_addsub_configs(&small_modulus, NUM_LIMBS_32, NUM_LIMBS_32_U16, range_bus,)
+                .use_u16
+        );
+        assert!(
+            modular_addsub_configs(&BN254_MODULUS, NUM_LIMBS_32, NUM_LIMBS_32_U16, range_bus,)
+                .use_u16
+        );
+    }
+}
+
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for ModularExtension {
     fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: Option<&RvrExtensionCtx>) {
@@ -83,10 +137,12 @@ impl<F: PrimeField32> VmRvrExtension<F> for ModularExtension {
 pub enum ModularExtensionExecutor {
     // 32 limbs prime
     ModularAddSubRv64_32(ModularExecutor<MODULAR_BLOCKS_32>), // ModularAddSub
+    ModularAddSubU16Rv64_32(ModularU16Executor<MODULAR_BLOCKS_32>), // ModularAddSub
     ModularMulDivRv64_32(ModularExecutor<MODULAR_BLOCKS_32>), // ModularMulDiv
     ModularIsEqualRv64_32(VmModularIsEqualU16Executor<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>), /* ModularIsEqual */
     // 48 limbs prime
     ModularAddSubRv64_48(ModularExecutor<MODULAR_BLOCKS_48>), // ModularAddSub
+    ModularAddSubU16Rv64_48(ModularU16Executor<MODULAR_BLOCKS_48>), // ModularAddSub
     ModularMulDivRv64_48(ModularExecutor<MODULAR_BLOCKS_48>), // ModularMulDiv
     ModularIsEqualRv64_48(VmModularIsEqualU16Executor<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>), /* ModularIsEqual */
 }
@@ -108,27 +164,42 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
             let modulus_limbs_u16 = big_uint_to_limbs(modulus, U16_BITS);
             if bytes <= NUM_LIMBS_32 {
-                let config = ExprBuilderConfig {
-                    modulus: modulus.clone(),
-                    num_limbs: NUM_LIMBS_32,
-                    limb_bits: 8,
-                };
-                let addsub = get_modular_addsub_executor::<MODULAR_BLOCKS_32>(
-                    config.clone(),
+                let addsub_configs = modular_addsub_configs(
+                    modulus,
+                    NUM_LIMBS_32,
+                    NUM_LIMBS_32_U16,
                     dummy_range_checker_bus,
-                    byte_ptr_max_bits,
-                    start_offset,
                 );
-
-                inventory.add_executor(
-                    ModularExtensionExecutor::ModularAddSubRv64_32(addsub),
-                    ((Rv64ModularArithmeticOpcode::ADD as usize)
-                        ..=(Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize))
-                        .map(|x| VmOpcode::from_usize(x + start_offset)),
-                )?;
+                if addsub_configs.use_u16 {
+                    let addsub = get_modular_addsub_u16_executor::<MODULAR_BLOCKS_32>(
+                        addsub_configs.u16,
+                        dummy_range_checker_bus,
+                        byte_ptr_max_bits,
+                        start_offset,
+                    );
+                    inventory.add_executor(
+                        ModularExtensionExecutor::ModularAddSubU16Rv64_32(addsub),
+                        ((Rv64ModularArithmeticOpcode::ADD as usize)
+                            ..=(Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize))
+                            .map(|x| VmOpcode::from_usize(x + start_offset)),
+                    )?;
+                } else {
+                    let addsub = get_modular_addsub_executor::<MODULAR_BLOCKS_32>(
+                        addsub_configs.byte.clone(),
+                        dummy_range_checker_bus,
+                        byte_ptr_max_bits,
+                        start_offset,
+                    );
+                    inventory.add_executor(
+                        ModularExtensionExecutor::ModularAddSubRv64_32(addsub),
+                        ((Rv64ModularArithmeticOpcode::ADD as usize)
+                            ..=(Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize))
+                            .map(|x| VmOpcode::from_usize(x + start_offset)),
+                    )?;
+                }
 
                 let muldiv = get_modular_muldiv_executor::<MODULAR_BLOCKS_32>(
-                    config,
+                    addsub_configs.byte,
                     dummy_range_checker_bus,
                     byte_ptr_max_bits,
                     start_offset,
@@ -162,27 +233,42 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= NUM_LIMBS_48 {
-                let config = ExprBuilderConfig {
-                    modulus: modulus.clone(),
-                    num_limbs: NUM_LIMBS_48,
-                    limb_bits: 8,
-                };
-                let addsub = get_modular_addsub_executor::<MODULAR_BLOCKS_48>(
-                    config.clone(),
+                let addsub_configs = modular_addsub_configs(
+                    modulus,
+                    NUM_LIMBS_48,
+                    NUM_LIMBS_48_U16,
                     dummy_range_checker_bus,
-                    byte_ptr_max_bits,
-                    start_offset,
                 );
-
-                inventory.add_executor(
-                    ModularExtensionExecutor::ModularAddSubRv64_48(addsub),
-                    ((Rv64ModularArithmeticOpcode::ADD as usize)
-                        ..=(Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize))
-                        .map(|x| VmOpcode::from_usize(x + start_offset)),
-                )?;
+                if addsub_configs.use_u16 {
+                    let addsub = get_modular_addsub_u16_executor::<MODULAR_BLOCKS_48>(
+                        addsub_configs.u16,
+                        dummy_range_checker_bus,
+                        byte_ptr_max_bits,
+                        start_offset,
+                    );
+                    inventory.add_executor(
+                        ModularExtensionExecutor::ModularAddSubU16Rv64_48(addsub),
+                        ((Rv64ModularArithmeticOpcode::ADD as usize)
+                            ..=(Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize))
+                            .map(|x| VmOpcode::from_usize(x + start_offset)),
+                    )?;
+                } else {
+                    let addsub = get_modular_addsub_executor::<MODULAR_BLOCKS_48>(
+                        addsub_configs.byte.clone(),
+                        dummy_range_checker_bus,
+                        byte_ptr_max_bits,
+                        start_offset,
+                    );
+                    inventory.add_executor(
+                        ModularExtensionExecutor::ModularAddSubRv64_48(addsub),
+                        ((Rv64ModularArithmeticOpcode::ADD as usize)
+                            ..=(Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize))
+                            .map(|x| VmOpcode::from_usize(x + start_offset)),
+                    )?;
+                }
 
                 let muldiv = get_modular_muldiv_executor::<MODULAR_BLOCKS_48>(
-                    config,
+                    addsub_configs.byte,
                     dummy_range_checker_bus,
                     byte_ptr_max_bits,
                     start_offset,
@@ -254,26 +340,39 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                 Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
 
             if bytes <= NUM_LIMBS_32 {
-                let config = ExprBuilderConfig {
-                    modulus: modulus.clone(),
-                    num_limbs: NUM_LIMBS_32,
-                    limb_bits: 8,
-                };
-
-                let addsub = get_modular_addsub_air::<MODULAR_BLOCKS_32>(
-                    exec_bridge,
-                    memory_bridge,
-                    config.clone(),
+                let addsub_configs = modular_addsub_configs(
+                    modulus,
+                    NUM_LIMBS_32,
+                    NUM_LIMBS_32_U16,
                     range_checker_bus,
-                    byte_ptr_max_bits,
-                    start_offset,
                 );
-                inventory.add_air(addsub);
+
+                if addsub_configs.use_u16 {
+                    let addsub = get_modular_addsub_u16_air::<MODULAR_BLOCKS_32>(
+                        exec_bridge,
+                        memory_bridge,
+                        addsub_configs.u16,
+                        range_checker_bus,
+                        byte_ptr_max_bits,
+                        start_offset,
+                    );
+                    inventory.add_air(addsub);
+                } else {
+                    let addsub = get_modular_addsub_air::<MODULAR_BLOCKS_32>(
+                        exec_bridge,
+                        memory_bridge,
+                        addsub_configs.byte.clone(),
+                        range_checker_bus,
+                        byte_ptr_max_bits,
+                        start_offset,
+                    );
+                    inventory.add_air(addsub);
+                }
 
                 let muldiv = get_modular_muldiv_air::<MODULAR_BLOCKS_32>(
                     exec_bridge,
                     memory_bridge,
-                    config,
+                    addsub_configs.byte,
                     range_checker_bus,
                     byte_ptr_max_bits,
                     start_offset,
@@ -291,26 +390,39 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
                 );
                 inventory.add_air(is_eq);
             } else if bytes <= NUM_LIMBS_48 {
-                let config = ExprBuilderConfig {
-                    modulus: modulus.clone(),
-                    num_limbs: NUM_LIMBS_48,
-                    limb_bits: 8,
-                };
-
-                let addsub = get_modular_addsub_air::<MODULAR_BLOCKS_48>(
-                    exec_bridge,
-                    memory_bridge,
-                    config.clone(),
+                let addsub_configs = modular_addsub_configs(
+                    modulus,
+                    NUM_LIMBS_48,
+                    NUM_LIMBS_48_U16,
                     range_checker_bus,
-                    byte_ptr_max_bits,
-                    start_offset,
                 );
-                inventory.add_air(addsub);
+
+                if addsub_configs.use_u16 {
+                    let addsub = get_modular_addsub_u16_air::<MODULAR_BLOCKS_48>(
+                        exec_bridge,
+                        memory_bridge,
+                        addsub_configs.u16,
+                        range_checker_bus,
+                        byte_ptr_max_bits,
+                        start_offset,
+                    );
+                    inventory.add_air(addsub);
+                } else {
+                    let addsub = get_modular_addsub_air::<MODULAR_BLOCKS_48>(
+                        exec_bridge,
+                        memory_bridge,
+                        addsub_configs.byte.clone(),
+                        range_checker_bus,
+                        byte_ptr_max_bits,
+                        start_offset,
+                    );
+                    inventory.add_air(addsub);
+                }
 
                 let muldiv = get_modular_muldiv_air::<MODULAR_BLOCKS_48>(
                     exec_bridge,
                     memory_bridge,
-                    config,
+                    addsub_configs.byte,
                     range_checker_bus,
                     byte_ptr_max_bits,
                     start_offset,
@@ -364,24 +476,36 @@ where
             let modulus_limbs_u16 = big_uint_to_limbs(modulus, U16_BITS);
 
             if bytes <= NUM_LIMBS_32 {
-                let config = ExprBuilderConfig {
-                    modulus: modulus.clone(),
-                    num_limbs: NUM_LIMBS_32,
-                    limb_bits: 8,
-                };
-
-                inventory.next_air::<ModularAir<MODULAR_BLOCKS_32>>()?;
-                let addsub = get_modular_addsub_chip::<Val<SC>, MODULAR_BLOCKS_32>(
-                    config.clone(),
-                    mem_helper.clone(),
-                    range_checker.clone(),
-                    byte_ptr_max_bits,
+                let addsub_configs = modular_addsub_configs(
+                    modulus,
+                    NUM_LIMBS_32,
+                    NUM_LIMBS_32_U16,
+                    range_checker.bus(),
                 );
-                inventory.add_executor_chip(addsub);
+
+                if addsub_configs.use_u16 {
+                    inventory.next_air::<ModularU16Air<MODULAR_BLOCKS_32>>()?;
+                    let addsub = get_modular_addsub_u16_chip::<Val<SC>, MODULAR_BLOCKS_32>(
+                        addsub_configs.u16,
+                        mem_helper.clone(),
+                        range_checker.clone(),
+                        byte_ptr_max_bits,
+                    );
+                    inventory.add_executor_chip(addsub);
+                } else {
+                    inventory.next_air::<ModularAir<MODULAR_BLOCKS_32>>()?;
+                    let addsub = get_modular_addsub_chip::<Val<SC>, MODULAR_BLOCKS_32>(
+                        addsub_configs.byte.clone(),
+                        mem_helper.clone(),
+                        range_checker.clone(),
+                        byte_ptr_max_bits,
+                    );
+                    inventory.add_executor_chip(addsub);
+                }
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_32>>()?;
                 let muldiv = get_modular_muldiv_chip::<Val<SC>, MODULAR_BLOCKS_32>(
-                    config,
+                    addsub_configs.byte,
                     mem_helper.clone(),
                     range_checker.clone(),
                     byte_ptr_max_bits,
@@ -412,24 +536,36 @@ where
                     );
                 inventory.add_executor_chip(is_eq);
             } else if bytes <= NUM_LIMBS_48 {
-                let config = ExprBuilderConfig {
-                    modulus: modulus.clone(),
-                    num_limbs: NUM_LIMBS_48,
-                    limb_bits: 8,
-                };
-
-                inventory.next_air::<ModularAir<MODULAR_BLOCKS_48>>()?;
-                let addsub = get_modular_addsub_chip::<Val<SC>, MODULAR_BLOCKS_48>(
-                    config.clone(),
-                    mem_helper.clone(),
-                    range_checker.clone(),
-                    byte_ptr_max_bits,
+                let addsub_configs = modular_addsub_configs(
+                    modulus,
+                    NUM_LIMBS_48,
+                    NUM_LIMBS_48_U16,
+                    range_checker.bus(),
                 );
-                inventory.add_executor_chip(addsub);
+
+                if addsub_configs.use_u16 {
+                    inventory.next_air::<ModularU16Air<MODULAR_BLOCKS_48>>()?;
+                    let addsub = get_modular_addsub_u16_chip::<Val<SC>, MODULAR_BLOCKS_48>(
+                        addsub_configs.u16,
+                        mem_helper.clone(),
+                        range_checker.clone(),
+                        byte_ptr_max_bits,
+                    );
+                    inventory.add_executor_chip(addsub);
+                } else {
+                    inventory.next_air::<ModularAir<MODULAR_BLOCKS_48>>()?;
+                    let addsub = get_modular_addsub_chip::<Val<SC>, MODULAR_BLOCKS_48>(
+                        addsub_configs.byte.clone(),
+                        mem_helper.clone(),
+                        range_checker.clone(),
+                        byte_ptr_max_bits,
+                    );
+                    inventory.add_executor_chip(addsub);
+                }
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_48>>()?;
                 let muldiv = get_modular_muldiv_chip::<Val<SC>, MODULAR_BLOCKS_48>(
-                    config,
+                    addsub_configs.byte,
                     mem_helper.clone(),
                     range_checker.clone(),
                     byte_ptr_max_bits,

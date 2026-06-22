@@ -64,6 +64,8 @@ pub struct ExprBuilder {
 
     // The number of limbs of the quotient for each constraint.
     pub q_limbs: Vec<usize>,
+    // Tight bit bounds for each signed quotient limb.
+    pub q_limb_bits: Vec<Vec<usize>>,
     // The number of limbs of the carries for each constraint.
     pub carry_limbs: Vec<usize>,
 
@@ -115,6 +117,7 @@ impl ExprBuilder {
             num_variables: 0,
             constants: vec![],
             q_limbs: vec![],
+            q_limb_bits: vec![],
             carry_limbs: vec![],
             constraints: vec![],
             computes: vec![],
@@ -191,6 +194,7 @@ impl ExprBuilder {
         self.constraints.push(SymbolicExpr::Input(0));
         self.computes.push(SymbolicExpr::Input(0));
         self.q_limbs.push(0);
+        self.q_limb_bits.push(vec![]);
         self.carry_limbs.push(0);
         (
             self.num_variables - 1,
@@ -222,7 +226,7 @@ impl ExprBuilder {
     }
 
     pub fn set_constraint(&mut self, index: usize, constraint: SymbolicExpr) {
-        let (q_limbs, carry_limbs) = constraint.constraint_limbs(
+        let (q_limbs, q_limb_bits, carry_limbs) = constraint.constraint_limbs_with_quotient_bits(
             &self.prime,
             self.limb_bits,
             self.num_limbs,
@@ -230,6 +234,7 @@ impl ExprBuilder {
         );
         self.constraints[index] = constraint;
         self.q_limbs[index] = q_limbs;
+        self.q_limb_bits[index] = q_limb_bits;
         self.carry_limbs[index] = carry_limbs;
     }
 
@@ -421,7 +426,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
         for i in 0..self.constraints.len() {
             let expr = self.constraints[i]
                 .evaluate_overflow_expr::<AB>(&inputs, &vars, &constants, &flags);
-            self.check_carry_mod_to_zero.eval(
+            self.check_carry_mod_to_zero.eval_with_quotient_limb_bits(
                 builder,
                 (
                     expr,
@@ -431,6 +436,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
                     },
                     is_valid.into(),
                 ),
+                &self.builder.q_limb_bits[i],
             );
         }
 
@@ -525,10 +531,15 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             debug_assert_eq!(expr_bigint, &q * &self.prime_bigint);
             let q_limbs = big_int_to_num_limbs(&q, limb_bits, self.q_limbs[i]);
             assert_eq!(q_limbs.len(), self.q_limbs[i]); // If this fails, the q_limbs estimate is wrong.
-            for &q in q_limbs.iter() {
-                range_checker.add_count((q + (1 << limb_bits)) as u32, limb_bits + 1);
+            for (&q, &q_bits) in q_limbs.iter().zip_eq(&self.q_limb_bits[i]) {
+                range_checker.add_count((q + (1 << q_bits)) as u32, q_bits + 1);
             }
-            let q_overflow = OverflowInt::from_signed_limbs(q_limbs.clone(), limb_bits);
+            let max_q_limb_bits = self.q_limb_bits[i].iter().copied().max().unwrap_or(0);
+            let q_overflow = OverflowInt::from_computed_limbs(
+                q_limbs.clone(),
+                1 << max_q_limb_bits,
+                max_q_limb_bits + 1,
+            );
             // compute carries of (expr - q * p)
             let expr = self.constraints[i].evaluate_overflow_isize(
                 &input_overflow,

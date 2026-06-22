@@ -1,12 +1,13 @@
 use std::{
     marker::PhantomData,
     mem::{align_of, size_of},
+    slice::from_raw_parts_mut,
     sync::Arc,
 };
 
 use itertools::Itertools;
 use num_bigint::BigUint;
-use num_traits::Zero;
+use num_traits::{ToPrimitive, Zero};
 use openvm_circuit::{
     arch::*,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
@@ -213,27 +214,71 @@ where
 
 pub type FieldExpressionRecordLayout<F, A> = AdapterCoreLayout<FieldExpressionMetadata<F, A>>;
 
-pub struct FieldExpressionCoreRecordMut<'a> {
-    pub opcode: &'a mut u8,
-    pub input_limbs: &'a mut [u8],
+mod sealed {
+    pub trait FieldExpressionLimbSealed {}
+
+    impl FieldExpressionLimbSealed for u8 {}
+    impl FieldExpressionLimbSealed for u16 {}
 }
 
-impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionRecordLayout<F, A>>
+pub trait FieldExpressionLimb:
+    sealed::FieldExpressionLimbSealed + Copy + Default + Send + Sync + 'static
+{
+    fn from_u64(value: u64) -> Self;
+    fn as_u64(self) -> u64;
+}
+
+impl FieldExpressionLimb for u8 {
+    #[inline(always)]
+    fn from_u64(value: u64) -> Self {
+        value as u8
+    }
+
+    #[inline(always)]
+    fn as_u64(self) -> u64 {
+        self as u64
+    }
+}
+
+impl FieldExpressionLimb for u16 {
+    #[inline(always)]
+    fn from_u64(value: u64) -> Self {
+        value as u16
+    }
+
+    #[inline(always)]
+    fn as_u64(self) -> u64 {
+        self as u64
+    }
+}
+
+pub struct FieldExpressionCoreRecordMut<'a, T = u8> {
+    pub opcode: &'a mut u8,
+    pub input_limbs: &'a mut [T],
+}
+
+impl<'a, F, A, T>
+    CustomBorrow<'a, FieldExpressionCoreRecordMut<'a, T>, FieldExpressionRecordLayout<F, A>>
     for [u8]
+where
+    T: FieldExpressionLimb,
 {
     fn custom_borrow(
         &'a mut self,
         layout: FieldExpressionRecordLayout<F, A>,
-    ) -> FieldExpressionCoreRecordMut<'a> {
-        // SAFETY: The buffer length is the width of the trace which should be at least 1
-        let (opcode_buf, input_limbs_buff) = unsafe { self.split_at_mut_unchecked(1) };
-
-        // SAFETY: opcode_buf has exactly 1 element from split_at_mut_unchecked(1)
-        let opcode_buf = unsafe { opcode_buf.get_unchecked_mut(0) };
+    ) -> FieldExpressionCoreRecordMut<'a, T> {
+        let opcode_size = size_of::<u8>().next_multiple_of(align_of::<T>());
+        let (opcode_buf, input_limbs_buf) = self.split_at_mut(opcode_size);
+        let opcode = &mut opcode_buf[0];
+        let len = layout.metadata.total_input_limbs;
+        // SAFETY: SizedRecord requests T alignment and enough bytes for len T limbs after opcode
+        // padding.
+        let input_limbs =
+            unsafe { from_raw_parts_mut(input_limbs_buf.as_mut_ptr().cast::<T>(), len) };
 
         FieldExpressionCoreRecordMut {
-            opcode: opcode_buf,
-            input_limbs: &mut input_limbs_buff[..layout.metadata.total_input_limbs],
+            opcode,
+            input_limbs,
         }
     }
 
@@ -242,17 +287,24 @@ impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressio
     }
 }
 
-impl<F, A> SizedRecord<FieldExpressionRecordLayout<F, A>> for FieldExpressionCoreRecordMut<'_> {
+impl<F, A, T> SizedRecord<FieldExpressionRecordLayout<F, A>> for FieldExpressionCoreRecordMut<'_, T>
+where
+    T: FieldExpressionLimb,
+{
     fn size(layout: &FieldExpressionRecordLayout<F, A>) -> usize {
-        layout.metadata.total_input_limbs + 1
+        size_of::<u8>().next_multiple_of(align_of::<T>())
+            + layout.metadata.total_input_limbs * size_of::<T>()
     }
 
     fn alignment(_layout: &FieldExpressionRecordLayout<F, A>) -> usize {
-        align_of::<u8>()
+        align_of::<T>()
     }
 }
 
-impl<'a> FieldExpressionCoreRecordMut<'a> {
+impl<'a, T> FieldExpressionCoreRecordMut<'a, T>
+where
+    T: FieldExpressionLimb,
+{
     // This method is only used in testing
     pub fn new_from_execution_data(
         buffer: &'a mut [u8],
@@ -268,7 +320,7 @@ impl<'a> FieldExpressionCoreRecordMut<'a> {
     }
 
     #[inline(always)]
-    pub fn fill_from_execution_data(&mut self, opcode: u8, data: &[u8]) {
+    pub fn fill_from_execution_data(&mut self, opcode: u8, data: &[T]) {
         // Rust will assert that length of `data` and `self.input_limbs` are the same
         // That is `data.len() == num_inputs * limbs_per_input`
         *self.opcode = opcode;
@@ -333,16 +385,20 @@ impl<A> FieldExpressionExecutor<A> {
     }
 }
 
-pub struct FieldExpressionFiller<A> {
+pub struct FieldExpressionFiller<A, T = u8> {
     adapter: A,
     pub expr: FieldExpr,
     pub local_opcode_idx: Vec<usize>,
     pub opcode_flag_idx: Vec<usize>,
     pub range_checker: SharedVariableRangeCheckerChip,
     pub should_finalize: bool,
+    _marker: PhantomData<T>,
 }
 
-impl<A> FieldExpressionFiller<A> {
+impl<A, T> FieldExpressionFiller<A, T>
+where
+    T: FieldExpressionLimb,
+{
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         adapter: A,
@@ -367,6 +423,7 @@ impl<A> FieldExpressionFiller<A> {
             opcode_flag_idx,
             range_checker,
             should_finalize,
+            _marker: PhantomData,
         }
     }
     pub fn num_inputs(&self) -> usize {
@@ -443,10 +500,11 @@ where
 #[cfg(feature = "aot")]
 impl<F: PrimeField32, A> AotExecutor<F> for FieldExpressionExecutor<A> {}
 
-impl<F, A> TraceFiller<F> for FieldExpressionFiller<A>
+impl<F, A, T> TraceFiller<F> for FieldExpressionFiller<A, T>
 where
     F: PrimeField32 + Send + Sync + Clone,
     A: 'static + AdapterTraceFiller<F>,
+    T: FieldExpressionLimb,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // Get the core record from the row slice
@@ -460,7 +518,7 @@ where
         //   written by the executor
         // - core_row slice is transmuted to FieldExpressionCoreRecordMut using the specified
         //   layout, which satisfies CustomBorrow requirements for safe access.
-        let record: FieldExpressionCoreRecordMut =
+        let record: FieldExpressionCoreRecordMut<T> =
             unsafe { get_record_from_slice(&mut core_row, self.get_record_layout::<F>()) };
 
         let (_, inputs, flags) = run_field_expression(
@@ -493,57 +551,84 @@ where
     }
 }
 
-fn run_field_expression(
+fn limbs_to_biguint<T: FieldExpressionLimb>(limbs: &[T], limb_bits: usize) -> BigUint {
+    let mut res = BigUint::zero();
+    let base = BigUint::from(1u64 << limb_bits);
+    for limb in limbs.iter().rev() {
+        res = res * &base + BigUint::from(limb.as_u64());
+    }
+    res
+}
+
+fn biguint_to_limb_vec<T: FieldExpressionLimb>(
+    mut value: BigUint,
+    num_limbs: usize,
+    limb_bits: usize,
+) -> Vec<T> {
+    let base = BigUint::from(1u64 << limb_bits);
+    let mut out = Vec::with_capacity(num_limbs);
+    for _ in 0..num_limbs {
+        let limb = (&value % &base).to_u64().expect("limb should fit in u64");
+        out.push(T::from_u64(limb));
+        value /= &base;
+    }
+    out
+}
+
+fn flags_for_opcode(
     expr: &FieldExpr,
     local_opcode_flags: &[usize],
     opcode_flag_idx: &[usize],
-    data: &[u8],
     local_opcode_idx: usize,
-) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>) {
+) -> Vec<bool> {
+    let mut flags = vec![];
+    if expr.needs_setup() {
+        flags = vec![false; expr.builder.num_flags];
+
+        if let Some(opcode_position) = local_opcode_flags
+            .iter()
+            .position(|&idx| idx == local_opcode_idx)
+        {
+            if opcode_position < opcode_flag_idx.len() {
+                let flag_idx = opcode_flag_idx[opcode_position];
+                flags[flag_idx] = true;
+            }
+        }
+    }
+    flags
+}
+
+fn run_field_expression<T: FieldExpressionLimb>(
+    expr: &FieldExpr,
+    local_opcode_flags: &[usize],
+    opcode_flag_idx: &[usize],
+    data: &[T],
+    local_opcode_idx: usize,
+) -> (DynArray<T>, Vec<BigUint>, Vec<bool>) {
     let field_element_limbs = expr.canonical_num_limbs();
+    let limb_bits = expr.canonical_limb_bits();
     assert_eq!(data.len(), expr.builder.num_input * field_element_limbs);
 
     let mut inputs = Vec::with_capacity(expr.builder.num_input);
     for i in 0..expr.builder.num_input {
         let start = i * field_element_limbs;
         let end = start + field_element_limbs;
-        let limb_slice = &data[start..end];
-        let input = BigUint::from_bytes_le(limb_slice);
-        inputs.push(input);
+        inputs.push(limbs_to_biguint(&data[start..end], limb_bits));
     }
 
-    let mut flags = vec![];
-    if expr.needs_setup() {
-        flags = vec![false; expr.builder.num_flags];
-
-        // Find which opcode this is in our local_opcode_idx list
-        if let Some(opcode_position) = local_opcode_flags
-            .iter()
-            .position(|&idx| idx == local_opcode_idx)
-        {
-            // If this is NOT the last opcode (setup), set the corresponding flag
-            if opcode_position < opcode_flag_idx.len() {
-                let flag_idx = opcode_flag_idx[opcode_position];
-                flags[flag_idx] = true;
-            }
-            // If opcode_position == step.opcode_flag_idx.len(), it's the setup operation
-            // and all flags should remain false (which they already are)
-        }
-    }
+    let flags = flags_for_opcode(expr, local_opcode_flags, opcode_flag_idx, local_opcode_idx);
 
     let vars = expr.execute(&inputs, &flags);
     assert_eq!(vars.len(), expr.builder.num_variables);
 
-    // Write outputs directly to a pre-allocated buffer to avoid intermediate Vecs
     let num_outputs = expr.builder.output_indices.len();
-    let total_output_bytes = num_outputs * field_element_limbs;
-    let mut write_buffer = vec![0u8; total_output_bytes];
-    for (i, &var_idx) in expr.builder.output_indices.iter().enumerate() {
-        let start = i * field_element_limbs;
-        let bytes = vars[var_idx].to_bytes_le();
-        let copy_len = bytes.len().min(field_element_limbs);
-        write_buffer[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
-        // Remaining bytes are already zero from vec![0u8; ...]
+    let mut write_buffer = Vec::with_capacity(num_outputs * field_element_limbs);
+    for &var_idx in expr.builder.output_indices.iter() {
+        write_buffer.extend(biguint_to_limb_vec::<T>(
+            vars[var_idx].clone(),
+            field_element_limbs,
+            limb_bits,
+        ));
     }
     let writes: DynArray<_> = write_buffer.into();
 
@@ -556,16 +641,27 @@ pub fn run_field_expression_precomputed<const NEEDS_SETUP: bool>(
     flag_idx: usize,
     data: &[u8],
 ) -> DynArray<u8> {
+    run_field_expression_precomputed_bytes::<NEEDS_SETUP>(expr, flag_idx, data)
+}
+
+#[inline(always)]
+pub fn run_field_expression_precomputed_bytes<const NEEDS_SETUP: bool>(
+    expr: &FieldExpr,
+    flag_idx: usize,
+    data: &[u8],
+) -> DynArray<u8> {
     let field_element_limbs = expr.canonical_num_limbs();
-    assert_eq!(data.len(), expr.num_inputs() * field_element_limbs);
+    let limb_bits = expr.canonical_limb_bits();
+    assert_eq!(limb_bits % 8, 0);
+    let bytes_per_limb = limb_bits / 8;
+    let field_element_bytes = field_element_limbs * bytes_per_limb;
+    assert_eq!(data.len(), expr.num_inputs() * field_element_bytes);
 
     let mut inputs = Vec::with_capacity(expr.num_inputs());
     for i in 0..expr.num_inputs() {
-        let start = i * expr.canonical_num_limbs();
-        let end = start + expr.canonical_num_limbs();
-        let limb_slice = &data[start..end];
-        let input = BigUint::from_bytes_le(limb_slice);
-        inputs.push(input);
+        let start = i * field_element_bytes;
+        let end = start + field_element_bytes;
+        inputs.push(BigUint::from_bytes_le(&data[start..end]));
     }
 
     let flags = if NEEDS_SETUP {
@@ -581,15 +677,54 @@ pub fn run_field_expression_precomputed<const NEEDS_SETUP: bool>(
     let vars = expr.execute(&inputs, &flags);
     assert_eq!(vars.len(), expr.num_vars());
 
-    // Write outputs directly to a pre-allocated buffer to avoid intermediate Vecs
-    let num_outputs = expr.output_indices().len();
-    let total_output_bytes = num_outputs * field_element_limbs;
-    let mut write_buffer = vec![0u8; total_output_bytes];
+    let mut write_buffer = vec![0u8; expr.output_indices().len() * field_element_bytes];
     for (i, &var_idx) in expr.output_indices().iter().enumerate() {
-        let start = i * field_element_limbs;
+        let start = i * field_element_bytes;
         let bytes = vars[var_idx].to_bytes_le();
-        let copy_len = bytes.len().min(field_element_limbs);
+        let copy_len = bytes.len().min(field_element_bytes);
         write_buffer[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
+    }
+    write_buffer.into()
+}
+
+#[inline(always)]
+pub fn run_field_expression_precomputed_limbs<const NEEDS_SETUP: bool, T: FieldExpressionLimb>(
+    expr: &FieldExpr,
+    flag_idx: usize,
+    data: &[T],
+) -> DynArray<T> {
+    let field_element_limbs = expr.canonical_num_limbs();
+    let limb_bits = expr.canonical_limb_bits();
+    assert_eq!(data.len(), expr.num_inputs() * field_element_limbs);
+
+    let mut inputs = Vec::with_capacity(expr.num_inputs());
+    for i in 0..expr.num_inputs() {
+        let start = i * field_element_limbs;
+        let end = start + field_element_limbs;
+        inputs.push(limbs_to_biguint(&data[start..end], limb_bits));
+    }
+
+    let flags = if NEEDS_SETUP {
+        let mut flags = vec![false; expr.num_flags()];
+        if flag_idx < expr.num_flags() {
+            flags[flag_idx] = true;
+        }
+        flags
+    } else {
+        vec![]
+    };
+
+    let vars = expr.execute(&inputs, &flags);
+    assert_eq!(vars.len(), expr.num_vars());
+
+    let num_outputs = expr.output_indices().len();
+    let mut write_buffer = Vec::with_capacity(num_outputs * field_element_limbs);
+    for &var_idx in expr.output_indices().iter() {
+        write_buffer.extend(biguint_to_limb_vec::<T>(
+            vars[var_idx].clone(),
+            field_element_limbs,
+            limb_bits,
+        ));
     }
     write_buffer.into()
 }

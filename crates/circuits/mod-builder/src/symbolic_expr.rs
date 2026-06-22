@@ -294,10 +294,16 @@ impl SymbolicExpr {
         proper_max: &BigUint,
     ) -> usize {
         let without_pq = self.constraint_limb_max_abs(limb_bits, num_limbs);
-        let (q_limbs, _) = self.constraint_limbs(prime, limb_bits, num_limbs, proper_max);
+        let (_, q_limb_bits, _) =
+            self.constraint_limbs_with_quotient_bits(prime, limb_bits, num_limbs, proper_max);
         let canonical_limb_max_abs = (1 << limb_bits) - 1;
-        let limb_max_abs =
-            without_pq + canonical_limb_max_abs * canonical_limb_max_abs * min(q_limbs, num_limbs);
+        let max_q_limb_abs = q_limb_bits
+            .iter()
+            .map(|&bits| 1usize << bits)
+            .max()
+            .unwrap_or(0);
+        let limb_max_abs = without_pq
+            + max_q_limb_abs * canonical_limb_max_abs * min(q_limb_bits.len(), num_limbs);
         let max_overflow_bits = log2_ceil_usize(limb_max_abs);
         let (_, carry_bits) = get_carry_max_abs_and_bits(max_overflow_bits, limb_bits);
         carry_bits
@@ -342,19 +348,35 @@ impl SymbolicExpr {
         num_limbs: usize,
         proper_max: &BigUint,
     ) -> (usize, usize) {
+        let (q_limbs, _, carry_limbs) =
+            self.constraint_limbs_with_quotient_bits(prime, limb_bits, num_limbs, proper_max);
+        (q_limbs, carry_limbs)
+    }
+
+    /// Returns quotient limb count, tight signed quotient-limb bit bounds, and carry limb count.
+    pub(crate) fn constraint_limbs_with_quotient_bits(
+        &self,
+        prime: &BigUint,
+        limb_bits: usize,
+        num_limbs: usize,
+        proper_max: &BigUint,
+    ) -> (usize, Vec<usize>, usize) {
         let (max_pos_abs, max_neg_abs) = self.max_abs(proper_max);
         let max_abs = max(max_pos_abs, max_neg_abs);
         let max_q_abs = (&max_abs + prime - BigUint::one()) / prime;
         let q_bits = max_q_abs.bits() as usize;
         let p_bits = prime.bits() as usize;
         let q_limbs = q_bits.div_ceil(limb_bits);
+        let q_limb_bits = (0..q_limbs)
+            .map(|i| min(limb_bits, q_bits.saturating_sub(i * limb_bits)))
+            .collect::<Vec<_>>();
         // Attention! This must match with prime_overflow in `FieldExpr::generate_subrow`
         let p_limbs = p_bits.div_ceil(limb_bits);
         let qp_limbs = q_limbs + p_limbs - 1;
 
         let expr_limbs = self.expr_limbs(num_limbs);
         let carry_limbs = max(expr_limbs, qp_limbs);
-        (q_limbs, carry_limbs)
+        (q_limbs, q_limb_bits, carry_limbs)
     }
 
     /// Used in trace gen to compute `q``.

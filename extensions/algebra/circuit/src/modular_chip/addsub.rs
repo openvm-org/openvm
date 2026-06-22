@@ -14,9 +14,12 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_riscv_adapters::{
     Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
+    Rv64VecHeapU16AdapterAir, Rv64VecHeapU16AdapterExecutor, Rv64VecHeapU16AdapterFiller,
 };
 
-use super::{ModularAir, ModularChip, ModularExecutor};
+use super::{
+    ModularAir, ModularChip, ModularExecutor, ModularU16Air, ModularU16Chip, ModularU16Executor,
+};
 use crate::FieldExprVecHeapExecutor;
 
 pub fn addsub_expr(
@@ -43,6 +46,21 @@ pub fn addsub_expr(
         is_add_flag,
         is_sub_flag,
     )
+}
+
+pub(crate) fn is_modular_addsub_u16_supported(
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+) -> bool {
+    let (expr, _, _) = addsub_expr(config, range_checker_bus);
+    expr.builder.constraints.iter().all(|constraint| {
+        constraint.constraint_carry_bits_with_pq(
+            &expr.builder.prime,
+            expr.builder.limb_bits,
+            expr.builder.num_limbs,
+            expr.builder.proper_max(),
+        ) <= expr.builder.max_carry_bits
+    })
 }
 
 fn gen_base_expr(
@@ -104,6 +122,59 @@ pub fn get_modular_addsub_chip<F, const BLOCKS: usize>(
     ModularChip::new(
         FieldExpressionFiller::new(
             Rv64VecHeapAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+            expr,
+            local_opcode_idx,
+            opcode_flag_idx,
+            range_checker,
+            false,
+        ),
+        mem_helper,
+    )
+}
+
+pub(crate) fn get_modular_addsub_u16_air<const BLOCKS: usize>(
+    exec_bridge: ExecutionBridge,
+    mem_bridge: MemoryBridge,
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    pointer_max_bits: usize,
+    offset: usize,
+) -> ModularU16Air<BLOCKS> {
+    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+    ModularU16Air::new(
+        Rv64VecHeapU16AdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
+        FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx),
+    )
+}
+
+pub(crate) fn get_modular_addsub_u16_executor<const BLOCKS: usize>(
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    pointer_max_bits: usize,
+    offset: usize,
+) -> ModularU16Executor<BLOCKS> {
+    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+
+    FieldExprVecHeapExecutor::new(FieldExpressionExecutor::new(
+        Rv64VecHeapU16AdapterExecutor::new(pointer_max_bits),
+        expr,
+        offset,
+        local_opcode_idx,
+        opcode_flag_idx,
+        "Rv64ModularAddSubU16",
+    ))
+}
+
+pub(crate) fn get_modular_addsub_u16_chip<F, const BLOCKS: usize>(
+    config: ExprBuilderConfig,
+    mem_helper: SharedMemoryHelper<F>,
+    range_checker: SharedVariableRangeCheckerChip,
+    pointer_max_bits: usize,
+) -> ModularU16Chip<F, BLOCKS> {
+    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
+    ModularU16Chip::new(
+        FieldExpressionFiller::new(
+            Rv64VecHeapU16AdapterFiller::new(pointer_max_bits, range_checker.clone()),
             expr,
             local_opcode_idx,
             opcode_flag_idx,
