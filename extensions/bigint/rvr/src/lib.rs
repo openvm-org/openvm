@@ -129,9 +129,9 @@ pub struct Int256BranchEqInstr {
     /// Register index holding pointer to second operand.
     pub rs2_reg: Reg,
     /// PC to jump to if condition is true.
-    pub target_pc: u32,
+    pub target_pc: u64,
     /// PC to fall through to if condition is false.
-    pub fall_pc: u32,
+    pub fall_pc: u64,
     /// If true, branch on *not* equal (BNE); otherwise branch on equal (BEQ).
     pub is_ne: bool,
     /// Chip index for metering. See [`Int256AluInstr::chip_idx`].
@@ -147,7 +147,7 @@ impl ExtInstr for Int256BranchEqInstr {
         // Terminators use emit_c_term instead.
     }
 
-    fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, branch_to: &dyn Fn(u32) -> String) {
+    fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, branch_to: &dyn Fn(u64) -> String) {
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
         let fn_name = if self.is_ne {
@@ -167,7 +167,7 @@ impl ExtInstr for Int256BranchEqInstr {
         Box::new(self.clone())
     }
 
-    fn successors(&self, _fall_pc: u32) -> Vec<u32> {
+    fn successors(&self, _fall_pc: u64) -> Vec<u64> {
         vec![self.target_pc, self.fall_pc]
     }
 
@@ -184,9 +184,9 @@ pub struct Int256BranchLtInstr {
     /// Register index holding pointer to second operand.
     pub rs2_reg: Reg,
     /// PC to jump to if condition is true.
-    pub target_pc: u32,
+    pub target_pc: u64,
     /// PC to fall through to if condition is false.
-    pub fall_pc: u32,
+    pub fall_pc: u64,
     /// The branch-less-than variant (selects the FFI function at codegen time).
     pub op: Int256BranchLtOp,
     /// Chip index for metering. See [`Int256AluInstr::chip_idx`].
@@ -202,7 +202,7 @@ impl ExtInstr for Int256BranchLtInstr {
         // Terminators use emit_c_term instead.
     }
 
-    fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, branch_to: &dyn Fn(u32) -> String) {
+    fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, branch_to: &dyn Fn(u64) -> String) {
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
         let cond = ctx.extern_call_expr("uint8_t", self.op.ffi_name(), &["state", &rs1, &rs2]);
@@ -217,7 +217,7 @@ impl ExtInstr for Int256BranchLtInstr {
         Box::new(self.clone())
     }
 
-    fn successors(&self, _fall_pc: u32) -> Vec<u32> {
+    fn successors(&self, _fall_pc: u64) -> Vec<u64> {
         vec![self.target_pc, self.fall_pc]
     }
 
@@ -316,7 +316,7 @@ fn decode_imm<F: PrimeField32>(f: F) -> i32 {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         // ── ALU body instructions ───────────────────────────────────────
@@ -373,8 +373,8 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
             let rs1_reg = decode_reg(insn.a);
             let rs2_reg = decode_reg(insn.b);
             let imm = decode_imm(insn.c);
-            let target_pc = (pc as i32 + imm) as u32;
-            let fall_pc = pc + DEFAULT_PC_STEP;
+            let target_pc = (pc as i64 + imm as i64) as u64;
+            let fall_pc = pc + DEFAULT_PC_STEP as u64;
             let chip_idx = self.chip_idx_for_opcode(opcode);
 
             return Some(LiftedInstr::Term {
@@ -404,8 +404,8 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
             let rs1_reg = decode_reg(insn.a);
             let rs2_reg = decode_reg(insn.b);
             let imm = decode_imm(insn.c);
-            let target_pc = (pc as i32 + imm) as u32;
-            let fall_pc = pc + DEFAULT_PC_STEP;
+            let target_pc = (pc as i64 + imm as i64) as u64;
+            let fall_pc = pc + DEFAULT_PC_STEP as u64;
             let chip_idx = self.chip_idx_for_opcode(opcode);
 
             return Some(LiftedInstr::Term {
@@ -442,7 +442,7 @@ impl Int256Extension {
     fn lift_alu<F: PrimeField32>(
         &self,
         insn: &Instruction<F>,
-        pc: u32,
+        pc: u64,
         op: Int256AluOp,
     ) -> LiftedInstr {
         let rd_reg = decode_reg(insn.a);

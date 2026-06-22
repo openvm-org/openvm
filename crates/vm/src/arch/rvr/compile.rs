@@ -357,7 +357,7 @@ fn compile_impl<F: PrimeField32>(
             .and_then(|debug_map| debug_map.get(pc).cloned())
     })?;
 
-    let valid_pcs: std::collections::HashSet<u32> = ir.iter().map(|li| li.pc()).collect();
+    let valid_pcs: std::collections::HashSet<u64> = ir.iter().map(|li| li.pc()).collect();
     let extra_targets = scan_init_memory_for_code_pointers(exe, &valid_pcs);
     let blocks = build_blocks(&ir, &extra_targets);
 
@@ -372,7 +372,7 @@ fn compile_impl<F: PrimeField32>(
     let output_dir = temp_dir.path();
 
     let mut project = CProject::new(output_dir, &base_name, opts.tracer_mode);
-    project.pc_base = exe.program.pc_base;
+    project.pc_base = u64::from(exe.program.pc_base);
     if let Some(suspend_policy) = opts.suspend_policy {
         project.suspend_policy = suspend_policy;
     }
@@ -403,8 +403,8 @@ fn compile_impl<F: PrimeField32>(
 
     project.native_debug_info = opts.native_debug_info;
 
-    let entry_point = exe.pc_start;
-    let text_start = exe.program.pc_base;
+    let entry_point = u64::from(exe.pc_start);
+    let text_start = u64::from(exe.program.pc_base);
     project
         .write_all(&blocks, entry_point, text_start, opts.extensions)
         .map_err(|source| CompileError::CProject {

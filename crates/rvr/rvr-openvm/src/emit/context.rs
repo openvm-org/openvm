@@ -309,7 +309,7 @@ impl EmitContext {
     /// Emit a trace_pc call. Per-instruction chip accounting is rolled into
     /// the per-block chip update emitted at block entry by
     /// `CProject::emit_block_function`, not here.
-    pub fn trace_pc(&mut self, pc: u32) {
+    pub fn trace_pc(&mut self, pc: u64) {
         self.write_line(&format!("trace_pc(state, 0x{pc:08x}u);"));
     }
 

@@ -84,7 +84,7 @@ impl Default for PairingExtension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for PairingExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode != SystemOpcode::PHANTOM.global_opcode_usize() {

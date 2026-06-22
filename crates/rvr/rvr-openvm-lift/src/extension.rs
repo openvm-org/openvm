@@ -120,7 +120,7 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
     /// Try to lift an OpenVM instruction into IR.
     /// Return `None` if this extension doesn't handle the opcode.
     /// Chip indices are stored on the extension and baked into IR nodes.
-    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr>;
+    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr>;
 
     /// C header files for this extension, as `(filename, content)` pairs.
     /// Written to the output directory and `#include`d in the generated code.
@@ -211,7 +211,7 @@ impl<F: PrimeField32> ExtensionRegistry<F> {
 
     /// Try to lift an instruction through all registered extensions.
     /// Returns the first successful lift, or `None`.
-    pub fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
+    pub fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         self.extensions
             .iter()
             .find_map(|ext| ext.try_lift(insn, pc))

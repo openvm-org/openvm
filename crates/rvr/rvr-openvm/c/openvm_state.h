@@ -62,8 +62,8 @@ static __attribute__((always_inline)) inline void rv_set_status_at(
 }
 
 static __attribute__((always_inline)) inline uint32_t rv_dispatch_index(
-    uint32_t pc) {
-  return (pc - RV_TEXT_START) >> 2;
+    uint64_t pc) {
+  return (uint32_t)((pc - RV_TEXT_START) >> 2);
 }
 
 /* True if pc names a 4-byte dispatch slot in the dense table. The alignment
