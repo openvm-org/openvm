@@ -435,6 +435,31 @@ fn test_aot_dispatch_rejects_dead_pc_slots() {
             .with_pc_start(4),
             4,
         ),
+        (
+            VmExe::new(Program::new_without_debug_infos_with_option(
+                &[
+                    Some(add_instruction(4, 0, 1)),
+                    None,
+                    Some(terminate_instruction()),
+                ],
+                0,
+            ))
+            .with_pc_start(0),
+            4,
+        ),
+        (
+            VmExe::new(Program::new_without_debug_infos_with_option(
+                &[
+                    Some(add_instruction(4, 0, 8)),
+                    Some(jalr_instruction(4)),
+                    None,
+                    Some(terminate_instruction()),
+                ],
+                0,
+            ))
+            .with_pc_start(0),
+            8,
+        ),
     ];
 
     let config = Rv32ImConfig::default();
@@ -452,6 +477,22 @@ fn test_aot_dispatch_rejects_dead_pc_slots() {
 #[cfg(feature = "aot")]
 fn terminate_instruction() -> Instruction<F> {
     Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0)
+}
+
+#[cfg(feature = "aot")]
+fn add_instruction(rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
+    Instruction::from_usize(
+        ADD.global_opcode(),
+        [rd, rs1, imm, RV32_REGISTER_AS as usize, 0],
+    )
+}
+
+#[cfg(feature = "aot")]
+fn jalr_instruction(rs1: usize) -> Instruction<F> {
+    Instruction::from_usize(
+        JALR.global_opcode(),
+        [0, rs1, 0, RV32_REGISTER_AS as usize, 0, 0, 0],
+    )
 }
 
 #[cfg(feature = "aot")]

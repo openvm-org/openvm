@@ -117,7 +117,7 @@ where
         let pre_compute_insns_ptr = format!("{:p}", pre_compute_insns_ptr as *const ());
         let instret_left_ptr = format!("{:p}", set_instret_left_shim::<F> as *const ());
 
-        for pc_idx in base_idx..num_pc_slots {
+        for pc_idx in 0..num_pc_slots {
             /* Preprocessing step, to check if we should suspend or not */
             let pc = pc_idx as u32 * DEFAULT_PC_STEP;
             let instruction = pc_idx.checked_sub(base_idx).and_then(|idx| {
@@ -126,8 +126,10 @@ where
                     .map(|(instruction, _)| instruction)
             });
 
-            // a `None` slot at or above `pc_base`
             let Some(instruction) = instruction else {
+                asm_str += &format!("asm_execute_pc_{pc}:\n");
+                asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
+                asm_str += "   jmp asm_dead_pc_handler\n";
                 continue;
             };
 
@@ -259,14 +261,7 @@ where
 
         for pc_idx in 0..num_pc_slots {
             let pc = pc_idx as u32 * DEFAULT_PC_STEP;
-            let is_real = pc_idx
-                .checked_sub(base_idx)
-                .is_some_and(|idx| exe.program.instructions_and_debug_infos[idx].is_some());
-            if is_real {
-                asm_str += &format!("   .long asm_execute_pc_{pc} - map_pc_base\n");
-            } else {
-                asm_str += "   .long asm_dead_pc_handler - map_pc_base\n";
-            }
+            asm_str += &format!("   .long asm_execute_pc_{pc} - map_pc_base\n");
         }
 
         // std::fs::write("/tmp/asm_dump.s", &asm_str).expect("failed to write asm_str");
@@ -282,11 +277,8 @@ where
     ) -> String {
         let mut asm_str = String::new();
 
-        // Dead dispatch-table entries share this handler. Load the current PC from VmState so
-        // extern_handler records Unreachable(pc) for the actual dead slot.
+        // Dead-slot stubs enter with the dead pc held in REG_THIRD_ARG (= REG_C).
         asm_str += "asm_dead_pc_handler:\n";
-        asm_str += &format!("   pextrq {REG_THIRD_ARG}, xmm3, 1\n");
-        asm_str += &format!("   mov {REG_C_W}, dword ptr [{REG_THIRD_ARG}]\n");
         asm_str += &format!("    cmp {REG_INSTRET_END}, 0\n");
         asm_str += "    je asm_dead_pc_exit\n";
         asm_str += &format!("    dec {REG_INSTRET_END}\n");
