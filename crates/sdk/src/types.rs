@@ -49,9 +49,10 @@ impl From<Vec<u8>> for ExecutableFormat {
 pub enum ExecutableInput {
     /// An in-memory executable.
     Format(ExecutableFormat),
-    /// An ELF file path. Path provenance is preserved for profiling source maps.
+    /// An ELF file path. Path provenance is preserved for source maps.
     ElfFile(PathBuf),
     /// An in-memory executable with the ELF file it was built from.
+    #[cfg(feature = "rvr")]
     WithElfPath {
         executable: ExecutableFormat,
         elf_path: PathBuf,
@@ -59,6 +60,7 @@ pub enum ExecutableInput {
 }
 
 impl ExecutableInput {
+    #[cfg(feature = "rvr")]
     pub fn with_elf_path(
         executable: impl Into<ExecutableFormat>,
         elf_path: impl Into<PathBuf>,

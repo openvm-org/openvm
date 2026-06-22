@@ -1,20 +1,16 @@
-#[cfg(feature = "rvr")]
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
-
-#[cfg(feature = "rvr")]
-use eyre::{Context, Result};
-#[cfg(feature = "rvr")]
-use openvm_circuit::arch::execution_mode::MeteredCtxConfig;
 use openvm_circuit::arch::execution_mode::{MeteredCostCtx, MeteredCtx};
-#[cfg(feature = "rvr")]
-use openvm_circuit::arch::rvr::CompileError;
 #[cfg(not(feature = "rvr"))]
 use openvm_circuit::arch::{execution_mode::ExecutionCtx, InterpretedInstance};
 #[cfg(feature = "rvr")]
-use serde::{Deserialize, Serialize};
+use {
+    eyre::{Context, Result},
+    openvm_circuit::arch::{execution_mode::MeteredCtxConfig, rvr::CompileError},
+    serde::{Deserialize, Serialize},
+    std::{
+        fs,
+        path::{Path, PathBuf},
+    },
+};
 
 use crate::F;
 

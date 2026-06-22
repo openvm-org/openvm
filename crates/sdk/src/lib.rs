@@ -1,8 +1,6 @@
 #![cfg_attr(feature = "tco", allow(incomplete_features))]
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 
-#[cfg(feature = "rvr")]
-use std::path::PathBuf;
 use std::{
     fs::read,
     marker::PhantomData,
@@ -19,12 +17,6 @@ use openvm_build::{
 // Re-exports
 pub use openvm_build::{cargo_command, get_rustup_toolchain_name};
 pub use openvm_circuit;
-#[cfg(feature = "rvr")]
-use openvm_circuit::arch::execution_mode::MeteredCtx;
-#[cfg(feature = "rvr")]
-use openvm_circuit::arch::instructions::program::DEFAULT_PC_STEP;
-#[cfg(feature = "rvr")]
-use openvm_circuit::arch::rvr::{default_addr2line_cmd, GuestDebugMap};
 use openvm_circuit::{
     arch::{
         execution_mode::Segment, instructions::exe::VmExe, Executor, InitFileGenerator,
@@ -50,9 +42,17 @@ use openvm_verify_stark_host::{
     VmStarkProof,
 };
 pub use types::{ExecutableFormat, ExecutableInput};
-
 #[cfg(feature = "rvr")]
-use crate::compiled::load_metered_artifact_metadata;
+use {
+    crate::compiled::load_metered_artifact_metadata,
+    openvm_circuit::arch::{
+        execution_mode::MeteredCtx,
+        instructions::program::DEFAULT_PC_STEP,
+        rvr::{default_addr2line_cmd, GuestDebugMap},
+    },
+    std::path::PathBuf,
+};
+
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey},
@@ -348,23 +348,11 @@ where
                 executable,
                 elf_path: Some(elf_path),
             }),
-            #[cfg(not(feature = "rvr"))]
-            ExecutableInput::WithElfPath { executable, .. } => Ok(CompileInput { executable }),
         }
     }
 
     #[cfg(feature = "rvr")]
-    fn guest_debug_map(
-        &self,
-        elf_path: Option<&Path>,
-        exe: &VmExe<F>,
-    ) -> Result<Option<GuestDebugMap>, SdkError> {
-        if !cfg!(feature = "profiling") {
-            return Ok(None);
-        }
-        let Some(elf_path) = elf_path else {
-            return Ok(None);
-        };
+    fn guest_debug_map(&self, elf_path: &Path, exe: &VmExe<F>) -> Result<GuestDebugMap, SdkError> {
         let pcs = exe
             .program
             .instructions_and_debug_infos
@@ -375,9 +363,8 @@ where
                     .map(|_| exe.program.pc_base + (index as u32) * DEFAULT_PC_STEP)
             })
             .collect::<Vec<_>>();
-        let map = GuestDebugMap::from_elf(elf_path, &pcs, &default_addr2line_cmd())
-            .map_err(|err| SdkError::Other(eyre::eyre!(err)))?;
-        Ok(Some(map))
+        GuestDebugMap::from_elf(elf_path, &pcs, &default_addr2line_cmd())
+            .map_err(|err| SdkError::Other(eyre::eyre!(err)))
     }
 }
 
@@ -410,12 +397,15 @@ where
         let exe = self.convert_to_exe(input.executable)?;
         #[cfg(feature = "rvr")]
         {
-            let guest_debug_map = self.guest_debug_map(input.elf_path.as_deref(), &exe)?;
-            return self
-                .executor
+            let guest_debug_map = input
+                .elf_path
+                .as_deref()
+                .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+                .transpose()?;
+            self.executor
                 .rvr_instance(&exe, guest_debug_map.as_ref())
                 .map_err(VirtualMachineError::from)
-                .map_err(SdkError::from);
+                .map_err(SdkError::from)
         }
         #[cfg(not(feature = "rvr"))]
         self.executor
@@ -483,7 +473,11 @@ where
         let ctx = vm.build_metered_ctx(&exe);
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         #[cfg(feature = "rvr")]
-        let guest_debug_map = self.guest_debug_map(input.elf_path.as_deref(), &exe)?;
+        let guest_debug_map = input
+            .elf_path
+            .as_deref()
+            .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+            .transpose()?;
         #[cfg(feature = "rvr")]
         let instance = self
             .executor
@@ -570,7 +564,11 @@ where
         let ctx = vm.build_metered_cost_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         #[cfg(feature = "rvr")]
-        let guest_debug_map = self.guest_debug_map(input.elf_path.as_deref(), &exe)?;
+        let guest_debug_map = input
+            .elf_path
+            .as_deref()
+            .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+            .transpose()?;
         #[cfg(feature = "rvr")]
         let instance = self
             .executor
