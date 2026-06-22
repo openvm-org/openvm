@@ -528,6 +528,19 @@ impl CProject {
             "typedef __attribute__((preserve_none)) void (*BlockFn)({typedef_params});"
         )
         .unwrap();
+        let trap_signature =
+            self.block_signature("__attribute__((preserve_none, cold)) void", "rv_trap");
+        writeln!(
+            h,
+            "// Used when a computed jump or dispatch slot does not point to a real block."
+        )
+        .unwrap();
+        writeln!(
+            h,
+            "// It takes the same arguments as a block so those register values can still be saved."
+        )
+        .unwrap();
+        writeln!(h, "{trap_signature};").unwrap();
         writeln!(h, "extern BlockFn dispatch_table[RV_DISPATCH_TABLE_SIZE];").unwrap();
         writeln!(h).unwrap();
 
@@ -868,11 +881,18 @@ impl CProject {
         writeln!(src).unwrap();
 
         let save = self.save_hot_regs_call();
-        // rv_trap — cold fallback for dispatch to non-block PCs.
-        let trap_signature = self.block_signature(
-            "static __attribute__((preserve_none, cold)) void",
-            "rv_trap",
-        );
+        let trap_signature =
+            self.block_signature("__attribute__((preserve_none, cold)) void", "rv_trap");
+        writeln!(
+            src,
+            "// If a computed jump reaches an invalid PC, guest registers are still in"
+        )
+        .unwrap();
+        writeln!(
+            src,
+            "// this function's arguments. Save them back to state before trapping."
+        )
+        .unwrap();
         writeln!(src, "{trap_signature} {{").unwrap();
         writeln!(src, "    {save}").unwrap();
         if self.tracer_mode == TracerMode::Metered {
