@@ -417,6 +417,14 @@ fn test_aot_dispatch_rejects_dead_pc_slots() {
         ),
         (
             VmExe::new(Program::new_without_debug_infos_with_option(
+                &[Some(terminate_instruction())],
+                8,
+            ))
+            .with_pc_start(0),
+            0,
+        ),
+        (
+            VmExe::new(Program::new_without_debug_infos_with_option(
                 &[
                     Some(terminate_instruction()),
                     None,

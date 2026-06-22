@@ -117,17 +117,6 @@ where
         let pre_compute_insns_ptr = format!("{:p}", pre_compute_insns_ptr as *const ());
         let instret_left_ptr = format!("{:p}", set_instret_left_shim::<F> as *const ());
 
-        // `None` pc slots below `pc_base`
-        if base_idx > 0 {
-            for i in 0..base_idx - 1 {
-                asm_str += &format!("asm_execute_pc_{}:\n", i as u32 * DEFAULT_PC_STEP);
-            }
-            let pc = (base_idx - 1) as u32 * DEFAULT_PC_STEP;
-            asm_str += &format!("asm_execute_pc_{pc}:\n");
-            asm_str += &format!("    mov {REG_THIRD_ARG}, {pc}\n");
-            asm_str += "    jmp asm_dead_pc_handler\n";
-        }
-
         for pc_idx in base_idx..num_pc_slots {
             /* Preprocessing step, to check if we should suspend or not */
             let pc = pc_idx as u32 * DEFAULT_PC_STEP;
@@ -139,9 +128,6 @@ where
 
             // a `None` slot at or above `pc_base`
             let Some(instruction) = instruction else {
-                asm_str += &format!("asm_execute_pc_{pc}:\n");
-                asm_str += &format!("    mov {REG_THIRD_ARG}, {pc}\n");
-                asm_str += "    jmp asm_dead_pc_handler\n";
                 continue;
             };
 
@@ -235,43 +221,12 @@ where
             }
         }
 
-        // Shared dead-pc handler. Reached from a dead-slot stub with the dead pc held in
-        // `REG_THIRD_ARG` (= `REG_C`). It mirrors the real-instruction suspend check, then
-        // dispatches to `extern_handler`, whose pre-compute table holds an `unreachable_handler`
-        // for every dead pc, so it records `ExecutionError::Unreachable(pc)` and returns 1. The
-        // pc in `REG_C` survives the calls below because `push_internal_registers` saves it.
-        asm_str += "asm_dead_pc_handler:\n";
-        asm_str += &format!("    cmp {REG_INSTRET_END}, 0\n");
-        asm_str += "    je asm_dead_pc_exit\n";
-        asm_str += &format!("    dec {REG_INSTRET_END}\n");
-        asm_str += &Self::xmm_to_rv32_regs();
-        asm_str += &Self::push_address_space_start();
-        asm_str += &Self::push_internal_registers();
-        asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
-        asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
-        // `REG_THIRD_ARG` already holds the dead pc.
-        asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n");
-        asm_str += &format!("   call {REG_D}\n");
-        asm_str += &Self::pop_internal_registers();
-        asm_str += &Self::pop_address_space_start();
-        asm_str += &Self::rv32_regs_to_xmm();
-        // `extern_handler` always reports an error for a dead pc, so fall through to the exit.
-
-        // Exit path: set_pc runs before set_instret_left so the pc in `REG_C` is consumed before
-        // the call clobbers it (`REG_INSTRET_END` is callee-saved and survives).
-        asm_str += "asm_dead_pc_exit:\n";
-        asm_str += &Self::xmm_to_rv32_regs();
-        asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
-        asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_C}\n");
-        asm_str += &format!("   mov {REG_D}, {set_pc_ptr}\n");
-        asm_str += &format!("   call {REG_D}\n");
-        asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
-        asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSTRET_END}\n");
-        asm_str += &format!("   mov {REG_D}, {instret_left_ptr}\n");
-        asm_str += &format!("   call {REG_D}\n");
-        asm_str += &Self::pop_external_registers();
-        asm_str += &format!("   xor {REG_RETURN_VAL}, {REG_RETURN_VAL}\n");
-        asm_str += "    ret\n";
+        asm_str += &Self::dead_pc_handler_asm(
+            &extern_handler_ptr,
+            &pre_compute_insns_ptr,
+            &set_pc_ptr,
+            &instret_left_ptr,
+        );
 
         // asm_run_end part. Only real instructions reach a per-pc suspend target; dead slots
         // use the shared exit path inside the dead-pc handler instead.
@@ -304,13 +259,65 @@ where
 
         for pc_idx in 0..num_pc_slots {
             let pc = pc_idx as u32 * DEFAULT_PC_STEP;
-            asm_str += &format!("   .long asm_execute_pc_{pc} - map_pc_base\n");
+            let is_real = pc_idx
+                .checked_sub(base_idx)
+                .is_some_and(|idx| exe.program.instructions_and_debug_infos[idx].is_some());
+            if is_real {
+                asm_str += &format!("   .long asm_execute_pc_{pc} - map_pc_base\n");
+            } else {
+                asm_str += "   .long asm_dead_pc_handler - map_pc_base\n";
+            }
         }
 
         // std::fs::write("/tmp/asm_dump.s", &asm_str).expect("failed to write asm_str");
 
         Ok(asm_str)
     }
+
+    fn dead_pc_handler_asm(
+        extern_handler_ptr: &str,
+        pre_compute_insns_ptr: &str,
+        set_pc_ptr: &str,
+        instret_left_ptr: &str,
+    ) -> String {
+        let mut asm_str = String::new();
+
+        // Dead dispatch-table entries share this handler. Load the current PC from VmState so
+        // extern_handler records Unreachable(pc) for the actual dead slot.
+        asm_str += "asm_dead_pc_handler:\n";
+        asm_str += &format!("   pextrq {REG_THIRD_ARG}, xmm3, 1\n");
+        asm_str += &format!("   mov {REG_C_W}, dword ptr [{REG_THIRD_ARG}]\n");
+        asm_str += &format!("    cmp {REG_INSTRET_END}, 0\n");
+        asm_str += "    je asm_dead_pc_exit\n";
+        asm_str += &format!("    dec {REG_INSTRET_END}\n");
+        asm_str += &Self::xmm_to_rv32_regs();
+        asm_str += &Self::push_address_space_start();
+        asm_str += &Self::push_internal_registers();
+        asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+        asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
+        asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n");
+        asm_str += &format!("   call {REG_D}\n");
+        asm_str += &Self::pop_internal_registers();
+        asm_str += &Self::pop_address_space_start();
+        asm_str += &Self::rv32_regs_to_xmm();
+
+        asm_str += "asm_dead_pc_exit:\n";
+        asm_str += &Self::xmm_to_rv32_regs();
+        asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+        asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_C}\n");
+        asm_str += &format!("   mov {REG_D}, {set_pc_ptr}\n");
+        asm_str += &format!("   call {REG_D}\n");
+        asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+        asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSTRET_END}\n");
+        asm_str += &format!("   mov {REG_D}, {instret_left_ptr}\n");
+        asm_str += &format!("   call {REG_D}\n");
+        asm_str += &Self::pop_external_registers();
+        asm_str += &format!("   xor {REG_RETURN_VAL}, {REG_RETURN_VAL}\n");
+        asm_str += "    ret\n";
+
+        asm_str
+    }
+
     /// Creates a new instance for pure execution
     pub fn new<E>(
         inventory: &'a ExecutorInventory<E>,
