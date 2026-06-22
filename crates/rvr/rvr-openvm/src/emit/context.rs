@@ -340,19 +340,6 @@ impl EmitContext {
         self.reload_page_locals();
     }
 
-    pub fn trace_mem_access_u32_range(
-        &mut self,
-        base_addr: &str,
-        num_words: &str,
-        addr_space: u32,
-    ) {
-        self.flush_page_locals();
-        self.write_line(&format!(
-            "trace_mem_access_u32_range(state, {base_addr}, {num_words}, {addr_space}u);"
-        ));
-        self.reload_page_locals();
-    }
-
     pub fn trace_mem_access_u64_range(
         &mut self,
         base_addr: &str,
@@ -448,10 +435,6 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
 
     fn trace_mem_access(&mut self, addr: &str, addr_space: u32) {
         EmitContext::trace_mem_access(self, addr, addr_space);
-    }
-
-    fn trace_mem_access_u32_range(&mut self, base_addr: &str, num_words: &str, addr_space: u32) {
-        EmitContext::trace_mem_access_u32_range(self, base_addr, num_words, addr_space);
     }
 
     fn trace_mem_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32) {

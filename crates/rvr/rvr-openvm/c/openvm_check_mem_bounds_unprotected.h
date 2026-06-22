@@ -17,8 +17,6 @@ static __attribute__((always_inline)) inline void check_mem_bounds_u64(
     uint32_t start) {}
 static __attribute__((always_inline)) inline void check_mem_bounds_range(
     uint32_t start, size_t size) {}
-static __attribute__((always_inline)) inline void check_mem_bounds_u32_range(
-    uint32_t base_addr, uint32_t num_words) {}
 static __attribute__((always_inline)) inline void check_mem_bounds_u64_range(
     uint32_t base_addr, uint32_t num_words) {}
 

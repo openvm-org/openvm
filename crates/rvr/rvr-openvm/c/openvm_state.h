@@ -184,26 +184,9 @@ static __attribute__((always_inline)) inline void wr_mem_u64(
 /* ── Word-aligned range memory access ────────────────────────────── */
 
 /* `base_addr` is word-aligned; the guest pointer is word-aligned too,
- * so these lower to a single memcpy. */
-static __attribute__((always_inline)) inline void rd_mem_u32_range(
-    RvState* restrict state, uint32_t base_addr, uint32_t* restrict out,
-    uint32_t num_words) {
-  check_mem_bounds_u32_range(base_addr, num_words);
-  const void* p =
-      __builtin_assume_aligned(mem_ptr(state->memory, base_addr), WORD_SIZE);
-  memcpy(out, p, (size_t)num_words * sizeof(uint32_t));
-}
-
-static __attribute__((always_inline)) inline void wr_mem_u32_range(
-    RvState* restrict state, uint32_t base_addr, const uint32_t* restrict vals,
-    uint32_t num_words) {
-  check_mem_bounds_u32_range(base_addr, num_words);
-  void* p =
-      __builtin_assume_aligned(mem_ptr(state->memory, base_addr), WORD_SIZE);
-  memcpy(p, vals, (size_t)num_words * sizeof(uint32_t));
-}
-
-/* A "word" in RV64 is 8 bytes (sizeof(uint64_t)), matching MEMORY_BLOCK_BYTES.
+ * so these lower to a single memcpy.
+ *
+ * A "word" in RV64 is 8 bytes (sizeof(uint64_t)), matching MEMORY_BLOCK_BYTES.
  * All extension multi-word memory I/O uses this granularity. */
 static __attribute__((always_inline)) inline void rd_mem_u64_range(
     RvState* restrict state, uint32_t base_addr, uint64_t* restrict out,
@@ -247,12 +230,6 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u32(
     RvState* restrict state, uint32_t addr, uint32_t val);
 static __attribute__((always_inline)) inline void trace_wr_mem_u64(
     RvState* restrict state, uint32_t addr, uint64_t val);
-static __attribute__((always_inline)) inline void trace_rd_mem_u32_range(
-    RvState* restrict state, uint32_t base_addr, const uint32_t* vals,
-    uint32_t num_words);
-static __attribute__((always_inline)) inline void trace_wr_mem_u32_range(
-    RvState* restrict state, uint32_t base_addr, const uint32_t* vals,
-    uint32_t num_words);
 static __attribute__((always_inline)) inline void trace_rd_mem_u64_range(
     RvState* restrict state, uint32_t base_addr, const uint64_t* vals,
     uint32_t num_words);
@@ -332,20 +309,6 @@ static __attribute__((always_inline)) inline void wr_mem_u64_traced(
     RvState* restrict state, uint32_t addr, uint64_t val) {
   trace_wr_mem_u64(state, addr, val);
   wr_mem_u64(state->memory, addr, val);
-}
-
-static __attribute__((always_inline)) inline void rd_mem_u32_range_traced(
-    RvState* restrict state, uint32_t base_addr, uint32_t* restrict out,
-    uint32_t num_words) {
-  rd_mem_u32_range(state, base_addr, out, num_words);
-  trace_rd_mem_u32_range(state, base_addr, out, num_words);
-}
-
-static __attribute__((always_inline)) inline void wr_mem_u32_range_traced(
-    RvState* restrict state, uint32_t base_addr, const uint32_t* restrict vals,
-    uint32_t num_words) {
-  trace_wr_mem_u32_range(state, base_addr, vals, num_words);
-  wr_mem_u32_range(state, base_addr, vals, num_words);
 }
 
 static __attribute__((always_inline)) inline void rd_mem_u64_range_traced(
