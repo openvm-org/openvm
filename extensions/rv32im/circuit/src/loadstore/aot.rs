@@ -227,7 +227,7 @@ mod tests {
     }
 
     #[test]
-    fn disabled_unsigned_loads_still_emit_memory_read_without_register_write() {
+    fn disabled_loads_still_emit_memory_read_without_register_write() {
         let cases = [
             (
                 Rv32LoadStoreOpcode::LOADW,

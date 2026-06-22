@@ -213,7 +213,7 @@ where
         inst: &Instruction<F>,
         pc: u32,
         chip_idx: usize,
-        config: &SystemConfig,
+        _config: &SystemConfig,
     ) -> Result<String, AotError> {
         let mut asm_str = String::from("");
 
