@@ -1,6 +1,8 @@
 #![cfg_attr(feature = "tco", allow(incomplete_features))]
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 
+#[cfg(feature = "rvr")]
+use std::path::PathBuf;
 use std::{
     fs::read,
     marker::PhantomData,
@@ -17,6 +19,12 @@ use openvm_build::{
 // Re-exports
 pub use openvm_build::{cargo_command, get_rustup_toolchain_name};
 pub use openvm_circuit;
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::{
+    execution_mode::MeteredCtx,
+    instructions::program::DEFAULT_PC_STEP,
+    rvr::{default_addr2line_cmd, GuestDebugMap},
+};
 use openvm_circuit::{
     arch::{
         execution_mode::Segment, instructions::exe::VmExe, Executor, InitFileGenerator,
@@ -42,17 +50,9 @@ use openvm_verify_stark_host::{
     VmStarkProof,
 };
 pub use types::{ExecutableFormat, ExecutableInput};
-#[cfg(feature = "rvr")]
-use {
-    crate::compiled::load_metered_artifact_metadata,
-    openvm_circuit::arch::{
-        execution_mode::MeteredCtx,
-        instructions::program::DEFAULT_PC_STEP,
-        rvr::{default_addr2line_cmd, GuestDebugMap},
-    },
-    std::path::PathBuf,
-};
 
+#[cfg(feature = "rvr")]
+use crate::compiled::load_metered_artifact_metadata;
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey},
