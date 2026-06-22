@@ -1,7 +1,9 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
 #[cfg(feature = "aot")]
-use openvm_circuit::arch::{ExecutionError, VirtualMachine, testing::assert_vm_states_equivalent, VmExecutor, VmState};
+use openvm_circuit::arch::{
+    testing::assert_vm_states_equivalent, ExecutionError, VirtualMachine, VmExecutor, VmState,
+};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
@@ -32,9 +34,9 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
 };
 #[cfg(feature = "aot")]
-use openvm_stark_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters};
+use openvm_stark_backend::{StarkEngine, SystemParams};
 #[cfg(feature = "aot")]
-use openvm_stark_sdk::engine::StarkFriEngine;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
@@ -429,7 +431,7 @@ fn test_aot_dispatch_rejects_dead_pc_slots() {
 
     let config = Rv32ImConfig::default();
     let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
     let (vm, _) = VirtualMachine::new_with_keygen(engine, Rv32ImBuilder, config).expect("vm init");
     let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
 
@@ -469,7 +471,7 @@ fn assert_dead_pc_rejected_by_pure_aot(
 
 #[cfg(feature = "aot")]
 fn assert_dead_pc_rejected_by_metered_aot(
-    vm: &VirtualMachine<BabyBearPoseidon2Engine, Rv32ImBuilder>,
+    vm: &VirtualMachine<BabyBearPoseidon2CpuEngine<DuplexSponge>, Rv32ImBuilder>,
     executor_idx_to_air_idx: &[usize],
     exe: &VmExe<F>,
     dead_pc: u32,
