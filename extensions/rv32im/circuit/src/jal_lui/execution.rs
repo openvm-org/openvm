@@ -195,7 +195,7 @@ where
         inst: &Instruction<F>,
         pc: u32,
         chip_idx: usize,
-        config: &SystemConfig,
+        _config: &SystemConfig,
     ) -> Result<String, AotError> {
         use crate::common::update_height_change_asm;
         let mut asm_str = update_height_change_asm(chip_idx, 1)?;

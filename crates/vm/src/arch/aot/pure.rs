@@ -283,12 +283,8 @@ where
         inputs: impl Into<Streams<F>>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
-        let vm_state = VmState::initial(
-            &self.system_config,
-            &self.init_memory,
-            self.pc_start,
-            inputs,
-        );
+        let vm_state =
+            VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
         self.execute_from_state(vm_state, num_insns)
     }
 

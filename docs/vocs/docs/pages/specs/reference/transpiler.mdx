@@ -69,7 +69,7 @@ to handling of the `x0` register, which discards writes and has value `0` in all
 We handle writes to `x0` in transpilation as follows:
 
 - Instructions that write to `x0` with no side effects are transpiled to the PHANTOM instruction with `c = 0x00` (`Nop`).
-- Instructions that write to a register which might be `x0` with side effects (JAL, JALR) are transpiled to the corresponding custom instruction whose write behavior is controlled by a flag specifying whether the target register is `x0`.
+- Instructions that write to a register which might be `x0` with side effects (LB, LH, LW, LBU, LHU, JAL, JALR) are transpiled to the corresponding custom instruction whose write behavior is controlled by a flag specifying whether the target register is `x0`.
 
 Because `[0:4]_1` is initialized to `0` and never written to, this guarantees that reads from `x0` yield `0` and enforces that any OpenVM program transpiled from RV32IM conforms to the RV32IM specification for `x0`.
 
