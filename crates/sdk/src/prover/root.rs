@@ -95,17 +95,21 @@ impl RootProver {
         Self(inner)
     }
 
+    pub fn create_engine(&self) -> E {
+        self.0.create_engine::<E>()
+    }
+
     pub fn generate_proving_ctx(
         &self,
         input: VmStarkProof,
+        engine: &E,
     ) -> Option<ProvingContext<<E as StarkEngine>::PB>> {
-        let engine = E::new(self.0.get_pk().params.clone());
         let ctx = info_span!("tracegen_attempt", group = format!("root")).in_scope(|| {
             self.0.generate_proving_ctx(
                 input.inner,
                 &input.user_pvs_proof,
                 input.deferral_merkle_proofs.as_ref(),
-                engine_device_ctx(&engine),
+                engine_device_ctx(engine),
             )
         });
         ctx
@@ -114,21 +118,24 @@ impl RootProver {
     pub fn prove_from_ctx(
         &self,
         ctx: ProvingContext<<E as StarkEngine>::PB>,
+        engine: &E,
     ) -> Result<Proof<RootSC>> {
-        let proof = info_span!("agg_layer", group = format!("root"))
-            .in_scope(|| info_span!("root").in_scope(|| self.0.root_prove_from_ctx::<E>(ctx)))?;
+        let proof = info_span!("agg_layer", group = format!("root")).in_scope(|| {
+            info_span!("root").in_scope(|| self.0.root_prove_from_ctx::<E>(ctx, engine))
+        })?;
         Ok(proof)
     }
 
     pub fn prove(
         &self,
         mut stark_proof: VmStarkProof,
+        engine: &E,
         max_retries: usize,
         mut wrap: impl FnMut(VmStarkProof) -> Result<VmStarkProof>,
     ) -> Result<Proof<RootSC>> {
         let mut attempt = 0usize;
         let ctx = loop {
-            if let Some(ctx) = self.generate_proving_ctx(stark_proof.clone()) {
+            if let Some(ctx) = self.generate_proving_ctx(stark_proof.clone(), engine) {
                 break ctx;
             }
             if attempt >= max_retries {
@@ -155,7 +162,7 @@ impl RootProver {
             );
         }
 
-        self.prove_from_ctx(ctx)
+        self.prove_from_ctx(ctx, engine)
     }
 }
 
@@ -221,12 +228,13 @@ pub fn compute_root_proof_heights(
         def_hook_commit,
         None,
     );
+    let engine = root_prover.create_engine::<CpuRootE>();
     let root_proving_ctx: ProvingContext<<CpuRootE as StarkEngine>::PB> = root_prover
         .generate_proving_ctx(
             agg_proof.inner,
             &agg_proof.user_pvs_proof,
             agg_proof.deferral_merkle_proofs.as_ref(),
-            &(),
+            engine_device_ctx(&engine),
         )
         .unwrap();
 

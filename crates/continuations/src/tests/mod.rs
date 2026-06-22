@@ -311,13 +311,13 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
         None,
         None,
     );
-    let engine = RootEngine::new(root_prover.get_vk().inner.params.clone());
+    let engine = root_prover.create_engine::<RootEngine>();
     let ctx = root_prover.generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB, _>(
         internal_recursive_proof,
         &user_pvs_proof,
         &engine.device().device_ctx,
     );
-    let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
+    let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap(), &engine)?;
 
     let vk = root_prover.get_vk();
     engine.verify(&vk, &root_proof)?;
@@ -347,7 +347,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         None,
     );
     let root_pk = root_base_prover.get_pk();
-    let engine = RootEngine::new(root_pk.params.clone());
+    let engine = root_base_prover.create_engine::<RootEngine>();
     let ctx = root_base_prover
         .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB, _>(
             internal_recursive_proof.clone(),
@@ -373,7 +373,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         None,
         Some(trace_heights.clone()),
     );
-    let engine2 = RootEngine::new(root_prover.get_pk().params.clone());
+    let engine2 = root_prover.create_engine::<RootEngine>();
     let ctx = root_prover
         .generate_proving_ctx_no_def::<<RootEngine as StarkEngine>::PB, _>(
             internal_recursive_proof,
@@ -385,7 +385,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
     for ((air_idx, air_ctx), expected_height) in ctx.per_trace.iter().zip(trace_heights) {
         assert_eq!(air_ctx.height(), expected_height, "air_idx {air_idx}");
     }
-    let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx)?;
+    let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx, &engine2)?;
 
     let vk = root_prover.get_vk();
     let engine = RootEngine::new(vk.inner.params.clone());
