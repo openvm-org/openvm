@@ -1,11 +1,11 @@
-use getset::{Getters, Setters, WithSetters};
 use itertools::Itertools;
 use openvm_instructions::riscv::{RV64_IMM_AS, RV64_REGISTER_AS};
 use openvm_stark_backend::memory_metering::ProvingMemoryConfig;
+use serde::{Deserialize, Serialize};
 
 use super::{
     memory_ctx::MemoryCtx,
-    segment_ctx::{Segment, SegmentationCtx, SegmentationLimits},
+    segment_ctx::{Segment, SegmentationConfig, SegmentationCtx, SegmentationLimits},
 };
 use crate::{
     arch::{
@@ -17,16 +17,22 @@ use crate::{
 
 pub const DEFAULT_PAGE_BITS: usize = 6;
 
-#[derive(Clone, Debug, Getters, Setters, WithSetters)]
-pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
-    pub trace_heights: Vec<u32>,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MeteredCtxConfig {
+    pub initial_trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
-    pub memory_ctx: MemoryCtx<PAGE_BITS>,
-    pub segmentation_ctx: SegmentationCtx,
+    pub segmentation: SegmentationConfig,
     // TODO: Remove this once segmented execution is selected by typed executor entry points across
     // all backends. RVR already treats the compiled suspender policy as the source of truth.
-    #[getset(get = "pub", set = "pub", set_with = "pub")]
-    suspend_on_segment: bool,
+    pub suspend_on_segment: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
+    pub config: MeteredCtxConfig,
+    pub trace_heights: Vec<u32>,
+    pub memory_ctx: MemoryCtx<PAGE_BITS>,
+    pub segmentation_ctx: SegmentationCtx,
 }
 
 pub struct MeteredCtxInputs<'a> {
@@ -40,11 +46,10 @@ pub struct MeteredCtxInputs<'a> {
 
 #[cfg(feature = "rvr")]
 pub(crate) struct MeteredCtxParts<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
+    pub config: MeteredCtxConfig,
     pub trace_heights: Vec<u32>,
-    pub is_trace_height_constant: Vec<bool>,
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
-    pub suspend_on_segment: bool,
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
@@ -89,11 +94,15 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             air_names[MERKLE_AIR_ID]
         );
         let mut ctx = Self {
+            config: MeteredCtxConfig {
+                initial_trace_heights: trace_heights.clone(),
+                is_trace_height_constant,
+                segmentation: segmentation_ctx.config().clone(),
+                suspend_on_segment: false,
+            },
             trace_heights,
-            is_trace_height_constant,
             memory_ctx,
             segmentation_ctx,
-            suspend_on_segment: false,
         };
 
         // Add merkle height contributions for all registers
@@ -106,7 +115,35 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     pub fn with_max_memory(mut self, max_memory: usize) -> Self {
         self.segmentation_ctx.set_max_memory(max_memory);
+        self.config.segmentation.set_max_memory(max_memory);
         self
+    }
+
+    pub fn from_config(config: MeteredCtxConfig, system_config: &SystemConfig) -> Self {
+        let segmentation_ctx = SegmentationCtx::from_config(config.segmentation.clone());
+        let mut memory_ctx = MemoryCtx::new(system_config, segmentation_ctx.segment_check_insns());
+        let mut trace_heights = config.initial_trace_heights.clone();
+        memory_ctx.add_register_merkle_heights();
+        memory_ctx.lazy_update_boundary_heights(&mut trace_heights);
+        Self {
+            trace_heights,
+            config,
+            memory_ctx,
+            segmentation_ctx,
+        }
+    }
+
+    pub fn set_suspend_on_segment(&mut self, suspend_on_segment: bool) {
+        self.config.suspend_on_segment = suspend_on_segment;
+    }
+
+    pub fn with_suspend_on_segment(mut self, suspend_on_segment: bool) -> Self {
+        self.set_suspend_on_segment(suspend_on_segment);
+        self
+    }
+
+    pub fn suspend_on_segment(&self) -> &bool {
+        &self.config.suspend_on_segment
     }
 
     pub fn segments(&self) -> &[Segment] {
@@ -120,22 +157,20 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     #[cfg(feature = "rvr")]
     pub(crate) fn into_parts(self) -> MeteredCtxParts<PAGE_BITS> {
         MeteredCtxParts {
+            config: self.config,
             trace_heights: self.trace_heights,
-            is_trace_height_constant: self.is_trace_height_constant,
             memory_ctx: self.memory_ctx,
             segmentation_ctx: self.segmentation_ctx,
-            suspend_on_segment: self.suspend_on_segment,
         }
     }
 
     #[cfg(feature = "rvr")]
     pub(crate) fn from_parts(parts: MeteredCtxParts<PAGE_BITS>) -> Self {
         Self {
+            config: parts.config,
             trace_heights: parts.trace_heights,
-            is_trace_height_constant: parts.is_trace_height_constant,
             memory_ctx: parts.memory_ctx,
             segmentation_ctx: parts.segmentation_ctx,
-            suspend_on_segment: parts.suspend_on_segment,
         }
     }
 
@@ -155,20 +190,22 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         let did_segment = self.segmentation_ctx.check_and_segment(
             self.segmentation_ctx.instret,
             &mut self.trace_heights,
-            &self.is_trace_height_constant,
+            &self.config.is_trace_height_constant,
         );
 
         if did_segment {
             // Initialize contexts for new segment
-            self.segmentation_ctx
-                .initialize_segment(&mut self.trace_heights, &self.is_trace_height_constant);
+            self.segmentation_ctx.initialize_segment(
+                &mut self.trace_heights,
+                &self.config.is_trace_height_constant,
+            );
             self.memory_ctx.initialize_segment(&mut self.trace_heights);
 
             // Check if the new segment is within limits
             self.segmentation_ctx.warn_if_exceeds_limits(
                 self.segmentation_ctx.instret,
                 &self.trace_heights,
-                &self.is_trace_height_constant,
+                &self.config.is_trace_height_constant,
             );
         }
 
@@ -226,7 +263,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         // If `segment_suspend` is set, suspend when a segment is determined (but the VM state might
         // be after the segment boundary because the segment happens in the previous checkpoint).
         // Otherwise, execute until termination.
-        if exec_state.ctx.check_and_segment() && exec_state.ctx.suspend_on_segment {
+        if exec_state.ctx.check_and_segment() && exec_state.ctx.config.suspend_on_segment {
             true
         } else {
             exec_state.ctx.segmentation_ctx.instrets_until_check -= 1;
@@ -297,7 +334,6 @@ mod tests {
             test_cpu_engine().proving_memory_config(),
         );
         segmentation_ctx.instret = 123;
-        segmentation_ctx.segment_check_insns = 1;
         segmentation_ctx.instrets_until_check = 1;
 
         let mut memory_ctx = MemoryCtx::<DEFAULT_PAGE_BITS>::new(&system_config, 1);
@@ -305,18 +341,22 @@ mod tests {
         memory_ctx.page_indices_since_checkpoint_len = 3;
 
         let ctx = MeteredCtx::<DEFAULT_PAGE_BITS> {
+            config: MeteredCtxConfig {
+                initial_trace_heights: vec![1, 2, 3, 4, 5, 6],
+                is_trace_height_constant: vec![false, true, false, true, false, true],
+                segmentation: segmentation_ctx.config().clone(),
+                suspend_on_segment: true,
+            },
             trace_heights: vec![1, 2, 3, 4, 5, 6],
-            is_trace_height_constant: vec![false, true, false, true, false, true],
             memory_ctx,
             segmentation_ctx,
-            suspend_on_segment: true,
         };
 
         let restored = MeteredCtx::from_parts(ctx.into_parts());
 
         assert_eq!(restored.trace_heights, vec![1, 2, 3, 4, 5, 6]);
         assert_eq!(
-            restored.is_trace_height_constant,
+            restored.config.is_trace_height_constant,
             vec![false, true, false, true, false, true]
         );
         assert_eq!(restored.segmentation_ctx.instret, 123);
