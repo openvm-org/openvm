@@ -752,7 +752,7 @@ impl CProject {
 
         writeln!(
             out,
-            "    uint8_t suspend_signal = begin_block(state, 0x{pc:016x}ull, {insn_count}u);"
+            "    uint8_t suspend_signal = begin_block(state, 0x{pc:08x}ull, {insn_count}u);"
         )
         .unwrap();
         self.emit_instret_suspend_check(out, pc, insn_count);
@@ -777,7 +777,7 @@ impl CProject {
         );
         writeln!(
             out,
-            "    if (unlikely(should_suspend(state, 0x{pc:016x}ull, {insn_count}u, suspend_signal))) {{"
+            "    if (unlikely(should_suspend(state, 0x{pc:08x}ull, {insn_count}u, suspend_signal))) {{"
         )
         .unwrap();
         self.emit_suspend_return(out, pc);
@@ -789,7 +789,7 @@ impl CProject {
         writeln!(out, "        {save}").unwrap();
         writeln!(
             out,
-            "        rv_set_status_at(state, 0x{pc:016x}ull, OPENVM_EXEC_SUSPENDED, 0);"
+            "        rv_set_status_at(state, 0x{pc:08x}ull, OPENVM_EXEC_SUSPENDED, 0);"
         )
         .unwrap();
         writeln!(out, "        return;").unwrap();
