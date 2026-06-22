@@ -36,7 +36,7 @@ use openvm_riscv_circuit::{
     BitwiseLogicFiller, BranchEqualCoreAir, BranchEqualFiller, BranchLessThanCoreAir,
     BranchLessThanFiller, LessThanCoreAir, LessThanFiller, MultiplicationCoreAir,
     MultiplicationFiller, ShiftArithmeticRightCoreAir, ShiftArithmeticRightFiller,
-    ShiftLogicalU16CoreAir, ShiftLogicalU16Filler,
+    ShiftLogicalCoreAir, ShiftLogicalFiller,
 };
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
@@ -257,14 +257,14 @@ fn create_shift_logical_harness_fields(
             range_checker_chip.bus(),
             address_bits,
         )),
-        ShiftLogicalU16CoreAir::new(range_checker_chip.bus(), Rv64Shift256Opcode::CLASS_OFFSET),
+        ShiftLogicalCoreAir::new(range_checker_chip.bus(), Rv64Shift256Opcode::CLASS_OFFSET),
     );
     let executor = Rv64ShiftLogical256Executor::new(
         AluU16AdapterExecutor::new(Rv64VecHeapU16AdapterExecutor::new(address_bits)),
         Rv64Shift256Opcode::CLASS_OFFSET,
     );
     let chip = Rv64ShiftLogical256Chip::new(
-        ShiftLogicalU16Filler::new(
+        ShiftLogicalFiller::new(
             Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
             range_checker_chip,
             Rv64Shift256Opcode::CLASS_OFFSET,

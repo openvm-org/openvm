@@ -5,16 +5,14 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     adapters::{RV64_WORD_U16_LIMBS, U16_BITS},
-    shift_logical::run_shift_logical_u16,
-    ShiftLogicalU16CoreRecord,
+    shift_logical::run_shift_logical,
+    ShiftLogicalCoreRecord,
 };
 
-/// Executor for the RV64 `SLLW`/`SRLW` chip. The shift math is identical to the low 32 bits of the
-/// register `SLL`/`SRL`, so trace generation reuses `run_shift_logical_u16` and
-/// [`ShiftLogicalU16CoreRecord`]; the W adapter rebuilds the sign-extended 64-bit write. This is a
-/// distinct type from `ShiftLogicalU16Executor` because its pure/metered interpreter (see
-/// `execution.rs`) has W-specific 32->64 sign-extension semantics, which would conflict with
-/// `ShiftLogicalU16Executor`'s blanket interpreter impls.
+/// Executor for the RV64 `SLLW`/`SRLW` chip. The shift math matches the low 32 bits of register
+/// `SLL`/`SRL`, so trace generation uses `run_shift_logical` and [`ShiftLogicalCoreRecord`];
+/// the W adapter rebuilds the sign-extended 64-bit write. It is a separate type from
+/// `ShiftLogicalExecutor` because its interpreter has W-specific 32->64 sign-extension.
 #[derive(Clone, Copy, derive_new::new)]
 pub struct ShiftWLogicalExecutor<A> {
     adapter: A,
@@ -35,7 +33,7 @@ where
         EmptyAdapterCoreLayout<F, A>,
         (
             A::RecordMut<'buf>,
-            &'buf mut ShiftLogicalU16CoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+            &'buf mut ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
         ),
     >,
 {
@@ -65,7 +63,7 @@ where
             .into();
 
         let (output, _, _) =
-            run_shift_logical_u16::<RV64_WORD_U16_LIMBS, U16_BITS>(local_opcode, &rs1, &rs2);
+            run_shift_logical::<RV64_WORD_U16_LIMBS, U16_BITS>(local_opcode, &rs1, &rs2);
 
         core_record.b = rs1;
         core_record.c = rs2;

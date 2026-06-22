@@ -17,8 +17,8 @@ use openvm_riscv_circuit::{
     AddSubCoreCols, AddSubCoreRecord, BitwiseLogicCoreCols, BitwiseLogicCoreRecord,
     BranchEqualCoreCols, BranchEqualCoreRecord, BranchLessThanCoreCols, BranchLessThanCoreRecord,
     LessThanCoreCols, LessThanCoreRecord, MultiplicationCoreCols, MultiplicationCoreRecord,
-    ShiftArithmeticRightCoreCols, ShiftArithmeticRightCoreRecord, ShiftLogicalU16CoreCols,
-    ShiftLogicalU16CoreRecord,
+    ShiftArithmeticRightCoreCols, ShiftArithmeticRightCoreRecord, ShiftLogicalCoreCols,
+    ShiftLogicalCoreRecord,
 };
 use openvm_stark_backend::prover::AirProvingContext;
 
@@ -297,7 +297,7 @@ pub type Shift256AdapterRecord =
 /// SLL/SRL use the u16 vec-heap adapter (shared shape with AddSub256/LessThan256).
 pub type ShiftLogical256U16AdapterRecord =
     Rv64VecHeapU16AdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
-pub type ShiftLogical256CoreRecord = ShiftLogicalU16CoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
+pub type ShiftLogical256CoreRecord = ShiftLogicalCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
 pub type ShiftArithmeticRight256CoreRecord =
     ShiftArithmeticRightCoreRecord<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>;
 
@@ -326,7 +326,7 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftLogical256ChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = ShiftLogicalU16CoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width()
+        let trace_width = ShiftLogicalCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width()
             + Rv64VecHeapU16AdapterCols::<
                 F,
                 NUM_READS,

@@ -26,7 +26,7 @@ use openvm_riscv_circuit::{
     LessThanExecutor, LessThanFiller, MultiplicationCoreAir, MultiplicationExecutor,
     MultiplicationFiller, Rv64I, Rv64IExecutor, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
     ShiftArithmeticRightCoreAir, ShiftArithmeticRightExecutor, ShiftArithmeticRightFiller,
-    ShiftLogicalU16CoreAir, ShiftLogicalU16Executor, ShiftLogicalU16Filler,
+    ShiftLogicalCoreAir, ShiftLogicalExecutor, ShiftLogicalFiller,
 };
 use serde::{Deserialize, Serialize};
 
@@ -187,15 +187,14 @@ pub type Rv64Multiplication256Chip<F> = VmChipWrapper<
     >,
 >;
 
-/// Shift256 — SLL/SRL use u16 limbs over the AluU16 adapter (shared with AddSub256/LessThan256);
-/// SRA keeps byte limbs and the byte adapter.
+/// Shift256 — SLL/SRL use u16 limbs (AluU16 adapter); SRA uses byte limbs (byte adapter).
 pub type Rv64ShiftLogical256Air =
-    VmAirWrapper<AluU16AdapterAir, ShiftLogicalU16CoreAir<INT256_NUM_U16_LIMBS, U16_BITS>>;
+    VmAirWrapper<AluU16AdapterAir, ShiftLogicalCoreAir<INT256_NUM_U16_LIMBS, U16_BITS>>;
 pub type Rv64ShiftArithmeticRight256Air =
     VmAirWrapper<AluAdapterAir, ShiftArithmeticRightCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv64ShiftLogical256Executor(
-    ShiftLogicalU16Executor<AluU16AdapterExecutor, INT256_NUM_U16_LIMBS, U16_BITS>,
+    ShiftLogicalExecutor<AluU16AdapterExecutor, INT256_NUM_U16_LIMBS, U16_BITS>,
 );
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv64ShiftArithmeticRight256Executor(
@@ -203,7 +202,7 @@ pub struct Rv64ShiftArithmeticRight256Executor(
 );
 pub type Rv64ShiftLogical256Chip<F> = VmChipWrapper<
     F,
-    ShiftLogicalU16Filler<
+    ShiftLogicalFiller<
         Rv64VecHeapU16AdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
         INT256_NUM_U16_LIMBS,
         U16_BITS,

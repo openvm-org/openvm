@@ -33,7 +33,7 @@ use {
     crate::{
         adapters::{Rv64BaseAluWAdapterRecord, Rv64BaseAluWU16AdapterRecord},
         Rv64ShiftWArithmeticRightChipGpu, Rv64ShiftWLogicalChipGpu, ShiftArithmeticRightCoreRecord,
-        ShiftLogicalU16CoreRecord,
+        ShiftLogicalCoreRecord,
     },
     openvm_circuit::arch::{
         testing::{
@@ -59,7 +59,7 @@ use crate::{
         U16_BITS,
     },
     shift_arithmetic_right::ShiftArithmeticRightCoreCols,
-    shift_logical::ShiftLogicalU16CoreCols,
+    shift_logical::ShiftLogicalCoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
 };
 
@@ -73,9 +73,8 @@ type ArithmeticRightHarness = TestChipHarness<
     Rv64ShiftWArithmeticRightAir,
     Rv64ShiftWArithmeticRightChip<F>,
 >;
-// SLLW/SRLW use the u16 logical core (2 limbs of 16 bits) over the low 32-bit word; SRAW keeps the
-// byte-shaped arithmetic-right core.
-type ShiftWLogicalCoreCols<T> = ShiftLogicalU16CoreCols<T, RV64_WORD_U16_LIMBS, U16_BITS>;
+// SLLW/SRLW use the u16 logical core; SRAW uses the byte-shaped arithmetic-right core.
+type ShiftWLogicalCoreCols<T> = ShiftLogicalCoreCols<T, RV64_WORD_U16_LIMBS, U16_BITS>;
 type ShiftWArithmeticRightCoreCols<T> =
     ShiftArithmeticRightCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 
@@ -948,7 +947,7 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
 
         type Record<'a> = (
             &'a mut Rv64BaseAluWU16AdapterRecord,
-            &'a mut ShiftLogicalU16CoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+            &'a mut ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
         );
         harness
             .dense_arena

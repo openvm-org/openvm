@@ -24,7 +24,7 @@ use crate::{
 
 impl Rv64ShiftLogical256Executor {
     pub fn new(adapter: AluU16AdapterExecutor, offset: usize) -> Self {
-        Self(openvm_riscv_circuit::ShiftLogicalU16Executor::new(
+        Self(openvm_riscv_circuit::ShiftLogicalExecutor::new(
             adapter, offset,
         ))
     }

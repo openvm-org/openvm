@@ -25,7 +25,7 @@ use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
     crate::{
-        adapters::Rv64BaseAluU16AdapterRecord, Rv64ShiftLogicalChipGpu, ShiftLogicalU16CoreRecord,
+        adapters::Rv64BaseAluU16AdapterRecord, Rv64ShiftLogicalChipGpu, ShiftLogicalCoreRecord,
     },
     openvm_circuit::arch::{
         testing::{GpuChipTestBuilder, GpuTestChipHarness},
@@ -36,8 +36,7 @@ use {
 };
 
 use super::{
-    core_u16::run_shift_logical_u16, Rv64ShiftLogicalChip, ShiftLogicalU16CoreAir,
-    ShiftLogicalU16CoreCols,
+    core::run_shift_logical, Rv64ShiftLogicalChip, ShiftLogicalCoreAir, ShiftLogicalCoreCols,
 };
 use crate::{
     adapters::{
@@ -46,7 +45,7 @@ use crate::{
         RV64_REGISTER_NUM_LIMBS, U16_BITS,
     },
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
-    Rv64ShiftLogicalAir, Rv64ShiftLogicalExecutor, ShiftLogicalU16Filler,
+    Rv64ShiftLogicalAir, Rv64ShiftLogicalExecutor, ShiftLogicalFiller,
 };
 
 type F = BabyBear;
@@ -66,12 +65,12 @@ fn create_harness_fields(
 ) {
     let air = Rv64ShiftLogicalAir::new(
         Rv64BaseAluU16AdapterAir::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
-        ShiftLogicalU16CoreAir::new(range_checker_chip.bus(), ShiftOpcode::CLASS_OFFSET),
+        ShiftLogicalCoreAir::new(range_checker_chip.bus(), ShiftOpcode::CLASS_OFFSET),
     );
     let executor =
         Rv64ShiftLogicalExecutor::new(Rv64BaseAluU16AdapterExecutor, ShiftOpcode::CLASS_OFFSET);
     let chip = Rv64ShiftLogicalChip::<F>::new(
-        ShiftLogicalU16Filler::new(
+        ShiftLogicalFiller::new(
             Rv64BaseAluU16AdapterFiller::new(range_checker_chip.clone()),
             range_checker_chip,
             ShiftOpcode::CLASS_OFFSET,
@@ -129,7 +128,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let b_u16 = rv64_bytes_to_u16_block(b);
     let c_u16 = rv64_bytes_to_u16_block(c);
-    let (a_u16, _, _) = run_shift_logical_u16::<BLOCK_FE_WIDTH, U16_BITS>(opcode, &b_u16, &c_u16);
+    let (a_u16, _, _) = run_shift_logical::<BLOCK_FE_WIDTH, U16_BITS>(opcode, &b_u16, &c_u16);
     let a_bytes = rv64_u16_block_to_bytes(a_u16);
     assert_eq!(
         a_bytes.map(F::from_u8),
@@ -230,7 +229,7 @@ fn run_negative_shift_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut ShiftLogicalU16CoreCols<F, BLOCK_FE_WIDTH, U16_BITS> =
+        let cols: &mut ShiftLogicalCoreCols<F, BLOCK_FE_WIDTH, U16_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
         if let Some(a) = prank_vals.a {
@@ -382,7 +381,7 @@ fn rv64_shift_adapter_imm_sign_extension_negative_test() {
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut ShiftLogicalU16CoreCols<F, BLOCK_FE_WIDTH, U16_BITS> =
+        let cols: &mut ShiftLogicalCoreCols<F, BLOCK_FE_WIDTH, U16_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         cols.c[RV64_PTR_U16_LIMBS] = F::ONE;
         *trace = RowMajorMatrix::new(values, trace.width());
@@ -409,7 +408,7 @@ fn run_sll_sanity_test() {
     let x = rv64_bytes_to_u16_block([45, 7, 61, 186, 31, 190, 221, 200]);
     let y = rv64_bytes_to_u16_block([91, 0, 100, 0, 49, 190, 190, 113]);
     let (result, limb_shift, bit_shift) =
-        run_shift_logical_u16::<BLOCK_FE_WIDTH, U16_BITS>(SLL, &x, &y);
+        run_shift_logical::<BLOCK_FE_WIDTH, U16_BITS>(SLL, &x, &y);
     // Reference: shift the full 64-bit value left by (y[0] % 64) bits.
     let expected =
         (u64::from_le_bytes([45, 7, 61, 186, 31, 190, 221, 200]) << (91u32 % 64)).to_le_bytes();
@@ -424,7 +423,7 @@ fn run_srl_sanity_test() {
     let x = rv64_bytes_to_u16_block([31, 190, 221, 200, 45, 7, 61, 186]);
     let y = rv64_bytes_to_u16_block([81, 190, 190, 190, 113, 20, 50, 80]);
     let (result, limb_shift, bit_shift) =
-        run_shift_logical_u16::<BLOCK_FE_WIDTH, U16_BITS>(SRL, &x, &y);
+        run_shift_logical::<BLOCK_FE_WIDTH, U16_BITS>(SRL, &x, &y);
     let expected =
         (u64::from_le_bytes([31, 190, 221, 200, 45, 7, 61, 186]) >> (81u32 % 64)).to_le_bytes();
     assert_eq!(rv64_u16_block_to_bytes(result), expected);
@@ -490,7 +489,7 @@ fn test_cuda_rand_shift_logical_tracegen(opcode: ShiftOpcode, num_ops: usize) {
 
     type Record<'a> = (
         &'a mut Rv64BaseAluU16AdapterRecord,
-        &'a mut ShiftLogicalU16CoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+        &'a mut ShiftLogicalCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
     );
     harness
         .dense_arena

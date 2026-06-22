@@ -9,22 +9,21 @@ use super::{
     shift_arithmetic_right::{
         ShiftArithmeticRightCoreAir, ShiftArithmeticRightExecutor, ShiftArithmeticRightFiller,
     },
-    shift_logical::{ShiftLogicalU16CoreAir, ShiftLogicalU16Filler},
+    shift_logical::{ShiftLogicalCoreAir, ShiftLogicalFiller},
 };
 
 mod execution;
 mod preflight;
 pub use preflight::*;
 
-// SLLW/SRLW reuse the u16 logical core (2 limbs of 16 bits) over the W adapter, which exposes the
-// low 32-bit word to the core and rebuilds the sign-extended 64-bit write. SRAW keeps the byte-
-// shaped arithmetic-right core, whose AIR relies on byte-level carry/shift structure.
-pub type ShiftWLogicalCoreAir = ShiftLogicalU16CoreAir<RV64_WORD_U16_LIMBS, U16_BITS>;
+// SLLW/SRLW use the u16 logical core over the W adapter (low 32-bit word in, sign-extended 64-bit
+// write); SRAW uses the byte-shaped arithmetic-right core.
+pub type ShiftWLogicalCoreAir = ShiftLogicalCoreAir<RV64_WORD_U16_LIMBS, U16_BITS>;
 pub type ShiftWArithmeticRightCoreAir =
     ShiftArithmeticRightCoreAir<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 pub type ShiftWArithmeticRightExecutor<A> =
     ShiftArithmeticRightExecutor<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
-pub type ShiftWLogicalFiller<A> = ShiftLogicalU16Filler<A, RV64_WORD_U16_LIMBS, U16_BITS>;
+pub type ShiftWLogicalFiller<A> = ShiftLogicalFiller<A, RV64_WORD_U16_LIMBS, U16_BITS>;
 pub type ShiftWArithmeticRightFiller<A> =
     ShiftArithmeticRightFiller<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 

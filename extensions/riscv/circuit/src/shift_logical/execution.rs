@@ -14,9 +14,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-#[cfg(feature = "aot")]
 use super::ShiftLogicalExecutor;
-use super::ShiftLogicalU16Executor;
 #[allow(unused_imports)]
 use crate::{
     adapters::{imm_to_rv64_bytes, imm_to_rv64_u64},
@@ -32,7 +30,7 @@ struct ShiftLogicalPreCompute {
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    ShiftLogicalU16Executor<A, NUM_LIMBS, LIMB_BITS>
+    ShiftLogicalExecutor<A, NUM_LIMBS, LIMB_BITS>
 {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
@@ -83,7 +81,7 @@ macro_rules! dispatch {
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for ShiftLogicalU16Executor<A, NUM_LIMBS, LIMB_BITS>
+    for ShiftLogicalExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -118,20 +116,6 @@ where
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
         dispatch!(execute_e1_handler, is_imm, shift_opcode, pc)
-    }
-}
-
-#[cfg(feature = "aot")]
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotExecutor<F>
-    for ShiftLogicalU16Executor<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-{
-    fn is_aot_supported(&self, _instruction: &Instruction<F>) -> bool {
-        true
-    }
-    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
-        shift_logical_generate_x86_asm(inst, pc)
     }
 }
 
@@ -217,7 +201,7 @@ fn shift_logical_generate_x86_asm<F: PrimeField32>(
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for ShiftLogicalU16Executor<A, NUM_LIMBS, LIMB_BITS>
+    for ShiftLogicalExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -253,29 +237,6 @@ where
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
         dispatch!(execute_e2_handler, is_imm, shift_opcode, pc)
-    }
-}
-
-#[cfg(feature = "aot")]
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotMeteredExecutor<F>
-    for ShiftLogicalU16Executor<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-{
-    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
-        true
-    }
-    fn generate_x86_metered_asm(
-        &self,
-        inst: &Instruction<F>,
-        pc: u32,
-        chip_idx: usize,
-        config: &SystemConfig,
-    ) -> Result<String, AotError> {
-        let _ = config;
-        let mut asm_str = shift_logical_generate_x86_asm(inst, pc)?;
-        asm_str += &update_height_change_asm(chip_idx, 1)?;
-        Ok(asm_str)
     }
 }
 

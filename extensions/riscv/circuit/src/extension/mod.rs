@@ -338,7 +338,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let shift_logical = Rv64ShiftLogicalAir::new(
             Rv64BaseAluU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
-            ShiftLogicalU16CoreAir::new(range_checker, ShiftOpcode::CLASS_OFFSET),
+            ShiftLogicalCoreAir::new(range_checker, ShiftOpcode::CLASS_OFFSET),
         );
         inventory.add_air(shift_logical);
 
@@ -503,7 +503,7 @@ where
 
         inventory.next_air::<Rv64ShiftLogicalAir>()?;
         let shift_logical = Rv64ShiftLogicalChip::new(
-            ShiftLogicalU16Filler::new(
+            ShiftLogicalFiller::new(
                 Rv64BaseAluU16AdapterFiller::new(range_checker.clone()),
                 range_checker.clone(),
                 ShiftOpcode::CLASS_OFFSET,
