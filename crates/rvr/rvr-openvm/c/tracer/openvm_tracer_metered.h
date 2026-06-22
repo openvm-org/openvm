@@ -306,7 +306,7 @@ static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
 }
 
 static __attribute__((always_inline)) inline void trace_pc(
-    RvState* restrict state, uint32_t pc) {}
+    RvState* restrict state, uint64_t pc) {}
 
 static __attribute__((always_inline)) inline void trace_chip(
     RvState* restrict state, uint32_t chip_idx, uint32_t count) {
@@ -314,7 +314,7 @@ static __attribute__((always_inline)) inline void trace_chip(
 }
 
 static __attribute__((always_inline)) inline void trace_block(
-    RvState* restrict state, uint32_t pc, uint32_t block_insn_count) {
+    RvState* restrict state, uint64_t pc, uint32_t block_insn_count) {
   if (unlikely(state->tracer->check_counter < block_insn_count)) {
     state->tracer->on_check(state->tracer);
   }
@@ -322,7 +322,7 @@ static __attribute__((always_inline)) inline void trace_block(
 }
 
 static __attribute__((always_inline)) inline uint8_t
-trace_block_with_segment_check(RvState* restrict state, uint32_t pc,
+trace_block_with_segment_check(RvState* restrict state, uint64_t pc,
                                uint32_t block_insn_count) {
   if (unlikely(state->tracer->check_counter < block_insn_count)) {
     if (state->tracer->on_check(state->tracer)) {

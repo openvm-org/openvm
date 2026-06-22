@@ -12,7 +12,7 @@ use crate::{extension::ExtensionRegistry, opcode::lift_instruction};
 #[derive(Debug, thiserror::Error)]
 pub enum ConvertError {
     #[error("unrecognized opcode {opcode} at pc {pc:#x}")]
-    UnrecognizedOpcode { opcode: usize, pc: u32 },
+    UnrecognizedOpcode { opcode: usize, pc: u64 },
 }
 
 /// Convert a VmExe to a vector of lifted IR instructions.
@@ -57,7 +57,7 @@ where
             None => {
                 return Err(ConvertError::UnrecognizedOpcode {
                     opcode: insn.opcode.as_usize(),
-                    pc,
+                    pc: u64::from(pc),
                 });
             }
         }

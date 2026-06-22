@@ -150,10 +150,9 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             ));
             ctx.write_line(&format!("  [[clang::musttail]] return rv_trap({args});"));
             ctx.write_line("}");
-            let next_pc_u32 = ctx.materialize_u32(&format!("(uint32_t){next_pc}"));
-            ctx.write_line(&format!("state->pc = {next_pc_u32};"));
+            ctx.write_line(&format!("state->pc = {next_pc};"));
             ctx.write_line(&format!(
-                "[[clang::musttail]] return dispatch_table[rv_dispatch_index({next_pc_u32})]({args});"
+                "[[clang::musttail]] return dispatch_table[rv_dispatch_index({next_pc})]({args});"
             ));
         }
         Terminator::Branch {

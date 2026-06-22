@@ -310,7 +310,7 @@ impl EmitContext {
     /// the per-block chip update emitted at block entry by
     /// `CProject::emit_block_function`, not here.
     pub fn trace_pc(&mut self, pc: u64) {
-        self.write_line(&format!("trace_pc(state, 0x{pc:08x}u);"));
+        self.write_line(&format!("trace_pc(state, 0x{pc:016x}ull);"));
     }
 
     pub fn extern_call(&mut self, name: &str, args: &[&str]) {
