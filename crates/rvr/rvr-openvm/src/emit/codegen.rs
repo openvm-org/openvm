@@ -38,7 +38,7 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             ctx.write_reg(*rd, &sext32(*value));
         }
         Instr::Auipc { rd, value } => {
-            ctx.write_reg(*rd, &sext32(*value));
+            ctx.write_reg(*rd, &hex_u64(*value));
         }
         Instr::Load {
             width,
@@ -122,7 +122,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u32, tc: &T
             // Save base to a temporary when link_rd == rs1 to prevent
             // the link write from clobbering the jump target (e.g. jalr ra, ra, 0).
             let base = if link_rd.is_some_and(|rd| rd == *rs1) {
-                ctx.materialize_u32(&base)
+                ctx.materialize_u64(&base)
             } else {
                 base
             };
@@ -131,19 +131,28 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u32, tc: &T
             }
             let imm_val = *imm;
             let next_pc = if imm_val == 0 {
-                ctx.materialize_u32(&format!("{base} & ~0x00000001u"))
+                ctx.materialize_u64(&format!("{base} & ~0x0000000000000001ull"))
             } else if imm_val > 0 {
-                ctx.materialize_u32(&format!(
-                    "({base} + {}) & ~0x00000001u",
-                    hex_u32(imm_val as u32)
+                ctx.materialize_u64(&format!(
+                    "({base} + {}) & ~0x0000000000000001ull",
+                    hex_u64(imm_val as u64)
                 ))
             } else {
-                let abs = (-(imm_val as i64)) as u32;
-                ctx.materialize_u32(&format!("({base} - {}) & ~0x00000001u", hex_u32(abs)))
+                let abs = (-(imm_val as i64)) as u64;
+                ctx.materialize_u64(&format!(
+                    "({base} - {}) & ~0x0000000000000001ull",
+                    hex_u64(abs)
+                ))
             };
-            ctx.write_line(&format!("state->pc = {next_pc};"));
             ctx.write_line(&format!(
-                "[[clang::musttail]] return dispatch_table[rv_dispatch_index({next_pc})]({args});"
+                "if (unlikely({next_pc} < RV_TEXT_START || {next_pc} > RV_TEXT_END)) {{"
+            ));
+            ctx.write_line(&format!("  [[clang::musttail]] return rv_trap({args});"));
+            ctx.write_line("}");
+            let next_pc_u32 = ctx.materialize_u32(&format!("(uint32_t){next_pc}"));
+            ctx.write_line(&format!("state->pc = {next_pc_u32};"));
+            ctx.write_line(&format!(
+                "[[clang::musttail]] return dispatch_table[rv_dispatch_index({next_pc_u32})]({args});"
             ));
         }
         Terminator::Branch {
@@ -284,8 +293,11 @@ fn imm_literal(imm: i32) -> String {
 
 /// Sign-extend a u32 value to a 64-bit C literal (uint64_t).
 fn sext32(value: u32) -> String {
-    let extended = value as i32 as i64 as u64;
-    format!("0x{extended:016x}ull")
+    hex_u64(value as i32 as i64 as u64)
+}
+
+fn hex_u64(value: u64) -> String {
+    format!("0x{value:016x}ull")
 }
 
 pub(super) fn hex_u32(value: u32) -> String {

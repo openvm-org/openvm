@@ -164,8 +164,6 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Rv64IExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
-
         let add_sub =
             Rv64AddSubExecutor::new(Rv64BaseAluU16AdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
         inventory.add_executor(
@@ -222,6 +220,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             [ShiftWOpcode::SRAW].map(|x| x.global_opcode()),
         )?;
 
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         let load_store = Rv64LoadStoreExecutor::new(
             Rv64LoadStoreAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,

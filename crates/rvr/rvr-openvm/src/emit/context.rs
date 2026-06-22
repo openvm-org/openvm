@@ -77,6 +77,12 @@ impl EmitContext {
         tmp
     }
 
+    pub fn materialize_u64(&mut self, expr: &str) -> String {
+        let tmp = self.next_var();
+        self.write_line(&format!("uint64_t {tmp} = {expr};"));
+        tmp
+    }
+
     pub fn take_buf(&mut self) -> String {
         std::mem::take(&mut self.buf)
     }

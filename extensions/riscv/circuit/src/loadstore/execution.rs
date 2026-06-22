@@ -16,7 +16,7 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::LoadStoreExecutor;
-use crate::adapters::{rv64_bytes_to_u32, sign_extend_imm16};
+use crate::adapters::{rv64_address_add_imm, sign_extend_imm16, try_rv64_bytes_to_u32};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -205,10 +205,20 @@ unsafe fn execute_e12_impl<
     let pc = exec_state.pc();
     let rs1_bytes: [u8; RV64_REGISTER_NUM_LIMBS] =
         exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs1_val = rv64_bytes_to_u32(rs1_bytes);
-    let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
-    // sign_extend([r64{c,g}(b):2]_e)
-    debug_assert!((ptr_val as usize) < RV64_MEMORY_BYTES);
+    let Some(rs1) = try_rv64_bytes_to_u32(rs1_bytes) else {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "load/store base exceeds implemented memory address space",
+        });
+    };
+    let addr = rv64_address_add_imm(rs1, pre_compute.imm_extended);
+    if addr >= RV64_MEMORY_BYTES as u64 {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "load/store effective address out of range",
+        });
+    }
+    let ptr_val = addr as u32;
 
     let shift_amount = ptr_val % RV64_REGISTER_NUM_LIMBS as u32;
     let ptr_val = ptr_val - shift_amount; // aligned ptr

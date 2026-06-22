@@ -29,7 +29,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
-    LocalOpcode,
+    LocalOpcode, DEFERRAL_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -40,9 +40,10 @@ use openvm_stark_backend::{
 
 use super::{
     byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
-    sign_extend_imm16, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+    rv64_address_add_imm, sign_extend_imm16, try_rv64_bytes_to_u32, RV64_PTR_BITS,
+    RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
-use crate::adapters::{memory_read, rv64_bytes_to_u32, timed_write, tracing_read};
+use crate::adapters::{memory_read, timed_write, tracing_read};
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
 /// of the instruction type, specifically whether it is a load or store.
@@ -177,11 +178,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             .eval(builder, is_valid.clone());
 
         // Constrain mem_ptr = rs1 + sign_extend(imm) as a 32-bit addition.
-        let limbs_01 = local_cols.rs1_data[0];
-        let limbs_23 = local_cols.rs1_data[1];
+        let rs1_low = local_cols.rs1_data[0];
+        let rs1_high = local_cols.rs1_data[1];
 
         let inv = AB::F::from_u32(1u32 << U16_BITS).inverse();
-        let carry = (limbs_01 + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
+        let carry = (rs1_low + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
 
         builder.when(is_valid.clone()).assert_bool(carry.clone());
 
@@ -189,8 +190,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             .when(is_valid.clone())
             .assert_bool(local_cols.imm_sign);
         let imm_extend_limb = local_cols.imm_sign * AB::F::from_u32(u16::MAX as u32);
-        let carry = (limbs_23 + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
+        let carry = (rs1_high + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
         builder.when(is_valid.clone()).assert_bool(carry.clone());
+        builder
+            .when(is_valid.clone())
+            .assert_eq(carry, local_cols.imm_sign);
 
         // preventing mem_ptr overflow
         self.range_bus
@@ -302,7 +306,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
 }
 
 #[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
+#[derive(AlignedBytesBorrow, Clone, Debug)]
 pub struct Rv64LoadStoreAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
@@ -313,11 +317,10 @@ pub struct Rv64LoadStoreAdapterRecord {
 
     pub rd_rs2_ptr: u32,
     pub read_data_aux: MemoryReadAuxRecord,
+
     pub imm: u16,
     pub imm_sign: bool,
-
     pub mem_as: u8,
-
     pub write_prev_timestamp: u32,
 }
 
@@ -377,23 +380,29 @@ where
         );
 
         record.rs1_ptr = b.as_canonical_u32();
-        record.rs1_val = rv64_bytes_to_u32(tracing_read(
+        let rs1_bytes = tracing_read(
             memory,
             RV64_REGISTER_AS,
             record.rs1_ptr,
             &mut record.rs1_aux_record.prev_timestamp,
-        ));
-        let rs1_val = record.rs1_val;
+        );
+        let rs1_val = try_rv64_bytes_to_u32(rs1_bytes).expect("upper 4 bytes must be zero");
+        record.rs1_val = rs1_val;
 
         record.imm = c.as_canonical_u32() as u16;
         record.imm_sign = g.is_one();
         let imm_extended = sign_extend_imm16(record.imm as u32, record.imm_sign as u32);
 
-        let ptr_val = rs1_val.wrapping_add(imm_extended);
+        let addr = rv64_address_add_imm(rs1_val, imm_extended);
+        let ptr_val = u32::try_from(addr)
+            .ok()
+            .filter(|&ptr| {
+                self.pointer_max_bits >= RV64_PTR_BITS
+                    || u64::from(ptr) < (1u64 << self.pointer_max_bits)
+            })
+            .expect("effective address exceeds implemented memory address space");
         let shift_amount = ptr_val & (RV64_REGISTER_NUM_LIMBS as u32 - 1);
-        let ptr_val = ptr_val - shift_amount;
-
-        debug_assert!((ptr_val as u64) < (1u64 << self.pointer_max_bits));
+        let aligned_ptr = ptr_val - shift_amount;
 
         // prev_data: We need to keep values of some cells to keep them unchanged when writing to
         // those cells
@@ -404,7 +413,7 @@ where
                 let read_data = tracing_read(
                     memory,
                     RV64_MEMORY_AS,
-                    ptr_val,
+                    aligned_ptr,
                     &mut record.read_data_aux.prev_timestamp,
                 );
                 let prev_data = memory_read(memory.data(), RV64_REGISTER_AS, a.as_canonical_u32());
@@ -421,7 +430,7 @@ where
                     a.as_canonical_u32(),
                     &mut record.read_data_aux.prev_timestamp,
                 );
-                let prev_data = memory_read(memory.data(), e, ptr_val);
+                let prev_data = memory_read(memory.data(), e, aligned_ptr);
                 (read_data, prev_data)
             }
         };
@@ -456,16 +465,24 @@ where
 
         if enabled != F::ZERO {
             record.rd_rs2_ptr = a.as_canonical_u32();
+            let write_data = data.map(|x| x as u8);
 
             record.write_prev_timestamp = match local_opcode {
                 STORED | STOREW | STOREH | STOREB => {
+                    if record.mem_as == DEFERRAL_AS as u8 {
+                        // TODO: Remove loadstore read/write support for DEFERRAL_AS.
+                        unreachable!("STORE to DEFERRAL_AS is unsupported");
+                    }
+                    let write_as = record.mem_as as u32;
                     let imm_extended = sign_extend_imm16(record.imm as u32, record.imm_sign as u32);
-                    let ptr = record.rs1_val.wrapping_add(imm_extended)
-                        & !(RV64_REGISTER_NUM_LIMBS as u32 - 1);
-                    timed_write(memory, record.mem_as as u32, ptr, data).0
+                    let mem_ptr = record.rs1_val.wrapping_add(imm_extended);
+                    let alignment_mask = RV64_REGISTER_NUM_LIMBS as u32 - 1;
+                    let write_ptr = mem_ptr - (mem_ptr & alignment_mask);
+                    timed_write(memory, write_as, write_ptr, write_data).0
                 }
                 LOADD | LOADW | LOADB | LOADH | LOADWU | LOADBU | LOADHU => {
-                    timed_write(memory, RV64_REGISTER_AS, record.rd_rs2_ptr, data).0
+                    let write_ptr = record.rd_rs2_ptr;
+                    timed_write(memory, RV64_REGISTER_AS, write_ptr, write_data).0
                 }
             };
         } else {
@@ -486,12 +503,12 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
         // - get_record_from_slice correctly interprets the bytes as Rv64LoadStoreAdapterRecord
-        let record: &Rv64LoadStoreAdapterRecord =
+        let record_ref: &Rv64LoadStoreAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let record = record_ref.clone();
         let adapter_row: &mut Rv64LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
 
         let needs_write = record.rd_rs2_ptr != u32::MAX;
-        // Writing in reverse order
         adapter_row.needs_write = F::from_bool(needs_write);
 
         if needs_write {
@@ -505,16 +522,14 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
         }
 
         adapter_row.mem_as = F::from_u8(record.mem_as);
-        let ptr = record
-            .rs1_val
-            .wrapping_add(sign_extend_imm16(record.imm as u32, record.imm_sign as u32));
-
-        let ptr_limbs = ptr_to_u16_limbs(ptr).map(u32::from);
+        let imm_extended = sign_extend_imm16(record.imm as u32, record.imm_sign as u32);
+        let mem_ptr = record.rs1_val.wrapping_add(imm_extended);
+        let mem_ptr_limbs = ptr_to_u16_limbs(mem_ptr).map(u32::from);
         self.range_checker_chip
-            .add_count(ptr_limbs[0] >> 3, U16_BITS - 3);
+            .add_count(mem_ptr_limbs[0] >> 3, U16_BITS - 3);
         self.range_checker_chip
-            .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
-        adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_u32);
+            .add_count(mem_ptr_limbs[1], self.pointer_max_bits - U16_BITS);
+        adapter_row.mem_ptr_limbs = mem_ptr_limbs.map(F::from_u32);
 
         adapter_row.imm_sign = F::from_bool(record.imm_sign);
         adapter_row.imm = F::from_u16(record.imm);

@@ -7,13 +7,13 @@ use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
-    program::{DEFAULT_PC_STEP, PC_BITS},
+    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC},
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::Rv64JalrExecutor;
-use crate::adapters::rv64_bytes_to_u32;
+use crate::adapters::{rv64_address_add_imm, try_rv64_bytes_to_u32};
 #[cfg(feature = "aot")]
 use crate::common::*;
 
@@ -210,10 +210,26 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLE
     let pc = exec_state.pc();
     let rs1 =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs1 = rv64_bytes_to_u32(rs1);
-    let to_pc = rs1.wrapping_add(pre_compute.imm_extended);
-    let to_pc = to_pc - (to_pc & 1);
-    debug_assert!(to_pc < (1 << PC_BITS));
+    let Some(rs1) = try_rv64_bytes_to_u32(rs1) else {
+        exec_state.exit_code = Err(ExecutionError::Fail {
+            pc,
+            msg: "JALR base exceeds implemented PC address space",
+        });
+        return;
+    };
+    let unaligned_to_pc = rv64_address_add_imm(rs1, pre_compute.imm_extended);
+    // JALR clears bit 0 before jumping.
+    let to_pc = unaligned_to_pc & !1;
+    let Some(to_pc) = u32::try_from(to_pc)
+        .ok()
+        .filter(|&to_pc| to_pc <= MAX_ALLOWED_PC)
+    else {
+        exec_state.exit_code = Err(ExecutionError::Fail {
+            pc,
+            msg: "JALR target exceeds PC address space",
+        });
+        return;
+    };
     let mut rd = [0u8; RV64_REGISTER_NUM_LIMBS];
     rd[..4].copy_from_slice(&(pc + DEFAULT_PC_STEP).to_le_bytes());
 

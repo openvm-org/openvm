@@ -23,8 +23,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    ptr_to_u16_limbs, Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_BYTE_BITS,
-    RV64_PTR_U16_LIMBS, U16_BITS,
+    ptr_to_u16_limbs, sext32_to_u64, Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller,
+    RV64_BYTE_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 #[repr(C)]
@@ -102,12 +102,15 @@ where
         builder.when(is_valid).assert_bool(carry_low.clone());
 
         let carry_top = (pc_high + imm_high_16 + carry_low - rd_data[1]) * carry_divide;
-        builder.when(is_valid).assert_bool(carry_top);
+        builder.when(is_valid).assert_bool(carry_top.clone());
 
+        // `imm_sign` is the sign bit after accounting for carry out of bit 31.
+        // Range-checking `2 * imm_high_16 - imm_sign * 2^16` ties that sign bit
+        // to the 15-bit magnitude of the shifted immediate.
+        let imm_sign = is_sign_extend + carry_top;
         self.range_bus
             .range_check(
-                AB::Expr::from_u32(2) * rd_data[1]
-                    - is_sign_extend * AB::Expr::from_u32(1 << U16_BITS),
+                AB::Expr::from_u32(2) * imm_high_16 - imm_sign * AB::Expr::from_u32(1 << U16_BITS),
                 U16_BITS,
             )
             .eval(builder, is_valid);
@@ -230,7 +233,10 @@ where
         let [pc_low, pc_high] = ptr_to_u16_limbs(record.from_pc);
 
         let rd_block = run_auipc(record.from_pc, record.imm);
-        let rd_u16 = [rd_block[0], rd_block[1]];
+        let rd_lo = rd_block[0];
+        let rd_hi = rd_block[1];
+        let is_sign_extend = rd_block[2] != 0;
+        let imm_sign = (imm_high_16 >> (U16_BITS - 1)) & 1;
 
         // range checks:
         self.range_checker_chip.add_count(pc_low as u32, U16_BITS);
@@ -239,22 +245,19 @@ where
         self.range_checker_chip
             .add_count(imm_low_8 as u32, RV64_BYTE_BITS);
         self.range_checker_chip.add_count(imm_high_16, U16_BITS);
+        self.range_checker_chip.add_count(rd_lo as u32, U16_BITS);
+        self.range_checker_chip.add_count(rd_hi as u32, U16_BITS);
+        // Mirrors the AIR sign-bit check for imm_high_16.
+        let imm_magnitude_check = 2u32 * imm_high_16 - imm_sign * (1 << U16_BITS);
         self.range_checker_chip
-            .add_count(rd_u16[0] as u32, U16_BITS);
-        self.range_checker_chip
-            .add_count(rd_u16[1] as u32, U16_BITS);
-        let is_sign_extend = (rd_u16[1] >> (U16_BITS - 1)) & 1;
-        let second_range_limb =
-            2u32 * (rd_u16[1] as u32) - (is_sign_extend as u32) * (1 << U16_BITS);
-        self.range_checker_chip
-            .add_count(second_range_limb, U16_BITS);
+            .add_count(imm_magnitude_check, U16_BITS);
 
         // Writing in reverse order
-        core_row.rd_data = rd_u16.map(F::from_u16);
+        core_row.rd_data = [F::from_u16(rd_lo), F::from_u16(rd_hi)];
         core_row.imm_low_8 = F::from_u8(imm_low_8);
         core_row.imm_high_16 = F::from_u32(imm_high_16);
         core_row.pc_high = F::from_u16(pc_high);
-        core_row.is_sign_extend = F::from_bool(is_sign_extend != 0);
+        core_row.is_sign_extend = F::from_bool(is_sign_extend);
         core_row.is_valid = F::ONE;
     }
 }
@@ -262,12 +265,9 @@ where
 // returns rd_data
 #[inline(always)]
 pub(super) fn run_auipc(pc: u32, imm: u32) -> [u16; BLOCK_FE_WIDTH] {
-    let rd_low_32 = pc.wrapping_add(imm << RV64_BYTE_BITS);
-    let [lo, hi] = ptr_to_u16_limbs(rd_low_32);
-    let sign = if (hi >> (U16_BITS - 1)) & 1 == 1 {
-        u16::MAX
-    } else {
-        0
-    };
+    let offset = imm << RV64_BYTE_BITS;
+    let rd = (pc as u64).wrapping_add(sext32_to_u64(offset));
+    let [lo, hi] = ptr_to_u16_limbs(rd as u32);
+    let sign = if rd >> 32 != 0 { u16::MAX } else { 0 };
     [lo, hi, sign, sign]
 }
