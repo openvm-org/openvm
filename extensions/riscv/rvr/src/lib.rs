@@ -554,17 +554,6 @@ mod tests {
             self.write_line(&format!("trace_mem_access(state, {addr}, {addr_space}u);"));
         }
 
-        fn trace_mem_access_u32_range(
-            &mut self,
-            base_addr: &str,
-            num_words: &str,
-            addr_space: u32,
-        ) {
-            self.write_line(&format!(
-                "trace_mem_access_u32_range(state, {base_addr}, {num_words}, {addr_space}u);"
-            ));
-        }
-
         fn trace_mem_access_u64_range(
             &mut self,
             base_addr: &str,
@@ -639,13 +628,6 @@ mod tests {
                 .iter()
                 .any(|l| l.contains("trace_mem_access_u64_range")),
             "expected trace_mem_access_u64_range, got: {:#?}",
-            ctx.lines
-        );
-        assert!(
-            !ctx.lines
-                .iter()
-                .any(|l| l.contains("trace_mem_access_u32_range")),
-            "unexpected trace_mem_access_u32_range in: {:#?}",
             ctx.lines
         );
     }

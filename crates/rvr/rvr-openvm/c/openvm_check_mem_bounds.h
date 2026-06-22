@@ -66,11 +66,6 @@ static __attribute__((always_inline)) inline void check_mem_bounds_range(
   }
 }
 
-static __attribute__((always_inline)) inline void check_mem_bounds_u32_range(
-    uint32_t base_addr, uint32_t num_words) {
-  check_mem_bounds_range(base_addr, (size_t)num_words * sizeof(uint32_t));
-}
-
 static __attribute__((always_inline)) inline void check_mem_bounds_u64_range(
     uint32_t base_addr, uint32_t num_words) {
   check_mem_bounds_range(base_addr, (size_t)num_words * sizeof(uint64_t));
