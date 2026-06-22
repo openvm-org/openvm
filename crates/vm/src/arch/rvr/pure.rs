@@ -83,4 +83,9 @@ where
         let dest_lib = self.compiled.lib_file_name_with_suffix("pure")?;
         self.compiled.save_artifact(&dir.join(dest_lib))
     }
+
+    /// Persist generated C sources for inspection.
+    pub fn save_generated_sources(&self, dir: &Path) -> Result<(), CompileError> {
+        self.compiled.save_generated_sources(dir)
+    }
 }
