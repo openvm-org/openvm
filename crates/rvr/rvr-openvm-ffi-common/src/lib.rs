@@ -44,52 +44,11 @@ pub const DEFAULT_PAGE_BITS: usize = 6;
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u32 = 1000;
 
 extern "C" {
-    // ── Memory access (single word, data) ─────────────────────────────
-    pub fn rd_mem_u32_wrapper(state: *mut c_void, addr: u32) -> u32;
-    pub fn wr_mem_u32_wrapper(state: *mut c_void, addr: u32, val: u32);
-
-    // ── Memory access (single word, trace-only) ───────────────────────
-    pub fn trace_rd_mem_u32_wrapper(state: *mut c_void, addr: u32, val: u32);
-    pub fn trace_wr_mem_u32_wrapper(state: *mut c_void, addr: u32, new_val: u32);
-    pub fn trace_mem_access_u32_wrapper(state: *mut c_void, addr: u32, addr_space: u32);
-
-    // ── Memory access (single u64 word, data)
+    // ── Memory access (single u64 word, data) ─────────────────────────
     pub fn rd_mem_u64_wrapper(state: *mut c_void, addr: u32) -> u64;
+
+    // ── Memory access (single u64 word, trace-only) ───────────────────
     pub fn trace_rd_mem_u64_wrapper(state: *mut c_void, addr: u32, val: u64);
-
-    // ── Memory access (u32 ranges, data) ─────────────────────────────
-    pub fn rd_mem_u32_range_wrapper(
-        state: *mut c_void,
-        base_addr: u32,
-        out: *mut u32,
-        num_words: u32,
-    );
-    pub fn wr_mem_u32_range_wrapper(
-        state: *mut c_void,
-        base_addr: u32,
-        vals: *const u32,
-        num_words: u32,
-    );
-
-    // ── Memory access (u32 ranges, trace-only) ────────────────────────
-    pub fn trace_rd_mem_u32_range_wrapper(
-        state: *mut c_void,
-        base_addr: u32,
-        vals: *const u32,
-        num_words: u32,
-    );
-    pub fn trace_wr_mem_u32_range_wrapper(
-        state: *mut c_void,
-        base_addr: u32,
-        vals: *const u32,
-        num_words: u32,
-    );
-    pub fn trace_mem_access_u32_range_wrapper(
-        state: *mut c_void,
-        base_addr: u32,
-        num_words: u32,
-        addr_space: u32,
-    );
 
     // ── Memory access (u64-word ranges, data) — WORD_SIZE = 8 bytes ──
     pub fn rd_mem_u64_range_wrapper(
@@ -140,56 +99,23 @@ extern "C" {
 
 // ── Zero-copy lane reinterpretation ─────────────────────────────────────
 
-// We assume a little-endian host (x86_64, aarch64). All u64↔u32 reinterpret
-// helpers below depend on that.
+// We assume a little-endian host (x86_64, aarch64). The u64→u32 reinterpret
+// helper below depends on that.
 const _: () = assert!(
     cfg!(target_endian = "little"),
     "rvr-openvm-ext-ffi-common assumes a little-endian host"
 );
 
-/// Reinterpret a `[u64]` slice as a `[u32]` slice (twice as many elements).
-/// Zero-copy on LE: the low u32 of each u64 comes first, then the high u32.
-#[inline(always)]
-pub fn u64s_as_u32s(lanes: &[u64]) -> &[u32] {
-    let len = lanes.len() * 2;
-    // SAFETY: u64 alignment (8) >= u32 alignment (4); total bytes match;
-    // POD types; LE host (asserted above) makes the layout (lo, hi).
-    unsafe { std::slice::from_raw_parts(lanes.as_ptr().cast::<u32>(), len) }
-}
-
-/// Mutable counterpart of [`u64s_as_u32s`]. Mutating through the returned
-/// slice mutates the underlying u64 lanes.
+/// Reinterpret a `[u64]` slice as a `[u32]` slice (twice as many elements),
+/// mutably. Zero-copy on LE: the low u32 of each u64 comes first, then the
+/// high u32. Mutating through the returned slice mutates the underlying u64
+/// lanes.
 #[inline(always)]
 pub fn u64s_as_u32s_mut(lanes: &mut [u64]) -> &mut [u32] {
     let len = lanes.len() * 2;
-    // SAFETY: see u64s_as_u32s.
+    // SAFETY: u64 alignment (8) >= u32 alignment (4); total bytes match;
+    // POD types; LE host (asserted above) makes the layout (lo, hi).
     unsafe { std::slice::from_raw_parts_mut(lanes.as_mut_ptr().cast::<u32>(), len) }
-}
-
-/// Reinterpret a `[u32]` slice as a `[u8]` slice (4× as many elements).
-/// Zero-copy: each u32 contributes its LE bytes in order.
-#[inline(always)]
-pub fn u32s_as_u8s(words: &[u32]) -> &[u8] {
-    let len = words.len() * WORD_SIZE;
-    // SAFETY: u32 alignment (4) >= u8 alignment (1); total bytes match;
-    // POD; LE host (asserted above).
-    unsafe { std::slice::from_raw_parts(words.as_ptr().cast::<u8>(), len) }
-}
-
-/// Reinterpret a `[u32]` slice as a `[u64]` slice (half as many elements).
-/// `words.len()` must be even and the slice must be u64-aligned (a stack
-/// `[u32; 2N]` is **not** guaranteed to be 8-aligned; use this only on slices
-/// that originated as `[u64]`).
-#[inline(always)]
-pub fn u32s_as_u64s(words: &[u32]) -> &[u64] {
-    debug_assert!(words.len().is_multiple_of(2));
-    debug_assert!(
-        (words.as_ptr() as usize).is_multiple_of(std::mem::align_of::<u64>()),
-        "u32s_as_u64s requires 8-byte aligned input"
-    );
-    let len = words.len() / 2;
-    // SAFETY: alignment debug-asserted; total bytes match; POD; LE host.
-    unsafe { std::slice::from_raw_parts(words.as_ptr().cast::<u64>(), len) }
 }
 
 // ── Ergonomic batched memory helpers ─────────────────────────────────────
