@@ -184,10 +184,7 @@ static __attribute__((always_inline)) inline void wr_mem_u64(
 /* ── Word-aligned range memory access ────────────────────────────── */
 
 /* `base_addr` is word-aligned; the guest pointer is word-aligned too,
- * so these lower to a single memcpy.
- *
- * A "word" in RV64 is 8 bytes (sizeof(uint64_t)), matching MEMORY_BLOCK_BYTES.
- * All extension multi-word memory I/O uses this granularity. */
+ * so these lower to a single memcpy. */
 static __attribute__((always_inline)) inline void rd_mem_u64_range(
     RvState* restrict state, uint32_t base_addr, uint64_t* restrict out,
     uint32_t num_words) {
