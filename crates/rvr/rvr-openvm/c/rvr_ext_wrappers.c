@@ -22,9 +22,6 @@ void trace_rd_mem_u64_wrapper(RvState* s, uint32_t addr, uint64_t val) {
   trace_rd_mem_u64(s, addr, val);
 }
 
-/* A "word" in RV64 is 8 bytes (sizeof(uint64_t)), matching MEMORY_BLOCK_BYTES.
- * All extension multi-word memory I/O uses this granularity. */
-
 void rd_mem_u64_range_wrapper(RvState* s, uint32_t base_addr, uint64_t* out,
                               uint32_t num_words) {
   rd_mem_u64_range(s, base_addr, out, num_words);
