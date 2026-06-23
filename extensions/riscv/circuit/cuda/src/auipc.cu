@@ -1,3 +1,5 @@
+#include <assert.h>
+
 #include "launcher.cuh"
 #include "primitives/buffer_view.cuh"
 #include "primitives/constants.h"
@@ -41,11 +43,14 @@ struct Rv64AuipcCore {
         uint16_t pc_limbs[RV64_PTR_U16_LIMBS];
         ptr_to_u16_limbs(pc_limbs, record.from_pc);
         uint64_t auipc = run_auipc(record.from_pc, record.imm);
+        uint64_t auipc_hi = auipc >> 32;
+        assert(auipc_hi == 0ull || auipc_hi == 0xffffffffull);
+        uint32_t auipc_lo = (uint32_t)auipc;
         uint16_t rd_limbs[RV64_PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rd_limbs, (uint32_t)auipc);
+        ptr_to_u16_limbs(rd_limbs, auipc_lo);
         uint32_t rd_lo = rd_limbs[0];
         uint32_t rd_hi = rd_limbs[1];
-        uint32_t is_sign_ext = ((auipc >> 32) != 0) ? 1u : 0u;
+        uint32_t is_sign_ext = (auipc_hi != 0) ? 1u : 0u;
         uint32_t imm_sign = (imm_high_16 >> (U16_BITS - 1)) & 1u;
 
         range_checker.add_count(pc_limbs[0], U16_BITS);

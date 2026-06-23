@@ -145,7 +145,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u32, tc: &T
                 ))
             };
             ctx.write_line(&format!(
-                "if (unlikely({next_pc} < RV_TEXT_START || {next_pc} > RV_TEXT_END)) {{"
+                "if (unlikely(!rv_pc_is_dispatchable({next_pc}))) {{"
             ));
             ctx.write_line(&format!("  [[clang::musttail]] return rv_trap({args});"));
             ctx.write_line("}");

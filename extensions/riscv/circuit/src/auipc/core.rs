@@ -266,8 +266,12 @@ where
 #[inline(always)]
 pub(super) fn run_auipc(pc: u32, imm: u32) -> [u16; BLOCK_FE_WIDTH] {
     let offset = imm << RV64_BYTE_BITS;
-    let rd = (pc as u64).wrapping_add(sext32_to_u64(offset));
-    let [lo, hi] = ptr_to_u16_limbs(rd as u32);
-    let sign = if rd >> 32 != 0 { u16::MAX } else { 0 };
+    let auipc = (pc as u64).wrapping_add(sext32_to_u64(offset));
+    let auipc_hi = auipc >> 32;
+    debug_assert!(auipc_hi == 0 || auipc_hi == u64::from(u32::MAX));
+    let auipc_lo = auipc as u32;
+
+    let [lo, hi] = ptr_to_u16_limbs(auipc_lo);
+    let sign = if auipc_hi != 0 { u16::MAX } else { 0 };
     [lo, hi, sign, sign]
 }
