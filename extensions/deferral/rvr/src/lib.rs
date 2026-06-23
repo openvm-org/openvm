@@ -146,9 +146,8 @@ impl DeferralRvrExtension {
     ) -> Result<Self, ExtensionError> {
         let call_chip_idx = opcode_air_idx(ctx, DeferralOpcode::CALL)?;
         let output_chip_idx = opcode_air_idx(ctx, DeferralOpcode::OUTPUT)?;
-        // Poseidon2 periphery chip: in extend_circuit, the hasher is added
-        // right before the CALL chip. Due to reverse ordering of AIR indices,
-        // poseidon2_air_idx = call_air_idx + 1.
+        // The Poseidon2 hasher is registered adjacent to the CALL chip and
+        // assigned the next AIR index (call_air_idx + 1) due to reverse registration order.
         let poseidon2_chip_idx = call_chip_idx.map(AirIndex::next);
 
         Ok(Self {
