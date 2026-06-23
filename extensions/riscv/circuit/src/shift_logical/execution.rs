@@ -15,11 +15,9 @@ use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::ShiftLogicalExecutor;
-#[allow(unused_imports)]
-use crate::{
-    adapters::{imm_to_rv64_bytes, imm_to_rv64_u64},
-    common::*,
-};
+use crate::adapters::imm_to_rv64_u64;
+#[cfg(feature = "aot")]
+use crate::common::*;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
