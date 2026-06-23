@@ -433,45 +433,13 @@ where
     ) -> Result<(), ExecutionError> {
         let Instruction { opcode, d, e, .. } = instruction;
         let local_opcode = Rv64LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        let d_u32 = d.as_canonical_u32();
-        if d_u32 != RV64_REGISTER_AS {
-            return Err(ExecutionError::InvalidAddressSpace {
-                pc: *state.pc,
-                instruction: "LoadStore",
-                operand: "d",
-                actual: d_u32,
-                expected: RV64_REGISTER_AS.to_string(),
-            });
-        }
-        let e_u32 = e.as_canonical_u32();
-        let valid_e = match local_opcode {
-            LOADD | LOADWU | LOADHU | LOADBU => e_u32 == RV64_MEMORY_AS,
-            STORED | STOREW | STOREH | STOREB => {
-                e_u32 == RV64_MEMORY_AS || e_u32 == PUBLIC_VALUES_AS
-            }
-            _ => {
-                return Err(ExecutionError::Fail {
-                    pc: *state.pc,
-                    msg: "Invalid LoadStore opcode for LoadStore chip",
-                });
-            }
-        };
-        if !valid_e {
-            let expected = match local_opcode {
-                LOADD | LOADWU | LOADHU | LOADBU => RV64_MEMORY_AS.to_string(),
-                STORED | STOREW | STOREH | STOREB => {
-                    format!("{RV64_MEMORY_AS} or {PUBLIC_VALUES_AS}")
-                }
-                _ => unreachable!(),
-            };
-            return Err(ExecutionError::InvalidAddressSpace {
-                pc: *state.pc,
-                instruction: "LoadStore",
-                operand: "e",
-                actual: e_u32,
-                expected,
-            });
-        }
+        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
+        debug_assert!(match local_opcode {
+            LOADD | LOADWU | LOADHU | LOADBU => e.as_canonical_u32() == RV64_MEMORY_AS,
+            STORED | STOREW | STOREH | STOREB =>
+                e.as_canonical_u32() == RV64_MEMORY_AS || e.as_canonical_u32() == PUBLIC_VALUES_AS,
+            _ => false,
+        });
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
