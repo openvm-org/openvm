@@ -11,11 +11,19 @@ use openvm_instructions::{
 };
 use rvr_openvm_ir::{AluOp, Block, Instr, InstrAt, LiftedInstr, MulDivOp, Terminator};
 
-use crate::helpers::{assert_valid_pc, is_valid_pc, sext32};
+use crate::helpers::{is_valid_pc, sext32};
 
 const MAX_VALUES: usize = 16;
 const MAX_ITERATIONS_MULTIPLIER: usize = 20;
 const MAX_JUMP_TABLE_SCAN: usize = 256;
+
+/// Error during basic-block (CFG) construction.
+#[derive(Debug, thiserror::Error)]
+pub enum CfgError {
+    /// A statically computable control-flow target exceeds the PC address space.
+    #[error("{what} {target:#x} exceeds PC address space")]
+    PcOutOfBounds { what: &'static str, target: u64 },
+}
 
 // ── RegisterValue ──────────────────────────────────────────────────────────
 
@@ -665,7 +673,7 @@ fn worklist(
     ctx: &WorklistContext<'_>,
     function_entries: &BTreeSet<u64>,
     internal_targets: &BTreeSet<u64>,
-) -> WorklistResult {
+) -> Result<WorklistResult, CfgError> {
     let estimated_size = function_entries.len() + internal_targets.len();
     let mut states: HashMap<u64, RegisterState> = HashMap::with_capacity(estimated_size);
     let mut work: Vec<u64> = Vec::with_capacity(estimated_size);
@@ -712,7 +720,7 @@ fn worklist(
             ctx,
             &mut unresolved_dynamic_jumps,
             &mut resolved_jumps,
-        );
+        )?;
 
         let state_out = transfer(li, state);
 
@@ -732,10 +740,10 @@ fn worklist(
         successors.entry(pc).or_default().extend(succs);
     }
 
-    WorklistResult {
+    Ok(WorklistResult {
         successors,
         resolved_jumps,
-    }
+    })
 }
 
 // ── Phase 4: transfer ─────────────────────────────────────────────────────
@@ -882,7 +890,7 @@ fn get_successors(
     ctx: &WorklistContext<'_>,
     unresolved_dynamic_jumps: &mut HashSet<u64>,
     resolved_jumps: &mut HashMap<u64, HashSet<u64>>,
-) -> HashSet<u64> {
+) -> Result<HashSet<u64>, CfgError> {
     let mut result = HashSet::new();
     let pc = li.pc();
     let is_call_instr = is_call(li);
@@ -898,7 +906,12 @@ fn get_successors(
                     result.insert(pc + INSTR_SIZE as u64);
                 }
                 Terminator::Jump { target, .. } => {
-                    assert_valid_pc(*target, "JAL target");
+                    if !is_valid_pc(*target) {
+                        return Err(CfgError::PcOutOfBounds {
+                            what: "JAL target",
+                            target: *target,
+                        });
+                    }
                     result.insert(*target);
                     if is_call_instr {
                         result.insert(pc + INSTR_SIZE as u64);
@@ -909,18 +922,18 @@ fn get_successors(
                     let addr_val = eval_jumpdyn_multi(state, *rs1, *imm);
 
                     if addr_val.is_constant() && !addr_val.values.is_empty() {
-                        let targets: Vec<u64> = addr_val
-                            .values
-                            .iter()
-                            .filter_map(|&t| {
-                                assert_valid_pc(t, "JumpDyn target");
-                                if ctx.pc_to_idx.contains_key(&t) {
-                                    Some(t)
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
+                        let mut targets: Vec<u64> = Vec::new();
+                        for &t in &addr_val.values {
+                            if !is_valid_pc(t) {
+                                return Err(CfgError::PcOutOfBounds {
+                                    what: "JumpDyn target",
+                                    target: t,
+                                });
+                            }
+                            if ctx.pc_to_idx.contains_key(&t) {
+                                targets.push(t);
+                            }
+                        }
 
                         if !targets.is_empty() {
                             result.extend(targets.iter().copied());
@@ -951,14 +964,24 @@ fn get_successors(
                     }
                 }
                 Terminator::Branch { target, .. } => {
-                    assert_valid_pc(*target, "Branch target");
+                    if !is_valid_pc(*target) {
+                        return Err(CfgError::PcOutOfBounds {
+                            what: "Branch target",
+                            target: *target,
+                        });
+                    }
                     result.insert(pc + INSTR_SIZE as u64);
                     result.insert(*target);
                 }
                 Terminator::Exit { .. } | Terminator::Trap { .. } => {}
                 Terminator::Extension(ext) => {
                     for target in ext.successors(pc + INSTR_SIZE as u64) {
-                        assert_valid_pc(target, "Extension successor");
+                        if !is_valid_pc(target) {
+                            return Err(CfgError::PcOutOfBounds {
+                                what: "Extension successor",
+                                target,
+                            });
+                        }
                         result.insert(target);
                     }
                 }
@@ -966,7 +989,7 @@ fn get_successors(
         }
     }
 
-    result
+    Ok(result)
 }
 
 /// Compute a single JumpDyn target: `(base + imm) & !1`, returning `None` if
@@ -1155,9 +1178,12 @@ fn binary_search_le(sorted: &[u64], target: u64) -> Option<u64> {
 /// function pointer arrays).
 ///
 /// Returns `Vec<Block>` with resolved `JumpDyn` targets filled in.
-pub fn build_blocks(instructions: &[LiftedInstr], extra_targets: &[u64]) -> Vec<Block> {
+pub fn build_blocks(
+    instructions: &[LiftedInstr],
+    extra_targets: &[u64],
+) -> Result<Vec<Block>, CfgError> {
     if instructions.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
 
     // Build PC -> instruction index lookup.
@@ -1209,7 +1235,7 @@ pub fn build_blocks(instructions: &[LiftedInstr], extra_targets: &[u64]) -> Vec<
     let WorklistResult {
         successors,
         resolved_jumps,
-    } = worklist(&ctx, &function_entries, &internal_targets);
+    } = worklist(&ctx, &function_entries, &internal_targets)?;
 
     // Phase 7: Compute leaders.
     let leaders = compute_leaders(
@@ -1222,7 +1248,7 @@ pub fn build_blocks(instructions: &[LiftedInstr], extra_targets: &[u64]) -> Vec<
     );
 
     // Build blocks by splitting at leaders and patching resolved JumpDyn targets.
-    build_block_list(instructions, &leaders, &resolved_jumps)
+    Ok(build_block_list(instructions, &leaders, &resolved_jumps))
 }
 
 /// Split the flat instruction list into `Block`s at leader boundaries,

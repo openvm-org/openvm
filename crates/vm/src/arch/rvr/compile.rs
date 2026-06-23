@@ -142,6 +142,8 @@ impl RvrCompiled {
 pub enum CompileError {
     #[error("IR conversion failed: {0}")]
     Convert(#[from] rvr_openvm_lift::ConvertError),
+    #[error("CFG construction failed: {0}")]
+    Cfg(#[from] rvr_openvm_lift::CfgError),
     #[error("C project write failed under {}: {source}", path.display())]
     CProject {
         path: PathBuf,
@@ -359,7 +361,7 @@ fn compile_impl<F: PrimeField32>(
 
     let valid_pcs: std::collections::HashSet<u64> = ir.iter().map(|li| li.pc()).collect();
     let extra_targets = scan_init_memory_for_code_pointers(exe, &valid_pcs);
-    let blocks = build_blocks(&ir, &extra_targets);
+    let blocks = build_blocks(&ir, &extra_targets)?;
 
     let temp_root = std::env::temp_dir();
     let temp_dir = tempfile::Builder::new()

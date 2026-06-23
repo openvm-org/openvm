@@ -15,7 +15,7 @@ pub mod extension;
 pub mod helpers;
 pub mod opcode;
 
-pub use cfg::build_blocks;
+pub use cfg::{build_blocks, CfgError};
 pub use convert::{
     convert_vmexe_to_ir, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers,
     ConvertError,

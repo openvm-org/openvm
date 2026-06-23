@@ -30,13 +30,3 @@ pub fn sext32(value: u32) -> u64 {
 pub fn is_valid_pc(pc: u64) -> bool {
     pc <= u64::from(MAX_ALLOWED_PC)
 }
-
-/// Assert that a control-flow `target` is within the PC address space, panicking
-/// otherwise. `what` labels the source in the message, e.g. `"JAL target"`.
-#[inline]
-pub fn assert_valid_pc(target: u64, what: &str) {
-    assert!(
-        is_valid_pc(target),
-        "{what} {target:#x} exceeds PC address space"
-    );
-}
