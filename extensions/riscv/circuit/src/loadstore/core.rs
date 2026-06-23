@@ -368,8 +368,7 @@ pub struct LoadStoreCoreRecord<const NUM_CELLS: usize> {
     pub local_opcode: u8,
     pub shift_amount: u8,
     pub read_data: [u8; NUM_CELLS],
-    // `prev_data` is u32 so load/store core logic can be shared across byte cells.
-    pub prev_data: [u32; NUM_CELLS],
+    pub prev_data: [u8; NUM_CELLS],
 }
 
 #[derive(Clone, Copy, derive_new::new)]
@@ -434,18 +433,43 @@ where
     ) -> Result<(), ExecutionError> {
         let Instruction { opcode, d, e, .. } = instruction;
         let local_opcode = Rv64LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let d_u32 = d.as_canonical_u32();
+        if d_u32 != RV64_REGISTER_AS {
+            return Err(ExecutionError::InvalidAddressSpace {
+                pc: *state.pc,
+                instruction: "LoadStore",
+                operand: "d",
+                actual: d_u32,
+                expected: RV64_REGISTER_AS.to_string(),
+            });
+        }
         let e_u32 = e.as_canonical_u32();
-        let valid_address_space = match local_opcode {
+        let valid_e = match local_opcode {
             LOADD | LOADWU | LOADHU | LOADBU => e_u32 == RV64_MEMORY_AS,
             STORED | STOREW | STOREH | STOREB => {
                 e_u32 == RV64_MEMORY_AS || e_u32 == PUBLIC_VALUES_AS
             }
-            _ => false,
+            _ => {
+                return Err(ExecutionError::Fail {
+                    pc: *state.pc,
+                    msg: "Invalid LoadStore opcode for LoadStore chip",
+                });
+            }
         };
-        if d.as_canonical_u32() != RV64_REGISTER_AS || !valid_address_space {
-            return Err(ExecutionError::Fail {
+        if !valid_e {
+            let expected = match local_opcode {
+                LOADD | LOADWU | LOADHU | LOADBU => RV64_MEMORY_AS.to_string(),
+                STORED | STOREW | STOREH | STOREB => {
+                    format!("{RV64_MEMORY_AS} or {PUBLIC_VALUES_AS}")
+                }
+                _ => unreachable!(),
+            };
+            return Err(ExecutionError::InvalidAddressSpace {
                 pc: *state.pc,
-                msg: "Invalid LoadStore instruction",
+                instruction: "LoadStore",
+                operand: "e",
+                actual: e_u32,
+                expected,
             });
         }
 
@@ -453,12 +477,12 @@ where
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
-        (
-            (core_record.prev_data, core_record.read_data),
-            core_record.shift_amount,
-        ) = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record);
+        let ((prev_data, read_data), shift_amount) =
+            self.adapter
+                .read(state.memory, instruction, &mut adapter_record);
+        core_record.prev_data = prev_data.map(|x| x as u8);
+        core_record.read_data = read_data;
+        core_record.shift_amount = shift_amount;
 
         core_record.local_opcode = local_opcode as u8;
 
@@ -468,8 +492,12 @@ where
             core_record.prev_data,
             core_record.shift_amount as usize,
         );
-        self.adapter
-            .write(state.memory, instruction, write_data, &mut adapter_record);
+        self.adapter.write(
+            state.memory,
+            instruction,
+            write_data.map(u32::from),
+            &mut adapter_record,
+        );
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -502,11 +530,12 @@ where
                 .request_range(pair[0] as u32, pair[1] as u32);
         }
         for pair in record.prev_data.chunks_exact(2) {
-            self.bitwise_lookup_chip.request_range(pair[0], pair[1]);
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
         }
 
-        core_row.write_data = write_data.map(F::from_u32);
-        core_row.prev_data = record.prev_data.map(F::from_u32);
+        core_row.write_data = write_data.map(F::from_u8);
+        core_row.prev_data = record.prev_data.map(F::from_u8);
         core_row.read_data = record.read_data.map(F::from_u8);
         core_row.is_load = F::from_bool(matches!(opcode, LOADD | LOADWU | LOADHU | LOADBU));
         core_row.is_valid = F::ONE;
@@ -524,18 +553,18 @@ where
 pub(super) fn run_write_data<const NUM_CELLS: usize>(
     opcode: Rv64LoadStoreOpcode,
     read_data: [u8; NUM_CELLS],
-    prev_data: [u32; NUM_CELLS],
+    prev_data: [u8; NUM_CELLS],
     shift: usize,
-) -> [u32; NUM_CELLS] {
+) -> [u8; NUM_CELLS] {
     const { assert!(NUM_CELLS == RV64_REGISTER_NUM_LIMBS) };
     let word_width = NUM_CELLS / 2;
     let half_width = NUM_CELLS / 4;
 
     match opcode {
-        LOADD if shift == 0 => read_data.map(u32::from),
+        LOADD if shift == 0 => read_data,
         LOADWU if shift == 0 || shift == word_width => array::from_fn(|i| {
             if i < word_width {
-                read_data[i + shift] as u32
+                read_data[i + shift]
             } else {
                 0
             }
@@ -543,7 +572,7 @@ pub(super) fn run_write_data<const NUM_CELLS: usize>(
         LOADHU if [0, half_width, word_width, word_width + half_width].contains(&shift) => {
             array::from_fn(|i| {
                 if i < half_width {
-                    read_data[i + shift] as u32
+                    read_data[i + shift]
                 } else {
                     0
                 }
@@ -551,15 +580,15 @@ pub(super) fn run_write_data<const NUM_CELLS: usize>(
         }
         LOADBU if shift < NUM_CELLS => array::from_fn(|i| {
             if i == 0 {
-                read_data[shift] as u32
+                read_data[shift]
             } else {
                 0
             }
         }),
-        STORED if shift == 0 => read_data.map(u32::from),
+        STORED if shift == 0 => read_data,
         STOREW if shift == 0 || shift == word_width => array::from_fn(|i| {
             if i >= shift && i < shift + word_width {
-                read_data[i - shift] as u32
+                read_data[i - shift]
             } else {
                 prev_data[i]
             }
@@ -567,7 +596,7 @@ pub(super) fn run_write_data<const NUM_CELLS: usize>(
         STOREH if [0, half_width, word_width, word_width + half_width].contains(&shift) => {
             array::from_fn(|i| {
                 if i >= shift && i < shift + half_width {
-                    read_data[i - shift] as u32
+                    read_data[i - shift]
                 } else {
                     prev_data[i]
                 }
@@ -575,7 +604,7 @@ pub(super) fn run_write_data<const NUM_CELLS: usize>(
         }
         STOREB if shift < NUM_CELLS => {
             let mut write_data = prev_data;
-            write_data[shift] = read_data[0] as u32;
+            write_data[shift] = read_data[0];
             write_data
         }
         _ => unreachable!(

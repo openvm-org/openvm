@@ -4,8 +4,8 @@
 #include <stdint.h>
 
 /* Forwarding stubs owned by the RISC-V IO (Rv64Io) extension: the hint-store
- * consumers (HINT_STOREW, HINT_BUFFER) and public-values stores, including
- * REVEAL. Backed by a dispatch table installed by
+ * consumers (HINT_STOREW, HINT_BUFFER) and public-values stores routed through
+ * openvm_reveal. Backed by a dispatch table installed by
  * `Rv64IoExtension::register_host_callbacks`. */
 void openvm_hint_storew(uint32_t dest_addr);
 void openvm_hint_buffer(uint32_t dest_addr, uint32_t num_words);

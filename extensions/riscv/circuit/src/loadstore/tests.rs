@@ -213,10 +213,10 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let write_data = run_write_data(
         opcode,
         read_data.map(|x| x.as_canonical_u32() as u8),
-        prev_data.map(|x| x.as_canonical_u32()),
+        prev_data.map(|x| x.as_canonical_u32() as u8),
         shift_amount,
     )
-    .map(F::from_u32);
+    .map(F::from_u8);
     if is_load {
         if enabled_write {
             assert_eq!(
@@ -637,14 +637,8 @@ fn negative_wrong_address_space_tests() {
 fn run_loadd_stored_sanity_test() {
     let read_data = [138, 45, 202, 76, 131, 74, 186, 29];
     let prev_data = [159, 213, 89, 34, 142, 67, 210, 88];
-    assert_eq!(
-        run_write_data(LOADD, read_data, prev_data, 0),
-        read_data.map(u32::from)
-    );
-    assert_eq!(
-        run_write_data(STORED, read_data, prev_data, 0),
-        read_data.map(u32::from)
-    );
+    assert_eq!(run_write_data(LOADD, read_data, prev_data, 0), read_data);
+    assert_eq!(run_write_data(STORED, read_data, prev_data, 0), read_data);
 }
 
 #[test]

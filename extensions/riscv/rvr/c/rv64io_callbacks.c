@@ -1,7 +1,7 @@
 /*
  * Dispatch table and forwarding stubs for the Rv64Io operations: the
- * hint-store consumers (HINT_STOREW, HINT_BUFFER) and public-values stores,
- * including REVEAL.
+ * hint-store consumers (HINT_STOREW, HINT_BUFFER) and public-values stores
+ * routed through openvm_reveal.
  */
 
 #include "rv64io_callbacks.h"

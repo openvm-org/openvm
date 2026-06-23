@@ -30,6 +30,16 @@ use crate::{
 pub enum ExecutionError {
     #[error("execution failed at pc {pc}, err: {msg}")]
     Fail { pc: u32, msg: &'static str },
+    #[error(
+        "at pc {pc}, invalid {instruction} address space operand {operand}: got {actual}, expected {expected}"
+    )]
+    InvalidAddressSpace {
+        pc: u32,
+        instruction: &'static str,
+        operand: &'static str,
+        actual: u32,
+        expected: String,
+    },
     #[error("pc {0} out of bounds")]
     PcOutOfBounds(u32),
     #[error("unreachable instruction at pc {0}")]

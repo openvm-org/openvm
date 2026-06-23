@@ -295,10 +295,24 @@ where
         let local_opcode = Rv64LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
         );
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_MEMORY_AS {
-            return Err(ExecutionError::Fail {
+        let d_u32 = d.as_canonical_u32();
+        if d_u32 != RV64_REGISTER_AS {
+            return Err(ExecutionError::InvalidAddressSpace {
                 pc: *state.pc,
-                msg: "Invalid LoadSignExtend instruction",
+                instruction: "LoadSignExtend",
+                operand: "d",
+                actual: d_u32,
+                expected: RV64_REGISTER_AS.to_string(),
+            });
+        }
+        let e_u32 = e.as_canonical_u32();
+        if e_u32 != RV64_MEMORY_AS {
+            return Err(ExecutionError::InvalidAddressSpace {
+                pc: *state.pc,
+                instruction: "LoadSignExtend",
+                operand: "e",
+                actual: e_u32,
+                expected: RV64_MEMORY_AS.to_string(),
             });
         }
 

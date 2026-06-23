@@ -5,8 +5,8 @@
 //! - System instructions: TERMINATE, PHANTOM, PUBLISH
 //! - System phantom sub-instructions: Nop, DebugPanic, CtStart, CtEnd
 //! - RV64 load/store instructions lift memory address space `e = 2`.
-//! - RV64 stores to public values address space `e = 3`, including REVEAL after transpilation, are
-//!   handled by extensions.
+//! - RV64 stores to public values address space `e = 3`, including REVEAL, are handled by
+//!   extensions.
 
 use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode, SysPhantom, SystemOpcode,
