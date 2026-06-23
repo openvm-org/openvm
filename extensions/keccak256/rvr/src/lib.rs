@@ -91,9 +91,8 @@ impl KeccakExtension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
         let xorin_chip_idx = opcode_air_idx(ctx, XorinOpcode::XORIN)?;
         let keccakf_op_chip_idx = opcode_air_idx(ctx, KeccakfOpcode::KECCAKF)?;
-        // KeccakfPermAir is inserted right before KeccakfOpAir in
-        // Keccak256::extend_circuit, and the chip indices are set in reverse
-        // order.
+        // KeccakfPerm is registered adjacent to KeccakfOp and assigned the next
+        // AIR index (keccakf_op_chip_idx + 1) due to reverse registration order.
         let keccakf_perm_chip_idx = keccakf_op_chip_idx.map(AirIndex::next);
 
         Ok(Self {
