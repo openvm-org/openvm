@@ -120,7 +120,7 @@ pub enum Rv64IExecutor {
     AddSubW(Rv64AddSubWExecutor),
     LessThan(Rv64LessThanExecutor),
     ShiftLogical(Rv64ShiftLogicalExecutor),
-    ShiftArithmeticRight(Rv64ShiftArithmeticRightExecutor),
+    ShiftRightArithmetic(Rv64ShiftRightArithmeticExecutor),
     ShiftWLogical(Rv64ShiftWLogicalExecutor),
     ShiftWArithmeticRight(Rv64ShiftWArithmeticRightExecutor),
     BranchEqual(Rv64BranchEqualExecutor),
@@ -195,12 +195,12 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             [ShiftOpcode::SLL, ShiftOpcode::SRL].map(|x| x.global_opcode()),
         )?;
 
-        let shift_arithmetic_right = Rv64ShiftArithmeticRightExecutor::new(
+        let shift_right_arithmetic = Rv64ShiftRightArithmeticExecutor::new(
             Rv64BaseAluAdapterExecutor,
             ShiftOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
-            shift_arithmetic_right,
+            shift_right_arithmetic,
             [ShiftOpcode::SRA].map(|x| x.global_opcode()),
         )?;
 
@@ -342,11 +342,11 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         );
         inventory.add_air(shift_logical);
 
-        let shift_arithmetic_right = Rv64ShiftArithmeticRightAir::new(
+        let shift_right_arithmetic = Rv64ShiftRightArithmeticAir::new(
             Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            ShiftArithmeticRightCoreAir::new(bitwise_lu, range_checker, ShiftOpcode::CLASS_OFFSET),
+            ShiftRightArithmeticCoreAir::new(bitwise_lu, range_checker, ShiftOpcode::CLASS_OFFSET),
         );
-        inventory.add_air(shift_arithmetic_right);
+        inventory.add_air(shift_right_arithmetic);
 
         let shift_w_logical = Rv64ShiftWLogicalAir::new(
             Rv64BaseAluWU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
@@ -512,9 +512,9 @@ where
         );
         inventory.add_executor_chip(shift_logical);
 
-        inventory.next_air::<Rv64ShiftArithmeticRightAir>()?;
-        let shift_arithmetic_right = Rv64ShiftArithmeticRightChip::new(
-            ShiftArithmeticRightFiller::new(
+        inventory.next_air::<Rv64ShiftRightArithmeticAir>()?;
+        let shift_right_arithmetic = Rv64ShiftRightArithmeticChip::new(
+            ShiftRightArithmeticFiller::new(
                 Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 range_checker.clone(),
@@ -522,7 +522,7 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift_arithmetic_right);
+        inventory.add_executor_chip(shift_right_arithmetic);
 
         inventory.next_air::<Rv64ShiftWLogicalAir>()?;
         let shift_w_logical = Rv64ShiftWLogicalChip::new(

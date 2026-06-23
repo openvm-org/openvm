@@ -18,7 +18,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
-    AluAdapterExecutor, AluU16AdapterExecutor, Rv64ShiftArithmeticRight256Executor,
+    AluAdapterExecutor, AluU16AdapterExecutor, Rv64ShiftRightArithmetic256Executor,
     Rv64ShiftLogical256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
 };
 
@@ -30,9 +30,9 @@ impl Rv64ShiftLogical256Executor {
     }
 }
 
-impl Rv64ShiftArithmeticRight256Executor {
+impl Rv64ShiftRightArithmetic256Executor {
     pub fn new(adapter: AluAdapterExecutor, offset: usize) -> Self {
-        Self(openvm_riscv_circuit::ShiftArithmeticRightExecutor::new(
+        Self(openvm_riscv_circuit::ShiftRightArithmeticExecutor::new(
             adapter, offset,
         ))
     }
@@ -178,7 +178,7 @@ macro_rules! impl_shift256_executor {
 }
 
 impl_shift256_executor!(Rv64ShiftLogical256Executor, false);
-impl_shift256_executor!(Rv64ShiftArithmeticRight256Executor, true);
+impl_shift256_executor!(Rv64ShiftRightArithmetic256Executor, true);
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(

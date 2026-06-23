@@ -32,7 +32,7 @@ use test_case::test_case;
 use {
     crate::{
         adapters::{Rv64BaseAluWAdapterRecord, Rv64BaseAluWU16AdapterRecord},
-        Rv64ShiftWArithmeticRightChipGpu, Rv64ShiftWLogicalChipGpu, ShiftArithmeticRightCoreRecord,
+        Rv64ShiftWArithmeticRightChipGpu, Rv64ShiftWLogicalChipGpu, ShiftRightArithmeticCoreRecord,
         ShiftLogicalCoreRecord,
     },
     openvm_circuit::arch::{
@@ -58,7 +58,7 @@ use crate::{
         RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS, RV64_WORD_U16_LIMBS,
         U16_BITS,
     },
-    shift_arithmetic_right::ShiftArithmeticRightCoreCols,
+    shift_right_arithmetic::ShiftRightArithmeticCoreCols,
     shift_logical::ShiftLogicalCoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
 };
@@ -76,7 +76,7 @@ type ArithmeticRightHarness = TestChipHarness<
 // SLLW/SRLW use the u16 logical core; SRAW uses the byte-shaped arithmetic-right core.
 type ShiftWLogicalCoreCols<T> = ShiftLogicalCoreCols<T, RV64_WORD_U16_LIMBS, U16_BITS>;
 type ShiftWArithmeticRightCoreCols<T> =
-    ShiftArithmeticRightCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+    ShiftRightArithmeticCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 
 #[inline(always)]
 fn run_shift_w(
@@ -510,7 +510,7 @@ struct ArithmeticShiftPrankValues {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn run_negative_shift_arithmetic_right_test(
+fn run_negative_shift_right_arithmetic_test(
     opcode: ShiftWOpcode,
     prank_a: [u32; RV64_WORD_NUM_LIMBS],
     b: [u8; RV64_REGISTER_NUM_LIMBS],
@@ -613,7 +613,7 @@ fn rv64_shiftw_wrong_negative_test() {
             ..Default::default()
         },
     );
-    run_negative_shift_arithmetic_right_test(
+    run_negative_shift_right_arithmetic_test(
         SRAW,
         [1, 0, 0, 0],
         b,
@@ -633,7 +633,7 @@ fn rv64_sraw_wrong_bit_shift_negative_test() {
         bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
         ..Default::default()
     };
-    run_negative_shift_arithmetic_right_test(SRAW, a, b, c, None, None, prank_vals);
+    run_negative_shift_right_arithmetic_test(SRAW, a, b, c, None, None, prank_vals);
 }
 
 #[test]
@@ -645,7 +645,7 @@ fn rv64_sraw_wrong_limb_shift_negative_test() {
         limb_shift_marker: Some([0, 1, 0, 0]),
         ..Default::default()
     };
-    run_negative_shift_arithmetic_right_test(SRAW, a, b, c, None, None, prank_vals);
+    run_negative_shift_right_arithmetic_test(SRAW, a, b, c, None, None, prank_vals);
 }
 
 #[test]
@@ -657,7 +657,7 @@ fn rv64_sraw_wrong_bit_mult_negative_test() {
         bit_multiplier: Some(0),
         ..Default::default()
     };
-    run_negative_shift_arithmetic_right_test(SRAW, a, b, c, None, None, prank_vals);
+    run_negative_shift_right_arithmetic_test(SRAW, a, b, c, None, None, prank_vals);
 }
 
 #[test]
@@ -669,7 +669,7 @@ fn rv64_sraw_wrong_sign_negative_test() {
         b_sign: Some(0),
         ..Default::default()
     };
-    run_negative_shift_arithmetic_right_test(SRAW, a, b, c, None, None, prank_vals);
+    run_negative_shift_right_arithmetic_test(SRAW, a, b, c, None, None, prank_vals);
 }
 
 #[test]
@@ -688,7 +688,7 @@ fn rv64_shiftw_wrong_upper_sign_extension_negative_test() {
 #[test]
 fn rv64_shiftw_b_sign_only_prank_negative_test() {
     // SRAW: b_sign must match input sign bit.
-    run_negative_shift_arithmetic_right_test(
+    run_negative_shift_right_arithmetic_test(
         SRAW,
         [0, 0, 0, 128],
         [0, 0, 0, 128, 255, 255, 255, 255],
@@ -727,7 +727,7 @@ fn rv64_shiftw_result_sign_only_prank_negative_test() {
     );
 
     // SRAW: result_sign must match output sign bit.
-    run_negative_shift_arithmetic_right_test(
+    run_negative_shift_right_arithmetic_test(
         SRAW,
         [0, 0, 0, 192],
         [0, 0, 0, 128, 255, 255, 255, 255],
@@ -750,7 +750,7 @@ fn rv64_shiftw_wrong_upper_sign_extension_negative_to_zero_test() {
         result_sign: Some(0),
         ..Default::default()
     };
-    run_negative_shift_arithmetic_right_test(SRAW, a, b, c, None, None, prank_vals);
+    run_negative_shift_right_arithmetic_test(SRAW, a, b, c, None, None, prank_vals);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -913,7 +913,7 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
 
         type Record<'a> = (
             &'a mut Rv64BaseAluWAdapterRecord,
-            &'a mut ShiftArithmeticRightCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
+            &'a mut ShiftRightArithmeticCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
         );
         harness
             .dense_arena

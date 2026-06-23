@@ -13,9 +13,9 @@ using namespace program;
 
 // Concrete type aliases for 64-bit
 using Rv64ShiftCoreRecord = ShiftCoreRecord<RV64_REGISTER_NUM_LIMBS>;
-using Rv64ShiftArithmeticRightCore = ShiftArithmeticRightCore<RV64_REGISTER_NUM_LIMBS>;
+using Rv64ShiftRightArithmeticCore = ShiftRightArithmeticCore<RV64_REGISTER_NUM_LIMBS>;
 template <typename T>
-using Rv64ShiftArithmeticRightCoreCols = ShiftArithmeticRightCoreCols<T, RV64_REGISTER_NUM_LIMBS>;
+using Rv64ShiftRightArithmeticCoreCols = ShiftRightArithmeticCoreCols<T, RV64_REGISTER_NUM_LIMBS>;
 
 // The logical shift (SLL/SRL) uses u16 limbs and the u16 ALU adapter; the arithmetic-right shift
 // keeps byte limbs and the byte adapter.
@@ -29,9 +29,9 @@ template <typename T> struct ShiftLogicalCols {
     Rv64ShiftLogicalU16CoreCols<T> core;
 };
 
-template <typename T> struct ShiftArithmeticRightCols {
+template <typename T> struct ShiftRightArithmeticCols {
     Rv64BaseAluAdapterCols<T> adapter;
-    Rv64ShiftArithmeticRightCoreCols<T> core;
+    Rv64ShiftRightArithmeticCoreCols<T> core;
 };
 
 struct ShiftLogicalRecord {
@@ -67,7 +67,7 @@ __global__ void rv64_shift_logical_tracegen(
     }
 }
 
-__global__ void rv64_shift_arithmetic_right_tracegen(
+__global__ void rv64_shift_right_arithmetic_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
@@ -87,11 +87,11 @@ __global__ void rv64_shift_arithmetic_right_tracegen(
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
-        auto core = Rv64ShiftArithmeticRightCore(
+        auto core = Rv64ShiftRightArithmeticCore(
             BitwiseOperationLookup(lookup_ptr),
             VariableRangeChecker(range_ptr, range_bins)
         );
-        core.fill_trace_row(row.slice_from(COL_INDEX(ShiftArithmeticRightCols, core)), rec.core);
+        core.fill_trace_row(row.slice_from(COL_INDEX(ShiftRightArithmeticCols, core)), rec.core);
     } else {
         row.fill_zero(0, width);
     }
@@ -122,7 +122,7 @@ extern "C" int _rv64_shift_logical_tracegen(
     return CHECK_KERNEL();
 }
 
-extern "C" int _rv64_shift_arithmetic_right_tracegen(
+extern "C" int _rv64_shift_right_arithmetic_tracegen(
     Fp *__restrict__ d_trace,
     size_t height,
     size_t width,
@@ -133,10 +133,10 @@ extern "C" int _rv64_shift_arithmetic_right_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(ShiftArithmeticRightCols<uint8_t>));
+    assert(width == sizeof(ShiftRightArithmeticCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    rv64_shift_arithmetic_right_tracegen<<<grid, block, 0, stream>>>(
+    rv64_shift_right_arithmetic_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         width,

@@ -19,7 +19,7 @@ use crate::{
         tracegen_arithmetic_right as rv64_shift_w_arithmetic_right_tracegen,
         tracegen_logical as rv64_shift_w_logical_tracegen,
     },
-    ShiftArithmeticRightCoreCols, ShiftArithmeticRightCoreRecord, ShiftLogicalCoreCols,
+    ShiftRightArithmeticCoreCols, ShiftRightArithmeticCoreRecord, ShiftLogicalCoreCols,
     ShiftLogicalCoreRecord,
 };
 
@@ -75,7 +75,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWArithmeticRightChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
             Rv64BaseAluWAdapterRecord,
-            ShiftArithmeticRightCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
+            ShiftRightArithmeticCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
@@ -84,7 +84,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWArithmeticRightChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = Rv64BaseAluWAdapterCols::<F>::width()
-            + ShiftArithmeticRightCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width();
+            + ShiftRightArithmeticCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 

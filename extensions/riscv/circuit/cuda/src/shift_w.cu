@@ -12,9 +12,9 @@ using namespace riscv;
 
 // Concrete type aliases for the 32-bit word variant on RV64.
 using Rv64ShiftWCoreRecord = ShiftCoreRecord<RV64_WORD_NUM_LIMBS>;
-using Rv64ShiftWArithmeticRightCore = ShiftArithmeticRightCore<RV64_WORD_NUM_LIMBS>;
+using Rv64ShiftWArithmeticRightCore = ShiftRightArithmeticCore<RV64_WORD_NUM_LIMBS>;
 template <typename T>
-using Rv64ShiftWArithmeticRightCoreCols = ShiftArithmeticRightCoreCols<T, RV64_WORD_NUM_LIMBS>;
+using Rv64ShiftWArithmeticRightCoreCols = ShiftRightArithmeticCoreCols<T, RV64_WORD_NUM_LIMBS>;
 
 // SLLW/SRLW use the u16 logical core (RV64_WORD_U16_LIMBS limbs of 16 bits) over the low 32-bit
 // word and the u16 W adapter; SRAW keeps byte limbs and the byte adapter.

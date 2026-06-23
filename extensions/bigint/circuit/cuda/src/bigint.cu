@@ -44,9 +44,9 @@ using Multiplication256Core = MultiplicationCore<INT256_NUM_U8_LIMBS>;
 template <typename T> using Multiplication256CoreCols = MultiplicationCoreCols<T, INT256_NUM_U8_LIMBS>;
 
 using Shift256CoreRecord = ShiftCoreRecord<INT256_NUM_U8_LIMBS>;
-using ShiftArithmeticRight256Core = ShiftArithmeticRightCore<INT256_NUM_U8_LIMBS>;
+using ShiftRightArithmetic256Core = ShiftRightArithmeticCore<INT256_NUM_U8_LIMBS>;
 template <typename T>
-using ShiftArithmeticRight256CoreCols = ShiftArithmeticRightCoreCols<T, INT256_NUM_U8_LIMBS>;
+using ShiftRightArithmetic256CoreCols = ShiftRightArithmeticCoreCols<T, INT256_NUM_U8_LIMBS>;
 // SLL/SRL use the u16 logical core (16 limbs of 16 bits) over the u16 vec-heap adapter.
 using ShiftLogical256U16Core = ShiftLogicalU16Core<INT256_NUM_U16_LIMBS, U16_BITS>;
 using ShiftLogical256U16CoreRecord = ShiftLogicalU16CoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
@@ -423,9 +423,9 @@ template <typename T> struct ShiftLogical256Cols {
     ShiftLogical256U16CoreCols<T> core;
 };
 
-template <typename T> struct ShiftArithmeticRight256Cols {
+template <typename T> struct ShiftRightArithmetic256Cols {
     Rv64VecHeapAdapter256Cols<T> adapter;
-    ShiftArithmeticRight256CoreCols<T> core;
+    ShiftRightArithmetic256CoreCols<T> core;
 };
 
 struct ShiftLogical256Record {
@@ -488,15 +488,15 @@ __global__ void shift256_arithmetic_right_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        ShiftArithmeticRight256Core core(
+        ShiftRightArithmetic256Core core(
             BitwiseOperationLookup(d_bitwise_lookup_ptr),
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins)
         );
         core.fill_trace_row(
-            row.slice_from(COL_INDEX(ShiftArithmeticRight256Cols, core)), rec.core
+            row.slice_from(COL_INDEX(ShiftRightArithmetic256Cols, core)), rec.core
         );
     } else {
-        row.fill_zero(0, sizeof(ShiftArithmeticRight256Cols<uint8_t>));
+        row.fill_zero(0, sizeof(ShiftRightArithmetic256Cols<uint8_t>));
     }
 }
 
@@ -538,7 +538,7 @@ extern "C" int _shift256_arithmetic_right_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(ShiftArithmeticRight256Cols<uint8_t>));
+    assert(width == sizeof(ShiftRightArithmetic256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
     shift256_arithmetic_right_tracegen<<<grid, block, 0, stream>>>(

@@ -14,7 +14,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::ShiftArithmeticRightExecutor;
+use super::ShiftRightArithmeticExecutor;
 #[allow(unused_imports)]
 use crate::{
     adapters::{imm_to_rv64_bytes, imm_to_rv64_u64},
@@ -23,21 +23,21 @@ use crate::{
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-struct ShiftArithmeticRightPreCompute {
+struct ShiftRightArithmeticPreCompute {
     c: u64,
     a: u8,
     b: u8,
 }
 
 impl<A, const LIMB_BITS: usize>
-    ShiftArithmeticRightExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    ShiftRightArithmeticExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut ShiftArithmeticRightPreCompute,
+        data: &mut ShiftRightArithmeticPreCompute,
     ) -> Result<bool, StaticProgramError> {
         let Instruction {
             opcode, a, b, c, e, ..
@@ -54,7 +54,7 @@ impl<A, const LIMB_BITS: usize>
         }
         let is_imm = e_u32 == RV64_IMM_AS;
         let c_u32 = c.as_canonical_u32();
-        *data = ShiftArithmeticRightPreCompute {
+        *data = ShiftRightArithmeticPreCompute {
             c: if is_imm {
                 imm_to_rv64_u64(c_u32)
             } else {
@@ -78,12 +78,12 @@ macro_rules! dispatch {
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for ShiftArithmeticRightExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for ShiftRightArithmeticExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
     fn pre_compute_size(&self) -> usize {
-        size_of::<ShiftArithmeticRightPreCompute>()
+        size_of::<ShiftRightArithmeticPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -93,7 +93,7 @@ where
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
-        let data: &mut ShiftArithmeticRightPreCompute = data.borrow_mut();
+        let data: &mut ShiftRightArithmeticPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
         dispatch!(execute_e1_handler, is_imm)
@@ -109,7 +109,7 @@ where
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut ShiftArithmeticRightPreCompute = data.borrow_mut();
+        let data: &mut ShiftRightArithmeticPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
         dispatch!(execute_e1_handler, is_imm)
@@ -118,7 +118,7 @@ where
 
 #[cfg(feature = "aot")]
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotExecutor<F>
-    for ShiftArithmeticRightExecutor<A, NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -186,12 +186,12 @@ where
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for ShiftArithmeticRightExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for ShiftRightArithmeticExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<ShiftArithmeticRightPreCompute>>()
+        size_of::<E2PreCompute<ShiftRightArithmeticPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -202,7 +202,7 @@ where
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
-        let data: &mut E2PreCompute<ShiftArithmeticRightPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<ShiftRightArithmeticPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
@@ -217,7 +217,7 @@ where
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<Handler<F, Ctx>, StaticProgramError> {
-        let data: &mut E2PreCompute<ShiftArithmeticRightPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<ShiftRightArithmeticPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
@@ -227,7 +227,7 @@ where
 
 #[cfg(feature = "aot")]
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotMeteredExecutor<F>
-    for ShiftArithmeticRightExecutor<A, NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -249,7 +249,7 @@ where
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_IMM: bool>(
-    pre_compute: &ShiftArithmeticRightPreCompute,
+    pre_compute: &ShiftRightArithmeticPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
@@ -277,8 +277,8 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_IMM:
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &ShiftArithmeticRightPreCompute =
-        std::slice::from_raw_parts(pre_compute, size_of::<ShiftArithmeticRightPreCompute>())
+    let pre_compute: &ShiftRightArithmeticPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<ShiftRightArithmeticPreCompute>())
             .borrow();
     execute_e12_impl::<F, CTX, IS_IMM>(pre_compute, exec_state);
 }
@@ -289,9 +289,9 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const 
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<ShiftArithmeticRightPreCompute> = std::slice::from_raw_parts(
+    let pre_compute: &E2PreCompute<ShiftRightArithmeticPreCompute> = std::slice::from_raw_parts(
         pre_compute,
-        size_of::<E2PreCompute<ShiftArithmeticRightPreCompute>>(),
+        size_of::<E2PreCompute<ShiftRightArithmeticPreCompute>>(),
     )
     .borrow();
     exec_state

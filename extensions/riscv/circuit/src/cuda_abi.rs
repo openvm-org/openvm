@@ -294,7 +294,7 @@ pub mod shift_cuda {
             stream: cudaStream_t,
         ) -> i32;
 
-        fn _rv64_shift_arithmetic_right_tracegen(
+        fn _rv64_shift_right_arithmetic_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -336,7 +336,7 @@ pub mod shift_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_shift_arithmetic_right_tracegen(
+        CudaError::from_result(_rv64_shift_right_arithmetic_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,

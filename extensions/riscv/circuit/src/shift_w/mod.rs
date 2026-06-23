@@ -6,8 +6,8 @@ use super::{
         Rv64BaseAluWU16AdapterAir, Rv64BaseAluWU16AdapterExecutor, Rv64BaseAluWU16AdapterFiller,
         RV64_BYTE_BITS, RV64_WORD_NUM_LIMBS, RV64_WORD_U16_LIMBS, U16_BITS,
     },
-    shift_arithmetic_right::{
-        ShiftArithmeticRightCoreAir, ShiftArithmeticRightExecutor, ShiftArithmeticRightFiller,
+    shift_right_arithmetic::{
+        ShiftRightArithmeticCoreAir, ShiftRightArithmeticExecutor, ShiftRightArithmeticFiller,
     },
     shift_logical::{ShiftLogicalCoreAir, ShiftLogicalFiller},
 };
@@ -20,12 +20,12 @@ pub use preflight::*;
 // write); SRAW uses the byte-shaped arithmetic-right core.
 pub type ShiftWLogicalCoreAir = ShiftLogicalCoreAir<RV64_WORD_U16_LIMBS, U16_BITS>;
 pub type ShiftWArithmeticRightCoreAir =
-    ShiftArithmeticRightCoreAir<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+    ShiftRightArithmeticCoreAir<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 pub type ShiftWArithmeticRightExecutor<A> =
-    ShiftArithmeticRightExecutor<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+    ShiftRightArithmeticExecutor<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 pub type ShiftWLogicalFiller<A> = ShiftLogicalFiller<A, RV64_WORD_U16_LIMBS, U16_BITS>;
 pub type ShiftWArithmeticRightFiller<A> =
-    ShiftArithmeticRightFiller<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
+    ShiftRightArithmeticFiller<A, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 
 #[cfg(feature = "cuda")]
 mod cuda;

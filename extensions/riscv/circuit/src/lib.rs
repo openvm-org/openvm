@@ -34,7 +34,7 @@ mod loadstore;
 mod mul;
 mod mul_w;
 mod mulh;
-mod shift_arithmetic_right;
+mod shift_right_arithmetic;
 mod shift_logical;
 mod shift_w;
 
@@ -55,7 +55,7 @@ pub use loadstore::*;
 pub use mul::*;
 pub use mul_w::*;
 pub use mulh::*;
-pub use shift_arithmetic_right::*;
+pub use shift_right_arithmetic::*;
 pub use shift_logical::*;
 pub use shift_w::*;
 

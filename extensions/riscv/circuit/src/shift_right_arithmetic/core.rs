@@ -24,7 +24,7 @@ use openvm_stark_backend::{
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
-pub struct ShiftArithmeticRightCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftRightArithmeticCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
     pub c: [T; NUM_LIMBS],
@@ -49,27 +49,27 @@ pub struct ShiftArithmeticRightCoreCols<T, const NUM_LIMBS: usize, const LIMB_BI
 /// Note: when the shift amount from operand is greater than the number of bits, only shift
 /// `shift_amount % num_bits` bits. This matches the RISC-V specs for SRA.
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(ShiftArithmeticRightCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
-pub struct ShiftArithmeticRightCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+#[columns_via(ShiftRightArithmeticCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
+pub struct ShiftRightArithmeticCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for ShiftArithmeticRightCoreAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
-        ShiftArithmeticRightCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
+        ShiftRightArithmeticCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for ShiftArithmeticRightCoreAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for ShiftArithmeticRightCoreAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -83,7 +83,7 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &ShiftArithmeticRightCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
+        let cols: &ShiftRightArithmeticCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
         builder.assert_bool(cols.is_valid);
         let is_valid: AB::Expr = cols.is_valid.into();
 
@@ -207,20 +207,20 @@ where
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct ShiftArithmeticRightCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftRightArithmeticCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub b: [u8; NUM_LIMBS],
     pub c: [u8; NUM_LIMBS],
     pub local_opcode: u8,
 }
 
 #[derive(Clone, Copy)]
-pub struct ShiftArithmeticRightExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftRightArithmeticExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
 }
 
 #[derive(Clone)]
-pub struct ShiftArithmeticRightFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftRightArithmeticFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
@@ -228,7 +228,7 @@ pub struct ShiftArithmeticRightFiller<A, const NUM_LIMBS: usize, const LIMB_BITS
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    ShiftArithmeticRightExecutor<A, NUM_LIMBS, LIMB_BITS>
+    ShiftRightArithmeticExecutor<A, NUM_LIMBS, LIMB_BITS>
 {
     pub fn new(adapter: A, offset: usize) -> Self {
         assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
@@ -237,7 +237,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    ShiftArithmeticRightFiller<A, NUM_LIMBS, LIMB_BITS>
+    ShiftRightArithmeticFiller<A, NUM_LIMBS, LIMB_BITS>
 {
     pub fn new(
         adapter: A,
@@ -256,7 +256,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for ShiftArithmeticRightExecutor<A, NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
@@ -270,7 +270,7 @@ where
         EmptyAdapterCoreLayout<F, A>,
         (
             A::RecordMut<'buf>,
-            &'buf mut ShiftArithmeticRightCoreRecord<NUM_LIMBS, LIMB_BITS>,
+            &'buf mut ShiftRightArithmeticCoreRecord<NUM_LIMBS, LIMB_BITS>,
         ),
     >,
 {
@@ -297,7 +297,7 @@ where
             .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let (output, _, _) = run_shift_arithmetic_right::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
+        let (output, _, _) = run_shift_right_arithmetic::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
 
         core_record.b = rs1;
         core_record.c = rs2;
@@ -316,23 +316,23 @@ where
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for ShiftArithmeticRightFiller<A, NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticFiller<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // ShiftArithmeticRightCoreCols::width() elements
+        // ShiftRightArithmeticCoreCols::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid ShiftArithmeticRightCoreRecord written by the
+        // SAFETY: core_row contains a valid ShiftRightArithmeticCoreRecord written by the
         // executor during trace generation
-        let record: &ShiftArithmeticRightCoreRecord<NUM_LIMBS, LIMB_BITS> =
+        let record: &ShiftRightArithmeticCoreRecord<NUM_LIMBS, LIMB_BITS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
 
         let (a, limb_shift, bit_shift) =
-            run_shift_arithmetic_right::<NUM_LIMBS, LIMB_BITS>(&record.b, &record.c);
+            run_shift_right_arithmetic::<NUM_LIMBS, LIMB_BITS>(&record.b, &record.c);
 
         for pair in a.chunks_exact(2) {
             self.bitwise_lookup_chip
@@ -375,7 +375,7 @@ where
         self.bitwise_lookup_chip
             .request_xor(record.b[NUM_LIMBS - 1] as u32, 1 << (LIMB_BITS - 1));
 
-        let core_row: &mut ShiftArithmeticRightCoreCols<F, NUM_LIMBS, LIMB_BITS> =
+        let core_row: &mut ShiftRightArithmeticCoreCols<F, NUM_LIMBS, LIMB_BITS> =
             core_row.borrow_mut();
         core_row.is_valid = F::ONE;
         core_row.bit_multiplier = F::from_usize(1 << bit_shift);
@@ -391,7 +391,7 @@ where
 
 // Returns (result, limb_shift, bit_shift)
 #[inline(always)]
-pub(super) fn run_shift_arithmetic_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_shift_right_arithmetic<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
 ) -> ([u8; NUM_LIMBS], usize, usize) {

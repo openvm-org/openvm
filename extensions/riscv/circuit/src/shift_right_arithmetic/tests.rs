@@ -31,8 +31,8 @@ use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
     crate::{
-        adapters::Rv64BaseAluAdapterRecord, Rv64ShiftArithmeticRightChipGpu,
-        ShiftArithmeticRightCoreRecord,
+        adapters::Rv64BaseAluAdapterRecord, Rv64ShiftRightArithmeticChipGpu,
+        ShiftRightArithmeticCoreRecord,
     },
     openvm_circuit::arch::{
         testing::{
@@ -44,8 +44,8 @@ use {
 };
 
 use super::{
-    core::run_shift_arithmetic_right, Rv64ShiftArithmeticRightChip, ShiftArithmeticRightCoreAir,
-    ShiftArithmeticRightCoreCols,
+    core::run_shift_right_arithmetic, Rv64ShiftRightArithmeticChip, ShiftRightArithmeticCoreAir,
+    ShiftRightArithmeticCoreCols,
 };
 use crate::{
     adapters::{
@@ -53,16 +53,16 @@ use crate::{
         RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
-    Rv64ShiftArithmeticRightAir, Rv64ShiftArithmeticRightExecutor, ShiftArithmeticRightFiller,
+    Rv64ShiftRightArithmeticAir, Rv64ShiftRightArithmeticExecutor, ShiftRightArithmeticFiller,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 type Harness = TestChipHarness<
     F,
-    Rv64ShiftArithmeticRightExecutor,
-    Rv64ShiftArithmeticRightAir,
-    Rv64ShiftArithmeticRightChip<F>,
+    Rv64ShiftRightArithmeticExecutor,
+    Rv64ShiftRightArithmeticAir,
+    Rv64ShiftRightArithmeticChip<F>,
 >;
 
 fn create_harness_fields(
@@ -72,24 +72,24 @@ fn create_harness_fields(
     range_checker: Arc<VariableRangeCheckerChip>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (
-    Rv64ShiftArithmeticRightAir,
-    Rv64ShiftArithmeticRightExecutor,
-    Rv64ShiftArithmeticRightChip<F>,
+    Rv64ShiftRightArithmeticAir,
+    Rv64ShiftRightArithmeticExecutor,
+    Rv64ShiftRightArithmeticChip<F>,
 ) {
-    let air = Rv64ShiftArithmeticRightAir::new(
+    let air = Rv64ShiftRightArithmeticAir::new(
         Rv64BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
-        ShiftArithmeticRightCoreAir::new(
+        ShiftRightArithmeticCoreAir::new(
             bitwise_chip.bus(),
             range_checker.bus(),
             ShiftOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64ShiftArithmeticRightExecutor::new(
+    let executor = Rv64ShiftRightArithmeticExecutor::new(
         Rv64BaseAluAdapterExecutor,
         ShiftOpcode::CLASS_OFFSET,
     );
-    let chip = Rv64ShiftArithmeticRightChip::<F>::new(
-        ShiftArithmeticRightFiller::new(
+    let chip = Rv64ShiftRightArithmeticChip::<F>::new(
+        ShiftRightArithmeticFiller::new(
             Rv64BaseAluAdapterFiller::new(bitwise_chip.clone()),
             bitwise_chip,
             range_checker,
@@ -162,7 +162,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(executor, arena, &instruction);
 
-    let (a, _, _) = run_shift_arithmetic_right::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(&b, &c);
+    let (a, _, _) = run_shift_right_arithmetic::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(&b, &c);
     assert_eq!(
         a.map(F::from_u8),
         tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd)
@@ -176,7 +176,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 // passes all constraints.
 //////////////////////////////////////////////////////////////////////////////////////
 #[test_case(SRA, 100)]
-fn run_rv64_shift_arithmetic_right_rand_test(opcode: ShiftOpcode, num_ops: usize) {
+fn run_rv64_shift_right_arithmetic_rand_test(opcode: ShiftOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise_chip) = create_harness(&tester);
@@ -246,7 +246,7 @@ fn run_negative_shift_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut ShiftArithmeticRightCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
+        let cols: &mut ShiftRightArithmeticCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
         cols.a = prank_a.map(F::from_u32);
@@ -359,7 +359,7 @@ fn run_sra_sanity_test() {
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [81, 20, 50, 80, 49, 190, 190, 113];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [110, 228, 150, 131, 30, 221, 255, 255];
     let (result, limb_shift, bit_shift) =
-        run_shift_arithmetic_right::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(&x, &y);
+        run_shift_right_arithmetic::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(&x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
@@ -377,10 +377,10 @@ fn run_sra_sanity_test() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv64ShiftArithmeticRightExecutor,
-    Rv64ShiftArithmeticRightAir,
-    Rv64ShiftArithmeticRightChipGpu,
-    Rv64ShiftArithmeticRightChip<F>,
+    Rv64ShiftRightArithmeticExecutor,
+    Rv64ShiftRightArithmeticAir,
+    Rv64ShiftRightArithmeticChipGpu,
+    Rv64ShiftRightArithmeticChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -400,7 +400,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_checker,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64ShiftArithmeticRightChipGpu::new(
+    let gpu_chip = Rv64ShiftRightArithmeticChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -411,7 +411,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 
 #[cfg(feature = "cuda")]
 #[test_case(ShiftOpcode::SRA, 100)]
-fn test_cuda_rand_shift_arithmetic_right_tracegen(opcode: ShiftOpcode, num_ops: usize) {
+fn test_cuda_rand_shift_right_arithmetic_tracegen(opcode: ShiftOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
@@ -433,7 +433,7 @@ fn test_cuda_rand_shift_arithmetic_right_tracegen(opcode: ShiftOpcode, num_ops: 
 
     type Record<'a> = (
         &'a mut Rv64BaseAluAdapterRecord,
-        &'a mut ShiftArithmeticRightCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+        &'a mut ShiftRightArithmeticCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
     );
     harness
         .dense_arena

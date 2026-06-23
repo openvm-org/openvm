@@ -17,7 +17,7 @@ use openvm_riscv_circuit::{
     AddSubCoreCols, AddSubCoreRecord, BitwiseLogicCoreCols, BitwiseLogicCoreRecord,
     BranchEqualCoreCols, BranchEqualCoreRecord, BranchLessThanCoreCols, BranchLessThanCoreRecord,
     LessThanCoreCols, LessThanCoreRecord, MultiplicationCoreCols, MultiplicationCoreRecord,
-    ShiftArithmeticRightCoreCols, ShiftArithmeticRightCoreRecord, ShiftLogicalCoreCols,
+    ShiftRightArithmeticCoreCols, ShiftRightArithmeticCoreRecord, ShiftLogicalCoreCols,
     ShiftLogicalCoreRecord,
 };
 use openvm_stark_backend::prover::AirProvingContext;
@@ -298,8 +298,8 @@ pub type Shift256AdapterRecord =
 pub type ShiftLogical256U16AdapterRecord =
     Rv64VecHeapU16AdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
 pub type ShiftLogical256CoreRecord = ShiftLogicalCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
-pub type ShiftArithmeticRight256CoreRecord =
-    ShiftArithmeticRightCoreRecord<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>;
+pub type ShiftRightArithmetic256CoreRecord =
+    ShiftRightArithmeticCoreRecord<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>;
 
 #[derive(new)]
 pub struct ShiftLogical256ChipGpu {
@@ -309,7 +309,7 @@ pub struct ShiftLogical256ChipGpu {
 }
 
 #[derive(new)]
-pub struct ShiftArithmeticRight256ChipGpu {
+pub struct ShiftRightArithmetic256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub pointer_max_bits: usize,
@@ -356,10 +356,10 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftLogical256ChipGpu {
     }
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for ShiftArithmeticRight256ChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for ShiftRightArithmetic256ChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize =
-            size_of::<(Shift256AdapterRecord, ShiftArithmeticRight256CoreRecord)>();
+            size_of::<(Shift256AdapterRecord, ShiftRightArithmetic256CoreRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -367,7 +367,7 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftArithmeticRight256ChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width =
-            ShiftArithmeticRightCoreCols::<F, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>::width()
+            ShiftRightArithmeticCoreCols::<F, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>::width()
                 + Rv64VecHeapAdapterCols::<
                     F,
                     NUM_READS,

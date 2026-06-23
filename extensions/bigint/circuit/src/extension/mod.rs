@@ -109,7 +109,7 @@ pub enum Int256Executor {
     BranchLessThan256(Rv64BranchLessThan256Executor),
     Multiplication256(Rv64Multiplication256Executor),
     ShiftLogical256(Rv64ShiftLogical256Executor),
-    ShiftArithmeticRight256(Rv64ShiftArithmeticRight256Executor),
+    ShiftRightArithmetic256(Rv64ShiftRightArithmetic256Executor),
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
@@ -188,12 +188,12 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
             .map(|x| x.global_opcode()),
         )?;
 
-        let shift_arithmetic_right = Rv64ShiftArithmeticRight256Executor::new(
+        let shift_right_arithmetic = Rv64ShiftRightArithmetic256Executor::new(
             AluAdapterExecutor::new(Rv64VecHeapAdapterExecutor::new(byte_ptr_max_bits)),
             Rv64Shift256Opcode::CLASS_OFFSET,
         );
         inventory.add_executor(
-            shift_arithmetic_right,
+            shift_right_arithmetic,
             [Rv64Shift256Opcode(ShiftOpcode::SRA)].map(|x| x.global_opcode()),
         )?;
 
@@ -325,20 +325,20 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
         );
         inventory.add_air(shift_logical);
 
-        let shift_arithmetic_right = Rv64ShiftArithmeticRight256Air::new(
+        let shift_right_arithmetic = Rv64ShiftRightArithmetic256Air::new(
             AluAdapterAir::new(Rv64VecHeapAdapterAir::new(
                 exec_bridge,
                 memory_bridge,
                 range_checker,
                 byte_ptr_max_bits,
             )),
-            ShiftArithmeticRightCoreAir::new(
+            ShiftRightArithmeticCoreAir::new(
                 bitwise_lu,
                 range_checker,
                 Rv64Shift256Opcode::CLASS_OFFSET,
             ),
         );
-        inventory.add_air(shift_arithmetic_right);
+        inventory.add_air(shift_right_arithmetic);
 
         Ok(())
     }
@@ -475,9 +475,9 @@ where
         );
         inventory.add_executor_chip(shift_logical);
 
-        inventory.next_air::<Rv64ShiftArithmeticRight256Air>()?;
-        let shift_arithmetic_right = Rv64ShiftArithmeticRight256Chip::new(
-            ShiftArithmeticRightFiller::new(
+        inventory.next_air::<Rv64ShiftRightArithmetic256Air>()?;
+        let shift_right_arithmetic = Rv64ShiftRightArithmetic256Chip::new(
+            ShiftRightArithmeticFiller::new(
                 Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 bitwise_lu.clone(),
                 range_checker.clone(),
@@ -485,7 +485,7 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift_arithmetic_right);
+        inventory.add_executor_chip(shift_right_arithmetic);
         Ok(())
     }
 }

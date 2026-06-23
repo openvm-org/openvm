@@ -13,22 +13,22 @@ use crate::{
     adapters::{
         Rv64BaseAluAdapterCols, Rv64BaseAluAdapterRecord, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
-    cuda_abi::shift_cuda::tracegen_arithmetic_right as rv64_shift_arithmetic_right_tracegen,
-    ShiftArithmeticRightCoreCols, ShiftArithmeticRightCoreRecord,
+    cuda_abi::shift_cuda::tracegen_arithmetic_right as rv64_shift_right_arithmetic_tracegen,
+    ShiftRightArithmeticCoreCols, ShiftRightArithmeticCoreRecord,
 };
 
 #[derive(new)]
-pub struct Rv64ShiftArithmeticRightChipGpu {
+pub struct Rv64ShiftRightArithmeticChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftArithmeticRightChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftRightArithmeticChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
             Rv64BaseAluAdapterRecord,
-            ShiftArithmeticRightCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+            ShiftRightArithmeticCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
@@ -37,14 +37,14 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftArithmeticRightChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = Rv64BaseAluAdapterCols::<F>::width()
-            + ShiftArithmeticRightCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>::width();
+            + ShiftRightArithmeticCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
         let d_records = records.to_device_on(device_ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
-            rv64_shift_arithmetic_right_tracegen(
+            rv64_shift_right_arithmetic_tracegen(
                 d_trace.buffer(),
                 trace_height,
                 &d_records,

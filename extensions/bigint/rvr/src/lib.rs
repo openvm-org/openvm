@@ -233,7 +233,7 @@ pub struct Int256Extension {
     add_sub_chip_idx: Option<AirIndex>,
     bitwise_logic_chip_idx: Option<AirIndex>,
     shift_logical_chip_idx: Option<AirIndex>,
-    shift_arithmetic_right_chip_idx: Option<AirIndex>,
+    shift_right_arithmetic_chip_idx: Option<AirIndex>,
     less_than_chip_idx: Option<AirIndex>,
     mul_chip_idx: Option<AirIndex>,
     branch_eq_chip_idx: Option<AirIndex>,
@@ -245,7 +245,7 @@ impl Int256Extension {
         let add_sub_chip_idx = opcode_air_idx(ctx, Rv64BaseAlu256Opcode(BaseAluOpcode::ADD))?;
         let bitwise_logic_chip_idx = opcode_air_idx(ctx, Rv64BaseAlu256Opcode(BaseAluOpcode::XOR))?;
         let shift_logical_chip_idx = opcode_air_idx(ctx, Rv64Shift256Opcode(ShiftOpcode::SLL))?;
-        let shift_arithmetic_right_chip_idx =
+        let shift_right_arithmetic_chip_idx =
             opcode_air_idx(ctx, Rv64Shift256Opcode(ShiftOpcode::SRA))?;
         let less_than_chip_idx = opcode_air_idx(ctx, Rv64LessThan256Opcode(LessThanOpcode::SLT))?;
         let mul_chip_idx = opcode_air_idx(ctx, Rv64Mul256Opcode(MulOpcode::MUL))?;
@@ -258,7 +258,7 @@ impl Int256Extension {
             add_sub_chip_idx,
             bitwise_logic_chip_idx,
             shift_logical_chip_idx,
-            shift_arithmetic_right_chip_idx,
+            shift_right_arithmetic_chip_idx,
             less_than_chip_idx,
             mul_chip_idx,
             branch_eq_chip_idx,
@@ -283,7 +283,7 @@ impl Int256Extension {
         } else if opcode >= shift_start && opcode < shift_start + ShiftOpcode::COUNT {
             match opcode - shift_start {
                 0..=1 => self.shift_logical_chip_idx,
-                _ => self.shift_arithmetic_right_chip_idx,
+                _ => self.shift_right_arithmetic_chip_idx,
             }
         } else if opcode >= lt_start && opcode < lt_start + LessThanOpcode::COUNT {
             self.less_than_chip_idx

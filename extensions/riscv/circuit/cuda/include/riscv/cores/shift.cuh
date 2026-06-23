@@ -29,7 +29,7 @@ template <typename T, size_t NUM_LIMBS> struct ShiftLogicalCoreCols {
     T bit_shift_carry[NUM_LIMBS];
 };
 
-template <typename T, size_t NUM_LIMBS> struct ShiftArithmeticRightCoreCols {
+template <typename T, size_t NUM_LIMBS> struct ShiftRightArithmeticCoreCols {
     T a[NUM_LIMBS];
     T b[NUM_LIMBS];
     T c[NUM_LIMBS];
@@ -363,13 +363,13 @@ template <size_t NUM_LIMBS> struct ShiftLogicalCore {
     }
 };
 
-template <size_t NUM_LIMBS> struct ShiftArithmeticRightCore {
+template <size_t NUM_LIMBS> struct ShiftRightArithmeticCore {
     BitwiseOperationLookup bitwise_lookup;
     VariableRangeChecker range_checker;
 
-    template <typename T> using Cols = ShiftArithmeticRightCoreCols<T, NUM_LIMBS>;
+    template <typename T> using Cols = ShiftRightArithmeticCoreCols<T, NUM_LIMBS>;
 
-    __device__ ShiftArithmeticRightCore(BitwiseOperationLookup lookup, VariableRangeChecker range)
+    __device__ ShiftRightArithmeticCore(BitwiseOperationLookup lookup, VariableRangeChecker range)
         : bitwise_lookup(lookup), range_checker(range) {}
 
     __device__ void fill_trace_row(RowSlice row, ShiftCoreRecord<NUM_LIMBS> record) {
