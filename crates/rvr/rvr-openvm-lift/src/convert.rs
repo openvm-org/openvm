@@ -66,9 +66,10 @@ where
     Ok(lifted)
 }
 
-/// Scan the VmExe's init_memory for 4-byte-aligned values that look like
-/// valid instruction PCs. This discovers switch table entries, function
-/// pointer arrays, and other code pointers embedded in read-only data.
+/// Scan the VmExe's init_memory for values that look like valid instruction PCs.
+/// Candidates are read at 4-byte-aligned addresses (RISC-V instruction width),
+/// not memory word (u64) boundaries. This discovers switch table entries,
+/// function pointer arrays, and other code pointers embedded in read-only data.
 pub fn scan_init_memory_for_code_pointers<F: PrimeField32>(
     exe: &VmExe<F>,
     valid_pcs: &HashSet<u32>,
@@ -81,7 +82,7 @@ pub fn scan_init_memory_for_code_pointers<F: PrimeField32>(
         }
     }
 
-    // Scan 4-byte-aligned addresses for potential code pointers.
+    // Scan 4-byte-aligned addresses (RISC-V instruction width) for potential code pointers.
     let mut targets = Vec::new();
     let addrs: Vec<u32> = mem_bytes.keys().copied().collect();
     for &addr in &addrs {

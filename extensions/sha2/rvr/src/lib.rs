@@ -24,9 +24,9 @@ pub struct Sha256Instr {
     pub state_ptr_reg: Reg,
     /// Register index holding input pointer (message block).
     pub input_ptr_reg: Reg,
-    /// SHA-256 main chip AIR index (1 row per instruction).
+    /// AIR index of the SHA-256 main chip (1 row per instruction).
     pub main_chip_idx: Option<AirIndex>,
-    /// SHA-256 block hasher chip AIR index (ROWS_PER_BLOCK rows per instruction).
+    /// AIR index of the SHA-256 block hasher chip (ROWS_PER_BLOCK rows per instruction).
     pub block_hasher_chip_idx: Option<AirIndex>,
 }
 
@@ -67,9 +67,9 @@ pub struct Sha512Instr {
     pub state_ptr_reg: Reg,
     /// Register index holding input pointer (message block).
     pub input_ptr_reg: Reg,
-    /// SHA-512 main chip AIR index (1 row per instruction).
+    /// AIR index of the SHA-512 main chip (1 row per instruction).
     pub main_chip_idx: Option<AirIndex>,
-    /// SHA-512 block hasher chip AIR index (ROWS_PER_BLOCK rows per instruction).
+    /// AIR index of the SHA-512 block hasher chip (ROWS_PER_BLOCK rows per instruction).
     pub block_hasher_chip_idx: Option<AirIndex>,
 }
 
@@ -110,9 +110,8 @@ pub struct Sha2Extension {
 impl Sha2Extension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
         let sha256_main_chip_idx = opcode_air_idx(ctx, Rv64Sha2Opcode::SHA256)?;
-        // SHA-256 block hasher: in extend_circuit, the block hasher is added right before
-        // the main chip. Due to reverse ordering of AIR indices,
-        // block_hasher_air_idx = main_air_idx + 1.
+        // The SHA-256 block hasher is registered adjacent to the main chip and
+        // assigned the next AIR index (main_air_idx + 1) due to reverse registration order.
         let sha256_block_hasher_chip_idx = sha256_main_chip_idx.map(AirIndex::next);
 
         let sha512_main_chip_idx = opcode_air_idx(ctx, Rv64Sha2Opcode::SHA512)?;
