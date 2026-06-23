@@ -306,7 +306,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
 }
 
 #[repr(C)]
-#[derive(AlignedBytesBorrow, Clone, Debug)]
+#[derive(AlignedBytesBorrow, Debug)]
 pub struct Rv64LoadStoreAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
@@ -317,10 +317,11 @@ pub struct Rv64LoadStoreAdapterRecord {
 
     pub rd_rs2_ptr: u32,
     pub read_data_aux: MemoryReadAuxRecord,
-
     pub imm: u16,
     pub imm_sign: bool,
+
     pub mem_as: u8,
+
     pub write_prev_timestamp: u32,
 }
 
@@ -503,9 +504,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
         // - get_record_from_slice correctly interprets the bytes as Rv64LoadStoreAdapterRecord
-        let record_ref: &Rv64LoadStoreAdapterRecord =
+        let record: &Rv64LoadStoreAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let record = record_ref.clone();
         let adapter_row: &mut Rv64LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
 
         let needs_write = record.rd_rs2_ptr != u32::MAX;
