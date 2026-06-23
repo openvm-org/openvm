@@ -44,11 +44,11 @@ using Multiplication256CoreRecord = MultiplicationCoreRecord<INT256_NUM_U8_LIMBS
 using Multiplication256Core = MultiplicationCore<INT256_NUM_U8_LIMBS>;
 template <typename T> using Multiplication256CoreCols = MultiplicationCoreCols<T, INT256_NUM_U8_LIMBS>;
 
-using Shift256CoreRecord = ShiftRightArithmeticCoreRecord<INT256_NUM_U8_LIMBS>;
-using ShiftRightArithmetic256Core = ShiftRightArithmeticCore<INT256_NUM_U8_LIMBS>;
+using Shift256CoreRecord = ShiftRightArithmeticCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
+using ShiftRightArithmetic256Core = ShiftRightArithmeticCore<INT256_NUM_U16_LIMBS, U16_BITS>;
 template <typename T>
-using ShiftRightArithmetic256CoreCols = ShiftRightArithmeticCoreCols<T, INT256_NUM_U8_LIMBS>;
-// SLL/SRL use the u16 logical core (16 limbs of 16 bits) over the u16 vec-heap adapter.
+using ShiftRightArithmetic256CoreCols =
+    ShiftRightArithmeticCoreCols<T, INT256_NUM_U16_LIMBS, U16_BITS>;
 using ShiftLogical256Core = ShiftLogicalCore<INT256_NUM_U16_LIMBS, U16_BITS>;
 using ShiftLogical256CoreRecord = ShiftLogicalCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
 template <typename T>
@@ -425,7 +425,7 @@ template <typename T> struct ShiftLogical256Cols {
 };
 
 template <typename T> struct ShiftRightArithmetic256Cols {
-    Rv64VecHeapAdapter256Cols<T> adapter;
+    Rv64VecHeapU16Adapter256Cols<T> adapter;
     ShiftRightArithmetic256CoreCols<T> core;
 };
 
@@ -435,7 +435,7 @@ struct ShiftLogical256Record {
 };
 
 struct Shift256Record {
-    Rv64VecHeapAdapter256Record adapter;
+    Rv64VecHeapU16Adapter256Record adapter;
     Shift256CoreRecord core;
 };
 
@@ -473,7 +473,6 @@ __global__ void shift256_right_arithmetic_tracegen(
     DeviceBufferConstView<Shift256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
-    uint32_t *d_bitwise_lookup_ptr,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -482,7 +481,7 @@ __global__ void shift256_right_arithmetic_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        Rv64VecHeapAdapter256 adapter(
+        Rv64VecHeapU16Adapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
             timestamp_max_bits
@@ -490,7 +489,6 @@ __global__ void shift256_right_arithmetic_tracegen(
         adapter.fill_trace_row(row, rec.adapter);
 
         ShiftRightArithmetic256Core core(
-            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins)
         );
         core.fill_trace_row(
@@ -534,7 +532,6 @@ extern "C" int _shift256_right_arithmetic_tracegen(
     DeviceBufferConstView<Shift256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
-    uint32_t *d_bitwise_lookup_ptr,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
@@ -548,7 +545,6 @@ extern "C" int _shift256_right_arithmetic_tracegen(
         d_records,
         d_range_checker_ptr,
         range_checker_bins,
-        d_bitwise_lookup_ptr,
         pointer_max_bits,
         timestamp_max_bits
     );

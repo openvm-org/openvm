@@ -1,14 +1,10 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::*,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
@@ -33,6 +29,10 @@ pub struct ShiftRightArithmeticCoreCols<T, const NUM_LIMBS: usize, const LIMB_BI
 
     // bit_multiplier = 2^bit_shift
     pub bit_multiplier: T,
+    // carry_multiplier = 2^(LIMB_BITS - bit_shift). Used to position the bits that cross the limb
+    // boundary additively, avoiding the `a * 2^bit_shift` product that would overflow BabyBear for
+    // u16 limbs.
+    pub carry_multiplier: T,
 
     // Sign of b for SRA
     pub b_sign: T,
@@ -41,17 +41,25 @@ pub struct ShiftRightArithmeticCoreCols<T, const NUM_LIMBS: usize, const LIMB_BI
     pub bit_shift_marker: [T; LIMB_BITS],
     pub limb_shift_marker: [T; NUM_LIMBS],
 
-    // Part of each b[i] that gets bit shifted to the next limb
+    // Right-shift decomposition of each b[k] into the low `bit_shift` bits that cross into the
+    // previous limb (`carry`) and the high bits that stay (`aux`):
+    //   b[k] = carry[k] + aux[k] * 2^bit_shift
+    // `carry` is range checked to bit_shift bits, `aux` to LIMB_BITS - bit_shift bits.
     pub bit_shift_carry: [T; NUM_LIMBS],
+    pub bit_shift_aux: [T; NUM_LIMBS],
 }
 
-/// Arithmetic shift-right AIR (SRA).
+/// Arithmetic shift-right AIR (SRA) over u16 limbs.
+///
+/// To stay sound at `LIMB_BITS = 16`, each `b` limb is split into `carry`/`aux` parts and each
+/// output limb is recombined additively rather than forming `a * 2^bit_shift`, which would overflow
+/// BabyBear. The vacated high bits are filled with the sign bit of the top limb.
+///
 /// Note: when the shift amount from operand is greater than the number of bits, only shift
 /// `shift_amount % num_bits` bits. This matches the RISC-V specs for SRA.
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(ShiftRightArithmeticCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
 pub struct ShiftRightArithmeticCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
 }
@@ -91,9 +99,8 @@ where
         let b = &cols.b;
         let c = &cols.c;
 
-        // Constrain that bit_shift, bit_multiplier are correct, i.e. that bit_multiplier =
-        // 1 << bit_shift. Because the sum of all bit_shift_marker[i] is constrained to be
-        // 1, bit_shift is guaranteed to be in range.
+        // Constrain that bit_shift and the (bit/carry) multipliers are correct. Because the sum of
+        // all bit_shift_marker[i] is constrained to be 1, bit_shift is guaranteed to be in range.
         let mut bit_marker_sum = AB::Expr::ZERO;
         let mut bit_shift = AB::Expr::ZERO;
 
@@ -107,10 +114,24 @@ where
                 cols.bit_multiplier,
                 AB::Expr::from_usize(1 << i) * is_valid.clone(),
             );
+            when_bit_shift.assert_eq(
+                cols.carry_multiplier,
+                AB::Expr::from_usize(1 << (LIMB_BITS - i)) * is_valid.clone(),
+            );
         }
         builder.assert_eq(bit_marker_sum, is_valid.clone());
 
-        // Check that a is the result of SRA b c.
+        // Decompose each b[k] into carry/aux parts: b[k] = carry[k] + aux[k] * 2^bit_shift.
+        for (k, &b_limb) in b.iter().enumerate() {
+            builder.assert_eq(
+                b_limb,
+                cols.bit_shift_carry[k] + cols.bit_shift_aux[k] * cols.bit_multiplier,
+            );
+        }
+
+        // Check that a is the result of SRA b c. Each output limb is recombined additively from the
+        // (already range-checked) carry/aux parts, so the result is automatically in
+        // [0, 2^LIMB_BITS). The vacated high bits are filled with the sign bit.
         let mut limb_marker_sum = AB::Expr::ZERO;
         let mut limb_shift = AB::Expr::ZERO;
         for i in 0..NUM_LIMBS {
@@ -120,19 +141,27 @@ where
 
             let mut when_limb_shift = builder.when(cols.limb_shift_marker[i]);
 
-            for j in 0..NUM_LIMBS {
+            let carry_multiplier: AB::Expr = cols.carry_multiplier.into();
+            for (j, &a_limb) in a.iter().enumerate() {
+                // a[j] = aux[j+i] + carry_in * 2^(LIMB_BITS - bit_shift)
                 if j + i > NUM_LIMBS - 1 {
-                    when_limb_shift
-                        .assert_eq(a[j], cols.b_sign * AB::F::from_usize((1 << LIMB_BITS) - 1));
+                    // Fully sign-extended limb.
+                    when_limb_shift.assert_eq(
+                        a_limb,
+                        cols.b_sign * AB::F::from_usize((1 << LIMB_BITS) - 1),
+                    );
                 } else {
-                    let expected_a = if j + i == NUM_LIMBS - 1 {
-                        cols.b_sign * (cols.bit_multiplier - AB::F::ONE)
+                    // For the top limb the bits shifted in from above are the sign bit, i.e.
+                    // carry_in = b_sign * (2^bit_shift - 1). Since
+                    // (2^bit_shift - 1) * carry_multiplier = 2^LIMB_BITS - carry_multiplier,
+                    // we can write the fill without forming a triple product.
+                    let carry_in = if j + i == NUM_LIMBS - 1 {
+                        (AB::Expr::from_usize(1 << LIMB_BITS) - carry_multiplier.clone())
+                            * cols.b_sign
                     } else {
-                        cols.bit_shift_carry[j + i + 1].into()
-                    } * AB::F::from_usize(1 << LIMB_BITS)
-                        + b[j + i]
-                        - cols.bit_shift_carry[j + i];
-                    when_limb_shift.assert_eq(a[j] * cols.bit_multiplier, expected_a);
+                        carry_multiplier.clone() * cols.bit_shift_carry[j + i + 1]
+                    };
+                    when_limb_shift.assert_eq(a_limb, carry_in + cols.bit_shift_aux[j + i]);
                 }
             }
         }
@@ -148,38 +177,28 @@ where
             )
             .eval(builder, is_valid.clone());
 
-        // Check b_sign & b[NUM_LIMBS - 1] == b_sign using XOR.
+        // Constrain b_sign to be the sign bit of b[NUM_LIMBS - 1]. b arrives range checked to
+        // [0, 2^LIMB_BITS) from the u16 memory bus, so range checking the low LIMB_BITS-1 bits of
+        // b[NUM_LIMBS-1] (i.e. b[NUM_LIMBS-1] minus the contribution of the sign bit) forces b_sign
+        // to equal its top bit.
         builder.assert_bool(cols.b_sign);
-
-        let mask = AB::F::from_u32(1 << (LIMB_BITS - 1));
-        let b_sign_shifted = cols.b_sign * mask;
-        self.bitwise_lookup_bus
-            .send_xor(
-                b[NUM_LIMBS - 1],
-                mask,
-                b[NUM_LIMBS - 1] + mask - (AB::Expr::from_u32(2) * b_sign_shifted),
+        self.range_bus
+            .range_check(
+                b[NUM_LIMBS - 1] - cols.b_sign * AB::F::from_u32(1 << (LIMB_BITS - 1)),
+                LIMB_BITS - 1,
             )
-            .eval(builder, cols.is_valid);
+            .eval(builder, is_valid.clone());
 
-        for i in 0..(NUM_LIMBS / 2) {
-            self.bitwise_lookup_bus
-                .send_range(a[i * 2], a[i * 2 + 1])
-                .eval(builder, is_valid.clone());
-        }
-
-        // Memory bus checks only packed u16 values; these byte limbs need separate bounds.
-        for i in 0..(NUM_LIMBS / 2) {
-            self.bitwise_lookup_bus
-                .send_range(b[i * 2], b[i * 2 + 1])
-                .eval(builder, is_valid.clone());
-            self.bitwise_lookup_bus
-                .send_range(c[i * 2], c[i * 2 + 1])
-                .eval(builder, is_valid.clone());
-        }
-
-        for carry in cols.bit_shift_carry {
+        // Range check the carry/aux decomposition of each b limb. b and c arrive range checked to
+        // [0, 2^LIMB_BITS) from the u16 memory bus, so no further bounds on b/c are needed; a is
+        // bounded implicitly by the additive recombination above.
+        let aux_bits = AB::Expr::from_usize(LIMB_BITS) - bit_shift.clone();
+        for k in 0..NUM_LIMBS {
             self.range_bus
-                .send(carry, bit_shift.clone())
+                .send(cols.bit_shift_carry[k], bit_shift.clone())
+                .eval(builder, is_valid.clone());
+            self.range_bus
+                .send(cols.bit_shift_aux[k], aux_bits.clone())
                 .eval(builder, is_valid.clone());
         }
 
@@ -208,51 +227,22 @@ where
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct ShiftRightArithmeticCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub b: [u8; NUM_LIMBS],
-    pub c: [u8; NUM_LIMBS],
+    pub b: [u16; NUM_LIMBS],
+    pub c: [u16; NUM_LIMBS],
     pub local_opcode: u8,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct ShiftRightArithmeticExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, derive_new::new)]
 pub struct ShiftRightArithmeticFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
-    pub offset: usize,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-}
-
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    ShiftRightArithmeticExecutor<A, NUM_LIMBS, LIMB_BITS>
-{
-    pub fn new(adapter: A, offset: usize) -> Self {
-        assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
-        Self { adapter, offset }
-    }
-}
-
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    ShiftRightArithmeticFiller<A, NUM_LIMBS, LIMB_BITS>
-{
-    pub fn new(
-        adapter: A,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-        range_checker_chip: SharedVariableRangeCheckerChip,
-        offset: usize,
-    ) -> Self {
-        assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
-        Self {
-            adapter,
-            offset,
-            bitwise_lookup_chip,
-            range_checker_chip,
-        }
-    }
+    pub offset: usize,
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
@@ -262,8 +252,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
+            ReadData: Into<[[u16; NUM_LIMBS]; 2]>,
+            WriteData: From<[[u16; NUM_LIMBS]; 1]>,
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -334,88 +324,83 @@ where
         let (a, limb_shift, bit_shift) =
             run_shift_right_arithmetic::<NUM_LIMBS, LIMB_BITS>(&record.b, &record.c);
 
-        for pair in a.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32, pair[1] as u32);
-        }
-        for pair in record.b.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32, pair[1] as u32);
-        }
-        for pair in record.c.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32, pair[1] as u32);
-        }
-
         let num_bits_log = (NUM_LIMBS * LIMB_BITS).ilog2();
         self.range_checker_chip.add_count(
             ((record.c[0] as usize - bit_shift - limb_shift * LIMB_BITS) >> num_bits_log) as u32,
             LIMB_BITS - num_bits_log as usize,
         );
 
-        let bit_shift_carry: [F; NUM_LIMBS] = if bit_shift == 0 {
-            for _ in 0..NUM_LIMBS {
-                self.range_checker_chip.add_count(0, 0);
-            }
-            [F::ZERO; NUM_LIMBS]
-        } else {
-            array::from_fn(|i| {
-                let carry = record.b[i] % (1 << bit_shift);
-                self.range_checker_chip.add_count(carry as u32, bit_shift);
-                F::from_u8(carry)
-            })
-        };
+        // carry = the low bit_shift bits of b[k] that cross into the previous limb;
+        // aux = the remaining (LIMB_BITS - bit_shift) bits. Both are computed via u32 intermediates
+        // so a zero shift amount does not produce a shift-by-LIMB_BITS overflow.
+        let aux_bits = LIMB_BITS - bit_shift;
+        let mut bit_shift_carry = [F::ZERO; NUM_LIMBS];
+        let mut bit_shift_aux = [F::ZERO; NUM_LIMBS];
+        for k in 0..NUM_LIMBS {
+            let limb = record.b[k] as u32;
+            let carry = limb & ((1u32 << bit_shift) - 1);
+            let aux = limb >> bit_shift;
+            self.range_checker_chip.add_count(carry, bit_shift);
+            self.range_checker_chip.add_count(aux, aux_bits);
+            bit_shift_carry[k] = F::from_u32(carry);
+            bit_shift_aux[k] = F::from_u32(aux);
+        }
 
         let mut limb_shift_marker = [F::ZERO; NUM_LIMBS];
         limb_shift_marker[limb_shift] = F::ONE;
         let mut bit_shift_marker = [F::ZERO; LIMB_BITS];
         bit_shift_marker[bit_shift] = F::ONE;
 
-        let b_sign = F::from_u8(record.b[NUM_LIMBS - 1] >> (LIMB_BITS - 1));
-        self.bitwise_lookup_chip
-            .request_xor(record.b[NUM_LIMBS - 1] as u32, 1 << (LIMB_BITS - 1));
+        let b_sign = record.b[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
+        // b_sign correctness: range check the low LIMB_BITS-1 bits of b[NUM_LIMBS - 1].
+        self.range_checker_chip.add_count(
+            (record.b[NUM_LIMBS - 1] as u32) - ((b_sign as u32) << (LIMB_BITS - 1)),
+            LIMB_BITS - 1,
+        );
 
         let core_row: &mut ShiftRightArithmeticCoreCols<F, NUM_LIMBS, LIMB_BITS> =
             core_row.borrow_mut();
         core_row.is_valid = F::ONE;
-        core_row.bit_multiplier = F::from_usize(1 << bit_shift);
-        core_row.b_sign = b_sign;
+        core_row.bit_multiplier = F::from_u32(1 << bit_shift);
+        core_row.carry_multiplier = F::from_u32(1 << aux_bits);
+        core_row.b_sign = F::from_u16(b_sign);
         core_row.bit_shift_marker = bit_shift_marker;
         core_row.limb_shift_marker = limb_shift_marker;
+        core_row.bit_shift_aux = bit_shift_aux;
         core_row.bit_shift_carry = bit_shift_carry;
-        core_row.c = record.c.map(F::from_u8);
-        core_row.b = record.b.map(F::from_u8);
-        core_row.a = a.map(F::from_u8);
+        core_row.c = record.c.map(F::from_u16);
+        core_row.b = record.b.map(F::from_u16);
+        core_row.a = a.map(F::from_u16);
     }
 }
 
 // Returns (result, limb_shift, bit_shift)
 #[inline(always)]
-pub(super) fn run_shift_right_arithmetic<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
-) -> ([u8; NUM_LIMBS], usize, usize) {
-    let fill = (((1u16 << LIMB_BITS) - 1) as u8) * (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1));
+pub(crate) fn run_shift_right_arithmetic<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    x: &[u16; NUM_LIMBS],
+    y: &[u16; NUM_LIMBS],
+) -> ([u16; NUM_LIMBS], usize, usize) {
+    let fill = (((1u32 << LIMB_BITS) - 1) as u16) * (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1));
     let mut result = [fill; NUM_LIMBS];
 
     let (limb_shift, bit_shift) = get_shift::<NUM_LIMBS, LIMB_BITS>(y);
 
     for i in 0..(NUM_LIMBS - limb_shift) {
         let res = if i + limb_shift + 1 < NUM_LIMBS {
-            (((x[i + limb_shift] >> bit_shift) as u16)
-                | ((x[i + limb_shift + 1] as u16) << (LIMB_BITS - bit_shift)))
-                % (1u16 << LIMB_BITS)
+            (((x[i + limb_shift] as u32) >> bit_shift)
+                | ((x[i + limb_shift + 1] as u32) << (LIMB_BITS - bit_shift)))
+                % (1u32 << LIMB_BITS)
         } else {
-            (((x[i + limb_shift] >> bit_shift) as u16) | ((fill as u16) << (LIMB_BITS - bit_shift)))
-                % (1u16 << LIMB_BITS)
+            (((x[i + limb_shift] as u32) >> bit_shift) | ((fill as u32) << (LIMB_BITS - bit_shift)))
+                % (1u32 << LIMB_BITS)
         };
-        result[i] = res as u8;
+        result[i] = res as u16;
     }
     (result, limb_shift, bit_shift)
 }
 
 #[inline(always)]
-fn get_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(y: &[u8]) -> (usize, usize) {
+fn get_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(y: &[u16]) -> (usize, usize) {
     debug_assert!(NUM_LIMBS * LIMB_BITS <= (1 << LIMB_BITS));
     // We assume `NUM_LIMBS * LIMB_BITS <= 2^LIMB_BITS` so the shift is defined
     // entirely in y[0].

@@ -11,14 +11,14 @@
 
 using namespace riscv;
 
-// Concrete type aliases for the 32-bit word variant on RV64.
-using Rv64ShiftWCoreRecord = ShiftRightArithmeticCoreRecord<RV64_WORD_NUM_LIMBS>;
-using Rv64ShiftWRightArithmeticCore = ShiftRightArithmeticCore<RV64_WORD_NUM_LIMBS>;
+// SLLW/SRLW/SRAW all use the u16 shift cores (RV64_WORD_U16_LIMBS limbs of 16 bits) over the low
+// 32-bit word and the u16 W adapter.
+using Rv64ShiftWCoreRecord = ShiftRightArithmeticCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>;
+using Rv64ShiftWRightArithmeticCore = ShiftRightArithmeticCore<RV64_WORD_U16_LIMBS, U16_BITS>;
 template <typename T>
-using Rv64ShiftWRightArithmeticCoreCols = ShiftRightArithmeticCoreCols<T, RV64_WORD_NUM_LIMBS>;
+using Rv64ShiftWRightArithmeticCoreCols =
+    ShiftRightArithmeticCoreCols<T, RV64_WORD_U16_LIMBS, U16_BITS>;
 
-// SLLW/SRLW use the u16 logical core (RV64_WORD_U16_LIMBS limbs of 16 bits) over the low 32-bit
-// word and the u16 W adapter; SRAW keeps byte limbs and the byte adapter.
 using Rv64ShiftWLogicalCore = ShiftLogicalCore<RV64_WORD_U16_LIMBS, U16_BITS>;
 using Rv64ShiftWLogicalCoreRecord = ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>;
 template <typename T>
@@ -30,7 +30,7 @@ template <typename T> struct ShiftWLogicalCols {
 };
 
 template <typename T> struct ShiftWRightArithmeticCols {
-    Rv64BaseAluWAdapterCols<T> adapter;
+    Rv64BaseAluWU16AdapterCols<T> adapter;
     Rv64ShiftWRightArithmeticCoreCols<T> core;
 };
 
@@ -40,7 +40,7 @@ struct ShiftWLogicalRecord {
 };
 
 struct ShiftWRecord {
-    Rv64BaseAluWAdapterRecord adapter;
+    Rv64BaseAluWU16AdapterRecord adapter;
     Rv64ShiftWCoreRecord core;
 };
 
@@ -72,23 +72,16 @@ __global__ void rv64_shift_w_right_arithmetic_tracegen(
     DeviceBufferConstView<ShiftWRecord> records,
     uint32_t *range_ptr,
     uint32_t range_bins,
-    uint32_t *lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
         auto const &rec = records[idx];
-        auto adapter = Rv64BaseAluWAdapter(
-            VariableRangeChecker(range_ptr, range_bins),
-            BitwiseOperationLookup(lookup_ptr),
-            timestamp_max_bits
-        );
+        auto adapter =
+            Rv64BaseAluWU16Adapter(VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, rec.adapter);
-        auto core = Rv64ShiftWRightArithmeticCore(
-            BitwiseOperationLookup(lookup_ptr),
-            VariableRangeChecker(range_ptr, range_bins)
-        );
+        auto core = Rv64ShiftWRightArithmeticCore(VariableRangeChecker(range_ptr, range_bins));
         core.fill_trace_row(row.slice_from(COL_INDEX(ShiftWRightArithmeticCols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(ShiftWRightArithmeticCols<uint8_t>));
@@ -126,7 +119,6 @@ extern "C" int _rv64_shift_w_right_arithmetic_tracegen(
     DeviceBufferConstView<ShiftWRecord> d_records,
     uint32_t *__restrict__ d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t *__restrict__ d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -139,7 +131,6 @@ extern "C" int _rv64_shift_w_right_arithmetic_tracegen(
         d_records,
         d_range_checker,
         range_checker_num_bins,
-        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();

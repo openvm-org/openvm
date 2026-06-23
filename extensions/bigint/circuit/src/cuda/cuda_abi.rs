@@ -243,7 +243,6 @@ pub mod shift256 {
             d_records: DeviceBufferView,
             d_range_checker: *const u32,
             range_checker_bins: usize,
-            d_bitwise_lookup: *const u32,
             pointer_max_bits: u32,
             timestamp_max_bits: u32,
             stream: cudaStream_t,
@@ -273,13 +272,11 @@ pub mod shift256 {
         ))
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub unsafe fn tracegen_right_arithmetic(
         d_trace: &DeviceBuffer<F>,
         height: usize,
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
-        d_bitwise_lookup: &DeviceBuffer<F>,
         pointer_max_bits: u32,
         timestamp_max_bits: u32,
         stream: cudaStream_t,
@@ -292,7 +289,6 @@ pub mod shift256 {
             d_records.view(),
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len(),
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
             pointer_max_bits,
             timestamp_max_bits,
             stream,

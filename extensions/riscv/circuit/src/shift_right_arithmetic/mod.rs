@@ -1,8 +1,7 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
 use super::adapters::{
-    Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller, RV64_BYTE_BITS,
-    RV64_REGISTER_NUM_LIMBS,
+    Rv64BaseAluU16AdapterAir, Rv64BaseAluU16AdapterExecutor, Rv64BaseAluU16AdapterFiller, U16_BITS,
 };
 
 mod core;
@@ -17,20 +16,12 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64ShiftRightArithmeticAir = VmAirWrapper<
-    Rv64BaseAluAdapterAir,
-    ShiftRightArithmeticCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
->;
-pub type Rv64ShiftRightArithmeticExecutor = ShiftRightArithmeticExecutor<
-    Rv64BaseAluAdapterExecutor<RV64_BYTE_BITS>,
-    RV64_REGISTER_NUM_LIMBS,
-    RV64_BYTE_BITS,
->;
+// u16 core (4 limbs of 16 bits), shared with shift_w (SRAW) and bigint Shift256.
+pub type Rv64ShiftRightArithmeticAir =
+    VmAirWrapper<Rv64BaseAluU16AdapterAir, ShiftRightArithmeticCoreAir<BLOCK_FE_WIDTH, U16_BITS>>;
+pub type Rv64ShiftRightArithmeticExecutor =
+    ShiftRightArithmeticExecutor<Rv64BaseAluU16AdapterExecutor, BLOCK_FE_WIDTH, U16_BITS>;
 pub type Rv64ShiftRightArithmeticChip<F> = VmChipWrapper<
     F,
-    ShiftRightArithmeticFiller<
-        Rv64BaseAluAdapterFiller<RV64_BYTE_BITS>,
-        RV64_REGISTER_NUM_LIMBS,
-        RV64_BYTE_BITS,
-    >,
+    ShiftRightArithmeticFiller<Rv64BaseAluU16AdapterFiller, BLOCK_FE_WIDTH, U16_BITS>,
 >;

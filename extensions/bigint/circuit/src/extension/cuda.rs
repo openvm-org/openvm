@@ -108,7 +108,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         inventory.next_air::<Rv64ShiftRightArithmetic256Air>()?;
         let shift_right_arithmetic = ShiftRightArithmetic256ChipGpu::new(
             range_checker.clone(),
-            bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );

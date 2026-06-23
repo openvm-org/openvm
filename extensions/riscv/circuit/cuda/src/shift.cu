@@ -12,14 +12,12 @@
 using namespace riscv;
 using namespace program;
 
-// Concrete type aliases for 64-bit
-using Rv64ShiftCoreRecord = ShiftRightArithmeticCoreRecord<RV64_REGISTER_NUM_LIMBS>;
-using Rv64ShiftRightArithmeticCore = ShiftRightArithmeticCore<RV64_REGISTER_NUM_LIMBS>;
+// SLL/SRL/SRA all use u16 limbs (4 limbs of 16 bits) and the u16 ALU adapter.
+using Rv64ShiftCoreRecord = ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>;
+using Rv64ShiftRightArithmeticCore = ShiftRightArithmeticCore<BLOCK_FE_WIDTH, U16_BITS>;
 template <typename T>
-using Rv64ShiftRightArithmeticCoreCols = ShiftRightArithmeticCoreCols<T, RV64_REGISTER_NUM_LIMBS>;
+using Rv64ShiftRightArithmeticCoreCols = ShiftRightArithmeticCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
-// The logical shift (SLL/SRL) uses u16 limbs and the u16 ALU adapter; the arithmetic-right shift
-// keeps byte limbs and the byte adapter.
 using Rv64ShiftLogicalCore = ShiftLogicalCore<BLOCK_FE_WIDTH, U16_BITS>;
 using Rv64ShiftLogicalCoreRecord = ShiftLogicalCoreRecord<BLOCK_FE_WIDTH, U16_BITS>;
 template <typename T>
@@ -31,7 +29,7 @@ template <typename T> struct ShiftLogicalCols {
 };
 
 template <typename T> struct ShiftRightArithmeticCols {
-    Rv64BaseAluAdapterCols<T> adapter;
+    Rv64BaseAluU16AdapterCols<T> adapter;
     Rv64ShiftRightArithmeticCoreCols<T> core;
 };
 
@@ -41,7 +39,7 @@ struct ShiftLogicalRecord {
 };
 
 struct ShiftRecord {
-    Rv64BaseAluAdapterRecord adapter;
+    Rv64BaseAluU16AdapterRecord adapter;
     Rv64ShiftCoreRecord core;
 };
 
@@ -75,23 +73,16 @@ __global__ void rv64_shift_right_arithmetic_tracegen(
     DeviceBufferConstView<ShiftRecord> records,
     uint32_t *range_ptr,
     uint32_t range_bins,
-    uint32_t *lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
         auto const &rec = records[idx];
-        auto adapter = Rv64BaseAluAdapter(
-            VariableRangeChecker(range_ptr, range_bins),
-            BitwiseOperationLookup(lookup_ptr),
-            timestamp_max_bits
-        );
+        auto adapter =
+            Rv64BaseAluU16Adapter(VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, rec.adapter);
-        auto core = Rv64ShiftRightArithmeticCore(
-            BitwiseOperationLookup(lookup_ptr),
-            VariableRangeChecker(range_ptr, range_bins)
-        );
+        auto core = Rv64ShiftRightArithmeticCore(VariableRangeChecker(range_ptr, range_bins));
         core.fill_trace_row(row.slice_from(COL_INDEX(ShiftRightArithmeticCols, core)), rec.core);
     } else {
         row.fill_zero(0, width);
@@ -130,7 +121,6 @@ extern "C" int _rv64_shift_right_arithmetic_tracegen(
     DeviceBufferConstView<ShiftRecord> d_records,
     uint32_t *__restrict__ d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t *__restrict__ d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -144,7 +134,6 @@ extern "C" int _rv64_shift_right_arithmetic_tracegen(
         d_records,
         d_range_checker,
         range_checker_num_bins,
-        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();

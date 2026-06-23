@@ -17,8 +17,8 @@ use openvm_riscv_circuit::{
     AddSubCoreCols, AddSubCoreRecord, BitwiseLogicCoreCols, BitwiseLogicCoreRecord,
     BranchEqualCoreCols, BranchEqualCoreRecord, BranchLessThanCoreCols, BranchLessThanCoreRecord,
     LessThanCoreCols, LessThanCoreRecord, MultiplicationCoreCols, MultiplicationCoreRecord,
-    ShiftRightArithmeticCoreCols, ShiftRightArithmeticCoreRecord, ShiftLogicalCoreCols,
-    ShiftLogicalCoreRecord,
+    ShiftLogicalCoreCols, ShiftLogicalCoreRecord, ShiftRightArithmeticCoreCols,
+    ShiftRightArithmeticCoreRecord,
 };
 use openvm_stark_backend::prover::AirProvingContext;
 
@@ -292,14 +292,12 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Shift
 //////////////////////////////////////////////////////////////////////////////////////
-pub type Shift256AdapterRecord =
-    Rv64VecHeapAdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
-/// SLL/SRL use the u16 vec-heap adapter (shared shape with AddSub256/LessThan256).
 pub type ShiftLogical256U16AdapterRecord =
     Rv64VecHeapU16AdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
+pub type Shift256AdapterRecord = ShiftLogical256U16AdapterRecord;
 pub type ShiftLogical256CoreRecord = ShiftLogicalCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
 pub type ShiftRightArithmetic256CoreRecord =
-    ShiftRightArithmeticCoreRecord<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>;
+    ShiftRightArithmeticCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
 
 #[derive(new)]
 pub struct ShiftLogical256ChipGpu {
@@ -311,7 +309,6 @@ pub struct ShiftLogical256ChipGpu {
 #[derive(new)]
 pub struct ShiftRightArithmetic256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
@@ -367,8 +364,8 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftRightArithmetic256ChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width =
-            ShiftRightArithmeticCoreCols::<F, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>::width()
-                + Rv64VecHeapAdapterCols::<
+            ShiftRightArithmeticCoreCols::<F, INT256_NUM_U16_LIMBS, U16_BITS>::width()
+                + Rv64VecHeapU16AdapterCols::<
                     F,
                     NUM_READS,
                     INT256_NUM_MEMORY_BLOCKS,
@@ -386,7 +383,6 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftRightArithmetic256ChipGpu {
                 trace_height,
                 &d_records,
                 &self.range_checker.count,
-                &self.bitwise_lookup.count,
                 self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),

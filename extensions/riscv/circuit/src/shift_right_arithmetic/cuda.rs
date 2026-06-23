@@ -1,18 +1,17 @@
 use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
-use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
+use openvm_circuit::{
+    arch::{DenseRecordArena, BLOCK_FE_WIDTH},
+    utils::next_power_of_two_or_zero,
 };
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{
-        Rv64BaseAluAdapterCols, Rv64BaseAluAdapterRecord, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
-    },
+    adapters::{Rv64BaseAluU16AdapterCols, Rv64BaseAluU16AdapterRecord, U16_BITS},
     cuda_abi::shift_right_arithmetic_cuda::tracegen as rv64_shift_right_arithmetic_tracegen,
     ShiftRightArithmeticCoreCols, ShiftRightArithmeticCoreRecord,
 };
@@ -20,15 +19,14 @@ use crate::{
 #[derive(new)]
 pub struct Rv64ShiftRightArithmeticChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftRightArithmeticChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv64BaseAluAdapterRecord,
-            ShiftRightArithmeticCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+            Rv64BaseAluU16AdapterRecord,
+            ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
@@ -36,8 +34,8 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftRightArithmeticChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64BaseAluAdapterCols::<F>::width()
-            + ShiftRightArithmeticCoreCols::<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>::width();
+        let trace_width = Rv64BaseAluU16AdapterCols::<F>::width()
+            + ShiftRightArithmeticCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
@@ -49,7 +47,6 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftRightArithmeticChipGpu {
                 trace_height,
                 &d_records,
                 &self.range_checker.count,
-                &self.bitwise_lookup.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )
