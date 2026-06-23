@@ -50,7 +50,7 @@ extern "C" {
     // ── Memory access (single u64 word, trace-only) ───────────────────
     pub fn trace_rd_mem_u64_wrapper(state: *mut c_void, addr: u32, val: u64);
 
-    // ── Memory access (u64-word ranges, data) — WORD_SIZE = 8 bytes ──
+    // ── Memory access (u64-word ranges, data) ───────────────────────
     pub fn rd_mem_u64_range_wrapper(
         state: *mut c_void,
         base_addr: u32,

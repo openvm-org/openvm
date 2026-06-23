@@ -12,7 +12,7 @@ use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced, WORD_S
 /// Number of bytes in a 256-bit integer.
 const INT256_BYTES: usize = 32;
 
-/// Number of 8-byte (u64) words in a 256-bit integer; matches MEMORY_BLOCK_BYTES granularity.
+/// Number of u64 words in a 256-bit integer.
 const INT256_WORDS: usize = INT256_BYTES / WORD_SIZE;
 
 /// Bytes in one u32 limb.
