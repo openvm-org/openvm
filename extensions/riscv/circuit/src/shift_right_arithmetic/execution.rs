@@ -250,11 +250,12 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_IMM
     pre_compute: &ShiftRightArithmeticPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs1 =
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2 = if IS_IMM {
         pre_compute.c.to_le_bytes()
     } else {
-        exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.c as u32)
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32)
     };
     let rs1 = i64::from_le_bytes(rs1);
     let rs2 = u64::from_le_bytes(rs2);

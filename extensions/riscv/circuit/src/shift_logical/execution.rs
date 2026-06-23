@@ -8,7 +8,7 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::ShiftOpcode;
@@ -271,11 +271,12 @@ unsafe fn execute_e12_impl<
     pre_compute: &ShiftLogicalPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs1 =
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2 = if IS_IMM {
         pre_compute.c.to_le_bytes()
     } else {
-        exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.c as u32)
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32)
     };
     let rs2 = u64::from_le_bytes(rs2);
 
@@ -327,19 +328,19 @@ unsafe fn execute_e2_impl<
 }
 
 trait ShiftOp {
-    fn compute(rs1: [u8; 8], rs2: u64) -> [u8; 8];
+    fn compute(rs1: [u8; RV64_REGISTER_NUM_LIMBS], rs2: u64) -> [u8; RV64_REGISTER_NUM_LIMBS];
 }
 struct SllOp;
 struct SrlOp;
 impl ShiftOp for SllOp {
-    fn compute(rs1: [u8; 8], rs2: u64) -> [u8; 8] {
+    fn compute(rs1: [u8; RV64_REGISTER_NUM_LIMBS], rs2: u64) -> [u8; RV64_REGISTER_NUM_LIMBS] {
         let rs1 = u64::from_le_bytes(rs1);
         // RV64: only the low 6 bits of rs2 are used for the shift amount.
         (rs1 << (rs2 & 0x3F)).to_le_bytes()
     }
 }
 impl ShiftOp for SrlOp {
-    fn compute(rs1: [u8; 8], rs2: u64) -> [u8; 8] {
+    fn compute(rs1: [u8; RV64_REGISTER_NUM_LIMBS], rs2: u64) -> [u8; RV64_REGISTER_NUM_LIMBS] {
         let rs1 = u64::from_le_bytes(rs1);
         // RV64: only the low 6 bits of rs2 are used for the shift amount.
         (rs1 >> (rs2 & 0x3F)).to_le_bytes()
