@@ -149,7 +149,7 @@ pub unsafe fn rd_mem_words_traced(state: *mut c_void, base_addr: u32, out: &mut 
 ///
 /// # Safety
 /// `state` must be a valid `RvState` pointer; the byte range
-/// `[base_addr, base_addr + vals.len() * 8)` must lie within guest memory.
+/// `[base_addr, base_addr + vals.len() * WORD_SIZE)` must lie within guest memory.
 pub unsafe fn wr_mem_words_traced(state: *mut c_void, base_addr: u32, vals: &[u64]) {
     debug_assert!(
         !vals.is_empty(),
@@ -161,6 +161,7 @@ pub unsafe fn wr_mem_words_traced(state: *mut c_void, base_addr: u32, vals: &[u6
 }
 
 /// Trace `num_words` consecutive memory-access notifications (no value)
+/// at `addr_space`, one per WORD_SIZE step from `base_addr`.
 ///
 /// `num_words` must be `>= 1`; see [`rd_mem_words_traced`] for rationale.
 ///
