@@ -11,7 +11,7 @@
 
 use std::ffi::c_void;
 
-/// Word size for memory access (8 bytes — `sizeof(u64)` per platform definition).
+/// Memory access granularity in bytes (`sizeof(u64) == 8`).
 pub use openvm_platform::WORD_SIZE;
 
 // TODO(dedup): make a common crate that is imported by rvr and openvm-circuit
@@ -50,7 +50,7 @@ extern "C" {
     // ── Memory access (single u64 word, trace-only) ───────────────────
     pub fn trace_rd_mem_u64_wrapper(state: *mut c_void, addr: u32, val: u64);
 
-    // ── Memory access (u64-word ranges, data) — WORD_SIZE = 8 bytes ──
+    // ── Memory access (u64-word ranges, data) ───────────────────────
     pub fn rd_mem_u64_range_wrapper(
         state: *mut c_void,
         base_addr: u32,
@@ -121,8 +121,7 @@ pub fn u64s_as_u32s_mut(lanes: &mut [u64]) -> &mut [u32] {
 // ── Ergonomic batched memory helpers ─────────────────────────────────────
 
 /// Read `out.len()` consecutive u64 words from guest memory into `out`,
-/// then trace each as a memory read. A word is 8 bytes (`WORD_SIZE`),
-/// matching the circuit's `MEMORY_BLOCK_BYTES` granularity.
+/// then trace each as a memory read.
 ///
 /// `out` must be non-empty; the C trace functions assume `num_words >= 1`
 /// to avoid an underflow check on the hot path. Callers handling
@@ -131,7 +130,7 @@ pub fn u64s_as_u32s_mut(lanes: &mut [u64]) -> &mut [u32] {
 ///
 /// # Safety
 /// `state` must be a valid `RvState` pointer; the byte range
-/// `[base_addr, base_addr + out.len()*WORD_SIZE)` must lie within guest memory.
+/// `[base_addr, base_addr + out.len() * WORD_SIZE)` must lie within guest memory.
 pub unsafe fn rd_mem_words_traced(state: *mut c_void, base_addr: u32, out: &mut [u64]) {
     debug_assert!(
         !out.is_empty(),
@@ -142,16 +141,15 @@ pub unsafe fn rd_mem_words_traced(state: *mut c_void, base_addr: u32, out: &mut 
     trace_rd_mem_u64_range_wrapper(state, base_addr, out.as_ptr(), n);
 }
 
-/// Trace each value in `vals` as a write at `base_addr + i*WORD_SIZE`,
-/// then write them to guest memory. Trace-before-write so future tracers
-/// can read the old value before it is overwritten. A word is 8 bytes
-/// (`WORD_SIZE`), matching the circuit's `MEMORY_BLOCK_BYTES` granularity.
+/// Trace each value in `vals` as a write to guest memory, then write them.
+/// Trace-before-write so future tracers can read the old value before it is
+/// overwritten.
 ///
 /// `vals` must be non-empty; see [`rd_mem_words_traced`] for rationale.
 ///
 /// # Safety
 /// `state` must be a valid `RvState` pointer; the byte range
-/// `[base_addr, base_addr + vals.len()*WORD_SIZE)` must lie within guest memory.
+/// `[base_addr, base_addr + vals.len() * WORD_SIZE)` must lie within guest memory.
 pub unsafe fn wr_mem_words_traced(state: *mut c_void, base_addr: u32, vals: &[u64]) {
     debug_assert!(
         !vals.is_empty(),
