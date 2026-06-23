@@ -138,9 +138,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let imm_ext = imm + (imm_sign * 0xffff0000);
     let a = rd_ptr.unwrap_or_else(|| rng.random_range(0..32) << 3);
     let b = rng.random_range(1..32) << 3;
-    let to_pc = rng.random_range(0..(1 << PC_BITS));
+    let imm_signed = (imm_ext as i32) as i64;
+    let min_to_pc = imm_signed.max(0) as u32;
+    let to_pc = rng.random_range(min_to_pc..(1 << PC_BITS));
 
-    let rs1 = rs1.unwrap_or(into_limbs((to_pc as u32).wrapping_sub(imm_ext)));
+    let rs1 = rs1.unwrap_or(into_limbs((i64::from(to_pc) - imm_signed) as u32));
     let rs1 = rs1.map(F::from_u32);
 
     tester.write_bytes(1, b, rs1);
@@ -572,6 +574,12 @@ fn run_jalr_sanity_test() {
     assert_eq!(next_pc & !1, 736481674);
     // u32 pc+4 = 789456124 = 0x2f0e24fc => low u16=0x24fc, high u16=0x2f0e.
     assert_eq!(rd_data, [0x24fc, 0x2f0e, 0, 0]);
+}
+
+#[test]
+#[should_panic(expected = "JALR target exceeds implemented PC address space")]
+fn run_jalr_rejects_low_32_wraparound_test() {
+    run_jalr(0, 0xffff_fff8, 16, false);
 }
 
 #[test]
