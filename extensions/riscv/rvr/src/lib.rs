@@ -1,5 +1,5 @@
 //! rvr lifter for the RISC-V I/O sub-extension: HINT_STORED, HINT_BUFFER,
-//! and public-values stores.
+//! and public-values stores, including REVEAL.
 //!
 //! TODO: check if other RISC-V instructions/opcodes can be separated into
 //! extensions.
@@ -79,8 +79,8 @@ impl ExtInstr for HintBufferInstr {
     }
 }
 
-/// Public-values store: write bytes from `reg[src_reg]` to address space `AS_PUBLIC_VALUES`
-/// at `reg[ptr_reg] + offset`.
+/// Public-values store, including REVEAL after transpilation: write bytes from
+/// `reg[src_reg]` to address space `AS_PUBLIC_VALUES` at `reg[ptr_reg] + offset`.
 #[derive(Debug, Clone)]
 pub struct RevealInstr {
     pub src_reg: Reg,
@@ -181,7 +181,7 @@ impl ExtInstr for HintRandomInstr {
 }
 
 /// rvr extension for the RISC-V I/O instructions HINT_STORED, HINT_BUFFER, and
-/// public-values stores.
+/// public-values stores, including REVEAL.
 pub struct Rv64IoExtension {
     hint_store_chip_idx: Option<AirIndex>,
 }
@@ -467,8 +467,8 @@ pub extern "C" fn host_hint_buffer<F: PrimeField32>(
     }
 }
 
-/// Public-values store: write bytes directly into the guest's `PUBLIC_VALUES_AS` byte slice.
-/// Cost corrections handled in C.
+/// Public-values store, including REVEAL after transpilation: write bytes directly into the
+/// guest's `PUBLIC_VALUES_AS` byte slice. Cost corrections handled in C.
 pub extern "C" fn host_reveal<F: PrimeField32>(
     ctx: *mut c_void,
     src_val: u64,
