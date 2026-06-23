@@ -279,7 +279,7 @@ pub mod divrem_cuda {
     }
 }
 
-pub mod shift_cuda {
+pub mod shift_logical_cuda {
     use super::*;
 
     extern "C" {
@@ -293,21 +293,9 @@ pub mod shift_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
-
-        fn _rv64_shift_right_arithmetic_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            d_bitwise_lookup: *mut u32,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> i32;
     }
 
-    pub unsafe fn tracegen_logical(
+    pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
         d_records: &DeviceBuffer<u8>,
@@ -326,8 +314,26 @@ pub mod shift_cuda {
             stream,
         ))
     }
+}
 
-    pub unsafe fn tracegen_right_arithmetic(
+pub mod shift_right_arithmetic_cuda {
+    use super::*;
+
+    extern "C" {
+        fn _rv64_shift_right_arithmetic_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            d_bitwise_lookup: *mut u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
         d_records: &DeviceBuffer<u8>,

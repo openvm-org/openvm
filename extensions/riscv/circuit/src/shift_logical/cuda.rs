@@ -12,7 +12,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     adapters::{Rv64BaseAluU16AdapterCols, Rv64BaseAluU16AdapterRecord, U16_BITS},
-    cuda_abi::shift_cuda::tracegen_logical as rv64_shift_logical_tracegen,
+    cuda_abi::shift_logical_cuda::tracegen as rv64_shift_logical_tracegen,
     ShiftLogicalCoreCols, ShiftLogicalCoreRecord,
 };
 

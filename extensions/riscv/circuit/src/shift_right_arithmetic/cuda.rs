@@ -13,7 +13,7 @@ use crate::{
     adapters::{
         Rv64BaseAluAdapterCols, Rv64BaseAluAdapterRecord, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
-    cuda_abi::shift_cuda::tracegen_right_arithmetic as rv64_shift_right_arithmetic_tracegen,
+    cuda_abi::shift_right_arithmetic_cuda::tracegen as rv64_shift_right_arithmetic_tracegen,
     ShiftRightArithmeticCoreCols, ShiftRightArithmeticCoreRecord,
 };
 
