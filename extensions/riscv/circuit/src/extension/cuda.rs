@@ -20,7 +20,7 @@ use crate::{
     Rv64LoadStoreChipGpu, Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir, Rv64MulWChipGpu,
     Rv64MultiplicationAir, Rv64MultiplicationChipGpu, Rv64ShiftRightArithmeticAir,
     Rv64ShiftRightArithmeticChipGpu, Rv64ShiftLogicalAir, Rv64ShiftLogicalChipGpu,
-    Rv64ShiftWArithmeticRightAir, Rv64ShiftWArithmeticRightChipGpu, Rv64ShiftWLogicalAir,
+    Rv64ShiftWRightArithmeticAir, Rv64ShiftWRightArithmeticChipGpu, Rv64ShiftWLogicalAir,
     Rv64ShiftWLogicalChipGpu,
 };
 
@@ -79,13 +79,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             Rv64ShiftWLogicalChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(shift_w_logical);
 
-        inventory.next_air::<Rv64ShiftWArithmeticRightAir>()?;
-        let shift_w_arithmetic_right = Rv64ShiftWArithmeticRightChipGpu::new(
+        inventory.next_air::<Rv64ShiftWRightArithmeticAir>()?;
+        let shift_w_right_arithmetic = Rv64ShiftWRightArithmeticChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
         );
-        inventory.add_executor_chip(shift_w_arithmetic_right);
+        inventory.add_executor_chip(shift_w_right_arithmetic);
 
         inventory.next_air::<Rv64LoadStoreAir>()?;
         let load_store_chip = Rv64LoadStoreChipGpu::new(

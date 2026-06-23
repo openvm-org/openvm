@@ -381,7 +381,7 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftRightArithmetic256ChipGpu {
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
-            cuda_abi::shift256::tracegen_arithmetic_right(
+            cuda_abi::shift256::tracegen_right_arithmetic(
                 d_trace.buffer(),
                 trace_height,
                 &d_records,

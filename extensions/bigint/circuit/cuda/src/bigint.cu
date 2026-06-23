@@ -467,7 +467,7 @@ __global__ void shift256_logical_tracegen(
     }
 }
 
-__global__ void shift256_arithmetic_right_tracegen(
+__global__ void shift256_right_arithmetic_tracegen(
     Fp *d_trace,
     size_t height,
     DeviceBufferConstView<Shift256Record> d_records,
@@ -527,7 +527,7 @@ extern "C" int _shift256_logical_tracegen(
     return CHECK_KERNEL();
 }
 
-extern "C" int _shift256_arithmetic_right_tracegen(
+extern "C" int _shift256_right_arithmetic_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
@@ -542,7 +542,7 @@ extern "C" int _shift256_arithmetic_right_tracegen(
     assert(width == sizeof(ShiftRightArithmetic256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
-    shift256_arithmetic_right_tracegen<<<grid, block, 0, stream>>>(
+    shift256_right_arithmetic_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,

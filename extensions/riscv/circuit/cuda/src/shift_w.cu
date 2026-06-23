@@ -13,9 +13,9 @@ using namespace riscv;
 
 // Concrete type aliases for the 32-bit word variant on RV64.
 using Rv64ShiftWCoreRecord = ShiftRightArithmeticCoreRecord<RV64_WORD_NUM_LIMBS>;
-using Rv64ShiftWArithmeticRightCore = ShiftRightArithmeticCore<RV64_WORD_NUM_LIMBS>;
+using Rv64ShiftWRightArithmeticCore = ShiftRightArithmeticCore<RV64_WORD_NUM_LIMBS>;
 template <typename T>
-using Rv64ShiftWArithmeticRightCoreCols = ShiftRightArithmeticCoreCols<T, RV64_WORD_NUM_LIMBS>;
+using Rv64ShiftWRightArithmeticCoreCols = ShiftRightArithmeticCoreCols<T, RV64_WORD_NUM_LIMBS>;
 
 // SLLW/SRLW use the u16 logical core (RV64_WORD_U16_LIMBS limbs of 16 bits) over the low 32-bit
 // word and the u16 W adapter; SRAW keeps byte limbs and the byte adapter.
@@ -29,9 +29,9 @@ template <typename T> struct ShiftWLogicalCols {
     Rv64ShiftWLogicalCoreCols<T> core;
 };
 
-template <typename T> struct ShiftWArithmeticRightCols {
+template <typename T> struct ShiftWRightArithmeticCols {
     Rv64BaseAluWAdapterCols<T> adapter;
-    Rv64ShiftWArithmeticRightCoreCols<T> core;
+    Rv64ShiftWRightArithmeticCoreCols<T> core;
 };
 
 struct ShiftWLogicalRecord {
@@ -66,7 +66,7 @@ __global__ void rv64_shift_w_logical_tracegen(
     }
 }
 
-__global__ void rv64_shift_w_arithmetic_right_tracegen(
+__global__ void rv64_shift_w_right_arithmetic_tracegen(
     Fp *trace,
     size_t height,
     DeviceBufferConstView<ShiftWRecord> records,
@@ -85,13 +85,13 @@ __global__ void rv64_shift_w_arithmetic_right_tracegen(
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
-        auto core = Rv64ShiftWArithmeticRightCore(
+        auto core = Rv64ShiftWRightArithmeticCore(
             BitwiseOperationLookup(lookup_ptr),
             VariableRangeChecker(range_ptr, range_bins)
         );
-        core.fill_trace_row(row.slice_from(COL_INDEX(ShiftWArithmeticRightCols, core)), rec.core);
+        core.fill_trace_row(row.slice_from(COL_INDEX(ShiftWRightArithmeticCols, core)), rec.core);
     } else {
-        row.fill_zero(0, sizeof(ShiftWArithmeticRightCols<uint8_t>));
+        row.fill_zero(0, sizeof(ShiftWRightArithmeticCols<uint8_t>));
     }
 }
 
@@ -119,7 +119,7 @@ extern "C" int _rv64_shift_w_logical_tracegen(
     return CHECK_KERNEL();
 }
 
-extern "C" int _rv64_shift_w_arithmetic_right_tracegen(
+extern "C" int _rv64_shift_w_right_arithmetic_tracegen(
     Fp *__restrict__ d_trace,
     size_t height,
     size_t width,
@@ -130,10 +130,10 @@ extern "C" int _rv64_shift_w_arithmetic_right_tracegen(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert(width == sizeof(ShiftWArithmeticRightCols<uint8_t>));
+    assert(width == sizeof(ShiftWRightArithmeticCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    rv64_shift_w_arithmetic_right_tracegen<<<grid, block, 0, stream>>>(
+    rv64_shift_w_right_arithmetic_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,

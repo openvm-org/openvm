@@ -16,7 +16,7 @@ use crate::{
         U16_BITS,
     },
     cuda_abi::shift_w_cuda::{
-        tracegen_arithmetic_right as rv64_shift_w_arithmetic_right_tracegen,
+        tracegen_right_arithmetic as rv64_shift_w_right_arithmetic_tracegen,
         tracegen_logical as rv64_shift_w_logical_tracegen,
     },
     ShiftRightArithmeticCoreCols, ShiftRightArithmeticCoreRecord, ShiftLogicalCoreCols,
@@ -30,7 +30,7 @@ pub struct Rv64ShiftWLogicalChipGpu {
 }
 
 #[derive(new)]
-pub struct Rv64ShiftWArithmeticRightChipGpu {
+pub struct Rv64ShiftWRightArithmeticChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub timestamp_max_bits: usize,
@@ -71,7 +71,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWLogicalChipGpu {
     }
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWArithmeticRightChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWRightArithmeticChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
             Rv64BaseAluWAdapterRecord,
@@ -91,7 +91,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWArithmeticRightChipGpu {
         let d_records = records.to_device_on(device_ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
-            rv64_shift_w_arithmetic_right_tracegen(
+            rv64_shift_w_right_arithmetic_tracegen(
                 d_trace.buffer(),
                 trace_height,
                 &d_records,

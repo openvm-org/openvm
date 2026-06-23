@@ -32,7 +32,7 @@ use test_case::test_case;
 use {
     crate::{
         adapters::{Rv64BaseAluWAdapterRecord, Rv64BaseAluWU16AdapterRecord},
-        Rv64ShiftWArithmeticRightChipGpu, Rv64ShiftWLogicalChipGpu, ShiftRightArithmeticCoreRecord,
+        Rv64ShiftWRightArithmeticChipGpu, Rv64ShiftWLogicalChipGpu, ShiftRightArithmeticCoreRecord,
         ShiftLogicalCoreRecord,
     },
     openvm_circuit::arch::{
@@ -45,9 +45,9 @@ use {
 };
 
 use super::{
-    Rv64ShiftWArithmeticRightAir, Rv64ShiftWArithmeticRightChip, Rv64ShiftWArithmeticRightExecutor,
+    Rv64ShiftWRightArithmeticAir, Rv64ShiftWRightArithmeticChip, Rv64ShiftWRightArithmeticExecutor,
     Rv64ShiftWLogicalAir, Rv64ShiftWLogicalChip, Rv64ShiftWLogicalExecutor,
-    ShiftWArithmeticRightCoreAir, ShiftWArithmeticRightFiller, ShiftWLogicalCoreAir,
+    ShiftWRightArithmeticCoreAir, ShiftWRightArithmeticFiller, ShiftWLogicalCoreAir,
     ShiftWLogicalFiller,
 };
 use crate::{
@@ -67,15 +67,15 @@ type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 type LogicalHarness =
     TestChipHarness<F, Rv64ShiftWLogicalExecutor, Rv64ShiftWLogicalAir, Rv64ShiftWLogicalChip<F>>;
-type ArithmeticRightHarness = TestChipHarness<
+type RightArithmeticHarness = TestChipHarness<
     F,
-    Rv64ShiftWArithmeticRightExecutor,
-    Rv64ShiftWArithmeticRightAir,
-    Rv64ShiftWArithmeticRightChip<F>,
+    Rv64ShiftWRightArithmeticExecutor,
+    Rv64ShiftWRightArithmeticAir,
+    Rv64ShiftWRightArithmeticChip<F>,
 >;
 // SLLW/SRLW use the u16 logical core; SRAW uses the byte-shaped arithmetic-right core.
 type ShiftWLogicalCoreCols<T> = ShiftLogicalCoreCols<T, RV64_WORD_U16_LIMBS, U16_BITS>;
-type ShiftWArithmeticRightCoreCols<T> =
+type ShiftWRightArithmeticCoreCols<T> =
     ShiftRightArithmeticCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>;
 
 #[inline(always)]
@@ -131,31 +131,31 @@ fn create_logical_harness_fields(
     (air, executor, chip)
 }
 
-fn create_arithmetic_right_harness_fields(
+fn create_right_arithmetic_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
     range_checker: Arc<VariableRangeCheckerChip>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (
-    Rv64ShiftWArithmeticRightAir,
-    Rv64ShiftWArithmeticRightExecutor,
-    Rv64ShiftWArithmeticRightChip<F>,
+    Rv64ShiftWRightArithmeticAir,
+    Rv64ShiftWRightArithmeticExecutor,
+    Rv64ShiftWRightArithmeticChip<F>,
 ) {
-    let air = Rv64ShiftWArithmeticRightAir::new(
+    let air = Rv64ShiftWRightArithmeticAir::new(
         Rv64BaseAluWAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
-        ShiftWArithmeticRightCoreAir::new(
+        ShiftWRightArithmeticCoreAir::new(
             bitwise_chip.bus(),
             range_checker.bus(),
             ShiftWOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64ShiftWArithmeticRightExecutor::new(
+    let executor = Rv64ShiftWRightArithmeticExecutor::new(
         Rv64BaseAluWAdapterExecutor::new(),
         ShiftWOpcode::CLASS_OFFSET,
     );
-    let chip = Rv64ShiftWArithmeticRightChip::<F>::new(
-        ShiftWArithmeticRightFiller::new(
+    let chip = Rv64ShiftWRightArithmeticChip::<F>::new(
+        ShiftWRightArithmeticFiller::new(
             Rv64BaseAluWAdapterFiller::new(bitwise_chip.clone()),
             bitwise_chip,
             range_checker,
@@ -176,10 +176,10 @@ fn create_logical_harness(tester: &VmChipTestBuilder<F>) -> LogicalHarness {
     LogicalHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
-fn create_arithmetic_right_harness(
+fn create_right_arithmetic_harness(
     tester: &VmChipTestBuilder<F>,
 ) -> (
-    ArithmeticRightHarness,
+    RightArithmeticHarness,
     (
         BitwiseOperationLookupAir<RV64_BYTE_BITS>,
         SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
@@ -191,14 +191,14 @@ fn create_arithmetic_right_harness(
         bitwise_bus,
     ));
 
-    let (air, executor, chip) = create_arithmetic_right_harness_fields(
+    let (air, executor, chip) = create_right_arithmetic_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         bitwise_chip.clone(),
         range_checker,
         tester.memory_helper(),
     );
-    let harness = ArithmeticRightHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = RightArithmeticHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
     (harness, (bitwise_chip.air, bitwise_chip))
 }
@@ -260,7 +260,7 @@ fn run_rv64w_shift_rand_test(opcode: ShiftWOpcode, num_ops: usize) {
     let mut tester = VmChipTestBuilder::default();
 
     if opcode == SRAW {
-        let (mut harness, bitwise_chip) = create_arithmetic_right_harness(&tester);
+        let (mut harness, bitwise_chip) = create_right_arithmetic_harness(&tester);
         for _ in 0..num_ops {
             set_and_execute(
                 &mut tester,
@@ -521,7 +521,7 @@ fn run_negative_shift_right_arithmetic_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_arithmetic_right_harness(&tester);
+    let (mut harness, bitwise) = create_right_arithmetic_harness(&tester);
 
     set_and_execute(
         &mut tester,
@@ -539,7 +539,7 @@ fn run_negative_shift_right_arithmetic_test(
         let mut values = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
-        let cols: &mut ShiftWArithmeticRightCoreCols<F> = core_row.borrow_mut();
+        let cols: &mut ShiftWRightArithmeticCoreCols<F> = core_row.borrow_mut();
 
         cols.a = prank_a.map(F::from_u32);
         if let Some(prank_b) = prank_b {
@@ -835,12 +835,12 @@ type GpuLogicalHarness = GpuTestChipHarness<
 >;
 
 #[cfg(feature = "cuda")]
-type GpuArithmeticRightHarness = GpuTestChipHarness<
+type GpuRightArithmeticHarness = GpuTestChipHarness<
     F,
-    Rv64ShiftWArithmeticRightExecutor,
-    Rv64ShiftWArithmeticRightAir,
-    Rv64ShiftWArithmeticRightChipGpu,
-    Rv64ShiftWArithmeticRightChip<F>,
+    Rv64ShiftWRightArithmeticExecutor,
+    Rv64ShiftWRightArithmeticAir,
+    Rv64ShiftWRightArithmeticChipGpu,
+    Rv64ShiftWRightArithmeticChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -861,7 +861,7 @@ fn create_cuda_logical_harness(tester: &GpuChipTestBuilder) -> GpuLogicalHarness
 }
 
 #[cfg(feature = "cuda")]
-fn create_cuda_arithmetic_right_harness(tester: &GpuChipTestBuilder) -> GpuArithmeticRightHarness {
+fn create_cuda_right_arithmetic_harness(tester: &GpuChipTestBuilder) -> GpuRightArithmeticHarness {
     let bitwise_bus = default_bitwise_lookup_bus();
     let range_bus = default_var_range_checker_bus();
 
@@ -870,14 +870,14 @@ fn create_cuda_arithmetic_right_harness(tester: &GpuChipTestBuilder) -> GpuArith
     ));
     let dummy_range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
-    let (air, executor, cpu_chip) = create_arithmetic_right_harness_fields(
+    let (air, executor, cpu_chip) = create_right_arithmetic_harness_fields(
         tester.memory_bridge(),
         tester.execution_bridge(),
         dummy_bitwise_chip,
         dummy_range_checker,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64ShiftWArithmeticRightChipGpu::new(
+    let gpu_chip = Rv64ShiftWRightArithmeticChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -896,7 +896,7 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
     if opcode == SRAW {
-        let mut harness = create_cuda_arithmetic_right_harness(&tester);
+        let mut harness = create_cuda_right_arithmetic_harness(&tester);
 
         for _ in 0..num_ops {
             set_and_execute(

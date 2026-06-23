@@ -57,7 +57,7 @@ macro_rules! dispatch {
 }
 
 macro_rules! impl_shift256_executor {
-    ($executor:ty, $is_arithmetic_right:expr) => {
+    ($executor:ty, $is_right_arithmetic:expr) => {
         impl<F: PrimeField32> InterpreterExecutor<F> for $executor {
             fn pre_compute_size(&self) -> usize {
                 size_of::<ShiftPreCompute>()
@@ -168,7 +168,7 @@ macro_rules! impl_shift256_executor {
                 let local_opcode = ShiftOpcode::from_usize(
                     opcode.local_opcode_idx(Rv64Shift256Opcode::CLASS_OFFSET),
                 );
-                if (local_opcode == ShiftOpcode::SRA) != $is_arithmetic_right {
+                if (local_opcode == ShiftOpcode::SRA) != $is_right_arithmetic {
                     return Err(StaticProgramError::InvalidInstruction(pc));
                 }
                 Ok(local_opcode)

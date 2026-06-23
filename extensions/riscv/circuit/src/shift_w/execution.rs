@@ -14,7 +14,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::ShiftWOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{ShiftWArithmeticRightExecutor, ShiftWLogicalExecutor};
+use super::{ShiftWRightArithmeticExecutor, ShiftWLogicalExecutor};
 #[allow(unused_imports)]
 use crate::{adapters::imm_to_rv64_u64, common::*};
 
@@ -28,7 +28,7 @@ struct ShiftWPreCompute {
 
 trait ShiftWExecutorKind {
     fn offset(&self) -> usize;
-    fn is_arithmetic_right(&self) -> bool;
+    fn is_right_arithmetic(&self) -> bool;
 }
 
 impl<A> ShiftWExecutorKind for ShiftWLogicalExecutor<A> {
@@ -36,17 +36,17 @@ impl<A> ShiftWExecutorKind for ShiftWLogicalExecutor<A> {
         self.offset
     }
 
-    fn is_arithmetic_right(&self) -> bool {
+    fn is_right_arithmetic(&self) -> bool {
         false
     }
 }
 
-impl<A> ShiftWExecutorKind for ShiftWArithmeticRightExecutor<A> {
+impl<A> ShiftWExecutorKind for ShiftWRightArithmeticExecutor<A> {
     fn offset(&self) -> usize {
         self.offset
     }
 
-    fn is_arithmetic_right(&self) -> bool {
+    fn is_right_arithmetic(&self) -> bool {
         true
     }
 }
@@ -65,7 +65,7 @@ trait ShiftWPreComputeExt: ShiftWExecutorKind {
             opcode, a, b, c, e, ..
         } = inst;
         let shift_opcode = ShiftWOpcode::from_usize(opcode.local_opcode_idx(self.offset()));
-        if (shift_opcode == ShiftWOpcode::SRAW) != self.is_arithmetic_right() {
+        if (shift_opcode == ShiftWOpcode::SRAW) != self.is_right_arithmetic() {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let e_u32 = e.as_canonical_u32();
@@ -141,7 +141,7 @@ where
     }
 }
 
-impl<F, A> InterpreterExecutor<F> for ShiftWArithmeticRightExecutor<A>
+impl<F, A> InterpreterExecutor<F> for ShiftWRightArithmeticExecutor<A>
 where
     F: PrimeField32,
 {
@@ -218,7 +218,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for ShiftWArithmeticRightExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for ShiftWRightArithmeticExecutor<A>
 where
     F: PrimeField32,
 {

@@ -236,7 +236,7 @@ pub mod shift256 {
             stream: cudaStream_t,
         ) -> i32;
 
-        fn _shift256_arithmetic_right_tracegen(
+        fn _shift256_right_arithmetic_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -274,7 +274,7 @@ pub mod shift256 {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub unsafe fn tracegen_arithmetic_right(
+    pub unsafe fn tracegen_right_arithmetic(
         d_trace: &DeviceBuffer<F>,
         height: usize,
         d_records: &DeviceBuffer<u8>,
@@ -285,7 +285,7 @@ pub mod shift256 {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
-        CudaError::from_result(_shift256_arithmetic_right_tracegen(
+        CudaError::from_result(_shift256_right_arithmetic_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,

@@ -122,7 +122,7 @@ pub enum Rv64IExecutor {
     ShiftLogical(Rv64ShiftLogicalExecutor),
     ShiftRightArithmetic(Rv64ShiftRightArithmeticExecutor),
     ShiftWLogical(Rv64ShiftWLogicalExecutor),
-    ShiftWArithmeticRight(Rv64ShiftWArithmeticRightExecutor),
+    ShiftWRightArithmetic(Rv64ShiftWRightArithmeticExecutor),
     BranchEqual(Rv64BranchEqualExecutor),
     BranchLessThan(Rv64BranchLessThanExecutor),
     JalLui(Rv64JalLuiExecutor),
@@ -213,12 +213,12 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             [ShiftWOpcode::SLLW, ShiftWOpcode::SRLW].map(|x| x.global_opcode()),
         )?;
 
-        let shift_w_arithmetic_right = Rv64ShiftWArithmeticRightExecutor::new(
+        let shift_w_right_arithmetic = Rv64ShiftWRightArithmeticExecutor::new(
             Rv64BaseAluWAdapterExecutor::new(),
             ShiftWOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
-            shift_w_arithmetic_right,
+            shift_w_right_arithmetic,
             [ShiftWOpcode::SRAW].map(|x| x.global_opcode()),
         )?;
 
@@ -354,15 +354,15 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         );
         inventory.add_air(shift_w_logical);
 
-        let shift_w_arithmetic_right = Rv64ShiftWArithmeticRightAir::new(
+        let shift_w_right_arithmetic = Rv64ShiftWRightArithmeticAir::new(
             Rv64BaseAluWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
-            crate::shift_w::ShiftWArithmeticRightCoreAir::new(
+            crate::shift_w::ShiftWRightArithmeticCoreAir::new(
                 bitwise_lu,
                 range_checker,
                 ShiftWOpcode::CLASS_OFFSET,
             ),
         );
-        inventory.add_air(shift_w_arithmetic_right);
+        inventory.add_air(shift_w_right_arithmetic);
 
         let load_store = Rv64LoadStoreAir::new(
             Rv64LoadStoreAdapterAir::new(
@@ -535,9 +535,9 @@ where
         );
         inventory.add_executor_chip(shift_w_logical);
 
-        inventory.next_air::<Rv64ShiftWArithmeticRightAir>()?;
-        let shift_w_arithmetic_right = Rv64ShiftWArithmeticRightChip::new(
-            crate::shift_w::ShiftWArithmeticRightFiller::new(
+        inventory.next_air::<Rv64ShiftWRightArithmeticAir>()?;
+        let shift_w_right_arithmetic = Rv64ShiftWRightArithmeticChip::new(
+            crate::shift_w::ShiftWRightArithmeticFiller::new(
                 Rv64BaseAluWAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 range_checker.clone(),
@@ -545,7 +545,7 @@ where
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(shift_w_arithmetic_right);
+        inventory.add_executor_chip(shift_w_right_arithmetic);
 
         inventory.next_air::<Rv64LoadStoreAir>()?;
         let load_store_chip = Rv64LoadStoreChip::new(

@@ -327,7 +327,7 @@ pub mod shift_cuda {
         ))
     }
 
-    pub unsafe fn tracegen_arithmetic_right(
+    pub unsafe fn tracegen_right_arithmetic(
         d_trace: &DeviceBuffer<F>,
         height: usize,
         d_records: &DeviceBuffer<u8>,
@@ -728,7 +728,7 @@ pub mod shift_w_cuda {
             stream: cudaStream_t,
         ) -> i32;
 
-        fn _rv64_shift_w_arithmetic_right_tracegen(
+        fn _rv64_shift_w_right_arithmetic_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -761,7 +761,7 @@ pub mod shift_w_cuda {
         ))
     }
 
-    pub unsafe fn tracegen_arithmetic_right(
+    pub unsafe fn tracegen_right_arithmetic(
         d_trace: &DeviceBuffer<F>,
         height: usize,
         d_records: &DeviceBuffer<u8>,
@@ -770,7 +770,7 @@ pub mod shift_w_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_shift_w_arithmetic_right_tracegen(
+        CudaError::from_result(_rv64_shift_w_right_arithmetic_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
