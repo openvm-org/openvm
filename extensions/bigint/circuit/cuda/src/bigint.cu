@@ -44,7 +44,7 @@ using Multiplication256CoreRecord = MultiplicationCoreRecord<INT256_NUM_U8_LIMBS
 using Multiplication256Core = MultiplicationCore<INT256_NUM_U8_LIMBS>;
 template <typename T> using Multiplication256CoreCols = MultiplicationCoreCols<T, INT256_NUM_U8_LIMBS>;
 
-using Shift256CoreRecord = ShiftCoreRecord<INT256_NUM_U8_LIMBS>;
+using Shift256CoreRecord = ShiftRightArithmeticCoreRecord<INT256_NUM_U8_LIMBS>;
 using ShiftRightArithmetic256Core = ShiftRightArithmeticCore<INT256_NUM_U8_LIMBS>;
 template <typename T>
 using ShiftRightArithmetic256CoreCols = ShiftRightArithmeticCoreCols<T, INT256_NUM_U8_LIMBS>;

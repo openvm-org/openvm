@@ -12,7 +12,7 @@ using namespace riscv;
 // contrast to the per-limb range checks of the u16 logical core (see shift_logical.cuh).
 // ----------------------------------------------------------------------------
 
-template <size_t NUM_LIMBS> struct ShiftCoreRecord {
+template <size_t NUM_LIMBS> struct ShiftRightArithmeticCoreRecord {
     uint8_t b[NUM_LIMBS];
     uint8_t c[NUM_LIMBS];
     uint8_t local_opcode;
@@ -81,7 +81,7 @@ template <size_t NUM_LIMBS> struct ShiftRightArithmeticCore {
     __device__ ShiftRightArithmeticCore(BitwiseOperationLookup lookup, VariableRangeChecker range)
         : bitwise_lookup(lookup), range_checker(range) {}
 
-    __device__ void fill_trace_row(RowSlice row, ShiftCoreRecord<NUM_LIMBS> record) {
+    __device__ void fill_trace_row(RowSlice row, ShiftRightArithmeticCoreRecord<NUM_LIMBS> record) {
         uint8_t a[NUM_LIMBS];
         size_t limb_shift = 0, bit_shift = 0;
         run_shift_right<NUM_LIMBS>(record.b, record.c, a, limb_shift, bit_shift, false);

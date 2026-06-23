@@ -13,7 +13,7 @@ using namespace riscv;
 using namespace program;
 
 // Concrete type aliases for 64-bit
-using Rv64ShiftCoreRecord = ShiftCoreRecord<RV64_REGISTER_NUM_LIMBS>;
+using Rv64ShiftCoreRecord = ShiftRightArithmeticCoreRecord<RV64_REGISTER_NUM_LIMBS>;
 using Rv64ShiftRightArithmeticCore = ShiftRightArithmeticCore<RV64_REGISTER_NUM_LIMBS>;
 template <typename T>
 using Rv64ShiftRightArithmeticCoreCols = ShiftRightArithmeticCoreCols<T, RV64_REGISTER_NUM_LIMBS>;

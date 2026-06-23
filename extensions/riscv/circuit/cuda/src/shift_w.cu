@@ -12,7 +12,7 @@
 using namespace riscv;
 
 // Concrete type aliases for the 32-bit word variant on RV64.
-using Rv64ShiftWCoreRecord = ShiftCoreRecord<RV64_WORD_NUM_LIMBS>;
+using Rv64ShiftWCoreRecord = ShiftRightArithmeticCoreRecord<RV64_WORD_NUM_LIMBS>;
 using Rv64ShiftWArithmeticRightCore = ShiftRightArithmeticCore<RV64_WORD_NUM_LIMBS>;
 template <typename T>
 using Rv64ShiftWArithmeticRightCoreCols = ShiftRightArithmeticCoreCols<T, RV64_WORD_NUM_LIMBS>;
