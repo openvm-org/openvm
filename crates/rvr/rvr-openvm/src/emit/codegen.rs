@@ -1,4 +1,5 @@
 //! C code generation for IR instructions and terminators.
+use std::collections::HashSet;
 
 use rvr_openvm_ir::*;
 
@@ -94,7 +95,7 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
 /// Context for terminator code generation (dispatch / tail-call info).
 pub struct TermCtx<'a> {
     /// Set of valid block start PCs (for direct tail calls).
-    pub valid_blocks: &'a std::collections::HashSet<u64>,
+    pub valid_blocks: &'a HashSet<u64>,
 }
 
 /// Emit C code for a terminator using tail calls between blocks.
@@ -213,12 +214,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
 
 /// Emit a tail call to a known PC. Uses a direct call if the target is a valid
 /// block; otherwise falls back to the dispatch table.
-fn emit_tail_call(
-    ctx: &mut EmitContext,
-    target: u64,
-    args: &str,
-    valid_blocks: &std::collections::HashSet<u64>,
-) {
+fn emit_tail_call(ctx: &mut EmitContext, target: u64, args: &str, valid_blocks: &HashSet<u64>) {
     if valid_blocks.contains(&target) {
         ctx.write_line(&format!(
             "[[clang::musttail]] return block_0x{target:08x}({args});"
