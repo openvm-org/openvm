@@ -6757,7 +6757,6 @@ dependencies = [
  "openvm-riscv-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "p3-baby-bear",
  "serde",
  "strum 0.26.3",
  "tracing",

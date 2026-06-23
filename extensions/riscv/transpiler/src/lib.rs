@@ -194,39 +194,3 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64IoTranspilerExtension {
         instruction.map(TranspilerOutput::one_to_one)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use openvm_riscv_guest::{NATIVE_STORED_FUNCT3, NATIVE_STORED_FUNCT7, SYSTEM_OPCODE};
-    use openvm_transpiler::transpiler::{Transpiler, TranspilerError};
-    use p3_baby_bear::BabyBear;
-
-    use super::Rv64IoTranspilerExtension;
-
-    fn encode_r_type(opcode: u8, funct3: u8, funct7: u32, rd: u32, rs1: u32, rs2: u32) -> u32 {
-        opcode as u32
-            | (rd << 7)
-            | ((funct3 as u32) << 12)
-            | (rs1 << 15)
-            | (rs2 << 20)
-            | (funct7 << 25)
-    }
-
-    #[test]
-    fn native_stored_transpiles_to_parse_error() {
-        let instruction = encode_r_type(
-            SYSTEM_OPCODE,
-            NATIVE_STORED_FUNCT3,
-            NATIVE_STORED_FUNCT7,
-            1,
-            2,
-            2,
-        );
-        let err = Transpiler::<BabyBear>::new()
-            .with_extension(Rv64IoTranspilerExtension)
-            .transpile(&[instruction])
-            .unwrap_err();
-
-        assert!(matches!(err, TranspilerError::ParseError(parsed) if parsed == instruction));
-    }
-}

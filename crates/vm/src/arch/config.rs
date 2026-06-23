@@ -268,7 +268,7 @@ impl MemoryConfig {
         addr_spaces
     }
 
-    /// Config for aggregation usage with only native address space.
+    /// Config for aggregation usage with only deferral address space.
     pub fn aggregation() -> Self {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
