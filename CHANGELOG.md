@@ -11,6 +11,8 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ### Changed
 - (Circuits/Memory) Fix a soundness issue in `MemoryMerkleAir` by rejecting Merkle expansion rows below the leaf layer, preventing malformed traces from changing the committed memory root without a corresponding memory operation.
+- (Verifier) Fix a selector-clash issue in the Solidity verifier wrapper to ensure proof verification runs through the generated Halo2 fallback.
+- (Verifier) Reject non-canonical BN254 scalar encodings for `appExeCommit` and `appVmCommit` in the Solidity verifier wrapper.
 
 ## v1.6.0
 
