@@ -8997,6 +8997,7 @@ dependencies = [
 name = "rvr-openvm"
 version = "2.0.0-beta.2"
 dependencies = [
+ "openvm-instructions",
  "openvm-platform",
  "openvm-riscv-guest",
  "openvm-stark-backend",

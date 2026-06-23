@@ -1,6 +1,7 @@
 //! C code generation for IR instructions and terminators.
 use std::collections::HashSet;
 
+use openvm_instructions::program::DEFAULT_PC_STEP;
 use rvr_openvm_ir::*;
 
 use super::context::EmitContext;
@@ -104,8 +105,7 @@ pub struct TermCtx<'a> {
 /// Dynamic targets go through the dispatch table: `return dispatch_table[idx](args);`
 /// Exit/suspend/trap save hot regs to state and return to `rv_execute`.
 pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &TermCtx) {
-    // TODO(rvr): remove constant 4
-    let next_pc = pc.wrapping_add(4);
+    let next_pc = pc.wrapping_add(u64::from(DEFAULT_PC_STEP));
     let args = ctx.tail_call_args();
     match term {
         Terminator::FallThrough => {
