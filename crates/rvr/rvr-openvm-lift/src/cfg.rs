@@ -11,7 +11,7 @@ use openvm_instructions::{
 };
 use rvr_openvm_ir::{AluOp, Block, Instr, InstrAt, LiftedInstr, MulDivOp, Terminator};
 
-use crate::helpers::{is_valid_pc, sext32};
+use crate::helpers::{is_pc_in_bounds, sext32};
 
 const MAX_VALUES: usize = 16;
 const MAX_ITERATIONS_MULTIPLIER: usize = 20;
@@ -21,8 +21,11 @@ const MAX_JUMP_TABLE_SCAN: usize = 256;
 #[derive(Debug, thiserror::Error)]
 pub enum CfgError {
     /// A statically computable control-flow target exceeds the PC address space.
-    #[error("{what} {target:#x} exceeds PC address space")]
-    PcOutOfBounds { what: &'static str, target: u64 },
+    #[error("control-flow target {target:#x} from PC {pc:#x} exceeds PC address space")]
+    PcOutOfBounds { pc: u64, target: u64 },
+    /// A statically computable control-flow target does not name a lifted instruction.
+    #[error("control-flow target {target:#x} from PC {pc:#x} does not point to an instruction")]
+    PcNotInProgram { pc: u64, target: u64 },
 }
 
 // ── RegisterValue ──────────────────────────────────────────────────────────
@@ -746,6 +749,55 @@ fn worklist(
     })
 }
 
+fn validate_static_target(
+    pc_to_idx: &HashMap<u64, usize>,
+    pc: u64,
+    target: u64,
+) -> Result<(), CfgError> {
+    if !is_pc_in_bounds(target) {
+        return Err(CfgError::PcOutOfBounds { pc, target });
+    }
+    if !pc_to_idx.contains_key(&target) {
+        return Err(CfgError::PcNotInProgram { pc, target });
+    }
+    Ok(())
+}
+
+fn validate_static_control_targets(
+    instructions: &[LiftedInstr],
+    pc_to_idx: &HashMap<u64, usize>,
+) -> Result<(), CfgError> {
+    for li in instructions {
+        let pc = li.pc();
+        let fallthrough = pc + INSTR_SIZE as u64;
+        match li {
+            LiftedInstr::Body(_) => {
+                validate_static_target(pc_to_idx, pc, fallthrough)?;
+            }
+            LiftedInstr::Term { terminator, .. } => match terminator {
+                Terminator::FallThrough => {
+                    validate_static_target(pc_to_idx, pc, fallthrough)?;
+                }
+                Terminator::Jump { target, .. } => {
+                    validate_static_target(pc_to_idx, pc, *target)?;
+                }
+                Terminator::JumpDyn { .. } => {}
+                Terminator::Branch { target, .. } => {
+                    validate_static_target(pc_to_idx, pc, *target)?;
+                    validate_static_target(pc_to_idx, pc, fallthrough)?;
+                }
+                Terminator::Exit { .. } | Terminator::Trap { .. } => {}
+                Terminator::Extension(ext) => {
+                    for target in ext.successors(fallthrough) {
+                        validate_static_target(pc_to_idx, pc, target)?;
+                    }
+                }
+            },
+        }
+    }
+    Ok(())
+}
+
 // ── Phase 4: transfer ─────────────────────────────────────────────────────
 
 /// Process one LiftedInstr, updating the register state for the output edge.
@@ -906,12 +958,6 @@ fn get_successors(
                     result.insert(pc + INSTR_SIZE as u64);
                 }
                 Terminator::Jump { target, .. } => {
-                    if !is_valid_pc(*target) {
-                        return Err(CfgError::PcOutOfBounds {
-                            what: "JAL target",
-                            target: *target,
-                        });
-                    }
                     result.insert(*target);
                     if is_call_instr {
                         result.insert(pc + INSTR_SIZE as u64);
@@ -924,11 +970,8 @@ fn get_successors(
                     if addr_val.is_constant() && !addr_val.values.is_empty() {
                         let mut targets: Vec<u64> = Vec::new();
                         for &t in &addr_val.values {
-                            if !is_valid_pc(t) {
-                                return Err(CfgError::PcOutOfBounds {
-                                    what: "JumpDyn target",
-                                    target: t,
-                                });
+                            if !is_pc_in_bounds(t) {
+                                return Err(CfgError::PcOutOfBounds { pc, target: t });
                             }
                             if ctx.pc_to_idx.contains_key(&t) {
                                 targets.push(t);
@@ -964,24 +1007,12 @@ fn get_successors(
                     }
                 }
                 Terminator::Branch { target, .. } => {
-                    if !is_valid_pc(*target) {
-                        return Err(CfgError::PcOutOfBounds {
-                            what: "Branch target",
-                            target: *target,
-                        });
-                    }
                     result.insert(pc + INSTR_SIZE as u64);
                     result.insert(*target);
                 }
                 Terminator::Exit { .. } | Terminator::Trap { .. } => {}
                 Terminator::Extension(ext) => {
                     for target in ext.successors(pc + INSTR_SIZE as u64) {
-                        if !is_valid_pc(target) {
-                            return Err(CfgError::PcOutOfBounds {
-                                what: "Extension successor",
-                                target,
-                            });
-                        }
                         result.insert(target);
                     }
                 }
@@ -996,7 +1027,7 @@ fn get_successors(
 /// the result exceeds the valid PC address space.
 fn eval_jumpdyn_target(base: u64, imm: i32) -> Option<u64> {
     let target = base.wrapping_add(imm as i64 as u64) & !1u64;
-    is_valid_pc(target).then_some(target)
+    is_pc_in_bounds(target).then_some(target)
 }
 
 /// Evaluate the JumpDyn target as a multi-value register value:
@@ -1193,6 +1224,8 @@ pub fn build_blocks(
         .map(|(i, li)| (li.pc(), i))
         .collect();
 
+    validate_static_control_targets(instructions, &pc_to_idx)?;
+
     // Phase 1: Discover potential targets.
     let (function_entries, mut internal_targets, return_sites) =
         collect_potential_targets(instructions, &pc_to_idx);
@@ -1355,4 +1388,86 @@ fn build_block_list(
     }
 
     blocks
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::program::MAX_ALLOWED_PC;
+    use rvr_openvm_ir::BranchCond;
+
+    use super::*;
+
+    fn term(pc: u64, terminator: Terminator) -> LiftedInstr {
+        LiftedInstr::Term {
+            pc,
+            terminator,
+            source_loc: None,
+        }
+    }
+
+    #[test]
+    fn build_blocks_rejects_static_jump_to_missing_pc() {
+        let err = build_blocks(
+            &[
+                term(
+                    0,
+                    Terminator::Jump {
+                        link_rd: None,
+                        target: 8,
+                    },
+                ),
+                term(4, Terminator::Exit { code: 0 }),
+            ],
+            &[],
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, CfgError::PcNotInProgram { pc: 0, target: 8 }));
+    }
+
+    #[test]
+    fn build_blocks_rejects_static_jump_out_of_bounds() {
+        let target = u64::from(MAX_ALLOWED_PC) + 1;
+        let err = build_blocks(
+            &[
+                term(
+                    0,
+                    Terminator::Jump {
+                        link_rd: None,
+                        target,
+                    },
+                ),
+                term(4, Terminator::Exit { code: 0 }),
+            ],
+            &[],
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            CfgError::PcOutOfBounds { pc: 0, target: t } if t == target
+        ));
+    }
+
+    #[test]
+    fn build_blocks_rejects_static_branch_to_missing_pc() {
+        let err = build_blocks(
+            &[
+                term(
+                    0,
+                    Terminator::Branch {
+                        cond: BranchCond::Eq,
+                        rs1: 0,
+                        rs2: 0,
+                        target: 8,
+                    },
+                ),
+                term(4, Terminator::Exit { code: 0 }),
+            ],
+            &[],
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, CfgError::PcNotInProgram { pc: 0, target: 8 }));
+    }
 }
