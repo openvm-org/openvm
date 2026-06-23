@@ -104,9 +104,7 @@ where
         let carry_top = (pc_high + imm_high_16 + carry_low - rd_data[1]) * carry_divide;
         builder.when(is_valid).assert_bool(carry_top.clone());
 
-        // `imm_sign` is the sign bit after accounting for carry out of bit 31.
-        // Range-checking `2 * imm_high_16 - imm_sign * 2^16` ties that sign bit
-        // to the 15-bit magnitude of the shifted immediate.
+        // Check that the computed sign matches the top bit of `imm_high_16`.
         let imm_sign = is_sign_extend + carry_top;
         self.range_bus
             .range_check(
@@ -247,7 +245,7 @@ where
         self.range_checker_chip.add_count(imm_high_16, U16_BITS);
         self.range_checker_chip.add_count(rd_lo as u32, U16_BITS);
         self.range_checker_chip.add_count(rd_hi as u32, U16_BITS);
-        // Mirrors the AIR sign-bit check for imm_high_16.
+        // Check that imm_sign matches the top bit of imm_high_16.
         let imm_magnitude_check = 2u32 * imm_high_16 - imm_sign * (1 << U16_BITS);
         self.range_checker_chip
             .add_count(imm_magnitude_check, U16_BITS);

@@ -59,7 +59,7 @@ struct Rv64AuipcCore {
         range_checker.add_count(imm_high_16, U16_BITS);
         range_checker.add_count(rd_lo, U16_BITS);
         range_checker.add_count(rd_hi, U16_BITS);
-        // Mirrors the AIR sign-bit check for imm_high_16.
+        // Check that imm_sign matches the top bit of imm_high_16.
         range_checker.add_count(2u * imm_high_16 - (imm_sign << U16_BITS), U16_BITS);
 
         uint32_t rd_u16[RV64_PTR_U16_LIMBS] = {rd_lo, rd_hi};
