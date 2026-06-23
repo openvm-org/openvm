@@ -5,7 +5,8 @@
 #include "primitives/trace_access.h"
 #include "riscv/adapters/alu_w.cuh"
 #include "riscv/adapters/alu_w_u16.cuh"
-#include "riscv/cores/shift.cuh"
+#include "riscv/cores/shift_logical.cuh"
+#include "riscv/cores/shift_right_arithmetic.cuh"
 #include "system/memory/params.cuh"
 
 using namespace riscv;
@@ -18,14 +19,14 @@ using Rv64ShiftWArithmeticRightCoreCols = ShiftRightArithmeticCoreCols<T, RV64_W
 
 // SLLW/SRLW use the u16 logical core (RV64_WORD_U16_LIMBS limbs of 16 bits) over the low 32-bit
 // word and the u16 W adapter; SRAW keeps byte limbs and the byte adapter.
-using Rv64ShiftWLogicalU16Core = ShiftLogicalU16Core<RV64_WORD_U16_LIMBS, U16_BITS>;
-using Rv64ShiftWLogicalU16CoreRecord = ShiftLogicalU16CoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>;
+using Rv64ShiftWLogicalCore = ShiftLogicalCore<RV64_WORD_U16_LIMBS, U16_BITS>;
+using Rv64ShiftWLogicalCoreRecord = ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>;
 template <typename T>
-using Rv64ShiftWLogicalU16CoreCols = ShiftLogicalU16CoreCols<T, RV64_WORD_U16_LIMBS, U16_BITS>;
+using Rv64ShiftWLogicalCoreCols = ShiftLogicalCoreCols<T, RV64_WORD_U16_LIMBS, U16_BITS>;
 
 template <typename T> struct ShiftWLogicalCols {
     Rv64BaseAluWU16AdapterCols<T> adapter;
-    Rv64ShiftWLogicalU16CoreCols<T> core;
+    Rv64ShiftWLogicalCoreCols<T> core;
 };
 
 template <typename T> struct ShiftWArithmeticRightCols {
@@ -35,7 +36,7 @@ template <typename T> struct ShiftWArithmeticRightCols {
 
 struct ShiftWLogicalRecord {
     Rv64BaseAluWU16AdapterRecord adapter;
-    Rv64ShiftWLogicalU16CoreRecord core;
+    Rv64ShiftWLogicalCoreRecord core;
 };
 
 struct ShiftWRecord {
@@ -58,7 +59,7 @@ __global__ void rv64_shift_w_logical_tracegen(
         auto adapter =
             Rv64BaseAluWU16Adapter(VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, rec.adapter);
-        auto core = Rv64ShiftWLogicalU16Core(VariableRangeChecker(range_ptr, range_bins));
+        auto core = Rv64ShiftWLogicalCore(VariableRangeChecker(range_ptr, range_bins));
         core.fill_trace_row(row.slice_from(COL_INDEX(ShiftWLogicalCols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(ShiftWLogicalCols<uint8_t>));

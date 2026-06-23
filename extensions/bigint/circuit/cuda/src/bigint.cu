@@ -11,7 +11,8 @@
 #include "riscv/cores/blt.cuh"
 #include "riscv/cores/less_than.cuh"
 #include "riscv/cores/mul.cuh"
-#include "riscv/cores/shift.cuh"
+#include "riscv/cores/shift_logical.cuh"
+#include "riscv/cores/shift_right_arithmetic.cuh"
 #include "system/memory/params.cuh"
 
 using namespace riscv;
@@ -48,10 +49,10 @@ using ShiftRightArithmetic256Core = ShiftRightArithmeticCore<INT256_NUM_U8_LIMBS
 template <typename T>
 using ShiftRightArithmetic256CoreCols = ShiftRightArithmeticCoreCols<T, INT256_NUM_U8_LIMBS>;
 // SLL/SRL use the u16 logical core (16 limbs of 16 bits) over the u16 vec-heap adapter.
-using ShiftLogical256U16Core = ShiftLogicalU16Core<INT256_NUM_U16_LIMBS, U16_BITS>;
-using ShiftLogical256U16CoreRecord = ShiftLogicalU16CoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
+using ShiftLogical256Core = ShiftLogicalCore<INT256_NUM_U16_LIMBS, U16_BITS>;
+using ShiftLogical256CoreRecord = ShiftLogicalCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
 template <typename T>
-using ShiftLogical256U16CoreCols = ShiftLogicalU16CoreCols<T, INT256_NUM_U16_LIMBS, U16_BITS>;
+using ShiftLogical256CoreCols = ShiftLogicalCoreCols<T, INT256_NUM_U16_LIMBS, U16_BITS>;
 
 using BranchLessThan256CoreRecord =
     BranchLessThanCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
@@ -420,7 +421,7 @@ extern "C" int _branch_less_than256_tracegen(
 
 template <typename T> struct ShiftLogical256Cols {
     Rv64VecHeapU16Adapter256Cols<T> adapter;
-    ShiftLogical256U16CoreCols<T> core;
+    ShiftLogical256CoreCols<T> core;
 };
 
 template <typename T> struct ShiftRightArithmetic256Cols {
@@ -430,7 +431,7 @@ template <typename T> struct ShiftRightArithmetic256Cols {
 
 struct ShiftLogical256Record {
     Rv64VecHeapU16Adapter256Record adapter;
-    ShiftLogical256U16CoreRecord core;
+    ShiftLogical256CoreRecord core;
 };
 
 struct Shift256Record {
@@ -459,7 +460,7 @@ __global__ void shift256_logical_tracegen(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        ShiftLogical256U16Core core(VariableRangeChecker(d_range_checker_ptr, range_checker_bins));
+        ShiftLogical256Core core(VariableRangeChecker(d_range_checker_ptr, range_checker_bins));
         core.fill_trace_row(row.slice_from(COL_INDEX(ShiftLogical256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(ShiftLogical256Cols<uint8_t>));

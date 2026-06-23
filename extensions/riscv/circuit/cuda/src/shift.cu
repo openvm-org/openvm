@@ -5,7 +5,8 @@
 #include "primitives/trace_access.h"
 #include "riscv/adapters/alu.cuh"
 #include "riscv/adapters/alu_u16.cuh"
-#include "riscv/cores/shift.cuh"
+#include "riscv/cores/shift_logical.cuh"
+#include "riscv/cores/shift_right_arithmetic.cuh"
 #include "system/memory/params.cuh"
 
 using namespace riscv;
@@ -19,14 +20,14 @@ using Rv64ShiftRightArithmeticCoreCols = ShiftRightArithmeticCoreCols<T, RV64_RE
 
 // The logical shift (SLL/SRL) uses u16 limbs and the u16 ALU adapter; the arithmetic-right shift
 // keeps byte limbs and the byte adapter.
-using Rv64ShiftLogicalU16Core = ShiftLogicalU16Core<BLOCK_FE_WIDTH, U16_BITS>;
-using Rv64ShiftLogicalU16CoreRecord = ShiftLogicalU16CoreRecord<BLOCK_FE_WIDTH, U16_BITS>;
+using Rv64ShiftLogicalCore = ShiftLogicalCore<BLOCK_FE_WIDTH, U16_BITS>;
+using Rv64ShiftLogicalCoreRecord = ShiftLogicalCoreRecord<BLOCK_FE_WIDTH, U16_BITS>;
 template <typename T>
-using Rv64ShiftLogicalU16CoreCols = ShiftLogicalU16CoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
+using Rv64ShiftLogicalCoreCols = ShiftLogicalCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct ShiftLogicalCols {
     Rv64BaseAluU16AdapterCols<T> adapter;
-    Rv64ShiftLogicalU16CoreCols<T> core;
+    Rv64ShiftLogicalCoreCols<T> core;
 };
 
 template <typename T> struct ShiftRightArithmeticCols {
@@ -36,7 +37,7 @@ template <typename T> struct ShiftRightArithmeticCols {
 
 struct ShiftLogicalRecord {
     Rv64BaseAluU16AdapterRecord adapter;
-    Rv64ShiftLogicalU16CoreRecord core;
+    Rv64ShiftLogicalCoreRecord core;
 };
 
 struct ShiftRecord {
@@ -60,7 +61,7 @@ __global__ void rv64_shift_logical_tracegen(
         auto adapter =
             Rv64BaseAluU16Adapter(VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, rec.adapter);
-        auto core = Rv64ShiftLogicalU16Core(VariableRangeChecker(range_ptr, range_bins));
+        auto core = Rv64ShiftLogicalCore(VariableRangeChecker(range_ptr, range_bins));
         core.fill_trace_row(row.slice_from(COL_INDEX(ShiftLogicalCols, core)), rec.core);
     } else {
         row.fill_zero(0, width);
