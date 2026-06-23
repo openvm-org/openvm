@@ -40,6 +40,7 @@ use {
         },
         EmptyAdapterCoreLayout,
     },
+    openvm_instructions::riscv::RV64_MEMORY_AS,
 };
 
 use super::{
