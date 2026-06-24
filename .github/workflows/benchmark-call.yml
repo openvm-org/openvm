@@ -138,6 +138,10 @@ jobs:
 
           if [[ "${E2E_BENCH}" == "true" ]]; then
             FEATURE_FLAGS=${FEATURE_FLAGS},evm
+            # On GPU instances, prove the halo2/EVM layer on GPU too (halo2-gpu implies cuda + evm).
+            if [[ "${{ inputs.instance_type || github.event.inputs.instance_type }}" =~ ^g ]]; then
+              FEATURE_FLAGS=${FEATURE_FLAGS},halo2-gpu
+            fi
             echo "FEATURE_FLAGS=${FEATURE_FLAGS}" >> $GITHUB_ENV
             bash ./scripts/trusted_setup_s3.sh
             PARAMS_DIR=${{ inputs.kzg_params_dir || github.event.inputs.kzg_params_dir || '$HOME/.openvm/params' }}

@@ -47,6 +47,11 @@ cuda = [
     "openvm-circuit/cuda",
     "openvm-sdk/cuda",
 ]
+halo2-gpu = [
+    "evm",
+    "cuda",
+    "openvm-sdk/halo2-gpu",
+]
 
 [[bin]]
 name = "fibonacci"

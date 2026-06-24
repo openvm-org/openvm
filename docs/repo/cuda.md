@@ -21,7 +21,7 @@ GPU acceleration of the **halo2 prover** used by the static / EVM verifier (the 
 | `cuda` | GPU | CPU |
 | `halo2-gpu` | GPU | GPU |
 
-The feature is exposed on `openvm-static-verifier` (where the halo2 prover lives), `openvm-sdk`, and `cargo-openvm`.
+The feature is exposed on `openvm-static-verifier` (where the halo2 prover lives), `openvm-sdk`, and `cargo-openvm`. It is also exposed on `openvm-benchmarks-prove`, where it additionally implies `evm` (the halo2 layer is only exercised by the EVM benchmark).
 
 ## Project Structure
 
