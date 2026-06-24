@@ -54,8 +54,8 @@ use {
         BranchLessThan256AdapterRecord, BranchLessThan256ChipGpu, BranchLessThan256CoreRecord,
         LessThan256AdapterRecord, LessThan256ChipGpu, LessThan256CoreRecord,
         Multiplication256AdapterRecord, Multiplication256ChipGpu, Multiplication256CoreRecord,
-        Shift256AdapterRecord, ShiftLogical256ChipGpu, ShiftLogical256CoreRecord,
-        ShiftLogical256U16AdapterRecord, ShiftRightArithmetic256ChipGpu,
+        ShiftLogical256ChipGpu, ShiftLogical256CoreRecord, ShiftLogical256U16AdapterRecord,
+        ShiftRightArithmetic256AdapterRecord, ShiftRightArithmetic256ChipGpu,
         ShiftRightArithmetic256CoreRecord, INT256_NUM_MEMORY_BLOCKS, NUM_READS,
     },
     openvm_circuit::arch::{
@@ -1058,7 +1058,7 @@ fn run_shift_256_rand_test_cuda(opcode: ShiftOpcode, num_ops: usize) {
         }
 
         type Record<'a> = (
-            &'a mut Shift256AdapterRecord,
+            &'a mut ShiftRightArithmetic256AdapterRecord,
             &'a mut ShiftRightArithmetic256CoreRecord,
         );
 

@@ -16,7 +16,7 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-// u16 core (4 limbs of 16 bits), shared with shift_w (SRAW) and bigint Shift256.
+// u16 core (4 limbs of 16 bits), shared with shift_w (SRAW) and bigint ShiftRightArithmetic256.
 pub type Rv64ShiftRightArithmeticAir =
     VmAirWrapper<Rv64BaseAluU16AdapterAir, ShiftRightArithmeticCoreAir<BLOCK_FE_WIDTH, U16_BITS>>;
 pub type Rv64ShiftRightArithmeticExecutor =

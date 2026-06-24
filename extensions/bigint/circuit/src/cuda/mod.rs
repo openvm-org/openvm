@@ -294,7 +294,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 pub type ShiftLogical256U16AdapterRecord =
     Rv64VecHeapU16AdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
-pub type Shift256AdapterRecord = ShiftLogical256U16AdapterRecord;
+pub type ShiftRightArithmetic256AdapterRecord = ShiftLogical256U16AdapterRecord;
 pub type ShiftLogical256CoreRecord = ShiftLogicalCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
 pub type ShiftRightArithmetic256CoreRecord =
     ShiftRightArithmeticCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
@@ -355,8 +355,10 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftLogical256ChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for ShiftRightArithmetic256ChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize =
-            size_of::<(Shift256AdapterRecord, ShiftRightArithmetic256CoreRecord)>();
+        const RECORD_SIZE: usize = size_of::<(
+            ShiftRightArithmetic256AdapterRecord,
+            ShiftRightArithmetic256CoreRecord,
+        )>();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());

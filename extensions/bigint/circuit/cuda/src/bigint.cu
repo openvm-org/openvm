@@ -44,7 +44,8 @@ using Multiplication256CoreRecord = MultiplicationCoreRecord<INT256_NUM_U8_LIMBS
 using Multiplication256Core = MultiplicationCore<INT256_NUM_U8_LIMBS>;
 template <typename T> using Multiplication256CoreCols = MultiplicationCoreCols<T, INT256_NUM_U8_LIMBS>;
 
-using Shift256CoreRecord = ShiftRightArithmeticCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
+using ShiftRightArithmetic256CoreRecord =
+    ShiftRightArithmeticCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
 using ShiftRightArithmetic256Core = ShiftRightArithmeticCore<INT256_NUM_U16_LIMBS, U16_BITS>;
 template <typename T>
 using ShiftRightArithmetic256CoreCols =
@@ -434,9 +435,9 @@ struct ShiftLogical256Record {
     ShiftLogical256CoreRecord core;
 };
 
-struct Shift256Record {
+struct ShiftRightArithmetic256Record {
     Rv64VecHeapU16Adapter256Record adapter;
-    Shift256CoreRecord core;
+    ShiftRightArithmetic256CoreRecord core;
 };
 
 __global__ void shift256_logical_tracegen(
@@ -470,7 +471,7 @@ __global__ void shift256_logical_tracegen(
 __global__ void shift256_right_arithmetic_tracegen(
     Fp *d_trace,
     size_t height,
-    DeviceBufferConstView<Shift256Record> d_records,
+    DeviceBufferConstView<ShiftRightArithmetic256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t pointer_max_bits,
@@ -529,7 +530,7 @@ extern "C" int _shift256_right_arithmetic_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Shift256Record> d_records,
+    DeviceBufferConstView<ShiftRightArithmetic256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t pointer_max_bits,
