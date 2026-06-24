@@ -30,8 +30,8 @@ pub struct ShiftRightArithmeticCoreCols<T, const NUM_LIMBS: usize, const LIMB_BI
     // bit_multiplier = 2^bit_shift
     pub bit_multiplier: T,
     // carry_multiplier = 2^(LIMB_BITS - bit_shift). Used to position the bits that cross the limb
-    // boundary additively, avoiding the `a * 2^bit_shift` product that would overflow BabyBear for
-    // u16 limbs.
+    // boundary without forming a product that exceeds 2^LIMB_BITS (which would alias the field
+    // modulus for u16 limbs).
     pub carry_multiplier: T,
 
     // Sign of b for SRA
@@ -52,8 +52,8 @@ pub struct ShiftRightArithmeticCoreCols<T, const NUM_LIMBS: usize, const LIMB_BI
 /// Arithmetic shift-right AIR (SRA) over u16 limbs.
 ///
 /// To stay sound at `LIMB_BITS = 16`, each `b` limb is split into `carry`/`aux` parts and each
-/// output limb is recombined additively rather than forming `a * 2^bit_shift`, which would overflow
-/// BabyBear. The vacated high bits are filled with the sign bit of the top limb.
+/// output limb is recombined additively so every constraint term stays below BabyBear's modulus.
+/// The vacated high bits are filled with the sign bit of the top limb.
 ///
 /// Note: when the shift amount from operand is greater than the number of bits, only shift
 /// `shift_amount % num_bits` bits. This matches the RISC-V specs for SRA.

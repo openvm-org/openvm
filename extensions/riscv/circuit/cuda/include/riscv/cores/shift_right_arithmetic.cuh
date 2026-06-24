@@ -11,7 +11,7 @@ using namespace riscv;
 // split into a `carry` part (the low bits that cross into the previous limb) and an `aux` part (the
 // bits that stay), then recombined additively so no constraint term exceeds 2^LIMB_BITS (which
 // would alias the field modulus). The vacated high bits are filled with the sign bit of the top
-// limb, which is range checked (instead of derived via a bitwise XOR).
+// limb, which is range checked.
 // ----------------------------------------------------------------------------
 
 template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftRightArithmeticCoreRecord {

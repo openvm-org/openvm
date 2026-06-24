@@ -53,7 +53,7 @@ pub struct ShiftLogicalCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usiz
 /// Logical shift AIR (SLL/SRL) over u16 limbs.
 ///
 /// To stay sound at `LIMB_BITS = 16`, each `b` limb is split into `carry`/`aux` parts and
-/// recombined additively rather than forming `b * 2^bit_shift`, which would overflow BabyBear.
+/// recombined additively so every constraint term stays below BabyBear's modulus.
 ///
 /// Note: when the shift amount from operand is greater than the number of bits, only shift
 /// `shift_amount % num_bits` bits. This matches the RISC-V specs for SLL/SRL.
@@ -412,7 +412,7 @@ pub(crate) fn run_shift_logical<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 ) -> ([u16; NUM_LIMBS], usize, usize) {
     match opcode {
         ShiftOpcode::SLL => run_shift_left::<NUM_LIMBS, LIMB_BITS>(x, y),
-        // SRL (SRA is not handled by the logical shift chip).
+        // SRL
         _ => run_shift_right_logical::<NUM_LIMBS, LIMB_BITS>(x, y),
     }
 }

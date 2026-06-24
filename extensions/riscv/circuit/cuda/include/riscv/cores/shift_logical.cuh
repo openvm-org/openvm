@@ -10,8 +10,8 @@ using namespace riscv;
 // u16-limb logical shift (SLL/SRL). Used by the rv64 register shift, which reads/writes u16 memory
 // cells. Each b limb is split into a `carry` part (the bits crossing the limb boundary) and an
 // `aux` part (the bits that stay), then recombined additively so no constraint term exceeds
-// 2^LIMB_BITS (which would alias the field modulus). Per-limb range checks replace the byte-pair
-// bitwise lookups used by the byte-limb arithmetic-right core (see shift_right_arithmetic.cuh).
+// 2^LIMB_BITS (which would alias the field modulus). The `carry` and `aux` parts are range checked
+// per limb.
 // ----------------------------------------------------------------------------
 
 template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalCoreRecord {

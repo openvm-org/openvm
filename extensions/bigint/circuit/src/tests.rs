@@ -641,8 +641,7 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
 
     let range_checker_chip = tester.range_checker();
 
-    // SLL/SRL and SRA all use distinct u16 core types (no bitwise lookup), so the two harnesses
-    // have distinct types.
+    // SLL/SRL and SRA use separate u16 core types, so each needs its own harness.
     if opcode == ShiftOpcode::SRA {
         let (air, executor, chip) = create_shift_right_arithmetic_harness_fields(
             tester.memory_bridge(),
