@@ -25,7 +25,8 @@ use openvm_riscv_circuit::{
     BranchLessThanCoreAir, BranchLessThanExecutor, BranchLessThanFiller, LessThanCoreAir,
     LessThanExecutor, LessThanFiller, MultiplicationCoreAir, MultiplicationExecutor,
     MultiplicationFiller, Rv64I, Rv64IExecutor, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
-    ShiftCoreAir, ShiftExecutor, ShiftFiller,
+    ShiftLogicalCoreAir, ShiftLogicalExecutor, ShiftLogicalFiller, ShiftRightArithmeticCoreAir,
+    ShiftRightArithmeticExecutor, ShiftRightArithmeticFiller,
 };
 use serde::{Deserialize, Serialize};
 
@@ -186,19 +187,33 @@ pub type Rv64Multiplication256Chip<F> = VmChipWrapper<
     >,
 >;
 
-/// Shift256
-pub type Rv64Shift256Air =
-    VmAirWrapper<AluAdapterAir, ShiftCoreAir<INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>>;
+/// Shift256 — SLL/SRL/SRA all use u16 limbs (AluU16 adapter).
+pub type Rv64ShiftLogical256Air =
+    VmAirWrapper<AluU16AdapterAir, ShiftLogicalCoreAir<INT256_NUM_U16_LIMBS, U16_BITS>>;
+pub type Rv64ShiftRightArithmetic256Air =
+    VmAirWrapper<AluU16AdapterAir, ShiftRightArithmeticCoreAir<INT256_NUM_U16_LIMBS, U16_BITS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv64Shift256Executor(
-    ShiftExecutor<AluAdapterExecutor, INT256_NUM_U8_LIMBS, RV64_BYTE_BITS>,
+pub struct Rv64ShiftLogical256Executor(
+    ShiftLogicalExecutor<AluU16AdapterExecutor, INT256_NUM_U16_LIMBS, U16_BITS>,
 );
-pub type Rv64Shift256Chip<F> = VmChipWrapper<
+#[derive(Clone, PreflightExecutor)]
+pub struct Rv64ShiftRightArithmetic256Executor(
+    ShiftRightArithmeticExecutor<AluU16AdapterExecutor, INT256_NUM_U16_LIMBS, U16_BITS>,
+);
+pub type Rv64ShiftLogical256Chip<F> = VmChipWrapper<
     F,
-    ShiftFiller<
-        Rv64VecHeapAdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
-        INT256_NUM_U8_LIMBS,
-        RV64_BYTE_BITS,
+    ShiftLogicalFiller<
+        Rv64VecHeapU16AdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
+        INT256_NUM_U16_LIMBS,
+        U16_BITS,
+    >,
+>;
+pub type Rv64ShiftRightArithmetic256Chip<F> = VmChipWrapper<
+    F,
+    ShiftRightArithmeticFiller<
+        Rv64VecHeapU16AdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
+        INT256_NUM_U16_LIMBS,
+        U16_BITS,
     >,
 >;
 
