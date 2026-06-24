@@ -40,7 +40,7 @@ impl AppConfig<SdkVmConfig> {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct AggregationConfig {
     pub params: AggregationSystemParams,
 }

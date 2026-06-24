@@ -1070,14 +1070,17 @@ impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
     where
         (): From<EngineDeviceCtx<E>>,
     {
-        self.batch_constraint.commit_child_vk(engine, child_vk)
+        crate::batch_constraint::commit_child_vk(engine, child_vk, self.batch_constraint.has_cached)
     }
 
     fn cached_trace_record(
         &self,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     ) -> CachedTraceRecord {
-        self.batch_constraint.cached_trace_record(child_vk)
+        crate::batch_constraint::expr_eval::build_cached_trace_record(
+            child_vk,
+            self.batch_constraint.has_cached,
+        )
     }
 
     #[tracing::instrument(name = "subcircuit_generate_proving_ctxs", skip_all)]
@@ -1224,7 +1227,6 @@ pub mod cuda_tracegen {
     use std::iter::zip;
 
     use openvm_cuda_backend::{hash_scheme::GpuHashScheme, GenericGpuBackend, GpuBackend};
-    use openvm_stark_backend::prover::ProverDevice;
 
     use super::*;
     use crate::{
@@ -1348,16 +1350,21 @@ pub mod cuda_tracegen {
         where
             GpuDeviceCtx: From<EngineDeviceCtx<E>>,
         {
-            let device_ctx: GpuDeviceCtx = engine.device().device_ctx().clone().into();
-            self.batch_constraint
-                .commit_child_vk_gpu(engine, child_vk, &device_ctx)
+            crate::batch_constraint::commit_child_vk(
+                engine,
+                child_vk,
+                self.batch_constraint.has_cached,
+            )
         }
 
         fn cached_trace_record(
             &self,
             child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         ) -> CachedTraceRecord {
-            self.batch_constraint.cached_trace_record(child_vk)
+            crate::batch_constraint::expr_eval::build_cached_trace_record(
+                child_vk,
+                self.batch_constraint.has_cached,
+            )
         }
 
         #[tracing::instrument(name = "subcircuit_generate_proving_ctxs", skip_all)]

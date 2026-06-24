@@ -11,7 +11,6 @@ use openvm_cpu_backend::{CpuBackend, CpuDevice, CpuProverError};
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    DEFERRAL_AS,
 };
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
@@ -353,7 +352,6 @@ impl<F: VmField> Default for VmChipTestBuilder<F> {
         // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
         // removed when tests are updated.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 0;
         Self::from_config(mem_config)
     }
 }

@@ -1,9 +1,11 @@
 use std::array::from_fn;
 
 use num_bigint::BigUint;
+use openvm_stark_backend::codec::{Decode, Encode};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
 use openvm_verify_stark_host::pvs::VkCommit;
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub const COMMIT_NUM_BYTES: usize = 32;
 
@@ -11,7 +13,7 @@ pub const COMMIT_NUM_BYTES: usize = 32;
 /// an unsigned integer in base `F::MODULUS`. Each commit can be converted to a Bn254 using the
 /// trivial identification as natural numbers or into a `u32` digest by decomposing the big integer
 /// base-`F::MODULUS`.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub struct CommitBytes([u8; COMMIT_NUM_BYTES]);
 
 impl CommitBytes {
@@ -25,6 +27,15 @@ impl CommitBytes {
 
     pub fn as_slice(&self) -> &[u8; COMMIT_NUM_BYTES] {
         &self.0
+    }
+
+    pub fn to_field_le_bytes(self) -> [u8; COMMIT_NUM_BYTES] {
+        let digest: [F; DIGEST_SIZE] = self.into();
+        let mut bytes = [0u8; COMMIT_NUM_BYTES];
+        for (i, limb) in digest.into_iter().enumerate() {
+            bytes[4 * i..4 * (i + 1)].copy_from_slice(&limb.to_unique_u32().to_le_bytes());
+        }
+        bytes
     }
 }
 
@@ -113,6 +124,24 @@ fn u32_digest_to_bytes(digest: &[u32; DIGEST_SIZE]) -> [u8; COMMIT_NUM_BYTES] {
     let start = COMMIT_NUM_BYTES - bytes.len();
     ret[start..].copy_from_slice(&bytes);
     ret
+}
+
+impl Serialize for CommitBytes {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        format!("0x{}", hex::encode(self.as_slice())).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for CommitBytes {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let hex_str = String::deserialize(deserializer)?;
+        let hex_str = hex_str.strip_prefix("0x").unwrap_or(&hex_str);
+        let bytes: [u8; COMMIT_NUM_BYTES] = hex::decode(hex_str)
+            .map_err(serde::de::Error::custom)?
+            .try_into()
+            .map_err(|_| serde::de::Error::custom("expected 32 bytes"))?;
+        Ok(CommitBytes::new(bytes))
+    }
 }
 
 #[cfg(feature = "root-prover")]

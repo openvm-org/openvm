@@ -101,3 +101,53 @@ jobs:
       - name: sccache stats
         if: always()
         run: sccache --show-stats || true
+
+  verify-stark-examples:
+    name: verify-stark examples
+    runs-on:
+      - runs-on=${{ github.run_id }}-verify-stark-examples/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=80gb/spot=capacity-optimized/extras=s3-cache
+
+    steps:
+      - uses: runs-on/action@v2
+        with:
+          sccache: s3
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        env:
+          RUSTUP_PERMIT_COPY_RENAME: "1"
+      - uses: ./.github/actions/sccache
+      - uses: ./.github/actions/rust-cache-cuda
+        with:
+          cache-on-failure: true
+
+      - name: Verify GPU setup
+        run: |
+          nvidia-smi
+          nvidia-smi -L
+          nvcc --version
+          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
+
+      - name: Setup CUDA environment
+        run: |
+          CUDART_PATH=$(find /usr/local -name "libcudart.so" | head -1)
+          if [ -n "$CUDART_PATH" ]; then
+            CUDA_LIB_DIR=$(dirname "$CUDART_PATH")
+            echo "CUDA libraries found at: $CUDA_LIB_DIR"
+            echo "CUDA_LIB_DIR=$CUDA_LIB_DIR" >> $GITHUB_ENV
+          else
+            echo "CUDA libraries not found!"
+            exit 1
+          fi
+
+      - name: Build cargo-openvm
+        run: |
+          cargo build --locked --profile fast -p cargo-openvm --features cuda
+          echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
+
+      - name: Verify book examples with verify-stark
+        run: |
+          ./examples/verify-stark/verify-book-examples.sh
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

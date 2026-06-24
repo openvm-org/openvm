@@ -1,0 +1,25 @@
+[package]
+name = "verify-stark-example"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+members = []
+
+[dependencies]
+openvm = { git = "https://github.com/openvm-org/openvm.git", default-features = false }
+openvm-deferral-guest = { git = "https://github.com/openvm-org/openvm.git", default-features = false }
+openvm-verify-stark-guest = { git = "https://github.com/openvm-org/openvm.git", default-features = false }
+
+[features]
+default = []
+
+[profile.release]
+panic = "abort"
+lto = "thin"
+
+# remove this if copying example outside of monorepo
+[patch."https://github.com/openvm-org/openvm.git"]
+openvm = { path = "../../../crates/toolchain/openvm" }
+openvm-deferral-guest = { path = "../../../extensions/deferral/guest" }
+openvm-verify-stark-guest = { path = "../../../guest-libs/verify-stark/guest" }

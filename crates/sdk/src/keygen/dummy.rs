@@ -19,7 +19,7 @@ use {
 };
 
 use crate::{
-    prover::{vm::types::VmProvingKey, AggProver, DeferralPathProver, StarkProver},
+    prover::{vm::types::VmProvingKey, AggProver, DeferralAggProver, StarkProver},
     StdIn, F, SC,
 };
 
@@ -50,7 +50,7 @@ pub fn compute_root_proof_heights<E, VB>(
     app_vm_pk: &VmProvingKey<VB::VmConfig>,
     agg_prover: Arc<AggProver>,
     root_params: SystemParams,
-    def_prover: Option<Arc<DeferralPathProver>>,
+    def_prover: Option<Arc<DeferralAggProver>>,
 ) -> Result<(Vec<usize>, Arc<MultiStarkProvingKey<RootSC>>)>
 where
     E: StarkEngine<SC = SC>,
@@ -119,7 +119,7 @@ pub fn generate_dummy_root_proof<E, VB>(
     vm_builder: VB,
     app_vm_pk: &VmProvingKey<VB::VmConfig>,
     agg_prover: Arc<AggProver>,
-    def_path_prover: Option<Arc<DeferralPathProver>>,
+    def_agg_prover: Option<Arc<DeferralAggProver>>,
     root_prover: Arc<RootProver>,
 ) -> Proof<RootSC>
 where
@@ -136,7 +136,7 @@ where
         app_vm_pk,
         dummy_exe,
         agg_prover,
-        def_path_prover,
+        def_agg_prover,
         root_prover,
         None,
     )

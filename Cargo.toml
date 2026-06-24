@@ -74,7 +74,10 @@ members = [
     "crates/static-verifier",
     "scripts",
 ]
-exclude = ["crates/sdk/example", "benchmarks/guest/**"]
+exclude = [
+    "crates/sdk/example",
+    "benchmarks/guest/**",
+]
 resolver = "2"
 
 # Fastest runtime configuration
