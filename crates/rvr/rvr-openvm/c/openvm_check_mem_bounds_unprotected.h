@@ -4,20 +4,20 @@
 #include <stdint.h>
 
 static __attribute__((always_inline)) inline void check_mem_bounds_u8(
-    uint32_t start) {}
+    uint64_t start) {}
 static __attribute__((always_inline)) inline void check_mem_bounds_i8(
-    uint32_t start) {}
+    uint64_t start) {}
 static __attribute__((always_inline)) inline void check_mem_bounds_u16(
-    uint32_t start) {}
+    uint64_t start) {}
 static __attribute__((always_inline)) inline void check_mem_bounds_i16(
-    uint32_t start) {}
+    uint64_t start) {}
 static __attribute__((always_inline)) inline void check_mem_bounds_u32(
-    uint32_t start) {}
+    uint64_t start) {}
 static __attribute__((always_inline)) inline void check_mem_bounds_u64(
-    uint32_t start) {}
+    uint64_t start) {}
 static __attribute__((always_inline)) inline void check_mem_bounds_range(
-    uint32_t start, size_t size) {}
+    uint64_t start, size_t size) {}
 static __attribute__((always_inline)) inline void check_mem_bounds_u64_range(
-    uint32_t base_addr, uint32_t num_words) {}
+    uint64_t base_addr, uint32_t num_words) {}
 
 #endif
