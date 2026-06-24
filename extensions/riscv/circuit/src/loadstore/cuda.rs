@@ -1,21 +1,25 @@
-use std::sync::Arc;
+use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
-use openvm_circuit::arch::DenseRecordArena;
+use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
-use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
+use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
-use crate::adapters::RV64_BYTE_BITS;
-
-fn unsupported_split_loadstore_ctx(arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-    if arena.allocated().is_empty() {
-        return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-    }
-    unimplemented!("CUDA trace generation for split RV64 loadstore chips is not implemented")
-}
+use crate::{
+    adapters::{Rv64LoadStoreAdapterCols, Rv64LoadStoreAdapterRecord, RV64_BYTE_BITS},
+    cuda_abi::{
+        loadstore_byte_cuda, loadstore_doubleword_cuda, loadstore_halfword_cuda,
+        loadstore_word_cuda,
+    },
+    loadstore::{
+        aligned::LoadStoreAlignedCoreCols, LoadStoreByteCoreCols, LoadStoreDoublewordCoreCols,
+        LoadStoreRecord, HALFWORD_SELECTOR_WIDTH, WORD_SELECTOR_WIDTH,
+    },
+};
 
 #[derive(new)]
 pub struct Rv64LoadStoreByteChipGpu {
@@ -27,7 +31,37 @@ pub struct Rv64LoadStoreByteChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadStoreByteChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        unsupported_split_loadstore_ctx(arena)
+        const RECORD_SIZE: usize = size_of::<(Rv64LoadStoreAdapterRecord, LoadStoreRecord)>();
+        let records = arena.allocated();
+        if records.is_empty() {
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        }
+        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
+
+        let trace_width =
+            Rv64LoadStoreAdapterCols::<F>::width() + LoadStoreByteCoreCols::<F>::width();
+        let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+        let device_ctx = &self.range_checker.device_ctx;
+
+        let d_records = tracing::info_span!("trace_gen.h2d_records")
+            .in_scope(|| records.to_device_on(device_ctx))
+            .unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+
+        unsafe {
+            loadstore_byte_cuda::tracegen(
+                d_trace.buffer(),
+                trace_height,
+                &d_records,
+                self.pointer_max_bits,
+                &self.range_checker.count,
+                &self.bitwise_lookup.count,
+                self.timestamp_max_bits as u32,
+                device_ctx.stream.as_raw(),
+            )
+            .unwrap();
+        }
+        AirProvingContext::simple_no_pis(d_trace)
     }
 }
 
@@ -40,7 +74,36 @@ pub struct Rv64LoadStoreHalfwordChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadStoreHalfwordChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        unsupported_split_loadstore_ctx(arena)
+        const RECORD_SIZE: usize = size_of::<(Rv64LoadStoreAdapterRecord, LoadStoreRecord)>();
+        let records = arena.allocated();
+        if records.is_empty() {
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        }
+        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
+
+        let trace_width = Rv64LoadStoreAdapterCols::<F>::width()
+            + LoadStoreAlignedCoreCols::<F, HALFWORD_SELECTOR_WIDTH>::width();
+        let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+        let device_ctx = &self.range_checker.device_ctx;
+
+        let d_records = tracing::info_span!("trace_gen.h2d_records")
+            .in_scope(|| records.to_device_on(device_ctx))
+            .unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+
+        unsafe {
+            loadstore_halfword_cuda::tracegen(
+                d_trace.buffer(),
+                trace_height,
+                &d_records,
+                self.pointer_max_bits,
+                &self.range_checker.count,
+                self.timestamp_max_bits as u32,
+                device_ctx.stream.as_raw(),
+            )
+            .unwrap();
+        }
+        AirProvingContext::simple_no_pis(d_trace)
     }
 }
 
@@ -53,7 +116,36 @@ pub struct Rv64LoadStoreWordChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadStoreWordChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        unsupported_split_loadstore_ctx(arena)
+        const RECORD_SIZE: usize = size_of::<(Rv64LoadStoreAdapterRecord, LoadStoreRecord)>();
+        let records = arena.allocated();
+        if records.is_empty() {
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        }
+        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
+
+        let trace_width = Rv64LoadStoreAdapterCols::<F>::width()
+            + LoadStoreAlignedCoreCols::<F, WORD_SELECTOR_WIDTH>::width();
+        let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+        let device_ctx = &self.range_checker.device_ctx;
+
+        let d_records = tracing::info_span!("trace_gen.h2d_records")
+            .in_scope(|| records.to_device_on(device_ctx))
+            .unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+
+        unsafe {
+            loadstore_word_cuda::tracegen(
+                d_trace.buffer(),
+                trace_height,
+                &d_records,
+                self.pointer_max_bits,
+                &self.range_checker.count,
+                self.timestamp_max_bits as u32,
+                device_ctx.stream.as_raw(),
+            )
+            .unwrap();
+        }
+        AirProvingContext::simple_no_pis(d_trace)
     }
 }
 
@@ -66,6 +158,35 @@ pub struct Rv64LoadStoreDoublewordChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadStoreDoublewordChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        unsupported_split_loadstore_ctx(arena)
+        const RECORD_SIZE: usize = size_of::<(Rv64LoadStoreAdapterRecord, LoadStoreRecord)>();
+        let records = arena.allocated();
+        if records.is_empty() {
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        }
+        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
+
+        let trace_width =
+            Rv64LoadStoreAdapterCols::<F>::width() + LoadStoreDoublewordCoreCols::<F>::width();
+        let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
+        let device_ctx = &self.range_checker.device_ctx;
+
+        let d_records = tracing::info_span!("trace_gen.h2d_records")
+            .in_scope(|| records.to_device_on(device_ctx))
+            .unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+
+        unsafe {
+            loadstore_doubleword_cuda::tracegen(
+                d_trace.buffer(),
+                trace_height,
+                &d_records,
+                self.pointer_max_bits,
+                &self.range_checker.count,
+                self.timestamp_max_bits as u32,
+                device_ctx.stream.as_raw(),
+            )
+            .unwrap();
+        }
+        AirProvingContext::simple_no_pis(d_trace)
     }
 }
