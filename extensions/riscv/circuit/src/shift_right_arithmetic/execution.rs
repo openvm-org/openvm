@@ -14,33 +14,34 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::ShiftExecutor;
-#[allow(unused_imports)]
-use crate::{
-    adapters::{imm_to_rv64_bytes, imm_to_rv64_u64},
-    common::*,
-};
+use super::ShiftRightArithmeticExecutor;
+use crate::adapters::imm_to_rv64_u64;
+#[cfg(feature = "aot")]
+use crate::common::*;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-struct ShiftPreCompute {
+struct ShiftRightArithmeticPreCompute {
     c: u64,
     a: u8,
     b: u8,
 }
 
-impl<A, const LIMB_BITS: usize> ShiftExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<A, const LIMB_BITS: usize> ShiftRightArithmeticExecutor<A, { BLOCK_FE_WIDTH }, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut ShiftPreCompute,
-    ) -> Result<(bool, ShiftOpcode), StaticProgramError> {
+        data: &mut ShiftRightArithmeticPreCompute,
+    ) -> Result<bool, StaticProgramError> {
         let Instruction {
             opcode, a, b, c, e, ..
         } = inst;
         let shift_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        if shift_opcode != ShiftOpcode::SRA {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
         let e_u32 = e.as_canonical_u32();
         if inst.d.as_canonical_u32() != RV64_REGISTER_AS
             || !(e_u32 == RV64_IMM_AS || e_u32 == RV64_REGISTER_AS)
@@ -49,7 +50,7 @@ impl<A, const LIMB_BITS: usize> ShiftExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LI
         }
         let is_imm = e_u32 == RV64_IMM_AS;
         let c_u32 = c.as_canonical_u32();
-        *data = ShiftPreCompute {
+        *data = ShiftRightArithmeticPreCompute {
             c: if is_imm {
                 imm_to_rv64_u64(c_u32)
             } else {
@@ -59,30 +60,26 @@ impl<A, const LIMB_BITS: usize> ShiftExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LI
             b: b.as_canonical_u32() as u8,
         };
         // `d` is always expected to be RV64_REGISTER_AS.
-        Ok((is_imm, shift_opcode))
+        Ok(is_imm)
     }
 }
 
 macro_rules! dispatch {
-    ($execute_impl:ident, $is_imm:ident, $shift_opcode:ident) => {
-        match ($is_imm, $shift_opcode) {
-            (true, ShiftOpcode::SLL) => Ok($execute_impl::<_, _, true, SllOp>),
-            (false, ShiftOpcode::SLL) => Ok($execute_impl::<_, _, false, SllOp>),
-            (true, ShiftOpcode::SRL) => Ok($execute_impl::<_, _, true, SrlOp>),
-            (false, ShiftOpcode::SRL) => Ok($execute_impl::<_, _, false, SrlOp>),
-            (true, ShiftOpcode::SRA) => Ok($execute_impl::<_, _, true, SraOp>),
-            (false, ShiftOpcode::SRA) => Ok($execute_impl::<_, _, false, SraOp>),
+    ($execute_impl:ident, $is_imm:ident) => {
+        match $is_imm {
+            true => Ok($execute_impl::<_, _, true>),
+            false => Ok($execute_impl::<_, _, false>),
         }
     };
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for ShiftExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for ShiftRightArithmeticExecutor<A, { BLOCK_FE_WIDTH }, LIMB_BITS>
 where
     F: PrimeField32,
 {
     fn pre_compute_size(&self) -> usize {
-        size_of::<ShiftPreCompute>()
+        size_of::<ShiftRightArithmeticPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -92,10 +89,10 @@ where
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
-        let data: &mut ShiftPreCompute = data.borrow_mut();
-        let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
+        let data: &mut ShiftRightArithmeticPreCompute = data.borrow_mut();
+        let is_imm = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
-        dispatch!(execute_e1_handler, is_imm, shift_opcode)
+        dispatch!(execute_e1_handler, is_imm)
     }
 
     #[cfg(feature = "tco")]
@@ -108,16 +105,16 @@ where
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut ShiftPreCompute = data.borrow_mut();
-        let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
+        let data: &mut ShiftRightArithmeticPreCompute = data.borrow_mut();
+        let is_imm = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
-        dispatch!(execute_e1_handler, is_imm, shift_opcode)
+        dispatch!(execute_e1_handler, is_imm)
     }
 }
 
 #[cfg(feature = "aot")]
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotExecutor<F>
-    for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -152,11 +149,7 @@ where
         if e == 0 {
             // [a:4]_1 <- [b:4]_1 (shift) c
             let mut asm_opcode = String::new();
-            if inst.opcode == ShiftOpcode::SLL.global_opcode() {
-                asm_opcode += "shl";
-            } else if inst.opcode == ShiftOpcode::SRL.global_opcode() {
-                asm_opcode += "shr";
-            } else if inst.opcode == ShiftOpcode::SRA.global_opcode() {
+            if inst.opcode == ShiftOpcode::SRA.global_opcode() {
                 asm_opcode += "sar";
             }
 
@@ -167,11 +160,7 @@ where
         } else {
             // [b:4]_1 <- [b:4]_1 (shift) [c:4]_1
             let mut asm_opcode = String::new();
-            if inst.opcode == ShiftOpcode::SLL.global_opcode() {
-                asm_opcode += "shlx";
-            } else if inst.opcode == ShiftOpcode::SRL.global_opcode() {
-                asm_opcode += "shrx";
-            } else if inst.opcode == ShiftOpcode::SRA.global_opcode() {
+            if inst.opcode == ShiftOpcode::SRA.global_opcode() {
                 asm_opcode += "sarx";
             }
 
@@ -193,12 +182,12 @@ where
 }
 
 impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for ShiftExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for ShiftRightArithmeticExecutor<A, { BLOCK_FE_WIDTH }, LIMB_BITS>
 where
     F: PrimeField32,
 {
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<ShiftPreCompute>>()
+        size_of::<E2PreCompute<ShiftRightArithmeticPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -209,11 +198,11 @@ where
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
-        let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<ShiftRightArithmeticPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
-        dispatch!(execute_e2_handler, is_imm, shift_opcode)
+        dispatch!(execute_e2_handler, is_imm)
     }
 
     #[cfg(feature = "tco")]
@@ -224,17 +213,17 @@ where
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<Handler<F, Ctx>, StaticProgramError> {
-        let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<ShiftRightArithmeticPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
-        dispatch!(execute_e2_handler, is_imm, shift_opcode)
+        dispatch!(execute_e2_handler, is_imm)
     }
 }
 
 #[cfg(feature = "aot")]
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotMeteredExecutor<F>
-    for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -253,26 +242,25 @@ where
         Ok(asm_str)
     }
 }
+
 #[inline(always)]
-unsafe fn execute_e12_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: ShiftOp,
->(
-    pre_compute: &ShiftPreCompute,
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_IMM: bool>(
+    pre_compute: &ShiftRightArithmeticPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs1 =
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2 = if IS_IMM {
         pre_compute.c.to_le_bytes()
     } else {
-        exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.c as u32)
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32)
     };
+    let rs1 = i64::from_le_bytes(rs1);
     let rs2 = u64::from_le_bytes(rs2);
 
-    // Execute the shift operation
-    let rd = <OP as ShiftOp>::compute(rs1, rs2);
+    // Execute the arithmetic shift-right operation.
+    // RV64: only the low 6 bits of rs2 are used for the shift amount.
+    let rd = (rs1 >> (rs2 & 0x3F)).to_le_bytes();
     // Write the result back to memory
     exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
 
@@ -282,64 +270,29 @@ unsafe fn execute_e12_impl<
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: ShiftOp,
->(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_IMM: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &ShiftPreCompute =
-        std::slice::from_raw_parts(pre_compute, size_of::<ShiftPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, exec_state);
+    let pre_compute: &ShiftRightArithmeticPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<ShiftRightArithmeticPreCompute>())
+            .borrow();
+    execute_e12_impl::<F, CTX, IS_IMM>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<
-    F: PrimeField32,
-    CTX: MeteredExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: ShiftOp,
->(
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_IMM: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<ShiftPreCompute> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<ShiftPreCompute>>())
-            .borrow();
+    let pre_compute: &E2PreCompute<ShiftRightArithmeticPreCompute> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<ShiftRightArithmeticPreCompute>>(),
+    )
+    .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
-}
-
-trait ShiftOp {
-    fn compute(rs1: [u8; 8], rs2: u64) -> [u8; 8];
-}
-struct SllOp;
-struct SrlOp;
-struct SraOp;
-impl ShiftOp for SllOp {
-    fn compute(rs1: [u8; 8], rs2: u64) -> [u8; 8] {
-        let rs1 = u64::from_le_bytes(rs1);
-        // RV64: only the low 6 bits of rs2 are used for the shift amount.
-        (rs1 << (rs2 & 0x3F)).to_le_bytes()
-    }
-}
-impl ShiftOp for SrlOp {
-    fn compute(rs1: [u8; 8], rs2: u64) -> [u8; 8] {
-        let rs1 = u64::from_le_bytes(rs1);
-        // RV64: only the low 6 bits of rs2 are used for the shift amount.
-        (rs1 >> (rs2 & 0x3F)).to_le_bytes()
-    }
-}
-impl ShiftOp for SraOp {
-    fn compute(rs1: [u8; 8], rs2: u64) -> [u8; 8] {
-        let rs1 = i64::from_le_bytes(rs1);
-        // RV64: only the low 6 bits of rs2 are used for the shift amount.
-        (rs1 >> (rs2 & 0x3F)).to_le_bytes()
-    }
+    execute_e12_impl::<F, CTX, IS_IMM>(&pre_compute.data, exec_state);
 }
