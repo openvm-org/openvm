@@ -31,3 +31,6 @@ pub type Rv64LoadSignExtendWordChip<F> = VmChipWrapper<F, LoadSignExtendWordFill
 mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
+
+#[cfg(test)]
+mod tests;

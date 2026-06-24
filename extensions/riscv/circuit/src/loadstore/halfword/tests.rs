@@ -1,6 +1,6 @@
 use test_case::test_case;
 
-use super::*;
+use crate::loadstore::test_utils::*;
 
 #[test]
 fn positive_loadhu_shift6_test() {

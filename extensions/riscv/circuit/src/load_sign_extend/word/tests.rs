@@ -1,12 +1,12 @@
 use test_case::test_case;
 
-use super::*;
+use crate::load_sign_extend::test_utils::*;
 
-#[test_case(LOADH, 100)]
-fn rand_load_sign_extend_halfword_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+#[test_case(LOADW, 100)]
+fn rand_load_sign_extend_word_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(memory_config_for());
-    let mut harness = create_halfword_harness(&mut tester);
+    let mut harness = create_word_harness(&mut tester);
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
@@ -28,17 +28,17 @@ fn rand_load_sign_extend_halfword_test(opcode: Rv64LoadStoreOpcode, num_ops: usi
 }
 
 #[test]
-fn positive_loadh_shift6_test() {
+fn positive_loadw_shift4_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(memory_config_for());
-    let mut harness = create_halfword_harness(&mut tester);
+    let mut harness = create_word_harness(&mut tester);
     set_and_execute(
         &mut tester,
         &mut harness.executor,
         &mut harness.arena,
         &mut rng,
-        LOADH,
-        Some([6, 0, 0, 0, 0, 0, 0, 0]),
+        LOADW,
+        Some([4, 0, 0, 0, 0, 0, 0, 0]),
         Some(0),
         Some(0),
     );
@@ -51,39 +51,39 @@ fn positive_loadh_shift6_test() {
 }
 
 #[cfg(feature = "cuda")]
-type GpuHalfwordHarness = GpuTestChipHarness<
+type GpuWordHarness = GpuTestChipHarness<
     F,
-    Rv64LoadSignExtendHalfwordExecutor,
-    Rv64LoadSignExtendHalfwordAir,
-    Rv64LoadSignExtendHalfwordChipGpu,
-    Rv64LoadSignExtendHalfwordChip<F>,
+    Rv64LoadSignExtendWordExecutor,
+    Rv64LoadSignExtendWordAir,
+    Rv64LoadSignExtendWordChipGpu,
+    Rv64LoadSignExtendWordChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
-fn create_cuda_halfword_harness(tester: &GpuChipTestBuilder) -> GpuHalfwordHarness {
+fn create_cuda_word_harness(tester: &GpuChipTestBuilder) -> GpuWordHarness {
     let range_checker = dummy_range_checker();
-    let air = Rv64LoadSignExtendHalfwordAir::new(
+    let air = Rv64LoadSignExtendWordAir::new(
         Rv64LoadStoreAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
             tester.address_bits(),
         ),
-        LoadSignExtendHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
+        LoadSignExtendWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
     );
-    let executor = Rv64LoadSignExtendHalfwordExecutor::new(
+    let executor = Rv64LoadSignExtendWordExecutor::new(
         Rv64LoadStoreAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
-    let cpu_chip = Rv64LoadSignExtendHalfwordChip::<F>::new(
-        LoadSignExtendHalfwordFiller::new(
+    let cpu_chip = Rv64LoadSignExtendWordChip::<F>::new(
+        LoadSignExtendWordFiller::new(
             Rv64LoadStoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             range_checker,
         ),
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64LoadSignExtendHalfwordChipGpu::new(
+    let gpu_chip = Rv64LoadSignExtendWordChipGpu::new(
         tester.range_checker(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
@@ -93,11 +93,11 @@ fn create_cuda_halfword_harness(tester: &GpuChipTestBuilder) -> GpuHalfwordHarne
 }
 
 #[cfg(feature = "cuda")]
-#[test_case(LOADH, 100)]
-fn test_cuda_rand_load_sign_extend_halfword_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+#[test_case(LOADW, 100)]
+fn test_cuda_rand_load_sign_extend_word_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = GpuChipTestBuilder::default();
-    let mut harness = create_cuda_halfword_harness(&tester);
+    let mut harness = create_cuda_word_harness(&tester);
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,

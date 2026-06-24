@@ -17,4 +17,6 @@ mod execution;
 mod aot;
 
 #[cfg(test)]
+pub(crate) mod test_utils;
+#[cfg(test)]
 mod tests;
