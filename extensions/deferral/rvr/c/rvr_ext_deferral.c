@@ -46,8 +46,8 @@ void register_deferral_callbacks(const DeferralHostCallbacks* cb) {
 }
 
 /* Deferral CALL: read input_commit, look up output_key, write it. */
-void rvr_ext_deferral_call(RvState* restrict state, uint32_t output_ptr,
-                           uint32_t input_ptr, uint32_t def_idx,
+void rvr_ext_deferral_call(RvState* restrict state, uint64_t output_ptr,
+                           uint64_t input_ptr, uint32_t def_idx,
                            uint32_t poseidon2_chip_idx) {
   /* Read input_commit (COMMIT_WORDS words) from guest memory. */
   uint64_t commit_words[COMMIT_WORDS];
@@ -58,8 +58,8 @@ void rvr_ext_deferral_call(RvState* restrict state, uint32_t output_ptr,
    * TODO: deferral address space elements are field elements, not u32.
    * Page tracking currently assumes u32 cells — verify that the page and
    * chunk geometry is correct for field-element-typed cells. */
-  uint32_t input_acc_ptr = 2u * def_idx * DEFERRAL_DIGEST_SIZE;
-  uint32_t output_acc_ptr = input_acc_ptr + DEFERRAL_DIGEST_SIZE;
+  uint64_t input_acc_ptr = 2u * def_idx * DEFERRAL_DIGEST_SIZE;
+  uint64_t output_acc_ptr = input_acc_ptr + DEFERRAL_DIGEST_SIZE;
   trace_mem_access_u64_range(state, input_acc_ptr, DIGEST_MEMORY_OPS,
                              AS_DEFERRAL);
   trace_mem_access_u64_range(state, output_acc_ptr, DIGEST_MEMORY_OPS,
@@ -83,8 +83,8 @@ void rvr_ext_deferral_call(RvState* restrict state, uint32_t output_ptr,
 }
 
 /* Deferral OUTPUT: read output_key, look up raw output, write it. */
-void rvr_ext_deferral_output(RvState* restrict state, uint32_t output_ptr,
-                             uint32_t input_ptr, uint32_t def_idx,
+void rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
+                             uint64_t input_ptr, uint32_t def_idx,
                              uint32_t output_chip_idx,
                              uint32_t poseidon2_chip_idx) {
   /* Read output_key (OUTPUT_KEY_WORDS words) from guest memory. */
@@ -107,7 +107,7 @@ void rvr_ext_deferral_output(RvState* restrict state, uint32_t output_ptr,
   uint32_t num_data_rows = (uint32_t)(output_len / DEFERRAL_DIGEST_SIZE);
   uint64_t row_words[DIGEST_MEMORY_OPS];
   for (uint32_t row_idx = 0; row_idx < num_data_rows; row_idx++) {
-    uint32_t row_byte_base = row_idx * DEFERRAL_DIGEST_SIZE;
+    uint64_t row_byte_base = (uint64_t)row_idx * DEFERRAL_DIGEST_SIZE;
     memcpy(row_words, output_raw + row_byte_base, DEFERRAL_DIGEST_SIZE);
     wr_mem_u64_range_traced(state, output_ptr + row_byte_base, row_words,
                             DIGEST_MEMORY_OPS);
