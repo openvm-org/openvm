@@ -5,7 +5,6 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "riscv/adapters/loadstore.cuh"
-#include <type_traits>
 
 using namespace riscv;
 using namespace program;
@@ -172,8 +171,7 @@ template <size_t SELECTOR_WIDTH, uint32_t CASES> struct LoadSignExtendAlignedCor
     }
 };
 
-template <template <typename> typename Cols, typename Core>
-__global__ void rv64_load_sign_extend_tracegen(
+__global__ void rv64_load_sign_extend_byte_tracegen_kernel(
     Fp *trace,
     size_t height,
     size_t width,
@@ -196,16 +194,81 @@ __global__ void rv64_load_sign_extend_tracegen(
         );
         adapter.fill_trace_row(row, record.adapter);
 
-        if constexpr (std::is_same_v<Core, LoadSignExtendByteCore>) {
-            auto core = LoadSignExtendByteCore(
-                VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
-                BitwiseOperationLookup(bitwise_lookup_ptr)
-            );
-            core.fill_trace_row(row.slice_from(COL_INDEX(Cols, core)), record.core);
-        } else {
-            auto core = Core(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
-            core.fill_trace_row(row.slice_from(COL_INDEX(Cols, core)), record.core);
-        }
+        auto core = LoadSignExtendByteCore(
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            BitwiseOperationLookup(bitwise_lookup_ptr)
+        );
+        core.fill_trace_row(
+            row.slice_from(COL_INDEX(Rv64LoadSignExtendByteCols, core)), record.core
+        );
+    } else {
+        row.fill_zero(0, width);
+    }
+}
+
+__global__ void rv64_load_sign_extend_halfword_tracegen_kernel(
+    Fp *trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<Rv64LoadSignExtendRecord> records,
+    size_t pointer_max_bits,
+    uint32_t *range_checker_ptr,
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(trace + idx, height);
+    if (idx < records.len()) {
+        auto const &record = records[idx];
+
+        auto adapter = Rv64LoadStoreAdapter(
+            pointer_max_bits,
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            timestamp_max_bits
+        );
+        adapter.fill_trace_row(row, record.adapter);
+
+        using Core = LoadSignExtendAlignedCore<
+            LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
+            LOAD_SIGN_EXTEND_HALFWORD_CASES>;
+        auto core = Core(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
+        core.fill_trace_row(
+            row.slice_from(COL_INDEX(Rv64LoadSignExtendHalfwordCols, core)), record.core
+        );
+    } else {
+        row.fill_zero(0, width);
+    }
+}
+
+__global__ void rv64_load_sign_extend_word_tracegen_kernel(
+    Fp *trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<Rv64LoadSignExtendRecord> records,
+    size_t pointer_max_bits,
+    uint32_t *range_checker_ptr,
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(trace + idx, height);
+    if (idx < records.len()) {
+        auto const &record = records[idx];
+
+        auto adapter = Rv64LoadStoreAdapter(
+            pointer_max_bits,
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            timestamp_max_bits
+        );
+        adapter.fill_trace_row(row, record.adapter);
+
+        using Core = LoadSignExtendAlignedCore<
+            LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
+            LOAD_SIGN_EXTEND_WORD_CASES>;
+        auto core = Core(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
+        core.fill_trace_row(
+            row.slice_from(COL_INDEX(Rv64LoadSignExtendWordCols, core)), record.core
+        );
     } else {
         row.fill_zero(0, width);
     }
@@ -225,18 +288,17 @@ extern "C" int _rv64_load_sign_extend_byte_tracegen(
 ) {
     assert(width == RV64_LOAD_SIGN_EXTEND_BYTE_WIDTH);
     auto [grid, block] = kernel_launch_params(height, 512);
-    rv64_load_sign_extend_tracegen<Rv64LoadSignExtendByteCols, LoadSignExtendByteCore>
-        <<<grid, block, 0, stream>>>(
-            d_trace,
-            height,
-            width,
-            d_records,
-            pointer_max_bits,
-            d_range_checker,
-            range_checker_num_bins,
-            d_bitwise_lookup,
-            timestamp_max_bits
-        );
+    rv64_load_sign_extend_byte_tracegen_kernel<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        width,
+        d_records,
+        pointer_max_bits,
+        d_range_checker,
+        range_checker_num_bins,
+        d_bitwise_lookup,
+        timestamp_max_bits
+    );
     return CHECK_KERNEL();
 }
 
@@ -253,21 +315,16 @@ extern "C" int _rv64_load_sign_extend_halfword_tracegen(
 ) {
     assert(width == RV64_LOAD_SIGN_EXTEND_HALFWORD_WIDTH);
     auto [grid, block] = kernel_launch_params(height, 512);
-    using Core = LoadSignExtendAlignedCore<
-        LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
-        LOAD_SIGN_EXTEND_HALFWORD_CASES>;
-    rv64_load_sign_extend_tracegen<Rv64LoadSignExtendHalfwordCols, Core>
-        <<<grid, block, 0, stream>>>(
-            d_trace,
-            height,
-            width,
-            d_records,
-            pointer_max_bits,
-            d_range_checker,
-            range_checker_num_bins,
-            nullptr,
-            timestamp_max_bits
-        );
+    rv64_load_sign_extend_halfword_tracegen_kernel<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        width,
+        d_records,
+        pointer_max_bits,
+        d_range_checker,
+        range_checker_num_bins,
+        timestamp_max_bits
+    );
     return CHECK_KERNEL();
 }
 
@@ -284,19 +341,15 @@ extern "C" int _rv64_load_sign_extend_word_tracegen(
 ) {
     assert(width == RV64_LOAD_SIGN_EXTEND_WORD_WIDTH);
     auto [grid, block] = kernel_launch_params(height, 512);
-    using Core =
-        LoadSignExtendAlignedCore<LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH, LOAD_SIGN_EXTEND_WORD_CASES>;
-    rv64_load_sign_extend_tracegen<Rv64LoadSignExtendWordCols, Core>
-        <<<grid, block, 0, stream>>>(
-            d_trace,
-            height,
-            width,
-            d_records,
-            pointer_max_bits,
-            d_range_checker,
-            range_checker_num_bins,
-            nullptr,
-            timestamp_max_bits
-        );
+    rv64_load_sign_extend_word_tracegen_kernel<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        width,
+        d_records,
+        pointer_max_bits,
+        d_range_checker,
+        range_checker_num_bins,
+        timestamp_max_bits
+    );
     return CHECK_KERNEL();
 }
