@@ -107,6 +107,10 @@ cuda = [
     "openvm-verify-stark-circuit/cuda",
     "openvm-static-verifier?/cuda",
 ]
+halo2-gpu = [
+    "cuda",
+    "openvm-static-verifier?/halo2-gpu",
+]
 cell-profiling = [
     "evm-prove",
     "openvm-static-verifier/cell-profiling",
