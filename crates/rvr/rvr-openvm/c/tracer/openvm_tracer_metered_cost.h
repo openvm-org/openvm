@@ -28,47 +28,47 @@ static __attribute__((always_inline)) inline void trace_reg_write(
 /* ── Trace-only memory reads (no-ops in metered cost mode) ───────── */
 
 static __attribute__((always_inline)) inline void trace_rd_mem_u8(
-    RvState* restrict state, uint32_t addr, uint8_t val) {}
+    RvState* restrict state, uint64_t addr, uint8_t val) {}
 static __attribute__((always_inline)) inline void trace_rd_mem_i8(
-    RvState* restrict state, uint32_t addr, int8_t val) {}
+    RvState* restrict state, uint64_t addr, int8_t val) {}
 static __attribute__((always_inline)) inline void trace_rd_mem_u16(
-    RvState* restrict state, uint32_t addr, uint16_t val) {}
+    RvState* restrict state, uint64_t addr, uint16_t val) {}
 static __attribute__((always_inline)) inline void trace_rd_mem_i16(
-    RvState* restrict state, uint32_t addr, int16_t val) {}
+    RvState* restrict state, uint64_t addr, int16_t val) {}
 static __attribute__((always_inline)) inline void trace_rd_mem_u32(
-    RvState* restrict state, uint32_t addr, uint32_t val) {}
+    RvState* restrict state, uint64_t addr, uint32_t val) {}
 static __attribute__((always_inline)) inline void trace_rd_mem_i32(
-    RvState* restrict state, uint32_t addr, int32_t val) {}
+    RvState* restrict state, uint64_t addr, int32_t val) {}
 static __attribute__((always_inline)) inline void trace_rd_mem_u64(
-    RvState* restrict state, uint32_t addr, uint64_t val) {}
+    RvState* restrict state, uint64_t addr, uint64_t val) {}
 
 /* ── Trace-only memory writes (no-ops in metered cost mode) ──────── */
 
 static __attribute__((always_inline)) inline void trace_wr_mem_u8(
-    RvState* restrict state, uint32_t addr, uint8_t new_val) {}
+    RvState* restrict state, uint64_t addr, uint8_t new_val) {}
 static __attribute__((always_inline)) inline void trace_wr_mem_u16(
-    RvState* restrict state, uint32_t addr, uint16_t new_val) {}
+    RvState* restrict state, uint64_t addr, uint16_t new_val) {}
 static __attribute__((always_inline)) inline void trace_wr_mem_u32(
-    RvState* restrict state, uint32_t addr, uint32_t new_val) {}
+    RvState* restrict state, uint64_t addr, uint32_t new_val) {}
 static __attribute__((always_inline)) inline void trace_wr_mem_u64(
-    RvState* restrict state, uint32_t addr, uint64_t new_val) {}
+    RvState* restrict state, uint64_t addr, uint64_t new_val) {}
 
 /* ── Trace-only word-range memory access (no-ops in metered cost mode) */
 
 static __attribute__((always_inline)) inline void trace_rd_mem_u64_range(
-    RvState* restrict state, uint32_t base_addr, const uint64_t* vals,
+    RvState* restrict state, uint64_t base_addr, const uint64_t* vals,
     uint32_t num_words) {}
 static __attribute__((always_inline)) inline void trace_wr_mem_u64_range(
-    RvState* restrict state, uint32_t base_addr, const uint64_t* vals,
+    RvState* restrict state, uint64_t base_addr, const uint64_t* vals,
     uint32_t num_words) {}
 
 /* ── Trace-only operations ────────────────────────────────────────── */
 
 static __attribute__((always_inline)) inline void trace_mem_access(
-    RvState* restrict state, uint32_t addr, uint32_t addr_space) {}
+    RvState* restrict state, uint64_t addr, uint32_t addr_space) {}
 
 static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
-    RvState* restrict state, uint32_t base_addr, uint32_t num_dwords,
+    RvState* restrict state, uint64_t base_addr, uint32_t num_dwords,
     uint32_t addr_space) {}
 
 static __attribute__((always_inline)) inline void trace_pc(
