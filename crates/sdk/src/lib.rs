@@ -548,8 +548,11 @@ where
     ) -> Result<CompiledExeMetered<'_>, SdkError> {
         let metadata = load_metered_artifact_metadata(lib_path).map_err(SdkError::Other)?;
         let exe = self.convert_to_exe(app_exe)?;
-        let ctx =
-            MeteredCtx::from_config(metadata.metered_ctx_config, self.executor.config.as_ref());
+        let ctx = MeteredCtx::from_config(
+            metadata.metered_ctx_config,
+            metadata.segmentation_config,
+            self.executor.config.as_ref(),
+        );
         let instance = self
             .executor
             .load_metered_instance(lib_path, &exe, &metadata.executor_idx_to_air_idx)
