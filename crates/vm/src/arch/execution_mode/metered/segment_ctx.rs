@@ -107,6 +107,15 @@ impl SegmentationConfig {
         self.max_memory = max_memory;
     }
 
+    pub fn set_cache_rs_code_matrix(&mut self, cache_rs_code_matrix: bool) {
+        self.memory_config.cache_rs_code_matrix = cache_rs_code_matrix;
+    }
+
+    #[inline(always)]
+    pub fn cache_rs_code_matrix(&self) -> bool {
+        self.memory_config.cache_rs_code_matrix
+    }
+
     #[inline(always)]
     pub fn max_memory(&self) -> usize {
         self.max_memory
@@ -218,6 +227,15 @@ impl SegmentationCtx {
 
     pub fn set_max_memory(&mut self, max_memory: usize) {
         self.config.set_max_memory(max_memory);
+    }
+
+    pub fn set_cache_rs_code_matrix(&mut self, cache_rs_code_matrix: bool) {
+        self.config.set_cache_rs_code_matrix(cache_rs_code_matrix);
+    }
+
+    #[inline(always)]
+    pub fn cache_rs_code_matrix(&self) -> bool {
+        self.config.cache_rs_code_matrix()
     }
 
     pub fn config(&self) -> &SegmentationConfig {
