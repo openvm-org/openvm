@@ -119,6 +119,24 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self
     }
 
+    pub fn set_cache_rs_code_matrix(&mut self, cache_rs_code_matrix: bool) {
+        self.segmentation_ctx
+            .set_cache_rs_code_matrix(cache_rs_code_matrix);
+        self.config
+            .segmentation
+            .set_cache_rs_code_matrix(cache_rs_code_matrix);
+    }
+
+    pub fn with_cache_rs_code_matrix(mut self, cache_rs_code_matrix: bool) -> Self {
+        self.set_cache_rs_code_matrix(cache_rs_code_matrix);
+        self
+    }
+
+    #[inline(always)]
+    pub fn cache_rs_code_matrix(&self) -> bool {
+        self.segmentation_ctx.cache_rs_code_matrix()
+    }
+
     pub fn from_config(config: MeteredCtxConfig, system_config: &SystemConfig) -> Self {
         let segmentation_ctx = SegmentationCtx::from_config(config.segmentation.clone());
         let mut memory_ctx = MemoryCtx::new(system_config, segmentation_ctx.segment_check_insns());
@@ -327,7 +345,7 @@ mod tests {
             vec![0; num_airs],
             vec![false; num_airs],
             SegmentationLimits {
-                max_trace_height_bits: 4,
+                max_trace_height_bits: 12,
                 max_memory: usize::MAX,
                 max_interactions: u32::MAX,
             },
@@ -340,7 +358,7 @@ mod tests {
         memory_ctx.addr_space_access_count[1] = 7;
         memory_ctx.page_indices_since_checkpoint_len = 3;
 
-        let ctx = MeteredCtx::<DEFAULT_PAGE_BITS> {
+        let mut ctx = MeteredCtx::<DEFAULT_PAGE_BITS> {
             config: MeteredCtxConfig {
                 initial_trace_heights: vec![1, 2, 3, 4, 5, 6],
                 is_trace_height_constant: vec![false, true, false, true, false, true],
@@ -351,9 +369,14 @@ mod tests {
             memory_ctx,
             segmentation_ctx,
         };
+        ctx.set_cache_rs_code_matrix(false);
+
+        assert!(!ctx.cache_rs_code_matrix());
+        assert!(!ctx.config.segmentation.cache_rs_code_matrix());
 
         let restored = MeteredCtx::from_parts(ctx.into_parts());
 
+        assert!(!restored.cache_rs_code_matrix());
         assert_eq!(restored.trace_heights, vec![1, 2, 3, 4, 5, 6]);
         assert_eq!(
             restored.config.is_trace_height_constant,
