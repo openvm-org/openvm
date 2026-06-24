@@ -25,6 +25,22 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, seq::IndexedRandom, Rng};
 use test_case::test_case;
+#[cfg(feature = "cuda")]
+use {
+    super::{
+        LoadStoreRecord, Rv64LoadStoreByteChipGpu, Rv64LoadStoreDoublewordChipGpu,
+        Rv64LoadStoreHalfwordChipGpu, Rv64LoadStoreWordChipGpu,
+    },
+    crate::adapters::Rv64LoadStoreAdapterRecord,
+    openvm_circuit::arch::{
+        testing::{
+            default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+            GpuTestChipHarness,
+        },
+        EmptyAdapterCoreLayout,
+    },
+    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+};
 
 use super::{
     aligned::LoadStoreAlignedCoreCols,
@@ -197,7 +213,7 @@ fn create_doubleword_harness(tester: &mut VmChipTestBuilder<F>) -> DoublewordHar
 
 #[allow(clippy::too_many_arguments)]
 fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
-    tester: &mut VmChipTestBuilder<F>,
+    tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     arena: &mut RA,
     rng: &mut StdRng,
@@ -208,7 +224,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
 #[allow(clippy::too_many_arguments)]
 fn set_and_execute_with<RA: Arena, E: PreflightExecutor<F, RA>>(
-    tester: &mut VmChipTestBuilder<F>,
+    tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     arena: &mut RA,
     rng: &mut StdRng,
@@ -842,4 +858,323 @@ fn negative_split_opcode_role_tests() {
     assert_pranked_halfword_fails(STOREH, |core| core.is_load = F::ONE);
     assert_pranked_word_fails(LOADWU, |core| core.is_load = F::ZERO);
     assert_pranked_doubleword_fails(LOADD, |core| core.is_load = F::ZERO);
+}
+
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen.
+// ////////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(feature = "cuda")]
+type GpuByteHarness = GpuTestChipHarness<
+    F,
+    Rv64LoadStoreByteExecutor,
+    Rv64LoadStoreByteAir,
+    Rv64LoadStoreByteChipGpu,
+    Rv64LoadStoreByteChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+type GpuHalfwordHarness = GpuTestChipHarness<
+    F,
+    Rv64LoadStoreHalfwordExecutor,
+    Rv64LoadStoreHalfwordAir,
+    Rv64LoadStoreHalfwordChipGpu,
+    Rv64LoadStoreHalfwordChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+type GpuWordHarness = GpuTestChipHarness<
+    F,
+    Rv64LoadStoreWordExecutor,
+    Rv64LoadStoreWordAir,
+    Rv64LoadStoreWordChipGpu,
+    Rv64LoadStoreWordChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+type GpuDoublewordHarness = GpuTestChipHarness<
+    F,
+    Rv64LoadStoreDoublewordExecutor,
+    Rv64LoadStoreDoublewordAir,
+    Rv64LoadStoreDoublewordChipGpu,
+    Rv64LoadStoreDoublewordChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+fn dummy_range_checker() -> Arc<VariableRangeCheckerChip> {
+    Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
+    ))
+}
+
+#[cfg(feature = "cuda")]
+fn create_cuda_byte_harness(tester: &GpuChipTestBuilder) -> GpuByteHarness {
+    let range_checker = dummy_range_checker();
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        default_bitwise_lookup_bus(),
+    ));
+    let air = Rv64LoadStoreByteAir::new(
+        Rv64LoadStoreAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        LoadStoreByteCoreAir::new(
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.bus(),
+            range_checker.bus(),
+        ),
+    );
+    let executor = Rv64LoadStoreByteExecutor::new(
+        Rv64LoadStoreAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let cpu_chip = Rv64LoadStoreByteChip::<F>::new(
+        LoadStoreByteFiller::new(
+            Rv64LoadStoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip,
+            range_checker,
+        ),
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv64LoadStoreByteChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.address_bits(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+fn create_cuda_halfword_harness(tester: &GpuChipTestBuilder) -> GpuHalfwordHarness {
+    let range_checker = dummy_range_checker();
+    let air = Rv64LoadStoreHalfwordAir::new(
+        Rv64LoadStoreAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        LoadStoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
+    );
+    let executor = Rv64LoadStoreHalfwordExecutor::new(
+        Rv64LoadStoreAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let cpu_chip = Rv64LoadStoreHalfwordChip::<F>::new(
+        LoadStoreHalfwordFiller::new(
+            Rv64LoadStoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            range_checker,
+        ),
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv64LoadStoreHalfwordChipGpu::new(
+        tester.range_checker(),
+        tester.address_bits(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+fn create_cuda_word_harness(tester: &GpuChipTestBuilder) -> GpuWordHarness {
+    let range_checker = dummy_range_checker();
+    let air = Rv64LoadStoreWordAir::new(
+        Rv64LoadStoreAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        LoadStoreWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
+    );
+    let executor = Rv64LoadStoreWordExecutor::new(
+        Rv64LoadStoreAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let cpu_chip = Rv64LoadStoreWordChip::<F>::new(
+        LoadStoreWordFiller::new(
+            Rv64LoadStoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            range_checker,
+        ),
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv64LoadStoreWordChipGpu::new(
+        tester.range_checker(),
+        tester.address_bits(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+fn create_cuda_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuDoublewordHarness {
+    let range_checker = dummy_range_checker();
+    let air = Rv64LoadStoreDoublewordAir::new(
+        Rv64LoadStoreAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        LoadStoreDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
+    );
+    let executor = Rv64LoadStoreDoublewordExecutor::new(
+        Rv64LoadStoreAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let cpu_chip = Rv64LoadStoreDoublewordChip::<F>::new(
+        LoadStoreDoublewordFiller::new(
+            Rv64LoadStoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            range_checker,
+        ),
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv64LoadStoreDoublewordChipGpu::new(
+        tester.range_checker(),
+        tester.address_bits(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+fn transfer_loadstore_records<G, C, A, E>(harness: &mut GpuTestChipHarness<F, E, A, G, C>) {
+    type Record<'a> = (&'a mut Rv64LoadStoreAdapterRecord, &'a mut LoadStoreRecord);
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new(),
+        );
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(LOADBU, 100)]
+#[test_case(STOREB, 100)]
+fn test_cuda_rand_loadstore_byte_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let mut harness = create_cuda_byte_harness(&tester);
+    for _ in 0..num_ops {
+        set_and_execute_with(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+            Some(2),
+        );
+    }
+    transfer_loadstore_records(&mut harness);
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(LOADHU, 100)]
+#[test_case(STOREH, 100)]
+fn test_cuda_rand_loadstore_halfword_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_cuda_halfword_harness(&tester);
+    for _ in 0..num_ops {
+        set_and_execute_with(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+            Some(2),
+        );
+    }
+    transfer_loadstore_records(&mut harness);
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(LOADWU, 100)]
+#[test_case(STOREW, 100)]
+fn test_cuda_rand_loadstore_word_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_cuda_word_harness(&tester);
+    for _ in 0..num_ops {
+        set_and_execute_with(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+            Some(2),
+        );
+    }
+    transfer_loadstore_records(&mut harness);
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(LOADD, 100)]
+#[test_case(STORED, 100)]
+fn test_cuda_rand_loadstore_doubleword_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_cuda_doubleword_harness(&tester);
+    for _ in 0..num_ops {
+        set_and_execute_with(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+            Some(2),
+        );
+    }
+    transfer_loadstore_records(&mut harness);
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
