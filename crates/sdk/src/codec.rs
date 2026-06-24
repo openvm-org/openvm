@@ -585,7 +585,14 @@ impl Decode for Option<FriLogUpPartialProof<F>> {
         }
 
         // Reconstruct the field element from the u32 value
-        let logup_pow_witness = F::from_u32(value);
+        let modulus = F::ORDER_U32;
+        if value >= modulus {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Non-canonical field element in logup witness: {value} >= {modulus}"),
+            ));
+        }
+        let logup_pow_witness = F::from_canonical_u32(value);
         Ok(Some(FriLogUpPartialProof { logup_pow_witness }))
     }
 }
@@ -631,7 +638,14 @@ impl Decode for F {
         reader.read_exact(&mut bytes)?;
 
         let value = u32::from_le_bytes(bytes);
-        Ok(F::from_u32(value))
+        let modulus = F::ORDER_U32;
+        if value >= modulus {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Non-canonical field element: {value} >= {modulus}"),
+            ));
+        }
+        Ok(F::from_canonical_u32(value))
     }
 }
 
