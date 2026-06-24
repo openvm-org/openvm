@@ -10,7 +10,10 @@ use openvm_circuit::arch::execution_mode::{MeteredCostCtx, MeteredCtx};
 #[cfg(not(feature = "rvr"))]
 use openvm_circuit::arch::{execution_mode::ExecutionCtx, InterpretedInstance};
 #[cfg(feature = "rvr")]
-use openvm_circuit::arch::{execution_mode::MeteredCtxConfig, rvr::CompileError};
+use openvm_circuit::arch::{
+    execution_mode::{MeteredCtxConfig, SegmentationConfig},
+    rvr::CompileError,
+};
 #[cfg(feature = "rvr")]
 use serde::{Deserialize, Serialize};
 
@@ -55,6 +58,7 @@ pub struct CompiledExeMeteredCost<'a> {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MeteredArtifactMetadata {
     pub metered_ctx_config: MeteredCtxConfig,
+    pub segmentation_config: SegmentationConfig,
     pub executor_idx_to_air_idx: Vec<usize>,
 }
 
@@ -78,6 +82,7 @@ impl CompiledExeMetered<'_> {
         let lib_path = self.instance.save(dir)?;
         let metadata = MeteredArtifactMetadata {
             metered_ctx_config: self.ctx.config.clone(),
+            segmentation_config: self.ctx.segmentation_ctx.config().clone(),
             executor_idx_to_air_idx: self.executor_idx_to_air_idx.clone(),
         };
         let metadata_path = metered_artifact_metadata_path(&lib_path);
