@@ -13,6 +13,9 @@ mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
 
+#[cfg(test)]
+mod tests;
+
 pub type Rv64LoadStoreDoublewordAir =
     VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreDoublewordCoreAir>;
 pub type Rv64LoadStoreDoublewordExecutor =

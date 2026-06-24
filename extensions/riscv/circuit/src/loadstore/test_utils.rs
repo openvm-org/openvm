@@ -1,19 +1,21 @@
-use std::{array, borrow::BorrowMut, sync::Arc};
+pub(crate) use std::{array, borrow::BorrowMut, sync::Arc};
 
-use openvm_circuit::{
+pub(crate) use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
         Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
     },
     system::memory::merkle::public_values::PUBLIC_VALUES_AS,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
+pub(crate) use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode};
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
-use openvm_stark_backend::{
+pub(crate) use openvm_instructions::{
+    instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode,
+};
+pub(crate) use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
+pub(crate) use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::{
@@ -22,10 +24,10 @@ use openvm_stark_backend::{
     },
     utils::disable_debug_builder,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use rand::{rngs::StdRng, seq::IndexedRandom, Rng};
+pub(crate) use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+pub(crate) use rand::{rngs::StdRng, seq::IndexedRandom, Rng};
 #[cfg(feature = "cuda")]
-use {
+pub(crate) use {
     super::{
         LoadStoreRecord, Rv64LoadStoreByteChipGpu, Rv64LoadStoreDoublewordChipGpu,
         Rv64LoadStoreHalfwordChipGpu, Rv64LoadStoreWordChipGpu,
@@ -41,7 +43,7 @@ use {
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
 
-use super::{
+pub(crate) use super::{
     aligned::LoadStoreAlignedCoreCols,
     byte::{LoadStoreByteCoreAir, LoadStoreByteCoreCols, LoadStoreByteFiller},
     common::run_write_data,
@@ -55,43 +57,38 @@ use super::{
     Rv64LoadStoreHalfwordAir, Rv64LoadStoreHalfwordChip, Rv64LoadStoreHalfwordExecutor,
     Rv64LoadStoreWordAir, Rv64LoadStoreWordChip, Rv64LoadStoreWordExecutor,
 };
-use crate::adapters::{
+pub(crate) use crate::adapters::{
     rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
     Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller,
     RV64_BYTE_BITS,
 };
 
-const IMM_BITS: usize = 16;
-const MAX_INS_CAPACITY: usize = 128;
-type F = BabyBear;
+pub(crate) const IMM_BITS: usize = 16;
+pub(crate) const MAX_INS_CAPACITY: usize = 128;
+pub(crate) type F = BabyBear;
 
-mod byte;
-mod doubleword;
-mod halfword;
-mod word;
-
-type ByteHarness =
+pub(crate) type ByteHarness =
     TestChipHarness<F, Rv64LoadStoreByteExecutor, Rv64LoadStoreByteAir, Rv64LoadStoreByteChip<F>>;
-type HalfwordHarness = TestChipHarness<
+pub(crate) type HalfwordHarness = TestChipHarness<
     F,
     Rv64LoadStoreHalfwordExecutor,
     Rv64LoadStoreHalfwordAir,
     Rv64LoadStoreHalfwordChip<F>,
 >;
-type WordHarness =
+pub(crate) type WordHarness =
     TestChipHarness<F, Rv64LoadStoreWordExecutor, Rv64LoadStoreWordAir, Rv64LoadStoreWordChip<F>>;
-type DoublewordHarness = TestChipHarness<
+pub(crate) type DoublewordHarness = TestChipHarness<
     F,
     Rv64LoadStoreDoublewordExecutor,
     Rv64LoadStoreDoublewordAir,
     Rv64LoadStoreDoublewordChip<F>,
 >;
 
-fn u16_block_to_f_bytes(block: [u16; BLOCK_FE_WIDTH]) -> [F; 8] {
+pub(crate) fn u16_block_to_f_bytes(block: [u16; BLOCK_FE_WIDTH]) -> [F; 8] {
     rv64_u16_block_to_bytes(block).map(F::from_u8)
 }
 
-fn create_byte_harness(
+pub(crate) fn create_byte_harness(
     tester: &mut VmChipTestBuilder<F>,
 ) -> (
     ByteHarness,
@@ -137,7 +134,7 @@ fn create_byte_harness(
     )
 }
 
-fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> HalfwordHarness {
+pub(crate) fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> HalfwordHarness {
     let range_checker = tester.range_checker();
     let air = Rv64LoadStoreHalfwordAir::new(
         Rv64LoadStoreAdapterAir::new(
@@ -163,7 +160,7 @@ fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> HalfwordHarness
     HalfwordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
-fn create_word_harness(tester: &mut VmChipTestBuilder<F>) -> WordHarness {
+pub(crate) fn create_word_harness(tester: &mut VmChipTestBuilder<F>) -> WordHarness {
     let range_checker = tester.range_checker();
     let air = Rv64LoadStoreWordAir::new(
         Rv64LoadStoreAdapterAir::new(
@@ -189,7 +186,7 @@ fn create_word_harness(tester: &mut VmChipTestBuilder<F>) -> WordHarness {
     WordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
-fn create_doubleword_harness(tester: &mut VmChipTestBuilder<F>) -> DoublewordHarness {
+pub(crate) fn create_doubleword_harness(tester: &mut VmChipTestBuilder<F>) -> DoublewordHarness {
     let range_checker = tester.range_checker();
     let air = Rv64LoadStoreDoublewordAir::new(
         Rv64LoadStoreAdapterAir::new(
@@ -216,7 +213,7 @@ fn create_doubleword_harness(tester: &mut VmChipTestBuilder<F>) -> DoublewordHar
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     arena: &mut RA,
@@ -227,7 +224,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute_with<RA: Arena, E: PreflightExecutor<F, RA>>(
+pub(crate) fn set_and_execute_with<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
     arena: &mut RA,
@@ -334,7 +331,7 @@ fn set_and_execute_with<RA: Arena, E: PreflightExecutor<F, RA>>(
     }
 }
 
-fn memory_config_for(opcodes: &[Rv64LoadStoreOpcode]) -> MemoryConfig {
+pub(crate) fn memory_config_for(opcodes: &[Rv64LoadStoreOpcode]) -> MemoryConfig {
     let mut mem_config = MemoryConfig::default();
     mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
     if opcodes
@@ -345,60 +342,10 @@ fn memory_config_for(opcodes: &[Rv64LoadStoreOpcode]) -> MemoryConfig {
     }
     mem_config
 }
-fn b(bytes: [u8; 8]) -> [u16; BLOCK_FE_WIDTH] {
+pub(crate) fn b(bytes: [u8; 8]) -> [u16; BLOCK_FE_WIDTH] {
     rv64_bytes_to_u16_block(bytes)
 }
-#[test]
-fn load_sign_extend_sanity_tests() {
-    let read_data = b([34, 159, 237, 151, 100, 200, 50, 25]);
-    assert_eq!(
-        run_write_data(LOADH, read_data, [0; BLOCK_FE_WIDTH], 0),
-        b([34, 159, 255, 255, 255, 255, 255, 255])
-    );
-    assert_eq!(
-        run_write_data(LOADH, read_data, [0; BLOCK_FE_WIDTH], 2),
-        b([237, 151, 255, 255, 255, 255, 255, 255])
-    );
-    assert_eq!(
-        run_write_data(LOADH, read_data, [0; BLOCK_FE_WIDTH], 4),
-        b([100, 200, 255, 255, 255, 255, 255, 255])
-    );
-    assert_eq!(
-        run_write_data(LOADH, read_data, [0; BLOCK_FE_WIDTH], 6),
-        b([50, 25, 0, 0, 0, 0, 0, 0])
-    );
-
-    let read_data = b([45, 82, 99, 127, 200, 150, 180, 210]);
-    for shift in 0..8 {
-        let byte = rv64_u16_block_to_bytes(read_data)[shift];
-        assert_eq!(
-            rv64_u16_block_to_bytes(run_write_data(LOADB, read_data, [0; BLOCK_FE_WIDTH], shift)),
-            (byte as i8 as i64).to_le_bytes(),
-            "LOADB shift={shift}"
-        );
-    }
-
-    let read_data = b([0x01, 0x02, 0x03, 0x84, 0xAA, 0xBB, 0xCC, 0xDD]);
-    assert_eq!(
-        run_write_data(LOADW, read_data, [0; BLOCK_FE_WIDTH], 0),
-        b([0x01, 0x02, 0x03, 0x84, 0xFF, 0xFF, 0xFF, 0xFF])
-    );
-    assert_eq!(
-        run_write_data(LOADW, read_data, [0; BLOCK_FE_WIDTH], 4),
-        b([0xAA, 0xBB, 0xCC, 0xDD, 0xFF, 0xFF, 0xFF, 0xFF])
-    );
-
-    let read_data = b([0x01, 0x02, 0x03, 0x04, 0xAA, 0xBB, 0xCC, 0x7D]);
-    assert_eq!(
-        run_write_data(LOADW, read_data, [0; BLOCK_FE_WIDTH], 0),
-        b([0x01, 0x02, 0x03, 0x04, 0, 0, 0, 0])
-    );
-    assert_eq!(
-        run_write_data(LOADW, read_data, [0; BLOCK_FE_WIDTH], 4),
-        b([0xAA, 0xBB, 0xCC, 0x7D, 0, 0, 0, 0])
-    );
-}
-fn assert_pranked_byte_fails(
+pub(crate) fn assert_pranked_byte_fails(
     opcode: Rv64LoadStoreOpcode,
     prank: impl Fn(&mut LoadStoreByteCoreCols<F>),
 ) {
@@ -429,7 +376,7 @@ fn assert_pranked_byte_fails(
         .expect_err("pranked byte loadstore trace should fail");
 }
 
-fn assert_pranked_halfword_fails(
+pub(crate) fn assert_pranked_halfword_fails(
     opcode: Rv64LoadStoreOpcode,
     prank: impl Fn(&mut LoadStoreAlignedCoreCols<F, HALFWORD_SELECTOR_WIDTH>),
 ) {
@@ -459,7 +406,7 @@ fn assert_pranked_halfword_fails(
         .expect_err("pranked halfword loadstore trace should fail");
 }
 
-fn assert_pranked_word_fails(
+pub(crate) fn assert_pranked_word_fails(
     opcode: Rv64LoadStoreOpcode,
     prank: impl Fn(&mut LoadStoreAlignedCoreCols<F, WORD_SELECTOR_WIDTH>),
 ) {
@@ -489,7 +436,7 @@ fn assert_pranked_word_fails(
         .expect_err("pranked word loadstore trace should fail");
 }
 
-fn assert_pranked_doubleword_fails(
+pub(crate) fn assert_pranked_doubleword_fails(
     opcode: Rv64LoadStoreOpcode,
     prank: impl Fn(&mut LoadStoreDoublewordCoreCols<F>),
 ) {
@@ -519,35 +466,21 @@ fn assert_pranked_doubleword_fails(
         .expect_err("pranked doubleword loadstore trace should fail");
 }
 
-#[test]
-fn negative_split_write_data_tests() {
-    assert_pranked_byte_fails(STOREB, |core| core.read_data[0] += F::ONE);
-    assert_pranked_halfword_fails(LOADHU, |core| core.read_data[0] += F::ONE);
-    assert_pranked_word_fails(LOADWU, |core| core.read_data[0] += F::ONE);
-    assert_pranked_doubleword_fails(LOADD, |core| core.read_data[0] += F::ONE);
-}
-
-#[test]
-fn negative_split_opcode_role_tests() {
-    assert_pranked_byte_fails(LOADBU, |core| core.is_load = F::ZERO);
-    assert_pranked_halfword_fails(STOREH, |core| core.is_load = F::ONE);
-    assert_pranked_word_fails(LOADWU, |core| core.is_load = F::ZERO);
-    assert_pranked_doubleword_fails(LOADD, |core| core.is_load = F::ZERO);
-}
-
 // ////////////////////////////////////////////////////////////////////////////////////
 //  CUDA TESTS
 //
 //  Ensure GPU tracegen is equivalent to CPU tracegen.
 // ////////////////////////////////////////////////////////////////////////////////////
 #[cfg(feature = "cuda")]
-fn dummy_range_checker() -> Arc<VariableRangeCheckerChip> {
+pub(crate) fn dummy_range_checker() -> Arc<VariableRangeCheckerChip> {
     Arc::new(VariableRangeCheckerChip::new(
         default_var_range_checker_bus(),
     ))
 }
 #[cfg(feature = "cuda")]
-fn transfer_loadstore_records<G, C, A, E>(harness: &mut GpuTestChipHarness<F, E, A, G, C>) {
+pub(crate) fn transfer_loadstore_records<G, C, A, E>(
+    harness: &mut GpuTestChipHarness<F, E, A, G, C>,
+) {
     type Record<'a> = (&'a mut Rv64LoadStoreAdapterRecord, &'a mut LoadStoreRecord);
     harness
         .dense_arena

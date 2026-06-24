@@ -13,6 +13,9 @@ mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
 
+#[cfg(test)]
+mod tests;
+
 pub type Rv64LoadSignExtendByteAir =
     VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendByteCoreAir>;
 pub type Rv64LoadSignExtendByteExecutor =

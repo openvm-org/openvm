@@ -1,6 +1,6 @@
 use test_case::test_case;
 
-use super::*;
+use crate::loadstore::test_utils::*;
 
 #[test_case(LOADBU, 100)]
 #[test_case(STOREB, 100)]

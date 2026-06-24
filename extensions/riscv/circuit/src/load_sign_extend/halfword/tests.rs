@@ -1,12 +1,12 @@
 use test_case::test_case;
 
-use super::*;
+use crate::load_sign_extend::test_utils::*;
 
-#[test_case(LOADB, 100)]
-fn rand_load_sign_extend_byte_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+#[test_case(LOADH, 100)]
+fn rand_load_sign_extend_halfword_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(memory_config_for());
-    let (mut harness, bitwise) = create_byte_harness(&mut tester);
+    let mut harness = create_halfword_harness(&mut tester);
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
@@ -22,80 +22,69 @@ fn rand_load_sign_extend_byte_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) 
     tester
         .build()
         .load(harness)
-        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .unwrap();
 }
 
 #[test]
-fn positive_loadb_shift7_test() {
+fn positive_loadh_shift6_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(memory_config_for());
-    let (mut harness, bitwise) = create_byte_harness(&mut tester);
+    let mut harness = create_halfword_harness(&mut tester);
     set_and_execute(
         &mut tester,
         &mut harness.executor,
         &mut harness.arena,
         &mut rng,
-        LOADB,
-        Some([7, 0, 0, 0, 0, 0, 0, 0]),
+        LOADH,
+        Some([6, 0, 0, 0, 0, 0, 0, 0]),
         Some(0),
         Some(0),
     );
     tester
         .build()
         .load(harness)
-        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .unwrap();
 }
 
 #[cfg(feature = "cuda")]
-type GpuByteHarness = GpuTestChipHarness<
+type GpuHalfwordHarness = GpuTestChipHarness<
     F,
-    Rv64LoadSignExtendByteExecutor,
-    Rv64LoadSignExtendByteAir,
-    Rv64LoadSignExtendByteChipGpu,
-    Rv64LoadSignExtendByteChip<F>,
+    Rv64LoadSignExtendHalfwordExecutor,
+    Rv64LoadSignExtendHalfwordAir,
+    Rv64LoadSignExtendHalfwordChipGpu,
+    Rv64LoadSignExtendHalfwordChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
-fn create_cuda_byte_harness(tester: &GpuChipTestBuilder) -> GpuByteHarness {
+fn create_cuda_halfword_harness(tester: &GpuChipTestBuilder) -> GpuHalfwordHarness {
     let range_checker = dummy_range_checker();
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
-        default_bitwise_lookup_bus(),
-    ));
-    let air = Rv64LoadSignExtendByteAir::new(
+    let air = Rv64LoadSignExtendHalfwordAir::new(
         Rv64LoadStoreAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
             tester.address_bits(),
         ),
-        LoadSignExtendByteCoreAir::new(
-            Rv64LoadStoreOpcode::CLASS_OFFSET,
-            bitwise_chip.bus(),
-            range_checker.bus(),
-        ),
+        LoadSignExtendHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
     );
-    let executor = Rv64LoadSignExtendByteExecutor::new(
+    let executor = Rv64LoadSignExtendHalfwordExecutor::new(
         Rv64LoadStoreAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
-    let cpu_chip = Rv64LoadSignExtendByteChip::<F>::new(
-        LoadSignExtendByteFiller::new(
+    let cpu_chip = Rv64LoadSignExtendHalfwordChip::<F>::new(
+        LoadSignExtendHalfwordFiller::new(
             Rv64LoadStoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
-            bitwise_chip,
             range_checker,
         ),
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64LoadSignExtendByteChipGpu::new(
+    let gpu_chip = Rv64LoadSignExtendHalfwordChipGpu::new(
         tester.range_checker(),
-        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
@@ -104,12 +93,11 @@ fn create_cuda_byte_harness(tester: &GpuChipTestBuilder) -> GpuByteHarness {
 }
 
 #[cfg(feature = "cuda")]
-#[test_case(LOADB, 100)]
-fn test_cuda_rand_load_sign_extend_byte_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+#[test_case(LOADH, 100)]
+fn test_cuda_rand_load_sign_extend_halfword_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let mut tester =
-        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
-    let mut harness = create_cuda_byte_harness(&tester);
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_cuda_halfword_harness(&tester);
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
