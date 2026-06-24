@@ -127,11 +127,12 @@ impl DeferralAggProver {
         let first_pk = deferral_circuit_pks
             .next()
             .ok_or_else(|| eyre!("cached deferral proving key has no circuits"))?;
-        let mut multi_deferral_circuit_prover = MultiDeferralCircuitProver::from_single_circuit_prover(
-            supported_deferral_circuit_prover_from_pk(&first_config.def_type, first_pk)?,
-            deferral_pk.def_internal_recursive_pk,
-            deferral_pk.def_hook_pk,
-        );
+        let mut multi_deferral_circuit_prover =
+            MultiDeferralCircuitProver::from_single_circuit_prover(
+                supported_deferral_circuit_prover_from_pk(&first_config.def_type, first_pk)?,
+                deferral_pk.def_internal_recursive_pk,
+                deferral_pk.def_hook_pk,
+            );
 
         for (config, circuit_pk) in deferral_config
             .circuits
@@ -147,7 +148,8 @@ impl DeferralAggProver {
 
         // Validate that the reconstructed prover's circuit commits match the cached app VM deferral
         // config. Done unconditionally (not just under debug_assertions): a mismatch means the
-        // config and keys disagree, which would otherwise surface as an opaque proof/verify failure.
+        // config and keys disagree, which would otherwise surface as an opaque proof/verify
+        // failure.
         let reconstructed_config = multi_deferral_circuit_prover.make_config(
             deferral_config
                 .circuits
