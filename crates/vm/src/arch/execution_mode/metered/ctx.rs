@@ -21,7 +21,6 @@ pub const DEFAULT_PAGE_BITS: usize = 6;
 pub struct MeteredCtxConfig {
     pub initial_trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
-    pub segmentation: SegmentationConfig,
     // TODO: Remove this once segmented execution is selected by typed executor entry points across
     // all backends. RVR already treats the compiled suspender policy as the source of truth.
     pub suspend_on_segment: bool,
@@ -97,7 +96,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             config: MeteredCtxConfig {
                 initial_trace_heights: trace_heights.clone(),
                 is_trace_height_constant,
-                segmentation: segmentation_ctx.config().clone(),
                 suspend_on_segment: false,
             },
             trace_heights,
@@ -115,12 +113,30 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     pub fn with_max_memory(mut self, max_memory: usize) -> Self {
         self.segmentation_ctx.set_max_memory(max_memory);
-        self.config.segmentation.set_max_memory(max_memory);
         self
     }
 
-    pub fn from_config(config: MeteredCtxConfig, system_config: &SystemConfig) -> Self {
-        let segmentation_ctx = SegmentationCtx::from_config(config.segmentation.clone());
+    pub fn set_cache_rs_code_matrix(&mut self, cache_rs_code_matrix: bool) {
+        self.segmentation_ctx
+            .set_cache_rs_code_matrix(cache_rs_code_matrix);
+    }
+
+    pub fn with_cache_rs_code_matrix(mut self, cache_rs_code_matrix: bool) -> Self {
+        self.set_cache_rs_code_matrix(cache_rs_code_matrix);
+        self
+    }
+
+    #[inline(always)]
+    pub fn cache_rs_code_matrix(&self) -> bool {
+        self.segmentation_ctx.cache_rs_code_matrix()
+    }
+
+    pub fn from_config(
+        config: MeteredCtxConfig,
+        segmentation_config: SegmentationConfig,
+        system_config: &SystemConfig,
+    ) -> Self {
+        let segmentation_ctx = SegmentationCtx::from_config(segmentation_config);
         let mut memory_ctx = MemoryCtx::new(system_config, segmentation_ctx.segment_check_insns());
         let mut trace_heights = config.initial_trace_heights.clone();
         memory_ctx.add_register_merkle_heights();
@@ -327,7 +343,7 @@ mod tests {
             vec![0; num_airs],
             vec![false; num_airs],
             SegmentationLimits {
-                max_trace_height_bits: 4,
+                max_trace_height_bits: 12,
                 max_memory: usize::MAX,
                 max_interactions: u32::MAX,
             },
@@ -340,20 +356,22 @@ mod tests {
         memory_ctx.addr_space_access_count[1] = 7;
         memory_ctx.page_indices_since_checkpoint_len = 3;
 
-        let ctx = MeteredCtx::<DEFAULT_PAGE_BITS> {
+        let mut ctx = MeteredCtx::<DEFAULT_PAGE_BITS> {
             config: MeteredCtxConfig {
                 initial_trace_heights: vec![1, 2, 3, 4, 5, 6],
                 is_trace_height_constant: vec![false, true, false, true, false, true],
-                segmentation: segmentation_ctx.config().clone(),
                 suspend_on_segment: true,
             },
             trace_heights: vec![1, 2, 3, 4, 5, 6],
             memory_ctx,
             segmentation_ctx,
         };
+        ctx.set_cache_rs_code_matrix(false);
 
+        assert!(!ctx.cache_rs_code_matrix());
         let restored = MeteredCtx::from_parts(ctx.into_parts());
 
+        assert!(!restored.cache_rs_code_matrix());
         assert_eq!(restored.trace_heights, vec![1, 2, 3, 4, 5, 6]);
         assert_eq!(
             restored.config.is_trace_height_constant,
