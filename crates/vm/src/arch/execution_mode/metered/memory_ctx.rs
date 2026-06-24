@@ -8,8 +8,8 @@ use crate::{
     system::memory::{dimensions::MemoryDimensions, DIGEST_WIDTH},
 };
 
-/// Number of bits needed to index the 64 leaves represented by one page mask.
-pub const PAGE_BITS: usize = 6;
+/// Number of bits needed to index the leaves represented by one `u64` page mask.
+pub const PAGE_BITS: usize = u64::BITS.ilog2() as usize;
 
 /// Upper bound on number of memory pages accessed per instruction. Used for buffer allocation.
 pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
