@@ -8,6 +8,9 @@ use crate::{
     system::memory::{dimensions::MemoryDimensions, DIGEST_WIDTH},
 };
 
+/// Number of bits needed to index the 64 leaves represented by one page mask.
+pub const PAGE_BITS: usize = 6;
+
 /// Upper bound on number of memory pages accessed per instruction. Used for buffer allocation.
 pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
 const INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN: usize = 16;
@@ -144,8 +147,7 @@ impl MemoryPageTracker {
     }
 
     #[inline(always)]
-    pub fn insert<const PAGE_BITS: usize>(&mut self, page_id: usize, leaf_mask: u64) {
-        debug_assert!(PAGE_BITS <= 6);
+    pub fn insert(&mut self, page_id: usize, leaf_mask: u64) {
         debug_assert!(page_id < self.page_masks.len());
         debug_assert!(leaf_mask != 0);
 
@@ -158,8 +160,7 @@ impl MemoryPageTracker {
 
         *page_mask = new_mask;
         self.leaves += (new_mask ^ old_mask).count_ones();
-        self.merkle_nodes +=
-            local_merkle_nodes::<PAGE_BITS>(new_mask) - local_merkle_nodes::<PAGE_BITS>(old_mask);
+        self.merkle_nodes += local_merkle_nodes(new_mask) - local_merkle_nodes(old_mask);
 
         if old_mask == 0 {
             self.merkle_nodes += self.insert_upper_path(page_id);
@@ -177,16 +178,6 @@ impl MemoryPageTracker {
             }
         }
         count
-    }
-}
-
-#[inline(always)]
-fn full_leaf_mask<const PAGE_BITS: usize>() -> u64 {
-    debug_assert!(PAGE_BITS <= 6);
-    if PAGE_BITS == 6 {
-        u64::MAX
-    } else {
-        (1u64 << (1usize << PAGE_BITS)) - 1
     }
 }
 
@@ -215,12 +206,11 @@ fn parent_mask(mut mask: u64) -> u64 {
 }
 
 #[inline(always)]
-fn local_merkle_nodes<const PAGE_BITS: usize>(mask: u64) -> u32 {
-    debug_assert!(PAGE_BITS <= 6);
-    if mask == 0 || PAGE_BITS == 0 {
+fn local_merkle_nodes(mask: u64) -> u32 {
+    if mask == 0 {
         return 0;
     }
-    if mask == full_leaf_mask::<PAGE_BITS>() {
+    if mask == u64::MAX {
         return ((1usize << PAGE_BITS) - 1) as u32;
     }
 
@@ -234,16 +224,15 @@ fn local_merkle_nodes<const PAGE_BITS: usize>(mask: u64) -> u32 {
 }
 
 #[derive(Clone, Debug)]
-pub struct MemoryCtx<const PAGE_BITS: usize> {
+pub struct MemoryCtx {
     memory_dimensions: MemoryDimensions,
     pub page_tracker: MemoryPageTracker,
     pub page_indices_since_checkpoint: Vec<PageAccess>,
     pub page_indices_since_checkpoint_len: usize,
 }
 
-impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
+impl MemoryCtx {
     pub fn new(config: &SystemConfig, segment_check_insns: u64) -> Self {
-        assert!(PAGE_BITS <= 6, "PAGE_BITS must fit in a u64 leaf mask");
         let memory_dimensions = config.memory_config.memory_dimensions();
         let merkle_height = memory_dimensions.overall_height();
 
@@ -363,7 +352,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         let old_merkle_nodes = self.page_tracker.merkle_nodes;
         for &access in &self.page_indices_since_checkpoint {
             self.page_tracker
-                .insert::<PAGE_BITS>(access.page_id as usize, access.leaf_mask);
+                .insert(access.page_id as usize, access.leaf_mask);
         }
 
         let leaves = self.page_tracker.leaves - old_leaves;
@@ -418,21 +407,21 @@ mod tests {
     #[test]
     fn test_local_merkle_nodes_doc_example() {
         let mut tracker = MemoryPageTracker::new(1, 0);
-        tracker.insert::<3>(0, 1 << 0);
-        assert_eq!(tracker.merkle_nodes, 3);
-        tracker.insert::<3>(0, 1 << 4);
-        assert_eq!(tracker.merkle_nodes, 5);
-        tracker.insert::<3>(0, 1 << 2);
+        tracker.insert(0, 1 << 0);
         assert_eq!(tracker.merkle_nodes, 6);
+        tracker.insert(0, 1 << 4);
+        assert_eq!(tracker.merkle_nodes, 8);
+        tracker.insert(0, 1 << 2);
+        assert_eq!(tracker.merkle_nodes, 9);
     }
 
     #[test]
     fn test_page_mask_duplicate_leaf_does_not_change_counts() {
         let mut tracker = MemoryPageTracker::new(8, 3);
-        tracker.insert::<3>(0, 1 << 0);
+        tracker.insert(0, 1 << 0);
         let leaves = tracker.leaves;
         let nodes = tracker.merkle_nodes;
-        tracker.insert::<3>(0, 1 << 0);
+        tracker.insert(0, 1 << 0);
         assert_eq!(tracker.leaves, leaves);
         assert_eq!(tracker.merkle_nodes, nodes);
     }
@@ -440,17 +429,17 @@ mod tests {
     #[test]
     fn test_adjacent_pages_share_upper_ancestors() {
         let mut tracker = MemoryPageTracker::new(8, 3);
-        tracker.insert::<3>(0, 1);
+        tracker.insert(0, 1);
         let first = tracker.merkle_nodes;
-        tracker.insert::<3>(1, 1);
-        assert_eq!(tracker.merkle_nodes - first, 3);
+        tracker.insert(1, 1);
+        assert_eq!(tracker.merkle_nodes - first, PAGE_BITS as u32);
     }
 
     #[test]
     fn test_range_insertion_matches_explicit_leaves() {
         let system_config = crate::utils::test_system_config();
-        let mut range_ctx = MemoryCtx::<3>::new(&system_config, 1);
-        let mut explicit_ctx = MemoryCtx::<3>::new(&system_config, 1);
+        let mut range_ctx = MemoryCtx::new(&system_config, 1);
+        let mut explicit_ctx = MemoryCtx::new(&system_config, 1);
 
         range_ctx.update_boundary_merkle_heights(2, 0, 17);
         for ptr in [0, 16] {

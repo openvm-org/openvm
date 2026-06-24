@@ -124,7 +124,7 @@ pub struct SegmentationState {
     config: MeteredCtxConfig,
     pub segmentation_ctx: SegmentationCtx,
     trace_heights: Vec<u32>,
-    memory_ctx: MemoryCtx<DEFAULT_PAGE_BITS>,
+    memory_ctx: MemoryCtx,
     /// Per-address-space page buffers. Each entry = local page id + leaf mask.
     mem_page_buf: Vec<PageAccess>,
     pv_page_buf: Vec<PageAccess>,
@@ -439,7 +439,7 @@ mod tests {
     use crate::{
         arch::{
             execution_mode::metered::{
-                ctx::{MeteredCtxInputs, DEFAULT_PAGE_BITS},
+                ctx::MeteredCtxInputs,
                 segment_ctx::{SegmentationLimits, DEFAULT_MAX_MEMORY},
             },
             BOUNDARY_AIR_ID, MERKLE_AIR_ID,
@@ -460,7 +460,7 @@ mod tests {
         let interactions = vec![0; num_airs];
         let need_rot = vec![false; num_airs];
 
-        let ctx = MeteredCtx::<DEFAULT_PAGE_BITS>::new(
+        let ctx = MeteredCtx::new(
             MeteredCtxInputs {
                 constant_trace_heights: &constant_trace_heights,
                 air_names: &air_names,

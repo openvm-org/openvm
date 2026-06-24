@@ -225,7 +225,7 @@ static __attribute__((always_inline)) inline void record_page_range(
 static __attribute__((always_inline)) inline TraceMemory trace_memory_setup(
     Tracer* restrict t) {
   TraceMemory memory = {
-      .last_mem_page = t->last_mem_page,
+      .last_mem_page = NO_LAST_PAGE,
       .mem_page_buf_len = t->mem_page_buf_len,
       .last_mem_leaf_mask = 0,
       .mem_page_buf = t->mem_page_buf,
@@ -235,7 +235,10 @@ static __attribute__((always_inline)) inline TraceMemory trace_memory_setup(
 
 static __attribute__((always_inline)) inline void trace_memory_drain(
     TraceMemory* restrict memory) {
-  if (memory->last_mem_page == NO_LAST_PAGE) {
+  if (memory->last_mem_page == NO_LAST_PAGE ||
+      memory->last_mem_leaf_mask == 0) {
+    memory->last_mem_page = NO_LAST_PAGE;
+    memory->last_mem_leaf_mask = 0;
     return;
   }
   append_page_access(memory->mem_page_buf, &memory->mem_page_buf_len,
@@ -253,8 +256,9 @@ static __attribute__((always_inline)) inline void trace_memory_flush(
 
 static __attribute__((always_inline)) inline void trace_memory_reload(
     Tracer* restrict t, TraceMemory* restrict memory) {
-  memory->last_mem_page = t->last_mem_page;
+  memory->last_mem_page = NO_LAST_PAGE;
   memory->mem_page_buf_len = t->mem_page_buf_len;
+  memory->last_mem_leaf_mask = 0;
   memory->mem_page_buf = t->mem_page_buf;
 }
 
@@ -283,6 +287,9 @@ static __attribute__((always_inline)) inline void trace_memory_access(
         memory, first_page,
         leaf_mask_range(first_leaf,
                         ((first_page + 1u) << TRACER_PAGE_BITS) - 1u));
+    for (uint32_t page = first_page + 1u; page < last_page; page++) {
+      trace_memory_access_page(memory, page, UINT64_MAX);
+    }
     trace_memory_access_page(memory, last_page,
                              leaf_mask_range(last_page << TRACER_PAGE_BITS,
                                              last_leaf));
