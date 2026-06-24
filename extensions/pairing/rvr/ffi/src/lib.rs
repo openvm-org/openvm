@@ -39,7 +39,7 @@ unsafe fn clear_hint_stream() {
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 /// Read `N` bytes from guest memory (untraced, word-aligned reads).
-unsafe fn read_bytes<const N: usize>(state: *mut c_void, ptr: u32) -> [u8; N] {
+unsafe fn read_bytes<const N: usize>(state: *mut c_void, ptr: u64) -> [u8; N] {
     const {
         assert!(
             N.is_multiple_of(WORD_SIZE),
@@ -57,29 +57,29 @@ unsafe fn read_bytes<const N: usize>(state: *mut c_void, ptr: u32) -> [u8; N] {
 }
 
 /// Read an Fq element from guest memory for BN254.
-unsafe fn read_bn254_fq(state: *mut c_void, ptr: u32) -> Option<bn256::Fq> {
+unsafe fn read_bn254_fq(state: *mut c_void, ptr: u64) -> Option<bn256::Fq> {
     let bytes = read_bytes::<{ BN254_FQ_BYTES as usize }>(state, ptr);
     Option::from(bn256::Fq::from_repr(bytes))
 }
 
 /// Read an Fq element from guest memory for BLS12-381.
-unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u32) -> Option<bls12_381::Fq> {
+unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u64) -> Option<bls12_381::Fq> {
     let bytes = read_bytes::<{ BLS12_381_FQ_BYTES as usize }>(state, ptr);
     Option::from(bls12_381::Fq::from_repr(bytes.into()))
 }
 
-fn point_base(ptr: u64, idx: u64, words_per_point: u32) -> Option<u32> {
+fn point_base(ptr: u64, idx: u64, words_per_point: u32) -> Option<u64> {
     let offset = idx.checked_mul(words_per_point as u64)?;
-    ptr.checked_add(offset)?.try_into().ok()
+    ptr.checked_add(offset)
 }
 
 // ── BN254 pairing hint ──────────────────────────────────────────────────
 
-unsafe fn hint_bn254(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Option<Vec<u8>> {
+unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<Vec<u8>> {
     let p_ptr = rd_mem_u64_wrapper(state, rs1_val);
-    let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
+    let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET as u64);
     let q_ptr = rd_mem_u64_wrapper(state, rs2_val);
-    let q_len = rd_mem_u64_wrapper(state, rs2_val + SLICE_LEN_OFFSET);
+    let q_len = rd_mem_u64_wrapper(state, rs2_val + SLICE_LEN_OFFSET as u64);
 
     if p_len != q_len {
         return None;
@@ -90,7 +90,7 @@ unsafe fn hint_bn254(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Option<V
             let base = point_base(p_ptr, i, G1_AFFINE_COORDS * BN254_FQ_BYTES)?;
             Some(AffinePoint::new(
                 read_bn254_fq(state, base)?,
-                read_bn254_fq(state, base + BN254_FQ_BYTES)?,
+                read_bn254_fq(state, base + BN254_FQ_BYTES as u64)?,
             ))
         })
         .collect::<Option<_>>()?;
@@ -101,11 +101,11 @@ unsafe fn hint_bn254(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Option<V
             // BN254 Fq2 exposes a constructor helper.
             let x = bn256::Fq2::new(
                 read_bn254_fq(state, base)?,
-                read_bn254_fq(state, base + BN254_FQ_BYTES)?,
+                read_bn254_fq(state, base + BN254_FQ_BYTES as u64)?,
             );
             let y = bn256::Fq2::new(
-                read_bn254_fq(state, base + 2 * BN254_FQ_BYTES)?,
-                read_bn254_fq(state, base + 3 * BN254_FQ_BYTES)?,
+                read_bn254_fq(state, base + 2 * BN254_FQ_BYTES as u64)?,
+                read_bn254_fq(state, base + 3 * BN254_FQ_BYTES as u64)?,
             );
             Some(AffinePoint::new(x, y))
         })
@@ -127,11 +127,11 @@ unsafe fn hint_bn254(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Option<V
 
 // ── BLS12-381 pairing hint ──────────────────────────────────────────────
 
-unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Option<Vec<u8>> {
+unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<Vec<u8>> {
     let p_ptr = rd_mem_u64_wrapper(state, rs1_val);
-    let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
+    let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET as u64);
     let q_ptr = rd_mem_u64_wrapper(state, rs2_val);
-    let q_len = rd_mem_u64_wrapper(state, rs2_val + SLICE_LEN_OFFSET);
+    let q_len = rd_mem_u64_wrapper(state, rs2_val + SLICE_LEN_OFFSET as u64);
 
     if p_len != q_len {
         return None;
@@ -142,7 +142,7 @@ unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Opti
             let base = point_base(p_ptr, i, G1_AFFINE_COORDS * BLS12_381_FQ_BYTES)?;
             Some(AffinePoint::new(
                 read_bls12_381_fq(state, base)?,
-                read_bls12_381_fq(state, base + BLS12_381_FQ_BYTES)?,
+                read_bls12_381_fq(state, base + BLS12_381_FQ_BYTES as u64)?,
             ))
         })
         .collect::<Option<_>>()?;
@@ -153,11 +153,11 @@ unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Opti
             // BLS12-381 Fq2 uses struct fields instead of an `Fq2::new` helper.
             let x = bls12_381::Fq2 {
                 c0: read_bls12_381_fq(state, base)?,
-                c1: read_bls12_381_fq(state, base + BLS12_381_FQ_BYTES)?,
+                c1: read_bls12_381_fq(state, base + BLS12_381_FQ_BYTES as u64)?,
             };
             let y = bls12_381::Fq2 {
-                c0: read_bls12_381_fq(state, base + 2 * BLS12_381_FQ_BYTES)?,
-                c1: read_bls12_381_fq(state, base + 3 * BLS12_381_FQ_BYTES)?,
+                c0: read_bls12_381_fq(state, base + 2 * BLS12_381_FQ_BYTES as u64)?,
+                c1: read_bls12_381_fq(state, base + 3 * BLS12_381_FQ_BYTES as u64)?,
             };
             Some(AffinePoint::new(x, y))
         })
@@ -183,8 +183,8 @@ unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Opti
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_pairing_hint_final_exp_bn254(
     state: *mut c_void,
-    rs1_val: u32,
-    rs2_val: u32,
+    rs1_val: u64,
+    rs2_val: u64,
 ) {
     if let Some(hint_bytes) = hint_bn254(state, rs1_val, rs2_val) {
         set_hint_stream(&hint_bytes);
@@ -198,8 +198,8 @@ pub unsafe extern "C" fn rvr_ext_pairing_hint_final_exp_bn254(
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_pairing_hint_final_exp_bls12_381(
     state: *mut c_void,
-    rs1_val: u32,
-    rs2_val: u32,
+    rs1_val: u64,
+    rs2_val: u64,
 ) {
     if let Some(hint_bytes) = hint_bls12_381(state, rs1_val, rs2_val) {
         set_hint_stream(&hint_bytes);

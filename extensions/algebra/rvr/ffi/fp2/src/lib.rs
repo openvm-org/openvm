@@ -32,19 +32,19 @@ impl FieldArith for KnownComplexField<halo2curves_axiom::bn256::Fq2> {
     type Elem = halo2curves_axiom::bn256::Fq2;
 
     #[inline(always)]
-    unsafe fn read_elem(&self, state: *mut c_void, ptr: u32) -> Self::Elem {
+    unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem {
         halo2curves_axiom::bn256::Fq2::new(
             read_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr),
-            read_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr + FIELD_256_BYTES as u32),
+            read_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr + FIELD_256_BYTES as u64),
         )
     }
 
     #[inline(always)]
-    unsafe fn write_elem(&self, state: *mut c_void, ptr: u32, val: &Self::Elem) {
+    unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
         write_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr, &val.c0);
         write_field_256::<halo2curves_axiom::bn256::Fq>(
             state,
-            ptr + FIELD_256_BYTES as u32,
+            ptr + FIELD_256_BYTES as u64,
             &val.c1,
         );
     }
@@ -75,17 +75,17 @@ impl FieldArith for KnownComplexField<blstrs::Fp2> {
     type Elem = blstrs::Fp2;
 
     #[inline(always)]
-    unsafe fn read_elem(&self, state: *mut c_void, ptr: u32) -> Self::Elem {
+    unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem {
         blstrs::Fp2::new(
             read_bls12_381_fq(state, ptr),
-            read_bls12_381_fq(state, ptr + BLS12_381_ELEM_BYTES as u32),
+            read_bls12_381_fq(state, ptr + BLS12_381_ELEM_BYTES as u64),
         )
     }
 
     #[inline(always)]
-    unsafe fn write_elem(&self, state: *mut c_void, ptr: u32, val: &Self::Elem) {
+    unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
         write_bls12_381_fq(state, ptr, &val.c0());
-        write_bls12_381_fq(state, ptr + BLS12_381_ELEM_BYTES as u32, &val.c1());
+        write_bls12_381_fq(state, ptr + BLS12_381_ELEM_BYTES as u64, &val.c1());
     }
 
     #[inline(always)]
@@ -115,15 +115,15 @@ impl FieldArith for KnownComplexField<blstrs::Fp2> {
 impl FieldArith for UnknownComplexField {
     type Elem = (BigUint, BigUint);
 
-    unsafe fn read_elem(&self, state: *mut c_void, ptr: u32) -> Self::Elem {
+    unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem {
         let c0 = read_bigint(state, ptr, self.num_limbs);
-        let c1 = read_bigint(state, ptr + self.num_limbs, self.num_limbs);
+        let c1 = read_bigint(state, ptr + self.num_limbs as u64, self.num_limbs);
         (c0, c1)
     }
 
-    unsafe fn write_elem(&self, state: *mut c_void, ptr: u32, val: &Self::Elem) {
+    unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
         write_bigint(state, ptr, &val.0, self.num_limbs);
-        write_bigint(state, ptr + self.num_limbs, &val.1, self.num_limbs);
+        write_bigint(state, ptr + self.num_limbs as u64, &val.1, self.num_limbs);
     }
 
     fn add(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
@@ -167,7 +167,7 @@ macro_rules! field_op_fn {
         /// # Safety
         /// `state` must be a valid `RvState` pointer.
         #[no_mangle]
-        pub unsafe extern "C" fn $name(state: *mut c_void, rd: u32, rs1: u32, rs2: u32) {
+        pub unsafe extern "C" fn $name(state: *mut c_void, rd: u64, rs1: u64, rs2: u64) {
             let f = KnownComplexField::<$field>(PhantomData);
             exec_op(&f, state, rd, rs1, rs2, |f, a, b| f.$op(a, b));
         }
@@ -198,9 +198,9 @@ macro_rules! unknown_field_op_fn {
         #[no_mangle]
         pub unsafe extern "C" fn $name(
             state: *mut c_void,
-            rd_ptr: u32,
-            rs1_ptr: u32,
-            rs2_ptr: u32,
+            rd_ptr: u64,
+            rs1_ptr: u64,
+            rs2_ptr: u64,
             num_limbs: u32,
             modulus_ptr: *const u8,
         ) {
@@ -222,9 +222,9 @@ unknown_field_op_fn!(rvr_ext_fp2_div, div);
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_fp2_setup(
     state: *mut c_void,
-    rd_ptr: u32,
-    rs1_ptr: u32,
-    rs2_ptr: u32,
+    rd_ptr: u64,
+    rs1_ptr: u64,
+    rs2_ptr: u64,
     num_limbs: u32,
 ) {
     let total_limbs = num_limbs * 2;
