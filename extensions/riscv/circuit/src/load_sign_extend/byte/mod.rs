@@ -8,6 +8,11 @@ use crate::{
 mod core;
 pub use core::*;
 
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 pub type Rv64LoadSignExtendByteAir =
     VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendByteCoreAir>;
 pub type Rv64LoadSignExtendByteExecutor =

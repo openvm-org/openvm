@@ -22,3 +22,8 @@ pub type LoadStoreWordFiller = LoadStoreAlignedFiller<
 pub type Rv64LoadStoreWordAir = VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreWordCoreAir>;
 pub type Rv64LoadStoreWordExecutor = LoadStoreExecutor<Rv64LoadStoreAdapterExecutor, KIND_WORD>;
 pub type Rv64LoadStoreWordChip<F> = VmChipWrapper<F, LoadStoreWordFiller>;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;

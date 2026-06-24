@@ -8,6 +8,11 @@ use crate::{
 mod core;
 pub use core::*;
 
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 pub type Rv64LoadStoreDoublewordAir =
     VmAirWrapper<Rv64LoadStoreAdapterAir, LoadStoreDoublewordCoreAir>;
 pub type Rv64LoadStoreDoublewordExecutor =
