@@ -26,3 +26,8 @@ pub type Rv64LoadSignExtendWordAir =
 pub type Rv64LoadSignExtendWordExecutor =
     LoadStoreExecutor<Rv64LoadStoreAdapterExecutor, KIND_WORD>;
 pub type Rv64LoadSignExtendWordChip<F> = VmChipWrapper<F, LoadSignExtendWordFiller>;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;

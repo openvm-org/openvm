@@ -304,7 +304,12 @@ Given:
 - `prev_data` is the previous write target block, either register `rd` for loads or `mem_as[aligned(val(rs1) + imm)]` for stores
 - `opcode` indicates the operation to be performed
 
-These circuits prove that the block written by the adapter matches the width-specific unsigned load extension or store merge for the selected opcode and alignment.
+These circuits prove that:
+
+- The selected opcode matches the access width handled by the chip
+- The shift selector matches the low address bits for byte, halfword, and word accesses
+- For unsigned loads, the value written to `rd` is the selected memory value zero-extended to 64 bits
+- For stores, the value written to memory is the previous memory block with the selected bytes replaced by the value from `rd`
 
 #### 11. [Load sign extend](./load_sign_extend/mod.rs)
 
@@ -315,7 +320,12 @@ Given:
 - `read_data` is the data read from `mem_as[aligned(val(rs1) + imm)]`
 - `opcode` indicates the operation to be performed
 
-These circuits prove that the block written by the adapter matches the width-specific signed load extension for the selected opcode and alignment.
+These circuits prove that:
+
+- The selected opcode matches the signed-load width handled by the chip
+- The shift selector matches the low address bits for byte, halfword, and word accesses
+- The loaded value is sign-extended to 64 bits before it is written to `rd`
+- The sign bit decomposition used for extension is range-checked
 
 #### 12. [Multiplication](./mul/core.rs)
 

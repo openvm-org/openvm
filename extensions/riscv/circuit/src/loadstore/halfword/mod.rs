@@ -24,3 +24,8 @@ pub type Rv64LoadStoreHalfwordAir = VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSt
 pub type Rv64LoadStoreHalfwordExecutor =
     LoadStoreExecutor<Rv64LoadStoreAdapterExecutor, KIND_HALFWORD>;
 pub type Rv64LoadStoreHalfwordChip<F> = VmChipWrapper<F, LoadStoreHalfwordFiller>;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
