@@ -12,18 +12,29 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_circuit::{adapters::rv64_bytes_to_u32, ShiftExecutor};
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u64_array, read_int256, u64_array_to_bytes, write_int256},
-    AluAdapterExecutor, Rv64Shift256Executor, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
+    AluU16AdapterExecutor, Rv64ShiftLogical256Executor, Rv64ShiftRightArithmetic256Executor,
+    INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
 };
 
-impl Rv64Shift256Executor {
-    pub fn new(adapter: AluAdapterExecutor, offset: usize) -> Self {
-        Self(ShiftExecutor::new(adapter, offset))
+impl Rv64ShiftLogical256Executor {
+    pub fn new(adapter: AluU16AdapterExecutor, offset: usize) -> Self {
+        Self(openvm_riscv_circuit::ShiftLogicalExecutor::new(
+            adapter, offset,
+        ))
+    }
+}
+
+impl Rv64ShiftRightArithmetic256Executor {
+    pub fn new(adapter: AluU16AdapterExecutor, offset: usize) -> Self {
+        Self(openvm_riscv_circuit::ShiftRightArithmeticExecutor::new(
+            adapter, offset,
+        ))
     }
 }
 
@@ -45,87 +56,129 @@ macro_rules! dispatch {
     };
 }
 
-impl<F: PrimeField32> InterpreterExecutor<F> for Rv64Shift256Executor {
-    fn pre_compute_size(&self) -> usize {
-        size_of::<ShiftPreCompute>()
-    }
+macro_rules! impl_shift256_executor {
+    ($executor:ty, $is_right_arithmetic:expr) => {
+        impl<F: PrimeField32> InterpreterExecutor<F> for $executor {
+            fn pre_compute_size(&self) -> usize {
+                size_of::<ShiftPreCompute>()
+            }
 
-    #[cfg(not(feature = "tco"))]
-    fn pre_compute<Ctx>(
-        &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
-    where
-        Ctx: ExecutionCtxTrait,
-    {
-        let data: &mut ShiftPreCompute = data.borrow_mut();
-        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        dispatch!(execute_e1_handler, local_opcode)
-    }
+            #[cfg(not(feature = "tco"))]
+            fn pre_compute<Ctx>(
+                &self,
+                pc: u32,
+                inst: &Instruction<F>,
+                data: &mut [u8],
+            ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+            where
+                Ctx: ExecutionCtxTrait,
+            {
+                let data: &mut ShiftPreCompute = data.borrow_mut();
+                let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+                dispatch!(execute_e1_handler, local_opcode)
+            }
 
-    #[cfg(feature = "tco")]
-    fn handler<Ctx>(
-        &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
-    where
-        Ctx: ExecutionCtxTrait,
-    {
-        let data: &mut ShiftPreCompute = data.borrow_mut();
-        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        dispatch!(execute_e1_handler, local_opcode)
-    }
+            #[cfg(feature = "tco")]
+            fn handler<Ctx>(
+                &self,
+                pc: u32,
+                inst: &Instruction<F>,
+                data: &mut [u8],
+            ) -> Result<Handler<F, Ctx>, StaticProgramError>
+            where
+                Ctx: ExecutionCtxTrait,
+            {
+                let data: &mut ShiftPreCompute = data.borrow_mut();
+                let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+                dispatch!(execute_e1_handler, local_opcode)
+            }
+        }
+
+        #[cfg(feature = "aot")]
+        impl<F: PrimeField32> AotExecutor<F> for $executor {}
+
+        impl<F: PrimeField32> InterpreterMeteredExecutor<F> for $executor {
+            fn metered_pre_compute_size(&self) -> usize {
+                size_of::<E2PreCompute<ShiftPreCompute>>()
+            }
+
+            #[cfg(not(feature = "tco"))]
+            fn metered_pre_compute<Ctx>(
+                &self,
+                chip_idx: usize,
+                pc: u32,
+                inst: &Instruction<F>,
+                data: &mut [u8],
+            ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+            where
+                Ctx: MeteredExecutionCtxTrait,
+            {
+                let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
+                data.chip_idx = chip_idx as u32;
+                let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+                dispatch!(execute_e2_handler, local_opcode)
+            }
+
+            #[cfg(feature = "tco")]
+            fn metered_handler<Ctx>(
+                &self,
+                chip_idx: usize,
+                pc: u32,
+                inst: &Instruction<F>,
+                data: &mut [u8],
+            ) -> Result<Handler<F, Ctx>, StaticProgramError>
+            where
+                Ctx: MeteredExecutionCtxTrait,
+            {
+                let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
+                data.chip_idx = chip_idx as u32;
+                let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+                dispatch!(execute_e2_handler, local_opcode)
+            }
+        }
+
+        #[cfg(feature = "aot")]
+        impl<F: PrimeField32> AotMeteredExecutor<F> for $executor {}
+
+        impl $executor {
+            fn pre_compute_impl<F: PrimeField32>(
+                &self,
+                pc: u32,
+                inst: &Instruction<F>,
+                data: &mut ShiftPreCompute,
+            ) -> Result<ShiftOpcode, StaticProgramError> {
+                let Instruction {
+                    opcode,
+                    a,
+                    b,
+                    c,
+                    d,
+                    e,
+                    ..
+                } = inst;
+                let e_u32 = e.as_canonical_u32();
+                if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
+                    return Err(StaticProgramError::InvalidInstruction(pc));
+                }
+                *data = ShiftPreCompute {
+                    a: a.as_canonical_u32() as u8,
+                    b: b.as_canonical_u32() as u8,
+                    c: c.as_canonical_u32() as u8,
+                };
+                let local_opcode = ShiftOpcode::from_usize(
+                    opcode.local_opcode_idx(Rv64Shift256Opcode::CLASS_OFFSET),
+                );
+                if (local_opcode == ShiftOpcode::SRA) != $is_right_arithmetic {
+                    return Err(StaticProgramError::InvalidInstruction(pc));
+                }
+                Ok(local_opcode)
+            }
+        }
+    };
 }
 
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotExecutor<F> for Rv64Shift256Executor {}
-
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64Shift256Executor {
-    fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<ShiftPreCompute>>()
-    }
-
-    #[cfg(not(feature = "tco"))]
-    fn metered_pre_compute<Ctx>(
-        &self,
-        chip_idx: usize,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
-    where
-        Ctx: MeteredExecutionCtxTrait,
-    {
-        let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
-        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        dispatch!(execute_e2_handler, local_opcode)
-    }
-
-    #[cfg(feature = "tco")]
-    fn metered_handler<Ctx>(
-        &self,
-        chip_idx: usize,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
-    where
-        Ctx: MeteredExecutionCtxTrait,
-    {
-        let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
-        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        dispatch!(execute_e2_handler, local_opcode)
-    }
-}
-
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64Shift256Executor {}
+impl_shift256_executor!(Rv64ShiftLogical256Executor, false);
+impl_shift256_executor!(Rv64ShiftRightArithmetic256Executor, true);
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(
@@ -170,37 +223,6 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Sh
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<F, CTX, OP>(&pre_compute.data, exec_state);
-}
-
-impl Rv64Shift256Executor {
-    fn pre_compute_impl<F: PrimeField32>(
-        &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut ShiftPreCompute,
-    ) -> Result<ShiftOpcode, StaticProgramError> {
-        let Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            ..
-        } = inst;
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
-            return Err(StaticProgramError::InvalidInstruction(pc));
-        }
-        *data = ShiftPreCompute {
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-            c: c.as_canonical_u32() as u8,
-        };
-        let local_opcode =
-            ShiftOpcode::from_usize(opcode.local_opcode_idx(Rv64Shift256Opcode::CLASS_OFFSET));
-        Ok(local_opcode)
-    }
 }
 
 trait ShiftOp {
