@@ -12,7 +12,7 @@ using namespace riscv;
 using namespace program;
 
 // SRA uses u16 limbs (4 limbs of 16 bits) and the u16 ALU adapter.
-using Rv64ShiftCoreRecord = ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>;
+using Rv64ShiftRightArithmeticCoreRecord = ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>;
 using Rv64ShiftRightArithmeticCore = ShiftRightArithmeticCore<BLOCK_FE_WIDTH, U16_BITS>;
 template <typename T>
 using Rv64ShiftRightArithmeticCoreCols = ShiftRightArithmeticCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
@@ -22,16 +22,16 @@ template <typename T> struct ShiftRightArithmeticCols {
     Rv64ShiftRightArithmeticCoreCols<T> core;
 };
 
-struct ShiftRecord {
+struct ShiftRightArithmeticRecord {
     Rv64BaseAluU16AdapterRecord adapter;
-    Rv64ShiftCoreRecord core;
+    Rv64ShiftRightArithmeticCoreRecord core;
 };
 
 __global__ void rv64_shift_right_arithmetic_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<ShiftRecord> records,
+    DeviceBufferConstView<ShiftRightArithmeticRecord> records,
     uint32_t *range_ptr,
     uint32_t range_bins,
     uint32_t timestamp_max_bits
@@ -54,7 +54,7 @@ extern "C" int _rv64_shift_right_arithmetic_tracegen(
     Fp *__restrict__ d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<ShiftRecord> d_records,
+    DeviceBufferConstView<ShiftRightArithmeticRecord> d_records,
     uint32_t *__restrict__ d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits,
