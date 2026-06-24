@@ -353,8 +353,9 @@ mod tests {
         segmentation_ctx.instrets_until_check = 1;
 
         let mut memory_ctx = MemoryCtx::<DEFAULT_PAGE_BITS>::new(&system_config, 1);
-        memory_ctx.addr_space_access_count[1] = 7;
-        memory_ctx.page_indices_since_checkpoint_len = 3;
+        memory_ctx.record_page_access(7, 1);
+        memory_ctx.record_page_access(8, 1);
+        memory_ctx.record_page_access(9, 1);
 
         let mut ctx = MeteredCtx::<DEFAULT_PAGE_BITS> {
             config: MeteredCtxConfig {
@@ -378,7 +379,6 @@ mod tests {
             vec![false, true, false, true, false, true]
         );
         assert_eq!(restored.segmentation_ctx.instret, 123);
-        assert_eq!(restored.memory_ctx.addr_space_access_count[1], 7);
         assert_eq!(restored.memory_ctx.page_indices_since_checkpoint_len, 3);
         assert!(*restored.suspend_on_segment());
     }

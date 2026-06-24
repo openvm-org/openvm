@@ -1,4 +1,3 @@
-use abi_stable::std_types::RVec;
 use openvm_instructions::{
     riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     DEFERRAL_AS,
@@ -11,6 +10,7 @@ use crate::{
 
 /// Upper bound on number of memory pages accessed per instruction. Used for buffer allocation.
 pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
+const INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN: usize = 16;
 
 #[derive(Clone, Debug)]
 pub struct BitSet {
@@ -106,36 +106,161 @@ impl BitSet {
     }
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PageAccess {
+    pub page_id: u32,
+    pub leaf_mask: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct MemoryPageTracker {
+    page_masks: Box<[u64]>,
+    upper_nodes: BitSet,
+    upper_height: usize,
+    merkle_nodes: u32,
+    leaves: u32,
+}
+
+impl MemoryPageTracker {
+    pub fn new(num_pages: usize, upper_height: usize) -> Self {
+        Self {
+            page_masks: vec![0; num_pages].into_boxed_slice(),
+            upper_nodes: BitSet::new(num_pages),
+            upper_height,
+            merkle_nodes: 0,
+            leaves: 0,
+        }
+    }
+
+    #[inline(always)]
+    pub fn clear(&mut self) {
+        unsafe {
+            std::ptr::write_bytes(self.page_masks.as_mut_ptr(), 0, self.page_masks.len());
+        }
+        self.upper_nodes.clear();
+        self.merkle_nodes = 0;
+        self.leaves = 0;
+    }
+
+    #[inline(always)]
+    pub fn insert<const PAGE_BITS: usize>(&mut self, page_id: usize, leaf_mask: u64) {
+        debug_assert!(PAGE_BITS <= 6);
+        debug_assert!(page_id < self.page_masks.len());
+        debug_assert!(leaf_mask != 0);
+
+        let page_mask = unsafe { self.page_masks.get_unchecked_mut(page_id) };
+        let old_mask = *page_mask;
+        let new_mask = old_mask | leaf_mask;
+        if new_mask == old_mask {
+            return;
+        }
+
+        *page_mask = new_mask;
+        self.leaves += (new_mask ^ old_mask).count_ones();
+        self.merkle_nodes +=
+            local_merkle_nodes::<PAGE_BITS>(new_mask) - local_merkle_nodes::<PAGE_BITS>(old_mask);
+
+        if old_mask == 0 {
+            self.merkle_nodes += self.insert_upper_path(page_id);
+        }
+    }
+
+    #[inline(always)]
+    fn insert_upper_path(&mut self, page_id: usize) -> u32 {
+        let mut count = 0;
+        let mut node = (1usize << self.upper_height) + page_id;
+        while node > 1 {
+            node >>= 1;
+            if self.upper_nodes.insert(node) {
+                count += 1;
+            }
+        }
+        count
+    }
+}
+
+#[inline(always)]
+fn full_leaf_mask<const PAGE_BITS: usize>() -> u64 {
+    debug_assert!(PAGE_BITS <= 6);
+    if PAGE_BITS == 6 {
+        u64::MAX
+    } else {
+        (1u64 << (1usize << PAGE_BITS)) - 1
+    }
+}
+
+#[inline(always)]
+fn leaf_mask_range(start: u32, end: u32) -> u64 {
+    debug_assert!(start < end);
+    debug_assert!(end <= 64);
+    let width = end - start;
+    let mask = if width == 64 {
+        u64::MAX
+    } else {
+        (1u64 << width) - 1
+    };
+    mask << start
+}
+
+#[inline(always)]
+fn parent_mask(mut mask: u64) -> u64 {
+    let mut parents = 0;
+    while mask != 0 {
+        let bit = mask.trailing_zeros();
+        parents |= 1u64 << (bit >> 1);
+        mask &= mask - 1;
+    }
+    parents
+}
+
+#[inline(always)]
+fn local_merkle_nodes<const PAGE_BITS: usize>(mask: u64) -> u32 {
+    debug_assert!(PAGE_BITS <= 6);
+    if mask == 0 || PAGE_BITS == 0 {
+        return 0;
+    }
+    if mask == full_leaf_mask::<PAGE_BITS>() {
+        return ((1usize << PAGE_BITS) - 1) as u32;
+    }
+
+    let mut nodes = 0;
+    let mut level_mask = mask;
+    for _ in 0..PAGE_BITS {
+        level_mask = parent_mask(level_mask);
+        nodes += level_mask.count_ones();
+    }
+    nodes
+}
+
 #[derive(Clone, Debug)]
 pub struct MemoryCtx<const PAGE_BITS: usize> {
     memory_dimensions: MemoryDimensions,
-    pub page_indices: BitSet,
-    pub addr_space_access_count: RVec<u32>,
-    pub page_indices_since_checkpoint: Box<[u32]>,
+    pub page_tracker: MemoryPageTracker,
+    pub page_indices_since_checkpoint: Vec<PageAccess>,
     pub page_indices_since_checkpoint_len: usize,
 }
 
 impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     pub fn new(config: &SystemConfig, segment_check_insns: u64) -> Self {
+        assert!(PAGE_BITS <= 6, "PAGE_BITS must fit in a u64 leaf mask");
         let memory_dimensions = config.memory_config.memory_dimensions();
         let merkle_height = memory_dimensions.overall_height();
 
-        let bitset_size = 1 << (merkle_height.saturating_sub(PAGE_BITS));
-        let addr_space_size = (1 << memory_dimensions.addr_space_height) + 1;
-        let checkpoint_capacity = Self::calculate_checkpoint_capacity(segment_check_insns);
+        let num_pages = 1 << (merkle_height.saturating_sub(PAGE_BITS));
+        let checkpoint_capacity = Self::initial_checkpoint_capacity(segment_check_insns);
 
         Self {
             memory_dimensions,
-            page_indices: BitSet::new(bitset_size),
-            addr_space_access_count: vec![0; addr_space_size].into(),
-            page_indices_since_checkpoint: vec![0; checkpoint_capacity].into_boxed_slice(),
+            page_tracker: MemoryPageTracker::new(num_pages, merkle_height - PAGE_BITS),
+            page_indices_since_checkpoint: Vec::with_capacity(checkpoint_capacity),
             page_indices_since_checkpoint_len: 0,
         }
     }
 
     #[inline(always)]
-    fn calculate_checkpoint_capacity(segment_check_insns: u64) -> usize {
-        segment_check_insns as usize * MAX_MEM_PAGE_OPS_PER_INSN
+    fn initial_checkpoint_capacity(segment_check_insns: u64) -> usize {
+        segment_check_insns as usize * INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN
     }
 
     #[inline(always)]
@@ -157,8 +282,6 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         ptr: u32,
         size: u32,
     ) {
-        debug_assert!((address_space as usize) < self.addr_space_access_count.len());
-
         let end_ptr = ptr + size - 1;
         let ptrs_per_leaf = if address_space == DEFERRAL_AS {
             DIGEST_WIDTH as u32
@@ -175,39 +298,35 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         let end_leaf_id = start_leaf_id + num_leaves;
         let start_page_id = start_leaf_id >> PAGE_BITS;
         let end_page_id = ((end_leaf_id - 1) >> PAGE_BITS) + 1;
+        let num_pages = (end_page_id - start_page_id) as usize;
         assert!(
-            self.page_indices_since_checkpoint_len + (end_page_id - start_page_id) as usize
-                <= self.page_indices_since_checkpoint.len(),
+            num_pages <= MAX_MEM_PAGE_OPS_PER_INSN,
             "more than {MAX_MEM_PAGE_OPS_PER_INSN} memory pages accessed in a single instruction"
         );
+        self.page_indices_since_checkpoint.reserve(num_pages);
 
         for page_id in start_page_id..end_page_id {
-            // Append page_id to page_indices_since_checkpoint
-            let len = self.page_indices_since_checkpoint_len;
-            debug_assert!(len < self.page_indices_since_checkpoint.len());
-            // SAFETY: len is within bounds, and we extend length by 1 after writing.
-            unsafe {
-                *self.page_indices_since_checkpoint.as_mut_ptr().add(len) = page_id;
-            }
-            self.page_indices_since_checkpoint_len = len + 1;
-
-            if self.page_indices.insert(page_id as usize) {
-                // SAFETY: address_space passed is usually a hardcoded constant or derived from an
-                // Instruction where it is bounds checked before passing
-                unsafe {
-                    *self
-                        .addr_space_access_count
-                        .get_unchecked_mut(address_space as usize) += 1;
-                }
-            }
+            let page_start = page_id << PAGE_BITS;
+            let page_end = page_start + (1 << PAGE_BITS);
+            let start = start_leaf_id.max(page_start) - page_start;
+            let end = end_leaf_id.min(page_end) - page_start;
+            let leaf_mask = leaf_mask_range(start, end);
+            self.record_page_access(page_id, leaf_mask);
         }
+    }
+
+    #[inline(always)]
+    pub(crate) fn record_page_access(&mut self, page_id: u32, leaf_mask: u64) {
+        debug_assert!(leaf_mask != 0);
+        self.page_indices_since_checkpoint
+            .push(PageAccess { page_id, leaf_mask });
+        self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
     }
 
     /// Initialize state for a new segment
     #[inline(always)]
     pub(crate) fn initialize_segment(&mut self, trace_heights: &mut [u32]) {
-        // Clear page indices for the new segment
-        self.page_indices.clear();
+        self.page_tracker.clear();
 
         // Reset trace heights for memory chips as 0
         // SAFETY: BOUNDARY_AIR_ID and MERKLE_AIR_ID are compile-time constants within bounds
@@ -221,27 +340,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             *trace_heights.get_unchecked_mut(poseidon2_idx) = 0;
         }
 
-        // Apply height updates for all pages accessed since last checkpoint, and
-        // initialize page_indices for the new segment.
-        let mut addr_space_access_count = vec![0; self.addr_space_access_count.len()];
-        let pages_len = self.page_indices_since_checkpoint_len;
-        for i in 0..pages_len {
-            // SAFETY: i is within 0..pages_len and pages_len is the slice length.
-            let page_id = unsafe { *self.page_indices_since_checkpoint.get_unchecked(i) } as usize;
-            if self.page_indices.insert(page_id) {
-                let (addr_space, _) = self
-                    .memory_dimensions
-                    .index_to_label((page_id as u64) << PAGE_BITS);
-                let addr_space_idx = addr_space as usize;
-                debug_assert!(addr_space_idx < addr_space_access_count.len());
-                // SAFETY: addr_space_idx is bounds checked in debug and derived from a valid page
-                // id.
-                unsafe {
-                    *addr_space_access_count.get_unchecked_mut(addr_space_idx) += 1;
-                }
-            }
-        }
-        self.apply_height_updates(trace_heights, &addr_space_access_count);
+        self.apply_height_updates(trace_heights);
 
         // Add merkle height contributions for all registers
         self.add_register_merkle_heights();
@@ -251,66 +350,40 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     /// Updates the checkpoint with current safe state
     #[inline(always)]
     pub(crate) fn update_checkpoint(&mut self) {
+        self.page_indices_since_checkpoint.clear();
         self.page_indices_since_checkpoint_len = 0;
     }
 
-    /// Overestimates trace heights from page faults.
-    ///
-    /// Memory leaves (DIGEST_WIDTH-sized) form a sparse merkle tree of height `h`. Each segment
-    /// maintains an initial and final tree, so all counts are doubled.
-    ///
-    /// On each page fault, we conservatively assume all `2^PAGE_BITS` leaves in the page
-    /// are touched and no merkle nodes are shared across pages:
-    ///
-    /// ```text
-    ///        [root]              height h
-    ///        /    \
-    ///      ...    ...
-    ///      /        \
-    ///   [page]    [page]         (h - PAGE_BITS) nodes above each page
-    ///   / .. \
-    ///  L  ..  L                  2^PAGE_BITS leaves, (2^PAGE_BITS - 1) internal nodes
-    /// ```
-    ///
-    /// Per page fault:
-    /// - BOUNDARY_AIR: `2 * 2^PAGE_BITS` rows (one init + one final row per leaf)
-    /// - MERKLE_AIR:   `2 * nodes_per_page` rows
-    /// - Poseidon2:    `2 * 2^PAGE_BITS` (leaf compression) + `2 * nodes_per_page` (tree hashes)
+    /// Applies exact boundary and Merkle height deltas for the page/leaf masks
+    /// recorded since the last checkpoint. Poseidon2 remains a safe upper bound:
+    /// tracegen may deduplicate equal hash inputs by value.
     #[inline(always)]
-    fn apply_height_updates(&self, trace_heights: &mut [u32], addr_space_access_count: &[u32]) {
-        let page_access_count: u32 = addr_space_access_count.iter().sum();
+    fn apply_height_updates(&mut self, trace_heights: &mut [u32]) {
+        let old_leaves = self.page_tracker.leaves;
+        let old_merkle_nodes = self.page_tracker.merkle_nodes;
+        for &access in &self.page_indices_since_checkpoint {
+            self.page_tracker
+                .insert::<PAGE_BITS>(access.page_id as usize, access.leaf_mask);
+        }
 
-        // Leaves touched: conservatively assume every leaf in each faulted page is touched.
-        let leaves = page_access_count << PAGE_BITS;
+        let leaves = self.page_tracker.leaves - old_leaves;
+        let merkle_nodes = self.page_tracker.merkle_nodes - old_merkle_nodes;
         debug_assert!(trace_heights.len() >= 2);
         let poseidon2_idx = trace_heights.len() - 2;
-
-        let merkle_height = self.memory_dimensions.overall_height();
-        let nodes_per_page = (((1 << PAGE_BITS) - 1) + (merkle_height - PAGE_BITS)) as u32;
         // SAFETY: BOUNDARY_AIR_ID, MERKLE_AIR_ID, and poseidon2_idx are all within bounds
         unsafe {
             *trace_heights.get_unchecked_mut(BOUNDARY_AIR_ID) += leaves * 2;
             // Poseidon2: 2 hashes per leaf (compression) + 2 per internal node (init + final tree)
-            *trace_heights.get_unchecked_mut(poseidon2_idx) +=
-                leaves * 2 + nodes_per_page * page_access_count * 2;
+            *trace_heights.get_unchecked_mut(poseidon2_idx) += leaves * 2 + merkle_nodes * 2;
             // Merkle AIR: 2 rows per internal node (init + final tree)
-            *trace_heights.get_unchecked_mut(MERKLE_AIR_ID) +=
-                nodes_per_page * page_access_count * 2;
+            *trace_heights.get_unchecked_mut(MERKLE_AIR_ID) += merkle_nodes * 2;
         }
     }
 
     /// Resolve all lazy updates of each memory access for poseidon2/merkle chips.
     #[inline(always)]
     pub(crate) fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {
-        self.apply_height_updates(trace_heights, &self.addr_space_access_count);
-        // SAFETY: Resetting array elements to 0 is always safe
-        unsafe {
-            std::ptr::write_bytes(
-                self.addr_space_access_count.as_mut_ptr(),
-                0,
-                self.addr_space_access_count.len(),
-            );
-        }
+        self.apply_height_updates(trace_heights);
     }
 }
 
@@ -340,5 +413,54 @@ mod tests {
         assert_eq!(num_flips, 57);
         let num_flips = bit_set.insert_range(100, 513);
         assert_eq!(num_flips, 413 - 121);
+    }
+
+    #[test]
+    fn test_local_merkle_nodes_doc_example() {
+        let mut tracker = MemoryPageTracker::new(1, 0);
+        tracker.insert::<3>(0, 1 << 0);
+        assert_eq!(tracker.merkle_nodes, 3);
+        tracker.insert::<3>(0, 1 << 4);
+        assert_eq!(tracker.merkle_nodes, 5);
+        tracker.insert::<3>(0, 1 << 2);
+        assert_eq!(tracker.merkle_nodes, 6);
+    }
+
+    #[test]
+    fn test_page_mask_duplicate_leaf_does_not_change_counts() {
+        let mut tracker = MemoryPageTracker::new(8, 3);
+        tracker.insert::<3>(0, 1 << 0);
+        let leaves = tracker.leaves;
+        let nodes = tracker.merkle_nodes;
+        tracker.insert::<3>(0, 1 << 0);
+        assert_eq!(tracker.leaves, leaves);
+        assert_eq!(tracker.merkle_nodes, nodes);
+    }
+
+    #[test]
+    fn test_adjacent_pages_share_upper_ancestors() {
+        let mut tracker = MemoryPageTracker::new(8, 3);
+        tracker.insert::<3>(0, 1);
+        let first = tracker.merkle_nodes;
+        tracker.insert::<3>(1, 1);
+        assert_eq!(tracker.merkle_nodes - first, 3);
+    }
+
+    #[test]
+    fn test_range_insertion_matches_explicit_leaves() {
+        let system_config = crate::utils::test_system_config();
+        let mut range_ctx = MemoryCtx::<3>::new(&system_config, 1);
+        let mut explicit_ctx = MemoryCtx::<3>::new(&system_config, 1);
+
+        range_ctx.update_boundary_merkle_heights(2, 0, 17);
+        for ptr in [0, 16] {
+            explicit_ctx.update_boundary_merkle_heights(2, ptr, 1);
+        }
+
+        let mut range_heights = vec![0; 6];
+        let mut explicit_heights = vec![0; 6];
+        range_ctx.lazy_update_boundary_heights(&mut range_heights);
+        explicit_ctx.lazy_update_boundary_heights(&mut explicit_heights);
+        assert_eq!(range_heights, explicit_heights);
     }
 }
