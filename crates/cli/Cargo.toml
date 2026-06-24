@@ -59,6 +59,7 @@ mimalloc = ["openvm-sdk/mimalloc"]
 jemalloc = ["openvm-sdk/jemalloc"]
 jemalloc-prof = ["openvm-sdk/jemalloc-prof"]
 cuda = ["openvm-sdk/cuda"]
+halo2-gpu = ["cuda", "openvm-sdk/halo2-gpu"]
 ci = []
 
 [dev-dependencies]
