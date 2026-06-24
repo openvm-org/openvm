@@ -8,6 +8,21 @@ See [Development with CUDA](../contributor-setup.md#development-with-cuda) for m
 
 The OpenVM framework includes optional GPU acceleration via CUDA for performance-critical components. GPU implementations are available as an optional feature `cuda` and can significantly speed up proof and trace generation.
 
+### Halo2 GPU proving (`halo2-gpu`)
+
+GPU acceleration of the **halo2 prover** used by the static / EVM verifier (the final BN254 wrapping proof) is gated behind a separate `halo2-gpu` feature rather than the general `cuda` feature. This lets you run STARK proving on GPU while keeping the halo2 layer on CPU.
+
+- `halo2-gpu` enables Axiom's CUDA halo2 prover (`halo2_proofs_axiom_gpu`) in place of the CPU `halo2_proofs_axiom` prover.
+- `halo2-gpu` **implies `cuda`** — enabling it automatically turns on the STARK GPU backend, so it cannot be enabled without `cuda`.
+- It only has an effect together with `evm-prove` / `evm-verify` (the build paths that exercise the halo2 verifier).
+
+| Features | STARK proving | Halo2 (EVM verifier) proving |
+| --- | --- | --- |
+| `cuda` | GPU | CPU |
+| `halo2-gpu` | GPU | GPU |
+
+The feature is exposed on `openvm-static-verifier` (where the halo2 prover lives), `openvm-sdk`, and `cargo-openvm`.
+
 ## Project Structure
 
 ### Directory Organization
