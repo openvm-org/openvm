@@ -15,7 +15,7 @@ use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
-    LocalOpcode, DEFERRAL_AS,
+    LocalOpcode,
 };
 use openvm_stark_backend::{interaction::BusIndex, p3_field::PrimeCharacteristicRing};
 use openvm_stark_sdk::{
@@ -98,7 +98,6 @@ struct CudaHarnessBundle {
 fn test_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
     config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-    config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     config
 }
 

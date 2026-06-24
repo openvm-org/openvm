@@ -4,7 +4,7 @@ use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtensi
 use openvm_bigint_circuit::*;
 use openvm_bigint_transpiler::*;
 use openvm_circuit::{
-    arch::*,
+    arch::{instructions::DEFERRAL_AS, *},
     derive::VmConfig,
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
@@ -25,6 +25,10 @@ use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig, Va
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
+
+pub mod deferral;
+use deferral::DeferralConfig;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_algebra_circuit::AlgebraProverExt;
@@ -76,9 +80,10 @@ pub struct SdkVmConfig {
     pub pairing: Option<PairingExtension>,
     pub ecc: Option<WeierstrassExtension>,
 
-    /// NOTE: Not all fields for this extension are **not** serializable. If this config is
-    /// initialized via a deserialize, each DeferralFn must be set and added.
-    pub deferral: Option<DeferralExtension>,
+    /// NOTE: Only deferral configurations enumerated by SupportedDeferral are fully serializable
+    /// and deserializable. For custom deferral circuits stored as SupportedDeferral::Other, the
+    /// circuit's DeferralFn must be manually replaced in the extension after deserialization.
+    pub deferral: Option<DeferralConfig>,
 }
 
 impl SdkVmConfig {
@@ -158,6 +163,12 @@ impl SdkVmConfig {
         let wrapper: SdkVmConfigWrapper = toml::from_str(openvm_toml)?;
         Ok(wrapper.app_vm_config)
     }
+
+    pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
+        toml::to_string_pretty(&SdkVmConfigWrapper {
+            app_vm_config: self.clone(),
+        })
+    }
 }
 
 pub trait TranspilerConfig<F> {
@@ -197,9 +208,9 @@ impl TranspilerConfig<F> for SdkVmConfig {
         if self.ecc.is_some() {
             transpiler = transpiler.with_extension(EccTranspilerExtension);
         }
-        if let Some(ext) = &self.deferral {
+        if let Some(deferral_config) = &self.deferral {
             transpiler = transpiler.with_extension(DeferralTranspilerExtension::new(
-                ext.def_circuit_commits.clone(),
+                deferral_config.to_extension().def_circuit_commits,
             ));
         }
         transpiler
@@ -235,6 +246,19 @@ impl SdkVmConfig {
                 rv32m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
             bigint.range_tuple_checker_sizes = rv32m.range_tuple_checker_sizes;
         }
+
+        const DEFERRAL_AS_USIZE: usize = DEFERRAL_AS as usize;
+        let addr_spaces = &mut self.system.config.memory_config.addr_spaces;
+        let deferral_as_exists = addr_spaces.len() > DEFERRAL_AS_USIZE;
+        if self.deferral.is_some() {
+            assert!(
+                deferral_as_exists,
+                "deferral is enabled but address space DEFERRAL_AS ({DEFERRAL_AS_USIZE}) is missing \
+                 from memory_config.addr_spaces; the VM config must allocate it"
+            );
+        } else if deferral_as_exists {
+            addr_spaces[DEFERRAL_AS_USIZE].num_cells = 0;
+        }
     }
 
     pub fn to_inner(&self) -> SdkVmConfigInner {
@@ -250,7 +274,7 @@ impl SdkVmConfig {
         let fp2 = config.fp2.clone();
         let pairing = config.pairing.clone();
         let ecc = config.ecc.clone();
-        let deferral = config.deferral.clone();
+        let deferral = config.deferral.as_ref().map(DeferralConfig::to_extension);
 
         SdkVmConfigInner {
             system,
@@ -568,7 +592,7 @@ struct SdkVmConfigWithDefaultDeser {
     pub pairing: Option<PairingExtension>,
     pub ecc: Option<WeierstrassExtension>,
 
-    pub deferral: Option<DeferralExtension>,
+    pub deferral: Option<DeferralConfig>,
 }
 
 impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {

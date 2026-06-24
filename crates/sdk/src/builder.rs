@@ -5,7 +5,7 @@ use std::{
 
 use eyre::eyre;
 use openvm_circuit::arch::{VmBuilder, VmExecutionConfig, VmExecutor};
-use openvm_sdk_config::TranspilerConfig;
+use openvm_sdk_config::{SdkVmConfig, TranspilerConfig};
 use openvm_stark_backend::StarkEngine;
 use openvm_transpiler::transpiler::Transpiler;
 #[cfg(feature = "evm-prove")]
@@ -26,8 +26,8 @@ use {
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},
-    keygen::{AggProvingKey, AppProvingKey},
-    prover::{AggProver, DeferralPathProver, DeferralProver},
+    keygen::{AggProvingKey, AppProvingKey, SdkCachedProvingKey},
+    prover::{AggProver, DeferralAggProver, MultiDeferralCircuitProver},
     GenericSdk, SdkError, F, SC,
 };
 
@@ -44,8 +44,8 @@ enum AggSource {
 
 #[allow(clippy::large_enum_variant)]
 enum DeferralSource {
-    Prover(DeferralProver),
-    PathProver(DeferralPathProver),
+    MultiCircuitProver(MultiDeferralCircuitProver),
+    AggProver(DeferralAggProver),
 }
 
 #[cfg(feature = "root-prover")]
@@ -136,18 +136,22 @@ where
         }
     }
 
-    fn build_deferral_path_prover(
+    fn build_deferral_agg_prover(
         agg_config: &AggregationConfig,
-        deferral_prover: DeferralProver,
-    ) -> Arc<DeferralPathProver> {
+        multi_deferral_circuit_prover: MultiDeferralCircuitProver,
+    ) -> Arc<DeferralAggProver> {
         let agg_prover = AggProver::new(
-            deferral_prover.def_hook_prover.get_vk(),
+            multi_deferral_circuit_prover.def_hook_prover.get_vk(),
             agg_config.clone(),
             AggregationTreeConfig::deferral(),
-            Some(deferral_prover.def_hook_prover.get_cached_commit()),
+            Some(
+                multi_deferral_circuit_prover
+                    .def_hook_prover
+                    .get_cached_commit(),
+            ),
         );
-        Arc::new(DeferralPathProver {
-            deferral_prover: Arc::new(deferral_prover),
+        Arc::new(DeferralAggProver {
+            multi_deferral_circuit_prover: Arc::new(multi_deferral_circuit_prover),
             agg_prover: Arc::new(agg_prover),
         })
     }
@@ -355,22 +359,22 @@ where
             .map_err(|e| SdkError::Vm(e.into()))?;
         let agg_tree_config = agg_tree_config.unwrap_or_default();
 
-        let def_path_prover = match deferral_source {
-            Some(DeferralSource::Prover(deferral_prover)) => Some(
-                Self::build_deferral_path_prover(&agg_config, deferral_prover),
+        let def_agg_prover = match deferral_source {
+            Some(DeferralSource::MultiCircuitProver(multi_deferral_circuit_prover)) => Some(
+                Self::build_deferral_agg_prover(&agg_config, multi_deferral_circuit_prover),
             ),
-            Some(DeferralSource::PathProver(deferral_path_prover)) => {
-                Some(Arc::new(deferral_path_prover))
+            Some(DeferralSource::AggProver(deferral_agg_prover)) => {
+                Some(Arc::new(deferral_agg_prover))
             }
             None => None,
         };
-        let def_hook_cached_commit = def_path_prover
+        let def_hook_cached_commit = def_agg_prover
             .as_ref()
-            .map(|def_path_prover| def_path_prover.def_hook_cached_commit());
+            .map(|def_agg_prover| def_agg_prover.def_hook_cached_commit());
         #[cfg(feature = "root-prover")]
-        let def_hook_commit = def_path_prover
+        let def_hook_commit = def_agg_prover
             .as_ref()
-            .map(|def_path_prover| def_path_prover.def_hook_commit());
+            .map(|def_agg_prover| def_agg_prover.def_hook_commit());
 
         let app_vm_vk = app_pk_seed
             .as_ref()
@@ -439,7 +443,7 @@ where
             agg_prover: Self::init_once_lock(agg_prover_seed, "agg_prover"),
             #[cfg(feature = "root-prover")]
             root_prover: Self::init_once_lock(root_prover_seed, "root_prover"),
-            def_path_prover,
+            def_agg_prover,
             #[cfg(feature = "evm-prove")]
             halo2_params_reader,
             #[cfg(feature = "evm-prove")]
@@ -464,29 +468,32 @@ where
         self.build_without_transpiler()
     }
 
-    /// Enables deferrals in this SDK build. The [`DeferralProver`] must be created ahead of time
-    /// because the [`openvm_deferral_circuit::DeferralExtension`] should be created using
-    /// [`DeferralProver::make_extension`], which generates the `def_circuit_commits` needed by the
-    /// VM config.
-    pub fn deferral_prover(mut self, deferral_prover: DeferralProver) -> Self {
+    /// Enables deferrals in this SDK build. The [`MultiDeferralCircuitProver`] must be created
+    /// ahead of time because the [`openvm_sdk_config::deferral::DeferralConfig`] should be created
+    /// using [`MultiDeferralCircuitProver::make_config`], which generates the `def_circuit_commits`
+    /// needed by the VM config.
+    pub fn multi_deferral_circuit_prover(
+        mut self,
+        multi_deferral_circuit_prover: MultiDeferralCircuitProver,
+    ) -> Self {
         Self::set_once(
             &mut self.deferral_source,
             "deferral_source",
-            DeferralSource::Prover(deferral_prover),
+            DeferralSource::MultiCircuitProver(multi_deferral_circuit_prover),
         );
         self
     }
 
-    /// Enables deferrals in this SDK build using a pre-built [`DeferralPathProver`].
+    /// Enables deferrals in this SDK build using a pre-built [`DeferralAggProver`].
     ///
-    /// This is mutually exclusive with [`Self::deferral_prover`]. Use this when the deferral
-    /// aggregation path has already been constructed, for example by
-    /// [`DeferralPathProver::verify_stark`].
-    pub fn deferral_path_prover(mut self, deferral_path_prover: DeferralPathProver) -> Self {
+    /// This is mutually exclusive with [`Self::multi_deferral_circuit_prover`]. Use this when the
+    /// deferral aggregation path has already been constructed, for example by
+    /// [`DeferralAggProver::verify_stark`].
+    pub fn deferral_agg_prover(mut self, deferral_agg_prover: DeferralAggProver) -> Self {
         Self::set_once(
             &mut self.deferral_source,
             "deferral_source",
-            DeferralSource::PathProver(deferral_path_prover),
+            DeferralSource::AggProver(deferral_agg_prover),
         );
         self
     }
@@ -558,5 +565,101 @@ where
     /// Returns a builder for constructing an immutable [`GenericSdk`].
     pub fn builder() -> GenericSdkBuilder<E, VB> {
         GenericSdkBuilder::new()
+    }
+
+    /// Builds an SDK from cached proving keys without deferral prover reconstruction.
+    ///
+    /// This generic constructor requires the cached key to have no deferral proving keys. Use
+    /// `from_deferral_cached_proving_key` for [`SdkVmConfig`] caches that include
+    /// supported deferral provers.
+    pub fn from_cached_proving_key(
+        cached_pk: SdkCachedProvingKey<VB::VmConfig>,
+    ) -> Result<Self, SdkError>
+    where
+        VB: Default,
+        VB::VmConfig: TranspilerConfig<F>,
+    {
+        let SdkCachedProvingKey {
+            app_pk,
+            agg_pk,
+            deferral_pk,
+            deferral_agg_pk,
+            #[cfg(feature = "root-prover")]
+            root_pk,
+        } = cached_pk;
+
+        if deferral_pk.is_some() || deferral_agg_pk.is_some() {
+            return Err(SdkError::Other(eyre!(
+                "generic cached SDK cannot include deferral keys"
+            )));
+        }
+
+        let builder = Self::builder().app_pk(app_pk).agg_pk(agg_pk);
+        #[cfg(feature = "root-prover")]
+        let builder = if let Some(root_pk) = root_pk {
+            builder.root_pk(root_pk)
+        } else {
+            builder
+        };
+
+        builder.build()
+    }
+}
+
+impl<E, VB> GenericSdk<E, VB>
+where
+    E: StarkEngine<SC = SC>,
+    VB: VmBuilder<E, VmConfig = SdkVmConfig>,
+{
+    /// Builds an SDK from proving keys returned by [`GenericSdk::cached_proving_key`].
+    ///
+    /// If the cached key includes deferral proving keys, the SDK reads the app VM deferral config
+    /// to initialize the corresponding supported deferral provers. Custom deferral circuit provers
+    /// must be manually created and supplied through [`GenericSdkBuilder::deferral_agg_prover`].
+    pub fn from_deferral_cached_proving_key(
+        cached_pk: SdkCachedProvingKey<SdkVmConfig>,
+    ) -> Result<Self, SdkError>
+    where
+        VB: Default,
+    {
+        let SdkCachedProvingKey {
+            app_pk,
+            agg_pk,
+            deferral_pk,
+            deferral_agg_pk,
+            #[cfg(feature = "root-prover")]
+            root_pk,
+        } = cached_pk;
+
+        let deferral_config = app_pk.app_vm_pk.vm_config.deferral.clone();
+
+        let builder = Self::builder().app_pk(app_pk).agg_pk(agg_pk);
+        #[cfg(feature = "root-prover")]
+        let builder = if let Some(root_pk) = root_pk {
+            builder.root_pk(root_pk)
+        } else {
+            builder
+        };
+
+        let builder = match (deferral_pk, deferral_agg_pk) {
+            (Some(deferral_pk), Some(deferral_agg_pk)) => {
+                let deferral_config = deferral_config.ok_or_else(|| {
+                    SdkError::Other(eyre!("cached deferral keys require a deferral config"))
+                })?;
+                builder.deferral_agg_prover(DeferralAggProver::from_supported_deferral_pks(
+                    &deferral_config,
+                    deferral_pk,
+                    deferral_agg_pk,
+                )?)
+            }
+            (None, None) => builder,
+            _ => {
+                return Err(SdkError::Other(eyre!(
+                    "cached deferral keys are incomplete"
+                )));
+            }
+        };
+
+        builder.build()
     }
 }

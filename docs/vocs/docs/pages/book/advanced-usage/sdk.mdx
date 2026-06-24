@@ -72,6 +72,8 @@ A custom OpenVM configuration can also be specified in an `openvm.toml` file and
     Sdk::new(AppConfig::new(app_vm_config, app_params), agg_params)?;
 ```
 
+`SdkVmConfig::to_toml()` serializes a config back to TOML, which is useful after programmatic setup fills generated fields such as supported [deferral](/book/acceleration-using-extensions/deferral) circuit commits.
+
 <details>
 <summary>To customize your `Sdk`, you may need additional dependencies. Click here to view.</summary>
 
@@ -179,6 +181,20 @@ Note that STARK verification requires the verification baseline to confirm that 
 :::info
 Note that the aggregation proving and verifying keys will be generated (a) once and (b) only when needed. Calling one of `sdk.prove(...)`, `sdk.prover(...)`, and `sdk.agg_keygen(...)` for the first time will initialize key generation.
 :::
+
+### Caching SDK Proving Keys
+
+Generated SDK proving keys can be saved and reused with `Sdk::cached_proving_key()`. This returns an `SdkCachedProvingKey` containing the app proving key, aggregation proving keys, and any already-generated deferral proving keys. Halo2 proving keys are intentionally not included; use the Halo2-specific read/write helpers for those.
+
+```rust
+let _ = sdk.app_keygen();
+let _ = sdk.agg_pk();
+let cached_pk = sdk.cached_proving_key()?;
+
+let sdk = Sdk::from_cached_proving_key(cached_pk)?;
+```
+
+For SDKs that include supported deferral proving keys, use `Sdk::from_deferral_cached_proving_key(cached_pk)` instead. That constructor reads the serialized `DeferralConfig` from the cached app VM config and reconstructs the supported deferral provers. Custom deferral circuits still need to be supplied manually through `Sdk::builder().deferral_agg_prover(...)` or `Sdk::builder().multi_deferral_circuit_prover(...)`.
 
 ## EVM Proof
 

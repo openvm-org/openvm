@@ -18,8 +18,9 @@ use openvm_verify_stark_host::{
 
 use crate::{
     prover::{
-        deferral::compute_deferral_merkle_proofs, vm::types::VmProvingKey, AggProver, AppProver,
-        DeferralProver, InternalLayerMetadata,
+        deferral::{compute_deferral_merkle_proofs, DeferralAggProver},
+        vm::types::VmProvingKey,
+        AggProver, AppProver, InternalLayerMetadata,
     },
     DeferralInput, StdIn, SC,
 };
@@ -31,13 +32,7 @@ where
 {
     pub app_prover: AppProver<E, VB>,
     pub agg_prover: Arc<AggProver>,
-    pub def_prover: Option<Arc<DeferralPathProver>>,
-}
-
-#[derive(derive_new::new)]
-pub struct DeferralPathProver {
-    pub deferral_prover: Arc<DeferralProver>,
-    pub agg_prover: Arc<AggProver>,
+    pub def_prover: Option<Arc<DeferralAggProver>>,
 }
 
 impl<E, VB> StarkProver<E, VB>
@@ -51,7 +46,7 @@ where
         app_vm_pk: &VmProvingKey<VB::VmConfig>,
         app_exe: Arc<VmExe<Val<SC>>>,
         agg_prover: Arc<AggProver>,
-        def_prover: Option<Arc<DeferralPathProver>>,
+        def_prover: Option<Arc<DeferralAggProver>>,
     ) -> Result<Self> {
         Ok(Self {
             app_prover: AppProver::new(vm_builder, app_vm_pk, app_exe)?,
@@ -108,10 +103,12 @@ where
             self.agg_prover.prove_vm(continuation_proof)?;
 
         if !def_inputs.is_empty() {
-            let def_prover = self.def_prover.as_ref().unwrap();
-            let def_hook_proofs = def_prover.deferral_prover.prove(def_inputs)?;
+            let def_agg_prover = self.def_prover.as_ref().unwrap();
+            let def_hook_proofs = def_agg_prover
+                .multi_deferral_circuit_prover
+                .prove(def_inputs)?;
             let (def_proof, def_internal_recursive_layer) =
-                def_prover.agg_prover.prove_def(def_hook_proofs)?;
+                def_agg_prover.agg_prover.prove_def(def_hook_proofs)?;
             stark_proof = self.agg_prover.prove_mixed(
                 stark_proof,
                 def_proof,
@@ -181,16 +178,6 @@ where
     }
 
     pub fn app_vm_commit(&self) -> Digest {
-        self.agg_prover.vm_or_hook_commit()
-    }
-}
-
-impl DeferralPathProver {
-    pub fn def_hook_cached_commit(&self) -> Digest {
-        self.deferral_prover.def_hook_prover.get_cached_commit()
-    }
-
-    pub fn def_hook_commit(&self) -> Digest {
         self.agg_prover.vm_or_hook_commit()
     }
 }

@@ -8,6 +8,7 @@ use openvm_circuit::{
         hasher::poseidon2::vm_poseidon2_hasher,
         instructions::{exe::VmExe, DEFERRAL_AS},
         ContinuationVmProver, Streams, VirtualMachine, VmInstance,
+        DEFAULT_DEFERRAL_ADDR_SPACE_CELLS,
     },
     system::memory::{
         dimensions::MemoryDimensions,
@@ -313,8 +314,8 @@ fn test_deferral_e2e() -> Result<()> {
     // SECTION 1: Set up Rv32DeferralConfig, build ELF, set up deferral streams.
     // =========================================================================
     let mut system = test_system_config();
-    system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 25;
-
+    system.memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells =
+        DEFAULT_DEFERRAL_ADDR_SPACE_CELLS;
     let config = Rv32DeferralConfig {
         system: system.clone(),
         rv32i: Rv32I,

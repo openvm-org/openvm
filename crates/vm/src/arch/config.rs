@@ -6,7 +6,10 @@ use std::{
 
 use derive_new::new;
 use getset::{Setters, WithSetters};
-use openvm_instructions::riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS};
+use openvm_instructions::{
+    riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS},
+    DEFERRAL_AS,
+};
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     p3_field::Field, EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Val,
@@ -29,6 +32,8 @@ use crate::{
 // allows log_blowup = 1
 const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 3;
 pub const DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
+/// Max number of deferral address space cells
+pub const DEFAULT_DEFERRAL_ADDR_SPACE_CELLS: usize = 1 << 14;
 /// Width of Poseidon2 VM uses.
 pub const POSEIDON2_WIDTH: usize = 16;
 /// Offset for address space indices. This is used to distinguish between different memory spaces.
@@ -187,6 +192,7 @@ impl Default for MemoryConfig {
         addr_spaces[RV32_REGISTER_AS as usize].num_cells = 32 * size_of::<u32>();
         addr_spaces[RV32_MEMORY_AS as usize].num_cells = MAX_CELLS;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
+        addr_spaces[DEFERRAL_AS as usize].num_cells = DEFAULT_DEFERRAL_ADDR_SPACE_CELLS;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
     }
 }

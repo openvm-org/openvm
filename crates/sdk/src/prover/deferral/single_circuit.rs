@@ -25,18 +25,18 @@ cfg_if::cfg_if! {
     }
 }
 
-pub struct SingleDefCircuitProver {
+pub struct SingleDeferralCircuitProver {
     pub def_circuit_prover: Box<dyn DeferralCircuitProver<SC> + Send + Sync>,
     pub leaf_prover: DeferralInnerProver,
     pub internal_for_leaf_prover: DeferralInnerProver,
 }
 
-pub struct SingleDefCircuitResult {
+pub struct SingleDeferralCircuitResult {
     pub internal_for_leaf_proofs: Vec<Proof<SC>>,
     pub leaf_io_commits: Vec<DeferralIoCommit<F>>,
 }
 
-impl SingleDefCircuitProver {
+impl SingleDeferralCircuitProver {
     pub fn new<DP: DeferralCircuitProver<SC> + Send + Sync + 'static>(
         def_circuit_prover: DP,
         leaf_params: SystemParams,
@@ -69,7 +69,7 @@ impl SingleDefCircuitProver {
         }
     }
 
-    pub fn prove(&self, inputs: &DeferralInput) -> Result<SingleDefCircuitResult> {
+    pub fn prove(&self, inputs: &DeferralInput) -> Result<SingleDeferralCircuitResult> {
         // Generate deferral circuit proofs
         let def_proofs = inputs
             .byte_vec
@@ -139,7 +139,7 @@ impl SingleDefCircuitProver {
                     .collect::<Result<Vec<_>>>()
             })?;
 
-        Ok(SingleDefCircuitResult {
+        Ok(SingleDeferralCircuitResult {
             internal_for_leaf_proofs,
             leaf_io_commits,
         })

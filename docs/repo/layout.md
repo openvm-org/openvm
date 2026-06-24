@@ -86,7 +86,7 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 
 ### Examples
 
-- [`examples`](../../examples): Examples of guest programs using the OpenVM framework. All of the examples can be built and run using the CLI.
+- [`examples`](../../examples): Examples of guest programs using the OpenVM framework. Most top-level examples are CLI book examples that can be built and run directly with `cargo openvm build` and `cargo openvm run`; [`examples/verify-stark`](../../examples/verify-stark) is an end-to-end host/guest example for recursively verifying STARK proofs with the deferral framework.
 
 ### Extensions
 

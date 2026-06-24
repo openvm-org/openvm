@@ -24,8 +24,11 @@ itertools.workspace = true
 tracing.workspace = true
 eyre.workspace = true
 derive-new.workspace = true
+derivative.workspace = true
 cfg-if.workspace = true
 num-bigint.workspace = true
+hex.workspace = true
+serde.workspace = true
 
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
