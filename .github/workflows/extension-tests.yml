@@ -111,7 +111,7 @@ jobs:
           if [[ "${{ matrix.extension.aot }}" == 'true' ]]; then
             cargo nextest run --cargo-profile=fast --features aot $TEST_THREADS --no-tests=pass --success-output=immediate
           elif [[ "${{ matrix.extension.rvr }}" == 'true' && "${{ matrix.extension.unprotected }}" == 'true' ]]; then
-            cargo nextest run --cargo-profile=fast --features rvr,unprotected $TEST_THREADS --no-tests=pass --success-output=immediate
+            cargo nextest run --cargo-profile=fast --features rvr,openvm-circuit/unprotected $TEST_THREADS --no-tests=pass --success-output=immediate
           elif [[ "${{ matrix.extension.rvr }}" == 'true' ]]; then
             cargo nextest run --cargo-profile=fast --features rvr $TEST_THREADS --no-tests=pass --success-output=immediate
           else
