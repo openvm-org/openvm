@@ -127,7 +127,7 @@ impl DeferralAggProver {
         let first_pk = deferral_circuit_pks
             .next()
             .ok_or_else(|| eyre!("cached deferral proving key has no circuits"))?;
-        let mut multi_deferral_circuit_prover = MultiDeferralCircuitProver::from_single_circuit_pks(
+        let mut multi_deferral_circuit_prover = MultiDeferralCircuitProver::from_single_circuit_prover(
             supported_deferral_circuit_prover_from_pk(&first_config.def_type, first_pk)?,
             deferral_pk.def_internal_recursive_pk,
             deferral_pk.def_hook_pk,
@@ -145,25 +145,21 @@ impl DeferralAggProver {
                 );
         }
 
-        #[cfg(debug_assertions)]
-        {
-            let reconstructed_config = multi_deferral_circuit_prover.make_config(
-                deferral_config
-                    .circuits
-                    .iter()
-                    .map(|circuit| circuit.def_type.clone())
-                    .collect(),
-            );
-            for (expected, reconstructed) in deferral_config
+        // Validate that the reconstructed prover's circuit commits match the cached app VM deferral
+        // config. Done unconditionally (not just under debug_assertions): a mismatch means the
+        // config and keys disagree, which would otherwise surface as an opaque proof/verify failure.
+        let reconstructed_config = multi_deferral_circuit_prover.make_config(
+            deferral_config
                 .circuits
                 .iter()
-                .zip(&reconstructed_config.circuits)
-            {
-                assert_eq!(
-                    reconstructed, expected,
-                    "cached deferral proving key circuit config does not match app VM deferral config"
-                );
-            }
+                .map(|circuit| circuit.def_type.clone())
+                .collect(),
+        );
+        if reconstructed_config.circuits != deferral_config.circuits {
+            return Err(eyre!(
+                "cached deferral proving key does not match app VM deferral config \
+                 (def_type/commit mismatch)"
+            ));
         }
 
         Ok(DeferralAggProver::from_pk(

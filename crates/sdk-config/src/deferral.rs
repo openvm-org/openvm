@@ -72,7 +72,11 @@ impl SupportedDeferral {
             SupportedDeferral::Other(name) => {
                 let name = name.clone();
                 Arc::new(DeferralFn::new(move |_| {
-                    panic!("unsupported deferral function `{name}`")
+                    panic!(
+                        "deferral `{name}`: placeholder DeferralFn from `SupportedDeferral::Other` \
+                         was never replaced — set the real DeferralFn in the DeferralExtension \
+                         after deserialize"
+                    )
                 }))
             }
         }

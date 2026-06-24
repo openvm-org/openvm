@@ -99,14 +99,14 @@ impl MultiDeferralCircuitProver {
             def_prefix_pk.leaf,
             def_prefix_pk.internal_for_leaf,
         );
-        Self::from_single_circuit_pks(
+        Self::from_single_circuit_prover(
             single_circuit_prover,
             def_internal_recursive_pk,
             def_hook_pk,
         )
     }
 
-    pub fn from_single_circuit_pks(
+    pub fn from_single_circuit_prover(
         single_circuit_prover: SingleDeferralCircuitProver,
         def_internal_recursive_pk: Arc<MultiStarkProvingKey<SC>>,
         def_hook_pk: Arc<MultiStarkProvingKey<SC>>,

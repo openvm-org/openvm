@@ -208,9 +208,9 @@ impl TranspilerConfig<F> for SdkVmConfig {
         if self.ecc.is_some() {
             transpiler = transpiler.with_extension(EccTranspilerExtension);
         }
-        if let Some(ext) = &self.deferral {
+        if let Some(deferral_config) = &self.deferral {
             transpiler = transpiler.with_extension(DeferralTranspilerExtension::new(
-                ext.to_extension().def_circuit_commits,
+                deferral_config.to_extension().def_circuit_commits,
             ));
         }
         transpiler
@@ -251,7 +251,11 @@ impl SdkVmConfig {
         let addr_spaces = &mut self.system.config.memory_config.addr_spaces;
         let deferral_as_exists = addr_spaces.len() > DEFERRAL_AS_USIZE;
         if self.deferral.is_some() {
-            assert!(deferral_as_exists);
+            assert!(
+                deferral_as_exists,
+                "deferral is enabled but address space DEFERRAL_AS ({DEFERRAL_AS_USIZE}) is missing \
+                 from memory_config.addr_spaces; the VM config must allocate it"
+            );
         } else if deferral_as_exists {
             addr_spaces[DEFERRAL_AS_USIZE].num_cells = 0;
         }

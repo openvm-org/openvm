@@ -24,15 +24,19 @@ enum Command {
 
 #[derive(Parser)]
 struct KeygenCmd {
+    /// [input] child aggregation vk that the verify-stark circuit verifies against.
     #[arg(long, required = true)]
     child_agg_vk: PathBuf,
 
+    /// [output] cached SDK proving key.
     #[arg(long, required = true)]
     sdk_pk: PathBuf,
 
+    /// [output] generated VM config (openvm.toml), including the deferral config.
     #[arg(long, required = true)]
     openvm_toml: PathBuf,
 
+    /// [output] this SDK's aggregation vk.
     #[arg(long, required = true)]
     agg_vk: PathBuf,
 }
