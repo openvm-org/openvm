@@ -229,7 +229,6 @@ where
 pub struct ShiftRightArithmeticCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub b: [u16; NUM_LIMBS],
     pub c: [u16; NUM_LIMBS],
-    pub local_opcode: u8,
 }
 
 #[derive(Clone, Copy, derive_new::new)]
@@ -291,7 +290,6 @@ where
 
         core_record.b = rs1;
         core_record.c = rs2;
-        core_record.local_opcode = local_opcode as u8;
 
         self.adapter.write(
             state.memory,

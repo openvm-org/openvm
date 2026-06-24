@@ -17,7 +17,6 @@ using namespace riscv;
 template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftRightArithmeticCoreRecord {
     uint16_t b[NUM_LIMBS];
     uint16_t c[NUM_LIMBS];
-    uint8_t local_opcode;
 };
 
 template <typename T, size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftRightArithmeticCoreCols {
