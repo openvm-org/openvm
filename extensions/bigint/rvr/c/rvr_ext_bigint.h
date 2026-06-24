@@ -16,8 +16,8 @@ extern void rvr_ext_int256_sll(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr
 extern void rvr_ext_int256_srl(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
 extern void rvr_ext_int256_sra(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
 extern void rvr_ext_int256_slt(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern void rvr_ext_int256_sltu(RvState* state, uint32_t rd_ptr, uint32_t rs1_ptr,
-                                uint32_t rs2_ptr);
+extern void rvr_ext_int256_sltu(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr,
+                                uint64_t rs2_ptr);
 extern void rvr_ext_int256_mul(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
 
 /* 256-bit branch predicates. Each returns 1 if the branch should be taken. */
