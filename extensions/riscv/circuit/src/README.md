@@ -294,9 +294,9 @@ This circuit proves that:
 - If `opcode` is `sltu` and `compose(b) < compose(c)` (unsigned comparison), then `a` is 1.
 - Otherwise, `a` is 0.
 
-#### 10. [Load/store](./loadstore/mod.rs) and [Load sign extend](./load_sign_extend/mod.rs)
+#### 10. [Load/store](./loadstore/mod.rs)
 
-The RV64 load/store circuit is split by access width: [byte](./loadstore/byte/core.rs), [halfword](./loadstore/halfword/mod.rs), [word](./loadstore/word/mod.rs), and [doubleword](./loadstore/doubleword/core.rs). Signed loads stay in separate sign-extension chips split by width: [byte](./load_sign_extend/byte/core.rs), [halfword](./load_sign_extend/halfword/mod.rs), and [word](./load_sign_extend/word/mod.rs).
+The RV64 load/store circuit is split by access width: [byte](./loadstore/byte/core.rs), [halfword](./loadstore/halfword/mod.rs), [word](./loadstore/word/mod.rs), and [doubleword](./loadstore/doubleword/core.rs).
 
 Given:
 
@@ -304,9 +304,20 @@ Given:
 - `prev_data` is the previous write target block, either register `rd` for loads or `mem_as[aligned(val(rs1) + imm)]` for stores
 - `opcode` indicates the operation to be performed
 
-These circuits prove that the block written by the adapter matches the width-specific load extension or store merge for the selected opcode and alignment.
+These circuits prove that the block written by the adapter matches the width-specific unsigned load extension or store merge for the selected opcode and alignment.
 
-#### 11. [Multiplication](./mul/core.rs)
+#### 11. [Load sign extend](./load_sign_extend/mod.rs)
+
+The RV64 signed-load circuit is split by access width: [byte](./load_sign_extend/byte/core.rs), [halfword](./load_sign_extend/halfword/mod.rs), and [word](./load_sign_extend/word/mod.rs).
+
+Given:
+
+- `read_data` is the data read from `mem_as[aligned(val(rs1) + imm)]`
+- `opcode` indicates the operation to be performed
+
+These circuits prove that the block written by the adapter matches the width-specific signed load extension for the selected opcode and alignment.
+
+#### 12. [Multiplication](./mul/core.rs)
 
 Given:
 
@@ -319,7 +330,7 @@ This circuit proves that:
 - `compose(a) == (compose(b) * compose(c)) % 2^64`
 - Each limb of `a` is in the range `[0, 2^RV64_BYTE_BITS)`
 
-#### 12. [MULH](./mulh/core.rs)
+#### 13. [MULH](./mulh/core.rs)
 
 Given:
 
