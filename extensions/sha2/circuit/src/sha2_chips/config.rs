@@ -80,11 +80,6 @@ impl Sha2Config for Sha512Config {
         for (w, chunk) in state_u64s.iter().zip(state.chunks_exact_mut(8)) {
             chunk.copy_from_slice(&w.to_ne_bytes());
         }
-        compress512(&mut state_u64s, &[*input_array]);
-
-        for (w, chunk) in state_u64s.iter().zip(state.chunks_exact_mut(8)) {
-            chunk.copy_from_slice(&w.to_ne_bytes());
-        }
     }
 
     // returns the digest as big-endian words
