@@ -17,7 +17,7 @@ use super::{
         write_rv64_registers,
     },
     compile::RvrCompiled,
-    io::OpenVmIoState,
+    io::{host_hint_stream_set, OpenVmIoState},
     metered::{
         metered_periodic_check, MeteredTracerData, RvrMeteredResult, SegmentationState,
         NO_LAST_PAGE,
@@ -31,6 +31,8 @@ use super::{
 use crate::{arch::VmState, system::memory::online::GuestMemory};
 
 type RegisterIoCtxFn = unsafe extern "C" fn(*mut c_void);
+type RegisterHintStreamSetFn =
+    unsafe extern "C" fn(unsafe extern "C" fn(*mut c_void, *const u8, u32));
 type ExecuteFn = unsafe extern "C" fn(*mut c_void);
 
 /// Error during execution.
@@ -88,6 +90,16 @@ unsafe fn register_openvm_io_ctx<F: PrimeField32>(
         *sym
     };
     unsafe { register_fn(io_state as *mut OpenVmIoState<'_, F> as *mut c_void) };
+
+    let register_hint_fn: RegisterHintStreamSetFn = unsafe {
+        let sym = compiled
+            .lib
+            .get::<RegisterHintStreamSetFn>(b"register_hint_stream_set_fn")
+            .map_err(|e| ExecuteError::SymbolLookup(e.to_string()))?;
+        *sym
+    };
+    unsafe { register_hint_fn(host_hint_stream_set::<F>) };
+
     Ok(())
 }
 
