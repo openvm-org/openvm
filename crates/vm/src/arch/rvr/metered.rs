@@ -25,8 +25,8 @@ use crate::{
     arch::{
         execution_mode::{
             metered::{
-                ctx::{MeteredCtxConfig, MeteredCtxParts, DEFAULT_PAGE_BITS},
-                memory_ctx::{MemoryCtx, PageAccess},
+                ctx::{MeteredCtxConfig, MeteredCtxParts},
+                memory_ctx::{MemoryCtx, PageAccess, PAGE_BITS},
                 segment_ctx::{Segment, SegmentationCtx},
             },
             MeteredCtx,
@@ -199,7 +199,7 @@ impl SegmentationState {
         if len == 0 {
             return;
         }
-        let page_shift = address_height as usize - DEFAULT_PAGE_BITS;
+        let page_shift = address_height as usize - PAGE_BITS;
         let page_offset = ((addr_space as usize - 1) << page_shift) as u32;
         memory_ctx.apply_page_accesses_with_offset(page_offset, &buffer[..len as usize]);
     }
@@ -231,12 +231,6 @@ impl SegmentationState {
         );
     }
 
-    /// Apply boundary and merkle height updates from accumulated page accesses.
-    fn apply_height_updates(&mut self) {
-        self.memory_ctx
-            .lazy_update_boundary_heights(&mut self.trace_heights);
-    }
-
     fn initialize_segment_memory(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
         // RVR can only suspend at block boundaries, so segmentation uses the
         // last safe checkpoint. The pages accumulated since that checkpoint
@@ -245,10 +239,12 @@ impl SegmentationState {
         self.memory_ctx
             .reset_segment_without_replay(&mut self.trace_heights);
         self.apply_page_buffers(mem_len, pv_len, deferral_len);
-        self.apply_height_updates();
+        self.memory_ctx
+            .apply_height_updates(&mut self.trace_heights);
 
         self.memory_ctx.add_register_merkle_heights();
-        self.apply_height_updates();
+        self.memory_ctx
+            .apply_height_updates(&mut self.trace_heights);
     }
 
     /// Called on each periodic check (approximately every `segment_check_insns` instructions).
@@ -268,7 +264,8 @@ impl SegmentationState {
         self.segmentation_ctx.instrets_until_check = seg_check_insns;
 
         self.apply_page_buffers(mem_len, pv_len, deferral_len);
-        self.apply_height_updates();
+        self.memory_ctx
+            .apply_height_updates(&mut self.trace_heights);
 
         let did_segment = self.segmentation_ctx.check_and_segment(
             instret,
@@ -308,7 +305,8 @@ impl SegmentationState {
         remaining_counter: u32,
     ) {
         self.apply_page_buffers(mem_len, pv_len, deferral_len);
-        self.apply_height_updates();
+        self.memory_ctx
+            .apply_height_updates(&mut self.trace_heights);
 
         self.segmentation_ctx.instrets_until_check = remaining_counter as u64;
         self.segmentation_ctx

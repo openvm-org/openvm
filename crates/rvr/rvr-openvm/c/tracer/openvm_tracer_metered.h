@@ -369,14 +369,14 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u64_range(
 
 static __attribute__((always_inline)) inline void trace_mem_access(
     RvState* restrict state, uint32_t addr, uint32_t addr_space) {
-  record_page(state->tracer, addr_space, addr, 8u);
+  record_page(state->tracer, addr_space, addr, WORD_SIZE);
 }
 
 static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
     RvState* restrict state, uint32_t base_addr, uint32_t num_dwords,
     uint32_t addr_space) {
   assume(num_dwords > 0);
-  uint32_t last_addr = base_addr + num_dwords * 8u - 1u;
+  uint32_t last_addr = base_addr + num_dwords * WORD_SIZE - 1u;
   record_page_range(state->tracer, addr_space, base_addr, last_addr);
 }
 

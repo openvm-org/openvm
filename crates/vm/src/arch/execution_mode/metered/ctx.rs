@@ -4,7 +4,7 @@ use openvm_stark_backend::memory_metering::ProvingMemoryConfig;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    memory_ctx::{MemoryCtx, PAGE_BITS},
+    memory_ctx::MemoryCtx,
     segment_ctx::{Segment, SegmentationConfig, SegmentationCtx, SegmentationLimits},
 };
 use crate::{
@@ -14,8 +14,6 @@ use crate::{
     },
     system::memory::online::GuestMemory,
 };
-
-pub const DEFAULT_PAGE_BITS: usize = PAGE_BITS;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MeteredCtxConfig {
@@ -105,8 +103,7 @@ impl MeteredCtx {
 
         // Add merkle height contributions for all registers
         ctx.memory_ctx.add_register_merkle_heights();
-        ctx.memory_ctx
-            .lazy_update_boundary_heights(&mut ctx.trace_heights);
+        ctx.memory_ctx.apply_height_updates(&mut ctx.trace_heights);
 
         ctx
     }
@@ -140,7 +137,7 @@ impl MeteredCtx {
         let mut memory_ctx = MemoryCtx::new(system_config, segmentation_ctx.segment_check_insns());
         let mut trace_heights = config.initial_trace_heights.clone();
         memory_ctx.add_register_merkle_heights();
-        memory_ctx.lazy_update_boundary_heights(&mut trace_heights);
+        memory_ctx.apply_height_updates(&mut trace_heights);
         Self {
             trace_heights,
             config,
@@ -202,7 +199,7 @@ impl MeteredCtx {
         self.segmentation_ctx.instret += segment_check_insns;
 
         self.memory_ctx
-            .lazy_update_boundary_heights(&mut self.trace_heights);
+            .apply_height_updates(&mut self.trace_heights);
         let did_segment = self.segmentation_ctx.check_and_segment(
             self.segmentation_ctx.instret,
             &mut self.trace_heights,
@@ -279,6 +276,10 @@ impl ExecutionCtxTrait for MeteredCtx {
         // If `segment_suspend` is set, suspend when a segment is determined (but the VM state might
         // be after the segment boundary because the segment happens in the previous checkpoint).
         // Otherwise, execute until termination.
+        if exec_state.ctx.segmentation_ctx.instrets_until_check > 0 {
+            exec_state.ctx.segmentation_ctx.instrets_until_check -= 1;
+            return false;
+        }
         if exec_state.ctx.check_and_segment() && exec_state.ctx.config.suspend_on_segment {
             true
         } else {
@@ -292,7 +293,7 @@ impl ExecutionCtxTrait for MeteredCtx {
         exec_state
             .ctx
             .memory_ctx
-            .lazy_update_boundary_heights(&mut exec_state.ctx.trace_heights);
+            .apply_height_updates(&mut exec_state.ctx.trace_heights);
         exec_state
             .ctx
             .segmentation_ctx

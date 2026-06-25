@@ -397,8 +397,31 @@ impl MemoryCtx {
     #[inline(always)]
     fn record_page_access_no_len_update(&mut self, page_id: u32, leaf_mask: u64) {
         debug_assert!(leaf_mask != 0);
-        self.page_indices_since_checkpoint
-            .push(PageAccess { page_id, leaf_mask });
+        let len = self.page_indices_since_checkpoint.len();
+        if len != 0 {
+            // SAFETY: len is non-zero, so len - 1 is in bounds.
+            let prev = unsafe {
+                self.page_indices_since_checkpoint
+                    .get_unchecked_mut(len - 1)
+            };
+            if prev.page_id == page_id {
+                prev.leaf_mask |= leaf_mask;
+                return;
+            }
+        }
+
+        if len == self.page_indices_since_checkpoint.capacity() {
+            self.page_indices_since_checkpoint.reserve(1);
+        }
+
+        // SAFETY: capacity was checked above. PageAccess is Copy and has no drop glue.
+        unsafe {
+            self.page_indices_since_checkpoint
+                .as_mut_ptr()
+                .add(len)
+                .write(PageAccess { page_id, leaf_mask });
+            self.page_indices_since_checkpoint.set_len(len + 1);
+        }
     }
 
     #[cfg(feature = "rvr")]
@@ -469,7 +492,7 @@ impl MemoryCtx {
 
         // Add merkle height contributions for all registers
         self.add_register_merkle_heights();
-        self.lazy_update_boundary_heights(trace_heights);
+        self.apply_height_updates(trace_heights);
     }
 
     /// Updates the checkpoint with current safe state
@@ -511,7 +534,7 @@ impl MemoryCtx {
     /// The Poseidon2 count is still an upper bound because tracegen may
     /// deduplicate equal hash inputs by value.
     #[inline(always)]
-    fn apply_height_updates(&mut self, trace_heights: &mut [u32]) {
+    pub(crate) fn apply_height_updates(&mut self, trace_heights: &mut [u32]) {
         let mut leaves = self.pending_leaves;
         let mut merkle_nodes = self.pending_merkle_nodes;
         self.pending_leaves = 0;
@@ -536,12 +559,6 @@ impl MemoryCtx {
             // Merkle AIR: 2 rows per internal node (init + final tree)
             *trace_heights.get_unchecked_mut(MERKLE_AIR_ID) += merkle_nodes * 2;
         }
-    }
-
-    /// Resolve all lazy updates of each memory access for poseidon2/merkle chips.
-    #[inline(always)]
-    pub(crate) fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {
-        self.apply_height_updates(trace_heights);
     }
 }
 
@@ -738,8 +755,8 @@ mod tests {
 
         let mut range_heights = vec![0; 6];
         let mut explicit_heights = vec![0; 6];
-        range_ctx.lazy_update_boundary_heights(&mut range_heights);
-        explicit_ctx.lazy_update_boundary_heights(&mut explicit_heights);
+        range_ctx.apply_height_updates(&mut range_heights);
+        explicit_ctx.apply_height_updates(&mut explicit_heights);
         assert_eq!(range_heights, explicit_heights);
     }
 }

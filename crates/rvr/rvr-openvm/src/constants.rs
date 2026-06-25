@@ -7,8 +7,8 @@
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
 use rvr_openvm_ext_ffi_common::{
-    AS_MEMORY, AS_PUBLIC_VALUES, AS_REGISTER, DEFAULT_PAGE_BITS, DEFAULT_SEGMENT_CHECK_INSNS,
-    DEFERRAL_AS, DEFERRAL_DIGEST_SIZE, WORD_SIZE,
+    AS_MEMORY, AS_PUBLIC_VALUES, AS_REGISTER, DEFAULT_SEGMENT_CHECK_INSNS, DEFERRAL_AS,
+    DEFERRAL_DIGEST_SIZE, PAGE_BITS, WORD_SIZE,
 };
 
 const BYTE_SPACE_PTRS_PER_LEAF: usize = core::mem::size_of::<u16>() * DEFERRAL_DIGEST_SIZE;
@@ -21,7 +21,7 @@ const DEFERRAL_PTRS_PER_LEAF: usize = DEFERRAL_DIGEST_SIZE;
 /// covers `BYTE_SPACE_PTRS_PER_LEAF * 2^PAGE_BITS` bytes. The `+1` covers worst-case
 /// misalignment of the range across page boundaries.
 pub const MAX_MEM_PAGES_PER_INSN: usize = {
-    let page_bytes = BYTE_SPACE_PTRS_PER_LEAF * (1 << DEFAULT_PAGE_BITS);
+    let page_bytes = BYTE_SPACE_PTRS_PER_LEAF * (1 << PAGE_BITS);
     let max_bytes = MAX_HINT_BUFFER_DWORDS * WORD_SIZE;
     max_bytes.div_ceil(page_bytes) + 1
 };
@@ -70,7 +70,7 @@ static constexpr uint64_t RV_TEXT_END = 0x{text_end:08x}ull;
 static constexpr uint32_t RV_DISPATCH_TABLE_SIZE = {dispatch_table_size}u;
 static constexpr uint32_t TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS = {byte_space_ptrs_per_leaf_bits};
 static constexpr uint32_t TRACER_DEFERRAL_PTRS_PER_LEAF_BITS = {deferral_ptrs_per_leaf_bits};
-static constexpr uint32_t TRACER_PAGE_BITS = {DEFAULT_PAGE_BITS};
+static constexpr uint32_t TRACER_PAGE_BITS = {PAGE_BITS};
 static constexpr uint32_t TRACER_MEM_PAGE_BUF_CAP = {MEM_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_PV_PAGE_BUF_CAP = {PV_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_DEFERRAL_PAGE_BUF_CAP = {DEFERRAL_PAGE_BUF_CAP};
