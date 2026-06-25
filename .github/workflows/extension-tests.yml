@@ -50,16 +50,25 @@ jobs:
   extension-tests:
     needs: changes
     if: needs.changes.outputs.extensions != '[]'
-    name: ${{ format('{0} ({1})', matrix.extension == 'riscv' && 'RISC-V' || matrix.extension, matrix.mode == 'aot' && 'AOT' || matrix.mode == 'rvr' && 'RVR' || matrix.mode) }}
+    name: ${{ format('{0} ({1})', matrix.extension == 'riscv' && 'RISC-V' || matrix.extension, matrix.mode == 'aot' && 'AOT' || matrix.mode == 'rvr' && 'RVR' || matrix.mode == 'rvr-unprotected' && 'RVR unprotected' || matrix.mode) }}
     strategy:
       matrix:
         extension: ${{ fromJSON(needs.changes.outputs.extensions) }}
-        mode: [default, rvr]
+        mode: [default, rvr, rvr-unprotected]
         exclude:
           - { extension: shared, mode: default }
           - { extension: cuda, mode: default }
           - { extension: shared, mode: rvr }
           - { extension: cuda, mode: rvr }
+          - { extension: shared, mode: rvr-unprotected }
+          - { extension: cuda, mode: rvr-unprotected }
+          - { extension: keccak256, mode: rvr-unprotected }
+          - { extension: sha2, mode: rvr-unprotected }
+          - { extension: bigint, mode: rvr-unprotected }
+          - { extension: algebra, mode: rvr-unprotected }
+          - { extension: ecc, mode: rvr-unprotected }
+          - { extension: pairing, mode: rvr-unprotected }
+          - { extension: deferral, mode: rvr-unprotected }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
     uses: ./.github/workflows/extension-tests.group.yml
