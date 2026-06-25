@@ -4,7 +4,7 @@ use openvm_instructions::{
 };
 
 use crate::{
-    arch::{SystemConfig, BOUNDARY_AIR_ID, MERKLE_AIR_ID, U16_CELL_SIZE},
+    arch::{SystemConfig, ADDR_SPACE_OFFSET, BOUNDARY_AIR_ID, MERKLE_AIR_ID, U16_CELL_SIZE},
     system::memory::{dimensions::MemoryDimensions, DIGEST_WIDTH},
 };
 
@@ -15,6 +15,8 @@ pub const PAGE_BITS: usize = u64::BITS.ilog2() as usize;
 pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
 const INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN: usize = 16;
 const SPARSE_MERKLE_DELTA_LEAF_THRESHOLD: u32 = 8;
+const BYTE_PTRS_PER_LEAF_BITS: u32 = (U16_CELL_SIZE * DIGEST_WIDTH).ilog2();
+const DEFERRAL_PTRS_PER_LEAF_BITS: u32 = DIGEST_WIDTH.ilog2();
 
 #[derive(Clone, Debug)]
 pub struct BitSet {
@@ -339,27 +341,43 @@ impl MemoryCtx {
         size: u32,
     ) {
         let end_ptr = ptr + size - 1;
-        let ptrs_per_leaf = if address_space == DEFERRAL_AS {
-            DIGEST_WIDTH as u32
+        let leaf_bits = if address_space == DEFERRAL_AS {
+            DEFERRAL_PTRS_PER_LEAF_BITS
         } else {
-            (U16_CELL_SIZE * DIGEST_WIDTH) as u32
+            BYTE_PTRS_PER_LEAF_BITS
         };
-        let leaf_bits = ptrs_per_leaf.ilog2();
         let leaf_label = ptr >> leaf_bits;
         let end_leaf_label = end_ptr >> leaf_bits;
         let num_leaves = end_leaf_label - leaf_label + 1;
-        let start_leaf_id = self
-            .memory_dimensions
-            .label_to_index((address_space, leaf_label)) as u32;
+        debug_assert!(
+            leaf_label < (1 << self.memory_dimensions.address_height),
+            "leaf_label={leaf_label} exceeds address_height={}",
+            self.memory_dimensions.address_height
+        );
+        let address_space_offset = (((address_space - ADDR_SPACE_OFFSET) as u64)
+            << self.memory_dimensions.address_height) as u32;
+        let start_leaf_id = address_space_offset + leaf_label;
         let end_leaf_id = start_leaf_id + num_leaves;
         let start_page_id = start_leaf_id >> PAGE_BITS;
+
+        if num_leaves == 1 {
+            self.record_page_access_no_len_update(
+                start_page_id,
+                1u64 << (start_leaf_id & ((1 << PAGE_BITS) - 1)),
+            );
+            self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
+            return;
+        }
+
         let end_page_id = ((end_leaf_id - 1) >> PAGE_BITS) + 1;
         let num_pages = (end_page_id - start_page_id) as usize;
         assert!(
             num_pages <= MAX_MEM_PAGE_OPS_PER_INSN,
             "more than {MAX_MEM_PAGE_OPS_PER_INSN} memory pages accessed in a single instruction"
         );
-        self.page_indices_since_checkpoint.reserve(num_pages);
+        if num_pages > 1 {
+            self.page_indices_since_checkpoint.reserve(num_pages);
+        }
 
         for page_id in start_page_id..end_page_id {
             let page_start = page_id << PAGE_BITS;
@@ -367,16 +385,25 @@ impl MemoryCtx {
             let start = start_leaf_id.max(page_start) - page_start;
             let end = end_leaf_id.min(page_end) - page_start;
             let leaf_mask = leaf_mask_range(start, end);
-            self.record_page_access(page_id, leaf_mask);
+            self.record_page_access_no_len_update(page_id, leaf_mask);
         }
+        self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
     }
 
     #[inline(always)]
+    #[allow(dead_code)]
     pub(crate) fn record_page_access(&mut self, page_id: u32, leaf_mask: u64) {
         debug_assert!(leaf_mask != 0);
         self.page_indices_since_checkpoint
             .push(PageAccess { page_id, leaf_mask });
         self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
+    }
+
+    #[inline(always)]
+    fn record_page_access_no_len_update(&mut self, page_id: u32, leaf_mask: u64) {
+        debug_assert!(leaf_mask != 0);
+        self.page_indices_since_checkpoint
+            .push(PageAccess { page_id, leaf_mask });
     }
 
     #[cfg(feature = "rvr")]
