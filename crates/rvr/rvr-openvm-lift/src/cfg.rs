@@ -767,6 +767,9 @@ fn validate_static_control_targets(
     instructions: &[LiftedInstr],
     pc_to_idx: &HashMap<u64, usize>,
 ) -> Result<(), CfgError> {
+    // TODO: Make this looser if RVR should support programs with unused invalid jump
+    // targets, e.g. a branch to a missing instruction that is never taken at runtime.
+    // Generated C must safely trap if such a jump is ever taken.
     for li in instructions {
         let pc = li.pc();
         let fallthrough = pc + INSTR_SIZE as u64;
