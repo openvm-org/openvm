@@ -17,15 +17,15 @@ use rvr_openvm_ext_ffi_common::{
 };
 
 /// BN254 base field element size in bytes.
-const BN254_FQ_BYTES: u32 = FIELD_256_BYTES as u32;
+const BN254_FQ_BYTES: u64 = FIELD_256_BYTES as u64;
 /// BLS12-381 base field element size in bytes.
-const BLS12_381_FQ_BYTES: u32 = BLS12_381_ELEM_BYTES as u32;
+const BLS12_381_FQ_BYTES: u64 = BLS12_381_ELEM_BYTES as u64;
 /// G1 affine point: two field coordinates (x, y).
-const G1_AFFINE_COORDS: u32 = 2;
+const G1_AFFINE_COORDS: u64 = 2;
 /// G2 affine point: two Fp2 coordinates, each containing two Fp elements.
-const G2_AFFINE_COORDS: u32 = 4;
+const G2_AFFINE_COORDS: u64 = 4;
 /// Offset of `len` in a guest slice header `(data_ptr, len)`.
-const SLICE_LEN_OFFSET: u32 = WORD_SIZE as u32;
+const SLICE_LEN_OFFSET: u64 = WORD_SIZE as u64;
 
 unsafe fn set_hint_stream(bytes: &[u8]) {
     let len: u32 = bytes.len().try_into().unwrap();
@@ -68,8 +68,8 @@ unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u64) -> Option<bls12_381::F
     Option::from(bls12_381::Fq::from_repr(bytes.into()))
 }
 
-fn point_base(ptr: u64, idx: u64, words_per_point: u32) -> Option<u64> {
-    let offset = idx.checked_mul(words_per_point as u64)?;
+fn point_base(ptr: u64, idx: u64, words_per_point: u64) -> Option<u64> {
+    let offset = idx.checked_mul(words_per_point)?;
     ptr.checked_add(offset)
 }
 
@@ -77,9 +77,9 @@ fn point_base(ptr: u64, idx: u64, words_per_point: u32) -> Option<u64> {
 
 unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<Vec<u8>> {
     let p_ptr = rd_mem_u64_wrapper(state, rs1_val);
-    let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET as u64);
+    let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
     let q_ptr = rd_mem_u64_wrapper(state, rs2_val);
-    let q_len = rd_mem_u64_wrapper(state, rs2_val + SLICE_LEN_OFFSET as u64);
+    let q_len = rd_mem_u64_wrapper(state, rs2_val + SLICE_LEN_OFFSET);
 
     if p_len != q_len {
         return None;
@@ -90,7 +90,7 @@ unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<V
             let base = point_base(p_ptr, i, G1_AFFINE_COORDS * BN254_FQ_BYTES)?;
             Some(AffinePoint::new(
                 read_bn254_fq(state, base)?,
-                read_bn254_fq(state, base + BN254_FQ_BYTES as u64)?,
+                read_bn254_fq(state, base + BN254_FQ_BYTES)?,
             ))
         })
         .collect::<Option<_>>()?;
@@ -101,11 +101,11 @@ unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<V
             // BN254 Fq2 exposes a constructor helper.
             let x = bn256::Fq2::new(
                 read_bn254_fq(state, base)?,
-                read_bn254_fq(state, base + BN254_FQ_BYTES as u64)?,
+                read_bn254_fq(state, base + BN254_FQ_BYTES)?,
             );
             let y = bn256::Fq2::new(
-                read_bn254_fq(state, base + 2 * BN254_FQ_BYTES as u64)?,
-                read_bn254_fq(state, base + 3 * BN254_FQ_BYTES as u64)?,
+                read_bn254_fq(state, base + 2 * BN254_FQ_BYTES)?,
+                read_bn254_fq(state, base + 3 * BN254_FQ_BYTES)?,
             );
             Some(AffinePoint::new(x, y))
         })
@@ -129,9 +129,9 @@ unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<V
 
 unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<Vec<u8>> {
     let p_ptr = rd_mem_u64_wrapper(state, rs1_val);
-    let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET as u64);
+    let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
     let q_ptr = rd_mem_u64_wrapper(state, rs2_val);
-    let q_len = rd_mem_u64_wrapper(state, rs2_val + SLICE_LEN_OFFSET as u64);
+    let q_len = rd_mem_u64_wrapper(state, rs2_val + SLICE_LEN_OFFSET);
 
     if p_len != q_len {
         return None;
@@ -142,7 +142,7 @@ unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Opti
             let base = point_base(p_ptr, i, G1_AFFINE_COORDS * BLS12_381_FQ_BYTES)?;
             Some(AffinePoint::new(
                 read_bls12_381_fq(state, base)?,
-                read_bls12_381_fq(state, base + BLS12_381_FQ_BYTES as u64)?,
+                read_bls12_381_fq(state, base + BLS12_381_FQ_BYTES)?,
             ))
         })
         .collect::<Option<_>>()?;
@@ -153,11 +153,11 @@ unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Opti
             // BLS12-381 Fq2 uses struct fields instead of an `Fq2::new` helper.
             let x = bls12_381::Fq2 {
                 c0: read_bls12_381_fq(state, base)?,
-                c1: read_bls12_381_fq(state, base + BLS12_381_FQ_BYTES as u64)?,
+                c1: read_bls12_381_fq(state, base + BLS12_381_FQ_BYTES)?,
             };
             let y = bls12_381::Fq2 {
-                c0: read_bls12_381_fq(state, base + 2 * BLS12_381_FQ_BYTES as u64)?,
-                c1: read_bls12_381_fq(state, base + 3 * BLS12_381_FQ_BYTES as u64)?,
+                c0: read_bls12_381_fq(state, base + 2 * BLS12_381_FQ_BYTES)?,
+                c1: read_bls12_381_fq(state, base + 3 * BLS12_381_FQ_BYTES)?,
             };
             Some(AffinePoint::new(x, y))
         })

@@ -106,8 +106,8 @@ void rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
    * row is an independent batched write (the trace API is per-row). */
   uint32_t num_data_rows = (uint32_t)(output_len / DEFERRAL_DIGEST_SIZE);
   uint64_t row_words[DIGEST_MEMORY_OPS];
-  for (uint32_t row_idx = 0; row_idx < num_data_rows; row_idx++) {
-    uint64_t row_byte_base = (uint64_t)row_idx * DEFERRAL_DIGEST_SIZE;
+  for (uint64_t row_idx = 0; row_idx < num_data_rows; row_idx++) {
+    uint64_t row_byte_base = row_idx * DEFERRAL_DIGEST_SIZE;
     memcpy(row_words, output_raw + row_byte_base, DEFERRAL_DIGEST_SIZE);
     wr_mem_u64_range_traced(state, output_ptr + row_byte_base, row_words,
                             DIGEST_MEMORY_OPS);
