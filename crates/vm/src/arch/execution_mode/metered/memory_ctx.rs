@@ -13,6 +13,9 @@ pub const PAGE_BITS: usize = u64::BITS.ilog2() as usize;
 
 /// Upper bound on number of memory pages accessed per instruction. Used for buffer allocation.
 pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
+// Initial allocation only. Correctness is preserved by `Vec::reserve` for large
+// range accesses; this avoids preallocating the worst-case per-instruction page
+// count for the common scalar-access path.
 const INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN: usize = 16;
 const SPARSE_MERKLE_DELTA_LEAF_THRESHOLD: u32 = 8;
 const BYTE_PTRS_PER_LEAF_BITS: u32 = (U16_CELL_SIZE * DIGEST_WIDTH).ilog2();
@@ -302,12 +305,13 @@ impl MemoryCtx {
         let memory_dimensions = config.memory_config.memory_dimensions();
         let merkle_height = memory_dimensions.overall_height();
 
-        let num_pages = 1 << (merkle_height.saturating_sub(PAGE_BITS));
+        let upper_height = merkle_height.saturating_sub(PAGE_BITS);
+        let num_pages = 1 << upper_height;
         let checkpoint_capacity = Self::initial_checkpoint_capacity(segment_check_insns);
 
         Self {
             memory_dimensions,
-            page_tracker: MemoryPageTracker::new(num_pages, merkle_height - PAGE_BITS),
+            page_tracker: MemoryPageTracker::new(num_pages, upper_height),
             page_indices_since_checkpoint: Vec::with_capacity(checkpoint_capacity),
             page_indices_since_checkpoint_len: 0,
             page_indices_applied_len: 0,
@@ -387,15 +391,6 @@ impl MemoryCtx {
             let leaf_mask = leaf_mask_range(start, end);
             self.record_page_access_no_len_update(page_id, leaf_mask);
         }
-        self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
-    }
-
-    #[inline(always)]
-    #[allow(dead_code)]
-    pub(crate) fn record_page_access(&mut self, page_id: u32, leaf_mask: u64) {
-        debug_assert!(leaf_mask != 0);
-        self.page_indices_since_checkpoint
-            .push(PageAccess { page_id, leaf_mask });
         self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
     }
 
@@ -487,9 +482,34 @@ impl MemoryCtx {
         self.pending_merkle_nodes = 0;
     }
 
-    /// Applies exact boundary and Merkle height deltas for the page/leaf masks
-    /// recorded since the last checkpoint. Poseidon2 remains a safe upper bound:
-    /// tracegen may deduplicate equal hash inputs by value.
+    /// Applies boundary and Merkle height deltas for the page/leaf masks recorded
+    /// since the last checkpoint.
+    ///
+    /// Memory leaves form a sparse Merkle tree. Each page contains the 64 leaves
+    /// represented by one `u64` leaf mask:
+    ///
+    /// ```text
+    ///        [root]              height h
+    ///        /    \
+    ///      ...    ...
+    ///      /        \
+    ///   [page]    [page]         (h - PAGE_BITS) nodes above each page
+    ///   / .. \
+    ///  L  ..  L                  PAGE_BITS levels inside a 64-leaf page
+    /// ```
+    ///
+    /// `MemoryPageTracker` counts each newly touched leaf once, each newly
+    /// required internal node inside that page once, and each shared ancestor
+    /// above the page once across all pages in the segment. Each segment has an
+    /// initial and final memory tree, so boundary and Merkle row counts are
+    /// doubled.
+    ///
+    /// - BOUNDARY_AIR: `2 * new_leaves` rows
+    /// - MERKLE_AIR:   `2 * new_merkle_nodes` rows
+    /// - Poseidon2:    `2 * new_leaves + 2 * new_merkle_nodes` hashes
+    ///
+    /// The Poseidon2 count is still an upper bound because tracegen may
+    /// deduplicate equal hash inputs by value.
     #[inline(always)]
     fn apply_height_updates(&mut self, trace_heights: &mut [u32]) {
         let mut leaves = self.pending_leaves;

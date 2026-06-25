@@ -353,9 +353,9 @@ mod tests {
         segmentation_ctx.instrets_until_check = 1;
 
         let mut memory_ctx = MemoryCtx::new(&system_config, 1);
-        memory_ctx.record_page_access(7, 1);
-        memory_ctx.record_page_access(8, 1);
-        memory_ctx.record_page_access(9, 1);
+        memory_ctx.update_boundary_merkle_heights(2, 0, 1);
+        memory_ctx.update_boundary_merkle_heights(2, 1024, 1);
+        memory_ctx.update_boundary_merkle_heights(2, 2048, 1);
 
         let mut ctx = MeteredCtx {
             config: MeteredCtxConfig {

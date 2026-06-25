@@ -188,31 +188,47 @@ impl SegmentationState {
         self.deferral_page_buf.as_mut_ptr()
     }
 
+    #[inline(always)]
+    fn apply_addr_space_buffer(
+        memory_ctx: &mut MemoryCtx,
+        address_height: u32,
+        addr_space: u32,
+        buffer: &[PageAccess],
+        len: u32,
+    ) {
+        if len == 0 {
+            return;
+        }
+        let page_shift = address_height as usize - DEFAULT_PAGE_BITS;
+        let page_offset = ((addr_space as usize - 1) << page_shift) as u32;
+        memory_ctx.apply_page_accesses_with_offset(page_offset, &buffer[..len as usize]);
+    }
+
     /// Apply all page buffers: convert local pages to global ids and update
     /// memory metering state.
-    fn apply_page_buffer(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
-        let page_shift = self.address_height as usize - DEFAULT_PAGE_BITS;
-        if mem_len != 0 {
-            let mem_offset = ((RV64_MEMORY_AS as usize - 1) << page_shift) as u32;
-            self.memory_ctx.apply_page_accesses_with_offset(
-                mem_offset,
-                &self.mem_page_buf[..mem_len as usize],
-            );
-        }
-
-        if pv_len != 0 {
-            let pv_offset = ((PUBLIC_VALUES_AS as usize - 1) << page_shift) as u32;
-            self.memory_ctx
-                .apply_page_accesses_with_offset(pv_offset, &self.pv_page_buf[..pv_len as usize]);
-        }
-
-        if deferral_len != 0 {
-            let deferral_offset = ((DEFERRAL_AS as usize - 1) << page_shift) as u32;
-            self.memory_ctx.apply_page_accesses_with_offset(
-                deferral_offset,
-                &self.deferral_page_buf[..deferral_len as usize],
-            );
-        }
+    #[inline(always)]
+    fn apply_page_buffers(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
+        Self::apply_addr_space_buffer(
+            &mut self.memory_ctx,
+            self.address_height,
+            RV64_MEMORY_AS,
+            &self.mem_page_buf,
+            mem_len,
+        );
+        Self::apply_addr_space_buffer(
+            &mut self.memory_ctx,
+            self.address_height,
+            PUBLIC_VALUES_AS,
+            &self.pv_page_buf,
+            pv_len,
+        );
+        Self::apply_addr_space_buffer(
+            &mut self.memory_ctx,
+            self.address_height,
+            DEFERRAL_AS,
+            &self.deferral_page_buf,
+            deferral_len,
+        );
     }
 
     /// Apply boundary and merkle height updates from accumulated page accesses.
@@ -228,7 +244,7 @@ impl SegmentationState {
         // after the previous segment's heights are subtracted.
         self.memory_ctx
             .reset_segment_without_replay(&mut self.trace_heights);
-        self.apply_page_buffer(mem_len, pv_len, deferral_len);
+        self.apply_page_buffers(mem_len, pv_len, deferral_len);
         self.apply_height_updates();
 
         self.memory_ctx.add_register_merkle_heights();
@@ -251,7 +267,7 @@ impl SegmentationState {
         self.segmentation_ctx.instret = instret;
         self.segmentation_ctx.instrets_until_check = seg_check_insns;
 
-        self.apply_page_buffer(mem_len, pv_len, deferral_len);
+        self.apply_page_buffers(mem_len, pv_len, deferral_len);
         self.apply_height_updates();
 
         let did_segment = self.segmentation_ctx.check_and_segment(
@@ -291,7 +307,7 @@ impl SegmentationState {
         deferral_len: u32,
         remaining_counter: u32,
     ) {
-        self.apply_page_buffer(mem_len, pv_len, deferral_len);
+        self.apply_page_buffers(mem_len, pv_len, deferral_len);
         self.apply_height_updates();
 
         self.segmentation_ctx.instrets_until_check = remaining_counter as u64;
