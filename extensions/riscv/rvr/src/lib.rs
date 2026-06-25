@@ -16,7 +16,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, Rv64Phantom};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::Rng;
-use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
+use rvr_openvm_ext_ffi_common::{AS_PUBLIC_VALUES, AS_REGISTER};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, MemWidth, Reg};
 use rvr_openvm_lift::{
     air_index_to_c, decode_imm_cg, decode_reg, opcode_air_idx, AirIndex, ExtensionError,
@@ -222,33 +222,20 @@ impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
             }));
         }
 
-        if insn.e.as_canonical_u32() == AS_PUBLIC_VALUES {
-            let width = match Rv64LoadStoreOpcode::from_usize(
-                insn.opcode
-                    .local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
-            ) {
-                Rv64LoadStoreOpcode::STORED => Some(MemWidth::Double),
-                Rv64LoadStoreOpcode::STOREW => Some(MemWidth::Word),
-                Rv64LoadStoreOpcode::STOREH => Some(MemWidth::Half),
-                Rv64LoadStoreOpcode::STOREB => Some(MemWidth::Byte),
-                _ => None,
-            };
-
-            if let Some(width) = width {
-                let src_reg = decode_reg(insn.a);
-                let ptr_reg = decode_reg(insn.b);
-                let offset = decode_imm_cg(insn);
-                return Some(LiftedInstr::Body(InstrAt {
-                    pc,
-                    instr: Instr::Ext(Box::new(RevealInstr {
-                        src_reg,
-                        ptr_reg,
-                        offset,
-                        width,
-                    })),
-                    source_loc: None,
-                }));
-            }
+        if let Some(width) = public_values_store_width(insn) {
+            let src_reg = decode_reg(insn.a);
+            let ptr_reg = decode_reg(insn.b);
+            let offset = decode_imm_cg(insn);
+            return Some(LiftedInstr::Body(InstrAt {
+                pc,
+                instr: Instr::Ext(Box::new(RevealInstr {
+                    src_reg,
+                    ptr_reg,
+                    offset,
+                    width,
+                })),
+                source_loc: None,
+            }));
         }
 
         None
@@ -285,6 +272,28 @@ impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
         };
         unsafe { register_fn(&callbacks) };
         Ok(())
+    }
+}
+
+fn public_values_store_width<F: PrimeField32>(insn: &Instruction<F>) -> Option<MemWidth> {
+    if insn.d.as_canonical_u32() != AS_REGISTER || insn.e.as_canonical_u32() != AS_PUBLIC_VALUES {
+        return None;
+    }
+
+    match insn.opcode.as_usize() {
+        opcode if opcode == Rv64LoadStoreOpcode::STORED.global_opcode_usize() => {
+            Some(MemWidth::Double)
+        }
+        opcode if opcode == Rv64LoadStoreOpcode::STOREW.global_opcode_usize() => {
+            Some(MemWidth::Word)
+        }
+        opcode if opcode == Rv64LoadStoreOpcode::STOREH.global_opcode_usize() => {
+            Some(MemWidth::Half)
+        }
+        opcode if opcode == Rv64LoadStoreOpcode::STOREB.global_opcode_usize() => {
+            Some(MemWidth::Byte)
+        }
+        _ => None,
     }
 }
 
@@ -593,7 +602,15 @@ mod tests {
         ] {
             let inst = Instruction::<BabyBear>::from_usize(
                 opcode.global_opcode(),
-                [8, 16, 0, 1, AS_PUBLIC_VALUES as usize, 1, 0],
+                [
+                    8,
+                    16,
+                    0,
+                    AS_REGISTER as usize,
+                    AS_PUBLIC_VALUES as usize,
+                    1,
+                    0,
+                ],
             );
             let lifted = ext.try_lift(&inst, 0x100).unwrap();
             let LiftedInstr::Body(InstrAt {
@@ -611,6 +628,44 @@ mod tests {
                 format!("openvm_reveal(r1, r2, 0x00000000u, {width});")
             );
         }
+    }
+
+    #[test]
+    fn rv64io_rejects_public_values_store_with_non_register_d() {
+        let ext = Rv64IoExtension::new(None).unwrap();
+        let inst = Instruction::<BabyBear>::from_usize(
+            Rv64LoadStoreOpcode::STORED.global_opcode(),
+            [
+                8,
+                16,
+                0,
+                AS_PUBLIC_VALUES as usize,
+                AS_PUBLIC_VALUES as usize,
+                1,
+                0,
+            ],
+        );
+
+        assert!(ext.try_lift(&inst, 0x100).is_none());
+    }
+
+    #[test]
+    fn rv64io_ignores_non_store_public_values_shaped_instruction() {
+        let ext = Rv64IoExtension::new(None).unwrap();
+        let inst = Instruction::<BabyBear>::from_usize(
+            SystemOpcode::TERMINATE.global_opcode(),
+            [
+                8,
+                16,
+                0,
+                AS_REGISTER as usize,
+                AS_PUBLIC_VALUES as usize,
+                1,
+                0,
+            ],
+        );
+
+        assert!(ext.try_lift(&inst, 0x100).is_none());
     }
 
     #[test]
