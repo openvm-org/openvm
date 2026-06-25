@@ -17,6 +17,8 @@ pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
 // range accesses; this avoids preallocating the worst-case per-instruction page
 // count for the common scalar-access path.
 const INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN: usize = 16;
+// Up to this many new leaves, count page-local Merkle nodes by walking only
+// the added bits. Larger updates use a fixed six-level recompute.
 const SPARSE_MERKLE_DELTA_LEAF_THRESHOLD: u32 = 8;
 const BYTE_PTRS_PER_LEAF_BITS: u32 = (U16_CELL_SIZE * DIGEST_WIDTH).ilog2();
 const DEFERRAL_PTRS_PER_LEAF_BITS: u32 = DIGEST_WIDTH.ilog2();
@@ -205,8 +207,12 @@ impl MemoryPageTracker {
         let added_mask = new_mask ^ old_mask;
         let leaves = added_mask.count_ones();
         let mut merkle_nodes = if leaves <= SPARSE_MERKLE_DELTA_LEAF_THRESHOLD {
+            // Sparse path: O(new leaves). For each added leaf, test the aligned
+            // 2/4/8/16/32/64-leaf groups that map to its parent ancestors.
             local_merkle_nodes_added(old_mask, added_mask)
         } else {
+            // Dense path: recompute page-local nodes before/after with six
+            // shift/mask parent collapses and popcounts.
             local_merkle_nodes(new_mask) - local_merkle_nodes(old_mask)
         };
         self.leaves += leaves;
@@ -220,6 +226,8 @@ impl MemoryPageTracker {
 
     #[inline(always)]
     fn insert_upper_path(&mut self, page_id: usize) -> u32 {
+        // Called only when a page first becomes non-empty in this segment.
+        // `upper_nodes` makes nearby pages share already-counted ancestors.
         let mut count = 0;
         let mut node = (1usize << self.upper_height) + page_id;
         while node > 1 {
@@ -247,8 +255,8 @@ fn leaf_mask_range(start: u32, end: u32) -> u64 {
 
 #[inline(always)]
 fn parent_mask(mut mask: u64) -> u64 {
-    // Collapse 64 child bits into 32 parent bits. Repeated calls walk the
-    // 64-leaf page up to its root without iterating over every child bit.
+    // Collapse child occupancy into parent occupancy: each parent bit is set
+    // when either child bit is set. Repeated calls walk up to the page root.
     mask |= mask >> 1;
     mask &= 0x5555_5555_5555_5555;
     mask = (mask | (mask >> 1)) & 0x3333_3333_3333_3333;
@@ -271,6 +279,7 @@ fn local_merkle_nodes(mask: u64) -> u32 {
     let mut level_mask = mask;
     for _ in 0..PAGE_BITS {
         level_mask = parent_mask(level_mask);
+        // Each set parent bit is one page-local Merkle node at this level.
         nodes += level_mask.count_ones();
     }
     nodes
@@ -282,6 +291,7 @@ fn local_merkle_nodes_added(mut old_mask: u64, mut added_mask: u64) -> u32 {
 
     let mut nodes = 0;
     while added_mask != 0 {
+        // Pick one newly added leaf, then clear it from added_mask.
         let leaf = added_mask.trailing_zeros();
         let leaf_bit = 1u64 << leaf;
         // For a single new leaf, each aligned group corresponds to one
@@ -415,6 +425,8 @@ impl MemoryCtx {
                     .get_unchecked_mut(len - 1)
             };
             if prev.page_id == page_id {
+                // Consecutive accesses to the same page merge in-place; the
+                // tracker later deduplicates non-consecutive repeats.
                 prev.leaf_mask |= leaf_mask;
                 return;
             }
