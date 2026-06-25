@@ -20,8 +20,18 @@ const INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN: usize = 16;
 // Up to this many new leaves, count page-local Merkle nodes by walking only
 // the added bits. Larger updates use a fixed six-level recompute.
 const SPARSE_MERKLE_DELTA_LEAF_THRESHOLD: u32 = 8;
+
+// Shift amounts from address-space pointer units to memory Merkle leaves.
 const BYTE_PTRS_PER_LEAF_BITS: u32 = (U16_CELL_SIZE * DIGEST_WIDTH).ilog2();
 const DEFERRAL_PTRS_PER_LEAF_BITS: u32 = DIGEST_WIDTH.ilog2();
+
+// Masks used to compact even-position parent bits into a dense lower-bit mask.
+const LOW_BIT_PER_PAIR: u64 = 0x5555_5555_5555_5555;
+const LOW_2_BITS_PER_NIBBLE: u64 = 0x3333_3333_3333_3333;
+const LOW_NIBBLE_PER_BYTE: u64 = 0x0f0f_0f0f_0f0f_0f0f;
+const LOW_BYTE_PER_U16: u64 = 0x00ff_00ff_00ff_00ff;
+const LOW_U16_PER_U32: u64 = 0x0000_ffff_0000_ffff;
+const LOW_U32: u64 = 0x0000_0000_ffff_ffff;
 
 #[derive(Clone, Debug)]
 pub struct BitSet {
@@ -144,8 +154,8 @@ impl BitSet {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PageAccess {
-    /// Scalar page index. The leaf occupancy for this page is stored in
-    /// `leaf_mask`.
+    /// Index into the page table. The leaf occupancy for this page is stored
+    /// in `leaf_mask`.
     pub page_id: u32,
     /// Bit `i` is set when leaf `i` inside this 64-leaf page was touched.
     pub leaf_mask: u64,
@@ -208,7 +218,7 @@ impl MemoryPageTracker {
         let leaves = added_mask.count_ones();
         let mut merkle_nodes = if leaves <= SPARSE_MERKLE_DELTA_LEAF_THRESHOLD {
             // Sparse path: O(new leaves). For each added leaf, test the aligned
-            // 2/4/8/16/32/64-leaf groups that map to its parent ancestors.
+            // 2/4/8/16/32/64-leaf groups that map to its ancestor levels.
             local_merkle_nodes_added(old_mask, added_mask)
         } else {
             // Dense path: recompute page-local nodes before/after with six
@@ -258,12 +268,14 @@ fn parent_mask(mut mask: u64) -> u64 {
     // Collapse child occupancy into parent occupancy: each parent bit is set
     // when either child bit is set. Repeated calls walk up to the page root.
     mask |= mask >> 1;
-    mask &= 0x5555_5555_5555_5555;
-    mask = (mask | (mask >> 1)) & 0x3333_3333_3333_3333;
-    mask = (mask | (mask >> 2)) & 0x0f0f_0f0f_0f0f_0f0f;
-    mask = (mask | (mask >> 4)) & 0x00ff_00ff_00ff_00ff;
-    mask = (mask | (mask >> 8)) & 0x0000_ffff_0000_ffff;
-    (mask | (mask >> 16)) & 0x0000_0000_ffff_ffff
+    mask &= LOW_BIT_PER_PAIR;
+
+    // Compact the 32 even-position parent bits into the low 32 bits.
+    mask = (mask | (mask >> 1)) & LOW_2_BITS_PER_NIBBLE;
+    mask = (mask | (mask >> 2)) & LOW_NIBBLE_PER_BYTE;
+    mask = (mask | (mask >> 4)) & LOW_BYTE_PER_U16;
+    mask = (mask | (mask >> 8)) & LOW_U16_PER_U32;
+    (mask | (mask >> 16)) & LOW_U32
 }
 
 #[inline(always)]
@@ -286,6 +298,15 @@ fn local_merkle_nodes(mask: u64) -> u32 {
 }
 
 #[inline(always)]
+fn aligned_group_is_empty<const GROUP_SIZE: u32>(old_mask: u64, leaf: u32) -> bool {
+    // The ancestor at this level covers the aligned group containing `leaf`.
+    // If the old mask has no bit in that group, adding `leaf` creates it.
+    let group_start = leaf & !(GROUP_SIZE - 1);
+    let group_mask = ((1u64 << GROUP_SIZE) - 1) << group_start;
+    old_mask & group_mask == 0
+}
+
+#[inline(always)]
 fn local_merkle_nodes_added(mut old_mask: u64, mut added_mask: u64) -> u32 {
     debug_assert_eq!(old_mask & added_mask, 0);
 
@@ -294,14 +315,13 @@ fn local_merkle_nodes_added(mut old_mask: u64, mut added_mask: u64) -> u32 {
         // Pick one newly added leaf, then clear it from added_mask.
         let leaf = added_mask.trailing_zeros();
         let leaf_bit = 1u64 << leaf;
-        // For a single new leaf, each aligned group corresponds to one
-        // ancestor level. If no old leaf existed in that group, this leaf
-        // creates that ancestor node.
-        nodes += u32::from(old_mask & (0x3 << (leaf & !0x1)) == 0);
-        nodes += u32::from(old_mask & (0xf << (leaf & !0x3)) == 0);
-        nodes += u32::from(old_mask & (0xff << (leaf & !0x7)) == 0);
-        nodes += u32::from(old_mask & (0xffff << (leaf & !0xf)) == 0);
-        nodes += u32::from(old_mask & (0xffff_ffff << (leaf & !0x1f)) == 0);
+        // Group sizes 2..32 are the page-local ancestor levels below the
+        // 64-leaf page root. The page root is new when the old page mask is empty.
+        nodes += u32::from(aligned_group_is_empty::<2>(old_mask, leaf));
+        nodes += u32::from(aligned_group_is_empty::<4>(old_mask, leaf));
+        nodes += u32::from(aligned_group_is_empty::<8>(old_mask, leaf));
+        nodes += u32::from(aligned_group_is_empty::<16>(old_mask, leaf));
+        nodes += u32::from(aligned_group_is_empty::<32>(old_mask, leaf));
         nodes += u32::from(old_mask == 0);
         old_mask |= leaf_bit;
         added_mask &= added_mask - 1;

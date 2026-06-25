@@ -25,7 +25,7 @@ _Static_assert(
  * (see DEFERRAL_PAGE_BUF_CAP in metered.rs). */
 
 typedef struct PageAccess {
-  /* Scalar page index plus a 64-bit leaf mask for that page. */
+  /* Page table index plus a 64-bit leaf mask for that page. */
   uint32_t page_id;
   uint64_t leaf_mask;
 } PageAccess;
