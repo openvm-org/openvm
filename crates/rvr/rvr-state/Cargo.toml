@@ -8,5 +8,3 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-thiserror.workspace = true
-nix.workspace = true

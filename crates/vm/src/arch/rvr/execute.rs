@@ -43,8 +43,6 @@ pub enum ExecuteError {
     ExecutionFailed(i32),
     #[error("guest exited with non-zero exit code: {0}")]
     GuestExit(u8),
-    #[error("memory allocation failed: {0}")]
-    MemoryAlloc(#[from] MemoryError),
     #[error("extension host callback registration failed: {0}")]
     ExtensionRegistration(#[from] ExtensionError),
     #[error("invalid metered context: {0}")]
