@@ -14,16 +14,19 @@ pub const PAGE_BITS: usize = u64::BITS.ilog2() as usize;
 /// Upper bound on number of memory pages accessed per instruction. Used for buffer allocation.
 pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
 const INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN: usize = 16;
+const SPARSE_MERKLE_DELTA_LEAF_THRESHOLD: u32 = 8;
 
 #[derive(Clone, Debug)]
 pub struct BitSet {
     words: Box<[u64]>,
+    dirty_words: Vec<usize>,
 }
 
 impl BitSet {
     pub fn new(num_bits: usize) -> Self {
         Self {
             words: vec![0; num_bits.div_ceil(u64::BITS as usize)].into_boxed_slice(),
+            dirty_words: Vec::new(),
         }
     }
 
@@ -39,8 +42,12 @@ impl BitSet {
         //         during memory access. The bitset is sized to accommodate all valid
         //         memory addresses, so word_index is always within bounds.
         let word = unsafe { self.words.get_unchecked_mut(word_index) };
-        let was_set = (*word & mask) != 0;
-        *word |= mask;
+        let old_word = *word;
+        let was_set = (old_word & mask) != 0;
+        if old_word == 0 {
+            self.dirty_words.push(word_index);
+        }
+        *word = old_word | mask;
         !was_set
     }
 
@@ -63,8 +70,12 @@ impl BitSet {
             // SAFETY: Caller ensures start < end and end <= self.words.len() * 64,
             // so start_word_index < self.words.len()
             let word = unsafe { self.words.get_unchecked_mut(start_word_index) };
-            ret += mask_bits - (*word & mask).count_ones();
-            *word |= mask;
+            let old_word = *word;
+            ret += mask_bits - (old_word & mask).count_ones();
+            if old_word == 0 {
+                self.dirty_words.push(start_word_index);
+            }
+            *word = old_word | mask;
         } else {
             let end_bit = (end & 63) as u32;
             let mask_bits = 64 - start_bit;
@@ -72,8 +83,12 @@ impl BitSet {
             // SAFETY: Caller ensures start < end and end <= self.words.len() * 64,
             // so start_word_index < self.words.len()
             let start_word = unsafe { self.words.get_unchecked_mut(start_word_index) };
-            ret += mask_bits - (*start_word & mask).count_ones();
-            *start_word |= mask;
+            let old_start_word = *start_word;
+            ret += mask_bits - (old_start_word & mask).count_ones();
+            if old_start_word == 0 {
+                self.dirty_words.push(start_word_index);
+            }
+            *start_word = old_start_word | mask;
 
             let mask_bits = end_bit;
             let mask = if end_bit == 0 {
@@ -84,8 +99,12 @@ impl BitSet {
             // SAFETY: Caller ensures end <= self.words.len() * 64, so
             // end_word_index < self.words.len()
             let end_word = unsafe { self.words.get_unchecked_mut(end_word_index) };
-            ret += mask_bits - (*end_word & mask).count_ones();
-            *end_word |= mask;
+            let old_end_word = *end_word;
+            ret += mask_bits - (old_end_word & mask).count_ones();
+            if mask != 0 && old_end_word == 0 {
+                self.dirty_words.push(end_word_index);
+            }
+            *end_word = old_end_word | mask;
         }
 
         if start_word_index + 1 < end_word_index {
@@ -93,7 +112,11 @@ impl BitSet {
                 // SAFETY: Caller ensures proper start and end, so i is within bounds
                 // of self.words.len()
                 let word = unsafe { self.words.get_unchecked_mut(i) };
-                ret += word.count_zeros();
+                let old_word = *word;
+                ret += old_word.count_zeros();
+                if old_word == 0 {
+                    self.dirty_words.push(i);
+                }
                 *word = u64::MAX;
             }
         }
@@ -102,9 +125,11 @@ impl BitSet {
 
     #[inline(always)]
     pub fn clear(&mut self) {
-        // SAFETY: words is valid for self.words.len() elements
-        unsafe {
-            std::ptr::write_bytes(self.words.as_mut_ptr(), 0, self.words.len());
+        for word_index in self.dirty_words.drain(..) {
+            // SAFETY: dirty_words entries are word indices previously written by this BitSet.
+            unsafe {
+                *self.words.get_unchecked_mut(word_index) = 0;
+            }
         }
     }
 }
@@ -119,6 +144,7 @@ pub struct PageAccess {
 #[derive(Clone, Debug)]
 pub struct MemoryPageTracker {
     page_masks: Box<[u64]>,
+    dirty_pages: Vec<usize>,
     upper_nodes: BitSet,
     upper_height: usize,
     merkle_nodes: u32,
@@ -129,6 +155,7 @@ impl MemoryPageTracker {
     pub fn new(num_pages: usize, upper_height: usize) -> Self {
         Self {
             page_masks: vec![0; num_pages].into_boxed_slice(),
+            dirty_pages: Vec::new(),
             upper_nodes: BitSet::new(num_pages),
             upper_height,
             merkle_nodes: 0,
@@ -138,8 +165,11 @@ impl MemoryPageTracker {
 
     #[inline(always)]
     pub fn clear(&mut self) {
-        unsafe {
-            std::ptr::write_bytes(self.page_masks.as_mut_ptr(), 0, self.page_masks.len());
+        for page_id in self.dirty_pages.drain(..) {
+            // SAFETY: dirty_pages entries are page indices previously written by this tracker.
+            unsafe {
+                *self.page_masks.get_unchecked_mut(page_id) = 0;
+            }
         }
         self.upper_nodes.clear();
         self.merkle_nodes = 0;
@@ -159,9 +189,12 @@ impl MemoryPageTracker {
         }
 
         *page_mask = new_mask;
+        if old_mask == 0 {
+            self.dirty_pages.push(page_id);
+        }
         let added_mask = new_mask ^ old_mask;
         let leaves = added_mask.count_ones();
-        let mut merkle_nodes = if leaves <= 4 {
+        let mut merkle_nodes = if leaves <= SPARSE_MERKLE_DELTA_LEAF_THRESHOLD {
             local_merkle_nodes_added(old_mask, added_mask)
         } else {
             local_merkle_nodes(new_mask) - local_merkle_nodes(old_mask)
@@ -348,39 +381,46 @@ impl MemoryCtx {
 
     #[cfg(feature = "rvr")]
     #[inline(always)]
-    pub(crate) fn record_and_apply_page_accesses_with_offset(
+    pub(crate) fn apply_page_accesses_with_offset(
         &mut self,
         page_offset: u32,
         accesses: &[PageAccess],
     ) {
         let len = accesses.len();
-        if len == 0 {
-            return;
+        let ptr = accesses.as_ptr();
+        for i in 0..len {
+            // SAFETY: i is bounded by accesses.len().
+            let access = unsafe { *ptr.add(i) };
+            debug_assert!(access.leaf_mask != 0);
+            let page_id = page_offset + access.page_id;
+            let (leaves, merkle_nodes) =
+                self.page_tracker.insert(page_id as usize, access.leaf_mask);
+            self.pending_leaves += leaves;
+            self.pending_merkle_nodes += merkle_nodes;
         }
+    }
 
-        let old_len = self.page_indices_since_checkpoint.len();
-        self.page_indices_since_checkpoint.reserve(len);
+    #[cfg(feature = "rvr")]
+    #[inline(always)]
+    pub(crate) fn reset_segment_without_replay(&mut self, trace_heights: &mut [u32]) {
+        self.page_tracker.clear();
+        self.page_indices_since_checkpoint.clear();
+        self.page_indices_since_checkpoint_len = 0;
+        self.page_indices_applied_len = 0;
+        self.pending_leaves = 0;
+        self.pending_merkle_nodes = 0;
 
-        // SAFETY: reserve above ensures capacity for len new initialized entries.
+        // Reset trace heights for memory chips as 0
+        // SAFETY: BOUNDARY_AIR_ID and MERKLE_AIR_ID are compile-time constants within bounds
         unsafe {
-            let dst = self.page_indices_since_checkpoint.as_mut_ptr().add(old_len);
-            for (i, access) in accesses.iter().enumerate() {
-                debug_assert!(access.leaf_mask != 0);
-                let page_id = page_offset + access.page_id;
-                dst.add(i).write(PageAccess {
-                    page_id,
-                    leaf_mask: access.leaf_mask,
-                });
-                let (leaves, merkle_nodes) =
-                    self.page_tracker.insert(page_id as usize, access.leaf_mask);
-                self.pending_leaves += leaves;
-                self.pending_merkle_nodes += merkle_nodes;
-            }
-            self.page_indices_since_checkpoint.set_len(old_len + len);
+            *trace_heights.get_unchecked_mut(BOUNDARY_AIR_ID) = 0;
+            *trace_heights.get_unchecked_mut(MERKLE_AIR_ID) = 0;
         }
-
-        self.page_indices_applied_len = self.page_indices_since_checkpoint.len();
-        self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
+        let poseidon2_idx = trace_heights.len() - 2;
+        // SAFETY: poseidon2_idx is trace_heights.len() - 2, guaranteed to be in bounds
+        unsafe {
+            *trace_heights.get_unchecked_mut(poseidon2_idx) = 0;
+        }
     }
 
     /// Initialize state for a new segment
@@ -565,7 +605,7 @@ mod tests {
             let new_mask = old_mask | leaf_mask;
             if new_mask != old_mask {
                 let added_mask = new_mask ^ old_mask;
-                if added_mask.count_ones() <= 4 {
+                if added_mask.count_ones() <= SPARSE_MERKLE_DELTA_LEAF_THRESHOLD {
                     assert_eq!(
                         local_merkle_nodes_added(old_mask, added_mask),
                         reference_local_merkle_nodes(new_mask)
@@ -585,7 +625,7 @@ mod tests {
             let new_mask = old_mask | leaf_mask;
             if new_mask != old_mask {
                 let added_mask = new_mask ^ old_mask;
-                if added_mask.count_ones() <= 4 {
+                if added_mask.count_ones() <= SPARSE_MERKLE_DELTA_LEAF_THRESHOLD {
                     assert_eq!(
                         local_merkle_nodes_added(old_mask, added_mask),
                         reference_local_merkle_nodes(new_mask)
@@ -610,6 +650,23 @@ mod tests {
         tracker.insert(0, 1 << 0);
         assert_eq!(tracker.leaves, leaves);
         assert_eq!(tracker.merkle_nodes, nodes);
+    }
+
+    #[test]
+    fn test_memory_page_tracker_clear_resets_touched_state() {
+        let mut tracker = MemoryPageTracker::new(8, 3);
+        tracker.insert(0, 1 << 0);
+        tracker.insert(7, 1 << 63);
+        assert!(tracker.leaves > 0);
+        assert!(tracker.merkle_nodes > 0);
+
+        tracker.clear();
+        assert_eq!(tracker.leaves, 0);
+        assert_eq!(tracker.merkle_nodes, 0);
+
+        tracker.insert(0, 1 << 0);
+        assert_eq!(tracker.leaves, 1);
+        assert!(tracker.merkle_nodes > 0);
     }
 
     #[test]
