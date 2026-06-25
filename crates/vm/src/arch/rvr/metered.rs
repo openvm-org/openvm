@@ -199,6 +199,9 @@ impl SegmentationState {
         if len == 0 {
             return;
         }
+        // C buffers use page ids local to one address space. `MemoryCtx`
+        // deduplicates against one global memory tree, so convert to global
+        // page ids before applying the leaf masks.
         let page_shift = address_height as usize - PAGE_BITS;
         let page_offset = ((addr_space as usize - 1) << page_shift) as u32;
         memory_ctx.apply_page_accesses_with_offset(page_offset, &buffer[..len as usize]);

@@ -25,6 +25,7 @@ _Static_assert(
  * (see DEFERRAL_PAGE_BUF_CAP in metered.rs). */
 
 typedef struct PageAccess {
+  /* Scalar page index plus a 64-bit leaf mask for that page. */
   uint32_t page_id;
   uint64_t leaf_mask;
 } PageAccess;
@@ -79,6 +80,7 @@ static __attribute__((always_inline)) inline uint32_t addr_to_local_leaf(
 
 static __attribute__((always_inline)) inline uint64_t leaf_mask_range(
     uint32_t first_leaf, uint32_t last_leaf) {
+  /* Convert an inclusive leaf range within a page into a uint64_t occupancy mask. */
   uint32_t start = first_leaf & ((1u << TRACER_PAGE_BITS) - 1u);
   uint32_t end = (last_leaf & ((1u << TRACER_PAGE_BITS) - 1u)) + 1u;
   uint32_t width = end - start;
@@ -261,6 +263,8 @@ static __attribute__((always_inline)) inline void trace_memory_reload(
 
 static __attribute__((always_inline)) inline void trace_memory_access_page(
     TraceMemory* restrict memory, uint32_t page, uint64_t leaf_mask) {
+  /* Keep one pending AS_MEMORY page in registers for the current generated
+   * block. Consecutive accesses to that page merge by OR-ing leaf masks. */
   if (likely(page == memory->last_mem_page)) {
     memory->last_mem_leaf_mask |= leaf_mask;
     return;

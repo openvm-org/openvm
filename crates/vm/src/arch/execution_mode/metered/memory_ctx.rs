@@ -142,7 +142,10 @@ impl BitSet {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PageAccess {
+    /// Scalar page index. The leaf occupancy for this page is stored in
+    /// `leaf_mask`.
     pub page_id: u32,
+    /// Bit `i` is set when leaf `i` inside this 64-leaf page was touched.
     pub leaf_mask: u64,
 }
 
@@ -197,6 +200,8 @@ impl MemoryPageTracker {
         if old_mask == 0 {
             self.dirty_pages.push(page_id);
         }
+        // Newly set bits are the only leaves that can add boundary rows or new
+        // page-local Merkle nodes.
         let added_mask = new_mask ^ old_mask;
         let leaves = added_mask.count_ones();
         let mut merkle_nodes = if leaves <= SPARSE_MERKLE_DELTA_LEAF_THRESHOLD {
@@ -242,6 +247,8 @@ fn leaf_mask_range(start: u32, end: u32) -> u64 {
 
 #[inline(always)]
 fn parent_mask(mut mask: u64) -> u64 {
+    // Collapse 64 child bits into 32 parent bits. Repeated calls walk the
+    // 64-leaf page up to its root without iterating over every child bit.
     mask |= mask >> 1;
     mask &= 0x5555_5555_5555_5555;
     mask = (mask | (mask >> 1)) & 0x3333_3333_3333_3333;
@@ -277,6 +284,9 @@ fn local_merkle_nodes_added(mut old_mask: u64, mut added_mask: u64) -> u32 {
     while added_mask != 0 {
         let leaf = added_mask.trailing_zeros();
         let leaf_bit = 1u64 << leaf;
+        // For a single new leaf, each aligned group corresponds to one
+        // ancestor level. If no old leaf existed in that group, this leaf
+        // creates that ancestor node.
         nodes += u32::from(old_mask & (0x3 << (leaf & !0x1)) == 0);
         nodes += u32::from(old_mask & (0xf << (leaf & !0x3)) == 0);
         nodes += u32::from(old_mask & (0xff << (leaf & !0x7)) == 0);
