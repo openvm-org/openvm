@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "rvr")]
+    #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     use std::{env, process::Command};
 
     use eyre::Result;
@@ -37,7 +37,7 @@ mod tests {
     use test_case::test_case;
 
     type F = BabyBear;
-    #[cfg(feature = "rvr")]
+    #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     const RVR_OOB_CHILD_ENV: &str = "OPENVM_RVR_OOB_CHILD";
 
     #[cfg(test)]
@@ -75,7 +75,7 @@ mod tests {
         execute_rvr_example("fibonacci");
     }
 
-    #[cfg(feature = "rvr")]
+    #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     fn assert_child_aborts(test_name: &str) {
         let output = Command::new(env::current_exe().unwrap())
             .args(["--exact", test_name, "--nocapture"])
@@ -291,7 +291,7 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "reveal out of bounds")]
-    #[cfg(feature = "rvr")]
+    #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     fn test_reveal_beyond_num_public_values_errors() {
         if env::var(RVR_OOB_CHILD_ENV).is_ok() {
             let mut config = test_rv64im_config();
@@ -463,7 +463,7 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "Memory access out of bounds")]
-    #[cfg(feature = "rvr")]
+    #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     fn test_out_of_bound_mem_access() {
         // Child mode: triggers the OOB; abort_oob in C aborts the process.
         if env::var(RVR_OOB_CHILD_ENV).is_ok() {
@@ -479,7 +479,7 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "reveal out of bounds")]
-    #[cfg(feature = "rvr")]
+    #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     fn test_out_of_bound_reveal() {
         // Child mode: triggers the existing host_reveal public-values bounds assert.
         if env::var(RVR_OOB_CHILD_ENV).is_ok() {
@@ -495,7 +495,7 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "Memory access out of bounds")]
-    #[cfg(feature = "rvr")]
+    #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     fn test_out_of_bound_print_str() {
         // Child mode: triggers the Rust-side bounds check in host_print_str.
         if env::var(RVR_OOB_CHILD_ENV).is_ok() {
