@@ -45,6 +45,7 @@ jobs:
           # - { name: "pairing", path: "pairing", aot: true, rvr: false }
           # - { name: "deferral", path: "deferral", aot: true, rvr: false }
           - { name: "riscv", path: "riscv", aot: false, rvr: true }
+          - { name: "riscv", path: "riscv", aot: false, rvr: true, unprotected: true }
           - { name: "keccak256", path: "keccak256", aot: false, rvr: true }
           - { name: "sha2", path: "sha2", aot: false, rvr: true }
           - { name: "bigint", path: "bigint", aot: false, rvr: true }
@@ -105,7 +106,7 @@ jobs:
           sudo ./llvm.sh 22
           sudo apt-get install -y lld
 
-      - name: Run ${{ format('{0}{1}{2}', matrix.extension.name, matrix.extension.aot && '-aot' || '', matrix.extension.rvr && '-rvr' || '') }} circuit crate tests
+      - name: Run ${{ format('{0}{1}{2}{3}', matrix.extension.name, matrix.extension.aot && '-aot' || '', matrix.extension.rvr && '-rvr' || '', matrix.extension.unprotected && '-unprotected' || '') }} circuit crate tests
         working-directory: extensions/${{ matrix.extension.path }}/circuit
         run: |
           TEST_THREADS="--test-threads=32"
@@ -114,6 +115,8 @@ jobs:
           fi
           if [[ "${{ matrix.extension.aot }}" == 'true' ]]; then
             cargo nextest run --cargo-profile=fast --features aot $TEST_THREADS --no-tests=pass --success-output=immediate
+          elif [[ "${{ matrix.extension.rvr }}" == 'true' && "${{ matrix.extension.unprotected }}" == 'true' ]]; then
+            cargo nextest run --cargo-profile=fast --features rvr,openvm-circuit/unprotected $TEST_THREADS --no-tests=pass --success-output=immediate
           elif [[ "${{ matrix.extension.rvr }}" == 'true' ]]; then
             cargo nextest run --cargo-profile=fast --features rvr $TEST_THREADS --no-tests=pass --success-output=immediate
           else
@@ -131,13 +134,15 @@ jobs:
           fi
           cargo nextest run --cargo-profile=fast  $GUEST_FEATURE_ARGS --no-tests=pass
 
-      - name: Run ${{ format('{0}{1}{2}', matrix.extension.name, matrix.extension.aot && '-aot' || '', matrix.extension.rvr && '-rvr' || '') }} integration tests
+      - name: Run ${{ format('{0}{1}{2}{3}', matrix.extension.name, matrix.extension.aot && '-aot' || '', matrix.extension.rvr && '-rvr' || '', matrix.extension.unprotected && '-unprotected' || '') }} integration tests
         if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
           if [[ "${{ matrix.extension.aot }}" == 'true' ]]; then
             cargo nextest run --cargo-profile=fast --features aot --profile=heavy --no-tests=pass --success-output=immediate
+          elif [[ "${{ matrix.extension.rvr }}" == 'true' && "${{ matrix.extension.unprotected }}" == 'true' ]]; then
+            cargo nextest run --cargo-profile=fast --features rvr,unprotected --profile=heavy --no-tests=pass --success-output=immediate
           elif [[ "${{ matrix.extension.rvr }}" == 'true' ]]; then
             cargo nextest run --cargo-profile=fast --features rvr --profile=heavy --no-tests=pass --success-output=immediate
           else
