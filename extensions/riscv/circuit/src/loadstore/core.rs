@@ -410,8 +410,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
-            WriteData = [u32; NUM_CELLS],
+            ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u8),
+            WriteData = [u8; NUM_CELLS],
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -448,7 +448,7 @@ where
         let ((prev_data, read_data), shift_amount) =
             self.adapter
                 .read(state.memory, instruction, &mut adapter_record);
-        core_record.prev_data = prev_data.map(|x| x as u8);
+        core_record.prev_data = prev_data;
         core_record.read_data = read_data;
         core_record.shift_amount = shift_amount;
 
@@ -460,12 +460,8 @@ where
             core_record.prev_data,
             core_record.shift_amount as usize,
         );
-        self.adapter.write(
-            state.memory,
-            instruction,
-            write_data.map(u32::from),
-            &mut adapter_record,
-        );
+        self.adapter
+            .write(state.memory, instruction, write_data, &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

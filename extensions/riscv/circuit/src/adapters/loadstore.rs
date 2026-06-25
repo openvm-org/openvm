@@ -343,13 +343,10 @@ where
 {
     const WIDTH: usize = size_of::<Rv64LoadStoreAdapterCols<u8>>();
     type ReadData = (
-        (
-            [u32; RV64_REGISTER_NUM_LIMBS],
-            [u8; RV64_REGISTER_NUM_LIMBS],
-        ),
+        ([u8; RV64_REGISTER_NUM_LIMBS], [u8; RV64_REGISTER_NUM_LIMBS]),
         u8,
     );
-    type WriteData = [u32; RV64_REGISTER_NUM_LIMBS];
+    type WriteData = [u8; RV64_REGISTER_NUM_LIMBS];
     type RecordMut<'a> = &'a mut Rv64LoadStoreAdapterRecord;
 
     #[inline(always)]
@@ -412,8 +409,7 @@ where
                     ptr_val,
                     &mut record.read_data_aux.prev_timestamp,
                 );
-                let prev_data = memory_read(memory.data(), RV64_REGISTER_AS, a.as_canonical_u32())
-                    .map(u32::from);
+                let prev_data = memory_read(memory.data(), RV64_REGISTER_AS, a.as_canonical_u32());
                 (read_data, prev_data)
             }
             STORED | STOREW | STOREH | STOREB => {
@@ -427,7 +423,7 @@ where
                     a.as_canonical_u32(),
                     &mut record.read_data_aux.prev_timestamp,
                 );
-                let prev_data = memory_read(memory.data(), e, ptr_val).map(u32::from);
+                let prev_data = memory_read(memory.data(), e, ptr_val);
                 (read_data, prev_data)
             }
         };
@@ -468,16 +464,10 @@ where
                     let imm_extended = sign_extend_imm16(record.imm as u32, record.imm_sign as u32);
                     let ptr = record.rs1_val.wrapping_add(imm_extended)
                         & !(RV64_REGISTER_NUM_LIMBS as u32 - 1);
-                    timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
+                    timed_write(memory, record.mem_as as u32, ptr, data).0
                 }
                 LOADD | LOADW | LOADB | LOADH | LOADWU | LOADBU | LOADHU => {
-                    timed_write(
-                        memory,
-                        RV64_REGISTER_AS,
-                        record.rd_rs2_ptr,
-                        data.map(|x| x as u8),
-                    )
-                    .0
+                    timed_write(memory, RV64_REGISTER_AS, record.rd_rs2_ptr, data).0
                 }
             };
         } else {

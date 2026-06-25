@@ -266,8 +266,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
-            WriteData = [u32; NUM_CELLS],
+            ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u8),
+            WriteData = [u8; NUM_CELLS],
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -308,7 +308,7 @@ where
 
         core_record.is_byte = local_opcode == LOADB;
         core_record.is_word = local_opcode == LOADW;
-        core_record.prev_data = tmp.0 .0.map(|x| x as u8);
+        core_record.prev_data = tmp.0 .0;
         core_record.read_data = tmp.0 .1;
         core_record.shift_amount = tmp.1;
 
@@ -318,12 +318,8 @@ where
             core_record.shift_amount as usize,
         );
 
-        self.adapter.write(
-            state.memory,
-            instruction,
-            write_data.map(u32::from),
-            &mut adapter_record,
-        );
+        self.adapter
+            .write(state.memory, instruction, write_data, &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
