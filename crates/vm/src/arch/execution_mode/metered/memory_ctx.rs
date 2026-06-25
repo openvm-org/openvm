@@ -147,7 +147,7 @@ impl MemoryPageTracker {
     }
 
     #[inline(always)]
-    pub fn insert(&mut self, page_id: usize, leaf_mask: u64) {
+    pub fn insert(&mut self, page_id: usize, leaf_mask: u64) -> (u32, u32) {
         debug_assert!(page_id < self.page_masks.len());
         debug_assert!(leaf_mask != 0);
 
@@ -155,16 +155,24 @@ impl MemoryPageTracker {
         let old_mask = *page_mask;
         let new_mask = old_mask | leaf_mask;
         if new_mask == old_mask {
-            return;
+            return (0, 0);
         }
 
         *page_mask = new_mask;
-        self.leaves += (new_mask ^ old_mask).count_ones();
-        self.merkle_nodes += local_merkle_nodes(new_mask) - local_merkle_nodes(old_mask);
+        let added_mask = new_mask ^ old_mask;
+        let leaves = added_mask.count_ones();
+        let mut merkle_nodes = if leaves <= 4 {
+            local_merkle_nodes_added(old_mask, added_mask)
+        } else {
+            local_merkle_nodes(new_mask) - local_merkle_nodes(old_mask)
+        };
+        self.leaves += leaves;
 
         if old_mask == 0 {
-            self.merkle_nodes += self.insert_upper_path(page_id);
+            merkle_nodes += self.insert_upper_path(page_id);
         }
+        self.merkle_nodes += merkle_nodes;
+        (leaves, merkle_nodes)
     }
 
     #[inline(always)]
@@ -196,13 +204,13 @@ fn leaf_mask_range(start: u32, end: u32) -> u64 {
 
 #[inline(always)]
 fn parent_mask(mut mask: u64) -> u64 {
-    let mut parents = 0;
-    while mask != 0 {
-        let bit = mask.trailing_zeros();
-        parents |= 1u64 << (bit >> 1);
-        mask &= mask - 1;
-    }
-    parents
+    mask |= mask >> 1;
+    mask &= 0x5555_5555_5555_5555;
+    mask = (mask | (mask >> 1)) & 0x3333_3333_3333_3333;
+    mask = (mask | (mask >> 2)) & 0x0f0f_0f0f_0f0f_0f0f;
+    mask = (mask | (mask >> 4)) & 0x00ff_00ff_00ff_00ff;
+    mask = (mask | (mask >> 8)) & 0x0000_ffff_0000_ffff;
+    (mask | (mask >> 16)) & 0x0000_0000_ffff_ffff
 }
 
 #[inline(always)]
@@ -223,12 +231,35 @@ fn local_merkle_nodes(mask: u64) -> u32 {
     nodes
 }
 
+#[inline(always)]
+fn local_merkle_nodes_added(mut old_mask: u64, mut added_mask: u64) -> u32 {
+    debug_assert_eq!(old_mask & added_mask, 0);
+
+    let mut nodes = 0;
+    while added_mask != 0 {
+        let leaf = added_mask.trailing_zeros();
+        let leaf_bit = 1u64 << leaf;
+        nodes += u32::from(old_mask & (0x3 << (leaf & !0x1)) == 0);
+        nodes += u32::from(old_mask & (0xf << (leaf & !0x3)) == 0);
+        nodes += u32::from(old_mask & (0xff << (leaf & !0x7)) == 0);
+        nodes += u32::from(old_mask & (0xffff << (leaf & !0xf)) == 0);
+        nodes += u32::from(old_mask & (0xffff_ffff << (leaf & !0x1f)) == 0);
+        nodes += u32::from(old_mask == 0);
+        old_mask |= leaf_bit;
+        added_mask &= added_mask - 1;
+    }
+    nodes
+}
+
 #[derive(Clone, Debug)]
 pub struct MemoryCtx {
     memory_dimensions: MemoryDimensions,
     pub page_tracker: MemoryPageTracker,
     pub page_indices_since_checkpoint: Vec<PageAccess>,
     pub page_indices_since_checkpoint_len: usize,
+    page_indices_applied_len: usize,
+    pending_leaves: u32,
+    pending_merkle_nodes: u32,
 }
 
 impl MemoryCtx {
@@ -244,6 +275,9 @@ impl MemoryCtx {
             page_tracker: MemoryPageTracker::new(num_pages, merkle_height - PAGE_BITS),
             page_indices_since_checkpoint: Vec::with_capacity(checkpoint_capacity),
             page_indices_since_checkpoint_len: 0,
+            page_indices_applied_len: 0,
+            pending_leaves: 0,
+            pending_merkle_nodes: 0,
         }
     }
 
@@ -312,10 +346,50 @@ impl MemoryCtx {
         self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
     }
 
+    #[cfg(feature = "rvr")]
+    #[inline(always)]
+    pub(crate) fn record_and_apply_page_accesses_with_offset(
+        &mut self,
+        page_offset: u32,
+        accesses: &[PageAccess],
+    ) {
+        let len = accesses.len();
+        if len == 0 {
+            return;
+        }
+
+        let old_len = self.page_indices_since_checkpoint.len();
+        self.page_indices_since_checkpoint.reserve(len);
+
+        // SAFETY: reserve above ensures capacity for len new initialized entries.
+        unsafe {
+            let dst = self.page_indices_since_checkpoint.as_mut_ptr().add(old_len);
+            for (i, access) in accesses.iter().enumerate() {
+                debug_assert!(access.leaf_mask != 0);
+                let page_id = page_offset + access.page_id;
+                dst.add(i).write(PageAccess {
+                    page_id,
+                    leaf_mask: access.leaf_mask,
+                });
+                let (leaves, merkle_nodes) =
+                    self.page_tracker.insert(page_id as usize, access.leaf_mask);
+                self.pending_leaves += leaves;
+                self.pending_merkle_nodes += merkle_nodes;
+            }
+            self.page_indices_since_checkpoint.set_len(old_len + len);
+        }
+
+        self.page_indices_applied_len = self.page_indices_since_checkpoint.len();
+        self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
+    }
+
     /// Initialize state for a new segment
     #[inline(always)]
     pub(crate) fn initialize_segment(&mut self, trace_heights: &mut [u32]) {
         self.page_tracker.clear();
+        self.page_indices_applied_len = 0;
+        self.pending_leaves = 0;
+        self.pending_merkle_nodes = 0;
 
         // Reset trace heights for memory chips as 0
         // SAFETY: BOUNDARY_AIR_ID and MERKLE_AIR_ID are compile-time constants within bounds
@@ -341,6 +415,9 @@ impl MemoryCtx {
     pub(crate) fn update_checkpoint(&mut self) {
         self.page_indices_since_checkpoint.clear();
         self.page_indices_since_checkpoint_len = 0;
+        self.page_indices_applied_len = 0;
+        self.pending_leaves = 0;
+        self.pending_merkle_nodes = 0;
     }
 
     /// Applies exact boundary and Merkle height deltas for the page/leaf masks
@@ -348,15 +425,20 @@ impl MemoryCtx {
     /// tracegen may deduplicate equal hash inputs by value.
     #[inline(always)]
     fn apply_height_updates(&mut self, trace_heights: &mut [u32]) {
-        let old_leaves = self.page_tracker.leaves;
-        let old_merkle_nodes = self.page_tracker.merkle_nodes;
-        for &access in &self.page_indices_since_checkpoint {
-            self.page_tracker
-                .insert(access.page_id as usize, access.leaf_mask);
-        }
+        let mut leaves = self.pending_leaves;
+        let mut merkle_nodes = self.pending_merkle_nodes;
+        self.pending_leaves = 0;
+        self.pending_merkle_nodes = 0;
 
-        let leaves = self.page_tracker.leaves - old_leaves;
-        let merkle_nodes = self.page_tracker.merkle_nodes - old_merkle_nodes;
+        for &access in &self.page_indices_since_checkpoint[self.page_indices_applied_len..] {
+            let (new_leaves, new_merkle_nodes) = self
+                .page_tracker
+                .insert(access.page_id as usize, access.leaf_mask);
+            leaves += new_leaves;
+            merkle_nodes += new_merkle_nodes;
+        }
+        self.page_indices_applied_len = self.page_indices_since_checkpoint.len();
+
         debug_assert!(trace_heights.len() >= 2);
         let poseidon2_idx = trace_heights.len() - 2;
         // SAFETY: BOUNDARY_AIR_ID, MERKLE_AIR_ID, and poseidon2_idx are all within bounds
@@ -379,6 +461,26 @@ impl MemoryCtx {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn reference_parent_mask(mut mask: u64) -> u64 {
+        let mut parents = 0;
+        while mask != 0 {
+            let bit = mask.trailing_zeros();
+            parents |= 1u64 << (bit >> 1);
+            mask &= mask - 1;
+        }
+        parents
+    }
+
+    fn reference_local_merkle_nodes(mask: u64) -> u32 {
+        let mut nodes = 0;
+        let mut level_mask = mask;
+        for _ in 0..PAGE_BITS {
+            level_mask = reference_parent_mask(level_mask);
+            nodes += level_mask.count_ones();
+        }
+        nodes
+    }
 
     #[test]
     fn test_bitset_insert_range() {
@@ -413,6 +515,90 @@ mod tests {
         assert_eq!(tracker.merkle_nodes, 8);
         tracker.insert(0, 1 << 2);
         assert_eq!(tracker.merkle_nodes, 9);
+    }
+
+    #[test]
+    fn test_local_merkle_nodes_matches_reference() {
+        let cases = [
+            0,
+            1,
+            1 << 1,
+            1 << 2,
+            1 << 31,
+            1 << 32,
+            1 << 63,
+            0x5555_5555_5555_5555,
+            0xaaaa_aaaa_aaaa_aaaa,
+            0x0000_ffff_0000_ffff,
+            0xffff_0000_ffff_0000,
+            u64::MAX,
+        ];
+        for mask in cases {
+            assert_eq!(local_merkle_nodes(mask), reference_local_merkle_nodes(mask));
+        }
+
+        let mut mask = 0x9e37_79b9_7f4a_7c15u64;
+        for _ in 0..1024 {
+            mask ^= mask << 7;
+            mask ^= mask >> 9;
+            mask ^= mask << 8;
+            assert_eq!(local_merkle_nodes(mask), reference_local_merkle_nodes(mask));
+        }
+    }
+
+    #[test]
+    fn test_local_merkle_nodes_added_matches_reference_delta() {
+        let mut old_mask = 0u64;
+        let additions = [
+            1u64 << 0,
+            1u64 << 1,
+            1u64 << 4,
+            1u64 << 17,
+            1u64 << 31,
+            1u64 << 32,
+            1u64 << 63,
+            0x5555_0000_0000_0000,
+            0xaaaa_ffff_0000_0000,
+            u64::MAX,
+        ];
+        for leaf_mask in additions {
+            let new_mask = old_mask | leaf_mask;
+            if new_mask != old_mask {
+                let added_mask = new_mask ^ old_mask;
+                if added_mask.count_ones() <= 4 {
+                    assert_eq!(
+                        local_merkle_nodes_added(old_mask, added_mask),
+                        reference_local_merkle_nodes(new_mask)
+                            - reference_local_merkle_nodes(old_mask)
+                    );
+                }
+                assert_eq!(
+                    local_merkle_nodes(new_mask) - local_merkle_nodes(old_mask),
+                    reference_local_merkle_nodes(new_mask) - reference_local_merkle_nodes(old_mask)
+                );
+                old_mask = new_mask;
+            }
+        }
+
+        old_mask = 1;
+        for leaf_mask in additions {
+            let new_mask = old_mask | leaf_mask;
+            if new_mask != old_mask {
+                let added_mask = new_mask ^ old_mask;
+                if added_mask.count_ones() <= 4 {
+                    assert_eq!(
+                        local_merkle_nodes_added(old_mask, added_mask),
+                        reference_local_merkle_nodes(new_mask)
+                            - reference_local_merkle_nodes(old_mask)
+                    );
+                }
+                assert_eq!(
+                    local_merkle_nodes(new_mask) - local_merkle_nodes(old_mask),
+                    reference_local_merkle_nodes(new_mask) - reference_local_merkle_nodes(old_mask)
+                );
+                old_mask = new_mask;
+            }
+        }
     }
 
     #[test]

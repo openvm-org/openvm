@@ -192,24 +192,23 @@ impl SegmentationState {
     /// their leaf masks to the shared memory metering checkpoint buffer.
     fn flush_page_buffer(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
         let page_shift = self.address_height as usize - DEFAULT_PAGE_BITS;
-        for &(buf_len, addr_space) in &[
-            (mem_len, RV64_MEMORY_AS),
-            (pv_len, PUBLIC_VALUES_AS),
-            (deferral_len, DEFERRAL_AS),
-        ] {
-            let as_idx = addr_space as usize;
-            let as_offset = (as_idx - 1) << page_shift;
-            let buf = match addr_space {
-                RV64_MEMORY_AS => &self.mem_page_buf,
-                PUBLIC_VALUES_AS => &self.pv_page_buf,
-                _ => &self.deferral_page_buf,
-            };
-            for access in &buf[..buf_len as usize] {
-                let page_id = as_offset + access.page_id as usize;
-                self.memory_ctx
-                    .record_page_access(page_id as u32, access.leaf_mask);
-            }
-        }
+        let mem_offset = ((RV64_MEMORY_AS as usize - 1) << page_shift) as u32;
+        self.memory_ctx.record_and_apply_page_accesses_with_offset(
+            mem_offset,
+            &self.mem_page_buf[..mem_len as usize],
+        );
+
+        let pv_offset = ((PUBLIC_VALUES_AS as usize - 1) << page_shift) as u32;
+        self.memory_ctx.record_and_apply_page_accesses_with_offset(
+            pv_offset,
+            &self.pv_page_buf[..pv_len as usize],
+        );
+
+        let deferral_offset = ((DEFERRAL_AS as usize - 1) << page_shift) as u32;
+        self.memory_ctx.record_and_apply_page_accesses_with_offset(
+            deferral_offset,
+            &self.deferral_page_buf[..deferral_len as usize],
+        );
     }
 
     /// Apply boundary and merkle height updates from accumulated page accesses.
