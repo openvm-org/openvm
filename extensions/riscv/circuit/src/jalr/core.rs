@@ -11,7 +11,7 @@ use openvm_circuit_primitives::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
-    program::{DEFAULT_PC_STEP, PC_BITS},
+    program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC, PC_BITS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::Rv64JalrOpcode::{self, *};
@@ -23,9 +23,9 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    expand_to_rv64_block, ptr_to_u16_limbs, rv64_bytes_to_u32, rv64_u16_block_to_bytes,
-    rv64_u32_to_u16_block, Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_PTR_U16_LIMBS,
-    U16_BITS,
+    expand_to_rv64_block, ptr_to_u16_limbs, rv64_address_add_imm, rv64_bytes_to_u32,
+    rv64_u16_block_to_bytes, rv64_u32_to_u16_block, Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller,
+    RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 #[repr(C)]
@@ -119,7 +119,8 @@ where
         // Sign-extend the 16-bit immediate into the high u16 limb.
         let imm_extend_limb = imm_sign * AB::F::from_u32(u16::MAX as u32);
         let carry = (rs1[1] + imm_extend_limb + carry - to_pc_limbs[1]) * inv;
-        builder.when(is_valid).assert_bool(carry);
+        builder.when(is_valid).assert_bool(carry.clone());
+        builder.when(is_valid).assert_eq(carry, imm_sign);
 
         // Prevent to_pc overflow. to_pc_limbs[0] is 15 bits because it is
         // multiplied by 2 when reconstructing the aligned target.
@@ -300,8 +301,13 @@ pub(super) fn run_jalr(
     imm: u16,
     imm_sign: bool,
 ) -> (u32, [u16; BLOCK_FE_WIDTH]) {
-    let to_pc = rs1.wrapping_add(imm as u32 + (imm_sign as u32 * ((u16::MAX as u32) << U16_BITS)));
-    assert!(to_pc < (1 << PC_BITS));
+    let imm_extended = imm as u32 + (imm_sign as u32 * ((u16::MAX as u32) << U16_BITS));
+    let to_pc = rv64_address_add_imm(rs1, imm_extended);
+    assert!(
+        to_pc <= u64::from(MAX_ALLOWED_PC),
+        "JALR target exceeds implemented PC address space"
+    );
+    let to_pc = to_pc as u32;
 
     let rd_low_u32 = pc.wrapping_add(DEFAULT_PC_STEP);
     let rd_data = rv64_u32_to_u16_block(rd_low_u32);
