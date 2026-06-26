@@ -100,18 +100,33 @@ impl MemoryInventoryGPU {
             .map(|mem| mem.as_slice())
             .enumerate()
         {
-            tracing::debug!(
-                "Setting initial memory for address space {}: {} bytes",
-                addr_sp,
-                raw_mem.len()
-            );
-            self.initial_memory.push(Arc::new(if raw_mem.is_empty() {
+            // The merkle/boundary kernels expect the full address space on device, but only the
+            // first `used_len` bytes can be non-zero (the rest is zero by construction). So we
+            // allocate the full buffer yet copy only the populated prefix over PCIe and zero the
+            // remainder on-device, avoiding a multi-GB host->device transfer of mostly-zero memory.
+            let device_buffer = if raw_mem.is_empty() {
                 DeviceBuffer::new()
             } else {
-                raw_mem
-                    .to_device_on(&self.device_ctx)
-                    .expect("failed to copy memory to device")
-            }));
+                let full_len = raw_mem.len();
+                let used_len = initial_memory.used_bytes(addr_sp).min(full_len);
+                tracing::debug!(
+                    "Setting initial memory for address space {}: copying {} of {} bytes",
+                    addr_sp,
+                    used_len,
+                    full_len
+                );
+                let mut buffer = DeviceBuffer::<u8>::with_capacity_on(full_len, &self.device_ctx);
+                if used_len > 0 {
+                    raw_mem[..used_len]
+                        .copy_to_on(&mut buffer, &self.device_ctx)
+                        .expect("failed to copy memory to device");
+                }
+                buffer
+                    .fill_zero_suffix_on(used_len, &self.device_ctx)
+                    .expect("failed to zero device memory tail");
+                buffer
+            };
+            self.initial_memory.push(Arc::new(device_buffer));
             self.merkle_tree
                 .build_async(self.initial_memory[addr_sp].clone(), addr_sp);
         }
@@ -356,7 +371,10 @@ mod tests {
         common::get_device,
         stream::{CudaStream, GpuDeviceCtx, StreamGuard},
     };
-    use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+    use openvm_instructions::{
+        exe::SparseMemoryImage,
+        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    };
     use openvm_stark_backend::prover::MatrixDimensions;
 
     use super::*;
@@ -522,6 +540,86 @@ mod tests {
         let gpu_root_slice =
             &merkle_ctx.public_values[merkle_ctx.public_values.len() - DIGEST_WIDTH..];
         let gpu_root: [F; DIGEST_WIDTH] = gpu_root_slice.try_into().unwrap();
+
+        assert_eq!(expected_root, gpu_root);
+    }
+
+    /// Exercises the narrowed host->device transfer: an address space far larger than its populated
+    /// prefix must still produce the same merkle root as the CPU reference, proving that copying
+    /// only `used_bytes` and zeroing the device tail is equivalent to transferring the whole
+    /// zero-padded image.
+    #[test]
+    fn test_set_initial_memory_copies_only_used_prefix() {
+        let address_height = 10;
+        let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
+        // Registers stay tiny; main memory spans 2^address_height leaves but is only sparsely used.
+        addr_spaces[RV64_REGISTER_AS as usize].num_cells = 2 * DIGEST_WIDTH;
+        addr_spaces[RV64_MEMORY_AS as usize].num_cells = DIGEST_WIDTH << address_height;
+        let mem_config = MemoryConfig::new(
+            2,
+            addr_spaces,
+            ptr_bits_from_address_height(address_height),
+            29,
+            17,
+        );
+
+        // Populate a small low-address prefix via the sparse image, mirroring a real initial image.
+        let prefix_bytes = 2 * MEMORY_BLOCK_BYTES as u32;
+        let mut sparse = SparseMemoryImage::new();
+        for byte_ptr in 0..prefix_bytes {
+            sparse.insert((RV64_REGISTER_AS, byte_ptr), (byte_ptr + 1) as u8);
+            sparse.insert((RV64_MEMORY_AS, byte_ptr), (byte_ptr + 7) as u8);
+        }
+        let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
+        memory.memory.set_from_sparse(&sparse);
+
+        // The populated prefix must be far smaller than the full allocation, so that
+        // `set_initial_memory` actually takes the prefix-copy + tail-zero path under test.
+        let used_len = memory.memory.used_bytes(RV64_MEMORY_AS as usize);
+        let full_len = memory.memory.get_memory()[RV64_MEMORY_AS as usize]
+            .as_slice()
+            .len();
+        assert_eq!(used_len, prefix_bytes as usize);
+        assert!(
+            used_len < full_len,
+            "test must exercise the narrowed transfer"
+        );
+
+        let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
+        let cpu_merkle_tree = MerkleTree::<F, DIGEST_WIDTH>::from_memory(
+            &memory.memory,
+            &mem_config.memory_dimensions(),
+            &cpu_hasher,
+        );
+        let expected_root = cpu_merkle_tree.root();
+
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
+        let range_max_bits = mem_config.pointer_max_bits.max(LOW_LEAF_BITS);
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+            0,
+            range_max_bits,
+        )));
+        let mut inventory = MemoryInventoryGPU::new(
+            mem_config.clone(),
+            range_checker,
+            hasher_chip,
+            device_ctx.clone(),
+        );
+        inventory.set_initial_memory(&memory.memory);
+
+        let ctxs = inventory.generate_proving_ctxs(Vec::new());
+        let merkle_ctx = ctxs
+            .iter()
+            .find(|ctx| ctx.public_values.len() >= 2 * DIGEST_WIDTH)
+            .expect("missing merkle ctx");
+        let gpu_root: [F; DIGEST_WIDTH] = merkle_ctx.public_values
+            [merkle_ctx.public_values.len() - DIGEST_WIDTH..]
+            .try_into()
+            .unwrap();
 
         assert_eq!(expected_root, gpu_root);
     }

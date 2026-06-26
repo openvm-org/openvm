@@ -1014,6 +1014,14 @@ where
             interpreter.opcode_counts_by_air::<VB::RecordArena>(),
         );
         let touched_memory = exec_state.vm_state.memory.finalize::<Val<E::SC>>();
+        // Record how far memory has been written so the next segment's initial-memory transfer
+        // (e.g. the GPU host->device copy) only touches the populated prefix of the image.
+        exec_state
+            .vm_state
+            .memory
+            .data
+            .memory
+            .extend_used_from_touched(&touched_memory);
         #[cfg(feature = "perf-metrics")]
         end_segment_metrics(&mut exec_state);
 

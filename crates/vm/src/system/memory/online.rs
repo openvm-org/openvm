@@ -134,6 +134,19 @@ pub struct AddressMap<M: LinearMemory = MemoryBackend> {
     pub mem: Vec<M>,
     /// Host configuration for each address space.
     pub config: Vec<AddressSpaceHostConfig>,
+    /// Per-address-space upper bound (in bytes) on the populated prefix of `mem`: bytes at offsets
+    /// `>= mem_used[as]` are guaranteed to be zero. This lets the GPU initial-memory transfer copy
+    /// only the populated prefix of the (potentially multi-GB) memory image instead of the whole
+    /// zero-padded buffer (see the CUDA `MemoryInventoryGPU::set_initial_memory`).
+    ///
+    /// It defaults to the full allocation (so memory mutated by untracked paths is conservatively
+    /// transferred in full) and is narrowed by [`Self::set_from_sparse`] (which assumes a freshly
+    /// zeroed image) and grown by [`Self::extend_used_from_touched`]. Raw writes via
+    /// [`LinearMemory`]/[`Self::get_memory_mut`] are *not* reflected, so once narrowed the
+    /// watermark is only valid for images populated solely through those two methods — which
+    /// is exactly how every memory image that gets transported for proving is built (the
+    /// initial sparse image, then per-segment preflight touches).
+    pub mem_used: Vec<usize>,
 }
 
 impl Default for AddressMap {
@@ -145,11 +158,17 @@ impl Default for AddressMap {
 impl<M: LinearMemory> AddressMap<M> {
     pub fn new(config: Vec<AddressSpaceHostConfig>) -> Self {
         assert_eq!(config[0].num_cells, 0, "Address space 0 must have 0 cells");
-        let mem = config
+        let mem: Vec<M> = config
             .iter()
             .map(|config| M::new(config.num_cells.checked_mul(config.layout.size()).unwrap()))
             .collect();
-        Self { mem, config }
+        // Conservatively assume the whole allocation is in use; trusted population paths narrow it.
+        let mem_used = mem.iter().map(|m| m.size()).collect();
+        Self {
+            mem,
+            config,
+            mem_used,
+        }
     }
 
     pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
@@ -170,6 +189,34 @@ impl<M: LinearMemory> AddressMap<M> {
     pub fn fill_zero(&mut self) {
         for mem in &mut self.mem {
             mem.fill_zero();
+        }
+        // Everything is now zero, so nothing is populated.
+        self.mem_used.iter_mut().for_each(|used| *used = 0);
+    }
+
+    /// Number of leading bytes of `addr_space`'s linear memory that may be non-zero; the remaining
+    /// bytes are guaranteed to be zero. See [`Self::mem_used`].
+    #[inline]
+    pub fn used_bytes(&self, addr_space: usize) -> usize {
+        self.mem_used[addr_space].min(self.mem[addr_space].size())
+    }
+
+    /// Grows the per-address-space used watermark ([`Self::mem_used`]) to cover every block in
+    /// `touched`. Call this after preflight execution so that the carried-forward memory image
+    /// records how far it has been written, keeping the GPU initial-memory transfer correct across
+    /// continuation segments while still skipping the zero tail.
+    pub fn extend_used_from_touched<F, const N: usize>(
+        &mut self,
+        touched: &[(Address, TimestampedValues<F, N>)],
+    ) {
+        for &((addr_space, ptr), _) in touched {
+            let cell_size = self.config[addr_space as usize].layout.size();
+            // `ptr` is an AS-native cell pointer and each block spans `N` cells.
+            let end = (ptr as usize + N) * cell_size;
+            let used = &mut self.mem_used[addr_space as usize];
+            if end > *used {
+                *used = end;
+            }
         }
     }
 
@@ -257,6 +304,10 @@ impl<M: LinearMemory> AddressMap<M> {
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub fn set_from_sparse(&mut self, sparse_map: &SparseMemoryImage) {
+        // `set_from_sparse` is only called on freshly zeroed memory, so after it runs the populated
+        // region is exactly the union of the sparse entries. Reset the used watermark and grow it
+        // to the largest written byte per address space.
+        self.mem_used.iter_mut().for_each(|used| *used = 0);
         for (&(addr_space, ptr), &data_byte) in sparse_map.iter() {
             // SAFETY:
             // - safety assumptions in function doc comments
@@ -264,6 +315,8 @@ impl<M: LinearMemory> AddressMap<M> {
                 self.mem
                     .get_unchecked_mut(addr_space as usize)
                     .write_unaligned(ptr as usize, data_byte);
+                let used = self.mem_used.get_unchecked_mut(addr_space as usize);
+                *used = (*used).max(ptr as usize + 1);
             }
         }
     }
