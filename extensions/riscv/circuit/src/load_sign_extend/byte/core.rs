@@ -17,8 +17,11 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    adapters::{LoadStoreInstruction, Rv64LoadStoreAdapterFiller, RV64_BYTE_BITS},
-    loadstore::common::{adapter_context, byte_from_cell, LoadStoreRecord, BYTE_BITS, SIGN_BYTE},
+    adapters::{
+        load_adapter_context, u16_cell_byte, LoadInstruction, Rv64LoadAdapterFiller,
+        RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
+    },
+    load::LoadRecord,
 };
 
 const LOAD_SIGN_EXTEND_BYTE_CASES: usize = 8;
@@ -43,7 +46,6 @@ pub struct LoadSignExtendByteCoreCols<T> {
     pub data_most_sig_bit: T,
     pub read_cell_bytes: [T; 2],
     pub read_data: [T; BLOCK_FE_WIDTH],
-    pub prev_data: [T; BLOCK_FE_WIDTH],
 }
 
 #[derive(Debug, Clone, ColumnsAir)]
@@ -82,9 +84,9 @@ impl<AB, I> VmCoreAir<AB, I> for LoadSignExtendByteCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<([AB::Var; BLOCK_FE_WIDTH], [AB::Expr; BLOCK_FE_WIDTH])>,
+    I::Reads: From<[AB::Expr; BLOCK_FE_WIDTH]>,
     I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
-    I::ProcessedInstruction: From<LoadStoreInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<LoadInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -104,8 +106,8 @@ where
             .send_range(cols.read_cell_bytes[0], cols.read_cell_bytes[1])
             .eval(builder, is_valid.clone());
 
-        let read_cell =
-            cols.read_cell_bytes[0] + cols.read_cell_bytes[1] * AB::Expr::from_u32(1 << BYTE_BITS);
+        let read_cell = cols.read_cell_bytes[0]
+            + cols.read_cell_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
         let expected_read_cell = flags
             .iter()
             .enumerate()
@@ -128,7 +130,7 @@ where
         self.range_bus
             .range_check(
                 selected_byte.clone()
-                    - cols.data_most_sig_bit * AB::Expr::from_u32(SIGN_BYTE as u32),
+                    - cols.data_most_sig_bit * AB::Expr::from_u32(RV64_BYTE_SIGN_BIT as u32),
                 RV64_BYTE_BITS - 1,
             )
             .eval(builder, is_valid.clone());
@@ -152,14 +154,11 @@ where
             is_valid.clone() * AB::Expr::from_u8(LOADB as u8),
         );
 
-        adapter_context::<AB, I>(
-            cols.is_valid.into(),
+        load_adapter_context::<AB, I>(
             cols.is_valid.into(),
             expected_opcode,
             load_shift_amount,
-            AB::Expr::ZERO,
             cols.read_data,
-            cols.prev_data,
             write_data,
         )
     }
@@ -170,7 +169,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct LoadSignExtendByteFiller<A = Rv64LoadStoreAdapterFiller> {
+pub struct LoadSignExtendByteFiller<A = Rv64LoadAdapterFiller> {
     adapter: A,
     pub offset: usize,
     encoder: Encoder,
@@ -204,27 +203,25 @@ where
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        let record: &LoadStoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let opcode = Rv64LoadStoreOpcode::from_usize(record.local_opcode as usize);
         let shift = record.shift_amount as usize;
         let read_data = record.read_data;
-        let prev_data = record.prev_data;
         debug_assert_eq!(opcode, LOADB);
         let core_row: &mut LoadSignExtendByteCoreCols<F> = core_row.borrow_mut();
 
         let read_cell = read_data[shift / 2];
-        let read_cell_bytes = [byte_from_cell(read_cell, 0), byte_from_cell(read_cell, 1)];
+        let read_cell_bytes = [u16_cell_byte(read_cell, 0), u16_cell_byte(read_cell, 1)];
         self.bitwise_lookup_chip
             .request_range(read_cell_bytes[0] as u32, read_cell_bytes[1] as u32);
         core_row.read_cell_bytes = read_cell_bytes.map(F::from_u16);
 
         let byte = read_cell_bytes[shift % 2];
-        let sign_bit = byte & SIGN_BYTE;
+        let sign_bit = byte & RV64_BYTE_SIGN_BIT;
         self.range_checker_chip
             .add_count((byte - sign_bit) as u32, RV64_BYTE_BITS - 1);
         core_row.data_most_sig_bit = F::from_bool(sign_bit != 0);
         core_row.read_data = read_data.map(F::from_u16);
-        core_row.prev_data = prev_data.map(F::from_u16);
         core_row.is_valid = F::ONE;
         let pt: [u32; LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH] =
             self.encoder.get_flag_pt(shift).try_into().unwrap();

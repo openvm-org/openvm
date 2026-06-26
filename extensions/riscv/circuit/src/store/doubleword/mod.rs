@@ -1,0 +1,33 @@
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+
+use crate::{
+    adapters::{Rv64StoreAdapterAir, Rv64StoreAdapterExecutor, Rv64StoreAdapterFiller},
+    store::{
+        aligned::{StoreAlignedCoreAir, StoreAlignedFiller},
+        common::{StoreExecutor, KIND_DOUBLEWORD},
+    },
+};
+
+pub const DOUBLEWORD_STORE_CASES: usize = 1;
+pub const DOUBLEWORD_STORE_SELECTOR_WIDTH: usize = 1;
+
+pub type StoreDoublewordCoreAir =
+    StoreAlignedCoreAir<KIND_DOUBLEWORD, DOUBLEWORD_STORE_CASES, DOUBLEWORD_STORE_SELECTOR_WIDTH>;
+pub type StoreDoublewordFiller = StoreAlignedFiller<
+    Rv64StoreAdapterFiller,
+    KIND_DOUBLEWORD,
+    DOUBLEWORD_STORE_CASES,
+    DOUBLEWORD_STORE_SELECTOR_WIDTH,
+>;
+
+pub type Rv64StoreDoublewordAir = VmAirWrapper<Rv64StoreAdapterAir, StoreDoublewordCoreAir>;
+pub type Rv64StoreDoublewordExecutor = StoreExecutor<Rv64StoreAdapterExecutor, KIND_DOUBLEWORD>;
+pub type Rv64StoreDoublewordChip<F> = VmChipWrapper<F, StoreDoublewordFiller>;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
+#[cfg(test)]
+mod tests;

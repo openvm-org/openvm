@@ -6,7 +6,7 @@ pub(crate) use openvm_circuit::{
             memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
+        Arena, MemoryConfig, PreflightExecutor,
     },
     system::memory::merkle::public_values::PUBLIC_VALUES_AS,
 };
@@ -35,7 +35,7 @@ pub(crate) use {
         Rv64LoadSignExtendByteChipGpu, Rv64LoadSignExtendHalfwordChipGpu,
         Rv64LoadSignExtendWordChipGpu,
     },
-    crate::{adapters::Rv64LoadStoreAdapterRecord, loadstore::LoadStoreRecord},
+    crate::{adapters::Rv64LoadAdapterRecord, load::LoadRecord},
     openvm_circuit::arch::{
         testing::{
             default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
@@ -65,11 +65,11 @@ pub(crate) use super::{
 pub(crate) use crate::{
     adapters::{
         rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
-        Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller,
-        RV64_BYTE_BITS,
+        Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, RV64_BYTE_BITS,
     },
-    load_sign_extend::aligned::core::LoadSignExtendAlignedCoreCols,
-    loadstore::common::run_write_data,
+    load_sign_extend::{
+        aligned::core::LoadSignExtendAlignedCoreCols, common::load_sign_extend_write_data,
+    },
 };
 
 pub(crate) const IMM_BITS: usize = 16;
@@ -110,7 +110,7 @@ pub(crate) fn create_byte_harness(
         bitwise_bus,
     ));
     let air = Rv64LoadSignExtendByteAir::new(
-        Rv64LoadStoreAdapterAir::new(
+        Rv64LoadAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -123,12 +123,12 @@ pub(crate) fn create_byte_harness(
         ),
     );
     let executor = Rv64LoadSignExtendByteExecutor::new(
-        Rv64LoadStoreAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = Rv64LoadSignExtendByteChip::<F>::new(
         LoadSignExtendByteFiller::new(
-            Rv64LoadStoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
             range_checker,
@@ -144,7 +144,7 @@ pub(crate) fn create_byte_harness(
 pub(crate) fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> HalfwordHarness {
     let range_checker = tester.range_checker();
     let air = Rv64LoadSignExtendHalfwordAir::new(
-        Rv64LoadStoreAdapterAir::new(
+        Rv64LoadAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -153,12 +153,12 @@ pub(crate) fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> Half
         LoadSignExtendHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
     );
     let executor = Rv64LoadSignExtendHalfwordExecutor::new(
-        Rv64LoadStoreAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = Rv64LoadSignExtendHalfwordChip::<F>::new(
         LoadSignExtendHalfwordFiller::new(
-            Rv64LoadStoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             range_checker,
         ),
@@ -170,7 +170,7 @@ pub(crate) fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> Half
 pub(crate) fn create_word_harness(tester: &mut VmChipTestBuilder<F>) -> WordHarness {
     let range_checker = tester.range_checker();
     let air = Rv64LoadSignExtendWordAir::new(
-        Rv64LoadStoreAdapterAir::new(
+        Rv64LoadAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -179,12 +179,12 @@ pub(crate) fn create_word_harness(tester: &mut VmChipTestBuilder<F>) -> WordHarn
         LoadSignExtendWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
     );
     let executor = Rv64LoadSignExtendWordExecutor::new(
-        Rv64LoadStoreAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = Rv64LoadSignExtendWordChip::<F>::new(
         LoadSignExtendWordFiller::new(
-            Rv64LoadStoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             range_checker,
         ),
@@ -213,10 +213,18 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         LOADB => 0,
         _ => unreachable!("signed load test only supports LOADB/LOADH/LOADW"),
     };
-    let ptr_val: u32 =
-        rng.random_range(0..(1u32 << (tester.address_bits() - alignment))) << alignment;
+    let max_addr = 1usize << tester.address_bits();
+    let imm_signed = if imm_sign == 0 {
+        imm as i64
+    } else {
+        imm as i64 - (1 << IMM_BITS)
+    };
+    let min_ptr = imm_signed.max(0) as usize;
+    let alignment_mask = (1usize << alignment) - 1;
+    let min_aligned_ptr = (min_ptr + alignment_mask) >> alignment;
+    let ptr_val = rng.random_range(min_aligned_ptr..(max_addr >> alignment)) << alignment;
     let rs1 = rs1.unwrap_or_else(|| {
-        let low4 = ptr_val.wrapping_sub(imm_ext).to_le_bytes();
+        let low4 = (ptr_val as i64 - imm_signed).to_le_bytes();
         [low4[0], low4[1], low4[2], low4[3], 0, 0, 0, 0]
     });
     let ptr_val = imm_ext.wrapping_add(rv64_bytes_to_u32(rs1));
@@ -255,10 +263,9 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         ),
     );
 
-    let expected = run_write_data(
+    let expected = load_sign_extend_write_data(
         opcode,
         rv64_bytes_to_u16_block(read_data),
-        [0; BLOCK_FE_WIDTH],
         shift_amount as usize,
     );
     if a != 0 {
@@ -390,12 +397,12 @@ pub(crate) fn dummy_range_checker() -> Arc<VariableRangeCheckerChip> {
 pub(crate) fn transfer_load_sign_extend_records<G, C, A, E>(
     harness: &mut GpuTestChipHarness<F, E, A, G, C>,
 ) {
-    type Record<'a> = (&'a mut Rv64LoadStoreAdapterRecord, &'a mut LoadStoreRecord);
+    type Record<'a> = (&'a mut Rv64LoadAdapterRecord, &'a mut LoadRecord);
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor>::new(),
         );
 }

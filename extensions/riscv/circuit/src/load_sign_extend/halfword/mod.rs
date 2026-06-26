@@ -1,9 +1,11 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use crate::{
-    adapters::{Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterExecutor},
-    load_sign_extend::aligned::core::{LoadSignExtendAlignedCoreAir, LoadSignExtendAlignedFiller},
-    loadstore::common::{LoadStoreExecutor, KIND_HALFWORD},
+    adapters::{Rv64LoadAdapterAir, Rv64LoadAdapterExecutor},
+    load_sign_extend::{
+        aligned::core::{LoadSignExtendAlignedCoreAir, LoadSignExtendAlignedFiller},
+        common::{LoadSignExtendExecutor, KIND_HALFWORD},
+    },
 };
 
 pub const LOAD_SIGN_EXTEND_HALFWORD_CASES: usize = 4;
@@ -15,16 +17,16 @@ pub type LoadSignExtendHalfwordCoreAir = LoadSignExtendAlignedCoreAir<
     LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
 >;
 pub type LoadSignExtendHalfwordFiller = LoadSignExtendAlignedFiller<
-    crate::adapters::Rv64LoadStoreAdapterFiller,
+    crate::adapters::Rv64LoadAdapterFiller,
     KIND_HALFWORD,
     LOAD_SIGN_EXTEND_HALFWORD_CASES,
     LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
 >;
 
 pub type Rv64LoadSignExtendHalfwordAir =
-    VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendHalfwordCoreAir>;
+    VmAirWrapper<Rv64LoadAdapterAir, LoadSignExtendHalfwordCoreAir>;
 pub type Rv64LoadSignExtendHalfwordExecutor =
-    LoadStoreExecutor<Rv64LoadStoreAdapterExecutor, KIND_HALFWORD>;
+    LoadSignExtendExecutor<Rv64LoadAdapterExecutor, KIND_HALFWORD>;
 pub type Rv64LoadSignExtendHalfwordChip<F> = VmChipWrapper<F, LoadSignExtendHalfwordFiller>;
 
 #[cfg(feature = "cuda")]
