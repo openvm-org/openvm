@@ -83,9 +83,6 @@ pub struct MeteredTracerData {
     pub mem_page_buf: *mut u32,
     pub pv_page_buf: *mut u32,
     pub deferral_page_buf: *mut u32,
-    /// Periodic-check callback. Always initialized; generated C calls it
-    /// unconditionally to keep the hot metered path branch-free.
-    pub on_check: unsafe extern "C" fn(*mut MeteredTracerData) -> u8,
     pub seg_state: *mut c_void,
     pub mem_page_buf_len: u32,
     pub pv_page_buf_len: u32,
@@ -105,7 +102,6 @@ impl Default for MeteredTracerData {
             mem_page_buf: std::ptr::null_mut(),
             pv_page_buf: std::ptr::null_mut(),
             deferral_page_buf: std::ptr::null_mut(),
-            on_check: metered_periodic_check,
             seg_state: std::ptr::null_mut(),
             mem_page_buf_len: 0,
             pv_page_buf_len: 0,
@@ -374,6 +370,7 @@ impl SegmentationState {
 /// # Safety
 /// `t` must point to a valid `MeteredTracerData` whose `seg_state` pointer
 /// references a live `SegmentationState`.
+#[no_mangle]
 pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) -> u8 {
     let tracer = &mut *t;
     let seg_state = &mut *(tracer.seg_state as *mut SegmentationState);
@@ -597,7 +594,6 @@ mod tests {
             mem_page_buf: seg_state.mem_page_buf_ptr(),
             pv_page_buf: seg_state.pv_page_buf_ptr(),
             deferral_page_buf: seg_state.deferral_page_buf_ptr(),
-            on_check: metered_periodic_check,
             seg_state: &mut seg_state as *mut SegmentationState as *mut c_void,
             mem_page_buf_len: 0,
             pv_page_buf_len: 0,
@@ -623,7 +619,6 @@ mod tests {
             mem_page_buf: seg_state.mem_page_buf_ptr(),
             pv_page_buf: seg_state.pv_page_buf_ptr(),
             deferral_page_buf: seg_state.deferral_page_buf_ptr(),
-            on_check: metered_periodic_check,
             seg_state: &mut seg_state as *mut SegmentationState as *mut c_void,
             mem_page_buf_len: 0,
             pv_page_buf_len: 0,

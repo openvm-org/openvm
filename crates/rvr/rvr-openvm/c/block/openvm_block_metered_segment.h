@@ -22,7 +22,7 @@ static __attribute__((preserve_most, cold,
 metered_segment_checkpoint(RvState* restrict state, uint32_t check_counter) {
   Tracer* t = state->tracer;
   t->check_counter = check_counter;
-  uint8_t suspend_signal = t->on_check(t);
+  uint8_t suspend_signal = metered_periodic_check(t);
   return (MeteredSegmentCheckpointResult){
       .check_counter = t->check_counter,
       .suspend_signal = suspend_signal,

@@ -17,7 +17,7 @@ static __attribute__((preserve_most, cold, noinline)) uint32_t
 metered_checkpoint(RvState* restrict state, uint32_t check_counter) {
   Tracer* t = state->tracer;
   t->check_counter = check_counter;
-  t->on_check(t);
+  metered_periodic_check(t);
   return t->check_counter;
 }
 

@@ -18,10 +18,7 @@ use super::{
     },
     compile::RvrCompiled,
     io::OpenVmIoState,
-    metered::{
-        metered_periodic_check, MeteredTracerData, RvrMeteredResult, SegmentationState,
-        NO_LAST_PAGE,
-    },
+    metered::{MeteredTracerData, RvrMeteredResult, SegmentationState, NO_LAST_PAGE},
     metered_cost::{MeteredCostData, PureTracerData, RvrMeteredCostResult},
     pure::RvrPureResult,
     state::{
@@ -289,7 +286,6 @@ fn execute_metered_impl<F: PrimeField32>(
     state.tracer.deferral_page_buf_len = 0;
     state.tracer.last_mem_page = NO_LAST_PAGE;
     state.tracer.check_counter = check_counter;
-    state.tracer.on_check = metered_periodic_check;
     state.tracer.seg_state = &mut seg_state as *mut SegmentationState as *mut c_void;
 
     let status = run_and_finalize(compiled, extensions, vm_state, &mut state, allow_suspended)

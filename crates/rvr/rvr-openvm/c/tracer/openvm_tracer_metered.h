@@ -31,9 +31,6 @@ typedef struct Tracer {
   uint32_t* mem_page_buf;
   uint32_t* pv_page_buf;
   uint32_t* deferral_page_buf;
-  /* Always initialized by Rust; called unconditionally on the cold checkpoint
-   * path to avoid a hot-path null check. */
-  uint8_t (*on_check)(struct Tracer*);
   void* seg_state;
   uint32_t mem_page_buf_len;
   uint32_t pv_page_buf_len;
@@ -44,6 +41,11 @@ typedef struct Tracer {
    * across segment boundaries that clear the global BitSet). */
   uint32_t last_mem_page;
 } Tracer;
+
+/* Periodic segmentation check implemented in Rust. Called unconditionally on
+ * the cold checkpoint path; exported from the host binary so the generated
+ * shared library can reference it directly without a function-pointer field. */
+extern uint8_t metered_periodic_check(Tracer* t);
 
 typedef struct TraceMemory {
   uint32_t last_mem_page;
@@ -316,7 +318,7 @@ static __attribute__((always_inline)) inline void trace_chip(
 static __attribute__((always_inline)) inline void trace_block(
     RvState* restrict state, uint32_t pc, uint32_t block_insn_count) {
   if (unlikely(state->tracer->check_counter < block_insn_count)) {
-    state->tracer->on_check(state->tracer);
+    metered_periodic_check(state->tracer);
   }
   state->tracer->check_counter -= block_insn_count;
 }
@@ -325,7 +327,7 @@ static __attribute__((always_inline)) inline uint8_t
 trace_block_with_segment_check(RvState* restrict state, uint32_t pc,
                                uint32_t block_insn_count) {
   if (unlikely(state->tracer->check_counter < block_insn_count)) {
-    if (state->tracer->on_check(state->tracer)) {
+    if (metered_periodic_check(state->tracer)) {
       return 1;
     }
   }
