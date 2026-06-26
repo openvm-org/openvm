@@ -27,6 +27,6 @@ pub fn sext32(value: u32) -> u64 {
 
 /// True if `pc` lies within the implemented PC address space (`<= MAX_ALLOWED_PC`).
 #[inline]
-pub fn is_valid_pc(pc: u64) -> bool {
+pub fn is_pc_in_bounds(pc: u64) -> bool {
     pc <= u64::from(MAX_ALLOWED_PC)
 }
