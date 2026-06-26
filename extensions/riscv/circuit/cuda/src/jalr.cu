@@ -35,10 +35,11 @@ __device__ void run_jalr(
     uint16_t rd_data[BLOCK_FE_WIDTH]
 ) {
     uint32_t offset = imm + (imm_sign ? (uint32_t(UINT16_MAX) << U16_BITS) : 0);
-    uint32_t to_pc = rs1 + offset;
+    int64_t signed_offset = (int64_t)(int32_t)offset;
+    uint64_t to_pc = uint64_t(rs1) + signed_offset;
 
-    assert(to_pc < (1u << PC_BITS));
-    out_pc = to_pc;
+    assert(to_pc < (uint64_t(1) << PC_BITS));
+    out_pc = uint32_t(to_pc);
     uint32_t rd_val = pc + DEFAULT_PC_STEP;
     rd_data[0] = uint16_t(rd_val);
     rd_data[1] = uint16_t(rd_val >> U16_BITS);

@@ -7,10 +7,12 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use openvm_instructions::{
-    program::{DEFAULT_PC_STEP as INSTR_SIZE, PC_BITS},
+    program::{DEFAULT_PC_STEP as INSTR_SIZE, MAX_ALLOWED_PC},
     riscv::RV64_NUM_REGISTERS as NUM_REGS,
 };
 use rvr_openvm_ir::{AluOp, Block, Instr, InstrAt, LiftedInstr, MulDivOp, Terminator};
+
+use crate::helpers::sext32;
 
 const MAX_VALUES: usize = 16;
 const MAX_ITERATIONS_MULTIPLIER: usize = 20;
@@ -168,12 +170,6 @@ impl RegisterState {
         }
         changed
     }
-}
-
-/// Sign-extend a 32-bit value to 64 bits.
-#[inline(always)]
-fn sext32(value: u32) -> u64 {
-    value as i32 as u64
 }
 
 // ── Binary operation evaluation (u64) ─────────────────────────────────────
@@ -504,14 +500,14 @@ fn simple_process_instr(instr: &Instr, regs: &mut [Option<u64>; NUM_REGS]) {
             if rd == 0 {
                 return;
             }
-            regs[rd as usize] = Some(*value as i32 as i64 as u64);
+            regs[rd as usize] = Some(sext32(*value));
         }
         Instr::Auipc { rd, value } => {
             let rd = *rd;
             if rd == 0 {
                 return;
             }
-            regs[rd as usize] = Some(*value as u64);
+            regs[rd as usize] = Some(*value);
         }
         Instr::Load { rd, .. } => {
             let rd = *rd;
@@ -841,7 +837,7 @@ fn transfer_instr(instr: &Instr, state: &mut RegisterState) {
             if *rd == 0 {
                 return;
             }
-            state.set(*rd, RegisterValue::constant(*value as u64));
+            state.set(*rd, RegisterValue::constant(*value));
         }
         Instr::Load { rd, .. } => {
             if *rd != 0 {
@@ -920,7 +916,7 @@ fn get_successors(
                             .iter()
                             .filter_map(|&t| {
                                 assert!(
-                                    t < (1u64 << PC_BITS),
+                                    t <= u64::from(MAX_ALLOWED_PC),
                                     "JumpDyn target {t:#x} exceeds PC address space"
                                 );
                                 let pc32 = t as u32;
@@ -981,7 +977,7 @@ fn get_successors(
 /// the result exceeds the valid PC address space.
 fn eval_jumpdyn_target(base: u64, imm: i32) -> Option<u64> {
     let target = base.wrapping_add(imm as i64 as u64) & !1u64;
-    if target < (1u64 << PC_BITS) {
+    if target <= u64::from(MAX_ALLOWED_PC) {
         Some(target)
     } else {
         None
