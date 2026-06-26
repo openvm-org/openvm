@@ -182,11 +182,11 @@ pub mod less_than_cuda {
     }
 }
 
-pub mod loadstore_byte_cuda {
+pub mod load_byte_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_store_byte_tracegen(
+        fn _rv64_load_byte_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -210,7 +210,7 @@ pub mod loadstore_byte_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_load_store_byte_tracegen(
+        CudaError::from_result(_rv64_load_byte_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -225,11 +225,11 @@ pub mod loadstore_byte_cuda {
     }
 }
 
-pub mod loadstore_halfword_cuda {
+pub mod load_halfword_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_store_halfword_tracegen(
+        fn _rv64_load_halfword_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -251,7 +251,7 @@ pub mod loadstore_halfword_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_load_store_halfword_tracegen(
+        CudaError::from_result(_rv64_load_halfword_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -265,11 +265,11 @@ pub mod loadstore_halfword_cuda {
     }
 }
 
-pub mod loadstore_word_cuda {
+pub mod load_word_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_store_word_tracegen(
+        fn _rv64_load_word_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -291,7 +291,7 @@ pub mod loadstore_word_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_load_store_word_tracegen(
+        CudaError::from_result(_rv64_load_word_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -305,11 +305,11 @@ pub mod loadstore_word_cuda {
     }
 }
 
-pub mod loadstore_doubleword_cuda {
+pub mod load_doubleword_cuda {
     use super::*;
 
     extern "C" {
-        fn _rv64_load_store_doubleword_tracegen(
+        fn _rv64_load_doubleword_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -331,7 +331,170 @@ pub mod loadstore_doubleword_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_load_store_doubleword_tracegen(
+        CudaError::from_result(_rv64_load_doubleword_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            pointer_max_bits,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+}
+
+pub mod store_byte_cuda {
+    use super::*;
+
+    extern "C" {
+        fn _rv64_store_byte_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            pointer_max_bits: usize,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            d_bitwise_lookup: *mut u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        pointer_max_bits: usize,
+        d_range_checker: &DeviceBuffer<F>,
+        d_bitwise_lookup: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rv64_store_byte_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            pointer_max_bits,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+}
+
+pub mod store_halfword_cuda {
+    use super::*;
+
+    extern "C" {
+        fn _rv64_store_halfword_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            pointer_max_bits: usize,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        pointer_max_bits: usize,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rv64_store_halfword_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            pointer_max_bits,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+}
+
+pub mod store_word_cuda {
+    use super::*;
+
+    extern "C" {
+        fn _rv64_store_word_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            pointer_max_bits: usize,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        pointer_max_bits: usize,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rv64_store_word_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            pointer_max_bits,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+}
+
+pub mod store_doubleword_cuda {
+    use super::*;
+
+    extern "C" {
+        fn _rv64_store_doubleword_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            pointer_max_bits: usize,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        pointer_max_bits: usize,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rv64_store_doubleword_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,

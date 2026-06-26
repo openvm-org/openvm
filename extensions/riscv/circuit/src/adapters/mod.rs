@@ -23,10 +23,11 @@ mod alu_w;
 mod alu_w_u16;
 mod branch;
 mod jalr;
-mod loadstore;
+mod load;
 mod mul;
 mod mul_w;
 mod rdwrite;
+mod store;
 
 pub use alu::*;
 pub use alu_u16::*;
@@ -34,13 +35,14 @@ pub use alu_w::*;
 pub use alu_w_u16::*;
 pub use branch::*;
 pub use jalr::*;
-pub use loadstore::*;
+pub use load::*;
 pub use mul::*;
 pub use mul_w::*;
 pub use openvm_instructions::riscv::{
     RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 pub use rdwrite::*;
+pub use store::*;
 
 /// Number of u16 limbs needed for a low-32-bit RV64 pointer.
 pub const RV64_PTR_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
@@ -49,6 +51,11 @@ pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 /// Number of u16 limbs in a 32-bit RV64 word (e.g. an `ADDW`/`SUBW` operand, or one half of a
 /// register). Numerically equal to [`RV64_PTR_U16_LIMBS`], but named for arithmetic-word use.
 pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
+
+pub(crate) const RV64_ACCESS_SIZE_BYTE: usize = 0;
+pub(crate) const RV64_ACCESS_SIZE_HALFWORD: usize = 1;
+pub(crate) const RV64_ACCESS_SIZE_WORD: usize = 2;
+pub(crate) const RV64_ACCESS_SIZE_DOUBLEWORD: usize = 3;
 
 /// Packs two little-endian u8 limbs into one u16-shaped field element.
 #[inline(always)]
@@ -214,6 +221,23 @@ pub fn rv64_address_add_imm(base: u32, imm_extended: u32) -> u64 {
 #[inline(always)]
 pub fn rv64_bytes_to_u16_block(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> [u16; BLOCK_FE_WIDTH] {
     std::array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
+}
+
+pub(crate) const RV64_BYTE_MASK: u16 = (1 << RV64_BYTE_BITS) - 1;
+pub(crate) const RV64_BYTE_SIGN_BIT: u16 = 1 << (RV64_BYTE_BITS - 1);
+pub(crate) const RV64_U16_SIGN_BIT: u16 = 1 << (U16_BITS - 1);
+
+#[inline(always)]
+pub(crate) fn u16_cell_byte(cell: u16, byte_idx: usize) -> u16 {
+    u16::from(cell.to_le_bytes()[byte_idx])
+}
+
+#[inline(always)]
+pub(crate) fn set_u16_cell_byte(cell: u16, byte_idx: usize, byte: u16) -> u16 {
+    debug_assert!(byte <= RV64_BYTE_MASK);
+    let mut bytes = cell.to_le_bytes();
+    bytes[byte_idx] = byte as u8;
+    u16::from_le_bytes(bytes)
 }
 
 /// Converts a low-32-bit value to one zero-extended RV64 u16 block.

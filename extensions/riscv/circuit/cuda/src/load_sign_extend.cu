@@ -4,23 +4,15 @@
 #include "primitives/encoder.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv/adapters/loadstore.cuh"
+#include "riscv/adapters/load.cuh"
 
 using namespace riscv;
 using namespace program;
 
-enum Rv64LoadStoreOpcode {
-    LOADD,
-    LOADBU,
-    LOADHU,
-    LOADWU,
-    STORED,
-    STOREW,
-    STOREH,
-    STOREB,
-    LOADB,
-    LOADH,
-    LOADW,
+enum Rv64LoadSignExtendOpcode {
+    LOADB = 8,
+    LOADH = 9,
+    LOADW = 10,
 };
 
 constexpr size_t LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH = 3;
@@ -32,11 +24,10 @@ constexpr uint32_t LOAD_SIGN_EXTEND_WORD_CASES = 2;
 constexpr uint32_t LOAD_SIGN_EXTEND_SELECTOR_MAX_DEGREE = 2;
 constexpr uint16_t SIGN_BYTE = 1 << (RV64_BYTE_BITS - 1);
 constexpr uint16_t SIGN_U16 = 1 << (U16_BITS - 1);
-struct LoadStoreRecord {
+struct LoadRecord {
     uint8_t local_opcode;
     uint8_t shift_amount;
     uint16_t read_data[BLOCK_FE_WIDTH];
-    uint16_t prev_data[BLOCK_FE_WIDTH];
 };
 
 template <typename T> struct LoadSignExtendByteCoreCols {
@@ -45,7 +36,6 @@ template <typename T> struct LoadSignExtendByteCoreCols {
     T data_most_sig_bit;
     T read_cell_bytes[2];
     T read_data[BLOCK_FE_WIDTH];
-    T prev_data[BLOCK_FE_WIDTH];
 };
 
 template <typename T, size_t SELECTOR_WIDTH> struct LoadSignExtendAlignedCoreCols {
@@ -53,21 +43,20 @@ template <typename T, size_t SELECTOR_WIDTH> struct LoadSignExtendAlignedCoreCol
     T is_valid;
     T data_most_sig_bit;
     T read_data[BLOCK_FE_WIDTH];
-    T prev_data[BLOCK_FE_WIDTH];
 };
 
 template <typename T> struct Rv64LoadSignExtendByteCols {
-    Rv64LoadStoreAdapterCols<T> adapter;
+    Rv64LoadAdapterCols<T> adapter;
     LoadSignExtendByteCoreCols<T> core;
 };
 
 template <typename T> struct Rv64LoadSignExtendHalfwordCols {
-    Rv64LoadStoreAdapterCols<T> adapter;
+    Rv64LoadAdapterCols<T> adapter;
     LoadSignExtendAlignedCoreCols<T, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH> core;
 };
 
 template <typename T> struct Rv64LoadSignExtendWordCols {
-    Rv64LoadStoreAdapterCols<T> adapter;
+    Rv64LoadAdapterCols<T> adapter;
     LoadSignExtendAlignedCoreCols<T, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH> core;
 };
 
@@ -79,16 +68,16 @@ constexpr size_t RV64_LOAD_SIGN_EXTEND_WORD_WIDTH =
     sizeof(Rv64LoadSignExtendWordCols<uint8_t>);
 
 struct Rv64LoadSignExtendRecord {
-    Rv64LoadStoreAdapterRecord adapter;
-    LoadStoreRecord core;
+    Rv64LoadAdapterRecord adapter;
+    LoadRecord core;
 };
 
-static_assert(sizeof(Rv64LoadStoreAdapterRecord) == 36);
-static_assert(sizeof(LoadStoreRecord) == 18);
+static_assert(sizeof(Rv64LoadAdapterRecord) == 44);
+static_assert(sizeof(LoadRecord) == 10);
 static_assert(sizeof(Rv64LoadSignExtendRecord) == 56);
-static_assert(offsetof(Rv64LoadSignExtendRecord, core) == 36);
+static_assert(offsetof(Rv64LoadSignExtendRecord, core) == 44);
 
-__device__ __forceinline__ uint16_t byte_from_cell(uint16_t cell, uint8_t byte_idx) {
+static __device__ __forceinline__ uint16_t byte_from_cell(uint16_t cell, uint8_t byte_idx) {
     return (cell >> (RV64_BYTE_BITS * byte_idx)) & 0xff;
 }
 
@@ -102,7 +91,7 @@ struct LoadSignExtendByteCore {
     )
         : range_checker(range_checker), bitwise_lookup(bitwise_lookup) {}
 
-    __device__ void fill_trace_row(RowSlice row, LoadStoreRecord record) {
+    __device__ void fill_trace_row(RowSlice row, LoadRecord record) {
         assert(record.local_opcode == LOADB);
         uint8_t shift = record.shift_amount;
         uint16_t read_cell = record.read_data[shift >> 1];
@@ -130,7 +119,6 @@ struct LoadSignExtendByteCore {
         COL_WRITE_VALUE(row, LoadSignExtendByteCoreCols, data_most_sig_bit, sign_bit != 0);
         COL_WRITE_ARRAY(row, LoadSignExtendByteCoreCols, read_cell_bytes, read_cell_bytes);
         COL_WRITE_ARRAY(row, LoadSignExtendByteCoreCols, read_data, record.read_data);
-        COL_WRITE_ARRAY(row, LoadSignExtendByteCoreCols, prev_data, record.prev_data);
     }
 };
 
@@ -140,8 +128,9 @@ template <size_t SELECTOR_WIDTH, uint32_t CASES> struct LoadSignExtendAlignedCor
     __device__ LoadSignExtendAlignedCore(VariableRangeChecker range_checker)
         : range_checker(range_checker) {}
 
-    __device__ void fill_trace_row(RowSlice row, LoadStoreRecord record) {
-        Rv64LoadStoreOpcode opcode = static_cast<Rv64LoadStoreOpcode>(record.local_opcode);
+    __device__ void fill_trace_row(RowSlice row, LoadRecord record) {
+        Rv64LoadSignExtendOpcode opcode =
+            static_cast<Rv64LoadSignExtendOpcode>(record.local_opcode);
         uint8_t shift = record.shift_amount;
         uint32_t access_cells;
         uint32_t case_idx;
@@ -163,11 +152,6 @@ template <size_t SELECTOR_WIDTH, uint32_t CASES> struct LoadSignExtendAlignedCor
         row[SELECTOR_WIDTH] = 1;
         row[SELECTOR_WIDTH + 1] = sign_bit != 0;
         row.write_array(SELECTOR_WIDTH + 2, BLOCK_FE_WIDTH, record.read_data);
-        row.write_array(
-            SELECTOR_WIDTH + 2 + BLOCK_FE_WIDTH,
-            BLOCK_FE_WIDTH,
-            record.prev_data
-        );
     }
 };
 
@@ -187,7 +171,7 @@ __global__ void rv64_load_sign_extend_byte_tracegen_kernel(
     if (idx < records.len()) {
         auto const &record = records[idx];
 
-        auto adapter = Rv64LoadStoreAdapter(
+        auto adapter = Rv64LoadAdapter(
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits
@@ -221,7 +205,7 @@ __global__ void rv64_load_sign_extend_halfword_tracegen_kernel(
     if (idx < records.len()) {
         auto const &record = records[idx];
 
-        auto adapter = Rv64LoadStoreAdapter(
+        auto adapter = Rv64LoadAdapter(
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits
@@ -255,7 +239,7 @@ __global__ void rv64_load_sign_extend_word_tracegen_kernel(
     if (idx < records.len()) {
         auto const &record = records[idx];
 
-        auto adapter = Rv64LoadStoreAdapter(
+        auto adapter = Rv64LoadAdapter(
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits

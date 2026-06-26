@@ -16,15 +16,17 @@ use crate::{
     Rv64BranchEqualChipGpu, Rv64BranchLessThanAir, Rv64BranchLessThanChipGpu, Rv64DivRemAir,
     Rv64DivRemChipGpu, Rv64DivRemWAir, Rv64DivRemWChipGpu, Rv64HintStoreAir, Rv64HintStoreChipGpu,
     Rv64I, Rv64Io, Rv64JalLuiAir, Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir,
-    Rv64LessThanChipGpu, Rv64LoadSignExtendByteAir, Rv64LoadSignExtendByteChipGpu,
-    Rv64LoadSignExtendHalfwordAir, Rv64LoadSignExtendHalfwordChipGpu, Rv64LoadSignExtendWordAir,
-    Rv64LoadSignExtendWordChipGpu, Rv64LoadStoreByteAir, Rv64LoadStoreByteChipGpu,
-    Rv64LoadStoreDoublewordAir, Rv64LoadStoreDoublewordChipGpu, Rv64LoadStoreHalfwordAir,
-    Rv64LoadStoreHalfwordChipGpu, Rv64LoadStoreWordAir, Rv64LoadStoreWordChipGpu, Rv64M,
-    Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir, Rv64MulWChipGpu, Rv64MultiplicationAir,
-    Rv64MultiplicationChipGpu, Rv64ShiftLogicalAir, Rv64ShiftLogicalChipGpu,
-    Rv64ShiftRightArithmeticAir, Rv64ShiftRightArithmeticChipGpu, Rv64ShiftWLogicalAir,
-    Rv64ShiftWLogicalChipGpu, Rv64ShiftWRightArithmeticAir, Rv64ShiftWRightArithmeticChipGpu,
+    Rv64LessThanChipGpu, Rv64LoadByteAir, Rv64LoadByteChipGpu, Rv64LoadDoublewordAir,
+    Rv64LoadDoublewordChipGpu, Rv64LoadHalfwordAir, Rv64LoadHalfwordChipGpu,
+    Rv64LoadSignExtendByteAir, Rv64LoadSignExtendByteChipGpu, Rv64LoadSignExtendHalfwordAir,
+    Rv64LoadSignExtendHalfwordChipGpu, Rv64LoadSignExtendWordAir, Rv64LoadSignExtendWordChipGpu,
+    Rv64LoadWordAir, Rv64LoadWordChipGpu, Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir,
+    Rv64MulWChipGpu, Rv64MultiplicationAir, Rv64MultiplicationChipGpu, Rv64ShiftLogicalAir,
+    Rv64ShiftLogicalChipGpu, Rv64ShiftRightArithmeticAir, Rv64ShiftRightArithmeticChipGpu,
+    Rv64ShiftWLogicalAir, Rv64ShiftWLogicalChipGpu, Rv64ShiftWRightArithmeticAir,
+    Rv64ShiftWRightArithmeticChipGpu, Rv64StoreByteAir, Rv64StoreByteChipGpu,
+    Rv64StoreDoublewordAir, Rv64StoreDoublewordChipGpu, Rv64StoreHalfwordAir,
+    Rv64StoreHalfwordChipGpu, Rv64StoreWordAir, Rv64StoreWordChipGpu,
 };
 
 pub struct Rv64ImGpuProverExt;
@@ -93,14 +95,23 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         );
         inventory.add_executor_chip(load_sign_extend_byte);
 
-        inventory.next_air::<Rv64LoadStoreByteAir>()?;
-        let load_store_byte = Rv64LoadStoreByteChipGpu::new(
+        inventory.next_air::<Rv64LoadByteAir>()?;
+        let load_byte = Rv64LoadByteChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );
-        inventory.add_executor_chip(load_store_byte);
+        inventory.add_executor_chip(load_byte);
+
+        inventory.next_air::<Rv64StoreByteAir>()?;
+        let store_byte = Rv64StoreByteChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(store_byte);
 
         inventory.next_air::<Rv64LoadSignExtendHalfwordAir>()?;
         let load_sign_extend_halfword = Rv64LoadSignExtendHalfwordChipGpu::new(
@@ -110,13 +121,21 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         );
         inventory.add_executor_chip(load_sign_extend_halfword);
 
-        inventory.next_air::<Rv64LoadStoreHalfwordAir>()?;
-        let load_store_halfword = Rv64LoadStoreHalfwordChipGpu::new(
+        inventory.next_air::<Rv64LoadHalfwordAir>()?;
+        let load_halfword = Rv64LoadHalfwordChipGpu::new(
             range_checker.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );
-        inventory.add_executor_chip(load_store_halfword);
+        inventory.add_executor_chip(load_halfword);
+
+        inventory.next_air::<Rv64StoreHalfwordAir>()?;
+        let store_halfword = Rv64StoreHalfwordChipGpu::new(
+            range_checker.clone(),
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(store_halfword);
 
         inventory.next_air::<Rv64LoadSignExtendWordAir>()?;
         let load_sign_extend_word = Rv64LoadSignExtendWordChipGpu::new(
@@ -126,21 +145,31 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         );
         inventory.add_executor_chip(load_sign_extend_word);
 
-        inventory.next_air::<Rv64LoadStoreWordAir>()?;
-        let load_store_word = Rv64LoadStoreWordChipGpu::new(
-            range_checker.clone(),
-            byte_ptr_max_bits,
-            timestamp_max_bits,
-        );
-        inventory.add_executor_chip(load_store_word);
+        inventory.next_air::<Rv64LoadWordAir>()?;
+        let load_word =
+            Rv64LoadWordChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
+        inventory.add_executor_chip(load_word);
 
-        inventory.next_air::<Rv64LoadStoreDoublewordAir>()?;
-        let load_store_doubleword = Rv64LoadStoreDoublewordChipGpu::new(
+        inventory.next_air::<Rv64StoreWordAir>()?;
+        let store_word =
+            Rv64StoreWordChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
+        inventory.add_executor_chip(store_word);
+
+        inventory.next_air::<Rv64LoadDoublewordAir>()?;
+        let load_doubleword = Rv64LoadDoublewordChipGpu::new(
             range_checker.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );
-        inventory.add_executor_chip(load_store_doubleword);
+        inventory.add_executor_chip(load_doubleword);
+
+        inventory.next_air::<Rv64StoreDoublewordAir>()?;
+        let store_doubleword = Rv64StoreDoublewordChipGpu::new(
+            range_checker.clone(),
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(store_doubleword);
 
         inventory.next_air::<Rv64BranchEqualAir>()?;
         let beq = Rv64BranchEqualChipGpu::new(range_checker.clone(), timestamp_max_bits);

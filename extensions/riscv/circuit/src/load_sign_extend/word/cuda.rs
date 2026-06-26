@@ -9,10 +9,10 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use super::LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH;
 use crate::{
-    adapters::{Rv64LoadStoreAdapterCols, Rv64LoadStoreAdapterRecord},
+    adapters::{Rv64LoadAdapterCols, Rv64LoadAdapterRecord},
     cuda_abi::load_sign_extend_word_cuda,
+    load::LoadRecord,
     load_sign_extend::aligned::core::LoadSignExtendAlignedCoreCols,
-    loadstore::LoadStoreRecord,
 };
 
 #[derive(new)]
@@ -24,14 +24,14 @@ pub struct Rv64LoadSignExtendWordChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendWordChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(Rv64LoadStoreAdapterRecord, LoadStoreRecord)>();
+        const RECORD_SIZE: usize = size_of::<(Rv64LoadAdapterRecord, LoadRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64LoadStoreAdapterCols::<F>::width()
+        let trace_width = Rv64LoadAdapterCols::<F>::width()
             + LoadSignExtendAlignedCoreCols::<F, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;

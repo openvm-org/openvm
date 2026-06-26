@@ -1,0 +1,154 @@
+use crate::test_utils::memory::{
+    b, create_halfword_harness, create_seeded_rng, load_memory_config, load_write_data,
+    set_and_execute_load, VmChipTestBuilder, LOADHU, RV64_MEMORY_AS,
+};
+#[cfg(feature = "cuda")]
+use crate::test_utils::memory::{
+    default_var_range_checker_bus, dummy_range_checker, load_gpu_memory_config,
+    transfer_load_records, GpuChipTestBuilder, GpuTestChipHarness, LoadHalfwordCoreAir,
+    LoadHalfwordFiller, Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller,
+    Rv64LoadHalfwordAir, Rv64LoadHalfwordChip, Rv64LoadHalfwordChipGpu, Rv64LoadHalfwordExecutor,
+    Rv64LoadStoreOpcode, F, MAX_INS_CAPACITY,
+};
+
+#[test]
+fn positive_loadhu_shift6_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let mut harness = create_halfword_harness(&mut tester);
+    set_and_execute_load(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        LOADHU,
+        Some([6, 0, 0, 0, 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        Some(RV64_MEMORY_AS as usize),
+    );
+    tester
+        .build()
+        .load(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[test]
+fn rand_load_halfword_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let mut harness = create_halfword_harness(&mut tester);
+    for _ in 0..100 {
+        set_and_execute_load(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            LOADHU,
+            None,
+            None,
+            None,
+            None,
+        );
+    }
+    tester
+        .build()
+        .load(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[test]
+fn run_loadhu_sanity_test() {
+    let read_data = b([175, 33, 198, 250, 131, 74, 186, 29]);
+    assert_eq!(
+        load_write_data(LOADHU, read_data, 0),
+        b([175, 33, 0, 0, 0, 0, 0, 0])
+    );
+    assert_eq!(
+        load_write_data(LOADHU, read_data, 2),
+        b([198, 250, 0, 0, 0, 0, 0, 0])
+    );
+    assert_eq!(
+        load_write_data(LOADHU, read_data, 4),
+        b([131, 74, 0, 0, 0, 0, 0, 0])
+    );
+    assert_eq!(
+        load_write_data(LOADHU, read_data, 6),
+        b([186, 29, 0, 0, 0, 0, 0, 0])
+    );
+}
+
+#[cfg(feature = "cuda")]
+type GpuHalfwordHarness = GpuTestChipHarness<
+    F,
+    Rv64LoadHalfwordExecutor,
+    Rv64LoadHalfwordAir,
+    Rv64LoadHalfwordChipGpu,
+    Rv64LoadHalfwordChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_halfword_harness(tester: &GpuChipTestBuilder) -> GpuHalfwordHarness {
+    let range_checker = dummy_range_checker();
+    let air = Rv64LoadHalfwordAir::new(
+        Rv64LoadAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        LoadHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+    );
+    let executor = Rv64LoadHalfwordExecutor::new(
+        Rv64LoadAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let cpu_chip = Rv64LoadHalfwordChip::<F>::new(
+        LoadHalfwordFiller::new(
+            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            range_checker,
+        ),
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv64LoadHalfwordChipGpu::new(
+        tester.range_checker(),
+        tester.address_bits(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_rand_load_halfword_tracegen() {
+    let mut rng = create_seeded_rng();
+    let mut tester =
+        GpuChipTestBuilder::new(load_gpu_memory_config(), default_var_range_checker_bus());
+    let mut harness = create_cuda_halfword_harness(&tester);
+    for _ in 0..100 {
+        set_and_execute_load(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            LOADHU,
+            None,
+            None,
+            None,
+            Some(RV64_MEMORY_AS as usize),
+        );
+    }
+    transfer_load_records(&mut harness);
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}

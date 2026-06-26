@@ -1,9 +1,11 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use crate::{
-    adapters::{Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterExecutor},
-    load_sign_extend::aligned::core::{LoadSignExtendAlignedCoreAir, LoadSignExtendAlignedFiller},
-    loadstore::common::{LoadStoreExecutor, KIND_WORD},
+    adapters::{Rv64LoadAdapterAir, Rv64LoadAdapterExecutor},
+    load_sign_extend::{
+        aligned::core::{LoadSignExtendAlignedCoreAir, LoadSignExtendAlignedFiller},
+        common::{LoadSignExtendExecutor, KIND_WORD},
+    },
 };
 
 pub const LOAD_SIGN_EXTEND_WORD_CASES: usize = 2;
@@ -15,16 +17,15 @@ pub type LoadSignExtendWordCoreAir = LoadSignExtendAlignedCoreAir<
     LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
 >;
 pub type LoadSignExtendWordFiller = LoadSignExtendAlignedFiller<
-    crate::adapters::Rv64LoadStoreAdapterFiller,
+    crate::adapters::Rv64LoadAdapterFiller,
     KIND_WORD,
     LOAD_SIGN_EXTEND_WORD_CASES,
     LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
 >;
 
-pub type Rv64LoadSignExtendWordAir =
-    VmAirWrapper<Rv64LoadStoreAdapterAir, LoadSignExtendWordCoreAir>;
+pub type Rv64LoadSignExtendWordAir = VmAirWrapper<Rv64LoadAdapterAir, LoadSignExtendWordCoreAir>;
 pub type Rv64LoadSignExtendWordExecutor =
-    LoadStoreExecutor<Rv64LoadStoreAdapterExecutor, KIND_WORD>;
+    LoadSignExtendExecutor<Rv64LoadAdapterExecutor, KIND_WORD>;
 pub type Rv64LoadSignExtendWordChip<F> = VmChipWrapper<F, LoadSignExtendWordFiller>;
 
 #[cfg(feature = "cuda")]
