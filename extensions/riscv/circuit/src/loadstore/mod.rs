@@ -1,13 +1,12 @@
-mod core;
-
-pub use core::*;
-
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::adapters::RV64_REGISTER_NUM_LIMBS;
 use crate::adapters::{Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterExecutor};
 
+mod core;
 mod execution;
+
+pub use core::*;
 
 #[cfg(feature = "cuda")]
 mod cuda;
