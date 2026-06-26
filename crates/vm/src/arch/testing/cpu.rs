@@ -35,7 +35,7 @@ use crate::{
         },
         to_byte_ptr_bits, vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus,
         ExecutionState, MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmField,
-        VmStateMut, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        VmStateMut, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, NUM_RV64_REGISTERS,
     },
     system::{
         memory::{
@@ -171,8 +171,13 @@ where
     }
 
     fn get_default_register(&mut self, increment: usize) -> usize {
+        const REGISTER_FILE_BYTES: usize = NUM_RV64_REGISTERS * size_of::<u64>();
+        if self.default_register + increment > REGISTER_FILE_BYTES {
+            self.default_register = 0;
+        }
+        let register = self.default_register;
         self.default_register += increment;
-        self.default_register - increment
+        register
     }
 
     fn get_default_pointer(&mut self, increment: usize) -> usize {
