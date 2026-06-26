@@ -100,3 +100,31 @@ mod test_utils {
         BabyBearPoseidon2GpuEngine::new(test_system_params_small(4, 12, 4))
     }
 }
+
+#[cfg(all(feature = "touchemall", feature = "cuda"))]
+pub use touchemall::*;
+#[cfg(all(feature = "touchemall", feature = "cuda"))]
+mod touchemall {
+    use openvm_cuda_backend::{prelude::F, GpuBackend};
+    use openvm_stark_backend::prover::AirProvingContext;
+
+    pub fn check_trace_validity(proving_ctx: &AirProvingContext<GpuBackend>, name: &str) {
+        use openvm_cuda_common::copy::MemCopyD2H;
+        use openvm_stark_backend::prover::MatrixDimensions;
+
+        let trace = &proving_ctx.common_main;
+        let height = trace.height();
+        let width = trace.width();
+        let trace = trace.to_host().unwrap();
+        for r in 0..height {
+            for c in 0..width {
+                let value = trace[c * height + r];
+                let value_u32 = unsafe { *(&value as *const F as *const u32) };
+                assert!(
+                    value_u32 != 0xffffffff,
+                    "potentially untouched value at ({r}, {c}) of a trace of size {height}x{width} for air {name}"
+                    );
+            }
+        }
+    }
+}
