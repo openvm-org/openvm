@@ -117,6 +117,12 @@ pub fn sign_extend_imm16(imm: u32, sign: u32) -> u32 {
     imm + sign * (u32::MAX << U16_BITS)
 }
 
+/// Sign-extends a 32-bit value into RV64 register arithmetic form.
+#[inline(always)]
+pub fn sext32_to_u64(value: u32) -> u64 {
+    value as i32 as i64 as u64
+}
+
 // For soundness, should be <= 16
 pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 
@@ -191,6 +197,18 @@ pub fn u64_to_u32_checked(value: u64) -> u32 {
 #[inline(always)]
 pub fn rv64_bytes_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> u32 {
     u64_to_u32_checked(u64::from_le_bytes(bytes))
+}
+
+/// Attempts to convert RV64 register bytes to a `u32`, requiring the upper 4 bytes to be zero.
+#[inline(always)]
+pub fn try_rv64_bytes_to_u32(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> Option<u32> {
+    u32::try_from(u64::from_le_bytes(bytes)).ok()
+}
+
+/// Adds an already-sign-extended 16-bit RV64 immediate to an implemented low-32-bit address.
+#[inline(always)]
+pub fn rv64_address_add_imm(base: u32, imm_extended: u32) -> u64 {
+    u64::from(base).wrapping_add(sext32_to_u64(imm_extended))
 }
 
 #[inline(always)]
