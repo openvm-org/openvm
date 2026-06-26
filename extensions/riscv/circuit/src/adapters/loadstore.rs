@@ -213,12 +213,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
 
         // Constrain loads to address space 2 and stores to address spaces 2 or 3.
         let mem_as_minus_two = local_cols.mem_as - AB::Expr::TWO;
+        let is_store = is_valid.clone() - is_load.clone();
         builder
             .when(is_valid.clone())
-            .assert_bool(mem_as_minus_two.clone());
-        builder
-            .when(is_load.clone())
-            .assert_zero(mem_as_minus_two.clone());
+            .assert_zero(mem_as_minus_two.clone() * (mem_as_minus_two.clone() - is_store));
         builder
             .when(not::<AB::Expr>(is_valid.clone()))
             .assert_zero(local_cols.mem_as);
