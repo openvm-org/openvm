@@ -132,7 +132,7 @@ impl Fp2RvrExtension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for Fp2RvrExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
         self.try_lift_fp2(insn, pc, opcode)
     }
@@ -153,7 +153,7 @@ impl Fp2RvrExtension {
     fn try_lift_fp2<F: PrimeField32>(
         &self,
         insn: &Instruction<F>,
-        pc: u32,
+        pc: u64,
         opcode: usize,
     ) -> Option<LiftedInstr> {
         let base_offset = Fp2Opcode::CLASS_OFFSET;
