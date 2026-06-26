@@ -48,7 +48,7 @@ pub const DEFERRAL_PAGE_BUF_CAP: usize = 1 << 16;
 
 /// Generate the `openvm_constants.h` content with compile-time constants
 /// for the C tracer headers.
-pub fn constants_header(text_start: u32, text_end: u32, dispatch_table_size: usize) -> String {
+pub fn constants_header(text_start: u64, text_end: u64, dispatch_table_size: usize) -> String {
     let memory_mask = MEM_SIZE as u64 - 1;
     let byte_space_ptrs_per_leaf_bits = BYTE_SPACE_PTRS_PER_LEAF.ilog2();
     let deferral_ptrs_per_leaf_bits = DEFERRAL_PTRS_PER_LEAF.ilog2();
@@ -65,8 +65,8 @@ static constexpr uint32_t AS_PUBLIC_VALUES = {AS_PUBLIC_VALUES};
 static constexpr uint32_t AS_DEFERRAL = {DEFERRAL_AS};
 static constexpr uint32_t WORD_SIZE = {WORD_SIZE};
 static constexpr uint32_t DEFERRAL_DIGEST_SIZE = {DEFERRAL_DIGEST_SIZE};
-static constexpr uint32_t RV_TEXT_START = 0x{text_start:08x}u;
-static constexpr uint32_t RV_TEXT_END = 0x{text_end:08x}u;
+static constexpr uint64_t RV_TEXT_START = 0x{text_start:08x}ull;
+static constexpr uint64_t RV_TEXT_END = 0x{text_end:08x}ull;
 static constexpr uint32_t RV_DISPATCH_TABLE_SIZE = {dispatch_table_size}u;
 static constexpr uint32_t TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS = {byte_space_ptrs_per_leaf_bits};
 static constexpr uint32_t TRACER_DEFERRAL_PTRS_PER_LEAF_BITS = {deferral_ptrs_per_leaf_bits};

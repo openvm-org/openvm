@@ -13,7 +13,7 @@ typedef struct MeteredSegmentCheckpointResult {
 } MeteredSegmentCheckpointResult;
 
 static __attribute__((always_inline)) inline uint8_t begin_block(
-    RvState* restrict state, uint32_t pc, uint32_t block_insn_count) {
+    RvState* restrict state, uint64_t pc, uint32_t block_insn_count) {
   return trace_block_with_segment_check(state, pc, block_insn_count);
 }
 
