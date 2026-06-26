@@ -12,7 +12,6 @@ runners:
     family: ["g6.*", "g5", "g4dn", "g6e"]
     image: ubuntu24-gpu-x64
     cpu: [4, 8, 16, 32]
-    disk: default
     spot: capacity-optimized
     extras: s3-cache
     preinstall: |
