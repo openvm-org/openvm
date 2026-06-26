@@ -26,6 +26,8 @@ pub fn keygen_halo2(
     root_vk: &MultiStarkVerifyingKey<RootSC>,
     dummy_root_proof: &Proof<RootSC>,
 ) -> Halo2ProvingKey {
+    shape.assert_onchain_verifier_supported();
+
     let params = reader.read_params(shape.k);
 
     let verifier = keygen_static_verifier(

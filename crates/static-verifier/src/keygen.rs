@@ -27,7 +27,7 @@ impl StaticVerifierCircuit {
         representative_proof: &Proof<RootConfig>,
     ) -> Halo2ProvingPinning {
         let mut builder = Self::builder(CircuitBuilderStage::Keygen, shape);
-        let public_inputs = self.populate(&mut builder, representative_proof);
+        self.populate(&mut builder, representative_proof);
 
         let config_params = builder.calculate_params(Some(shape.minimum_rows));
 
@@ -40,7 +40,11 @@ impl StaticVerifierCircuit {
             metadata: Halo2ProvingMetadata {
                 config_params,
                 break_points,
-                num_pvs: vec![public_inputs.to_vec().len()],
+                num_pvs: builder
+                    .assigned_instances
+                    .iter()
+                    .map(|instances| instances.len())
+                    .collect(),
             },
         }
     }
@@ -161,6 +165,8 @@ impl StaticVerifierProvingKey {
         params: &Halo2Params,
         proof: &Proof<RootConfig>,
     ) -> RawEvmProof {
+        self.shape.assert_onchain_verifier_supported();
+
         let mut builder = BaseCircuitBuilder::prover(
             self.pinning.metadata.config_params.clone(),
             self.pinning.metadata.break_points.clone(),
