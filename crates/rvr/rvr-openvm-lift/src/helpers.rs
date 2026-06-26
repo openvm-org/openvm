@@ -17,3 +17,8 @@ pub fn decode_imm_cg<F: PrimeField32>(insn: &Instruction<F>) -> u32 {
     let is_neg = insn.g.as_canonical_u32() != 0;
     low16.wrapping_add(if is_neg { 0xFFFF0000 } else { 0 })
 }
+
+/// Sign-extend a 32-bit value into an RV64 register value.
+pub fn sext32(value: u32) -> u64 {
+    value as i32 as i64 as u64
+}

@@ -566,6 +566,19 @@ fn negative_write_data_tests() {
 }
 
 #[test]
+#[should_panic(expected = "effective address exceeds implemented memory address space")]
+fn negative_32_bit_address_wraparound_test() {
+    run_negative_loadstore_test(
+        LOADBU,
+        Some([0xf8, 0xff, 0xff, 0xff, 0, 0, 0, 0]),
+        Some(16),
+        Some(0),
+        LoadStorePrankValues::default(),
+        false,
+    );
+}
+
+#[test]
 fn negative_wrong_address_space_tests() {
     run_negative_loadstore_test(
         LOADD,

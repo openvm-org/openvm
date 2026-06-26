@@ -22,7 +22,10 @@ use rvr_openvm_ir::{
     AluOp, BranchCond, Instr, InstrAt, LiftedInstr, MemWidth, MulDivOp, Terminator,
 };
 
-use crate::{helpers::decode_imm_cg, ExtensionRegistry};
+use crate::{
+    helpers::{decode_imm_cg, sext32},
+    ExtensionRegistry,
+};
 
 /// Lift a single OpenVM instruction to the new IR types.
 ///
@@ -503,7 +506,7 @@ fn lift_auipc<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let shifted = field_to_u32(insn.c);
     let upper = shifted << 8; // reconstruct the upper 20 bits with low 12 zeros
-    let value = pc.wrapping_add(upper);
+    let value = (pc as u64).wrapping_add(sext32(upper));
 
     if rd == 0 {
         return body(pc, Instr::Nop);
@@ -588,12 +591,16 @@ mod tests {
     use openvm_instructions::{
         instruction::Instruction, LocalOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
     };
-    use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{
-        LOADB, LOADBU, LOADD, LOADH, LOADHU, LOADW, LOADWU, STOREB, STORED, STOREH, STOREW,
+    use openvm_riscv_transpiler::{
+        Rv64AuipcOpcode,
+        Rv64LoadStoreOpcode::{
+            LOADB, LOADBU, LOADD, LOADH, LOADHU, LOADW, LOADWU, STOREB, STORED, STOREH, STOREW,
+        },
     };
     use p3_baby_bear::BabyBear;
 
-    use super::{lift_instruction, ExtensionRegistry, AS_MEMORY, AS_REGISTER};
+    use super::{lift_instruction, Instr, InstrAt, LiftedInstr, AS_MEMORY, AS_REGISTER};
+    use crate::ExtensionRegistry;
 
     #[test]
     fn load_store_address_space_domain() {
@@ -662,6 +669,29 @@ mod tests {
                 [8, 16, 0, AS_REGISTER as usize, AS_MEMORY as usize, 1, 0],
             );
             assert!(lift_instruction(&valid_memory_inst, 0x100, &extensions).is_some());
+        }
+    }
+
+    #[test]
+    fn auipc_lifts_sign_extended_64_bit_value() {
+        let pc = 0x1000;
+        let insn = Instruction::<BabyBear>::from_usize(
+            Rv64AuipcOpcode::AUIPC.global_opcode(),
+            [8, 0, 0x80_0000],
+        );
+
+        let lifted = lift_instruction(&insn, pc, &ExtensionRegistry::default());
+        match lifted {
+            Some(LiftedInstr::Body(InstrAt {
+                pc: lifted_pc,
+                instr: Instr::Auipc { rd, value },
+                ..
+            })) => {
+                assert_eq!(lifted_pc, pc);
+                assert_eq!(rd, 1);
+                assert_eq!(value, 0xffff_ffff_8000_1000);
+            }
+            other => panic!("unexpected lift: {other:?}"),
         }
     }
 }
