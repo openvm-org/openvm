@@ -1,3 +1,8 @@
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::TestBuilder;
+#[cfg(feature = "cuda")]
+use openvm_instructions::LocalOpcode;
+
 use crate::load_sign_extend::test_utils::{
     create_halfword_harness, create_seeded_rng, memory_config_for, set_and_execute,
     VmChipTestBuilder, LOADH,
