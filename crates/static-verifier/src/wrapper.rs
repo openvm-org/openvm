@@ -98,7 +98,7 @@ pub struct Halo2WrapperProvingKey {
 const MIN_ROWS: usize = 20;
 
 fn has_single_advice_column(config_params: &BaseCircuitParams) -> bool {
-    config_params.num_advice_per_phase.as_slice() == &[1]
+    config_params.num_advice_per_phase.as_slice() == [1]
 }
 
 fn assert_single_advice_column(config_params: &BaseCircuitParams) {
