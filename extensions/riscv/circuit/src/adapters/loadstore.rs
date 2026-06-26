@@ -476,16 +476,10 @@ where
                         // TODO: Remove loadstore read/write support for DEFERRAL_AS.
                         unreachable!("STORE to DEFERRAL_AS is unsupported");
                     }
-                    timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
+                    timed_write(memory, record.mem_as as u32, ptr, data).0
                 }
                 LOADD | LOADW | LOADB | LOADH | LOADWU | LOADBU | LOADHU => {
-                    timed_write(
-                        memory,
-                        RV64_REGISTER_AS,
-                        record.rd_rs2_ptr,
-                        data.map(|x| x as u8),
-                    )
-                    .0
+                    timed_write(memory, RV64_REGISTER_AS, record.rd_rs2_ptr, data).0
                 }
             };
         } else {
