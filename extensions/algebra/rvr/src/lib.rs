@@ -6,14 +6,18 @@
 //! (modular + phantoms; ships the lift-time C and libsecp256k1 inputs for
 //! k256) and [`Fp2RvrExtension`] (fp2 ops only; Rust-only).
 
+mod field_arith;
 mod fp2;
 mod modular;
 
-pub use fp2::{Fp2ArithInstr, Fp2RvrExtension, Fp2SetupInstr};
-pub use modular::{
-    HintNonQrInstr, HintSqrtInstr, ModArithInstr, ModIsEqInstr, ModSetupInstr, ModularRvrExtension,
-};
 use num_bigint::BigUint;
+
+pub use field_arith::{ArithKind, FieldArithInstr};
+pub use fp2::{Fp2ArithInstr, Fp2ArithKind, Fp2RvrExtension, Fp2SetupInstr};
+pub use modular::{
+    HintNonQrInstr, HintSqrtInstr, ModArithInstr, ModArithKind, ModIsEqInstr, ModSetupInstr,
+    ModularRvrExtension,
+};
 
 /// Zero-pad `modulus` to the canonical limb boundary (32 or 48 bytes).
 ///
@@ -58,7 +62,7 @@ impl ModOp {
 
 /// Known field types that have optimized native FFI implementations.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum KnownField {
+pub enum KnownField {
     K256Coord,
     K256Scalar,
     P256Coord,
