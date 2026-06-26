@@ -30,8 +30,7 @@ template <size_t NUM_CELLS> struct LoadStoreCoreRecord {
     uint8_t local_opcode;
     uint8_t shift_amount;
     uint8_t read_data[NUM_CELLS];
-    // Note: `prev_data` can be a field, so we need to use u32
-    uint32_t prev_data[NUM_CELLS];
+    uint8_t prev_data[NUM_CELLS];
 };
 
 enum Rv64LoadStoreOpcode {
@@ -84,10 +83,10 @@ __device__ constexpr uint32_t LOADSTORE_WIDTH[] = {
 
 template <size_t NUM_CELLS>
 __device__ __forceinline__ void run_write_data(
-    uint32_t (&write_data)[NUM_CELLS],
+    uint8_t (&write_data)[NUM_CELLS],
     Rv64LoadStoreOpcode opcode,
     const uint8_t (&read_data)[NUM_CELLS],
-    const uint32_t (&prev_data)[NUM_CELLS],
+    const uint8_t (&prev_data)[NUM_CELLS],
     uint8_t shift
 ) {
     bool is_store = opcode >= STORED;
@@ -123,7 +122,7 @@ template <size_t NUM_CELLS> struct LoadStoreCore {
             true
         );
         uint8_t shift = record.shift_amount;
-        uint32_t write_data[NUM_CELLS] = {0};
+        uint8_t write_data[NUM_CELLS] = {0};
 
         COL_WRITE_VALUE(row, Cols, is_valid, 1);
         COL_WRITE_VALUE(

@@ -9,7 +9,7 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
@@ -47,14 +47,13 @@ impl<A, const LIMB_BITS: usize> LoadSignExtendExecutor<A, { RV64_REGISTER_NUM_LI
             ..
         } = inst;
 
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 == RV64_IMM_AS {
-            return Err(StaticProgramError::InvalidInstruction(pc));
-        }
-
         let local_opcode = Rv64LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
         );
+        let e_u32 = e.as_canonical_u32();
+        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 != RV64_MEMORY_AS {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
         debug_assert!(
             matches!(local_opcode, LOADB | LOADH | LOADW),
             "LoadSignExtendExecutor should only handle LOADB/LOADH/LOADW opcodes"
@@ -298,4 +297,48 @@ unsafe fn execute_e2_impl<
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<F, CTX, OP, ENABLED>(&pre_compute.data, exec_state)
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_circuit::arch::StaticProgramError;
+    use openvm_instructions::{
+        instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, DEFERRAL_AS,
+    };
+    use openvm_riscv_transpiler::Rv64LoadStoreOpcode::LOADW;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
+    use super::LoadSignExtendPreCompute;
+    use crate::{adapters::Rv64LoadStoreAdapterExecutor, Rv64LoadSignExtendExecutor};
+
+    #[test]
+    fn precompute_enforces_address_space_domain() {
+        const PC: u32 = 0x100;
+
+        let executor = Rv64LoadSignExtendExecutor::new(Rv64LoadStoreAdapterExecutor::new(29));
+        let inst = Instruction::<BabyBear>::from_usize(
+            LOADW.global_opcode(),
+            [
+                8,
+                16,
+                0,
+                RV64_REGISTER_AS as usize,
+                DEFERRAL_AS as usize,
+                1,
+                0,
+            ],
+        );
+        let mut data = LoadSignExtendPreCompute {
+            imm_extended: 0,
+            a: 0,
+            b: 0,
+            e: 0,
+        };
+
+        let err = executor
+            .pre_compute_impl_rv64(PC, &inst, &mut data)
+            .expect_err("load address-space domain should be enforced");
+
+        assert!(matches!(err, StaticProgramError::InvalidInstruction(PC)));
+    }
 }
