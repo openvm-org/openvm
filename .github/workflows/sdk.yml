@@ -33,15 +33,6 @@ on:
         default: ""
   push:
     branches: ["main"]
-  # pull_request:
-  #   branches: ["**"]
-  #   paths:
-  #     - "crates/circuits/primitives/**"
-  #     - "crates/vm/**"
-  #     - "crates/toolchain/**"
-  #     - "crates/sdk/**"
-  #     - "Cargo.toml"
-  #     - ".github/workflows/sdk.yml"
 
 concurrency:
   group: ${{ github.workflow_ref }}-sdk-${{ github.event.pull_request.number || github.sha }}
@@ -125,7 +116,7 @@ jobs:
           export RUST_BACKTRACE=1
           export RUST_MIN_STACK=8388608
           export RUST_LOG=debug
-          SWEEP_ARGS=()
+          SWEEP_ARGS=("-j=1")
           LOGS=()
           SWEEP_EXIT=0
           if [[ -n "${{ inputs.test_name }}" ]]; then SWEEP_ARGS+=(--test-name "${{ inputs.test_name }}"); fi
@@ -173,7 +164,7 @@ jobs:
           export RUST_BACKTRACE=1
           export RUST_MIN_STACK=8388608
           export RUST_LOG=debug
-          SWEEP_ARGS=()
+          SWEEP_ARGS=("-j=1")
           LOGS=()
           SWEEP_EXIT=0
           if [[ -n "${{ inputs.test_name }}" ]]; then SWEEP_ARGS+=(--test-name "${{ inputs.test_name }}"); fi
@@ -214,7 +205,7 @@ jobs:
         # if: ${{ github.event_name == 'push' }}
         run: |
           export RUST_LOG=debug
-          SWEEP_ARGS=()
+          SWEEP_ARGS=("-j=1")
           LOGS=()
           SWEEP_EXIT=0
           if [[ -n "${{ inputs.test_name }}" ]]; then SWEEP_ARGS+=(--test-name "${{ inputs.test_name }}"); fi
