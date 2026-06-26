@@ -94,18 +94,38 @@ impl MemoryInventoryGPU {
             .map(|mem| mem.as_slice())
             .enumerate()
         {
+            // Only transfer pages that may contain non-zero data; the rest are zero-filled
+            // on-device. The merkle kernel reads the full address-space region, so the device
+            // buffer is full-size and the skipped pages must read as zero.
+            let runs = initial_memory.touched_pages[addr_sp].byte_runs(raw_mem.len());
             tracing::debug!(
-                "Setting initial memory for address space {}: {} bytes",
+                "Setting initial memory for address space {}: {} bytes, {} touched run(s)",
                 addr_sp,
-                raw_mem.len()
+                raw_mem.len(),
+                runs.len()
             );
             self.initial_memory.push(Arc::new(if raw_mem.is_empty() {
                 DeviceBuffer::new()
             } else {
-                raw_mem
-                    .to_device_on(&self.device_ctx)
-                    .expect("failed to copy memory to device")
-            }));
+                let buf = DeviceBuffer::<u8>::with_capacity_on(raw_mem.len(), &self.device_ctx);
+                // Device-bandwidth memset (cheap) so all un-copied pages read as zero.
+                buf.fill_zero_on(&self.device_ctx)
+                    .expect("failed to zero device memory");
+                for (start, end) in runs {
+                    // SAFETY: `byte_runs` clamps ranges to `raw_mem.len()`, and `buf` has the same
+                    // length, so both the host slice and the device offset stay in bounds.
+                    unsafe {
+                        cuda_memcpy_on::<true, false>(
+                            buf.as_mut_ptr().add(start) as *mut std::ffi::c_void,
+                            raw_mem[start..end].as_ptr() as *const std::ffi::c_void,
+                            end - start,
+                            &self.device_ctx,
+                        )
+                        .expect("failed to copy memory to device");
+                    }
+                }
+                buf
+            });
             self.merkle_tree
                 .build_async(self.initial_memory[addr_sp].clone(), addr_sp);
         }
@@ -324,7 +344,9 @@ mod tests {
         arch::{vm_poseidon2_config, MemoryConfig, MEMORY_BLOCK_BYTES},
         system::{
             memory::{
-                merkle::MerkleTree, offline_checker::pack_u8_block_value, online::GuestMemory,
+                merkle::MerkleTree,
+                offline_checker::pack_u8_block_value,
+                online::{GuestMemory, TouchedPages, PAGE_SIZE},
                 ptr_bits_from_address_height, AddressMap, TimestampedValues,
             },
             poseidon2::Poseidon2PeripheryChip,
@@ -335,7 +357,10 @@ mod tests {
         common::get_device,
         stream::{CudaStream, GpuDeviceCtx, StreamGuard},
     };
-    use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+    use openvm_instructions::{
+        exe::SparseMemoryImage,
+        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    };
     use openvm_stark_backend::prover::MatrixDimensions;
 
     use super::*;
@@ -476,6 +501,107 @@ mod tests {
             "boundary chip should not emit public values"
         );
 
+        let merkle_ctx = ctxs
+            .iter()
+            .find(|ctx| ctx.public_values.len() >= 2 * DIGEST_WIDTH)
+            .expect("missing merkle ctx");
+        let gpu_root_slice =
+            &merkle_ctx.public_values[merkle_ctx.public_values.len() - DIGEST_WIDTH..];
+        let gpu_root: [F; DIGEST_WIDTH] = gpu_root_slice.try_into().unwrap();
+
+        assert_eq!(expected_root, gpu_root);
+    }
+
+    // Paged transfer coverage: builds a multi-page memory address space whose initial image is
+    // sparse (only pages 0 and 2 of 4 hold data, via `set_from_sparse`), so the H2D transfer
+    // copies only those pages and zero-fills the rest on-device. Asserts the GPU merkle root
+    // matches the CPU root computed over the full (mostly-zero) memory, and that the paging
+    // actually engaged (fewer bytes copied than the full address space).
+    #[test]
+    fn test_set_initial_memory_copies_only_touched_pages() {
+        const NUM_PAGES: usize = 4;
+        // U16 memory cells (2 bytes), so one PAGE_SIZE-byte page is PAGE_SIZE / 2 cells.
+        let num_cells = NUM_PAGES * (PAGE_SIZE / 2);
+        // 2^address_height leaf labels per AS must cover num_cells / DIGEST_WIDTH leaves.
+        let address_height = (num_cells / DIGEST_WIDTH).ilog2() as usize;
+
+        let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
+        addr_spaces[RV64_REGISTER_AS as usize].num_cells = 2 * DIGEST_WIDTH;
+        addr_spaces[RV64_MEMORY_AS as usize].num_cells = num_cells;
+        let mem_config = MemoryConfig::new(
+            2,
+            addr_spaces,
+            ptr_bits_from_address_height(address_height),
+            29,
+            17,
+        );
+
+        // Sparse initial image: an 8-byte block at the start of page 0 and another at page 2.
+        let mut sparse = SparseMemoryImage::new();
+        for (i, b) in [9u8, 10, 11, 12, 13, 14, 15, 16].into_iter().enumerate() {
+            sparse.insert((RV64_MEMORY_AS, i as u32), b);
+        }
+        for (i, b) in [101u8, 102, 103, 104, 105, 106, 107, 108]
+            .into_iter()
+            .enumerate()
+        {
+            sparse.insert((RV64_MEMORY_AS, (2 * PAGE_SIZE + i) as u32), b);
+        }
+        let mut addr_map = AddressMap::from_mem_config(&mem_config);
+        addr_map.set_from_sparse(&sparse);
+        let memory = GuestMemory::new(addr_map);
+
+        // Paging engaged: only pages 0 and 2 are marked, coalesced into two single-page runs.
+        let mem_bytes = memory.memory.get_memory()[RV64_MEMORY_AS as usize]
+            .as_slice()
+            .len();
+        assert!(matches!(
+            memory.memory.touched_pages[RV64_MEMORY_AS as usize],
+            TouchedPages::Marked { .. }
+        ));
+        let runs = memory.memory.touched_pages[RV64_MEMORY_AS as usize].byte_runs(mem_bytes);
+        assert_eq!(
+            runs,
+            vec![(0, PAGE_SIZE), (2 * PAGE_SIZE, 3 * PAGE_SIZE)],
+            "only the two written pages should be transferred"
+        );
+        let copied: usize = runs.iter().map(|(s, e)| e - s).sum();
+        assert!(
+            copied < mem_bytes,
+            "paging should copy fewer bytes ({copied}) than the full AS ({mem_bytes})"
+        );
+
+        let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
+        let cpu_merkle_tree = MerkleTree::<F, DIGEST_WIDTH>::from_memory(
+            &memory.memory,
+            &mem_config.memory_dimensions(),
+            &cpu_hasher,
+        );
+        let expected_root = cpu_merkle_tree.root();
+
+        let max_buffer_size = (mem_config
+            .addr_spaces
+            .iter()
+            .map(|ashc| ashc.num_cells * 2 + mem_config.memory_dimensions().overall_height())
+            .sum::<usize>()
+            * 2)
+        .next_power_of_two()
+            * 2
+            * DIGEST_WIDTH;
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
+            max_buffer_size,
+            1,
+            device_ctx.clone(),
+        ));
+        let mut inventory =
+            MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
+        inventory.set_initial_memory(&memory.memory);
+
+        let ctxs = inventory.generate_proving_ctxs(Vec::new());
         let merkle_ctx = ctxs
             .iter()
             .find(|ctx| ctx.public_values.len() >= 2 * DIGEST_WIDTH)
