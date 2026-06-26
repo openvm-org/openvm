@@ -689,7 +689,7 @@ where
         &self.executor.config
     }
 
-    /// Pure interpreter.
+    /// Pure execution instance.
     #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     pub fn instance(
         &self,
