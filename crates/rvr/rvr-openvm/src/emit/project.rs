@@ -260,6 +260,25 @@ impl CProject {
         out
     }
 
+    fn trap_signature(&self) -> String {
+        self.block_signature("__attribute__((preserve_none, cold)) void", "rv_trap")
+    }
+
+    fn emit_trap_declaration(&self, out: &mut String) {
+        let trap_signature = self.trap_signature();
+        writeln!(
+            out,
+            "// Used when a computed jump or dispatch slot does not point to a real block."
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "// It takes the same arguments as a block so those register values can still be saved."
+        )
+        .unwrap();
+        writeln!(out, "{trap_signature};").unwrap();
+    }
+
     /// C argument list extracting hot regs from state:
     /// "state, state->regs[1], state->regs[2]".
     fn fn_args_from_state(&self) -> String {
@@ -528,6 +547,7 @@ impl CProject {
             "typedef __attribute__((preserve_none)) void (*BlockFn)({typedef_params});"
         )
         .unwrap();
+        self.emit_trap_declaration(&mut h);
         writeln!(h, "extern BlockFn dispatch_table[RV_DISPATCH_TABLE_SIZE];").unwrap();
         writeln!(h).unwrap();
 
@@ -868,11 +888,17 @@ impl CProject {
         writeln!(src).unwrap();
 
         let save = self.save_hot_regs_call();
-        // rv_trap — cold fallback for dispatch to non-block PCs.
-        let trap_signature = self.block_signature(
-            "static __attribute__((preserve_none, cold)) void",
-            "rv_trap",
-        );
+        let trap_signature = self.trap_signature();
+        writeln!(
+            src,
+            "// If a computed jump reaches an invalid PC, guest registers are still in"
+        )
+        .unwrap();
+        writeln!(
+            src,
+            "// this function's arguments. Save them back to state before trapping."
+        )
+        .unwrap();
         writeln!(src, "{trap_signature} {{").unwrap();
         writeln!(src, "    {save}").unwrap();
         if self.tracer_mode == TracerMode::Metered {
@@ -911,7 +937,7 @@ impl CProject {
         .unwrap();
         writeln!(
             src,
-            "    if (state->pc < RV_TEXT_START || state->pc > RV_TEXT_END) {{"
+            "    if (unlikely(!rv_pc_is_dispatchable(state->pc))) {{"
         )
         .unwrap();
         writeln!(src, "        rv_trap({args_from_state});").unwrap();

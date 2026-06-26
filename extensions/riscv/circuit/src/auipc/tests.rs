@@ -368,6 +368,20 @@ fn sign_extend_flag_negative_tests() {
 }
 
 #[test]
+fn positive_offset_crossing_sign_extend_negative_tests() {
+    run_negative_auipc_test(
+        AUIPC,
+        Some(0x7f_fff0),
+        Some(0x1000),
+        AuipcPrankValues {
+            is_sign_extend: Some(1),
+            ..Default::default()
+        },
+        true,
+    );
+}
+
+#[test]
 fn overflow_negative_tests() {
     let (imm_low_8, imm_high_16) = split_imm_u8_limbs([3592, 219, 3]);
     run_negative_auipc_test(
@@ -442,6 +456,18 @@ fn run_auipc_sanity_test() {
     assert_eq!(
         rv64_u16_block_to_bytes(rd_data),
         [210, 107, 113, 186, 255, 255, 255, 255]
+    );
+
+    let rd_data = run_auipc(0x1000, 0x7f_fff0);
+    assert_eq!(
+        rv64_u16_block_to_bytes(rd_data),
+        [0, 0, 0, 0x80, 0, 0, 0, 0]
+    );
+
+    let rd_data = run_auipc(0x2000, 0xff_fff0);
+    assert_eq!(
+        rv64_u16_block_to_bytes(rd_data),
+        [0, 0x10, 0, 0, 0, 0, 0, 0]
     );
 }
 
