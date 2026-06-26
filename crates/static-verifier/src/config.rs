@@ -5,6 +5,7 @@ pub const STATIC_VERIFIER_NUM_ADVICE_COLS: usize = 1;
 pub const STATIC_VERIFIER_LOOKUP_ADVICE_COLS: usize = 1;
 
 pub const DEFAULT_HALO2_VERIFIER_K: usize = 23;
+pub const ONCHAIN_VERIFIER_NUM_INSTANCE_COLS: usize = 1;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct StaticVerifierShape {
@@ -26,6 +27,16 @@ impl Default for StaticVerifierShape {
 }
 
 impl StaticVerifierShape {
+    /// OpenVM's EVM/on-chain proof format exposes all public values in one instance column.
+    /// Other static verifier uses may choose a different instance-column shape.
+    pub fn assert_onchain_verifier_supported(&self) {
+        assert_eq!(
+            self.instance_columns, ONCHAIN_VERIFIER_NUM_INSTANCE_COLS,
+            "OpenVM on-chain verifier supports exactly {ONCHAIN_VERIFIER_NUM_INSTANCE_COLS} instance column, got {}",
+            self.instance_columns
+        );
+    }
+
     pub fn expected_phase0_params(&self) -> BaseCircuitParams {
         BaseCircuitParams {
             k: self.k,

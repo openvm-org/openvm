@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use halo2_base::{
-    gates::circuit::CircuitBuilderStage,
+    gates::circuit::{BaseCircuitParams, CircuitBuilderStage},
     halo2_proofs::{
         halo2curves::bn256::G1Affine,
         plonk::keygen_pk2,
@@ -97,6 +97,29 @@ pub struct Halo2WrapperProvingKey {
 
 const MIN_ROWS: usize = 20;
 
+fn has_single_advice_column(config_params: &BaseCircuitParams) -> bool {
+    config_params.num_advice_per_phase.as_slice() == &[1]
+}
+
+fn assert_single_advice_column(config_params: &BaseCircuitParams) {
+    assert!(
+        has_single_advice_column(config_params),
+        "OpenVM EVM wrapper requires exactly one advice column, got {:?}; increase wrapper_k or leave wrapper_k unset to auto-tune",
+        config_params.num_advice_per_phase
+    );
+}
+
+fn assert_single_instance_column_count(instance_columns: usize) {
+    assert_eq!(
+        instance_columns, 1,
+        "OpenVM EVM wrapper requires exactly one instance column, got {instance_columns}"
+    );
+}
+
+fn assert_single_instance_column_snark(snark: &Snark) {
+    assert_single_instance_column_count(snark.instances.len());
+}
+
 impl Halo2WrapperProvingKey {
     /// Auto select k to let Wrapper circuit only have 1 advice column.
     pub fn keygen_auto_tune(reader: &impl Halo2ParamsReader, dummy_snark: Snark) -> Self {
@@ -107,6 +130,8 @@ impl Halo2WrapperProvingKey {
     }
 
     pub fn keygen(params: &Halo2Params, dummy_snark: Snark) -> Self {
+        assert_single_instance_column_snark(&dummy_snark);
+
         let k = params.k();
         let mut circuit =
             generate_wrapper_circuit_object(CircuitBuilderStage::Keygen, k as usize, dummy_snark);
@@ -116,6 +141,7 @@ impl Halo2WrapperProvingKey {
             "Wrapper circuit num advice: {:?}",
             config_params.num_advice_per_phase
         );
+        assert_single_advice_column(&config_params);
         let pk = keygen_pk2(params, &circuit, false).unwrap();
         let num_pvs = circuit.instances().iter().map(|x| x.len()).collect_vec();
         Self {
@@ -146,6 +172,8 @@ impl Halo2WrapperProvingKey {
     #[cfg(feature = "evm-prove")]
     /// Return deployment code for EVM verifier which can verify the snark of this circuit.
     pub fn generate_fallback_evm_verifier(&self, params: &Halo2Params) -> FallbackEvmVerifier {
+        assert_single_advice_column(&self.pinning.metadata.config_params);
+        assert_single_instance_column_count(self.pinning.metadata.num_pvs.len());
         assert_eq!(
             self.pinning.metadata.config_params.k as u32,
             params.k(),
@@ -163,7 +191,7 @@ impl Halo2WrapperProvingKey {
         let k = self.pinning.metadata.config_params.k;
         let prover_circuit = self.generate_circuit_object_for_proving(k, snark_to_verify);
         let mut pvs = prover_circuit.instances();
-        assert_eq!(pvs.len(), 1);
+        assert_single_instance_column_count(pvs.len());
         let proof = snark_verifier_sdk::evm::gen_evm_proof_shplonk(
             params,
             &self.pinning.pk,
@@ -183,15 +211,13 @@ impl Halo2WrapperProvingKey {
         k: usize,
         snark_to_verify: Snark,
     ) -> AggregationCircuit {
-        assert_eq!(
-            snark_to_verify.instances.len(),
-            1,
-            "Snark should only have 1 instance column"
-        );
+        assert_single_instance_column_snark(&snark_to_verify);
+        assert_single_instance_column_count(self.pinning.metadata.num_pvs.len());
         assert_eq!(
             self.pinning.metadata.num_pvs[0],
             snark_to_verify.instances[0].len() + 12,
         );
+        assert_single_advice_column(&self.pinning.metadata.config_params);
         generate_wrapper_circuit_object(CircuitBuilderStage::Prover, k, snark_to_verify)
             .use_params(
                 self.pinning
@@ -219,7 +245,7 @@ impl Halo2WrapperProvingKey {
                 1,
                 "Snark has multiple phases"
             );
-            if circuit.builder.config_params.num_advice_per_phase[0] == 1 {
+            if has_single_advice_column(&circuit.builder.config_params) {
                 circuit.builder.clear();
                 break;
             }
