@@ -16,8 +16,6 @@ pub const RV64_ALU_OPCODE: u8 = 0b0110011;
 pub const RV64_ALU_OP_32: u8 = 0b0111011;
 pub const RV64_ALU_OP_IMM_32: u8 = 0b0011011;
 pub const RV64M_FUNCT7: u8 = 0x01;
-pub const NATIVE_STORED_FUNCT3: u8 = 0b111;
-pub const NATIVE_STORED_FUNCT7: u32 = 2;
 
 pub const TERMINATE_FUNCT3: u8 = 0b000;
 pub const HINT_FUNCT3: u8 = 0b001;

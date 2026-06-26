@@ -10,8 +10,8 @@ use openvm_instructions::{
 };
 use openvm_riscv_guest::{
     PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3, HINT_STORED_IMM,
-    NATIVE_STORED_FUNCT3, NATIVE_STORED_FUNCT7, PHANTOM_FUNCT3, REVEAL_FUNCT3, RV64M_FUNCT7,
-    RV64_ALU_OPCODE, RV64_ALU_OP_32, SYSTEM_OPCODE, TERMINATE_FUNCT3,
+    PHANTOM_FUNCT3, REVEAL_FUNCT3, RV64M_FUNCT7, RV64_ALU_OPCODE, RV64_ALU_OP_32, SYSTEM_OPCODE,
+    TERMINATE_FUNCT3,
 };
 pub use openvm_riscv_guest::{MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -186,23 +186,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64IoTranspilerExtension {
                     3,
                     1,
                     (dec_insn.imm < 0) as isize,
-                ))
-            }
-            NATIVE_STORED_FUNCT3 => {
-                // NATIVE_STORED is a pseudo-instruction for STORED_RV64 a,b,0,1,4
-                let dec_insn = RType::new(instruction_u32);
-                if dec_insn.funct7 != NATIVE_STORED_FUNCT7 {
-                    return None;
-                }
-                Some(Instruction::large_from_isize(
-                    Rv64LoadStoreOpcode::STORED.global_opcode(),
-                    (RV64_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
-                    (RV64_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
-                    0,
-                    1,
-                    4,
-                    1,
-                    0,
                 ))
             }
             _ => return None,

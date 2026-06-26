@@ -7,7 +7,7 @@ pub fn decode_reg<F: PrimeField32>(f: F) -> u8 {
 }
 
 /// Decode the immediate from the (c, g) field pair used by JALR, LOAD, STORE,
-/// and REVEAL.
+/// and public-values stores, including REVEAL.
 ///
 /// OpenVM stores the lower 16 bits of the sign-extended immediate in `c`, and
 /// the sign bit in `g`. The full 32-bit value is reconstructed as:
