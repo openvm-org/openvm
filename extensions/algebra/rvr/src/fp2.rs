@@ -8,7 +8,7 @@ use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
 use strum::EnumCount;
 
-use crate::{detect_known_field, format_c_byte_array, ModOp};
+use crate::{detect_known_field, format_c_byte_array, pad_modulus, ModOp};
 
 /// Per-modulus info for the Fp2 extension. Fp2 lifting never consults a
 /// non-QR, so we only carry the padded modulus and limb count.
@@ -22,14 +22,7 @@ fn make_moduli(moduli: Vec<BigUint>) -> Vec<ModulusInfo> {
 }
 
 fn make_modulus_info(modulus: BigUint) -> ModulusInfo {
-    let bytes = modulus.bits().div_ceil(8) as usize;
-    assert!(
-        bytes <= 48,
-        "modulus exceeds maximum supported size of 384 bits"
-    );
-    let num_limbs = if bytes <= 32 { 32u32 } else { 48u32 };
-    let mut modulus_bytes = modulus.to_bytes_le();
-    modulus_bytes.resize(num_limbs as usize, 0);
+    let (modulus_bytes, num_limbs) = pad_modulus(&modulus);
     ModulusInfo {
         modulus_bytes,
         num_limbs,
