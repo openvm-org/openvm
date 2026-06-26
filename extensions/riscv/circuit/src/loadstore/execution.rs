@@ -9,8 +9,8 @@ use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    LocalOpcode, DEFERRAL_AS,
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -28,13 +28,13 @@ struct LoadStorePreCompute {
 }
 
 impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
-    /// Return (local_opcode, enabled, is_native_store)
+    /// Return (local_opcode, enabled)
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
         data: &mut LoadStorePreCompute,
-    ) -> Result<(Rv64LoadStoreOpcode, bool, bool), StaticProgramError> {
+    ) -> Result<(Rv64LoadStoreOpcode, bool), StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -48,14 +48,20 @@ impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
         } = inst;
         let enabled = !f.is_zero();
 
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e_u32 == RV64_IMM_AS {
-            return Err(StaticProgramError::InvalidInstruction(pc));
-        }
-
         let local_opcode = Rv64LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
         );
+        let e_u32 = e.as_canonical_u32();
+        let valid_address_space = match local_opcode {
+            LOADD | LOADWU | LOADHU | LOADBU => e_u32 == RV64_MEMORY_AS,
+            STORED | STOREW | STOREH | STOREB => {
+                e_u32 == RV64_MEMORY_AS || e_u32 == PUBLIC_VALUES_AS
+            }
+            _ => false,
+        };
+        if d.as_canonical_u32() != RV64_REGISTER_AS || !valid_address_space {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
         match local_opcode {
             LOADD | LOADWU | LOADHU | LOADBU => {}
             STORED | STOREW | STOREH | STOREB => {
@@ -69,7 +75,6 @@ impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
         let imm = c.as_canonical_u32();
         let imm_sign = g.as_canonical_u32();
         let imm_extended = sign_extend_imm16(imm, imm_sign);
-        let is_native_store = e_u32 == DEFERRAL_AS;
 
         *data = LoadStorePreCompute {
             imm_extended,
@@ -77,38 +82,30 @@ impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
             b: b.as_canonical_u32() as u8,
             e: e_u32 as u8,
         };
-        Ok((local_opcode, enabled, is_native_store))
+        Ok((local_opcode, enabled))
     }
 }
 
 macro_rules! dispatch {
-    ($execute_impl:ident, $local_opcode:ident, $enabled:ident, $is_native_store:ident) => {
-        match ($local_opcode, $enabled, $is_native_store) {
-            (LOADD, true, _) => Ok($execute_impl::<_, _, U8, LoadDOp, true>),
-            (LOADD, false, _) => Ok($execute_impl::<_, _, U8, LoadDOp, false>),
-            (LOADWU, true, _) => Ok($execute_impl::<_, _, U8, LoadWUOp, true>),
-            (LOADWU, false, _) => Ok($execute_impl::<_, _, U8, LoadWUOp, false>),
-            (LOADHU, true, _) => Ok($execute_impl::<_, _, U8, LoadHUOp, true>),
-            (LOADHU, false, _) => Ok($execute_impl::<_, _, U8, LoadHUOp, false>),
-            (LOADBU, true, _) => Ok($execute_impl::<_, _, U8, LoadBUOp, true>),
-            (LOADBU, false, _) => Ok($execute_impl::<_, _, U8, LoadBUOp, false>),
-            (STORED, true, false) => Ok($execute_impl::<_, _, U8, StoreDOp, true>),
-            (STORED, false, false) => Ok($execute_impl::<_, _, U8, StoreDOp, false>),
-            (STORED, true, true) => Ok($execute_impl::<_, _, F, StoreDOp, true>),
-            (STORED, false, true) => Ok($execute_impl::<_, _, F, StoreDOp, false>),
-            (STOREW, true, false) => Ok($execute_impl::<_, _, U8, StoreWOp, true>),
-            (STOREW, false, false) => Ok($execute_impl::<_, _, U8, StoreWOp, false>),
-            (STOREW, true, true) => Ok($execute_impl::<_, _, F, StoreWOp, true>),
-            (STOREW, false, true) => Ok($execute_impl::<_, _, F, StoreWOp, false>),
-            (STOREH, true, false) => Ok($execute_impl::<_, _, U8, StoreHOp, true>),
-            (STOREH, false, false) => Ok($execute_impl::<_, _, U8, StoreHOp, false>),
-            (STOREH, true, true) => Ok($execute_impl::<_, _, F, StoreHOp, true>),
-            (STOREH, false, true) => Ok($execute_impl::<_, _, F, StoreHOp, false>),
-            (STOREB, true, false) => Ok($execute_impl::<_, _, U8, StoreBOp, true>),
-            (STOREB, false, false) => Ok($execute_impl::<_, _, U8, StoreBOp, false>),
-            (STOREB, true, true) => Ok($execute_impl::<_, _, F, StoreBOp, true>),
-            (STOREB, false, true) => Ok($execute_impl::<_, _, F, StoreBOp, false>),
-            (_, _, _) => unreachable!(),
+    ($execute_impl:ident, $local_opcode:ident, $enabled:ident) => {
+        match ($local_opcode, $enabled) {
+            (LOADD, true) => Ok($execute_impl::<_, _, U8, LoadDOp, true>),
+            (LOADD, false) => Ok($execute_impl::<_, _, U8, LoadDOp, false>),
+            (LOADWU, true) => Ok($execute_impl::<_, _, U8, LoadWUOp, true>),
+            (LOADWU, false) => Ok($execute_impl::<_, _, U8, LoadWUOp, false>),
+            (LOADHU, true) => Ok($execute_impl::<_, _, U8, LoadHUOp, true>),
+            (LOADHU, false) => Ok($execute_impl::<_, _, U8, LoadHUOp, false>),
+            (LOADBU, true) => Ok($execute_impl::<_, _, U8, LoadBUOp, true>),
+            (LOADBU, false) => Ok($execute_impl::<_, _, U8, LoadBUOp, false>),
+            (STORED, true) => Ok($execute_impl::<_, _, U8, StoreDOp, true>),
+            (STORED, false) => Ok($execute_impl::<_, _, U8, StoreDOp, false>),
+            (STOREW, true) => Ok($execute_impl::<_, _, U8, StoreWOp, true>),
+            (STOREW, false) => Ok($execute_impl::<_, _, U8, StoreWOp, false>),
+            (STOREH, true) => Ok($execute_impl::<_, _, U8, StoreHOp, true>),
+            (STOREH, false) => Ok($execute_impl::<_, _, U8, StoreHOp, false>),
+            (STOREB, true) => Ok($execute_impl::<_, _, U8, StoreBOp, true>),
+            (STOREB, false) => Ok($execute_impl::<_, _, U8, StoreBOp, false>),
+            (_, _) => unreachable!(),
         }
     };
 }
@@ -131,9 +128,8 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut LoadStorePreCompute = data.borrow_mut();
-        let (local_opcode, enabled, is_native_store) =
-            self.pre_compute_impl(pc, inst, pre_compute)?;
-        dispatch!(execute_e1_handler, local_opcode, enabled, is_native_store)
+        let (local_opcode, enabled) = self.pre_compute_impl(pc, inst, pre_compute)?;
+        dispatch!(execute_e1_handler, local_opcode, enabled)
     }
 
     #[cfg(feature = "tco")]
@@ -147,9 +143,8 @@ where
         Ctx: ExecutionCtxTrait,
     {
         let pre_compute: &mut LoadStorePreCompute = data.borrow_mut();
-        let (local_opcode, enabled, is_native_store) =
-            self.pre_compute_impl(pc, inst, pre_compute)?;
-        dispatch!(execute_e1_handler, local_opcode, enabled, is_native_store)
+        let (local_opcode, enabled) = self.pre_compute_impl(pc, inst, pre_compute)?;
+        dispatch!(execute_e1_handler, local_opcode, enabled)
     }
 }
 
@@ -174,9 +169,8 @@ where
     {
         let pre_compute: &mut E2PreCompute<LoadStorePreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
-        let (local_opcode, enabled, is_native_store) =
-            self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        dispatch!(execute_e2_handler, local_opcode, enabled, is_native_store)
+        let (local_opcode, enabled) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        dispatch!(execute_e2_handler, local_opcode, enabled)
     }
 
     #[cfg(feature = "tco")]
@@ -192,9 +186,8 @@ where
     {
         let pre_compute: &mut E2PreCompute<LoadStorePreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
-        let (local_opcode, enabled, is_native_store) =
-            self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        dispatch!(execute_e2_handler, local_opcode, enabled, is_native_store)
+        let (local_opcode, enabled) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        dispatch!(execute_e2_handler, local_opcode, enabled)
     }
 }
 
@@ -457,72 +450,51 @@ impl LoadStoreOp<U8> for StoreBOp {
     }
 }
 
-impl<F: PrimeField32> LoadStoreOp<F> for StoreDOp {
-    const IS_LOAD: bool = false;
-    const HOST_READ: bool = false;
+#[cfg(test)]
+mod tests {
+    use openvm_circuit::arch::StaticProgramError;
+    use openvm_instructions::{
+        instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, DEFERRAL_AS,
+    };
+    use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{LOADWU, STORED};
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-    #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [F; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        _shift_amount: usize,
-    ) -> bool {
-        *write_data = read_data.map(F::from_u8);
-        true
-    }
-}
+    use super::{LoadStorePreCompute, Rv64LoadStoreOpcode};
+    use crate::{adapters::Rv64LoadStoreAdapterExecutor, Rv64LoadStoreExecutor};
 
-impl<F: PrimeField32> LoadStoreOp<F> for StoreWOp {
-    const IS_LOAD: bool = false;
-    const HOST_READ: bool = true;
+    #[test]
+    fn precompute_enforces_address_space_domain() {
+        const PC: u32 = 0x100;
 
-    #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [F; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) -> bool {
-        if shift_amount != 0 && shift_amount != 4 {
-            return false;
+        let executor = Rv64LoadStoreExecutor::new(
+            Rv64LoadStoreAdapterExecutor::new(29),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+        );
+        for opcode in [LOADWU, STORED] {
+            let inst = Instruction::<BabyBear>::from_usize(
+                opcode.global_opcode(),
+                [
+                    8,
+                    16,
+                    0,
+                    RV64_REGISTER_AS as usize,
+                    DEFERRAL_AS as usize,
+                    1,
+                    0,
+                ],
+            );
+            let mut data = LoadStorePreCompute {
+                imm_extended: 0,
+                a: 0,
+                b: 0,
+                e: 0,
+            };
+
+            let err = executor
+                .pre_compute_impl(PC, &inst, &mut data)
+                .expect_err("load/store address-space domain should be enforced");
+
+            assert!(matches!(err, StaticProgramError::InvalidInstruction(PC)));
         }
-        write_data[shift_amount] = F::from_u8(read_data[0]);
-        write_data[shift_amount + 1] = F::from_u8(read_data[1]);
-        write_data[shift_amount + 2] = F::from_u8(read_data[2]);
-        write_data[shift_amount + 3] = F::from_u8(read_data[3]);
-        true
-    }
-}
-
-impl<F: PrimeField32> LoadStoreOp<F> for StoreHOp {
-    const IS_LOAD: bool = false;
-    const HOST_READ: bool = true;
-
-    #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [F; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) -> bool {
-        if shift_amount != 0 && shift_amount != 2 && shift_amount != 4 && shift_amount != 6 {
-            return false;
-        }
-        write_data[shift_amount] = F::from_u8(read_data[0]);
-        write_data[shift_amount + 1] = F::from_u8(read_data[1]);
-        true
-    }
-}
-
-impl<F: PrimeField32> LoadStoreOp<F> for StoreBOp {
-    const IS_LOAD: bool = false;
-    const HOST_READ: bool = true;
-
-    #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [F; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) -> bool {
-        write_data[shift_amount] = F::from_u8(read_data[0]);
-        true
     }
 }
