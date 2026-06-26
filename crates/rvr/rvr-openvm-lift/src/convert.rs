@@ -12,7 +12,7 @@ use crate::{extension::ExtensionRegistry, opcode::lift_instruction};
 #[derive(Debug, thiserror::Error)]
 pub enum ConvertError {
     #[error("unrecognized opcode {opcode} at pc {pc:#x}")]
-    UnrecognizedOpcode { opcode: usize, pc: u32 },
+    UnrecognizedOpcode { opcode: usize, pc: u64 },
 }
 
 /// Convert a VmExe to a vector of lifted IR instructions.
@@ -40,7 +40,7 @@ where
     let mut lifted = Vec::new();
 
     for (pc, insn, _debug_info) in exe.program.enumerate_by_pc() {
-        match lift_instruction(&insn, pc, extensions) {
+        match lift_instruction(&insn, u64::from(pc), extensions) {
             Some(mut li) => {
                 if let Some(loc) = source_lookup(pc) {
                     match &mut li {
@@ -57,7 +57,7 @@ where
             None => {
                 return Err(ConvertError::UnrecognizedOpcode {
                     opcode: insn.opcode.as_usize(),
-                    pc,
+                    pc: u64::from(pc),
                 });
             }
         }
@@ -72,8 +72,8 @@ where
 /// function pointer arrays, and other code pointers embedded in read-only data.
 pub fn scan_init_memory_for_code_pointers<F: PrimeField32>(
     exe: &VmExe<F>,
-    valid_pcs: &HashSet<u32>,
-) -> Vec<u32> {
+    valid_pcs: &HashSet<u64>,
+) -> Vec<u64> {
     // Collect all bytes in address space 2 (main memory).
     let mut mem_bytes: std::collections::BTreeMap<u32, u8> = std::collections::BTreeMap::new();
     for (&(addr_space, addr), &byte) in &exe.init_memory {
@@ -96,7 +96,7 @@ pub fn scan_init_memory_for_code_pointers<F: PrimeField32>(
             mem_bytes.get(&(addr + 2)),
             mem_bytes.get(&(addr + 3)),
         ) {
-            let val = u32::from_le_bytes([b0, b1, b2, b3]);
+            let val = u64::from(u32::from_le_bytes([b0, b1, b2, b3]));
             if valid_pcs.contains(&val) {
                 targets.push(val);
             }

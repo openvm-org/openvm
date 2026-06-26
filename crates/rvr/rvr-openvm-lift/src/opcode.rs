@@ -33,7 +33,7 @@ use crate::{
 /// the opcode, its `try_lift` is called.
 pub fn lift_instruction<F: PrimeField32>(
     insn: &Instruction<F>,
-    pc: u32,
+    pc: u64,
     extensions: &ExtensionRegistry<F>,
 ) -> Option<LiftedInstr> {
     let opcode = insn.opcode.as_usize();
@@ -286,7 +286,7 @@ fn sign_extend_12(val: u32) -> i32 {
 // ============= Instruction Lifters =============
 
 /// Helper to create a body instruction.
-pub fn body(pc: u32, instr: Instr) -> LiftedInstr {
+pub fn body(pc: u64, instr: Instr) -> LiftedInstr {
     LiftedInstr::Body(InstrAt {
         pc,
         instr,
@@ -295,7 +295,7 @@ pub fn body(pc: u32, instr: Instr) -> LiftedInstr {
 }
 
 /// Helper to create a terminator instruction.
-pub fn term(pc: u32, terminator: Terminator) -> LiftedInstr {
+pub fn term(pc: u64, terminator: Terminator) -> LiftedInstr {
     LiftedInstr::Term {
         pc,
         terminator,
@@ -304,7 +304,7 @@ pub fn term(pc: u32, terminator: Terminator) -> LiftedInstr {
 }
 
 /// Lift ALU instruction (R-type when e!=0, I-type when e==0).
-fn lift_alu<F: PrimeField32>(insn: &Instruction<F>, pc: u32, e: u32, op: AluOp) -> LiftedInstr {
+fn lift_alu<F: PrimeField32>(insn: &Instruction<F>, pc: u64, e: u32, op: AluOp) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
 
@@ -327,7 +327,7 @@ fn lift_alu<F: PrimeField32>(insn: &Instruction<F>, pc: u32, e: u32, op: AluOp) 
 }
 
 /// Lift shift instruction (R-type when e!=0, I-type shamt when e==0).
-fn lift_shift<F: PrimeField32>(insn: &Instruction<F>, pc: u32, e: u32, op: AluOp) -> LiftedInstr {
+fn lift_shift<F: PrimeField32>(insn: &Instruction<F>, pc: u64, e: u32, op: AluOp) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
 
@@ -349,7 +349,7 @@ fn lift_shift<F: PrimeField32>(insn: &Instruction<F>, pc: u32, e: u32, op: AluOp
 }
 
 /// Lift MUL/DIV/REM R-type instruction.
-fn lift_muldiv<F: PrimeField32>(insn: &Instruction<F>, pc: u32, op: MulDivOp) -> LiftedInstr {
+fn lift_muldiv<F: PrimeField32>(insn: &Instruction<F>, pc: u64, op: MulDivOp) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
     let rs2 = decode_reg(insn.c);
@@ -373,7 +373,7 @@ fn is_public_values_instruction<F: PrimeField32>(insn: &Instruction<F>) -> bool 
 
 fn lift_public_values_store<F: PrimeField32>(
     insn: &Instruction<F>,
-    pc: u32,
+    pc: u64,
     extensions: &ExtensionRegistry<F>,
 ) -> Option<LiftedInstr> {
     if is_public_values_instruction(insn) {
@@ -385,7 +385,7 @@ fn lift_public_values_store<F: PrimeField32>(
 
 fn lift_load<F: PrimeField32>(
     insn: &Instruction<F>,
-    pc: u32,
+    pc: u64,
     width: MemWidth,
     signed: bool,
 ) -> Option<LiftedInstr> {
@@ -416,7 +416,7 @@ fn lift_load<F: PrimeField32>(
 /// OpenVM encoding: rs2=a/4, rs1=b/4, imm low16=c, sign=g!=0
 fn lift_store<F: PrimeField32>(
     insn: &Instruction<F>,
-    pc: u32,
+    pc: u64,
     width: MemWidth,
 ) -> Option<LiftedInstr> {
     if !is_memory_instruction(insn) {
@@ -440,11 +440,11 @@ fn lift_store<F: PrimeField32>(
 
 /// Lift branch instruction.
 /// OpenVM encoding: rs1=a/4, rs2=b/4, offset=c as signed (BabyBear modular)
-fn lift_branch<F: PrimeField32>(insn: &Instruction<F>, pc: u32, cond: BranchCond) -> LiftedInstr {
+fn lift_branch<F: PrimeField32>(insn: &Instruction<F>, pc: u64, cond: BranchCond) -> LiftedInstr {
     let rs1 = decode_reg(insn.a);
     let rs2 = decode_reg(insn.b);
     let offset = field_to_i32(insn.c);
-    let target = (pc as i64 + offset as i64) as u32;
+    let target = (pc as i64 + offset as i64) as u64;
 
     term(
         pc,
@@ -459,10 +459,10 @@ fn lift_branch<F: PrimeField32>(insn: &Instruction<F>, pc: u32, cond: BranchCond
 
 /// Lift JAL instruction.
 /// OpenVM encoding: rd=a/4, offset=c as signed (BabyBear modular)
-fn lift_jal<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
+fn lift_jal<F: PrimeField32>(insn: &Instruction<F>, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let offset = field_to_i32(insn.c);
-    let target = (pc as i64 + offset as i64) as u32;
+    let target = (pc as i64 + offset as i64) as u64;
 
     let link_rd = if rd != 0 { Some(rd) } else { None };
     term(pc, Terminator::Jump { link_rd, target })
@@ -470,7 +470,7 @@ fn lift_jal<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
 
 /// Lift JALR instruction.
 /// OpenVM encoding: rd=a/4, rs1=b/4, imm low16=c, sign=g!=0
-fn lift_jalr<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
+fn lift_jalr<F: PrimeField32>(insn: &Instruction<F>, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
     let imm = decode_imm_cg(insn) as i32;
@@ -489,7 +489,7 @@ fn lift_jalr<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
 
 /// Lift LUI instruction.
 /// OpenVM encoding: rd=a/4, upper20=c << 12
-fn lift_lui<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
+fn lift_lui<F: PrimeField32>(insn: &Instruction<F>, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let upper = field_to_u32(insn.c);
     let value = upper << 12;
@@ -502,11 +502,11 @@ fn lift_lui<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
 
 /// Lift AUIPC instruction.
 /// OpenVM encoding: rd=a/4, upper20 = c << 8 (from rrs.rs: c = (imm & 0xfffff000) >> 8)
-fn lift_auipc<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
+fn lift_auipc<F: PrimeField32>(insn: &Instruction<F>, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let shifted = field_to_u32(insn.c);
     let upper = shifted << 8; // reconstruct the upper 20 bits with low 12 zeros
-    let value = (pc as u64).wrapping_add(sext32(upper));
+    let value = pc.wrapping_add(sext32(upper));
 
     if rd == 0 {
         return body(pc, Instr::Nop);
@@ -516,7 +516,7 @@ fn lift_auipc<F: PrimeField32>(insn: &Instruction<F>, pc: u32) -> LiftedInstr {
 
 /// Lift W-suffix ALU instruction (R-type when e!=0, I-type when e==0).
 /// Result is the low 32 bits of the operation, sign-extended to 64 bits.
-fn lift_alu_w<F: PrimeField32>(insn: &Instruction<F>, pc: u32, e: u32, op: AluOp) -> LiftedInstr {
+fn lift_alu_w<F: PrimeField32>(insn: &Instruction<F>, pc: u64, e: u32, op: AluOp) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
 
@@ -538,7 +538,7 @@ fn lift_alu_w<F: PrimeField32>(insn: &Instruction<F>, pc: u32, e: u32, op: AluOp
 
 /// Lift W-suffix shift instruction (R-type when e!=0, I-type shamt when e==0).
 /// Shamt is 5-bit (W shifts operate on 32-bit values regardless of register width).
-fn lift_shift_w<F: PrimeField32>(insn: &Instruction<F>, pc: u32, e: u32, op: AluOp) -> LiftedInstr {
+fn lift_shift_w<F: PrimeField32>(insn: &Instruction<F>, pc: u64, e: u32, op: AluOp) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
 
@@ -558,7 +558,7 @@ fn lift_shift_w<F: PrimeField32>(insn: &Instruction<F>, pc: u32, e: u32, op: Alu
 }
 
 /// Lift W-suffix MUL/DIV/REM R-type instruction.
-fn lift_muldiv_w<F: PrimeField32>(insn: &Instruction<F>, pc: u32, op: MulDivOp) -> LiftedInstr {
+fn lift_muldiv_w<F: PrimeField32>(insn: &Instruction<F>, pc: u64, op: MulDivOp) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
     let rs2 = decode_reg(insn.c);
@@ -571,7 +571,7 @@ fn lift_muldiv_w<F: PrimeField32>(insn: &Instruction<F>, pc: u32, op: MulDivOp) 
 // ============= System / IO Instructions =============
 
 /// Lift a system PHANTOM sub-instruction.
-fn lift_phantom(sys: SysPhantom, pc: u32) -> LiftedInstr {
+fn lift_phantom(sys: SysPhantom, pc: u64) -> LiftedInstr {
     match sys {
         // Nop, CtStart, CtEnd — no-ops for execution
         SysPhantom::Nop | SysPhantom::CtStart | SysPhantom::CtEnd => body(pc, Instr::Nop),

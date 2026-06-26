@@ -165,7 +165,7 @@ impl EccExtension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for EccExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         let ecc_base = Rv64WeierstrassOpcode::CLASS_OFFSET;
