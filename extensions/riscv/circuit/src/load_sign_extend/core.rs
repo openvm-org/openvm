@@ -17,7 +17,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
@@ -266,8 +266,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
-            WriteData = [u32; NUM_CELLS],
+            ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u8),
+            WriteData = [u8; NUM_CELLS],
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -290,11 +290,13 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
+        let Instruction { opcode, d, e, .. } = instruction;
 
         let local_opcode = Rv64LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
         );
+        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV64_MEMORY_AS);
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
@@ -306,7 +308,7 @@ where
 
         core_record.is_byte = local_opcode == LOADB;
         core_record.is_word = local_opcode == LOADW;
-        core_record.prev_data = tmp.0 .0.map(|x| x as u8);
+        core_record.prev_data = tmp.0 .0;
         core_record.read_data = tmp.0 .1;
         core_record.shift_amount = tmp.1;
 
@@ -316,12 +318,8 @@ where
             core_record.shift_amount as usize,
         );
 
-        self.adapter.write(
-            state.memory,
-            instruction,
-            write_data.map(u32::from),
-            &mut adapter_record,
-        );
+        self.adapter
+            .write(state.memory, instruction, write_data, &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
