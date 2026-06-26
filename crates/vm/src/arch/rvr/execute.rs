@@ -267,16 +267,16 @@ fn execute_metered_impl<F: PrimeField32>(
     state.tracer = TracerPtr(&mut tracer_data);
 
     let check_counter =
-        u32::try_from(seg_state.segmentation_ctx.instrets_until_check).map_err(|_| {
+        u32::try_from(seg_state.ctx.segmentation_ctx.instrets_until_check).map_err(|_| {
             ExecuteError::InvalidMeteredContext(format!(
                 "instrets_until_check {} exceeds rvr tracer u32 counter",
-                seg_state.segmentation_ctx.instrets_until_check
+                seg_state.ctx.segmentation_ctx.instrets_until_check
             ))
         })?;
-    let _ = u32::try_from(seg_state.segmentation_ctx.segment_check_insns()).map_err(|_| {
+    let _ = u32::try_from(seg_state.ctx.segmentation_ctx.segment_check_insns()).map_err(|_| {
         ExecuteError::InvalidMeteredContext(format!(
             "segment_check_insns {} exceeds rvr tracer u32 counter",
-            seg_state.segmentation_ctx.segment_check_insns()
+            seg_state.ctx.segmentation_ctx.segment_check_insns()
         ))
     })?;
 
@@ -311,7 +311,7 @@ fn execute_metered_impl<F: PrimeField32>(
         // The segment-boundary suspender exits before executing the triggering block.
         // The periodic check already flushed page buffers and initialized the next
         // segment; carry the bumped countdown forward for resume.
-        seg_state.segmentation_ctx.instrets_until_check = state.tracer.check_counter as u64;
+        seg_state.ctx.segmentation_ctx.instrets_until_check = state.tracer.check_counter as u64;
     }
     Ok(RvrMeteredResult {
         seg_state,

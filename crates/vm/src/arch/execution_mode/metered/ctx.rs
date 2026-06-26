@@ -43,14 +43,6 @@ pub struct MeteredCtxInputs<'a> {
     pub segmentation_limits: SegmentationLimits,
 }
 
-#[cfg(feature = "rvr")]
-pub(crate) struct MeteredCtxParts<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
-    pub config: MeteredCtxConfig,
-    pub trace_heights: Vec<u32>,
-    pub memory_ctx: MemoryCtx<PAGE_BITS>,
-    pub segmentation_ctx: SegmentationCtx,
-}
-
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     // Note: prefer to use `build_metered_ctx` in `VmExecutor` or `VirtualMachine`.
     pub fn new(
@@ -168,26 +160,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     pub fn into_segments(self) -> Vec<Segment> {
         self.segmentation_ctx.segments
-    }
-
-    #[cfg(feature = "rvr")]
-    pub(crate) fn into_parts(self) -> MeteredCtxParts<PAGE_BITS> {
-        MeteredCtxParts {
-            config: self.config,
-            trace_heights: self.trace_heights,
-            memory_ctx: self.memory_ctx,
-            segmentation_ctx: self.segmentation_ctx,
-        }
-    }
-
-    #[cfg(feature = "rvr")]
-    pub(crate) fn from_parts(parts: MeteredCtxParts<PAGE_BITS>) -> Self {
-        Self {
-            config: parts.config,
-            trace_heights: parts.trace_heights,
-            memory_ctx: parts.memory_ctx,
-            segmentation_ctx: parts.segmentation_ctx,
-        }
     }
 
     #[inline(always)]
@@ -317,69 +289,3 @@ impl<const PAGE_BITS: usize> MeteredExecutionCtxTrait for MeteredCtx<PAGE_BITS> 
     }
 }
 
-#[cfg(all(test, feature = "rvr"))]
-mod tests {
-    use openvm_stark_backend::StarkEngine;
-
-    use super::*;
-    use crate::{
-        arch::{BOUNDARY_AIR_ID, MERKLE_AIR_ID},
-        utils::{test_cpu_engine, test_system_config},
-    };
-
-    #[test]
-    fn rvr_metered_ctx_parts_roundtrip_preserves_execution_state() {
-        let system_config = test_system_config();
-        let num_airs = 6;
-        let mut air_names = (0..num_airs)
-            .map(|idx| format!("Air {idx}"))
-            .collect::<Vec<_>>();
-        air_names[BOUNDARY_AIR_ID] = "Memory Boundary".to_string();
-        air_names[MERKLE_AIR_ID] = "Memory Merkle".to_string();
-
-        let mut segmentation_ctx = SegmentationCtx::new(
-            air_names,
-            vec![1; num_airs],
-            vec![0; num_airs],
-            vec![false; num_airs],
-            SegmentationLimits {
-                max_trace_height_bits: 12,
-                max_memory: usize::MAX,
-                max_interactions: u32::MAX,
-            },
-            test_cpu_engine().proving_memory_config(),
-        );
-        segmentation_ctx.instret = 123;
-        segmentation_ctx.instrets_until_check = 1;
-
-        let mut memory_ctx = MemoryCtx::<DEFAULT_PAGE_BITS>::new(&system_config, 1);
-        memory_ctx.addr_space_access_count[1] = 7;
-        memory_ctx.page_indices_since_checkpoint_len = 3;
-
-        let mut ctx = MeteredCtx::<DEFAULT_PAGE_BITS> {
-            config: MeteredCtxConfig {
-                initial_trace_heights: vec![1, 2, 3, 4, 5, 6],
-                is_trace_height_constant: vec![false, true, false, true, false, true],
-                suspend_on_segment: true,
-            },
-            trace_heights: vec![1, 2, 3, 4, 5, 6],
-            memory_ctx,
-            segmentation_ctx,
-        };
-        ctx.set_cache_rs_code_matrix(false);
-
-        assert!(!ctx.cache_rs_code_matrix());
-        let restored = MeteredCtx::from_parts(ctx.into_parts());
-
-        assert!(!restored.cache_rs_code_matrix());
-        assert_eq!(restored.trace_heights, vec![1, 2, 3, 4, 5, 6]);
-        assert_eq!(
-            restored.config.is_trace_height_constant,
-            vec![false, true, false, true, false, true]
-        );
-        assert_eq!(restored.segmentation_ctx.instret, 123);
-        assert_eq!(restored.memory_ctx.addr_space_access_count[1], 7);
-        assert_eq!(restored.memory_ctx.page_indices_since_checkpoint_len, 3);
-        assert!(*restored.suspend_on_segment());
-    }
-}
