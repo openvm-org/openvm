@@ -15,3 +15,6 @@ openvm-riscv-transpiler.workspace = true
 openvm-stark-backend.workspace = true
 libloading.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+p3-baby-bear.workspace = true

@@ -15,7 +15,10 @@ use openvm_circuit_primitives::{
     SubAir,
 };
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode,
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -365,8 +368,7 @@ pub struct LoadStoreCoreRecord<const NUM_CELLS: usize> {
     pub local_opcode: u8,
     pub shift_amount: u8,
     pub read_data: [u8; NUM_CELLS],
-    // Note: `prev_data` can be from native address space, so we need to use u32.
-    pub prev_data: [u32; NUM_CELLS],
+    pub prev_data: [u8; NUM_CELLS],
 }
 
 #[derive(Clone, Copy, derive_new::new)]
@@ -408,8 +410,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
-            WriteData = [u32; NUM_CELLS],
+            ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u8),
+            WriteData = [u8; NUM_CELLS],
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -429,20 +431,27 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, .. } = instruction;
+        let Instruction { opcode, d, e, .. } = instruction;
+        let local_opcode = Rv64LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
+        debug_assert!(match local_opcode {
+            LOADD | LOADWU | LOADHU | LOADBU => e.as_canonical_u32() == RV64_MEMORY_AS,
+            STORED | STOREW | STOREH | STOREB =>
+                e.as_canonical_u32() == RV64_MEMORY_AS || e.as_canonical_u32() == PUBLIC_VALUES_AS,
+            _ => false,
+        });
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
-        (
-            (core_record.prev_data, core_record.read_data),
-            core_record.shift_amount,
-        ) = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record);
+        let ((prev_data, read_data), shift_amount) =
+            self.adapter
+                .read(state.memory, instruction, &mut adapter_record);
+        core_record.prev_data = prev_data;
+        core_record.read_data = read_data;
+        core_record.shift_amount = shift_amount;
 
-        let local_opcode = Rv64LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         core_record.local_opcode = local_opcode as u8;
 
         let write_data = run_write_data(
@@ -485,11 +494,12 @@ where
                 .request_range(pair[0] as u32, pair[1] as u32);
         }
         for pair in record.prev_data.chunks_exact(2) {
-            self.bitwise_lookup_chip.request_range(pair[0], pair[1]);
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
         }
 
-        core_row.write_data = write_data.map(F::from_u32);
-        core_row.prev_data = record.prev_data.map(F::from_u32);
+        core_row.write_data = write_data.map(F::from_u8);
+        core_row.prev_data = record.prev_data.map(F::from_u8);
         core_row.read_data = record.read_data.map(F::from_u8);
         core_row.is_load = F::from_bool(matches!(opcode, LOADD | LOADWU | LOADHU | LOADBU));
         core_row.is_valid = F::ONE;
@@ -507,18 +517,18 @@ where
 pub(super) fn run_write_data<const NUM_CELLS: usize>(
     opcode: Rv64LoadStoreOpcode,
     read_data: [u8; NUM_CELLS],
-    prev_data: [u32; NUM_CELLS],
+    prev_data: [u8; NUM_CELLS],
     shift: usize,
-) -> [u32; NUM_CELLS] {
+) -> [u8; NUM_CELLS] {
     const { assert!(NUM_CELLS == RV64_REGISTER_NUM_LIMBS) };
     let word_width = NUM_CELLS / 2;
     let half_width = NUM_CELLS / 4;
 
     match opcode {
-        LOADD if shift == 0 => read_data.map(u32::from),
+        LOADD if shift == 0 => read_data,
         LOADWU if shift == 0 || shift == word_width => array::from_fn(|i| {
             if i < word_width {
-                read_data[i + shift] as u32
+                read_data[i + shift]
             } else {
                 0
             }
@@ -526,7 +536,7 @@ pub(super) fn run_write_data<const NUM_CELLS: usize>(
         LOADHU if [0, half_width, word_width, word_width + half_width].contains(&shift) => {
             array::from_fn(|i| {
                 if i < half_width {
-                    read_data[i + shift] as u32
+                    read_data[i + shift]
                 } else {
                     0
                 }
@@ -534,15 +544,15 @@ pub(super) fn run_write_data<const NUM_CELLS: usize>(
         }
         LOADBU if shift < NUM_CELLS => array::from_fn(|i| {
             if i == 0 {
-                read_data[shift] as u32
+                read_data[shift]
             } else {
                 0
             }
         }),
-        STORED if shift == 0 => read_data.map(u32::from),
+        STORED if shift == 0 => read_data,
         STOREW if shift == 0 || shift == word_width => array::from_fn(|i| {
             if i >= shift && i < shift + word_width {
-                read_data[i - shift] as u32
+                read_data[i - shift]
             } else {
                 prev_data[i]
             }
@@ -550,7 +560,7 @@ pub(super) fn run_write_data<const NUM_CELLS: usize>(
         STOREH if [0, half_width, word_width, word_width + half_width].contains(&shift) => {
             array::from_fn(|i| {
                 if i >= shift && i < shift + half_width {
-                    read_data[i - shift] as u32
+                    read_data[i - shift]
                 } else {
                     prev_data[i]
                 }
@@ -558,7 +568,7 @@ pub(super) fn run_write_data<const NUM_CELLS: usize>(
         }
         STOREB if shift < NUM_CELLS => {
             let mut write_data = prev_data;
-            write_data[shift] = read_data[0] as u32;
+            write_data[shift] = read_data[0];
             write_data
         }
         _ => unreachable!(

@@ -4,7 +4,9 @@
 //! - RISC-V base instructions
 //! - System instructions: TERMINATE, PHANTOM, PUBLISH
 //! - System phantom sub-instructions: Nop, DebugPanic, CtStart, CtEnd
-//! - STORED/STOREW e=2 dispatch (normal memory store; e=3 falls through to extensions for REVEAL)
+//! - RV64 load/store instructions lift memory address space `e = 2`.
+//! - RV64 stores to public values address space `e = 3`, including REVEAL, are handled by
+//!   extensions.
 
 use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode, SysPhantom, SystemOpcode,
@@ -15,12 +17,12 @@ use openvm_riscv_transpiler::{
     Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
+use rvr_openvm_ext_ffi_common::{AS_MEMORY, AS_PUBLIC_VALUES, AS_REGISTER};
 use rvr_openvm_ir::{
     AluOp, BranchCond, Instr, InstrAt, LiftedInstr, MemWidth, MulDivOp, Terminator,
 };
 
-use crate::helpers::decode_imm_cg;
+use crate::{helpers::decode_imm_cg, ExtensionRegistry};
 
 /// Lift a single OpenVM instruction to the new IR types.
 ///
@@ -29,7 +31,7 @@ use crate::helpers::decode_imm_cg;
 pub fn lift_instruction<F: PrimeField32>(
     insn: &Instruction<F>,
     pc: u32,
-    extensions: &crate::ExtensionRegistry<F>,
+    extensions: &ExtensionRegistry<F>,
 ) -> Option<LiftedInstr> {
     let opcode = insn.opcode.as_usize();
 
@@ -111,42 +113,49 @@ pub fn lift_instruction<F: PrimeField32>(
     //            STORED=0x214, STOREW=0x215, STOREH=0x216, STOREB=0x217,
     //            LOADB=0x218, LOADH=0x219, LOADW=0x21a
     if opcode == Rv64LoadStoreOpcode::LOADD.global_opcode_usize() {
-        return Some(lift_load(insn, pc, MemWidth::Double, false));
+        return lift_load(insn, pc, MemWidth::Double, false);
     }
     if opcode == Rv64LoadStoreOpcode::LOADBU.global_opcode_usize() {
-        return Some(lift_load(insn, pc, MemWidth::Byte, false));
+        return lift_load(insn, pc, MemWidth::Byte, false);
     }
     if opcode == Rv64LoadStoreOpcode::LOADHU.global_opcode_usize() {
-        return Some(lift_load(insn, pc, MemWidth::Half, false));
+        return lift_load(insn, pc, MemWidth::Half, false);
     }
     if opcode == Rv64LoadStoreOpcode::LOADWU.global_opcode_usize() {
-        return Some(lift_load(insn, pc, MemWidth::Word, false));
+        return lift_load(insn, pc, MemWidth::Word, false);
     }
     if opcode == Rv64LoadStoreOpcode::LOADB.global_opcode_usize() {
-        return Some(lift_load(insn, pc, MemWidth::Byte, true));
+        return lift_load(insn, pc, MemWidth::Byte, true);
     }
     if opcode == Rv64LoadStoreOpcode::LOADH.global_opcode_usize() {
-        return Some(lift_load(insn, pc, MemWidth::Half, true));
+        return lift_load(insn, pc, MemWidth::Half, true);
     }
     if opcode == Rv64LoadStoreOpcode::LOADW.global_opcode_usize() {
-        return Some(lift_load(insn, pc, MemWidth::Word, true));
+        return lift_load(insn, pc, MemWidth::Word, true);
     }
     if opcode == Rv64LoadStoreOpcode::STORED.global_opcode_usize() {
-        // e = RV64_MEMORY_AS is a normal store; e = AS_PUBLIC_VALUES is REVEAL,
-        // handled by `Rv64IoExtension`.
-        let addr_space = field_to_u32(insn.e);
-        if addr_space != AS_PUBLIC_VALUES {
-            return Some(lift_store(insn, pc, MemWidth::Double));
+        if let Some(lifted) = lift_store(insn, pc, MemWidth::Double) {
+            return Some(lifted);
         }
+        return lift_public_values_store(insn, pc, extensions);
     }
     if opcode == Rv64LoadStoreOpcode::STOREW.global_opcode_usize() {
-        return Some(lift_store(insn, pc, MemWidth::Word));
+        if let Some(lifted) = lift_store(insn, pc, MemWidth::Word) {
+            return Some(lifted);
+        }
+        return lift_public_values_store(insn, pc, extensions);
     }
     if opcode == Rv64LoadStoreOpcode::STOREH.global_opcode_usize() {
-        return Some(lift_store(insn, pc, MemWidth::Half));
+        if let Some(lifted) = lift_store(insn, pc, MemWidth::Half) {
+            return Some(lifted);
+        }
+        return lift_public_values_store(insn, pc, extensions);
     }
     if opcode == Rv64LoadStoreOpcode::STOREB.global_opcode_usize() {
-        return Some(lift_store(insn, pc, MemWidth::Byte));
+        if let Some(lifted) = lift_store(insn, pc, MemWidth::Byte) {
+            return Some(lifted);
+        }
+        return lift_public_values_store(insn, pc, extensions);
     }
 
     // BranchEqual: BEQ=0x220, BNE=0x221
@@ -349,20 +358,46 @@ fn lift_muldiv<F: PrimeField32>(insn: &Instruction<F>, pc: u32, op: MulDivOp) ->
 
 /// Lift load instruction.
 /// OpenVM encoding: rd=a/4, rs1=b/4, imm low16=c, sign=g!=0
+#[inline]
+fn is_memory_instruction<F: PrimeField32>(insn: &Instruction<F>) -> bool {
+    field_to_u32(insn.d) == AS_REGISTER && field_to_u32(insn.e) == AS_MEMORY
+}
+
+#[inline]
+fn is_public_values_instruction<F: PrimeField32>(insn: &Instruction<F>) -> bool {
+    field_to_u32(insn.d) == AS_REGISTER && field_to_u32(insn.e) == AS_PUBLIC_VALUES
+}
+
+fn lift_public_values_store<F: PrimeField32>(
+    insn: &Instruction<F>,
+    pc: u32,
+    extensions: &ExtensionRegistry<F>,
+) -> Option<LiftedInstr> {
+    if is_public_values_instruction(insn) {
+        extensions.try_lift(insn, pc)
+    } else {
+        None
+    }
+}
+
 fn lift_load<F: PrimeField32>(
     insn: &Instruction<F>,
     pc: u32,
     width: MemWidth,
     signed: bool,
-) -> LiftedInstr {
+) -> Option<LiftedInstr> {
+    if !is_memory_instruction(insn) {
+        return None;
+    }
+
     let rd = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
     let offset = decode_imm_cg(insn) as i16;
 
     if rd == 0 {
-        return body(pc, Instr::Nop);
+        return Some(body(pc, Instr::Nop));
     }
-    body(
+    Some(body(
         pc,
         Instr::Load {
             width,
@@ -371,17 +406,25 @@ fn lift_load<F: PrimeField32>(
             rs1,
             offset,
         },
-    )
+    ))
 }
 
 /// Lift store instruction.
 /// OpenVM encoding: rs2=a/4, rs1=b/4, imm low16=c, sign=g!=0
-fn lift_store<F: PrimeField32>(insn: &Instruction<F>, pc: u32, width: MemWidth) -> LiftedInstr {
+fn lift_store<F: PrimeField32>(
+    insn: &Instruction<F>,
+    pc: u32,
+    width: MemWidth,
+) -> Option<LiftedInstr> {
+    if !is_memory_instruction(insn) {
+        return None;
+    }
+
     let rs2 = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
     let offset = decode_imm_cg(insn) as i16;
 
-    body(
+    Some(body(
         pc,
         Instr::Store {
             width,
@@ -389,7 +432,7 @@ fn lift_store<F: PrimeField32>(insn: &Instruction<F>, pc: u32, width: MemWidth) 
             rs2,
             offset,
         },
-    )
+    ))
 }
 
 /// Lift branch instruction.
@@ -537,5 +580,88 @@ fn lift_phantom(sys: SysPhantom, pc: u32) -> LiftedInstr {
                 message: "PHANTOM DebugPanic".to_string(),
             },
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::{
+        instruction::Instruction, LocalOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
+    };
+    use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{
+        LOADB, LOADBU, LOADD, LOADH, LOADHU, LOADW, LOADWU, STOREB, STORED, STOREH, STOREW,
+    };
+    use p3_baby_bear::BabyBear;
+
+    use super::{lift_instruction, ExtensionRegistry, AS_MEMORY, AS_REGISTER};
+
+    #[test]
+    fn load_store_address_space_domain() {
+        let extensions = ExtensionRegistry::<BabyBear>::new();
+
+        for opcode in [LOADD, LOADBU, LOADHU, LOADWU, LOADB, LOADH, LOADW] {
+            let inst = Instruction::<BabyBear>::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, 1, DEFERRAL_AS as usize, 1, 0],
+            );
+
+            assert!(lift_instruction(&inst, 0x100, &extensions).is_none());
+        }
+
+        for opcode in [STORED, STOREW, STOREH, STOREB] {
+            let deferral_inst = Instruction::<BabyBear>::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, 1, DEFERRAL_AS as usize, 1, 0],
+            );
+            assert!(lift_instruction(&deferral_inst, 0x100, &extensions).is_none());
+
+            let public_values_inst = Instruction::<BabyBear>::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, 1, PUBLIC_VALUES_AS as usize, 1, 0],
+            );
+            assert!(lift_instruction(&public_values_inst, 0x100, &extensions).is_none());
+        }
+    }
+
+    #[test]
+    fn load_store_requires_register_destination_address_space() {
+        let extensions = ExtensionRegistry::<BabyBear>::new();
+
+        for opcode in [LOADD, LOADBU, LOADHU, LOADWU, LOADB, LOADH, LOADW] {
+            let inst = Instruction::<BabyBear>::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, AS_MEMORY as usize, AS_MEMORY as usize, 1, 0],
+            );
+
+            assert!(lift_instruction(&inst, 0x100, &extensions).is_none());
+        }
+
+        for opcode in [STORED, STOREW, STOREH, STOREB] {
+            let memory_inst = Instruction::<BabyBear>::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, AS_MEMORY as usize, AS_MEMORY as usize, 1, 0],
+            );
+            assert!(lift_instruction(&memory_inst, 0x100, &extensions).is_none());
+
+            let public_values_inst = Instruction::<BabyBear>::from_usize(
+                opcode.global_opcode(),
+                [
+                    8,
+                    16,
+                    0,
+                    AS_MEMORY as usize,
+                    PUBLIC_VALUES_AS as usize,
+                    1,
+                    0,
+                ],
+            );
+            assert!(lift_instruction(&public_values_inst, 0x100, &extensions).is_none());
+
+            let valid_memory_inst = Instruction::<BabyBear>::from_usize(
+                opcode.global_opcode(),
+                [8, 16, 0, AS_REGISTER as usize, AS_MEMORY as usize, 1, 0],
+            );
+            assert!(lift_instruction(&valid_memory_inst, 0x100, &extensions).is_some());
+        }
     }
 }

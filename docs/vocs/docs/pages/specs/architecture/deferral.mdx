@@ -24,6 +24,8 @@ We also define the **circuit commit** as the `def_circuit_commit` [below](#aggre
 
 During guest program execution, we maintain an `input_i_accumulator: Digest` and `output_i_accumulator: Digest` for each `C_i`. These accumulators are stored in order at the beginning of the **deferral address space** (address space `4`), meaning that the accumulators for some `C_i` will be stored starting at `[2 * i * DIGEST_SIZE]_4`.
 
+The deferral extension maintains this address space through its deferral opcodes.
+
 Each accumulator is a **hash onion**, i.e. the result of folding `π` (Poseidon2 compression) over the sequence of commits seen so far. `input_i_accumulator` and `output_i_accumulator` accumulate the input and output commits for calls to `C_i` specifically. `input_i_accumulator` will initially be the `def_circuit_commit`, and `output_i_accumulator` all zero — this is required to [constrain that the correct deferral circuits were used](#aggregation-subcircuit-and-tree).
 
 ### New Opcodes
