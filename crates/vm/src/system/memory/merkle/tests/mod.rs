@@ -5,13 +5,14 @@ use std::{
     sync::Arc,
 };
 
+use openvm_circuit_primitives::Chip;
 use openvm_stark_backend::{
     interaction::{PermutationCheckBus, PermutationInteractionType},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::AirProvingContext,
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
-    Chip, StarkEngine,
+    StarkEngine,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::RngCore;
@@ -713,7 +714,6 @@ fn build_below_leaf_swap_fraud_merkle(
 
     let poseidon2_chip = Poseidon2PeripheryChip::<BabyBear>::new(
         vm_poseidon2_config(),
-        POSEIDON2_DIRECT_BUS,
         poseidon2_max_constraint_degree,
     );
 
@@ -853,8 +853,6 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
         exe::VmExe, instruction::Instruction, program::Program, LocalOpcode,
         SystemOpcode::TERMINATE,
     };
-    use openvm_stark_backend::engine::StarkEngine;
-    use openvm_stark_sdk::config::FriParameters;
 
     use crate::{
         arch::{PreflightExecutionOutput, Streams, SystemConfig, VirtualMachine, VmState},
@@ -877,12 +875,12 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
         COUNTEREXAMPLE_OVERALL_HEIGHT
     );
 
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
+    let engine = test_cpu_engine();
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, vm_config.clone()).unwrap();
     let vk = pk.get_vk();
 
-    let merkle_air_id = vm_config.memory_merkle_air_id().unwrap();
+    let merkle_air_id = vm_config.memory_merkle_air_id();
 
     // The poseidon2 periphery AIR index isn't a fixed constant, so find it by name.
     let poseidon2_air_id = vm
@@ -907,13 +905,7 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
     let memory = GuestMemory::new(AddressMap::from_mem_config(&vm_config.memory_config));
     vm.transport_init_memory_to_device(&memory);
     vm.load_program(vm.commit_program_on_device(&vm_exe.program));
-    let from_state = VmState::new_with_defaults(
-        0,
-        memory,
-        Streams::default(),
-        0,
-        vm_config.num_public_values,
-    );
+    let from_state = VmState::new_with_defaults(0, memory, Streams::default(), 0);
     let mut interpreter = vm.preflight_interpreter(&vm_exe).unwrap();
     let PreflightExecutionOutput {
         system_records,
@@ -931,17 +923,17 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
     // swapping the entries in.
     let (merkle_trace, merkle_pvs, poseidon2_chip) =
         build_below_leaf_swap_fraud_merkle(memory_dimensions, vm_config.max_constraint_degree);
-    ctx.per_air
+    ctx.per_trace
         .retain(|(id, _)| *id != merkle_air_id && *id != poseidon2_air_id);
-    ctx.per_air.push((
+    ctx.per_trace.push((
         merkle_air_id,
-        AirProvingContext::simple(Arc::new(merkle_trace), merkle_pvs),
+        AirProvingContext::simple(merkle_trace, merkle_pvs),
     ));
-    ctx.per_air
+    ctx.per_trace
         .push((poseidon2_air_id, poseidon2_chip.generate_proving_ctx(())));
-    ctx.per_air.sort_by_key(|(id, _)| *id);
+    ctx.per_trace.sort_by_key(|(id, _)| *id);
 
-    let proof = vm.engine.prove(vm.pk(), ctx);
+    let proof = vm.engine.prove(vm.pk(), ctx).unwrap();
     assert!(
         vm.engine.verify(&vk, &proof).is_err(),
         "fixed OpenVM verifier must reject the fraudulent below-leaf-swap proof"
