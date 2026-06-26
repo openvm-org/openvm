@@ -17,6 +17,11 @@ use rvr_openvm_ext_algebra_ffi_common::{
 };
 use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced, WORD_SIZE};
 
+/// BN254 base field element size in bytes, as `u64` for address arithmetic.
+const BN254_FQ_BYTES: u64 = FIELD_256_BYTES as u64;
+/// BLS12-381 base field element size in bytes, as `u64` for address arithmetic.
+const BLS12_381_FQ_BYTES: u64 = BLS12_381_ELEM_BYTES as u64;
+
 /// Affine point: two field coordinates (x, y).
 const AFFINE_COORDS: u32 = 2;
 /// Size of a 256-bit affine point in bytes.
@@ -73,12 +78,12 @@ unsafe fn ec_add_ne_256<F: halo2curves_axiom::ff::PrimeField<Repr = [u8; FIELD_2
     rs2_ptr: u64,
 ) {
     let x1: F = read_field_256(state, rs1_ptr);
-    let y1: F = read_field_256(state, rs1_ptr + FIELD_256_BYTES as u64);
+    let y1: F = read_field_256(state, rs1_ptr + BN254_FQ_BYTES);
     let x2: F = read_field_256(state, rs2_ptr);
-    let y2: F = read_field_256(state, rs2_ptr + FIELD_256_BYTES as u64);
+    let y2: F = read_field_256(state, rs2_ptr + BN254_FQ_BYTES);
     let (x3, y3) = ec_add_ne_impl(x1, y1, x2, y2);
     write_field_256(state, rd_ptr, &x3);
-    write_field_256(state, rd_ptr + FIELD_256_BYTES as u64, &y3);
+    write_field_256(state, rd_ptr + BN254_FQ_BYTES, &y3);
 }
 
 /// Execute ec_double for a 256-bit PrimeField curve.
@@ -90,31 +95,31 @@ unsafe fn ec_double_256<F: halo2curves_axiom::ff::PrimeField<Repr = [u8; FIELD_2
     a: F,
 ) {
     let x1: F = read_field_256(state, rs1_ptr);
-    let y1: F = read_field_256(state, rs1_ptr + FIELD_256_BYTES as u64);
+    let y1: F = read_field_256(state, rs1_ptr + BN254_FQ_BYTES);
     let (x3, y3) = ec_double_impl(x1, y1, a);
     write_field_256(state, rd_ptr, &x3);
-    write_field_256(state, rd_ptr + FIELD_256_BYTES as u64, &y3);
+    write_field_256(state, rd_ptr + BN254_FQ_BYTES, &y3);
 }
 
 // ── BLS12-381 helpers ─────────────────────────────────────────────────────────
 
 unsafe fn ec_add_ne_bls12_381(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64, rs2_ptr: u64) {
     let x1 = read_bls12_381_fq(state, rs1_ptr);
-    let y1 = read_bls12_381_fq(state, rs1_ptr + BLS12_381_ELEM_BYTES as u64);
+    let y1 = read_bls12_381_fq(state, rs1_ptr + BLS12_381_FQ_BYTES);
     let x2 = read_bls12_381_fq(state, rs2_ptr);
-    let y2 = read_bls12_381_fq(state, rs2_ptr + BLS12_381_ELEM_BYTES as u64);
+    let y2 = read_bls12_381_fq(state, rs2_ptr + BLS12_381_FQ_BYTES);
     let (x3, y3) = ec_add_ne_impl(x1, y1, x2, y2);
     write_bls12_381_fq(state, rd_ptr, &x3);
-    write_bls12_381_fq(state, rd_ptr + BLS12_381_ELEM_BYTES as u64, &y3);
+    write_bls12_381_fq(state, rd_ptr + BLS12_381_FQ_BYTES, &y3);
 }
 
 unsafe fn ec_double_bls12_381(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64) {
     let x1 = read_bls12_381_fq(state, rs1_ptr);
-    let y1 = read_bls12_381_fq(state, rs1_ptr + BLS12_381_ELEM_BYTES as u64);
+    let y1 = read_bls12_381_fq(state, rs1_ptr + BLS12_381_FQ_BYTES);
     // BLS12-381 has a = 0
     let (x3, y3) = ec_double_impl(x1, y1, blstrs::Fp::ZERO);
     write_bls12_381_fq(state, rd_ptr, &x3);
-    write_bls12_381_fq(state, rd_ptr + BLS12_381_ELEM_BYTES as u64, &y3);
+    write_bls12_381_fq(state, rd_ptr + BLS12_381_FQ_BYTES, &y3);
 }
 
 // ── Curve constants ──────────────────────────────────────────────────────────

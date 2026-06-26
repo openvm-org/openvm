@@ -11,11 +11,14 @@ use halo2curves_axiom::ff::Field;
 use num_bigint::BigUint;
 use rvr_openvm_ext_algebra_ffi_common::{
     exec_op, mod_inverse, read_bigint, read_bls12_381_fq, read_field_256, write_bigint,
-    write_bls12_381_fq, write_field_256, FieldArith, BLS12_381_ELEM_BYTES, FIELD_256_BYTES,
+    write_bls12_381_fq, write_field_256, FieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
     rd_mem_words_traced, trace_mem_access_range, wr_mem_words_traced, AS_MEMORY, WORD_SIZE,
 };
+
+const FIELD_256_BYTES: u64 = rvr_openvm_ext_algebra_ffi_common::FIELD_256_BYTES as u64;
+const BLS12_381_ELEM_BYTES: u64 = rvr_openvm_ext_algebra_ffi_common::BLS12_381_ELEM_BYTES as u64;
 
 // ── Field structs ───────────────────────────────────────────────────────────
 
@@ -35,7 +38,7 @@ impl FieldArith for KnownComplexField<halo2curves_axiom::bn256::Fq2> {
     unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem {
         halo2curves_axiom::bn256::Fq2::new(
             read_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr),
-            read_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr + FIELD_256_BYTES as u64),
+            read_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr + FIELD_256_BYTES),
         )
     }
 
@@ -44,7 +47,7 @@ impl FieldArith for KnownComplexField<halo2curves_axiom::bn256::Fq2> {
         write_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr, &val.c0);
         write_field_256::<halo2curves_axiom::bn256::Fq>(
             state,
-            ptr + FIELD_256_BYTES as u64,
+            ptr + FIELD_256_BYTES,
             &val.c1,
         );
     }
@@ -78,14 +81,14 @@ impl FieldArith for KnownComplexField<blstrs::Fp2> {
     unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem {
         blstrs::Fp2::new(
             read_bls12_381_fq(state, ptr),
-            read_bls12_381_fq(state, ptr + BLS12_381_ELEM_BYTES as u64),
+            read_bls12_381_fq(state, ptr + BLS12_381_ELEM_BYTES),
         )
     }
 
     #[inline(always)]
     unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
         write_bls12_381_fq(state, ptr, &val.c0());
-        write_bls12_381_fq(state, ptr + BLS12_381_ELEM_BYTES as u64, &val.c1());
+        write_bls12_381_fq(state, ptr + BLS12_381_ELEM_BYTES, &val.c1());
     }
 
     #[inline(always)]
