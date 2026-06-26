@@ -59,7 +59,7 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
     /// to emit comparison logic and use `branch_to` for control flow.
     ///
     /// Default: delegates to `emit_c`.
-    fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, _branch_to: &dyn Fn(u32) -> String) {
+    fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, _branch_to: &dyn Fn(u64) -> String) {
         self.emit_c(ctx);
     }
 
@@ -83,7 +83,7 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
 
     /// For terminator extensions: return successor PCs for CFG construction.
     /// Default returns `[fall_pc]` (fall-through behavior).
-    fn successors(&self, fall_pc: u32) -> Vec<u32> {
+    fn successors(&self, fall_pc: u64) -> Vec<u64> {
         vec![fall_pc]
     }
 
