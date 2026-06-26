@@ -804,6 +804,41 @@ pub(crate) fn assert_pranked_store_word_adapter_fails(
         .expect_err("pranked store adapter trace should fail");
 }
 
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen.
+// ////////////////////////////////////////////////////////////////////////////////////
+#[cfg(feature = "cuda")]
+pub(crate) fn dummy_range_checker() -> Arc<VariableRangeCheckerChip> {
+    Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
+    ))
+}
+#[cfg(feature = "cuda")]
+pub(crate) fn transfer_load_records<G, C, A, E>(harness: &mut GpuTestChipHarness<F, E, A, G, C>) {
+    type Record<'a> = (&'a mut Rv64LoadAdapterRecord, &'a mut LoadRecord);
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor>::new(),
+        );
+}
+
+#[cfg(feature = "cuda")]
+pub(crate) fn transfer_store_records<G, C, A, E>(harness: &mut GpuTestChipHarness<F, E, A, G, C>) {
+    type Record<'a> = (&'a mut Rv64StoreAdapterRecord, &'a mut StoreRecord);
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64StoreAdapterExecutor>::new(),
+        );
+}
+
 #[cfg(test)]
 mod tests {
     use openvm_instructions::DEFERRAL_AS;
@@ -838,39 +873,4 @@ mod tests {
             adapter.mem_as = F::from_u32(DEFERRAL_AS)
         });
     }
-}
-
-// ////////////////////////////////////////////////////////////////////////////////////
-//  CUDA TESTS
-//
-//  Ensure GPU tracegen is equivalent to CPU tracegen.
-// ////////////////////////////////////////////////////////////////////////////////////
-#[cfg(feature = "cuda")]
-pub(crate) fn dummy_range_checker() -> Arc<VariableRangeCheckerChip> {
-    Arc::new(VariableRangeCheckerChip::new(
-        default_var_range_checker_bus(),
-    ))
-}
-#[cfg(feature = "cuda")]
-pub(crate) fn transfer_load_records<G, C, A, E>(harness: &mut GpuTestChipHarness<F, E, A, G, C>) {
-    type Record<'a> = (&'a mut Rv64LoadAdapterRecord, &'a mut LoadRecord);
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor>::new(),
-        );
-}
-
-#[cfg(feature = "cuda")]
-pub(crate) fn transfer_store_records<G, C, A, E>(harness: &mut GpuTestChipHarness<F, E, A, G, C>) {
-    type Record<'a> = (&'a mut Rv64StoreAdapterRecord, &'a mut StoreRecord);
-    harness
-        .dense_arena
-        .get_record_seeker::<Record, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64StoreAdapterExecutor>::new(),
-        );
 }
