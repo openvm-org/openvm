@@ -66,6 +66,14 @@ static __attribute__((always_inline)) inline uint32_t rv_dispatch_index(
   return (pc - RV_TEXT_START) >> 2;
 }
 
+/* True if pc names a 4-byte dispatch slot in the dense table. The alignment
+ * check prevents an unaligned pc from aliasing to a neighboring slot. */
+static __attribute__((always_inline)) inline bool rv_pc_is_dispatchable(
+    uint64_t pc) {
+  return pc >= RV_TEXT_START && pc <= RV_TEXT_END &&
+         ((pc - RV_TEXT_START) & 3ull) == 0;
+}
+
 /* ── Guest memory pointer ────────────────────────────────────────── */
 
 /* GuardedMemory's mmap guard pages catch OOB. Buffer is page-aligned,

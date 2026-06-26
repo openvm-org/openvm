@@ -101,10 +101,10 @@ pub enum Instr {
         rd: Reg,
         value: u32,
     },
-    /// Add upper immediate to PC (rd = pc + (imm << 12), pre-computed).
+    /// Add upper immediate to PC (rd = pc + sign_extend(imm << 12), pre-computed).
     Auipc {
         rd: Reg,
-        value: u32,
+        value: u64,
     },
     /// Load from memory.
     Load {
