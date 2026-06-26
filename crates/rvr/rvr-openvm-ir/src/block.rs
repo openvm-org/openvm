@@ -45,20 +45,20 @@ pub enum Terminator {
     /// Fall through to pc + 4 (implicit next block).
     FallThrough,
     /// Static jump (JAL). `link_rd` writes pc+4 to rd before jumping.
-    Jump { link_rd: Option<Reg>, target: u32 },
+    Jump { link_rd: Option<Reg>, target: u64 },
     /// Dynamic jump (JALR). `resolved` filled in by CFG analysis.
     JumpDyn {
         link_rd: Option<Reg>,
         rs1: Reg,
         imm: i32,
-        resolved: Vec<u32>,
+        resolved: Vec<u64>,
     },
     /// Conditional branch. Falls through if false.
     Branch {
         cond: BranchCond,
         rs1: Reg,
         rs2: Reg,
-        target: u32,
+        target: u64,
     },
     /// Program exit.
     Exit { code: u32 },
@@ -71,7 +71,7 @@ pub enum Terminator {
 
 impl Terminator {
     /// Returns the set of possible successor PCs (for CFG building).
-    pub fn successors(&self, fall_pc: u32) -> Vec<u32> {
+    pub fn successors(&self, fall_pc: u64) -> Vec<u64> {
         match self {
             Terminator::FallThrough => vec![fall_pc],
             Terminator::Jump { target, .. } => vec![*target],
@@ -120,7 +120,7 @@ impl Terminator {
 /// An instruction at a specific PC.
 #[derive(Debug, Clone)]
 pub struct InstrAt {
-    pub pc: u32,
+    pub pc: u64,
     pub instr: Instr,
     /// Source location from guest ELF debug info.
     pub source_loc: Option<SourceLoc>,
@@ -132,14 +132,14 @@ pub struct InstrAt {
 pub enum LiftedInstr {
     Body(InstrAt),
     Term {
-        pc: u32,
+        pc: u64,
         terminator: Terminator,
         source_loc: Option<SourceLoc>,
     },
 }
 
 impl LiftedInstr {
-    pub fn pc(&self) -> u32 {
+    pub fn pc(&self) -> u64 {
         match self {
             LiftedInstr::Body(i) => i.pc,
             LiftedInstr::Term { pc, .. } => *pc,
@@ -150,15 +150,15 @@ impl LiftedInstr {
 /// A basic block.
 #[derive(Debug, Clone)]
 pub struct Block {
-    pub start_pc: u32,
+    pub start_pc: u64,
     /// End PC (exclusive).
-    pub end_pc: u32,
+    pub end_pc: u64,
     /// Body instructions (no branches/jumps).
     pub instructions: Vec<InstrAt>,
     /// Control flow at the end.
     pub terminator: Terminator,
     /// PC of the terminating instruction.
-    pub terminator_pc: u32,
+    pub terminator_pc: u64,
     /// Source location of the terminating instruction.
     pub terminator_source_loc: Option<SourceLoc>,
 }

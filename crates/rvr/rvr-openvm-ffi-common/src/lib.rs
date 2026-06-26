@@ -85,11 +85,11 @@ extern "C" {
     );
 
     // ── Instruction dispatch / chip cost ──────────────────────────────
-    pub fn trace_pc_wrapper(state: *mut c_void, pc: u32);
+    pub fn trace_pc_wrapper(state: *mut c_void, pc: u64);
     pub fn trace_chip_wrapper(state: *mut c_void, chip_idx: u32, count: u32);
 
     // ── Block metering ────────────────────────────────────────────────
-    pub fn trace_block_wrapper(state: *mut c_void, pc: u32, block_insn_count: u32);
+    pub fn trace_block_wrapper(state: *mut c_void, pc: u64, block_insn_count: u32);
 
     // ── Hint stream (for extension phantom instructions) ──────────────
     /// Replace the hint stream contents. Forwarded through `openvm_io.c`

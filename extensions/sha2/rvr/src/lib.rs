@@ -127,7 +127,7 @@ impl Sha2Extension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for Sha2Extension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode == Rv64Sha2Opcode::SHA256.global_opcode_usize() {

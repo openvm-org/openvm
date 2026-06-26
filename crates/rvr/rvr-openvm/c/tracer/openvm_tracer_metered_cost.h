@@ -72,7 +72,7 @@ static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
     uint32_t addr_space) {}
 
 static __attribute__((always_inline)) inline void trace_pc(
-    RvState* restrict state, uint32_t pc) {}
+    RvState* restrict state, uint64_t pc) {}
 
 static __attribute__((always_inline)) inline void trace_chip(
     RvState* restrict state, uint32_t chip_idx, uint32_t count) {
@@ -80,6 +80,6 @@ static __attribute__((always_inline)) inline void trace_chip(
 }
 
 static __attribute__((always_inline)) inline void trace_block(
-    RvState* restrict state, uint32_t pc, uint32_t block_insn_count) {}
+    RvState* restrict state, uint64_t pc, uint32_t block_insn_count) {}
 
 #endif /* OPENVM_TRACER_METERED_COST_H */

@@ -196,7 +196,7 @@ impl Rv64IoExtension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode == Rv64HintStoreOpcode::HINT_STORED.global_opcode_usize() {
@@ -314,7 +314,7 @@ impl Default for Rv64IExtension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for Rv64IExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         if insn.opcode.as_usize() != SystemOpcode::PHANTOM.global_opcode_usize() {
             return None;
         }

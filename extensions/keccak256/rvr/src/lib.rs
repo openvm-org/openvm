@@ -104,7 +104,7 @@ impl KeccakExtension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for KeccakExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode == KeccakfOpcode::KECCAKF.global_opcode_usize() {
