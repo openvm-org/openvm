@@ -38,8 +38,8 @@ pub use openvm_instructions::{
 // Redefined here to avoid a cycle with openvm-circuit. Checked against
 // upstream in `openvm-circuit`'s `arch::rvr::abi_consts`.
 
-/// Default, not an invariant; see TODO in `abi_consts.rs`.
-pub const DEFAULT_PAGE_BITS: usize = 6;
+/// Number of bits needed to index the leaves represented by one `u64` page mask.
+pub const PAGE_BITS: usize = 6;
 /// Default, not an invariant; see TODO in `abi_consts.rs`.
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u32 = 1000;
 
