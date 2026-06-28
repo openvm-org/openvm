@@ -25,13 +25,14 @@ const SPARSE_MERKLE_DELTA_LEAF_THRESHOLD: u32 = 8;
 const BYTE_PTRS_PER_LEAF_BITS: u32 = (U16_CELL_SIZE * DIGEST_WIDTH).ilog2();
 const DEFERRAL_PTRS_PER_LEAF_BITS: u32 = DIGEST_WIDTH.ilog2();
 
-// Masks used to compact even-position parent bits into a dense lower-bit mask.
-const LOW_BIT_PER_PAIR: u64 = 0x5555_5555_5555_5555;
-const LOW_2_BITS_PER_NIBBLE: u64 = 0x3333_3333_3333_3333;
-const LOW_NIBBLE_PER_BYTE: u64 = 0x0f0f_0f0f_0f0f_0f0f;
-const LOW_BYTE_PER_U16: u64 = 0x00ff_00ff_00ff_00ff;
-const LOW_U16_PER_U32: u64 = 0x0000_ffff_0000_ffff;
-const LOW_U32: u64 = 0x0000_0000_ffff_ffff;
+// Masks with the first bit set in each aligned group of leaves. These represent
+// group occupancy at each page-local Merkle level.
+const FIRST_BIT_PER_PAIR: u64 = 0x5555_5555_5555_5555;
+const FIRST_BIT_PER_NIBBLE: u64 = 0x1111_1111_1111_1111;
+const FIRST_BIT_PER_BYTE: u64 = 0x0101_0101_0101_0101;
+const FIRST_BIT_PER_U16: u64 = 0x0001_0001_0001_0001;
+const FIRST_BIT_PER_U32: u64 = 0x0000_0001_0000_0001;
+const FIRST_BIT_PER_U64: u64 = 0x0000_0000_0000_0001;
 
 #[derive(Clone, Debug)]
 pub struct BitSet {
@@ -221,9 +222,9 @@ impl MemoryPageTracker {
             // 2/4/8/16/32/64-leaf groups that map to its ancestor levels.
             local_merkle_nodes_added(old_mask, added_mask)
         } else {
-            // Dense path: recompute page-local nodes before/after with six
-            // shift/mask parent collapses and popcounts.
-            local_merkle_nodes(new_mask) - local_merkle_nodes(old_mask)
+            // Dense path: walk old and new occupancy up the six page-local
+            // levels, then count the parent groups that became occupied.
+            local_merkle_nodes_delta(old_mask, new_mask)
         };
         self.leaves += leaves;
 
@@ -264,36 +265,28 @@ fn leaf_mask_range(start: u32, end: u32) -> u64 {
 }
 
 #[inline(always)]
-fn parent_mask(mut mask: u64) -> u64 {
-    // Collapse child occupancy into parent occupancy: each parent bit is set
-    // when either child bit is set. Repeated calls walk up to the page root.
-    mask |= mask >> 1;
-    mask &= LOW_BIT_PER_PAIR;
-
-    // Compact the 32 even-position parent bits into the low 32 bits.
-    mask = (mask | (mask >> 1)) & LOW_2_BITS_PER_NIBBLE;
-    mask = (mask | (mask >> 2)) & LOW_NIBBLE_PER_BYTE;
-    mask = (mask | (mask >> 4)) & LOW_BYTE_PER_U16;
-    mask = (mask | (mask >> 8)) & LOW_U16_PER_U32;
-    (mask | (mask >> 16)) & LOW_U32
+fn add_level_delta<const SHIFT: u32, const MASK: u64>(
+    old_mask: &mut u64,
+    new_mask: &mut u64,
+) -> u32 {
+    *old_mask = (*old_mask | (*old_mask >> SHIFT)) & MASK;
+    *new_mask = (*new_mask | (*new_mask >> SHIFT)) & MASK;
+    (*new_mask & !*old_mask).count_ones()
 }
 
 #[inline(always)]
-fn local_merkle_nodes(mask: u64) -> u32 {
-    if mask == 0 {
-        return 0;
-    }
-    if mask == u64::MAX {
-        return ((1usize << PAGE_BITS) - 1) as u32;
-    }
+fn local_merkle_nodes_delta(mut old_mask: u64, mut new_mask: u64) -> u32 {
+    debug_assert_ne!(old_mask, new_mask);
+    debug_assert_eq!(old_mask | new_mask, new_mask);
 
     let mut nodes = 0;
-    let mut level_mask = mask;
-    for _ in 0..PAGE_BITS {
-        level_mask = parent_mask(level_mask);
-        // Each set parent bit is one page-local Merkle node at this level.
-        nodes += level_mask.count_ones();
-    }
+    nodes += add_level_delta::<1, FIRST_BIT_PER_PAIR>(&mut old_mask, &mut new_mask);
+    nodes += add_level_delta::<2, FIRST_BIT_PER_NIBBLE>(&mut old_mask, &mut new_mask);
+    nodes += add_level_delta::<4, FIRST_BIT_PER_BYTE>(&mut old_mask, &mut new_mask);
+    nodes += add_level_delta::<8, FIRST_BIT_PER_U16>(&mut old_mask, &mut new_mask);
+    nodes += add_level_delta::<16, FIRST_BIT_PER_U32>(&mut old_mask, &mut new_mask);
+    nodes += add_level_delta::<32, FIRST_BIT_PER_U64>(&mut old_mask, &mut new_mask);
+
     nodes
 }
 
@@ -664,35 +657,6 @@ mod tests {
     }
 
     #[test]
-    fn test_local_merkle_nodes_matches_reference() {
-        let cases = [
-            0,
-            1,
-            1 << 1,
-            1 << 2,
-            1 << 31,
-            1 << 32,
-            1 << 63,
-            0x5555_5555_5555_5555,
-            0xaaaa_aaaa_aaaa_aaaa,
-            0x0000_ffff_0000_ffff,
-            0xffff_0000_ffff_0000,
-            u64::MAX,
-        ];
-        for mask in cases {
-            assert_eq!(local_merkle_nodes(mask), reference_local_merkle_nodes(mask));
-        }
-
-        let mut mask = 0x9e37_79b9_7f4a_7c15u64;
-        for _ in 0..1024 {
-            mask ^= mask << 7;
-            mask ^= mask >> 9;
-            mask ^= mask << 8;
-            assert_eq!(local_merkle_nodes(mask), reference_local_merkle_nodes(mask));
-        }
-    }
-
-    #[test]
     fn test_local_merkle_nodes_added_matches_reference_delta() {
         let mut old_mask = 0u64;
         let additions = [
@@ -719,7 +683,7 @@ mod tests {
                     );
                 }
                 assert_eq!(
-                    local_merkle_nodes(new_mask) - local_merkle_nodes(old_mask),
+                    local_merkle_nodes_delta(old_mask, new_mask),
                     reference_local_merkle_nodes(new_mask) - reference_local_merkle_nodes(old_mask)
                 );
                 old_mask = new_mask;
@@ -739,10 +703,28 @@ mod tests {
                     );
                 }
                 assert_eq!(
-                    local_merkle_nodes(new_mask) - local_merkle_nodes(old_mask),
+                    local_merkle_nodes_delta(old_mask, new_mask),
                     reference_local_merkle_nodes(new_mask) - reference_local_merkle_nodes(old_mask)
                 );
                 old_mask = new_mask;
+            }
+        }
+
+        let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+        for _ in 0..1024 {
+            seed ^= seed << 7;
+            seed ^= seed >> 9;
+            seed ^= seed << 8;
+            let old_mask = seed;
+            seed ^= seed << 7;
+            seed ^= seed >> 9;
+            seed ^= seed << 8;
+            let new_mask = old_mask | seed;
+            if new_mask != old_mask {
+                assert_eq!(
+                    local_merkle_nodes_delta(old_mask, new_mask),
+                    reference_local_merkle_nodes(new_mask) - reference_local_merkle_nodes(old_mask)
+                );
             }
         }
     }
