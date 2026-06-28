@@ -291,7 +291,7 @@ impl EmitContext {
     }
 
     fn emit_inline_page_record(&mut self, addr: &str) {
-        self.write_line(&format!("trace_memory_access(&trace_memory, {addr});"));
+        self.write_line(&format!("trace_memory_access_leaf(&trace_memory, {addr});"));
     }
 
     pub fn flush_page_locals(&mut self) {

@@ -4,9 +4,9 @@
 //! TODO: decide whether any redefinition can be replaced with a direct
 //! import — e.g. by moving the canonical constant into a leaf crate.
 //!
-//! TODO(defaults): `DEFAULT_PAGE_BITS` / `DEFAULT_SEGMENT_CHECK_INSNS` are
-//! tunable defaults, not invariants — decide whether to keep them as
-//! `const`s or restore runtime plumbing for just these two.
+//! TODO(defaults): `DEFAULT_SEGMENT_CHECK_INSNS` is a tunable default, not an
+//! invariant — decide whether to keep it as a `const` or restore runtime
+//! plumbing for it.
 
 use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
@@ -16,7 +16,7 @@ use rvr_openvm_ext_ffi_common as ffi;
 
 use crate::{
     arch::execution_mode::metered::{
-        ctx::DEFAULT_PAGE_BITS, segment_ctx::DEFAULT_SEGMENT_CHECK_INSNS,
+        memory_ctx::PAGE_BITS, segment_ctx::DEFAULT_SEGMENT_CHECK_INSNS,
     },
     system::memory::{merkle::public_values::PUBLIC_VALUES_AS, DIGEST_WIDTH},
 };
@@ -37,5 +37,5 @@ const _: () = assert!(
 );
 
 // ── rvr-openvm-ext-ffi-common metered-execution layout ─────────────────
-const _: () = assert!(ffi::DEFAULT_PAGE_BITS == DEFAULT_PAGE_BITS);
+const _: () = assert!(ffi::PAGE_BITS == PAGE_BITS);
 const _: () = assert!(ffi::DEFAULT_SEGMENT_CHECK_INSNS as u64 == DEFAULT_SEGMENT_CHECK_INSNS);

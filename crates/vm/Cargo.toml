@@ -49,7 +49,6 @@ dashmap.workspace = true
 cfg-if.workspace = true
 libloading = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
-abi_stable.workspace = true
 bytesize.workspace = true
 
 [build-dependencies]
