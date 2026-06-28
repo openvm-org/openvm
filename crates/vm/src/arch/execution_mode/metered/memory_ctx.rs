@@ -17,10 +17,6 @@ pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
 // range accesses; this avoids preallocating the worst-case per-instruction page
 // count for the common scalar-access path.
 const INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN: usize = 16;
-// Up to this many new leaves, count page-local Merkle nodes by walking only
-// the added bits. Larger updates use a fixed six-level recompute.
-const SPARSE_MERKLE_DELTA_LEAF_THRESHOLD: u32 = 8;
-
 // Shift amounts from address-space pointer units to memory Merkle leaves.
 const BYTE_PTRS_PER_LEAF_BITS: u32 = (U16_CELL_SIZE * DIGEST_WIDTH).ilog2();
 const DEFERRAL_PTRS_PER_LEAF_BITS: u32 = DIGEST_WIDTH.ilog2();
@@ -215,16 +211,16 @@ impl MemoryPageTracker {
         }
         // Newly set bits are the only leaves that can add boundary rows or new
         // page-local Merkle nodes.
-        let added_mask = new_mask ^ old_mask;
+        let added_mask = leaf_mask & !old_mask;
         let leaves = added_mask.count_ones();
-        let mut merkle_nodes = if leaves <= SPARSE_MERKLE_DELTA_LEAF_THRESHOLD {
-            // Sparse path: O(new leaves). For each added leaf, test the aligned
-            // 2/4/8/16/32/64-leaf groups that map to its ancestor levels.
-            local_merkle_nodes_added(old_mask, added_mask)
+        let mut merkle_nodes = if leaves == 1 {
+            // Single-leaf path: test the aligned 2/4/8/16/32/64-leaf groups
+            // containing that leaf.
+            local_merkle_nodes_added_leaf(old_mask, added_mask.trailing_zeros())
         } else {
-            // Dense path: walk old and new occupancy up the six page-local
-            // levels, then count the parent groups that became occupied.
-            local_merkle_nodes_delta(old_mask, new_mask)
+            // Multi-leaf path: walk old and added occupancy up the six
+            // page-local levels, then count groups newly occupied by added leaves.
+            local_merkle_nodes_delta(old_mask, added_mask)
         };
         self.leaves += leaves;
 
@@ -267,25 +263,25 @@ fn leaf_mask_range(start: u32, end: u32) -> u64 {
 #[inline(always)]
 fn add_level_delta<const SHIFT: u32, const MASK: u64>(
     old_mask: &mut u64,
-    new_mask: &mut u64,
+    added_mask: &mut u64,
 ) -> u32 {
     *old_mask = (*old_mask | (*old_mask >> SHIFT)) & MASK;
-    *new_mask = (*new_mask | (*new_mask >> SHIFT)) & MASK;
-    (*new_mask & !*old_mask).count_ones()
+    *added_mask = (*added_mask | (*added_mask >> SHIFT)) & MASK;
+    (*added_mask & !*old_mask).count_ones()
 }
 
 #[inline(always)]
-fn local_merkle_nodes_delta(mut old_mask: u64, mut new_mask: u64) -> u32 {
-    debug_assert_ne!(old_mask, new_mask);
-    debug_assert_eq!(old_mask | new_mask, new_mask);
+fn local_merkle_nodes_delta(mut old_mask: u64, mut added_mask: u64) -> u32 {
+    debug_assert_ne!(added_mask, 0);
+    debug_assert_eq!(old_mask & added_mask, 0);
 
     let mut nodes = 0;
-    nodes += add_level_delta::<1, FIRST_BIT_PER_PAIR>(&mut old_mask, &mut new_mask);
-    nodes += add_level_delta::<2, FIRST_BIT_PER_NIBBLE>(&mut old_mask, &mut new_mask);
-    nodes += add_level_delta::<4, FIRST_BIT_PER_BYTE>(&mut old_mask, &mut new_mask);
-    nodes += add_level_delta::<8, FIRST_BIT_PER_U16>(&mut old_mask, &mut new_mask);
-    nodes += add_level_delta::<16, FIRST_BIT_PER_U32>(&mut old_mask, &mut new_mask);
-    nodes += add_level_delta::<32, FIRST_BIT_PER_U64>(&mut old_mask, &mut new_mask);
+    nodes += add_level_delta::<1, FIRST_BIT_PER_PAIR>(&mut old_mask, &mut added_mask);
+    nodes += add_level_delta::<2, FIRST_BIT_PER_NIBBLE>(&mut old_mask, &mut added_mask);
+    nodes += add_level_delta::<4, FIRST_BIT_PER_BYTE>(&mut old_mask, &mut added_mask);
+    nodes += add_level_delta::<8, FIRST_BIT_PER_U16>(&mut old_mask, &mut added_mask);
+    nodes += add_level_delta::<16, FIRST_BIT_PER_U32>(&mut old_mask, &mut added_mask);
+    nodes += add_level_delta::<32, FIRST_BIT_PER_U64>(&mut old_mask, &mut added_mask);
 
     nodes
 }
@@ -300,25 +296,21 @@ fn aligned_group_is_empty<const GROUP_SIZE: u32>(old_mask: u64, leaf: u32) -> bo
 }
 
 #[inline(always)]
-fn local_merkle_nodes_added(mut old_mask: u64, mut added_mask: u64) -> u32 {
-    debug_assert_eq!(old_mask & added_mask, 0);
+fn local_merkle_nodes_added_leaf(old_mask: u64, leaf: u32) -> u32 {
+    debug_assert!(leaf < u64::BITS);
+
+    if old_mask == 0 {
+        return PAGE_BITS as u32;
+    }
 
     let mut nodes = 0;
-    while added_mask != 0 {
-        // Pick one newly added leaf, then clear it from added_mask.
-        let leaf = added_mask.trailing_zeros();
-        let leaf_bit = 1u64 << leaf;
-        // Group sizes 2..32 are the page-local ancestor levels below the
-        // 64-leaf page root. The page root is new when the old page mask is empty.
-        nodes += u32::from(aligned_group_is_empty::<2>(old_mask, leaf));
-        nodes += u32::from(aligned_group_is_empty::<4>(old_mask, leaf));
-        nodes += u32::from(aligned_group_is_empty::<8>(old_mask, leaf));
-        nodes += u32::from(aligned_group_is_empty::<16>(old_mask, leaf));
-        nodes += u32::from(aligned_group_is_empty::<32>(old_mask, leaf));
-        nodes += u32::from(old_mask == 0);
-        old_mask |= leaf_bit;
-        added_mask &= added_mask - 1;
-    }
+    // Group sizes 2..32 are the page-local ancestor levels below the
+    // 64-leaf page root. The page root already exists for a non-empty page.
+    nodes += u32::from(aligned_group_is_empty::<2>(old_mask, leaf));
+    nodes += u32::from(aligned_group_is_empty::<4>(old_mask, leaf));
+    nodes += u32::from(aligned_group_is_empty::<8>(old_mask, leaf));
+    nodes += u32::from(aligned_group_is_empty::<16>(old_mask, leaf));
+    nodes += u32::from(aligned_group_is_empty::<32>(old_mask, leaf));
     nodes
 }
 
@@ -675,17 +667,15 @@ mod tests {
             let new_mask = old_mask | leaf_mask;
             if new_mask != old_mask {
                 let added_mask = new_mask ^ old_mask;
-                if added_mask.count_ones() <= SPARSE_MERKLE_DELTA_LEAF_THRESHOLD {
+                let expected =
+                    reference_local_merkle_nodes(new_mask) - reference_local_merkle_nodes(old_mask);
+                if added_mask.count_ones() == 1 {
                     assert_eq!(
-                        local_merkle_nodes_added(old_mask, added_mask),
-                        reference_local_merkle_nodes(new_mask)
-                            - reference_local_merkle_nodes(old_mask)
+                        local_merkle_nodes_added_leaf(old_mask, added_mask.trailing_zeros()),
+                        expected
                     );
                 }
-                assert_eq!(
-                    local_merkle_nodes_delta(old_mask, new_mask),
-                    reference_local_merkle_nodes(new_mask) - reference_local_merkle_nodes(old_mask)
-                );
+                assert_eq!(local_merkle_nodes_delta(old_mask, added_mask), expected);
                 old_mask = new_mask;
             }
         }
@@ -695,17 +685,15 @@ mod tests {
             let new_mask = old_mask | leaf_mask;
             if new_mask != old_mask {
                 let added_mask = new_mask ^ old_mask;
-                if added_mask.count_ones() <= SPARSE_MERKLE_DELTA_LEAF_THRESHOLD {
+                let expected =
+                    reference_local_merkle_nodes(new_mask) - reference_local_merkle_nodes(old_mask);
+                if added_mask.count_ones() == 1 {
                     assert_eq!(
-                        local_merkle_nodes_added(old_mask, added_mask),
-                        reference_local_merkle_nodes(new_mask)
-                            - reference_local_merkle_nodes(old_mask)
+                        local_merkle_nodes_added_leaf(old_mask, added_mask.trailing_zeros()),
+                        expected
                     );
                 }
-                assert_eq!(
-                    local_merkle_nodes_delta(old_mask, new_mask),
-                    reference_local_merkle_nodes(new_mask) - reference_local_merkle_nodes(old_mask)
-                );
+                assert_eq!(local_merkle_nodes_delta(old_mask, added_mask), expected);
                 old_mask = new_mask;
             }
         }
@@ -721,8 +709,9 @@ mod tests {
             seed ^= seed << 8;
             let new_mask = old_mask | seed;
             if new_mask != old_mask {
+                let added_mask = new_mask ^ old_mask;
                 assert_eq!(
-                    local_merkle_nodes_delta(old_mask, new_mask),
+                    local_merkle_nodes_delta(old_mask, added_mask),
                     reference_local_merkle_nodes(new_mask) - reference_local_merkle_nodes(old_mask)
                 );
             }
