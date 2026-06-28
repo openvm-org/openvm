@@ -169,7 +169,8 @@ pub struct MemoryPageTracker {
 }
 
 impl MemoryPageTracker {
-    pub fn new(num_pages: usize, upper_height: usize) -> Self {
+    pub fn new(upper_height: usize) -> Self {
+        let num_pages = 1 << upper_height;
         Self {
             page_masks: vec![0; num_pages].into_boxed_slice(),
             dirty_pages: Vec::new(),
@@ -331,12 +332,11 @@ impl MemoryCtx {
         let merkle_height = memory_dimensions.overall_height();
 
         let upper_height = merkle_height.saturating_sub(PAGE_BITS);
-        let num_pages = 1 << upper_height;
         let checkpoint_capacity = Self::initial_checkpoint_capacity(segment_check_insns);
 
         Self {
             memory_dimensions,
-            page_tracker: MemoryPageTracker::new(num_pages, upper_height),
+            page_tracker: MemoryPageTracker::new(upper_height),
             page_indices_since_checkpoint: Vec::with_capacity(checkpoint_capacity),
             page_indices_since_checkpoint_len: 0,
             page_indices_applied_len: 0,
@@ -639,7 +639,7 @@ mod tests {
 
     #[test]
     fn test_local_merkle_nodes_doc_example() {
-        let mut tracker = MemoryPageTracker::new(1, 0);
+        let mut tracker = MemoryPageTracker::new(0);
         tracker.insert(0, 1 << 0);
         assert_eq!(tracker.merkle_nodes, 6);
         tracker.insert(0, 1 << 4);
@@ -720,7 +720,7 @@ mod tests {
 
     #[test]
     fn test_page_mask_duplicate_leaf_does_not_change_counts() {
-        let mut tracker = MemoryPageTracker::new(8, 3);
+        let mut tracker = MemoryPageTracker::new(3);
         tracker.insert(0, 1 << 0);
         let leaves = tracker.leaves;
         let nodes = tracker.merkle_nodes;
@@ -731,7 +731,7 @@ mod tests {
 
     #[test]
     fn test_memory_page_tracker_clear_resets_touched_state() {
-        let mut tracker = MemoryPageTracker::new(8, 3);
+        let mut tracker = MemoryPageTracker::new(3);
         tracker.insert(0, 1 << 0);
         tracker.insert(7, 1 << 63);
         assert!(tracker.leaves > 0);
@@ -748,7 +748,7 @@ mod tests {
 
     #[test]
     fn test_adjacent_pages_share_upper_ancestors() {
-        let mut tracker = MemoryPageTracker::new(8, 3);
+        let mut tracker = MemoryPageTracker::new(3);
         tracker.insert(0, 1);
         let first = tracker.merkle_nodes;
         tracker.insert(1, 1);
