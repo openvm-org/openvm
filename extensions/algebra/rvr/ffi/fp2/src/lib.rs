@@ -7,11 +7,10 @@
 
 use std::{ffi::c_void, marker::PhantomData};
 
-use halo2curves_axiom::ff::Field;
 use num_bigint::BigUint;
 use rvr_openvm_ext_algebra_ffi_common::{
     exec_op, mod_inverse, read_bigint, read_bls12_381_fq, read_field_256, write_bigint,
-    write_bls12_381_fq, write_field_256, FieldArith,
+    write_bls12_381_fq, write_field_256, FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
     rd_mem_words_traced, trace_mem_access_range, wr_mem_words_traced, AS_MEMORY, WORD_SIZE,
@@ -31,7 +30,7 @@ struct UnknownComplexField {
 
 // ── KnownComplexField impls ─────────────────────────────────────────────────
 
-impl FieldArith for KnownComplexField<halo2curves_axiom::bn256::Fq2> {
+impl KnownFieldArith for KnownComplexField<halo2curves_axiom::bn256::Fq2> {
     type Elem = halo2curves_axiom::bn256::Fq2;
 
     #[inline(always)]
@@ -47,30 +46,9 @@ impl FieldArith for KnownComplexField<halo2curves_axiom::bn256::Fq2> {
         write_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr, &val.c0);
         write_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr + FIELD_256_BYTES, &val.c1);
     }
-
-    #[inline(always)]
-    fn add(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a + b
-    }
-    #[inline(always)]
-    fn sub(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a - b
-    }
-    #[inline(always)]
-    fn mul(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a * b
-    }
-    #[inline(always)]
-    fn div(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a * b.invert().unwrap()
-    }
-    #[inline(always)]
-    fn is_eq(&self, a: &Self::Elem, b: &Self::Elem) -> bool {
-        a == b
-    }
 }
 
-impl FieldArith for KnownComplexField<blstrs::Fp2> {
+impl KnownFieldArith for KnownComplexField<blstrs::Fp2> {
     type Elem = blstrs::Fp2;
 
     #[inline(always)]
@@ -85,27 +63,6 @@ impl FieldArith for KnownComplexField<blstrs::Fp2> {
     unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
         write_bls12_381_fq(state, ptr, &val.c0());
         write_bls12_381_fq(state, ptr + BLS12_381_ELEM_BYTES, &val.c1());
-    }
-
-    #[inline(always)]
-    fn add(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a + b
-    }
-    #[inline(always)]
-    fn sub(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a - b
-    }
-    #[inline(always)]
-    fn mul(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a * b
-    }
-    #[inline(always)]
-    fn div(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a * b.invert().unwrap()
-    }
-    #[inline(always)]
-    fn is_eq(&self, a: &Self::Elem, b: &Self::Elem) -> bool {
-        a == b
     }
 }
 

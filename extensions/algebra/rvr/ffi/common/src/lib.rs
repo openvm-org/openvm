@@ -2,7 +2,7 @@
 
 use std::ffi::c_void;
 
-use halo2curves_axiom::ff::PrimeField;
+use halo2curves_axiom::ff::{Field, PrimeField};
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced, WORD_SIZE};
@@ -35,6 +35,48 @@ pub trait FieldArith {
     fn mul(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem;
     fn div(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem;
     fn is_eq(&self, a: &Self::Elem, b: &Self::Elem) -> bool;
+}
+
+// ── KnownFieldArith trait ─────────────────────────────────────────────────────
+
+/// Narrower trait for known (native) field types whose element type supports
+/// standard arithmetic via operator overloads. Implementing this trait
+/// automatically provides a full [`FieldArith`] impl via a blanket impl —
+/// only `read_elem` and `write_elem` need to be supplied.
+pub trait KnownFieldArith {
+    type Elem: Field;
+
+    /// # Safety
+    /// `state` must be a valid pointer to the C `RvState` struct.
+    unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem;
+    /// # Safety
+    /// `state` must be a valid pointer to the C `RvState` struct.
+    unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem);
+}
+
+impl<T: KnownFieldArith> FieldArith for T {
+    type Elem = T::Elem;
+
+    #[inline(always)]
+    unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem {
+        KnownFieldArith::read_elem(self, state, ptr)
+    }
+
+    #[inline(always)]
+    unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
+        KnownFieldArith::write_elem(self, state, ptr, val)
+    }
+
+    #[inline(always)]
+    fn add(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem { a + b }
+    #[inline(always)]
+    fn sub(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem { a - b }
+    #[inline(always)]
+    fn mul(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem { a * b }
+    #[inline(always)]
+    fn div(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem { a * b.invert().unwrap() }
+    #[inline(always)]
+    fn is_eq(&self, a: &Self::Elem, b: &Self::Elem) -> bool { a == b }
 }
 
 // ── 256-bit / 384-bit field I/O ─────────────────────────────────────────────
