@@ -391,6 +391,12 @@ fn local_merkle_nodes_delta(mut old_mask: u64, mut added_mask: u64) -> u32 {
     // At each level, collapse child occupancy into one representative bit per
     // parent group, then count groups reached by added leaves that were empty
     // in the old segment-local mask.
+    //
+    // ```text
+    // leaves:       0 1   1 0   0 0   1 1
+    // parents:       1     1     0     1
+    // new parents:   (added_parent_bits & !old_parent_bits).count_ones()
+    // ```
     let mut nodes = 0;
     nodes += add_level_delta::<1, FIRST_BIT_PER_PAIR>(&mut old_mask, &mut added_mask);
     nodes += add_level_delta::<2, FIRST_BIT_PER_NIBBLE>(&mut old_mask, &mut added_mask);
