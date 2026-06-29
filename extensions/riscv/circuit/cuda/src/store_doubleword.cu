@@ -13,9 +13,8 @@ template <typename T> struct Rv64StoreDoublewordCols {
 };
 
 struct StoreDoublewordCore {
-    __device__ void fill_trace_row(RowSlice row, StoreRecord record) {
-        assert(record.local_opcode == STORED);
-        assert(record.shift_amount == 0);
+    __device__ void fill_trace_row(RowSlice row, StoreRecord record, uint8_t shift) {
+        assert(shift == 0);
 
         Encoder encoder(
             STORE_DOUBLEWORD_CASES, STORE_SELECTOR_MAX_DEGREE, true, STORE_DOUBLEWORD_SELECTOR_WIDTH
@@ -53,7 +52,9 @@ __global__ void rv64_store_doubleword_tracegen_kernel(
         adapter.fill_trace_row(row, record.adapter);
         StoreDoublewordCore core;
         core.fill_trace_row(
-            row.slice_from(COL_INDEX(Rv64StoreDoublewordCols, core)), record.core
+            row.slice_from(COL_INDEX(Rv64StoreDoublewordCols, core)),
+            record.core,
+            rv64_store_shift_amount(record.adapter)
         );
     } else {
         row.fill_zero(0, width);

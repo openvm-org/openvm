@@ -270,6 +270,20 @@ pub struct Rv64LoadAdapterRecord {
     pub write_prev_data: [u16; BLOCK_FE_WIDTH],
 }
 
+impl Rv64LoadAdapterRecord {
+    pub(crate) fn effective_ptr(&self) -> u32 {
+        let addr = rv64_address_add_imm(
+            self.rs1_val,
+            sign_extend_imm16(self.imm as u32, self.imm_sign as u32),
+        );
+        u32::try_from(addr).expect("effective address exceeds u32 range")
+    }
+
+    pub(crate) fn shift_amount(&self) -> usize {
+        (self.effective_ptr() & (RV64_REGISTER_NUM_LIMBS as u32 - 1)) as usize
+    }
+}
+
 /// Reads rs1, computes the effective memory pointer, reads the containing memory block, and writes
 /// the loaded value to rd.
 #[derive(Clone, Copy, derive_new::new)]
@@ -403,6 +417,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadAdapterFiller {
         let imm_sign = record.imm_sign;
         let write_prev_timestamp = record.write_prev_timestamp;
         let write_prev_data = record.write_prev_data;
+        let ptr = record.effective_ptr();
+        let shift_amount = record.shift_amount() as u32;
         let adapter_row: &mut Rv64LoadAdapterCols<F> = adapter_row.borrow_mut();
 
         let needs_write = rd_ptr != u32::MAX;
@@ -425,10 +441,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadAdapterFiller {
             adapter_row.write_aux.prev_data = [F::ZERO; BLOCK_FE_WIDTH];
         }
 
-        let addr = rv64_address_add_imm(rs1_val, sign_extend_imm16(imm as u32, imm_sign as u32));
-        let ptr = u32::try_from(addr).expect("effective address exceeds u32 range");
         let ptr_limbs = ptr_to_u16_limbs(ptr).map(u32::from);
-        let shift_amount = ptr & (RV64_REGISTER_NUM_LIMBS as u32 - 1);
         self.range_checker_chip
             .add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);
         self.range_checker_chip

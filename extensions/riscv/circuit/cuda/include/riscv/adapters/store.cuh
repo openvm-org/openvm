@@ -39,6 +39,17 @@ struct Rv64StoreAdapterRecord {
     uint32_t write_prev_timestamp;
 };
 
+static __device__ __forceinline__ uint32_t
+rv64_store_effective_ptr(Rv64StoreAdapterRecord record) {
+    return record.rs1_val + uint32_t(record.imm) +
+           uint32_t(record.imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
+}
+
+static __device__ __forceinline__ uint32_t
+rv64_store_shift_amount(Rv64StoreAdapterRecord record) {
+    return rv64_store_effective_ptr(record) & (RV64_REGISTER_NUM_LIMBS - 1);
+}
+
 struct Rv64StoreAdapter {
     size_t pointer_max_bits;
     VariableRangeChecker range_checker;
@@ -82,13 +93,12 @@ struct Rv64StoreAdapter {
         COL_WRITE_VALUE(row, Rv64StoreAdapterCols, imm_sign, record.imm_sign);
         COL_WRITE_VALUE(row, Rv64StoreAdapterCols, mem_as, record.mem_as);
 
-        uint32_t ptr = record.rs1_val + uint32_t(record.imm) +
-                       uint32_t(record.imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
+        uint32_t ptr = rv64_store_effective_ptr(record);
         uint32_t ptr_limbs[RV64_PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
         COL_WRITE_ARRAY(row, Rv64StoreAdapterCols, mem_ptr_limbs, ptr_limbs);
 
-        uint32_t shift_amount = ptr & (RV64_REGISTER_NUM_LIMBS - 1);
+        uint32_t shift_amount = rv64_store_shift_amount(record);
         range_checker.add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
     }

@@ -11,9 +11,7 @@ struct LoadSignExtendHalfwordCore {
     __device__ LoadSignExtendHalfwordCore(VariableRangeChecker range_checker)
         : range_checker(range_checker) {}
 
-    __device__ void fill_trace_row(RowSlice row, LoadSignExtendRecord record) {
-        assert(record.local_opcode == LOADH);
-        uint8_t shift = record.shift_amount;
+    __device__ void fill_trace_row(RowSlice row, LoadSignExtendRecord record, uint8_t shift) {
         uint32_t case_idx = shift >> 1;
         uint16_t sign_cell = record.read_data[shift >> 1];
         uint16_t sign_bit = sign_cell & SIGN_U16;
@@ -62,7 +60,9 @@ __global__ void rv64_load_sign_extend_halfword_tracegen_kernel(
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins)
         );
         core.fill_trace_row(
-            row.slice_from(COL_INDEX(Rv64LoadSignExtendHalfwordCols, core)), record.core
+            row.slice_from(COL_INDEX(Rv64LoadSignExtendHalfwordCols, core)),
+            record.core,
+            rv64_load_shift_amount(record.adapter)
         );
     } else {
         row.fill_zero(0, width);

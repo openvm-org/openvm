@@ -13,8 +13,6 @@ pub(crate) use crate::adapters::{
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Clone, Copy, Debug)]
 pub struct LoadRecord {
-    pub local_opcode: u8,
-    pub shift_amount: u8,
     pub read_data: [u16; BLOCK_FE_WIDTH],
 }
 
@@ -57,11 +55,7 @@ where
                 .read(state.memory, instruction, &mut adapter_record);
 
         let local_opcode = Rv64LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        *core_record = LoadRecord {
-            local_opcode: local_opcode as u8,
-            shift_amount,
-            read_data,
-        };
+        *core_record = LoadRecord { read_data };
 
         let write_data = load_write_data(local_opcode, read_data, shift_amount as usize);
         self.adapter

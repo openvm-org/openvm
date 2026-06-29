@@ -7,8 +7,7 @@ use openvm_circuit_primitives::{
     var_range::SharedVariableRangeCheckerChip,
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
-use openvm_instructions::LocalOpcode;
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
+use openvm_riscv_transpiler::Rv64LoadStoreOpcode::*;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -17,7 +16,10 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    adapters::{load_adapter_context, u16_cell_byte, LoadInstruction, RV64_BYTE_BITS},
+    adapters::{
+        load_adapter_context, u16_cell_byte, LoadInstruction, Rv64LoadAdapterFiller,
+        Rv64LoadAdapterRecord, RV64_BYTE_BITS,
+    },
     load::common::LoadRecord,
 };
 
@@ -164,23 +166,25 @@ impl<A> LoadByteFiller<A> {
     }
 }
 
-impl<F, A> TraceFiller<F> for LoadByteFiller<A>
+impl<F> TraceFiller<F> for LoadByteFiller<Rv64LoadAdapterFiller>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
+        // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
         // LoadByteCoreCols::width() elements.
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (mut adapter_row, mut core_row) = unsafe {
+            row_slice
+                .split_at_mut_unchecked(<Rv64LoadAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
+        };
+        let adapter_record: &Rv64LoadAdapterRecord =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let shift = adapter_record.shift_amount();
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
         // SAFETY: core_row contains a valid LoadRecord written by the executor during trace
         // generation.
         let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-        let opcode = Rv64LoadStoreOpcode::from_usize(record.local_opcode as usize);
-        let shift = record.shift_amount as usize;
-        debug_assert_eq!(opcode, LOADBU);
         let read_data = record.read_data;
         let core_row: &mut LoadByteCoreCols<F> = core_row.borrow_mut();
 

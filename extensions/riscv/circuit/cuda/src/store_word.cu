@@ -13,9 +13,7 @@ template <typename T> struct Rv64StoreWordCols {
 };
 
 struct StoreWordCore {
-    __device__ void fill_trace_row(RowSlice row, StoreRecord record) {
-        assert(record.local_opcode == STOREW);
-        uint8_t shift = record.shift_amount;
+    __device__ void fill_trace_row(RowSlice row, StoreRecord record, uint8_t shift) {
         uint32_t case_idx = shift >> 2;
 
         Encoder encoder(
@@ -51,7 +49,11 @@ __global__ void rv64_store_word_tracegen_kernel(
         );
         adapter.fill_trace_row(row, record.adapter);
         StoreWordCore core;
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64StoreWordCols, core)), record.core);
+        core.fill_trace_row(
+            row.slice_from(COL_INDEX(Rv64StoreWordCols, core)),
+            record.core,
+            rv64_store_shift_amount(record.adapter)
+        );
     } else {
         row.fill_zero(0, width);
         COL_WRITE_VALUE(row, Rv64StoreWordCols, adapter.mem_as, 2);

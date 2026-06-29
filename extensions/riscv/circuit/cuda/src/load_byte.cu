@@ -18,9 +18,7 @@ struct LoadByteCore {
     __device__ LoadByteCore(BitwiseOperationLookup bitwise_lookup)
         : bitwise_lookup(bitwise_lookup) {}
 
-    __device__ void fill_trace_row(RowSlice row, LoadRecord record) {
-        assert(record.local_opcode == LOADBU);
-        uint8_t shift = record.shift_amount;
+    __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
         uint16_t read_cell = record.read_data[shift >> 1];
         uint16_t read_cell_bytes[2] = {
             load_byte_from_cell(read_cell, 0),
@@ -58,7 +56,11 @@ __global__ void rv64_load_byte_tracegen_kernel(
         );
         adapter.fill_trace_row(row, record.adapter);
         auto core = LoadByteCore(BitwiseOperationLookup(bitwise_lookup_ptr));
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64LoadByteCols, core)), record.core);
+        core.fill_trace_row(
+            row.slice_from(COL_INDEX(Rv64LoadByteCols, core)),
+            record.core,
+            rv64_load_shift_amount(record.adapter)
+        );
     } else {
         row.fill_zero(0, width);
     }
