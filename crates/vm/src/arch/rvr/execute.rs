@@ -94,7 +94,7 @@ unsafe fn register_openvm_io_ctx<F: PrimeField32>(
 /// # Safety
 ///
 /// - `compiled` must contain a valid rvr-compiled shared library exporting the `rv_execute` symbol.
-/// - `state_ptr` must point to a valid, mutable RV32 state struct whose tracer variant matches the
+/// - `state_ptr` must point to a valid, mutable RvState struct whose tracer variant matches the
 ///   one compiled into the shared library.
 pub unsafe fn rv_execute(
     compiled: &RvrCompiled,

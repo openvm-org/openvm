@@ -140,7 +140,7 @@ static __attribute__((always_inline)) inline int32_t rd_mem_i32(
 
 static __attribute__((always_inline)) inline uint32_t rd_mem_u32(
     uint8_t* restrict memory, uint32_t addr) {
-  /* TODO(rvr): handle unaligned RV32 word load/store semantics in opcode
+  /* TODO(rvr): handle unaligned 32-bit load/store semantics in opcode
    * codegen if needed; this generic helper assumes aligned callers. */
   check_mem_bounds_u32(addr);
   uint32_t v;
@@ -175,7 +175,7 @@ static __attribute__((always_inline)) inline void wr_mem_u16(
 
 static __attribute__((always_inline)) inline void wr_mem_u32(
     uint8_t* restrict memory, uint32_t addr, uint32_t val) {
-  /* TODO(rvr): handle unaligned RV32 word load/store semantics in opcode
+  /* TODO(rvr): handle unaligned word 32-bit load/store semantics in opcode
    * codegen if needed; this generic helper assumes aligned callers. */
   check_mem_bounds_u32(addr);
   void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(val));
@@ -242,7 +242,8 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u64_range(
     RvState* restrict state, uint32_t base_addr, const uint64_t* vals,
     uint32_t num_words);
 
-/* Per-width traced reads widen to 32 bits. */
+/* Per-width traced reads return a 32-bit C type; callers widen to uint64_t at
+ * register assignment via C implicit promotion. */
 static __attribute__((always_inline)) inline uint32_t rd_mem_u8_traced(
     RvState* restrict state, uint32_t addr) {
   uint8_t v = rd_mem_u8(state->memory, addr);
