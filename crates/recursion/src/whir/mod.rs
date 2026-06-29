@@ -63,6 +63,11 @@ pub(crate) fn num_queries_per_round(params: &SystemParams) -> Vec<usize> {
         .collect()
 }
 
+pub(crate) fn whir_round_encoder(num_rounds: usize) -> Encoder {
+    // Encoder requires at least 2 flags to work correctly.
+    Encoder::new(num_rounds.max(2), 2, false)
+}
+
 #[inline]
 fn eval_final_poly_at_u(final_poly: &[EF], u_tail: &[EF]) -> EF {
     let mut evals = final_poly.to_vec();
@@ -754,9 +759,6 @@ impl AirModule for WhirModule {
         let num_rounds = params.num_whir_rounds();
         let num_queries_per_round = num_queries_per_round(params);
 
-        // Encoder requires at least 2 flags to work correctly
-        let whir_round_encoder = Encoder::new(num_rounds.max(2), 2, false);
-
         let whir_round_air: AirRef<SC> = Arc::new(WhirRoundAir {
             whir_module_bus: self.bus_inventory.whir_module_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
@@ -775,7 +777,7 @@ impl AirModule for WhirModule {
             pow_bits: params.whir.query_phase_pow_bits,
             folding_pow_bits: params.whir.folding_pow_bits,
             generator: F::GENERATOR,
-            whir_round_encoder,
+            whir_round_encoder: whir_round_encoder(num_rounds),
             num_queries_per_round: num_queries_per_round.clone(),
         });
         let whir_sumcheck_air = SumcheckAir {

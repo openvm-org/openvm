@@ -8,12 +8,19 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest, F};
 
+use crate::whir::whir_round_encoder;
+
 /*
  * Modified versions of the STARK and multi-STARK verifying keys for AirModule
  * implementations. AirModules should use MultiStarkVerifyingKeyFrame instead
- * of MultiStarkVerifyingKey<BabyBearPoseidon2Config> in their AIRs, as use of some fields in the
- * latter will compromise internal vk stability. For more information on what
- * can be used in AIRs and how, see crates/recursion/README.md.
+ * of MultiStarkVerifyingKey<BabyBearPoseidon2Config> in their AIRs, as use of
+ * some fields in the latter will compromise internal vk stability.
+ *
+ * We also define check_param_compatibility, which asserts compatibility (with
+ * regards to vk stability) between given app, leaf, and internal SystemParams.
+ *
+ * For more information on vk stability and what can be used in AIRs and how,
+ * see crates/recursion/README.md.
  */
 
 #[derive(Clone)]
@@ -52,4 +59,52 @@ impl From<&MultiStarkVerifyingKey<BabyBearPoseidon2Config>> for MultiStarkVkeyFr
             max_constraint_degree: mvk.max_constraint_degree(),
         }
     }
+}
+
+pub fn check_param_compatibility(
+    app_params: &SystemParams,
+    leaf_params: &SystemParams,
+    internal_params: &SystemParams,
+) {
+    // num_whir_rounds affects the number of columns in WhirRoundAir.
+    assert_eq!(
+        whir_round_encoder(leaf_params.num_whir_rounds()).width(),
+        whir_round_encoder(internal_params.num_whir_rounds()).width()
+    );
+    // logup_pow_bits affects the number of interactions in GkrInputAir.
+    assert_eq!(
+        app_params.logup_pow_bits() > 0,
+        leaf_params.logup_pow_bits() > 0
+    );
+    assert_eq!(
+        leaf_params.logup_pow_bits() > 0,
+        internal_params.logup_pow_bits() > 0
+    );
+    // mu_pow_bits affects the number of interactions in StackingClaimsAir.
+    assert_eq!(
+        app_params.whir.mu_pow_bits > 0,
+        leaf_params.whir.mu_pow_bits > 0
+    );
+    assert_eq!(
+        leaf_params.whir.mu_pow_bits > 0,
+        internal_params.whir.mu_pow_bits > 0
+    );
+    // folding_pow_bits affects the number of interactions in SumcheckAir.
+    assert_eq!(
+        app_params.whir.folding_pow_bits > 0,
+        leaf_params.whir.folding_pow_bits > 0
+    );
+    assert_eq!(
+        leaf_params.whir.folding_pow_bits > 0,
+        internal_params.whir.folding_pow_bits > 0
+    );
+    // query_phase_pow_bits affects the number of interactions in WhirRoundAir.
+    assert_eq!(
+        app_params.whir.query_phase_pow_bits > 0,
+        leaf_params.whir.query_phase_pow_bits > 0
+    );
+    assert_eq!(
+        leaf_params.whir.query_phase_pow_bits > 0,
+        internal_params.whir.query_phase_pow_bits > 0
+    );
 }

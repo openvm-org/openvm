@@ -34,6 +34,10 @@ In table form (where ✅ means the parent category can depend on the child categ
 | **Constant Fields**                      | ❌                       | ❌                               | ❌              | ❌               |
 | **Dependent Fields**                     | ❌                       | ❌                               | ✅              | ❌               |
 
+### Child System Parameter Dependencies
+
+By the table above, constant and dependent fields should not depend on child `SystemParams`. In practice, however, a few currently do: e.g. `WhirRoundAir` width depends on the child WHIR round encoder width, and the presence of some AIR interactions depend on whether child PoW parameters are zero or nonzero. `check_param_compatibility` records the subset of these dependencies that must agree between app, leaf, and internal params to keep the relevant verifier VKs stable.
+
 ## Non-Configurable Fields
 
 We get to choose which non-configurable fields are constant and which are dependent. As of now, the following need to be constant across the leaf and internal layers:
