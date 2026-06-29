@@ -1,5 +1,8 @@
 use itertools::Itertools;
-use openvm_instructions::riscv::{RV64_IMM_AS, RV64_REGISTER_AS};
+use openvm_instructions::{
+    exe::SparseMemoryImage,
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+};
 use openvm_stark_backend::memory_metering::ProvingMemoryConfig;
 use serde::{Deserialize, Serialize};
 
@@ -96,6 +99,7 @@ impl MeteredCtx {
         // Add merkle height contributions for all registers
         ctx.memory_ctx.add_register_merkle_heights();
         ctx.memory_ctx.apply_height_updates(&mut ctx.trace_heights);
+        ctx.memory_ctx.update_checkpoint();
 
         ctx
     }
@@ -103,6 +107,10 @@ impl MeteredCtx {
     pub fn with_max_memory(mut self, max_memory: usize) -> Self {
         self.segmentation_ctx.set_max_memory(max_memory);
         self
+    }
+
+    pub fn seed_initial_memory(&mut self, initial_memory: &SparseMemoryImage) {
+        self.memory_ctx.seed_initial_memory(initial_memory);
     }
 
     pub fn set_cache_rs_code_matrix(&mut self, cache_rs_code_matrix: bool) {
@@ -130,6 +138,7 @@ impl MeteredCtx {
         let mut trace_heights = config.initial_trace_heights.clone();
         memory_ctx.add_register_merkle_heights();
         memory_ctx.apply_height_updates(&mut trace_heights);
+        memory_ctx.update_checkpoint();
         Self {
             trace_heights,
             config,

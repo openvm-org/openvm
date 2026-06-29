@@ -1,4 +1,7 @@
+use std::mem::size_of;
+
 use openvm_instructions::{
+    exe::SparseMemoryImage,
     riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     DEFERRAL_AS, DIGEST_WIDTH, MEMORY_PAGE_BITS,
 };
@@ -26,6 +29,30 @@ const FIRST_BIT_PER_BYTE: u64 = 0x0101_0101_0101_0101;
 const FIRST_BIT_PER_U16: u64 = 0x0001_0001_0001_0001;
 const FIRST_BIT_PER_U32: u64 = 0x0000_0001_0000_0001;
 const FIRST_BIT_PER_U64: u64 = 0x0000_0000_0000_0001;
+const FIELD_ELEMENT_BYTES: u32 = size_of::<u32>() as u32;
+
+// Counts old-side leaves and Merkle nodes whose subtrees are still canonical
+// default values at the start of the segment.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct DefaultOldCounts {
+    leaves: u32,
+    merkle_nodes: u32,
+    merkle_node_levels: u64,
+}
+
+impl DefaultOldCounts {
+    #[inline(always)]
+    fn add(&mut self, other: Self) {
+        self.leaves += other.leaves;
+        self.merkle_nodes += other.merkle_nodes;
+        self.merkle_node_levels |= other.merkle_node_levels;
+    }
+
+    #[inline(always)]
+    fn estimated_poseidon_rows(self) -> u32 {
+        u32::from(self.leaves != 0) + self.merkle_node_levels.count_ones()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct BitSet {
@@ -60,6 +87,18 @@ impl BitSet {
         }
         *word = old_word | mask;
         !was_set
+    }
+
+    #[inline(always)]
+    fn contains(&self, index: usize) -> bool {
+        let word_index = index >> 6;
+        let bit_index = index & 63;
+        let mask = 1u64 << bit_index;
+
+        debug_assert!(word_index < self.words.len(), "BitSet index out of bounds");
+
+        // SAFETY: word_index is derived from a valid memory tree node index.
+        unsafe { (*self.words.get_unchecked(word_index) & mask) != 0 }
     }
 
     /// Set all bits within [start, end) to 1, return the number of flipped bits.
@@ -155,6 +194,14 @@ pub struct PageAccess {
     pub leaf_mask: u64,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct MemoryHeightDelta {
+    leaves: u32,
+    merkle_nodes: u32,
+    added_mask: u64,
+    default_old: DefaultOldCounts,
+}
+
 #[derive(Clone, Debug)]
 pub struct MemoryPageTracker {
     page_masks: Box<[u64]>,
@@ -192,7 +239,12 @@ impl MemoryPageTracker {
     }
 
     #[inline(always)]
-    pub fn insert(&mut self, page_id: usize, leaf_mask: u64) -> (u32, u32) {
+    fn insert(
+        &mut self,
+        page_id: usize,
+        leaf_mask: u64,
+        occupancy_tracker: &MemoryOccupancyTracker,
+    ) -> MemoryHeightDelta {
         debug_assert!(page_id < self.page_masks.len());
         debug_assert!(leaf_mask != 0);
 
@@ -200,7 +252,7 @@ impl MemoryPageTracker {
         let old_mask = *page_mask;
         let new_mask = old_mask | leaf_mask;
         if new_mask == old_mask {
-            return (0, 0);
+            return MemoryHeightDelta::default();
         }
 
         *page_mask = new_mask;
@@ -210,38 +262,135 @@ impl MemoryPageTracker {
         // Newly set bits are the only leaves that can add boundary rows or new
         // page-local Merkle nodes.
         let added_mask = leaf_mask & !old_mask;
+        let committed_mask = occupancy_tracker.page_mask(page_id);
+        let default_leaf_mask = added_mask & !committed_mask;
         let leaves = added_mask.count_ones();
-        let mut merkle_nodes = if leaves == 1 {
-            // Single-leaf path: test the aligned 2/4/8/16/32/64-leaf groups
-            // containing that leaf.
-            local_merkle_nodes_added_leaf(old_mask, added_mask.trailing_zeros())
+
+        let (mut merkle_nodes, mut default_old) = if default_leaf_mask == 0 {
+            (
+                local_merkle_nodes_delta(old_mask, added_mask),
+                DefaultOldCounts::default(),
+            )
         } else {
             // Multi-leaf path: walk old and added occupancy up the six
             // page-local levels, then count groups newly occupied by added leaves.
-            local_merkle_nodes_delta(old_mask, added_mask)
+            local_merkle_nodes_delta_with_default(old_mask, added_mask, committed_mask)
         };
+        default_old.leaves = default_leaf_mask.count_ones();
         self.leaves += leaves;
 
         if old_mask == 0 {
-            merkle_nodes += self.insert_upper_path(page_id);
+            if committed_mask == 0 {
+                let (upper_nodes, upper_default_old) =
+                    self.insert_upper_path(page_id, occupancy_tracker);
+                merkle_nodes += upper_nodes;
+                default_old.add(upper_default_old);
+            } else {
+                merkle_nodes += self.insert_upper_path_count_only(page_id);
+            }
         }
         self.merkle_nodes += merkle_nodes;
-        (leaves, merkle_nodes)
+        MemoryHeightDelta {
+            leaves,
+            merkle_nodes,
+            added_mask,
+            default_old,
+        }
     }
 
     #[inline(always)]
-    fn insert_upper_path(&mut self, page_id: usize) -> u32 {
+    fn insert_upper_path(
+        &mut self,
+        page_id: usize,
+        occupancy_tracker: &MemoryOccupancyTracker,
+    ) -> (u32, DefaultOldCounts) {
         // Called only when a page first becomes non-empty in this segment.
         // `upper_nodes` makes nearby pages share already-counted ancestors.
         let mut count = 0;
+        let mut default_old = DefaultOldCounts::default();
         let mut node = (1usize << self.upper_height) + page_id;
+        let mut height = MEMORY_PAGE_BITS + 1;
         while node > 1 {
             node >>= 1;
             if self.upper_nodes.insert(node) {
                 count += 1;
+                if !occupancy_tracker.upper_contains(node) {
+                    default_old.merkle_nodes += 1;
+                    default_old.merkle_node_levels |= 1u64 << height;
+                }
             }
+            height += 1;
+        }
+        (count, default_old)
+    }
+
+    #[inline(always)]
+    fn insert_upper_path_count_only(&mut self, page_id: usize) -> u32 {
+        let mut count = 0;
+        let mut node = (1usize << self.upper_height) + page_id;
+        while node > 1 {
+            node >>= 1;
+            count += u32::from(self.upper_nodes.insert(node));
         }
         count
+    }
+}
+
+#[derive(Clone, Debug)]
+struct MemoryOccupancyTracker {
+    page_masks: Box<[u64]>,
+    upper_nodes: BitSet,
+    upper_height: usize,
+}
+
+impl MemoryOccupancyTracker {
+    pub fn new(upper_height: usize) -> Self {
+        let num_pages = 1 << upper_height;
+        Self {
+            page_masks: vec![0; num_pages].into_boxed_slice(),
+            upper_nodes: BitSet::new(num_pages),
+            upper_height,
+        }
+    }
+
+    #[inline(always)]
+    fn page_mask(&self, page_id: usize) -> u64 {
+        debug_assert!(page_id < self.page_masks.len());
+        unsafe { *self.page_masks.get_unchecked(page_id) }
+    }
+
+    #[inline(always)]
+    fn upper_contains(&self, node: usize) -> bool {
+        self.upper_nodes.contains(node)
+    }
+
+    #[inline(always)]
+    fn mark_existing_page(&mut self, page_id: usize, leaf_mask: u64) {
+        debug_assert!(page_id < self.page_masks.len());
+        debug_assert!(leaf_mask != 0);
+
+        let page_mask = unsafe { self.page_masks.get_unchecked_mut(page_id) };
+        let old_mask = *page_mask;
+        *page_mask = old_mask | leaf_mask;
+        if old_mask == 0 {
+            self.mark_upper_path(page_id);
+        }
+    }
+
+    #[inline(always)]
+    fn commit_page_accesses(&mut self, accesses: &[PageAccess]) {
+        for &access in accesses {
+            self.mark_existing_page(access.page_id as usize, access.leaf_mask);
+        }
+    }
+
+    #[inline(always)]
+    fn mark_upper_path(&mut self, page_id: usize) {
+        let mut node = (1usize << self.upper_height) + page_id;
+        while node > 1 {
+            node >>= 1;
+            self.upper_nodes.insert(node);
+        }
     }
 }
 
@@ -285,42 +434,94 @@ fn local_merkle_nodes_delta(mut old_mask: u64, mut added_mask: u64) -> u32 {
 }
 
 #[inline(always)]
-fn aligned_group_is_empty<const GROUP_SIZE: u32>(old_mask: u64, leaf: u32) -> bool {
-    // The ancestor at this level covers the aligned group containing `leaf`.
-    // If the old mask has no bit in that group, adding `leaf` creates it.
-    let group_start = leaf & !(GROUP_SIZE - 1);
-    let group_mask = ((1u64 << GROUP_SIZE) - 1) << group_start;
-    old_mask & group_mask == 0
+fn add_level_delta_with_default<const SHIFT: u32, const MASK: u64>(
+    old_mask: &mut u64,
+    added_mask: &mut u64,
+    committed_mask: &mut u64,
+    level: usize,
+    default_old: &mut DefaultOldCounts,
+) -> u32 {
+    *old_mask = (*old_mask | (*old_mask >> SHIFT)) & MASK;
+    *added_mask = (*added_mask | (*added_mask >> SHIFT)) & MASK;
+    *committed_mask = (*committed_mask | (*committed_mask >> SHIFT)) & MASK;
+    let new_nodes = *added_mask & !*old_mask;
+    let default_nodes = new_nodes & !*committed_mask;
+    if default_nodes != 0 {
+        default_old.merkle_nodes += default_nodes.count_ones();
+        default_old.merkle_node_levels |= 1u64 << level;
+    }
+    new_nodes.count_ones()
 }
 
 #[inline(always)]
-fn local_merkle_nodes_added_leaf(old_mask: u64, leaf: u32) -> u32 {
-    debug_assert!(leaf < u64::BITS);
+fn local_merkle_nodes_delta_with_default(
+    mut old_mask: u64,
+    mut added_mask: u64,
+    mut committed_mask: u64,
+) -> (u32, DefaultOldCounts) {
+    debug_assert_ne!(added_mask, 0);
+    debug_assert_eq!(old_mask & added_mask, 0);
 
-    if old_mask == 0 {
-        return MEMORY_PAGE_BITS as u32;
-    }
-
+    let mut default_old = DefaultOldCounts::default();
     let mut nodes = 0;
-    // Group sizes 2..32 are the page-local ancestor levels below the
-    // 64-leaf page root. The page root already exists for a non-empty page.
-    nodes += u32::from(aligned_group_is_empty::<2>(old_mask, leaf));
-    nodes += u32::from(aligned_group_is_empty::<4>(old_mask, leaf));
-    nodes += u32::from(aligned_group_is_empty::<8>(old_mask, leaf));
-    nodes += u32::from(aligned_group_is_empty::<16>(old_mask, leaf));
-    nodes += u32::from(aligned_group_is_empty::<32>(old_mask, leaf));
-    nodes
+    nodes += add_level_delta_with_default::<1, FIRST_BIT_PER_PAIR>(
+        &mut old_mask,
+        &mut added_mask,
+        &mut committed_mask,
+        1,
+        &mut default_old,
+    );
+    nodes += add_level_delta_with_default::<2, FIRST_BIT_PER_NIBBLE>(
+        &mut old_mask,
+        &mut added_mask,
+        &mut committed_mask,
+        2,
+        &mut default_old,
+    );
+    nodes += add_level_delta_with_default::<4, FIRST_BIT_PER_BYTE>(
+        &mut old_mask,
+        &mut added_mask,
+        &mut committed_mask,
+        3,
+        &mut default_old,
+    );
+    nodes += add_level_delta_with_default::<8, FIRST_BIT_PER_U16>(
+        &mut old_mask,
+        &mut added_mask,
+        &mut committed_mask,
+        4,
+        &mut default_old,
+    );
+    nodes += add_level_delta_with_default::<16, FIRST_BIT_PER_U32>(
+        &mut old_mask,
+        &mut added_mask,
+        &mut committed_mask,
+        5,
+        &mut default_old,
+    );
+    nodes += add_level_delta_with_default::<32, FIRST_BIT_PER_U64>(
+        &mut old_mask,
+        &mut added_mask,
+        &mut committed_mask,
+        6,
+        &mut default_old,
+    );
+
+    (nodes, default_old)
 }
 
 #[derive(Clone, Debug)]
 pub struct MemoryCtx {
     memory_dimensions: MemoryDimensions,
     pub page_tracker: MemoryPageTracker,
+    occupancy_tracker: MemoryOccupancyTracker,
     pub page_indices_since_checkpoint: Vec<PageAccess>,
     pub page_indices_since_checkpoint_len: usize,
     page_indices_applied_len: usize,
+    pending_occupancy_updates: Vec<PageAccess>,
     pending_leaves: u32,
     pending_merkle_nodes: u32,
+    pending_default_old: DefaultOldCounts,
 }
 
 impl MemoryCtx {
@@ -334,11 +535,14 @@ impl MemoryCtx {
         Self {
             memory_dimensions,
             page_tracker: MemoryPageTracker::new(upper_height),
+            occupancy_tracker: MemoryOccupancyTracker::new(upper_height),
             page_indices_since_checkpoint: Vec::with_capacity(checkpoint_capacity),
             page_indices_since_checkpoint_len: 0,
             page_indices_applied_len: 0,
+            pending_occupancy_updates: Vec::with_capacity(checkpoint_capacity),
             pending_leaves: 0,
             pending_merkle_nodes: 0,
+            pending_default_old: DefaultOldCounts::default(),
         }
     }
 
@@ -354,6 +558,50 @@ impl MemoryCtx {
             0,
             (RV64_NUM_REGISTERS * RV64_REGISTER_NUM_LIMBS) as u32,
         );
+    }
+
+    pub(crate) fn seed_initial_memory(&mut self, initial_memory: &SparseMemoryImage) {
+        for (&(addr_space, ptr), &byte) in initial_memory {
+            if byte == 0 {
+                continue;
+            }
+            // The sparse image is byte-addressed. One nonzero byte is enough
+            // to make the containing Merkle leaf non-default.
+            if addr_space == DEFERRAL_AS {
+                self.mark_existing_memory_range(addr_space, ptr / FIELD_ELEMENT_BYTES, 1);
+            } else {
+                self.mark_existing_memory_range(addr_space, ptr, 1);
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn mark_existing_memory_range(&mut self, address_space: u32, ptr: u32, size: u32) {
+        let end_ptr = ptr + size - 1;
+        let leaf_bits = if address_space == DEFERRAL_AS {
+            DEFERRAL_PTRS_PER_LEAF_BITS
+        } else {
+            BYTE_PTRS_PER_LEAF_BITS
+        };
+        let leaf_label = ptr >> leaf_bits;
+        let end_leaf_label = end_ptr >> leaf_bits;
+        let num_leaves = end_leaf_label - leaf_label + 1;
+        let address_space_offset = (((address_space - ADDR_SPACE_OFFSET) as u64)
+            << self.memory_dimensions.address_height) as u32;
+        let start_leaf_id = address_space_offset + leaf_label;
+        let end_leaf_id = start_leaf_id + num_leaves;
+        let start_page_id = start_leaf_id >> MEMORY_PAGE_BITS;
+        let end_page_id = ((end_leaf_id - 1) >> MEMORY_PAGE_BITS) + 1;
+
+        for page_id in start_page_id..end_page_id {
+            let page_start = page_id << MEMORY_PAGE_BITS;
+            let page_end = page_start + (1 << MEMORY_PAGE_BITS);
+            let start = start_leaf_id.max(page_start) - page_start;
+            let end = end_leaf_id.min(page_end) - page_start;
+            let leaf_mask = leaf_mask_range(start, end);
+            self.occupancy_tracker
+                .mark_existing_page(page_id as usize, leaf_mask);
+        }
     }
 
     /// Records the memory-tree pages touched by `[ptr, ptr + size)`.
@@ -448,6 +696,33 @@ impl MemoryCtx {
         }
     }
 
+    #[inline(always)]
+    fn record_pending_occupancy_update(&mut self, page_id: u32, leaf_mask: u64) {
+        debug_assert!(leaf_mask != 0);
+        let len = self.pending_occupancy_updates.len();
+        if len != 0 {
+            // SAFETY: len is non-zero, so len - 1 is in bounds.
+            let prev = unsafe { self.pending_occupancy_updates.get_unchecked_mut(len - 1) };
+            if prev.page_id == page_id {
+                prev.leaf_mask |= leaf_mask;
+                return;
+            }
+        }
+
+        if len == self.pending_occupancy_updates.capacity() {
+            self.pending_occupancy_updates.reserve(1);
+        }
+
+        // SAFETY: capacity was checked above. PageAccess is Copy and has no drop glue.
+        unsafe {
+            self.pending_occupancy_updates
+                .as_mut_ptr()
+                .add(len)
+                .write(PageAccess { page_id, leaf_mask });
+            self.pending_occupancy_updates.set_len(len + 1);
+        }
+    }
+
     #[cfg(feature = "rvr")]
     #[inline(always)]
     pub(crate) fn apply_page_accesses_with_offset(
@@ -462,10 +737,17 @@ impl MemoryCtx {
             let access = unsafe { *ptr.add(i) };
             debug_assert!(access.leaf_mask != 0);
             let page_id = page_offset + access.page_id;
-            let (leaves, merkle_nodes) =
-                self.page_tracker.insert(page_id as usize, access.leaf_mask);
-            self.pending_leaves += leaves;
-            self.pending_merkle_nodes += merkle_nodes;
+            let delta = self.page_tracker.insert(
+                page_id as usize,
+                access.leaf_mask,
+                &self.occupancy_tracker,
+            );
+            if delta.added_mask != 0 {
+                self.pending_leaves += delta.leaves;
+                self.pending_merkle_nodes += delta.merkle_nodes;
+                self.record_pending_occupancy_update(page_id, delta.added_mask);
+                self.pending_default_old.add(delta.default_old);
+            }
         }
     }
 
@@ -476,8 +758,10 @@ impl MemoryCtx {
         self.page_indices_since_checkpoint.clear();
         self.page_indices_since_checkpoint_len = 0;
         self.page_indices_applied_len = 0;
+        self.pending_occupancy_updates.clear();
         self.pending_leaves = 0;
         self.pending_merkle_nodes = 0;
+        self.pending_default_old = DefaultOldCounts::default();
 
         // Reset trace heights for memory chips as 0
         // SAFETY: BOUNDARY_AIR_ID and MERKLE_AIR_ID are compile-time constants within bounds
@@ -497,8 +781,10 @@ impl MemoryCtx {
     pub(crate) fn initialize_segment(&mut self, trace_heights: &mut [u32]) {
         self.page_tracker.clear();
         self.page_indices_applied_len = 0;
+        self.pending_occupancy_updates.clear();
         self.pending_leaves = 0;
         self.pending_merkle_nodes = 0;
+        self.pending_default_old = DefaultOldCounts::default();
 
         // Reset trace heights for memory chips as 0
         // SAFETY: BOUNDARY_AIR_ID and MERKLE_AIR_ID are compile-time constants within bounds
@@ -522,11 +808,15 @@ impl MemoryCtx {
     /// Updates the checkpoint with current safe state
     #[inline(always)]
     pub(crate) fn update_checkpoint(&mut self) {
+        self.occupancy_tracker
+            .commit_page_accesses(&self.pending_occupancy_updates);
         self.page_indices_since_checkpoint.clear();
         self.page_indices_since_checkpoint_len = 0;
         self.page_indices_applied_len = 0;
+        self.pending_occupancy_updates.clear();
         self.pending_leaves = 0;
         self.pending_merkle_nodes = 0;
+        self.pending_default_old = DefaultOldCounts::default();
     }
 
     /// Applies boundary and Merkle height deltas for the page/leaf masks recorded
@@ -553,33 +843,51 @@ impl MemoryCtx {
     ///
     /// - BOUNDARY_AIR: `2 * new_leaves` rows
     /// - MERKLE_AIR:   `2 * new_merkle_nodes` rows
-    /// - Poseidon2:    `2 * new_leaves + 2 * new_merkle_nodes` hashes
+    /// - Poseidon2:    final-side hashes plus old-side hashes
     ///
-    /// The Poseidon2 count is still an upper bound because tracegen may
-    /// deduplicate equal hash inputs by value.
+    /// Old leaves and internal nodes that were definitely default before the
+    /// segment use canonical default Poseidon2 inputs. Default leaves share
+    /// one input, and default internal nodes share one input per Merkle height.
+    /// Other old-side hashes are counted structurally.
     #[inline(always)]
     pub(crate) fn apply_height_updates(&mut self, trace_heights: &mut [u32]) {
         let mut leaves = self.pending_leaves;
         let mut merkle_nodes = self.pending_merkle_nodes;
+        let mut default_old = self.pending_default_old;
         self.pending_leaves = 0;
         self.pending_merkle_nodes = 0;
+        self.pending_default_old = DefaultOldCounts::default();
 
-        for &access in &self.page_indices_since_checkpoint[self.page_indices_applied_len..] {
-            let (new_leaves, new_merkle_nodes) = self
-                .page_tracker
-                .insert(access.page_id as usize, access.leaf_mask);
-            leaves += new_leaves;
-            merkle_nodes += new_merkle_nodes;
+        let len = self.page_indices_since_checkpoint.len();
+        let ptr = self.page_indices_since_checkpoint.as_ptr();
+        for i in self.page_indices_applied_len..len {
+            // SAFETY: i is bounded by page_indices_since_checkpoint.len().
+            let access = unsafe { *ptr.add(i) };
+            let delta = self.page_tracker.insert(
+                access.page_id as usize,
+                access.leaf_mask,
+                &self.occupancy_tracker,
+            );
+            if delta.added_mask != 0 {
+                leaves += delta.leaves;
+                merkle_nodes += delta.merkle_nodes;
+                self.record_pending_occupancy_update(access.page_id, delta.added_mask);
+                default_old.add(delta.default_old);
+            }
         }
-        self.page_indices_applied_len = self.page_indices_since_checkpoint.len();
+        self.page_indices_applied_len = len;
 
         debug_assert!(trace_heights.len() >= 2);
         let poseidon2_idx = trace_heights.len() - 2;
+        let old_default_poseidon_rows = default_old.estimated_poseidon_rows();
+        let old_nondefault_poseidon_rows =
+            (leaves + merkle_nodes).saturating_sub(default_old.leaves + default_old.merkle_nodes);
+        let poseidon2_rows =
+            leaves + merkle_nodes + old_nondefault_poseidon_rows + old_default_poseidon_rows;
         // SAFETY: BOUNDARY_AIR_ID, MERKLE_AIR_ID, and poseidon2_idx are all within bounds
         unsafe {
             *trace_heights.get_unchecked_mut(BOUNDARY_AIR_ID) += leaves * 2;
-            // Poseidon2: 2 hashes per leaf (compression) + 2 per internal node (init + final tree)
-            *trace_heights.get_unchecked_mut(poseidon2_idx) += leaves * 2 + merkle_nodes * 2;
+            *trace_heights.get_unchecked_mut(poseidon2_idx) += poseidon2_rows;
             // Merkle AIR: 2 rows per internal node (init + final tree)
             *trace_heights.get_unchecked_mut(MERKLE_AIR_ID) += merkle_nodes * 2;
         }
@@ -637,11 +945,12 @@ mod tests {
     #[test]
     fn test_local_merkle_nodes_doc_example() {
         let mut tracker = MemoryPageTracker::new(0);
-        tracker.insert(0, 1 << 0);
+        let occupancy = MemoryOccupancyTracker::new(0);
+        tracker.insert(0, 1 << 0, &occupancy);
         assert_eq!(tracker.merkle_nodes, 6);
-        tracker.insert(0, 1 << 4);
+        tracker.insert(0, 1 << 4, &occupancy);
         assert_eq!(tracker.merkle_nodes, 8);
-        tracker.insert(0, 1 << 2);
+        tracker.insert(0, 1 << 2, &occupancy);
         assert_eq!(tracker.merkle_nodes, 9);
     }
 
@@ -666,12 +975,6 @@ mod tests {
                 let added_mask = new_mask ^ old_mask;
                 let expected =
                     reference_local_merkle_nodes(new_mask) - reference_local_merkle_nodes(old_mask);
-                if added_mask.count_ones() == 1 {
-                    assert_eq!(
-                        local_merkle_nodes_added_leaf(old_mask, added_mask.trailing_zeros()),
-                        expected
-                    );
-                }
                 assert_eq!(local_merkle_nodes_delta(old_mask, added_mask), expected);
                 old_mask = new_mask;
             }
@@ -684,12 +987,6 @@ mod tests {
                 let added_mask = new_mask ^ old_mask;
                 let expected =
                     reference_local_merkle_nodes(new_mask) - reference_local_merkle_nodes(old_mask);
-                if added_mask.count_ones() == 1 {
-                    assert_eq!(
-                        local_merkle_nodes_added_leaf(old_mask, added_mask.trailing_zeros()),
-                        expected
-                    );
-                }
                 assert_eq!(local_merkle_nodes_delta(old_mask, added_mask), expected);
                 old_mask = new_mask;
             }
@@ -718,10 +1015,11 @@ mod tests {
     #[test]
     fn test_page_mask_duplicate_leaf_does_not_change_counts() {
         let mut tracker = MemoryPageTracker::new(3);
-        tracker.insert(0, 1 << 0);
+        let occupancy = MemoryOccupancyTracker::new(3);
+        tracker.insert(0, 1 << 0, &occupancy);
         let leaves = tracker.leaves;
         let nodes = tracker.merkle_nodes;
-        tracker.insert(0, 1 << 0);
+        tracker.insert(0, 1 << 0, &occupancy);
         assert_eq!(tracker.leaves, leaves);
         assert_eq!(tracker.merkle_nodes, nodes);
     }
@@ -729,8 +1027,9 @@ mod tests {
     #[test]
     fn test_memory_page_tracker_clear_resets_touched_state() {
         let mut tracker = MemoryPageTracker::new(3);
-        tracker.insert(0, 1 << 0);
-        tracker.insert(7, 1 << 63);
+        let occupancy = MemoryOccupancyTracker::new(3);
+        tracker.insert(0, 1 << 0, &occupancy);
+        tracker.insert(7, 1 << 63, &occupancy);
         assert!(tracker.leaves > 0);
         assert!(tracker.merkle_nodes > 0);
 
@@ -738,7 +1037,7 @@ mod tests {
         assert_eq!(tracker.leaves, 0);
         assert_eq!(tracker.merkle_nodes, 0);
 
-        tracker.insert(0, 1 << 0);
+        tracker.insert(0, 1 << 0, &occupancy);
         assert_eq!(tracker.leaves, 1);
         assert!(tracker.merkle_nodes > 0);
     }
@@ -746,9 +1045,10 @@ mod tests {
     #[test]
     fn test_adjacent_pages_share_upper_ancestors() {
         let mut tracker = MemoryPageTracker::new(3);
-        tracker.insert(0, 1);
+        let occupancy = MemoryOccupancyTracker::new(3);
+        tracker.insert(0, 1, &occupancy);
         let first = tracker.merkle_nodes;
-        tracker.insert(1, 1);
+        tracker.insert(1, 1, &occupancy);
         assert_eq!(tracker.merkle_nodes - first, MEMORY_PAGE_BITS as u32);
     }
 
@@ -768,5 +1068,151 @@ mod tests {
         range_ctx.apply_height_updates(&mut range_heights);
         explicit_ctx.apply_height_updates(&mut explicit_heights);
         assert_eq!(range_heights, explicit_heights);
+    }
+
+    #[test]
+    fn test_tentative_apply_does_not_commit_occupancy() {
+        let system_config = crate::utils::test_system_config();
+        let mut ctx = MemoryCtx::new(&system_config, 1);
+        let mut trace_heights = vec![0; 6];
+
+        ctx.update_boundary_merkle_heights(2, 0, 1);
+        ctx.apply_height_updates(&mut trace_heights);
+
+        let page_id = ((2 - ADDR_SPACE_OFFSET) << ctx.memory_dimensions.address_height) as usize
+            >> MEMORY_PAGE_BITS;
+        assert_eq!(ctx.occupancy_tracker.page_mask(page_id), 0);
+    }
+
+    #[test]
+    fn test_checkpoint_commit_keeps_occupied_counts() {
+        let mut occupancy = MemoryOccupancyTracker::new(1);
+        let mut tracker = MemoryPageTracker::new(1);
+
+        let first = tracker.insert(0, 1, &occupancy).default_old;
+        occupancy.commit_page_accesses(&[PageAccess {
+            page_id: 0,
+            leaf_mask: 1,
+        }]);
+        tracker.clear();
+        let second = tracker.insert(0, 1, &occupancy).default_old;
+
+        assert!(first.leaves > 0);
+        assert_eq!(second, DefaultOldCounts::default());
+    }
+
+    #[test]
+    fn test_default_old_poseidon_rows_dedup_by_default_bucket() {
+        let system_config = crate::utils::test_system_config();
+        let mut ctx = MemoryCtx::new(&system_config, 1);
+        let height = ctx.memory_dimensions.overall_height() as u32;
+        let second_leaf_ptr = (U16_CELL_SIZE * DIGEST_WIDTH) as u32;
+
+        ctx.update_boundary_merkle_heights(2, 0, 1);
+        ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1);
+
+        let mut trace_heights = vec![0; 6];
+        ctx.apply_height_updates(&mut trace_heights);
+
+        let poseidon2_idx = trace_heights.len() - 2;
+        assert_eq!(trace_heights[BOUNDARY_AIR_ID], 4);
+        assert_eq!(trace_heights[MERKLE_AIR_ID], 2 * height);
+        assert_eq!(trace_heights[poseidon2_idx], 2 * height + 3);
+    }
+
+    #[test]
+    fn test_initial_zero_bytes_do_not_seed_occupancy() {
+        let system_config = crate::utils::test_system_config();
+        let mut ctx = MemoryCtx::new(&system_config, 1);
+        let height = ctx.memory_dimensions.overall_height() as u32;
+        ctx.seed_initial_memory(&SparseMemoryImage::from([((2, 0), 0)]));
+        let second_leaf_ptr = (U16_CELL_SIZE * DIGEST_WIDTH) as u32;
+
+        ctx.update_boundary_merkle_heights(2, 0, 1);
+        ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1);
+
+        let mut trace_heights = vec![0; 6];
+        ctx.apply_height_updates(&mut trace_heights);
+
+        let poseidon2_idx = trace_heights.len() - 2;
+        assert_eq!(trace_heights[poseidon2_idx], 2 * height + 3);
+    }
+
+    #[test]
+    fn test_initial_nonzero_bytes_seed_occupancy() {
+        let system_config = crate::utils::test_system_config();
+        let mut ctx = MemoryCtx::new(&system_config, 1);
+        let height = ctx.memory_dimensions.overall_height() as u32;
+        let second_leaf_ptr = (U16_CELL_SIZE * DIGEST_WIDTH) as u32;
+        ctx.seed_initial_memory(&SparseMemoryImage::from([
+            ((2, 0), 1),
+            ((2, second_leaf_ptr), 1),
+        ]));
+
+        ctx.update_boundary_merkle_heights(2, 0, 1);
+        ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1);
+
+        let mut trace_heights = vec![0; 6];
+        ctx.apply_height_updates(&mut trace_heights);
+
+        let poseidon2_idx = trace_heights.len() - 2;
+        assert_eq!(trace_heights[poseidon2_idx], 2 * height + 4);
+    }
+
+    #[test]
+    fn test_initial_deferral_bytes_seed_occupancy() {
+        let system_config = crate::utils::test_system_config();
+        let mut ctx = MemoryCtx::new(&system_config, 1);
+        let height = ctx.memory_dimensions.overall_height() as u32;
+        let second_leaf_ptr = DIGEST_WIDTH as u32;
+        let second_leaf_byte_ptr = second_leaf_ptr * FIELD_ELEMENT_BYTES;
+        ctx.seed_initial_memory(&SparseMemoryImage::from([
+            ((DEFERRAL_AS, 0), 1),
+            ((DEFERRAL_AS, second_leaf_byte_ptr), 1),
+        ]));
+
+        ctx.update_boundary_merkle_heights(DEFERRAL_AS, 0, 1);
+        ctx.update_boundary_merkle_heights(DEFERRAL_AS, second_leaf_ptr, 1);
+
+        let mut trace_heights = vec![0; 6];
+        ctx.apply_height_updates(&mut trace_heights);
+
+        let poseidon2_idx = trace_heights.len() - 2;
+        assert_eq!(trace_heights[poseidon2_idx], 2 * height + 4);
+    }
+
+    #[test]
+    fn test_initialize_segment_replays_with_default_occupancy() {
+        let system_config = crate::utils::test_system_config();
+        let second_leaf_ptr = (U16_CELL_SIZE * DIGEST_WIDTH) as u32;
+
+        let mut ctx = MemoryCtx::new(&system_config, 1);
+        let mut trace_heights = vec![0; 6];
+        ctx.add_register_merkle_heights();
+        ctx.apply_height_updates(&mut trace_heights);
+        ctx.update_checkpoint();
+
+        ctx.update_boundary_merkle_heights(2, 0, 1);
+        ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1);
+
+        let poseidon2_idx = trace_heights.len() - 2;
+        ctx.apply_height_updates(&mut trace_heights);
+
+        ctx.initialize_segment(&mut trace_heights);
+
+        let mut clean_ctx = MemoryCtx::new(&system_config, 1);
+        let mut clean_trace_heights = vec![0; 6];
+        clean_ctx.add_register_merkle_heights();
+        clean_ctx.apply_height_updates(&mut clean_trace_heights);
+        clean_ctx.update_checkpoint();
+        clean_ctx.initialize_segment(&mut clean_trace_heights);
+
+        let replayed_poseidon_rows =
+            trace_heights[poseidon2_idx] - clean_trace_heights[poseidon2_idx];
+        let replayed_leaves =
+            (trace_heights[BOUNDARY_AIR_ID] - clean_trace_heights[BOUNDARY_AIR_ID]) / 2;
+        let replayed_merkle_nodes =
+            (trace_heights[MERKLE_AIR_ID] - clean_trace_heights[MERKLE_AIR_ID]) / 2;
+        assert!(replayed_poseidon_rows > replayed_leaves + replayed_merkle_nodes);
     }
 }
