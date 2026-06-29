@@ -27,32 +27,6 @@ const BYTE_PTRS_PER_LEAF_BITS: u32 = (U16_CELL_SIZE * DIGEST_WIDTH).ilog2();
 const DEFERRAL_PTRS_PER_LEAF_BITS: u32 = DIGEST_WIDTH.ilog2();
 const FIELD_ELEMENT_BYTES: u32 = size_of::<u32>() as u32;
 
-#[inline(always)]
-fn push_page_access(accesses: &mut Vec<PageAccess>, page_id: u32, leaf_mask: u64) {
-    debug_assert!(leaf_mask != 0);
-    let len = accesses.len();
-    if len != 0 {
-        // SAFETY: len is non-zero, so len - 1 is in bounds.
-        let prev = unsafe { accesses.get_unchecked_mut(len - 1) };
-        if prev.page_id == page_id {
-            prev.leaf_mask |= leaf_mask;
-            return;
-        }
-    }
-
-    if len == accesses.capacity() {
-        accesses.reserve(1);
-    }
-
-    // SAFETY: capacity was checked above. PageAccess is Copy and has no drop glue.
-    unsafe {
-        accesses
-            .as_mut_ptr()
-            .add(len)
-            .write(PageAccess { page_id, leaf_mask });
-        accesses.set_len(len + 1);
-    }
-}
 #[derive(Clone, Debug)]
 pub struct MemoryCtx {
     /// Memory tree dimensions used to map address-space ranges into global leaf ids.
@@ -374,6 +348,33 @@ impl MemoryCtx {
             // Merkle AIR: 2 rows per internal node (init + final tree)
             *trace_heights.get_unchecked_mut(MERKLE_AIR_ID) += merkle_nodes * 2;
         }
+    }
+}
+
+#[inline(always)]
+fn push_page_access(accesses: &mut Vec<PageAccess>, page_id: u32, leaf_mask: u64) {
+    debug_assert!(leaf_mask != 0);
+    let len = accesses.len();
+    if len != 0 {
+        // SAFETY: len is non-zero, so len - 1 is in bounds.
+        let prev = unsafe { accesses.get_unchecked_mut(len - 1) };
+        if prev.page_id == page_id {
+            prev.leaf_mask |= leaf_mask;
+            return;
+        }
+    }
+
+    if len == accesses.capacity() {
+        accesses.reserve(1);
+    }
+
+    // SAFETY: capacity was checked above. PageAccess is Copy and has no drop glue.
+    unsafe {
+        accesses
+            .as_mut_ptr()
+            .add(len)
+            .write(PageAccess { page_id, leaf_mask });
+        accesses.set_len(len + 1);
     }
 }
 
