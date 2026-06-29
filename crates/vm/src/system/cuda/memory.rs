@@ -115,7 +115,7 @@ impl MemoryInventoryGPU {
                     // SAFETY: `byte_runs` clamps ranges to `raw_mem.len()`, and `buf` has the same
                     // length, so both the host slice and the device offset stay in bounds.
                     unsafe {
-                        cuda_memcpy_on::<true, false>(
+                        cuda_memcpy_on::<false, true>(
                             buf.as_mut_ptr().add(start) as *mut std::ffi::c_void,
                             raw_mem[start..end].as_ptr() as *const std::ffi::c_void,
                             end - start,
@@ -579,24 +579,11 @@ mod tests {
         );
         let expected_root = cpu_merkle_tree.root();
 
-        let max_buffer_size = (mem_config
-            .addr_spaces
-            .iter()
-            .map(|ashc| ashc.num_cells * 2 + mem_config.memory_dimensions().overall_height())
-            .sum::<usize>()
-            * 2)
-        .next_power_of_two()
-            * 2
-            * DIGEST_WIDTH;
         let device_ctx = GpuDeviceCtx {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
-        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(
-            max_buffer_size,
-            1,
-            device_ctx.clone(),
-        ));
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
         let mut inventory =
             MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
         inventory.set_initial_memory(&memory.memory);
