@@ -33,8 +33,11 @@ pub(super) struct GlobalFirstTouchCounts {
     merkle_height_mask: u64,
 }
 
+/// New contribution from one page access to the current segment.
+///
+/// Counts are in leaves/internal nodes. `MemoryCtx` maps them to trace rows.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(super) struct MemoryInsertDelta {
+pub(super) struct SegmentMemoryDelta {
     /// Boundary leaves newly counted in the current segment.
     pub(super) segment_leaves: u32,
     /// Merkle internal nodes newly counted in the current segment.
@@ -212,7 +215,7 @@ impl SegmentMemoryTracker {
         page_id: usize,
         leaf_mask: u64,
         global_memory: &GlobalMemoryTracker,
-    ) -> MemoryInsertDelta {
+    ) -> SegmentMemoryDelta {
         debug_assert!(page_id < self.segment_leaf_masks.len());
         debug_assert!(leaf_mask != 0);
 
@@ -220,7 +223,7 @@ impl SegmentMemoryTracker {
         let segment_leaf_mask_before = *segment_leaf_mask;
         let segment_leaf_mask_after = segment_leaf_mask_before | leaf_mask;
         if segment_leaf_mask_after == segment_leaf_mask_before {
-            return MemoryInsertDelta::default();
+            return SegmentMemoryDelta::default();
         }
 
         *segment_leaf_mask = segment_leaf_mask_after;
@@ -279,7 +282,7 @@ impl SegmentMemoryTracker {
                 segment_merkle_nodes += self.insert_upper_path(page_id);
             }
         }
-        MemoryInsertDelta {
+        SegmentMemoryDelta {
             segment_leaves,
             segment_merkle_nodes,
             new_segment_leaf_mask,
@@ -747,7 +750,7 @@ mod tests {
         );
         assert_eq!(
             tracker.insert(0, 1 << 0, &global_memory),
-            MemoryInsertDelta::default()
+            SegmentMemoryDelta::default()
         );
     }
 
