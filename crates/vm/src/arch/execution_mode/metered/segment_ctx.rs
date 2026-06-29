@@ -1,4 +1,5 @@
 use bytesize::ByteSize;
+use itertools::izip;
 #[cfg(feature = "metrics")]
 use openvm_stark_backend::memory_metering::INTERACTION_MEMORY_OVERHEAD;
 use openvm_stark_backend::memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts};
@@ -83,10 +84,15 @@ impl SegmentationParams {
 
 #[derive(Clone, Copy)]
 struct AirMeteringParams {
+    /// Current trace height for this AIR.
     height: u32,
+    /// All main trace columns, used for total main trace memory.
     total_width: usize,
+    /// Main columns retained in the stacked matrix estimate.
     stacked_main_width: usize,
+    /// Row-interaction slots per row.
     interactions: usize,
+    /// Whether main trace memory includes next-row rotation overhead.
     need_rot: bool,
 }
 
@@ -265,7 +271,7 @@ impl SegmentationCtx {
         debug_assert_eq!(trace_heights.len(), self.params.need_rot.len());
 
         let mut counts = MeteredCounts::default();
-        let airs = itertools::izip!(
+        let airs = izip!(
             trace_heights,
             &self.params.total_widths,
             &self.params.stacked_main_widths,
@@ -323,7 +329,7 @@ impl SegmentationCtx {
         let mut main_cnt_no_rot = 0;
         let mut stacked_slice_cells = 0;
         let mut interaction_cells = 0;
-        let airs = itertools::izip!(
+        let airs = izip!(
             trace_heights,
             &self.params.total_widths,
             &self.params.stacked_main_widths,
@@ -464,7 +470,7 @@ impl SegmentationCtx {
         let mut main_cnt_no_rot = 0usize;
         let mut stacked_slice_cells = 0usize;
         let mut interaction_cells = 0usize;
-        let airs = itertools::izip!(
+        let airs = izip!(
             trace_heights,
             &self.params.total_widths,
             &self.params.stacked_main_widths,
@@ -767,15 +773,14 @@ impl SegmentationCtx {
     fn emit_metered_air_metrics(&self, segment: &str, trace_heights: &[u32]) {
         let memory_config = self.params.memory_config;
 
-        for (air_id, (&height, &total_width, &interactions, &need_rot, air_name)) in
-            itertools::izip!(
-                trace_heights,
-                &self.params.total_widths,
-                &self.params.interactions,
-                &self.params.need_rot,
-                &self.params.air_names,
-            )
-            .enumerate()
+        for (air_id, (&height, &total_width, &interactions, &need_rot, air_name)) in izip!(
+            trace_heights,
+            &self.params.total_widths,
+            &self.params.interactions,
+            &self.params.need_rot,
+            &self.params.air_names,
+        )
+        .enumerate()
         {
             let padded_height = next_power_of_two_or_zero(height as usize);
             let unpadded_height = height as usize;
