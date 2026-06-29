@@ -5995,7 +5995,7 @@ dependencies = [
 [[package]]
 name = "openvm-codec-derive"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#04611d9be14da52ac9a3fbba4a410f98056cbb18"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -6042,7 +6042,7 @@ dependencies = [
 [[package]]
 name = "openvm-cpu-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#04611d9be14da52ac9a3fbba4a410f98056cbb18"
 dependencies = [
  "cfg-if 1.0.1",
  "derive-new 0.7.0",
@@ -6067,7 +6067,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#04611d9be14da52ac9a3fbba4a410f98056cbb18"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -6094,7 +6094,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#04611d9be14da52ac9a3fbba4a410f98056cbb18"
 dependencies = [
  "cc",
  "glob",
@@ -6103,7 +6103,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#04611d9be14da52ac9a3fbba4a410f98056cbb18"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6877,7 +6877,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#04611d9be14da52ac9a3fbba4a410f98056cbb18"
 dependencies = [
  "cfg-if 1.0.1",
  "derivative",
@@ -6912,7 +6912,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#04611d9be14da52ac9a3fbba4a410f98056cbb18"
 dependencies = [
  "dashmap",
  "derive-new 0.7.0",
@@ -9575,7 +9575,7 @@ dependencies = [
  "solar-config",
  "solar-data-structures",
  "solar-macros",
- "thiserror 1.0.69",
+ "thiserror 2.0.15",
  "tracing",
  "unicode-width 0.2.2",
 ]
@@ -9923,7 +9923,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.15",
  "url",
  "zip",
 ]
