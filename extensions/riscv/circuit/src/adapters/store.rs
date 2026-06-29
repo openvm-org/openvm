@@ -271,6 +271,20 @@ pub struct Rv64StoreAdapterRecord {
     pub write_prev_timestamp: u32,
 }
 
+impl Rv64StoreAdapterRecord {
+    pub(crate) fn effective_ptr(&self) -> u32 {
+        let addr = rv64_address_add_imm(
+            self.rs1_val,
+            sign_extend_imm16(self.imm as u32, self.imm_sign as u32),
+        );
+        u32::try_from(addr).expect("effective address exceeds u32 range")
+    }
+
+    pub(crate) fn shift_amount(&self) -> usize {
+        (self.effective_ptr() & (RV64_REGISTER_NUM_LIMBS as u32 - 1)) as usize
+    }
+}
+
 /// Reads rs1, computes the effective memory pointer, reads rs2, and writes the containing memory
 /// block.
 #[derive(Clone, Copy, derive_new::new)]
@@ -366,12 +380,7 @@ where
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     ) {
-        let ptr = u32::try_from(rv64_address_add_imm(
-            record.rs1_val,
-            sign_extend_imm16(record.imm as u32, record.imm_sign as u32),
-        ))
-        .expect("effective address exceeds u32 range")
-            & !(RV64_REGISTER_NUM_LIMBS as u32 - 1);
+        let ptr = record.effective_ptr() & !(RV64_REGISTER_NUM_LIMBS as u32 - 1);
         record.write_prev_timestamp = timed_write_u16(
             memory,
             record.mem_as as u32,
@@ -408,6 +417,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreAdapterFiller {
         let imm_sign = record.imm_sign;
         let mem_as = record.mem_as;
         let write_prev_timestamp = record.write_prev_timestamp;
+        let ptr = record.effective_ptr();
+        let shift_amount = record.shift_amount() as u32;
         let adapter_row: &mut Rv64StoreAdapterCols<F> = adapter_row.borrow_mut();
 
         mem_helper.fill(
@@ -417,10 +428,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreAdapterFiller {
         );
 
         adapter_row.mem_as = F::from_u8(mem_as);
-        let addr = rv64_address_add_imm(rs1_val, sign_extend_imm16(imm as u32, imm_sign as u32));
-        let ptr = u32::try_from(addr).expect("effective address exceeds u32 range");
         let ptr_limbs = ptr_to_u16_limbs(ptr).map(u32::from);
-        let shift_amount = ptr & (RV64_REGISTER_NUM_LIMBS as u32 - 1);
         self.range_checker_chip
             .add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);
         self.range_checker_chip

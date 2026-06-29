@@ -20,9 +20,7 @@ struct StoreByteCore {
     __device__ StoreByteCore(BitwiseOperationLookup bitwise_lookup)
         : bitwise_lookup(bitwise_lookup) {}
 
-    __device__ void fill_trace_row(RowSlice row, StoreRecord record) {
-        assert(record.local_opcode == STOREB);
-        uint8_t shift = record.shift_amount;
+    __device__ void fill_trace_row(RowSlice row, StoreRecord record, uint8_t shift) {
         uint8_t cell_shift = shift >> 1;
 
         uint16_t read_cell_bytes[2] = {
@@ -70,7 +68,11 @@ __global__ void rv64_store_byte_tracegen_kernel(
         );
         adapter.fill_trace_row(row, record.adapter);
         auto core = StoreByteCore(BitwiseOperationLookup(bitwise_lookup_ptr));
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64StoreByteCols, core)), record.core);
+        core.fill_trace_row(
+            row.slice_from(COL_INDEX(Rv64StoreByteCols, core)),
+            record.core,
+            rv64_store_shift_amount(record.adapter)
+        );
     } else {
         row.fill_zero(0, width);
         COL_WRITE_VALUE(row, Rv64StoreByteCols, adapter.mem_as, 2);

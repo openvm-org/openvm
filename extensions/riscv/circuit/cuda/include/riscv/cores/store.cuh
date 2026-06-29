@@ -29,8 +29,6 @@ constexpr uint32_t STORE_DOUBLEWORD_CASES = 1;
 constexpr uint32_t STORE_SELECTOR_MAX_DEGREE = 2;
 
 struct StoreRecord {
-    uint8_t local_opcode;
-    uint8_t shift_amount;
     uint16_t read_data[BLOCK_FE_WIDTH];
     uint16_t prev_data[BLOCK_FE_WIDTH];
 };
@@ -41,8 +39,10 @@ struct Rv64StoreRecord {
 };
 
 static_assert(sizeof(Rv64StoreAdapterRecord) == 36);
-static_assert(sizeof(StoreRecord) == 18);
-static_assert(sizeof(Rv64StoreRecord) == 56);
+static_assert(sizeof(StoreRecord) == 16);
+static_assert(sizeof(Rv64StoreRecord) == 52);
+static_assert(offsetof(StoreRecord, read_data) == 0);
+static_assert(offsetof(StoreRecord, prev_data) == 8);
 static_assert(offsetof(Rv64StoreRecord, core) == 36);
 
 static __device__ __forceinline__ uint16_t store_byte_from_cell(uint16_t cell, uint8_t byte_idx) {

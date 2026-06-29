@@ -29,8 +29,6 @@ constexpr uint32_t LOAD_DOUBLEWORD_CASES = 1;
 constexpr uint32_t LOAD_SELECTOR_MAX_DEGREE = 2;
 
 struct LoadRecord {
-    uint8_t local_opcode;
-    uint8_t shift_amount;
     uint16_t read_data[BLOCK_FE_WIDTH];
 };
 
@@ -40,8 +38,9 @@ struct Rv64LoadRecord {
 };
 
 static_assert(sizeof(Rv64LoadAdapterRecord) == 44);
-static_assert(sizeof(LoadRecord) == 10);
-static_assert(sizeof(Rv64LoadRecord) == 56);
+static_assert(sizeof(LoadRecord) == 8);
+static_assert(sizeof(Rv64LoadRecord) == 52);
+static_assert(offsetof(LoadRecord, read_data) == 0);
 static_assert(offsetof(Rv64LoadRecord, core) == 44);
 
 static __device__ __forceinline__ uint16_t load_byte_from_cell(uint16_t cell, uint8_t byte_idx) {

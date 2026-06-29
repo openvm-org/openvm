@@ -23,9 +23,7 @@ struct LoadSignExtendByteCore {
     )
         : range_checker(range_checker), bitwise_lookup(bitwise_lookup) {}
 
-    __device__ void fill_trace_row(RowSlice row, LoadSignExtendRecord record) {
-        assert(record.local_opcode == LOADB);
-        uint8_t shift = record.shift_amount;
+    __device__ void fill_trace_row(RowSlice row, LoadSignExtendRecord record, uint8_t shift) {
         uint16_t read_cell = record.read_data[shift >> 1];
         uint16_t read_cell_bytes[2] = {
             load_sign_extend_byte_from_cell(read_cell, 0),
@@ -82,7 +80,9 @@ __global__ void rv64_load_sign_extend_byte_tracegen_kernel(
             BitwiseOperationLookup(bitwise_lookup_ptr)
         );
         core.fill_trace_row(
-            row.slice_from(COL_INDEX(Rv64LoadSignExtendByteCols, core)), record.core
+            row.slice_from(COL_INDEX(Rv64LoadSignExtendByteCols, core)),
+            record.core,
+            rv64_load_shift_amount(record.adapter)
         );
     } else {
         row.fill_zero(0, width);

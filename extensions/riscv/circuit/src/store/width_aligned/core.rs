@@ -5,7 +5,6 @@ use openvm_circuit_primitives::{
     encoder::Encoder, var_range::SharedVariableRangeCheckerChip, AlignedBorrow, ColumnsAir,
     StructReflection, StructReflectionHelper, SubAir,
 };
-use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -16,7 +15,8 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        store_adapter_context, Rv64StoreAdapterCols, Rv64StoreAdapterFiller, StoreInstruction,
+        store_adapter_context, Rv64StoreAdapterCols, Rv64StoreAdapterFiller,
+        Rv64StoreAdapterRecord, StoreInstruction,
     },
     store::common::{StoreRecord, KIND_DOUBLEWORD, KIND_HALFWORD, KIND_WORD},
 };
@@ -238,31 +238,34 @@ impl<A, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
     }
 }
 
-impl<F, A, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
-    for StoreWidthAlignedFiller<A, KIND, CASES, SELECTOR_WIDTH>
+impl<F, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
+    for StoreWidthAlignedFiller<Rv64StoreAdapterFiller, KIND, CASES, SELECTOR_WIDTH>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
+        // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
         // StoreWidthAlignedCoreCols::width() elements.
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (mut adapter_row, mut core_row) = unsafe {
+            row_slice
+                .split_at_mut_unchecked(<Rv64StoreAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
+        };
+        let adapter_record: &Rv64StoreAdapterRecord =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let shift = adapter_record.shift_amount();
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
         // SAFETY: core_row contains a valid StoreRecord written by the executor during trace
         // generation.
         let record: &StoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-        let opcode = Rv64LoadStoreOpcode::from_usize(record.local_opcode as usize);
-        let shift = record.shift_amount as usize;
         let read_data = record.read_data;
         let prev_data = record.prev_data;
         let core_row: &mut StoreWidthAlignedCoreCols<F, SELECTOR_WIDTH> = core_row.borrow_mut();
         let cases = store_width_aligned_cases::<KIND>();
         let case_idx = cases
             .iter()
-            .position(|case| case.opcode == opcode && case.byte_shift == shift)
-            .expect("invalid width-aligned store opcode/shift");
+            .position(|case| case.byte_shift == shift)
+            .expect("invalid width-aligned store shift");
 
         core_row.read_data = read_data.map(F::from_u16);
         core_row.prev_data = prev_data.map(F::from_u16);
@@ -272,7 +275,10 @@ where
     }
 
     fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {
-        let (adapter_row, _) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, _) = unsafe {
+            row_slice
+                .split_at_mut_unchecked(<Rv64StoreAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
+        };
         let adapter_row: &mut Rv64StoreAdapterCols<F> = adapter_row.borrow_mut();
         adapter_row.mem_as = F::from_u32(2);
     }

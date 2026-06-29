@@ -12,9 +12,7 @@ template <typename T> struct Rv64LoadHalfwordCols {
 };
 
 struct LoadHalfwordCore {
-    __device__ void fill_trace_row(RowSlice row, LoadRecord record) {
-        assert(record.local_opcode == LOADHU);
-        uint8_t shift = record.shift_amount;
+    __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
         uint32_t case_idx = shift >> 1;
 
         Encoder encoder(
@@ -47,7 +45,11 @@ __global__ void rv64_load_halfword_tracegen_kernel(
         );
         adapter.fill_trace_row(row, record.adapter);
         LoadHalfwordCore core;
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64LoadHalfwordCols, core)), record.core);
+        core.fill_trace_row(
+            row.slice_from(COL_INDEX(Rv64LoadHalfwordCols, core)),
+            record.core,
+            rv64_load_shift_amount(record.adapter)
+        );
     } else {
         row.fill_zero(0, width);
     }

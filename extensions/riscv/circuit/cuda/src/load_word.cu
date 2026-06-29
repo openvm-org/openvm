@@ -12,9 +12,7 @@ template <typename T> struct Rv64LoadWordCols {
 };
 
 struct LoadWordCore {
-    __device__ void fill_trace_row(RowSlice row, LoadRecord record) {
-        assert(record.local_opcode == LOADWU);
-        uint8_t shift = record.shift_amount;
+    __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
         uint32_t case_idx = shift >> 2;
 
         Encoder encoder(LOAD_WORD_CASES, LOAD_SELECTOR_MAX_DEGREE, true, LOAD_WORD_SELECTOR_WIDTH);
@@ -45,7 +43,11 @@ __global__ void rv64_load_word_tracegen_kernel(
         );
         adapter.fill_trace_row(row, record.adapter);
         LoadWordCore core;
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64LoadWordCols, core)), record.core);
+        core.fill_trace_row(
+            row.slice_from(COL_INDEX(Rv64LoadWordCols, core)),
+            record.core,
+            rv64_load_shift_amount(record.adapter)
+        );
     } else {
         row.fill_zero(0, width);
     }

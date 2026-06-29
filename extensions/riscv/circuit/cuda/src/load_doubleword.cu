@@ -12,9 +12,8 @@ template <typename T> struct Rv64LoadDoublewordCols {
 };
 
 struct LoadDoublewordCore {
-    __device__ void fill_trace_row(RowSlice row, LoadRecord record) {
-        assert(record.local_opcode == LOADD);
-        assert(record.shift_amount == 0);
+    __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
+        assert(shift == 0);
 
         Encoder encoder(
             LOAD_DOUBLEWORD_CASES, LOAD_SELECTOR_MAX_DEGREE, true, LOAD_DOUBLEWORD_SELECTOR_WIDTH
@@ -46,7 +45,11 @@ __global__ void rv64_load_doubleword_tracegen_kernel(
         );
         adapter.fill_trace_row(row, record.adapter);
         LoadDoublewordCore core;
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64LoadDoublewordCols, core)), record.core);
+        core.fill_trace_row(
+            row.slice_from(COL_INDEX(Rv64LoadDoublewordCols, core)),
+            record.core,
+            rv64_load_shift_amount(record.adapter)
+        );
     } else {
         row.fill_zero(0, width);
     }
