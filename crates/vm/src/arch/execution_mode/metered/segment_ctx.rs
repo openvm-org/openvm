@@ -29,7 +29,7 @@ pub struct SegmentationLimits {
 struct SegmentationParams {
     air_names: Vec<String>,
     total_widths: Vec<usize>,
-    stacked_main_widths: Vec<usize>,
+    common_main_widths: Vec<usize>,
     interactions: Vec<usize>,
     need_rot: Vec<bool>,
     max_trace_height: u32,
@@ -43,14 +43,14 @@ impl SegmentationParams {
     fn new(
         air_names: Vec<String>,
         total_widths: Vec<usize>,
-        stacked_main_widths: Vec<usize>,
+        common_main_widths: Vec<usize>,
         interactions: Vec<usize>,
         need_rot: Vec<bool>,
         limits: SegmentationLimits,
         memory_config: ProvingMemoryConfig,
     ) -> Self {
         assert_eq!(air_names.len(), total_widths.len());
-        assert_eq!(air_names.len(), stacked_main_widths.len());
+        assert_eq!(air_names.len(), common_main_widths.len());
         assert_eq!(air_names.len(), interactions.len());
         assert_eq!(air_names.len(), need_rot.len());
         assert!(
@@ -70,7 +70,7 @@ impl SegmentationParams {
         Self {
             air_names,
             total_widths,
-            stacked_main_widths,
+            common_main_widths,
             interactions,
             need_rot,
             max_trace_height,
@@ -86,10 +86,10 @@ impl SegmentationParams {
 struct AirMeteringParams {
     /// Current trace height for this AIR.
     height: u32,
-    /// All main trace columns, used for total main trace memory.
+    /// Full trace width, including common main, cached, and preprocessed columns.
     total_width: usize,
-    /// Main columns retained in the stacked matrix estimate.
-    stacked_main_width: usize,
+    /// Common main columns retained in the stacked matrix estimate.
+    common_main_width: usize,
     /// Row-interaction slots per row.
     interactions: usize,
     /// Whether main trace memory includes next-row rotation overhead.
@@ -164,7 +164,7 @@ impl SegmentationCtx {
     pub fn new(
         air_names: Vec<String>,
         total_widths: Vec<usize>,
-        stacked_main_widths: Vec<usize>,
+        common_main_widths: Vec<usize>,
         interactions: Vec<usize>,
         need_rot: Vec<bool>,
         limits: SegmentationLimits,
@@ -174,7 +174,7 @@ impl SegmentationCtx {
         let params = SegmentationParams::new(
             air_names,
             total_widths,
-            stacked_main_widths,
+            common_main_widths,
             interactions,
             need_rot,
             limits,
@@ -261,12 +261,12 @@ impl SegmentationCtx {
         self.params.memory_config.stacked_slice_height(height) * width
     }
 
-    /// Sum padded main trace cells, main columns included in the stacked-matrix estimate, and
+    /// Sum padded main trace cells, common main cells included in the stacked-matrix estimate, and
     /// interaction cells across all chips, splitting main cells by per-AIR `need_rot`.
     #[inline(always)]
     fn calculate_count_breakdown(&self, trace_heights: &[u32]) -> MeteredCounts {
         debug_assert_eq!(trace_heights.len(), self.params.total_widths.len());
-        debug_assert_eq!(trace_heights.len(), self.params.stacked_main_widths.len());
+        debug_assert_eq!(trace_heights.len(), self.params.common_main_widths.len());
         debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
         debug_assert_eq!(trace_heights.len(), self.params.need_rot.len());
 
@@ -274,16 +274,16 @@ impl SegmentationCtx {
         let airs = izip!(
             trace_heights,
             &self.params.total_widths,
-            &self.params.stacked_main_widths,
+            &self.params.common_main_widths,
             &self.params.interactions,
             &self.params.need_rot,
         )
         .map(
-            |(&height, &total_width, &stacked_main_width, &interactions, &need_rot)| {
+            |(&height, &total_width, &common_main_width, &interactions, &need_rot)| {
                 AirMeteringParams {
                     height,
                     total_width,
-                    stacked_main_width,
+                    common_main_width,
                     interactions,
                     need_rot,
                 }
@@ -297,10 +297,10 @@ impl SegmentationCtx {
             counts.unpadded_rows += unpadded_height;
             counts.padding_rows += padding_height;
             counts.stacked_unpadded_slice_cells +=
-                self.stacked_slice_cells(unpadded_height, air.stacked_main_width);
+                self.stacked_slice_cells(unpadded_height, air.common_main_width);
             counts.stacked_padded_slice_cells += self
-                .stacked_slice_cells(padded_height, air.stacked_main_width)
-                - self.stacked_slice_cells(unpadded_height, air.stacked_main_width);
+                .stacked_slice_cells(padded_height, air.common_main_width)
+                - self.stacked_slice_cells(unpadded_height, air.common_main_width);
             let main_unpadded_cells = unpadded_height * air.total_width;
             let main_padding_cells = padding_height * air.total_width;
             if air.need_rot {
@@ -316,12 +316,12 @@ impl SegmentationCtx {
         counts
     }
 
-    /// Sum padded main trace cells, main columns included in the stacked-matrix estimate, and
+    /// Sum padded main trace cells, common main cells included in the stacked-matrix estimate, and
     /// interaction cells across all chips, splitting main cells by per-AIR `need_rot`.
     #[inline(always)]
     fn calculate_cell_counts(&self, trace_heights: &[u32]) -> (usize, usize, usize, usize) {
         debug_assert_eq!(trace_heights.len(), self.params.total_widths.len());
-        debug_assert_eq!(trace_heights.len(), self.params.stacked_main_widths.len());
+        debug_assert_eq!(trace_heights.len(), self.params.common_main_widths.len());
         debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
         debug_assert_eq!(trace_heights.len(), self.params.need_rot.len());
 
@@ -332,16 +332,16 @@ impl SegmentationCtx {
         let airs = izip!(
             trace_heights,
             &self.params.total_widths,
-            &self.params.stacked_main_widths,
+            &self.params.common_main_widths,
             &self.params.interactions,
             &self.params.need_rot,
         )
         .map(
-            |(&height, &total_width, &stacked_main_width, &interactions, &need_rot)| {
+            |(&height, &total_width, &common_main_width, &interactions, &need_rot)| {
                 AirMeteringParams {
                     height,
                     total_width,
-                    stacked_main_width,
+                    common_main_width,
                     interactions,
                     need_rot,
                 }
@@ -351,7 +351,7 @@ impl SegmentationCtx {
         for air in airs {
             let padded_height = next_power_of_two_or_zero(air.height as usize);
             let main_cells = padded_height * air.total_width;
-            stacked_slice_cells += self.stacked_slice_cells(padded_height, air.stacked_main_width);
+            stacked_slice_cells += self.stacked_slice_cells(padded_height, air.common_main_width);
             if air.need_rot {
                 main_cnt_with_rot += main_cells;
             } else {
@@ -451,7 +451,7 @@ impl SegmentationCtx {
         debug_assert_eq!(trace_heights.len(), is_trace_height_constant.len());
         debug_assert_eq!(trace_heights.len(), self.params.air_names.len());
         debug_assert_eq!(trace_heights.len(), self.params.total_widths.len());
-        debug_assert_eq!(trace_heights.len(), self.params.stacked_main_widths.len());
+        debug_assert_eq!(trace_heights.len(), self.params.common_main_widths.len());
         debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
         debug_assert_eq!(trace_heights.len(), self.params.need_rot.len());
 
@@ -473,16 +473,16 @@ impl SegmentationCtx {
         let airs = izip!(
             trace_heights,
             &self.params.total_widths,
-            &self.params.stacked_main_widths,
+            &self.params.common_main_widths,
             &self.params.interactions,
             &self.params.need_rot,
         )
         .map(
-            |(&height, &total_width, &stacked_main_width, &interactions, &need_rot)| {
+            |(&height, &total_width, &common_main_width, &interactions, &need_rot)| {
                 AirMeteringParams {
                     height,
                     total_width,
-                    stacked_main_width,
+                    common_main_width,
                     interactions,
                     need_rot,
                 }
@@ -510,7 +510,7 @@ impl SegmentationCtx {
             }
             let main_cells = padded_height as usize * air.total_width;
             stacked_slice_cells +=
-                self.stacked_slice_cells(padded_height as usize, air.stacked_main_width);
+                self.stacked_slice_cells(padded_height as usize, air.common_main_width);
             if air.need_rot {
                 main_cnt_with_rot += main_cells;
             } else {

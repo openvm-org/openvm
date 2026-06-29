@@ -861,7 +861,7 @@ where
             mut constant_trace_heights,
             air_names,
             total_widths,
-            stacked_main_widths,
+            common_main_widths,
             interactions,
             need_rot,
         ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = self
@@ -914,7 +914,7 @@ where
                 constant_trace_heights: &constant_trace_heights,
                 air_names: &air_names,
                 total_widths: &total_widths,
-                stacked_main_widths: &stacked_main_widths,
+                common_main_widths: &common_main_widths,
                 interactions: &interactions,
                 need_rot: &need_rot,
                 segmentation_limits: SegmentationLimits {

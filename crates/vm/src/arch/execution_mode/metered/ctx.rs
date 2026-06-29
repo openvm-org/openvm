@@ -31,7 +31,7 @@ pub struct MeteredCtxInputs<'a> {
     pub constant_trace_heights: &'a [Option<usize>],
     pub air_names: &'a [String],
     pub total_widths: &'a [usize],
-    pub stacked_main_widths: &'a [usize],
+    pub common_main_widths: &'a [usize],
     pub interactions: &'a [usize],
     pub need_rot: &'a [bool],
     pub segmentation_limits: SegmentationLimits,
@@ -59,7 +59,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         let segmentation_ctx = SegmentationCtx::new(
             inputs.air_names.to_vec(),
             inputs.total_widths.to_vec(),
-            inputs.stacked_main_widths.to_vec(),
+            inputs.common_main_widths.to_vec(),
             inputs.interactions.to_vec(),
             inputs.need_rot.to_vec(),
             inputs.segmentation_limits,
