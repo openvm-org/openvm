@@ -8,7 +8,7 @@ use rvr_openvm_ir::{Instr, InstrAt, LiftedInstr};
 use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
 use strum::EnumCount;
 
-use crate::{pad_modulus, ArithKind, FieldArithInstr, FieldSetupInstr, KnownField, ModOp};
+use crate::{pad_modulus, ArithKind, FieldArithInstr, FieldKind, FieldSetupInstr, KnownField, ModOp, SetupKind};
 
 /// Per-modulus info for the Fp2 extension. Fp2 lifting never consults a
 /// non-QR, so we only carry the padded modulus and limb count.
@@ -34,10 +34,7 @@ fn make_modulus_info(modulus: BigUint) -> ModulusInfo {
 #[derive(Debug, Clone)]
 pub(crate) struct Fp2ArithKind;
 
-impl ArithKind for Fp2ArithKind {
-    fn opname() -> &'static str {
-        "fp2_arith"
-    }
+impl FieldKind for Fp2ArithKind {
     fn c_prefix() -> &'static str {
         "fp2"
     }
@@ -46,11 +43,23 @@ impl ArithKind for Fp2ArithKind {
     }
 }
 
+impl ArithKind for Fp2ArithKind {
+    fn opname() -> &'static str {
+        "fp2_arith"
+    }
+}
+
+impl SetupKind for Fp2ArithKind {
+    fn opname() -> &'static str {
+        "fp2_setup"
+    }
+}
+
 /// IR node for Fp2 arithmetic (ADD, SUB, MUL, DIV).
 pub(crate) type Fp2ArithInstr = FieldArithInstr<Fp2ArithKind>;
 
 /// IR node for Fp2 SETUP (SETUP_ADDSUB, SETUP_MULDIV).
-pub type Fp2SetupInstr = FieldSetupInstr;
+pub(crate) type Fp2SetupInstr = FieldSetupInstr<Fp2ArithKind>;
 
 // ── Fp2 extension ────────────────────────────────────────────────────────────
 
@@ -120,14 +129,14 @@ impl Fp2RvrExtension {
             x if x == Fp2Opcode::SUB as usize => Instr::Ext(Box::new(
                 Fp2ArithInstr::new(ModOp::Sub, rd_reg, rs1_reg, rs2_reg, info.num_limbs, info.modulus_bytes.clone()),
             )),
-            x if x == Fp2Opcode::SETUP_ADDSUB as usize => Instr::Ext(Box::new(Fp2SetupInstr::new("rvr_ext_fp2_setup", rd_reg, rs1_reg, rs2_reg, info.num_limbs))),
+            x if x == Fp2Opcode::SETUP_ADDSUB as usize => Instr::Ext(Box::new(Fp2SetupInstr::new(rd_reg, rs1_reg, rs2_reg, info.num_limbs))),
             x if x == Fp2Opcode::MUL as usize => Instr::Ext(Box::new(
                 Fp2ArithInstr::new(ModOp::Mul, rd_reg, rs1_reg, rs2_reg, info.num_limbs, info.modulus_bytes.clone()),
             )),
             x if x == Fp2Opcode::DIV as usize => Instr::Ext(Box::new(
                 Fp2ArithInstr::new(ModOp::Div, rd_reg, rs1_reg, rs2_reg, info.num_limbs, info.modulus_bytes.clone()),
             )),
-            x if x == Fp2Opcode::SETUP_MULDIV as usize => Instr::Ext(Box::new(Fp2SetupInstr::new("rvr_ext_fp2_setup", rd_reg, rs1_reg, rs2_reg, info.num_limbs))),
+            x if x == Fp2Opcode::SETUP_MULDIV as usize => Instr::Ext(Box::new(Fp2SetupInstr::new(rd_reg, rs1_reg, rs2_reg, info.num_limbs))),
             _ => return None,
         };
 

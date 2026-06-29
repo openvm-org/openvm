@@ -4,14 +4,32 @@ use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Reg};
 
 use crate::{detect_known_field, format_c_byte_array, KnownField, ModOp};
 
-/// Marker trait implemented by zero-sized types that parameterize
-/// [`FieldArithInstr`], supplying the C prefix and known-field suffix lookup.
-pub(crate) trait ArithKind: Clone + Debug + Send + Sync + 'static {
-    fn opname() -> &'static str;
+/// Base trait for zero-sized marker types that identify a field kind (modular
+/// or Fp2). Provides the C function prefix and known-field suffix lookup used
+/// by all three instruction families (arith, iseq, setup).
+pub(crate) trait FieldKind: Clone + Debug + Send + Sync + 'static {
     fn c_prefix() -> &'static str;
     /// Returns the C suffix for a known field, or `None` to fall through to the
     /// generic path.
     fn known_suffix(field: KnownField) -> Option<&'static str>;
+}
+
+/// Extension of [`FieldKind`] for the arithmetic instruction family. Adds the
+/// IR opname used by [`FieldArithInstr`].
+pub(crate) trait ArithKind: FieldKind {
+    fn opname() -> &'static str;
+}
+
+/// Extension of [`FieldKind`] for the setup instruction family. Adds the
+/// IR opname used by [`FieldSetupInstr`].
+pub(crate) trait SetupKind: FieldKind {
+    fn opname() -> &'static str;
+}
+
+/// Extension of [`FieldKind`] for the IS_EQ instruction family. Adds the
+/// IR opname used by [`FieldIsEqInstr`]. Not implemented for Fp2 — fp2 has no IS_EQ.
+pub(crate) trait IsEqKind: FieldKind {
+    fn opname() -> &'static str;
 }
 
 /// Generic IR node for field arithmetic (ADD, SUB, MUL, DIV).
@@ -44,7 +62,7 @@ impl<K: ArithKind> FieldArithInstr<K> {
 /// Generic IR node for field IS_EQ.
 /// Use the type alias [`crate::ModIsEqInstr`] rather than naming this type directly.
 #[derive(Debug, Clone)]
-pub(crate) struct FieldIsEqInstr<K: ArithKind> {
+pub(crate) struct FieldIsEqInstr<K: IsEqKind> {
     _kind: PhantomData<K>,
     pub rd_reg: Reg,
     pub rs1_reg: Reg,
@@ -53,7 +71,7 @@ pub(crate) struct FieldIsEqInstr<K: ArithKind> {
     pub modulus: Vec<u8>,
 }
 
-impl<K: ArithKind> FieldIsEqInstr<K> {
+impl<K: IsEqKind> FieldIsEqInstr<K> {
     pub fn new(
         rd_reg: Reg,
         rs1_reg: Reg,
@@ -65,9 +83,51 @@ impl<K: ArithKind> FieldIsEqInstr<K> {
     }
 }
 
-impl<K: ArithKind> ExtInstr for FieldIsEqInstr<K> {
+/// Generic IR node for field setup (SETUP_ADDSUB, SETUP_MULDIV, SETUP_ISEQ).
+/// The C function name is derived from `K::c_prefix()` as `rvr_ext_{prefix}_setup`.
+/// Use the type aliases [`crate::ModSetupInstr`] / [`crate::Fp2SetupInstr`]
+/// rather than naming this type directly.
+#[derive(Debug, Clone)]
+pub(crate) struct FieldSetupInstr<K: SetupKind> {
+    _kind: PhantomData<K>,
+    pub rd_reg: Reg,
+    pub rs1_reg: Reg,
+    pub rs2_reg: Reg,
+    pub num_limbs: u32,
+}
+
+impl<K: SetupKind> FieldSetupInstr<K> {
+    pub fn new(rd_reg: Reg, rs1_reg: Reg, rs2_reg: Reg, num_limbs: u32) -> Self {
+        Self { _kind: PhantomData, rd_reg, rs1_reg, rs2_reg, num_limbs }
+    }
+}
+
+impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
     fn opname(&self) -> &str {
-        "iseq_opname"
+        K::opname()
+    }
+
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let rd = ctx.read_reg(self.rd_reg);
+        let rs1 = ctx.read_reg(self.rs1_reg);
+        let rs2 = ctx.read_reg(self.rs2_reg);
+        let num_limbs = format!("{}u", self.num_limbs);
+        let name = format!("rvr_ext_{}_setup", K::c_prefix());
+        ctx.extern_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs]);
+    }
+
+    fn clone_box(&self) -> Box<dyn ExtInstr> {
+        Box::new(self.clone())
+    }
+
+    fn is_block_end(&self) -> bool {
+        false
+    }
+}
+
+impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
+    fn opname(&self) -> &str {
+        K::opname()
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
@@ -93,46 +153,6 @@ impl<K: ArithKind> ExtInstr for FieldIsEqInstr<K> {
             ctx.write_reg(self.rd_reg, &val);
             ctx.write_line("}");
         }
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
-    }
-
-    fn is_block_end(&self) -> bool {
-        false
-    }
-}
-
-/// Generic IR node for field setup (SETUP_ADDSUB, SETUP_MULDIV, SETUP_ISEQ).
-/// Use the type aliases [`crate::ModSetupInstr`] / [`crate::Fp2SetupInstr`]
-/// rather than naming this type directly.
-#[derive(Debug, Clone)]
-pub struct FieldSetupInstr {
-    c_fn: &'static str,
-    pub rd_reg: Reg,
-    pub rs1_reg: Reg,
-    pub rs2_reg: Reg,
-    pub num_limbs: u32,
-}
-
-impl FieldSetupInstr {
-    pub fn new(c_fn: &'static str, rd_reg: Reg, rs1_reg: Reg, rs2_reg: Reg, num_limbs: u32) -> Self {
-        Self { c_fn, rd_reg, rs1_reg, rs2_reg, num_limbs }
-    }
-}
-
-impl ExtInstr for FieldSetupInstr {
-    fn opname(&self) -> &str {
-        &self.c_fn["rvr_ext_".len()..]
-    }
-
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
-        let num_limbs = format!("{}u", self.num_limbs);
-        ctx.extern_call(self.c_fn, &["state", &rd, &rs1, &rs2, &num_limbs]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
