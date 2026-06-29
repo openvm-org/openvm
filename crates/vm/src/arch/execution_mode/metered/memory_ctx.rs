@@ -7,7 +7,8 @@ use openvm_instructions::{
 };
 
 use super::page_tracker::{
-    leaf_mask_range, DefaultOldCounts, MemoryOccupancyTracker, MemoryPageTracker,
+    leaf_mask_range, CommittedMemoryOccupancyTracker, DefaultOldAccounting,
+    SegmentMemoryPageTracker,
 };
 pub use super::page_tracker::PageAccess;
 use crate::{
@@ -57,10 +58,10 @@ pub struct MemoryCtx {
     memory_dimensions: MemoryDimensions,
     /// Segment-local occupancy. Cleared at segment boundaries; it prevents
     /// charging the same leaf or Merkle node twice inside one segment.
-    page_tracker: MemoryPageTracker,
+    page_tracker: SegmentMemoryPageTracker,
     /// Committed occupancy at the last safe checkpoint, seeded with nonzero
     /// initial memory. This tells us whether an old value is canonical default.
-    occupancy_tracker: MemoryOccupancyTracker,
+    occupancy_tracker: CommittedMemoryOccupancyTracker,
     pub page_indices_since_checkpoint: Vec<PageAccess>,
     pub page_indices_since_checkpoint_len: usize,
     page_indices_applied_len: usize,
@@ -70,7 +71,7 @@ pub struct MemoryCtx {
     pending_occupancy_updates: Vec<PageAccess>,
     pending_leaves: u32,
     pending_merkle_nodes: u32,
-    pending_default_old: DefaultOldCounts,
+    pending_default_old: DefaultOldAccounting,
 }
 
 impl MemoryCtx {
@@ -83,15 +84,15 @@ impl MemoryCtx {
 
         Self {
             memory_dimensions,
-            page_tracker: MemoryPageTracker::new(upper_height),
-            occupancy_tracker: MemoryOccupancyTracker::new(upper_height),
+            page_tracker: SegmentMemoryPageTracker::new(upper_height),
+            occupancy_tracker: CommittedMemoryOccupancyTracker::new(upper_height),
             page_indices_since_checkpoint: Vec::with_capacity(checkpoint_capacity),
             page_indices_since_checkpoint_len: 0,
             page_indices_applied_len: 0,
             pending_occupancy_updates: Vec::with_capacity(checkpoint_capacity),
             pending_leaves: 0,
             pending_merkle_nodes: 0,
-            pending_default_old: DefaultOldCounts::default(),
+            pending_default_old: DefaultOldAccounting::default(),
         }
     }
 
@@ -228,13 +229,13 @@ impl MemoryCtx {
                 access.leaf_mask,
                 &self.occupancy_tracker,
             );
-            if delta.added_mask != 0 {
-                self.pending_leaves += delta.leaves;
-                self.pending_merkle_nodes += delta.merkle_nodes;
+            if delta.newly_charged_leaf_mask != 0 {
+                self.pending_leaves += delta.new_leaves;
+                self.pending_merkle_nodes += delta.new_merkle_nodes;
                 push_page_access(
                     &mut self.pending_occupancy_updates,
                     page_id,
-                    delta.added_mask,
+                    delta.newly_charged_leaf_mask,
                 );
                 self.pending_default_old.add(delta.default_old);
             }
@@ -251,7 +252,7 @@ impl MemoryCtx {
         self.pending_occupancy_updates.clear();
         self.pending_leaves = 0;
         self.pending_merkle_nodes = 0;
-        self.pending_default_old = DefaultOldCounts::default();
+        self.pending_default_old = DefaultOldAccounting::default();
 
         // Reset trace heights for memory chips as 0
         // SAFETY: BOUNDARY_AIR_ID and MERKLE_AIR_ID are compile-time constants within bounds
@@ -274,7 +275,7 @@ impl MemoryCtx {
         self.pending_occupancy_updates.clear();
         self.pending_leaves = 0;
         self.pending_merkle_nodes = 0;
-        self.pending_default_old = DefaultOldCounts::default();
+        self.pending_default_old = DefaultOldAccounting::default();
 
         // Reset trace heights for memory chips as 0
         // SAFETY: BOUNDARY_AIR_ID and MERKLE_AIR_ID are compile-time constants within bounds
@@ -306,7 +307,7 @@ impl MemoryCtx {
         self.pending_occupancy_updates.clear();
         self.pending_leaves = 0;
         self.pending_merkle_nodes = 0;
-        self.pending_default_old = DefaultOldCounts::default();
+        self.pending_default_old = DefaultOldAccounting::default();
     }
 
     /// Applies memory height deltas recorded since the last checkpoint.
@@ -324,7 +325,7 @@ impl MemoryCtx {
         let mut default_old = self.pending_default_old;
         self.pending_leaves = 0;
         self.pending_merkle_nodes = 0;
-        self.pending_default_old = DefaultOldCounts::default();
+        self.pending_default_old = DefaultOldAccounting::default();
 
         let len = self.page_indices_since_checkpoint.len();
         let ptr = self.page_indices_since_checkpoint.as_ptr();
@@ -336,13 +337,13 @@ impl MemoryCtx {
                 access.leaf_mask,
                 &self.occupancy_tracker,
             );
-            if delta.added_mask != 0 {
-                leaves += delta.leaves;
-                merkle_nodes += delta.merkle_nodes;
+            if delta.newly_charged_leaf_mask != 0 {
+                leaves += delta.new_leaves;
+                merkle_nodes += delta.new_merkle_nodes;
                 push_page_access(
                     &mut self.pending_occupancy_updates,
                     access.page_id,
-                    delta.added_mask,
+                    delta.newly_charged_leaf_mask,
                 );
                 default_old.add(delta.default_old);
             }
@@ -356,8 +357,8 @@ impl MemoryCtx {
         debug_assert!(trace_heights.len() >= 2);
         let poseidon2_idx = trace_heights.len() - 2;
         let old_default_poseidon_rows = default_old.estimated_poseidon_rows();
-        let old_nondefault_poseidon_rows =
-            (leaves + merkle_nodes).saturating_sub(default_old.leaves + default_old.merkle_nodes);
+        let old_nondefault_poseidon_rows = (leaves + merkle_nodes)
+            .saturating_sub(default_old.default_leaves + default_old.default_merkle_nodes);
         let poseidon2_rows =
             leaves + merkle_nodes + old_nondefault_poseidon_rows + old_default_poseidon_rows;
         // SAFETY: BOUNDARY_AIR_ID, MERKLE_AIR_ID, and poseidon2_idx are all within bounds
