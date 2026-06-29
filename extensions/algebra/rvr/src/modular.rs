@@ -12,8 +12,8 @@ use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
 use strum::EnumCount;
 
 use crate::{
-    detect_known_field, format_c_byte_array, pad_modulus, ArithKind, FieldArithInstr, KnownField,
-    ModOp,
+    detect_known_field, format_c_byte_array, pad_modulus, ArithKind, FieldArithInstr,
+    FieldSetupInstr, KnownField, ModOp,
 };
 
 include!(concat!(env!("OUT_DIR"), "/secp256k1_files.rs"));
@@ -117,35 +117,7 @@ impl ExtInstr for ModIsEqInstr {
 }
 
 /// IR node for modular SETUP (SETUP_ADDSUB, SETUP_MULDIV, SETUP_ISEQ).
-#[derive(Debug, Clone)]
-pub struct ModSetupInstr {
-    pub rd_reg: Reg,
-    pub rs1_reg: Reg,
-    pub rs2_reg: Reg,
-    pub num_limbs: u32,
-}
-
-impl ExtInstr for ModSetupInstr {
-    fn opname(&self) -> &str {
-        "mod_setup"
-    }
-
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
-        let num_limbs = format!("{}u", self.num_limbs);
-        ctx.extern_call("rvr_ext_mod_setup", &["state", &rd, &rs1, &rs2, &num_limbs]);
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
-    }
-
-    fn is_block_end(&self) -> bool {
-        false
-    }
-}
+pub type ModSetupInstr = FieldSetupInstr;
 
 // ── Phantom instructions (HintNonQr, HintSqrt) ──────────────────────────────
 
@@ -341,7 +313,7 @@ impl ModularRvrExtension {
                 ModArithInstr::new(ModOp::Sub, rd_reg, rs1_reg, rs2_reg, info.num_limbs, info.modulus_bytes.clone()),
             )),
             x if x == Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize => {
-                Instr::Ext(Box::new(ModSetupInstr { rd_reg, rs1_reg, rs2_reg, num_limbs: info.num_limbs }))
+                Instr::Ext(Box::new(ModSetupInstr::new("rvr_ext_mod_setup", rd_reg, rs1_reg, rs2_reg, info.num_limbs)))
             }
             x if x == Rv64ModularArithmeticOpcode::MUL as usize => Instr::Ext(Box::new(
                 ModArithInstr::new(ModOp::Mul, rd_reg, rs1_reg, rs2_reg, info.num_limbs, info.modulus_bytes.clone()),
@@ -350,7 +322,7 @@ impl ModularRvrExtension {
                 ModArithInstr::new(ModOp::Div, rd_reg, rs1_reg, rs2_reg, info.num_limbs, info.modulus_bytes.clone()),
             )),
             x if x == Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize => {
-                Instr::Ext(Box::new(ModSetupInstr { rd_reg, rs1_reg, rs2_reg, num_limbs: info.num_limbs }))
+                Instr::Ext(Box::new(ModSetupInstr::new("rvr_ext_mod_setup", rd_reg, rs1_reg, rs2_reg, info.num_limbs)))
             }
             x if x == Rv64ModularArithmeticOpcode::IS_EQ as usize => {
                 Instr::Ext(Box::new(ModIsEqInstr {
@@ -362,7 +334,7 @@ impl ModularRvrExtension {
                 }))
             }
             x if x == Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize => {
-                Instr::Ext(Box::new(ModSetupInstr { rd_reg, rs1_reg, rs2_reg, num_limbs: info.num_limbs }))
+                Instr::Ext(Box::new(ModSetupInstr::new("rvr_ext_mod_setup", rd_reg, rs1_reg, rs2_reg, info.num_limbs)))
             }
             _ => return None,
         };

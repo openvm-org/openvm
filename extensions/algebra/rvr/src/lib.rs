@@ -6,13 +6,13 @@
 //! (modular + phantoms; ships the lift-time C and libsecp256k1 inputs for
 //! k256) and [`Fp2RvrExtension`] (fp2 ops only; Rust-only).
 
-mod field_arith;
+mod common;
 mod fp2;
 mod modular;
 
 use num_bigint::BigUint;
 
-pub use field_arith::{ArithKind, FieldArithInstr};
+pub use common::{ArithKind, FieldArithInstr, FieldSetupInstr};
 pub use fp2::{Fp2ArithInstr, Fp2ArithKind, Fp2RvrExtension, Fp2SetupInstr};
 pub use modular::{
     HintNonQrInstr, HintSqrtInstr, ModArithInstr, ModArithKind, ModIsEqInstr, ModSetupInstr,
