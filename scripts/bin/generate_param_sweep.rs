@@ -13,7 +13,9 @@ struct ParamSet {
 }
 
 fn main() {
-    let output_dir = std::env::args().nth(1).unwrap_or_else(|| env!("CARGO_MANIFEST_DIR").to_string());
+    let output_dir = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| env!("CARGO_MANIFEST_DIR").to_string());
     generate_interesting_internal_params(&output_dir);
     generate_interesting_root_params(&output_dir);
 }
