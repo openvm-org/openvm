@@ -857,26 +857,29 @@ where
     {
         let program_len = exe.program.num_defined_instructions();
 
-        let (mut constant_trace_heights, air_names, widths, interactions, need_rot): (
-            Vec<_>,
-            Vec<_>,
-            Vec<_>,
-            Vec<_>,
-            Vec<_>,
-        ) = self
+        let (
+            mut constant_trace_heights,
+            air_names,
+            total_widths,
+            common_main_widths,
+            interactions,
+            need_rot,
+        ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = self
             .pk
             .per_air
             .iter()
             .map(|pk| {
                 let constant_trace_height = pk.preprocessed_data.as_ref().map(|cd| cd.height());
                 let air_names = pk.air_name.clone();
-                let width = pk.vk.params.width.total_width();
+                let width = &pk.vk.params.width;
+                // The retained stacked matrix only stores the common main columns.
                 let num_interactions = pk.vk.symbolic_constraints.interactions.len();
                 let need_rot = pk.vk.params.need_rot;
                 (
                     constant_trace_height,
                     air_names,
-                    width,
+                    width.total_width(),
+                    width.common_main,
                     num_interactions,
                     need_rot,
                 )
@@ -910,7 +913,8 @@ where
             MeteredCtxInputs {
                 constant_trace_heights: &constant_trace_heights,
                 air_names: &air_names,
-                widths: &widths,
+                total_widths: &total_widths,
+                common_main_widths: &common_main_widths,
                 interactions: &interactions,
                 need_rot: &need_rot,
                 segmentation_limits: SegmentationLimits {
