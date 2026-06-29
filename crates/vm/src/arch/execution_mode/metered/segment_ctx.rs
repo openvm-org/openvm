@@ -81,6 +81,15 @@ impl SegmentationParams {
     }
 }
 
+#[derive(Clone, Copy)]
+struct AirMeteringParams {
+    height: u32,
+    total_width: usize,
+    stacked_main_width: usize,
+    interactions: usize,
+    need_rot: bool,
+}
+
 #[derive(Clone, Debug)]
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
@@ -256,35 +265,47 @@ impl SegmentationCtx {
         debug_assert_eq!(trace_heights.len(), self.params.need_rot.len());
 
         let mut counts = MeteredCounts::default();
-        for ((((&height, &total_width), &stacked_main_width), &interactions), &need_rot) in
-            trace_heights
-                .iter()
-                .zip(self.params.total_widths.iter())
-                .zip(self.params.stacked_main_widths.iter())
-                .zip(self.params.interactions.iter())
-                .zip(self.params.need_rot.iter())
-        {
-            let padded_height = next_power_of_two_or_zero(height as usize);
-            let unpadded_height = height as usize;
+        let airs = itertools::izip!(
+            trace_heights,
+            &self.params.total_widths,
+            &self.params.stacked_main_widths,
+            &self.params.interactions,
+            &self.params.need_rot,
+        )
+        .map(
+            |(&height, &total_width, &stacked_main_width, &interactions, &need_rot)| {
+                AirMeteringParams {
+                    height,
+                    total_width,
+                    stacked_main_width,
+                    interactions,
+                    need_rot,
+                }
+            },
+        );
+
+        for air in airs {
+            let padded_height = next_power_of_two_or_zero(air.height as usize);
+            let unpadded_height = air.height as usize;
             let padding_height = padded_height - unpadded_height;
             counts.unpadded_rows += unpadded_height;
             counts.padding_rows += padding_height;
             counts.stacked_unpadded_slice_cells +=
-                self.stacked_slice_cells(unpadded_height, stacked_main_width);
+                self.stacked_slice_cells(unpadded_height, air.stacked_main_width);
             counts.stacked_padded_slice_cells += self
-                .stacked_slice_cells(padded_height, stacked_main_width)
-                - self.stacked_slice_cells(unpadded_height, stacked_main_width);
-            let main_unpadded_cells = unpadded_height * total_width;
-            let main_padding_cells = padding_height * total_width;
-            if need_rot {
+                .stacked_slice_cells(padded_height, air.stacked_main_width)
+                - self.stacked_slice_cells(unpadded_height, air.stacked_main_width);
+            let main_unpadded_cells = unpadded_height * air.total_width;
+            let main_padding_cells = padding_height * air.total_width;
+            if air.need_rot {
                 counts.main_unpadded_with_rot += main_unpadded_cells;
                 counts.main_padding_with_rot += main_padding_cells;
             } else {
                 counts.main_unpadded_no_rot += main_unpadded_cells;
                 counts.main_padding_no_rot += main_padding_cells;
             }
-            counts.interaction_cells_unpadded += unpadded_height * interactions;
-            counts.interaction_cells_padding += padding_height * interactions;
+            counts.interaction_cells_unpadded += unpadded_height * air.interactions;
+            counts.interaction_cells_padding += padding_height * air.interactions;
         }
         counts
     }
@@ -302,23 +323,35 @@ impl SegmentationCtx {
         let mut main_cnt_no_rot = 0;
         let mut stacked_slice_cells = 0;
         let mut interaction_cells = 0;
-        for ((((&height, &total_width), &stacked_main_width), &interactions), &need_rot) in
-            trace_heights
-                .iter()
-                .zip(self.params.total_widths.iter())
-                .zip(self.params.stacked_main_widths.iter())
-                .zip(self.params.interactions.iter())
-                .zip(self.params.need_rot.iter())
-        {
-            let padded_height = next_power_of_two_or_zero(height as usize);
-            let main_cells = padded_height * total_width;
-            stacked_slice_cells += self.stacked_slice_cells(padded_height, stacked_main_width);
-            if need_rot {
+        let airs = itertools::izip!(
+            trace_heights,
+            &self.params.total_widths,
+            &self.params.stacked_main_widths,
+            &self.params.interactions,
+            &self.params.need_rot,
+        )
+        .map(
+            |(&height, &total_width, &stacked_main_width, &interactions, &need_rot)| {
+                AirMeteringParams {
+                    height,
+                    total_width,
+                    stacked_main_width,
+                    interactions,
+                    need_rot,
+                }
+            },
+        );
+
+        for air in airs {
+            let padded_height = next_power_of_two_or_zero(air.height as usize);
+            let main_cells = padded_height * air.total_width;
+            stacked_slice_cells += self.stacked_slice_cells(padded_height, air.stacked_main_width);
+            if air.need_rot {
                 main_cnt_with_rot += main_cells;
             } else {
                 main_cnt_no_rot += main_cells;
             }
-            interaction_cells += padded_height * interactions;
+            interaction_cells += padded_height * air.interactions;
         }
         (
             main_cnt_with_rot,
@@ -431,25 +464,27 @@ impl SegmentationCtx {
         let mut main_cnt_no_rot = 0usize;
         let mut stacked_slice_cells = 0usize;
         let mut interaction_cells = 0usize;
-        for (
-            i,
-            (
-                (
-                    (((padded_height, &total_width), &stacked_main_width), &interactions),
-                    is_constant,
-                ),
-                &need_rot,
-            ),
-        ) in trace_heights
-            .iter()
-            .map(|&height| next_power_of_two_or_zero(height as usize) as u32)
-            .zip(self.params.total_widths.iter())
-            .zip(self.params.stacked_main_widths.iter())
-            .zip(self.params.interactions.iter())
-            .zip(is_trace_height_constant.iter())
-            .zip(self.params.need_rot.iter())
-            .enumerate()
-        {
+        let airs = itertools::izip!(
+            trace_heights,
+            &self.params.total_widths,
+            &self.params.stacked_main_widths,
+            &self.params.interactions,
+            &self.params.need_rot,
+        )
+        .map(
+            |(&height, &total_width, &stacked_main_width, &interactions, &need_rot)| {
+                AirMeteringParams {
+                    height,
+                    total_width,
+                    stacked_main_width,
+                    interactions,
+                    need_rot,
+                }
+            },
+        );
+
+        for (i, (air, &is_constant)) in airs.zip(is_trace_height_constant).enumerate() {
+            let padded_height = next_power_of_two_or_zero(air.height as usize) as u32;
             // Only segment if the height is not constant and exceeds the maximum height after
             // padding
             if !is_constant && padded_height > self.params.max_trace_height {
@@ -467,15 +502,15 @@ impl SegmentationCtx {
                     air_id: i,
                 });
             }
-            let main_cells = padded_height as usize * total_width;
+            let main_cells = padded_height as usize * air.total_width;
             stacked_slice_cells +=
-                self.stacked_slice_cells(padded_height as usize, stacked_main_width);
-            if need_rot {
+                self.stacked_slice_cells(padded_height as usize, air.stacked_main_width);
+            if air.need_rot {
                 main_cnt_with_rot += main_cells;
             } else {
                 main_cnt_no_rot += main_cells;
             }
-            interaction_cells += padded_height as usize * interactions;
+            interaction_cells += padded_height as usize * air.interactions;
         }
 
         let (total_memory, main_memory, interaction_memory) = self.counts_to_memory(
@@ -732,14 +767,15 @@ impl SegmentationCtx {
     fn emit_metered_air_metrics(&self, segment: &str, trace_heights: &[u32]) {
         let memory_config = self.params.memory_config;
 
-        for (air_id, ((((&height, &total_width), &interactions), &need_rot), air_name)) in
-            trace_heights
-                .iter()
-                .zip(self.params.total_widths.iter())
-                .zip(self.params.interactions.iter())
-                .zip(self.params.need_rot.iter())
-                .zip(self.params.air_names.iter())
-                .enumerate()
+        for (air_id, (&height, &total_width, &interactions, &need_rot, air_name)) in
+            itertools::izip!(
+                trace_heights,
+                &self.params.total_widths,
+                &self.params.interactions,
+                &self.params.need_rot,
+                &self.params.air_names,
+            )
+            .enumerate()
         {
             let padded_height = next_power_of_two_or_zero(height as usize);
             let unpadded_height = height as usize;
