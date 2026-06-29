@@ -1,0 +1,106 @@
+#include "riscv/cores/store.cuh"
+
+template <typename T> struct StoreByteCoreCols {
+    T selector[STORE_BYTE_SELECTOR_WIDTH];
+    T is_valid;
+    T read_cell_bytes[2];
+    T prev_cell_bytes[2];
+    T read_data[BLOCK_FE_WIDTH];
+    T prev_data[BLOCK_FE_WIDTH];
+};
+
+template <typename T> struct Rv64StoreByteCols {
+    Rv64StoreAdapterCols<T> adapter;
+    StoreByteCoreCols<T> core;
+};
+
+struct StoreByteCore {
+    BitwiseOperationLookup bitwise_lookup;
+
+    __device__ StoreByteCore(BitwiseOperationLookup bitwise_lookup)
+        : bitwise_lookup(bitwise_lookup) {}
+
+    __device__ void fill_trace_row(RowSlice row, StoreRecord record) {
+        assert(record.local_opcode == STOREB);
+        uint8_t shift = record.shift_amount;
+        uint8_t cell_shift = shift >> 1;
+
+        uint16_t read_cell_bytes[2] = {
+            store_byte_from_cell(record.read_data[0], 0),
+            store_byte_from_cell(record.read_data[0], 1),
+        };
+        uint16_t prev_cell_bytes[2] = {
+            store_byte_from_cell(record.prev_data[cell_shift], 0),
+            store_byte_from_cell(record.prev_data[cell_shift], 1),
+        };
+        bitwise_lookup.add_range(read_cell_bytes[0], read_cell_bytes[1]);
+        bitwise_lookup.add_range(prev_cell_bytes[0], prev_cell_bytes[1]);
+
+        Encoder encoder(
+            STORE_BYTE_CASES, STORE_SELECTOR_MAX_DEGREE, true, STORE_BYTE_SELECTOR_WIDTH
+        );
+        encoder.write_flag_pt(row.slice_from(COL_INDEX(StoreByteCoreCols, selector)), shift);
+        COL_WRITE_VALUE(row, StoreByteCoreCols, is_valid, 1);
+        COL_WRITE_ARRAY(row, StoreByteCoreCols, read_cell_bytes, read_cell_bytes);
+        COL_WRITE_ARRAY(row, StoreByteCoreCols, prev_cell_bytes, prev_cell_bytes);
+        COL_WRITE_ARRAY(row, StoreByteCoreCols, read_data, record.read_data);
+        COL_WRITE_ARRAY(row, StoreByteCoreCols, prev_data, record.prev_data);
+    }
+};
+
+__global__ void rv64_store_byte_tracegen_kernel(
+    Fp *trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<Rv64StoreRecord> records,
+    size_t pointer_max_bits,
+    uint32_t *range_checker_ptr,
+    uint32_t range_checker_num_bins,
+    uint32_t *bitwise_lookup_ptr,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(trace + idx, height);
+    if (idx < records.len()) {
+        auto const &record = records[idx];
+        auto adapter = Rv64StoreAdapter(
+            pointer_max_bits,
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            timestamp_max_bits
+        );
+        adapter.fill_trace_row(row, record.adapter);
+        auto core = StoreByteCore(BitwiseOperationLookup(bitwise_lookup_ptr));
+        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64StoreByteCols, core)), record.core);
+    } else {
+        row.fill_zero(0, width);
+        COL_WRITE_VALUE(row, Rv64StoreByteCols, adapter.mem_as, 2);
+    }
+}
+
+extern "C" int _rv64_store_byte_tracegen(
+    Fp *d_trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<Rv64StoreRecord> d_records,
+    size_t pointer_max_bits,
+    uint32_t *d_range_checker,
+    uint32_t range_checker_num_bins,
+    uint32_t *d_bitwise_lookup,
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
+) {
+    assert(width == sizeof(Rv64StoreByteCols<uint8_t>));
+    auto [grid, block] = kernel_launch_params(height, 512);
+    rv64_store_byte_tracegen_kernel<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        width,
+        d_records,
+        pointer_max_bits,
+        d_range_checker,
+        range_checker_num_bins,
+        d_bitwise_lookup,
+        timestamp_max_bits
+    );
+    return CHECK_KERNEL();
+}
