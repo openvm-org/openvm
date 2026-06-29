@@ -125,7 +125,7 @@ impl MemoryInventoryGPU {
                     }
                 }
                 buf
-            });
+            }));
             self.merkle_tree
                 .build_async(self.initial_memory[addr_sp].clone(), addr_sp);
         }
