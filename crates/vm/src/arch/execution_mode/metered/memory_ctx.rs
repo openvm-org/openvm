@@ -55,6 +55,7 @@ fn push_page_access(accesses: &mut Vec<PageAccess>, page_id: u32, leaf_mask: u64
 }
 #[derive(Clone, Debug)]
 pub struct MemoryCtx {
+    /// Memory tree dimensions used to map address-space ranges into global leaf ids.
     memory_dimensions: MemoryDimensions,
     /// Segment-local occupancy. Cleared at segment boundaries; it prevents
     /// charging the same leaf or Merkle node twice inside one segment.
@@ -62,15 +63,20 @@ pub struct MemoryCtx {
     /// Committed occupancy at the last safe checkpoint, seeded with nonzero
     /// initial memory. This tells us whether an old value is canonical default.
     occupancy_tracker: CommittedMemoryOccupancyTracker,
+    /// Page masks recorded since the last safe checkpoint by the normal metered path.
     pub page_indices_since_checkpoint: Vec<PageAccess>,
+    /// Length mirror used by generated metered code that appends through the raw buffer.
     pub page_indices_since_checkpoint_len: usize,
+    /// Number of checkpoint-buffer entries already reflected in `trace_heights`.
     page_indices_applied_len: usize,
-    /// New leaves already reflected in `trace_heights` and queued for the next
-    /// checkpoint commit. Segment replay clears this queue and recomputes
-    /// heights from `page_indices_since_checkpoint`.
+    /// Newly charged leaf masks queued for the next checkpoint commit. Segment
+    /// replay clears this queue and recomputes it from `page_indices_since_checkpoint`.
     pending_occupancy_updates: Vec<PageAccess>,
+    /// New boundary leaves accumulated by direct page-buffer application.
     pending_leaves: u32,
+    /// New Merkle nodes accumulated by direct page-buffer application.
     pending_merkle_nodes: u32,
+    /// Old-side default leaves and nodes paired with the pending height deltas.
     pending_default_old: DefaultOldAccounting,
 }
 

@@ -13,8 +13,11 @@ const FIRST_LEAF_PER_64_LEAVES: u64 = 0x0000_0000_0000_0001;
 /// when the current segment started.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(super) struct DefaultOldAccounting {
+    /// Newly charged leaves whose old value is the canonical default leaf.
     pub(super) default_leaves: u32,
+    /// Newly charged internal nodes whose old value is a canonical default node.
     pub(super) default_merkle_nodes: u32,
+    /// Bit `h` is set when at least one default old node appears at Merkle height `h`.
     merkle_level_mask: u64,
 }
 
@@ -34,7 +37,9 @@ impl DefaultOldAccounting {
 
 #[derive(Clone, Debug)]
 struct BitSet {
+    /// Packed occupancy bits.
     words: Box<[u64]>,
+    /// Word indices written since the last `clear`.
     dirty_words: Vec<usize>,
 }
 
@@ -118,9 +123,13 @@ pub struct PageAccess {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(super) struct MemoryAccountingDelta {
+    /// Boundary leaves newly charged in the current segment.
     pub(super) new_leaves: u32,
+    /// Merkle internal nodes newly charged in the current segment.
     pub(super) new_merkle_nodes: u32,
+    /// Subset of the inserted leaf mask that became newly charged in this segment.
     pub(super) newly_charged_leaf_mask: u64,
+    /// Old-side default values among the newly charged leaves and nodes.
     pub(super) default_old: DefaultOldAccounting,
 }
 
@@ -149,9 +158,13 @@ pub(super) struct MemoryAccountingDelta {
 /// pages in the segment.
 #[derive(Clone, Debug)]
 pub(super) struct SegmentMemoryPageTracker {
+    /// Segment-local touched leaf masks by page.
     segment_leaf_masks: Box<[u64]>,
+    /// Pages written since the segment started.
     dirty_page_ids: Vec<usize>,
+    /// Upper-tree ancestors already charged in the current segment.
     segment_upper_nodes: BitSet,
+    /// Number of Merkle levels above the 64-leaf page layer.
     upper_height: usize,
 }
 
@@ -309,8 +322,11 @@ impl SegmentMemoryPageTracker {
 /// pages or ancestors missing here are known canonical default old values.
 #[derive(Clone, Debug)]
 pub(super) struct CommittedMemoryOccupancyTracker {
+    /// Leaves known occupied at the last safe checkpoint, stored by page.
     committed_leaf_masks: Box<[u64]>,
+    /// Upper-tree ancestors known occupied at the last safe checkpoint.
     committed_upper_nodes: BitSet,
+    /// Number of Merkle levels above the 64-leaf page layer.
     upper_height: usize,
 }
 
