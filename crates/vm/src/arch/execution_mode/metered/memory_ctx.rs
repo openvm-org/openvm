@@ -208,8 +208,6 @@ pub struct MemoryPageTracker {
     dirty_pages: Vec<usize>,
     upper_nodes: BitSet,
     upper_height: usize,
-    merkle_nodes: u32,
-    leaves: u32,
 }
 
 impl MemoryPageTracker {
@@ -220,8 +218,6 @@ impl MemoryPageTracker {
             dirty_pages: Vec::new(),
             upper_nodes: BitSet::new(num_pages),
             upper_height,
-            merkle_nodes: 0,
-            leaves: 0,
         }
     }
 
@@ -234,8 +230,6 @@ impl MemoryPageTracker {
             }
         }
         self.upper_nodes.clear();
-        self.merkle_nodes = 0;
-        self.leaves = 0;
     }
 
     #[inline(always)]
@@ -268,7 +262,11 @@ impl MemoryPageTracker {
 
         let (mut merkle_nodes, mut default_old) = if default_leaf_mask == 0 {
             (
-                local_merkle_nodes_delta(old_mask, added_mask),
+                if leaves == 1 {
+                    local_merkle_nodes_added_leaf(old_mask, added_mask.trailing_zeros())
+                } else {
+                    local_merkle_nodes_delta(old_mask, added_mask)
+                },
                 DefaultOldCounts::default(),
             )
         } else {
@@ -276,8 +274,9 @@ impl MemoryPageTracker {
             // page-local levels, then count groups newly occupied by added leaves.
             local_merkle_nodes_delta_with_default(old_mask, added_mask, committed_mask)
         };
-        default_old.leaves = default_leaf_mask.count_ones();
-        self.leaves += leaves;
+        if default_leaf_mask != 0 {
+            default_old.leaves = default_leaf_mask.count_ones();
+        }
 
         if old_mask == 0 {
             if committed_mask == 0 {
@@ -289,7 +288,6 @@ impl MemoryPageTracker {
                 merkle_nodes += self.insert_upper_path_count_only(page_id);
             }
         }
-        self.merkle_nodes += merkle_nodes;
         MemoryHeightDelta {
             leaves,
             merkle_nodes,
@@ -318,6 +316,8 @@ impl MemoryPageTracker {
                     default_old.merkle_nodes += 1;
                     default_old.merkle_node_levels |= 1u64 << height;
                 }
+            } else {
+                break;
             }
             height += 1;
         }
@@ -330,7 +330,11 @@ impl MemoryPageTracker {
         let mut node = (1usize << self.upper_height) + page_id;
         while node > 1 {
             node >>= 1;
-            count += u32::from(self.upper_nodes.insert(node));
+            if self.upper_nodes.insert(node) {
+                count += 1;
+            } else {
+                break;
+            }
         }
         count
     }
@@ -430,6 +434,30 @@ fn local_merkle_nodes_delta(mut old_mask: u64, mut added_mask: u64) -> u32 {
     nodes += add_level_delta::<16, FIRST_BIT_PER_U32>(&mut old_mask, &mut added_mask);
     nodes += add_level_delta::<32, FIRST_BIT_PER_U64>(&mut old_mask, &mut added_mask);
 
+    nodes
+}
+
+#[inline(always)]
+fn aligned_group_is_empty<const GROUP_SIZE: u32>(old_mask: u64, leaf: u32) -> bool {
+    let group_start = leaf & !(GROUP_SIZE - 1);
+    let group_mask = ((1u64 << GROUP_SIZE) - 1) << group_start;
+    old_mask & group_mask == 0
+}
+
+#[inline(always)]
+fn local_merkle_nodes_added_leaf(old_mask: u64, leaf: u32) -> u32 {
+    debug_assert!(leaf < u64::BITS);
+
+    if old_mask == 0 {
+        return MEMORY_PAGE_BITS as u32;
+    }
+
+    let mut nodes = 0;
+    nodes += u32::from(aligned_group_is_empty::<2>(old_mask, leaf));
+    nodes += u32::from(aligned_group_is_empty::<4>(old_mask, leaf));
+    nodes += u32::from(aligned_group_is_empty::<8>(old_mask, leaf));
+    nodes += u32::from(aligned_group_is_empty::<16>(old_mask, leaf));
+    nodes += u32::from(aligned_group_is_empty::<32>(old_mask, leaf));
     nodes
 }
 
@@ -946,12 +974,13 @@ mod tests {
     fn test_local_merkle_nodes_doc_example() {
         let mut tracker = MemoryPageTracker::new(0);
         let occupancy = MemoryOccupancyTracker::new(0);
-        tracker.insert(0, 1 << 0, &occupancy);
-        assert_eq!(tracker.merkle_nodes, 6);
-        tracker.insert(0, 1 << 4, &occupancy);
-        assert_eq!(tracker.merkle_nodes, 8);
-        tracker.insert(0, 1 << 2, &occupancy);
-        assert_eq!(tracker.merkle_nodes, 9);
+        let mut nodes = 0;
+        nodes += tracker.insert(0, 1 << 0, &occupancy).merkle_nodes;
+        assert_eq!(nodes, 6);
+        nodes += tracker.insert(0, 1 << 4, &occupancy).merkle_nodes;
+        assert_eq!(nodes, 8);
+        nodes += tracker.insert(0, 1 << 2, &occupancy).merkle_nodes;
+        assert_eq!(nodes, 9);
     }
 
     #[test]
@@ -1016,30 +1045,24 @@ mod tests {
     fn test_page_mask_duplicate_leaf_does_not_change_counts() {
         let mut tracker = MemoryPageTracker::new(3);
         let occupancy = MemoryOccupancyTracker::new(3);
-        tracker.insert(0, 1 << 0, &occupancy);
-        let leaves = tracker.leaves;
-        let nodes = tracker.merkle_nodes;
-        tracker.insert(0, 1 << 0, &occupancy);
-        assert_eq!(tracker.leaves, leaves);
-        assert_eq!(tracker.merkle_nodes, nodes);
+        assert_ne!(tracker.insert(0, 1 << 0, &occupancy).added_mask, 0);
+        assert_eq!(tracker.insert(0, 1 << 0, &occupancy), MemoryHeightDelta::default());
     }
 
     #[test]
     fn test_memory_page_tracker_clear_resets_touched_state() {
         let mut tracker = MemoryPageTracker::new(3);
         let occupancy = MemoryOccupancyTracker::new(3);
-        tracker.insert(0, 1 << 0, &occupancy);
-        tracker.insert(7, 1 << 63, &occupancy);
-        assert!(tracker.leaves > 0);
-        assert!(tracker.merkle_nodes > 0);
+        let first = tracker.insert(0, 1 << 0, &occupancy);
+        let second = tracker.insert(7, 1 << 63, &occupancy);
+        assert!(first.leaves + second.leaves > 0);
+        assert!(first.merkle_nodes + second.merkle_nodes > 0);
 
         tracker.clear();
-        assert_eq!(tracker.leaves, 0);
-        assert_eq!(tracker.merkle_nodes, 0);
 
-        tracker.insert(0, 1 << 0, &occupancy);
-        assert_eq!(tracker.leaves, 1);
-        assert!(tracker.merkle_nodes > 0);
+        let after_clear = tracker.insert(0, 1 << 0, &occupancy);
+        assert_eq!(after_clear.leaves, 1);
+        assert!(after_clear.merkle_nodes > 0);
     }
 
     #[test]
@@ -1047,9 +1070,8 @@ mod tests {
         let mut tracker = MemoryPageTracker::new(3);
         let occupancy = MemoryOccupancyTracker::new(3);
         tracker.insert(0, 1, &occupancy);
-        let first = tracker.merkle_nodes;
-        tracker.insert(1, 1, &occupancy);
-        assert_eq!(tracker.merkle_nodes - first, MEMORY_PAGE_BITS as u32);
+        let second = tracker.insert(1, 1, &occupancy);
+        assert_eq!(second.merkle_nodes, MEMORY_PAGE_BITS as u32);
     }
 
     #[test]
