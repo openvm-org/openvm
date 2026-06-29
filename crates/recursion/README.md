@@ -10,9 +10,7 @@ In continuations, a **layer** is one level of the aggregation tree: it takes pro
 
 ## Circuit Fields and Dependencies
 
-To ensure the `internal_recursive_vk` and `root_vk` are constant for all possible `app_vk`'s, we impose several restrictions on how verifier circuit AIRs can and cannot depend on the child's `vk`. For recursive-self aggregation, compatibility means that the child VK used to construct the verifier and the verifier's own VK produce the same verifier circuit. This is not byte-for-byte VK equality: fields that do not define the verifier circuit, such as `pre_hash` and the symbolic constraints DAG, may differ. The guard for recursive-self proving should therefore compare the verifier-circuit dependency frame, not the full `MultiStarkVerifyingKey`.
-
-To start, we divide the `vk` fields into 4 categories:
+To ensure the `internal_recursive_vk` and `root_vk` are constant for all possible `app_vk`'s, we impose several restrictions on how verifier circuit AIRs can and cannot depend on the child's `vk`. To start, we divide the `vk` fields into 4 categories:
 
 - symbolic constraints DAG - per-AIR evaluation constraints (including symbolic interactions) represented as a directed acyclic graph
 - system (configurable) parameters - per-layer configurable parameters that modify the verifier protocol

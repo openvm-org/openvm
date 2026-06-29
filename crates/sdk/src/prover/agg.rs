@@ -4,9 +4,7 @@ use eyre::Result;
 use itertools::Itertools;
 use openvm_circuit::arch::ContinuationVmProof;
 use openvm_continuations::{circuit::inner::ProofsType, prover::ChildVkKind};
-use openvm_recursion_circuit::{
-    prelude::Digest, system::assert_recursive_self_vk_compatible, utils::poseidon2_hash_slice,
-};
+use openvm_recursion_circuit::{prelude::Digest, utils::poseidon2_hash_slice};
 use openvm_stark_backend::{
     codec::{Decode, Encode},
     keygen::types::MultiStarkVerifyingKey,
@@ -51,15 +49,6 @@ pub struct InternalLayerMetadata {
 }
 
 impl AggProver {
-    fn assert_internal_recursive_vk_compatible(
-        internal_for_leaf_prover: &InnerAggregationProver<MAX_NUM_CHILDREN_INTERNAL>,
-        internal_recursive_prover: &InnerAggregationProver<MAX_NUM_CHILDREN_INTERNAL>,
-    ) {
-        let internal_for_leaf_vk = internal_for_leaf_prover.get_vk();
-        let internal_recursive_vk = internal_recursive_prover.get_vk();
-        assert_recursive_self_vk_compatible(&internal_for_leaf_vk, &internal_recursive_vk);
-    }
-
     pub fn keygen_prefix(
         app_or_def_vk: Arc<MultiStarkVerifyingKey<SC>>,
         agg_config: AggregationConfig,
@@ -117,10 +106,6 @@ impl AggProver {
             true,
             def_hook_cached_commit,
         );
-        Self::assert_internal_recursive_vk_compatible(
-            &internal_for_leaf_prover,
-            &internal_recursive_prover,
-        );
         Self {
             leaf_prover,
             internal_for_leaf_prover,
@@ -152,10 +137,6 @@ impl AggProver {
             agg_pk.internal_recursive,
             true,
             def_hook_cached_commit,
-        );
-        Self::assert_internal_recursive_vk_compatible(
-            &internal_for_leaf_prover,
-            &internal_recursive_prover,
         );
         Self {
             leaf_prover,
