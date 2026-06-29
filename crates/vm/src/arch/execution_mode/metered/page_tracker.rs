@@ -435,17 +435,16 @@ fn local_merkle_nodes_added_leaf(old_mask: u64, leaf: u32) -> u32 {
 }
 
 #[inline(always)]
-fn add_leaf_level_delta_with_default<const GROUP_SIZE: u32>(
+fn add_leaf_level_delta_with_default<const GROUP_SIZE: u32, const LEVEL: usize>(
     old_mask: u64,
     committed_mask: u64,
     leaf: u32,
-    level: usize,
     default_old: &mut DefaultOldCounts,
 ) -> u32 {
     if aligned_group_is_empty::<GROUP_SIZE>(old_mask, leaf) {
         if aligned_group_is_empty::<GROUP_SIZE>(committed_mask, leaf) {
             default_old.merkle_nodes += 1;
-            default_old.merkle_node_levels |= 1u64 << level;
+            default_old.merkle_node_levels |= 1u64 << LEVEL;
         }
         1
     } else {
@@ -475,23 +474,21 @@ fn local_merkle_nodes_added_leaf_with_default(
     let mut default_old = DefaultOldCounts::default();
     let mut nodes = 0;
     nodes +=
-        add_leaf_level_delta_with_default::<2>(old_mask, committed_mask, leaf, 1, &mut default_old);
+        add_leaf_level_delta_with_default::<2, 1>(old_mask, committed_mask, leaf, &mut default_old);
     nodes +=
-        add_leaf_level_delta_with_default::<4>(old_mask, committed_mask, leaf, 2, &mut default_old);
+        add_leaf_level_delta_with_default::<4, 2>(old_mask, committed_mask, leaf, &mut default_old);
     nodes +=
-        add_leaf_level_delta_with_default::<8>(old_mask, committed_mask, leaf, 3, &mut default_old);
-    nodes += add_leaf_level_delta_with_default::<16>(
+        add_leaf_level_delta_with_default::<8, 3>(old_mask, committed_mask, leaf, &mut default_old);
+    nodes += add_leaf_level_delta_with_default::<16, 4>(
         old_mask,
         committed_mask,
         leaf,
-        4,
         &mut default_old,
     );
-    nodes += add_leaf_level_delta_with_default::<32>(
+    nodes += add_leaf_level_delta_with_default::<32, 5>(
         old_mask,
         committed_mask,
         leaf,
-        5,
         &mut default_old,
     );
 
@@ -507,11 +504,10 @@ fn local_merkle_nodes_added_leaf_with_default(
 }
 
 #[inline(always)]
-fn add_level_delta_with_default<const SHIFT: u32, const MASK: u64>(
+fn add_level_delta_with_default<const SHIFT: u32, const MASK: u64, const LEVEL: usize>(
     old_mask: &mut u64,
     added_mask: &mut u64,
     committed_mask: &mut u64,
-    level: usize,
     default_old: &mut DefaultOldCounts,
 ) -> u32 {
     *old_mask = (*old_mask | (*old_mask >> SHIFT)) & MASK;
@@ -520,7 +516,7 @@ fn add_level_delta_with_default<const SHIFT: u32, const MASK: u64>(
     let new_nodes = *added_mask & !*old_mask;
     let default_nodes = new_nodes & !*committed_mask;
     default_old.merkle_nodes += default_nodes.count_ones();
-    default_old.merkle_node_levels |= u64::from(default_nodes != 0) << level;
+    default_old.merkle_node_levels |= u64::from(default_nodes != 0) << LEVEL;
     new_nodes.count_ones()
 }
 
@@ -535,46 +531,40 @@ fn local_merkle_nodes_delta_with_default(
 
     let mut default_old = DefaultOldCounts::default();
     let mut nodes = 0;
-    nodes += add_level_delta_with_default::<1, FIRST_BIT_PER_PAIR>(
+    nodes += add_level_delta_with_default::<1, FIRST_BIT_PER_PAIR, 1>(
         &mut old_mask,
         &mut added_mask,
         &mut committed_mask,
-        1,
         &mut default_old,
     );
-    nodes += add_level_delta_with_default::<2, FIRST_BIT_PER_NIBBLE>(
+    nodes += add_level_delta_with_default::<2, FIRST_BIT_PER_NIBBLE, 2>(
         &mut old_mask,
         &mut added_mask,
         &mut committed_mask,
-        2,
         &mut default_old,
     );
-    nodes += add_level_delta_with_default::<4, FIRST_BIT_PER_BYTE>(
+    nodes += add_level_delta_with_default::<4, FIRST_BIT_PER_BYTE, 3>(
         &mut old_mask,
         &mut added_mask,
         &mut committed_mask,
-        3,
         &mut default_old,
     );
-    nodes += add_level_delta_with_default::<8, FIRST_BIT_PER_U16>(
+    nodes += add_level_delta_with_default::<8, FIRST_BIT_PER_U16, 4>(
         &mut old_mask,
         &mut added_mask,
         &mut committed_mask,
-        4,
         &mut default_old,
     );
-    nodes += add_level_delta_with_default::<16, FIRST_BIT_PER_U32>(
+    nodes += add_level_delta_with_default::<16, FIRST_BIT_PER_U32, 5>(
         &mut old_mask,
         &mut added_mask,
         &mut committed_mask,
-        5,
         &mut default_old,
     );
-    nodes += add_level_delta_with_default::<32, FIRST_BIT_PER_U64>(
+    nodes += add_level_delta_with_default::<32, FIRST_BIT_PER_U64, 6>(
         &mut old_mask,
         &mut added_mask,
         &mut committed_mask,
-        6,
         &mut default_old,
     );
 
