@@ -26,52 +26,52 @@ use crate::{
 const SELECTOR_MAX_DEGREE: u32 = 2;
 
 #[derive(Clone, Copy)]
-pub(crate) struct SignedAlignedCase {
+pub(crate) struct SignedWidthAlignedCase {
     opcode: Rv64LoadStoreOpcode,
     byte_shift: usize,
 }
 
-impl SignedAlignedCase {
+impl SignedWidthAlignedCase {
     fn cell_shift(self) -> usize {
         self.byte_shift / 2
     }
 }
 
-const WORD_CASES: [SignedAlignedCase; 2] = [
-    SignedAlignedCase {
+const WORD_CASES: [SignedWidthAlignedCase; 2] = [
+    SignedWidthAlignedCase {
         opcode: LOADW,
         byte_shift: 0,
     },
-    SignedAlignedCase {
+    SignedWidthAlignedCase {
         opcode: LOADW,
         byte_shift: 4,
     },
 ];
 
-const HALFWORD_CASES: [SignedAlignedCase; 4] = [
-    SignedAlignedCase {
+const HALFWORD_CASES: [SignedWidthAlignedCase; 4] = [
+    SignedWidthAlignedCase {
         opcode: LOADH,
         byte_shift: 0,
     },
-    SignedAlignedCase {
+    SignedWidthAlignedCase {
         opcode: LOADH,
         byte_shift: 2,
     },
-    SignedAlignedCase {
+    SignedWidthAlignedCase {
         opcode: LOADH,
         byte_shift: 4,
     },
-    SignedAlignedCase {
+    SignedWidthAlignedCase {
         opcode: LOADH,
         byte_shift: 6,
     },
 ];
 
-pub(crate) fn signed_aligned_cases<const KIND: usize>() -> &'static [SignedAlignedCase] {
+pub(crate) fn signed_width_aligned_cases<const KIND: usize>() -> &'static [SignedWidthAlignedCase] {
     match KIND {
         KIND_WORD => &WORD_CASES,
         KIND_HALFWORD => &HALFWORD_CASES,
-        _ => unreachable!("unsupported signed aligned load kind"),
+        _ => unreachable!("unsupported signed width-aligned load kind"),
     }
 }
 
@@ -79,7 +79,7 @@ fn access_cells<const KIND: usize>() -> usize {
     match KIND {
         KIND_WORD => 2,
         KIND_HALFWORD => 1,
-        _ => unreachable!("unsupported signed aligned load kind"),
+        _ => unreachable!("unsupported signed width-aligned load kind"),
     }
 }
 
@@ -89,18 +89,22 @@ fn encoder<const CASES: usize, const SELECTOR_WIDTH: usize>() -> Encoder {
     encoder
 }
 
+/// Handles signed halfword and word loads. The core builds the register write from the selected
+/// read cells and sign-extends the remaining cells.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct LoadSignExtendAlignedCoreCols<T, const SELECTOR_WIDTH: usize> {
+pub struct LoadSignExtendWidthAlignedCoreCols<T, const SELECTOR_WIDTH: usize> {
     pub selector: [T; SELECTOR_WIDTH],
+    /// Kept as a degree-1 copy of the selector validity.
     pub is_valid: T,
+    /// The sign bit that is extended to the remaining cells.
     pub data_most_sig_bit: T,
     pub read_data: [T; BLOCK_FE_WIDTH],
 }
 
 #[derive(Debug, Clone, ColumnsAir)]
-#[columns_via(LoadSignExtendAlignedCoreCols<u8, SELECTOR_WIDTH>)]
-pub struct LoadSignExtendAlignedCoreAir<
+#[columns_via(LoadSignExtendWidthAlignedCoreCols<u8, SELECTOR_WIDTH>)]
+pub struct LoadSignExtendWidthAlignedCoreAir<
     const KIND: usize,
     const CASES: usize,
     const SELECTOR_WIDTH: usize,
@@ -111,10 +115,10 @@ pub struct LoadSignExtendAlignedCoreAir<
 }
 
 impl<const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    LoadSignExtendAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
+    LoadSignExtendWidthAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
 {
     pub fn new(offset: usize, range_bus: VariableRangeCheckerBus) -> Self {
-        debug_assert_eq!(signed_aligned_cases::<KIND>().len(), CASES);
+        debug_assert_eq!(signed_width_aligned_cases::<KIND>().len(), CASES);
         Self {
             offset,
             encoder: encoder::<CASES, SELECTOR_WIDTH>(),
@@ -124,20 +128,20 @@ impl<const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
 }
 
 impl<F: Field, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize> BaseAir<F>
-    for LoadSignExtendAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
+    for LoadSignExtendWidthAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
 {
     fn width(&self) -> usize {
-        LoadSignExtendAlignedCoreCols::<F, SELECTOR_WIDTH>::width()
+        LoadSignExtendWidthAlignedCoreCols::<F, SELECTOR_WIDTH>::width()
     }
 }
 
 impl<F: Field, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    BaseAirWithPublicValues<F> for LoadSignExtendAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
+    BaseAirWithPublicValues<F> for LoadSignExtendWidthAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
 {
 }
 
 impl<AB, I, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize> VmCoreAir<AB, I>
-    for LoadSignExtendAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
+    for LoadSignExtendWidthAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -151,8 +155,9 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &LoadSignExtendAlignedCoreCols<AB::Var, SELECTOR_WIDTH> = (*local_core).borrow();
-        let cases = signed_aligned_cases::<KIND>();
+        let cols: &LoadSignExtendWidthAlignedCoreCols<AB::Var, SELECTOR_WIDTH> =
+            (*local_core).borrow();
+        let cases = signed_width_aligned_cases::<KIND>();
         let width = access_cells::<KIND>();
 
         self.encoder.eval(builder, &cols.selector);
@@ -162,6 +167,7 @@ where
         builder.assert_eq(cols.is_valid, is_valid.clone());
         builder.assert_bool(cols.data_most_sig_bit);
 
+        // Constrain that data_most_sig_bit matches the selected source sign cell.
         let sign_cell = cases
             .iter()
             .enumerate()
@@ -219,7 +225,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct LoadSignExtendAlignedFiller<
+pub struct LoadSignExtendWidthAlignedFiller<
     A = Rv64LoadAdapterFiller,
     const KIND: usize = KIND_WORD,
     const CASES: usize = 2,
@@ -232,14 +238,14 @@ pub struct LoadSignExtendAlignedFiller<
 }
 
 impl<A, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    LoadSignExtendAlignedFiller<A, KIND, CASES, SELECTOR_WIDTH>
+    LoadSignExtendWidthAlignedFiller<A, KIND, CASES, SELECTOR_WIDTH>
 {
     pub fn new(
         adapter: A,
         offset: usize,
         range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
-        debug_assert_eq!(signed_aligned_cases::<KIND>().len(), CASES);
+        debug_assert_eq!(signed_width_aligned_cases::<KIND>().len(), CASES);
         Self {
             adapter,
             offset,
@@ -250,25 +256,30 @@ impl<A, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
 }
 
 impl<F, A, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
-    for LoadSignExtendAlignedFiller<A, KIND, CASES, SELECTOR_WIDTH>
+    for LoadSignExtendWidthAlignedFiller<A, KIND, CASES, SELECTOR_WIDTH>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
+        // LoadSignExtendWidthAlignedCoreCols::width() elements.
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
+        // SAFETY: core_row contains a valid LoadRecord written by the executor during trace
+        // generation.
         let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let opcode = Rv64LoadStoreOpcode::from_usize(record.local_opcode as usize);
         let shift = record.shift_amount as usize;
         let read_data = record.read_data;
-        let core_row: &mut LoadSignExtendAlignedCoreCols<F, SELECTOR_WIDTH> = core_row.borrow_mut();
-        let cases = signed_aligned_cases::<KIND>();
+        let core_row: &mut LoadSignExtendWidthAlignedCoreCols<F, SELECTOR_WIDTH> =
+            core_row.borrow_mut();
+        let cases = signed_width_aligned_cases::<KIND>();
         let case_idx = cases
             .iter()
             .position(|case| case.opcode == opcode && case.byte_shift == shift)
-            .expect("invalid signed aligned load opcode/shift");
+            .expect("invalid signed width-aligned load opcode/shift");
 
         let width = access_cells::<KIND>();
         let sign_cell = read_data[shift / 2 + width - 1];

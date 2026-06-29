@@ -3,8 +3,8 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use crate::{
     adapters::{Rv64StoreAdapterAir, Rv64StoreAdapterExecutor, Rv64StoreAdapterFiller},
     store::{
-        aligned::{StoreAlignedCoreAir, StoreAlignedFiller},
         common::{StoreExecutor, KIND_WORD},
+        width_aligned::{StoreWidthAlignedCoreAir, StoreWidthAlignedFiller},
     },
 };
 
@@ -12,8 +12,8 @@ pub const WORD_STORE_CASES: usize = 2;
 pub const WORD_STORE_SELECTOR_WIDTH: usize = 1;
 
 pub type StoreWordCoreAir =
-    StoreAlignedCoreAir<KIND_WORD, WORD_STORE_CASES, WORD_STORE_SELECTOR_WIDTH>;
-pub type StoreWordFiller = StoreAlignedFiller<
+    StoreWidthAlignedCoreAir<KIND_WORD, WORD_STORE_CASES, WORD_STORE_SELECTOR_WIDTH>;
+pub type StoreWordFiller = StoreWidthAlignedFiller<
     Rv64StoreAdapterFiller,
     KIND_WORD,
     WORD_STORE_CASES,

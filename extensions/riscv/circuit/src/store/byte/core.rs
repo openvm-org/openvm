@@ -28,10 +28,13 @@ const BYTE_SELECTOR_MAX_DEGREE: u32 = 2;
 const STORE_BYTE_CASES: usize = 8;
 pub(crate) const STORE_BYTE_SELECTOR_WIDTH: usize = 3;
 
+/// Handles byte stores by replacing one byte in the previous memory block and preserving all other
+/// bytes.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct StoreByteCoreCols<T> {
     pub selector: [T; STORE_BYTE_SELECTOR_WIDTH],
+    /// Kept as a degree-1 copy of the selector validity.
     pub is_valid: T,
     pub read_cell_bytes: [T; 2],
     pub prev_cell_bytes: [T; 2],
@@ -183,9 +186,13 @@ where
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
+        // StoreByteCoreCols::width() elements.
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
+        // SAFETY: core_row contains a valid StoreRecord written by the executor during trace
+        // generation.
         let record: &StoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let opcode = Rv64LoadStoreOpcode::from_usize(record.local_opcode as usize);
         let shift = record.shift_amount as usize;

@@ -72,6 +72,7 @@ where
     }
 }
 
+/// Returns the register write data for an unsigned load.
 pub(crate) fn load_write_data(
     opcode: Rv64LoadStoreOpcode,
     read_data: [u16; BLOCK_FE_WIDTH],

@@ -38,7 +38,7 @@ template <typename T> struct LoadSignExtendByteCoreCols {
     T read_data[BLOCK_FE_WIDTH];
 };
 
-template <typename T, size_t SELECTOR_WIDTH> struct LoadSignExtendAlignedCoreCols {
+template <typename T, size_t SELECTOR_WIDTH> struct LoadSignExtendWidthAlignedCoreCols {
     T selector[SELECTOR_WIDTH];
     T is_valid;
     T data_most_sig_bit;
@@ -52,12 +52,12 @@ template <typename T> struct Rv64LoadSignExtendByteCols {
 
 template <typename T> struct Rv64LoadSignExtendHalfwordCols {
     Rv64LoadAdapterCols<T> adapter;
-    LoadSignExtendAlignedCoreCols<T, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH> core;
+    LoadSignExtendWidthAlignedCoreCols<T, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH> core;
 };
 
 template <typename T> struct Rv64LoadSignExtendWordCols {
     Rv64LoadAdapterCols<T> adapter;
-    LoadSignExtendAlignedCoreCols<T, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH> core;
+    LoadSignExtendWidthAlignedCoreCols<T, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH> core;
 };
 
 constexpr size_t RV64_LOAD_SIGN_EXTEND_BYTE_WIDTH =
@@ -122,10 +122,10 @@ struct LoadSignExtendByteCore {
     }
 };
 
-template <size_t SELECTOR_WIDTH, uint32_t CASES> struct LoadSignExtendAlignedCore {
+template <size_t SELECTOR_WIDTH, uint32_t CASES> struct LoadSignExtendWidthAlignedCore {
     VariableRangeChecker range_checker;
 
-    __device__ LoadSignExtendAlignedCore(VariableRangeChecker range_checker)
+    __device__ LoadSignExtendWidthAlignedCore(VariableRangeChecker range_checker)
         : range_checker(range_checker) {}
 
     __device__ void fill_trace_row(RowSlice row, LoadRecord record) {
@@ -212,7 +212,7 @@ __global__ void rv64_load_sign_extend_halfword_tracegen_kernel(
         );
         adapter.fill_trace_row(row, record.adapter);
 
-        using Core = LoadSignExtendAlignedCore<
+        using Core = LoadSignExtendWidthAlignedCore<
             LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
             LOAD_SIGN_EXTEND_HALFWORD_CASES>;
         auto core = Core(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
@@ -246,7 +246,7 @@ __global__ void rv64_load_sign_extend_word_tracegen_kernel(
         );
         adapter.fill_trace_row(row, record.adapter);
 
-        using Core = LoadSignExtendAlignedCore<
+        using Core = LoadSignExtendWidthAlignedCore<
             LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
             LOAD_SIGN_EXTEND_WORD_CASES>;
         auto core = Core(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
