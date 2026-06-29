@@ -175,7 +175,7 @@ static __attribute__((always_inline)) inline void wr_mem_u16(
 
 static __attribute__((always_inline)) inline void wr_mem_u32(
     uint8_t* restrict memory, uint32_t addr, uint32_t val) {
-  /* TODO(rvr): handle unaligned word 32-bit load/store semantics in opcode
+  /* TODO(rvr): handle unaligned 32-bit load/store semantics in opcode
    * codegen if needed; this generic helper assumes aligned callers. */
   check_mem_bounds_u32(addr);
   void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(val));
