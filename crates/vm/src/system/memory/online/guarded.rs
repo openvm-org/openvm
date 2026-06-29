@@ -115,8 +115,12 @@ impl LinearMemory for GuardedMemory {
                 )
             };
             unsafe {
-                mprotect(usable_start, size, ProtFlags::PROT_READ | ProtFlags::PROT_WRITE)
-                    .unwrap();
+                mprotect(
+                    usable_start,
+                    size,
+                    ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                )
+                .unwrap();
             }
         }
 
