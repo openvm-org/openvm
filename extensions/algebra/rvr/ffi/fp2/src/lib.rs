@@ -189,32 +189,12 @@ define_fp2_ffi!(blstrs::Fp2, bls12_381);
 
 // ── Generic FFI (fallback for unknown moduli) ────────────────────────────────
 
-macro_rules! unknown_field_op_fn {
-    ($name:ident, $op:ident) => {
-        /// # Safety
-        /// `state` must be a valid `RvState` pointer. `modulus_ptr` must point
-        /// to `num_limbs` bytes.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(
-            state: *mut c_void,
-            rd_ptr: u64,
-            rs1_ptr: u64,
-            rs2_ptr: u64,
-            num_limbs: u32,
-            modulus_ptr: *const u8,
-        ) {
-            let modulus =
-                BigUint::from_bytes_le(std::slice::from_raw_parts(modulus_ptr, num_limbs as usize));
-            let f = UnknownComplexField { modulus, num_limbs };
-            exec_op(&f, state, rd_ptr, rs1_ptr, rs2_ptr, |f, a, b| f.$op(a, b));
-        }
-    };
-}
+use rvr_openvm_ext_algebra_ffi_common::unknown_field_op_fn;
 
-unknown_field_op_fn!(rvr_ext_fp2_add, add);
-unknown_field_op_fn!(rvr_ext_fp2_sub, sub);
-unknown_field_op_fn!(rvr_ext_fp2_mul, mul);
-unknown_field_op_fn!(rvr_ext_fp2_div, div);
+unknown_field_op_fn!(rvr_ext_fp2_add, UnknownComplexField, add);
+unknown_field_op_fn!(rvr_ext_fp2_sub, UnknownComplexField, sub);
+unknown_field_op_fn!(rvr_ext_fp2_mul, UnknownComplexField, mul);
+unknown_field_op_fn!(rvr_ext_fp2_div, UnknownComplexField, div);
 
 /// # Safety
 /// `state` must be a valid `RvState` pointer.

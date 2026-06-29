@@ -182,6 +182,36 @@ pub fn mod_inverse(a: &BigUint, p: &BigUint) -> BigUint {
         .unwrap()
 }
 
+// ── FFI generation macro (shared by modular and fp2) ────────────────────────
+
+/// Generate a generic (unknown-modulus) field-op FFI function.
+///
+/// `$field_ty` must be a struct with `modulus: BigUint` and `num_limbs: u32`
+/// fields that implements [`FieldArith`].
+#[macro_export]
+macro_rules! unknown_field_op_fn {
+    ($name:ident, $field_ty:ident, $op:ident) => {
+        /// # Safety
+        /// `state` must be a valid `RvState` pointer. `modulus_ptr` must point
+        /// to `num_limbs` bytes.
+        #[no_mangle]
+        pub unsafe extern "C" fn $name(
+            state: *mut ::std::ffi::c_void,
+            rd_ptr: u64,
+            rs1_ptr: u64,
+            rs2_ptr: u64,
+            num_limbs: u32,
+            modulus_ptr: *const u8,
+        ) {
+            let modulus = ::num_bigint::BigUint::from_bytes_le(
+                ::std::slice::from_raw_parts(modulus_ptr, num_limbs as usize),
+            );
+            let f = $field_ty { modulus, num_limbs };
+            $crate::exec_op(&f, state, rd_ptr, rs1_ptr, rs2_ptr, |f, a, b| f.$op(a, b));
+        }
+    };
+}
+
 // ── Instruction execution helper ─────────────────────────────────────────────
 
 /// Read both operands, apply `op`, write the result.
