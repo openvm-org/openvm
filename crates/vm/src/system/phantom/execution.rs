@@ -86,6 +86,7 @@ impl<F> AotExecutor<F> for PhantomExecutor<F> where F: PrimeField32 {}
 
 pub(super) struct PhantomStateMut<'a, F> {
     pub(super) pc: u32,
+    pub(super) fp: u32,
     pub(super) memory: &'a mut GuestMemory,
     pub(super) streams: &'a mut Streams<F>,
     pub(super) rng: &'a mut StdRng,
@@ -183,6 +184,7 @@ fn execute_impl<F>(
             state.memory,
             state.streams,
             state.rng,
+            state.fp,
             discriminant,
             a,
             b,
@@ -204,9 +206,11 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 ) -> Result<(), ExecutionError> {
     let sub_executor = &*pre_compute.sub_executor;
     let pc = exec_state.pc();
+    let fp = exec_state.fp();
     execute_impl(
         PhantomStateMut {
             pc,
+            fp,
             memory: &mut exec_state.vm_state.memory,
             streams: &mut exec_state.vm_state.streams,
             rng: &mut exec_state.vm_state.rng,

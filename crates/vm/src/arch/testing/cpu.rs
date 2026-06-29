@@ -88,15 +88,19 @@ where
         E: PreflightExecutor<F, RA>,
         RA: Arena,
     {
+        let initial_fp = 0u32;
         let initial_state = ExecutionState {
             pc: initial_pc,
+            fp: initial_fp,
             timestamp: self.memory.memory.timestamp(),
         };
         tracing::debug!("initial_timestamp={}", self.memory.memory.timestamp());
 
         let mut pc = initial_pc;
+        let mut fp = initial_fp;
         let state_mut = VmStateMut {
             pc: &mut pc,
+            fp: &mut fp,
             memory: &mut self.memory.memory,
             streams: &mut self.streams,
             rng: &mut self.rng,
@@ -109,6 +113,7 @@ where
             .expect("Expected the execution not to fail");
         let final_state = ExecutionState {
             pc,
+            fp,
             timestamp: self.memory.memory.timestamp(),
         };
 

@@ -49,6 +49,10 @@ pub struct VmConnectorPvs<F> {
     pub initial_pc: F,
     /// The final PC of this segment.
     pub final_pc: F,
+    /// The initial frame pointer of this segment.
+    pub initial_fp: F,
+    /// The final frame pointer of this segment.
+    pub final_fp: F,
     /// The exit code of the whole program. 0 means exited normally. This is only meaningful when
     /// `is_terminate` is 1.
     pub exit_code: F,
@@ -124,6 +128,7 @@ impl VmConnectorAir {
 #[repr(C)]
 pub struct ConnectorCols<T> {
     pub pc: T,
+    pub fp: T,
     pub timestamp: T,
     pub is_terminate: T,
     pub exit_code: T,
@@ -138,6 +143,7 @@ impl<T: Copy> ConnectorCols<T> {
     fn map<F>(self, f: impl Fn(T) -> F) -> ConnectorCols<F> {
         ConnectorCols {
             pc: f(self.pc),
+            fp: f(self.fp),
             timestamp: f(self.timestamp),
             is_terminate: f(self.is_terminate),
             exit_code: f(self.exit_code),
@@ -146,9 +152,10 @@ impl<T: Copy> ConnectorCols<T> {
         }
     }
 
-    fn flatten(&self) -> [T; 6] {
+    fn flatten(&self) -> [T; 7] {
         [
             self.pc,
+            self.fp,
             self.timestamp,
             self.is_terminate,
             self.exit_code,
@@ -172,12 +179,16 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
         let &VmConnectorPvs {
             initial_pc,
             final_pc,
+            initial_fp,
+            final_fp,
             exit_code,
             is_terminate,
         } = builder.public_values().borrow();
 
         builder.when_transition().assert_eq(local.pc, initial_pc);
         builder.when_transition().assert_eq(next.pc, final_pc);
+        builder.when_transition().assert_eq(local.fp, initial_fp);
+        builder.when_transition().assert_eq(next.fp, final_fp);
         builder
             .when_transition()
             .when(next.is_terminate)
@@ -201,8 +212,8 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
         self.execution_bus.execute(
             builder,
             local.is_begin, // 1 only if these are [0th, 1st] and not [1st, 0th]
-            ExecutionState::new(next.pc, next.timestamp),
-            ExecutionState::new(local.pc, local.timestamp),
+            ExecutionState::new(next.pc, next.fp, next.timestamp),
+            ExecutionState::new(local.pc, local.fp, local.timestamp),
         );
         self.program_bus.lookup_instruction(
             builder,
@@ -254,6 +265,7 @@ impl<F> VmConnectorChip<F> {
     pub fn begin(&mut self, state: ExecutionState<u32>) {
         self.boundary_states[0] = Some(ConnectorCols {
             pc: state.pc,
+            fp: state.fp,
             timestamp: state.timestamp,
             is_terminate: 0,
             exit_code: 0,
@@ -265,6 +277,7 @@ impl<F> VmConnectorChip<F> {
     pub fn end(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
         self.boundary_states[1] = Some(ConnectorCols {
             pc: state.pc,
+            fp: state.fp,
             timestamp: state.timestamp,
             is_terminate: exit_code.is_some() as u32,
             exit_code: exit_code.unwrap_or(DEFAULT_SUSPEND_EXIT_CODE),
@@ -312,6 +325,8 @@ where
         *public_values.as_mut_slice().borrow_mut() = VmConnectorPvs {
             initial_pc: initial_state.pc,
             final_pc: final_state.pc,
+            initial_fp: initial_state.fp,
+            final_fp: final_state.fp,
             exit_code: final_state.exit_code,
             is_terminate: final_state.is_terminate,
         };

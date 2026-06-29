@@ -159,7 +159,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
                     AB::Expr::from_u32(RV32_REGISTER_AS),
                     AB::Expr::from_u32(RV32_MEMORY_AS),
                 ],
-                ExecutionState::new(local.pc, local.timestamp),
+                ExecutionState::<AB::Expr>::new(local.pc, AB::Expr::ZERO, local.timestamp),
                 AB::F::from_usize(timestamp_delta),
             )
             .eval(builder, is_valid);

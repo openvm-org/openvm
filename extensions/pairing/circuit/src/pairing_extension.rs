@@ -144,6 +144,7 @@ pub(crate) mod phantom {
             memory: &GuestMemory,
             streams: &mut Streams<F>,
             _: &mut StdRng,
+            _fp: u32,
             _: PhantomDiscriminant,
             a: u32,
             b: u32,

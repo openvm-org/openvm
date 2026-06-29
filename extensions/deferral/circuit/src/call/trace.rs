@@ -89,7 +89,7 @@ where
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-        A::start(*state.pc, state.memory, &mut adapter_record);
+        A::start(*state.pc, *state.fp, state.memory, &mut adapter_record);
         core_record.deferral_idx = instruction.c;
 
         let read_data = self
@@ -263,7 +263,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
     type WriteData = DeferralCallWrites<u8, F>;
     type RecordMut<'a> = &'a mut DeferralCallAdapterRecord<F>;
 
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, _fp: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }

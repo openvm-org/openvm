@@ -182,7 +182,7 @@ pub trait AdapterTraceExecutor<F>: Clone {
     where
         Self: 'a;
 
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>);
+    fn start(pc: u32, fp: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>);
 
     fn read(
         &self,

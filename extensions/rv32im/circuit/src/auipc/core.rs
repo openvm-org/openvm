@@ -230,7 +230,7 @@ where
     ) -> Result<(), ExecutionError> {
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
-        A::start(*state.pc, state.memory, &mut adapter_record);
+        A::start(*state.pc, *state.fp, state.memory, &mut adapter_record);
 
         core_record.from_pc = *state.pc;
         core_record.imm = instruction.c.as_canonical_u32();

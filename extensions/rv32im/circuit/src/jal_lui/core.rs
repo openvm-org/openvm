@@ -191,7 +191,7 @@ where
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
-        A::start(*state.pc, state.memory, &mut adapter_record);
+        A::start(*state.pc, *state.fp, state.memory, &mut adapter_record);
 
         let is_jal = opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET) == JAL as usize;
         let signed_imm = get_signed_imm(is_jal, imm);

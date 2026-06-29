@@ -330,6 +330,9 @@ pub enum VmVerificationError<SC: StarkProtocolConfig> {
     #[error("initial pc mismatch (initial: {initial}, prev_final: {prev_final})")]
     InitialPcMismatch { initial: u32, prev_final: u32 },
 
+    #[error("initial fp mismatch (initial: {initial}, prev_final: {prev_final})")]
+    InitialFpMismatch { initial: u32, prev_final: u32 },
+
     #[error("initial memory root mismatch")]
     InitialMemoryRootMismatch,
 
@@ -614,10 +617,12 @@ where
         let ctx = PreflightCtx::new_with_capacity(&capacities, num_insns);
 
         let pc = state.pc();
+        let fp = state.fp();
         let memory = TracingMemory::from_image(state.memory);
-        let from_state = ExecutionState::new(pc, memory.timestamp());
+        let from_state = ExecutionState::new(pc, fp, memory.timestamp());
         let vm_state = VmState::new(
             pc,
+            fp,
             memory,
             state.streams,
             state.rng,
@@ -633,8 +638,9 @@ where
         crate::metrics::end_segment_metrics(&mut exec_state);
 
         let pc = exec_state.vm_state.pc();
+        let fp = exec_state.vm_state.fp();
         let memory = exec_state.vm_state.memory;
-        let to_state = ExecutionState::new(pc, memory.timestamp());
+        let to_state = ExecutionState::new(pc, fp, memory.timestamp());
         let exit_code = exec_state.exit_code?;
         let system_records = SystemRecords {
             from_state,
@@ -646,6 +652,7 @@ where
         let record_arenas = exec_state.ctx.arenas;
         let to_state = VmState::new(
             pc,
+            fp,
             memory.data,
             exec_state.vm_state.streams,
             exec_state.vm_state.rng,
@@ -1165,6 +1172,7 @@ where
     }
     let mut prev_final_memory_root = None;
     let mut prev_final_pc = None;
+    let mut prev_final_fp = None;
     let mut start_pc = None;
     let mut initial_memory_root = None;
     let mut program_commit = None;
@@ -1210,10 +1218,18 @@ where
                             prev_final: prev_final_pc.unwrap().as_canonical_u32(),
                         });
                     }
+                    // Check initial fp matches the previous final fp.
+                    if pvs.initial_fp != prev_final_fp.unwrap() {
+                        return Err(VmVerificationError::InitialFpMismatch {
+                            initial: pvs.initial_fp.as_canonical_u32(),
+                            prev_final: prev_final_fp.unwrap().as_canonical_u32(),
+                        });
+                    }
                 } else {
                     start_pc = Some(pvs.initial_pc);
                 }
                 prev_final_pc = Some(pvs.final_pc);
+                prev_final_fp = Some(pvs.final_fp);
 
                 let expected_is_terminate = i == proofs.len() - 1;
                 if pvs.is_terminate != PrimeCharacteristicRing::from_bool(expected_is_terminate) {

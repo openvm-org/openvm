@@ -142,6 +142,7 @@ where
 
         <Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
             *state.pc,
+            *state.fp,
             state.memory,
             &mut adapter_record,
         );
@@ -220,6 +221,7 @@ where
 
         <Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
             *state.pc,
+            *state.fp,
             state.memory,
             &mut adapter_record,
         );

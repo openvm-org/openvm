@@ -436,7 +436,7 @@ where
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
-        A::start(*state.pc, state.memory, &mut adapter_record);
+        A::start(*state.pc, *state.fp, state.memory, &mut adapter_record);
 
         core_record.local_opcode = opcode.local_opcode_idx(self.offset) as u8;
 

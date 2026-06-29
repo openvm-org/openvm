@@ -288,6 +288,8 @@ pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>> {
 #[derive(derive_new::new)]
 pub struct VmStateMut<'a, F, MEM, RA> {
     pub pc: &'a mut u32,
+    /// Frame pointer, carried in the VM state alongside `pc` (no longer stored in memory).
+    pub fp: &'a mut u32,
     pub memory: &'a mut MEM,
     pub streams: &'a mut Streams<F>,
     pub rng: &'a mut StdRng,
@@ -311,6 +313,9 @@ pub struct E2PreCompute<DATA> {
 )]
 pub struct ExecutionState<T> {
     pub pc: T,
+    /// Frame pointer. Carried on the execution bus and in the connector's public values exactly
+    /// like `pc`, rather than stored in a memory cell.
+    pub fp: T,
     pub timestamp: T,
 }
 
@@ -353,9 +358,10 @@ pub enum PcIncOrSet<T> {
 }
 
 impl<T> ExecutionState<T> {
-    pub fn new(pc: impl Into<T>, timestamp: impl Into<T>) -> Self {
+    pub fn new(pc: impl Into<T>, fp: impl Into<T>, timestamp: impl Into<T>) -> Self {
         Self {
             pc: pc.into(),
+            fp: fp.into(),
             timestamp: timestamp.into(),
         }
     }
@@ -365,16 +371,17 @@ impl<T> ExecutionState<T> {
         let mut next = || iter.next().unwrap();
         Self {
             pc: next(),
+            fp: next(),
             timestamp: next(),
         }
     }
 
-    pub fn flatten(self) -> [T; 2] {
-        [self.pc, self.timestamp]
+    pub fn flatten(self) -> [T; 3] {
+        [self.pc, self.fp, self.timestamp]
     }
 
     pub fn get_width() -> usize {
-        2
+        3
     }
 
     pub fn map<U: Clone, F: Fn(T) -> U>(self, function: F) -> ExecutionState<U> {
@@ -393,6 +400,8 @@ impl ExecutionBus {
     ) {
         let next_state = ExecutionState {
             pc: prev_state.pc.clone() + AB::F::ONE,
+            // fp is unchanged by the default pc increment.
+            fp: prev_state.fp.clone(),
             timestamp: prev_state.timestamp.clone() + timestamp_change.into(),
         };
         self.execute(builder, enabled, prev_state, next_state);
@@ -409,12 +418,20 @@ impl ExecutionBus {
         let enabled = enabled.into();
         self.inner.receive(
             builder,
-            [prev_state.pc.into(), prev_state.timestamp.into()],
+            [
+                prev_state.pc.into(),
+                prev_state.fp.into(),
+                prev_state.timestamp.into(),
+            ],
             enabled.clone(),
         );
         self.inner.send(
             builder,
-            [next_state.pc.into(), next_state.timestamp.into()],
+            [
+                next_state.pc.into(),
+                next_state.fp.into(),
+                next_state.timestamp.into(),
+            ],
             enabled,
         );
     }
@@ -443,6 +460,9 @@ impl ExecutionBridge {
                 PcIncOrSet::Set(to_pc) => to_pc,
                 PcIncOrSet::Inc(pc_inc) => from_state.pc.clone().into() + pc_inc,
             },
+            // fp is kept by default; instructions that change it (e.g. CALL) use `execute` with an
+            // explicit `to_state` carrying the new fp.
+            fp: from_state.fp.clone().into(),
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
         self.execute(opcode, operands, from_state, to_state)
@@ -457,6 +477,7 @@ impl ExecutionBridge {
     ) -> ExecutionBridgeInteractor<AB> {
         let to_state = ExecutionState {
             pc: from_state.pc.clone().into() + AB::Expr::from_u32(DEFAULT_PC_STEP),
+            fp: from_state.fp.clone().into(),
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
         self.execute(opcode, operands, from_state, to_state)
@@ -523,6 +544,7 @@ pub trait PhantomSubExecutor<F>: Send + Sync {
         memory: &GuestMemory,
         streams: &mut Streams<F>,
         rng: &mut StdRng,
+        fp: u32,
         discriminant: PhantomDiscriminant,
         a: u32,
         b: u32,

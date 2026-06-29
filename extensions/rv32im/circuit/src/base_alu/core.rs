@@ -224,7 +224,7 @@ where
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
-        A::start(*state.pc, state.memory, &mut adapter_record);
+        A::start(*state.pc, *state.fp, state.memory, &mut adapter_record);
 
         [core_record.b, core_record.c] = self
             .adapter

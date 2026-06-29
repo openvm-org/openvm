@@ -203,7 +203,12 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceExecutor<F>
     type RecordMut<'a> = &'a mut Rv32BaseAluAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut Rv32BaseAluAdapterRecord) {
+    fn start(
+        pc: u32,
+        _fp: u32,
+        memory: &TracingMemory,
+        record: &mut &mut Rv32BaseAluAdapterRecord,
+    ) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }

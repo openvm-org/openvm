@@ -318,7 +318,7 @@ where
         TOTAL_READ_SIZE,
     >;
 
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, _fp: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.timestamp = memory.timestamp;
     }

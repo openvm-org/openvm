@@ -23,6 +23,9 @@ use crate::{
 pub struct VmState<F, MEM = GuestMemory> {
     #[getset(get_copy = "pub", get_mut = "pub")]
     pc: u32,
+    /// Frame pointer, carried in the VM state alongside `pc` (no longer in a memory cell).
+    #[getset(get_copy = "pub", get_mut = "pub")]
+    fp: u32,
     pub memory: MEM,
     pub streams: Streams<F>,
     pub rng: StdRng,
@@ -37,6 +40,11 @@ impl<F, MEM> VmState<F, MEM> {
     pub fn set_pc(&mut self, pc: u32) {
         self.pc = pc;
     }
+
+    #[inline(always)]
+    pub fn set_fp(&mut self, fp: u32) {
+        self.fp = fp;
+    }
 }
 
 impl<F: Clone, MEM> VmState<F, MEM> {
@@ -48,6 +56,7 @@ impl<F: Clone, MEM> VmState<F, MEM> {
     ) -> Self {
         Self {
             pc,
+            fp: 0,
             memory,
             streams: streams.into(),
             rng: StdRng::seed_from_u64(seed),
@@ -60,6 +69,7 @@ impl<F: Clone, MEM> VmState<F, MEM> {
     pub fn into_mut<'a, RA>(&'a mut self, ctx: &'a mut RA) -> VmStateMut<'a, F, MEM, RA> {
         VmStateMut {
             pc: &mut self.pc,
+            fp: &mut self.fp,
             memory: &mut self.memory,
             streams: &mut self.streams,
             rng: &mut self.rng,
@@ -89,6 +99,7 @@ impl<F: Clone> VmState<F, GuestMemory> {
         streams: impl Into<Streams<F>>,
     ) {
         self.pc = pc_start;
+        self.fp = 0;
         self.memory.memory.fill_zero();
         self.memory.memory.set_from_sparse(init_memory);
         self.streams = streams.into();

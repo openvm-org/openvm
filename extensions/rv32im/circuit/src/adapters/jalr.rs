@@ -131,6 +131,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
                 local_cols.from_state,
                 ExecutionState {
                     pc: to_pc,
+                    fp: local_cols.from_state.fp.into(),
                     timestamp: timestamp + AB::F::from_usize(timestamp_delta),
                 },
             )
@@ -174,7 +175,7 @@ where
     type RecordMut<'a> = &'a mut Rv32JalrAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, _fp: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }

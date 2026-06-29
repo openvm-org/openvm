@@ -280,8 +280,8 @@ where
         Self: 'a;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
-        A::start(pc, memory, record);
+    fn start(pc: u32, fp: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
+        A::start(pc, fp, memory, record);
     }
 
     #[inline(always)]
@@ -495,8 +495,8 @@ where
         Self: 'a;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
-        A::start(pc, memory, record);
+    fn start(pc: u32, fp: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
+        A::start(pc, fp, memory, record);
     }
 
     #[inline(always)]

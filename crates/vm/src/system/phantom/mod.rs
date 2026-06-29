@@ -55,6 +55,7 @@ pub struct PhantomAir {
 #[derive(AlignedBorrow, StructReflection, Copy, Clone, Serialize, Deserialize)]
 pub struct PhantomCols<T> {
     pub pc: T,
+    pub fp: T,
     #[serde(with = "BigArray")]
     pub operands: [T; NUM_PHANTOM_OPERANDS],
     pub timestamp: T,
@@ -80,6 +81,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
         let local = main.row_slice(0).expect("window should have two elements");
         let &PhantomCols {
             pc,
+            fp,
             operands,
             timestamp,
             is_valid,
@@ -89,7 +91,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
             .execute_and_increment_or_set_pc(
                 self.phantom_opcode.to_field::<AB::F>(),
                 operands,
-                ExecutionState::<AB::Expr>::new(pc, timestamp),
+                ExecutionState::<AB::Expr>::new(pc, fp, timestamp),
                 AB::Expr::ONE,
                 PcIncOrSet::Inc(AB::Expr::from_u32(DEFAULT_PC_STEP)),
             )
@@ -101,6 +103,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
 #[derive(AlignedBytesBorrow, Debug, Clone)]
 pub struct PhantomRecord {
     pub pc: u32,
+    pub fp: u32,
     pub operands: [u32; NUM_PHANTOM_OPERANDS],
     pub timestamp: u32,
 }
@@ -128,7 +131,9 @@ where
     ) -> Result<(), ExecutionError> {
         let record: &mut PhantomRecord = state.ctx.alloc(EmptyMultiRowLayout::default());
         let pc = *state.pc;
+        let fp = *state.fp;
         record.pc = pc;
+        record.fp = fp;
         record.timestamp = state.memory.timestamp;
         let [a, b, c] = [instruction.a, instruction.b, instruction.c].map(|x| x.as_canonical_u32());
         record.operands = [a, b, c];
@@ -181,6 +186,7 @@ where
                     &state.memory.data,
                     state.streams,
                     state.rng,
+                    fp,
                     discriminant,
                     a,
                     b,
@@ -215,6 +221,7 @@ impl<F: Field> TraceFiller<F> for PhantomFiller {
         row.operands[2] = F::from_u32(record.operands[2]);
         row.operands[1] = F::from_u32(record.operands[1]);
         row.operands[0] = F::from_u32(record.operands[0]);
+        row.fp = F::from_u32(record.fp);
         row.pc = F::from_u32(record.pc)
     }
 }
@@ -230,6 +237,7 @@ impl<F> PhantomSubExecutor<F> for NopPhantomExecutor {
         _memory: &GuestMemory,
         _streams: &mut Streams<F>,
         _rng: &mut StdRng,
+        _fp: u32,
         _discriminant: PhantomDiscriminant,
         _a: u32,
         _b: u32,
@@ -246,6 +254,7 @@ impl<F> PhantomSubExecutor<F> for CycleStartPhantomExecutor {
         _memory: &GuestMemory,
         _streams: &mut Streams<F>,
         _rng: &mut StdRng,
+        _fp: u32,
         _discriminant: PhantomDiscriminant,
         _a: u32,
         _b: u32,
@@ -263,6 +272,7 @@ impl<F> PhantomSubExecutor<F> for CycleEndPhantomExecutor {
         _memory: &GuestMemory,
         _streams: &mut Streams<F>,
         _rng: &mut StdRng,
+        _fp: u32,
         _discriminant: PhantomDiscriminant,
         _a: u32,
         _b: u32,
