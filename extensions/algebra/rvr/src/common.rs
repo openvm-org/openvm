@@ -55,7 +55,15 @@ impl<K: ArithKind> FieldArithInstr<K> {
         num_limbs: u32,
         modulus: Vec<u8>,
     ) -> Self {
-        Self { _kind: PhantomData, op, rd_reg, rs1_reg, rs2_reg, num_limbs, modulus }
+        Self {
+            _kind: PhantomData,
+            op,
+            rd_reg,
+            rs1_reg,
+            rs2_reg,
+            num_limbs,
+            modulus,
+        }
     }
 }
 
@@ -72,14 +80,15 @@ pub(crate) struct FieldIsEqInstr<K: IsEqKind> {
 }
 
 impl<K: IsEqKind> FieldIsEqInstr<K> {
-    pub fn new(
-        rd_reg: Reg,
-        rs1_reg: Reg,
-        rs2_reg: Reg,
-        num_limbs: u32,
-        modulus: Vec<u8>,
-    ) -> Self {
-        Self { _kind: PhantomData, rd_reg, rs1_reg, rs2_reg, num_limbs, modulus }
+    pub fn new(rd_reg: Reg, rs1_reg: Reg, rs2_reg: Reg, num_limbs: u32, modulus: Vec<u8>) -> Self {
+        Self {
+            _kind: PhantomData,
+            rd_reg,
+            rs1_reg,
+            rs2_reg,
+            num_limbs,
+            modulus,
+        }
     }
 }
 
@@ -98,7 +107,13 @@ pub(crate) struct FieldSetupInstr<K: SetupKind> {
 
 impl<K: SetupKind> FieldSetupInstr<K> {
     pub fn new(rd_reg: Reg, rs1_reg: Reg, rs2_reg: Reg, num_limbs: u32) -> Self {
-        Self { _kind: PhantomData, rd_reg, rs1_reg, rs2_reg, num_limbs }
+        Self {
+            _kind: PhantomData,
+            rd_reg,
+            rs1_reg,
+            rs2_reg,
+            num_limbs,
+        }
     }
 }
 

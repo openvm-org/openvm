@@ -10,11 +10,12 @@ mod common;
 mod fp2;
 mod modular;
 
-use num_bigint::BigUint;
-
-pub(crate) use common::{ArithKind, FieldArithInstr, FieldIsEqInstr, FieldKind, FieldSetupInstr, IsEqKind, SetupKind};
+pub(crate) use common::{
+    ArithKind, FieldArithInstr, FieldIsEqInstr, FieldKind, FieldSetupInstr, IsEqKind, SetupKind,
+};
 pub use fp2::Fp2RvrExtension;
 pub use modular::{HintNonQrInstr, HintSqrtInstr, ModularRvrExtension};
+use num_bigint::BigUint;
 
 /// Zero-pad `modulus` to the canonical limb boundary (32 or 48 bytes).
 ///

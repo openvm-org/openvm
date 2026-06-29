@@ -16,8 +16,8 @@ use halo2curves_axiom::ff::PrimeField;
 use num_bigint::BigUint;
 use num_traits::One;
 use rvr_openvm_ext_algebra_ffi_common::{
-    known_field_op_fn, mod_inverse, read_bigint, read_bls12_381_fq, read_field_256,
-    write_bigint, write_bls12_381_fq, write_field_256, FieldArith, KnownFieldArith,
+    known_field_op_fn, mod_inverse, read_bigint, read_bls12_381_fq, read_field_256, write_bigint,
+    write_bls12_381_fq, write_field_256, FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
     ext_hint_stream_set, rd_mem_u64_range_wrapper, rd_mem_words_traced, trace_mem_access_range,

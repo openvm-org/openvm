@@ -68,15 +68,25 @@ impl<T: KnownFieldArith> FieldArith for T {
     }
 
     #[inline(always)]
-    fn add(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem { a + b }
+    fn add(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
+        a + b
+    }
     #[inline(always)]
-    fn sub(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem { a - b }
+    fn sub(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
+        a - b
+    }
     #[inline(always)]
-    fn mul(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem { a * b }
+    fn mul(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
+        a * b
+    }
     #[inline(always)]
-    fn div(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem { a * b.invert().unwrap() }
+    fn div(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
+        a * b.invert().unwrap()
+    }
     #[inline(always)]
-    fn is_eq(&self, a: &Self::Elem, b: &Self::Elem) -> bool { a == b }
+    fn is_eq(&self, a: &Self::Elem, b: &Self::Elem) -> bool {
+        a == b
+    }
 }
 
 // ── 256-bit / 384-bit field I/O ─────────────────────────────────────────────
@@ -265,9 +275,10 @@ macro_rules! unknown_field_op_fn {
             num_limbs: u32,
             modulus_ptr: *const u8,
         ) {
-            let modulus = ::num_bigint::BigUint::from_bytes_le(
-                ::std::slice::from_raw_parts(modulus_ptr, num_limbs as usize),
-            );
+            let modulus = ::num_bigint::BigUint::from_bytes_le(::std::slice::from_raw_parts(
+                modulus_ptr,
+                num_limbs as usize,
+            ));
             let f = $field_ty { modulus, num_limbs };
             $crate::exec_op(&f, state, rd_ptr, rs1_ptr, rs2_ptr, |f, a, b| f.$op(a, b));
         }

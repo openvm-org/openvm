@@ -78,6 +78,8 @@ fn point_base(ptr: u64, idx: u64, words_per_point: u64) -> Option<u64> {
 
 // ── Shared scaffolding ──────────────────────────────────────────────────
 
+type PairingPoints<Fq, Fq2> = (Vec<AffinePoint<Fq>>, Vec<AffinePoint<Fq2>>);
+
 /// Read G1 and G2 point vectors from guest memory.
 ///
 /// `read_fq` reads one base-field element. `make_fq2` constructs an Fq2
@@ -90,7 +92,7 @@ unsafe fn read_pairing_points<Fq: Field, Fq2: Field>(
     fq_bytes: u64,
     read_fq: impl Fn(*mut c_void, u64) -> Option<Fq>,
     make_fq2: impl Fn(Fq, Fq) -> Fq2,
-) -> Option<(Vec<AffinePoint<Fq>>, Vec<AffinePoint<Fq2>>)> {
+) -> Option<PairingPoints<Fq, Fq2>> {
     let p_ptr = rd_mem_u64_wrapper(state, rs1_val);
     let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
     let q_ptr = rd_mem_u64_wrapper(state, rs2_val);
@@ -129,7 +131,9 @@ unsafe fn read_pairing_points<Fq: Field, Fq2: Field>(
 
 unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<Vec<u8>> {
     let (p, q) = read_pairing_points(
-        state, rs1_val, rs2_val,
+        state,
+        rs1_val,
+        rs2_val,
         BN254_FQ_BYTES,
         |s, ptr| unsafe { read_bn254_fq(s, ptr) },
         bn256::Fq2::new,
@@ -137,7 +141,9 @@ unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<V
     let f: bn256::Fq12 = Bn254::multi_miller_loop(&p, &q);
     let (c, u) = Bn254::final_exp_hint(&f);
     Some(
-        c.to_coeffs().into_iter().chain(u.to_coeffs())
+        c.to_coeffs()
+            .into_iter()
+            .chain(u.to_coeffs())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
             .collect(),
@@ -148,7 +154,9 @@ unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<V
 
 unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<Vec<u8>> {
     let (p, q) = read_pairing_points(
-        state, rs1_val, rs2_val,
+        state,
+        rs1_val,
+        rs2_val,
         BLS12_381_FQ_BYTES,
         |s, ptr| unsafe { read_bls12_381_fq(s, ptr) },
         |c0, c1| bls12_381::Fq2 { c0, c1 },
@@ -156,7 +164,9 @@ unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Opti
     let f: bls12_381::Fq12 = Bls12_381::multi_miller_loop(&p, &q);
     let (c, u) = Bls12_381::final_exp_hint(&f);
     Some(
-        c.to_coeffs().into_iter().chain(u.to_coeffs())
+        c.to_coeffs()
+            .into_iter()
+            .chain(u.to_coeffs())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
             .collect(),
