@@ -49,6 +49,11 @@ impl DefaultOldCounts {
     }
 
     #[inline(always)]
+    fn is_empty(self) -> bool {
+        self.leaves == 0 && self.merkle_nodes == 0 && self.merkle_node_levels == 0
+    }
+
+    #[inline(always)]
     fn estimated_poseidon_rows(self) -> u32 {
         u32::from(self.leaves != 0) + self.merkle_node_levels.count_ones()
     }
@@ -70,6 +75,16 @@ impl BitSet {
 
     #[inline(always)]
     pub fn insert(&mut self, index: usize) -> bool {
+        self.insert_impl::<true>(index)
+    }
+
+    #[inline(always)]
+    fn insert_persistent(&mut self, index: usize) -> bool {
+        self.insert_impl::<false>(index)
+    }
+
+    #[inline(always)]
+    fn insert_impl<const TRACK_DIRTY: bool>(&mut self, index: usize) -> bool {
         let word_index = index >> 6;
         let bit_index = index & 63;
         let mask = 1u64 << bit_index;
@@ -82,11 +97,14 @@ impl BitSet {
         let word = unsafe { self.words.get_unchecked_mut(word_index) };
         let old_word = *word;
         let was_set = (old_word & mask) != 0;
-        if old_word == 0 {
+        if was_set {
+            return false;
+        }
+        if TRACK_DIRTY && old_word == 0 {
             self.dirty_words.push(word_index);
         }
         *word = old_word | mask;
-        !was_set
+        true
     }
 
     #[inline(always)]
@@ -258,16 +276,27 @@ impl MemoryPageTracker {
         let added_mask = leaf_mask & !old_mask;
         let committed_mask = occupancy_tracker.page_mask(page_id);
         let default_leaf_mask = added_mask & !committed_mask;
-        let leaves = added_mask.count_ones();
+        let single_added_leaf = added_mask.is_power_of_two();
+        let leaves = if single_added_leaf {
+            1
+        } else {
+            added_mask.count_ones()
+        };
 
         let (mut merkle_nodes, mut default_old) = if default_leaf_mask == 0 {
             (
-                if leaves == 1 {
+                if single_added_leaf {
                     local_merkle_nodes_added_leaf(old_mask, added_mask.trailing_zeros())
                 } else {
                     local_merkle_nodes_delta(old_mask, added_mask)
                 },
                 DefaultOldCounts::default(),
+            )
+        } else if single_added_leaf {
+            local_merkle_nodes_added_leaf_with_default(
+                old_mask,
+                added_mask.trailing_zeros(),
+                committed_mask,
             )
         } else {
             // Multi-leaf path: walk old and added occupancy up the six
@@ -275,7 +304,11 @@ impl MemoryPageTracker {
             local_merkle_nodes_delta_with_default(old_mask, added_mask, committed_mask)
         };
         if default_leaf_mask != 0 {
-            default_old.leaves = default_leaf_mask.count_ones();
+            default_old.leaves = if single_added_leaf {
+                1
+            } else {
+                default_leaf_mask.count_ones()
+            };
         }
 
         if old_mask == 0 {
@@ -393,7 +426,9 @@ impl MemoryOccupancyTracker {
         let mut node = (1usize << self.upper_height) + page_id;
         while node > 1 {
             node >>= 1;
-            self.upper_nodes.insert(node);
+            if !self.upper_nodes.insert_persistent(node) {
+                break;
+            }
         }
     }
 }
@@ -462,6 +497,78 @@ fn local_merkle_nodes_added_leaf(old_mask: u64, leaf: u32) -> u32 {
 }
 
 #[inline(always)]
+fn add_leaf_level_delta_with_default<const GROUP_SIZE: u32>(
+    old_mask: u64,
+    committed_mask: u64,
+    leaf: u32,
+    level: usize,
+    default_old: &mut DefaultOldCounts,
+) -> u32 {
+    if aligned_group_is_empty::<GROUP_SIZE>(old_mask, leaf) {
+        if aligned_group_is_empty::<GROUP_SIZE>(committed_mask, leaf) {
+            default_old.merkle_nodes += 1;
+            default_old.merkle_node_levels |= 1u64 << level;
+        }
+        1
+    } else {
+        0
+    }
+}
+
+#[inline(always)]
+fn local_merkle_nodes_added_leaf_with_default(
+    old_mask: u64,
+    leaf: u32,
+    committed_mask: u64,
+) -> (u32, DefaultOldCounts) {
+    debug_assert!(leaf < u64::BITS);
+
+    if old_mask == 0 && committed_mask == 0 {
+        return (
+            PAGE_BITS as u32,
+            DefaultOldCounts {
+                leaves: 0,
+                merkle_nodes: PAGE_BITS as u32,
+                merkle_node_levels: (1u64 << (PAGE_BITS + 1)) - 2,
+            },
+        );
+    }
+
+    let mut default_old = DefaultOldCounts::default();
+    let mut nodes = 0;
+    nodes +=
+        add_leaf_level_delta_with_default::<2>(old_mask, committed_mask, leaf, 1, &mut default_old);
+    nodes +=
+        add_leaf_level_delta_with_default::<4>(old_mask, committed_mask, leaf, 2, &mut default_old);
+    nodes +=
+        add_leaf_level_delta_with_default::<8>(old_mask, committed_mask, leaf, 3, &mut default_old);
+    nodes += add_leaf_level_delta_with_default::<16>(
+        old_mask,
+        committed_mask,
+        leaf,
+        4,
+        &mut default_old,
+    );
+    nodes += add_leaf_level_delta_with_default::<32>(
+        old_mask,
+        committed_mask,
+        leaf,
+        5,
+        &mut default_old,
+    );
+
+    if old_mask == 0 {
+        nodes += 1;
+        if committed_mask == 0 {
+            default_old.merkle_nodes += 1;
+            default_old.merkle_node_levels |= 1u64 << PAGE_BITS;
+        }
+    }
+
+    (nodes, default_old)
+}
+
+#[inline(always)]
 fn add_level_delta_with_default<const SHIFT: u32, const MASK: u64>(
     old_mask: &mut u64,
     added_mask: &mut u64,
@@ -474,10 +581,8 @@ fn add_level_delta_with_default<const SHIFT: u32, const MASK: u64>(
     *committed_mask = (*committed_mask | (*committed_mask >> SHIFT)) & MASK;
     let new_nodes = *added_mask & !*old_mask;
     let default_nodes = new_nodes & !*committed_mask;
-    if default_nodes != 0 {
-        default_old.merkle_nodes += default_nodes.count_ones();
-        default_old.merkle_node_levels |= 1u64 << level;
-    }
+    default_old.merkle_nodes += default_nodes.count_ones();
+    default_old.merkle_node_levels |= u64::from(default_nodes != 0) << level;
     new_nodes.count_ones()
 }
 
@@ -905,6 +1010,10 @@ impl MemoryCtx {
         }
         self.page_indices_applied_len = len;
 
+        if leaves == 0 && merkle_nodes == 0 && default_old.is_empty() {
+            return;
+        }
+
         debug_assert!(trace_heights.len() >= 2);
         let poseidon2_idx = trace_heights.len() - 2;
         let old_default_poseidon_rows = default_old.estimated_poseidon_rows();
@@ -1042,11 +1151,38 @@ mod tests {
     }
 
     #[test]
+    fn test_default_single_leaf_matches_dense_delta() {
+        for leaf in 0..u64::BITS {
+            let added = 1u64 << leaf;
+            let old_patterns = [0, 1, 0x5555_5555_5555_5555, 0xaaaa_aaaa_aaaa_aaaa, u64::MAX];
+            let committed_patterns = [0, 1, 0x3333_3333_3333_3333, 0xcccc_cccc_cccc_cccc, u64::MAX];
+
+            for old_mask in old_patterns {
+                let old_mask = old_mask & !added;
+                for committed_mask in committed_patterns {
+                    let committed_mask = committed_mask & !added;
+                    let dense =
+                        local_merkle_nodes_delta_with_default(old_mask, added, committed_mask);
+                    let sparse =
+                        local_merkle_nodes_added_leaf_with_default(old_mask, leaf, committed_mask);
+                    assert_eq!(
+                        sparse, dense,
+                        "leaf={leaf} old={old_mask:x} committed={committed_mask:x}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn test_page_mask_duplicate_leaf_does_not_change_counts() {
         let mut tracker = MemoryPageTracker::new(3);
         let occupancy = MemoryOccupancyTracker::new(3);
         assert_ne!(tracker.insert(0, 1 << 0, &occupancy).added_mask, 0);
-        assert_eq!(tracker.insert(0, 1 << 0, &occupancy), MemoryHeightDelta::default());
+        assert_eq!(
+            tracker.insert(0, 1 << 0, &occupancy),
+            MemoryHeightDelta::default()
+        );
     }
 
     #[test]
