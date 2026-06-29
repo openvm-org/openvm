@@ -270,7 +270,7 @@ impl EmitContext {
             "{var_ty} {var} = {data_func}({data_arg}, {addr});"
         ));
         if self.mode.traces_memory_pages() {
-            self.emit_inline_page_record(&addr);
+            self.emit_inline_page_record(&addr, width);
         }
         var
     }
@@ -289,15 +289,21 @@ impl EmitContext {
         let data_arg = if value_traced { "state" } else { "memory" };
 
         if self.mode.traces_memory_pages() {
-            self.emit_inline_page_record(&addr);
+            self.emit_inline_page_record(&addr, width);
         }
         self.write_line(&format!(
             "{wr_func}({data_arg}, {addr}, ({cast_ty})({val}));"
         ));
     }
 
-    fn emit_inline_page_record(&mut self, addr: &str) {
-        self.write_line(&format!("trace_memory_access_leaf(&trace_memory, {addr});"));
+    fn emit_inline_page_record(&mut self, addr: &str, width: u8) {
+        if width == 1 {
+            self.write_line(&format!("trace_memory_access_leaf(&trace_memory, {addr});"));
+        } else {
+            self.write_line(&format!(
+                "trace_memory_access_bytes(&trace_memory, {addr}, {width}u);"
+            ));
+        }
         self.trace_memory_dirty = true;
     }
 
@@ -473,5 +479,41 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
 
     fn trace_mem_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32) {
         EmitContext::trace_mem_access_u64_range(self, base_addr, num_dwords, addr_space);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::{EmitContext, EmitMode};
+
+    fn metered_memory_ctx() -> EmitContext {
+        EmitContext::new(
+            HashSet::new(),
+            EmitMode::Metered {
+                trace_memory_pages: true,
+            },
+        )
+    }
+
+    #[test]
+    fn byte_memory_access_uses_single_leaf_trace() {
+        let mut ctx = metered_memory_ctx();
+        ctx.write_mem("addr", 0, "val", 1);
+
+        let emitted = ctx.buf();
+        assert!(emitted.contains("trace_memory_access_leaf(&trace_memory, addr);"));
+        assert!(!emitted.contains("trace_memory_access_bytes"));
+    }
+
+    #[test]
+    fn multibyte_memory_access_traces_full_width() {
+        let mut ctx = metered_memory_ctx();
+        ctx.read_mem("addr", 0, 8, false);
+
+        assert!(ctx
+            .buf()
+            .contains("trace_memory_access_bytes(&trace_memory, addr, 8u);"));
     }
 }
