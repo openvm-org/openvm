@@ -27,7 +27,8 @@ pub struct SegmentationLimits {
 #[derive(Clone, Debug)]
 struct SegmentationParams {
     air_names: Vec<String>,
-    widths: Vec<usize>,
+    total_widths: Vec<usize>,
+    stacked_main_widths: Vec<usize>,
     interactions: Vec<usize>,
     need_rot: Vec<bool>,
     max_trace_height: u32,
@@ -40,13 +41,15 @@ struct SegmentationParams {
 impl SegmentationParams {
     fn new(
         air_names: Vec<String>,
-        widths: Vec<usize>,
+        total_widths: Vec<usize>,
+        stacked_main_widths: Vec<usize>,
         interactions: Vec<usize>,
         need_rot: Vec<bool>,
         limits: SegmentationLimits,
         memory_config: ProvingMemoryConfig,
     ) -> Self {
-        assert_eq!(air_names.len(), widths.len());
+        assert_eq!(air_names.len(), total_widths.len());
+        assert_eq!(air_names.len(), stacked_main_widths.len());
         assert_eq!(air_names.len(), interactions.len());
         assert_eq!(air_names.len(), need_rot.len());
         assert!(
@@ -65,7 +68,8 @@ impl SegmentationParams {
 
         Self {
             air_names,
-            widths,
+            total_widths,
+            stacked_main_widths,
             interactions,
             need_rot,
             max_trace_height,
@@ -124,6 +128,10 @@ struct MeteredCounts {
     main_unpadded_no_rot: usize,
     /// Main trace cells for AIRs without next-row rotations, from padding rows.
     main_padding_no_rot: usize,
+    /// Stacked matrix slice cells before power-of-two padding.
+    stacked_unpadded_slice_cells: usize,
+    /// Stacked matrix slice cells from power-of-two padding.
+    stacked_padded_slice_cells: usize,
     /// Metered row-interaction slots before padding.
     interaction_cells_unpadded: usize,
     /// Metered row-interaction slots from padding rows.
@@ -140,7 +148,8 @@ struct MeteredMemoryBreakdown {
 impl SegmentationCtx {
     pub fn new(
         air_names: Vec<String>,
-        widths: Vec<usize>,
+        total_widths: Vec<usize>,
+        stacked_main_widths: Vec<usize>,
         interactions: Vec<usize>,
         need_rot: Vec<bool>,
         limits: SegmentationLimits,
@@ -149,7 +158,8 @@ impl SegmentationCtx {
         let num_airs = air_names.len();
         let params = SegmentationParams::new(
             air_names,
-            widths,
+            total_widths,
+            stacked_main_widths,
             interactions,
             need_rot,
             limits,
@@ -171,8 +181,8 @@ impl SegmentationCtx {
     }
 
     #[inline(always)]
-    pub(crate) fn widths(&self) -> &[usize] {
-        &self.params.widths
+    pub(crate) fn total_widths(&self) -> &[usize] {
+        &self.params.total_widths
     }
 
     #[inline(always)]
@@ -202,42 +212,70 @@ impl SegmentationCtx {
         &self,
         main_cnt_with_rot: usize,
         main_cnt_no_rot: usize,
+        main_stacked_cells: usize,
         interaction_cells: usize,
     ) -> (
         usize, /* memory */
         usize, /* main */
         usize, /* interaction */
     ) {
-        let estimate = self.params.memory_config.estimate(ProvingMemoryCounts::new(
-            main_cnt_with_rot,
-            main_cnt_no_rot,
-            interaction_cells,
-        ));
+        let estimate =
+            self.params
+                .memory_config
+                .estimate(ProvingMemoryCounts::new_with_stacked_cells(
+                    main_cnt_with_rot,
+                    main_cnt_no_rot,
+                    main_stacked_cells,
+                    interaction_cells,
+                ));
         (estimate.total, estimate.main, estimate.interaction)
     }
 
-    /// Sum padded main trace cells and interaction cells across all chips, splitting main
-    /// cells by per-AIR `need_rot`.
+    #[inline(always)]
+    fn stacked_main_cells_from_slice_cells(&self, stacked_slice_cells: usize) -> usize {
+        self.params
+            .memory_config
+            .stacked_matrix_cells(stacked_slice_cells)
+    }
+
+    #[inline(always)]
+    fn stacked_slice_cells(&self, height: usize, width: usize) -> usize {
+        if height == 0 {
+            return 0;
+        }
+        self.params.memory_config.stacked_slice_height(height) * width
+    }
+
+    /// Sum padded main trace cells, main columns included in the stacked-matrix estimate, and
+    /// interaction cells across all chips, splitting main cells by per-AIR `need_rot`.
     #[inline(always)]
     fn calculate_count_breakdown(&self, trace_heights: &[u32]) -> MeteredCounts {
-        debug_assert_eq!(trace_heights.len(), self.params.widths.len());
+        debug_assert_eq!(trace_heights.len(), self.params.total_widths.len());
+        debug_assert_eq!(trace_heights.len(), self.params.stacked_main_widths.len());
         debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
         debug_assert_eq!(trace_heights.len(), self.params.need_rot.len());
 
         let mut counts = MeteredCounts::default();
-        for (((&height, &width), &interactions), &need_rot) in trace_heights
-            .iter()
-            .zip(self.params.widths.iter())
-            .zip(self.params.interactions.iter())
-            .zip(self.params.need_rot.iter())
+        for ((((&height, &total_width), &stacked_main_width), &interactions), &need_rot) in
+            trace_heights
+                .iter()
+                .zip(self.params.total_widths.iter())
+                .zip(self.params.stacked_main_widths.iter())
+                .zip(self.params.interactions.iter())
+                .zip(self.params.need_rot.iter())
         {
             let padded_height = next_power_of_two_or_zero(height as usize);
             let unpadded_height = height as usize;
             let padding_height = padded_height - unpadded_height;
             counts.unpadded_rows += unpadded_height;
             counts.padding_rows += padding_height;
-            let main_unpadded_cells = unpadded_height * width;
-            let main_padding_cells = padding_height * width;
+            counts.stacked_unpadded_slice_cells +=
+                self.stacked_slice_cells(unpadded_height, stacked_main_width);
+            counts.stacked_padded_slice_cells += self
+                .stacked_slice_cells(padded_height, stacked_main_width)
+                - self.stacked_slice_cells(unpadded_height, stacked_main_width);
+            let main_unpadded_cells = unpadded_height * total_width;
+            let main_padding_cells = padding_height * total_width;
             if need_rot {
                 counts.main_unpadded_with_rot += main_unpadded_cells;
                 counts.main_padding_with_rot += main_padding_cells;
@@ -251,25 +289,30 @@ impl SegmentationCtx {
         counts
     }
 
-    /// Sum padded main trace cells and interaction cells across all chips, splitting main
-    /// cells by per-AIR `need_rot`.
+    /// Sum padded main trace cells, main columns included in the stacked-matrix estimate, and
+    /// interaction cells across all chips, splitting main cells by per-AIR `need_rot`.
     #[inline(always)]
-    fn calculate_cell_counts(&self, trace_heights: &[u32]) -> (usize, usize, usize) {
-        debug_assert_eq!(trace_heights.len(), self.params.widths.len());
+    fn calculate_cell_counts(&self, trace_heights: &[u32]) -> (usize, usize, usize, usize) {
+        debug_assert_eq!(trace_heights.len(), self.params.total_widths.len());
+        debug_assert_eq!(trace_heights.len(), self.params.stacked_main_widths.len());
         debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
         debug_assert_eq!(trace_heights.len(), self.params.need_rot.len());
 
         let mut main_cnt_with_rot = 0;
         let mut main_cnt_no_rot = 0;
+        let mut stacked_slice_cells = 0;
         let mut interaction_cells = 0;
-        for (((&height, &width), &interactions), &need_rot) in trace_heights
-            .iter()
-            .zip(self.params.widths.iter())
-            .zip(self.params.interactions.iter())
-            .zip(self.params.need_rot.iter())
+        for ((((&height, &total_width), &stacked_main_width), &interactions), &need_rot) in
+            trace_heights
+                .iter()
+                .zip(self.params.total_widths.iter())
+                .zip(self.params.stacked_main_widths.iter())
+                .zip(self.params.interactions.iter())
+                .zip(self.params.need_rot.iter())
         {
             let padded_height = next_power_of_two_or_zero(height as usize);
-            let main_cells = padded_height * width;
+            let main_cells = padded_height * total_width;
+            stacked_slice_cells += self.stacked_slice_cells(padded_height, stacked_main_width);
             if need_rot {
                 main_cnt_with_rot += main_cells;
             } else {
@@ -277,7 +320,12 @@ impl SegmentationCtx {
             }
             interaction_cells += padded_height * interactions;
         }
-        (main_cnt_with_rot, main_cnt_no_rot, interaction_cells)
+        (
+            main_cnt_with_rot,
+            main_cnt_no_rot,
+            self.stacked_main_cells_from_slice_cells(stacked_slice_cells),
+            interaction_cells,
+        )
     }
 
     /// Calculate total memory in bytes based on trace heights and widths.
@@ -290,23 +338,38 @@ impl SegmentationCtx {
         usize, /* main */
         usize, /* interaction */
     ) {
-        let (main_cnt_with_rot, main_cnt_no_rot, interaction_cells) =
+        let (main_cnt_with_rot, main_cnt_no_rot, main_stacked_cells, interaction_cells) =
             self.calculate_cell_counts(trace_heights);
-        self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells)
+        self.counts_to_memory(
+            main_cnt_with_rot,
+            main_cnt_no_rot,
+            main_stacked_cells,
+            interaction_cells,
+        )
     }
 
     #[inline(always)]
     fn calculate_memory_breakdown(&self, counts: &MeteredCounts) -> MeteredMemoryBreakdown {
-        let unpadded = self.params.memory_config.estimate(ProvingMemoryCounts::new(
-            counts.main_unpadded_with_rot,
-            counts.main_unpadded_no_rot,
-            counts.interaction_cells_unpadded,
-        ));
-        let total = self.params.memory_config.estimate(ProvingMemoryCounts::new(
-            counts.main_unpadded_with_rot + counts.main_padding_with_rot,
-            counts.main_unpadded_no_rot + counts.main_padding_no_rot,
-            counts.interaction_cells_unpadded + counts.interaction_cells_padding,
-        ));
+        let unpadded =
+            self.params
+                .memory_config
+                .estimate(ProvingMemoryCounts::new_with_stacked_cells(
+                    counts.main_unpadded_with_rot,
+                    counts.main_unpadded_no_rot,
+                    self.stacked_main_cells_from_slice_cells(counts.stacked_unpadded_slice_cells),
+                    counts.interaction_cells_unpadded,
+                ));
+        let total =
+            self.params
+                .memory_config
+                .estimate(ProvingMemoryCounts::new_with_stacked_cells(
+                    counts.main_unpadded_with_rot + counts.main_padding_with_rot,
+                    counts.main_unpadded_no_rot + counts.main_padding_no_rot,
+                    self.stacked_main_cells_from_slice_cells(
+                        counts.stacked_unpadded_slice_cells + counts.stacked_padded_slice_cells,
+                    ),
+                    counts.interaction_cells_unpadded + counts.interaction_cells_padding,
+                ));
 
         MeteredMemoryBreakdown {
             total: total.total,
@@ -348,7 +411,8 @@ impl SegmentationCtx {
     ) -> Option<SegmentationTrigger> {
         debug_assert_eq!(trace_heights.len(), is_trace_height_constant.len());
         debug_assert_eq!(trace_heights.len(), self.params.air_names.len());
-        debug_assert_eq!(trace_heights.len(), self.params.widths.len());
+        debug_assert_eq!(trace_heights.len(), self.params.total_widths.len());
+        debug_assert_eq!(trace_heights.len(), self.params.stacked_main_widths.len());
         debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
         debug_assert_eq!(trace_heights.len(), self.params.need_rot.len());
 
@@ -365,11 +429,22 @@ impl SegmentationCtx {
 
         let mut main_cnt_with_rot = 0usize;
         let mut main_cnt_no_rot = 0usize;
+        let mut stacked_slice_cells = 0usize;
         let mut interaction_cells = 0usize;
-        for (i, ((((padded_height, width), interactions), is_constant), &need_rot)) in trace_heights
+        for (
+            i,
+            (
+                (
+                    (((padded_height, &total_width), &stacked_main_width), &interactions),
+                    is_constant,
+                ),
+                &need_rot,
+            ),
+        ) in trace_heights
             .iter()
             .map(|&height| next_power_of_two_or_zero(height as usize) as u32)
-            .zip(self.params.widths.iter())
+            .zip(self.params.total_widths.iter())
+            .zip(self.params.stacked_main_widths.iter())
             .zip(self.params.interactions.iter())
             .zip(is_trace_height_constant.iter())
             .zip(self.params.need_rot.iter())
@@ -392,7 +467,9 @@ impl SegmentationCtx {
                     air_id: i,
                 });
             }
-            let main_cells = padded_height as usize * width;
+            let main_cells = padded_height as usize * total_width;
+            stacked_slice_cells +=
+                self.stacked_slice_cells(padded_height as usize, stacked_main_width);
             if need_rot {
                 main_cnt_with_rot += main_cells;
             } else {
@@ -401,8 +478,12 @@ impl SegmentationCtx {
             interaction_cells += padded_height as usize * interactions;
         }
 
-        let (total_memory, main_memory, interaction_memory) =
-            self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells);
+        let (total_memory, main_memory, interaction_memory) = self.counts_to_memory(
+            main_cnt_with_rot,
+            main_cnt_no_rot,
+            self.stacked_main_cells_from_slice_cells(stacked_slice_cells),
+            interaction_cells,
+        );
         if total_memory > self.params.max_memory {
             tracing::info!(
                 "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5})",
@@ -651,13 +732,14 @@ impl SegmentationCtx {
     fn emit_metered_air_metrics(&self, segment: &str, trace_heights: &[u32]) {
         let memory_config = self.params.memory_config;
 
-        for (air_id, ((((&height, &width), &interactions), &need_rot), air_name)) in trace_heights
-            .iter()
-            .zip(self.params.widths.iter())
-            .zip(self.params.interactions.iter())
-            .zip(self.params.need_rot.iter())
-            .zip(self.params.air_names.iter())
-            .enumerate()
+        for (air_id, ((((&height, &total_width), &interactions), &need_rot), air_name)) in
+            trace_heights
+                .iter()
+                .zip(self.params.total_widths.iter())
+                .zip(self.params.interactions.iter())
+                .zip(self.params.need_rot.iter())
+                .zip(self.params.air_names.iter())
+                .enumerate()
         {
             let padded_height = next_power_of_two_or_zero(height as usize);
             let unpadded_height = height as usize;
@@ -670,8 +752,8 @@ impl SegmentationCtx {
                 ("air_id", air_id.to_string()),
                 ("segment", segment.to_string()),
             ];
-            let unpadded_cells = unpadded_height * width;
-            let padding_cells = padding_height * width;
+            let unpadded_cells = unpadded_height * total_width;
+            let padding_cells = padding_height * total_width;
             // One interaction cell is one metered row-interaction slot.
             let interaction_cells_unpadded = unpadded_height * interactions;
             let interaction_cells_padding = padding_height * interactions;

@@ -30,7 +30,8 @@ pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
 pub struct MeteredCtxInputs<'a> {
     pub constant_trace_heights: &'a [Option<usize>],
     pub air_names: &'a [String],
-    pub widths: &'a [usize],
+    pub total_widths: &'a [usize],
+    pub stacked_main_widths: &'a [usize],
     pub interactions: &'a [usize],
     pub need_rot: &'a [bool],
     pub segmentation_limits: SegmentationLimits,
@@ -57,7 +58,8 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
         let segmentation_ctx = SegmentationCtx::new(
             inputs.air_names.to_vec(),
-            inputs.widths.to_vec(),
+            inputs.total_widths.to_vec(),
+            inputs.stacked_main_widths.to_vec(),
             inputs.interactions.to_vec(),
             inputs.need_rot.to_vec(),
             inputs.segmentation_limits,
@@ -168,16 +170,16 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         println!("{}", "-".repeat(80));
         println!("Segment {}", self.segmentation_ctx.segments.len() - 1);
         println!("{}", "-".repeat(80));
-        println!("{:>10} {:>10} {:<30}", "Width", "Height", "Air Name");
+        println!("{:>12} {:>10} {:<30}", "Total Width", "Height", "Air Name");
         println!("{}", "-".repeat(80));
         for ((&width, &height), air_name) in self
             .segmentation_ctx
-            .widths()
+            .total_widths()
             .iter()
             .zip_eq(self.trace_heights.iter())
             .zip_eq(self.segmentation_ctx.air_names().iter())
         {
-            println!("{:>10} {:>10} {:<30}", width, height, air_name.as_str());
+            println!("{:>12} {:>10} {:<30}", width, height, air_name.as_str());
         }
     }
 }
