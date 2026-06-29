@@ -19,28 +19,30 @@ pub struct PageAccess {
     pub leaf_mask: u64,
 }
 
-/// Old-side leaves and Merkle nodes that were still canonical default values
-/// when the current segment started.
+/// Newly counted leaves and nodes that were absent from global memory.
+///
+/// A global first touch has a canonical default initial-side value. These
+/// counts let `MemoryCtx` estimate Poseidon2 rows after default-row dedup.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(super) struct DefaultOldAccounting {
-    /// Newly charged leaves whose old value is the canonical default leaf.
-    pub(super) default_leaves: u32,
-    /// Newly charged internal nodes whose old value is a canonical default node.
-    pub(super) default_merkle_nodes: u32,
-    /// Bit `h` is set when at least one default old node appears at Merkle height `h`.
-    merkle_level_mask: u64,
+pub(super) struct GlobalFirstTouchCounts {
+    /// New segment leaves whose initial-side value is the canonical default leaf.
+    pub(super) leaves: u32,
+    /// New segment internal nodes whose initial-side value is a canonical default node.
+    pub(super) merkle_nodes: u32,
+    /// Bit `h` is set when height `h` has at least one first-touch internal node.
+    merkle_height_mask: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(super) struct MemoryAccountingDelta {
-    /// Boundary leaves newly charged in the current segment.
-    pub(super) new_leaves: u32,
-    /// Merkle internal nodes newly charged in the current segment.
-    pub(super) new_merkle_nodes: u32,
-    /// Subset of the inserted leaf mask that became newly charged in this segment.
-    pub(super) newly_charged_leaf_mask: u64,
-    /// Old-side default values among the newly charged leaves and nodes.
-    pub(super) default_old: DefaultOldAccounting,
+pub(super) struct MemoryInsertDelta {
+    /// Boundary leaves newly counted in the current segment.
+    pub(super) segment_leaves: u32,
+    /// Merkle internal nodes newly counted in the current segment.
+    pub(super) segment_merkle_nodes: u32,
+    /// Subset of the inserted leaf mask that became newly counted in this segment.
+    pub(super) new_segment_leaf_mask: u64,
+    /// New segment leaves and nodes that are absent from global memory.
+    pub(super) global_first_touches: GlobalFirstTouchCounts,
 }
 
 #[derive(Clone, Debug)]
@@ -51,12 +53,11 @@ struct BitSet {
     dirty_words: Vec<usize>,
 }
 
-/// Segment-local page accounting.
+/// Memory already counted in the current segment.
 ///
-/// This tracker is cleared whenever a new segment starts. It answers: "which
-/// leaves and Merkle nodes have already been charged in this segment?"
-/// `CommittedMemoryOccupancyTracker` is passed into `insert` only to classify
-/// old-side nodes as default or non-default.
+/// This tracker is cleared whenever a new segment starts. It prevents counting
+/// the same leaf or Merkle node twice inside one segment. `GlobalMemoryTracker`
+/// is passed into `insert` only to detect global first touches.
 ///
 /// Memory leaves form one sparse Merkle tree. Each page contains the 64 leaves
 /// represented by one `u64` leaf mask:
@@ -75,43 +76,43 @@ struct BitSet {
 /// page-local internal node once, and each upper-tree ancestor once across all
 /// pages in the segment.
 #[derive(Clone, Debug)]
-pub(super) struct SegmentMemoryPageTracker {
-    /// Segment-local touched leaf masks by page.
+pub(super) struct SegmentMemoryTracker {
+    /// Touched leaf masks by page for the current segment.
     segment_leaf_masks: Box<[u64]>,
     /// Pages written since the segment started.
     dirty_page_ids: Vec<usize>,
-    /// Upper-tree ancestors already charged in the current segment.
+    /// Upper-tree ancestors already counted in the current segment.
     segment_upper_nodes: BitSet,
     /// Number of Merkle levels above the 64-leaf page layer.
     upper_height: usize,
 }
 
-/// Occupancy committed at the last safe checkpoint.
+/// Memory present in the global baseline at the last checkpoint.
 ///
-/// This tracker persists across segment-local replays and is advanced only by
-/// `MemoryCtx::update_checkpoint`. It is seeded from nonzero initial memory, so
-/// pages or ancestors missing here are known canonical default old values.
+/// This tracker persists across segment replays and is advanced only by
+/// `MemoryCtx::update_checkpoint`. It is seeded from nonzero initial memory.
+/// A leaf or node missing from this tracker is a global first touch.
 #[derive(Clone, Debug)]
-pub(super) struct CommittedMemoryOccupancyTracker {
-    /// Leaves known occupied at the last safe checkpoint, stored by page.
-    committed_leaf_masks: Box<[u64]>,
-    /// Upper-tree ancestors known occupied at the last safe checkpoint.
-    committed_upper_nodes: BitSet,
+pub(super) struct GlobalMemoryTracker {
+    /// Leaf masks present in the global baseline, stored by page.
+    global_leaf_masks: Box<[u64]>,
+    /// Upper-tree ancestors present in the global baseline.
+    global_upper_nodes: BitSet,
     /// Number of Merkle levels above the 64-leaf page layer.
     upper_height: usize,
 }
 
-impl DefaultOldAccounting {
+impl GlobalFirstTouchCounts {
     #[inline(always)]
     pub(super) fn add(&mut self, other: Self) {
-        self.default_leaves += other.default_leaves;
-        self.default_merkle_nodes += other.default_merkle_nodes;
-        self.merkle_level_mask |= other.merkle_level_mask;
+        self.leaves += other.leaves;
+        self.merkle_nodes += other.merkle_nodes;
+        self.merkle_height_mask |= other.merkle_height_mask;
     }
 
     #[inline(always)]
-    pub(super) fn estimated_poseidon_rows(self) -> u32 {
-        u32::from(self.default_leaves != 0) + self.merkle_level_mask.count_ones()
+    pub(super) fn estimated_default_poseidon_rows(self) -> u32 {
+        u32::from(self.leaves != 0) + self.merkle_height_mask.count_ones()
     }
 }
 
@@ -131,8 +132,8 @@ impl BitSet {
     }
 
     #[inline(always)]
-    fn insert_committed(&mut self, index: usize) -> bool {
-        // Committed occupancy is monotonic and persists across checkpoints.
+    fn insert_global(&mut self, index: usize) -> bool {
+        // Global memory is monotonic and persists across checkpoints.
         self.insert_impl::<false>(index)
     }
 
@@ -148,15 +149,15 @@ impl BitSet {
         //         during memory access. The bitset is sized to accommodate all valid
         //         memory addresses, so word_index is always within bounds.
         let word = unsafe { self.words.get_unchecked_mut(word_index) };
-        let old_word = *word;
-        let was_set = (old_word & mask) != 0;
+        let previous_word = *word;
+        let was_set = (previous_word & mask) != 0;
         if was_set {
             return false;
         }
-        if TRACK_DIRTY && old_word == 0 {
+        if TRACK_DIRTY && previous_word == 0 {
             self.dirty_words.push(word_index);
         }
-        *word = old_word | mask;
+        *word = previous_word | mask;
         true
     }
 
@@ -183,7 +184,7 @@ impl BitSet {
     }
 }
 
-impl SegmentMemoryPageTracker {
+impl SegmentMemoryTracker {
     pub(super) fn new(upper_height: usize) -> Self {
         let num_pages = 1 << upper_height;
         Self {
@@ -210,8 +211,8 @@ impl SegmentMemoryPageTracker {
         &mut self,
         page_id: usize,
         leaf_mask: u64,
-        occupancy_tracker: &CommittedMemoryOccupancyTracker,
-    ) -> MemoryAccountingDelta {
+        global_memory: &GlobalMemoryTracker,
+    ) -> MemoryInsertDelta {
         debug_assert!(page_id < self.segment_leaf_masks.len());
         debug_assert!(leaf_mask != 0);
 
@@ -219,7 +220,7 @@ impl SegmentMemoryPageTracker {
         let segment_leaf_mask_before = *segment_leaf_mask;
         let segment_leaf_mask_after = segment_leaf_mask_before | leaf_mask;
         if segment_leaf_mask_after == segment_leaf_mask_before {
-            return MemoryAccountingDelta::default();
+            return MemoryInsertDelta::default();
         }
 
         *segment_leaf_mask = segment_leaf_mask_after;
@@ -227,95 +228,93 @@ impl SegmentMemoryPageTracker {
             self.dirty_page_ids.push(page_id);
         }
 
-        let newly_charged_leaf_mask = leaf_mask & !segment_leaf_mask_before;
-        let committed_leaf_mask = occupancy_tracker.page_mask(page_id);
-        let default_old_leaf_mask = newly_charged_leaf_mask & !committed_leaf_mask;
-        let single_added_leaf = newly_charged_leaf_mask.is_power_of_two();
-        let new_leaves = if single_added_leaf {
+        let new_segment_leaf_mask = leaf_mask & !segment_leaf_mask_before;
+        let global_leaf_mask = global_memory.page_mask(page_id);
+        let first_touch_leaf_mask = new_segment_leaf_mask & !global_leaf_mask;
+        let single_added_leaf = new_segment_leaf_mask.is_power_of_two();
+        let segment_leaves = if single_added_leaf {
             1
         } else {
-            newly_charged_leaf_mask.count_ones()
+            new_segment_leaf_mask.count_ones()
         };
 
-        let (mut new_merkle_nodes, mut default_old) = if default_old_leaf_mask == 0 {
-            (
-                if single_added_leaf {
-                    local_merkle_nodes_added_leaf(
-                        segment_leaf_mask_before,
-                        newly_charged_leaf_mask.trailing_zeros(),
-                    )
-                } else {
-                    local_merkle_nodes_delta(segment_leaf_mask_before, newly_charged_leaf_mask)
-                },
-                DefaultOldAccounting::default(),
-            )
+        let (mut segment_merkle_nodes, mut global_first_touches) = if first_touch_leaf_mask == 0 {
+            let nodes = if single_added_leaf {
+                local_merkle_nodes_added_leaf(
+                    segment_leaf_mask_before,
+                    new_segment_leaf_mask.trailing_zeros(),
+                )
+            } else {
+                local_merkle_nodes_delta(segment_leaf_mask_before, new_segment_leaf_mask)
+            };
+            (nodes, GlobalFirstTouchCounts::default())
         } else if single_added_leaf {
-            local_merkle_nodes_added_leaf_with_default(
+            local_merkle_nodes_added_leaf_with_global_first_touches(
                 segment_leaf_mask_before,
-                newly_charged_leaf_mask.trailing_zeros(),
-                committed_leaf_mask,
+                new_segment_leaf_mask.trailing_zeros(),
+                global_leaf_mask,
             )
         } else {
-            local_merkle_nodes_delta_with_default(
+            local_merkle_nodes_delta_with_global_first_touches(
                 segment_leaf_mask_before,
-                newly_charged_leaf_mask,
-                committed_leaf_mask,
+                new_segment_leaf_mask,
+                global_leaf_mask,
             )
         };
-        if default_old_leaf_mask != 0 {
-            default_old.default_leaves = if single_added_leaf {
+        if first_touch_leaf_mask != 0 {
+            global_first_touches.leaves = if single_added_leaf {
                 1
             } else {
-                default_old_leaf_mask.count_ones()
+                first_touch_leaf_mask.count_ones()
             };
         }
 
         if segment_leaf_mask_before == 0 {
-            if committed_leaf_mask == 0 {
-                let (upper_nodes, upper_default_old) =
-                    self.insert_upper_path_with_default_old(page_id, occupancy_tracker);
-                new_merkle_nodes += upper_nodes;
-                default_old.add(upper_default_old);
+            if global_leaf_mask == 0 {
+                let (upper_nodes, upper_global_first_touches) =
+                    self.insert_upper_path_with_global_first_touches(page_id, global_memory);
+                segment_merkle_nodes += upper_nodes;
+                global_first_touches.add(upper_global_first_touches);
             } else {
-                new_merkle_nodes += self.insert_upper_path_without_default_old(page_id);
+                segment_merkle_nodes += self.insert_upper_path(page_id);
             }
         }
-        MemoryAccountingDelta {
-            new_leaves,
-            new_merkle_nodes,
-            newly_charged_leaf_mask,
-            default_old,
+        MemoryInsertDelta {
+            segment_leaves,
+            segment_merkle_nodes,
+            new_segment_leaf_mask,
+            global_first_touches,
         }
     }
 
     #[inline(always)]
-    fn insert_upper_path_with_default_old(
+    fn insert_upper_path_with_global_first_touches(
         &mut self,
         page_id: usize,
-        occupancy_tracker: &CommittedMemoryOccupancyTracker,
-    ) -> (u32, DefaultOldAccounting) {
+        global_memory: &GlobalMemoryTracker,
+    ) -> (u32, GlobalFirstTouchCounts) {
         let mut count = 0;
-        let mut default_old = DefaultOldAccounting::default();
+        let mut global_first_touches = GlobalFirstTouchCounts::default();
         let mut node = (1usize << self.upper_height) + page_id;
         let mut height = MEMORY_PAGE_BITS + 1;
         while node > 1 {
             node >>= 1;
             if self.segment_upper_nodes.insert_clearable(node) {
                 count += 1;
-                if !occupancy_tracker.upper_contains(node) {
-                    default_old.default_merkle_nodes += 1;
-                    default_old.merkle_level_mask |= 1u64 << height;
+                if !global_memory.upper_contains(node) {
+                    global_first_touches.merkle_nodes += 1;
+                    global_first_touches.merkle_height_mask |= 1u64 << height;
                 }
             } else {
                 break;
             }
             height += 1;
         }
-        (count, default_old)
+        (count, global_first_touches)
     }
 
     #[inline(always)]
-    fn insert_upper_path_without_default_old(&mut self, page_id: usize) -> u32 {
+    fn insert_upper_path(&mut self, page_id: usize) -> u32 {
         let mut count = 0;
         let mut node = (1usize << self.upper_height) + page_id;
         while node > 1 {
@@ -330,42 +329,42 @@ impl SegmentMemoryPageTracker {
     }
 }
 
-impl CommittedMemoryOccupancyTracker {
+impl GlobalMemoryTracker {
     pub(super) fn new(upper_height: usize) -> Self {
         let num_pages = 1 << upper_height;
         Self {
-            committed_leaf_masks: vec![0; num_pages].into_boxed_slice(),
-            committed_upper_nodes: BitSet::new(num_pages),
+            global_leaf_masks: vec![0; num_pages].into_boxed_slice(),
+            global_upper_nodes: BitSet::new(num_pages),
             upper_height,
         }
     }
 
     #[inline(always)]
     pub(super) fn page_mask(&self, page_id: usize) -> u64 {
-        debug_assert!(page_id < self.committed_leaf_masks.len());
-        unsafe { *self.committed_leaf_masks.get_unchecked(page_id) }
+        debug_assert!(page_id < self.global_leaf_masks.len());
+        unsafe { *self.global_leaf_masks.get_unchecked(page_id) }
     }
 
     #[inline(always)]
     fn upper_contains(&self, node: usize) -> bool {
-        self.committed_upper_nodes.contains(node)
+        self.global_upper_nodes.contains(node)
     }
 
     #[inline(always)]
     pub(super) fn mark_existing_page(&mut self, page_id: usize, leaf_mask: u64) {
-        debug_assert!(page_id < self.committed_leaf_masks.len());
+        debug_assert!(page_id < self.global_leaf_masks.len());
         debug_assert!(leaf_mask != 0);
 
-        let committed_leaf_mask = unsafe { self.committed_leaf_masks.get_unchecked_mut(page_id) };
-        let committed_leaf_mask_before = *committed_leaf_mask;
-        *committed_leaf_mask = committed_leaf_mask_before | leaf_mask;
-        if committed_leaf_mask_before == 0 {
+        let global_leaf_mask = unsafe { self.global_leaf_masks.get_unchecked_mut(page_id) };
+        let global_leaf_mask_before = *global_leaf_mask;
+        *global_leaf_mask = global_leaf_mask_before | leaf_mask;
+        if global_leaf_mask_before == 0 {
             self.mark_upper_path(page_id);
         }
     }
 
     #[inline(always)]
-    pub(super) fn commit_page_accesses(&mut self, accesses: &[PageAccess]) {
+    pub(super) fn add_page_accesses(&mut self, accesses: &[PageAccess]) {
         for &access in accesses {
             self.mark_existing_page(access.page_id as usize, access.leaf_mask);
         }
@@ -376,7 +375,7 @@ impl CommittedMemoryOccupancyTracker {
         let mut node = (1usize << self.upper_height) + page_id;
         while node > 1 {
             node >>= 1;
-            if !self.committed_upper_nodes.insert_committed(node) {
+            if !self.global_upper_nodes.insert_global(node) {
                 break;
             }
         }
@@ -399,51 +398,51 @@ pub(super) fn leaf_mask_range(start: u32, end: u32) -> u64 {
 #[inline(always)]
 fn add_level_delta<const SHIFT: u32, const MASK: u64>(
     segment_mask: &mut u64,
-    newly_charged_mask: &mut u64,
+    new_segment_mask: &mut u64,
 ) -> u32 {
     *segment_mask = (*segment_mask | (*segment_mask >> SHIFT)) & MASK;
-    *newly_charged_mask = (*newly_charged_mask | (*newly_charged_mask >> SHIFT)) & MASK;
-    (*newly_charged_mask & !*segment_mask).count_ones()
+    *new_segment_mask = (*new_segment_mask | (*new_segment_mask >> SHIFT)) & MASK;
+    (*new_segment_mask & !*segment_mask).count_ones()
 }
 
 #[inline(always)]
-fn local_merkle_nodes_delta(mut segment_leaf_mask: u64, mut newly_charged_leaf_mask: u64) -> u32 {
-    debug_assert_ne!(newly_charged_leaf_mask, 0);
-    debug_assert_eq!(segment_leaf_mask & newly_charged_leaf_mask, 0);
+fn local_merkle_nodes_delta(mut segment_leaf_mask: u64, mut new_segment_leaf_mask: u64) -> u32 {
+    debug_assert_ne!(new_segment_leaf_mask, 0);
+    debug_assert_eq!(segment_leaf_mask & new_segment_leaf_mask, 0);
 
     // At each level, collapse child occupancy into one representative bit per
-    // parent group, then count groups reached by added leaves that were empty
-    // in the old segment-local mask.
+    // parent group, then count groups reached by new segment leaves that were
+    // empty in the segment mask.
     //
     // ```text
     // leaves:       0 1   1 0   0 0   1 1
     // parents:       1     1     0     1
-    // new parents:   (added_parent_bits & !old_parent_bits).count_ones()
+    // new parents:   (added_parent_bits & !segment_parent_bits).count_ones()
     // ```
     let mut nodes = 0;
     nodes += add_level_delta::<1, FIRST_LEAF_PER_2_LEAVES>(
         &mut segment_leaf_mask,
-        &mut newly_charged_leaf_mask,
+        &mut new_segment_leaf_mask,
     );
     nodes += add_level_delta::<2, FIRST_LEAF_PER_4_LEAVES>(
         &mut segment_leaf_mask,
-        &mut newly_charged_leaf_mask,
+        &mut new_segment_leaf_mask,
     );
     nodes += add_level_delta::<4, FIRST_LEAF_PER_8_LEAVES>(
         &mut segment_leaf_mask,
-        &mut newly_charged_leaf_mask,
+        &mut new_segment_leaf_mask,
     );
     nodes += add_level_delta::<8, FIRST_LEAF_PER_16_LEAVES>(
         &mut segment_leaf_mask,
-        &mut newly_charged_leaf_mask,
+        &mut new_segment_leaf_mask,
     );
     nodes += add_level_delta::<16, FIRST_LEAF_PER_32_LEAVES>(
         &mut segment_leaf_mask,
-        &mut newly_charged_leaf_mask,
+        &mut new_segment_leaf_mask,
     );
     nodes += add_level_delta::<32, FIRST_LEAF_PER_64_LEAVES>(
         &mut segment_leaf_mask,
-        &mut newly_charged_leaf_mask,
+        &mut new_segment_leaf_mask,
     );
 
     nodes
@@ -476,16 +475,16 @@ fn local_merkle_nodes_added_leaf(segment_leaf_mask: u64, leaf: u32) -> u32 {
 }
 
 #[inline(always)]
-fn add_leaf_level_delta_with_default<const GROUP_SIZE: u32, const LEVEL: usize>(
+fn add_leaf_level_delta_with_global_first_touch<const GROUP_SIZE: u32, const LEVEL: usize>(
     segment_leaf_mask: u64,
-    committed_leaf_mask: u64,
+    global_leaf_mask: u64,
     leaf: u32,
-    default_old: &mut DefaultOldAccounting,
+    global_first_touches: &mut GlobalFirstTouchCounts,
 ) -> u32 {
     if aligned_group_is_empty::<GROUP_SIZE>(segment_leaf_mask, leaf) {
-        if aligned_group_is_empty::<GROUP_SIZE>(committed_leaf_mask, leaf) {
-            default_old.default_merkle_nodes += 1;
-            default_old.merkle_level_mask |= 1u64 << LEVEL;
+        if aligned_group_is_empty::<GROUP_SIZE>(global_leaf_mask, leaf) {
+            global_first_touches.merkle_nodes += 1;
+            global_first_touches.merkle_height_mask |= 1u64 << LEVEL;
         }
         1
     } else {
@@ -494,134 +493,138 @@ fn add_leaf_level_delta_with_default<const GROUP_SIZE: u32, const LEVEL: usize>(
 }
 
 #[inline(always)]
-fn local_merkle_nodes_added_leaf_with_default(
+fn local_merkle_nodes_added_leaf_with_global_first_touches(
     segment_leaf_mask: u64,
     leaf: u32,
-    committed_leaf_mask: u64,
-) -> (u32, DefaultOldAccounting) {
+    global_leaf_mask: u64,
+) -> (u32, GlobalFirstTouchCounts) {
     debug_assert!(leaf < u64::BITS);
 
-    if segment_leaf_mask == 0 && committed_leaf_mask == 0 {
+    if segment_leaf_mask == 0 && global_leaf_mask == 0 {
         return (
             MEMORY_PAGE_BITS as u32,
-            DefaultOldAccounting {
-                default_leaves: 0,
-                default_merkle_nodes: MEMORY_PAGE_BITS as u32,
-                merkle_level_mask: (1u64 << (MEMORY_PAGE_BITS + 1)) - 2,
+            GlobalFirstTouchCounts {
+                leaves: 0,
+                merkle_nodes: MEMORY_PAGE_BITS as u32,
+                merkle_height_mask: (1u64 << (MEMORY_PAGE_BITS + 1)) - 2,
             },
         );
     }
 
-    let mut default_old = DefaultOldAccounting::default();
+    let mut global_first_touches = GlobalFirstTouchCounts::default();
     let mut nodes = 0;
-    nodes += add_leaf_level_delta_with_default::<2, 1>(
+    nodes += add_leaf_level_delta_with_global_first_touch::<2, 1>(
         segment_leaf_mask,
-        committed_leaf_mask,
+        global_leaf_mask,
         leaf,
-        &mut default_old,
+        &mut global_first_touches,
     );
-    nodes += add_leaf_level_delta_with_default::<4, 2>(
+    nodes += add_leaf_level_delta_with_global_first_touch::<4, 2>(
         segment_leaf_mask,
-        committed_leaf_mask,
+        global_leaf_mask,
         leaf,
-        &mut default_old,
+        &mut global_first_touches,
     );
-    nodes += add_leaf_level_delta_with_default::<8, 3>(
+    nodes += add_leaf_level_delta_with_global_first_touch::<8, 3>(
         segment_leaf_mask,
-        committed_leaf_mask,
+        global_leaf_mask,
         leaf,
-        &mut default_old,
+        &mut global_first_touches,
     );
-    nodes += add_leaf_level_delta_with_default::<16, 4>(
+    nodes += add_leaf_level_delta_with_global_first_touch::<16, 4>(
         segment_leaf_mask,
-        committed_leaf_mask,
+        global_leaf_mask,
         leaf,
-        &mut default_old,
+        &mut global_first_touches,
     );
-    nodes += add_leaf_level_delta_with_default::<32, 5>(
+    nodes += add_leaf_level_delta_with_global_first_touch::<32, 5>(
         segment_leaf_mask,
-        committed_leaf_mask,
+        global_leaf_mask,
         leaf,
-        &mut default_old,
+        &mut global_first_touches,
     );
 
     if segment_leaf_mask == 0 {
         nodes += 1;
-        if committed_leaf_mask == 0 {
-            default_old.default_merkle_nodes += 1;
-            default_old.merkle_level_mask |= 1u64 << MEMORY_PAGE_BITS;
+        if global_leaf_mask == 0 {
+            global_first_touches.merkle_nodes += 1;
+            global_first_touches.merkle_height_mask |= 1u64 << MEMORY_PAGE_BITS;
         }
     }
 
-    (nodes, default_old)
+    (nodes, global_first_touches)
 }
 
 #[inline(always)]
-fn add_level_delta_with_default<const SHIFT: u32, const MASK: u64, const LEVEL: usize>(
+fn add_level_delta_with_global_first_touches<
+    const SHIFT: u32,
+    const MASK: u64,
+    const LEVEL: usize,
+>(
     segment_mask: &mut u64,
-    newly_charged_mask: &mut u64,
-    committed_level_mask: &mut u64,
-    default_old: &mut DefaultOldAccounting,
+    new_segment_mask: &mut u64,
+    global_level_mask: &mut u64,
+    global_first_touches: &mut GlobalFirstTouchCounts,
 ) -> u32 {
     *segment_mask = (*segment_mask | (*segment_mask >> SHIFT)) & MASK;
-    *newly_charged_mask = (*newly_charged_mask | (*newly_charged_mask >> SHIFT)) & MASK;
-    *committed_level_mask = (*committed_level_mask | (*committed_level_mask >> SHIFT)) & MASK;
-    let new_nodes = *newly_charged_mask & !*segment_mask;
-    let default_nodes = new_nodes & !*committed_level_mask;
-    default_old.default_merkle_nodes += default_nodes.count_ones();
-    default_old.merkle_level_mask |= u64::from(default_nodes != 0) << LEVEL;
+    *new_segment_mask = (*new_segment_mask | (*new_segment_mask >> SHIFT)) & MASK;
+    *global_level_mask = (*global_level_mask | (*global_level_mask >> SHIFT)) & MASK;
+    let new_nodes = *new_segment_mask & !*segment_mask;
+    let first_touch_nodes = new_nodes & !*global_level_mask;
+    global_first_touches.merkle_nodes += first_touch_nodes.count_ones();
+    global_first_touches.merkle_height_mask |= u64::from(first_touch_nodes != 0) << LEVEL;
     new_nodes.count_ones()
 }
 
 #[inline(always)]
-fn local_merkle_nodes_delta_with_default(
+fn local_merkle_nodes_delta_with_global_first_touches(
     mut segment_leaf_mask: u64,
-    mut newly_charged_leaf_mask: u64,
-    mut committed_leaf_mask: u64,
-) -> (u32, DefaultOldAccounting) {
-    debug_assert_ne!(newly_charged_leaf_mask, 0);
-    debug_assert_eq!(segment_leaf_mask & newly_charged_leaf_mask, 0);
+    mut new_segment_leaf_mask: u64,
+    mut global_leaf_mask: u64,
+) -> (u32, GlobalFirstTouchCounts) {
+    debug_assert_ne!(new_segment_leaf_mask, 0);
+    debug_assert_eq!(segment_leaf_mask & new_segment_leaf_mask, 0);
 
-    let mut default_old = DefaultOldAccounting::default();
+    let mut global_first_touches = GlobalFirstTouchCounts::default();
     let mut nodes = 0;
-    nodes += add_level_delta_with_default::<1, FIRST_LEAF_PER_2_LEAVES, 1>(
+    nodes += add_level_delta_with_global_first_touches::<1, FIRST_LEAF_PER_2_LEAVES, 1>(
         &mut segment_leaf_mask,
-        &mut newly_charged_leaf_mask,
-        &mut committed_leaf_mask,
-        &mut default_old,
+        &mut new_segment_leaf_mask,
+        &mut global_leaf_mask,
+        &mut global_first_touches,
     );
-    nodes += add_level_delta_with_default::<2, FIRST_LEAF_PER_4_LEAVES, 2>(
+    nodes += add_level_delta_with_global_first_touches::<2, FIRST_LEAF_PER_4_LEAVES, 2>(
         &mut segment_leaf_mask,
-        &mut newly_charged_leaf_mask,
-        &mut committed_leaf_mask,
-        &mut default_old,
+        &mut new_segment_leaf_mask,
+        &mut global_leaf_mask,
+        &mut global_first_touches,
     );
-    nodes += add_level_delta_with_default::<4, FIRST_LEAF_PER_8_LEAVES, 3>(
+    nodes += add_level_delta_with_global_first_touches::<4, FIRST_LEAF_PER_8_LEAVES, 3>(
         &mut segment_leaf_mask,
-        &mut newly_charged_leaf_mask,
-        &mut committed_leaf_mask,
-        &mut default_old,
+        &mut new_segment_leaf_mask,
+        &mut global_leaf_mask,
+        &mut global_first_touches,
     );
-    nodes += add_level_delta_with_default::<8, FIRST_LEAF_PER_16_LEAVES, 4>(
+    nodes += add_level_delta_with_global_first_touches::<8, FIRST_LEAF_PER_16_LEAVES, 4>(
         &mut segment_leaf_mask,
-        &mut newly_charged_leaf_mask,
-        &mut committed_leaf_mask,
-        &mut default_old,
+        &mut new_segment_leaf_mask,
+        &mut global_leaf_mask,
+        &mut global_first_touches,
     );
-    nodes += add_level_delta_with_default::<16, FIRST_LEAF_PER_32_LEAVES, 5>(
+    nodes += add_level_delta_with_global_first_touches::<16, FIRST_LEAF_PER_32_LEAVES, 5>(
         &mut segment_leaf_mask,
-        &mut newly_charged_leaf_mask,
-        &mut committed_leaf_mask,
-        &mut default_old,
+        &mut new_segment_leaf_mask,
+        &mut global_leaf_mask,
+        &mut global_first_touches,
     );
-    nodes += add_level_delta_with_default::<32, FIRST_LEAF_PER_64_LEAVES, 6>(
+    nodes += add_level_delta_with_global_first_touches::<32, FIRST_LEAF_PER_64_LEAVES, 6>(
         &mut segment_leaf_mask,
-        &mut newly_charged_leaf_mask,
-        &mut committed_leaf_mask,
-        &mut default_old,
+        &mut new_segment_leaf_mask,
+        &mut global_leaf_mask,
+        &mut global_first_touches,
     );
 
-    (nodes, default_old)
+    (nodes, global_first_touches)
 }
 
 #[cfg(test)]
@@ -650,20 +653,20 @@ mod tests {
 
     #[test]
     fn test_local_merkle_nodes_doc_example() {
-        let mut tracker = SegmentMemoryPageTracker::new(0);
-        let committed_occupancy = CommittedMemoryOccupancyTracker::new(0);
+        let mut tracker = SegmentMemoryTracker::new(0);
+        let global_memory = GlobalMemoryTracker::new(0);
         let mut nodes = 0;
         nodes += tracker
-            .insert(0, 1 << 0, &committed_occupancy)
-            .new_merkle_nodes;
+            .insert(0, 1 << 0, &global_memory)
+            .segment_merkle_nodes;
         assert_eq!(nodes, 6);
         nodes += tracker
-            .insert(0, 1 << 4, &committed_occupancy)
-            .new_merkle_nodes;
+            .insert(0, 1 << 4, &global_memory)
+            .segment_merkle_nodes;
         assert_eq!(nodes, 8);
         nodes += tracker
-            .insert(0, 1 << 2, &committed_occupancy)
-            .new_merkle_nodes;
+            .insert(0, 1 << 2, &global_memory)
+            .segment_merkle_nodes;
         assert_eq!(nodes, 9);
     }
 
@@ -685,11 +688,11 @@ mod tests {
         for leaf_mask in additions {
             let segment_leaf_mask_after = segment_leaf_mask | leaf_mask;
             if segment_leaf_mask_after != segment_leaf_mask {
-                let newly_charged_leaf_mask = segment_leaf_mask_after ^ segment_leaf_mask;
+                let new_segment_leaf_mask = segment_leaf_mask_after ^ segment_leaf_mask;
                 let expected = reference_local_merkle_nodes(segment_leaf_mask_after)
                     - reference_local_merkle_nodes(segment_leaf_mask);
                 assert_eq!(
-                    local_merkle_nodes_delta(segment_leaf_mask, newly_charged_leaf_mask),
+                    local_merkle_nodes_delta(segment_leaf_mask, new_segment_leaf_mask),
                     expected
                 );
                 segment_leaf_mask = segment_leaf_mask_after;
@@ -700,11 +703,11 @@ mod tests {
         for leaf_mask in additions {
             let segment_leaf_mask_after = segment_leaf_mask | leaf_mask;
             if segment_leaf_mask_after != segment_leaf_mask {
-                let newly_charged_leaf_mask = segment_leaf_mask_after ^ segment_leaf_mask;
+                let new_segment_leaf_mask = segment_leaf_mask_after ^ segment_leaf_mask;
                 let expected = reference_local_merkle_nodes(segment_leaf_mask_after)
                     - reference_local_merkle_nodes(segment_leaf_mask);
                 assert_eq!(
-                    local_merkle_nodes_delta(segment_leaf_mask, newly_charged_leaf_mask),
+                    local_merkle_nodes_delta(segment_leaf_mask, new_segment_leaf_mask),
                     expected
                 );
                 segment_leaf_mask = segment_leaf_mask_after;
@@ -722,9 +725,9 @@ mod tests {
             seed ^= seed << 8;
             let segment_leaf_mask_after = segment_leaf_mask | seed;
             if segment_leaf_mask_after != segment_leaf_mask {
-                let newly_charged_leaf_mask = segment_leaf_mask_after ^ segment_leaf_mask;
+                let new_segment_leaf_mask = segment_leaf_mask_after ^ segment_leaf_mask;
                 assert_eq!(
-                    local_merkle_nodes_delta(segment_leaf_mask, newly_charged_leaf_mask),
+                    local_merkle_nodes_delta(segment_leaf_mask, new_segment_leaf_mask),
                     reference_local_merkle_nodes(segment_leaf_mask_after)
                         - reference_local_merkle_nodes(segment_leaf_mask)
                 );
@@ -734,59 +737,59 @@ mod tests {
 
     #[test]
     fn test_page_mask_duplicate_leaf_does_not_change_counts() {
-        let mut tracker = SegmentMemoryPageTracker::new(3);
-        let committed_occupancy = CommittedMemoryOccupancyTracker::new(3);
+        let mut tracker = SegmentMemoryTracker::new(3);
+        let global_memory = GlobalMemoryTracker::new(3);
         assert_ne!(
             tracker
-                .insert(0, 1 << 0, &committed_occupancy)
-                .newly_charged_leaf_mask,
+                .insert(0, 1 << 0, &global_memory)
+                .new_segment_leaf_mask,
             0
         );
         assert_eq!(
-            tracker.insert(0, 1 << 0, &committed_occupancy),
-            MemoryAccountingDelta::default()
+            tracker.insert(0, 1 << 0, &global_memory),
+            MemoryInsertDelta::default()
         );
     }
 
     #[test]
-    fn test_memory_page_tracker_clear_resets_touched_state() {
-        let mut tracker = SegmentMemoryPageTracker::new(3);
-        let committed_occupancy = CommittedMemoryOccupancyTracker::new(3);
-        let first = tracker.insert(0, 1 << 0, &committed_occupancy);
-        let second = tracker.insert(7, 1 << 63, &committed_occupancy);
-        assert!(first.new_leaves + second.new_leaves > 0);
-        assert!(first.new_merkle_nodes + second.new_merkle_nodes > 0);
+    fn test_segment_memory_clear_resets_touched_state() {
+        let mut tracker = SegmentMemoryTracker::new(3);
+        let global_memory = GlobalMemoryTracker::new(3);
+        let first = tracker.insert(0, 1 << 0, &global_memory);
+        let second = tracker.insert(7, 1 << 63, &global_memory);
+        assert!(first.segment_leaves + second.segment_leaves > 0);
+        assert!(first.segment_merkle_nodes + second.segment_merkle_nodes > 0);
 
         tracker.clear();
 
-        let after_clear = tracker.insert(0, 1 << 0, &committed_occupancy);
-        assert_eq!(after_clear.new_leaves, 1);
-        assert!(after_clear.new_merkle_nodes > 0);
+        let after_clear = tracker.insert(0, 1 << 0, &global_memory);
+        assert_eq!(after_clear.segment_leaves, 1);
+        assert!(after_clear.segment_merkle_nodes > 0);
     }
 
     #[test]
     fn test_adjacent_pages_share_upper_ancestors() {
-        let mut tracker = SegmentMemoryPageTracker::new(3);
-        let committed_occupancy = CommittedMemoryOccupancyTracker::new(3);
-        tracker.insert(0, 1, &committed_occupancy);
-        let second = tracker.insert(1, 1, &committed_occupancy);
-        assert_eq!(second.new_merkle_nodes, MEMORY_PAGE_BITS as u32);
+        let mut tracker = SegmentMemoryTracker::new(3);
+        let global_memory = GlobalMemoryTracker::new(3);
+        tracker.insert(0, 1, &global_memory);
+        let second = tracker.insert(1, 1, &global_memory);
+        assert_eq!(second.segment_merkle_nodes, MEMORY_PAGE_BITS as u32);
     }
 
     #[test]
-    fn test_checkpoint_commit_keeps_occupied_counts() {
-        let mut committed_occupancy = CommittedMemoryOccupancyTracker::new(1);
-        let mut tracker = SegmentMemoryPageTracker::new(1);
+    fn test_global_memory_suppresses_second_first_touch() {
+        let mut global_memory = GlobalMemoryTracker::new(1);
+        let mut tracker = SegmentMemoryTracker::new(1);
 
-        let first = tracker.insert(0, 1, &committed_occupancy).default_old;
-        committed_occupancy.commit_page_accesses(&[PageAccess {
+        let first = tracker.insert(0, 1, &global_memory).global_first_touches;
+        global_memory.add_page_accesses(&[PageAccess {
             page_id: 0,
             leaf_mask: 1,
         }]);
         tracker.clear();
-        let second = tracker.insert(0, 1, &committed_occupancy).default_old;
+        let second = tracker.insert(0, 1, &global_memory).global_first_touches;
 
-        assert!(first.default_leaves > 0);
-        assert_eq!(second, DefaultOldAccounting::default());
+        assert!(first.leaves > 0);
+        assert_eq!(second, GlobalFirstTouchCounts::default());
     }
 }
