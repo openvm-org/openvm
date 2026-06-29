@@ -3,20 +3,22 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use crate::{
     adapters::{Rv64LoadAdapterAir, Rv64LoadAdapterExecutor},
     load_sign_extend::{
-        aligned::core::{LoadSignExtendAlignedCoreAir, LoadSignExtendAlignedFiller},
         common::{LoadSignExtendExecutor, KIND_WORD},
+        width_aligned::core::{
+            LoadSignExtendWidthAlignedCoreAir, LoadSignExtendWidthAlignedFiller,
+        },
     },
 };
 
 pub const LOAD_SIGN_EXTEND_WORD_CASES: usize = 2;
 pub const LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH: usize = 1;
 
-pub type LoadSignExtendWordCoreAir = LoadSignExtendAlignedCoreAir<
+pub type LoadSignExtendWordCoreAir = LoadSignExtendWidthAlignedCoreAir<
     KIND_WORD,
     LOAD_SIGN_EXTEND_WORD_CASES,
     LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
 >;
-pub type LoadSignExtendWordFiller = LoadSignExtendAlignedFiller<
+pub type LoadSignExtendWordFiller = LoadSignExtendWidthAlignedFiller<
     crate::adapters::Rv64LoadAdapterFiller,
     KIND_WORD,
     LOAD_SIGN_EXTEND_WORD_CASES,

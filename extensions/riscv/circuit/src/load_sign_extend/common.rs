@@ -17,6 +17,7 @@ pub struct LoadSignExtendExecutor<A, const KIND: usize> {
     pub offset: usize,
 }
 
+/// Returns the register write data for a signed load.
 pub(crate) fn load_sign_extend_write_data(
     opcode: Rv64LoadStoreOpcode,
     read_data: [u16; BLOCK_FE_WIDTH],

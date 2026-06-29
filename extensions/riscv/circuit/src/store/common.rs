@@ -78,6 +78,7 @@ where
     }
 }
 
+/// Returns the memory write data, preserving previous cells outside the store width.
 pub(crate) fn store_write_data(
     opcode: Rv64LoadStoreOpcode,
     read_data: [u16; BLOCK_FE_WIDTH],

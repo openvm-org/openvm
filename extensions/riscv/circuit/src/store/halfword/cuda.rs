@@ -11,7 +11,7 @@ use super::HALFWORD_STORE_SELECTOR_WIDTH;
 use crate::{
     adapters::{Rv64StoreAdapterCols, Rv64StoreAdapterRecord},
     cuda_abi::store_halfword_cuda,
-    store::{aligned::StoreAlignedCoreCols, StoreRecord},
+    store::{width_aligned::StoreWidthAlignedCoreCols, StoreRecord},
 };
 
 #[derive(new)]
@@ -31,7 +31,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64StoreHalfwordChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = Rv64StoreAdapterCols::<F>::width()
-            + StoreAlignedCoreCols::<F, HALFWORD_STORE_SELECTOR_WIDTH>::width();
+            + StoreWidthAlignedCoreCols::<F, HALFWORD_STORE_SELECTOR_WIDTH>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 

@@ -243,6 +243,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: St
 trait StoreOp {
     const HOST_READ: bool;
 
+    /// Return if the operation is valid.
     fn compute_write_data(
         write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
@@ -251,6 +252,7 @@ trait StoreOp {
 }
 
 #[allow(dead_code)]
+/// Wrapper type for u8 so typed VM memory reads and writes can use opcode-specific helpers.
 #[derive(Copy, Clone, Debug, Default)]
 struct U8(u8);
 struct StoreDOp;

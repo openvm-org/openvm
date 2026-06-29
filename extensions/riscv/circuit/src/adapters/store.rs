@@ -43,13 +43,17 @@ use super::{
 use crate::adapters::{memory_read_u16, timed_write_u16, tracing_read, tracing_read_u16};
 
 pub struct StoreInstruction<T> {
+    /// Constrained to be boolean by the core selector.
     pub is_valid: T,
+    /// Absolute opcode number.
     pub opcode: T,
+    /// Byte offset of the effective pointer inside the 8-byte memory block.
     pub shift_amount: T,
 }
 
 pub struct Rv64StoreAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
 
+/// Uses AB::Var for previous memory data and AB::Expr for source register data.
 impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64StoreAdapterAirInterface<AB> {
     type Reads = ([AB::Var; BLOCK_FE_WIDTH], [AB::Expr; BLOCK_FE_WIDTH]);
     type Writes = [[AB::Expr; BLOCK_FE_WIDTH]; 1];
@@ -90,14 +94,18 @@ where
 pub struct Rv64StoreAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
+    /// Low 32 bits of the rs1 register, packed as two u16 cells.
     pub rs1_data: [T; RV64_PTR_U16_LIMBS],
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
+    /// Source register pointer.
     pub rs2_ptr: T,
     pub read_data_aux: MemoryReadAuxCols<T>,
     pub imm: T,
     pub imm_sign: T,
+    /// Intermediate effective pointer limbs for constraining rs1 + sign_extend(imm).
     pub mem_ptr_limbs: [T; 2],
     pub mem_as: T,
+    /// Timestamp aux for the memory write; previous data is provided by the core chip.
     pub write_base_aux: MemoryBaseAuxCols<T>,
 }
 
@@ -137,6 +145,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
         let is_valid = ctx.instruction.is_valid;
         let shift_amount = ctx.instruction.shift_amount;
 
+        // Read rs1 as a low 32-bit pointer value; the upper register cells are zero on the bus.
         let rs1_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&local_cols.rs1_data);
         self.memory_bridge
             .read(
@@ -150,6 +159,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
             )
             .eval(builder, is_valid.clone());
 
+        // Constrain mem_ptr = rs1 + sign_extend(imm) as a 32-bit addition.
         let inv = AB::F::from_u32(1u32 << U16_BITS).inverse();
         let carry = (local_cols.rs1_data[0] + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
         builder.when(is_valid.clone()).assert_bool(carry.clone());
@@ -164,8 +174,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
             .when(is_valid.clone())
             .assert_eq(carry, local_cols.imm_sign);
 
+        // Prevent mem_ptr overflow while allowing the adapter to write the containing 8-byte block.
         self.range_bus
             .range_check(
+                // (limb[0] - shift_amount) / 8 < 2^13 => limb[0] - shift_amount < 2^16
                 (local_cols.mem_ptr_limbs[0] - shift_amount.clone())
                     * AB::F::from_u32(RV64_REGISTER_NUM_LIMBS as u32).inverse(),
                 U16_BITS - 3,
@@ -180,8 +192,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
 
         let mem_ptr = local_cols.mem_ptr_limbs[0]
             + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1u32 << U16_BITS);
+        // Constrain stores to writable u16-celled address spaces.
         builder.assert_bool(local_cols.mem_as - AB::Expr::TWO);
 
+        // Read the source register data to be written into memory.
         self.memory_bridge
             .read(
                 MemoryAddress::new(
@@ -194,6 +208,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
             )
             .eval(builder, is_valid.clone());
 
+        // Write the memory block containing the effective store address. The core supplies
+        // previous cell values for any bytes not overwritten by this store.
         self.memory_bridge
             .write(
                 MemoryAddress::new(
@@ -255,6 +271,8 @@ pub struct Rv64StoreAdapterRecord {
     pub write_prev_timestamp: u32,
 }
 
+/// Reads rs1, computes the effective memory pointer, reads rs2, and writes the containing memory
+/// block.
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64StoreAdapterExecutor {
     pointer_max_bits: usize,
@@ -371,6 +389,10 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreAdapterFiller {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         debug_assert!(self.range_checker_chip.range_max_bits() >= 15);
 
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation written by the
+        //   executor
+        // - get_record_from_slice correctly interprets the bytes as Rv64StoreAdapterRecord
         let record: &Rv64StoreAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         // The record and columns share the same row buffer, so copy record data

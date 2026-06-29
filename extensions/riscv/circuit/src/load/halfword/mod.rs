@@ -3,8 +3,8 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use crate::{
     adapters::{Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller},
     load::{
-        aligned::{LoadAlignedCoreAir, LoadAlignedFiller},
         common::{LoadExecutor, KIND_HALFWORD},
+        width_aligned::{LoadWidthAlignedCoreAir, LoadWidthAlignedFiller},
     },
 };
 
@@ -12,8 +12,8 @@ pub const HALFWORD_LOAD_CASES: usize = 4;
 pub const HALFWORD_LOAD_SELECTOR_WIDTH: usize = 2;
 
 pub type LoadHalfwordCoreAir =
-    LoadAlignedCoreAir<KIND_HALFWORD, HALFWORD_LOAD_CASES, HALFWORD_LOAD_SELECTOR_WIDTH>;
-pub type LoadHalfwordFiller = LoadAlignedFiller<
+    LoadWidthAlignedCoreAir<KIND_HALFWORD, HALFWORD_LOAD_CASES, HALFWORD_LOAD_SELECTOR_WIDTH>;
+pub type LoadHalfwordFiller = LoadWidthAlignedFiller<
     Rv64LoadAdapterFiller,
     KIND_HALFWORD,
     HALFWORD_LOAD_CASES,

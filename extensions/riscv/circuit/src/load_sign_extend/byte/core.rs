@@ -38,11 +38,15 @@ fn encoder() -> Encoder {
     encoder
 }
 
+/// Handles signed byte loads by decomposing the selected u16 cell and sign-extending the chosen
+/// byte.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct LoadSignExtendByteCoreCols<T> {
     pub selector: [T; LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH],
+    /// Kept as a degree-1 copy of the selector validity.
     pub is_valid: T,
+    /// The sign bit that is extended to the remaining cells.
     pub data_most_sig_bit: T,
     pub read_cell_bytes: [T; 2],
     pub read_data: [T; BLOCK_FE_WIDTH],
@@ -127,6 +131,7 @@ where
                 };
                 acc + flag.clone() * byte
             });
+        // Constrain that data_most_sig_bit matches the selected source byte.
         self.range_bus
             .range_check(
                 selected_byte.clone()
@@ -200,9 +205,13 @@ where
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
+        // LoadSignExtendByteCoreCols::width() elements.
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
+        // SAFETY: core_row contains a valid LoadRecord written by the executor during trace
+        // generation.
         let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let opcode = Rv64LoadStoreOpcode::from_usize(record.local_opcode as usize);
         let shift = record.shift_amount as usize;

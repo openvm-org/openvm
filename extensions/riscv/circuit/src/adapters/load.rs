@@ -41,8 +41,11 @@ use super::{
 use crate::adapters::{memory_read_u16, timed_write_u16, tracing_read, tracing_read_u16};
 
 pub struct LoadInstruction<T> {
+    /// Constrained to be boolean by the core selector.
     pub is_valid: T,
+    /// Absolute opcode number.
     pub opcode: T,
+    /// Byte offset of the effective pointer inside the 8-byte memory block.
     pub shift_amount: T,
 }
 
@@ -87,14 +90,18 @@ where
 pub struct Rv64LoadAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
+    /// Low 32 bits of the rs1 register, packed as two u16 cells.
     pub rs1_data: [T; RV64_PTR_U16_LIMBS],
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
+    /// Destination register pointer.
     pub rd_ptr: T,
     pub read_data_aux: MemoryReadAuxCols<T>,
     pub imm: T,
     pub imm_sign: T,
+    /// Intermediate effective pointer limbs for constraining rs1 + sign_extend(imm).
     pub mem_ptr_limbs: [T; 2],
     pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
+    /// Only writes to rd if the load is valid and rd is not x0.
     pub needs_write: T,
 }
 
@@ -135,12 +142,15 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadAdapterAir {
         let shift_amount = ctx.instruction.shift_amount;
         let write_count = local_cols.needs_write;
 
+        // This constraint ensures that the register write only occurs when `is_valid == 1`.
         builder.assert_bool(write_count);
         builder.when(write_count).assert_one(is_valid.clone());
+        // If a valid load does not write, then it must target x0.
         builder
             .when(is_valid.clone() - write_count)
             .assert_zero(local_cols.rd_ptr);
 
+        // Read rs1 as a low 32-bit pointer value; the upper register cells are zero on the bus.
         let rs1_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&local_cols.rs1_data);
         self.memory_bridge
             .read(
@@ -154,6 +164,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadAdapterAir {
             )
             .eval(builder, is_valid.clone());
 
+        // Constrain mem_ptr = rs1 + sign_extend(imm) as a 32-bit addition.
         let inv = AB::F::from_u32(1u32 << U16_BITS).inverse();
         let carry = (local_cols.rs1_data[0] + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
         builder.when(is_valid.clone()).assert_bool(carry.clone());
@@ -169,8 +180,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadAdapterAir {
             .when(is_valid.clone())
             .assert_eq(carry, local_cols.imm_sign);
 
+        // Prevent mem_ptr overflow while allowing the adapter to read the containing 8-byte block.
         self.range_bus
             .range_check(
+                // (limb[0] - shift_amount) / 8 < 2^13 => limb[0] - shift_amount < 2^16
                 (local_cols.mem_ptr_limbs[0] - shift_amount.clone())
                     * AB::F::from_u32(RV64_REGISTER_NUM_LIMBS as u32).inverse(),
                 U16_BITS - 3,
@@ -185,6 +198,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadAdapterAir {
 
         let mem_ptr = local_cols.mem_ptr_limbs[0]
             + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1u32 << U16_BITS);
+        // Read the memory block containing the effective load address.
         self.memory_bridge
             .read(
                 MemoryAddress::new(
@@ -197,6 +211,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadAdapterAir {
             )
             .eval(builder, is_valid.clone());
 
+        // Write the loaded value into rd, unless rd is x0.
         self.memory_bridge
             .write(
                 MemoryAddress::new(
@@ -255,6 +270,8 @@ pub struct Rv64LoadAdapterRecord {
     pub write_prev_data: [u16; BLOCK_FE_WIDTH],
 }
 
+/// Reads rs1, computes the effective memory pointer, reads the containing memory block, and writes
+/// the loaded value to rd.
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64LoadAdapterExecutor {
     pointer_max_bits: usize,
@@ -368,6 +385,10 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadAdapterFiller {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         debug_assert!(self.range_checker_chip.range_max_bits() >= 15);
 
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation written by the
+        //   executor
+        // - get_record_from_slice correctly interprets the bytes as Rv64LoadAdapterRecord
         let record: &Rv64LoadAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
         // The record and columns share the same row buffer, so copy record data
         // before writing columns.
