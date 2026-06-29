@@ -6,7 +6,10 @@
 use std::ffi::c_void;
 
 use halo2curves_axiom::{bls12_381, bn256, ff::PrimeField};
-use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
+use openvm_ecc_guest::{
+    algebra::{field::FieldExtension, Field},
+    AffinePoint,
+};
 use openvm_pairing_guest::{
     halo2curves_shims::{bls12_381::Bls12_381, bn254::Bn254},
     pairing::{FinalExp, MultiMillerLoop},
@@ -73,9 +76,21 @@ fn point_base(ptr: u64, idx: u64, words_per_point: u64) -> Option<u64> {
     ptr.checked_add(offset)
 }
 
-// ── BN254 pairing hint ──────────────────────────────────────────────────
+// ── Shared scaffolding ──────────────────────────────────────────────────
 
-unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<Vec<u8>> {
+/// Read G1 and G2 point vectors from guest memory.
+///
+/// `read_fq` reads one base-field element. `make_fq2` constructs an Fq2
+/// from two consecutive Fq elements; use `Fq2::new` or `|c0, c1| Fq2 { c0, c1 }`
+/// depending on the curve's API.
+unsafe fn read_pairing_points<Fq: Field, Fq2: Field>(
+    state: *mut c_void,
+    rs1_val: u64,
+    rs2_val: u64,
+    fq_bytes: u64,
+    read_fq: impl Fn(*mut c_void, u64) -> Option<Fq>,
+    make_fq2: impl Fn(Fq, Fq) -> Fq2,
+) -> Option<(Vec<AffinePoint<Fq>>, Vec<AffinePoint<Fq2>>)> {
     let p_ptr = rd_mem_u64_wrapper(state, rs1_val);
     let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
     let q_ptr = rd_mem_u64_wrapper(state, rs2_val);
@@ -87,38 +102,42 @@ unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<V
 
     let p: Vec<_> = (0..p_len)
         .map(|i| {
-            let base = point_base(p_ptr, i, G1_AFFINE_COORDS * BN254_FQ_BYTES)?;
+            let base = point_base(p_ptr, i, G1_AFFINE_COORDS * fq_bytes)?;
             Some(AffinePoint::new(
-                read_bn254_fq(state, base)?,
-                read_bn254_fq(state, base + BN254_FQ_BYTES)?,
+                read_fq(state, base)?,
+                read_fq(state, base + fq_bytes)?,
             ))
         })
         .collect::<Option<_>>()?;
 
     let q: Vec<_> = (0..q_len)
         .map(|i| {
-            let base = point_base(q_ptr, i, G2_AFFINE_COORDS * BN254_FQ_BYTES)?;
-            // BN254 Fq2 exposes a constructor helper.
-            let x = bn256::Fq2::new(
-                read_bn254_fq(state, base)?,
-                read_bn254_fq(state, base + BN254_FQ_BYTES)?,
-            );
-            let y = bn256::Fq2::new(
-                read_bn254_fq(state, base + 2 * BN254_FQ_BYTES)?,
-                read_bn254_fq(state, base + 3 * BN254_FQ_BYTES)?,
+            let base = point_base(q_ptr, i, G2_AFFINE_COORDS * fq_bytes)?;
+            let x = make_fq2(read_fq(state, base)?, read_fq(state, base + fq_bytes)?);
+            let y = make_fq2(
+                read_fq(state, base + 2 * fq_bytes)?,
+                read_fq(state, base + 3 * fq_bytes)?,
             );
             Some(AffinePoint::new(x, y))
         })
         .collect::<Option<_>>()?;
 
+    Some((p, q))
+}
+
+// ── BN254 pairing hint ──────────────────────────────────────────────────
+
+unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<Vec<u8>> {
+    let (p, q) = read_pairing_points(
+        state, rs1_val, rs2_val,
+        BN254_FQ_BYTES,
+        |s, ptr| unsafe { read_bn254_fq(s, ptr) },
+        bn256::Fq2::new,
+    )?;
     let f: bn256::Fq12 = Bn254::multi_miller_loop(&p, &q);
     let (c, u) = Bn254::final_exp_hint(&f);
-
-    // Serialize hint: c (Fp12) then u (Fp12), each as 12 Fq elements
     Some(
-        c.to_coeffs()
-            .into_iter()
-            .chain(u.to_coeffs())
+        c.to_coeffs().into_iter().chain(u.to_coeffs())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
             .collect(),
@@ -128,48 +147,16 @@ unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<V
 // ── BLS12-381 pairing hint ──────────────────────────────────────────────
 
 unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<Vec<u8>> {
-    let p_ptr = rd_mem_u64_wrapper(state, rs1_val);
-    let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
-    let q_ptr = rd_mem_u64_wrapper(state, rs2_val);
-    let q_len = rd_mem_u64_wrapper(state, rs2_val + SLICE_LEN_OFFSET);
-
-    if p_len != q_len {
-        return None;
-    }
-
-    let p: Vec<_> = (0..p_len)
-        .map(|i| {
-            let base = point_base(p_ptr, i, G1_AFFINE_COORDS * BLS12_381_FQ_BYTES)?;
-            Some(AffinePoint::new(
-                read_bls12_381_fq(state, base)?,
-                read_bls12_381_fq(state, base + BLS12_381_FQ_BYTES)?,
-            ))
-        })
-        .collect::<Option<_>>()?;
-
-    let q: Vec<_> = (0..q_len)
-        .map(|i| {
-            let base = point_base(q_ptr, i, G2_AFFINE_COORDS * BLS12_381_FQ_BYTES)?;
-            // BLS12-381 Fq2 uses struct fields instead of an `Fq2::new` helper.
-            let x = bls12_381::Fq2 {
-                c0: read_bls12_381_fq(state, base)?,
-                c1: read_bls12_381_fq(state, base + BLS12_381_FQ_BYTES)?,
-            };
-            let y = bls12_381::Fq2 {
-                c0: read_bls12_381_fq(state, base + 2 * BLS12_381_FQ_BYTES)?,
-                c1: read_bls12_381_fq(state, base + 3 * BLS12_381_FQ_BYTES)?,
-            };
-            Some(AffinePoint::new(x, y))
-        })
-        .collect::<Option<_>>()?;
-
+    let (p, q) = read_pairing_points(
+        state, rs1_val, rs2_val,
+        BLS12_381_FQ_BYTES,
+        |s, ptr| unsafe { read_bls12_381_fq(s, ptr) },
+        |c0, c1| bls12_381::Fq2 { c0, c1 },
+    )?;
     let f: bls12_381::Fq12 = Bls12_381::multi_miller_loop(&p, &q);
     let (c, u) = Bls12_381::final_exp_hint(&f);
-
     Some(
-        c.to_coeffs()
-            .into_iter()
-            .chain(u.to_coeffs())
+        c.to_coeffs().into_iter().chain(u.to_coeffs())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
             .collect(),
