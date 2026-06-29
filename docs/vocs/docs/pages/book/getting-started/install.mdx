@@ -103,6 +103,8 @@ You will need all of the common prerequisites listed [above](#installation-prere
 - Nvidia GPU drivers [installed](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/index.html#)
 - CUDA toolkit [installed](https://docs.nvidia.com/cuda/archive/12.9.0/cuda-installation-guide-linux/index.html)
 
+EVM proofs (`prove evm`, built with the `halo2-gpu` feature) are the most memory-intensive step: the halo2 GPU prover needs noticeably more GPU and host memory than `prove app` or `prove stark`. Use a GPU and machine with more memory if you plan to generate EVM proofs.
+
 For machines running Ubuntu 24.04, you can install Nvidia drivers using
 
 :::code-group
