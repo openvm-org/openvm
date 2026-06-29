@@ -6083,7 +6083,7 @@ dependencies = [
 [[package]]
 name = "openvm-cpu-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4246b8f7ff5bbaa6980854a78bb16828bb2eb211"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#04611d9be14da52ac9a3fbba4a410f98056cbb18"
 dependencies = [
  "cfg-if 1.0.1",
  "derive-new 0.7.0",
@@ -6108,7 +6108,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4246b8f7ff5bbaa6980854a78bb16828bb2eb211"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#04611d9be14da52ac9a3fbba4a410f98056cbb18"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -6135,7 +6135,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4246b8f7ff5bbaa6980854a78bb16828bb2eb211"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#04611d9be14da52ac9a3fbba4a410f98056cbb18"
 dependencies = [
  "cc",
  "glob",
@@ -6144,7 +6144,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4246b8f7ff5bbaa6980854a78bb16828bb2eb211"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#04611d9be14da52ac9a3fbba4a410f98056cbb18"
 dependencies = [
  "bytesize",
  "ctor",
