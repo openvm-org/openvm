@@ -38,8 +38,8 @@ pub use openvm_instructions::{
 // Redefined here to avoid a cycle with openvm-circuit. Checked against
 // upstream in `openvm-circuit`'s `arch::rvr::abi_consts`.
 
-/// Default, not an invariant; see TODO in `abi_consts.rs`.
-pub const DEFAULT_PAGE_BITS: usize = 6;
+/// Number of bits needed to index the leaves represented by one `u64` page mask.
+pub const PAGE_BITS: usize = 6;
 /// Default, not an invariant; see TODO in `abi_consts.rs`.
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u32 = 1000;
 
@@ -85,11 +85,11 @@ extern "C" {
     );
 
     // ── Instruction dispatch / chip cost ──────────────────────────────
-    pub fn trace_pc_wrapper(state: *mut c_void, pc: u32);
+    pub fn trace_pc_wrapper(state: *mut c_void, pc: u64);
     pub fn trace_chip_wrapper(state: *mut c_void, chip_idx: u32, count: u32);
 
     // ── Block metering ────────────────────────────────────────────────
-    pub fn trace_block_wrapper(state: *mut c_void, pc: u32, block_insn_count: u32);
+    pub fn trace_block_wrapper(state: *mut c_void, pc: u64, block_insn_count: u32);
 
     // ── Hint stream (for extension phantom instructions) ──────────────
     /// Replace the hint stream contents. Forwarded through `openvm_io.c`

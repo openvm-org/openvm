@@ -8,11 +8,7 @@ use std::{
     sync::Arc,
 };
 
-use openvm_instructions::{
-    exe::VmExe,
-    riscv::{RV64_MEMORY_AS, RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    DEFERRAL_AS,
-};
+use openvm_instructions::{exe::VmExe, riscv::RV64_MEMORY_AS, DEFERRAL_AS};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 use rvr_openvm_lift::ExtensionRegistry;
@@ -29,17 +25,14 @@ use crate::{
     arch::{
         execution_mode::{
             metered::{
-                ctx::DEFAULT_PAGE_BITS,
+                memory_ctx::{MemoryCtx, PageAccess, PAGE_BITS},
                 segment_ctx::Segment,
             },
             MeteredCtx,
         },
-        ExecutionError, Streams, SystemConfig, VmState, BOUNDARY_AIR_ID, MERKLE_AIR_ID,
-        U16_CELL_SIZE_BITS,
+        ExecutionError, Streams, SystemConfig, VmState,
     },
-    system::memory::{
-        merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, DIGEST_WIDTH_BITS,
-    },
+    system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory},
 };
 
 pub struct RunToCompletion;
@@ -79,9 +72,9 @@ pub struct RvrMeteredResult {
 #[derive(Clone, Copy)]
 pub struct MeteredTracerData {
     pub trace_heights: *mut u32,
-    pub mem_page_buf: *mut u32,
-    pub pv_page_buf: *mut u32,
-    pub deferral_page_buf: *mut u32,
+    pub mem_page_buf: *mut PageAccess,
+    pub pv_page_buf: *mut PageAccess,
+    pub deferral_page_buf: *mut PageAccess,
     /// Periodic-check callback. Always initialized; generated C calls it
     /// unconditionally to keep the hot metered path branch-free.
     pub on_check: unsafe extern "C" fn(*mut MeteredTracerData) -> u8,
@@ -127,31 +120,26 @@ pub type MeteredTracer = TracerPtr<MeteredTracerData>;
 // buffers (one per additional address space) instead of hardcoding
 // pv + deferral. The memory AS buffer stays separate as the hot path.
 pub struct SegmentationState {
-    /// OpenVM metered execution context — holds trace heights, memory tracking,
-    /// and segmentation logic. Carried directly to avoid duplicating its internals.
+    /// OpenVM metered execution context - holds trace heights, memory tracking,
+    /// and segmentation logic.
     pub ctx: MeteredCtx,
-    /// Per-address-space page buffers filled by the C tracer. Each entry = 1 u32 local page id.
-    mem_page_buf: Vec<u32>,
-    pv_page_buf: Vec<u32>,
-    deferral_page_buf: Vec<u32>,
-    /// Pre-computed from `SystemConfig` for use in `flush_page_buffer` and
-    /// `add_register_merkle_heights`.
+    /// Per-address-space page buffers. Each entry = local page id + leaf mask.
+    mem_page_buf: Vec<PageAccess>,
+    pv_page_buf: Vec<PageAccess>,
+    deferral_page_buf: Vec<PageAccess>,
     address_height: u32,
-    byte_space_leaf_bits: u32,
 }
 
 impl SegmentationState {
     pub fn new(ctx: MeteredCtx, system_config: &SystemConfig) -> Self {
         let memory_dimensions = system_config.memory_config.memory_dimensions();
         let address_height = memory_dimensions.address_height as u32;
-        let byte_space_leaf_bits = (U16_CELL_SIZE_BITS + DIGEST_WIDTH_BITS) as u32;
         Self {
             ctx,
-            mem_page_buf: vec![0u32; MEM_PAGE_BUF_CAP],
-            pv_page_buf: vec![0u32; PV_PAGE_BUF_CAP],
-            deferral_page_buf: vec![0u32; DEFERRAL_PAGE_BUF_CAP],
+            mem_page_buf: vec![PageAccess::default(); MEM_PAGE_BUF_CAP],
+            pv_page_buf: vec![PageAccess::default(); PV_PAGE_BUF_CAP],
+            deferral_page_buf: vec![PageAccess::default(); DEFERRAL_PAGE_BUF_CAP],
             address_height,
-            byte_space_leaf_bits,
         }
     }
 
@@ -169,95 +157,83 @@ impl SegmentationState {
     }
 
     /// Get mutable pointer to the AS_MEMORY page buffer for the C tracer.
-    pub fn mem_page_buf_ptr(&mut self) -> *mut u32 {
+    pub fn mem_page_buf_ptr(&mut self) -> *mut PageAccess {
         self.mem_page_buf.as_mut_ptr()
     }
 
     /// Get mutable pointer to the AS_PUBLIC_VALUES page buffer for the C tracer.
-    pub fn pv_page_buf_ptr(&mut self) -> *mut u32 {
+    pub fn pv_page_buf_ptr(&mut self) -> *mut PageAccess {
         self.pv_page_buf.as_mut_ptr()
     }
 
     /// Get mutable pointer to the AS_DEFERRAL page buffer for the C tracer.
-    pub fn deferral_page_buf_ptr(&mut self) -> *mut u32 {
+    pub fn deferral_page_buf_ptr(&mut self) -> *mut PageAccess {
         self.deferral_page_buf.as_mut_ptr()
     }
 
-    /// Flush all page buffers: convert local pages to global ids, deduplicate
-    /// via the BitSet, and update `addr_space_access_count` for each new page.
-    fn flush_page_buffer(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
-        let num_as = self.ctx.memory_ctx.addr_space_access_count.len();
-        let page_shift = self.address_height as usize - DEFAULT_PAGE_BITS;
-        for &(buf_len, addr_space) in &[
-            (mem_len, RV64_MEMORY_AS),
-            (pv_len, PUBLIC_VALUES_AS),
-            (deferral_len, DEFERRAL_AS),
-        ] {
-            let as_idx = addr_space as usize;
-            if as_idx >= num_as {
-                continue;
-            }
-            let as_offset = (as_idx - 1) << page_shift;
-            let buf = match addr_space {
-                RV64_MEMORY_AS => &self.mem_page_buf,
-                PUBLIC_VALUES_AS => &self.pv_page_buf,
-                _ => &self.deferral_page_buf,
-            };
-            for &local_page in &buf[..buf_len as usize] {
-                if self
-                    .ctx
-                    .memory_ctx
-                    .page_indices
-                    .insert(as_offset + local_page as usize)
-                {
-                    self.ctx.memory_ctx.addr_space_access_count[as_idx] += 1;
-                }
-            }
+    #[inline(always)]
+    fn apply_addr_space_buffer(
+        memory_ctx: &mut MemoryCtx,
+        address_height: u32,
+        addr_space: u32,
+        buffer: &[PageAccess],
+        len: u32,
+    ) {
+        if len == 0 {
+            return;
         }
+        // C buffers use page ids local to one address space. `MemoryCtx`
+        // deduplicates against one global memory tree, so convert to global
+        // page ids before applying the leaf masks.
+        let page_shift = address_height as usize - PAGE_BITS;
+        let page_offset = ((addr_space as usize - 1) << page_shift) as u32;
+        memory_ctx.apply_page_accesses_with_offset(page_offset, &buffer[..len as usize]);
     }
 
-    /// Inserts register space pages into the bitset and increments per-AS access counts.
-    /// Mirrors `MemoryCtx::add_register_merkle_heights` but without writing to
-    /// `page_indices_since_checkpoint`, which rvr does not use (it replays pages via
-    /// C page buffers instead).
-    fn add_register_merkle_heights(&mut self) {
-        const REG_SIZE: u32 = (RV64_NUM_REGISTERS * RV64_REGISTER_NUM_LIMBS) as u32;
-        let leaf_ptrs = 1u32 << self.byte_space_leaf_bits;
-        let num_blocks = (REG_SIZE + leaf_ptrs - 1) >> self.byte_space_leaf_bits;
-        let start_block_id = (RV64_REGISTER_AS as u64 - 1) << self.address_height;
-        let end_block_id = start_block_id + num_blocks as u64;
-        let start_page_id = start_block_id >> DEFAULT_PAGE_BITS;
-        let end_page_id = ((end_block_id - 1) >> DEFAULT_PAGE_BITS) + 1;
-        for page_id in start_page_id..end_page_id {
-            if self.ctx.memory_ctx.page_indices.insert(page_id as usize) {
-                self.ctx.memory_ctx.addr_space_access_count[RV64_REGISTER_AS as usize] += 1;
-            }
-        }
+    /// Apply all page buffers: convert local pages to global ids and update
+    /// memory metering state.
+    #[inline(always)]
+    fn apply_page_buffers(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
+        Self::apply_addr_space_buffer(
+            &mut self.ctx.memory_ctx,
+            self.address_height,
+            RV64_MEMORY_AS,
+            &self.mem_page_buf,
+            mem_len,
+        );
+        Self::apply_addr_space_buffer(
+            &mut self.ctx.memory_ctx,
+            self.address_height,
+            PUBLIC_VALUES_AS,
+            &self.pv_page_buf,
+            pv_len,
+        );
+        Self::apply_addr_space_buffer(
+            &mut self.ctx.memory_ctx,
+            self.address_height,
+            DEFERRAL_AS,
+            &self.deferral_page_buf,
+            deferral_len,
+        );
     }
 
     fn initialize_segment_memory(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
-        let poseidon2_idx = self.ctx.trace_heights.len() - 2;
-        self.ctx.trace_heights[BOUNDARY_AIR_ID] = 0;
-        self.ctx.trace_heights[MERKLE_AIR_ID] = 0;
-        self.ctx.trace_heights[poseidon2_idx] = 0;
-
-        self.ctx.memory_ctx.page_indices.clear();
-        self.ctx.memory_ctx.addr_space_access_count.fill(0);
-        self.ctx.memory_ctx.page_indices_since_checkpoint_len = 0;
-
         // RVR can only suspend at block boundaries, so segmentation uses the
         // last safe checkpoint. The pages accumulated since that checkpoint
         // belong to the next segment and must seed its memory trace heights
         // after the previous segment's heights are subtracted.
-        self.flush_page_buffer(mem_len, pv_len, deferral_len);
         self.ctx
             .memory_ctx
-            .lazy_update_boundary_heights(&mut self.ctx.trace_heights);
+            .reset_segment_without_replay(&mut self.ctx.trace_heights);
+        self.apply_page_buffers(mem_len, pv_len, deferral_len);
+        self.ctx
+            .memory_ctx
+            .apply_height_updates(&mut self.ctx.trace_heights);
 
-        self.add_register_merkle_heights();
+        self.ctx.memory_ctx.add_register_merkle_heights();
         self.ctx
             .memory_ctx
-            .lazy_update_boundary_heights(&mut self.ctx.trace_heights);
+            .apply_height_updates(&mut self.ctx.trace_heights);
     }
 
     /// Called on each periodic check (approximately every `segment_check_insns` instructions).
@@ -276,10 +252,10 @@ impl SegmentationState {
         self.ctx.segmentation_ctx.instret = instret;
         self.ctx.segmentation_ctx.instrets_until_check = seg_check_insns;
 
-        self.flush_page_buffer(mem_len, pv_len, deferral_len);
+        self.apply_page_buffers(mem_len, pv_len, deferral_len);
         self.ctx
             .memory_ctx
-            .lazy_update_boundary_heights(&mut self.ctx.trace_heights);
+            .apply_height_updates(&mut self.ctx.trace_heights);
 
         let did_segment = self.ctx.segmentation_ctx.check_and_segment(
             instret,
@@ -304,6 +280,7 @@ impl SegmentationState {
         self.ctx
             .segmentation_ctx
             .update_checkpoint(instret, &self.ctx.trace_heights);
+        self.ctx.memory_ctx.update_checkpoint();
 
         did_segment
     }
@@ -318,10 +295,10 @@ impl SegmentationState {
         deferral_len: u32,
         remaining_counter: u32,
     ) {
-        self.flush_page_buffer(mem_len, pv_len, deferral_len);
+        self.apply_page_buffers(mem_len, pv_len, deferral_len);
         self.ctx
             .memory_ctx
-            .lazy_update_boundary_heights(&mut self.ctx.trace_heights);
+            .apply_height_updates(&mut self.ctx.trace_heights);
 
         self.ctx.segmentation_ctx.instrets_until_check = remaining_counter as u64;
         self.ctx
@@ -478,7 +455,7 @@ mod tests {
     use crate::{
         arch::{
             execution_mode::metered::{
-                ctx::{MeteredCtxInputs, DEFAULT_PAGE_BITS},
+                ctx::MeteredCtxInputs,
                 segment_ctx::{SegmentationLimits, DEFAULT_MAX_MEMORY},
             },
             BOUNDARY_AIR_ID, MERKLE_AIR_ID,
@@ -499,7 +476,7 @@ mod tests {
         let interactions = vec![0; num_airs];
         let need_rot = vec![false; num_airs];
 
-        let ctx = MeteredCtx::<DEFAULT_PAGE_BITS>::new(
+        let ctx = MeteredCtx::new(
             MeteredCtxInputs {
                 constant_trace_heights: &constant_trace_heights,
                 air_names: &air_names,
@@ -519,11 +496,20 @@ mod tests {
     }
 
     #[test]
-    fn test_initialize_segment_memory_replays_checkpoint_pages() {
+    fn test_initialize_segment_memory_replays_page_buffers() {
         let mut with_interval_buffer = make_segmentation_state();
-        with_interval_buffer.mem_page_buf[0] = 7;
-        with_interval_buffer.pv_page_buf[0] = 3;
-        with_interval_buffer.deferral_page_buf[0] = 2;
+        with_interval_buffer.mem_page_buf[0] = PageAccess {
+            page_id: 7,
+            leaf_mask: 1,
+        };
+        with_interval_buffer.pv_page_buf[0] = PageAccess {
+            page_id: 3,
+            leaf_mask: 1,
+        };
+        with_interval_buffer.deferral_page_buf[0] = PageAccess {
+            page_id: 2,
+            leaf_mask: 1,
+        };
         with_interval_buffer.initialize_segment_memory(1, 1, 1);
 
         let mut clean = make_segmentation_state();

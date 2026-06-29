@@ -270,7 +270,7 @@ impl ModularRvrExtension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for ModularRvrExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
+    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if let Some(lifted) = self.try_lift_modular(insn, pc, opcode) {
@@ -342,7 +342,7 @@ impl ModularRvrExtension {
     fn try_lift_modular<F: PrimeField32>(
         &self,
         insn: &Instruction<F>,
-        pc: u32,
+        pc: u64,
         opcode: usize,
     ) -> Option<LiftedInstr> {
         let base_offset = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
@@ -451,7 +451,7 @@ impl ModularRvrExtension {
     fn try_lift_phantom<F: PrimeField32>(
         &self,
         insn: &Instruction<F>,
-        pc: u32,
+        pc: u64,
     ) -> Option<LiftedInstr> {
         let c_val = insn.c.as_canonical_u32();
         let discriminant = (c_val & 0xffff) as u16;

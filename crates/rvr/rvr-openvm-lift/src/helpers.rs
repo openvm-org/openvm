@@ -1,4 +1,6 @@
-use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS};
+use openvm_instructions::{
+    instruction::Instruction, program::MAX_ALLOWED_PC, riscv::RV64_REGISTER_NUM_LIMBS,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 /// Decode register index from an OpenVM operand.
@@ -21,4 +23,10 @@ pub fn decode_imm_cg<F: PrimeField32>(insn: &Instruction<F>) -> u32 {
 /// Sign-extend a 32-bit value into an RV64 register value.
 pub fn sext32(value: u32) -> u64 {
     value as i32 as i64 as u64
+}
+
+/// True if `pc` lies within the implemented PC address space (`<= MAX_ALLOWED_PC`).
+#[inline]
+pub fn is_pc_in_bounds(pc: u64) -> bool {
+    pc <= u64::from(MAX_ALLOWED_PC)
 }

@@ -50,7 +50,7 @@ void trace_mem_access_u64_range_wrapper(RvState* s, uint32_t base_addr,
 
 /* ── Instruction dispatch / chip cost ──────────────────────────────── */
 
-void trace_pc_wrapper(RvState* s, uint32_t pc) { trace_pc(s, pc); }
+void trace_pc_wrapper(RvState* s, uint64_t pc) { trace_pc(s, pc); }
 
 /* Extension FFI staticlibs use this to add chip rows on top of what the
  * per-block chip accounting in the generated `block_*` functions has already
@@ -75,6 +75,6 @@ void trace_chip_wrapper(RvState* s, uint32_t chip_idx, uint32_t count) {
 
 /* ── Block metering ────────────────────────────────────────────────── */
 
-void trace_block_wrapper(RvState* s, uint32_t pc, uint32_t block_insn_count) {
+void trace_block_wrapper(RvState* s, uint64_t pc, uint32_t block_insn_count) {
   trace_block(s, pc, block_insn_count);
 }

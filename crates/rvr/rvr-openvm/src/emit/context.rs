@@ -291,7 +291,7 @@ impl EmitContext {
     }
 
     fn emit_inline_page_record(&mut self, addr: &str) {
-        self.write_line(&format!("trace_memory_access(&trace_memory, {addr});"));
+        self.write_line(&format!("trace_memory_access_leaf(&trace_memory, {addr});"));
     }
 
     pub fn flush_page_locals(&mut self) {
@@ -309,8 +309,8 @@ impl EmitContext {
     /// Emit a trace_pc call. Per-instruction chip accounting is rolled into
     /// the per-block chip update emitted at block entry by
     /// `CProject::emit_block_function`, not here.
-    pub fn trace_pc(&mut self, pc: u32) {
-        self.write_line(&format!("trace_pc(state, 0x{pc:08x}u);"));
+    pub fn trace_pc(&mut self, pc: u64) {
+        self.write_line(&format!("trace_pc(state, 0x{pc:08x}ull);"));
     }
 
     pub fn extern_call(&mut self, name: &str, args: &[&str]) {
