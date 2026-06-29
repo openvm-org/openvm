@@ -54,9 +54,6 @@ pub struct EmitContext {
     /// Counter for unique variable names.
     var_counter: u32,
     mode: EmitMode,
-    /// True when block-local `TraceMemory` has a pending AS_MEMORY page that
-    /// has not been drained back into the shared tracer buffer.
-    trace_memory_dirty: bool,
 }
 
 impl EmitContext {
@@ -67,7 +64,6 @@ impl EmitContext {
             indent: 2,
             var_counter: 0,
             mode,
-            trace_memory_dirty: false,
         }
     }
 
@@ -304,20 +300,17 @@ impl EmitContext {
                 "trace_memory_access_bytes(&trace_memory, {addr}, {width}u);"
             ));
         }
-        self.trace_memory_dirty = true;
     }
 
     pub fn flush_page_locals(&mut self) {
-        if self.mode.traces_memory_pages() && self.trace_memory_dirty {
+        if self.mode.traces_memory_pages() {
             self.write_line("trace_memory_flush(state->tracer, &trace_memory);");
-            self.trace_memory_dirty = false;
         }
     }
 
     pub fn reload_page_locals(&mut self) {
         if self.mode.traces_memory_pages() {
             self.write_line("trace_memory_reload(state->tracer, &trace_memory);");
-            self.trace_memory_dirty = false;
         }
     }
 
@@ -495,16 +488,6 @@ mod tests {
                 trace_memory_pages: true,
             },
         )
-    }
-
-    #[test]
-    fn byte_memory_access_uses_single_leaf_trace() {
-        let mut ctx = metered_memory_ctx();
-        ctx.write_mem("addr", 0, "val", 1);
-
-        let emitted = ctx.buf();
-        assert!(emitted.contains("trace_memory_access_leaf(&trace_memory, addr);"));
-        assert!(!emitted.contains("trace_memory_access_bytes"));
     }
 
     #[test]

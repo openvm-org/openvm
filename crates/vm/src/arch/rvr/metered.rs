@@ -586,6 +586,38 @@ mod tests {
     }
 
     #[test]
+    fn test_memory_page_buffer_applies_cross_leaf_mask() {
+        let mut buffered = make_segmentation_state();
+        buffered.mem_page_buf[0] = PageAccess {
+            page_id: 0,
+            leaf_mask: 0b11,
+        };
+        buffered.on_termination(1, 0, 0, 0);
+
+        let mut explicit = make_segmentation_state();
+        explicit
+            .memory_ctx
+            .update_boundary_merkle_heights(RV64_MEMORY_AS, 0, 17);
+        explicit
+            .memory_ctx
+            .apply_height_updates(&mut explicit.trace_heights);
+        explicit.segmentation_ctx.instrets_until_check = 0;
+        explicit
+            .segmentation_ctx
+            .create_final_segment(&explicit.trace_heights);
+
+        assert_eq!(buffered.trace_heights, explicit.trace_heights);
+        assert_eq!(
+            buffered.segmentation_ctx.segments.len(),
+            explicit.segmentation_ctx.segments.len()
+        );
+        assert_eq!(
+            buffered.segmentation_ctx.segments[0].trace_heights,
+            explicit.segmentation_ctx.segments[0].trace_heights
+        );
+    }
+
+    #[test]
     fn test_periodic_check_records_block_boundary_instret() {
         let mut seg_state = make_segmentation_state();
         seg_state.ctx.segmentation_ctx.instrets_until_check = 1000;
