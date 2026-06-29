@@ -95,7 +95,7 @@ cargo openvm --version
 
 It is possible to install the OpenVM CLI with support for Nvidia GPUs. This requires installation on a machine with an Nvidia GPU and associated drivers (see [Installation Prerequisites (CUDA)](#installation-prerequisites-cuda))
 
-With this version of the CLI, the `prove app` and `prove stark` commands will utilize the Nvidia GPU for hardware acceleration. Currently only single GPU support is available through the CLI.
+With this version of the CLI, the `prove app` and `prove stark` commands will utilize the Nvidia GPU for hardware acceleration. To also run the EVM proof (`prove evm`) on the GPU, build with the `halo2-gpu` feature in place of `cuda`. Currently only single GPU support is available through the CLI.
 
 ### Installation Prerequisites (CUDA)
 
