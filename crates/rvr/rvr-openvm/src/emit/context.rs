@@ -1,5 +1,7 @@
 use std::{collections::HashSet, fmt::Write};
 
+use openvm_instructions::riscv::RV64_MEMORY_AS;
+
 use super::codegen::hex_u32;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -52,6 +54,9 @@ pub struct EmitContext {
     /// Counter for unique variable names.
     var_counter: u32,
     mode: EmitMode,
+    /// True when block-local `TraceMemory` has a pending AS_MEMORY page that
+    /// has not been drained back into the shared tracer buffer.
+    trace_memory_dirty: bool,
 }
 
 impl EmitContext {
@@ -62,6 +67,7 @@ impl EmitContext {
             indent: 2,
             var_counter: 0,
             mode,
+            trace_memory_dirty: false,
         }
     }
 
@@ -292,17 +298,20 @@ impl EmitContext {
 
     fn emit_inline_page_record(&mut self, addr: &str) {
         self.write_line(&format!("trace_memory_access_leaf(&trace_memory, {addr});"));
+        self.trace_memory_dirty = true;
     }
 
     pub fn flush_page_locals(&mut self) {
-        if self.mode.traces_memory_pages() {
+        if self.mode.traces_memory_pages() && self.trace_memory_dirty {
             self.write_line("trace_memory_flush(state->tracer, &trace_memory);");
+            self.trace_memory_dirty = false;
         }
     }
 
     pub fn reload_page_locals(&mut self) {
         if self.mode.traces_memory_pages() {
             self.write_line("trace_memory_reload(state->tracer, &trace_memory);");
+            self.trace_memory_dirty = false;
         }
     }
 
@@ -318,6 +327,11 @@ impl EmitContext {
         let args_str = args.join(", ");
         self.write_line(&format!("{name}({args_str});"));
         self.reload_page_locals();
+    }
+
+    pub fn extern_call_preserving_tracer(&mut self, name: &str, args: &[&str]) {
+        let args_str = args.join(", ");
+        self.write_line(&format!("{name}({args_str});"));
     }
 
     pub fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
@@ -341,9 +355,14 @@ impl EmitContext {
     }
 
     pub fn trace_mem_access(&mut self, addr: &str, addr_space: u32) {
-        self.flush_page_locals();
+        let touches_memory = addr_space == RV64_MEMORY_AS;
+        if touches_memory {
+            self.flush_page_locals();
+        }
         self.write_line(&format!("trace_mem_access(state, {addr}, {addr_space}u);"));
-        self.reload_page_locals();
+        if touches_memory {
+            self.reload_page_locals();
+        }
     }
 
     pub fn trace_mem_access_u64_range(
@@ -352,11 +371,16 @@ impl EmitContext {
         num_dwords: &str,
         addr_space: u32,
     ) {
-        self.flush_page_locals();
+        let touches_memory = addr_space == RV64_MEMORY_AS;
+        if touches_memory {
+            self.flush_page_locals();
+        }
         self.write_line(&format!(
             "trace_mem_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
         ));
-        self.reload_page_locals();
+        if touches_memory {
+            self.reload_page_locals();
+        }
     }
 
     fn sorted_hot_regs(&self) -> Vec<u8> {
@@ -429,6 +453,10 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
 
     fn extern_call(&mut self, name: &str, args: &[&str]) {
         EmitContext::extern_call(self, name, args);
+    }
+
+    fn extern_call_preserving_tracer(&mut self, name: &str, args: &[&str]) {
+        EmitContext::extern_call_preserving_tracer(self, name, args);
     }
 
     fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {

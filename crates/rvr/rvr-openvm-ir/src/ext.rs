@@ -29,6 +29,11 @@ pub trait ExtEmitCtx {
     /// Emit an opaque C call that may update state observed by the tracer.
     fn extern_call(&mut self, name: &str, args: &[&str]);
 
+    /// Emit a C call whose body preserves tracer buffers.
+    fn extern_call_preserving_tracer(&mut self, name: &str, args: &[&str]) {
+        self.extern_call(name, args);
+    }
+
     /// Emit an opaque C call that returns a value.
     fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String;
 
