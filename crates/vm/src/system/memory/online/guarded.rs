@@ -139,6 +139,26 @@ impl LinearMemory for GuardedMemory {
         unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.memory_size) }
     }
 
+    #[cfg(target_os = "linux")]
+    fn fill_zero(&mut self) {
+        use libc::{madvise, MADV_DONTNEED};
+
+        // SAFETY: the usable region is an anonymous private mapping (PROT_READ|PROT_WRITE).
+        // MADV_DONTNEED on anonymous private mappings causes subsequent accesses to return
+        // zero-filled pages without writing anything. We advise only [as_mut_ptr(), +memory_size),
+        // leaving the PROT_NONE guard pages untouched.
+        unsafe {
+            let ret = madvise(
+                self.as_mut_ptr() as *mut libc::c_void,
+                self.memory_size,
+                MADV_DONTNEED,
+            );
+            if ret != 0 {
+                std::ptr::write_bytes(self.as_mut_ptr(), 0, self.memory_size);
+            }
+        }
+    }
+
     #[inline(always)]
     unsafe fn read<BLOCK: Copy>(&self, from: usize) -> BLOCK {
         self.check_bounds(from, size_of::<BLOCK>());
