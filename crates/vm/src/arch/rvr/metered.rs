@@ -596,24 +596,27 @@ mod tests {
 
         let mut explicit = make_segmentation_state();
         explicit
+            .ctx
             .memory_ctx
             .update_boundary_merkle_heights(RV64_MEMORY_AS, 0, 17);
         explicit
+            .ctx
             .memory_ctx
-            .apply_height_updates(&mut explicit.trace_heights);
-        explicit.segmentation_ctx.instrets_until_check = 0;
+            .apply_height_updates(&mut explicit.ctx.trace_heights);
+        explicit.ctx.segmentation_ctx.instrets_until_check = 0;
         explicit
+            .ctx
             .segmentation_ctx
-            .create_final_segment(&explicit.trace_heights);
+            .create_final_segment(&explicit.ctx.trace_heights);
 
-        assert_eq!(buffered.trace_heights, explicit.trace_heights);
+        assert_eq!(buffered.ctx.trace_heights, explicit.ctx.trace_heights);
         assert_eq!(
-            buffered.segmentation_ctx.segments.len(),
-            explicit.segmentation_ctx.segments.len()
+            buffered.ctx.segmentation_ctx.segments.len(),
+            explicit.ctx.segmentation_ctx.segments.len()
         );
         assert_eq!(
-            buffered.segmentation_ctx.segments[0].trace_heights,
-            explicit.segmentation_ctx.segments[0].trace_heights
+            buffered.ctx.segmentation_ctx.segments[0].trace_heights,
+            explicit.ctx.segmentation_ctx.segments[0].trace_heights
         );
     }
 

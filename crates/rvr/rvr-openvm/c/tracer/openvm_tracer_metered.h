@@ -281,26 +281,6 @@ static __attribute__((always_inline)) inline void trace_memory_access_leaf(
                            1ull << (leaf & ((1u << TRACER_PAGE_BITS) - 1u)));
 }
 
-static __attribute__((always_inline)) inline void trace_memory_access_bytes(
-    TraceMemory* restrict memory, uint32_t addr, uint32_t size) {
-  uint32_t first_leaf = byte_addr_to_local_leaf(addr);
-  uint32_t last_leaf = byte_addr_to_local_leaf(addr + size - 1u);
-  uint32_t first_page = first_leaf >> TRACER_PAGE_BITS;
-  uint32_t last_page = last_leaf >> TRACER_PAGE_BITS;
-  if (likely(first_page == last_page)) {
-    trace_memory_access_page(memory, first_page,
-                             leaf_mask_range(first_leaf, last_leaf));
-    return;
-  }
-  for (uint32_t page = first_page; page <= last_page; page++) {
-    uint32_t page_first_leaf = page << TRACER_PAGE_BITS;
-    uint32_t page_last_leaf = page_first_leaf + (1u << TRACER_PAGE_BITS) - 1u;
-    uint32_t start = first_leaf > page_first_leaf ? first_leaf : page_first_leaf;
-    uint32_t end = last_leaf < page_last_leaf ? last_leaf : page_last_leaf;
-    trace_memory_access_page(memory, page, leaf_mask_range(start, end));
-  }
-}
-
 /* ── Trace-only register access (no-ops in metered mode) ─────────── */
 
 static __attribute__((always_inline)) inline void trace_reg_read(
