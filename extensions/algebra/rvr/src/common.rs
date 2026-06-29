@@ -6,7 +6,7 @@ use crate::{detect_known_field, format_c_byte_array, KnownField, ModOp};
 
 /// Marker trait implemented by zero-sized types that parameterize
 /// [`FieldArithInstr`], supplying the C prefix and known-field suffix lookup.
-pub trait ArithKind: Clone + Debug + Send + Sync + 'static {
+pub(crate) trait ArithKind: Clone + Debug + Send + Sync + 'static {
     fn opname() -> &'static str;
     fn c_prefix() -> &'static str;
     /// Returns the C suffix for a known field, or `None` to fall through to the
@@ -18,7 +18,7 @@ pub trait ArithKind: Clone + Debug + Send + Sync + 'static {
 /// Use the type aliases [`crate::ModArithInstr`] / [`crate::Fp2ArithInstr`]
 /// rather than naming this type directly.
 #[derive(Debug, Clone)]
-pub struct FieldArithInstr<K: ArithKind> {
+pub(crate) struct FieldArithInstr<K: ArithKind> {
     _kind: PhantomData<K>,
     pub op: ModOp,
     pub rd_reg: Reg,
@@ -38,6 +38,69 @@ impl<K: ArithKind> FieldArithInstr<K> {
         modulus: Vec<u8>,
     ) -> Self {
         Self { _kind: PhantomData, op, rd_reg, rs1_reg, rs2_reg, num_limbs, modulus }
+    }
+}
+
+/// Generic IR node for field IS_EQ.
+/// Use the type alias [`crate::ModIsEqInstr`] rather than naming this type directly.
+#[derive(Debug, Clone)]
+pub(crate) struct FieldIsEqInstr<K: ArithKind> {
+    _kind: PhantomData<K>,
+    pub rd_reg: Reg,
+    pub rs1_reg: Reg,
+    pub rs2_reg: Reg,
+    pub num_limbs: u32,
+    pub modulus: Vec<u8>,
+}
+
+impl<K: ArithKind> FieldIsEqInstr<K> {
+    pub fn new(
+        rd_reg: Reg,
+        rs1_reg: Reg,
+        rs2_reg: Reg,
+        num_limbs: u32,
+        modulus: Vec<u8>,
+    ) -> Self {
+        Self { _kind: PhantomData, rd_reg, rs1_reg, rs2_reg, num_limbs, modulus }
+    }
+}
+
+impl<K: ArithKind> ExtInstr for FieldIsEqInstr<K> {
+    fn opname(&self) -> &str {
+        "iseq_opname"
+    }
+
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let rs1 = ctx.read_reg(self.rs1_reg);
+        let rs2 = ctx.read_reg(self.rs2_reg);
+        let prefix = K::c_prefix();
+        let known_suffix = detect_known_field(&self.modulus).and_then(K::known_suffix);
+        if let Some(suffix) = known_suffix {
+            let name = format!("rvr_ext_{prefix}_iseq_{suffix}");
+            let val = ctx.extern_call_expr("uint32_t", &name, &["state", &rs1, &rs2]);
+            ctx.write_reg(self.rd_reg, &val);
+        } else {
+            let mod_literal = format_c_byte_array(&self.modulus);
+            ctx.write_line("{");
+            ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
+            let name = format!("rvr_ext_{prefix}_iseq");
+            let num_limbs = format!("{}u", self.num_limbs);
+            let val = ctx.extern_call_expr(
+                "uint32_t",
+                &name,
+                &["state", &rs1, &rs2, &num_limbs, "mod_"],
+            );
+            ctx.write_reg(self.rd_reg, &val);
+            ctx.write_line("}");
+        }
+    }
+
+    fn clone_box(&self) -> Box<dyn ExtInstr> {
+        Box::new(self.clone())
+    }
+
+    fn is_block_end(&self) -> bool {
+        false
     }
 }
 

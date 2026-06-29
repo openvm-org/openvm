@@ -12,12 +12,10 @@ mod modular;
 
 use num_bigint::BigUint;
 
-pub use common::{ArithKind, FieldArithInstr, FieldSetupInstr};
-pub use fp2::{Fp2ArithInstr, Fp2ArithKind, Fp2RvrExtension, Fp2SetupInstr};
-pub use modular::{
-    HintNonQrInstr, HintSqrtInstr, ModArithInstr, ModArithKind, ModIsEqInstr, ModSetupInstr,
-    ModularRvrExtension,
-};
+pub(crate) use common::{ArithKind, FieldArithInstr, FieldIsEqInstr};
+pub use common::FieldSetupInstr;
+pub use fp2::{Fp2RvrExtension, Fp2SetupInstr};
+pub use modular::{HintNonQrInstr, HintSqrtInstr, ModSetupInstr, ModularRvrExtension};
 
 /// Zero-pad `modulus` to the canonical limb boundary (32 or 48 bytes).
 ///
@@ -62,7 +60,7 @@ impl ModOp {
 
 /// Known field types that have optimized native FFI implementations.
 #[derive(Debug, Clone, Copy)]
-pub enum KnownField {
+pub(crate) enum KnownField {
     K256Coord,
     K256Scalar,
     P256Coord,

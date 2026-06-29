@@ -12,8 +12,8 @@ use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
 use strum::EnumCount;
 
 use crate::{
-    detect_known_field, format_c_byte_array, pad_modulus, ArithKind, FieldArithInstr,
-    FieldSetupInstr, KnownField, ModOp,
+    format_c_byte_array, pad_modulus, ArithKind, FieldArithInstr, FieldIsEqInstr, FieldSetupInstr,
+    KnownField, ModOp,
 };
 
 include!(concat!(env!("OUT_DIR"), "/secp256k1_files.rs"));
@@ -52,7 +52,7 @@ fn make_modulus_info(modulus: &BigUint, rng: &mut StdRng) -> ModulusInfo {
 // ── Modular arithmetic IR ────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
-pub struct ModArithKind;
+pub(crate) struct ModArithKind;
 
 impl ArithKind for ModArithKind {
     fn opname() -> &'static str {
@@ -67,54 +67,10 @@ impl ArithKind for ModArithKind {
 }
 
 /// IR node for modular arithmetic (ADD, SUB, MUL, DIV).
-pub type ModArithInstr = FieldArithInstr<ModArithKind>;
+pub(crate) type ModArithInstr = FieldArithInstr<ModArithKind>;
 
 /// IR node for modular IS_EQ.
-#[derive(Debug, Clone)]
-pub struct ModIsEqInstr {
-    pub rd_reg: Reg,
-    pub rs1_reg: Reg,
-    pub rs2_reg: Reg,
-    pub num_limbs: u32,
-    pub modulus: Vec<u8>,
-}
-
-impl ExtInstr for ModIsEqInstr {
-    fn opname(&self) -> &str {
-        "mod_iseq"
-    }
-
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
-        if let Some(field) = detect_known_field(&self.modulus) {
-            let suffix = field.c_suffix();
-            let name = format!("rvr_ext_mod_iseq_{suffix}");
-            let val = ctx.extern_call_expr("uint32_t", &name, &["state", &rs1, &rs2]);
-            ctx.write_reg(self.rd_reg, &val);
-        } else {
-            let mod_literal = format_c_byte_array(&self.modulus);
-            ctx.write_line("{");
-            ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
-            let num_limbs = format!("{}u", self.num_limbs);
-            let val = ctx.extern_call_expr(
-                "uint32_t",
-                "rvr_ext_mod_iseq",
-                &["state", &rs1, &rs2, &num_limbs, "mod_"],
-            );
-            ctx.write_reg(self.rd_reg, &val);
-            ctx.write_line("}");
-        }
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
-    }
-
-    fn is_block_end(&self) -> bool {
-        false
-    }
-}
+pub(crate) type ModIsEqInstr = FieldIsEqInstr<ModArithKind>;
 
 /// IR node for modular SETUP (SETUP_ADDSUB, SETUP_MULDIV, SETUP_ISEQ).
 pub type ModSetupInstr = FieldSetupInstr;
@@ -325,13 +281,13 @@ impl ModularRvrExtension {
                 Instr::Ext(Box::new(ModSetupInstr::new("rvr_ext_mod_setup", rd_reg, rs1_reg, rs2_reg, info.num_limbs)))
             }
             x if x == Rv64ModularArithmeticOpcode::IS_EQ as usize => {
-                Instr::Ext(Box::new(ModIsEqInstr {
+                Instr::Ext(Box::new(ModIsEqInstr::new(
                     rd_reg,
                     rs1_reg,
                     rs2_reg,
-                    num_limbs: info.num_limbs,
-                    modulus: info.modulus_bytes.clone(),
-                }))
+                    info.num_limbs,
+                    info.modulus_bytes.clone(),
+                )))
             }
             x if x == Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize => {
                 Instr::Ext(Box::new(ModSetupInstr::new("rvr_ext_mod_setup", rd_reg, rs1_reg, rs2_reg, info.num_limbs)))
