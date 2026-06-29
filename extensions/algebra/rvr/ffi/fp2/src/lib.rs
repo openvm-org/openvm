@@ -9,8 +9,8 @@ use std::{ffi::c_void, marker::PhantomData};
 
 use num_bigint::BigUint;
 use rvr_openvm_ext_algebra_ffi_common::{
-    exec_op, mod_inverse, read_bigint, read_bls12_381_fq, read_field_256, write_bigint,
-    write_bls12_381_fq, write_field_256, FieldArith, KnownFieldArith,
+    known_field_op_fn, mod_inverse, read_bigint, read_bls12_381_fq, read_field_256,
+    write_bigint, write_bls12_381_fq, write_field_256, FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
     rd_mem_words_traced, trace_mem_access_range, wr_mem_words_traced, AS_MEMORY, WORD_SIZE,
@@ -118,25 +118,13 @@ impl FieldArith for UnknownComplexField {
 
 // ── Macros ──────────────────────────────────────────────────────────────────
 
-macro_rules! field_op_fn {
-    ($name:ident, $field:ty, $op:ident) => {
-        /// # Safety
-        /// `state` must be a valid `RvState` pointer.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(state: *mut c_void, rd: u64, rs1: u64, rs2: u64) {
-            let f = KnownComplexField::<$field>(PhantomData);
-            exec_op(&f, state, rd, rs1, rs2, |f, a, b| f.$op(a, b));
-        }
-    };
-}
-
 macro_rules! define_fp2_ffi {
     ($field:ty, $suffix:ident) => {
         paste::paste! {
-            field_op_fn!([<rvr_ext_fp2_add_ $suffix>], $field, add);
-            field_op_fn!([<rvr_ext_fp2_sub_ $suffix>], $field, sub);
-            field_op_fn!([<rvr_ext_fp2_mul_ $suffix>], $field, mul);
-            field_op_fn!([<rvr_ext_fp2_div_ $suffix>], $field, div);
+            known_field_op_fn!([<rvr_ext_fp2_add_ $suffix>], KnownComplexField, $field, add);
+            known_field_op_fn!([<rvr_ext_fp2_sub_ $suffix>], KnownComplexField, $field, sub);
+            known_field_op_fn!([<rvr_ext_fp2_mul_ $suffix>], KnownComplexField, $field, mul);
+            known_field_op_fn!([<rvr_ext_fp2_div_ $suffix>], KnownComplexField, $field, div);
         }
     };
 }

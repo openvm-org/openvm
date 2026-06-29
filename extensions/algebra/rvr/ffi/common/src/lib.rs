@@ -224,7 +224,27 @@ pub fn mod_inverse(a: &BigUint, p: &BigUint) -> BigUint {
         .unwrap()
 }
 
-// ── FFI generation macro (shared by modular and fp2) ────────────────────────
+// ── FFI generation macros (shared by modular and fp2) ───────────────────────
+
+/// Generate a known-field FFI function. `$wrapper` must be a
+/// `PhantomData`-newtype that implements [`KnownFieldArith`] for `$field`.
+#[macro_export]
+macro_rules! known_field_op_fn {
+    ($name:ident, $wrapper:ident, $field:ty, $op:ident) => {
+        /// # Safety
+        /// `state` must be a valid `RvState` pointer.
+        #[no_mangle]
+        pub unsafe extern "C" fn $name(
+            state: *mut ::std::ffi::c_void,
+            rd: u64,
+            rs1: u64,
+            rs2: u64,
+        ) {
+            let f = $wrapper::<$field>(::std::marker::PhantomData);
+            $crate::exec_op(&f, state, rd, rs1, rs2, |f, a, b| f.$op(a, b));
+        }
+    };
+}
 
 /// Generate a generic (unknown-modulus) field-op FFI function.
 ///

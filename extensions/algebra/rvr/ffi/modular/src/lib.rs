@@ -16,8 +16,8 @@ use halo2curves_axiom::ff::PrimeField;
 use num_bigint::BigUint;
 use num_traits::One;
 use rvr_openvm_ext_algebra_ffi_common::{
-    exec_op, mod_inverse, read_bigint, read_bls12_381_fq, read_field_256, write_bigint,
-    write_bls12_381_fq, write_field_256, FieldArith, KnownFieldArith,
+    known_field_op_fn, mod_inverse, read_bigint, read_bls12_381_fq, read_field_256,
+    write_bigint, write_bls12_381_fq, write_field_256, FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
     ext_hint_stream_set, rd_mem_u64_range_wrapper, rd_mem_words_traced, trace_mem_access_range,
@@ -121,25 +121,13 @@ unsafe fn exec_iseq<F: FieldArith>(f: &F, state: *mut c_void, rs1_ptr: u64, rs2_
 
 // ── FFI generation macros ────────────────────────────────────────────────────
 
-macro_rules! field_op_fn {
-    ($name:ident, $field:ty, $op:ident) => {
-        /// # Safety
-        /// `state` must be a valid `RvState` pointer.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(state: *mut c_void, rd: u64, rs1: u64, rs2: u64) {
-            let f = KnownPrimeField::<$field>(PhantomData);
-            exec_op(&f, state, rd, rs1, rs2, |f, a, b| f.$op(a, b));
-        }
-    };
-}
-
 macro_rules! define_mod_ffi {
     ($field:ty, $suffix:ident) => {
         paste::paste! {
-            field_op_fn!([<rvr_ext_mod_add_ $suffix>], $field, add);
-            field_op_fn!([<rvr_ext_mod_sub_ $suffix>], $field, sub);
-            field_op_fn!([<rvr_ext_mod_mul_ $suffix>], $field, mul);
-            field_op_fn!([<rvr_ext_mod_div_ $suffix>], $field, div);
+            known_field_op_fn!([<rvr_ext_mod_add_ $suffix>], KnownPrimeField, $field, add);
+            known_field_op_fn!([<rvr_ext_mod_sub_ $suffix>], KnownPrimeField, $field, sub);
+            known_field_op_fn!([<rvr_ext_mod_mul_ $suffix>], KnownPrimeField, $field, mul);
+            known_field_op_fn!([<rvr_ext_mod_div_ $suffix>], KnownPrimeField, $field, div);
             /// # Safety
             /// `state` must be a valid `RvState` pointer.
             #[no_mangle]
