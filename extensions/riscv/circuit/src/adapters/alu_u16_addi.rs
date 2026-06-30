@@ -250,8 +250,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64AddIAdapterFiller {
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
-        let record: &Rv64AddIAdapterRecord =
-            unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let record: &Rv64AddIAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv64AddIAdapterCols<F> = adapter_row.borrow_mut();
 
         // Always an immediate — always range-check the low u16 limb.

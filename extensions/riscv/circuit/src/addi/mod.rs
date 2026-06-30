@@ -1,6 +1,8 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
-use super::adapters::{Rv64AddIAdapterAir, Rv64AddIAdapterExecutor, Rv64AddIAdapterFiller, U16_BITS};
+use super::adapters::{
+    Rv64AddIAdapterAir, Rv64AddIAdapterExecutor, Rv64AddIAdapterFiller, U16_BITS,
+};
 
 mod core;
 mod execution;

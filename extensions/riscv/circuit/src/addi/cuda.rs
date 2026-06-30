@@ -24,10 +24,8 @@ pub struct Rv64AddIChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64AddIChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(
-            Rv64AddIAdapterRecord,
-            AddICoreRecord<BLOCK_FE_WIDTH>,
-        )>();
+        const RECORD_SIZE: usize =
+            size_of::<(Rv64AddIAdapterRecord, AddICoreRecord<BLOCK_FE_WIDTH>)>();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());

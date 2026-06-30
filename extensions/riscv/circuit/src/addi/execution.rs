@@ -12,9 +12,8 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::adapters::imm_to_rv64_u64;
-
 use super::core::AddIExecutor;
+use crate::adapters::imm_to_rv64_u64;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -132,11 +131,7 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    OP: AluOp,
->(
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: &AddIPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -178,8 +173,7 @@ unsafe fn execute_e2_impl<
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<AddIPreCompute> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<AddIPreCompute>>())
-            .borrow();
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<AddIPreCompute>>()).borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
