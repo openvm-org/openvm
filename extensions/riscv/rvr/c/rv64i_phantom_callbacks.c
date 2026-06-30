@@ -9,7 +9,7 @@
 
 typedef struct {
   void (*hint_input)(void* ctx);
-  void (*print_str)(void* ctx, uint32_t ptr, uint32_t len);
+  void (*print_str)(void* ctx, uint64_t ptr, uint32_t len);
   void (*hint_random)(void* ctx, uint32_t num_words);
 } Rv64IPhantomCallbacks;
 
@@ -22,7 +22,7 @@ void register_rv64i_phantom_callbacks(const Rv64IPhantomCallbacks* cb) {
 
 void openvm_hint_input(void) { g_rv64i_phantom_callbacks.hint_input(openvm_get_io_ctx()); }
 
-void openvm_print_str(uint32_t ptr, uint32_t len) {
+void openvm_print_str(uint64_t ptr, uint32_t len) {
   g_rv64i_phantom_callbacks.print_str(openvm_get_io_ctx(), ptr, len);
 }
 

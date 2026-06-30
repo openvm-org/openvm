@@ -58,7 +58,7 @@ pub fn constants_header(text_start: u64, text_end: u64, dispatch_table_size: usi
 #pragma once
 #include <stdint.h>
 
-static constexpr uint32_t MEMORY_MASK = 0x{memory_mask:x}u;
+static constexpr uint64_t MEMORY_MASK = 0x{memory_mask:x}ull;
 static constexpr uint32_t AS_REGISTER = {AS_REGISTER};
 static constexpr uint32_t AS_MEMORY = {AS_MEMORY};
 static constexpr uint32_t AS_PUBLIC_VALUES = {AS_PUBLIC_VALUES};
