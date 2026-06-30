@@ -50,6 +50,8 @@ use crate::{
 mod dummy;
 pub(crate) mod frame;
 
+pub use frame::check_param_compatibility;
+
 const BATCH_CONSTRAINT_MOD_IDX: usize = 0;
 pub(crate) const POW_CHECKER_HEIGHT: usize = 32;
 
