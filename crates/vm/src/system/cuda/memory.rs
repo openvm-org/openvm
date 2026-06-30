@@ -112,8 +112,9 @@ impl MemoryInventoryGPU {
                 buf.fill_zero_on(&self.device_ctx)
                     .expect("failed to zero device memory");
                 for (start, end) in runs {
-                    // SAFETY: `touched_byte_ranges` clamps ranges to `raw_mem.len()`, and `buf` has the same
-                    // length, so both the host slice and the device offset stay in bounds.
+                    // SAFETY: `touched_byte_ranges` clamps ranges to `raw_mem.len()`, and `buf` has
+                    // the same length, so both the host slice and the device
+                    // offset stay in bounds.
                     unsafe {
                         cuda_memcpy_on::<false, true>(
                             buf.as_mut_ptr().add(start) as *mut std::ffi::c_void,
@@ -364,32 +365,25 @@ mod tests {
     use openvm_stark_backend::prover::MatrixDimensions;
 
     use super::*;
-    #[test]
-    fn test_empty_touched_memory_uses_full_chunk_values() {
-        let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
-        for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
-            addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
-        }
-        let mem_config = MemoryConfig::new(2, addr_spaces, ptr_bits_from_address_height(1), 29, 17);
 
-        let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
-        unsafe {
-            memory.write_bytes::<MEMORY_BLOCK_BYTES>(RV64_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
-            memory.write_bytes::<MEMORY_BLOCK_BYTES>(
-                RV64_MEMORY_AS,
-                0,
-                [9, 10, 11, 12, 0, 0, 0, 0],
-            );
-        }
-
+    /// CPU reference Merkle root over the full memory image, for cross-checking the GPU root.
+    fn cpu_merkle_root(memory: &AddressMap, mem_config: &MemoryConfig) -> [F; DIGEST_WIDTH] {
         let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
         let cpu_merkle_tree = MerkleTree::<F, DIGEST_WIDTH>::from_memory(
-            &memory.memory,
+            memory,
             &mem_config.memory_dimensions(),
             &cpu_hasher,
         );
-        let expected_root = cpu_merkle_tree.root();
+        cpu_merkle_tree.root()
+    }
 
+    /// Builds a GPU inventory, loads `initial_memory`, and returns the proving contexts produced
+    /// for `touched_memory`.
+    fn run_inventory(
+        mem_config: &MemoryConfig,
+        initial_memory: &AddressMap,
+        touched_memory: TouchedMemory<F>,
+    ) -> Vec<AirProvingContext<GpuBackend>> {
         let device_ctx = GpuDeviceCtx {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
@@ -397,37 +391,25 @@ mod tests {
         let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
         let mut inventory =
             MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
-        inventory.set_initial_memory(&memory.memory);
+        inventory.set_initial_memory(initial_memory);
+        inventory.generate_proving_ctxs(touched_memory)
+    }
 
-        let ctxs = inventory.generate_proving_ctxs(Vec::new());
-        let boundary_ctx = ctxs.first().expect("missing boundary ctx");
-        assert_eq!(
-            boundary_ctx.common_main.height(),
-            1,
-            "boundary trace should be a single padding row for empty touched memory"
-        );
-        assert!(
-            boundary_ctx.public_values.is_empty(),
-            "boundary chip should not emit public values"
-        );
-
+    /// Extracts the Merkle root from the proving contexts: the merkle chip is the one emitting at
+    /// least two digests of public values, and the root is its final digest.
+    fn gpu_merkle_root(ctxs: &[AirProvingContext<GpuBackend>]) -> [F; DIGEST_WIDTH] {
         let merkle_ctx = ctxs
             .iter()
             .find(|ctx| ctx.public_values.len() >= 2 * DIGEST_WIDTH)
             .expect("missing merkle ctx");
         let gpu_root_slice =
             &merkle_ctx.public_values[merkle_ctx.public_values.len() - DIGEST_WIDTH..];
-        let gpu_root: [F; DIGEST_WIDTH] = gpu_root_slice.try_into().unwrap();
-
-        assert_eq!(expected_root, gpu_root);
+        gpu_root_slice.try_into().unwrap()
     }
 
-    // Touched-memory coverage for the merge path: writes two MEMORY_BLOCK_BYTES
-    // blocks into RV64_MEMORY_AS (u16-celled, so each block is
-    // BLOCK_FE_WIDTH = 4 u16 cells = MEMORY_BLOCK_BYTES = 8 bytes) and routes
-    // them through `inventory.cu`'s `<4, 1> -> <8, 2>` merge kernel.
-    #[test]
-    fn test_touched_memory_updates_memory_address_space() {
+    /// Single-block register + memory config with the shared initial image used by the
+    /// empty- and touched-memory tests.
+    fn single_block_setup() -> (MemoryConfig, GuestMemory) {
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
         for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
             // num_cells is in u16 cells; allocate 2 * DIGEST_WIDTH = 16 cells.
@@ -444,6 +426,37 @@ mod tests {
                 [9, 10, 11, 12, 0, 0, 0, 0],
             );
         }
+        (mem_config, memory)
+    }
+
+    #[test]
+    fn test_empty_touched_memory_uses_full_chunk_values() {
+        let (mem_config, memory) = single_block_setup();
+
+        let expected_root = cpu_merkle_root(&memory.memory, &mem_config);
+
+        let ctxs = run_inventory(&mem_config, &memory.memory, Vec::new());
+        let boundary_ctx = ctxs.first().expect("missing boundary ctx");
+        assert_eq!(
+            boundary_ctx.common_main.height(),
+            1,
+            "boundary trace should be a single padding row for empty touched memory"
+        );
+        assert!(
+            boundary_ctx.public_values.is_empty(),
+            "boundary chip should not emit public values"
+        );
+
+        assert_eq!(expected_root, gpu_merkle_root(&ctxs));
+    }
+
+    // Touched-memory coverage for the merge path: writes two MEMORY_BLOCK_BYTES
+    // blocks into RV64_MEMORY_AS (u16-celled, so each block is
+    // BLOCK_FE_WIDTH = 4 u16 cells = MEMORY_BLOCK_BYTES = 8 bytes) and routes
+    // them through `inventory.cu`'s `<4, 1> -> <8, 2>` merge kernel.
+    #[test]
+    fn test_touched_memory_updates_memory_address_space() {
+        let (mem_config, memory) = single_block_setup();
 
         let mut final_memory = memory.clone();
         let touched_bytes = [101u8, 102, 103, 104, 105, 106, 107, 108];
@@ -457,22 +470,7 @@ mod tests {
             );
         }
 
-        let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
-        let cpu_merkle_tree = MerkleTree::<F, DIGEST_WIDTH>::from_memory(
-            &final_memory.memory,
-            &mem_config.memory_dimensions(),
-            &cpu_hasher,
-        );
-        let expected_root = cpu_merkle_tree.root();
-
-        let device_ctx = GpuDeviceCtx {
-            device_id: get_device().unwrap() as u32,
-            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
-        };
-        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
-        let mut inventory =
-            MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
-        inventory.set_initial_memory(&memory.memory);
+        let expected_root = cpu_merkle_root(&final_memory.memory, &mem_config);
 
         let touched_memory = vec![
             (
@@ -490,7 +488,7 @@ mod tests {
                 },
             ),
         ];
-        let ctxs = inventory.generate_proving_ctxs(touched_memory);
+        let ctxs = run_inventory(&mem_config, &memory.memory, touched_memory);
         let boundary_ctx = ctxs.first().expect("missing boundary ctx");
         assert!(
             boundary_ctx.common_main.height() > 0,
@@ -501,15 +499,7 @@ mod tests {
             "boundary chip should not emit public values"
         );
 
-        let merkle_ctx = ctxs
-            .iter()
-            .find(|ctx| ctx.public_values.len() >= 2 * DIGEST_WIDTH)
-            .expect("missing merkle ctx");
-        let gpu_root_slice =
-            &merkle_ctx.public_values[merkle_ctx.public_values.len() - DIGEST_WIDTH..];
-        let gpu_root: [F; DIGEST_WIDTH] = gpu_root_slice.try_into().unwrap();
-
-        assert_eq!(expected_root, gpu_root);
+        assert_eq!(expected_root, gpu_merkle_root(&ctxs));
     }
 
     // Paged transfer coverage: builds a multi-page memory address space whose initial image is
@@ -559,7 +549,8 @@ mod tests {
             memory.memory.touched_pages[RV64_MEMORY_AS as usize],
             TouchedPages::Marked { .. }
         ));
-        let runs = memory.memory.touched_pages[RV64_MEMORY_AS as usize].touched_byte_ranges(mem_bytes);
+        let runs =
+            memory.memory.touched_pages[RV64_MEMORY_AS as usize].touched_byte_ranges(mem_bytes);
         assert_eq!(
             runs,
             vec![(0, PAGE_SIZE), (2 * PAGE_SIZE, 3 * PAGE_SIZE)],
@@ -571,32 +562,10 @@ mod tests {
             "paging should copy fewer bytes ({copied}) than the full AS ({mem_bytes})"
         );
 
-        let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
-        let cpu_merkle_tree = MerkleTree::<F, DIGEST_WIDTH>::from_memory(
-            &memory.memory,
-            &mem_config.memory_dimensions(),
-            &cpu_hasher,
-        );
-        let expected_root = cpu_merkle_tree.root();
+        let expected_root = cpu_merkle_root(&memory.memory, &mem_config);
 
-        let device_ctx = GpuDeviceCtx {
-            device_id: get_device().unwrap() as u32,
-            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
-        };
-        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
-        let mut inventory =
-            MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
-        inventory.set_initial_memory(&memory.memory);
+        let ctxs = run_inventory(&mem_config, &memory.memory, Vec::new());
 
-        let ctxs = inventory.generate_proving_ctxs(Vec::new());
-        let merkle_ctx = ctxs
-            .iter()
-            .find(|ctx| ctx.public_values.len() >= 2 * DIGEST_WIDTH)
-            .expect("missing merkle ctx");
-        let gpu_root_slice =
-            &merkle_ctx.public_values[merkle_ctx.public_values.len() - DIGEST_WIDTH..];
-        let gpu_root: [F; DIGEST_WIDTH] = gpu_root_slice.try_into().unwrap();
-
-        assert_eq!(expected_root, gpu_root);
+        assert_eq!(expected_root, gpu_merkle_root(&ctxs));
     }
 }

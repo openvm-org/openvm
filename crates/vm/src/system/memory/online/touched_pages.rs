@@ -89,7 +89,10 @@ mod tests {
     #[test]
     fn all_yields_single_full_run() {
         let touched = TouchedPages::all();
-        assert_eq!(touched.touched_byte_ranges(10 * PAGE_SIZE), vec![(0, 10 * PAGE_SIZE)]);
+        assert_eq!(
+            touched.touched_byte_ranges(10 * PAGE_SIZE),
+            vec![(0, 10 * PAGE_SIZE)]
+        );
         // Degenerate empty address space.
         assert_eq!(touched.touched_byte_ranges(0), vec![]);
     }
