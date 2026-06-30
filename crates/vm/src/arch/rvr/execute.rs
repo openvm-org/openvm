@@ -75,9 +75,10 @@ fn build_io_state_borrowed<'a, F: PrimeField32>(
 
 /// # Safety
 ///
-/// `compiled` must contain a valid rvr-compiled shared library exporting the
-/// `register_openvm_io_ctx` symbol with the expected ABI. `io_state` must
-/// remain valid for the lifetime of the subsequent `rv_execute` call.
+/// `compiled` must contain a valid rvr-compiled shared library exporting both
+/// `register_openvm_io_ctx` and `register_hint_stream_set_fn` with the expected
+/// ABIs. `io_state` must remain valid for the lifetime of the subsequent
+/// `rv_execute` call.
 unsafe fn register_openvm_io_ctx<F: PrimeField32>(
     compiled: &RvrCompiled,
     io_state: &mut OpenVmIoState<'_, F>,
