@@ -205,7 +205,7 @@ where
 }
 
 #[inline(always)]
-fn run_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(crate) fn run_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u16; NUM_LIMBS],
     y: &[u16; NUM_LIMBS],
 ) -> [u16; NUM_LIMBS] {
