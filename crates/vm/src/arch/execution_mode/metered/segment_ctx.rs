@@ -6,18 +6,13 @@ use openvm_stark_backend::memory_metering::{ProvingMemoryConfig, ProvingMemoryCo
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    arch::{BOUNDARY_AIR_ID, DEFAULT_BLOCK_SIZE},
-    system::memory::CHUNK,
+    arch::BOUNDARY_AIR_ID,
     utils::{add_one_or_zero, next_power_of_two_or_zero},
 };
 
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
 pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
-
-const CUDA_BOUNDARY_RECORD_BYTES: usize =
-    (2 + CHUNK / DEFAULT_BLOCK_SIZE + CHUNK) * std::mem::size_of::<u32>();
-const CUDA_MERKLE_RECORD_BYTES: usize = (3 + CHUNK) * std::mem::size_of::<u32>();
 
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
 pub struct Segment {
@@ -429,23 +424,11 @@ impl SegmentationCtx {
     }
 
     #[inline(always)]
-    pub(crate) fn retained_auxiliary_memory_bytes(
-        &self,
-        trace_heights: &[u32],
-        touched_block_count: usize,
-    ) -> usize {
+    pub(crate) fn retained_auxiliary_memory_bytes(&self, trace_heights: &[u32]) -> usize {
         let boundary_records = trace_heights[BOUNDARY_AIR_ID] as usize / 2;
-        if touched_block_count == 0 && boundary_records == 0 {
-            return 0;
-        }
-        let boundary_input_records = touched_block_count.max(boundary_records);
         self.params
             .memory_config
-            .tracked_allocation_bytes(boundary_input_records * CUDA_BOUNDARY_RECORD_BYTES)
-            + self
-                .params
-                .memory_config
-                .tracked_allocation_bytes(boundary_records * CUDA_MERKLE_RECORD_BYTES)
+            .retained_boundary_memory_bytes(boundary_records)
     }
 
     #[inline(always)]

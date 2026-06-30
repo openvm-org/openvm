@@ -121,10 +121,9 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
         self.memory_ctx
             .lazy_update_boundary_heights(&mut self.trace_heights);
-        let retained_auxiliary_bytes = self.segmentation_ctx.retained_auxiliary_memory_bytes(
-            &self.trace_heights,
-            self.memory_ctx.touched_block_count(),
-        );
+        let retained_auxiliary_bytes = self
+            .segmentation_ctx
+            .retained_auxiliary_memory_bytes(&self.trace_heights);
         let did_segment = self.segmentation_ctx.check_and_segment(
             self.segmentation_ctx.instret,
             &mut self.trace_heights,
@@ -139,10 +138,9 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             self.memory_ctx.initialize_segment(&mut self.trace_heights);
 
             // Check if the new segment is within limits
-            let retained_auxiliary_bytes = self.segmentation_ctx.retained_auxiliary_memory_bytes(
-                &self.trace_heights,
-                self.memory_ctx.touched_block_count(),
-            );
+            let retained_auxiliary_bytes = self
+                .segmentation_ctx
+                .retained_auxiliary_memory_bytes(&self.trace_heights);
             if self.segmentation_ctx.should_segment(
                 self.segmentation_ctx.instret,
                 &self.trace_heights,
@@ -168,10 +166,9 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         }
 
         // Update checkpoints
-        let retained_auxiliary_bytes = self.segmentation_ctx.retained_auxiliary_memory_bytes(
-            &self.trace_heights,
-            self.memory_ctx.touched_block_count(),
-        );
+        let retained_auxiliary_bytes = self
+            .segmentation_ctx
+            .retained_auxiliary_memory_bytes(&self.trace_heights);
         self.segmentation_ctx.update_checkpoint(
             self.segmentation_ctx.instret,
             &self.trace_heights,
@@ -215,8 +212,6 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         );
 
         // Handle merkle tree updates
-        self.memory_ctx
-            .update_touched_blocks(address_space, ptr, size);
         if address_space != RV32_REGISTER_AS {
             self.memory_ctx
                 .update_boundary_merkle_heights(address_space, ptr, size);
@@ -247,10 +242,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         let retained_auxiliary_bytes = exec_state
             .ctx
             .segmentation_ctx
-            .retained_auxiliary_memory_bytes(
-                &exec_state.ctx.trace_heights,
-                exec_state.ctx.memory_ctx.touched_block_count(),
-            );
+            .retained_auxiliary_memory_bytes(&exec_state.ctx.trace_heights);
         exec_state
             .ctx
             .segmentation_ctx
