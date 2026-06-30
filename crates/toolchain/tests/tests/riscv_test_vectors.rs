@@ -39,14 +39,14 @@ fn test_rv64im_riscv_vector_runtime() -> Result<()> {
                         .with_extension(Rv64IoTranspilerExtension),
                 )?;
                 let executor = VmExecutor::new(config.clone())?;
-                let interpreter = executor.instance(&exe)?;
+                let instance = executor.instance(&exe)?;
                 #[allow(unused_variables)]
-                let state = interpreter.execute(vec![], None)?;
+                let state = instance.execute(vec![], None)?;
 
                 #[cfg(any(feature = "aot", feature = "rvr"))]
                 {
-                    let naive_interpreter = executor.interpreter_instance(&exe)?;
-                    let naive_state = naive_interpreter.execute(vec![], None)?;
+                    let interpreter_instance = executor.interpreter_instance(&exe)?;
+                    let naive_state = interpreter_instance.execute(vec![], None)?;
                     let system_config: &SystemConfig = config.as_ref();
                     assert_vm_states_equivalent(
                         &state,
