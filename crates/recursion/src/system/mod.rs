@@ -1,8 +1,8 @@
 //! Traits and types describing the core interfaces of the verifier sub-circuit. The verifier
 //! sub-circuit verifies multiple proofs for the same child verifying key. It supports **recursive**
-//! verification, where the child verifying key is verifier-circuit compatible with the verifying
-//! key of the verifier circuit itself.
-use std::{fmt::Debug, iter, sync::Arc};
+//! verification, where the child verifying key is equal to the verifying key of the verifier
+//! circuit itself.
+use std::{iter, sync::Arc};
 
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
@@ -10,15 +10,13 @@ use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     interaction::BusIndex,
-    keygen::types::{LinearConstraint, MultiStarkVerifyingKey, StarkVerifyingKey},
+    keygen::types::{LinearConstraint, MultiStarkVerifyingKey},
     proof::{Proof, TraceVData},
     prover::{AirProvingContext, CommittedTraceData, ProverBackend},
     AirRef, EngineDeviceCtx, FiatShamirTranscript, StarkEngine, StarkProtocolConfig,
     TranscriptHistory, TranscriptLog,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    BabyBearPoseidon2Config, Digest, CHUNK, EF, F,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, CHUNK, EF, F};
 use p3_field::BasedVectorSpace;
 use p3_maybe_rayon::prelude::*;
 
@@ -87,119 +85,6 @@ pub struct VerifierExternalData<'a> {
     pub power_check_inputs: &'a Vec<usize>,
     pub required_heights: Option<&'a [usize]>,
     pub final_transcript_state: Option<&'a mut [F; POSEIDON2_WIDTH]>,
-}
-
-/// Checks that `recursive_self_vk` can be used as the child VK for a verifier circuit constructed
-/// from `circuit_child_vk`.
-///
-/// This is deliberately weaker than full VK equality. The recursive verifier AIRs must be generated
-/// from the same verifier-circuit frame, but fields such as the Fiat-Shamir `pre_hash` and the
-/// symbolic constraint DAG can differ. See `crates/recursion/README.md` for the dependency model.
-pub fn assert_recursive_self_vk_compatible(
-    circuit_child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-    recursive_self_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-) {
-    assert_vk_field_eq(
-        "system params",
-        &circuit_child_vk.inner.params,
-        &recursive_self_vk.inner.params,
-    );
-    assert_vk_field_eq(
-        "number of AIRs",
-        &circuit_child_vk.inner.per_air.len(),
-        &recursive_self_vk.inner.per_air.len(),
-    );
-
-    for (air_idx, (circuit_air, recursive_air)) in circuit_child_vk
-        .inner
-        .per_air
-        .iter()
-        .zip(&recursive_self_vk.inner.per_air)
-        .enumerate()
-    {
-        assert_air_verifier_frame_compatible(air_idx, circuit_air, recursive_air);
-    }
-}
-
-fn assert_air_verifier_frame_compatible(
-    air_idx: usize,
-    circuit_air: &StarkVerifyingKey<F, Digest>,
-    recursive_air: &StarkVerifyingKey<F, Digest>,
-) {
-    assert_vk_field_eq(
-        format_args!("per_air[{air_idx}].is_required"),
-        &circuit_air.is_required,
-        &recursive_air.is_required,
-    );
-    assert_vk_field_eq(
-        format_args!("per_air[{air_idx}].params.need_rot"),
-        &circuit_air.params.need_rot,
-        &recursive_air.params.need_rot,
-    );
-    assert_vk_field_eq(
-        format_args!("per_air[{air_idx}].params.num_public_values"),
-        &circuit_air.params.num_public_values,
-        &recursive_air.params.num_public_values,
-    );
-    assert_vk_field_eq(
-        format_args!("per_air[{air_idx}].params.width.common_main"),
-        &circuit_air.params.width.common_main,
-        &recursive_air.params.width.common_main,
-    );
-    assert_vk_field_eq(
-        format_args!("per_air[{air_idx}].params.width.cached_mains"),
-        &circuit_air.params.width.cached_mains,
-        &recursive_air.params.width.cached_mains,
-    );
-    assert_vk_field_eq(
-        format_args!("per_air[{air_idx}].params.width.preprocessed"),
-        &circuit_air.params.width.preprocessed,
-        &recursive_air.params.width.preprocessed,
-    );
-    assert_vk_field_eq(
-        format_args!("per_air[{air_idx}].num_interactions"),
-        &circuit_air.num_interactions(),
-        &recursive_air.num_interactions(),
-    );
-    assert_vk_field_eq(
-        format_args!("per_air[{air_idx}].has_preprocessed_data"),
-        &circuit_air.preprocessed_data.is_some(),
-        &recursive_air.preprocessed_data.is_some(),
-    );
-
-    if let (Some(circuit_preprocessed), Some(recursive_preprocessed)) = (
-        &circuit_air.preprocessed_data,
-        &recursive_air.preprocessed_data,
-    ) {
-        assert_vk_field_eq(
-            format_args!("per_air[{air_idx}].preprocessed_data.commit"),
-            &circuit_preprocessed.commit,
-            &recursive_preprocessed.commit,
-        );
-        assert_vk_field_eq(
-            format_args!("per_air[{air_idx}].preprocessed_data.hypercube_dim"),
-            &circuit_preprocessed.hypercube_dim,
-            &recursive_preprocessed.hypercube_dim,
-        );
-        assert_vk_field_eq(
-            format_args!("per_air[{air_idx}].preprocessed_data.stacking_width"),
-            &circuit_preprocessed.stacking_width,
-            &recursive_preprocessed.stacking_width,
-        );
-    }
-}
-
-fn assert_vk_field_eq<T: Debug + PartialEq>(
-    field: impl std::fmt::Display,
-    circuit_value: &T,
-    recursive_value: &T,
-) {
-    assert!(
-        circuit_value == recursive_value,
-        "recursive-self aggregation requires internal-for-leaf and internal-recursive VKs to \
-         produce the same verifier circuit; mismatch in {field}: \
-         internal_for_leaf={circuit_value:?}, internal_recursive={recursive_value:?}",
-    );
 }
 
 // Trait to make tracegen functions generic on ProverBackend.

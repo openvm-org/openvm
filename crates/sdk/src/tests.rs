@@ -1,22 +1,18 @@
-use std::{path::Path, slice::from_ref};
+use std::slice::from_ref;
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
-#[cfg(feature = "root-prover")]
 use openvm_continuations::prover::DeferralCircuitProver;
 use openvm_sdk_config::{
     deferral::{DeferralConfig, SupportedDeferral},
     SdkVmConfig,
 };
-#[cfg(feature = "root-prover")]
-use openvm_stark_backend::{codec::Encode, StarkEngine};
-use openvm_stark_backend::{SystemParams, WhirProximityStrategy};
+use openvm_stark_backend::{codec::Encode, StarkEngine, SystemParams};
 use openvm_stark_sdk::{
     config::{
         app_params_with_100_bits_security, hook_params_with_100_bits_security,
         internal_params_with_100_bits_security, leaf_params_with_100_bits_security,
-        params_with_100_bits_security, root_params_with_100_bits_security,
-        RECURSION_MAX_CONSTRAINT_DEGREE,
+        root_params_with_100_bits_security,
     },
     utils::setup_tracing,
 };
@@ -26,14 +22,11 @@ use openvm_verify_stark_host::{
     vk::{VerificationBaseline, VmStarkVerifyingKey},
     VmStarkProof,
 };
-use serde::Serialize;
 
-#[cfg(feature = "root-prover")]
-use crate::prover::DeferralProof;
 use crate::{
     builder::GenericSdkBuilder,
     config::{AggregationConfig, AggregationSystemParams, AppConfig, DEFAULT_APP_L_SKIP},
-    prover::{DeferralAggProver, MultiDeferralCircuitProver},
+    prover::{DeferralAggProver, DeferralProof, MultiDeferralCircuitProver},
     DeferralInput, Sdk, StdIn,
 };
 
@@ -303,227 +296,6 @@ fn make_deferral_sdk(
     Ok((vs_sdk, vs_stdin, def_input))
 }
 
-#[derive(Serialize, Default)]
-struct ParamSet {
-    app: Option<SystemParams>,
-    leaf: Option<SystemParams>,
-    root: Option<SystemParams>,
-    internal: Option<SystemParams>,
-}
-
-#[test]
-fn generate_interesting_internal_params() {
-    let w_stack = 512;
-    let make_internal_params =
-        |max_log_height, k_whir, log_blowup, l_skip, pow_bits, folding_pow_bits| -> SystemParams {
-            let n_stack = max_log_height - l_skip;
-            let proximity = WhirProximityStrategy::ListDecoding { m: 2 };
-            params_with_100_bits_security(
-                log_blowup,
-                l_skip,
-                n_stack,
-                w_stack,
-                folding_pow_bits,
-                pow_bits,
-                proximity,
-                RECURSION_MAX_CONSTRAINT_DEGREE,
-                pow_bits,
-                k_whir,
-            )
-        };
-    // Root override matching internal_sweep_root.json: fixed l_skip=2, n_stack=18, log_blowup=4,
-    // k_whir=4, proximity=ListDecoding{m:1}, all pow_bits=20; only w_stack varies per entry.
-    let make_root_params = |root_w_stack| -> SystemParams {
-        let max_log_height = 20;
-        let l_skip = 2;
-        let n_stack = max_log_height - l_skip;
-        let log_blowup = 4;
-        let k_whir = 4;
-        let proximity = WhirProximityStrategy::ListDecoding { m: 1 };
-        let pow_bits = 20;
-        params_with_100_bits_security(
-            log_blowup,
-            l_skip,
-            n_stack,
-            root_w_stack,
-            pow_bits,
-            pow_bits,
-            proximity,
-            RECURSION_MAX_CONSTRAINT_DEGREE,
-            pow_bits,
-            k_whir,
-        )
-    };
-    let make_param =
-        |max_log_height, k_whir, log_blowup, l_skip, pow_bits, folding_pow_bits| ParamSet {
-            internal: Some(make_internal_params(
-                max_log_height,
-                k_whir,
-                log_blowup,
-                l_skip,
-                pow_bits,
-                folding_pow_bits,
-            )),
-            ..Default::default()
-        };
-    let make_param_with_root =
-        |max_log_height, k_whir, log_blowup, l_skip, pow_bits, folding_pow_bits, root_w_stack| {
-            ParamSet {
-                internal: Some(make_internal_params(
-                    max_log_height,
-                    k_whir,
-                    log_blowup,
-                    l_skip,
-                    pow_bits,
-                    folding_pow_bits,
-                )),
-                root: Some(make_root_params(root_w_stack)),
-                ..Default::default()
-            }
-        };
-    let no_root_params = vec![
-        // log_blowup=2, k_whir=3, max_log_height=19
-        make_param(19, 3, 2, 1, 20, 18),
-        make_param(19, 3, 2, 2, 20, 18),
-        make_param(19, 3, 2, 3, 20, 18),
-        make_param(19, 3, 2, 4, 20, 18),
-        make_param(19, 3, 2, 5, 20, 18),
-        // log_blowup=3, k_whir=3, max_log_height=19
-        make_param(19, 3, 3, 1, 20, 18),
-        make_param(19, 3, 3, 2, 20, 18),
-        make_param(19, 3, 3, 3, 20, 18),
-        make_param(19, 3, 3, 4, 20, 18),
-        make_param(19, 3, 3, 5, 20, 18),
-        // log_blowup=1, k_whir=4, max_log_height=19
-        make_param(19, 4, 1, 1, 20, 18),
-        make_param(19, 4, 1, 2, 20, 18),
-        make_param(19, 4, 1, 3, 20, 18),
-        make_param(19, 4, 1, 4, 20, 18),
-        make_param(19, 4, 1, 5, 20, 18),
-        // log_blowup=2, k_whir=4, max_log_height=19
-        make_param(19, 4, 2, 1, 20, 18),
-        make_param(19, 4, 2, 2, 20, 18),
-        make_param(19, 4, 2, 3, 20, 18),
-        make_param(19, 4, 2, 4, 20, 18),
-        make_param(19, 4, 2, 5, 20, 18),
-        // log_blowup=3, k_whir=4, max_log_height=19
-        make_param(19, 4, 3, 1, 20, 18),
-        make_param(19, 4, 3, 2, 20, 18),
-        make_param(19, 4, 3, 3, 20, 18),
-        make_param(19, 4, 3, 4, 20, 18),
-        make_param(19, 4, 3, 5, 20, 18),
-        // log_blowup=1, k_whir=4, max_log_height=20
-        make_param(20, 4, 1, 1, 20, 18),
-        make_param(20, 4, 1, 2, 20, 18),
-        make_param(20, 4, 1, 3, 20, 18),
-        make_param(20, 4, 1, 4, 20, 18),
-        make_param(20, 4, 1, 5, 20, 18),
-        // log_blowup=2, k_whir=4, max_log_height=20
-        make_param(20, 4, 2, 1, 20, 18),
-        make_param(20, 4, 2, 2, 20, 18),
-        make_param(20, 4, 2, 3, 20, 18),
-        make_param(20, 4, 2, 4, 20, 18),
-        make_param(20, 4, 2, 5, 20, 18),
-    ];
-    let root_params = vec![
-        // internal log_blowup=3, k_whir=4, max_log_height=19; root w_stack=18
-        make_param_with_root(19, 4, 3, 1, 20, 18, 18),
-        make_param_with_root(19, 4, 3, 2, 20, 18, 18),
-        make_param_with_root(19, 4, 3, 3, 20, 18, 18),
-        make_param_with_root(19, 4, 3, 4, 20, 18, 18),
-        make_param_with_root(19, 4, 3, 5, 20, 18, 18),
-        // internal log_blowup=2, k_whir=4, max_log_height=20; root w_stack=33
-        make_param_with_root(20, 4, 2, 1, 20, 18, 33),
-        make_param_with_root(20, 4, 2, 2, 20, 18, 33),
-        make_param_with_root(20, 4, 2, 3, 20, 18, 33),
-        make_param_with_root(20, 4, 2, 4, 20, 18, 33),
-        make_param_with_root(20, 4, 2, 5, 20, 18, 33),
-    ];
-
-    let tests_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
-    let no_root_path = tests_dir.join("internal_sweep_no_root.json");
-    serde_json::to_writer_pretty(
-        std::fs::File::create(&no_root_path).expect("failed to create internal_sweep_no_root.json"),
-        &no_root_params,
-    )
-    .expect("failed to write internal_sweep_no_root.json");
-    println!(
-        "wrote {} entries to {}",
-        no_root_params.len(),
-        no_root_path.display()
-    );
-
-    let root_path = tests_dir.join("internal_sweep_root.json");
-    serde_json::to_writer_pretty(
-        std::fs::File::create(&root_path).expect("failed to create internal_sweep_root.json"),
-        &root_params,
-    )
-    .expect("failed to write internal_sweep_root.json");
-    println!(
-        "wrote {} entries to {}",
-        root_params.len(),
-        root_path.display()
-    );
-}
-
-#[test]
-fn generate_interesting_root_params() {
-    let max_log_height = 20;
-    let w_stack = 18;
-    let make_param = |k_whir, log_blowup, l_skip, pow_bits| {
-        let n_stack = max_log_height - l_skip;
-        let proximity = WhirProximityStrategy::ListDecoding { m: 1 };
-        let root = params_with_100_bits_security(
-            log_blowup,
-            l_skip,
-            n_stack,
-            w_stack,
-            pow_bits,
-            pow_bits,
-            proximity,
-            RECURSION_MAX_CONSTRAINT_DEGREE,
-            pow_bits,
-            k_whir,
-        );
-        ParamSet {
-            root: Some(root),
-            ..Default::default()
-        }
-    };
-    let good_params = vec![
-        // k_whir = 4
-        make_param(4, 2, 1, 20),
-        make_param(4, 2, 4, 20),
-        make_param(4, 2, 5, 20),
-        make_param(4, 3, 1, 20),
-        make_param(4, 3, 2, 20),
-        make_param(4, 3, 3, 20),
-        make_param(4, 3, 5, 20),
-        // k_whir = 3
-        make_param(3, 4, 1, 20),
-        make_param(3, 4, 2, 20),
-        make_param(3, 4, 4, 20),
-        make_param(3, 3, 5, 20),
-        make_param(3, 3, 1, 20),
-        make_param(3, 3, 3, 20),
-        make_param(3, 3, 5, 20),
-        // k_whir = 4, pow_bits lowered
-        make_param(4, 4, 2, 15),
-        make_param(4, 4, 2, 18),
-    ];
-
-    let output_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("root_params.json");
-    let file = std::fs::File::create(&output_path).expect("failed to create root_params.json");
-    serde_json::to_writer_pretty(file, &good_params).expect("failed to write root_params.json");
-    println!(
-        "wrote {} good params to {}",
-        good_params.len(),
-        output_path.display()
-    );
-}
-
 #[test]
 fn test_sdk_fibonacci() -> Result<()> {
     setup_tracing();
@@ -532,27 +304,24 @@ fn test_sdk_fibonacci() -> Result<()> {
         include_bytes!("../programs/examples/fibonacci.elf"),
         MEM_SIZE as u32,
     )?;
-    let app_exe = sdk.convert_to_exe(elf.clone())?;
+    let app_exe = sdk.convert_to_exe(elf)?;
 
     let n = 1000u64;
     let mut stdin = StdIn::default();
     stdin.write(&n);
 
-    #[cfg(not(feature = "evm-verify"))]
+    #[cfg(not(feature = "root-prover"))]
     {
-        #[cfg(feature = "root-prover")]
-        {
-            let mut evm_prover = sdk.evm_prover_without_halo2(app_exe)?;
-            let proof = evm_prover.prove_root(stdin, &[])?;
-            let vk = evm_prover.root_prover.0.get_vk();
-            let engine = RootE::new(vk.inner.params.clone());
-            engine.verify(&vk, &proof)?;
-        }
-        #[cfg(not(feature = "root-prover"))]
-        {
-            let (proof, baseline) = sdk.prove(app_exe, stdin, &[])?;
-            Sdk::verify_proof((*sdk.agg_vk()).clone(), baseline, &proof)?;
-        }
+        let (proof, baseline) = sdk.prove(app_exe, stdin, &[])?;
+        Sdk::verify_proof((*sdk.agg_vk()).clone(), baseline, &proof)?;
+    }
+    #[cfg(all(feature = "root-prover", not(feature = "evm-verify")))]
+    {
+        let mut evm_prover = sdk.evm_prover_without_halo2(app_exe)?;
+        let proof = evm_prover.prove_root(stdin, &[])?;
+        let vk = evm_prover.root_prover.0.get_vk();
+        let engine = RootE::new(vk.inner.params.clone());
+        engine.verify(&vk, &proof)?;
     }
     #[cfg(feature = "evm-verify")]
     {
@@ -578,6 +347,20 @@ fn test_verify_stark_deferral() -> Result<()> {
     )?;
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
+    #[cfg(not(feature = "root-prover"))]
+    {
+        let (proof, baseline) = vs_sdk.prove(vs_exe, vs_stdin, &[def_input])?;
+        Sdk::verify_proof((*vs_sdk.agg_vk()).clone(), baseline, &proof)?;
+    }
+    #[cfg(all(feature = "root-prover", not(feature = "evm-verify")))]
+    {
+        let mut evm_prover = vs_sdk.evm_prover_without_halo2(vs_exe)?;
+        let vs_proof = evm_prover.prove_root(vs_stdin, &[def_input])?;
+
+        let vk = evm_prover.root_prover.0.get_vk();
+        let engine = RootE::new(vk.inner.params.clone());
+        engine.verify(&vk, &vs_proof)?;
+    }
     #[cfg(feature = "evm-verify")]
     {
         let app_commit = vs_sdk.app_commit(vs_exe.clone())?;
@@ -586,23 +369,6 @@ fn test_verify_stark_deferral() -> Result<()> {
 
         let openvm_verifier = vs_sdk.generate_halo2_verifier_solidity()?;
         let _gas_cost = Sdk::verify_evm_halo2_proof(&openvm_verifier, vs_proof, Some(app_commit))?;
-    }
-    #[cfg(not(feature = "evm-verify"))]
-    {
-        #[cfg(feature = "root-prover")]
-        {
-            let mut evm_prover = vs_sdk.evm_prover_without_halo2(vs_exe)?;
-            let vs_proof = evm_prover.prove_root(vs_stdin, &[def_input])?;
-
-            let vk = evm_prover.root_prover.0.get_vk();
-            let engine = RootE::new(vk.inner.params.clone());
-            engine.verify(&vk, &vs_proof)?;
-        }
-        #[cfg(not(feature = "root-prover"))]
-        {
-            let (proof, baseline) = vs_sdk.prove(vs_exe, vs_stdin, &[def_input])?;
-            Sdk::verify_proof((*vs_sdk.agg_vk()).clone(), baseline, &proof)?;
-        }
     }
 
     Ok(())
@@ -635,15 +401,7 @@ fn test_verify_many_deferrals() -> Result<()> {
     )?;
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
-    #[cfg(feature = "evm-verify")]
-    {
-        let app_commit = vs_sdk.app_commit(vs_exe.clone())?;
-        let evm_proof = vs_sdk.prove_evm(vs_exe, vs_stdin, &def_inputs)?;
-        let openvm_verifier = vs_sdk.generate_halo2_verifier_solidity()?;
-        let _gas_cost = Sdk::verify_evm_halo2_proof(&openvm_verifier, evm_proof, Some(app_commit))?;
-    }
-
-    #[cfg(not(feature = "evm-verify"))]
+    #[cfg(not(feature = "root-prover"))]
     {
         let (vs_proof, vs_baseline) = vs_sdk.prove(vs_exe, vs_stdin, &def_inputs)?;
         assert!(
@@ -652,11 +410,102 @@ fn test_verify_many_deferrals() -> Result<()> {
         );
         Sdk::verify_proof(vs_sdk.agg_vk().as_ref().clone(), vs_baseline, &vs_proof)?;
     }
+    #[cfg(all(feature = "root-prover", not(feature = "evm-verify")))]
+    {
+        let mut evm_prover = vs_sdk.evm_prover_without_halo2(vs_exe)?;
+        let vs_proof = evm_prover.prove_root(vs_stdin, &def_inputs)?;
+        let vk = evm_prover.root_prover.0.get_vk();
+        let engine = RootE::new(vk.inner.params.clone());
+        engine.verify(&vk, &vs_proof)?;
+    }
+    #[cfg(feature = "evm-verify")]
+    {
+        let app_commit = vs_sdk.app_commit(vs_exe.clone())?;
+        let evm_proof = vs_sdk.prove_evm(vs_exe, vs_stdin, &def_inputs)?;
+        let openvm_verifier = vs_sdk.generate_halo2_verifier_solidity()?;
+        let _gas_cost = Sdk::verify_evm_halo2_proof(&openvm_verifier, evm_proof, Some(app_commit))?;
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_verify_stark_path_sdk_can_verify_own_proofs() -> Result<()> {
+    setup_tracing();
+    let (app_params, agg_params, _) = get_params();
+    let sdk = make_verify_stark_path_sdk(app_params, agg_params)?;
+    let agg_vk = sdk.agg_vk().as_ref().clone();
+
+    let vs_elf = Elf::decode(
+        include_bytes!("../programs/examples/verify-stark.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let vs_exe = sdk.convert_to_exe(vs_elf)?;
+
+    let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&sdk)?;
+    assert!(fib_proof.deferral_merkle_proofs.is_some(),);
+    Sdk::verify_proof(agg_vk.clone(), fib_baseline.clone(), &fib_proof)?;
+
+    let (vs_stdin, def_input) = make_verify_stark_inputs(&sdk, &fib_proof, fib_baseline)?;
+    let (vs_proof, vs_baseline) = sdk.prove(vs_exe.clone(), vs_stdin, &[def_input])?;
+    assert!(vs_proof.deferral_merkle_proofs.is_some(),);
+    Sdk::verify_proof(agg_vk.clone(), vs_baseline.clone(), &vs_proof)?;
+
+    let (vs2_stdin, vs2_def_input) = make_verify_stark_inputs(&sdk, &vs_proof, vs_baseline)?;
+    #[cfg(not(feature = "root-prover"))]
+    {
+        let (vs2_proof, vs2_baseline) = sdk.prove(vs_exe, vs2_stdin, &[vs2_def_input])?;
+        assert!(vs2_proof.deferral_merkle_proofs.is_some(),);
+        Sdk::verify_proof(agg_vk, vs2_baseline, &vs2_proof)?;
+    }
+    #[cfg(all(feature = "root-prover", not(feature = "evm-verify")))]
+    {
+        let mut evm_prover = sdk.evm_prover_without_halo2(vs_exe)?;
+        let vs2_proof = evm_prover.prove_root(vs2_stdin, &[vs2_def_input])?;
+        let vk = evm_prover.root_prover.0.get_vk();
+        let engine = RootE::new(vk.inner.params.clone());
+        engine.verify(&vk, &vs2_proof)?;
+    }
+    #[cfg(feature = "evm-verify")]
+    {
+        let app_commit = sdk.app_commit(vs_exe.clone())?;
+        let evm_proof = sdk.prove_evm(vs_exe, vs2_stdin, &[vs2_def_input])?;
+
+        let openvm_verifier = sdk.generate_halo2_verifier_solidity()?;
+        let _gas_cost = Sdk::verify_evm_halo2_proof(&openvm_verifier, evm_proof, Some(app_commit))?;
+    }
 
     Ok(())
 }
 
 #[cfg(feature = "root-prover")]
+#[test]
+fn test_deferrals_enabled_without_usage() -> Result<()> {
+    setup_tracing();
+    let (fib_sdk, app_params, agg_params) = make_fib_sdk();
+    let sdk = make_deferral_enabled_sdk(&fib_sdk, app_params, agg_params)?;
+
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let app_exe = sdk.convert_to_exe(elf)?;
+
+    let n = 1000u64;
+    let mut stdin = StdIn::default();
+    stdin.write(&n);
+
+    let mut evm_prover = sdk.evm_prover_without_halo2(app_exe)?;
+    let proof = evm_prover.prove_root(stdin, &[])?;
+
+    // ---- Step 3: Verify the final result ----
+    let vk = evm_prover.root_prover.0.get_vk();
+    let engine = RootE::new(vk.inner.params.clone());
+    engine.verify(&vk, &proof)?;
+
+    Ok(())
+}
+
 #[test]
 fn test_verify_stark_with_deferral_child() -> Result<()> {
     setup_tracing();
@@ -717,77 +566,6 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_verify_stark_path_sdk_can_verify_own_proofs() -> Result<()> {
-    setup_tracing();
-    let (app_params, agg_params, _) = get_params();
-    let sdk = make_verify_stark_path_sdk(app_params, agg_params)?;
-    let agg_vk = sdk.agg_vk().as_ref().clone();
-
-    let vs_elf = Elf::decode(
-        include_bytes!("../programs/examples/verify-stark.elf"),
-        MEM_SIZE as u32,
-    )?;
-    let vs_exe = sdk.convert_to_exe(vs_elf)?;
-
-    let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&sdk)?;
-    assert!(fib_proof.deferral_merkle_proofs.is_some(),);
-    Sdk::verify_proof(agg_vk.clone(), fib_baseline.clone(), &fib_proof)?;
-
-    let (vs_stdin, def_input) = make_verify_stark_inputs(&sdk, &fib_proof, fib_baseline)?;
-    let (vs_proof, vs_baseline) = sdk.prove(vs_exe.clone(), vs_stdin, &[def_input])?;
-    assert!(vs_proof.deferral_merkle_proofs.is_some(),);
-    Sdk::verify_proof(agg_vk.clone(), vs_baseline.clone(), &vs_proof)?;
-
-    let (vs2_stdin, vs2_def_input) = make_verify_stark_inputs(&sdk, &vs_proof, vs_baseline)?;
-    #[cfg(feature = "evm-verify")]
-    {
-        let app_commit = sdk.app_commit(vs_exe.clone())?;
-        let evm_proof = sdk.prove_evm(vs_exe, vs2_stdin, &[vs2_def_input])?;
-
-        let openvm_verifier = sdk.generate_halo2_verifier_solidity()?;
-        let _gas_cost = Sdk::verify_evm_halo2_proof(&openvm_verifier, evm_proof, Some(app_commit))?;
-    }
-
-    #[cfg(not(feature = "evm-verify"))]
-    {
-        let (vs2_proof, vs2_baseline) = sdk.prove(vs_exe, vs2_stdin, &[vs2_def_input])?;
-        assert!(vs2_proof.deferral_merkle_proofs.is_some(),);
-        Sdk::verify_proof(agg_vk, vs2_baseline, &vs2_proof)?;
-    }
-
-    Ok(())
-}
-
-#[cfg(feature = "root-prover")]
-#[test]
-fn test_deferrals_enabled_without_usage() -> Result<()> {
-    setup_tracing();
-    let (fib_sdk, app_params, agg_params) = make_fib_sdk();
-    let sdk = make_deferral_enabled_sdk(&fib_sdk, app_params, agg_params)?;
-
-    let elf = Elf::decode(
-        include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
-    )?;
-    let app_exe = sdk.convert_to_exe(elf)?;
-
-    let n = 1000u64;
-    let mut stdin = StdIn::default();
-    stdin.write(&n);
-
-    let mut evm_prover = sdk.evm_prover_without_halo2(app_exe)?;
-    let proof = evm_prover.prove_root(stdin, &[])?;
-
-    // ---- Step 3: Verify the final result ----
-    let vk = evm_prover.root_prover.0.get_vk();
-    let engine = RootE::new(vk.inner.params.clone());
-    engine.verify(&vk, &proof)?;
-
-    Ok(())
-}
-
-#[cfg(feature = "root-prover")]
 #[test]
 fn test_prove_mixed_vm_def_depth_mismatch() -> Result<()> {
     setup_tracing();
@@ -870,8 +648,7 @@ fn test_prove_mixed_vm_def_depth_mismatch() -> Result<()> {
 ///   cargo nextest run --cargo-profile=fast -p openvm-sdk --features cuda,cell-profiling \
 ///   -- sdk_static_verifier_cell_profiling
 /// ```
-#[cfg(feature = "cell-profiling")]
-#[cfg(feature = "root-prover")]
+#[cfg(all(feature = "cell-profiling", feature = "root-prover"))]
 #[test]
 fn sdk_static_verifier_cell_profiling() -> Result<()> {
     use std::path::Path;

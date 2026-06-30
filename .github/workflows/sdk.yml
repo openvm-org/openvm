@@ -105,13 +105,9 @@ jobs:
 
       - name: Generate sweep JSON files if missing
         if: ${{ inputs.sweep_root || inputs.sweep_internal }}
-        working-directory: crates/sdk
         run: |
-          if [[ ! -f tests/internal_sweep_no_root.json || ! -f tests/internal_sweep_root.json ]]; then
-            cargo nextest run --release --features parallel,root-prover,evm-verify -- generate_interesting_internal_params
-          fi
-          if [[ ! -f tests/root_params.json ]]; then
-            cargo nextest run --release --features parallel,root-prover,evm-verify -- generate_interesting_root_params
+          if [[ ! -f tests/internal_sweep_no_root.json || ! -f tests/internal_sweep_root.json || ! -f tests/root_params.json ]]; then
+            cargo run --bin generate-param-sweep -- crates/sdk/tests/
           fi
 
       - name: Run openvm-sdk crate tests
@@ -141,10 +137,10 @@ jobs:
 
           # The sweep JSON files are produced by crates/sdk/src/tests.rs
           if [[ "${{ inputs.sweep_internal || false }}" == "true" ]]; then
-            run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --test-indices=2,8,14,16,22,28,34 --sweep tests/internal_sweep_no_root.json
+            run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --test-indices=2,8,9,11,17,23,29 --sweep tests/internal_sweep_no_root.json
           fi
           if [[ "${{ inputs.sweep_root || false }}" == "true" ]]; then
-            run_sweep "sweeps/sweep_root" "${SWEEP_ARGS[@]}" --use-evm --test-indices=2,3,4,6,7,8,9,24 --sweep tests/internal_sweep_root.json tests/root_params.json
+            run_sweep "sweeps/sweep_root" "${SWEEP_ARGS[@]}" --use-evm --test-indices=2,3,4,6,7,8,9,19 --sweep tests/internal_sweep_root.json tests/root_params.json
           fi
 
           if [ ${#LOGS[@]} -eq 0 ]; then
@@ -189,10 +185,10 @@ jobs:
 
           # The sweep JSON files are produced by crates/sdk/src/tests.rs
           if [[ "${{ inputs.sweep_internal || false }}" == "true" ]]; then
-            run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --test-indices=2,8,34 --sweep tests/internal_sweep_no_root.json
+            run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --test-indices=2,8,9,11,17,23,29 --sweep tests/internal_sweep_no_root.json
           fi
           if [[ "${{ inputs.sweep_root || false }}" == "true" ]]; then
-            run_sweep "sweeps/sweep_root" "${SWEEP_ARGS[@]}" --use-evm --test-indices=2,24 --sweep tests/internal_sweep_root.json tests/root_params.json
+            run_sweep "sweeps/sweep_root" "${SWEEP_ARGS[@]}" --use-evm --test-indices=2,3,4,6,7,8,9,19 --sweep tests/internal_sweep_root.json tests/root_params.json
           fi
 
           if [ ${#LOGS[@]} -eq 0 ]; then
@@ -230,10 +226,10 @@ jobs:
 
           # The sweep JSON files are produced by crates/sdk/src/tests.rs
           if [[ "${{ inputs.sweep_internal || false }}" == "true" ]]; then
-            run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --test-indices=2,8,14,16,22,28,34 --sweep tests/internal_sweep_no_root.json
+            run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --test-indices=2,8,9,11,17,23,29 --sweep tests/internal_sweep_no_root.json
           fi
           if [[ "${{ inputs.sweep_root || false }}" == "true" ]]; then
-            run_sweep "sweeps/sweep_root" "${SWEEP_ARGS[@]}" --use-evm --test-indices=2,3,4,6,7,8,9,24 --sweep tests/internal_sweep_root.json tests/root_params.json
+            run_sweep "sweeps/sweep_root" "${SWEEP_ARGS[@]}" --use-evm --test-indices=2,3,4,6,7,8,9,19 --sweep tests/internal_sweep_root.json tests/root_params.json
           fi
 
           if [ ${#LOGS[@]} -eq 0 ]; then
