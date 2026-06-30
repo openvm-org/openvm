@@ -2,8 +2,12 @@ use abi_stable::std_types::RVec;
 use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 
 use crate::{
-    arch::{SystemConfig, BOUNDARY_AIR_ID, MERKLE_AIR_ID},
-    system::memory::{dimensions::MemoryDimensions, CHUNK},
+    arch::{SystemConfig, BOUNDARY_AIR_ID, DEFAULT_BLOCK_SIZE, MERKLE_AIR_ID},
+    system::memory::{
+        dimensions::MemoryDimensions,
+        online::{PagedVec, PAGE_SIZE},
+        CHUNK,
+    },
 };
 
 /// CHUNK granularity (merkle leaf size) for page fault tracking.
@@ -115,6 +119,10 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub addr_space_access_count: RVec<u32>,
     pub page_indices_since_checkpoint: Box<[u32]>,
     pub page_indices_since_checkpoint_len: usize,
+    touched_blocks: Vec<PagedVec<u32, PAGE_SIZE>>,
+    touched_blocks_since_checkpoint: Vec<u64>,
+    touched_block_generation: u32,
+    touched_block_count: usize,
 }
 
 impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
@@ -132,6 +140,15 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             addr_space_access_count: vec![0; addr_space_size].into(),
             page_indices_since_checkpoint: vec![0; checkpoint_capacity].into_boxed_slice(),
             page_indices_since_checkpoint_len: 0,
+            touched_blocks: config
+                .memory_config
+                .addr_spaces
+                .iter()
+                .map(|config| PagedVec::new(config.num_cells.div_ceil(DEFAULT_BLOCK_SIZE)))
+                .collect(),
+            touched_blocks_since_checkpoint: Vec::new(),
+            touched_block_generation: 1,
+            touched_block_count: 0,
         }
     }
 
@@ -198,11 +215,58 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         }
     }
 
+    #[inline(always)]
+    pub(crate) fn update_touched_blocks(&mut self, address_space: u32, ptr: u32, size: u32) {
+        let block_size = DEFAULT_BLOCK_SIZE as u32;
+        let start_block = ptr / block_size;
+        let end_block = (ptr + size - 1) / block_size;
+        for block in start_block..=end_block {
+            self.touched_blocks_since_checkpoint
+                .push(Self::encode_touched_block(address_space, block));
+            self.mark_touched_block(address_space, block);
+        }
+    }
+
+    #[inline(always)]
+    fn encode_touched_block(address_space: u32, block: u32) -> u64 {
+        (u64::from(address_space) << u32::BITS) | u64::from(block)
+    }
+
+    #[inline(always)]
+    fn decode_touched_block(encoded: u64) -> (u32, u32) {
+        ((encoded >> u32::BITS) as u32, encoded as u32)
+    }
+
+    #[inline(always)]
+    fn mark_touched_block(&mut self, address_space: u32, block: u32) {
+        let generation = self.touched_block_generation;
+        // SAFETY: address_space is bounds-checked by memory access decoding.
+        let touched_blocks = unsafe {
+            self.touched_blocks
+                .get_unchecked_mut(address_space as usize)
+        };
+        let block = block as usize;
+        if touched_blocks.get(block) != generation {
+            touched_blocks.set(block, generation);
+            self.touched_block_count += 1;
+        }
+    }
+
     /// Initialize state for a new segment
     #[inline(always)]
     pub(crate) fn initialize_segment(&mut self, trace_heights: &mut [u32]) {
         // Clear page indices for the new segment
         self.page_indices.clear();
+        self.touched_block_generation = self
+            .touched_block_generation
+            .checked_add(1)
+            .expect("too many metered segments");
+        self.touched_block_count = 0;
+        let touched_blocks_since_checkpoint = self.touched_blocks_since_checkpoint.clone();
+        for encoded in touched_blocks_since_checkpoint {
+            let (address_space, block) = Self::decode_touched_block(encoded);
+            self.mark_touched_block(address_space, block);
+        }
 
         // Reset trace heights for memory chips as 0
         // SAFETY: BOUNDARY_AIR_ID and MERKLE_AIR_ID are compile-time constants within bounds
@@ -247,6 +311,12 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     #[inline(always)]
     pub(crate) fn update_checkpoint(&mut self) {
         self.page_indices_since_checkpoint_len = 0;
+        self.touched_blocks_since_checkpoint.clear();
+    }
+
+    #[inline(always)]
+    pub(crate) fn touched_block_count(&self) -> usize {
+        self.touched_block_count
     }
 
     /// Overestimates trace heights from page faults.

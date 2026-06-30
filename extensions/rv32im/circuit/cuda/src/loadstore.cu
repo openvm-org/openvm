@@ -206,7 +206,7 @@ extern "C" int _rv32_load_store_tracegen(
 ) {
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(Rv32LoadStoreCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height, 256);
+    auto [grid, block] = kernel_launch_params(height);
 
     rv32_load_store_tracegen<<<grid, block, 0, stream>>>(
         d_trace,

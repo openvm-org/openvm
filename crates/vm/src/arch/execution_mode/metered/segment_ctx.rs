@@ -5,11 +5,19 @@ use openvm_stark_backend::memory_metering::INTERACTION_MEMORY_OVERHEAD;
 use openvm_stark_backend::memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts};
 use serde::{Deserialize, Serialize};
 
-use crate::utils::{add_one_or_zero, next_power_of_two_or_zero};
+use crate::{
+    arch::{BOUNDARY_AIR_ID, DEFAULT_BLOCK_SIZE},
+    system::memory::CHUNK,
+    utils::{add_one_or_zero, next_power_of_two_or_zero},
+};
 
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
 pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
+
+const CUDA_BOUNDARY_RECORD_BYTES: usize =
+    (2 + CHUNK / DEFAULT_BLOCK_SIZE + CHUNK) * std::mem::size_of::<u32>();
+const CUDA_MERKLE_RECORD_BYTES: usize = (3 + CHUNK) * std::mem::size_of::<u32>();
 
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
 pub struct Segment {
@@ -106,6 +114,7 @@ pub struct SegmentationCtx {
     pub(crate) checkpoint_trace_heights: Vec<u32>,
     /// Instruction count at the checkpoint
     checkpoint_instret: u64,
+    checkpoint_retained_auxiliary_bytes: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -143,6 +152,10 @@ struct MeteredCounts {
     main_unpadded_no_rot: usize,
     /// Main trace cells for AIRs without next-row rotations, from padding rows.
     main_padding_no_rot: usize,
+    /// Rounded main trace allocation bytes before power-of-two padding.
+    main_unpadded_memory_bytes: usize,
+    /// Rounded main trace allocation bytes after power-of-two padding.
+    main_memory_bytes: usize,
     /// Stacked matrix slice cells before power-of-two padding.
     stacked_unpadded_slice_cells: usize,
     /// Stacked matrix slice cells from power-of-two padding.
@@ -187,6 +200,7 @@ impl SegmentationCtx {
             instret: 0,
             checkpoint_trace_heights: vec![0; num_airs],
             checkpoint_instret: 0,
+            checkpoint_retained_auxiliary_bytes: 0,
         }
     }
 
@@ -229,21 +243,33 @@ impl SegmentationCtx {
         main_cnt_no_rot: usize,
         main_stacked_cells: usize,
         interaction_cells: usize,
+        main_memory_bytes: usize,
+        retained_auxiliary_bytes: usize,
     ) -> (
         usize, /* memory */
         usize, /* main */
         usize, /* interaction */
     ) {
-        let estimate =
-            self.params
-                .memory_config
-                .estimate(ProvingMemoryCounts::new_with_stacked_cells(
-                    main_cnt_with_rot,
-                    main_cnt_no_rot,
-                    main_stacked_cells,
-                    interaction_cells,
-                ));
+        let estimate = self.params.memory_config.estimate(
+            ProvingMemoryCounts::new_with_stacked_cells(
+                main_cnt_with_rot,
+                main_cnt_no_rot,
+                main_stacked_cells,
+                interaction_cells,
+            )
+            .with_main_memory_bytes(main_memory_bytes)
+            .with_retained_auxiliary_bytes(retained_auxiliary_bytes),
+        );
         (estimate.total, estimate.main, estimate.interaction)
+    }
+
+    #[inline(always)]
+    fn trace_allocation_memory_bytes(&self, height: usize, width: usize) -> usize {
+        if height == 0 || width == 0 {
+            return 0;
+        }
+        let bytes = self.params.memory_config.main_memory_bytes(height * width);
+        self.params.memory_config.tracked_allocation_bytes(bytes)
     }
 
     #[inline(always)]
@@ -303,6 +329,10 @@ impl SegmentationCtx {
                 - self.stacked_slice_cells(unpadded_height, air.common_main_width);
             let main_unpadded_cells = unpadded_height * air.total_width;
             let main_padding_cells = padding_height * air.total_width;
+            counts.main_unpadded_memory_bytes +=
+                self.trace_allocation_memory_bytes(unpadded_height, air.total_width);
+            counts.main_memory_bytes +=
+                self.trace_allocation_memory_bytes(padded_height, air.total_width);
             if air.need_rot {
                 counts.main_unpadded_with_rot += main_unpadded_cells;
                 counts.main_padding_with_rot += main_padding_cells;
@@ -319,7 +349,7 @@ impl SegmentationCtx {
     /// Sum padded main trace cells, common main cells included in the stacked-matrix estimate, and
     /// interaction cells across all chips, splitting main cells by per-AIR `need_rot`.
     #[inline(always)]
-    fn calculate_cell_counts(&self, trace_heights: &[u32]) -> (usize, usize, usize, usize) {
+    fn calculate_cell_counts(&self, trace_heights: &[u32]) -> (usize, usize, usize, usize, usize) {
         debug_assert_eq!(trace_heights.len(), self.params.total_widths.len());
         debug_assert_eq!(trace_heights.len(), self.params.common_main_widths.len());
         debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
@@ -327,6 +357,7 @@ impl SegmentationCtx {
 
         let mut main_cnt_with_rot = 0;
         let mut main_cnt_no_rot = 0;
+        let mut main_memory_bytes = 0;
         let mut stacked_slice_cells = 0;
         let mut interaction_cells = 0;
         let airs = izip!(
@@ -351,6 +382,7 @@ impl SegmentationCtx {
         for air in airs {
             let padded_height = next_power_of_two_or_zero(air.height as usize);
             let main_cells = padded_height * air.total_width;
+            main_memory_bytes += self.trace_allocation_memory_bytes(padded_height, air.total_width);
             stacked_slice_cells += self.stacked_slice_cells(padded_height, air.common_main_width);
             if air.need_rot {
                 main_cnt_with_rot += main_cells;
@@ -364,6 +396,7 @@ impl SegmentationCtx {
             main_cnt_no_rot,
             self.stacked_main_cells_from_slice_cells(stacked_slice_cells),
             interaction_cells,
+            main_memory_bytes,
         )
     }
 
@@ -372,43 +405,77 @@ impl SegmentationCtx {
     fn calculate_total_memory(
         &self,
         trace_heights: &[u32],
+        retained_auxiliary_bytes: usize,
     ) -> (
         usize, /* memory */
         usize, /* main */
         usize, /* interaction */
     ) {
-        let (main_cnt_with_rot, main_cnt_no_rot, main_stacked_cells, interaction_cells) =
-            self.calculate_cell_counts(trace_heights);
+        let (
+            main_cnt_with_rot,
+            main_cnt_no_rot,
+            main_stacked_cells,
+            interaction_cells,
+            main_memory_bytes,
+        ) = self.calculate_cell_counts(trace_heights);
         self.counts_to_memory(
             main_cnt_with_rot,
             main_cnt_no_rot,
             main_stacked_cells,
             interaction_cells,
+            main_memory_bytes,
+            retained_auxiliary_bytes,
         )
     }
 
     #[inline(always)]
-    fn calculate_memory_breakdown(&self, counts: &MeteredCounts) -> MeteredMemoryBreakdown {
-        let unpadded =
-            self.params
+    pub(crate) fn retained_auxiliary_memory_bytes(
+        &self,
+        trace_heights: &[u32],
+        touched_block_count: usize,
+    ) -> usize {
+        let boundary_records = trace_heights[BOUNDARY_AIR_ID] as usize / 2;
+        if touched_block_count == 0 && boundary_records == 0 {
+            return 0;
+        }
+        let boundary_input_records = touched_block_count.max(boundary_records);
+        self.params
+            .memory_config
+            .tracked_allocation_bytes(boundary_input_records * CUDA_BOUNDARY_RECORD_BYTES)
+            + self
+                .params
                 .memory_config
-                .estimate(ProvingMemoryCounts::new_with_stacked_cells(
-                    counts.main_unpadded_with_rot,
-                    counts.main_unpadded_no_rot,
-                    self.stacked_main_cells_from_slice_cells(counts.stacked_unpadded_slice_cells),
-                    counts.interaction_cells_unpadded,
-                ));
-        let total =
-            self.params
-                .memory_config
-                .estimate(ProvingMemoryCounts::new_with_stacked_cells(
-                    counts.main_unpadded_with_rot + counts.main_padding_with_rot,
-                    counts.main_unpadded_no_rot + counts.main_padding_no_rot,
-                    self.stacked_main_cells_from_slice_cells(
-                        counts.stacked_unpadded_slice_cells + counts.stacked_padded_slice_cells,
-                    ),
-                    counts.interaction_cells_unpadded + counts.interaction_cells_padding,
-                ));
+                .tracked_allocation_bytes(boundary_records * CUDA_MERKLE_RECORD_BYTES)
+    }
+
+    #[inline(always)]
+    fn calculate_memory_breakdown(
+        &self,
+        counts: &MeteredCounts,
+        retained_auxiliary_bytes: usize,
+    ) -> MeteredMemoryBreakdown {
+        let unpadded = self.params.memory_config.estimate(
+            ProvingMemoryCounts::new_with_stacked_cells(
+                counts.main_unpadded_with_rot,
+                counts.main_unpadded_no_rot,
+                self.stacked_main_cells_from_slice_cells(counts.stacked_unpadded_slice_cells),
+                counts.interaction_cells_unpadded,
+            )
+            .with_main_memory_bytes(counts.main_unpadded_memory_bytes)
+            .with_retained_auxiliary_bytes(retained_auxiliary_bytes),
+        );
+        let total = self.params.memory_config.estimate(
+            ProvingMemoryCounts::new_with_stacked_cells(
+                counts.main_unpadded_with_rot + counts.main_padding_with_rot,
+                counts.main_unpadded_no_rot + counts.main_padding_no_rot,
+                self.stacked_main_cells_from_slice_cells(
+                    counts.stacked_unpadded_slice_cells + counts.stacked_padded_slice_cells,
+                ),
+                counts.interaction_cells_unpadded + counts.interaction_cells_padding,
+            )
+            .with_main_memory_bytes(counts.main_memory_bytes)
+            .with_retained_auxiliary_bytes(retained_auxiliary_bytes),
+        );
 
         MeteredMemoryBreakdown {
             total: total.total,
@@ -436,9 +503,15 @@ impl SegmentationCtx {
         instret: u64,
         trace_heights: &[u32],
         is_trace_height_constant: &[bool],
+        retained_auxiliary_bytes: usize,
     ) -> bool {
-        self.segmentation_trigger(instret, trace_heights, is_trace_height_constant)
-            .is_some()
+        self.segmentation_trigger(
+            instret,
+            trace_heights,
+            is_trace_height_constant,
+            retained_auxiliary_bytes,
+        )
+        .is_some()
     }
 
     #[inline(always)]
@@ -447,6 +520,7 @@ impl SegmentationCtx {
         instret: u64,
         trace_heights: &[u32],
         is_trace_height_constant: &[bool],
+        retained_auxiliary_bytes: usize,
     ) -> Option<SegmentationTrigger> {
         debug_assert_eq!(trace_heights.len(), is_trace_height_constant.len());
         debug_assert_eq!(trace_heights.len(), self.params.air_names.len());
@@ -468,6 +542,7 @@ impl SegmentationCtx {
 
         let mut main_cnt_with_rot = 0usize;
         let mut main_cnt_no_rot = 0usize;
+        let mut main_memory_bytes = 0usize;
         let mut stacked_slice_cells = 0usize;
         let mut interaction_cells = 0usize;
         let airs = izip!(
@@ -509,6 +584,8 @@ impl SegmentationCtx {
                 });
             }
             let main_cells = padded_height as usize * air.total_width;
+            main_memory_bytes +=
+                self.trace_allocation_memory_bytes(padded_height as usize, air.total_width);
             stacked_slice_cells +=
                 self.stacked_slice_cells(padded_height as usize, air.common_main_width);
             if air.need_rot {
@@ -524,15 +601,23 @@ impl SegmentationCtx {
             main_cnt_no_rot,
             self.stacked_main_cells_from_slice_cells(stacked_slice_cells),
             interaction_cells,
+            main_memory_bytes,
+            retained_auxiliary_bytes,
         );
         if total_memory > self.params.max_memory {
             tracing::info!(
-                "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5})",
+                "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5}) | aux ({:5}) | bytes total={} max={} main={} interaction={} aux={}",
                 instret,
                 ByteSize::b(total_memory as u64),
                 ByteSize::b(self.params.max_memory as u64),
                 ByteSize::b(main_memory as u64),
                 ByteSize::b(interaction_memory as u64),
+                ByteSize::b(retained_auxiliary_bytes as u64),
+                total_memory,
+                self.params.max_memory,
+                main_memory,
+                interaction_memory,
+                retained_auxiliary_bytes,
             );
             return Some(SegmentationTrigger::Memory);
         }
@@ -557,8 +642,14 @@ impl SegmentationCtx {
         instret: u64,
         trace_heights: &mut [u32],
         is_trace_height_constant: &[bool],
+        retained_auxiliary_bytes: usize,
     ) -> bool {
-        let trigger = self.segmentation_trigger(instret, trace_heights, is_trace_height_constant);
+        let trigger = self.segmentation_trigger(
+            instret,
+            trace_heights,
+            is_trace_height_constant,
+            retained_auxiliary_bytes,
+        );
         let should_segment = trigger.is_some();
 
         #[cfg(feature = "metrics")]
@@ -567,7 +658,7 @@ impl SegmentationCtx {
         }
 
         if should_segment {
-            self.create_segment_from_checkpoint(instret, trace_heights);
+            self.create_segment_from_checkpoint(instret, trace_heights, retained_auxiliary_bytes);
             true
         } else {
             false
@@ -575,16 +666,25 @@ impl SegmentationCtx {
     }
 
     #[inline(always)]
-    fn create_segment_from_checkpoint(&mut self, instret: u64, trace_heights: &mut [u32]) {
+    fn create_segment_from_checkpoint(
+        &mut self,
+        instret: u64,
+        trace_heights: &mut [u32],
+        retained_auxiliary_bytes: usize,
+    ) {
         let instret_start = self
             .segments
             .last()
             .map_or(0, |s| s.instret_start + s.num_insns);
 
-        let (segment_instret, segment_heights) = if self.checkpoint_instret > instret_start {
+        let (segment_instret, segment_heights, retained_auxiliary_bytes) = if self
+            .checkpoint_instret
+            > instret_start
+        {
             (
                 self.checkpoint_instret,
                 self.checkpoint_trace_heights.clone(),
+                self.checkpoint_retained_auxiliary_bytes,
             )
         } else {
             let trace_heights_str = trace_heights
@@ -595,14 +695,19 @@ impl SegmentationCtx {
                 .collect::<Vec<_>>()
                 .join("\n");
             tracing::warn!(
-                "No valid checkpoint, creating segment using instret={instret}\ntrace_heights=[\n{trace_heights_str}\n]"
-            );
-            // No valid checkpoint, use current values
-            (instret, trace_heights.to_vec())
+                    "No valid checkpoint, creating segment using instret={instret}\ntrace_heights=[\n{trace_heights_str}\n]"
+                );
+            // No valid checkpoint, use current values.
+            (instret, trace_heights.to_vec(), retained_auxiliary_bytes)
         };
 
         let num_insns = segment_instret - instret_start;
-        self.create_segment::<false>(instret_start, num_insns, segment_heights);
+        self.create_segment::<false>(
+            instret_start,
+            num_insns,
+            segment_heights,
+            retained_auxiliary_bytes,
+        );
     }
 
     /// Initialize state for a new segment
@@ -642,14 +747,20 @@ impl SegmentationCtx {
 
     /// Updates the checkpoint with current safe state
     #[inline(always)]
-    pub(crate) fn update_checkpoint(&mut self, instret: u64, trace_heights: &[u32]) {
+    pub(crate) fn update_checkpoint(
+        &mut self,
+        instret: u64,
+        trace_heights: &[u32],
+        retained_auxiliary_bytes: usize,
+    ) {
         self.checkpoint_trace_heights.copy_from_slice(trace_heights);
         self.checkpoint_instret = instret;
+        self.checkpoint_retained_auxiliary_bytes = retained_auxiliary_bytes;
     }
 
     /// Try segment if there is at least one instruction
     #[inline(always)]
-    pub fn create_final_segment(&mut self, trace_heights: &[u32]) {
+    pub fn create_final_segment(&mut self, trace_heights: &[u32], retained_auxiliary_bytes: usize) {
         self.instret += self.params.segment_check_insns - self.instrets_until_check;
         self.instrets_until_check = self.params.segment_check_insns;
         let instret_start = self
@@ -658,7 +769,12 @@ impl SegmentationCtx {
             .map_or(0, |s| s.instret_start + s.num_insns);
 
         let num_insns = self.instret - instret_start;
-        self.create_segment::<true>(instret_start, num_insns, trace_heights.to_vec());
+        self.create_segment::<true>(
+            instret_start,
+            num_insns,
+            trace_heights.to_vec(),
+            retained_auxiliary_bytes,
+        );
     }
 
     /// Push a new segment with logging
@@ -668,17 +784,23 @@ impl SegmentationCtx {
         instret_start: u64,
         num_insns: u64,
         trace_heights: Vec<u32>,
+        retained_auxiliary_bytes: usize,
     ) {
         debug_assert!(
             num_insns > 0,
             "Segment should contain at least one instruction"
         );
 
-        self.log_segment_info::<IS_FINAL>(instret_start, num_insns, &trace_heights);
+        self.log_segment_info::<IS_FINAL>(
+            instret_start,
+            num_insns,
+            &trace_heights,
+            retained_auxiliary_bytes,
+        );
         #[cfg(feature = "metrics")]
         {
             let segment = self.segments.len().to_string();
-            self.emit_metered_segment_metrics(&segment, &trace_heights);
+            self.emit_metered_segment_metrics(&segment, &trace_heights, retained_auxiliary_bytes);
             self.emit_metered_air_metrics(&segment, &trace_heights);
         }
         self.segments.push(Segment {
@@ -692,9 +814,13 @@ impl SegmentationCtx {
     /// This measures how much of the selected proving memory estimate is useful work vs
     /// power-of-two trace padding. Note: this inherits memory-related trace-height overestimates.
     #[inline(always)]
-    fn calculate_memory_utilization(&self, trace_heights: &[u32]) -> f64 {
+    fn calculate_memory_utilization(
+        &self,
+        trace_heights: &[u32],
+        retained_auxiliary_bytes: usize,
+    ) -> f64 {
         let counts = self.calculate_count_breakdown(trace_heights);
-        let memory = self.calculate_memory_breakdown(&counts);
+        let memory = self.calculate_memory_breakdown(&counts, retained_auxiliary_bytes);
         if memory.total == 0 {
             0.0
         } else {
@@ -709,28 +835,35 @@ impl SegmentationCtx {
         instret_start: u64,
         num_insns: u64,
         trace_heights: &[u32],
+        retained_auxiliary_bytes: usize,
     ) {
         let (max_trace_height, air_name) = self.calculate_max_trace_height_with_name(trace_heights);
         let (total_memory, main_memory, interaction_memory) =
-            self.calculate_total_memory(trace_heights);
+            self.calculate_total_memory(trace_heights, retained_auxiliary_bytes);
         let total_interactions = self.calculate_total_interactions(trace_heights);
-        let utilization = self.calculate_memory_utilization(trace_heights);
+        let utilization =
+            self.calculate_memory_utilization(trace_heights, retained_auxiliary_bytes);
 
         let final_marker = if IS_FINAL { " [TERMINATED]" } else { "" };
 
         tracing::info!(
-            "Segment {:3} | instret {:10} | {:8} instructions | {:5} memory ({:5}, {:5}) | {:10} interactions | {:8} max height ({}) | {:.2}% memory util{}",
+            "Segment {:3} | instret {:10} | {:8} instructions | {:5} memory ({:5}, {:5}, aux {:5}) | {:10} interactions | {:8} max height ({}) | {:.2}% memory util{} | bytes total={} main={} interaction={} aux={}",
             self.segments.len(),
             instret_start,
             num_insns,
             ByteSize::b(total_memory as u64),
             ByteSize::b(main_memory as u64),
             ByteSize::b(interaction_memory as u64),
+            ByteSize::b(retained_auxiliary_bytes as u64),
             total_interactions,
             max_trace_height,
             air_name,
             utilization,
-            final_marker
+            final_marker,
+            total_memory,
+            main_memory,
+            interaction_memory,
+            retained_auxiliary_bytes,
         );
     }
 }
@@ -757,15 +890,22 @@ impl SegmentationCtx {
         }
     }
 
-    fn emit_metered_segment_metrics(&self, segment: &str, trace_heights: &[u32]) {
+    fn emit_metered_segment_metrics(
+        &self,
+        segment: &str,
+        trace_heights: &[u32],
+        retained_auxiliary_bytes: usize,
+    ) {
         let counts = self.calculate_count_breakdown(trace_heights);
-        let memory = self.calculate_memory_breakdown(&counts);
+        let memory = self.calculate_memory_breakdown(&counts, retained_auxiliary_bytes);
         let padding = memory.total - memory.unpadded;
         let labels = [("segment", segment.to_string())];
         metrics::counter!("metered_memory_bytes", &labels).absolute(memory.total as u64);
         metrics::counter!("metered_memory_unpadded_bytes", &labels)
             .absolute(memory.unpadded as u64);
         metrics::counter!("metered_memory_padding_bytes", &labels).absolute(padding as u64);
+        metrics::counter!("metered_retained_auxiliary_memory_bytes", &labels)
+            .absolute(retained_auxiliary_bytes as u64);
         metrics::counter!("metered_interaction_memory_overhead_bytes", &labels)
             .absolute(INTERACTION_MEMORY_OVERHEAD as u64);
     }
