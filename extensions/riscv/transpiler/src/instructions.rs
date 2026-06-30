@@ -354,6 +354,27 @@ pub enum DivRemWOpcode {
     REMUW,
 }
 
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x290]
+#[repr(usize)]
+pub enum AddIOpcode {
+    ADDI,
+}
+
 // =================================================================================================
 // Phantom opcodes
 // =================================================================================================
