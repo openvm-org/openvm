@@ -421,10 +421,10 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
     let memory_dimensions = config.rv64i.system.memory_config.memory_dimensions();
     let executor = VmExecutor::new(config.clone()).expect("failed to create Rv64IM executor");
 
-    let interpreter = executor
+    let interpreter_instance = executor
         .interpreter_instance(&exe)
         .expect("interpreter build must succeed");
-    let interp_state = interpreter
+    let interp_state = interpreter_instance
         .execute(vec![], None)
         .expect("interpreter execution must succeed");
 
