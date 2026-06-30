@@ -19,6 +19,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - name: Checkout repository
         uses: actions/checkout@v5
         with:

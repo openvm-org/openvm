@@ -15,6 +15,11 @@ jobs:
     outputs:
       cuda: ${{ steps.filter.outputs.cuda }}
     steps:
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
@@ -37,6 +42,11 @@ jobs:
       - uses: runs-on/action@v2
         with:
           sccache: s3
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
       - uses: codespell-project/actions-codespell@v2
         with:
@@ -110,6 +120,11 @@ jobs:
       - uses: runs-on/action@v2
         with:
           sccache: s3
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/sccache
@@ -139,6 +154,11 @@ jobs:
       - uses: runs-on/action@v2
         with:
           sccache: s3
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         env:
