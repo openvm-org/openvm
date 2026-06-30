@@ -41,7 +41,7 @@ const SIGN_BIT_MASK: u8 = 1 << SIGN_BIT_SHIFT;
 
 /// Read a 256-bit value from memory as INT256_WORDS LE words.
 #[inline]
-unsafe fn read_int256(state: *mut c_void, ptr: u32) -> [u8; INT256_BYTES] {
+unsafe fn read_int256(state: *mut c_void, ptr: u64) -> [u8; INT256_BYTES] {
     let mut words = [0u64; INT256_WORDS];
     rd_mem_words_traced(state, ptr, &mut words);
     let mut bytes = [0u8; INT256_BYTES];
@@ -53,7 +53,7 @@ unsafe fn read_int256(state: *mut c_void, ptr: u32) -> [u8; INT256_BYTES] {
 
 /// Write a 256-bit value to memory as INT256_WORDS LE words.
 #[inline]
-unsafe fn write_int256(state: *mut c_void, ptr: u32, bytes: &[u8; INT256_BYTES]) {
+unsafe fn write_int256(state: *mut c_void, ptr: u64, bytes: &[u8; INT256_BYTES]) {
     let mut words = [0u64; INT256_WORDS];
     for (i, w) in words.iter_mut().enumerate() {
         *w = u64::from_le_bytes(
@@ -302,9 +302,9 @@ macro_rules! int256_alu_fn {
         #[no_mangle]
         pub unsafe extern "C" fn $name(
             state: *mut c_void,
-            rd_ptr: u32,
-            rs1_ptr: u32,
-            rs2_ptr: u32,
+            rd_ptr: u64,
+            rs1_ptr: u64,
+            rs2_ptr: u64,
         ) {
             let rs1 = read_int256(state, rs1_ptr);
             let rs2 = read_int256(state, rs2_ptr);
@@ -332,7 +332,7 @@ macro_rules! int256_branch_fn {
         /// # Safety
         /// `state` must be a valid pointer to the C `RvState` struct.
         #[no_mangle]
-        pub unsafe extern "C" fn $name(state: *mut c_void, rs1_ptr: u32, rs2_ptr: u32) -> u32 {
+        pub unsafe extern "C" fn $name(state: *mut c_void, rs1_ptr: u64, rs2_ptr: u64) -> u32 {
             let rs1 = read_int256(state, rs1_ptr);
             let rs2 = read_int256(state, rs2_ptr);
             ($cond(&rs1, &rs2)) as u32

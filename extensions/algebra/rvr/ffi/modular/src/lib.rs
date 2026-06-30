@@ -48,11 +48,11 @@ struct UnknownPrimeField {
 impl<F: PrimeField<Repr = [u8; 32]>> FieldArith for KnownPrimeField<F> {
     type Elem = F;
     #[inline(always)]
-    unsafe fn read_elem(&self, state: *mut c_void, ptr: u32) -> Self::Elem {
+    unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem {
         read_field_256(state, ptr)
     }
     #[inline(always)]
-    unsafe fn write_elem(&self, state: *mut c_void, ptr: u32, val: &Self::Elem) {
+    unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
         write_field_256(state, ptr, val)
     }
     #[inline(always)]
@@ -82,11 +82,11 @@ impl<F: PrimeField<Repr = [u8; 32]>> FieldArith for KnownPrimeField<F> {
 impl FieldArith for KnownPrimeField<Bls12381Fq> {
     type Elem = blstrs::Fp;
     #[inline(always)]
-    unsafe fn read_elem(&self, state: *mut c_void, ptr: u32) -> Self::Elem {
+    unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem {
         read_bls12_381_fq(state, ptr)
     }
     #[inline(always)]
-    unsafe fn write_elem(&self, state: *mut c_void, ptr: u32, val: &Self::Elem) {
+    unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
         write_bls12_381_fq(state, ptr, val)
     }
     #[inline(always)]
@@ -116,11 +116,11 @@ impl FieldArith for KnownPrimeField<Bls12381Fq> {
 impl FieldArith for UnknownPrimeField {
     type Elem = BigUint;
 
-    unsafe fn read_elem(&self, state: *mut c_void, ptr: u32) -> Self::Elem {
+    unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem {
         read_bigint(state, ptr, self.num_limbs)
     }
 
-    unsafe fn write_elem(&self, state: *mut c_void, ptr: u32, val: &Self::Elem) {
+    unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
         write_bigint(state, ptr, val, self.num_limbs)
     }
 
@@ -149,7 +149,7 @@ impl FieldArith for UnknownPrimeField {
 // ── Instruction execution helpers ────────────────────────────────────────────
 
 #[inline(always)]
-unsafe fn exec_iseq<F: FieldArith>(f: &F, state: *mut c_void, rs1_ptr: u32, rs2_ptr: u32) -> u32 {
+unsafe fn exec_iseq<F: FieldArith>(f: &F, state: *mut c_void, rs1_ptr: u64, rs2_ptr: u64) -> u32 {
     let a = f.read_elem(state, rs1_ptr);
     let b = f.read_elem(state, rs2_ptr);
     if f.is_eq(&a, &b) {
@@ -166,7 +166,7 @@ macro_rules! field_op_fn {
         /// # Safety
         /// `state` must be a valid `RvState` pointer.
         #[no_mangle]
-        pub unsafe extern "C" fn $name(state: *mut c_void, rd: u32, rs1: u32, rs2: u32) {
+        pub unsafe extern "C" fn $name(state: *mut c_void, rd: u64, rs1: u64, rs2: u64) {
             let f = KnownPrimeField::<$field>(PhantomData);
             exec_op(&f, state, rd, rs1, rs2, |f, a, b| f.$op(a, b));
         }
@@ -184,7 +184,7 @@ macro_rules! define_mod_ffi {
             /// `state` must be a valid `RvState` pointer.
             #[no_mangle]
             pub unsafe extern "C" fn [<rvr_ext_mod_iseq_ $suffix>](
-                state: *mut c_void, rs1: u32, rs2: u32,
+                state: *mut c_void, rs1: u64, rs2: u64,
             ) -> u32 { exec_iseq(&KnownPrimeField::<$field>(PhantomData), state, rs1, rs2) }
         }
     };
@@ -211,9 +211,9 @@ macro_rules! unknown_field_op_fn {
         #[no_mangle]
         pub unsafe extern "C" fn $name(
             state: *mut c_void,
-            rd_ptr: u32,
-            rs1_ptr: u32,
-            rs2_ptr: u32,
+            rd_ptr: u64,
+            rs1_ptr: u64,
+            rs2_ptr: u64,
             num_limbs: u32,
             modulus_ptr: *const u8,
         ) {
@@ -235,8 +235,8 @@ unknown_field_op_fn!(rvr_ext_mod_div, div);
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_mod_iseq(
     state: *mut c_void,
-    rs1_ptr: u32,
-    rs2_ptr: u32,
+    rs1_ptr: u64,
+    rs2_ptr: u64,
     num_limbs: u32,
     modulus_ptr: *const u8,
 ) -> u32 {
@@ -251,9 +251,9 @@ pub unsafe extern "C" fn rvr_ext_mod_iseq(
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_mod_setup(
     state: *mut c_void,
-    rd_ptr: u32,
-    rs1_ptr: u32,
-    rs2_ptr: u32,
+    rd_ptr: u64,
+    rs1_ptr: u64,
+    rs2_ptr: u64,
     num_limbs: u32,
 ) {
     let num_words = num_limbs / WORD_SIZE as u32;
@@ -329,7 +329,7 @@ fn mod_sqrt_impl(x: &BigUint, modulus: &BigUint, non_qr: &BigUint) -> Option<Big
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_algebra_hint_sqrt(
     state: *mut c_void,
-    rs1_ptr: u32,
+    rs1_ptr: u64,
     num_limbs: u32,
     modulus_ptr: *const u8,
     non_qr_ptr: *const u8,

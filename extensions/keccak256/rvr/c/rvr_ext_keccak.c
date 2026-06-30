@@ -12,7 +12,7 @@ static constexpr uint32_t KECCAK_NUM_ROUNDS = 24;
 extern void rvr_keccak_f1600(uint64_t state[25]);
 
 __attribute__((preserve_most)) void rvr_ext_keccakf(RvState* restrict state,
-                                                    uint32_t buffer_ptr,
+                                                    uint64_t buffer_ptr,
                                                     uint32_t _op_chip_idx,
                                                     uint32_t perm_chip_idx) {
   uint64_t st[KECCAK_WIDTH_WORDS];
@@ -29,8 +29,8 @@ __attribute__((preserve_most)) void rvr_ext_keccakf(RvState* restrict state,
 }
 
 __attribute__((preserve_most)) void rvr_ext_xorin(RvState* restrict state,
-                                                  uint32_t buffer_ptr,
-                                                  uint32_t input_ptr,
+                                                  uint64_t buffer_ptr,
+                                                  uint64_t input_ptr,
                                                   uint32_t len,
                                                   uint32_t _chip_idx) {
   uint32_t num_words = (len + WORD_SIZE - 1) / WORD_SIZE;
