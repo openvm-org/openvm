@@ -97,7 +97,7 @@ impl MemoryInventoryGPU {
             // Only transfer pages that may contain non-zero data; the rest are zero-filled
             // on-device. The merkle kernel reads the full address-space region, so the device
             // buffer is full-size and the skipped pages must read as zero.
-            let runs = initial_memory.touched_pages[addr_sp].byte_runs(raw_mem.len());
+            let runs = initial_memory.touched_pages[addr_sp].touched_byte_ranges(raw_mem.len());
             tracing::debug!(
                 "Setting initial memory for address space {}: {} bytes, {} touched run(s)",
                 addr_sp,
@@ -112,7 +112,7 @@ impl MemoryInventoryGPU {
                 buf.fill_zero_on(&self.device_ctx)
                     .expect("failed to zero device memory");
                 for (start, end) in runs {
-                    // SAFETY: `byte_runs` clamps ranges to `raw_mem.len()`, and `buf` has the same
+                    // SAFETY: `touched_byte_ranges` clamps ranges to `raw_mem.len()`, and `buf` has the same
                     // length, so both the host slice and the device offset stay in bounds.
                     unsafe {
                         cuda_memcpy_on::<false, true>(
@@ -559,7 +559,7 @@ mod tests {
             memory.memory.touched_pages[RV64_MEMORY_AS as usize],
             TouchedPages::Marked { .. }
         ));
-        let runs = memory.memory.touched_pages[RV64_MEMORY_AS as usize].byte_runs(mem_bytes);
+        let runs = memory.memory.touched_pages[RV64_MEMORY_AS as usize].touched_byte_ranges(mem_bytes);
         assert_eq!(
             runs,
             vec![(0, PAGE_SIZE), (2 * PAGE_SIZE, 3 * PAGE_SIZE)],

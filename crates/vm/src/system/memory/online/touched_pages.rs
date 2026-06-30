@@ -2,9 +2,8 @@ use super::PAGE_SIZE;
 
 /// Tracks which fixed-size pages of an address space's linear memory may contain non-zero data,
 /// for the GPU host-to-device transfer. Pages that are *not* marked are guaranteed zero and can be
-/// skipped by the transport (which zero-fills the device buffer first), so this is always a
-/// conservative **superset** of the truly non-zero pages: we may copy a still-zero page, but we
-/// must never skip a non-zero one. Pages are [`PAGE_SIZE`] bytes, matching the mmap page size.
+/// skipped by the transport (which zero-fills the device buffer first).
+/// Pages are [`PAGE_SIZE`] bytes, matching the mmap page size.
 #[derive(Debug, Clone)]
 pub enum TouchedPages {
     /// Conservative default: every page may be non-zero, so the transport copies everything.
@@ -51,7 +50,7 @@ impl TouchedPages {
     /// Yields the half-open **byte** ranges `[start, end)` of maximal runs of consecutive marked
     /// pages, clamped to `total_bytes`. Coalescing adjacent pages into runs minimizes the number
     /// of `cudaMemcpyAsync` calls. [`TouchedPages::All`] yields a single full run.
-    pub fn byte_runs(&self, total_bytes: usize) -> Vec<(usize, usize)> {
+    pub fn touched_byte_ranges(&self, total_bytes: usize) -> Vec<(usize, usize)> {
         let mut runs = Vec::new();
         match self {
             TouchedPages::All => {
@@ -90,15 +89,15 @@ mod tests {
     #[test]
     fn all_yields_single_full_run() {
         let touched = TouchedPages::all();
-        assert_eq!(touched.byte_runs(10 * PAGE_SIZE), vec![(0, 10 * PAGE_SIZE)]);
+        assert_eq!(touched.touched_byte_ranges(10 * PAGE_SIZE), vec![(0, 10 * PAGE_SIZE)]);
         // Degenerate empty address space.
-        assert_eq!(touched.byte_runs(0), vec![]);
+        assert_eq!(touched.touched_byte_ranges(0), vec![]);
     }
 
     #[test]
     fn none_yields_no_runs() {
         let touched = TouchedPages::none(10 * PAGE_SIZE);
-        assert_eq!(touched.byte_runs(10 * PAGE_SIZE), vec![]);
+        assert_eq!(touched.touched_byte_ranges(10 * PAGE_SIZE), vec![]);
     }
 
     #[test]
@@ -107,19 +106,19 @@ mod tests {
         // A range spanning the boundary between page 1 and page 2 marks both.
         touched.mark_byte_range(2 * PAGE_SIZE - 1, 2);
         assert_eq!(
-            touched.byte_runs(10 * PAGE_SIZE),
+            touched.touched_byte_ranges(10 * PAGE_SIZE),
             vec![(PAGE_SIZE, 3 * PAGE_SIZE)]
         );
     }
 
     #[test]
-    fn byte_runs_coalesces_adjacent_pages_and_separates_gaps() {
+    fn touched_byte_ranges_coalesces_adjacent_pages_and_separates_gaps() {
         let mut touched = TouchedPages::none(10 * PAGE_SIZE);
         // Pages 2, 3, 4 (contiguous) and page 7 (isolated).
         touched.mark_byte_range(2 * PAGE_SIZE, 3 * PAGE_SIZE);
         touched.mark_byte_range(7 * PAGE_SIZE + 100, 1);
         assert_eq!(
-            touched.byte_runs(10 * PAGE_SIZE),
+            touched.touched_byte_ranges(10 * PAGE_SIZE),
             vec![
                 (2 * PAGE_SIZE, 5 * PAGE_SIZE),
                 (7 * PAGE_SIZE, 8 * PAGE_SIZE)
@@ -128,13 +127,13 @@ mod tests {
     }
 
     #[test]
-    fn byte_runs_clamps_last_page_to_total_bytes() {
+    fn touched_byte_ranges_clamps_last_page_to_total_bytes() {
         // Address space of 3.5 pages; mark the final (partial) page.
         let num_bytes = 3 * PAGE_SIZE + PAGE_SIZE / 2;
         let mut touched = TouchedPages::none(num_bytes);
         touched.mark_byte_range(3 * PAGE_SIZE, 1);
         assert_eq!(
-            touched.byte_runs(num_bytes),
+            touched.touched_byte_ranges(num_bytes),
             vec![(3 * PAGE_SIZE, num_bytes)]
         );
     }
@@ -143,6 +142,6 @@ mod tests {
     fn mark_byte_range_is_noop_on_all() {
         let mut touched = TouchedPages::all();
         touched.mark_byte_range(0, PAGE_SIZE);
-        assert_eq!(touched.byte_runs(PAGE_SIZE), vec![(0, PAGE_SIZE)]);
+        assert_eq!(touched.touched_byte_ranges(PAGE_SIZE), vec![(0, PAGE_SIZE)]);
     }
 }
