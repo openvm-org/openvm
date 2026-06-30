@@ -689,9 +689,9 @@ where
         &self.executor.config
     }
 
-    /// Pure interpreter.
+    /// Pure execution instance.
     #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
-    pub fn interpreter(
+    pub fn instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
@@ -703,7 +703,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn interpreter(
+    pub fn instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<RvrPureInstance<'_, Val<E::SC>>, StaticProgramError>
@@ -728,7 +728,7 @@ where
 
     // Pure AOT / RVR execution
     #[cfg(any(feature = "aot", feature = "rvr"))]
-    pub fn naive_interpreter(
+    pub fn interpreter_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
@@ -741,7 +741,7 @@ where
 
     // Pure AOT execution
     #[cfg(feature = "aot")]
-    pub fn interpreter(
+    pub fn instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<AotInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
@@ -765,7 +765,7 @@ where
     }
 
     #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
-    pub fn metered_interpreter(
+    pub fn metered_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
@@ -779,7 +779,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn metered_interpreter(
+    pub fn metered_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<RvrMeteredInstance<'_, Val<E::SC>>, StaticProgramError>
@@ -821,7 +821,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn load_metered_interpreter(
+    pub fn load_metered_instance(
         &self,
         lib_path: &std::path::Path,
         exe: &VmExe<Val<E::SC>>,
@@ -836,7 +836,7 @@ where
     }
 
     #[cfg(feature = "aot")]
-    pub fn metered_interpreter(
+    pub fn metered_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<AotInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
@@ -865,7 +865,7 @@ where
     }
 
     #[cfg(any(feature = "aot", feature = "rvr"))]
-    pub fn naive_metered_interpreter(
+    pub fn metered_interpreter_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
@@ -879,7 +879,7 @@ where
     }
 
     #[cfg(not(feature = "rvr"))]
-    pub fn metered_cost_interpreter(
+    pub fn metered_cost_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCostCtx>, StaticProgramError>
@@ -893,7 +893,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn metered_cost_interpreter(
+    pub fn metered_cost_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<RvrMeteredCostInstance<'_, Val<E::SC>>, StaticProgramError>
@@ -925,7 +925,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn load_metered_cost_interpreter(
+    pub fn load_metered_cost_instance(
         &self,
         lib_path: &std::path::Path,
         exe: &VmExe<Val<E::SC>>,
@@ -1479,8 +1479,8 @@ where
         self.reset_state(input.clone());
         let vm = &mut self.vm;
         let metered_ctx = vm.build_metered_ctx(&self.exe);
-        let metered_interpreter = vm.metered_interpreter(&self.exe)?;
-        let (segments, _) = metered_interpreter.execute_metered(input, metered_ctx)?;
+        let metered_instance = vm.metered_instance(&self.exe)?;
+        let (segments, _) = metered_instance.execute_metered(input, metered_ctx)?;
         let mut proofs = Vec::with_capacity(segments.len());
         let mut state = self.state.take();
         for (seg_idx, segment) in segments.into_iter().enumerate() {
