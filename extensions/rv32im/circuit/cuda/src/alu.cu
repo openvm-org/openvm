@@ -66,7 +66,7 @@ extern "C" int _alu_tracegen(
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(Rv32BaseAluCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
     alu_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
