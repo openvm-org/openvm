@@ -19,7 +19,7 @@ use openvm_circuit_primitives::{
     },
     var_range::VariableRangeCheckerChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -401,7 +401,6 @@ fn positive_storew_public_values_test() {
         .finalize();
     tester.simple_test().expect("Verification failed");
 }
-
 
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS

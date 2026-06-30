@@ -41,9 +41,8 @@ use openvm_stark_backend::{
 use super::{
     byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits,
     eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_rv64_block, ptr_to_field_u16_limbs,
-    ptr_to_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs, rv64_address_add_imm, sign_extend_imm16, try_rv64_bytes_to_u32, RV64_PTR_BITS,
-    RV64_PTR_U16_LIMBS,
-    RV64_REGISTER_NUM_LIMBS, U16_BITS,
+    ptr_to_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs, rv64_address_add_imm, sign_extend_imm16,
+    try_rv64_bytes_to_u32, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
 use crate::adapters::{memory_read, timed_write, tracing_read};
 
