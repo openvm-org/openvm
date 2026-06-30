@@ -45,11 +45,7 @@ impl FieldArith for KnownComplexField<halo2curves_axiom::bn256::Fq2> {
     #[inline(always)]
     unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
         write_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr, &val.c0);
-        write_field_256::<halo2curves_axiom::bn256::Fq>(
-            state,
-            ptr + FIELD_256_BYTES,
-            &val.c1,
-        );
+        write_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr + FIELD_256_BYTES, &val.c1);
     }
 
     #[inline(always)]

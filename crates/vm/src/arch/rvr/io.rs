@@ -1,6 +1,6 @@
 //! OpenVM IO runtime: ctx (`OpenVmIoState`) borrowed from `VmState<F>`.
 
-use std::collections::VecDeque;
+use std::{collections::VecDeque, ffi::c_void};
 
 #[cfg(not(feature = "unprotected"))]
 use openvm_platform::memory::MEM_SIZE;
@@ -44,3 +44,23 @@ pub fn check_mem_bounds_range(start: u64, num_bytes: usize) {
 #[cfg(feature = "unprotected")]
 #[inline(always)]
 pub fn check_mem_bounds_range(_start: u64, _num_bytes: usize) {}
+
+/// Replace the hint stream contents. Called via `ext_hint_stream_set` from extension FFI.
+///
+/// # Safety
+///
+/// `ctx` must be a valid `OpenVmIoState` pointer. `data` must point to `len` bytes (or be null).
+pub unsafe extern "C" fn host_hint_stream_set<F: PrimeField32>(
+    ctx: *mut c_void,
+    data: *const u8,
+    len: u32,
+) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+    io.hint_stream.clear();
+    if len > 0 && !data.is_null() {
+        let slice = unsafe { std::slice::from_raw_parts(data, len as usize) };
+        for &b in slice {
+            io.hint_stream.push_back(F::from_u8(b));
+        }
+    }
+}

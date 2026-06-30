@@ -495,7 +495,6 @@ pub extern "C" fn host_reveal<F: PrimeField32>(
     io.public_values[start..end].copy_from_slice(&src_val.to_le_bytes()[..width]);
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
