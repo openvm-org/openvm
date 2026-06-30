@@ -359,8 +359,6 @@ fn lift_muldiv<F: PrimeField32>(insn: &Instruction<F>, pc: u64, op: MulDivOp) ->
     body(pc, Instr::MulDiv { op, rd, rs1, rs2 })
 }
 
-/// Lift load instruction.
-/// OpenVM encoding: rd=a/4, rs1=b/4, imm low16=c, sign=g!=0
 #[inline]
 fn is_memory_instruction<F: PrimeField32>(insn: &Instruction<F>) -> bool {
     field_to_u32(insn.d) == AS_REGISTER && field_to_u32(insn.e) == AS_MEMORY
@@ -383,6 +381,8 @@ fn lift_public_values_store<F: PrimeField32>(
     }
 }
 
+/// Lift load instruction.
+/// OpenVM encoding: rd=a/8, rs1=b/8, imm low16=c, sign=g!=0
 fn lift_load<F: PrimeField32>(
     insn: &Instruction<F>,
     pc: u64,
@@ -413,7 +413,7 @@ fn lift_load<F: PrimeField32>(
 }
 
 /// Lift store instruction.
-/// OpenVM encoding: rs2=a/4, rs1=b/4, imm low16=c, sign=g!=0
+/// OpenVM encoding: rs2=a/8, rs1=b/8, imm low16=c, sign=g!=0
 fn lift_store<F: PrimeField32>(
     insn: &Instruction<F>,
     pc: u64,
@@ -439,7 +439,7 @@ fn lift_store<F: PrimeField32>(
 }
 
 /// Lift branch instruction.
-/// OpenVM encoding: rs1=a/4, rs2=b/4, offset=c as signed (BabyBear modular)
+/// OpenVM encoding: rs1=a/8, rs2=b/8, offset=c as signed (BabyBear modular)
 fn lift_branch<F: PrimeField32>(insn: &Instruction<F>, pc: u64, cond: BranchCond) -> LiftedInstr {
     let rs1 = decode_reg(insn.a);
     let rs2 = decode_reg(insn.b);
@@ -458,7 +458,7 @@ fn lift_branch<F: PrimeField32>(insn: &Instruction<F>, pc: u64, cond: BranchCond
 }
 
 /// Lift JAL instruction.
-/// OpenVM encoding: rd=a/4, offset=c as signed (BabyBear modular)
+/// OpenVM encoding: rd=a/8, offset=c as signed (BabyBear modular)
 fn lift_jal<F: PrimeField32>(insn: &Instruction<F>, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let offset = field_to_i32(insn.c);
@@ -469,7 +469,7 @@ fn lift_jal<F: PrimeField32>(insn: &Instruction<F>, pc: u64) -> LiftedInstr {
 }
 
 /// Lift JALR instruction.
-/// OpenVM encoding: rd=a/4, rs1=b/4, imm low16=c, sign=g!=0
+/// OpenVM encoding: rd=a/8, rs1=b/8, imm low16=c, sign=g!=0
 fn lift_jalr<F: PrimeField32>(insn: &Instruction<F>, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
@@ -488,7 +488,7 @@ fn lift_jalr<F: PrimeField32>(insn: &Instruction<F>, pc: u64) -> LiftedInstr {
 }
 
 /// Lift LUI instruction.
-/// OpenVM encoding: rd=a/4, upper20=c << 12
+/// OpenVM encoding: rd=a/8, upper20=c << 12
 fn lift_lui<F: PrimeField32>(insn: &Instruction<F>, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let upper = field_to_u32(insn.c);
@@ -501,7 +501,7 @@ fn lift_lui<F: PrimeField32>(insn: &Instruction<F>, pc: u64) -> LiftedInstr {
 }
 
 /// Lift AUIPC instruction.
-/// OpenVM encoding: rd=a/4, upper20 = c << 8 (from rrs.rs: c = (imm & 0xfffff000) >> 8)
+/// OpenVM encoding: rd=a/8, upper20 = c << 8 (from rrs.rs: c = (imm & 0xfffff000) >> 8)
 fn lift_auipc<F: PrimeField32>(insn: &Instruction<F>, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     let shifted = field_to_u32(insn.c);
