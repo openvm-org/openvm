@@ -17,15 +17,15 @@ use rvr_openvm_ext_ffi_common::{
 };
 
 /// BN254 base field element size in bytes.
-const BN254_FQ_BYTES: u32 = FIELD_256_BYTES as u32;
+const BN254_FQ_BYTES: u64 = FIELD_256_BYTES as u64;
 /// BLS12-381 base field element size in bytes.
-const BLS12_381_FQ_BYTES: u32 = BLS12_381_ELEM_BYTES as u32;
+const BLS12_381_FQ_BYTES: u64 = BLS12_381_ELEM_BYTES as u64;
 /// G1 affine point: two field coordinates (x, y).
-const G1_AFFINE_COORDS: u32 = 2;
+const G1_AFFINE_COORDS: u64 = 2;
 /// G2 affine point: two Fp2 coordinates, each containing two Fp elements.
-const G2_AFFINE_COORDS: u32 = 4;
+const G2_AFFINE_COORDS: u64 = 4;
 /// Offset of `len` in a guest slice header `(data_ptr, len)`.
-const SLICE_LEN_OFFSET: u32 = WORD_SIZE as u32;
+const SLICE_LEN_OFFSET: u64 = WORD_SIZE as u64;
 
 unsafe fn set_hint_stream(bytes: &[u8]) {
     let len: u32 = bytes.len().try_into().unwrap();
@@ -39,7 +39,7 @@ unsafe fn clear_hint_stream() {
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 /// Read `N` bytes from guest memory (untraced, word-aligned reads).
-unsafe fn read_bytes<const N: usize>(state: *mut c_void, ptr: u32) -> [u8; N] {
+unsafe fn read_bytes<const N: usize>(state: *mut c_void, ptr: u64) -> [u8; N] {
     const {
         assert!(
             N.is_multiple_of(WORD_SIZE),
@@ -57,25 +57,25 @@ unsafe fn read_bytes<const N: usize>(state: *mut c_void, ptr: u32) -> [u8; N] {
 }
 
 /// Read an Fq element from guest memory for BN254.
-unsafe fn read_bn254_fq(state: *mut c_void, ptr: u32) -> Option<bn256::Fq> {
+unsafe fn read_bn254_fq(state: *mut c_void, ptr: u64) -> Option<bn256::Fq> {
     let bytes = read_bytes::<{ BN254_FQ_BYTES as usize }>(state, ptr);
     Option::from(bn256::Fq::from_repr(bytes))
 }
 
 /// Read an Fq element from guest memory for BLS12-381.
-unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u32) -> Option<bls12_381::Fq> {
+unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u64) -> Option<bls12_381::Fq> {
     let bytes = read_bytes::<{ BLS12_381_FQ_BYTES as usize }>(state, ptr);
     Option::from(bls12_381::Fq::from_repr(bytes.into()))
 }
 
-fn point_base(ptr: u64, idx: u64, words_per_point: u32) -> Option<u32> {
-    let offset = idx.checked_mul(words_per_point as u64)?;
-    ptr.checked_add(offset)?.try_into().ok()
+fn point_base(ptr: u64, idx: u64, words_per_point: u64) -> Option<u64> {
+    let offset = idx.checked_mul(words_per_point)?;
+    ptr.checked_add(offset)
 }
 
 // ── BN254 pairing hint ──────────────────────────────────────────────────
 
-unsafe fn hint_bn254(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Option<Vec<u8>> {
+unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<Vec<u8>> {
     let p_ptr = rd_mem_u64_wrapper(state, rs1_val);
     let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
     let q_ptr = rd_mem_u64_wrapper(state, rs2_val);
@@ -127,7 +127,7 @@ unsafe fn hint_bn254(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Option<V
 
 // ── BLS12-381 pairing hint ──────────────────────────────────────────────
 
-unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Option<Vec<u8>> {
+unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<Vec<u8>> {
     let p_ptr = rd_mem_u64_wrapper(state, rs1_val);
     let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
     let q_ptr = rd_mem_u64_wrapper(state, rs2_val);
@@ -183,8 +183,8 @@ unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u32, rs2_val: u32) -> Opti
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_pairing_hint_final_exp_bn254(
     state: *mut c_void,
-    rs1_val: u32,
-    rs2_val: u32,
+    rs1_val: u64,
+    rs2_val: u64,
 ) {
     if let Some(hint_bytes) = hint_bn254(state, rs1_val, rs2_val) {
         set_hint_stream(&hint_bytes);
@@ -198,8 +198,8 @@ pub unsafe extern "C" fn rvr_ext_pairing_hint_final_exp_bn254(
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_pairing_hint_final_exp_bls12_381(
     state: *mut c_void,
-    rs1_val: u32,
-    rs2_val: u32,
+    rs1_val: u64,
+    rs2_val: u64,
 ) {
     if let Some(hint_bytes) = hint_bls12_381(state, rs1_val, rs2_val) {
         set_hint_stream(&hint_bytes);

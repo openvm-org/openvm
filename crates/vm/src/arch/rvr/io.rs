@@ -32,7 +32,7 @@ pub struct OpenVmIoState<'a, F: PrimeField32> {
 /// matching the C-side `abort_oob` termination used by `rd_mem_*`/`wr_mem_*`.
 /// Compiles to a no-op under the `unprotected` feature.
 #[cfg(not(feature = "unprotected"))]
-pub fn check_mem_bounds_range(start: u32, num_bytes: usize) {
+pub fn check_mem_bounds_range(start: u64, num_bytes: usize) {
     let start = start as usize;
     if start > MEM_SIZE || num_bytes > MEM_SIZE - start {
         panic!(
@@ -43,7 +43,7 @@ pub fn check_mem_bounds_range(start: u32, num_bytes: usize) {
 
 #[cfg(feature = "unprotected")]
 #[inline(always)]
-pub fn check_mem_bounds_range(_start: u32, _num_bytes: usize) {}
+pub fn check_mem_bounds_range(_start: u64, _num_bytes: usize) {}
 
 /// Replace the hint stream contents. Called via `ext_hint_stream_set` from extension FFI.
 ///
