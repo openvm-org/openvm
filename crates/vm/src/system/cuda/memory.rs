@@ -426,6 +426,12 @@ mod tests {
                 [9, 10, 11, 12, 0, 0, 0, 0],
             );
         }
+        // `write_bytes` is an untracked write path, so mark the written pages by hand: the
+        // host-to-device transfer (`set_initial_memory`) only copies marked pages. See the
+        // invariant on `AddressMap::touched_pages`.
+        for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
+            memory.memory.touched_pages[addr_space as usize].mark_byte_range(0, MEMORY_BLOCK_BYTES);
+        }
         (mem_config, memory)
     }
 
