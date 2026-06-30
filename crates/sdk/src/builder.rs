@@ -27,8 +27,8 @@ use {
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},
     keygen::{AggProvingKey, AppProvingKey, SdkCachedProvingKey},
-    prover::{AggProver, DeferralAggProver, MultiDeferralCircuitProver},
-    GenericSdk, SdkError, F, SC,
+    prover::{AggProver, DeferralAggProver, DeferralHookCommits, MultiDeferralCircuitProver},
+    DeferralSetup, GenericSdk, SdkError, F, SC,
 };
 
 enum AppSource<VC> {
@@ -44,6 +44,7 @@ enum AggSource {
 
 #[allow(clippy::large_enum_variant)]
 enum DeferralSource {
+    HookCommits(DeferralHookCommits),
     MultiCircuitProver(MultiDeferralCircuitProver),
     AggProver(DeferralAggProver),
 }
@@ -359,22 +360,22 @@ where
             .map_err(|e| SdkError::Vm(e.into()))?;
         let agg_tree_config = agg_tree_config.unwrap_or_default();
 
-        let def_agg_prover = match deferral_source {
-            Some(DeferralSource::MultiCircuitProver(multi_deferral_circuit_prover)) => Some(
-                Self::build_deferral_agg_prover(&agg_config, multi_deferral_circuit_prover),
-            ),
-            Some(DeferralSource::AggProver(deferral_agg_prover)) => {
-                Some(Arc::new(deferral_agg_prover))
+        let deferral_setup = match deferral_source {
+            Some(DeferralSource::HookCommits(commits)) => DeferralSetup::Aware(commits),
+            Some(DeferralSource::MultiCircuitProver(multi_deferral_circuit_prover)) => {
+                DeferralSetup::Active(Self::build_deferral_agg_prover(
+                    &agg_config,
+                    multi_deferral_circuit_prover,
+                ))
             }
-            None => None,
+            Some(DeferralSource::AggProver(deferral_agg_prover)) => {
+                DeferralSetup::Active(Arc::new(deferral_agg_prover))
+            }
+            None => DeferralSetup::Disabled,
         };
-        let def_hook_cached_commit = def_agg_prover
-            .as_ref()
-            .map(|def_agg_prover| def_agg_prover.def_hook_cached_commit());
+        let def_hook_cached_commit = deferral_setup.hook_cached_commit();
         #[cfg(feature = "root-prover")]
-        let def_hook_commit = def_agg_prover
-            .as_ref()
-            .map(|def_agg_prover| def_agg_prover.def_hook_commit());
+        let def_hook_commit = deferral_setup.hook_commit();
 
         let app_vm_vk = app_pk_seed
             .as_ref()
@@ -443,7 +444,7 @@ where
             agg_prover: Self::init_once_lock(agg_prover_seed, "agg_prover"),
             #[cfg(feature = "root-prover")]
             root_prover: Self::init_once_lock(root_prover_seed, "root_prover"),
-            def_agg_prover,
+            deferral_setup,
             #[cfg(feature = "evm-prove")]
             halo2_params_reader,
             #[cfg(feature = "evm-prove")]
@@ -468,10 +469,27 @@ where
         self.build_without_transpiler()
     }
 
+    /// Enables deferral-aware aggregation without configuring a prover for non-empty deferral
+    /// inputs.
+    ///
+    /// This is mutually exclusive with [`Self::multi_deferral_circuit_prover`] and
+    /// [`Self::deferral_agg_prover`].
+    pub fn deferral_hook_commits(mut self, commits: DeferralHookCommits) -> Self {
+        Self::set_once(
+            &mut self.deferral_source,
+            "deferral_source",
+            DeferralSource::HookCommits(commits),
+        );
+        self
+    }
+
     /// Enables deferrals in this SDK build. The [`MultiDeferralCircuitProver`] must be created
     /// ahead of time because the [`openvm_sdk_config::deferral::DeferralConfig`] should be created
     /// using [`MultiDeferralCircuitProver::make_config`], which generates the `def_circuit_commits`
     /// needed by the VM config.
+    ///
+    /// This is mutually exclusive with [`Self::deferral_hook_commits`] and
+    /// [`Self::deferral_agg_prover`].
     pub fn multi_deferral_circuit_prover(
         mut self,
         multi_deferral_circuit_prover: MultiDeferralCircuitProver,
@@ -486,9 +504,9 @@ where
 
     /// Enables deferrals in this SDK build using a pre-built [`DeferralAggProver`].
     ///
-    /// This is mutually exclusive with [`Self::multi_deferral_circuit_prover`]. Use this when the
-    /// deferral aggregation path has already been constructed, for example by
-    /// [`DeferralAggProver::verify_stark`].
+    /// This is mutually exclusive with [`Self::deferral_hook_commits`] and
+    /// [`Self::multi_deferral_circuit_prover`]. Use this when the deferral aggregation path
+    /// has already been constructed, for example by [`DeferralAggProver::verify_stark`].
     pub fn deferral_agg_prover(mut self, deferral_agg_prover: DeferralAggProver) -> Self {
         Self::set_once(
             &mut self.deferral_source,

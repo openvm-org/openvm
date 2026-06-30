@@ -27,7 +27,7 @@ use openvm_verify_stark_host::{
 use crate::{
     builder::GenericSdkBuilder,
     config::{AggregationConfig, AggregationSystemParams, AppConfig, DEFAULT_APP_L_SKIP},
-    prover::{DeferralAggProver, DeferralProof, MultiDeferralCircuitProver},
+    prover::{DeferralAggProver, DeferralHookCommits, DeferralProof, MultiDeferralCircuitProver},
     DeferralInput, Sdk, StdIn, F,
 };
 
@@ -531,7 +531,9 @@ fn test_prove_mixed_vm_def_depth_mismatch() -> Result<()> {
     // internal_recursive layer is needed to fully aggregate its proof.
     assert_eq!(internal_layer_metadata.internal_recursive_layer, 1);
 
-    let def_prover = vs_sdk.def_agg_prover.unwrap();
+    let def_prover = vs_sdk
+        .deferral_agg_prover()
+        .expect("deferral-enabled SDK should expose a deferral prover");
     let def_hook_proofs = def_prover
         .multi_deferral_circuit_prover
         .prove(&[def_input])?;
@@ -579,6 +581,29 @@ fn test_prove_mixed_vm_def_depth_mismatch() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_deferral_aware_and_active_have_equivalent_vks() -> Result<()> {
+    setup_tracing();
+    let n_stack = 19;
+    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
+    let agg_params = AggregationSystemParams::default();
+    let active_sdk = make_verify_stark_path_sdk(app_params.clone(), agg_params.clone())?;
+    let hook_commits = DeferralHookCommits {
+        hook_cached_commit: active_sdk.def_hook_cached_commit().unwrap(),
+        hook_commit: active_sdk.def_hook_commit().unwrap(),
+    };
+    let aware_sdk = Sdk::builder()
+        .app_config(active_sdk.app_config().clone())
+        .agg_params(agg_params)
+        .deferral_hook_commits(hook_commits)
+        .build()?;
+    assert_eq!(
+        active_sdk.agg_vk().as_ref().pre_hash,
+        aware_sdk.agg_vk().as_ref().pre_hash
+    );
+    Ok(())
+}
+
 /// Cell-count profiling test for the static verifier circuit using a production root proof.
 ///
 /// Root verifier params match `pipeline_cell_count_profiling` in static-verifier crate.
@@ -612,7 +637,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
         config::{AggregationSystemParams, DEFAULT_APP_L_SKIP},
         keygen::dummy::compute_root_proof_heights,
         prover::{EvmProver, RootProver},
-        Sdk, StdIn,
+        DeferralSetup, Sdk, StdIn,
     };
 
     // Root verifier params matching pipeline_cell_count_profiling in static-verifier
@@ -654,12 +679,12 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
             // Compute trace heights for root prover with profiling params
             let system_config = sdk.app_config().app_vm_config.as_ref();
             let agg_prover = sdk.agg_prover();
-            let (trace_heights, root_pk) = compute_root_proof_heights::<E, _>(
-                sdk.app_vm_builder().clone(),
-                &sdk.app_pk().app_vm_pk,
-                agg_prover.clone(),
+            let (trace_heights, root_pk) = compute_root_proof_heights(
+                system_config.clone(),
+                sdk.agg_config().params.clone(),
+                sdk.agg_tree_config(),
                 root_params.clone(),
-                None,
+                DeferralSetup::Disabled,
             )?;
 
             let ir_vk = agg_prover.internal_recursive_prover.get_vk();
@@ -688,7 +713,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
                 &sdk.app_pk().app_vm_pk,
                 app_exe,
                 agg_prover,
-                None,
+                DeferralSetup::Disabled,
                 root_prover.clone(),
                 None,
             )?;

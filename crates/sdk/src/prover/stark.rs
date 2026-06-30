@@ -18,11 +18,10 @@ use openvm_verify_stark_host::{
 
 use crate::{
     prover::{
-        deferral::{compute_deferral_merkle_proofs, DeferralAggProver},
-        vm::types::VmProvingKey,
-        AggProver, AppProver, InternalLayerMetadata,
+        deferral::compute_deferral_merkle_proofs, vm::types::VmProvingKey, AggProver, AppProver,
+        InternalLayerMetadata,
     },
-    DeferralInput, StdIn, SC,
+    DeferralInput, DeferralSetup, StdIn, SC,
 };
 
 pub struct StarkProver<E, VB>
@@ -32,7 +31,7 @@ where
 {
     pub app_prover: AppProver<E, VB>,
     pub agg_prover: Arc<AggProver>,
-    pub def_prover: Option<Arc<DeferralAggProver>>,
+    pub deferral_setup: DeferralSetup,
 }
 
 impl<E, VB> StarkProver<E, VB>
@@ -46,12 +45,12 @@ where
         app_vm_pk: &VmProvingKey<VB::VmConfig>,
         app_exe: Arc<VmExe<Val<SC>>>,
         agg_prover: Arc<AggProver>,
-        def_prover: Option<Arc<DeferralAggProver>>,
+        deferral_setup: DeferralSetup,
     ) -> Result<Self> {
         Ok(Self {
             app_prover: AppProver::new(vm_builder, app_vm_pk, app_exe)?,
             agg_prover,
-            def_prover,
+            deferral_setup,
         })
     }
 
@@ -75,7 +74,7 @@ where
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
-        let has_deferrals = self.def_prover.is_some();
+        let has_deferrals = self.deferral_setup.hook_commit().is_some();
         let memory_dimensions = self.app_prover.memory_dimensions();
 
         // Build the initial memory merkle tree before proving (needed for deferral proofs).
@@ -103,7 +102,9 @@ where
             self.agg_prover.prove_vm(continuation_proof)?;
 
         if !def_inputs.is_empty() {
-            let def_agg_prover = self.def_prover.as_ref().unwrap();
+            let def_agg_prover = self.deferral_setup.prover().ok_or_else(|| {
+                eyre::eyre!("non-empty deferral inputs require a deferral aggregation prover")
+            })?;
             let def_hook_proofs = def_agg_prover
                 .multi_deferral_circuit_prover
                 .prove(def_inputs)?;
@@ -173,7 +174,7 @@ where
                 .agg_prover
                 .internal_recursive_prover
                 .get_vk_commit(true),
-            expected_def_hook_commit: self.def_prover.as_ref().map(|dp| dp.def_hook_commit()),
+            expected_def_hook_commit: self.deferral_setup.hook_commit(),
         }
     }
 
