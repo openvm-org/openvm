@@ -347,7 +347,7 @@ mod tests {
             memory::{
                 merkle::MerkleTree,
                 offline_checker::pack_u8_block_value,
-                online::{GuestMemory, TouchedPages, PAGE_SIZE},
+                online::{GuestMemory, PAGE_SIZE},
                 ptr_bits_from_address_height, AddressMap, TimestampedValues,
             },
             poseidon2::Poseidon2PeripheryChip,
@@ -545,10 +545,6 @@ mod tests {
         let mem_bytes = memory.memory.get_memory()[RV64_MEMORY_AS as usize]
             .as_slice()
             .len();
-        assert!(matches!(
-            memory.memory.touched_pages[RV64_MEMORY_AS as usize],
-            TouchedPages::Marked { .. }
-        ));
         let runs =
             memory.memory.touched_pages[RV64_MEMORY_AS as usize].touched_byte_ranges(mem_bytes);
         assert_eq!(

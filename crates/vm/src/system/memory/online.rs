@@ -138,6 +138,12 @@ pub struct AddressMap<M: LinearMemory = MemoryBackend> {
     pub config: Vec<AddressSpaceHostConfig>,
     /// Per-address-space record of which pages may contain non-zero data, used to skip all-zero
     /// pages during the GPU host-to-device transfer. See [`TouchedPages`].
+    ///
+    /// Invariant: any path that writes non-zero data into memory that may later be transferred via
+    /// `set_initial_memory` must mark the written pages (`set_from_sparse`,
+    /// `extend_touched_pages_from_touched`). Unmarked pages are transferred as zero. The untracked
+    /// write paths (`get_memory_mut`, `GuestMemory::write`/`write_bytes`) do not mark and must not
+    /// be the source of transferred initial memory.
     pub touched_pages: Vec<TouchedPages>,
 }
 
@@ -150,13 +156,14 @@ impl Default for AddressMap {
 impl<M: LinearMemory> AddressMap<M> {
     pub fn new(config: Vec<AddressSpaceHostConfig>) -> Self {
         assert_eq!(config[0].num_cells, 0, "Address space 0 must have 0 cells");
-        let mem = config
+        let mem: Vec<M> = config
             .iter()
             .map(|config| M::new(config.num_cells.checked_mul(config.layout.size()).unwrap()))
             .collect();
-        // Conservative default: any untracked mutation is still copied in full (always correct).
-        // Trusted construction paths (`set_from_sparse`, `fill_zero`) narrow this to actual pages.
-        let touched_pages = vec![TouchedPages::all(); config.len()];
+        // Pages start unmarked (guaranteed zero); paths that write data (`set_from_sparse`) and the
+        // carried-forward extension (`extend_touched_pages_from_touched`) mark the pages they touch.
+        // See the invariant on `touched_pages`.
+        let touched_pages = mem.iter().map(|m| TouchedPages::new(m.size())).collect();
         Self {
             mem,
             config,
@@ -183,7 +190,7 @@ impl<M: LinearMemory> AddressMap<M> {
         for (mem, touched) in self.mem.iter_mut().zip(self.touched_pages.iter_mut()) {
             mem.fill_zero();
             // Memory is now all zero, so no pages are touched.
-            *touched = TouchedPages::none(mem.size());
+            *touched = TouchedPages::new(mem.size());
         }
     }
 
@@ -275,7 +282,7 @@ impl<M: LinearMemory> AddressMap<M> {
         // written from the sparse image below is guaranteed zero. This narrows the segment-0
         // initial image to exactly the sparse pages.
         for (mem, touched) in self.mem.iter().zip(self.touched_pages.iter_mut()) {
-            *touched = TouchedPages::none(mem.size());
+            *touched = TouchedPages::new(mem.size());
         }
         for (&(addr_space, ptr), &data_byte) in sparse_map.iter() {
             // SAFETY:
