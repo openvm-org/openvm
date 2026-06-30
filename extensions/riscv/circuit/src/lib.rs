@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod adapters;
 mod add_sub;
+mod addi;
 mod add_sub_w;
 mod auipc;
 mod bitwise_logic;
@@ -39,6 +40,7 @@ mod shift_w;
 mod store;
 
 pub use add_sub::*;
+pub use addi::*;
 pub use add_sub_w::*;
 pub use auipc::*;
 pub use bitwise_logic::*;
