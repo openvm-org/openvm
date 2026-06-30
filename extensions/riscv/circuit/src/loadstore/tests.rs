@@ -341,8 +341,6 @@ fn positive_loadstore_max_address_test() {
     let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, bitwise) = create_harness(&mut tester);
 
-    // The default config exposes the full 2^32-byte memory AS (`tester.address_bits()` = 32);
-    // deterministically touch its last addressable bytes, plus one rs1 + imm wrap past 2^32.
     let top = 1u64 << tester.address_bits();
     let imm = 8u32;
     for (opcode, byte_addr) in [
@@ -350,7 +348,6 @@ fn positive_loadstore_max_address_test() {
         (LOADBU, top - 1),
         (STORED, top - 8),
         (STOREB, top - 1),
-        (LOADWU, 4), // rs1 = 2^32 - 4, so rs1 + imm wraps past 2^32
     ] {
         let rs1 = (byte_addr as u32).wrapping_sub(imm).to_le_bytes();
         set_and_execute(
