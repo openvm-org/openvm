@@ -25,9 +25,8 @@ use crate::{
     arch::{
         execution_mode::{
             metered::{
-                ctx::{MeteredCtxConfig, MeteredCtxParts},
                 memory_ctx::{MemoryCtx, PageAccess, PAGE_BITS},
-                segment_ctx::{Segment, SegmentationCtx},
+                segment_ctx::Segment,
             },
             MeteredCtx,
         },
@@ -121,10 +120,9 @@ pub type MeteredTracer = TracerPtr<MeteredTracerData>;
 // buffers (one per additional address space) instead of hardcoding
 // pv + deferral. The memory AS buffer stays separate as the hot path.
 pub struct SegmentationState {
-    config: MeteredCtxConfig,
-    pub segmentation_ctx: SegmentationCtx,
-    trace_heights: Vec<u32>,
-    memory_ctx: MemoryCtx,
+    /// OpenVM metered execution context - holds trace heights, memory tracking,
+    /// and segmentation logic.
+    pub ctx: MeteredCtx,
     /// Per-address-space page buffers. Each entry = local page id + leaf mask.
     mem_page_buf: Vec<PageAccess>,
     pv_page_buf: Vec<PageAccess>,
@@ -134,20 +132,10 @@ pub struct SegmentationState {
 
 impl SegmentationState {
     pub fn new(ctx: MeteredCtx, system_config: &SystemConfig) -> Self {
-        let ctx = ctx.into_parts();
-        let config = ctx.config;
-        let segmentation_ctx = ctx.segmentation_ctx;
-        let trace_heights = ctx.trace_heights;
-        let memory_ctx = ctx.memory_ctx;
-
-        let mem_config = &system_config.memory_config;
-        let memory_dimensions = mem_config.memory_dimensions();
+        let memory_dimensions = system_config.memory_config.memory_dimensions();
         let address_height = memory_dimensions.address_height as u32;
         Self {
-            config,
-            segmentation_ctx,
-            trace_heights,
-            memory_ctx,
+            ctx,
             mem_page_buf: vec![PageAccess::default(); MEM_PAGE_BUF_CAP],
             pv_page_buf: vec![PageAccess::default(); PV_PAGE_BUF_CAP],
             deferral_page_buf: vec![PageAccess::default(); DEFERRAL_PAGE_BUF_CAP],
@@ -156,21 +144,16 @@ impl SegmentationState {
     }
 
     pub fn into_metered_ctx(self) -> MeteredCtx {
-        MeteredCtx::from_parts(MeteredCtxParts {
-            config: self.config,
-            trace_heights: self.trace_heights,
-            memory_ctx: self.memory_ctx,
-            segmentation_ctx: self.segmentation_ctx,
-        })
+        self.ctx
     }
 
     pub(crate) fn suspend_on_segment(&self) -> bool {
-        self.config.suspend_on_segment
+        self.ctx.config.suspend_on_segment
     }
 
     /// Get mutable pointer to trace_heights for the C tracer.
     pub fn trace_heights_ptr(&mut self) -> *mut u32 {
-        self.trace_heights.as_mut_ptr()
+        self.ctx.trace_heights.as_mut_ptr()
     }
 
     /// Get mutable pointer to the AS_MEMORY page buffer for the C tracer.
@@ -212,21 +195,21 @@ impl SegmentationState {
     #[inline(always)]
     fn apply_page_buffers(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
         Self::apply_addr_space_buffer(
-            &mut self.memory_ctx,
+            &mut self.ctx.memory_ctx,
             self.address_height,
             RV64_MEMORY_AS,
             &self.mem_page_buf,
             mem_len,
         );
         Self::apply_addr_space_buffer(
-            &mut self.memory_ctx,
+            &mut self.ctx.memory_ctx,
             self.address_height,
             PUBLIC_VALUES_AS,
             &self.pv_page_buf,
             pv_len,
         );
         Self::apply_addr_space_buffer(
-            &mut self.memory_ctx,
+            &mut self.ctx.memory_ctx,
             self.address_height,
             DEFERRAL_AS,
             &self.deferral_page_buf,
@@ -239,15 +222,18 @@ impl SegmentationState {
         // last safe checkpoint. The pages accumulated since that checkpoint
         // belong to the next segment and must seed its memory trace heights
         // after the previous segment's heights are subtracted.
-        self.memory_ctx
-            .reset_segment_without_replay(&mut self.trace_heights);
+        self.ctx
+            .memory_ctx
+            .reset_segment_without_replay(&mut self.ctx.trace_heights);
         self.apply_page_buffers(mem_len, pv_len, deferral_len);
-        self.memory_ctx
-            .apply_height_updates(&mut self.trace_heights);
+        self.ctx
+            .memory_ctx
+            .apply_height_updates(&mut self.ctx.trace_heights);
 
-        self.memory_ctx.add_register_merkle_heights();
-        self.memory_ctx
-            .apply_height_updates(&mut self.trace_heights);
+        self.ctx.memory_ctx.add_register_merkle_heights();
+        self.ctx
+            .memory_ctx
+            .apply_height_updates(&mut self.ctx.trace_heights);
     }
 
     /// Called on each periodic check (approximately every `segment_check_insns` instructions).
@@ -260,39 +246,41 @@ impl SegmentationState {
         deferral_len: u32,
         remaining_counter: u32,
     ) -> bool {
-        let seg_check_insns = self.segmentation_ctx.segment_check_insns();
+        let seg_check_insns = self.ctx.segmentation_ctx.segment_check_insns();
         let insns_since_last_check = seg_check_insns - remaining_counter as u64;
-        let instret = self.segmentation_ctx.instret + insns_since_last_check;
-        self.segmentation_ctx.instret = instret;
-        self.segmentation_ctx.instrets_until_check = seg_check_insns;
+        let instret = self.ctx.segmentation_ctx.instret + insns_since_last_check;
+        self.ctx.segmentation_ctx.instret = instret;
+        self.ctx.segmentation_ctx.instrets_until_check = seg_check_insns;
 
         self.apply_page_buffers(mem_len, pv_len, deferral_len);
-        self.memory_ctx
-            .apply_height_updates(&mut self.trace_heights);
+        self.ctx
+            .memory_ctx
+            .apply_height_updates(&mut self.ctx.trace_heights);
 
-        let did_segment = self.segmentation_ctx.check_and_segment(
+        let did_segment = self.ctx.segmentation_ctx.check_and_segment(
             instret,
-            &mut self.trace_heights,
-            &self.config.is_trace_height_constant,
+            &mut self.ctx.trace_heights,
+            &self.ctx.config.is_trace_height_constant,
         );
 
         if did_segment {
-            self.segmentation_ctx.initialize_segment(
-                &mut self.trace_heights,
-                &self.config.is_trace_height_constant,
+            self.ctx.segmentation_ctx.initialize_segment(
+                &mut self.ctx.trace_heights,
+                &self.ctx.config.is_trace_height_constant,
             );
             self.initialize_segment_memory(mem_len, pv_len, deferral_len);
 
-            self.segmentation_ctx.warn_if_exceeds_limits(
+            self.ctx.segmentation_ctx.warn_if_exceeds_limits(
                 instret,
-                &self.trace_heights,
-                &self.config.is_trace_height_constant,
+                &self.ctx.trace_heights,
+                &self.ctx.config.is_trace_height_constant,
             );
         }
 
-        self.segmentation_ctx
-            .update_checkpoint(instret, &self.trace_heights);
-        self.memory_ctx.update_checkpoint();
+        self.ctx
+            .segmentation_ctx
+            .update_checkpoint(instret, &self.ctx.trace_heights);
+        self.ctx.memory_ctx.update_checkpoint();
 
         did_segment
     }
@@ -308,12 +296,14 @@ impl SegmentationState {
         remaining_counter: u32,
     ) {
         self.apply_page_buffers(mem_len, pv_len, deferral_len);
-        self.memory_ctx
-            .apply_height_updates(&mut self.trace_heights);
+        self.ctx
+            .memory_ctx
+            .apply_height_updates(&mut self.ctx.trace_heights);
 
-        self.segmentation_ctx.instrets_until_check = remaining_counter as u64;
-        self.segmentation_ctx
-            .create_final_segment(&self.trace_heights);
+        self.ctx.segmentation_ctx.instrets_until_check = remaining_counter as u64;
+        self.ctx
+            .segmentation_ctx
+            .create_final_segment(&self.ctx.trace_heights);
     }
 }
 
@@ -342,10 +332,10 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) -> u8
     let did_segment =
         seg_state.on_periodic_check(mem_len, pv_len, deferral_len, tracer.check_counter);
 
-    let segment_check_insns = seg_state.segmentation_ctx.segment_check_insns() as u32;
+    let segment_check_insns = seg_state.ctx.segmentation_ctx.segment_check_insns() as u32;
     debug_assert_eq!(
         u64::from(segment_check_insns),
-        seg_state.segmentation_ctx.segment_check_insns()
+        seg_state.ctx.segmentation_ctx.segment_check_insns()
     );
 
     // We are at the start of a block that would cross the old countdown.
@@ -406,7 +396,7 @@ impl<F: PrimeField32> RvrMeteredInstance<'_, F> {
                 execute_metered(&self.compiled, &self.extensions, &mut vm_state, seg_state)
             })
             .map_err(map_rvr_execute_error)?;
-        let result_seg_ctx = result_seg_state.segmentation_ctx;
+        let result_seg_ctx = result_seg_state.ctx.segmentation_ctx;
         #[cfg(feature = "metrics")]
         {
             let insns = result_seg_ctx.instret;
@@ -450,7 +440,7 @@ impl<F: PrimeField32> RvrMeteredSegmentInstance<'_, F> {
         let result = result.map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]
         {
-            let insns = result.seg_state.segmentation_ctx.instret - start_instret;
+            let insns = result.seg_state.ctx.segmentation_ctx.instret - start_instret;
             metrics.record(insns);
         }
         Ok((result, vm_state))
@@ -526,33 +516,35 @@ mod tests {
         clean.initialize_segment_memory(0, 0, 0);
 
         assert!(
-            with_interval_buffer.trace_heights[BOUNDARY_AIR_ID]
-                > clean.trace_heights[BOUNDARY_AIR_ID]
+            with_interval_buffer.ctx.trace_heights[BOUNDARY_AIR_ID]
+                > clean.ctx.trace_heights[BOUNDARY_AIR_ID]
         );
         assert!(
-            with_interval_buffer.trace_heights[MERKLE_AIR_ID] > clean.trace_heights[MERKLE_AIR_ID]
+            with_interval_buffer.ctx.trace_heights[MERKLE_AIR_ID]
+                > clean.ctx.trace_heights[MERKLE_AIR_ID]
         );
-        let poseidon2_idx = clean.trace_heights.len() - 2;
+        let poseidon2_idx = clean.ctx.trace_heights.len() - 2;
         assert!(
-            with_interval_buffer.trace_heights[poseidon2_idx] > clean.trace_heights[poseidon2_idx]
+            with_interval_buffer.ctx.trace_heights[poseidon2_idx]
+                > clean.ctx.trace_heights[poseidon2_idx]
         );
     }
 
     #[test]
     fn test_periodic_check_records_block_boundary_instret() {
         let mut seg_state = make_segmentation_state();
-        seg_state.segmentation_ctx.instrets_until_check = 1000;
+        seg_state.ctx.segmentation_ctx.instrets_until_check = 1000;
 
         assert!(!seg_state.on_periodic_check(0, 0, 0, 250));
 
-        assert_eq!(seg_state.segmentation_ctx.instret, 750);
-        assert_eq!(seg_state.segmentation_ctx.instrets_until_check, 1000);
+        assert_eq!(seg_state.ctx.segmentation_ctx.instret, 750);
+        assert_eq!(seg_state.ctx.segmentation_ctx.instrets_until_check, 1000);
     }
 
     #[test]
     fn test_periodic_callback_starts_next_interval_at_block_boundary() {
         let mut seg_state = make_segmentation_state();
-        seg_state.segmentation_ctx.instrets_until_check = 1000;
+        seg_state.ctx.segmentation_ctx.instrets_until_check = 1000;
         let mut tracer = MeteredTracerData {
             trace_heights: seg_state.trace_heights_ptr(),
             mem_page_buf: seg_state.mem_page_buf_ptr(),
@@ -571,14 +563,14 @@ mod tests {
 
         assert_eq!(did_segment, 0);
         assert_eq!(tracer.check_counter, 1000);
-        assert_eq!(seg_state.segmentation_ctx.instret, 750);
+        assert_eq!(seg_state.ctx.segmentation_ctx.instret, 750);
     }
 
     #[test]
     fn test_periodic_callback_starts_next_interval_when_suspending() {
         let mut seg_state = make_segmentation_state();
-        seg_state.segmentation_ctx.instrets_until_check = 1000;
-        *seg_state.trace_heights.last_mut().unwrap() = 4096;
+        seg_state.ctx.segmentation_ctx.instrets_until_check = 1000;
+        *seg_state.ctx.trace_heights.last_mut().unwrap() = 4096;
         let mut tracer = MeteredTracerData {
             trace_heights: seg_state.trace_heights_ptr(),
             mem_page_buf: seg_state.mem_page_buf_ptr(),
@@ -597,6 +589,6 @@ mod tests {
 
         assert_eq!(did_segment, 1);
         assert_eq!(tracer.check_counter, 1000);
-        assert_eq!(seg_state.segmentation_ctx.instret, 750);
+        assert_eq!(seg_state.ctx.segmentation_ctx.instret, 750);
     }
 }
