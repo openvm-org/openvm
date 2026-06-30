@@ -47,9 +47,9 @@ fn u64_words_as_bytes(words: &[u64]) -> &[u8] {
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_sha256(
     state: *mut c_void,
-    dst_ptr: u32,
-    state_ptr: u32,
-    input_ptr: u32,
+    dst_ptr: u64,
+    state_ptr: u64,
+    input_ptr: u64,
     _main_chip_idx: u32,
     block_hasher_chip_idx: u32,
 ) {
@@ -83,9 +83,9 @@ pub unsafe extern "C" fn rvr_ext_sha256(
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_sha512(
     state: *mut c_void,
-    dst_ptr: u32,
-    state_ptr: u32,
-    input_ptr: u32,
+    dst_ptr: u64,
+    state_ptr: u64,
+    input_ptr: u64,
     _main_chip_idx: u32,
     block_hasher_chip_idx: u32,
 ) {
