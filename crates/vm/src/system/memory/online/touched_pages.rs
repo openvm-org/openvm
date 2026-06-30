@@ -37,9 +37,26 @@ impl TouchedPages {
             last < self.num_pages,
             "byte range out of address space bounds"
         );
-        for page in first..=last {
-            self.bits[page / 64] |= 1u64 << (page % 64);
+
+        // Set whole `u64` words at once: each word covers 64 pages, so the fully-covered middle
+        // becomes a single `memset` instead of one OR per page.
+        let first_word = first / 64;
+        let last_word = last / 64;
+
+        if first_word == last_word {
+            // All pages land in one word: set bits [first%64, last%64].
+            let lo = first % 64;
+            let hi = last % 64;
+            self.bits[first_word] |= ((!0u64) >> (63 - (hi - lo))) << lo;
+            return;
         }
+
+        // Partial first word: bits [first%64, 63].
+        self.bits[first_word] |= (!0u64) << (first % 64);
+        // Fully-covered middle words: memset to all-ones.
+        self.bits[first_word + 1..last_word].fill(!0u64);
+        // Partial last word: bits [0, last%64].
+        self.bits[last_word] |= (!0u64) >> (63 - (last % 64));
     }
 
     /// Yields the half-open **byte** ranges `[start, end)` of maximal runs of consecutive marked
@@ -48,18 +65,16 @@ impl TouchedPages {
     pub fn touched_byte_ranges(&self, total_bytes: usize) -> Vec<(usize, usize)> {
         let mut runs = Vec::new();
         let is_set = |page: usize| self.bits[page / 64] >> (page % 64) & 1 == 1;
+        let n = self.num_pages.min(total_bytes.div_ceil(PAGE_SIZE));
         let mut page = 0;
-        while page < self.num_pages {
+        while page < n {
             if is_set(page) {
                 let run_start = page;
-                while page < self.num_pages && is_set(page) {
+                while page < n && is_set(page) {
                     page += 1;
                 }
-                let start_byte = run_start * PAGE_SIZE;
-                let end_byte = (page * PAGE_SIZE).min(total_bytes);
-                if start_byte < end_byte {
-                    runs.push((start_byte, end_byte));
-                }
+                // Clamp the last run's end to total_bytes.
+                runs.push((run_start * PAGE_SIZE, (page * PAGE_SIZE).min(total_bytes)));
             } else {
                 page += 1;
             }
