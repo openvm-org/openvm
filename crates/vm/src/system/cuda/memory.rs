@@ -426,9 +426,8 @@ mod tests {
                 [9, 10, 11, 12, 0, 0, 0, 0],
             );
         }
-        // `write_bytes` is an untracked write path, so mark the written pages by hand: the
-        // host-to-device transfer (`set_initial_memory`) only copies marked pages. See the
-        // invariant on `AddressMap::touched_pages`.
+        // `write_bytes` doesn't mark pages, so mark them by hand: `set_initial_memory` only
+        // transfers marked pages (see the invariant on `AddressMap::touched_pages`).
         for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
             memory.memory.touched_pages[addr_space as usize].mark_byte_range(0, MEMORY_BLOCK_BYTES);
         }
@@ -456,10 +455,8 @@ mod tests {
         assert_eq!(expected_root, gpu_merkle_root(&ctxs));
     }
 
-    // Touched-memory coverage for the merge path: writes two MEMORY_BLOCK_BYTES
-    // blocks into RV64_MEMORY_AS (u16-celled, so each block is
-    // BLOCK_FE_WIDTH = 4 u16 cells = MEMORY_BLOCK_BYTES = 8 bytes) and routes
-    // them through `inventory.cu`'s `<4, 1> -> <8, 2>` merge kernel.
+    // Touched-memory merge path: writes two 8-byte (BLOCK_FE_WIDTH = 4 u16 cells) blocks into
+    // RV64_MEMORY_AS and routes them through `inventory.cu`'s `<4, 1> -> <8, 2>` merge kernel.
     #[test]
     fn test_touched_memory_updates_memory_address_space() {
         let (mem_config, memory) = single_block_setup();
@@ -508,11 +505,9 @@ mod tests {
         assert_eq!(expected_root, gpu_merkle_root(&ctxs));
     }
 
-    // Paged transfer coverage: builds a multi-page memory address space whose initial image is
-    // sparse (only pages 0 and 2 of 4 hold data, via `set_from_sparse`), so the H2D transfer
-    // copies only those pages and zero-fills the rest on-device. Asserts the GPU merkle root
-    // matches the CPU root computed over the full (mostly-zero) memory, and that the paging
-    // actually engaged (fewer bytes copied than the full address space).
+    // Paged transfer: a 4-page AS with only pages 0 and 2 populated (via `set_from_sparse`), so
+    // the H2D transfer copies just those pages and zero-fills the rest. Asserts the GPU root
+    // matches the CPU root over the full image, and that paging engaged (fewer bytes copied).
     #[test]
     fn test_set_initial_memory_copies_only_touched_pages() {
         const NUM_PAGES: usize = 4;
