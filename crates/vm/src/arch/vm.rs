@@ -1014,6 +1014,15 @@ where
             interpreter.opcode_counts_by_air::<VB::RecordArena>(),
         );
         let touched_memory = exec_state.vm_state.memory.finalize::<Val<E::SC>>();
+        // Grow the touched-page sets on the carried-forward memory image so the next segment's
+        // host-to-device transfer (`set_initial_memory`) stays a correct superset of non-zero
+        // pages.
+        exec_state
+            .vm_state
+            .memory
+            .data
+            .memory
+            .extend_touched_pages_from_touched(&touched_memory);
         #[cfg(feature = "perf-metrics")]
         end_segment_metrics(&mut exec_state);
 
