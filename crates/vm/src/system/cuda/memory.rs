@@ -366,7 +366,7 @@ mod tests {
 
     use super::*;
 
-    /// CPU reference Merkle root over the full memory image, for cross-checking the GPU root.
+    /// CPU reference Merkle root, for cross-checking the GPU root.
     fn cpu_merkle_root(memory: &AddressMap, mem_config: &MemoryConfig) -> [F; DIGEST_WIDTH] {
         let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
         let cpu_merkle_tree = MerkleTree::<F, DIGEST_WIDTH>::from_memory(
@@ -377,8 +377,7 @@ mod tests {
         cpu_merkle_tree.root()
     }
 
-    /// Builds a GPU inventory, loads `initial_memory`, and returns the proving contexts produced
-    /// for `touched_memory`.
+    /// Builds a GPU inventory, loads `initial_memory`, returns the contexts for `touched_memory`.
     fn run_inventory(
         mem_config: &MemoryConfig,
         initial_memory: &AddressMap,
@@ -395,8 +394,8 @@ mod tests {
         inventory.generate_proving_ctxs(touched_memory)
     }
 
-    /// Extracts the Merkle root from the proving contexts: the merkle chip is the one emitting at
-    /// least two digests of public values, and the root is its final digest.
+    /// Extracts the Merkle root: the merkle chip is the one emitting at least two public-value
+    /// digests, and the root is the last one.
     fn gpu_merkle_root(ctxs: &[AirProvingContext<GpuBackend>]) -> [F; DIGEST_WIDTH] {
         let merkle_ctx = ctxs
             .iter()
@@ -407,8 +406,7 @@ mod tests {
         gpu_root_slice.try_into().unwrap()
     }
 
-    /// Single-block register + memory config with the shared initial image used by the
-    /// empty- and touched-memory tests.
+    /// Single-block register + memory config shared by the empty- and touched-memory tests.
     fn single_block_setup() -> (MemoryConfig, GuestMemory) {
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
         for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
@@ -426,8 +424,8 @@ mod tests {
                 [9, 10, 11, 12, 0, 0, 0, 0],
             );
         }
-        // `write_bytes` doesn't mark pages, so mark them by hand: `set_initial_memory` only
-        // transfers marked pages (see the invariant on `AddressMap::touched_pages`).
+        // `write_bytes` doesn't mark pages; mark them so `set_initial_memory` transfers them
+        // (see `AddressMap::touched_pages`).
         for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
             memory.memory.touched_pages[addr_space as usize].mark_byte_range(0, MEMORY_BLOCK_BYTES);
         }
@@ -505,9 +503,8 @@ mod tests {
         assert_eq!(expected_root, gpu_merkle_root(&ctxs));
     }
 
-    // Paged transfer: a 4-page AS with only pages 0 and 2 populated (via `set_from_sparse`), so
-    // the H2D transfer copies just those pages and zero-fills the rest. Asserts the GPU root
-    // matches the CPU root over the full image, and that paging engaged (fewer bytes copied).
+    // Paged transfer: only pages 0 and 2 of a 4-page AS are populated (via `set_from_sparse`), so
+    // the H2D copies just those. Asserts GPU root == CPU root and that paging engaged.
     #[test]
     fn test_set_initial_memory_copies_only_touched_pages() {
         const NUM_PAGES: usize = 4;
