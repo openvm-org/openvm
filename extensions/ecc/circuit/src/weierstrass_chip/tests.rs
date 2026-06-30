@@ -6,7 +6,10 @@ use halo2curves_axiom::secp256r1;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+    testing::{
+        memory::{gen_distinct_register_pointers, gen_pointer},
+        TestBuilder, TestChipHarness, VmChipTestBuilder,
+    },
     Arena, MatrixRecordArena, PreflightExecutor, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime};
@@ -224,9 +227,8 @@ mod ec_addne_tests {
         let ptr_as = RV64_REGISTER_AS as usize;
         let data_as = RV64_MEMORY_AS as usize;
 
-        let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-        let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-        let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+        let [rs1_ptr, rs2_ptr, rd_ptr] =
+            gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
         let p1_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
         let p2_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
@@ -642,8 +644,7 @@ mod ec_double_tests {
         let ptr_as = RV64_REGISTER_AS as usize;
         let data_as = RV64_MEMORY_AS as usize;
 
-        let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-        let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+        let [rs1_ptr, rd_ptr] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
         let p1_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;
         let result_base_addr = gen_pointer(rng, MEMORY_BLOCK_BYTES) as u64;

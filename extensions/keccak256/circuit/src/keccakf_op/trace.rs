@@ -13,7 +13,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    var_range::SharedVariableRangeCheckerChip, AlignedBytesBorrow, Chip, U16_BITS,
+    var_range::SharedVariableRangeCheckerChip, AlignedBytesBorrow, Chip,
 };
 use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
@@ -23,7 +23,7 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_riscv_circuit::adapters::{
-    ptr_bound_from_ptr, ptr_to_field_u16_limbs, rv64_bytes_to_u32, timed_write, tracing_read,
+    compute_pointer_carries, ptr_to_field_u16_limbs, rv64_bytes_to_u32, timed_write, tracing_read,
 };
 use openvm_stark_backend::{
     p3_field::PrimeField32,
@@ -252,10 +252,25 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                     timestamp += 1;
                 }
 
-                self.range_checker_chip.add_count(
-                    ptr_bound_from_ptr(record.buffer_ptr, self.pointer_max_bits),
-                    U16_BITS,
+                // Byte -> cell pointer conversion carry and per-block cell-offset carries, plus
+                // matching range-check counts. `record` is a stable clone, so writing the carry
+                // columns here does not alias the trace reads above.
+                let cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
+                let (conv_carry, add_carries) = compute_pointer_carries(
+                    &self.range_checker_chip,
+                    record.buffer_ptr,
+                    KECCAK_WIDTH_MEM_OPS,
+                    cell_stride,
+                    self.pointer_max_bits,
                 );
+                local.buffer_cell_carry = F::from_u32(conv_carry);
+                for (col, &add_carry) in local
+                    .buffer_word_add_carry
+                    .iter_mut()
+                    .zip(add_carries.iter())
+                {
+                    *col = F::from_u32(add_carry);
+                }
             });
         *self.shared_records.lock().unwrap() = records;
     }

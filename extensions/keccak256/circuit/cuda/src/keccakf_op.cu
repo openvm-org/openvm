@@ -6,6 +6,7 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 
 #include <cassert>
@@ -15,7 +16,6 @@
 
 using namespace keccakf_op;
 using namespace riscv;
-using openvm::U16_BITS;
 
 #define KECCAKF_OP_WRITE(FIELD, VALUE) COL_WRITE_VALUE(row, KeccakfOpCols, FIELD, VALUE)
 #define KECCAKF_OP_WRITE_ARRAY(FIELD, VALUES) COL_WRITE_ARRAY(row, KeccakfOpCols, FIELD, VALUES)
@@ -80,11 +80,20 @@ static __device__ __noinline__ void fill_keccakf_op_row(
         ts++;
     }
 
-    // Bound the high u16 cell so the low-32-bit buffer pointer fits in pointer_max_bits.
-    range_checker.add_count(
-        ptr_bound_from_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
-        U16_BITS
+    // Byte -> cell pointer conversion carry and per-block cell-offset carries, plus the matching
+    // range-check counts (mirrors KeccakfOpChip::fill_trace).
+    uint32_t cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
+    uint32_t add_carries[KECCAK_WIDTH_MEM_OPS];
+    uint32_t conv_carry = compute_pointer_carries(
+        range_checker,
+        rec.buffer_ptr,
+        pointer_max_bits,
+        KECCAK_WIDTH_MEM_OPS,
+        cell_stride,
+        add_carries
     );
+    KECCAKF_OP_WRITE(buffer_cell_carry, conv_carry);
+    KECCAKF_OP_WRITE_ARRAY(buffer_word_add_carry, add_carries);
 }
 
 // Main kernel for KeccakfOpChip trace generation

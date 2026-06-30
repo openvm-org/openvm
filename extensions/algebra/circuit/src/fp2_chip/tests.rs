@@ -7,7 +7,10 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+    testing::{
+        memory::{gen_distinct_register_pointers, gen_pointer},
+        TestBuilder, TestChipHarness, VmChipTestBuilder,
+    },
     Arena, PreflightExecutor, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bigint::utils::secp256k1_coord_prime;
@@ -148,9 +151,7 @@ fn set_and_execute_fp2<const BLOCKS: usize, const NUM_LIMBS: usize, RA>(
     let ptr_as = RV64_REGISTER_AS as usize;
     let data_as = RV64_MEMORY_AS as usize;
 
-    let rs1_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rd_ptr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let [rs1_ptr, rs2_ptr, rd_ptr] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
 
     let a_base_addr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;
     let b_base_addr = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS) as u32;

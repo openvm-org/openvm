@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "fp.h"
+#include "primitives/constants.h"
 #include "system/memory/params.cuh"
 
 namespace deferral {
@@ -29,5 +30,9 @@ inline constexpr uint8_t BABY_BEAR_ORDER_BE[F_NUM_BYTES] = {
     static_cast<uint8_t>((BABY_BEAR_ORDER >> 8) & 0xff),
     static_cast<uint8_t>(BABY_BEAR_ORDER & 0xff),
 };
+
+// Maximum AS-native cell-pointer width; mirrors
+// `openvm_circuit::system::memory::POINTER_MAX_BITS`.
+inline constexpr size_t POINTER_MAX_BITS = 31;
 
 } // namespace deferral

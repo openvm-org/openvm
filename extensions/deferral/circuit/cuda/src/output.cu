@@ -12,6 +12,7 @@
 #include "primitives/fp_array.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -105,6 +106,15 @@ template <typename T> struct DeferralOutputCols {
     // Capacity of the permutation of write_bytes and the previous row's capacity on
     // non-last rows, compression on the last row.
     T poseidon2_res[DIGEST_SIZE];
+
+    // Carry for converting the heap `input` base byte pointer (read on the first row) to AS-native
+    // u16 cell pointer limbs, plus per-block cell-offset carries.
+    T input_cell_carry;
+    T input_add_carry[OUTPUT_TOTAL_MEMORY_OPS];
+
+    // Per-row output write cell pointer limbs `[lo16, hi16]`. On write rows this equals
+    // `(output_ptr + (section_idx - 1) * DIGEST_SIZE) / 2`.
+    T write_cell_ptr[2];
 };
 
 __global__ void deferral_output_tracegen(
@@ -147,6 +157,7 @@ __global__ void deferral_output_tracegen(
     const bool is_last = section_idx + 1 == header.num_rows;
 
     Histogram count_buffer(count_ptr, num_def_circuits);
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
@@ -254,6 +265,31 @@ __global__ void deferral_output_tracegen(
         COL_WRITE_ARRAY(row, DeferralOutputCols, sponge_inputs, sponge_inputs);
 
         COL_FILL_ZERO(row, DeferralOutputCols, write_bytes_aux);
+
+        // Convert the heap `input` (rs_val) base byte pointer to AS-native u16 cell pointer limbs
+        // and emit the matching range-check counts. Mirrors the first-row branch of the host
+        // `DeferralOutputFiller`.
+        const uint32_t heap_cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
+        const uint32_t input_ptr =
+            static_cast<uint32_t>(header.rs_val[0]) |
+            (static_cast<uint32_t>(header.rs_val[1]) << RV64_BYTE_BITS) |
+            (static_cast<uint32_t>(header.rs_val[2]) << (2 * RV64_BYTE_BITS)) |
+            (static_cast<uint32_t>(header.rs_val[3]) << (3 * RV64_BYTE_BITS));
+        uint32_t add_carries[OUTPUT_TOTAL_MEMORY_OPS];
+        const uint32_t conv_carry = compute_pointer_carries(
+            range_checker,
+            input_ptr,
+            address_bits,
+            OUTPUT_TOTAL_MEMORY_OPS,
+            heap_cell_stride,
+            add_carries
+        );
+        COL_WRITE_VALUE(row, DeferralOutputCols, input_cell_carry, Fp(conv_carry));
+        COL_WRITE_ARRAY(row, DeferralOutputCols, input_add_carry, add_carries);
+
+        // The output write cell pointer is unconstrained on the first row (its constraints are
+        // gated by `is_write_row`); match the host trace, which leaves it zero.
+        COL_FILL_ZERO(row, DeferralOutputCols, write_cell_ptr);
     } else {
         const uint8_t *header_end = record_start + sizeof(DeferralOutputRecordHeader);
         const uint8_t *write_bytes_start = header_end + (section_idx - 1) * DIGEST_SIZE;
@@ -294,6 +330,27 @@ __global__ void deferral_output_tracegen(
                     static_cast<uint32_t>(aux_idx)
             );
         }
+
+        // Input-conversion carries are only populated on the first row; match the host trace,
+        // which leaves them zero on write rows.
+        COL_WRITE_VALUE(row, DeferralOutputCols, input_cell_carry, Fp::zero());
+        COL_FILL_ZERO(row, DeferralOutputCols, input_add_carry);
+
+        // Output write cell pointer for this row = `(output_ptr + (section_idx - 1) * DIGEST_SIZE)
+        // / 2`, witnessed as little-endian 16-bit cell-pointer limbs `[lo16, hi16]` and
+        // range-checked. Mirrors the write-row branch of the host `DeferralOutputFiller`.
+        const uint32_t rd_val = static_cast<uint32_t>(header.rd_val[0]) |
+                                (static_cast<uint32_t>(header.rd_val[1]) << RV64_BYTE_BITS) |
+                                (static_cast<uint32_t>(header.rd_val[2]) << (2 * RV64_BYTE_BITS)) |
+                                (static_cast<uint32_t>(header.rd_val[3]) << (3 * RV64_BYTE_BITS));
+        const uint32_t write_byte_ptr = rd_val + (section_idx - 1) * DIGEST_SIZE;
+        const uint32_t write_cell = write_byte_ptr >> 1;
+        const uint32_t write_cell_lo = write_cell & 0xffffu;
+        const uint32_t write_cell_hi = write_cell >> openvm::U16_BITS;
+        range_checker.add_count(write_cell_lo, openvm::U16_BITS);
+        range_checker.add_count(write_cell_hi, POINTER_MAX_BITS - openvm::U16_BITS);
+        const Fp write_cell_limbs[2] = {Fp(write_cell_lo), Fp(write_cell_hi)};
+        COL_WRITE_ARRAY(row, DeferralOutputCols, write_cell_ptr, write_cell_limbs);
     }
 
     Fp prev_capacity[DIGEST_SIZE];

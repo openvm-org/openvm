@@ -8,11 +8,7 @@ use openvm_circuit_primitives::{
     Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice, CpuProverError};
-use openvm_instructions::{
-    instruction::Instruction,
-    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    DEFERRAL_AS,
-};
+use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, DEFERRAL_AS};
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
@@ -39,7 +35,7 @@ use crate::{
         },
         to_byte_ptr_bits, vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus,
         ExecutionState, MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmField,
-        VmStateMut, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        VmStateMut, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, NUM_RV64_REGISTERS,
     },
     system::{
         memory::{
@@ -175,8 +171,13 @@ where
     }
 
     fn get_default_register(&mut self, increment: usize) -> usize {
+        const REGISTER_FILE_BYTES: usize = NUM_RV64_REGISTERS * size_of::<u64>();
+        if self.default_register + increment > REGISTER_FILE_BYTES {
+            self.default_register = 0;
+        }
+        let register = self.default_register;
         self.default_register += increment;
-        self.default_register - increment
+        register
     }
 
     fn get_default_pointer(&mut self, increment: usize) -> usize {
@@ -367,9 +368,6 @@ impl<F: VmField> VmChipTestBuilder<F> {
 impl<F: VmField> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
         let mut mem_config = MemoryConfig::default();
-        // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
-        // removed when tests are updated.
-        mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
         mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 0;
         Self::from_config(mem_config)
     }

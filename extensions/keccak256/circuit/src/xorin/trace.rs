@@ -11,7 +11,7 @@ use openvm_circuit::{
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::{AlignedBytesBorrow, U16_BITS};
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -19,8 +19,9 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_riscv_circuit::adapters::{
-    ptr_bound_from_ptr, ptr_to_field_u16_limbs, read_rv64_register_as_u32, rv64_bytes_to_u32,
-    tracing_read, tracing_write,
+    byte_ptr_limbs_to_cell_ptr_limbs_value, compute_block_add_carries, compute_pointer_carries,
+    ptr_to_field_u16_limbs, read_rv64_register_as_u32, rv64_bytes_to_u32, tracing_read,
+    tracing_write, u32_to_ptr_limbs,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -154,9 +155,13 @@ where
         );
         record.inner.len = rv64_bytes_to_u32(len_val);
 
-        debug_assert!(record.inner.buffer as usize + len <= (1 << self.pointer_max_bits));
-        debug_assert!(record.inner.input as usize + len < (1 << self.pointer_max_bits));
-        debug_assert!(record.inner.len < (1 << self.pointer_max_bits));
+        debug_assert!(
+            (record.inner.buffer as u64) + (len as u64) <= (1u64 << self.pointer_max_bits)
+        );
+        debug_assert!(
+            (record.inner.input as u64) + (len as u64) <= (1u64 << self.pointer_max_bits)
+        );
+        debug_assert!((record.inner.len as u64) < (1u64 << self.pointer_max_bits));
 
         // read buffer
         for idx in 0..num_reads {
@@ -233,9 +238,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         trace_row.instruction.buffer_reg_ptr = F::from_u32(record.rd_ptr);
         trace_row.instruction.input_reg_ptr = F::from_u32(record.rs1_ptr);
         trace_row.instruction.len_reg_ptr = F::from_u32(record.rs2_ptr);
-        trace_row.instruction.buffer_ptr = F::from_u32(record.buffer);
         trace_row.instruction.buffer_ptr_limbs = ptr_to_field_u16_limbs(record.buffer);
-        trace_row.instruction.input_ptr = F::from_u32(record.input);
         trace_row.instruction.input_ptr_limbs = ptr_to_field_u16_limbs(record.input);
         trace_row.instruction.len = F::from_u32(record.len);
         trace_row.instruction.len_limb = F::from_u8(record.len as u8);
@@ -309,9 +312,67 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             timestamp += 1;
         }
 
-        for ptr in [record.buffer, record.input] {
-            self.range_checker_chip
-                .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
+        // Byte -> cell pointer conversion carries and per-block cell-offset carries, plus matching
+        // range-check counts. `record` is a stable clone, so writing the carry columns here does
+        // not alias the trace reads above.
+        //
+        // The AIR gates the per-block cell-offset add by `is_enabled` (degree 1) rather than the
+        // per-block `should_read`/`should_write` (degree 2) to stay within the max constraint
+        // degree. So add carries (and their range checks) are computed for *every* block, padding
+        // or not, matching the AIR's `is_enabled`-gated `eval_add_const_u16_limbs` for all blocks.
+        let cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
+        let (buffer_conv, buffer_add) = compute_pointer_carries(
+            &self.range_checker_chip,
+            record.buffer,
+            KECCAK_RATE_MEM_OPS,
+            cell_stride,
+            self.pointer_max_bits,
+        );
+        trace_row.mem_oc.buffer_cell_carry = F::from_u32(buffer_conv);
+        for (col, &add_carry) in trace_row
+            .mem_oc
+            .buffer_read_add_carry
+            .iter_mut()
+            .zip(buffer_add.iter())
+        {
+            *col = F::from_u32(add_carry);
+        }
+        let (input_conv, input_add) = compute_pointer_carries(
+            &self.range_checker_chip,
+            record.input,
+            KECCAK_RATE_MEM_OPS,
+            cell_stride,
+            self.pointer_max_bits,
+        );
+        trace_row.mem_oc.input_cell_carry = F::from_u32(input_conv);
+        for (col, &add_carry) in trace_row
+            .mem_oc
+            .input_read_add_carry
+            .iter_mut()
+            .zip(input_add.iter())
+        {
+            *col = F::from_u32(add_carry);
+        }
+        // The write reuses the converted `buffer` base cell pointer; only register the per-block
+        // write add carries (and their range checks). The base conversion carry is already filled
+        // above for the buffer read group.
+        {
+            let byte_limbs = u32_to_ptr_limbs(record.buffer);
+            let (_conv_carry, base_cell) = byte_ptr_limbs_to_cell_ptr_limbs_value(byte_limbs);
+            let buffer_write_add = compute_block_add_carries(
+                &self.range_checker_chip,
+                base_cell.map(|limb| limb as u16),
+                KECCAK_RATE_MEM_OPS,
+                cell_stride,
+            );
+            for (col, &add_carry) in trace_row
+                .mem_oc
+                .buffer_write_add_carry
+                .iter_mut()
+                .zip(buffer_write_add.iter())
+            {
+                *col = F::from_u32(add_carry);
+            }
         }
     }
 }

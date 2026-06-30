@@ -54,6 +54,25 @@ fn test_memory_write(its: usize) {
     tester.simple_test().expect("Verification failed");
 }
 
+#[test]
+fn test_memory_write_max_address() {
+    let mut rng = create_seeded_rng();
+    let mem_config = MemoryConfig::default();
+    // The default config gives RV64_MEMORY_AS its full 2^32-byte capacity (2^31 u16 cells).
+    // Touch the last cell block so the boundary/merkle chips process the top of the address range.
+    let last_block = mem_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells - BLOCK_FE_WIDTH;
+    let mut tester = VmChipTestBuilder::<F>::from_config(mem_config);
+    let values: [F; BLOCK_FE_WIDTH] =
+        array::from_fn(|_| F::from_u32(rng.random_range(0..u16::MAX as u32 + 1)));
+    tester.write::<BLOCK_FE_WIDTH>(RV64_MEMORY_AS as usize, last_block, values);
+    assert_eq!(
+        tester.read::<BLOCK_FE_WIDTH>(RV64_MEMORY_AS as usize, last_block),
+        values
+    );
+    let tester = tester.build().finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
 #[cfg(feature = "cuda")]
 #[test_case(1000)]
 #[test_case(0)]

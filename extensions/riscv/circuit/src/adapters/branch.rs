@@ -25,7 +25,9 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use crate::adapters::{byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_read_u16};
+use crate::adapters::{
+    byte_ptr_to_u16_ptr_value, reg_byte_ptr_to_cell_ptr_limbs, tracing_read_u16,
+};
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
@@ -71,7 +73,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rs1_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs1_ptr),
                 ),
                 ctx.reads[0].clone(),
                 timestamp_pp(),
@@ -83,7 +85,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BranchAdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local.rs2_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local.rs2_ptr),
                 ),
                 ctx.reads[1].clone(),
                 timestamp_pp(),

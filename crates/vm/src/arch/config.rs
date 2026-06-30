@@ -86,13 +86,21 @@ pub const BLOCK_FE_WIDTH: usize = 4;
 /// Bytes per memory-bus block.
 pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 
-/// Default byte-pointer bit width.
+/// Default RV64 *byte*-pointer bit width.
+///
+/// RV64 byte addresses span 2^32 bytes, so byte pointers are 32 bits wide. This is distinct from
+/// [`POINTER_MAX_BITS`] (31), the AS-native u16-*cell* pointer width: 2^32 bytes = 2^31 u16 cells.
 pub const BYTE_POINTER_MAX_BITS: usize = to_byte_ptr_bits(POINTER_MAX_BITS);
+
+const _: () = assert!(BYTE_POINTER_MAX_BITS == 32);
+
+/// Default RV64 byte-addressable memory capacity (2^32 bytes).
+pub const DEFAULT_RV64_MEMORY_BYTE_CAPACITY: usize = 1usize << BYTE_POINTER_MAX_BITS;
 
 /// Byte count for `RV64_MEMORY_AS`.
 // TODO: make executor debug bounds use `MemoryConfig::pointer_max_bits` once
 // execution state carries the memory config.
-pub const RV64_MEMORY_BYTES: usize = 1 << BYTE_POINTER_MAX_BITS;
+pub const RV64_MEMORY_BYTES: usize = DEFAULT_RV64_MEMORY_BYTE_CAPACITY;
 
 /// Number of registers in the RV64 register file.
 pub const NUM_RV64_REGISTERS: usize = 32;

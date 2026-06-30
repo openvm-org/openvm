@@ -2,7 +2,7 @@ use air::{MemoryDummyAir, MemoryDummyChip};
 use rand::Rng;
 
 use crate::{
-    arch::{MemoryCellType, VmField, BLOCK_FE_WIDTH, U16_CELL_SIZE},
+    arch::{MemoryCellType, VmField, BLOCK_FE_WIDTH, NUM_RV64_REGISTERS, U16_CELL_SIZE},
     system::memory::{
         offline_checker::pack_u8_block_value, online::TracingMemory, MemoryController,
     },
@@ -149,6 +149,32 @@ pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
 where
     R: Rng + ?Sized,
 {
-    const MAX_MEMORY: usize = 1 << 29;
+    const MAX_MEMORY: usize = 1 << 31;
     rng.random_range(0..MAX_MEMORY - len) / len * len
+}
+
+pub fn gen_register_pointer<R>(rng: &mut R, len: usize) -> usize
+where
+    R: Rng + ?Sized,
+{
+    rng.random_range(0..NUM_RV64_REGISTERS * size_of::<u64>() - len) / len * len
+}
+
+/// Generates `N` pairwise-distinct `len`-aligned register pointers. Use this when a test writes
+/// several register operands independently: the register file only has 32 slots, so independent
+/// draws collide often enough to corrupt the expected values.
+pub fn gen_distinct_register_pointers<R, const N: usize>(rng: &mut R, len: usize) -> [usize; N]
+where
+    R: Rng + ?Sized,
+{
+    let mut ptrs = [0usize; N];
+    for i in 0..N {
+        ptrs[i] = loop {
+            let ptr = gen_register_pointer(rng, len);
+            if !ptrs[..i].contains(&ptr) {
+                break ptr;
+            }
+        };
+    }
+    ptrs
 }

@@ -5,7 +5,7 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterTraceExecutor, AdapterTraceFiller, EmptyAdapterCoreLayout,
         ExecutionError, PreflightExecutor, RecordArena, TraceFiller, VmField, VmStateMut,
-        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, U16_CELL_SIZE,
     },
     system::memory::{
         offline_checker::{
@@ -17,7 +17,8 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, AlignedBytesBorrow,
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
+    AlignedBytesBorrow,
 };
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
@@ -28,7 +29,9 @@ use openvm_instructions::{
         RV64_WORD_NUM_LIMBS,
     },
 };
-use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, tracing_read, tracing_write};
+use openvm_riscv_circuit::adapters::{
+    compute_pointer_carries, rv64_bytes_to_u32, tracing_read, tracing_write,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::accumulator_ptrs;
@@ -268,6 +271,7 @@ pub struct DeferralCallAdapterExecutor;
 #[derive(Clone, derive_new::new)]
 pub struct DeferralCallAdapterFiller {
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     address_bits: usize,
 }
 
@@ -432,6 +436,28 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
             }
         }
 
+        // Byte -> cell pointer conversion carries and per-block cell-offset carries for the heap
+        // `input`/`output` pointers, plus matching range-check counts. Must read the record values
+        // here before any column overwrites; carry columns are written at the very end.
+        let heap_cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
+        let (input_conv, input_add) = compute_pointer_carries(
+            &self.range_checker_chip,
+            record.rs_val,
+            COMMIT_MEMORY_OPS,
+            heap_cell_stride,
+            self.address_bits,
+        );
+        let (output_conv, output_add) = compute_pointer_carries(
+            &self.range_checker_chip,
+            record.rd_val,
+            OUTPUT_TOTAL_MEMORY_OPS,
+            heap_cell_stride,
+            self.address_bits,
+        );
+
+        // The DEFERRAL_AS accumulator cell pointers are bounded below 2^16 (see the static assert
+        // in `super`), so they need no limb decomposition, range checks, or add-carry columns.
+
         // Timestamps in AIR are assigned in strict sequence starting from
         // `from_state.timestamp`; mirror that exact sequence in reverse here.
         let timestamp_delta =
@@ -511,5 +537,23 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
         adapter_row.rd_ptr = record.rd_ptr;
         adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
         adapter_row.from_state.pc = F::from_u32(record.from_pc);
+
+        // Pointer-conversion / block-offset carry columns (computed above, after all record reads).
+        adapter_row.input_cell_carry = F::from_u32(input_conv);
+        adapter_row.output_cell_carry = F::from_u32(output_conv);
+        for (col, &c) in adapter_row
+            .input_commit_add_carry
+            .iter_mut()
+            .zip(input_add.iter())
+        {
+            *col = F::from_u32(c);
+        }
+        for (col, &c) in adapter_row
+            .output_add_carry
+            .iter_mut()
+            .zip(output_add.iter())
+        {
+            *col = F::from_u32(c);
+        }
     }
 }

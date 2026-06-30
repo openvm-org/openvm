@@ -3,6 +3,7 @@
 #include "primitives/execution.h"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -14,9 +15,16 @@ struct Rv64VecHeapBranchAdapterCols {
 
     T rs_ptr[NUM_READS];
     T rs_val[NUM_READS][RV64_PTR_U16_LIMBS];
+
+    // Carry for converting each base byte pointer to AS-native u16 *cell* pointer limbs.
+    T rs_cell_carry[NUM_READS];
+    // Per-block carry for adding the cell offset `j * (MEMORY_BLOCK_BYTES / U16_CELL_SIZE)` to each
+    // base cell pointer (block `j`'s carry into the high cell limb).
+    T reads_add_carry[NUM_READS][BLOCKS_PER_READ];
+
     MemoryReadAuxCols<T> rs_read_aux[NUM_READS];
 
-    MemoryReadAuxCols<T> heap_read_aux[NUM_READS][BLOCKS_PER_READ];
+    MemoryReadAuxCols<T> reads_aux[NUM_READS][BLOCKS_PER_READ];
 };
 
 template <size_t NUM_READS, size_t BLOCKS_PER_READ>
@@ -28,7 +36,7 @@ struct Rv64VecHeapBranchAdapterRecord {
     uint32_t rs_vals[NUM_READS];
 
     MemoryReadAuxRecord rs_read_aux[NUM_READS];
-    MemoryReadAuxRecord heap_read_aux[NUM_READS][BLOCKS_PER_READ];
+    MemoryReadAuxRecord reads_aux[NUM_READS][BLOCKS_PER_READ];
 };
 
 template <size_t NUM_READS, size_t BLOCKS_PER_READ>
@@ -54,12 +62,26 @@ struct Rv64VecHeapBranchAdapter {
     ) {
         static_assert(NUM_READS == 1 || NUM_READS == 2);
 
+        // Byte -> cell pointer conversion carries and per-block cell-offset carries, plus matching
+        // range-check counts. Mirrors the host filler in vec_heap_branch.rs.
+        const uint32_t cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
+
 #pragma unroll
         for (size_t i = 0; i < NUM_READS; i++) {
-            range_checker.add_count(
-                ptr_bound_from_high_u16(uint16_t(record.rs_vals[i] >> U16_BITS), pointer_max_bits),
-                U16_BITS
+            uint32_t add_carries[BLOCKS_PER_READ];
+            uint32_t conv_carry = compute_pointer_carries(
+                range_checker,
+                record.rs_vals[i],
+                pointer_max_bits,
+                BLOCKS_PER_READ,
+                cell_stride,
+                add_carries
             );
+            COL_WRITE_VALUE(row, Cols, rs_cell_carry[i], conv_carry);
+#pragma unroll
+            for (size_t j = 0; j < BLOCKS_PER_READ; j++) {
+                COL_WRITE_VALUE(row, Cols, reads_add_carry[i][j], add_carries[j]);
+            }
         }
 
         uint32_t timestamp = record.from_timestamp + NUM_READS + NUM_READS * BLOCKS_PER_READ;
@@ -68,8 +90,8 @@ struct Rv64VecHeapBranchAdapter {
             for (int j = BLOCKS_PER_READ - 1; j >= 0; j--) {
                 timestamp--;
                 mem_helper.fill(
-                    row.slice_from(COL_INDEX(Cols, heap_read_aux[i][j])),
-                    record.heap_read_aux[i][j].prev_timestamp,
+                    row.slice_from(COL_INDEX(Cols, reads_aux[i][j])),
+                    record.reads_aux[i][j].prev_timestamp,
                     timestamp
                 );
             }

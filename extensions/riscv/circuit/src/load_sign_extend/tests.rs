@@ -3,8 +3,8 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS,
+            memory::gen_distinct_register_pointers, TestBuilder, TestChipHarness,
+            VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
         },
         Arena, ExecutionBridge, PreflightExecutor,
     },
@@ -153,15 +153,15 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         _ => unreachable!(),
     };
 
-    let ptr_val: u32 = rng.random_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
+    let ptr_val: u32 =
+        (rng.random_range(0..(1u64 << (tester.address_bits() - alignment))) << alignment) as u32;
     // rs1 is 8 bytes, but only low 4 bytes used for address
     let rs1 = rs1.unwrap_or_else(|| {
         let low4 = ptr_val.wrapping_sub(imm_ext).to_le_bytes();
         [low4[0], low4[1], low4[2], low4[3], 0, 0, 0, 0]
     });
     let ptr_val = imm_ext.wrapping_add(rv64_bytes_to_u32(rs1));
-    let a = gen_pointer(rng, 8);
-    let b = gen_pointer(rng, 8);
+    let [a, b] = gen_distinct_register_pointers(rng, 8);
 
     let shift_amount = ptr_val % 8;
     tester.write_bytes(1, b, rs1.map(F::from_u8));

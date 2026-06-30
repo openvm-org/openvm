@@ -2,7 +2,9 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+        testing::{
+            memory::gen_distinct_register_pointers, TestBuilder, TestChipHarness, VmChipTestBuilder,
+        },
         Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
@@ -108,8 +110,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     });
 
     let imm = imm.unwrap_or(rng.random_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
-    let rs1 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
-    let rs2 = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
+    let [rs1, rs2] = gen_distinct_register_pointers(rng, RV64_REGISTER_NUM_LIMBS);
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_u8));
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_u8));
 

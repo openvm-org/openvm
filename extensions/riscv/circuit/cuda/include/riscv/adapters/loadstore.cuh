@@ -19,8 +19,12 @@ template <typename T> struct Rv64LoadStoreAdapterCols {
     MemoryReadAuxCols<T> read_data_aux;
     T imm;
     T imm_sign;
-    /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
+    /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition.
+    /// These are *byte*-pointer limbs of `rs1 + imm` (each < 2^16).
     T mem_ptr_limbs[2];
+    /// Carry bit (`mem_ptr_limbs[1] & 1`) used to convert the aligned heap *byte* pointer into
+    /// AS-native u16 *cell* pointer limbs.
+    T mem_ptr_carry;
     T mem_as;
     /// Timestamp aux for the write; previous data is provided by the core chip.
     MemoryBaseAuxCols<T> write_base_aux;
@@ -47,6 +51,8 @@ struct Rv64LoadStoreAdapterRecord {
     bool imm_sign;
 
     uint8_t mem_as;
+    /// Whether this is a load (heap access is the read) vs a store (heap access is the write).
+    bool is_load;
 
     uint32_t write_prev_timestamp;
 };
@@ -101,10 +107,21 @@ struct Rv64LoadStoreAdapter {
         uint32_t ptr_limbs[RV64_PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
         COL_WRITE_ARRAY(row, Rv64LoadStoreAdapterCols, mem_ptr_limbs, ptr_limbs);
+
+        // Convert the aligned heap byte pointer to AS-native u16 cell pointer limbs. The carry
+        // depends only on the high byte limb's parity; only `cell_hi` is range-checked (hi_bits).
+        uint32_t shift = ptr & (uint32_t(RV64_REGISTER_NUM_LIMBS) - 1);
+        uint32_t aligned_byte_limbs[RV64_PTR_U16_LIMBS];
+        ptr_to_u16_limbs(aligned_byte_limbs, ptr - shift);
+        uint32_t mem_ptr_carry = aligned_byte_limbs[1] & 1u;
+        uint32_t heap_cell_hi = aligned_byte_limbs[1] >> 1;
+        COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, mem_ptr_carry, mem_ptr_carry);
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, mem_as, record.mem_as);
 
+        uint32_t hi_bits = uint32_t(pointer_max_bits) - U16_CELL_SIZE_BITS - U16_BITS;
+        // Alignment check: `(mem_ptr_limbs[0] - shift) / 8 < 2^13`.
         range_checker.add_count(ptr_limbs[0] >> 3, U16_BITS - 3);
-        range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
+        range_checker.add_count(heap_cell_hi, hi_bits);
 
         COL_WRITE_VALUE(row, Rv64LoadStoreAdapterCols, needs_write, needs_write);
         if (needs_write) {

@@ -9,8 +9,8 @@ use openvm_circuit::arch::{
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
+            memory::gen_distinct_register_pointers, TestBuilder, TestChipHarness,
+            VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
         Arena, ExecutionBridge, PreflightExecutor,
     },
@@ -162,9 +162,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         RV64_BYTE_BITS,
     >(rng));
 
-    let rs1 = gen_pointer(rng, 8);
-    let rs2 = gen_pointer(rng, 8);
-    let rd = gen_pointer(rng, 8);
+    let [rs1, rs2, rd] = gen_distinct_register_pointers(rng, 8);
 
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_u32));
     tester.write_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_u32));

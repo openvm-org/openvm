@@ -3,10 +3,10 @@ use std::sync::Arc;
 use openvm_circuit::arch::{
     deferral::{DeferralResult, DeferralState},
     testing::{
-        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+        memory::{gen_distinct_register_pointers, gen_pointer},
+        TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    to_byte_ptr_bits, Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor,
-    MEMORY_BLOCK_BYTES,
+    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -28,7 +28,9 @@ use {
     super::{DeferralOutputChipGpu, DeferralOutputRecordMut},
     crate::{count::DeferralCircuitCountChipGpu, poseidon2::DeferralPoseidon2ChipGpu},
     openvm_circuit::arch::{
-        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
+        testing::{
+            default_bitwise_lookup_bus, dummy_range_checker, GpuChipTestBuilder, GpuTestChipHarness,
+        },
         DenseRecordArena,
     },
     openvm_cuda_common::d_buffer::DeviceBuffer,
@@ -98,15 +100,7 @@ struct CudaHarnessBundle {
 
 fn test_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
-    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << config.pointer_max_bits;
     config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
-    config
-}
-
-fn test_memory_config_cpu() -> MemoryConfig {
-    let mut config = test_memory_config();
-    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells =
-        1 << to_byte_ptr_bits(config.pointer_max_bits);
     config
 }
 
@@ -155,8 +149,7 @@ fn set_and_execute_output<RA, E>(
     RA: Arena,
     E: PreflightExecutor<F, RA>,
 {
-    let rd = gen_pointer(rng, MEMORY_BLOCK_BYTES);
-    let rs = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let [rd, rs] = gen_distinct_register_pointers(rng, MEMORY_BLOCK_BYTES);
     let output_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let input_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = rng.random_range(0..num_deferrals);
@@ -226,6 +219,7 @@ fn create_cpu_harness(tester: &VmChipTestBuilder<F>, num_deferrals: usize) -> Cp
         count_bus,
         poseidon2_bus,
         bitwise_bus,
+        tester.range_checker().bus(),
         tester.address_bits(),
     );
     let executor = DeferralOutputExecutor::new();
@@ -234,6 +228,7 @@ fn create_cpu_harness(tester: &VmChipTestBuilder<F>, num_deferrals: usize) -> Cp
             count_chip.clone(),
             poseidon2_chip.clone(),
             bitwise_chip.clone(),
+            tester.range_checker(),
             tester.address_bits(),
         ),
         tester.memory_helper(),
@@ -269,6 +264,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
         count_bus,
         poseidon2_bus,
         bitwise_bus,
+        tester.cpu_range_checker().bus(),
         tester.address_bits(),
     );
     let executor = DeferralOutputExecutor::new();
@@ -277,6 +273,9 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
             count_chip_cpu,
             poseidon2_chip_cpu,
             dummy_bitwise_chip,
+            // Dummy range checker: the GPU kernel already emits the AS-pointer range-check counts;
+            // using the real (hybrid) range checker here would double-count them.
+            dummy_range_checker(tester.cpu_range_checker().bus()),
             tester.address_bits(),
         ),
         tester.dummy_memory_helper(),
@@ -319,7 +318,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder, num_deferrals: usize) -> Cud
 #[test]
 fn rand_deferral_output_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config_cpu());
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
     let CpuHarnessBundle {
         mut harness,
         bitwise,
@@ -367,7 +366,7 @@ fn rand_deferral_output_test() {
 #[test]
 fn deferral_output_non_first_row_canonicity_aux_cleared_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config_cpu());
+    let mut tester = VmChipTestBuilder::<F>::from_config(test_memory_config());
     let CpuHarnessBundle {
         mut harness,
         bitwise,
@@ -382,8 +381,7 @@ fn deferral_output_non_first_row_canonicity_aux_cleared_test() {
     // columns the filler skips (the bug under test) retain this value.
     harness.arena.trace_buffer.fill(F::from_u32(0xdead));
 
-    let rd = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
-    let rs = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
+    let [rd, rs] = gen_distinct_register_pointers(&mut rng, MEMORY_BLOCK_BYTES);
     let output_ptr = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
     let input_ptr = gen_pointer(&mut rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = 0;

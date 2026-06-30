@@ -25,7 +25,7 @@ use openvm_cuda_common::{
     common::get_device,
     stream::{device_synchronize, CudaStream, GpuDeviceCtx, StreamGuard},
 };
-use openvm_instructions::{program::PC_BITS, riscv::RV64_REGISTER_AS};
+use openvm_instructions::program::PC_BITS;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
@@ -55,7 +55,7 @@ use crate::{
         },
         to_byte_ptr_bits, Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
         MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmStateMut, BLOCK_FE_WIDTH,
-        MEMORY_BLOCK_BYTES,
+        MEMORY_BLOCK_BYTES, NUM_RV64_REGISTERS,
     },
     system::{
         cuda::poseidon2::Poseidon2PeripheryChipGPU,
@@ -213,8 +213,13 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     }
 
     fn get_default_register(&mut self, increment: usize) -> usize {
+        const REGISTER_FILE_BYTES: usize = NUM_RV64_REGISTERS * size_of::<u64>();
+        if self.default_register + increment > REGISTER_FILE_BYTES {
+            self.default_register = 0;
+        }
+        let register = self.default_register;
         self.default_register += increment;
-        self.default_register - increment
+        register
     }
 
     fn get_default_pointer(&mut self, increment: usize) -> usize {
@@ -269,11 +274,7 @@ pub struct GpuChipTestBuilder {
 
 impl Default for GpuChipTestBuilder {
     fn default() -> Self {
-        let mut mem_config = MemoryConfig::default();
-        // Tests generate register pointers across the full AS-native pointer range.
-        mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells =
-            1 << mem_config.pointer_max_bits;
-        Self::new(mem_config, default_var_range_checker_bus())
+        Self::new(MemoryConfig::default(), default_var_range_checker_bus())
     }
 }
 

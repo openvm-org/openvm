@@ -12,6 +12,7 @@
 #include "primitives/fp_array.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "riscv-adapters/pointer_conv.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 
@@ -206,6 +207,14 @@ template <typename T> struct DeferralCallAdapterCols {
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> output_commit_and_len_aux[OUTPUT_TOTAL_MEMORY_OPS];
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> new_input_acc_aux[DIGEST_F_MEMORY_OPS];
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> new_output_acc_aux[DIGEST_F_MEMORY_OPS];
+
+    // Carries for converting the heap `input`/`output` base byte pointers to AS-native u16 cell
+    // pointer limbs, plus per-block cell-offset carries. The DEFERRAL_AS accumulator pointers are
+    // bounded below 2^16 and need no carry/decomposition columns.
+    T input_cell_carry;
+    T output_cell_carry;
+    T input_commit_add_carry[COMMIT_MEMORY_OPS];
+    T output_add_carry[OUTPUT_TOTAL_MEMORY_OPS];
 };
 
 __device__ __forceinline__ void deferral_call_adapter_tracegen(
@@ -213,6 +222,7 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
     const DeferralCallAdapterRecord<Fp> &record,
     BitwiseOperationLookup &bitwise_buffer,
     MemoryAuxColsFactory &mem_helper,
+    VariableRangeChecker &range_checker,
     const size_t address_bits
 ) {
     const uint32_t limb_shift_bits = RV64_BYTE_BITS * RV64_WORD_NUM_LIMBS - address_bits;
@@ -315,6 +325,49 @@ __device__ __forceinline__ void deferral_call_adapter_tracegen(
         );
         mem_helper.fill(aux_row, record.new_output_acc_aux[i].prev_timestamp, timestamp++);
     }
+
+    // Convert the heap `input` (rs_val) and `output` (rd_val) base byte pointers to AS-native u16
+    // cell pointer limbs and emit the matching range-check counts. Mirrors the per-block carry
+    // computation in the host `DeferralCallAdapterFiller`.
+    const uint32_t heap_cell_stride = MEMORY_BLOCK_BYTES / U16_CELL_SIZE;
+
+    {
+        const uint32_t input_ptr =
+            static_cast<uint32_t>(record.rs_val[0]) |
+            (static_cast<uint32_t>(record.rs_val[1]) << RV64_BYTE_BITS) |
+            (static_cast<uint32_t>(record.rs_val[2]) << (2 * RV64_BYTE_BITS)) |
+            (static_cast<uint32_t>(record.rs_val[3]) << (3 * RV64_BYTE_BITS));
+        uint32_t add_carries[COMMIT_MEMORY_OPS];
+        const uint32_t conv_carry = compute_pointer_carries(
+            range_checker,
+            input_ptr,
+            address_bits,
+            COMMIT_MEMORY_OPS,
+            heap_cell_stride,
+            add_carries
+        );
+        COL_WRITE_VALUE(row, DeferralCallAdapterCols, input_cell_carry, Fp(conv_carry));
+        COL_WRITE_ARRAY(row, DeferralCallAdapterCols, input_commit_add_carry, add_carries);
+    }
+
+    {
+        const uint32_t output_ptr =
+            static_cast<uint32_t>(record.rd_val[0]) |
+            (static_cast<uint32_t>(record.rd_val[1]) << RV64_BYTE_BITS) |
+            (static_cast<uint32_t>(record.rd_val[2]) << (2 * RV64_BYTE_BITS)) |
+            (static_cast<uint32_t>(record.rd_val[3]) << (3 * RV64_BYTE_BITS));
+        uint32_t add_carries[OUTPUT_TOTAL_MEMORY_OPS];
+        const uint32_t conv_carry = compute_pointer_carries(
+            range_checker,
+            output_ptr,
+            address_bits,
+            OUTPUT_TOTAL_MEMORY_OPS,
+            heap_cell_stride,
+            add_carries
+        );
+        COL_WRITE_VALUE(row, DeferralCallAdapterCols, output_cell_carry, Fp(conv_carry));
+        COL_WRITE_ARRAY(row, DeferralCallAdapterCols, output_add_carry, add_carries);
+    }
 }
 
 // =========================== COMBINED ===========================
@@ -356,6 +409,7 @@ __global__ void deferral_call_tracegen(
 
     DeferralCallRecord<Fp> record = records[row_idx];
     Histogram count_buffer(count_ptr, num_def_circuits);
+    VariableRangeChecker range_checker(range_checker_ptr, range_checker_num_bins);
     MemoryAuxColsFactory mem_helper(
         VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
     );
@@ -364,7 +418,9 @@ __global__ void deferral_call_tracegen(
         poseidon2_records, poseidon2_counts, poseidon2_idx, poseidon2_capacity
     );
 
-    deferral_call_adapter_tracegen(row, record.adapter, bitwise_buffer, mem_helper, address_bits);
+    deferral_call_adapter_tracegen(
+        row, record.adapter, bitwise_buffer, mem_helper, range_checker, address_bits
+    );
     deferral_call_core_tracegen(
         row.slice_from(COL_INDEX(DeferralCallCols, core)),
         record.core,

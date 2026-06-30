@@ -10,16 +10,17 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, CustomBorrow, ExecutionError, MultiRowLayout, MultiRowMetadata,
         PreflightExecutor, RecordArena, SizedRecord, TraceFiller, VmField, VmStateMut,
-        MEMORY_BLOCK_BYTES,
+        MEMORY_BLOCK_BYTES, U16_CELL_SIZE,
     },
     system::memory::{
         offline_checker::{pack_u8_block_bytes, MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
         online::TracingMemory,
-        MemoryAuxColsFactory,
+        MemoryAuxColsFactory, POINTER_MAX_BITS,
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, AlignedBytesBorrow,
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
+    AlignedBytesBorrow, U16_BITS,
 };
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
@@ -31,7 +32,8 @@ use openvm_instructions::{
     },
 };
 use openvm_riscv_circuit::adapters::{
-    memory_read, read_rv64_register_as_u32, rv64_bytes_to_u32, tracing_read, tracing_write,
+    byte_ptr_to_u16_ptr_value, compute_pointer_carries, memory_read, read_rv64_register_as_u32,
+    rv64_bytes_to_u32, tracing_read, tracing_write, u32_to_ptr_limbs,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
@@ -152,6 +154,7 @@ pub struct DeferralOutputFiller<F: VmField> {
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     address_bits: usize,
 }
 
@@ -379,6 +382,23 @@ where
                             cols.output_commit_and_len_aux[chunk_idx].as_mut(),
                         );
                     }
+
+                    // Byte -> cell pointer conversion carry and per-block cell-offset carries for
+                    // the `input` base pointer (read on the first row), plus matching range checks.
+                    let heap_cell_stride = (MEMORY_BLOCK_BYTES / U16_CELL_SIZE) as u32;
+                    let (input_conv, input_add) = compute_pointer_carries(
+                        &self.range_checker_chip,
+                        header.rs_val,
+                        OUTPUT_TOTAL_MEMORY_OPS,
+                        heap_cell_stride,
+                        self.address_bits,
+                    );
+                    cols.input_cell_carry = F::from_u32(input_conv);
+                    for (carry_col, &add_carry) in
+                        cols.input_add_carry.iter_mut().zip(input_add.iter())
+                    {
+                        *carry_col = F::from_u32(add_carry);
+                    }
                 } else {
                     mem_helper.fill_zero(cols.rd_aux.as_mut());
                     mem_helper.fill_zero(cols.rs_aux.as_mut());
@@ -432,6 +452,18 @@ where
                             cols.write_bytes_aux[chunk_idx].as_mut(),
                         );
                     }
+
+                    // Output write *cell* pointer for this row =
+                    // `(output_ptr + (section_idx - 1) * DIGEST_SIZE) / 2`, witnessed as
+                    // little-endian 16-bit cell-pointer limbs `[lo16, hi16]` and range-checked.
+                    let write_byte_ptr = header.rd_val + ((row_idx - 1) * DIGEST_SIZE) as u32;
+                    let write_cell_ptr = byte_ptr_to_u16_ptr_value(write_byte_ptr);
+                    let write_cell_limbs = u32_to_ptr_limbs(write_cell_ptr);
+                    self.range_checker_chip
+                        .add_count(write_cell_limbs[0], U16_BITS);
+                    self.range_checker_chip
+                        .add_count(write_cell_limbs[1], POINTER_MAX_BITS - U16_BITS);
+                    cols.write_cell_ptr = write_cell_limbs.map(F::from_u32);
                 }
                 cols.poseidon2_res = current_poseidon2_res;
             }

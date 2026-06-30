@@ -39,9 +39,10 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
-    rv64_address_add_imm, sign_extend_imm16, try_rv64_bytes_to_u32, RV64_PTR_BITS,
-    RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+    byte_ptr_limbs_to_cell_ptr_limbs_value, cell_ptr_hi_bits,
+    eval_byte_ptr_limbs_to_u16_cell_ptr_limbs, expand_to_rv64_block, ptr_to_field_u16_limbs,
+    ptr_to_u16_limbs, reg_byte_ptr_to_cell_ptr_limbs, rv64_address_add_imm, sign_extend_imm16,
+    try_rv64_bytes_to_u32, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
 use crate::adapters::{memory_read, timed_write, tracing_read};
 
@@ -95,8 +96,12 @@ pub struct Rv64LoadStoreAdapterCols<T> {
     pub read_data_aux: MemoryReadAuxCols<T>,
     pub imm: T,
     pub imm_sign: T,
-    /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition
+    /// mem_ptr is the intermediate memory pointer limbs, needed to check the correct addition.
+    /// These are *byte*-pointer limbs of `rs1 + imm` (each < 2^16).
     pub mem_ptr_limbs: [T; 2],
+    /// Carry bit (`mem_ptr_limbs[1] & 1`) used to convert the aligned heap *byte* pointer into
+    /// AS-native u16 *cell* pointer limbs. See `eval_byte_ptr_limbs_to_u16_cell_ptr_limbs`.
+    pub mem_ptr_carry: T,
     pub mem_as: T,
     /// Timestamp aux for the write; previous data is provided by the core chip.
     pub write_base_aux: MemoryBaseAuxCols<T>,
@@ -144,9 +149,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
 
         let is_load = ctx.instruction.is_load;
         let is_valid = ctx.instruction.is_valid;
-        let load_shift_amount = ctx.instruction.load_shift_amount;
-        let store_shift_amount = ctx.instruction.store_shift_amount;
-        let shift_amount = load_shift_amount.clone() + store_shift_amount.clone();
+        let load_shift_amount: AB::Expr = ctx.instruction.load_shift_amount;
+        let store_shift_amount: AB::Expr = ctx.instruction.store_shift_amount;
+        let shift_amount = load_shift_amount + store_shift_amount;
 
         let write_count = local_cols.needs_write;
 
@@ -169,7 +174,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_REGISTER_AS),
-                    byte_ptr_to_u16_ptr::<AB>(local_cols.rs1_ptr),
+                    reg_byte_ptr_to_cell_ptr_limbs::<AB>(local_cols.rs1_ptr),
                 ),
                 rs1_data,
                 timestamp_pp(),
@@ -196,24 +201,18 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             .when(is_valid.clone())
             .assert_eq(carry, local_cols.imm_sign);
 
-        // preventing mem_ptr overflow
+        // Alignment: the (shifted) heap byte pointer is 8-byte aligned, i.e.
+        // `(mem_ptr_limbs[0] - shift_amount) / 8 < 2^13`, which also implies
+        // `mem_ptr_limbs[0] - shift_amount < 2^16`. (The high byte limb `mem_ptr_limbs[1]` is
+        // bounded by the cell-pointer range checks below, via whichever of read/write is the heap
+        // access.)
         self.range_bus
             .range_check(
-                // (limb[0] - shift_amount) / 8 < 2^13 => limb[0] - shift_amount < 2^16
-                (local_cols.mem_ptr_limbs[0] - shift_amount)
+                (local_cols.mem_ptr_limbs[0] - shift_amount.clone())
                     * AB::F::from_u32(RV64_REGISTER_NUM_LIMBS as u32).inverse(),
                 U16_BITS - 3,
             )
             .eval(builder, is_valid.clone());
-        self.range_bus
-            .range_check(
-                local_cols.mem_ptr_limbs[1],
-                self.pointer_max_bits - U16_BITS,
-            )
-            .eval(builder, is_valid.clone());
-
-        let mem_ptr = local_cols.mem_ptr_limbs[0]
-            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1u32 << U16_BITS);
 
         // Constrain loads to address space 2 and stores to address spaces 2 or 3.
         let mem_as_minus_two = local_cols.mem_as - AB::Expr::TWO;
@@ -225,24 +224,48 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             .when(not::<AB::Expr>(is_valid.clone()))
             .assert_zero(local_cols.mem_as);
 
+        // Exactly one of {read, write} is a heap access (read for loads, write for stores); the
+        // other is a register access. The heap access uses the 8-byte-aligned byte pointer
+        // `mem_ptr - shift_amount`; convert it ONCE to AS-native u16 *cell* limbs (range-checked).
+        // The register access uses `rd_rs2_ptr` via the small-pointer helper (no range check, since
+        // register locations are small). Route heap/register limbs to read/write by `is_load`.
+        // (`shift_amount` is the per-instruction shift: `load_shift` for loads, `store_shift` for
+        // stores, so the aligned heap pointer is correct for whichever side is the heap access.)
+        let byte_ptr_max_bits = self.pointer_max_bits;
+        let heap_cell_limbs = eval_byte_ptr_limbs_to_u16_cell_ptr_limbs::<AB>(
+            builder,
+            self.range_bus,
+            [
+                local_cols.mem_ptr_limbs[0] - shift_amount,
+                local_cols.mem_ptr_limbs[1].into(),
+            ],
+            local_cols.mem_ptr_carry,
+            byte_ptr_max_bits,
+            is_valid.clone(),
+        );
+        let reg_cell_limbs = reg_byte_ptr_to_cell_ptr_limbs::<AB>(local_cols.rd_rs2_ptr);
+
         // read_as is [local_cols.mem_as] for loads and 1 for stores
         let read_as = select::<AB::Expr>(
             is_load.clone(),
             local_cols.mem_as,
             AB::F::from_u32(RV64_REGISTER_AS),
         );
-
-        // read_ptr is mem_ptr for loads and rd_rs2_ptr for stores
-        // Note: shift_amount is expected to have degree 2, thus we can't put it in the select
-        // clause       since the resulting read_ptr/write_ptr's degree will be 3 which is
-        // too high.       Instead, the solution without using additional columns is to get
-        // two different shift amounts from core chip
-        let read_ptr = select::<AB::Expr>(is_load.clone(), mem_ptr.clone(), local_cols.rd_rs2_ptr)
-            - load_shift_amount;
-
+        let read_ptr_limbs = [
+            select::<AB::Expr>(
+                is_load.clone(),
+                heap_cell_limbs[0].clone(),
+                reg_cell_limbs[0].clone(),
+            ),
+            select::<AB::Expr>(
+                is_load.clone(),
+                heap_cell_limbs[1].clone(),
+                reg_cell_limbs[1].clone(),
+            ),
+        ];
         self.memory_bridge
             .read(
-                MemoryAddress::new(read_as, byte_ptr_to_u16_ptr::<AB>(read_ptr)),
+                MemoryAddress::new(read_as, read_ptr_limbs),
                 pack_u8_block::<AB>(&ctx.reads.1),
                 timestamp_pp(),
                 &local_cols.read_data_aux,
@@ -255,17 +278,25 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
             AB::F::from_u32(RV64_REGISTER_AS),
             local_cols.mem_as,
         );
-
-        // write_ptr is rd_rs2_ptr for loads and mem_ptr for stores
-        let write_ptr = select::<AB::Expr>(is_load.clone(), local_cols.rd_rs2_ptr, mem_ptr.clone())
-            - store_shift_amount;
+        let write_ptr_limbs = [
+            select::<AB::Expr>(
+                is_load.clone(),
+                reg_cell_limbs[0].clone(),
+                heap_cell_limbs[0].clone(),
+            ),
+            select::<AB::Expr>(
+                is_load.clone(),
+                reg_cell_limbs[1].clone(),
+                heap_cell_limbs[1].clone(),
+            ),
+        ];
 
         // The core supplies the previous write bytes; this adapter stores only the base aux
         // columns.
         let prev_data_expr: [AB::Expr; MEMORY_BLOCK_BYTES] = ctx.reads.0.map(Into::into);
         self.memory_bridge
             .write(
-                MemoryAddress::new(write_as, byte_ptr_to_u16_ptr::<AB>(write_ptr)),
+                MemoryAddress::new(write_as, write_ptr_limbs),
                 pack_u8_block::<AB>(&ctx.writes[0].clone()),
                 timestamp_pp(),
                 MemoryWriteAuxInput::from_prev_data_exprs(
@@ -321,6 +352,8 @@ pub struct Rv64LoadStoreAdapterRecord {
     pub imm_sign: bool,
 
     pub mem_as: u8,
+    /// Whether this is a load (heap access is the read) vs a store (heap access is the write).
+    pub is_load: bool,
 
     pub write_prev_timestamp: u32,
 }
@@ -411,6 +444,7 @@ where
             LOADD | LOADW | LOADB | LOADH | LOADBU | LOADHU | LOADWU => {
                 debug_assert_eq!(e, F::from_u32(RV64_MEMORY_AS));
                 record.mem_as = RV64_MEMORY_AS as u8;
+                record.is_load = true;
                 let read_data = tracing_read(
                     memory,
                     RV64_MEMORY_AS,
@@ -425,6 +459,7 @@ where
                 debug_assert_ne!(e, RV64_IMM_AS);
                 debug_assert_ne!(e, RV64_REGISTER_AS);
                 record.mem_as = e as u8;
+                record.is_load = false;
                 let read_data = tracing_read(
                     memory,
                     RV64_REGISTER_AS,
@@ -523,11 +558,23 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
             .rs1_val
             .wrapping_add(sign_extend_imm16(record.imm as u32, record.imm_sign as u32));
         let ptr_limbs = ptr_to_u16_limbs(ptr).map(u32::from);
+        // Alignment check: `(mem_ptr_limbs[0] - shift) / 8 < 2^13`.
         self.range_checker_chip
             .add_count(ptr_limbs[0] >> 3, U16_BITS - 3);
-        self.range_checker_chip
-            .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
         adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_u32);
+
+        // Convert the aligned heap byte pointer to AS-native cell pointer limbs and register the
+        // single set of range-check counts (the AIR converts the heap pointer once, with
+        // `enabled = is_valid`). `mem_ptr_carry` depends only on the high byte limb's parity. The
+        // register-side access uses the small-pointer helper, which is NOT range-checked.
+        let hi_bits = cell_ptr_hi_bits(self.pointer_max_bits);
+        let shift = ptr & (RV64_REGISTER_NUM_LIMBS as u32 - 1);
+        let aligned_byte_limbs = ptr_to_u16_limbs(ptr - shift).map(u32::from);
+        let (mem_carry, heap_cell_limbs) =
+            byte_ptr_limbs_to_cell_ptr_limbs_value(aligned_byte_limbs);
+        adapter_row.mem_ptr_carry = F::from_u32(mem_carry);
+        self.range_checker_chip
+            .add_count(heap_cell_limbs[1], hi_bits);
 
         adapter_row.imm_sign = F::from_bool(record.imm_sign);
         adapter_row.imm = F::from_u16(record.imm);
