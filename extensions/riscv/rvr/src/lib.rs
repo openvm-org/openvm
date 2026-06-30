@@ -365,7 +365,6 @@ impl<F: PrimeField32> RvrExtension<F> for Rv64IExtension {
             hint_input: host_hint_input::<F>,
             print_str: host_print_str::<F>,
             hint_random: host_hint_random::<F>,
-            hint_stream_set: host_hint_stream_set::<F>,
         };
         unsafe { register_fn(&callbacks) };
         Ok(())
@@ -381,7 +380,6 @@ pub struct Rv64IPhantomCallbacks {
     pub hint_input: extern "C" fn(*mut c_void),
     pub print_str: extern "C" fn(*mut c_void, u32, u32),
     pub hint_random: extern "C" fn(*mut c_void, u32),
-    pub hint_stream_set: unsafe extern "C" fn(*mut c_void, *const u8, u32),
 }
 
 /// Must match the C `Rv64IoHostCallbacks` layout in `rv64io_callbacks.c`.
@@ -497,25 +495,6 @@ pub extern "C" fn host_reveal<F: PrimeField32>(
     io.public_values[start..end].copy_from_slice(&src_val.to_le_bytes()[..width]);
 }
 
-/// HINT_STREAM_SET: replace the hint stream contents (used by extension phantoms).
-///
-/// # Safety
-///
-/// `ctx` must be a valid `OpenVmIoState` pointer. `data` must point to `len` bytes (or be null).
-pub unsafe extern "C" fn host_hint_stream_set<F: PrimeField32>(
-    ctx: *mut c_void,
-    data: *const u8,
-    len: u32,
-) {
-    let io = &mut *(ctx as *mut OpenVmIoState<'_, F>);
-    io.hint_stream.clear();
-    if len > 0 && !data.is_null() {
-        let slice = std::slice::from_raw_parts(data, len as usize);
-        for &b in slice {
-            io.hint_stream.push_back(F::from_u8(b));
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
