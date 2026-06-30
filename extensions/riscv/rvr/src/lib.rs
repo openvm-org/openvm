@@ -158,7 +158,7 @@ impl ExtInstr for PrintStrInstr {
     }
 }
 
-/// HINT_RANDOM phantom: fill the hint stream with `reg[num_words_reg] * 4`
+/// HINT_RANDOM phantom: fill the hint stream with `reg[num_words_reg] * 8`
 /// random bytes drawn from the host's persistent RNG.
 #[derive(Debug, Clone)]
 pub struct HintRandomInstr {
