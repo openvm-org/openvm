@@ -79,8 +79,8 @@ fn test_rv64im_aot_pure_runtime(elf_path: &str) -> Result<()> {
     let config = Rv64ImConfig::default();
     let executor = VmExecutor::new(config.clone())?;
 
-    let interpreter = executor.instance(&exe)?;
-    let _interp_state = interpreter.execute(vec![], None)?;
+    let instance = executor.instance(&exe)?;
+    let _interp_state = instance.execute(vec![], None)?;
 
     Ok(())
 }
@@ -101,8 +101,8 @@ fn test_rv64im_aot_pure_runtime_with_path(elf_path: &str) -> Result<()> {
     let config = Rv64ImConfig::default();
     let executor = VmExecutor::new(config.clone())?;
 
-    let interpreter = executor.instance(&exe)?;
-    let interp_state = interpreter.execute(vec![], None)?;
+    let instance = executor.instance(&exe)?;
+    let interp_state = instance.execute(vec![], None)?;
 
     let asm_name = String::from("asm_test_name");
     let mut aot_instance = executor.aot_instance_with_asm_name(&exe, &asm_name)?;
@@ -128,8 +128,8 @@ fn test_rv64im_runtime(elf_path: &str) -> Result<()> {
     )?;
     let config = Rv64ImConfig::default();
     let executor = VmExecutor::new(config)?;
-    let interpreter = executor.instance(&exe)?;
-    interpreter.execute(vec![], None)?;
+    let instance = executor.instance(&exe)?;
+    instance.execute(vec![], None)?;
     Ok(())
 }
 
@@ -192,8 +192,8 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Fp2TranspilerExtension),
     )?;
     let executor = VmExecutor::new(config)?;
-    let interpreter = executor.instance(&openvm_exe)?;
-    interpreter.execute(vec![], None)?;
+    let instance = executor.instance(&openvm_exe)?;
+    instance.execute(vec![], None)?;
     Ok(())
 }
 
