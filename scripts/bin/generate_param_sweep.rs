@@ -198,7 +198,6 @@ fn generate_interesting_root_params(output_dir: impl AsRef<Path>) {
         make_param(3, 4, 1, 20),
         make_param(3, 4, 2, 20),
         make_param(3, 4, 4, 20),
-        make_param(3, 3, 5, 20),
         make_param(3, 3, 1, 20),
         make_param(3, 3, 3, 20),
         make_param(3, 3, 5, 20),
