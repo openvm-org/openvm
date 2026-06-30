@@ -15,34 +15,34 @@
 
 /* ── Memory access (single word) ───────────────────────────────────── */
 
-uint64_t rd_mem_u64_wrapper(RvState* s, uint32_t addr) {
+uint64_t rd_mem_u64_wrapper(RvState* s, uint64_t addr) {
   return rd_mem_u64(s->memory, addr);
 }
-void trace_rd_mem_u64_wrapper(RvState* s, uint32_t addr, uint64_t val) {
+void trace_rd_mem_u64_wrapper(RvState* s, uint64_t addr, uint64_t val) {
   trace_rd_mem_u64(s, addr, val);
 }
 
-void rd_mem_u64_range_wrapper(RvState* s, uint32_t base_addr, uint64_t* out,
+void rd_mem_u64_range_wrapper(RvState* s, uint64_t base_addr, uint64_t* out,
                               uint32_t num_words) {
   rd_mem_u64_range(s, base_addr, out, num_words);
 }
 
-void wr_mem_u64_range_wrapper(RvState* s, uint32_t base_addr,
+void wr_mem_u64_range_wrapper(RvState* s, uint64_t base_addr,
                               const uint64_t* vals, uint32_t num_words) {
   wr_mem_u64_range(s, base_addr, vals, num_words);
 }
 
-void trace_rd_mem_u64_range_wrapper(RvState* s, uint32_t base_addr,
+void trace_rd_mem_u64_range_wrapper(RvState* s, uint64_t base_addr,
                                     const uint64_t* vals, uint32_t num_words) {
   trace_rd_mem_u64_range(s, base_addr, vals, num_words);
 }
 
-void trace_wr_mem_u64_range_wrapper(RvState* s, uint32_t base_addr,
+void trace_wr_mem_u64_range_wrapper(RvState* s, uint64_t base_addr,
                                     const uint64_t* vals, uint32_t num_words) {
   trace_wr_mem_u64_range(s, base_addr, vals, num_words);
 }
 
-void trace_mem_access_u64_range_wrapper(RvState* s, uint32_t base_addr,
+void trace_mem_access_u64_range_wrapper(RvState* s, uint64_t base_addr,
                                         uint32_t num_words,
                                         uint32_t addr_space) {
   trace_mem_access_u64_range(s, base_addr, num_words, addr_space);

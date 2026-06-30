@@ -39,7 +39,7 @@ static inline void bytes_reverse_32(uint8_t out[SECP256K1_ELEM_BYTES],
   memcpy(out, reversed, sizeof(reversed));
 }
 
-static inline secp256k1_fe fe_read(RvState* state, uint32_t ptr) {
+static inline secp256k1_fe fe_read(RvState* state, uint64_t ptr) {
   uint64_t words[SECP256K1_ELEM_WORDS];
   rd_mem_u64_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
   uint8_t le[SECP256K1_ELEM_BYTES];
@@ -52,7 +52,7 @@ static inline secp256k1_fe fe_read(RvState* state, uint32_t ptr) {
   return r;
 }
 
-static inline void fe_write(RvState* state, uint32_t ptr,
+static inline void fe_write(RvState* state, uint64_t ptr,
                             const secp256k1_fe* val) {
   secp256k1_fe t = *val;
   secp256k1_fe_normalize_var(&t);
@@ -102,7 +102,7 @@ static inline int fe_is_zero(const secp256k1_fe* a) {
 
 /* ── k256 scalar (mod n) helpers ─────────────────────────────────────── */
 
-static inline secp256k1_scalar scalar_read(RvState* state, uint32_t ptr) {
+static inline secp256k1_scalar scalar_read(RvState* state, uint64_t ptr) {
   uint64_t words[SECP256K1_ELEM_WORDS];
   rd_mem_u64_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
   uint8_t le[SECP256K1_ELEM_BYTES];
@@ -114,7 +114,7 @@ static inline secp256k1_scalar scalar_read(RvState* state, uint32_t ptr) {
   return r;
 }
 
-static inline void scalar_write(RvState* state, uint32_t ptr,
+static inline void scalar_write(RvState* state, uint64_t ptr,
                                 const secp256k1_scalar* val) {
   uint8_t be[SECP256K1_ELEM_BYTES];
   secp256k1_scalar_get_b32(be, val);
@@ -128,7 +128,7 @@ static inline void scalar_write(RvState* state, uint32_t ptr,
 /* ── Modular arithmetic: secp256k1 coordinate field (mod p) ──────────── */
 
 __attribute__((preserve_most)) void rvr_ext_mod_add_k256_coord(
-    RvState* state, uint32_t rd_ptr, uint32_t rs1_ptr, uint32_t rs2_ptr) {
+    RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_fe a = fe_read(state, rs1_ptr);
   secp256k1_fe b = fe_read(state, rs2_ptr);
   secp256k1_fe r = fe_add(a, &b);
@@ -136,7 +136,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_add_k256_coord(
 }
 
 __attribute__((preserve_most)) void rvr_ext_mod_sub_k256_coord(
-    RvState* state, uint32_t rd_ptr, uint32_t rs1_ptr, uint32_t rs2_ptr) {
+    RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_fe a = fe_read(state, rs1_ptr);
   secp256k1_fe b = fe_read(state, rs2_ptr);
   secp256k1_fe r = fe_sub(&a, &b);
@@ -144,7 +144,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_sub_k256_coord(
 }
 
 __attribute__((preserve_most)) void rvr_ext_mod_mul_k256_coord(
-    RvState* state, uint32_t rd_ptr, uint32_t rs1_ptr, uint32_t rs2_ptr) {
+    RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_fe a = fe_read(state, rs1_ptr);
   secp256k1_fe b = fe_read(state, rs2_ptr);
   secp256k1_fe r = fe_mul(&a, &b);
@@ -152,7 +152,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_mul_k256_coord(
 }
 
 __attribute__((preserve_most)) void rvr_ext_mod_div_k256_coord(
-    RvState* state, uint32_t rd_ptr, uint32_t rs1_ptr, uint32_t rs2_ptr) {
+    RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_fe a = fe_read(state, rs1_ptr);
   secp256k1_fe b = fe_read(state, rs2_ptr);
   debug_assume(!fe_is_zero(&b));
@@ -162,7 +162,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_div_k256_coord(
 }
 
 __attribute__((preserve_most)) uint32_t rvr_ext_mod_iseq_k256_coord(
-    RvState* state, uint32_t rs1_ptr, uint32_t rs2_ptr) {
+    RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_fe a = fe_read(state, rs1_ptr);
   secp256k1_fe b = fe_read(state, rs2_ptr);
   return secp256k1_fe_equal(&a, &b) ? 1u : 0u;
@@ -171,7 +171,7 @@ __attribute__((preserve_most)) uint32_t rvr_ext_mod_iseq_k256_coord(
 /* ── Modular arithmetic: secp256k1 scalar field (mod n) ──────────────── */
 
 __attribute__((preserve_most)) void rvr_ext_mod_add_k256_scalar(
-    RvState* state, uint32_t rd_ptr, uint32_t rs1_ptr, uint32_t rs2_ptr) {
+    RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_scalar a = scalar_read(state, rs1_ptr);
   secp256k1_scalar b = scalar_read(state, rs2_ptr);
   secp256k1_scalar r;
@@ -180,7 +180,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_add_k256_scalar(
 }
 
 __attribute__((preserve_most)) void rvr_ext_mod_sub_k256_scalar(
-    RvState* state, uint32_t rd_ptr, uint32_t rs1_ptr, uint32_t rs2_ptr) {
+    RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_scalar a = scalar_read(state, rs1_ptr);
   secp256k1_scalar b = scalar_read(state, rs2_ptr);
   secp256k1_scalar neg_b;
@@ -191,7 +191,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_sub_k256_scalar(
 }
 
 __attribute__((preserve_most)) void rvr_ext_mod_mul_k256_scalar(
-    RvState* state, uint32_t rd_ptr, uint32_t rs1_ptr, uint32_t rs2_ptr) {
+    RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_scalar a = scalar_read(state, rs1_ptr);
   secp256k1_scalar b = scalar_read(state, rs2_ptr);
   secp256k1_scalar r;
@@ -200,7 +200,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_mul_k256_scalar(
 }
 
 __attribute__((preserve_most)) void rvr_ext_mod_div_k256_scalar(
-    RvState* state, uint32_t rd_ptr, uint32_t rs1_ptr, uint32_t rs2_ptr) {
+    RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_scalar a = scalar_read(state, rs1_ptr);
   secp256k1_scalar b = scalar_read(state, rs2_ptr);
   debug_assume(!secp256k1_scalar_is_zero(&b));
@@ -212,7 +212,7 @@ __attribute__((preserve_most)) void rvr_ext_mod_div_k256_scalar(
 }
 
 __attribute__((preserve_most)) uint32_t rvr_ext_mod_iseq_k256_scalar(
-    RvState* state, uint32_t rs1_ptr, uint32_t rs2_ptr) {
+    RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_scalar a = scalar_read(state, rs1_ptr);
   secp256k1_scalar b = scalar_read(state, rs2_ptr);
   return secp256k1_scalar_eq(&a, &b) ? 1u : 0u;
@@ -222,9 +222,9 @@ __attribute__((preserve_most)) uint32_t rvr_ext_mod_iseq_k256_scalar(
  * the ECC extension is configured at lift time) ──────────────────────── */
 
 __attribute__((preserve_most)) void rvr_ext_ec_add_ne_k256(RvState* state,
-                                                           uint32_t rd_ptr,
-                                                           uint32_t rs1_ptr,
-                                                           uint32_t rs2_ptr) {
+                                                           uint64_t rd_ptr,
+                                                           uint64_t rs1_ptr,
+                                                           uint64_t rs2_ptr) {
   secp256k1_fe x1 = fe_read(state, rs1_ptr);
   secp256k1_fe y1 = fe_read(state, rs1_ptr + SECP256K1_ELEM_BYTES);
   secp256k1_fe x2 = fe_read(state, rs2_ptr);
@@ -252,8 +252,8 @@ __attribute__((preserve_most)) void rvr_ext_ec_add_ne_k256(RvState* state,
 }
 
 __attribute__((preserve_most)) void rvr_ext_ec_double_k256(RvState* state,
-                                                           uint32_t rd_ptr,
-                                                           uint32_t rs1_ptr) {
+                                                           uint64_t rd_ptr,
+                                                           uint64_t rs1_ptr) {
   secp256k1_fe x1 = fe_read(state, rs1_ptr);
   secp256k1_fe y1 = fe_read(state, rs1_ptr + SECP256K1_ELEM_BYTES);
 
