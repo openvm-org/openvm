@@ -322,7 +322,7 @@ impl EmitContext {
         self.reload_page_locals();
     }
 
-    pub fn extern_call_preserving_tracer(&mut self, name: &str, args: &[&str]) {
+    pub fn extern_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
         let args_str = args.join(", ");
         self.write_line(&format!("{name}({args_str});"));
     }
@@ -448,8 +448,8 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
         EmitContext::extern_call(self, name, args);
     }
 
-    fn extern_call_preserving_tracer(&mut self, name: &str, args: &[&str]) {
-        EmitContext::extern_call_preserving_tracer(self, name, args);
+    fn extern_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+        EmitContext::extern_call_without_page_flush(self, name, args);
     }
 
     fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
