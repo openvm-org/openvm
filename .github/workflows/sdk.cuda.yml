@@ -1,6 +1,34 @@
 name: CUDA SDK Tests
 
 on:
+  workflow_dispatch:
+    inputs:
+      sweep_evm:
+        description: "Run SDK root parameter sweep on evm instead of normal SDK CUDA tests"
+        type: boolean
+        default: false
+      sweep_root:
+        description: "Run SDK root parameter sweep instead of normal SDK CUDA tests"
+        type: boolean
+        default: false
+      sweep_internal:
+        description: "Run SDK internal parameter sweep instead of normal SDK CUDA tests"
+        type: boolean
+        default: false
+      test_name:
+        description: "Comma-separated test filters passed to --test-name"
+        type: string
+        default: ""
+      num_samples:
+        description: "Number of parameter samples passed to --num-samples"
+        type: string
+        default: ""
+      instance_family:
+        type: string
+        required: false
+        description: Runner instance family, or multiple families joined with "+" (e.g. g6+g5)
+        default: g6e.2xlarge
+
   push:
     branches: ["main"]
   pull_request:
@@ -12,8 +40,8 @@ on:
       - ".github/workflows/sdk.cuda.yml"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -22,7 +50,7 @@ jobs:
   cuda-backend:
     name: sdk cuda tests
     runs-on:
-      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=${{ inputs.instance_family || github.event.inputs.instance_family || 'g6e.2xlarge' }}/volume=80gb/tag=sdk-cuda-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}/extras=s3-cache/spot=false
     steps:
       - uses: runs-on/action@v2
         with:
@@ -41,6 +69,28 @@ jobs:
       - uses: ./.github/actions/sccache
       - uses: ./.github/actions/rust-cache-cuda
       - uses: taiki-e/install-action@nextest
+      - name: Install solc
+        if: ${{ inputs.sweep_evm || false }}
+        run: (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
+
+      - name: Install Foundry
+        if: ${{ inputs.sweep_evm || false }}
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.3.5
+
+      - name: Install architecture specific tools
+        if: ${{ inputs.sweep_evm || false }}
+        run: |
+          source ci/scripts/utils.sh
+          install_s5cmd
+
+      - name: Setup halo2
+        if: ${{ inputs.sweep_evm || false }}
+        working-directory: crates/sdk
+        run: |
+          bash ../../scripts/trusted_setup_s3.sh
+
       - name: Verify GPU setup
         run: |
           nvidia-smi
@@ -61,12 +111,131 @@ jobs:
             exit 1
           fi
 
+      - name: Build SDK CUDA tests
+        working-directory: crates/sdk
+        run: |
+          rustup component add rust-src --toolchain nightly-2026-01-18
+
+          TEST_FILTERS=()
+          if [[ -n "${{ inputs.test_name }}" ]]; then
+            IFS=',' read -ra TEST_FILTERS <<< "${{ inputs.test_name }}"
+          fi
+
+          build_cuda_tests() {
+            local features="$1"
+            local cmd=(cargo nextest run --no-run --test-threads=1 --cargo-profile=fast --features "$features")
+            if [[ ${#TEST_FILTERS[@]} -gt 0 ]]; then
+              cmd+=(-- "${TEST_FILTERS[@]}")
+            fi
+            "${cmd[@]}"
+          }
+
+          if [[ "${{ inputs.sweep_internal || false }}" == "true" ]]; then
+            build_cuda_tests "parallel,cuda"
+          fi
+          if [[ "${{ inputs.sweep_root || false }}" == "true" ]]; then
+            build_cuda_tests "parallel,root-prover,cuda"
+          fi
+          if [[ "${{ inputs.sweep_evm || false }}" == "true" ]]; then
+            build_cuda_tests "parallel,root-prover,evm-verify,cuda"
+          fi
+          if [[ "${{ inputs.sweep_internal || false }}" != "true" && "${{ inputs.sweep_root || false }}" != "true" && "${{ inputs.sweep_evm || false }}" != "true" ]]; then
+            build_cuda_tests "cuda,root-prover"
+          fi
+
+      - name: Generate sweep JSON files if missing
+        if: ${{ inputs.sweep_root || inputs.sweep_internal || inputs.sweep_evm }}
+        working-directory: crates/sdk
+        run: |
+          if [[ ! -f tests/internal_sweep_no_root.json || ! -f tests/internal_sweep_root.json ]]; then
+            cargo nextest run --cargo-profile=fast --features cuda -- generate_interesting_internal_params
+          fi
+          if [[ ! -f tests/root_params.json ]]; then
+            cargo nextest run --cargo-profile=fast --features cuda -- generate_interesting_root_params
+          fi
+
       - name: Run SDK CUDA tests
         working-directory: crates/sdk
         run: |
           rustup component add rust-src --toolchain nightly-2026-01-18
-          cargo nextest run --cargo-profile=fast --features cuda,root-prover --test-threads=1
+          export RUST_LOG=debug
+          CARGO_RUN="true"
+          SWEEP_ARGS=("-j=1")
+          LOGS=()
+          SWEEP_EXIT=0
+          if [[ -n "${{ inputs.test_name }}" ]]; then SWEEP_ARGS+=(--test-name "${{ inputs.test_name }}"); fi
+          if [[ -n "${{ inputs.num_samples }}" ]]; then SWEEP_ARGS+=(--num-samples "${{ inputs.num_samples }}"); fi
+          mkdir -p sweeps
+
+          run_sweep() {
+            local log_dir="$1"
+            shift
+
+            mkdir -p "$log_dir"
+            LOGS+=("$log_dir")
+            if ! python3 tests/run_sdk_tests2.py --mode cuda --log-dir="$log_dir" "$@"; then
+              SWEEP_EXIT=1
+            fi
+          }
+
+          if [[ "${{ inputs.sweep_internal || false }}" == "true" ]]; then
+            run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --sweep tests/internal_sweep_no_root.json
+          fi
+          if [[ "${{ inputs.sweep_root || false }}" == "true" ]]; then
+            run_sweep "sweeps/sweep_root" --use-root "${SWEEP_ARGS[@]}" --sweep tests/internal_sweep_root.json
+          fi
+          if [[ "${{ inputs.sweep_evm || false }}" == "true" ]]; then
+            run_sweep "sweeps/sweep_evm" --use-evm --use-root "${SWEEP_ARGS[@]}" --sweep tests/internal_sweep_root.json
+          fi
+
+          if [ ${#LOGS[@]} -eq 0 ]; then
+            cargo nextest run --cargo-profile=fast --features cuda,root-prover --test-threads=1
+          else
+            if ! python3 tests/post_test_summarize.py -o "sweeps/ci_summary.md" --artifact-path-prefix="" --log-dirs "${LOGS[@]}"; then
+              SWEEP_EXIT=1
+            fi
+            echo "$SWEEP_EXIT" > sweeps/sweep_exit_code
+          fi
+
+      - name: Upload SDK CUDA sweep artifacts
+        id: upload-sdk-cuda-sweep
+        if: ${{ always() && (inputs.sweep_root || inputs.sweep_internal || inputs.sweep_evm) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-cuda-sweep
+          if-no-files-found: ignore
+          path: |
+            crates/sdk/sweeps/**
+
+      - name: Publish SDK CUDA sweep summary
+        if: ${{ always() && (inputs.sweep_root || inputs.sweep_internal || inputs.sweep_evm) }}
+        working-directory: crates/sdk
+        run: |
+          CI_SUMMARY_PATH="$(find sweeps -name ci_summary.md -print 2>/dev/null | sort | tail -n 1)"
+          if [[ -n "$CI_SUMMARY_PATH" ]]; then
+            LOG_DIR="$(dirname "$CI_SUMMARY_PATH")"
+            echo "Logs are uploaded in the [sdk-cuda-sweep](${{ steps.upload-sdk-cuda-sweep.outputs.artifact-url }}) artifact under \`$LOG_DIR\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            cat "$CI_SUMMARY_PATH" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No SDK CUDA sweep summary was generated." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: sccache stats
         if: always()
         run: sccache --show-stats || true
+
+      - name: Fail SDK CUDA sweep if needed
+        if: ${{ always() && (inputs.sweep_root || inputs.sweep_internal || inputs.sweep_evm) }}
+        working-directory: crates/sdk
+        run: |
+          if [[ ! -f sweeps/sweep_exit_code ]]; then
+            echo "SDK CUDA sweep status file missing."
+            exit 1
+          fi
+
+          SWEEP_EXIT="$(cat sweeps/sweep_exit_code)"
+          if [[ "$SWEEP_EXIT" != "0" ]]; then
+            echo "One or more SDK CUDA sweeps failed."
+            exit "$SWEEP_EXIT"
+          fi
