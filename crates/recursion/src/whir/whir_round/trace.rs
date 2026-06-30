@@ -8,7 +8,9 @@ use p3_maybe_rayon::prelude::*;
 
 use crate::{
     tracegen::{RowMajorChip, StandardTracegenCtx},
-    whir::{num_queries_per_round, whir_round::air::WhirRoundCols, WhirBlobCpu},
+    whir::{
+        num_queries_per_round, whir_round::air::WhirRoundCols, whir_round_encoder, WhirBlobCpu,
+    },
 };
 
 pub(crate) struct WhirRoundTraceGenerator;
@@ -24,8 +26,7 @@ impl RowMajorChip<F> for WhirRoundTraceGenerator {
     ) -> Option<RowMajorMatrix<F>> {
         let params = &ctx.0.vk.inner.params;
         let num_rounds = params.num_whir_rounds();
-        // Encoder requires at least 2 flags to work correctly
-        let encoder = Encoder::new(num_rounds.max(2), 2, false);
+        let encoder = whir_round_encoder(num_rounds);
         match encoder.width() {
             1 => generate_trace_impl::<1>(ctx, &encoder, required_height),
             2 => generate_trace_impl::<2>(ctx, &encoder, required_height),
