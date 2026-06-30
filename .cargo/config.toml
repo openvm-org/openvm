@@ -1,11 +1,10 @@
 [net]
 git-fetch-with-cli = true
 
-# Uncomment this block when testing OpenVM against a patched stark-backend branch.
-# [patch."https://github.com/openvm-org/stark-backend.git"]
-# openvm-stark-backend = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "fix/memory-metering-regression-88" }
-# openvm-stark-sdk = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "fix/memory-metering-regression-88" }
-# openvm-cpu-backend = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "fix/memory-metering-regression-88" }
-# openvm-cuda-backend = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "fix/memory-metering-regression-88" }
-# openvm-cuda-builder = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "fix/memory-metering-regression-88" }
-# openvm-cuda-common = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "fix/memory-metering-regression-88" }
+[patch."https://github.com/openvm-org/stark-backend.git"]
+openvm-stark-backend = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "fix/memory-metering-regression-88" }
+openvm-stark-sdk = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "fix/memory-metering-regression-88" }
+openvm-cpu-backend = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "fix/memory-metering-regression-88" }
+openvm-cuda-backend = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "fix/memory-metering-regression-88" }
+openvm-cuda-builder = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "fix/memory-metering-regression-88" }
+openvm-cuda-common = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "fix/memory-metering-regression-88" }

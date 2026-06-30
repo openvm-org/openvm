@@ -6036,7 +6036,7 @@ dependencies = [
 [[package]]
 name = "openvm-codec-derive"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4246b8f7ff5bbaa6980854a78bb16828bb2eb211"
+source = "git+ssh://git@github.com/openvm-org/stark-backend.git?branch=fix%2Fmemory-metering-regression-88#dcc09022bcf1e3268691f9c5cd7aa2ce62c63c46"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -6083,7 +6083,7 @@ dependencies = [
 [[package]]
 name = "openvm-cpu-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4246b8f7ff5bbaa6980854a78bb16828bb2eb211"
+source = "git+ssh://git@github.com/openvm-org/stark-backend.git?branch=fix%2Fmemory-metering-regression-88#dcc09022bcf1e3268691f9c5cd7aa2ce62c63c46"
 dependencies = [
  "cfg-if 1.0.1",
  "derive-new 0.7.0",
@@ -6108,7 +6108,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4246b8f7ff5bbaa6980854a78bb16828bb2eb211"
+source = "git+ssh://git@github.com/openvm-org/stark-backend.git?branch=fix%2Fmemory-metering-regression-88#dcc09022bcf1e3268691f9c5cd7aa2ce62c63c46"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -6135,7 +6135,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4246b8f7ff5bbaa6980854a78bb16828bb2eb211"
+source = "git+ssh://git@github.com/openvm-org/stark-backend.git?branch=fix%2Fmemory-metering-regression-88#dcc09022bcf1e3268691f9c5cd7aa2ce62c63c46"
 dependencies = [
  "cc",
  "glob",
@@ -6144,7 +6144,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4246b8f7ff5bbaa6980854a78bb16828bb2eb211"
+source = "git+ssh://git@github.com/openvm-org/stark-backend.git?branch=fix%2Fmemory-metering-regression-88#dcc09022bcf1e3268691f9c5cd7aa2ce62c63c46"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6918,7 +6918,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4246b8f7ff5bbaa6980854a78bb16828bb2eb211"
+source = "git+ssh://git@github.com/openvm-org/stark-backend.git?branch=fix%2Fmemory-metering-regression-88#dcc09022bcf1e3268691f9c5cd7aa2ce62c63c46"
 dependencies = [
  "cfg-if 1.0.1",
  "derivative",
@@ -6953,7 +6953,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#4246b8f7ff5bbaa6980854a78bb16828bb2eb211"
+source = "git+ssh://git@github.com/openvm-org/stark-backend.git?branch=fix%2Fmemory-metering-regression-88#dcc09022bcf1e3268691f9c5cd7aa2ce62c63c46"
 dependencies = [
  "dashmap",
  "derive-new 0.7.0",
