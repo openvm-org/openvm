@@ -104,7 +104,7 @@ You will need all of the common prerequisites listed [above](#installation-prere
 - CUDA toolkit [installed](https://docs.nvidia.com/cuda/archive/12.9.0/cuda-installation-guide-linux/index.html)
 
 :::warning
-EVM proofs (`prove evm`, built with the `halo2-gpu` feature) are the most memory-intensive step. The halo2 GPU prover uses considerably more memory than `prove app` or `prove stark`; it was tested on a 32 GB GPU, with peak resident memory around 25 GB.
+CUDA EVM proving (`prove evm` built with the `halo2-gpu` feature) is the most memory-intensive part of the proving flow, using considerably more GPU memory than `prove app` or `prove stark`. Expect peak GPU memory usage to be at least 25 GB, and we recommend using a GPU with at least 32 GB of available memory.
 :::
 
 For machines running Ubuntu 24.04, you can install Nvidia drivers using
