@@ -33,7 +33,10 @@ impl TouchedPages {
         }
         let first = start / PAGE_SIZE;
         let last = (start + len - 1) / PAGE_SIZE;
-        debug_assert!(last < self.num_pages, "byte range out of address space bounds");
+        debug_assert!(
+            last < self.num_pages,
+            "byte range out of address space bounds"
+        );
         for page in first..=last {
             self.bits[page / 64] |= 1u64 << (page % 64);
         }

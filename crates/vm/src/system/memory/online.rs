@@ -161,8 +161,8 @@ impl<M: LinearMemory> AddressMap<M> {
             .map(|config| M::new(config.num_cells.checked_mul(config.layout.size()).unwrap()))
             .collect();
         // Pages start unmarked (guaranteed zero); paths that write data (`set_from_sparse`) and the
-        // carried-forward extension (`extend_touched_pages_from_touched`) mark the pages they touch.
-        // See the invariant on `touched_pages`.
+        // carried-forward extension (`extend_touched_pages_from_touched`) mark the pages they
+        // touch. See the invariant on `touched_pages`.
         let touched_pages = mem.iter().map(|m| TouchedPages::new(m.size())).collect();
         Self {
             mem,
