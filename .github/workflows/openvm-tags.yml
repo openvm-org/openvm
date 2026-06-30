@@ -26,6 +26,11 @@ jobs:
     runs-on:
       - runs-on=${{ github.run_id }}/runner=8cpu-linux-x64
     steps:
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
       - name: Check the tags
         working-directory: docs
