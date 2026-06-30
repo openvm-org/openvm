@@ -25,10 +25,10 @@ pub trait FieldArith {
 
     /// # Safety
     /// `state` must be a valid pointer to the C `RvState` struct.
-    unsafe fn read_elem(&self, state: *mut c_void, ptr: u32) -> Self::Elem;
+    unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem;
     /// # Safety
     /// `state` must be a valid pointer to the C `RvState` struct.
-    unsafe fn write_elem(&self, state: *mut c_void, ptr: u32, val: &Self::Elem);
+    unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem);
 
     fn add(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem;
     fn sub(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem;
@@ -44,7 +44,7 @@ pub trait FieldArith {
 /// # Safety
 /// `state` must be a valid pointer to the C `RvState` struct.
 #[inline(always)]
-pub unsafe fn read_field_256<F: PrimeField<Repr = [u8; 32]>>(state: *mut c_void, ptr: u32) -> F {
+pub unsafe fn read_field_256<F: PrimeField<Repr = [u8; 32]>>(state: *mut c_void, ptr: u64) -> F {
     let mut words = [0u64; FIELD_256_WORDS];
     rd_mem_words_traced(state, ptr, &mut words);
     let mut bytes = [0u8; FIELD_256_BYTES];
@@ -70,7 +70,7 @@ pub unsafe fn read_field_256<F: PrimeField<Repr = [u8; 32]>>(state: *mut c_void,
 #[inline(always)]
 pub unsafe fn write_field_256<F: PrimeField<Repr = [u8; 32]>>(
     state: *mut c_void,
-    ptr: u32,
+    ptr: u64,
     val: &F,
 ) {
     let bytes = val.to_repr();
@@ -90,7 +90,7 @@ pub unsafe fn write_field_256<F: PrimeField<Repr = [u8; 32]>>(
 /// # Safety
 /// `state` must be a valid pointer to the C `RvState` struct.
 #[inline(always)]
-pub unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u32) -> blstrs::Fp {
+pub unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u64) -> blstrs::Fp {
     let mut words = [0u64; BLS12_381_ELEM_WORDS];
     rd_mem_words_traced(state, ptr, &mut words);
     let mut bytes = [0u8; BLS12_381_ELEM_BYTES];
@@ -113,7 +113,7 @@ pub unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u32) -> blstrs::Fp {
 /// # Safety
 /// `state` must be a valid pointer to the C `RvState` struct.
 #[inline(always)]
-pub unsafe fn write_bls12_381_fq(state: *mut c_void, ptr: u32, val: &blstrs::Fp) {
+pub unsafe fn write_bls12_381_fq(state: *mut c_void, ptr: u64, val: &blstrs::Fp) {
     let bytes = val.to_bytes_le();
     let mut words = [0u64; BLS12_381_ELEM_WORDS];
     for (i, w) in words.iter_mut().enumerate() {
@@ -134,7 +134,7 @@ pub unsafe fn write_bls12_381_fq(state: *mut c_void, ptr: u32, val: &blstrs::Fp)
 /// `state` must be a valid `RvState` pointer; `num_limbs` must be a multiple
 /// of `WORD_SIZE`.
 #[inline]
-pub unsafe fn read_bigint(state: *mut c_void, ptr: u32, num_limbs: u32) -> BigUint {
+pub unsafe fn read_bigint(state: *mut c_void, ptr: u64, num_limbs: u32) -> BigUint {
     let num_words = (num_limbs / WORD_SIZE as u32) as usize;
     let mut words = vec![0u64; num_words];
     rd_mem_words_traced(state, ptr, &mut words);
@@ -151,7 +151,7 @@ pub unsafe fn read_bigint(state: *mut c_void, ptr: u32, num_limbs: u32) -> BigUi
 /// `state` must be a valid `RvState` pointer; `num_limbs` must be a multiple
 /// of `WORD_SIZE` and large enough to hold `value`.
 #[inline]
-pub unsafe fn write_bigint(state: *mut c_void, ptr: u32, value: &BigUint, num_limbs: u32) {
+pub unsafe fn write_bigint(state: *mut c_void, ptr: u64, value: &BigUint, num_limbs: u32) {
     let num_words = (num_limbs / WORD_SIZE as u32) as usize;
     let mut bytes = value.to_bytes_le();
     bytes.resize(num_limbs as usize, 0);
@@ -193,9 +193,9 @@ pub fn mod_inverse(a: &BigUint, p: &BigUint) -> BigUint {
 pub unsafe fn exec_op<F, Op>(
     f: &F,
     state: *mut c_void,
-    rd_ptr: u32,
-    rs1_ptr: u32,
-    rs2_ptr: u32,
+    rd_ptr: u64,
+    rs1_ptr: u64,
+    rs2_ptr: u64,
     op: Op,
 ) where
     F: FieldArith,

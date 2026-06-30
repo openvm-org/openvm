@@ -17,6 +17,11 @@ use rvr_openvm_ext_algebra_ffi_common::{
 };
 use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced, WORD_SIZE};
 
+/// BN254 base field element size in bytes, as `u64` for address arithmetic.
+const BN254_FQ_BYTES: u64 = FIELD_256_BYTES as u64;
+/// BLS12-381 base field element size in bytes, as `u64` for address arithmetic.
+const BLS12_381_FQ_BYTES: u64 = BLS12_381_ELEM_BYTES as u64;
+
 /// Affine point: two field coordinates (x, y).
 const AFFINE_COORDS: u32 = 2;
 /// Size of a 256-bit affine point in bytes.
@@ -68,60 +73,60 @@ fn ec_double_impl<F: Field>(x1: F, y1: F, a: F) -> (F, F) {
 #[inline(always)]
 unsafe fn ec_add_ne_256<F: halo2curves_axiom::ff::PrimeField<Repr = [u8; FIELD_256_BYTES]>>(
     state: *mut c_void,
-    rd_ptr: u32,
-    rs1_ptr: u32,
-    rs2_ptr: u32,
+    rd_ptr: u64,
+    rs1_ptr: u64,
+    rs2_ptr: u64,
 ) {
     let x1: F = read_field_256(state, rs1_ptr);
-    let y1: F = read_field_256(state, rs1_ptr + FIELD_256_BYTES as u32);
+    let y1: F = read_field_256(state, rs1_ptr + BN254_FQ_BYTES);
     let x2: F = read_field_256(state, rs2_ptr);
-    let y2: F = read_field_256(state, rs2_ptr + FIELD_256_BYTES as u32);
+    let y2: F = read_field_256(state, rs2_ptr + BN254_FQ_BYTES);
     let (x3, y3) = ec_add_ne_impl(x1, y1, x2, y2);
     write_field_256(state, rd_ptr, &x3);
-    write_field_256(state, rd_ptr + FIELD_256_BYTES as u32, &y3);
+    write_field_256(state, rd_ptr + BN254_FQ_BYTES, &y3);
 }
 
 /// Execute ec_double for a 256-bit PrimeField curve.
 #[inline(always)]
 unsafe fn ec_double_256<F: halo2curves_axiom::ff::PrimeField<Repr = [u8; FIELD_256_BYTES]>>(
     state: *mut c_void,
-    rd_ptr: u32,
-    rs1_ptr: u32,
+    rd_ptr: u64,
+    rs1_ptr: u64,
     a: F,
 ) {
     let x1: F = read_field_256(state, rs1_ptr);
-    let y1: F = read_field_256(state, rs1_ptr + FIELD_256_BYTES as u32);
+    let y1: F = read_field_256(state, rs1_ptr + BN254_FQ_BYTES);
     let (x3, y3) = ec_double_impl(x1, y1, a);
     write_field_256(state, rd_ptr, &x3);
-    write_field_256(state, rd_ptr + FIELD_256_BYTES as u32, &y3);
+    write_field_256(state, rd_ptr + BN254_FQ_BYTES, &y3);
 }
 
 // ── BLS12-381 helpers ─────────────────────────────────────────────────────────
 
-unsafe fn ec_add_ne_bls12_381(state: *mut c_void, rd_ptr: u32, rs1_ptr: u32, rs2_ptr: u32) {
+unsafe fn ec_add_ne_bls12_381(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64, rs2_ptr: u64) {
     let x1 = read_bls12_381_fq(state, rs1_ptr);
-    let y1 = read_bls12_381_fq(state, rs1_ptr + BLS12_381_ELEM_BYTES as u32);
+    let y1 = read_bls12_381_fq(state, rs1_ptr + BLS12_381_FQ_BYTES);
     let x2 = read_bls12_381_fq(state, rs2_ptr);
-    let y2 = read_bls12_381_fq(state, rs2_ptr + BLS12_381_ELEM_BYTES as u32);
+    let y2 = read_bls12_381_fq(state, rs2_ptr + BLS12_381_FQ_BYTES);
     let (x3, y3) = ec_add_ne_impl(x1, y1, x2, y2);
     write_bls12_381_fq(state, rd_ptr, &x3);
-    write_bls12_381_fq(state, rd_ptr + BLS12_381_ELEM_BYTES as u32, &y3);
+    write_bls12_381_fq(state, rd_ptr + BLS12_381_FQ_BYTES, &y3);
 }
 
-unsafe fn ec_double_bls12_381(state: *mut c_void, rd_ptr: u32, rs1_ptr: u32) {
+unsafe fn ec_double_bls12_381(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64) {
     let x1 = read_bls12_381_fq(state, rs1_ptr);
-    let y1 = read_bls12_381_fq(state, rs1_ptr + BLS12_381_ELEM_BYTES as u32);
+    let y1 = read_bls12_381_fq(state, rs1_ptr + BLS12_381_FQ_BYTES);
     // BLS12-381 has a = 0
     let (x3, y3) = ec_double_impl(x1, y1, blstrs::Fp::ZERO);
     write_bls12_381_fq(state, rd_ptr, &x3);
-    write_bls12_381_fq(state, rd_ptr + BLS12_381_ELEM_BYTES as u32, &y3);
+    write_bls12_381_fq(state, rd_ptr + BLS12_381_FQ_BYTES, &y3);
 }
 
 // ── Curve constants ──────────────────────────────────────────────────────────
 
 const P256_A_ABS: u64 = 3;
 
-unsafe fn trace_read_bytes(state: *mut c_void, ptr: u32, len: u32) -> Vec<u8> {
+unsafe fn trace_read_bytes(state: *mut c_void, ptr: u64, len: u32) -> Vec<u8> {
     debug_assert_eq!(len % WORD_SIZE as u32, 0);
     let num_words = (len as usize) / WORD_SIZE;
     let mut words = vec![0u64; num_words];
@@ -133,7 +138,7 @@ unsafe fn trace_read_bytes(state: *mut c_void, ptr: u32, len: u32) -> Vec<u8> {
     bytes
 }
 
-unsafe fn trace_write_bytes(state: *mut c_void, ptr: u32, bytes: &[u8]) {
+unsafe fn trace_write_bytes(state: *mut c_void, ptr: u64, bytes: &[u8]) {
     debug_assert_eq!(bytes.len() % WORD_SIZE, 0);
     let words: Vec<u64> = bytes
         .chunks_exact(WORD_SIZE)
@@ -174,9 +179,9 @@ fn ecc_setup_expr(point_bytes: u32, setup_bytes: &[u8], is_double: bool) -> Vec<
 
 unsafe fn ec_add_ne_setup(
     state: *mut c_void,
-    rd_ptr: u32,
-    rs1_ptr: u32,
-    rs2_ptr: u32,
+    rd_ptr: u64,
+    rs1_ptr: u64,
+    rs2_ptr: u64,
     point_bytes: u32,
 ) {
     let mut setup_bytes = trace_read_bytes(state, rs1_ptr, point_bytes);
@@ -185,7 +190,7 @@ unsafe fn ec_add_ne_setup(
     trace_write_bytes(state, rd_ptr, &output);
 }
 
-unsafe fn ec_double_setup(state: *mut c_void, rd_ptr: u32, rs1_ptr: u32, point_bytes: u32) {
+unsafe fn ec_double_setup(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64, point_bytes: u32) {
     let setup_bytes = trace_read_bytes(state, rs1_ptr, point_bytes);
     let output = ecc_setup_expr(point_bytes, &setup_bytes, true);
     trace_write_bytes(state, rd_ptr, &output);
@@ -195,9 +200,9 @@ unsafe fn ec_add_ne_256_entry<
     F: halo2curves_axiom::ff::PrimeField<Repr = [u8; FIELD_256_BYTES]>,
 >(
     state: *mut c_void,
-    rd_ptr: u32,
-    rs1_ptr: u32,
-    rs2_ptr: u32,
+    rd_ptr: u64,
+    rs1_ptr: u64,
+    rs2_ptr: u64,
 ) {
     ec_add_ne_256::<F>(state, rd_ptr, rs1_ptr, rs2_ptr);
 }
@@ -206,8 +211,8 @@ unsafe fn ec_double_256_entry<
     F: halo2curves_axiom::ff::PrimeField<Repr = [u8; FIELD_256_BYTES]>,
 >(
     state: *mut c_void,
-    rd_ptr: u32,
-    rs1_ptr: u32,
+    rd_ptr: u64,
+    rs1_ptr: u64,
     a: F,
 ) {
     ec_double_256(state, rd_ptr, rs1_ptr, a);
@@ -222,9 +227,9 @@ macro_rules! ecc_add_ne_entry {
         #[no_mangle]
         pub unsafe extern "C" fn $name(
             state: *mut c_void,
-            rd_ptr: u32,
-            rs1_ptr: u32,
-            rs2_ptr: u32,
+            rd_ptr: u64,
+            rs1_ptr: u64,
+            rs2_ptr: u64,
         ) {
             ec_add_ne_256_entry::<$curve>(state, rd_ptr, rs1_ptr, rs2_ptr);
         }
@@ -238,7 +243,7 @@ macro_rules! ecc_double_entry {
         /// `state` must point to a valid native tracer state for this execution.
         /// Pointer parameters must point to valid affine point coordinates.
         #[no_mangle]
-        pub unsafe extern "C" fn $name(state: *mut c_void, rd_ptr: u32, rs1_ptr: u32) {
+        pub unsafe extern "C" fn $name(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64) {
             ec_double_256_entry::<$curve>(state, rd_ptr, rs1_ptr, $a);
         }
     };
@@ -253,9 +258,9 @@ macro_rules! ecc_add_ne_setup_entry {
         #[no_mangle]
         pub unsafe extern "C" fn $name(
             state: *mut c_void,
-            rd_ptr: u32,
-            rs1_ptr: u32,
-            rs2_ptr: u32,
+            rd_ptr: u64,
+            rs1_ptr: u64,
+            rs2_ptr: u64,
         ) {
             ec_add_ne_setup(state, rd_ptr, rs1_ptr, rs2_ptr, $point_bytes);
         }
@@ -269,7 +274,7 @@ macro_rules! ecc_double_setup_entry {
         /// `state` must point to a valid native tracer state for this execution.
         /// Pointer parameters must point to valid affine point coordinates.
         #[no_mangle]
-        pub unsafe extern "C" fn $name(state: *mut c_void, rd_ptr: u32, rs1_ptr: u32) {
+        pub unsafe extern "C" fn $name(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64) {
             ec_double_setup(state, rd_ptr, rs1_ptr, $point_bytes);
         }
     };
@@ -306,9 +311,9 @@ ecc_double_setup_entry!(rvr_ext_setup_ec_double_bn254, POINT_256_BYTES);
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_ec_add_ne_bls12_381(
     state: *mut c_void,
-    rd_ptr: u32,
-    rs1_ptr: u32,
-    rs2_ptr: u32,
+    rd_ptr: u64,
+    rs1_ptr: u64,
+    rs2_ptr: u64,
 ) {
     ec_add_ne_bls12_381(state, rd_ptr, rs1_ptr, rs2_ptr);
 }
@@ -323,8 +328,8 @@ ecc_add_ne_setup_entry!(rvr_ext_setup_ec_add_ne_bls12_381, POINT_BLS12_381_BYTES
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_ec_double_bls12_381(
     state: *mut c_void,
-    rd_ptr: u32,
-    rs1_ptr: u32,
+    rd_ptr: u64,
+    rs1_ptr: u64,
 ) {
     ec_double_bls12_381(state, rd_ptr, rs1_ptr);
 }

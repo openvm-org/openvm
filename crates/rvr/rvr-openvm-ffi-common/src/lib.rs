@@ -45,27 +45,27 @@ pub const DEFAULT_SEGMENT_CHECK_INSNS: u32 = 1000;
 
 extern "C" {
     // ── Memory access (single u64 word, data) ─────────────────────────
-    pub fn rd_mem_u64_wrapper(state: *mut c_void, addr: u32) -> u64;
+    pub fn rd_mem_u64_wrapper(state: *mut c_void, addr: u64) -> u64;
 
     // ── Memory access (single u64 word, trace-only) ───────────────────
-    pub fn trace_rd_mem_u64_wrapper(state: *mut c_void, addr: u32, val: u64);
+    pub fn trace_rd_mem_u64_wrapper(state: *mut c_void, addr: u64, val: u64);
 
     // ── Memory access (u64-word ranges, data) ───────────────────────
     pub fn rd_mem_u64_range_wrapper(
         state: *mut c_void,
-        base_addr: u32,
+        base_addr: u64,
         out: *mut u64,
         num_words: u32,
     );
     pub fn wr_mem_u64_range_wrapper(
         state: *mut c_void,
-        base_addr: u32,
+        base_addr: u64,
         vals: *const u64,
         num_words: u32,
     );
     pub fn trace_mem_access_u64_range_wrapper(
         state: *mut c_void,
-        base_addr: u32,
+        base_addr: u64,
         num_words: u32,
         addr_space: u32,
     );
@@ -73,13 +73,13 @@ extern "C" {
     // ── Memory access (u64-word ranges, trace-only) ───────────────────
     pub fn trace_rd_mem_u64_range_wrapper(
         state: *mut c_void,
-        base_addr: u32,
+        base_addr: u64,
         vals: *const u64,
         num_words: u32,
     );
     pub fn trace_wr_mem_u64_range_wrapper(
         state: *mut c_void,
-        base_addr: u32,
+        base_addr: u64,
         vals: *const u64,
         num_words: u32,
     );
@@ -131,7 +131,7 @@ pub fn u64s_as_u32s_mut(lanes: &mut [u64]) -> &mut [u32] {
 /// # Safety
 /// `state` must be a valid `RvState` pointer; the byte range
 /// `[base_addr, base_addr + out.len() * WORD_SIZE)` must lie within guest memory.
-pub unsafe fn rd_mem_words_traced(state: *mut c_void, base_addr: u32, out: &mut [u64]) {
+pub unsafe fn rd_mem_words_traced(state: *mut c_void, base_addr: u64, out: &mut [u64]) {
     debug_assert!(
         !out.is_empty(),
         "rd_mem_words_traced requires a non-empty range"
@@ -150,7 +150,7 @@ pub unsafe fn rd_mem_words_traced(state: *mut c_void, base_addr: u32, out: &mut 
 /// # Safety
 /// `state` must be a valid `RvState` pointer; the byte range
 /// `[base_addr, base_addr + vals.len() * WORD_SIZE)` must lie within guest memory.
-pub unsafe fn wr_mem_words_traced(state: *mut c_void, base_addr: u32, vals: &[u64]) {
+pub unsafe fn wr_mem_words_traced(state: *mut c_void, base_addr: u64, vals: &[u64]) {
     debug_assert!(
         !vals.is_empty(),
         "wr_mem_words_traced requires a non-empty range"
@@ -169,7 +169,7 @@ pub unsafe fn wr_mem_words_traced(state: *mut c_void, base_addr: u32, vals: &[u6
 /// `state` must be a valid `RvState` pointer.
 pub unsafe fn trace_mem_access_range(
     state: *mut c_void,
-    base_addr: u32,
+    base_addr: u64,
     num_words: u32,
     addr_space: u32,
 ) {
