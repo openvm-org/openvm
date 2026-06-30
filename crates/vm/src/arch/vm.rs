@@ -909,6 +909,12 @@ where
             .log_stacked_height()
             .try_into()
             .expect("log_stacked_height must fit in u8");
+        let memory_config = self.engine.proving_memory_config();
+        let retained_backend_memory_bytes =
+            E::PB::retained_proving_key_memory_bytes(&self.pk, &memory_config);
+        let memory_config =
+            memory_config.with_retained_backend_memory_bytes(retained_backend_memory_bytes);
+
         self.executor().build_metered_ctx(
             MeteredCtxInputs {
                 constant_trace_heights: &constant_trace_heights,
@@ -923,7 +929,7 @@ where
                     max_interactions: <Val<E::SC> as PrimeField32>::ORDER_U32,
                 },
             },
-            self.engine.proving_memory_config(),
+            memory_config,
         )
     }
 
