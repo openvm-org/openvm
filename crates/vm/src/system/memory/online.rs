@@ -17,12 +17,14 @@ mod basic;
 #[cfg(any(unix, windows))]
 mod memmap;
 mod paged_vec;
+mod touched_pages;
 
 #[cfg(not(any(unix, windows)))]
 pub use basic::*;
 #[cfg(any(unix, windows))]
 pub use memmap::*;
 pub use paged_vec::PagedVec;
+pub use touched_pages::TouchedPages;
 
 #[cfg(all(any(unix, windows), not(feature = "basic-memory")))]
 pub type MemoryBackend = memmap::MmapMemory;
@@ -134,6 +136,15 @@ pub struct AddressMap<M: LinearMemory = MemoryBackend> {
     pub mem: Vec<M>,
     /// Host configuration for each address space.
     pub config: Vec<AddressSpaceHostConfig>,
+    /// Per-address-space record of which pages may contain non-zero data, used to skip all-zero
+    /// pages during the GPU host-to-device transfer. See [`TouchedPages`].
+    ///
+    /// Invariant: any path that writes non-zero data into memory that may later be transferred via
+    /// `set_initial_memory` must mark the written pages (`set_from_sparse`,
+    /// `extend_touched_pages_from_touched`). Unmarked pages are transferred as zero. The untracked
+    /// write paths (`get_memory_mut`, `GuestMemory::write`/`write_bytes`) do not mark and must not
+    /// be the source of transferred initial memory.
+    pub touched_pages: Vec<TouchedPages>,
 }
 
 impl Default for AddressMap {
@@ -145,11 +156,19 @@ impl Default for AddressMap {
 impl<M: LinearMemory> AddressMap<M> {
     pub fn new(config: Vec<AddressSpaceHostConfig>) -> Self {
         assert_eq!(config[0].num_cells, 0, "Address space 0 must have 0 cells");
-        let mem = config
+        let mem: Vec<M> = config
             .iter()
             .map(|config| M::new(config.num_cells.checked_mul(config.layout.size()).unwrap()))
             .collect();
-        Self { mem, config }
+        // Pages start unmarked (guaranteed zero); paths that write data (`set_from_sparse`) and the
+        // carried-forward extension (`extend_touched_pages_from_touched`) mark the pages they
+        // touch. See the invariant on `touched_pages`.
+        let touched_pages = mem.iter().map(|m| TouchedPages::new(m.size())).collect();
+        Self {
+            mem,
+            config,
+            touched_pages,
+        }
     }
 
     pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
@@ -168,8 +187,10 @@ impl<M: LinearMemory> AddressMap<M> {
 
     /// Fill each address space memory with zeros. Does not change the config.
     pub fn fill_zero(&mut self) {
-        for mem in &mut self.mem {
+        for (mem, touched) in self.mem.iter_mut().zip(self.touched_pages.iter_mut()) {
             mem.fill_zero();
+            // Memory is now all zero, so no pages are touched.
+            *touched = TouchedPages::new(mem.size());
         }
     }
 
@@ -257,6 +278,12 @@ impl<M: LinearMemory> AddressMap<M> {
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub fn set_from_sparse(&mut self, sparse_map: &SparseMemoryImage) {
+        // Callers always pass freshly-zeroed memory, so reset the touched-page sets: any page not
+        // written from the sparse image below is guaranteed zero. This narrows the segment-0
+        // initial image to exactly the sparse pages.
+        for (mem, touched) in self.mem.iter().zip(self.touched_pages.iter_mut()) {
+            *touched = TouchedPages::new(mem.size());
+        }
         for (&(addr_space, ptr), &data_byte) in sparse_map.iter() {
             // SAFETY:
             // - safety assumptions in function doc comments
@@ -265,6 +292,22 @@ impl<M: LinearMemory> AddressMap<M> {
                     .get_unchecked_mut(addr_space as usize)
                     .write_unaligned(ptr as usize, data_byte);
             }
+            self.touched_pages[addr_space as usize].mark_byte_range(ptr as usize, 1);
+        }
+    }
+
+    /// Marks the pages covering each touched block as possibly non-zero. Grows the touched-page
+    /// sets so that a carried-forward memory image (a preflight `to_state`) stays a correct
+    /// superset of its non-zero pages across continuation segments.
+    ///
+    /// `touched` is the [`TouchedMemory`] produced by `TracingMemory::finalize`; its `ptr` is in
+    /// AS-native cells and each block spans `BLOCK_FE_WIDTH` cells.
+    pub fn extend_touched_pages_from_touched<F>(&mut self, touched: &TouchedMemory<F>) {
+        for &((addr_space, ptr), _) in touched.iter() {
+            let cell_size = self.config[addr_space as usize].layout.size();
+            let start = ptr as usize * cell_size;
+            let len = BLOCK_FE_WIDTH * cell_size;
+            self.touched_pages[addr_space as usize].mark_byte_range(start, len);
         }
     }
 }
