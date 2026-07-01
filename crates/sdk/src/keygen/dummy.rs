@@ -91,6 +91,7 @@ pub(crate) fn compute_root_proof_heights(
         agg_prover.clone(),
         deferral_setup,
     )?;
+    stark_prover.set_program_name("root_keygen");
     let (agg_proof, _) = stark_prover.prove(StdIn::default(), &[])?;
 
     let root_prover = openvm_continuations::prover::RootCpuProver::new::<CpuRootE>(
