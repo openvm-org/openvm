@@ -4,17 +4,16 @@ use clap::Parser;
 use eyre::{Context, Result};
 use openvm_sdk::{
     fs::{read_from_file_json, read_object_from_file},
-    prover::verify_app_proof,
-    types::{VerificationBaselineJson, VersionedVmStarkProof},
+    prover::verify_app_proof_with_expected_exe_commit,
+    types::{AppExecutionCommit, VerificationBaselineJson, VersionedVmStarkProof},
     Sdk, OPENVM_VERSION,
 };
 
-use super::KeygenCargoArgs;
 use crate::{
     args::ManifestArgs,
     default::{APP_PROOF_EXT, STARK_PROOF_EXT},
     util::{
-        get_app_baseline_path, get_app_vk_path, get_manifest_path_and_dir,
+        get_app_baseline_path, get_app_commit_path, get_app_vk_path, get_manifest_path_and_dir,
         get_single_target_name_raw, get_target_dir, get_target_output_dir, resolve_proof_path,
     },
 };
@@ -45,8 +44,16 @@ enum VerifySubCommand {
         )]
         proof: Option<PathBuf>,
 
+        #[arg(
+            long,
+            num_args = 0..=1,
+            help = "Check the exe commit recovered from the proof against an expected app commit. With no value, uses the default commit path for the target; or pass an explicit path to a .commit.json",
+            help_heading = "OpenVM Options"
+        )]
+        app_commit: Option<Option<PathBuf>>,
+
         #[command(flatten)]
-        cargo_args: KeygenCargoArgs,
+        cargo_args: SingleTargetCargoArgs,
     },
     Stark {
         #[arg(
@@ -155,6 +162,7 @@ impl VerifyCmd {
             VerifySubCommand::App {
                 app_vk,
                 proof,
+                app_commit,
                 cargo_args,
             } => {
                 let app_vk_path = if let Some(app_vk) = app_vk {
@@ -172,8 +180,11 @@ impl VerifyCmd {
                 let proof_path = resolve_proof_path(proof, APP_PROOF_EXT)?;
                 println!("Verifying application proof at {}", proof_path.display());
                 let app_proof = read_object_from_file(proof_path)?;
-                let _exe_commit =
-                    verify_app_proof::<openvm_sdk::DefaultStarkEngine>(&app_vk, &app_proof)?;
+                let exe_commit =
+                    read_app_commit(app_commit, cargo_args)?.map(|c| c.app_exe_commit.into());
+                verify_app_proof_with_expected_exe_commit::<openvm_sdk::DefaultStarkEngine>(
+                    &app_vk, &app_proof, exe_commit,
+                )?;
             }
             VerifySubCommand::Stark {
                 agg_vk,
@@ -226,10 +237,7 @@ impl VerifyCmd {
                 proof,
                 cargo_args,
             } => {
-                use openvm_sdk::{
-                    fs::read_evm_halo2_verifier_from_folder,
-                    types::{AppExecutionCommit, EvmProof},
-                };
+                use openvm_sdk::{fs::read_evm_halo2_verifier_from_folder, types::EvmProof};
 
                 let verifier_path = evm_verifier
                     .clone()
@@ -252,40 +260,41 @@ impl VerifyCmd {
                 if evm_proof.version != format!("v{OPENVM_VERSION}") {
                     eprintln!("Attempting to verify proof generated with openvm {}, but the verifier is on openvm v{OPENVM_VERSION}", evm_proof.version);
                 }
-                let app_commit = match app_commit {
-                    None => None,
-                    Some(explicit) => {
-                        let commit_path = if let Some(path) = explicit {
-                            path.to_path_buf()
-                        } else {
-                            let (manifest_path, _) =
-                                get_manifest_path_and_dir(&cargo_args.manifest.manifest_path)?;
-                            let target_dir =
-                                get_target_dir(&cargo_args.manifest.target_dir, &manifest_path);
-                            let target_output_dir =
-                                get_target_output_dir(&target_dir, &cargo_args.profile);
-                            let target_name = get_single_target_name_raw(
-                                &cargo_args.bin,
-                                &cargo_args.example,
-                                &cargo_args.manifest.manifest_path,
-                                &cargo_args.package,
-                            )?;
-                            crate::util::get_app_commit_path(&target_output_dir, target_name)
-                        };
-                        let app_commit: AppExecutionCommit = read_from_file_json(&commit_path)
-                            .with_context(|| {
-                                format!(
-                                    "Failed to read app commit from {}\nRun 'cargo openvm commit' first to generate it",
-                                    commit_path.display()
-                                )
-                            })?;
-                        Some(app_commit)
-                    }
-                };
+                let app_commit = read_app_commit(app_commit, cargo_args)?;
                 Sdk::verify_evm_halo2_proof(&evm_verifier, evm_proof, app_commit)?;
             }
         }
         println!("Proof verified successfully!");
         Ok(())
     }
+}
+
+fn read_app_commit(
+    app_commit: &Option<Option<PathBuf>>,
+    cargo_args: &SingleTargetCargoArgs,
+) -> Result<Option<AppExecutionCommit>> {
+    let Some(explicit) = app_commit else {
+        return Ok(None);
+    };
+    let commit_path = if let Some(path) = explicit {
+        path.to_path_buf()
+    } else {
+        let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest.manifest_path)?;
+        let target_dir = get_target_dir(&cargo_args.manifest.target_dir, &manifest_path);
+        let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);
+        let target_name = get_single_target_name_raw(
+            &cargo_args.bin,
+            &cargo_args.example,
+            &cargo_args.manifest.manifest_path,
+            &cargo_args.package,
+        )?;
+        get_app_commit_path(&target_output_dir, target_name)
+    };
+    let app_commit: AppExecutionCommit = read_from_file_json(&commit_path).with_context(|| {
+        format!(
+            "Failed to read app commit from {}\nRun 'cargo openvm commit' first to generate it",
+            commit_path.display()
+        )
+    })?;
+    Ok(Some(app_commit))
 }
