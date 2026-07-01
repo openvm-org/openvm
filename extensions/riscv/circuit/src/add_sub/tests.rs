@@ -58,8 +58,7 @@ fn create_harness_fields(
         Rv64AddSubAdapterAir::new(execution_bridge, memory_bridge),
         AddSubCoreAir::new(range_checker_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
     );
-    let executor =
-        Rv64AddSubExecutor::new(Rv64AddSubAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+    let executor = Rv64AddSubExecutor::new(Rv64AddSubAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
     let chip = Rv64AddSubChip::new(
         AddSubFiller::new(
             Rv64AddSubAdapterFiller,
@@ -94,14 +93,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
     let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
 
-    let (instruction, rd) = rv64_rand_write_register_or_imm(
-        tester,
-        b,
-        c,
-        None,
-        opcode.global_opcode().as_usize(),
-        rng,
-    );
+    let (instruction, rd) =
+        rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
     tester.execute(executor, arena, &instruction);
 
     let b_u16 = rv64_bytes_to_u16_block(b);

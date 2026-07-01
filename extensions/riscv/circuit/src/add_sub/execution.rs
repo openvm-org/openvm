@@ -6,10 +6,7 @@ use std::{
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::RV64_REGISTER_AS,
-    LocalOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS, LocalOpcode,
 };
 use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -34,8 +31,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AddSubExecutor<A, NUM_LI
         data: &mut AddSubPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction { a, b, c, d, e, .. } = inst;
-        if (d.as_canonical_u32() != RV64_REGISTER_AS)
-            || (e.as_canonical_u32() != RV64_REGISTER_AS)
+        if (d.as_canonical_u32() != RV64_REGISTER_AS) || (e.as_canonical_u32() != RV64_REGISTER_AS)
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
