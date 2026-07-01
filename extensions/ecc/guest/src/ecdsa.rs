@@ -512,6 +512,10 @@ where
     for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
     for<'a> &'a Scalar<C>: DivUnsafe<&'a Scalar<C>, Output = Scalar<C>>,
 {
+    if pubkey.is_identity() {
+        return Err(Error::new());
+    }
+
     // This should get compiled out:
     assert!(Scalar::<C>::NUM_LIMBS <= Coordinate::<C>::NUM_LIMBS);
     // IntMod limbs are currently always bytes

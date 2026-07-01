@@ -9,6 +9,7 @@ use openvm_ecc_guest::{
     algebra::IntMod,
     ecdsa::{verify_prehashed, VerifyingKey},
     weierstrass::WeierstrassPoint,
+    Group,
 };
 use openvm_k256::{
     ecdsa::{self, signature::hazmat::PrehashVerifier, RecoveryId, Signature},
@@ -93,4 +94,17 @@ pub fn main() {
         )
         .is_err());
     }
+
+    let forged_identity_sig = hex!(
+        "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+         0000000000000000000000000000000000000000000000000000000000000001"
+    );
+    let mut one_prehash = [0u8; 32];
+    one_prehash[31] = 1;
+    assert!(verify_prehashed::<Secp256k1>(
+        <Secp256k1Point as Group>::IDENTITY,
+        &one_prehash,
+        &forged_identity_sig
+    )
+    .is_err());
 }
