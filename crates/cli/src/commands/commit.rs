@@ -85,7 +85,7 @@ impl CommitCmd {
         let target_name =
             get_single_target_name(&self.cargo_args).unwrap_or(target_name_stem.into());
 
-        // Write Bn254 commit values in CommitBytes form.
+        // Write Bn254 commit values
         let commit_path = get_app_commit_path(&target_output_dir, target_name.clone());
         println!("Writing app commit to {}", commit_path.display());
         write_to_file_json(&commit_path, &app_commit)?;
