@@ -2079,7 +2079,6 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
- "p3-bn254",
  "serde",
  "serde_json",
  "target-lexicon",
