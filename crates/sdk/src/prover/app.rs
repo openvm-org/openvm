@@ -13,6 +13,7 @@ use openvm_circuit::{
         memory::dimensions::MemoryDimensions, program::trace::compute_exe_commit_from_mem_config,
     },
 };
+use openvm_continuations::CommitBytes;
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, prover::ProverBackend,
     StarkEngine, Val,
@@ -184,9 +185,9 @@ pub fn verify_app_proof_with_expected_exe_commit<E: StarkEngine<SC = SC>>(
     if let Some(expected_exe_commit) = expected_exe_commit {
         if exe_commit != expected_exe_commit {
             return Err(SdkError::Other(eyre::eyre!(
-                "app proof exe commit mismatch: expected {:?}, actual {:?}",
-                expected_exe_commit,
-                exe_commit
+                "app proof exe commit mismatch: expected {}, actual {}",
+                CommitBytes::from(expected_exe_commit),
+                CommitBytes::from(exe_commit)
             )));
         }
     }

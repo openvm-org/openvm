@@ -11,7 +11,6 @@ use openvm_sdk::{
     types::{AppExecutionCommit, VerificationBaselineJson},
     Sdk,
 };
-use p3_bn254::Bn254;
 
 use super::{prove::load_required_agg_pk, RunArgs, RunCargoArgs};
 use crate::{
@@ -77,10 +76,8 @@ impl CommitCmd {
             app_exe_commit: CommitBytes::from(baseline.app_exe_commit),
             app_vm_commit: CommitBytes::from(app_vm_commit),
         };
-        let exe_commit_bn254 = Bn254::from(app_commit.app_exe_commit);
-        let vm_commit_bn254 = Bn254::from(app_commit.app_vm_commit);
-        println!("exe commit: {:?}", exe_commit_bn254);
-        println!("vm commit: {:?}", vm_commit_bn254);
+        println!("exe commit: {}", app_commit.app_exe_commit);
+        println!("vm commit: {}", app_commit.app_vm_commit);
 
         let target_output_dir = get_target_output_dir(&target_dir, &self.cargo_args.profile);
 
@@ -88,7 +85,7 @@ impl CommitCmd {
         let target_name =
             get_single_target_name(&self.cargo_args).unwrap_or(target_name_stem.into());
 
-        // Write Bn254 commit values
+        // Write Bn254 commit values in CommitBytes form.
         let commit_path = get_app_commit_path(&target_output_dir, target_name.clone());
         println!("Writing app commit to {}", commit_path.display());
         write_to_file_json(&commit_path, &app_commit)?;
