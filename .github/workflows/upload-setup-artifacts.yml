@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version tag (e.g., v2.0.0-beta.2)"
+        description: "Version tag (e.g., v2.0.0)"
         required: true
-        default: "v2.0.0-beta.2"
+        default: "v2.0.0"
         type: string
   release:
     types: [released]

@@ -7,6 +7,11 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ## Unreleased
 
+## v2.0.0 (2026-07-06)
+
+### Changed
+- (Prover) Use the SWIRL proof system through STARK Backend v2.0.0.
+
 ## v1.7.0
 
 ### Changed

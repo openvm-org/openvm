@@ -31,7 +31,9 @@ OpenVM is a performant and modular zkVM framework built for customization and ex
 
 ## Status
 
-As of June 2026, OpenVM v1.7.0 and later are recommended for production use. OpenVM completed manual security reviews through external [audits](https://github.com/openvm-org/openvm/blob/main/audits/) on [Cantina](https://cantina.xyz/) and an internal [audit](https://github.com/openvm-org/openvm/blob/main/audits/v1-internal/README.md) by members of the [Axiom](https://axiom.xyz/) team.
+As of July 2026, OpenVM v2.0.0 and later are recommended for production use. OpenVM v2.0.0 completed an external [audit](https://github.com/openvm-org/openvm/blob/main/audits/v2/v2.0.0-zksecurity-report.pdf) by [zkSecurity](https://zksecurity.xyz/).
+
+OpenVM v1.7.0 completed manual security reviews through external [audits](https://github.com/openvm-org/openvm/blob/main/audits/v1/) on [Cantina](https://cantina.xyz/) as well as an internal [audit](https://github.com/openvm-org/openvm/blob/main/audits/v1/v1-internal/README.md) by members of the [Axiom](https://axiom.xyz/) team.
 
 As of February 2026, the OpenVM RV32IM extension has been formally verified in [Lean](https://lean-lang.org/) by [Nethermind Research](https://www.nethermind.io).
 

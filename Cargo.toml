@@ -1,5 +1,5 @@
 [workspace.package]
-version = "2.0.0-beta.2"
+version = "2.0.0"
 edition = "2021"
 rust-version = "1.91.1"
 authors = ["OpenVM Authors"]
@@ -119,6 +119,7 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
+# TODO: update to tag = "v2.0.0" after stark-backend is tagged
 openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
 openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
 openvm-cpu-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }

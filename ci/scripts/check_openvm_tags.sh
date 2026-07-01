@@ -4,7 +4,7 @@ set -euo pipefail
 dir="$1"
 status=0
 
-install_file=$(find $1 -name "install.mdx")
+install_file=$(find "$dir" -name "install.mdx")
 tag=$(awk '{
   for (i = 1; i <= NF; i++) {
     if ($i == "--tag" && (i+1) <= NF) {
@@ -18,10 +18,10 @@ echo "Tag is $tag"
 
 # Find all regular files under the directory
 while IFS= read -r file; do
-  awk -v tag=$tag '
-    /^openvm/ && /git/ && /\}$/ {
+  awk -v tag="$tag" '
+    /^openvm/ && index($0, "github.com/openvm-org/openvm.git") && /\}$/ {
       expected = "tag = \"" tag "\""
-      if ($0 !~ expected) {
+      if (index($0, expected) == 0) {
         print FILENAME ": missing tag in line -> " $0
         exit_status = 1
       }
