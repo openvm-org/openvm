@@ -173,6 +173,26 @@ pub fn verify_app_proof<E: StarkEngine<SC = SC>>(
     )
 }
 
+/// Verifies a ContinuationVmProof and optionally checks that the recovered app_exe_commit matches
+/// the expected value.
+pub fn verify_app_proof_with_expected_exe_commit<E: StarkEngine<SC = SC>>(
+    app_vk: &AppVerifyingKey,
+    proof: &ContinuationVmProof<E::SC>,
+    expected_exe_commit: Option<Digest>,
+) -> Result<(), SdkError> {
+    let exe_commit = verify_app_proof::<E>(app_vk, proof)?;
+    if let Some(expected_exe_commit) = expected_exe_commit {
+        if exe_commit != expected_exe_commit {
+            return Err(SdkError::Other(eyre::eyre!(
+                "app proof exe commit mismatch: expected {:?}, actual {:?}",
+                expected_exe_commit,
+                exe_commit
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Verifies a ContinuationVmProof from the borrowed components of an
 /// [`AppVerifyingKey`], returning the app_exe_commit.
 fn verify_app_proof_inner<E: StarkEngine<SC = SC>>(

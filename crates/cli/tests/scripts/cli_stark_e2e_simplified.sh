@@ -5,6 +5,7 @@ temp_dir="$(mktemp -d)"
 trap 'rm -rf "$temp_dir"' EXIT
 
 proof_path="$temp_dir/fibonacci.stark.proof"
+app_proof_path="$temp_dir/fibonacci.app.proof"
 
 cargo openvm keygen \
   --manifest-path tests/programs/multi/Cargo.toml
@@ -14,6 +15,17 @@ cargo openvm setup
 cargo openvm commit \
   --manifest-path tests/programs/multi/Cargo.toml \
   --example fibonacci
+
+cargo openvm prove app \
+  --manifest-path tests/programs/multi/Cargo.toml \
+  --example fibonacci \
+  --proof "$app_proof_path"
+
+cargo openvm verify app \
+  --manifest-path tests/programs/multi/Cargo.toml \
+  --example fibonacci \
+  --proof "$app_proof_path" \
+  --app-commit
 
 cargo openvm prove stark \
   --manifest-path tests/programs/multi/Cargo.toml \

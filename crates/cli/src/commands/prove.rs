@@ -163,9 +163,11 @@ impl ProveCmd {
                     .build()?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
-                let app_proof = sdk
-                    .app_prover(exe)?
-                    .prove(read_to_stdin(&run_args.input)?)?;
+                let mut prover = sdk.app_prover(exe)?;
+                let exe_commit = CommitBytes::from(prover.app_exe_commit());
+                println!("exe commit: {:?}", Bn254::from(exe_commit));
+
+                let app_proof = prover.prove(read_to_stdin(&run_args.input)?)?;
 
                 let proof_path = if let Some(proof) = proof {
                     proof
