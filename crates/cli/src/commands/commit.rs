@@ -11,7 +11,6 @@ use openvm_sdk::{
     types::{AppExecutionCommit, VerificationBaselineJson},
     Sdk,
 };
-use p3_bn254::Bn254;
 
 use super::{prove::load_required_agg_pk, RunArgs, RunCargoArgs};
 use crate::{
@@ -77,10 +76,8 @@ impl CommitCmd {
             app_exe_commit: CommitBytes::from(baseline.app_exe_commit),
             app_vm_commit: CommitBytes::from(app_vm_commit),
         };
-        let exe_commit_bn254 = Bn254::from(app_commit.app_exe_commit);
-        let vm_commit_bn254 = Bn254::from(app_commit.app_vm_commit);
-        println!("exe commit: {:?}", exe_commit_bn254);
-        println!("vm commit: {:?}", vm_commit_bn254);
+        println!("exe commit: {}", app_commit.app_exe_commit);
+        println!("vm commit: {}", app_commit.app_vm_commit);
 
         let target_output_dir = get_target_output_dir(&target_dir, &self.cargo_args.profile);
 

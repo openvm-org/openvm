@@ -1,4 +1,4 @@
-use std::array::from_fn;
+use std::{array::from_fn, fmt};
 
 use num_bigint::BigUint;
 use openvm_stark_backend::codec::{Decode, Encode};
@@ -126,9 +126,15 @@ fn u32_digest_to_bytes(digest: &[u32; DIGEST_SIZE]) -> [u8; COMMIT_NUM_BYTES] {
     ret
 }
 
+impl fmt::Display for CommitBytes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{}", hex::encode(self.as_slice()))
+    }
+}
+
 impl Serialize for CommitBytes {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        format!("0x{}", hex::encode(self.as_slice())).serialize(serializer)
+        self.to_string().serialize(serializer)
     }
 }
 
