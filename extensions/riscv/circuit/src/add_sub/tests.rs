@@ -24,7 +24,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluU16AdapterRecord, AddSubCoreRecord, Rv64AddSubChipGpu},
+    crate::{adapters::Rv64AddSubAdapterRecord, AddSubCoreRecord, Rv64AddSubChipGpu},
     openvm_circuit::arch::{
         testing::{GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -36,12 +36,11 @@ use {
 use super::{core::run_add_sub, AddSubCoreAir, Rv64AddSubChip, Rv64AddSubExecutor};
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, Rv64BaseAluU16AdapterAir,
-        Rv64BaseAluU16AdapterExecutor, Rv64BaseAluU16AdapterFiller, RV64_REGISTER_NUM_LIMBS,
-        U16_BITS,
+        rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, Rv64AddSubAdapterAir,
+        Rv64AddSubAdapterExecutor, Rv64AddSubAdapterFiller, RV64_REGISTER_NUM_LIMBS, U16_BITS,
     },
     add_sub::AddSubCoreCols,
-    test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
+    test_utils::rv64_rand_write_register_or_imm,
     AddSubFiller, Rv64AddSubAir,
 };
 
@@ -56,14 +55,14 @@ fn create_harness_fields(
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64AddSubAir, Rv64AddSubExecutor, Rv64AddSubChip<F>) {
     let air = Rv64AddSubAir::new(
-        Rv64BaseAluU16AdapterAir::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
+        Rv64AddSubAdapterAir::new(execution_bridge, memory_bridge),
         AddSubCoreAir::new(range_checker_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
     );
     let executor =
-        Rv64AddSubExecutor::new(Rv64BaseAluU16AdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+        Rv64AddSubExecutor::new(Rv64AddSubAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
     let chip = Rv64AddSubChip::new(
         AddSubFiller::new(
-            Rv64BaseAluU16AdapterFiller::new(range_checker_chip.clone()),
+            Rv64AddSubAdapterFiller,
             range_checker_chip,
             BaseAluOpcode::CLASS_OFFSET,
         ),
@@ -83,7 +82,6 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
@@ -91,29 +89,16 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     rng: &mut StdRng,
     opcode: BaseAluOpcode,
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-    is_imm: Option<bool>,
     c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
 ) {
     let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
-    let (c_imm, c) = if is_imm.unwrap_or(rng.random_bool(0.5)) {
-        let (imm, c) = if let Some(c) = c {
-            ((u64::from_le_bytes(c) & 0xFFFFFF) as usize, c)
-        } else {
-            generate_rv64_is_type_immediate(rng)
-        };
-        (Some(imm), c)
-    } else {
-        (
-            None,
-            c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX))),
-        )
-    };
+    let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
 
     let (instruction, rd) = rv64_rand_write_register_or_imm(
         tester,
         b,
         c,
-        c_imm,
+        None,
         opcode.global_opcode().as_usize(),
         rng,
     );
@@ -158,7 +143,6 @@ fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
             opcode,
             None,
             None,
-            None,
         );
     }
 
@@ -173,7 +157,6 @@ fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-#[allow(clippy::too_many_arguments)]
 fn run_negative_add_sub_test(
     opcode: BaseAluOpcode,
     prank_a: [u32; BLOCK_FE_WIDTH],
@@ -182,7 +165,6 @@ fn run_negative_add_sub_test(
     prank_b: Option<[u32; BLOCK_FE_WIDTH]>,
     prank_c: Option<[u32; BLOCK_FE_WIDTH]>,
     prank_opcode_flags: Option<[bool; 2]>,
-    is_imm: Option<bool>,
     _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
@@ -196,7 +178,6 @@ fn run_negative_add_sub_test(
         &mut rng,
         opcode,
         Some(b),
-        is_imm,
         Some(c),
     );
 
@@ -239,7 +220,6 @@ fn rv64_add_sub_add_wrong_negative_test() {
         None,
         None,
         None,
-        None,
         false,
     );
 }
@@ -257,7 +237,6 @@ fn rv64_add_sub_add_out_of_range_negative_test() {
         None,
         None,
         None,
-        None,
         true,
     );
 }
@@ -269,7 +248,6 @@ fn rv64_add_sub_sub_wrong_negative_test() {
         [65535, 0, 0, 0],
         [1, 0, 0, 0, 0, 0, 0, 0],
         [2, 0, 0, 0, 0, 0, 0, 0],
-        None,
         None,
         None,
         None,
@@ -289,7 +267,6 @@ fn rv64_add_sub_sub_out_of_range_negative_test() {
         None,
         None,
         None,
-        None,
         true,
     );
 }
@@ -304,25 +281,6 @@ fn rv64_add_sub_adapter_unconstrained_rs2_read_test() {
         None,
         None,
         Some([false, false]),
-        Some(false),
-        false,
-    );
-}
-
-#[test]
-fn rv64_add_sub_adapter_imm_sign_extension_negative_test() {
-    // Prank c[2] = 1 while the imm sign cell is 0. The adapter must catch that
-    // cells 1-3 don't match the sign cell. Also prank a[2] = 1 so the ADD core
-    // constraint (a = b + c) still holds.
-    run_negative_add_sub_test(
-        ADD,
-        [5, 0, 1, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [5, 0, 0, 0, 0, 0, 0, 0],
-        None,
-        Some([5, 0, 1, 0]),
-        None,
-        Some(true),
         false,
     );
 }
@@ -341,7 +299,6 @@ fn rv64_add_sub_noncanonical_b_negative_test() {
         Some([1 << U16_BITS, 0, 0, 0]),
         None,
         None,
-        Some(false),
         true,
     );
 }
@@ -418,12 +375,11 @@ fn test_cuda_rand_add_sub_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
             opcode,
             None,
             None,
-            None,
         );
     }
 
     type Record<'a> = (
-        &'a mut Rv64BaseAluU16AdapterRecord,
+        &'a mut Rv64AddSubAdapterRecord,
         &'a mut AddSubCoreRecord<BLOCK_FE_WIDTH>,
     );
 
@@ -432,7 +388,7 @@ fn test_cuda_rand_add_sub_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64AddSubAdapterExecutor>::new(),
         );
 
     tester
