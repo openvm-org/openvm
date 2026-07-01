@@ -183,9 +183,6 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|x| x.global_opcode()),
         )?;
 
-        let addi = Rv64AddIExecutor::new(Rv64AddIAdapterExecutor, AddIOpcode::CLASS_OFFSET);
-        inventory.add_executor(addi, [AddIOpcode::ADDI].map(|x| x.global_opcode()))?;
-
         let bitwise_logic =
             Rv64BitwiseLogicExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
         inventory.add_executor(
@@ -357,6 +354,9 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
 
         let auipc = Rv64AuipcExecutor::new(Rv64RdWriteAdapterExecutor);
         inventory.add_executor(auipc, Rv64AuipcOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let addi = Rv64AddIExecutor::new(Rv64AddIAdapterExecutor, AddIOpcode::CLASS_OFFSET);
+        inventory.add_executor(addi, [AddIOpcode::ADDI].map(|x| x.global_opcode()))?;
 
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
         inventory.add_phantom_sub_executor(
