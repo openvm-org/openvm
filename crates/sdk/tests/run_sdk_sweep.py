@@ -35,7 +35,7 @@ def cargo_test_cmd(mode: str, evm=True, root=True) -> list[str]:
         features += ",aot"
         flags.append("--release")
     if mode == "cuda":
-        features += ",cuda"
+        features += ",cuda,halo2-gpu"
         flags.extend(["--test-threads=1", "--cargo-profile=fast"])
     if mode == "ignored":
         flags.extend(["--run-ignored=only", "--no-tests", "pass", "--release"])
@@ -96,8 +96,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--log-dir", type=Path, default=None, help="dir to store the log files"
     )
-    parser.add_argument("--use-evm", action="store_true")
-    parser.add_argument("--use-root", action="store_true")
+    parser.add_argument(
+        "--prove-mode",
+        choices=("stark", "root", "evm"),
+        default="stark",
+        help="which prover path to exercise: 'stark' (default), 'root' (root prover), "
+        "or 'evm' (root + EVM verifier)",
+    )
     parser.add_argument(
         "--test-name",
         type=str,
@@ -116,7 +121,7 @@ def parse_args() -> argparse.Namespace:
         "--jobs",
         type=int,
         default=None,
-        help="maximum number of sweep configurations to run in parallel; defaults to CPU core count",
+        help="maximum number of sweep configurations to run in parallel; defaults to 1",
     )
     parser.add_argument(
         "--test-indices",
@@ -208,7 +213,9 @@ def run_test(
 
 
 def get_runs(args):
-    test_cmd = cargo_test_cmd(args.mode, evm=args.use_evm, root=args.use_root)
+    evm = args.prove_mode == "evm"
+    root = args.prove_mode in ("root", "evm")
+    test_cmd = cargo_test_cmd(args.mode, evm=evm, root=root)
 
     if args.test_name is not None:
         assert isinstance(args.test_name, str)
@@ -309,7 +316,7 @@ def main() -> int:
 
     successful = RUN_LOG_DIR / "successful.json"
     failed = RUN_LOG_DIR / "failed.json"
-    jobs = args.jobs if args.jobs is not None else os.cpu_count() or 1
+    jobs = args.jobs if args.jobs is not None else 1
 
     print(f"SDK directory: {SDK_DIR}")
     print(f"Logs: {RUN_LOG_DIR}")

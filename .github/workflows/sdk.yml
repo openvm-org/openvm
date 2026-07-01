@@ -15,14 +15,13 @@ on:
         description: "EC2 instance family (must match selected arch)"
         type: string
         default: "m7a.24xlarge"
-      sweep_root:
-        description: "Run SDK root parameter sweep instead of normal SDK crate tests"
-        type: boolean
-        default: false
-      sweep_internal:
-        description: "Run SDK internal parameter sweep instead of normal SDK crate tests"
-        type: boolean
-        default: false
+      sweep_mode:
+        description: "Which parameter sweep to run"
+        type: choice
+        options:
+          - sweep_internal
+          - sweep_root
+        default: sweep_internal
       test_name:
         description: "Comma-separated test filters passed to --test-name"
         type: string
@@ -104,14 +103,14 @@ jobs:
           diff -u expected_abi_sorted.json compiled_abi.json
 
       - name: Generate sweep JSON files if missing
-        if: ${{ inputs.sweep_root || inputs.sweep_internal }}
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           if [[ ! -f tests/internal_sweep_no_root.json || ! -f tests/internal_sweep_root.json || ! -f tests/root_params.json ]]; then
             cargo run --bin generate-param-sweep -- crates/sdk/tests/
           fi
 
-      - name: Run openvm-sdk crate tests
-        if: ${{ matrix.mode == 'default' }}
+      - name: Run openvm-sdk crate sweep
+        if: ${{ matrix.mode == 'default' && github.event_name == 'workflow_dispatch' }}
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
@@ -130,27 +129,34 @@ jobs:
 
             mkdir -p "$log_dir"
             LOGS+=("$log_dir")
-            if ! CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true python3 tests/run_sdk_tests2.py --mode default --log-dir="$log_dir" "$@"; then
+            if ! CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true python3 tests/run_sdk_sweep.py --mode default --log-dir="$log_dir" "$@"; then
               SWEEP_EXIT=1
             fi
           }
 
           # The sweep JSON files are produced by crates/sdk/src/tests.rs
-          if [[ "${{ inputs.sweep_internal || false }}" == "true" ]]; then
-            run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --test-indices=2,8,9,11,17,23,29 --sweep tests/internal_sweep_no_root.json
-          fi
-          if [[ "${{ inputs.sweep_root || false }}" == "true" ]]; then
-            run_sweep "sweeps/sweep_root" "${SWEEP_ARGS[@]}" --use-evm --test-indices=2,3,4,6,7,8,9,19 --sweep tests/internal_sweep_root.json tests/root_params.json
-          fi
+          case "${{ inputs.sweep_mode }}" in
+            sweep_internal)
+              run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --prove-mode stark --test-indices=2,8,9,11,17,23,29 --sweep tests/internal_sweep_no_root.json
+              ;;
+            sweep_root)
+              run_sweep "sweeps/sweep_root" "${SWEEP_ARGS[@]}" --prove-mode evm --test-indices=2,3,4,6,7,8,9,19 --sweep tests/internal_sweep_root.json tests/root_params.json
+              ;;
+          esac
 
-          if [ ${#LOGS[@]} -eq 0 ]; then
-            CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify
-          else
-            if ! python3 tests/post_test_summarize.py -o "sweeps/ci_summary.md" --artifact-path-prefix="" --log-dirs "${LOGS[@]}"; then
-              SWEEP_EXIT=1
-            fi
-            echo "$SWEEP_EXIT" > sweeps/sweep_exit_code
+          if ! python3 tests/post_test_summarize.py -o "sweeps/ci_summary.md" --artifact-path-prefix="" --log-dirs "${LOGS[@]}"; then
+            SWEEP_EXIT=1
           fi
+          echo "$SWEEP_EXIT" > sweeps/sweep_exit_code
+
+      - name: Run openvm-sdk crate tests
+        if: ${{ matrix.mode == 'default' && github.event_name != 'workflow_dispatch' }}
+        working-directory: crates/sdk
+        run: |
+          export RUST_BACKTRACE=1
+          export RUST_MIN_STACK=8388608
+          export RUST_LOG=debug
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify
 
       - name: Build openvm-sdk examples
         if: ${{ matrix.mode == 'default' }}
@@ -158,8 +164,8 @@ jobs:
         run: |
           cargo build --release --examples --features parallel,root-prover,evm-verify
 
-      - name: Run openvm-sdk crate tests (AOT)
-        if: ${{ matrix.mode == 'aot' && (inputs.arch || 'x86') == 'x86' }}
+      - name: Run openvm-sdk crate sweep (AOT)
+        if: ${{ matrix.mode == 'aot' && (inputs.arch || 'x86') == 'x86' && github.event_name == 'workflow_dispatch' }}
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
@@ -178,32 +184,38 @@ jobs:
 
             mkdir -p "$log_dir"
             LOGS+=("$log_dir")
-            if ! CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true python3 tests/run_sdk_tests2.py --mode aot --log-dir="$log_dir" "$@"; then
+            if ! CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true python3 tests/run_sdk_sweep.py --mode aot --log-dir="$log_dir" "$@"; then
               SWEEP_EXIT=1
             fi
           }
 
           # The sweep JSON files are produced by crates/sdk/src/tests.rs
-          if [[ "${{ inputs.sweep_internal || false }}" == "true" ]]; then
-            run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --test-indices=2,8,9,11,17,23,29 --sweep tests/internal_sweep_no_root.json
-          fi
-          if [[ "${{ inputs.sweep_root || false }}" == "true" ]]; then
-            run_sweep "sweeps/sweep_root" "${SWEEP_ARGS[@]}" --use-evm --test-indices=2,3,4,6,7,8,9,19 --sweep tests/internal_sweep_root.json tests/root_params.json
-          fi
+          case "${{ inputs.sweep_mode }}" in
+            sweep_internal)
+              run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --prove-mode stark --test-indices=2,8,9,11,17,23,29 --sweep tests/internal_sweep_no_root.json
+              ;;
+            sweep_root)
+              run_sweep "sweeps/sweep_root" "${SWEEP_ARGS[@]}" --prove-mode evm --test-indices=2,3,4,6,7,8,9,19 --sweep tests/internal_sweep_root.json tests/root_params.json
+              ;;
+          esac
 
-          if [ ${#LOGS[@]} -eq 0 ]; then
-            CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify,aot
-          else
-            if ! python3 tests/post_test_summarize.py -o "sweeps/ci_summary.md" --artifact-path-prefix="" --log-dirs "${LOGS[@]}"; then
-              SWEEP_EXIT=1
-            fi
-            echo "$SWEEP_EXIT" > sweeps/sweep_exit_code
+          if ! python3 tests/post_test_summarize.py -o "sweeps/ci_summary.md" --artifact-path-prefix="" --log-dirs "${LOGS[@]}"; then
+            SWEEP_EXIT=1
           fi
+          echo "$SWEEP_EXIT" > sweeps/sweep_exit_code
 
-      - name: Run ignored tests
-        if: ${{ matrix.mode == 'ignored' }}
+      - name: Run openvm-sdk crate tests (AOT)
+        if: ${{ matrix.mode == 'aot' && (inputs.arch || 'x86') == 'x86' && github.event_name != 'workflow_dispatch' }}
         working-directory: crates/sdk
-        # if: ${{ github.event_name == 'push' }}
+        run: |
+          export RUST_BACKTRACE=1
+          export RUST_MIN_STACK=8388608
+          export RUST_LOG=debug
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify,aot
+
+      - name: Run ignored sweep
+        if: ${{ matrix.mode == 'ignored' && github.event_name == 'workflow_dispatch' }}
+        working-directory: crates/sdk
         run: |
           export RUST_LOG=debug
           SWEEP_ARGS=("-j=1")
@@ -219,32 +231,37 @@ jobs:
 
             mkdir -p "$log_dir"
             LOGS+=("$log_dir")
-            if ! CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true python3 tests/run_sdk_tests2.py --mode ignored --log-dir="$log_dir" "$@"; then
+            if ! CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true python3 tests/run_sdk_sweep.py --mode ignored --log-dir="$log_dir" "$@"; then
               SWEEP_EXIT=1
             fi
           }
 
           # The sweep JSON files are produced by crates/sdk/src/tests.rs
-          if [[ "${{ inputs.sweep_internal || false }}" == "true" ]]; then
-            run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --test-indices=2,8,9,11,17,23,29 --sweep tests/internal_sweep_no_root.json
-          fi
-          if [[ "${{ inputs.sweep_root || false }}" == "true" ]]; then
-            run_sweep "sweeps/sweep_root" "${SWEEP_ARGS[@]}" --use-evm --test-indices=2,3,4,6,7,8,9,19 --sweep tests/internal_sweep_root.json tests/root_params.json
-          fi
+          case "${{ inputs.sweep_mode }}" in
+            sweep_internal)
+              run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --prove-mode stark --test-indices=2,8,9,11,17,23,29 --sweep tests/internal_sweep_no_root.json
+              ;;
+            sweep_root)
+              run_sweep "sweeps/sweep_root" "${SWEEP_ARGS[@]}" --prove-mode evm --test-indices=2,3,4,6,7,8,9,19 --sweep tests/internal_sweep_root.json tests/root_params.json
+              ;;
+          esac
 
-          if [ ${#LOGS[@]} -eq 0 ]; then
-            CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify --run-ignored=only --no-tests pass
-          else
-            if ! python3 tests/post_test_summarize.py -o "sweeps/ci_summary.md" --artifact-path-prefix="" --log-dirs "${LOGS[@]}"; then
-              SWEEP_EXIT=1
-            fi
-            echo "$SWEEP_EXIT" > sweeps/sweep_exit_code
+          if ! python3 tests/post_test_summarize.py -o "sweeps/ci_summary.md" --artifact-path-prefix="" --log-dirs "${LOGS[@]}"; then
+            SWEEP_EXIT=1
           fi
+          echo "$SWEEP_EXIT" > sweeps/sweep_exit_code
+
+      - name: Run ignored tests
+        if: ${{ matrix.mode == 'ignored' && github.event_name != 'workflow_dispatch' }}
+        working-directory: crates/sdk
+        run: |
+          export RUST_LOG=debug
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify --run-ignored=only --no-tests pass
 
 
       - name: Upload SDK sweep artifacts
         id: upload-sdk-sweep
-        if: ${{ always() && (inputs.sweep_root || inputs.sweep_internal) && (matrix.mode != 'aot' || (inputs.arch || 'x86') == 'x86') }}
+        if: ${{ always() && (github.event_name == 'workflow_dispatch') && (matrix.mode != 'aot' || (inputs.arch || 'x86') == 'x86') }}
         uses: actions/upload-artifact@v4
         with:
           name: sdk-sweep-${{ matrix.mode }}
@@ -253,7 +270,7 @@ jobs:
             crates/sdk/sweeps/**
 
       - name: Publish SDK sweep summary
-        if: ${{ always() && (inputs.sweep_root || inputs.sweep_internal) && (matrix.mode != 'aot' || (inputs.arch || 'x86') == 'x86') }}
+        if: ${{ always() && (github.event_name == 'workflow_dispatch') && (matrix.mode != 'aot' || (inputs.arch || 'x86') == 'x86') }}
         working-directory: crates/sdk
         run: |
           CI_SUMMARY_PATH="$(find sweeps -name ci_summary.md -print 2>/dev/null | sort | tail -n 1)"
@@ -271,7 +288,7 @@ jobs:
         run: sccache --show-stats || true
 
       - name: Fail SDK sweep if needed
-        if: ${{ always() && (inputs.sweep_root || inputs.sweep_internal) && (matrix.mode != 'aot' || (inputs.arch || 'x86') == 'x86') }}
+        if: ${{ always() && (github.event_name == 'workflow_dispatch') && (matrix.mode != 'aot' || (inputs.arch || 'x86') == 'x86') }}
         working-directory: crates/sdk
         run: |
           if [[ ! -f sweeps/sweep_exit_code ]]; then

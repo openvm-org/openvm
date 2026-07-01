@@ -9,7 +9,7 @@ Usage:
         -o tests/logs/sdk_tests/<log_dir>/ci_summary.md
 
 Each log directory must contain `successful/` and `failed/` log subdirectories
-created by `tests/run_sdk_tests2.py`. The output concatenates summaries for all
+created by `tests/run_sdk_sweep.py`. The output concatenates summaries for all
 log directories, containing the successful and failed parameter settings plus a
 concise stderr excerpt for each failed log. Log references are artifact-internal
 paths; the workflow adds the artifact URL.
