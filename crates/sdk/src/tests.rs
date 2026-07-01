@@ -720,7 +720,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
             let (trace_heights, root_pk) = compute_root_proof_heights(
                 system_config.clone(),
                 sdk.agg_config().params.clone(),
-                sdk.agg_tree_config(),
+                sdk.agg_tree_config().clone(),
                 root_params.clone(),
                 DeferralSetup::Disabled,
             )?;
