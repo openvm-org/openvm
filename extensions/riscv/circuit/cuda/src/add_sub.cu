@@ -3,7 +3,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv/adapters/alu_u16.cuh"
+#include "riscv/adapters/alu_u16_addsub.cuh"
 #include "riscv/cores/add_sub.cuh"
 #include "system/memory/params.cuh"
 
@@ -15,12 +15,12 @@ using Rv64AddSubCore = AddSubCore<BLOCK_FE_WIDTH, U16_BITS>;
 template <typename T> using Rv64AddSubCoreCols = AddSubCoreCols<T, BLOCK_FE_WIDTH>;
 
 template <typename T> struct Rv64AddSubCols {
-    Rv64BaseAluU16AdapterCols<T> adapter;
+    Rv64AddSubAdapterCols<T> adapter;
     Rv64AddSubCoreCols<T> core;
 };
 
 struct Rv64AddSubRecord {
-    Rv64BaseAluU16AdapterRecord adapter;
+    Rv64AddSubAdapterRecord adapter;
     Rv64AddSubCoreRecord core;
 };
 
@@ -37,7 +37,7 @@ __global__ void add_sub_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        auto adapter = Rv64BaseAluU16Adapter(
+        auto adapter = Rv64AddSubAdapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits
         );
