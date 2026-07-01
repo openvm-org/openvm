@@ -9,6 +9,11 @@ $$
 $$
 
 The main feature of the pairing extension is the `pairing_check` function, which asserts that a product of pairings evaluates to 1.
+
+:::warning
+This function assumes the caller has already validated externally supplied points. In particular, callers must check canonical coordinate encoding, curve membership, membership in the correct prime-order subgroup, and any protocol-specific identity-point policy before passing points to `pairing_check`.
+:::
+
 For example, for the BLS12-381 curve,
 
 ```rust
