@@ -1,4 +1,4 @@
-# Workflow to upload release artifacts such as proving keys. In the future pre-built binaries will also be added to this workflow.
+# Workflow to upload release artifacts such as proving keys.
 name: Upload Release Artifacts
 
 on:
