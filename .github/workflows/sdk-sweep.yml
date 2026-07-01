@@ -1,0 +1,294 @@
+name: SDK Parameter Sweep
+
+# Runs SDK parameter sweeps on demand. Exactly one of the sweep modes is
+# selected per invocation. The workflow uses a matrix over test modes and
+# filters entries by `arch`, so the CPU archs run the same test paths as
+# sdk.yml (default / ignored / aot) and the GPU arch runs the CUDA path from
+# sdk.cuda.yml.
+#
+# NOTE: `family` and `arch` must be consistent — `x86`/`arm` require a matching
+# CPU EC2 family (e.g. `m7a.24xlarge` / `c8g.24xlarge`), and `x86-gpu` requires
+# a GPU family (e.g. `g6e.2xlarge`).
+
+on:
+  workflow_dispatch:
+    inputs:
+      sweep_mode:
+        description: "Which parameter sweep to run"
+        type: choice
+        options:
+          - sweep_internal
+          - sweep_root
+          - sweep_evm
+        default: sweep_internal
+      arch:
+        description: "Architecture to run on (must match family)"
+        type: choice
+        options:
+          - x86
+          - arm
+          - x86-gpu
+        default: x86-gpu
+      family:
+        description: "EC2 instance family (must match selected arch)"
+        type: string
+        default: "g6e.2xlarge"
+      test_name:
+        description: "Comma-separated test filters passed to --test-name"
+        type: string
+        default: ""
+      num_samples:
+        description: "Number of parameter samples passed to --num-samples"
+        type: string
+        default: ""
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # Safe on CPU builds too; required by CUDA builds to work with mounted
+  # rustup toolchain caches.
+  RUSTUP_PERMIT_COPY_RENAME: "1"
+
+jobs:
+  # Compute the list of test modes to run based on the selected arch.
+  #   - `x86-gpu` → `cuda`
+  #   - `x86`     → `default`, `aot`, `ignored`
+  #   - `arm`     → `default`, `ignored` (AOT tests are x86-only)
+  # A dedicated job is needed because the `matrix` context isn't available in a
+  # job-level `if:`, so we can't filter matrix entries by `inputs.arch` directly.
+  matrix-config:
+    runs-on: ubuntu-latest
+    outputs:
+      modes: ${{ steps.set.outputs.modes }}
+    steps:
+      - id: set
+        run: |
+          case "${{ inputs.arch }}" in
+            x86)
+              echo 'modes=["default","aot","ignored"]' >> "$GITHUB_OUTPUT"
+              ;;
+            arm)
+              echo 'modes=["default","ignored"]' >> "$GITHUB_OUTPUT"
+              ;;
+            x86-gpu)
+              echo 'modes=["cuda"]' >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported arch: ${{ inputs.arch }}" >&2
+              exit 1
+              ;;
+          esac
+
+  sweep:
+    needs: matrix-config
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: ${{ fromJson(needs.matrix-config.outputs.modes) }}
+
+    # runs-on picks a GPU or CPU image based on matrix.mode; family comes from inputs.family.
+    runs-on:
+      - runs-on=${{ github.run_id }}-sdk-sweep-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ inputs.family }}/image=${{ matrix.mode == 'cuda' && 'ubuntu24-gpu-x64' || (inputs.arch == 'arm' && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64') }}/${{ matrix.mode == 'cuda' && 'volume=80gb/spot=false' || 'disk=large' }}/extras=s3-cache
+
+    steps:
+      - uses: runs-on/action@v2
+        with:
+          sccache: s3
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/sccache
+      - uses: Swatinem/rust-cache@v2
+        if: ${{ matrix.mode != 'cuda' }}
+        with:
+          cache-on-failure: true
+      - uses: ./.github/actions/rust-cache-cuda
+        if: ${{ matrix.mode == 'cuda' }}
+      - uses: taiki-e/install-action@nextest
+
+      # EVM tooling — only the `sweep_evm` sweep exercises the EVM verifier, so
+      # the tooling is skipped otherwise (both CPU and CUDA jobs).
+      - name: Install solc
+        if: ${{ inputs.sweep_mode == 'sweep_evm' }}
+        run: (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
+
+      - name: Install Foundry
+        if: ${{ inputs.sweep_mode == 'sweep_evm' }}
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: 'v1.5.0'
+
+      - name: Install architecture specific tools
+        if: ${{ inputs.sweep_mode == 'sweep_evm' }}
+        run: |
+          source ci/scripts/utils.sh
+          install_s5cmd
+
+      - name: Setup halo2
+        if: ${{ inputs.sweep_mode == 'sweep_evm' }}
+        working-directory: crates/sdk
+        run: |
+          bash ../../scripts/trusted_setup_s3.sh
+
+      - name: Verify GPU setup
+        if: ${{ matrix.mode == 'cuda' }}
+        run: |
+          nvidia-smi
+          nvidia-smi -L
+          nvcc --version
+          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
+
+      - name: Setup CUDA environment
+        if: ${{ matrix.mode == 'cuda' }}
+        run: |
+          CUDART_PATH=$(find /usr/local -name "libcudart.so" | head -1)
+          if [ -n "$CUDART_PATH" ]; then
+            CUDA_LIB_DIR=$(dirname "$CUDART_PATH")
+            echo "CUDA libraries found at: $CUDA_LIB_DIR"
+            echo "CUDA_LIB_DIR=$CUDA_LIB_DIR" >> $GITHUB_ENV
+          else
+            echo "CUDA libraries not found!"
+            exit 1
+          fi
+
+      - name: Build SDK CUDA tests
+        if: ${{ matrix.mode == 'cuda' }}
+        working-directory: crates/sdk
+        run: |
+          rustup component add rust-src --toolchain nightly-2026-01-18
+
+          TEST_FILTERS=()
+          if [[ -n "${{ inputs.test_name }}" ]]; then
+            IFS=',' read -ra TEST_FILTERS <<< "${{ inputs.test_name }}"
+          fi
+
+          build_cuda_tests() {
+            local features="$1"
+            local cmd=(cargo nextest run --no-run --test-threads=1 --cargo-profile=fast --features "$features")
+            if [[ ${#TEST_FILTERS[@]} -gt 0 ]]; then
+              cmd+=(-- "${TEST_FILTERS[@]}")
+            fi
+            "${cmd[@]}"
+          }
+
+          case "${{ inputs.sweep_mode }}" in
+            sweep_internal)
+              build_cuda_tests "parallel,cuda"
+              ;;
+            sweep_root)
+              build_cuda_tests "parallel,root-prover,cuda"
+              ;;
+            sweep_evm)
+              build_cuda_tests "parallel,root-prover,evm-verify,cuda"
+              ;;
+          esac
+
+      - name: Generate sweep JSON files if missing
+        run: |
+          cargo run --bin generate-param-sweep -- crates/sdk/tests/
+
+      - name: Run SDK sweep (${{ matrix.mode }})
+        working-directory: crates/sdk
+        run: |
+          if [[ "${{ matrix.mode }}" == "cuda" ]]; then
+            rustup component add rust-src --toolchain nightly-2026-01-18
+          else
+            export CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true
+            export RUST_BACKTRACE=1
+            export RUST_MIN_STACK=8388608
+          fi
+          export RUST_LOG=debug
+
+          SWEEP_ARGS=("-j=1")
+          LOGS=()
+          SWEEP_EXIT=0
+          if [[ -n "${{ inputs.test_name }}" ]]; then SWEEP_ARGS+=(--test-name "${{ inputs.test_name }}"); fi
+          if [[ -n "${{ inputs.num_samples }}" ]]; then SWEEP_ARGS+=(--num-samples "${{ inputs.num_samples }}"); fi
+          mkdir -p sweeps
+
+          # CPU sweeps subsample the parameter grids via --test-indices; CUDA
+          # sweeps run the whole grid.
+          TEST_INDICES_INTERNAL=()
+          TEST_INDICES_ROOT=()
+          if [[ "${{ matrix.mode }}" != "cuda" ]]; then
+            TEST_INDICES_INTERNAL=(--test-indices=2,8,9,11,17,23,29)
+            TEST_INDICES_ROOT=(--test-indices=2,3,4,6,7,8,9,19)
+          fi
+
+          run_sweep() {
+            local log_dir="$1"
+            shift
+            mkdir -p "$log_dir"
+            LOGS+=("$log_dir")
+            if ! python3 tests/run_sdk_sweep.py --mode ${{ matrix.mode }} --log-dir="$log_dir" "$@"; then
+              SWEEP_EXIT=1
+            fi
+          }
+
+          case "${{ inputs.sweep_mode }}" in
+            sweep_internal)
+              run_sweep "sweeps/sweep_internal" "${SWEEP_ARGS[@]}" --prove-mode stark "${TEST_INDICES_INTERNAL[@]}" --sweep tests/internal_sweep_no_root.json
+              ;;
+            sweep_root)
+              run_sweep "sweeps/sweep_root" "${SWEEP_ARGS[@]}" --prove-mode root "${TEST_INDICES_ROOT[@]}" --sweep tests/internal_sweep_root.json tests/root_params.json
+              ;;
+            sweep_evm)
+              run_sweep "sweeps/sweep_evm" "${SWEEP_ARGS[@]}" --prove-mode evm "${TEST_INDICES_ROOT[@]}" --sweep tests/internal_sweep_root.json tests/root_params.json
+              ;;
+          esac
+
+          if ! python3 tests/post_test_summarize.py -o "sweeps/ci_summary.md" --artifact-path-prefix="" --log-dirs "${LOGS[@]}"; then
+            SWEEP_EXIT=1
+          fi
+          echo "$SWEEP_EXIT" > sweeps/sweep_exit_code
+
+      - name: Upload SDK sweep artifacts
+        id: upload-sdk-sweep
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-sweep-${{ matrix.mode }}
+          if-no-files-found: ignore
+          path: |
+            crates/sdk/sweeps/**
+
+      - name: Publish SDK sweep summary
+        if: always()
+        working-directory: crates/sdk
+        run: |
+          CI_SUMMARY_PATH="$(find sweeps -name ci_summary.md -print 2>/dev/null | sort | tail -n 1)"
+          if [[ -n "$CI_SUMMARY_PATH" ]]; then
+            LOG_DIR="$(dirname "$CI_SUMMARY_PATH")"
+            echo "Logs are uploaded in the [sdk-sweep-${{ matrix.mode }}](${{ steps.upload-sdk-sweep.outputs.artifact-url }}) artifact under \`$LOG_DIR\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            cat "$CI_SUMMARY_PATH" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No SDK sweep summary was generated." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      - name: Fail SDK sweep if needed
+        if: always()
+        working-directory: crates/sdk
+        run: |
+          if [[ ! -f sweeps/sweep_exit_code ]]; then
+            echo "SDK sweep status file missing."
+            exit 1
+          fi
+          SWEEP_EXIT="$(cat sweeps/sweep_exit_code)"
+          if [[ "$SWEEP_EXIT" != "0" ]]; then
+            echo "SDK sweep failed."
+            exit "$SWEEP_EXIT"
+          fi
