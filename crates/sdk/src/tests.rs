@@ -26,7 +26,10 @@ use openvm_verify_stark_host::{
 
 use crate::{
     builder::GenericSdkBuilder,
-    config::{AggregationConfig, AggregationSystemParams, AppConfig, DEFAULT_APP_L_SKIP},
+    config::{
+        AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig,
+        DEFAULT_APP_L_SKIP,
+    },
     prover::{DeferralAggProver, DeferralHookCommits, DeferralProof, MultiDeferralCircuitProver},
     DeferralInput, Sdk, StdIn, F,
 };
@@ -504,6 +507,41 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
     let vk = nested_verify_circuit_prover.get_vk();
     let engine = E::new(vk.inner.params.clone());
     engine.verify(&vk, &nested_def_proof)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
+    setup_tracing();
+    let n_stack = 15;
+    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
+    let agg_params = AggregationSystemParams::default();
+    let hook_commits =
+        DeferralHookCommits::from_system_params(&agg_params, hook_params_with_100_bits_security());
+    let aware_sdk = Sdk::builder()
+        .app_config(AppConfig::riscv32(app_params))
+        .agg_params(agg_params)
+        .agg_tree_config(AggregationTreeConfig {
+            num_children_leaf: 1,
+            num_children_internal: 3,
+        })
+        .deferral_hook_commits(hook_commits)
+        .build()?;
+
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let app_exe = aware_sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&(1u64 << 17));
+
+    let (_, segments) = aware_sdk.execute_metered(app_exe.clone(), stdin.clone())?;
+    assert!(segments.len() >= 3, "expected >= 3 segments");
+
+    aware_sdk.prove(app_exe, stdin, &[])?;
 
     Ok(())
 }

@@ -30,5 +30,11 @@ pub fn generate_proving_ctx(
         cols.proof_idx = F::from_usize(*proof_idx);
     }
 
+    for proof_idx in num_valid..height {
+        let chunk = chunks.next().unwrap();
+        let cols: &mut UnsetPvsCols<F> = chunk.borrow_mut();
+        cols.proof_idx = F::from_usize(proof_idx);
+    }
+
     AirProvingContext::simple_no_pis(RowMajorMatrix::new(trace, width))
 }
