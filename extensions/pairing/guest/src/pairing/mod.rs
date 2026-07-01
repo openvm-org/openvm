@@ -42,11 +42,26 @@ pub trait PairingCheck {
     /// the final exponentiation hint from Novakovic-Eagon <https://eprint.iacr.org/2024/640.pdf>.
     ///
     /// Output is c (residue witness inverse) and u (cubic nonresidue power).
+    ///
+    /// ## Assumption
+    /// This function assumes all input points have already been validated by the caller. In
+    /// particular, externally supplied points must be checked for canonical field representation,
+    /// curve membership, and membership in the correct prime-order subgroup before being passed to
+    /// this function. Callers must also enforce any protocol-specific policy about whether identity
+    /// points are allowed. `AffinePoint` itself does not enforce these properties.
     fn pairing_check_hint(
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
     ) -> (Self::Fp12, Self::Fp12);
 
+    /// Checks whether the product of pairings over `(P[i], Q[i])` evaluates to one.
+    ///
+    /// ## Assumption
+    /// This function assumes all input points have already been validated by the caller. In
+    /// particular, externally supplied points must be checked for canonical field representation,
+    /// curve membership, and membership in the correct prime-order subgroup before being passed to
+    /// this function. Callers must also enforce any protocol-specific policy about whether identity
+    /// points are allowed. `AffinePoint` itself does not enforce these properties.
     fn pairing_check(
         P: &[AffinePoint<Self::Fp>],
         Q: &[AffinePoint<Self::Fp2>],
