@@ -11,14 +11,15 @@ use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engi
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{
-    Rv64AddSubAir, Rv64AddSubChipGpu, Rv64AddSubWAir, Rv64AddSubWChipGpu, Rv64AuipcAir,
-    Rv64AuipcChipGpu, Rv64BitwiseLogicAir, Rv64BitwiseLogicChipGpu, Rv64BranchEqualAir,
-    Rv64BranchEqualChipGpu, Rv64BranchLessThanAir, Rv64BranchLessThanChipGpu, Rv64DivRemAir,
-    Rv64DivRemChipGpu, Rv64DivRemWAir, Rv64DivRemWChipGpu, Rv64HintStoreAir, Rv64HintStoreChipGpu,
-    Rv64I, Rv64Io, Rv64JalLuiAir, Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir,
-    Rv64LessThanChipGpu, Rv64LoadByteAir, Rv64LoadByteChipGpu, Rv64LoadDoublewordAir,
-    Rv64LoadDoublewordChipGpu, Rv64LoadHalfwordAir, Rv64LoadHalfwordChipGpu,
-    Rv64LoadSignExtendByteAir, Rv64LoadSignExtendByteChipGpu, Rv64LoadSignExtendHalfwordAir,
+    Rv64AddIAir, Rv64AddIChipGpu, Rv64AddSubAir, Rv64AddSubChipGpu, Rv64AddSubWAir,
+    Rv64AddSubWChipGpu, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64BitwiseLogicAir,
+    Rv64BitwiseLogicChipGpu, Rv64BranchEqualAir, Rv64BranchEqualChipGpu, Rv64BranchLessThanAir,
+    Rv64BranchLessThanChipGpu, Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemWAir,
+    Rv64DivRemWChipGpu, Rv64HintStoreAir, Rv64HintStoreChipGpu, Rv64I, Rv64Io, Rv64JalLuiAir,
+    Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir, Rv64LessThanChipGpu,
+    Rv64LoadByteAir, Rv64LoadByteChipGpu, Rv64LoadDoublewordAir, Rv64LoadDoublewordChipGpu,
+    Rv64LoadHalfwordAir, Rv64LoadHalfwordChipGpu, Rv64LoadSignExtendByteAir,
+    Rv64LoadSignExtendByteChipGpu, Rv64LoadSignExtendHalfwordAir,
     Rv64LoadSignExtendHalfwordChipGpu, Rv64LoadSignExtendWordAir, Rv64LoadSignExtendWordChipGpu,
     Rv64LoadWordAir, Rv64LoadWordChipGpu, Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir,
     Rv64MulWChipGpu, Rv64MultiplicationAir, Rv64MultiplicationChipGpu, Rv64ShiftLogicalAir,
@@ -190,6 +191,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.next_air::<Rv64AuipcAir>()?;
         let auipc = Rv64AuipcChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(auipc);
+
+        inventory.next_air::<Rv64AddIAir>()?;
+        let addi = Rv64AddIChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(addi);
 
         Ok(())
     }
