@@ -12,9 +12,10 @@ use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode, SysPhantom, SystemOpcode,
 };
 use openvm_riscv_transpiler::{
-    BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
-    DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode,
-    Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode, ShiftWOpcode,
+    AddIOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
+    DivRemOpcode, DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
+    Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode,
+    ShiftWOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::{AS_MEMORY, AS_PUBLIC_VALUES, AS_REGISTER};
@@ -82,6 +83,11 @@ pub fn lift_instruction<F: PrimeField32>(
     }
     if opcode == BaseAluWOpcode::SUBW.global_opcode_usize() {
         return Some(lift_alu_w(insn, pc, e, AluOp::Sub));
+    }
+
+    // AddI: ADDI — always immediate (e == 0 from the transpiler)
+    if opcode == AddIOpcode::ADDI.global_opcode_usize() {
+        return Some(lift_alu(insn, pc, e, AluOp::Add));
     }
 
     // Shift: SLL=0x205, SRL=0x206, SRA=0x207, SLLW=0x275, SRLW=0x276, SRAW=0x277
