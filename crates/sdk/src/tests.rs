@@ -149,7 +149,7 @@ fn make_multi_deferral_circuit_prover_with_count(
     assert!(num_deferral_circuits > 0);
     // The def_circuit is a separate STARK layer from the aggregation internal layer, so it uses
     // its own parameter set rather than reusing `agg_params.internal`.
-    let def_circuit_params = internal_params_with_100_bits_security();
+    let def_circuit_params = agg_params.internal.clone();
     let verify_stark_prover = make_verify_stark_circuit_prover(sdk, def_circuit_params.clone(), 0);
     let hook_params = hook_params_with_100_bits_security();
     let agg_config = AggregationConfig {
