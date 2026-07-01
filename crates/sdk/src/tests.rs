@@ -1,7 +1,8 @@
-use std::slice::from_ref;
+use std::{slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
+use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_continuations::prover::DeferralCircuitProver;
 use openvm_sdk_config::{
     deferral::{DeferralConfig, SupportedDeferral},
@@ -11,7 +12,8 @@ use openvm_stark_backend::{codec::Encode, StarkEngine, SystemParams};
 use openvm_stark_sdk::{
     config::{
         app_params_with_100_bits_security, hook_params_with_100_bits_security,
-        internal_params_with_100_bits_security,
+        internal_params_with_100_bits_security, leaf_params_with_100_bits_security,
+        root_params_with_100_bits_security,
     },
     utils::setup_tracing,
 };
@@ -23,9 +25,10 @@ use openvm_verify_stark_host::{
 };
 
 use crate::{
+    builder::GenericSdkBuilder,
     config::{AggregationConfig, AggregationSystemParams, AppConfig, DEFAULT_APP_L_SKIP},
     prover::{DeferralAggProver, DeferralProof, MultiDeferralCircuitProver},
-    DeferralInput, Sdk, StdIn,
+    DeferralInput, Sdk, StdIn, F,
 };
 
 cfg_if::cfg_if! {
@@ -33,22 +36,57 @@ cfg_if::cfg_if! {
         use openvm_verify_stark_circuit::prover::DeferredVerifyGpuProver as VerifyProver;
         use openvm_verify_stark_circuit::prover::DeferredVerifyGpuCircuitProver as VerifyCircuitProver;
         type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
+        #[cfg(all(feature = "root-prover", any(not(feature = "evm-verify"), feature = "cell-profiling")))]
         type RootE = openvm_cuda_backend::BabyBearBn254Poseidon2GpuEngine;
     } else {
         use openvm_verify_stark_circuit::prover::DeferredVerifyCpuProver as VerifyProver;
         use openvm_verify_stark_circuit::prover::DeferredVerifyCpuCircuitProver as VerifyCircuitProver;
         type E = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
+        #[cfg(all(feature = "root-prover", any(not(feature = "evm-verify"), feature = "cell-profiling")))]
         type RootE = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
     }
 }
 
+fn get_params() -> (SystemParams, AggregationSystemParams, SystemParams) {
+    let n_stack = 19;
+    let app_params = get_params_from_env(
+        "APP_PARAMS_OVERRIDE",
+        app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack),
+    );
+    let agg_params = AggregationSystemParams {
+        leaf: get_params_from_env("LEAF_PARAMS_OVERRIDE", leaf_params_with_100_bits_security()),
+        internal: get_params_from_env(
+            "INTERNAL_PARAMS_OVERRIDE",
+            internal_params_with_100_bits_security(),
+        ),
+    };
+    let root_params =
+        get_params_from_env("ROOT_PARAMS_OVERRIDE", root_params_with_100_bits_security());
+
+    (app_params, agg_params, root_params)
+}
+
 /// Creates a fibonacci SDK with standard test parameters.
 fn make_fib_sdk() -> (Sdk, SystemParams, AggregationSystemParams) {
-    let n_stack = 19;
-    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
-    let agg_params = AggregationSystemParams::default();
-    let sdk = Sdk::riscv32(app_params.clone(), agg_params.clone());
-    (sdk, app_params, agg_params)
+    let (app_params, agg_params, _root_params) = get_params();
+    let mut sdk_builder =
+        GenericSdkBuilder::new().app_config(AppConfig::riscv32(app_params.clone()));
+    sdk_builder = sdk_builder.agg_params(agg_params.clone());
+    #[cfg(feature = "root-prover")]
+    {
+        sdk_builder = sdk_builder.root_params(_root_params);
+    }
+    (sdk_builder.build().unwrap(), app_params, agg_params)
+}
+
+fn get_params_from_env(env_var: &str, default: SystemParams) -> SystemParams {
+    match std::env::var(env_var) {
+        Ok(s) => {
+            eprintln!("getting params from env {env_var}");
+            serde_json::from_str(&s).unwrap()
+        }
+        Err(_) => default,
+    }
 }
 
 /// Generates a fibonacci VM STARK proof using the given SDK.
@@ -109,7 +147,9 @@ fn make_multi_deferral_circuit_prover_with_count(
     num_deferral_circuits: usize,
 ) -> MultiDeferralCircuitProver {
     assert!(num_deferral_circuits > 0);
-    let def_circuit_params = internal_params_with_100_bits_security();
+    // The def_circuit is a separate STARK layer from the aggregation internal layer, so it uses
+    // its own parameter set rather than reusing `agg_params.internal`.
+    let def_circuit_params = agg_params.internal.clone();
     let verify_stark_prover = make_verify_stark_circuit_prover(sdk, def_circuit_params.clone(), 0);
     let hook_params = hook_params_with_100_bits_security();
     let agg_config = AggregationConfig {
@@ -190,6 +230,47 @@ fn make_verify_stark_inputs(
     Ok((stdin, def_inputs.pop().unwrap()))
 }
 
+/// Proves `exe` with the given inputs and verifies the resulting proof. The exact prover path
+/// depends on which of `root-prover` / `evm-verify` features are enabled:
+///   * neither: STARK proof via `sdk.prove`, verified with the aggregation VK
+///   * `root-prover` without `evm-verify`: root proof via `evm_prover_without_halo2`
+///   * `evm-verify`: EVM proof via `sdk.prove_evm`, verified against the halo2 verifier
+///
+/// When `check_deferral_merkle_proofs` is set, asserts `deferral_merkle_proofs.is_some()` on the
+/// STARK proof (only meaningful in the STARK path).
+fn prove_and_verify_end_to_end(
+    sdk: &Sdk,
+    exe: Arc<VmExe<F>>,
+    stdin: StdIn,
+    def_inputs: &[DeferralInput],
+    #[allow(unused_variables)] check_deferral_merkle_proofs: bool,
+) -> Result<()> {
+    #[cfg(not(feature = "root-prover"))]
+    {
+        let (proof, baseline) = sdk.prove(exe, stdin, def_inputs)?;
+        if check_deferral_merkle_proofs {
+            assert!(proof.deferral_merkle_proofs.is_some());
+        }
+        Sdk::verify_proof((*sdk.agg_vk()).clone(), baseline, &proof)?;
+    }
+    #[cfg(all(feature = "root-prover", not(feature = "evm-verify")))]
+    {
+        let mut evm_prover = sdk.evm_prover_without_halo2(exe)?;
+        let proof = evm_prover.prove_root(stdin, def_inputs)?;
+        let vk = evm_prover.root_prover.0.get_vk();
+        let engine = RootE::new(vk.inner.params.clone());
+        engine.verify(&vk, &proof)?;
+    }
+    #[cfg(feature = "evm-verify")]
+    {
+        let app_commit = sdk.app_commit(exe.clone())?;
+        let evm_proof = sdk.prove_evm(exe, stdin, def_inputs)?;
+        let openvm_verifier = sdk.generate_halo2_verifier_solidity()?;
+        let _gas_cost = Sdk::verify_evm_halo2_proof(&openvm_verifier, evm_proof, Some(app_commit))?;
+    }
+    Ok(())
+}
+
 fn make_verify_stark_inputs_for_indices(
     child_sdk: &Sdk,
     child_proof: &VmStarkProof,
@@ -261,8 +342,7 @@ fn make_deferral_sdk(
 #[test]
 fn test_sdk_fibonacci() -> Result<()> {
     setup_tracing();
-    let (sdk, _app_params, _agg_params) = make_fib_sdk();
-
+    let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
         MEM_SIZE as u32,
@@ -273,23 +353,7 @@ fn test_sdk_fibonacci() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
 
-    #[cfg(not(feature = "evm-verify"))]
-    {
-        let mut evm_prover = sdk.evm_prover_without_halo2(app_exe)?;
-        let proof = evm_prover.prove_root(stdin, &[])?;
-        let vk = evm_prover.root_prover.0.get_vk();
-        let engine = RootE::new(vk.inner.params.clone());
-        engine.verify(&vk, &proof)?;
-    }
-    #[cfg(feature = "evm-verify")]
-    {
-        let app_commit = sdk.app_commit(app_exe.clone())?;
-        let evm_proof = sdk.prove_evm(app_exe, stdin, &[])?;
-        let openvm_verifier = sdk.generate_halo2_verifier_solidity()?;
-        let _gas_cost = Sdk::verify_evm_halo2_proof(&openvm_verifier, evm_proof, Some(app_commit))?;
-    }
-
-    Ok(())
+    prove_and_verify_end_to_end(&sdk, app_exe, stdin, &[], false)
 }
 
 #[test]
@@ -306,14 +370,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     )?;
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
-    let mut evm_prover = vs_sdk.evm_prover_without_halo2(vs_exe)?;
-    let vs_proof = evm_prover.prove_root(vs_stdin, &[def_input])?;
-
-    let vk = evm_prover.root_prover.0.get_vk();
-    let engine = RootE::new(vk.inner.params.clone());
-    engine.verify(&vk, &vs_proof)?;
-
-    Ok(())
+    prove_and_verify_end_to_end(&vs_sdk, vs_exe, vs_stdin, &[def_input], false)
 }
 
 #[test]
@@ -343,14 +400,52 @@ fn test_verify_many_deferrals() -> Result<()> {
     )?;
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
-    let (vs_proof, vs_baseline) = vs_sdk.prove(vs_exe, vs_stdin, &def_inputs)?;
-    assert!(
-        vs_proof.deferral_merkle_proofs.is_some(),
-        "verify-many proof must carry deferral merkle proofs",
-    );
-    Sdk::verify_proof(vs_sdk.agg_vk().as_ref().clone(), vs_baseline, &vs_proof)?;
+    prove_and_verify_end_to_end(&vs_sdk, vs_exe, vs_stdin, &def_inputs, true)
+}
 
-    Ok(())
+#[test]
+fn test_verify_stark_path_sdk_can_verify_own_proofs() -> Result<()> {
+    setup_tracing();
+    let (app_params, agg_params, _) = get_params();
+    let sdk = make_verify_stark_path_sdk(app_params, agg_params)?;
+    let agg_vk = sdk.agg_vk().as_ref().clone();
+
+    let vs_elf = Elf::decode(
+        include_bytes!("../programs/examples/verify-stark.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let vs_exe = sdk.convert_to_exe(vs_elf)?;
+
+    let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&sdk)?;
+    assert!(fib_proof.deferral_merkle_proofs.is_some(),);
+    Sdk::verify_proof(agg_vk.clone(), fib_baseline.clone(), &fib_proof)?;
+
+    let (vs_stdin, def_input) = make_verify_stark_inputs(&sdk, &fib_proof, fib_baseline)?;
+    let (vs_proof, vs_baseline) = sdk.prove(vs_exe.clone(), vs_stdin, &[def_input])?;
+    assert!(vs_proof.deferral_merkle_proofs.is_some(),);
+    Sdk::verify_proof(agg_vk.clone(), vs_baseline.clone(), &vs_proof)?;
+
+    let (vs2_stdin, vs2_def_input) = make_verify_stark_inputs(&sdk, &vs_proof, vs_baseline)?;
+    prove_and_verify_end_to_end(&sdk, vs_exe, vs2_stdin, &[vs2_def_input], true)
+}
+
+#[test]
+fn test_deferrals_enabled_without_usage() -> Result<()> {
+    setup_tracing();
+    let (fib_sdk, app_params, agg_params) = make_fib_sdk();
+    let sdk = make_deferral_enabled_sdk(&fib_sdk, app_params, agg_params)?;
+
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let app_exe = sdk.convert_to_exe(elf)?;
+
+    let n = 1000u64;
+    let mut stdin = StdIn::default();
+    stdin.write(&n);
+
+    prove_and_verify_end_to_end(&sdk, app_exe, stdin, &[], false)
 }
 
 #[test]
@@ -358,8 +453,13 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
     setup_tracing();
     let (fib_sdk, app_params, agg_params) = make_fib_sdk();
     let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&fib_sdk)?;
-    let (vs_sdk, vs_stdin, def_input) =
-        make_deferral_sdk(&fib_sdk, fib_proof, fib_baseline, app_params, agg_params)?;
+    let (vs_sdk, vs_stdin, def_input) = make_deferral_sdk(
+        &fib_sdk,
+        fib_proof,
+        fib_baseline,
+        app_params,
+        agg_params.clone(),
+    )?;
 
     let vs_elf = Elf::decode(
         include_bytes!("../programs/examples/verify-stark.elf"),
@@ -390,7 +490,7 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
     let nested_verify_prover = VerifyProver::new::<E>(
         vs_ir_vk,
         vs_ir_pcs_data.commitment.into(),
-        internal_params_with_100_bits_security(),
+        agg_params.internal.clone(),
         vs_system_config.memory_config.memory_dimensions(),
         vs_system_config.num_public_values,
         Some(expected_def_hook_commit.into()),
@@ -404,65 +504,6 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
     let vk = nested_verify_circuit_prover.get_vk();
     let engine = E::new(vk.inner.params.clone());
     engine.verify(&vk, &nested_def_proof)?;
-
-    Ok(())
-}
-
-#[test]
-fn test_verify_stark_path_sdk_can_verify_own_proofs() -> Result<()> {
-    setup_tracing();
-    let n_stack = 19;
-    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
-    let agg_params = AggregationSystemParams::default();
-    let sdk = make_verify_stark_path_sdk(app_params, agg_params)?;
-    let agg_vk = sdk.agg_vk().as_ref().clone();
-
-    let vs_elf = Elf::decode(
-        include_bytes!("../programs/examples/verify-stark.elf"),
-        MEM_SIZE as u32,
-    )?;
-    let vs_exe = sdk.convert_to_exe(vs_elf)?;
-
-    let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&sdk)?;
-    assert!(fib_proof.deferral_merkle_proofs.is_some(),);
-    Sdk::verify_proof(agg_vk.clone(), fib_baseline.clone(), &fib_proof)?;
-
-    let (vs_stdin, def_input) = make_verify_stark_inputs(&sdk, &fib_proof, fib_baseline)?;
-    let (vs_proof, vs_baseline) = sdk.prove(vs_exe.clone(), vs_stdin, &[def_input])?;
-    assert!(vs_proof.deferral_merkle_proofs.is_some(),);
-    Sdk::verify_proof(agg_vk.clone(), vs_baseline.clone(), &vs_proof)?;
-
-    let (vs2_stdin, vs2_def_input) = make_verify_stark_inputs(&sdk, &vs_proof, vs_baseline)?;
-    let (vs2_proof, vs2_baseline) = sdk.prove(vs_exe, vs2_stdin, &[vs2_def_input])?;
-    assert!(vs2_proof.deferral_merkle_proofs.is_some(),);
-    Sdk::verify_proof(agg_vk, vs2_baseline, &vs2_proof)?;
-
-    Ok(())
-}
-
-#[test]
-fn test_deferrals_enabled_without_usage() -> Result<()> {
-    setup_tracing();
-    let (fib_sdk, app_params, agg_params) = make_fib_sdk();
-    let sdk = make_deferral_enabled_sdk(&fib_sdk, app_params, agg_params)?;
-
-    let elf = Elf::decode(
-        include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
-    )?;
-    let app_exe = sdk.convert_to_exe(elf)?;
-
-    let n = 1000u64;
-    let mut stdin = StdIn::default();
-    stdin.write(&n);
-
-    let mut evm_prover = sdk.evm_prover_without_halo2(app_exe)?;
-    let proof = evm_prover.prove_root(stdin, &[])?;
-
-    // ---- Step 3: Verify the final result ----
-    let vk = evm_prover.root_prover.0.get_vk();
-    let engine = RootE::new(vk.inner.params.clone());
-    engine.verify(&vk, &proof)?;
 
     Ok(())
 }
@@ -549,7 +590,7 @@ fn test_prove_mixed_vm_def_depth_mismatch() -> Result<()> {
 ///   cargo nextest run --cargo-profile=fast -p openvm-sdk --features cuda,cell-profiling \
 ///   -- sdk_static_verifier_cell_profiling
 /// ```
-#[cfg(feature = "cell-profiling")]
+#[cfg(all(feature = "cell-profiling", feature = "root-prover"))]
 #[test]
 fn sdk_static_verifier_cell_profiling() -> Result<()> {
     use std::path::Path;
@@ -561,7 +602,6 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
         codec::{Decode, Encode},
         proof::Proof,
     };
-    use openvm_stark_sdk::config::root_params_with_100_bits_security;
     use openvm_static_verifier::{
         compute_dag_onion_commit,
         field::baby_bear::{BabyBearChip, BabyBearExtChip},
@@ -576,7 +616,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
     };
 
     // Root verifier params matching pipeline_cell_count_profiling in static-verifier
-    let root_params = root_params_with_100_bits_security();
+    let (app_params, agg_params, root_params) = get_params();
     let cache_dir = std::env::var("OPENVM_CACHE_DIR").unwrap_or_else(|_| "cache".to_string());
     std::fs::create_dir_all(&cache_dir)?;
 
@@ -603,10 +643,6 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
         } else {
             eprintln!("Generating root proof via SDK pipeline (this takes a while)...");
             let n_stack = 19;
-            let app_params = openvm_stark_sdk::config::app_params_with_100_bits_security(
-                DEFAULT_APP_L_SKIP + n_stack,
-            );
-            let agg_params = AggregationSystemParams::default();
 
             let elf = Elf::decode(
                 include_bytes!("../programs/examples/fibonacci.elf"),

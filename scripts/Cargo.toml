@@ -6,8 +6,12 @@ authors.workspace = true
 
 [dependencies]
 openvm-cuda-common = { workspace = true, optional = true }
+openvm-stark-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
+
 eyre = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 clap = { version = "4.5.9", features = ["derive", "env"] }
 serde_yaml = "0.9"
 tempfile = "3.13"
@@ -33,3 +37,8 @@ required-features = ["cuda"]
 name = "ptx-details"
 path = "bin/ptx_details.rs"
 required-features = ["cuda"]
+
+[[bin]]
+name = "generate-param-sweep"
+path = "bin/generate_param_sweep.rs"
+

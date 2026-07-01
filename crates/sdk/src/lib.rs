@@ -82,7 +82,7 @@ mod solidity;
 pub mod types;
 pub mod util;
 
-#[cfg(all(test, feature = "root-prover"))]
+#[cfg(test)]
 mod tests;
 
 mod error;

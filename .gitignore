@@ -44,6 +44,10 @@ guest.syms
 crates/cli/openvm/
 crates/cli/tests/**/openvm/
 
+# SDK sweep artifacts
+crates/sdk/tests/logs/
+crates/sdk/tests/*.json
+
 # samply profile
 profile.json.gz
 

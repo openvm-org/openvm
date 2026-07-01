@@ -2979,7 +2979,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6752,7 +6752,10 @@ dependencies = [
  "clap",
  "eyre",
  "openvm-cuda-common",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
  "serde",
+ "serde_json",
  "serde_yaml",
  "tempfile",
  "walkdir",
