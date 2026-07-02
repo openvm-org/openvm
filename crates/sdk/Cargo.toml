@@ -28,7 +28,6 @@ openvm-static-verifier = { workspace = true, optional = true }
 halo2-base = { workspace = true, optional = true, features = ["halo2-axiom"] }
 
 alloy-sol-types = { workspace = true, optional = true }
-forge-fmt = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
 
 bitcode = { workspace = true }
@@ -66,11 +65,6 @@ evm-verify = [
     "openvm-static-verifier/evm-verify",
     "dep:alloy-sol-types",
     "dep:tempfile",
-]
-# Optional Solidity code formatting; requires Rust 1.91+ due to foundry/alloy transitive deps.
-evm-verify-fmt = [
-    "evm-verify",
-    "dep:forge-fmt",
 ]
 metrics = ["dep:metrics", "openvm-continuations/metrics", "openvm-sdk-config/metrics"]
 aot = [
