@@ -201,10 +201,9 @@ Like PowerCheckerAir, the CPU trace generator uses `AtomicU32` counters for conc
 RangeCheckerAir is one of the most widely-used buses in the recursion circuit. Key consumers include:
 
 - **ProofShapeAir:** Limb decomposition for bounding total interaction counts and comparing heights.
-- **PowerCheckerAir:** Secondary range check on log values (verifying log fits in `log2(N)` bits).
 - **Various comparison operations:** Any AIR that needs to prove a value fits in 8 bits.
 
-Since the bus message includes `max_bits=NUM_BITS`, all lookups on this bus implicitly prove the value is in `[0, 2^NUM_BITS - 1]`.
+Each bus message carries a `max_bits` field, so a lookup proves the value is in `[0, 2^max_bits)`. ProofShapeAir performs lookups with both `max_bits = 8` (limb/count checks) and `max_bits = 5` (log/hypercube-dimension checks).
 
 ---
 
