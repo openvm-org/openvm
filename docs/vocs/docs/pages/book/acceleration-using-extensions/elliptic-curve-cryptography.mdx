@@ -71,3 +71,7 @@ For the basic operations provided by the `WeierstrassPoint` trait, the scalar fi
 
 The ECC extension supports ECDSA signature verification on any elliptic curve, and pre-defined implementations are provided for the secp256k1 and secp256r1 curves.
 To verify an ECDSA signature, first call the `VerifyingKey::recover_from_prehash_noverify` associated function to recover the verifying key, then call the `VerifyingKey::verify_prehash` method on the recovered verifying key.
+
+:::warning
+`VerifyingKey::from_affine` rejects identity points and non-canonical coordinates, but it does not check that the point is on the curve. Use it only with points that have already been checked. For public keys from untrusted bytes, use `VerifyingKey::from_sec1_bytes` or the guest library's checked encoded-point API.
+:::
