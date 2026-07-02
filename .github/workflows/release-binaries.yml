@@ -1,0 +1,185 @@
+name: Release Cargo OpenVM Binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to build"
+        required: true
+        type: string
+      dry_run:
+        description: "Build and package binaries without uploading to the GitHub release"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow_ref }}-release-binaries-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: cargo-openvm
+
+jobs:
+  build-linux-release:
+    name: Build ${{ matrix.target }}
+    runs-on:
+      - runs-on=${{ github.run_id }}-${{ github.run_attempt }}-cargo-openvm-${{ matrix.arch }}/runner=${{ matrix.runner }}/image=${{ matrix.image }}/volume=80gb/extras=s3-cache
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            arch: linux-x64
+            runner: 64cpu-linux-x64
+            image: ubuntu24-full-x64
+          - target: aarch64-unknown-linux-gnu
+            arch: linux-arm64
+            runner: 16cpu-linux-arm64
+            image: ubuntu24-full-arm64
+    steps:
+      - uses: runs-on/action@v2
+        with:
+          sccache: s3
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.version }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: ./.github/actions/sccache
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Set package version
+        id: meta
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build cargo-openvm
+        run: cargo build --release --locked -p cargo-openvm --target "${{ matrix.target }}"
+
+      - name: Smoke test binary
+        run: ./target/${{ matrix.target }}/release/${BINARY_NAME} openvm --version
+
+      - name: Package binary
+        id: package
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          artifact="${BINARY_NAME}-${VERSION}-${TARGET}.tar.gz"
+          mkdir -p package artifacts
+          cp "target/${TARGET}/release/${BINARY_NAME}" "package/${BINARY_NAME}"
+          chmod +x "package/${BINARY_NAME}"
+          tar -czf "artifacts/${artifact}" -C package "${BINARY_NAME}"
+          (cd artifacts && shasum -a 256 "${artifact}" > "${artifact}.sha256")
+          echo "artifact=${artifact}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload packaged binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.artifact }}
+          path: artifacts/*
+          if-no-files-found: error
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+  build-macos-release:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14
+    steps:
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.version }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Set package version
+        id: meta
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build cargo-openvm
+        run: cargo build --release --locked -p cargo-openvm --target "${{ matrix.target }}"
+
+      - name: Smoke test binary
+        run: ./target/${{ matrix.target }}/release/${BINARY_NAME} openvm --version
+
+      - name: Package binary
+        id: package
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          artifact="${BINARY_NAME}-${VERSION}-${TARGET}.tar.gz"
+          mkdir -p package artifacts
+          cp "target/${TARGET}/release/${BINARY_NAME}" "package/${BINARY_NAME}"
+          chmod +x "package/${BINARY_NAME}"
+          tar -czf "artifacts/${artifact}" -C package "${BINARY_NAME}"
+          (cd artifacts && shasum -a 256 "${artifact}" > "${artifact}.sha256")
+          echo "artifact=${artifact}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload packaged binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.artifact }}
+          path: artifacts/*
+          if-no-files-found: error
+
+  upload-release-assets:
+    name: Upload release assets
+    if: ${{ !inputs.dry_run }}
+    needs:
+      - build-linux-release
+      - build-macos-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packaged binaries
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Upload binaries to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.version }}
+        run: gh release upload "${TAG_NAME}" dist/* --clobber

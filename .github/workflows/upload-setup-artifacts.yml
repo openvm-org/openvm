@@ -1,5 +1,5 @@
-# Workflow to upload release artifacts such as proving keys. In the future pre-built binaries will also be added to this workflow.
-name: Upload Release Artifacts
+# Workflow to upload setup artifacts such as proving keys.
+name: Upload Setup Artifacts
 
 on:
   workflow_dispatch:
