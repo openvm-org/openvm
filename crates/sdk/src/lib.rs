@@ -170,7 +170,8 @@ pub enum DeferralSetup {
     /// unaware, and trying to prove with def_inputs set causes an error.
     Disabled,
     /// The STARK, root, and halo2 vks are deferral-aware (i.e. are equivalent to Active), but
-    /// trying to prove with def_inputs set still causes an error.
+    /// trying to prove with def_inputs set still causes an error. Use this when a program that
+    /// doesn't use deferrals must be verified by a deferral-aware vk.
     Aware(DeferralHookCommits),
     /// The STARK, root, and halo2 vks are deferral-aware (i.e. are equivalent to Aware), and
     /// deferral inputs can be used and proved.
