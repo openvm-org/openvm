@@ -70,7 +70,7 @@ pub fn keygen(
     // Default verify-stark circuit system parameters.
     let verify_prover_params = default_verify_stark_circuit_params();
 
-    // System parameters for VM proof aggregation. Deferral circuit proof aggregation re-uses
+    // System parameters for VM proof aggregation. Deferral circuit proof aggregation reuses
     // agg_config.
     let app_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let agg_config = AggregationConfig::default();
