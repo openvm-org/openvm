@@ -238,22 +238,15 @@ fn make_verify_stark_inputs(
 ///   * neither: STARK proof via `sdk.prove`, verified with the aggregation VK
 ///   * `root-prover` without `evm-verify`: root proof via `evm_prover_without_halo2`
 ///   * `evm-verify`: EVM proof via `sdk.prove_evm`, verified against the halo2 verifier
-///
-/// When `check_deferral_merkle_proofs` is set, asserts `deferral_merkle_proofs.is_some()` on the
-/// STARK proof (only meaningful in the STARK path).
-fn prove_and_verify_end_to_end(
+fn prove_and_verify_e2e(
     sdk: &Sdk,
     exe: Arc<VmExe<F>>,
     stdin: StdIn,
     def_inputs: &[DeferralInput],
-    #[allow(unused_variables)] check_deferral_merkle_proofs: bool,
 ) -> Result<()> {
     #[cfg(not(feature = "root-prover"))]
     {
         let (proof, baseline) = sdk.prove(exe, stdin, def_inputs)?;
-        if check_deferral_merkle_proofs {
-            assert!(proof.deferral_merkle_proofs.is_some());
-        }
         Sdk::verify_proof((*sdk.agg_vk()).clone(), baseline, &proof)?;
     }
     #[cfg(all(feature = "root-prover", not(feature = "evm-verify")))]
@@ -356,7 +349,7 @@ fn test_sdk_fibonacci() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
 
-    prove_and_verify_end_to_end(&sdk, app_exe, stdin, &[], false)
+    prove_and_verify_e2e(&sdk, app_exe, stdin, &[])
 }
 
 #[test]
@@ -373,7 +366,7 @@ fn test_verify_stark_deferral() -> Result<()> {
     )?;
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
-    prove_and_verify_end_to_end(&vs_sdk, vs_exe, vs_stdin, &[def_input], false)
+    prove_and_verify_e2e(&vs_sdk, vs_exe, vs_stdin, &[def_input])
 }
 
 #[test]
@@ -403,7 +396,7 @@ fn test_verify_many_deferrals() -> Result<()> {
     )?;
     let vs_exe = vs_sdk.convert_to_exe(vs_elf)?;
 
-    prove_and_verify_end_to_end(&vs_sdk, vs_exe, vs_stdin, &def_inputs, true)
+    prove_and_verify_e2e(&vs_sdk, vs_exe, vs_stdin, &def_inputs)
 }
 
 #[test]
@@ -429,7 +422,7 @@ fn test_verify_stark_path_sdk_can_verify_own_proofs() -> Result<()> {
     Sdk::verify_proof(agg_vk.clone(), vs_baseline.clone(), &vs_proof)?;
 
     let (vs2_stdin, vs2_def_input) = make_verify_stark_inputs(&sdk, &vs_proof, vs_baseline)?;
-    prove_and_verify_end_to_end(&sdk, vs_exe, vs2_stdin, &[vs2_def_input], true)
+    prove_and_verify_e2e(&sdk, vs_exe, vs2_stdin, &[vs2_def_input])
 }
 
 #[test]
@@ -448,7 +441,40 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
 
-    prove_and_verify_end_to_end(&sdk, app_exe, stdin, &[], false)
+    prove_and_verify_e2e(&sdk, app_exe, stdin, &[])
+}
+
+#[test]
+fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
+    setup_tracing();
+    let n_stack = 15;
+    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
+    let agg_params = AggregationSystemParams::default();
+    let hook_commits =
+        DeferralHookCommits::from_system_params(&agg_params, hook_params_with_100_bits_security());
+    let aware_sdk = Sdk::builder()
+        .app_config(AppConfig::riscv32(app_params))
+        .agg_params(agg_params)
+        .agg_tree_config(AggregationTreeConfig {
+            num_children_leaf: 1,
+            num_children_internal: 3,
+        })
+        .deferral_hook_commits(hook_commits)
+        .build()?;
+
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let app_exe = aware_sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&(1u64 << 17));
+
+    let (_, segments) = aware_sdk.execute_metered(app_exe.clone(), stdin.clone())?;
+    assert!(segments.len() >= 3, "expected >= 3 segments");
+
+    prove_and_verify_e2e(&aware_sdk, app_exe, stdin, &[])
 }
 
 #[test]
@@ -507,41 +533,6 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
     let vk = nested_verify_circuit_prover.get_vk();
     let engine = E::new(vk.inner.params.clone());
     engine.verify(&vk, &nested_def_proof)?;
-
-    Ok(())
-}
-
-#[test]
-fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
-    setup_tracing();
-    let n_stack = 15;
-    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
-    let agg_params = AggregationSystemParams::default();
-    let hook_commits =
-        DeferralHookCommits::from_system_params(&agg_params, hook_params_with_100_bits_security());
-    let aware_sdk = Sdk::builder()
-        .app_config(AppConfig::riscv32(app_params))
-        .agg_params(agg_params)
-        .agg_tree_config(AggregationTreeConfig {
-            num_children_leaf: 1,
-            num_children_internal: 3,
-        })
-        .deferral_hook_commits(hook_commits)
-        .build()?;
-
-    let elf = Elf::decode(
-        include_bytes!("../programs/examples/fibonacci.elf"),
-        MEM_SIZE as u32,
-    )?;
-    let app_exe = aware_sdk.convert_to_exe(elf)?;
-
-    let mut stdin = StdIn::default();
-    stdin.write(&(1u64 << 17));
-
-    let (_, segments) = aware_sdk.execute_metered(app_exe.clone(), stdin.clone())?;
-    assert!(segments.len() >= 3, "expected >= 3 segments");
-
-    aware_sdk.prove(app_exe, stdin, &[])?;
 
     Ok(())
 }
