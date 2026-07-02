@@ -94,6 +94,9 @@ where
     /// Convert an `AffinePoint` into a [`PublicKey`].
     /// In addition, for `Coordinate<C>` implementing `IntMod`, this function will assert that the
     /// affine coordinates of `point` are both in canonical form.
+    ///
+    /// This does not check that `point` is on the curve. Use this only with points that have
+    /// already been checked. For public keys from untrusted bytes, use [`Self::from_sec1_bytes`].
     pub fn from_affine(point: AffinePoint<C>) -> Result<Self> {
         // Internally this calls `is_eq` on `x` and `y` coordinates, which will assert `x, y` are
         // reduced.
@@ -201,6 +204,9 @@ where
         Ok(Self::new(public_key))
     }
 
+    /// Convert an affine point into a verifying key.
+    ///
+    /// This has the same validation behavior as [`PublicKey::from_affine`].
     pub fn from_affine(point: <C as IntrinsicCurve>::Point) -> Result<Self> {
         let public_key = PublicKey::<C>::from_affine(point)?;
         Ok(Self::new(public_key))
