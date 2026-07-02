@@ -6,6 +6,10 @@ The P256 guest library uses [`openvm-ecc-guest`](/book/acceleration-using-extens
 `VerifyingKey::from_affine` does not check that raw coordinates are on the P-256 curve. Use it only with points that have already been checked. For public keys from untrusted bytes, use `VerifyingKey::from_sec1_bytes` or `VerifyingKey::from_encoded_point`.
 :::
 
+:::warning
+`P256Point` stores raw affine coordinates. Deserializing a `P256Point` does not check that the point is on the P-256 curve. Validate points from untrusted input before using point addition, scalar multiplication, or MSM.
+:::
+
 ### Config parameters
 
 For the guest program to build successfully, all used moduli and curves must be declared in the `.toml` config file in the following format:
