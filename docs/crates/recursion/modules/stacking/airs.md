@@ -92,7 +92,7 @@ None.
 5. **Rotation check (AirShapeBus — lookup):** Looks up `NeedRot` property from ProofShapeAir to determine which columns require rotation claims.
 6. **Eq kernel lookups (EqKernelLookupBus — lookup, EqBitsLookupBus — lookup):** Looks up equality kernel evaluations for stacking coefficient computation.
 7. **Module input (StackingModuleBus — receives):** Receives starting tidx from the batch constraint module.
-8. **Tidx coordination (StackingModuleTidxBus — sends):** Sends tidx to downstream stacking AIRs (SumcheckRoundsAir, StackingClaimsAir).
+8. **Tidx coordination (StackingModuleTidxBus — sends):** Sends tidx to UnivariateRoundAir, the next sub-module in the tidx chain.
 9. **Transcript (TranscriptBus — receives):** Receives column claims and samples lambda.
 
 ### Walkthrough

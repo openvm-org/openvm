@@ -46,13 +46,16 @@ There should be a unique `DeferredVerifyCircuit` for each STARK verifying key yo
 
 ### Using `DeferralConfig`
 
-To use `DeferredVerifyCircuit` in an app, you must wire it into your VM config via `DeferralConfig`. A VM config can support up to `MAX_DEF_CIRCUITS = 512` different deferral circuits at one time. `DeferralConfig` stores:
+To use `DeferredVerifyCircuit` in an app, you must wire it into your VM config via `DeferralConfig`. A VM config can support up to `MAX_DEF_CIRCUITS = 512` different deferral circuits at one time. `DeferralConfig` has a single field:
 
 - `circuits: Vec<DeferralCircuitConfig>` - one entry per deferral circuit
+
+Each `DeferralCircuitConfig` entry has:
+
 - `def_type: SupportedDeferral` - the supported deferral function, such as `SupportedDeferral::VerifyStark`
 - `commit: CommitBytes` - the corresponding `def_circuit_commit`, serialized in TOML as a 32-byte hex string
 
-These entries are aligned by index. The SDK converts `DeferralConfig` into the lower-level `DeferralExtension` when building execution, transpiler, and prover components.
+The SDK converts `DeferralConfig` into the lower-level `DeferralExtension` when building execution, transpiler, and prover components.
 
 It is **highly** recommended that guest programs that use deferrals are proved using the SDK.
 
