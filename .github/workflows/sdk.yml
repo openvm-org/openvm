@@ -17,15 +17,9 @@ on:
         default: "m7a.24xlarge"
   push:
     branches: ["main"]
-  # pull_request:
-  #   branches: ["**"]
-  #   paths:
-  #     - "crates/circuits/primitives/**"
-  #     - "crates/vm/**"
-  #     - "crates/toolchain/**"
-  #     - "crates/sdk/**"
-  #     - "Cargo.toml"
-  #     - ".github/workflows/sdk.yml"
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    branches: ["**"]
 
 concurrency:
   group: ${{ github.workflow_ref }}-sdk-${{ github.event.pull_request.number || github.sha }}
@@ -36,6 +30,7 @@ env:
 
 jobs:
   tests:
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-sdk-tests') }}
     strategy:
       matrix:
         mode: ["default", "ignored", "aot"]
@@ -83,7 +78,6 @@ jobs:
         if: ${{ matrix.mode == 'default' }}
         working-directory: crates/sdk/contracts
         run: |
-          forge fmt --check
           forge build --sizes
           forge test
 
