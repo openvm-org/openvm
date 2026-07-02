@@ -130,7 +130,7 @@ However, there are some cases that all-0 row doesn't satisfy the constraints: wh
 - Some chips involve constant values, so their constraints will not be satisfied by all-0 rows.
   For these chips, we will pad the trace with a "dummy row".
   This dummy row will be created by evaluating the constraints with all-0 inputs and all-0 flags, and setting `is_valid` to 0.
-  See the `ExprBuilder::finalize` method for details.
+  See the `FieldExpressionFiller::fill_dummy_trace_row` method for details.
 
 ## Note on value of `range_checker_bits`
 

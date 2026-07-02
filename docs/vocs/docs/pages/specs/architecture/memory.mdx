@@ -90,7 +90,7 @@ The following invariants **must** be maintained by the memory architecture:
 
 Invariant 1 is guaranteed by [time goes forward](#time-goes-forward) under the [assumption](/specs/architecture/circuit-architecture#instruction-executors) that the timestamp increase during a single logical instruction execution is bounded by `num_interactions * num_rows_per_execution`, where `num_interactions` is the number of interactions contributed by one trace row.
 
-Invariants 2 and 3 are guaranteed at timestamp `0` in the MEMORY_BUS by the memory boundary chip: `PersistentBoundaryChip` populates the MEMORY_BUS at timestamp `0` from the initial memory state, which is committed to in the public value `initial_memory_root`. The chip upholds Invariants 2 and 3 **assuming** that the initial memory state only contains addresses in the required range. This assumption needs to be checked outside the scope of the circuit.
+Invariants 2 and 3 are guaranteed at timestamp `0` in the MEMORY_BUS by the memory boundary chip: `PersistentBoundaryChip` populates the MEMORY_BUS at timestamp `0` from the initial memory state, which is committed to in the public value `initial_root`. The chip upholds Invariants 2 and 3 **assuming** that the initial memory state only contains addresses in the required range. This assumption needs to be checked outside the scope of the circuit.
 
 :::warning
 At all later timestamps, it is the responsibility of each chip to ensure their memory accesses maintain Invariants 2 and 3.
@@ -212,7 +212,7 @@ The uniqueness of the addresses is achieved by the interactions on the merkle bu
 
 In this model, there is no central memory/offline checker AIR. Every chip is responsible for doing the necessary interactions discussed above for its memory operations. For this, every chip's AIR must have some auxiliary columns for every memory operation. The auxiliary columns include `prev_timestamp` and, for Write operations, `prev_data`.
 
-The initial memory state is constrained at the AIR level by the `PersistentBoundaryChip`, which commits to it via the `initial_memory_root` Merkle root (a public value) and sends initial values on the memory bus at timestamp $0$.
+The initial memory state is constrained at the AIR level by the `PersistentBoundaryChip`, which commits to it via the `initial_root` Merkle root (a public value) and sends initial values on the memory bus at timestamp $0$.
 
 ## What to take into account when adding a new chip
 

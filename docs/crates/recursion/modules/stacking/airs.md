@@ -92,7 +92,7 @@ None.
 5. **Rotation check (AirShapeBus — lookup):** Looks up `NeedRot` property from ProofShapeAir to determine which columns require rotation claims.
 6. **Eq kernel lookups (EqKernelLookupBus — lookup, EqBitsLookupBus — lookup):** Looks up equality kernel evaluations for stacking coefficient computation.
 7. **Module input (StackingModuleBus — receives):** Receives starting tidx from the batch constraint module.
-8. **Tidx coordination (StackingModuleTidxBus — sends):** Sends tidx to downstream stacking AIRs (SumcheckRoundsAir, StackingClaimsAir).
+8. **Tidx coordination (StackingModuleTidxBus — sends):** Sends tidx to UnivariateRoundAir, the next sub-module in the tidx chain.
 9. **Transcript (TranscriptBus — receives):** Receives column claims and samples lambda.
 
 ### Walkthrough
@@ -264,7 +264,7 @@ graph TD
     EqBase -->|"send eq_base"| EqBaseBus
     EqBase -->|"lookup u_0"| EqRandBus
     EqBase -->|"provide eq_0, k_rot_0"| EqKernelBus
-    EqBase -->|"send u, r^2"| EqNegBaseRandBus
+    EqBase -->|"send u, r"| EqNegBaseRandBus
     EqBase -->|"receive eq_neg, k_rot_neg"| EqNegResultBus
     EqBase -->|"provide eq_n (neg)"| EqKernelBus
 
@@ -289,7 +289,7 @@ None.
 2. **Eq base output (EqBaseBus — sends):** Sends `(eq_u_r, eq_u_r_omega, eq_u_r_prod)` to SumcheckRoundsAir.
 3. **Eq kernel output (EqKernelLookupBus — provides):** Provides `(n=0, eq_0, k_rot_0)` for positive dimensions, and `(n=-i, eq_neg, k_rot_neg)` for negative dimensions (combined with values received from EqNegAir).
 4. **WHIR opening points (WhirOpeningPointBus — sends):** Sends `(idx=row_idx, u^{2^row_idx})` for each iterative-squaring level.
-5. **Negative-dimension coordination (EqNegBaseRandBus — sends, EqNegResultBus — receives):** Sends `(u, r^2)` to EqNegAir and receives back `(eq_neg, k_rot_neg)` for negative-dimension AIRs.
+5. **Negative-dimension coordination (EqNegBaseRandBus — sends, EqNegResultBus — receives):** Sends `(u, r)` to EqNegAir and receives back `(eq_neg, k_rot_neg)` for negative-dimension AIRs.
 
 #### Walkthrough
 
@@ -301,7 +301,7 @@ For `l_skip = 2`, `u_0 = u`, `r_0 = r`, `omega = g_4`:
 | 1   | 1       | u^2   | r^2   | (r*w)^2     | u*(u+r)*(u^2+r^2)   | u^2       | 1*(u^2+1)      |
 | 2   | 2       | u^4   | r^4   | (r*w)^4     | (full product)       | u         | (u^2+1)*(u+1)  |
 
-- Row 0: Sends `(idx=0, u)` to WhirOpeningPointBus. Sends `(u, r^2)` to EqNegBaseRandBus.
+- Row 0: Sends `(idx=0, u)` to WhirOpeningPointBus. Sends `(u, r)` to EqNegBaseRandBus.
 - Row 1: Sends `(idx=1, u^2)` to WhirOpeningPointBus. Receives `(n=-1, eq_{-1}, k_rot_{-1})` from EqNegResultBus. Provides `(-1, in_1*eq_{-1}, in_1*k_rot_{-1})` to EqKernelLookupBus.
 - Row 1 (penultimate, gated by `next.is_last`): Computes `eq_0 = (prod_u_r - u^4 + 1) / 4` and `k_rot_0 = (prod_u_r_omega - u^4 + 1) / 4`. Provides `(0, eq_0, k_rot_0)` to EqKernelLookupBus. Sends base values to EqBaseBus.
 - Row 2 (last): Forces `eq_neg = k_rot_neg = 1` for the `n = -l_skip` special case and publishes the negative-dimension lookup to EqKernelLookupBus.
@@ -347,7 +347,7 @@ For `n_stack = 2`, `l_skip = 1`, with stacked slices needing `b_values` {0, 1, 2
 | [EqBaseBus](../../bus-inventory.md#645-eqbasebus) | Permutation (per-proof) | EqBaseAir sends base eq values to SumcheckRoundsAir |
 | [EqKernelLookupBus](../../bus-inventory.md#647-eqkernellookupbus) | Lookup (per-proof) | EqBaseAir provides `eq_0`/`k_rot_0` for positive and negative dimensions |
 | [WhirOpeningPointBus](../../bus-inventory.md#43-whiropeningpointbus) | Permutation (per-proof) | EqBaseAir sends `u^{2^i}` opening points |
-| [EqNegBaseRandBus](../../bus-inventory.md#45-eqnegbaserandbus) | Permutation (per-proof) | EqBaseAir sends `(u, r^2)` to EqNegAir |
+| [EqNegBaseRandBus](../../bus-inventory.md#45-eqnegbaserandbus) | Permutation (per-proof) | EqBaseAir sends `(u, r)` to EqNegAir |
 | [EqNegResultBus](../../bus-inventory.md#56-eqnegresultbus) | Permutation (per-proof) | EqBaseAir receives `eq_neg`/`k_rot_neg` from EqNegAir |
 | [EqBitsLookupBus](../../bus-inventory.md#648-eqbitslookupbus) | Lookup (per-proof) | EqBitsAir provides `eq_bits` values to OpeningClaimsAir |
 | [EqBitsInternalBus](../../bus-inventory.md#646-eqbitsinternalbus) | Permutation (per-proof) | EqBitsAir internal tree propagation |

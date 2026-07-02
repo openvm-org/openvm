@@ -2,9 +2,9 @@
 
 There is an `AotInstance` struct which stores the information generated during compile time to be used in execution time.
 ```
-pub struct AotInstance<F, Ctx> {
+pub struct AotInstance<'a, F, Ctx> {
     init_memory: SparseMemoryImage,
-    system_config: SystemConfig,
+    system_config: &'a SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
     // to this buffer.
     #[allow(dead_code)]
@@ -39,7 +39,7 @@ This function takes in `from_state: VmState<F, GuestMemory>` and `num_insns`. It
 - `new_metered` creates a new instance for metered execution.
 Important things to know about this:
 
-This function follows the same build pipeline as `new` — it generates metered x86 assembly source, compiles it via `asm_to_lib` (`gcc -fPIC -shared`), and loads the resulting `.so` dynamic library.
+This function follows the same build pipeline as `new` — it generates metered x86 assembly source, compiles it via `asm_to_lib` (`gcc -fPIC -Wl,-z,noexecstack -shared`), and loads the resulting `.so` dynamic library.
 
 There are also `set_pc` which will be called once at the end of the execution to sync the `VmExecState`'s pc from the x86 register. And also there is `should_suspend` which is called in every instruction and returns `1` if we should suspend and `0` otherwise which is later checked by the assembly.
 

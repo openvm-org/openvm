@@ -42,8 +42,6 @@ From ProofShape (per child-AIR per proof, indexed by sort_idx `i`):
   `ColumnClaimsBus`
 - `(i, part_idx, commit_idx, n[i], lifted_height[i], log_lifted_height[i])`
   (`LiftedHeightsBus`, received by OpeningClaimsAir) — one message per trace partition
-- `(commit_idx, stacking_row_idx)` (`StackingIndicesBus`, received by StackingClaimsAir)
-  — maps each commitment's columns to their row indices in the stacked matrix
 
 ### Derived quantities
 
@@ -54,7 +52,7 @@ From ProofShape (per child-AIR per proof, indexed by sort_idx `i`):
 - **WHIR handoff:** `tidx_whir` and `whir_claim` in D_EF — the transcript position after all
   Stacking activity and the batched stacking claim. `tidx_whir` is `tidx_stack` plus the
   slot counts from the transcript schedule below (phases A + B + C). The exact computation
-  is in `StackingModule::preflight` (`stacking/mod.rs`).
+  is in `StackingModule::run_preflight` (`stacking/mod.rs`).
   (`WhirModuleBus`, sent by StackingClaimsAir)
 - **Mu challenge:** `mu` in D_EF — the stacking batching challenge
   (`WhirMuBus`, sent by StackingClaimsAir)
@@ -68,10 +66,13 @@ From ProofShape (per child-AIR per proof, indexed by sort_idx `i`):
   - Total: `l_skip + n_stack` messages, matching the reference verifier's
     `u_cube = [u0^{2^0}, ..., u0^{2^{l_skip-1}}, u1, ..., u_{n_stack}]`.
 - **Column opening claims:** per-AIR per-partition `(col_claim, rot_claim)` in D_EF — the
-  claimed polynomial evaluations at `xi` that WHIR will verify
+  claimed polynomial evaluations at `xi` that BC's SymbolicExpressionAir will verify
   (`ColumnClaimsBus`, sent by OpeningClaimsAir)
-- **Eq-negation base randomness:** `(u, r^2)` — sent to BC's EqNegAir for shared eq-neg
+- **Eq-negation base randomness:** `(u_0, r_0)` — sent to BC's EqNegAir for shared eq-neg
   computation (`EqNegBaseRandBus`, sent by EqBaseAir)
+- **Stacking column indices:** `(commit_idx, col_idx)` — maps each stacked column to its
+  commitment, provided by StackingClaimsAir and consumed by WHIR's InitialOpenedValuesAir
+  (`StackingIndicesBus`)
 
 ## Extraction
 
@@ -90,7 +91,8 @@ module-boundary note in [README.md](../../README.md#witness-extraction)).
 
 **Connection to outgoing buses.** OpeningClaimsAir computes `s_0 = RLC(t_claims, lambda)` from
 the column openings and sends it on `SumcheckClaimsBus` (module_idx 0) to start the sumcheck
-chain. It also sends each `(col_claim, rot_claim)` on `ColumnClaimsBus` to WHIR.
+chain. It also sends each `(col_claim, rot_claim)` on `ColumnClaimsBus` to BC's
+SymbolicExpressionAir.
 StackingClaimsAir receives the final sumcheck claim via `SumcheckClaimsBus` (module_idx 2),
 verifies it against the stacking openings and claim coefficients, then computes
 `whir_claim = RLC(stacking_openings, mu)` and sends it on `WhirModuleBus`. It also sends `mu`
@@ -171,7 +173,7 @@ challenges `u_1, ..., u_{n_stack}` from SumcheckRoundsAir (`idx = l_skip..l_skip
 
 **C4 (`ColumnClaimsBus`).** Column opening claims are the values observed in (1).
 
-**C5 (`EqNegBaseRandBus`).** Eq-negation base randomness `(u_0, r_0^2)` — `u_0` from (3),
+**C5 (`EqNegBaseRandBus`).** Eq-negation base randomness `(u_0, r_0)` — `u_0` from (3),
 `r_0` from BC's constraint sumcheck.
 
 ## Module-level argument

@@ -107,13 +107,14 @@ The constructor pre-generates the parent proving and verifying keys, which can b
 Root proving is a two-step flow:
 
 ```rust
-pub fn generate_proving_ctx_no_def<PB>(
+pub fn generate_proving_ctx_no_def<PB, DC: Clone + Send + Sync>(
     &self,
     proof: Proof<SC>,
     user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+    device_ctx: &DC,
 ) -> Option<ProvingContext<PB>>
 
-pub fn root_prove_from_ctx<E>(&self, ctx: ProvingContext<E::PB>) -> Result<Proof<RootSC>>
+pub fn root_prove_from_ctx<E>(&self, ctx: ProvingContext<E::PB>, engine: &E) -> Result<Proof<RootSC>>
 ```
 
 If deferrals are enabled, use `generate_proving_ctx(...)` instead and pass the deferral Merkle proofs. Deferral-aware root proofs also constrain the final deferral `node_idx` to be `0`, and they verify unchanged deferral memory when no deferral calls were used.

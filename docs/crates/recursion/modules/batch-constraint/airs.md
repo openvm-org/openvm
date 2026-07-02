@@ -279,7 +279,7 @@ graph LR
     IFA -- "receive" --> IFIB
     IFA -- "send (claims)" --> ECB
     IFA -- "lookup_key" --> ASB
-    IFA -- "lookup_key" --> E3B
+    IFA -- "receive" --> E3B
     IFA -- "receive (sample beta)" --> TB
 
     CFA -- "receive" --> CFB

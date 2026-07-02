@@ -180,6 +180,7 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         &self,
         config: &Self::VmConfig,
         circuit: AirInventory<E::SC>,
+        device_ctx: &EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,

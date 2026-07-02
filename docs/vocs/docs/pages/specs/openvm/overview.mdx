@@ -3,7 +3,7 @@
 OpenVM is a modular framework to co-design and build a custom zkVM, ISA, and supporting programming language frontend simultaneously.
 
 - The [Circuit Architecture](/specs/architecture/circuit-architecture) explains the zkVM circuit architecture, which focuses on maximizing modularity and composability. The architecture supports adding arbitrary chips to handle custom instructions using a **VM extension** framework.
-  - There are a few required system chips: Program, Public Values, Connector, Range Checker, Memory (which is handled with several chips), and Poseidon2. These chips are required in any VM instantiation, and all other functionality is handled by circuits from VM extensions.
+  - There are a few required system chips: Program, Connector, Range Checker, Memory (which is handled with several chips), and Poseidon2. These chips are required in any VM instantiation, and all other functionality is handled by circuits from VM extensions.
 - The [Instruction Set Architecture](/specs/openvm/isa) specifies the ISA framework and lists the currently supported instructions in different VM extensions. The ISA is specialized for zkVMs and provides additional flexibility over traditional machine architectures:
   - Support for multiple machine architectures interoperating over multiple memory address spaces. These address spaces also allow support for both register and stack based architectures.
   - Variable word size, which allows flexible support for different register sizes and also higher bandwidth memory accesses.

@@ -153,7 +153,7 @@ Row | is_valid | proof_idx | air_idx | pv_idx | is_first_proof | is_first_air | 
 
 ### Executive Summary
 
-RangeCheckerAir is a fixed 256-row (2^NUM_BITS where NUM_BITS=8) lookup table. Row `i` contains the value `i` and a multiplicity count. Any AIR needing to prove a value is in `[0, 255]` performs a lookup on RangeCheckerBus. This is used by ProofShapeAir for limb decomposition, PowerCheckerAir for log range checks, and other AIRs throughout the circuit.
+RangeCheckerAir is a fixed 256-row (2^NUM_BITS where NUM_BITS=8) lookup table. Row `i` contains the value `i` and a multiplicity count. Any AIR needing to prove a value is in `[0, 255]` performs a lookup on RangeCheckerBus. This is used by ProofShapeAir for limb decomposition and other AIRs throughout the circuit.
 
 ### Public Values
 
@@ -201,10 +201,9 @@ Like PowerCheckerAir, the CPU trace generator uses `AtomicU32` counters for conc
 RangeCheckerAir is one of the most widely-used buses in the recursion circuit. Key consumers include:
 
 - **ProofShapeAir:** Limb decomposition for bounding total interaction counts and comparing heights.
-- **PowerCheckerAir:** Secondary range check on log values (verifying log fits in `log2(N)` bits).
 - **Various comparison operations:** Any AIR that needs to prove a value fits in 8 bits.
 
-Since the bus message includes `max_bits=NUM_BITS`, all lookups on this bus implicitly prove the value is in `[0, 2^NUM_BITS - 1]`.
+Each bus message carries a `max_bits` field, so a lookup proves the value is in `[0, 2^max_bits)`. ProofShapeAir performs lookups with both `max_bits = 8` (limb/count checks) and `max_bits = 5` (log/hypercube-dimension checks).
 
 ---
 
@@ -229,4 +228,4 @@ Since the bus message includes `max_bits=NUM_BITS`, all lookups on this bus impl
 | [CachedCommitBus](../../bus-inventory.md#71-cachedcommitbus) | PermutationCheck (per-proof) | PSA sends when continuations are enabled | RootVerifierPvsAir, DeferredVerifyPvsAir |
 | [PreHashBus](../../bus-inventory.md#516-prehashbus) | PermutationCheck (per-proof) | PSA sends when continuations are enabled | RootVerifierPvsAir, DeferredVerifyPvsAir |
 | [PowerCheckerBus](../../bus-inventory.md#53-powercheckerbus) | Lookup (global) | PSA looks up | PowerCheckerAir provides keys |
-| [RangeCheckerBus](../../bus-inventory.md#52-rangecheckerbus) | Lookup (global) | RCA provides keys | PSA, PowerCheckerAir |
+| [RangeCheckerBus](../../bus-inventory.md#52-rangecheckerbus) | Lookup (global) | RCA, PowerCheckerAir provide keys | PSA looks up |

@@ -4,29 +4,16 @@ To see list of all available built-in targets:
 rustc --print target-list
 ```
 
-We will currently use the risc0 target until we contribute our own RISC-V target to Rust.
+We currently use the risc0 target (`riscv32im-risc0-zkvm-elf`) until we contribute our own RISC-V target to Rust.
 
 WARNING: to prevent from building for your host machine, make sure you do not have `rustflags = ["-Ctarget-cpu=native"]` in your `~/.cargo/config.toml`.
 
-Build example with full command:
+Guest programs live in the `programs/examples` directory of each extension test crate (e.g. [`extensions/rv32im/tests/programs/examples`](../../../../extensions/rv32im/tests/programs/examples)). They are compiled to a RISC-V ELF for the risc0 target by the `build_example_program_at_path` utility, which reads back the output ELF file. See the crate's top-level [README.md](../README.md) for how to add and build guest programs.
+
+To disassemble a compiled ELF to read the instructions, [install cargo-binutils](https://github.com/rust-embedded/cargo-binutils) and run
 
 ```bash
-cargo +nightly build -Z build-std=alloc,core,proc_macro,panic_abort --target riscv32im-risc0-zkvm-elf --example fibonacci
-```
-
-Also works with just `cargo +nightly build` because we have a `.cargo/config.toml` that specifies the target and unstable build features (if uncommented).
-
-After this the ELF will be found via
-
-```bash
-file target/riscv32im-risc0-zkvm-elf/debug/examples/openvm-fibonacci-program
-target/riscv32im-risc0-zkvm-elf/debug/examples/openvm-fibonacci-program: ELF 32-bit LSB executable, UCB RISC-V, soft-float ABI, version 1 (SYSV), statically linked, with debug_info, not stripped
-```
-
-To disassemble the ELF to read the instructions, [install cargo-binutils](https://github.com/rust-embedded/cargo-binutils) and run
-
-```bash
-rust-objdump -d target/riscv32im-risc0-zkvm-elf/debug/examples/openvm-fibonacci-program
+rust-objdump -d <path-to-elf>
 ```
 
 where `-d` is short for `--disassemble`.
