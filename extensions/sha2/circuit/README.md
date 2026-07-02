@@ -32,7 +32,7 @@ In particular, SHA-384 shares its compression function with SHA-512, so users ma
 
 We support the `SHA256_UPDATE` and `SHA512_UPDATE` intrinsic instructions, each of which takes three operands, `dst`, `state`, and `input`.
 - `input` is a pointer to exactly one block of message bytes (the size of a block varies for each SHA-2 variant.)
-- `state` is a pointer to the current hasher state (8 words in big endian). Word size varies by SHA-2 variant.
+- `state` is a pointer to the current hasher state (8 words in little endian). Word size varies by SHA-2 variant.
 - `dst` is a pointer where the updated state should be stored. `dst` may be equal to `state`.
 
 The `SHA256_UPDATE` and `SHA512_UPDATE` instructions write the value of the updated hasher state after consuming the input to `dst`.

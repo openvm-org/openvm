@@ -7,6 +7,6 @@ Code-level guides to the crates in the repository.
   - [VM Extensions](./vm-extensions.md)
 - `openvm-recursion-circuit`
   - [Recursion Circuit](./recursion/README.md)
-- `openvm-benchmarks`
+- `openvm-benchmarks-*`
   - [Running Benchmarks](./benchmarks.md)
 - [Metrics](./metrics.md)

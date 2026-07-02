@@ -34,7 +34,7 @@ This overflow representation is useful for optimizing constraints in intermediat
 Use case:
 
 1. Trace generation: The parent AIR (e.g. multiplication AIR) can compose the expression (e.g. AB - PQ - R) as `OverflowInt<isize>` and generates the carries array (see the tests for an example).
-1. AIR eval: The parent AIR `eval` function should compose the expression as `OverflowInt<AB::Expr>` and pass it to the check carry subair `constrain_carry_to_zero` along with the carries column.
+1. AIR eval: The parent AIR `eval` function should compose the expression as `OverflowInt<AB::Expr>` and pass it to the check carry subair `CheckCarryToZeroSubAir` (via its `SubAir::eval` method) along with the carries column.
 
 ### Limit of Overflow Bits
 

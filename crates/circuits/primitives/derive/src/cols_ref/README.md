@@ -90,7 +90,7 @@ The fields of `ExampleColsRef` have the same names as the fields of `ExampleCols
     - one restriction is that any nested `ColsRef` type must have the same config as the outer `ColsRef` type
 - fields that are annotated with `#[aligned_borrow]` are assumed to derive `AlignedBorrow` and are borrowed from the input slice. The new type is a reference to the `AlignedBorrow` type
     - if a field whose type name ends in `Cols` is annotated with `#[aligned_borrow]`, then the aligned borrow takes precedence, and the field is not transformed into an `ArrayView`
-- nested arrays of `U` become `&ArrayViewX<U>` where `X` is the number of dimensions in the nested array type
+- nested arrays of `U` become `ArrayViewX<U>` where `X` is the number of dimensions in the nested array type
     - `U` can be either the generic type `T` or a type that derives `AlignedBorrow`. In the latter case, the field must be annotated with `#[aligned_borrow]`
     - the `ArrayViewX` type provides a `X`-dimensional view into the row slice 
 

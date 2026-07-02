@@ -2,9 +2,9 @@
 
 There is an `AotInstance` struct which stores the information generated during compile time to be used in execution time.
 ```
-pub struct AotInstance<F, Ctx> {
+pub struct AotInstance<'a, F, Ctx> {
     init_memory: SparseMemoryImage,
-    system_config: SystemConfig,
+    system_config: &'a SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
     // to this buffer.
     #[allow(dead_code)]

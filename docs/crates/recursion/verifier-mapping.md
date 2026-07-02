@@ -515,7 +515,8 @@ graph TB
     EqNegAir -- "SelUniBus" --> SymbolicExpressionAir
 
     %% Group 8 <-> Group 10
-    EqNegAir -- "EqNegBaseRandBus / EqNegResultBus" --> EqBaseAir
+    EqBaseAir -- "EqNegBaseRandBus" --> EqNegAir
+    EqNegAir -- "EqNegResultBus" --> EqBaseAir
 
     %% Group 9 -> Group 11
     StackingClaimsAir -- "WhirModuleBus" --> WhirRoundAir

@@ -127,8 +127,8 @@ Row | layer_idx | is_first | tidx  | lambda       | p_xi_0    | q_xi_0    | p_xi
  2  |     2     |    0     |  260  | [l0',l1',..]| [...]     | [...]     | [...]     | [...]     | [...]
 ```
 
-- **Row 0 (root):** Verifies `p_cross=0` and `q_cross = sumcheck_claim`. Does NOT sample lambda (root has no prior layer). Does NOT send to or receive from GkrSumcheckAir (sumcheck dispatch only applies to non-root layers).
-- **Row 1:** Samples lambda. Receives sumcheck output from its own layer's sumcheck. Computes new claim = `numer + lambda * denom`. Sends claim to GkrSumcheckAir.
+- **Row 0 (root):** Verifies `p_cross=0` and `q_cross = sumcheck_claim`. Does NOT sample lambda (root has no prior layer). Does NOT send to or receive from GkrLayerSumcheckAir (sumcheck dispatch only applies to non-root layers).
+- **Row 1:** Samples lambda. Receives sumcheck output from its own layer's sumcheck. Computes new claim = `numer + lambda * denom`. Sends claim to GkrLayerSumcheckAir.
 - **Row 2 (last):** After receiving sumcheck output, computes final `numer_claim` and `denom_claim`. Sends these as input layer claims back to GkrInputAir via GkrLayerOutputBus. Sends `mu` on XiRandomnessBus.
 
 ---
