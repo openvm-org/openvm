@@ -74,14 +74,6 @@ pub(crate) fn generate_halo2_verifier_solidity(
         .replace("{PUBLIC_VALUES_LENGTH}", &pvs_length.to_string())
         .replace("{OPENVM_VERSION}", OPENVM_VERSION);
 
-    // Format Solidity code if forge-fmt is available (requires Rust 1.91+)
-    let (formatted_interface, formatted_halo2_verifier_code, formatted_openvm_verifier_code) =
-        format_solidity_sources(
-            EVM_HALO2_VERIFIER_INTERFACE,
-            &halo2_verifier_code,
-            &openvm_verifier_code,
-        );
-
     // Create temp dir
     let temp_dir = tempdir()
         .wrap_err("Failed to create temp dir")
@@ -102,28 +94,25 @@ pub(crate) fn generate_halo2_verifier_solidity(
 
     // Write the files to the temp dir. This is only for compilation
     // purposes.
-    write(temp_path.join(&interface_file_path), &formatted_interface)?;
     write(
-        temp_path.join(&parent_file_path),
-        &formatted_halo2_verifier_code,
+        temp_path.join(&interface_file_path),
+        EVM_HALO2_VERIFIER_INTERFACE,
     )?;
-    write(
-        temp_path.join(&base_file_path),
-        &formatted_openvm_verifier_code,
-    )?;
+    write(temp_path.join(&parent_file_path), &halo2_verifier_code)?;
+    write(temp_path.join(&base_file_path), &openvm_verifier_code)?;
 
     // Run solc from the temp dir
     let solc_input = json!({
         "language": "Solidity",
         "sources": {
             interface_file_path.to_str().unwrap(): {
-                "content": formatted_interface
+                "content": EVM_HALO2_VERIFIER_INTERFACE
             },
             parent_file_path.to_str().unwrap(): {
-                "content": formatted_halo2_verifier_code
+                "content": halo2_verifier_code
             },
             base_file_path.to_str().unwrap(): {
-                "content": formatted_openvm_verifier_code
+                "content": openvm_verifier_code
             }
         },
         "settings": {
@@ -194,9 +183,9 @@ pub(crate) fn generate_halo2_verifier_solidity(
     let bytecode = hex::decode(bytecode).expect("Invalid hex in Binary");
 
     let evm_verifier = EvmHalo2Verifier {
-        halo2_verifier_code: formatted_halo2_verifier_code,
-        openvm_verifier_code: formatted_openvm_verifier_code,
-        openvm_verifier_interface: formatted_interface,
+        halo2_verifier_code,
+        openvm_verifier_code,
+        openvm_verifier_interface: EVM_HALO2_VERIFIER_INTERFACE.to_string(),
         artifact: EvmVerifierByteCode {
             sol_compiler_version: "0.8.19".to_string(),
             sol_compiler_options: solc_input.get("settings").unwrap().to_string(),
@@ -221,56 +210,4 @@ pub(crate) fn verify_evm_halo2_proof(
         })?;
 
     Ok(gas_cost)
-}
-
-/// Format Solidity sources using forge-fmt when available, or return them as-is.
-fn format_solidity_sources(
-    interface: &str,
-    halo2_verifier: &str,
-    openvm_verifier: &str,
-) -> (String, String, String) {
-    #[cfg(feature = "evm-verify-fmt")]
-    {
-        use forge_fmt::{
-            format, FormatterConfig, IntTypes, MultilineFuncHeaderStyle, NumberUnderscore,
-            QuoteStyle, SingleLineBlockStyle,
-        };
-
-        let config = FormatterConfig {
-            line_length: 120,
-            tab_width: 4,
-            bracket_spacing: true,
-            int_types: IntTypes::Long,
-            multiline_func_header: MultilineFuncHeaderStyle::AttributesFirst,
-            quote_style: QuoteStyle::Double,
-            number_underscore: NumberUnderscore::Thousands,
-            single_line_statement_blocks: SingleLineBlockStyle::Preserve,
-            override_spacing: false,
-            wrap_comments: false,
-            ignore: vec![],
-            contract_new_lines: false,
-            sort_imports: false,
-            ..Default::default()
-        };
-
-        let formatted_interface = format(interface, config.clone())
-            .into_result()
-            .expect("Failed to format interface");
-        let formatted_halo2 = format(halo2_verifier, config.clone())
-            .into_result()
-            .expect("Failed to format halo2 verifier code");
-        let formatted_openvm = format(openvm_verifier, config)
-            .into_result()
-            .expect("Failed to format openvm verifier code");
-
-        (formatted_interface, formatted_halo2, formatted_openvm)
-    }
-    #[cfg(not(feature = "evm-verify-fmt"))]
-    {
-        (
-            interface.to_string(),
-            halo2_verifier.to_string(),
-            openvm_verifier.to_string(),
-        )
-    }
 }

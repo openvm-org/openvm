@@ -207,7 +207,6 @@ halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib.git", tag = "v0.
 halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.2" }
 struct-reflection = "0.1.0"
 
-forge-fmt = { git = "https://github.com/foundry-rs/foundry.git", tag = "v1.5.0" }
 cargo_metadata = "0.18"
 alloy-sol-types = "1.4.1"
 tracing = "0.1.40"
