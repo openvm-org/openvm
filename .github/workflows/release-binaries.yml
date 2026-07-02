@@ -64,23 +64,27 @@ jobs:
       - name: Set package version
         id: meta
         shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          version="${{ inputs.version }}"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Build cargo-openvm
         run: cargo build --release --locked -p cargo-openvm --target "${{ matrix.target }}"
 
       - name: Smoke test binary
-        run: ./target/${{ matrix.target }}/release/${BINARY_NAME} --version
+        run: ./target/${{ matrix.target }}/release/${BINARY_NAME} openvm --version
 
       - name: Package binary
         id: package
         shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          artifact="${BINARY_NAME}-${{ steps.meta.outputs.version }}-${{ matrix.target }}.tar.gz"
+          artifact="${BINARY_NAME}-${VERSION}-${TARGET}.tar.gz"
           mkdir -p package artifacts
-          cp "target/${{ matrix.target }}/release/${BINARY_NAME}" "package/${BINARY_NAME}"
+          cp "target/${TARGET}/release/${BINARY_NAME}" "package/${BINARY_NAME}"
           chmod +x "package/${BINARY_NAME}"
           tar -czf "artifacts/${artifact}" -C package "${BINARY_NAME}"
           (cd artifacts && shasum -a 256 "${artifact}" > "${artifact}.sha256")
@@ -125,23 +129,27 @@ jobs:
       - name: Set package version
         id: meta
         shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          version="${{ inputs.version }}"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Build cargo-openvm
         run: cargo build --release --locked -p cargo-openvm --target "${{ matrix.target }}"
 
       - name: Smoke test binary
-        run: ./target/${{ matrix.target }}/release/${BINARY_NAME} --version
+        run: ./target/${{ matrix.target }}/release/${BINARY_NAME} openvm --version
 
       - name: Package binary
         id: package
         shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          artifact="${BINARY_NAME}-${{ steps.meta.outputs.version }}-${{ matrix.target }}.tar.gz"
+          artifact="${BINARY_NAME}-${VERSION}-${TARGET}.tar.gz"
           mkdir -p package artifacts
-          cp "target/${{ matrix.target }}/release/${BINARY_NAME}" "package/${BINARY_NAME}"
+          cp "target/${TARGET}/release/${BINARY_NAME}" "package/${BINARY_NAME}"
           chmod +x "package/${BINARY_NAME}"
           tar -czf "artifacts/${artifact}" -C package "${BINARY_NAME}"
           (cd artifacts && shasum -a 256 "${artifact}" > "${artifact}.sha256")
