@@ -8,6 +8,8 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::CommitBytes;
+
 mod hook;
 mod inner;
 pub use hook::*;
@@ -31,4 +33,8 @@ pub trait DeferralCircuitProver<SC: StarkProtocolConfig> {
 
     fn prove(&self, input_bytes: &[u8]) -> Proof<SC>;
     fn get_def_idx(&self) -> usize;
+
+    fn cached_commits(&self) -> Vec<CommitBytes> {
+        vec![]
+    }
 }

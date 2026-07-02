@@ -29,6 +29,7 @@ on:
     branches: ["**"]
     paths:
       - "crates/cli/**"
+      - "examples/verify-stark/**"
       - ".github/workflows/cli.cuda.yml"
 
 concurrency:

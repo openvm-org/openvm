@@ -14,7 +14,8 @@ use openvm_continuations::{
     CommitBytes, VkCommitBytes,
 };
 use openvm_recursion_circuit::{prelude::F, system::AggregationSubCircuit};
-use openvm_stark_backend::{AirRef, StarkProtocolConfig};
+use openvm_stark_backend::{AirRef, StarkProtocolConfig, SystemParams};
+use openvm_stark_sdk::config::internal_params_with_100_bits_security;
 
 use crate::{
     bus::{OutputCommitBus, OutputValBus},
@@ -38,6 +39,11 @@ pub use trace::*;
 
 #[cfg(test)]
 mod tests;
+
+pub fn default_verify_stark_circuit_params() -> SystemParams {
+    // Internal params are tuned well for the verify-stark circuit's size and proof cost
+    internal_params_with_100_bits_security()
+}
 
 #[derive(derive_new::new, Clone)]
 pub struct DeferredVerifyCircuit<S: AggregationSubCircuit> {
