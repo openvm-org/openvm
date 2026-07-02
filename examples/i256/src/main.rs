@@ -4,6 +4,7 @@ use core::array;
 
 use alloy_primitives::I256;
 use openvm as _;
+use openvm_bigint_guest as _;
 
 const N: usize = 16;
 type Matrix = [[I256; N]; N];
