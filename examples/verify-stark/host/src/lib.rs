@@ -176,18 +176,16 @@ fn verify_stark_guest_inputs(
         baseline,
     };
 
-    let raw_results =
-        get_raw_deferral_results(&child_vk, from_ref(proof), Some(verify_stark_cached_commit))?;
-    assert_eq!(raw_results.len(), 1);
-
-    let input_commit: [u8; 32] = raw_results[0].input.clone().try_into().unwrap();
+    let raw_res = get_raw_deferral_results(&child_vk, from_ref(proof), verify_stark_cached_commit)?;
+    assert_eq!(raw_res.len(), 1);
+    let input_commit: [u8; 32] = raw_res[0].input.clone().try_into().unwrap();
 
     let mut stdin = StdIn::default();
     stdin.write(&input_commit);
     stdin.deferrals = vec![get_deferral_state(
         &child_vk,
         from_ref(proof),
-        Some(verify_stark_cached_commit),
+        verify_stark_cached_commit,
         0,
     )?];
 

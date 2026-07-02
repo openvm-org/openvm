@@ -285,7 +285,7 @@ fn make_verify_stark_inputs_for_indices(
     let mut verify_stark_cached_commits =
         vs_sdk.deferral_circuit_cached_commits(DEFAULT_VERIFY_STARK_DEF_IDX)?;
     assert_eq!(verify_stark_cached_commits.len(), 1);
-    let verify_stark_cached_commit = Some(verify_stark_cached_commits.pop().unwrap().into());
+    let verify_stark_cached_commit = verify_stark_cached_commits.pop().unwrap().into();
 
     let raw_results =
         get_raw_deferral_results(&child_vk, from_ref(child_proof), verify_stark_cached_commit)?;

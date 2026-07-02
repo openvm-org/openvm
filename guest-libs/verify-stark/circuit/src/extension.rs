@@ -78,7 +78,7 @@ fn f_slice_to_bytes(slice: &[F]) -> Vec<u8> {
 pub fn get_raw_deferral_results(
     vk: &VmStarkVerifyingKey,
     proofs: &[VmStarkProof],
-    cached_commit: Option<Digest>,
+    cached_commit: Digest,
 ) -> Result<Vec<RawDeferralResult>> {
     let config = SC::default_from_params(vk.mvk.inner.params.clone());
 
@@ -93,8 +93,6 @@ pub fn get_raw_deferral_results(
             let final_ts_state = *ts.into_log().perm_results().last().unwrap();
             let (left_ts, right_ts) = poseidon2_input_to_digests(final_ts_state);
             let ts_commit = poseidon2_compress_with_capacity(left_ts, right_ts).0;
-            let cached_commit =
-                cached_commit.unwrap_or(vk.baseline.internal_recursive_vk_commit.cached_commit);
             let input_commit =
                 poseidon2_hash_slice(&vec![ts_commit, cached_commit].into_flattened()).0;
 
@@ -109,7 +107,7 @@ pub fn get_raw_deferral_results(
 pub fn get_deferral_state(
     vk: &VmStarkVerifyingKey,
     proofs: &[VmStarkProof],
-    cached_commit: Option<Digest>,
+    cached_commit: Digest,
     deferral_idx: u32,
 ) -> Result<DeferralState> {
     let raw_results = get_raw_deferral_results(vk, proofs, cached_commit)?;
