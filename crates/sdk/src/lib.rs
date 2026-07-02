@@ -291,6 +291,29 @@ where
         self.deferral_setup.prover()
     }
 
+    /// Derives the cached commits that the deferral circuit at `def_idx` expects callers to fold
+    /// into its input commit.
+    pub fn deferral_circuit_cached_commits(
+        &self,
+        def_idx: usize,
+    ) -> Result<Vec<CommitBytes>, SdkError> {
+        let deferral_prover = self.deferral_setup.prover().ok_or_else(|| {
+            SdkError::Other(eyre::eyre!(
+                "deferral circuit cached commits require an active deferral prover"
+            ))
+        })?;
+        deferral_prover
+            .multi_deferral_circuit_prover
+            .single_circuit_provers
+            .get(def_idx)
+            .map(|prover| prover.def_circuit_prover.cached_commits())
+            .ok_or_else(|| {
+                SdkError::Other(eyre::eyre!(
+                    "deferral circuit index {def_idx} is not configured"
+                ))
+            })
+    }
+
     /// Returns serde-serializable proving keys for this SDK.
     ///
     /// This errors if `app_pk` or `agg_pk` have not already been generated or seeded into the SDK.

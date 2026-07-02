@@ -11,7 +11,6 @@ artifacts_dir="$script_dir/openvm"
 sdk_pk="$artifacts_dir/sdk.pk"
 vmexe="$artifacts_dir/verify-stark.vmexe"
 baseline="$artifacts_dir/verify-stark.baseline.json"
-verify_stark_cached_commit="$artifacts_dir/verify-stark.cached-commit.json"
 verify_stark_agg_vk="$artifacts_dir/internal_recursive.vk"
 child_agg_vk="$HOME/.openvm/internal_recursive.vk"
 host_features="${VERIFY_STARK_HOST_FEATURES-cuda}"
@@ -30,8 +29,7 @@ fi
   --child-agg-vk "$child_agg_vk" \
   --sdk-pk "$sdk_pk" \
   --openvm-toml "$artifacts_dir/openvm.toml" \
-  --agg-vk "$verify_stark_agg_vk" \
-  --verify-stark-cached-commit "$verify_stark_cached_commit"
+  --agg-vk "$verify_stark_agg_vk"
 "$host_bin" build \
   --sdk-pk "$sdk_pk" \
   --vmexe "$vmexe" \
@@ -56,7 +54,6 @@ for manifest in "$examples_dir"/*/Cargo.toml; do
     --vmexe "$vmexe" \
     --child-agg-vk "$child_agg_vk" \
     --child-baseline "$example_dir/openvm/release/$target_name.baseline.json" \
-    --verify-stark-cached-commit "$verify_stark_cached_commit" \
     --input-proof "$example_dir/$target_name.stark.proof" \
     --output-proof "$verify_stark_proof"
   cargo openvm verify stark \

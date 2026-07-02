@@ -2,7 +2,6 @@ use std::{path::PathBuf, slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm_build::GuestOptions;
-use openvm_continuations::{prover::DeferralCircuitProver, CommitBytes};
 use openvm_recursion_circuit::batch_constraint::commit_child_vk;
 use openvm_sdk::{
     config::{AggregationConfig, AppConfig},
@@ -60,54 +59,48 @@ pub fn keygen(
     SdkCachedProvingKey<SdkVmConfig>,
     SdkVmConfig,
     MultiStarkVerifyingKey<SC>,
-    CommitBytes,
 )> {
     // App memory dimensions and number of public values the verify-stark prover expects.
     let default_config = SdkSystemConfig::default();
     let memory_dimensions = default_config.config.memory_config.memory_dimensions();
     let num_user_pvs = default_config.config.num_public_values;
 
-    // Default verify-stark circuit system parameters.
-    let verify_prover_params = default_verify_stark_circuit_params();
-
     // System parameters for VM proof aggregation. Deferral circuit proof aggregation reuses
     // agg_config.
     let app_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
     let agg_config = AggregationConfig::default();
 
-    // Generate the internal-recursive cached commit that Proofs are expected to expose.
-    let engine = <E as StarkEngine>::new(child_agg_vk.inner.params.clone());
-    let child_internal_recursive_cached_commit = commit_child_vk(&engine, &child_agg_vk, true)
-        .commitment
-        .into();
+    // Create the DeferralAggProver.
+    let deferral_agg_prover = {
+        // Default verify-stark circuit system parameters.
+        let verify_prover_params = default_verify_stark_circuit_params();
 
-    // Create the verify-stark deferral circuit prover.
-    let verify_prover = VerifyProver::new::<E>(
-        child_agg_vk,
-        child_internal_recursive_cached_commit,
-        verify_prover_params,
-        memory_dimensions,
-        num_user_pvs,
-        None,
-        VERIFY_STARK_DEF_IDX,
-    );
-    let verify_circuit_prover = VerifyCircuitProver::new(verify_prover);
+        // Generate the internal-recursive cached commit that Proofs are expected to expose.
+        let engine = <E as StarkEngine>::new(child_agg_vk.inner.params.clone());
+        let child_internal_recursive_cached_commit = commit_child_vk(&engine, &child_agg_vk, true)
+            .commitment
+            .into();
 
-    // Get the internal-recursive cached commit for the verify-stark circuit. This
-    // may **not** be the same as child_internal_recursive_cached_commit above. It
-    // will be used to generate guest program inputs during the proving process.
-    let mut verify_circuit_cached_commits = verify_circuit_prover.cached_commits();
-    assert_eq!(verify_circuit_cached_commits.len(), 1);
-    let verify_stark_cached_commit = verify_circuit_cached_commits.pop().unwrap();
+        // Create the verify-stark deferral circuit prover and use it in the DeferralAggProver.
+        let verify_prover = VerifyProver::new::<E>(
+            child_agg_vk,
+            child_internal_recursive_cached_commit,
+            verify_prover_params,
+            memory_dimensions,
+            num_user_pvs,
+            None,
+            VERIFY_STARK_DEF_IDX,
+        );
+        let verify_circuit_prover = VerifyCircuitProver::new(verify_prover);
+        let multi_deferral_circuit_prover = Arc::new(MultiDeferralCircuitProver::new(
+            verify_circuit_prover,
+            agg_config.clone(),
+            hook_params_with_100_bits_security(),
+        ));
+        DeferralAggProver::new(agg_config.clone(), multi_deferral_circuit_prover)
+    };
 
-    // Initialize the DeferralAggProver and create the SdkVmConfig.
-    let multi_deferral_circuit_prover = Arc::new(MultiDeferralCircuitProver::new(
-        verify_circuit_prover,
-        agg_config.clone(),
-        hook_params_with_100_bits_security(),
-    ));
-    let deferral_agg_prover =
-        DeferralAggProver::new(agg_config.clone(), multi_deferral_circuit_prover);
+    // Create the SdkVmConfig from the DeferralAggProver
     let deferral_config = deferral_agg_prover
         .multi_deferral_circuit_prover
         .make_config(vec![SupportedDeferral::VerifyStark]);
@@ -129,12 +122,7 @@ pub fn keygen(
     let _ = sdk.app_keygen();
     let _ = sdk.agg_pk();
     let agg_vk = sdk.agg_vk().as_ref().clone();
-    Ok((
-        sdk.cached_proving_key()?,
-        vm_config,
-        agg_vk,
-        verify_stark_cached_commit,
-    ))
+    Ok((sdk.cached_proving_key()?, vm_config, agg_vk))
 }
 
 pub fn build(
@@ -158,10 +146,15 @@ pub fn prove(
     exe: Arc<VmExe<F>>,
     child_agg_vk: Arc<MultiStarkVerifyingKey<SC>>,
     child_baseline: VerificationBaseline,
-    verify_stark_cached_commit: CommitBytes,
     input_proof: VersionedVmStarkProof,
 ) -> Result<VersionedVmStarkProof> {
     let sdk = Sdk::from_deferral_cached_proving_key(cached_pk)?;
+
+    let mut verify_stark_cached_commits =
+        sdk.deferral_circuit_cached_commits(VERIFY_STARK_DEF_IDX)?;
+    assert_eq!(verify_stark_cached_commits.len(), 1);
+    let verify_stark_cached_commit = verify_stark_cached_commits.pop().unwrap();
+
     let (stdin, def_input) = verify_stark_guest_inputs(
         &input_proof.try_into()?,
         child_agg_vk.as_ref().clone(),

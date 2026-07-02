@@ -3,7 +3,7 @@ use std::{slice::from_ref, sync::Arc};
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
 use openvm_circuit::arch::instructions::exe::VmExe;
-use openvm_continuations::{prover::DeferralCircuitProver, CommitBytes};
+use openvm_continuations::prover::DeferralCircuitProver;
 use openvm_sdk_config::{
     deferral::{DeferralConfig, SupportedDeferral},
     SdkVmConfig,
@@ -52,6 +52,9 @@ cfg_if::cfg_if! {
         type RootE = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
     }
 }
+
+/// Default deferral idx for the verify-stark deferral circuit.
+const DEFAULT_VERIFY_STARK_DEF_IDX: usize = 0;
 
 /// Returns app, aggregation, and root params, allowing tests to override them via env vars.
 fn get_params() -> (SystemParams, AggregationSystemParams, SystemParams) {
@@ -156,12 +159,13 @@ fn make_multi_deferral_circuit_prover_with_count(
     agg_params: &AggregationSystemParams,
     def_circuit_params: SystemParams,
     num_deferral_circuits: usize,
-) -> (MultiDeferralCircuitProver, CommitBytes) {
+) -> MultiDeferralCircuitProver {
     assert!(num_deferral_circuits > 0);
-    let verify_stark_prover = make_verify_stark_circuit_prover(sdk, def_circuit_params.clone(), 0);
-    let mut cached_commits = verify_stark_prover.cached_commits();
-    assert_eq!(cached_commits.len(), 1);
-    let verify_stark_cached_commit = cached_commits.pop().unwrap();
+    let verify_stark_prover = make_verify_stark_circuit_prover(
+        sdk,
+        def_circuit_params.clone(),
+        DEFAULT_VERIFY_STARK_DEF_IDX,
+    );
     let hook_params = hook_params_with_100_bits_security();
     let agg_config = AggregationConfig {
         params: agg_params.clone(),
@@ -173,15 +177,15 @@ fn make_multi_deferral_circuit_prover_with_count(
             make_verify_stark_circuit_prover(sdk, def_circuit_params.clone(), def_idx),
         );
     }
-    (multi_deferral_circuit_prover, verify_stark_cached_commit)
+    multi_deferral_circuit_prover
 }
 
-/// Builds a verify-stark SDK with one deferral slot and its prover-produced cached commit.
+/// Builds a verify-stark SDK with one deferral slot.
 fn make_verify_stark_sdk(
     fib_sdk: &Sdk,
     app_params: SystemParams,
     agg_params: AggregationSystemParams,
-) -> Result<(Sdk, CommitBytes)> {
+) -> Result<Sdk> {
     make_verify_stark_sdk_with_count(
         fib_sdk,
         app_params,
@@ -198,14 +202,13 @@ fn make_verify_stark_sdk_with_count(
     agg_params: AggregationSystemParams,
     def_circuit_params: SystemParams,
     num_deferral_circuits: usize,
-) -> Result<(Sdk, CommitBytes)> {
-    let (multi_deferral_circuit_prover, verify_stark_cached_commit) =
-        make_multi_deferral_circuit_prover_with_count(
-            fib_sdk,
-            &agg_params,
-            def_circuit_params,
-            num_deferral_circuits,
-        );
+) -> Result<Sdk> {
+    let multi_deferral_circuit_prover = make_multi_deferral_circuit_prover_with_count(
+        fib_sdk,
+        &agg_params,
+        def_circuit_params,
+        num_deferral_circuits,
+    );
     let supported_deferrals = vec![SupportedDeferral::VerifyStark; num_deferral_circuits];
     let deferral_config = multi_deferral_circuit_prover.make_config(supported_deferrals);
 
@@ -216,14 +219,14 @@ fn make_verify_stark_sdk_with_count(
         .agg_params(agg_params)
         .multi_deferral_circuit_prover(multi_deferral_circuit_prover)
         .build()?;
-    Ok((sdk, verify_stark_cached_commit))
+    Ok(sdk)
 }
 
 /// Builds a verify-stark SDK that can recursively verify proofs produced by the same SDK.
 fn make_recursive_verify_stark_sdk(
     app_params: SystemParams,
     agg_params: AggregationSystemParams,
-) -> Result<(Sdk, CommitBytes)> {
+) -> Result<Sdk> {
     let vm_config = SdkVmConfig::riscv32();
     let memory_dimensions = vm_config.system.config.memory_config.memory_dimensions();
     let num_user_pvs = vm_config.system.config.num_public_values;
@@ -237,20 +240,13 @@ fn make_recursive_verify_stark_sdk(
         .multi_deferral_circuit_prover
         .make_config(vec![SupportedDeferral::VerifyStark]);
     let vm_config = riscv32_config_with_deferral(deferral_config);
-    let mut cached_commits = deferral_agg_prover
-        .multi_deferral_circuit_prover
-        .single_circuit_provers[0]
-        .def_circuit_prover
-        .cached_commits();
-    assert_eq!(cached_commits.len(), 1);
-    let verify_stark_cached_commit = cached_commits.pop().unwrap();
 
     let sdk = Sdk::builder()
         .app_config(AppConfig::new(vm_config, app_params))
         .agg_params(agg_params)
         .deferral_agg_prover(deferral_agg_prover)
         .build()?;
-    Ok((sdk, verify_stark_cached_commit))
+    Ok(sdk)
 }
 
 /// Builds stdin and deferral input for a single verify-stark deferral proof.
@@ -258,25 +254,26 @@ fn make_verify_stark_inputs(
     child_sdk: &Sdk,
     child_proof: &VmStarkProof,
     child_baseline: VerificationBaseline,
-    verify_stark_cached_commit: CommitBytes,
+    vs_sdk: &Sdk,
 ) -> Result<(StdIn, DeferralInput)> {
     let (stdin, mut def_inputs) = make_verify_stark_inputs_for_indices(
         child_sdk,
         child_proof,
         child_baseline,
-        verify_stark_cached_commit,
-        &[0],
+        vs_sdk,
+        &[DEFAULT_VERIFY_STARK_DEF_IDX],
         1,
     )?;
     Ok((stdin, def_inputs.pop().unwrap()))
 }
 
-/// Builds stdin and deferral inputs for selected verify-stark deferral indices.
+/// Builds stdin and deferral inputs for selected verify-stark deferral indices. Assumes
+/// that the verify-stark circuit at each index is indentical.
 fn make_verify_stark_inputs_for_indices(
     child_sdk: &Sdk,
     child_proof: &VmStarkProof,
     child_baseline: VerificationBaseline,
-    verify_stark_cached_commit: CommitBytes,
+    vs_sdk: &Sdk,
     present_def_indices: &[usize],
     num_deferral_circuits: usize,
 ) -> Result<(StdIn, Vec<DeferralInput>)> {
@@ -284,7 +281,11 @@ fn make_verify_stark_inputs_for_indices(
         mvk: child_sdk.agg_vk().as_ref().clone(),
         baseline: child_baseline,
     };
-    let verify_stark_cached_commit = Some(verify_stark_cached_commit.into());
+
+    let mut verify_stark_cached_commits =
+        vs_sdk.deferral_circuit_cached_commits(DEFAULT_VERIFY_STARK_DEF_IDX)?;
+    assert_eq!(verify_stark_cached_commits.len(), 1);
+    let verify_stark_cached_commit = Some(verify_stark_cached_commits.pop().unwrap().into());
 
     let raw_results =
         get_raw_deferral_results(&child_vk, from_ref(child_proof), verify_stark_cached_commit)?;
@@ -305,6 +306,7 @@ fn make_verify_stark_inputs_for_indices(
 
     let proof_input = DeferralInput::from_inputs(from_ref(child_proof));
     let mut def_inputs = vec![DeferralInput::default(); num_deferral_circuits];
+
     for &def_idx in present_def_indices {
         assert!(def_idx < num_deferral_circuits);
         stdin.deferrals[def_idx] = get_deferral_state(
@@ -388,14 +390,9 @@ fn test_verify_stark_deferral() -> Result<()> {
     setup_tracing();
     let (fib_sdk, app_params, agg_params) = make_fib_sdk();
     let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&fib_sdk)?;
-    let (vs_sdk, verify_stark_cached_commit) =
-        make_verify_stark_sdk(&fib_sdk, app_params, agg_params)?;
-    let (vs_stdin, def_input) = make_verify_stark_inputs(
-        &fib_sdk,
-        &fib_proof,
-        fib_baseline,
-        verify_stark_cached_commit,
-    )?;
+    let vs_sdk = make_verify_stark_sdk(&fib_sdk, app_params, agg_params)?;
+    let (vs_stdin, def_input) =
+        make_verify_stark_inputs(&fib_sdk, &fib_proof, fib_baseline, &vs_sdk)?;
 
     let vs_elf = Elf::decode(
         include_bytes!("../programs/examples/verify-stark.elf"),
@@ -415,7 +412,7 @@ fn test_verify_many_deferrals() -> Result<()> {
     let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&fib_sdk)?;
     // Use non-default params for better test coverage
     let def_circuit_params = leaf_params_with_100_bits_security();
-    let (vs_sdk, verify_stark_cached_commit) = make_verify_stark_sdk_with_count(
+    let vs_sdk = make_verify_stark_sdk_with_count(
         &fib_sdk,
         app_params,
         agg_params,
@@ -426,7 +423,7 @@ fn test_verify_many_deferrals() -> Result<()> {
         &fib_sdk,
         &fib_proof,
         fib_baseline,
-        verify_stark_cached_commit,
+        &vs_sdk,
         &[0, 1, 3, 4],
         NUM_DEFERRAL_CIRCUITS,
     )?;
@@ -444,8 +441,7 @@ fn test_verify_many_deferrals() -> Result<()> {
 fn test_verify_stark_path_sdk_can_verify_own_proofs() -> Result<()> {
     setup_tracing();
     let (app_params, agg_params, _) = get_params();
-    let (sdk, verify_stark_cached_commit) =
-        make_recursive_verify_stark_sdk(app_params, agg_params)?;
+    let sdk = make_recursive_verify_stark_sdk(app_params, agg_params)?;
     let agg_vk = sdk.agg_vk().as_ref().clone();
 
     let vs_elf = Elf::decode(
@@ -458,14 +454,12 @@ fn test_verify_stark_path_sdk_can_verify_own_proofs() -> Result<()> {
     assert!(fib_proof.deferral_merkle_proofs.is_some(),);
     Sdk::verify_proof(agg_vk.clone(), fib_baseline.clone(), &fib_proof)?;
 
-    let (vs_stdin, def_input) =
-        make_verify_stark_inputs(&sdk, &fib_proof, fib_baseline, verify_stark_cached_commit)?;
+    let (vs_stdin, def_input) = make_verify_stark_inputs(&sdk, &fib_proof, fib_baseline, &sdk)?;
     let (vs_proof, vs_baseline) = sdk.prove(vs_exe.clone(), vs_stdin, &[def_input])?;
     assert!(vs_proof.deferral_merkle_proofs.is_some(),);
     Sdk::verify_proof(agg_vk.clone(), vs_baseline.clone(), &vs_proof)?;
 
-    let (vs2_stdin, vs2_def_input) =
-        make_verify_stark_inputs(&sdk, &vs_proof, vs_baseline, verify_stark_cached_commit)?;
+    let (vs2_stdin, vs2_def_input) = make_verify_stark_inputs(&sdk, &vs_proof, vs_baseline, &sdk)?;
     prove_and_verify_e2e(&sdk, vs_exe, vs2_stdin, &[vs2_def_input])
 }
 
@@ -473,7 +467,7 @@ fn test_verify_stark_path_sdk_can_verify_own_proofs() -> Result<()> {
 fn test_deferrals_enabled_without_usage() -> Result<()> {
     setup_tracing();
     let (fib_sdk, app_params, agg_params) = make_fib_sdk();
-    let (sdk, _) = make_verify_stark_sdk(&fib_sdk, app_params, agg_params)?;
+    let sdk = make_verify_stark_sdk(&fib_sdk, app_params, agg_params)?;
 
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
@@ -526,14 +520,9 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
     setup_tracing();
     let (fib_sdk, app_params, agg_params) = make_fib_sdk();
     let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&fib_sdk)?;
-    let (vs_sdk, verify_stark_cached_commit) =
-        make_verify_stark_sdk(&fib_sdk, app_params, agg_params.clone())?;
-    let (vs_stdin, def_input) = make_verify_stark_inputs(
-        &fib_sdk,
-        &fib_proof,
-        fib_baseline,
-        verify_stark_cached_commit,
-    )?;
+    let vs_sdk = make_verify_stark_sdk(&fib_sdk, app_params, agg_params.clone())?;
+    let (vs_stdin, def_input) =
+        make_verify_stark_inputs(&fib_sdk, &fib_proof, fib_baseline, &vs_sdk)?;
 
     let vs_elf = Elf::decode(
         include_bytes!("../programs/examples/verify-stark.elf"),
@@ -587,14 +576,9 @@ fn test_prove_mixed_vm_def_depth_mismatch() -> Result<()> {
     setup_tracing();
     let (fib_sdk, app_params, agg_params) = make_fib_sdk();
     let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&fib_sdk)?;
-    let (vs_sdk, verify_stark_cached_commit) =
-        make_verify_stark_sdk(&fib_sdk, app_params, agg_params)?;
-    let (vs_stdin, def_input) = make_verify_stark_inputs(
-        &fib_sdk,
-        &fib_proof,
-        fib_baseline,
-        verify_stark_cached_commit,
-    )?;
+    let vs_sdk = make_verify_stark_sdk(&fib_sdk, app_params, agg_params)?;
+    let (vs_stdin, def_input) =
+        make_verify_stark_inputs(&fib_sdk, &fib_proof, fib_baseline, &vs_sdk)?;
 
     let vs_elf = Elf::decode(
         include_bytes!("../programs/examples/verify-stark.elf"),
@@ -667,7 +651,7 @@ fn test_deferral_aware_and_active_have_equivalent_vks() -> Result<()> {
     let n_stack = 19;
     let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
     let agg_params = AggregationSystemParams::default();
-    let (active_sdk, _) = make_recursive_verify_stark_sdk(app_params.clone(), agg_params.clone())?;
+    let active_sdk = make_recursive_verify_stark_sdk(app_params.clone(), agg_params.clone())?;
     let hook_commits = DeferralHookCommits {
         hook_cached_commit: active_sdk.def_hook_cached_commit().unwrap(),
         hook_commit: active_sdk.def_hook_commit().unwrap(),
