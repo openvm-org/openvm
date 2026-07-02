@@ -268,7 +268,7 @@ fn make_verify_stark_inputs(
 }
 
 /// Builds stdin and deferral inputs for selected verify-stark deferral indices. Assumes
-/// that the verify-stark circuit at each index is indentical.
+/// that the verify-stark circuit at each index is identical.
 fn make_verify_stark_inputs_for_indices(
     child_sdk: &Sdk,
     child_proof: &VmStarkProof,
