@@ -198,7 +198,7 @@ p3-poseidon2 = { version = "=0.4.3", default-features = false }
 p3-poseidon2-air = { version = "=0.4.3", default-features = false }
 p3-symmetric = { version = "=0.4.3", default-features = false }
 
-zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
+zkhash = { package = "zkhash-axiom", version = "0.2.0" }
 snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.2.5", default-features = false, features = [
     "loader_halo2",
     "halo2-axiom",
