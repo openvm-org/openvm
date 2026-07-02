@@ -22,7 +22,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{core::run_add, AddICoreAir, Rv64AddIChip, Rv64AddIExecutor};
+use super::{core::run_addi, AddICoreAir, Rv64AddIChip, Rv64AddIExecutor};
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, Rv64AddIAdapterAir,
@@ -97,8 +97,9 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.execute(executor, arena, &instruction);
 
     let b_u16 = rv64_bytes_to_u16_block(b);
-    let c_u16 = rv64_bytes_to_u16_block(c);
-    let a = run_add::<BLOCK_FE_WIDTH, U16_BITS>(&b_u16, &c_u16);
+    let imm_low11 = (imm as u32 & 0x7FF) as u16;
+    let imm_sign = ((imm as u32 >> 11) & 1) as u16;
+    let a = run_addi::<BLOCK_FE_WIDTH, U16_BITS>(&b_u16, imm_low11, imm_sign);
     let a_bytes = rv64_u16_block_to_bytes(a).map(F::from_u8);
     assert_eq!(a_bytes, tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd))
 }
@@ -133,11 +134,11 @@ fn rand_rv64_addi_test() {
 //////////////////////////////////////////////////////////////////////////////////////
 
 fn run_negative_addi_test(
-    prank_a: [u32; BLOCK_FE_WIDTH],
+    prank_rd: [u32; BLOCK_FE_WIDTH],
     b: [u8; RV64_REGISTER_NUM_LIMBS],
     c: [u8; RV64_REGISTER_NUM_LIMBS],
-    prank_b: Option<[u32; BLOCK_FE_WIDTH]>,
-    prank_c: Option<[u32; BLOCK_FE_WIDTH]>,
+    prank_rs1: Option<[u32; BLOCK_FE_WIDTH]>,
+    prank_imm_sign: Option<u32>,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
@@ -157,12 +158,12 @@ fn run_negative_addi_test(
         let mut values = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut AddICoreCols<F, BLOCK_FE_WIDTH, U16_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
-        cols.a = prank_a.map(F::from_u32);
-        if let Some(prank_b) = prank_b {
-            cols.b = prank_b.map(F::from_u32);
+        cols.rd = prank_rd.map(F::from_u32);
+        if let Some(prank_rs1) = prank_rs1 {
+            cols.rs1 = prank_rs1.map(F::from_u32);
         }
-        if let Some(prank_c) = prank_c {
-            cols.c = prank_c.map(F::from_u32);
+        if let Some(prank_imm_sign) = prank_imm_sign {
+            cols.imm_sign = F::from_u32(prank_imm_sign);
         }
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -204,15 +205,15 @@ fn rv64_addi_out_of_range_negative_test() {
 
 #[test]
 fn rv64_addi_imm_sign_extension_negative_test() {
-    // Prank core c[2] = 1 while the adapter's rs2_imm_sign cell is 0. The adapter
-    // must catch that the high u16 limbs don't match the sign cell. Also prank
-    // a[2] = 1 so the ADD carry constraint (a = b + c) still holds.
+    // imm = 5 (positive, so imm_sign should be 0). Prank imm_sign = 1:
+    // instr_c reconstructs to 5 + 0xFFF800 which doesn't match instruction.c = 5,
+    // so the execution bridge interaction fails.
     run_negative_addi_test(
-        [5, 0, 1, 0],
+        [5, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
         [5, 0, 0, 0, 0, 0, 0, 0],
         None,
-        Some([5, 0, 1, 0]),
+        Some(1),
     );
 }
 
@@ -225,7 +226,7 @@ fn rv64_addi_noncanonical_b_negative_test() {
         [0, 1, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
-        Some([1 << U16_BITS, 0, 0, 0]),
+        Some([1 << U16_BITS, 0, 0, 0]), // prank rs1[0] out of range
         None,
     );
 }
@@ -236,11 +237,9 @@ fn rv64_addi_noncanonical_b_negative_test() {
 
 #[test]
 fn run_addi_sanity_test() {
-    let x = rv64_bytes_to_u16_block([229, 33, 29, 111, 145, 34, 25, 205]);
-    let y = rv64_bytes_to_u16_block([50, 171, 44, 194, 73, 35, 25, 206]);
-    let z = rv64_bytes_to_u16_block([23, 205, 73, 49, 219, 69, 50, 155]);
-    let result = run_add::<BLOCK_FE_WIDTH, U16_BITS>(&x, &y);
-    for i in 0..BLOCK_FE_WIDTH {
-        assert_eq!(z[i], result[i])
-    }
+    // rs1 = 500, imm = -3 (imm_low11 = 0x7FD, imm_sign = 1) → rd = 497
+    let rs1 = rv64_bytes_to_u16_block([0xF4, 0x01, 0, 0, 0, 0, 0, 0]);
+    let expected = rv64_bytes_to_u16_block([0xF1, 0x01, 0, 0, 0, 0, 0, 0]);
+    let result = run_addi::<BLOCK_FE_WIDTH, U16_BITS>(&rs1, 0x7FD, 1);
+    assert_eq!(expected, result);
 }
