@@ -153,7 +153,7 @@ Row | is_valid | proof_idx | air_idx | pv_idx | is_first_proof | is_first_air | 
 
 ### Executive Summary
 
-RangeCheckerAir is a fixed 256-row (2^NUM_BITS where NUM_BITS=8) lookup table. Row `i` contains the value `i` and a multiplicity count. Any AIR needing to prove a value is in `[0, 255]` performs a lookup on RangeCheckerBus. This is used by ProofShapeAir for limb decomposition, PowerCheckerAir for log range checks, and other AIRs throughout the circuit.
+RangeCheckerAir is a fixed 256-row (2^NUM_BITS where NUM_BITS=8) lookup table. Row `i` contains the value `i` and a multiplicity count. Any AIR needing to prove a value is in `[0, 255]` performs a lookup on RangeCheckerBus. This is used by ProofShapeAir for limb decomposition and other AIRs throughout the circuit.
 
 ### Public Values
 
@@ -229,4 +229,4 @@ Since the bus message includes `max_bits=NUM_BITS`, all lookups on this bus impl
 | [CachedCommitBus](../../bus-inventory.md#71-cachedcommitbus) | PermutationCheck (per-proof) | PSA sends when continuations are enabled | RootVerifierPvsAir, DeferredVerifyPvsAir |
 | [PreHashBus](../../bus-inventory.md#516-prehashbus) | PermutationCheck (per-proof) | PSA sends when continuations are enabled | RootVerifierPvsAir, DeferredVerifyPvsAir |
 | [PowerCheckerBus](../../bus-inventory.md#53-powercheckerbus) | Lookup (global) | PSA looks up | PowerCheckerAir provides keys |
-| [RangeCheckerBus](../../bus-inventory.md#52-rangecheckerbus) | Lookup (global) | RCA provides keys | PSA, PowerCheckerAir |
+| [RangeCheckerBus](../../bus-inventory.md#52-rangecheckerbus) | Lookup (global) | RCA, PowerCheckerAir provide keys | PSA looks up |

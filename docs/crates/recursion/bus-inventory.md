@@ -551,7 +551,7 @@ Lookup table for right-shifting: `result = input >> shift_bits` (i.e., `result =
 
 Lookup table for range checks. Verifies that a value fits within the specified number of bits.
 
-**Table:** The table consists of `{(i, NUM_BITS) : 0 <= i <= 255}` where `NUM_BITS = 8`. The `max_bits` field is always 8; every key has `max_bits = NUM_BITS`.
+**Table:** RangeCheckerAir provides `{(i, NUM_BITS) : 0 <= i <= 255}` where `NUM_BITS = 8`. PowerCheckerAir additionally provides `log`-value keys with `max_bits = log2(POW_CHECKER_HEIGHT) = 5`.
 
 **Providers:** RangeCheckerAir (provides the 256-row table of values 0..255), PowerCheckerAir.
 **Consumers:** ProofShapeAir.
@@ -988,11 +988,11 @@ Returns the sumcheck result from GkrLayerSumcheckAir back to GkrLayerAir: the re
 | **Source** | `gkr/bus.rs` |
 | **Message** | `{layer_idx: F, sumcheck_round: F, challenge: [F; D_EF]}` |
 
-Passes challenges between consecutive GKR sumcheck sub-rounds within the same layer.
+Passes challenges from each GKR layer's sumcheck to the next layer's sumcheck (`L` → `L+1`) for cross-layer eq computation.
 
 **Send set:** One message per sumcheck round per GKR layer.
 
-**Producers:** GkrLayerSumcheckAir (send, from one round to the next).
+**Producers:** GkrLayerAir (send round-0 challenge `mu`), GkrLayerSumcheckAir (send).
 **Consumers:** GkrLayerSumcheckAir (receive, at the start of the next round).
 
 **Invariants:**
@@ -1035,8 +1035,8 @@ Carries sumcheck claims between rounds in the batch constraint sumcheck. Each me
 
 **Send set:** One message per sumcheck round.
 
-**Producers:** UnivariateSumcheckAir, MultilinearSumcheckAir (send).
-**Consumers:** UnivariateSumcheckAir, MultilinearSumcheckAir (receive, for the next round).
+**Producers:** FractionsFolderAir, UnivariateSumcheckAir, MultilinearSumcheckAir (send).
+**Consumers:** UnivariateSumcheckAir, MultilinearSumcheckAir (receive, for the next round), ExpressionClaimAir (receive, final claim).
 
 ---
 
@@ -1152,10 +1152,10 @@ Carries partial products of the "sharp univariate" equality polynomial. These ar
 **Send set:** One message per `(xi_idx, iter_idx)` pair.
 
 **Producers:** EqSharpUniAir (send).
-**Consumers:** EqSharpUniReceiverAir (receive).
+**Consumers:** EqSharpUniAir, EqSharpUniReceiverAir (receive).
 
 **Invariants:**
-- The two products (`prod_1` and `prod_2`) represent partial evaluation products from the sharp univariate eq polynomial butterfly expansion.
+- The `product` field carries a partial evaluation product from the sharp univariate eq polynomial butterfly expansion.
 
 ---
 
@@ -1661,7 +1661,7 @@ Carries cached trace commitments from the verifier subcircuit to enclosing circu
 **Send set:** One message per cached trace partition per present AIR (sent by ProofShapeAir when the AIR has cached traces).
 
 **Sender:** ProofShapeAir (in the recursion crate).
-**Receivers:** Enclosing circuit verifier AIRs in the continuations crate -- inner verifier (`inner/verifier/air.rs`), root verifier (`root/verifier/air.rs`), inner VM PVs AIR (`inner/vm_pvs/air.rs`), inner deferral PVs AIR (`inner/def_pvs/air.rs`), deferral hook verifier (`deferral/hook/verifier/air.rs`), deferral inner input AIR (`deferral/inner/input/air.rs`), and deferral inner verifier AIR (`deferral/inner/verifier/air.rs`).
+**Receivers:** Enclosing circuit verifier AIRs. In the continuations crate: inner verifier (`inner/verifier/air.rs`), root verifier (`root/verifier/air.rs`), inner VM PVs AIR (`inner/vm_pvs/air.rs`), inner deferral PVs AIR (`inner/def_pvs/air.rs`), deferral hook verifier (`deferral/hook/verifier/air.rs`), deferral inner input AIR (`deferral/inner/input/air.rs`), and deferral inner verifier AIR (`deferral/inner/verifier/air.rs`). In the verify-stark guest library: `DeferredVerifyPvsAir` (`guest-libs/verify-stark/circuit/src/verifier/air.rs`).
 
 **Invariants:**
 - `cached_commit` is a Poseidon2 digest of the cached trace.

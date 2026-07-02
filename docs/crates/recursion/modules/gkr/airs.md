@@ -86,8 +86,8 @@ None.
 ```
 Row | is_enabled | proof_idx | n_logup | n_max | tidx | q0_claim     | alpha_logup  | input_layer_claim
 ----|------------|-----------|---------|-------|------|--------------|--------------|------------------
- 0  |     1      |     0     |    5    |   7   |   0  | [a,b,c,d]   | [e,f,g,h]    | [p0..., q0...]
- 1  |     1      |     1     |    0    |   3   |  200 | [0,0,0,0]   | [e',f',g',h']| [0..., e'f'g'h']
+ 0  |     1      |     0     |    5    |   7   |   0  | [a,b,c,d]    | [e,f,g,h]    | [p0..., q0...]
+ 1  |     1      |     1     |    0    |   3   |  200 | [1,0,0,0]    | [e',f',g',h']| [0..., e'f'g'h']
 ```
 
 - **Row 0:** Proof 0 has 5 logup layers and n_max=7. After PoW and alpha sampling, dispatches to GkrLayerAir. Two extra xi challenges will be sampled (7-5=2) via GkrXiSamplerAir.

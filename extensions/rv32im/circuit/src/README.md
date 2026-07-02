@@ -21,13 +21,13 @@ For further details, including the underlying constraints and assumptions, pleas
 Given
 
 - `rs1`, `rs2`, and `rd` are register addresses
-- `rs2_as` is a boolean indicating if `rs2` is an immediate value
+- `rs2_as` is a boolean indicating if `rs2` is read from a register (as opposed to being an immediate value)
 - `from_pc` is the current program address
 
 This circuit proves the following:
 
 - A memory read from register `rs1` is performed
-- If `rs2_as` is false, a memory read from register `rs2` is performed
+- If `rs2_as` is true, a memory read from register `rs2` is performed
 - A memory write to register `rd` is performed with the result of the operation
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
 

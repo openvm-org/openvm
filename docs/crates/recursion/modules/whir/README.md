@@ -35,7 +35,7 @@ cross-reference with [bus-inventory.md](../../bus-inventory.md).
   (`WhirOpeningPointBus`, received by SumcheckAir and FinalPolyMleEvalAir)
 
 From ProofShape (per proof):
-- `(major_idx, minor_idx, commitment)` (`CommitmentsBus`, looked up by WhirRoundAir) —
+- `(major_idx, minor_idx, commitment)` (`CommitmentsBus`, provided by ProofShapeAir and WhirRoundAir) —
   stacking commitments at `major_idx = 0` and WHIR round commitments at
   `major_idx = round + 1`, used as Merkle roots for query verification
 - `(commit_idx, stacking_row_idx)` (`StackingIndicesBus`, looked up by
