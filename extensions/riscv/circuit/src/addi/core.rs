@@ -181,7 +181,11 @@ where
         core_record.imm_low11 = (c_u32 & 0x7FF) as u16;
         core_record.imm_sign = ((c_u32 >> 11) & 1) as u16;
 
-        let rd = run_addi::<NUM_LIMBS, LIMB_BITS>(&core_record.rs1, core_record.imm_low11, core_record.imm_sign);
+        let rd = run_addi::<NUM_LIMBS, LIMB_BITS>(
+            &core_record.rs1,
+            core_record.imm_low11,
+            core_record.imm_sign,
+        );
 
         self.adapter
             .write(state.memory, instruction, [rd].into(), &mut adapter_record);
@@ -210,7 +214,8 @@ where
         core_row.is_valid = F::ONE;
         core_row.imm_sign = F::from_u16(record.imm_sign);
         core_row.imm_low11 = F::from_u16(record.imm_low11);
-        self.range_checker_chip.add_count(record.imm_low11 as u32, 11);
+        self.range_checker_chip
+            .add_count(record.imm_low11 as u32, 11);
         core_row.rs1 = record.rs1.map(F::from_u16);
         core_row.rd = rd.map(F::from_u16);
         for &rd_val in &rd {
