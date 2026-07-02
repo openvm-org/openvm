@@ -21,6 +21,10 @@ use syn::{
 /// `moduli_declare!`). The curve coefficients `a` (optional, defaults to zero) and `b` are
 /// constants of the coordinate type.
 ///
+/// The generated point type stores raw affine coordinates. Deserializing these points does not
+/// check that they are on the curve. Validate points from untrusted input before using group
+/// operations, scalar multiplication, or MSM.
+///
 /// For this macro to work, you must import the `elliptic_curve` crate and the `openvm_ecc_guest`
 /// crate.
 #[proc_macro]
