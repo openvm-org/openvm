@@ -286,11 +286,8 @@ fn make_verify_stark_inputs_for_indices(
     };
     let verify_stark_cached_commit = Some(verify_stark_cached_commit.into());
 
-    let raw_results = get_raw_deferral_results(
-        &child_vk,
-        from_ref(child_proof),
-        verify_stark_cached_commit.clone(),
-    )?;
+    let raw_results =
+        get_raw_deferral_results(&child_vk, from_ref(child_proof), verify_stark_cached_commit)?;
     assert_eq!(raw_results.len(), 1);
     let input_commit: [u8; 32] = raw_results[0].input.clone().try_into().unwrap();
     let output_raw = &raw_results[0].output_raw;
@@ -313,7 +310,7 @@ fn make_verify_stark_inputs_for_indices(
         stdin.deferrals[def_idx] = get_deferral_state(
             &child_vk,
             from_ref(child_proof),
-            verify_stark_cached_commit.clone(),
+            verify_stark_cached_commit,
             def_idx as u32,
         )?;
         def_inputs[def_idx] = proof_input.clone();
