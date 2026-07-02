@@ -321,6 +321,10 @@ where
     fn get_def_idx(&self) -> usize {
         self.prover.circuit.def_idx
     }
+
+    fn cached_commits(&self) -> Vec<CommitBytes> {
+        vec![self.prover.get_cached_commit().into()]
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]

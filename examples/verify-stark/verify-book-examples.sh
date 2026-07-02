@@ -13,13 +13,17 @@ vmexe="$artifacts_dir/verify-stark.vmexe"
 baseline="$artifacts_dir/verify-stark.baseline.json"
 verify_stark_agg_vk="$artifacts_dir/internal_recursive.vk"
 child_agg_vk="$HOME/.openvm/internal_recursive.vk"
-host_features="${VERIFY_STARK_HOST_FEATURES:-cuda}"
+host_features="${VERIFY_STARK_HOST_FEATURES-cuda}"
 
 mkdir -p "$artifacts_dir"
 
 cargo openvm setup --force
 
-cargo build --release --manifest-path "$host_manifest" --features "$host_features" --bin main
+host_build_cmd=(cargo build --release --manifest-path "$host_manifest" --bin main)
+if [[ -n "$host_features" ]]; then
+  host_build_cmd+=(--features "$host_features")
+fi
+"${host_build_cmd[@]}"
 
 "$host_bin" keygen \
   --child-agg-vk "$child_agg_vk" \

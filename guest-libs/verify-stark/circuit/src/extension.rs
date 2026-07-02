@@ -21,7 +21,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, poseidon2_compress_with_capacity,
-    BabyBearPoseidon2Config as SC, F,
+    BabyBearPoseidon2Config as SC, Digest, F,
 };
 use openvm_verify_stark_host::{
     pvs::{VerifierBasePvs, VmPvs, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID},
@@ -78,6 +78,7 @@ fn f_slice_to_bytes(slice: &[F]) -> Vec<u8> {
 pub fn get_raw_deferral_results(
     vk: &VmStarkVerifyingKey,
     proofs: &[VmStarkProof],
+    cached_commit: Digest,
 ) -> Result<Vec<RawDeferralResult>> {
     let config = SC::default_from_params(vk.mvk.inner.params.clone());
 
@@ -92,7 +93,6 @@ pub fn get_raw_deferral_results(
             let final_ts_state = *ts.into_log().perm_results().last().unwrap();
             let (left_ts, right_ts) = poseidon2_input_to_digests(final_ts_state);
             let ts_commit = poseidon2_compress_with_capacity(left_ts, right_ts).0;
-            let cached_commit = vk.baseline.internal_recursive_vk_commit.cached_commit;
             let input_commit =
                 poseidon2_hash_slice(&vec![ts_commit, cached_commit].into_flattened()).0;
 
@@ -107,9 +107,10 @@ pub fn get_raw_deferral_results(
 pub fn get_deferral_state(
     vk: &VmStarkVerifyingKey,
     proofs: &[VmStarkProof],
+    cached_commit: Digest,
     deferral_idx: u32,
 ) -> Result<DeferralState> {
-    let raw_results = get_raw_deferral_results(vk, proofs)?;
+    let raw_results = get_raw_deferral_results(vk, proofs, cached_commit)?;
     let results =
         generate_deferral_results(raw_results, deferral_idx, &deferral_poseidon2_chip::<F>());
     Ok(DeferralState::new(results))
