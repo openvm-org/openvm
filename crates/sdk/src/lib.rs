@@ -45,7 +45,7 @@ use openvm_verify_stark_host::{
 use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey, SdkCachedProvingKey},
-    prover::{AggProver, AppProver, DeferralAggProver, StarkProver},
+    prover::{AggProver, AppProver, DeferralAggProver, DeferralHookCommits, StarkProver},
     types::{AppExecutionCommit, ExecutableFormat},
 };
 #[cfg(feature = "evm-prove")]
@@ -152,7 +152,7 @@ where
     #[cfg(feature = "root-prover")]
     root_prover: OnceLock<Arc<RootProver>>,
 
-    def_agg_prover: Option<Arc<DeferralAggProver>>,
+    deferral_setup: DeferralSetup,
 
     #[cfg(feature = "evm-prove")]
     #[getset(get = "pub")]
@@ -161,6 +161,46 @@ where
     halo2_prover: OnceLock<Halo2Prover>,
 
     _phantom: PhantomData<E>,
+}
+
+#[derive(Clone, Default)]
+pub enum DeferralSetup {
+    #[default]
+    /// Deferrals are disabled for this GenericSdk. The STARK, root, and halo2 vks are deferral-
+    /// unaware, and trying to prove with def_inputs set causes an error.
+    Disabled,
+    /// The STARK, root, and halo2 vks are deferral-aware (i.e. are equivalent to Active), but
+    /// trying to prove with def_inputs set still causes an error. Use this when a program that
+    /// doesn't use deferrals must be verified by a deferral-aware vk.
+    Aware(DeferralHookCommits),
+    /// The STARK, root, and halo2 vks are deferral-aware (i.e. are equivalent to Aware), and
+    /// deferral inputs can be used and proved.
+    Active(Arc<DeferralAggProver>),
+}
+
+impl DeferralSetup {
+    pub fn hook_cached_commit(&self) -> Option<Digest> {
+        match self {
+            Self::Disabled => None,
+            Self::Aware(commits) => Some(commits.hook_cached_commit),
+            Self::Active(prover) => Some(prover.def_hook_cached_commit()),
+        }
+    }
+
+    pub fn hook_commit(&self) -> Option<Digest> {
+        match self {
+            Self::Disabled => None,
+            Self::Aware(commits) => Some(commits.hook_commit),
+            Self::Active(prover) => Some(prover.def_hook_commit()),
+        }
+    }
+
+    pub fn prover(&self) -> Option<Arc<DeferralAggProver>> {
+        match self {
+            Self::Active(prover) => Some(prover.clone()),
+            Self::Disabled | Self::Aware(_) => None,
+        }
+    }
 }
 
 pub type CpuSdk = GenericSdk<BabyBearPoseidon2Engine, SdkVmCpuBuilder>;
@@ -238,14 +278,17 @@ where
 
     /// Returns the def_hook_prover cached commit.
     pub fn def_hook_cached_commit(&self) -> Option<Digest> {
-        self.def_agg_prover
-            .as_ref()
-            .map(|p| p.def_hook_cached_commit())
+        self.deferral_setup.hook_cached_commit()
     }
 
     /// Returns the deferral hook commit derived from the deferral aggregation path.
     pub fn def_hook_commit(&self) -> Option<Digest> {
-        self.def_agg_prover.as_ref().map(|p| p.def_hook_commit())
+        self.deferral_setup.hook_commit()
+    }
+
+    /// Returns the deferral aggregation prover when this SDK can prove non-empty deferral inputs.
+    pub fn deferral_agg_prover(&self) -> Option<Arc<DeferralAggProver>> {
+        self.deferral_setup.prover()
     }
 
     /// Returns serde-serializable proving keys for this SDK.
@@ -265,6 +308,7 @@ where
             .agg_prover
             .get()
             .ok_or_else(|| SdkError::Other(eyre::eyre!("agg_pk is not generated")))?;
+        let deferral_prover = self.deferral_setup.prover();
         Ok(SdkCachedProvingKey {
             app_pk,
             agg_pk: AggProvingKey {
@@ -274,12 +318,10 @@ where
                 },
                 internal_recursive: agg_prover.internal_recursive_prover.get_pk(),
             },
-            deferral_pk: self
-                .def_agg_prover
+            deferral_pk: deferral_prover
                 .as_ref()
                 .map(|def_agg_prover| def_agg_prover.multi_deferral_circuit_prover.get_pk()),
-            deferral_agg_pk: self
-                .def_agg_prover
+            deferral_agg_pk: deferral_prover
                 .as_ref()
                 .map(|def_agg_prover| def_agg_prover.get_pk()),
             #[cfg(feature = "root-prover")]
@@ -507,7 +549,7 @@ where
             &app_pk.app_vm_pk,
             app_exe,
             self.agg_prover(),
-            self.def_agg_prover.clone(),
+            self.deferral_setup.clone(),
         )?;
         Ok(stark_prover)
     }
@@ -526,7 +568,7 @@ where
             &app_pk.app_vm_pk,
             app_exe,
             self.agg_prover(),
-            self.def_agg_prover.clone(),
+            self.deferral_setup.clone(),
             self.root_prover(),
             #[cfg(feature = "evm-prove")]
             None,
@@ -573,15 +615,14 @@ where
             .get_or_init(|| {
                 let system_config = self.app_config.app_vm_config.as_ref();
                 let root_params = self.root_params.clone();
-                let app_pk = self.app_pk();
                 let agg_prover = self.agg_prover();
 
-                let (trace_heights, root_pk) = compute_root_proof_heights::<E, VB>(
-                    self.app_vm_builder.clone(),
-                    &app_pk.app_vm_pk,
-                    agg_prover.clone(),
+                let (trace_heights, root_pk) = compute_root_proof_heights(
+                    system_config.clone(),
+                    self.agg_config.params.clone(),
+                    self.agg_tree_config,
                     root_params.clone(),
-                    self.def_agg_prover.clone(),
+                    self.deferral_setup.clone(),
                 )
                 .expect("Trace heights did not generate properly");
 
@@ -622,7 +663,7 @@ where
                     self.app_vm_builder.clone(),
                     &self.app_pk().app_vm_pk,
                     agg_prover.clone(),
-                    self.def_agg_prover.clone(),
+                    self.deferral_setup.clone(),
                     root_prover,
                 );
 
