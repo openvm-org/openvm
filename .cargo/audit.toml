@@ -3,4 +3,8 @@
   # an older version of tracing-subscriber 0.2.25 is used in ark-bn254 but it is an optional dependency that is not included in the crate graph even with all features enabled
   # unfortunately cargo audit includes optional dependencies from Cargo.lock even if they are not in the crate graph
   "RUSTSEC-2025-0055",
+  # quick-xml 0.39.4 is pulled in by inferno 0.12.6, which is only used by the optional cell-profiling feature.
+  # TODO: remove these ignores once inferno is updated to a fixed quick-xml range.
+  "RUSTSEC-2026-0194",
+  "RUSTSEC-2026-0195",
   ]
