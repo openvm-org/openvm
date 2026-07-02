@@ -7,6 +7,20 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ## Unreleased
 
+## v2.0.0 (2026-07-06)
+
+### Added
+- (Recursion) Add the recursive verifier circuit for the SWIRL proof system.
+- (Continuations/Deferrals) Add the continuation aggregation pipeline and deferral framework, including the `verify-stark` deferral path for guest programs.
+- (Guest Library/SHA-2) Add guest library support for SHA-256, SHA-384, and SHA-512 incremental hashers.
+- (Guest Library/Keccak) Add Keccak-256 guest library support with incremental hashing.
+
+### Changed
+- (Prover) Use the SWIRL proof system through STARK Backend v2.0.0.
+- (Circuits/Memory) Remove memory access adapters from the VM memory system.
+- (Circuits/SHA-2) Replace the SHA-256-specific AIR with SHA-2 family AIRs for SHA-256, SHA-384, and SHA-512.
+- (Circuits/Keccak) Redesign the Keccak-256 AIRs, splitting Keccak-f into operation and permutation AIRs.
+
 ## v1.7.0
 
 ### Changed
