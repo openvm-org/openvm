@@ -333,17 +333,36 @@ This circuit proves that:
 - If `opcode` is `mulhu`, then `compose(a) = floor((u64(b) * u64(c)) / 2^64)`.
 - Each limb of `a` is in the range `[0, 2^RV64_BYTE_BITS)`
 
-#### 13. [Shift](./shift/core.rs)
+#### 13. [Shift Logical](./shift_logical/core.rs)
 
 Given:
 
-- `b`, `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^RV64_BYTE_BITS)`
+- `b`, `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^LIMB_BITS)`
 - `a` is the decomposition of the result
-- `opcode` indicates the operation to be performed
+- `opcode_sll_flag` and `opcode_srl_flag` indicate if the instruction is `sll` or `srl`
 
 This circuit proves that:
 
-- If `opcode` is `sll`, then `compose(a) == compose(b) << (compose(c) % (RV64_BYTE_BITS * RV64_REGISTER_NUM_LIMBS))`
-- If `opcode` is `srl`, then `compose(a) == compose(b) >> (compose(c) % (RV64_BYTE_BITS * RV64_REGISTER_NUM_LIMBS))`
-- If `opcode` is `sra`, then `compose(a) == sign_extend(compose(b) >> (compose(c) % (RV64_BYTE_BITS * RV64_REGISTER_NUM_LIMBS)))`
-- Each limb of `a` is in the range `[0, 2^RV64_BYTE_BITS)`
+- If the instruction is `sll`, then `compose(a) == compose(b) << (compose(c) % (NUM_LIMBS * LIMB_BITS))`, modulo the register width
+- If the instruction is `srl`, then `compose(a) == compose(b) >> (compose(c) % (NUM_LIMBS * LIMB_BITS))`
+- Each limb of `a` is in the range `[0, 2^LIMB_BITS)`
+
+To stay sound at `LIMB_BITS = 16` over BabyBear, each limb of `b` is decomposed into the part that crosses the limb boundary (`carry`) and the part that stays (`aux`); both parts are range checked, and each limb of `a` is recombined additively from them so that no constraint term reaches the field modulus.
+
+#### 14. [Shift Right Arithmetic](./shift_right_arithmetic/core.rs)
+
+Given:
+
+- `b`, `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^LIMB_BITS)`
+- `a` is the decomposition of the result
+- `is_valid` indicates if the row corresponds to a real instruction (this chip only handles `sra`)
+
+This circuit proves that:
+
+- `compose(a) == sign_extend(compose(b) >> (compose(c) % (NUM_LIMBS * LIMB_BITS)))`, where the vacated high bits are filled with the sign bit of `b`
+- The sign column `b_sign` equals the most significant bit of `b`
+- Each limb of `a` is in the range `[0, 2^LIMB_BITS)`
+
+The same carry/aux decomposition as the shift logical chip is used to keep every constraint term below the field modulus at `LIMB_BITS = 16`.
+
+Both shift chips are instantiated over u16 limbs (`NUM_LIMBS = 4`, `LIMB_BITS = 16` for 64-bit registers) with the ALU u16 adapter. The W-instruction variants `sllw`/`srlw`/`sraw` ([shift_w](./shift_w/mod.rs)) reuse these same cores over 32-bit words (`NUM_LIMBS = 2`) with the ALU W u16 adapter.
