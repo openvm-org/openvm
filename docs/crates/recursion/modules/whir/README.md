@@ -183,14 +183,14 @@ Each reference verifier check is mapped to the responsible AIR(s):
 | `WhirSumcheckBus` | WhirRoundAir | SumcheckAir | dispatch sumcheck claims per round |
 | `VerifyQueriesBus` | WhirRoundAir | WhirQueryAir | dispatch per-round query verification |
 | `VerifyQueryBus` | WhirQueryAir | Initial/NonInitialOpenedValuesAir | dispatch per-query Merkle verification |
-| `WhirFoldingBus` | WhirQueryAir | WhirFoldingAir | opened values for binary k-fold |
+| `WhirFoldingBus` | Initial/NonInitialOpenedValuesAir, WhirFoldingAir | WhirFoldingAir | opened values for binary k-fold |
 | `WhirAlphaBus` | SumcheckAir | WhirFoldingAir, FinalPolyQueryEvalAir | alpha challenges |
 | `WhirGammaBus` | WhirRoundAir | FinalPolyQueryEvalAir | gamma challenges |
 | `WhirEqAlphaUBus` | SumcheckAir | FinalPolyMleEvalAir | eq_partial accumulation |
 | `FinalPolyFoldingBus` | FinalPolyMleEvalAir | FinalPolyMleEvalAir | binary tree MLE eval |
 | `WhirFinalPolyBus` | FinalPolyMleEvalAir | FinalPolyQueryEvalAir | final poly coefficients (lookup) |
-| `FinalPolyMleEvalBus` | FinalPolyMleEvalAir | WhirRoundAir | MLE eval result |
-| `FinalPolyQueryEvalBus` | FinalPolyQueryEvalAir | WhirRoundAir | per-query Horner eval |
+| `FinalPolyMleEvalBus` | WhirRoundAir | FinalPolyMleEvalAir | MLE eval result |
+| `FinalPolyQueryEvalBus` | WhirRoundAir | FinalPolyQueryEvalAir | per-query Horner eval |
 
 **Bus dependencies:** `MerkleVerifyBus` (permutation, for commitment openings),
 `Poseidon2PermuteBus` (lookup, for initial-round row hashing),

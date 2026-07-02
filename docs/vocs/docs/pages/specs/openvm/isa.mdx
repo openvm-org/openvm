@@ -153,7 +153,7 @@ introduce additional address spaces:
 | `0`           | Immediates  | Address space `0` is reserved for denoting immediates, and we define `[a]_0 = a`. |
 | `1`           | Registers   | Elements are constrained to lie in `[0, 2^LIMB_BITS)` for `LIMB_BITS = 8`.        |
 | `2`           | User Memory | Elements are constrained to lie in `[0, 2^LIMB_BITS)` for `LIMB_BITS = 8`.        |
-| `3`           | User IO     |                                                                                   |
+| `3`           | User IO     | Elements are constrained to lie in `[0, 2^LIMB_BITS)` for `LIMB_BITS = 8`.        |
 | `4`           | Deferral    | Elements are typically full native field elements.                                |
 
 When adding a new user address space, the invariants of the memory cells in that address space must be declared, and all
@@ -323,7 +323,7 @@ unsigned integer, and convert to field element. In the instructions below, `[c:4
 #### Load/Store
 
 For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1`.
-The address space `e` is `2` for load instructions, and can be `2`, `3`, or `4` for store instructions. While `e = 4`
+The address space `e` can be `1` or `2` for load instructions, and can be `2`, `3`, or `4` for store instructions. While `e = 4`
 (the [deferral address space](#address-spaces)) is technically allowed by the circuit constraints, verifiers should be
 extremely wary of any program that stores to address space `4` via these instructions and typically should not consider
 such programs as valid.
