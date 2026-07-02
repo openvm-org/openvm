@@ -91,7 +91,7 @@ jobs:
 
     # runs-on picks a GPU or CPU image based on matrix.mode; family comes from inputs.family.
     runs-on:
-      - runs-on=${{ github.run_id }}-sdk-sweep-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ inputs.family }}/image=${{ matrix.mode == 'cuda' && 'ubuntu24-gpu-x64' || (inputs.arch == 'arm' && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64') }}/${{ matrix.mode == 'cuda' && 'volume=80gb/spot=false' || 'disk=large' }}/extras=s3-cache
+      - runs-on=${{ github.run_id }}-sdk-sweep-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ inputs.family }}/image=${{ matrix.mode == 'cuda' && 'ubuntu24-gpu-x64' || (inputs.arch == 'arm' && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64') }}/volume=80gb/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
