@@ -14,7 +14,7 @@ openvm-verify-stark-host.workspace = true
 openvm-recursion-circuit.workspace = true
 openvm-cpu-backend.workspace = true
 openvm-continuations = { workspace = true, features = ["root-prover"] }
-halo2-base = { workspace = true, features = ["halo2-axiom"] }
+halo2-base = { workspace = true }
 snark-verifier-sdk = { workspace = true, features = ["loader_evm"], optional = true }
 
 rand_chacha.workspace = true

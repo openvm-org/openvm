@@ -2897,8 +2897,28 @@ dependencies = [
 [[package]]
 name = "halo2-axiom"
 version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0aee3f8178b78275038e5ea0e2577140056d2c4c87fccaf6777dc0a8eebe455a"
+source = "git+https://github.com/axiom-crypto/halo2.git?tag=v0.5.1#5f2df84fa4043d7b1f3ae8a98c08e2829e1d5d94"
+dependencies = [
+ "blake2b_simd",
+ "crossbeam",
+ "ff 0.13.1",
+ "group 0.13.0",
+ "halo2curves-axiom 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "itertools 0.11.0",
+ "maybe-rayon",
+ "pairing 0.23.0",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "rayon",
+ "rustc-hash 1.1.0",
+ "sha3",
+ "tracing",
+]
+
+[[package]]
+name = "halo2-axiom"
+version = "0.5.1"
+source = "git+https://github.com/axiom-crypto/halo2?branch=main#5f2df84fa4043d7b1f3ae8a98c08e2829e1d5d94"
 dependencies = [
  "blake2b_simd",
  "crossbeam",
@@ -2919,7 +2939,7 @@ dependencies = [
 [[package]]
 name = "halo2-axiom-gpu"
 version = "1.0.0-rc.0"
-source = "git+https://github.com/axiom-crypto/halo2-gpu.git?tag=v1.0.0-rc.0#fa3d662335d8f913660460d443509a84d1f3242f"
+source = "git+https://github.com/axiom-crypto/halo2-gpu.git?tag=v1.0.0-rc.1#62ecb5afc05ae1331212ccc34fcf2853bba7f668"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2933,6 +2953,7 @@ dependencies = [
  "ff 0.13.1",
  "git-version",
  "group 0.13.0",
+ "halo2-axiom 0.5.1 (git+https://github.com/axiom-crypto/halo2?branch=main)",
  "halo2curves-axiom 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.11.0",
  "lazy_static",
@@ -2957,11 +2978,11 @@ dependencies = [
 
 [[package]]
 name = "halo2-base"
-version = "0.5.3"
-source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.3#c54cbac60da598e8e484b8aea858e0bf3c51a857"
+version = "0.5.4"
+source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.4#5f4e38f52c45785c9f770ee7ab45223e61e74be9"
 dependencies = [
  "getset",
- "halo2-axiom",
+ "halo2-axiom 0.5.1 (git+https://github.com/axiom-crypto/halo2.git?tag=v0.5.1)",
  "halo2-axiom-gpu",
  "itertools 0.11.0",
  "log",
@@ -2978,8 +2999,8 @@ dependencies = [
 
 [[package]]
 name = "halo2-ecc"
-version = "0.5.3"
-source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.3#c54cbac60da598e8e484b8aea858e0bf3c51a857"
+version = "0.5.4"
+source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.4#5f4e38f52c45785c9f770ee7ab45223e61e74be9"
 dependencies = [
  "halo2-base",
  "itertools 0.11.0",
@@ -7459,8 +7480,8 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "snark-verifier"
-version = "0.2.5"
-source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.5#bbfcc721d714bea0d44a27c8fc6c4736e73ca853"
+version = "0.2.6"
+source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.6#ed52bda581fbab0b16a462c4e54e3a84b2857f9c"
 dependencies = [
  "halo2-base",
  "halo2-ecc",
@@ -7480,8 +7501,8 @@ dependencies = [
 
 [[package]]
 name = "snark-verifier-sdk"
-version = "0.2.5"
-source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.5#bbfcc721d714bea0d44a27c8fc6c4736e73ca853"
+version = "0.2.6"
+source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.6#ed52bda581fbab0b16a462c4e54e3a84b2857f9c"
 dependencies = [
  "bincode",
  "ethereum-types",
