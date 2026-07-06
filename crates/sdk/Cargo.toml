@@ -25,7 +25,7 @@ openvm-continuations = { workspace = true }
 openvm-verify-stark-host = { workspace = true }
 openvm-verify-stark-circuit = { workspace = true }
 openvm-static-verifier = { workspace = true, optional = true }
-halo2-base = { workspace = true, optional = true, features = ["halo2-axiom"] }
+halo2-base = { workspace = true, optional = true }
 
 alloy-sol-types = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
@@ -66,22 +66,20 @@ evm-verify = [
     "dep:alloy-sol-types",
     "dep:tempfile",
 ]
-metrics = ["dep:metrics", "openvm-continuations/metrics", "openvm-sdk-config/metrics"]
-aot = [
-    "openvm-circuit/aot",
-    "openvm-sdk-config/aot",
+metrics = [
+    "dep:metrics",
+    "openvm-continuations/metrics",
+    "openvm-sdk-config/metrics",
 ]
-tco = [
-    "openvm-circuit/tco",
-    "openvm-sdk-config/tco",
-]
+aot = ["openvm-circuit/aot", "openvm-sdk-config/aot"]
+tco = ["openvm-circuit/tco", "openvm-sdk-config/tco"]
 unprotected = ["openvm-circuit/unprotected"]
 
 # for guest profiling:
 perf-metrics = [
     "openvm-circuit/perf-metrics",
     "openvm-transpiler/function-span",
-    "openvm-sdk-config/perf-metrics"
+    "openvm-sdk-config/perf-metrics",
 ]
 
 # turns on stark-backend debugger in all proofs
@@ -101,14 +99,8 @@ cuda = [
     "openvm-verify-stark-circuit/cuda",
     "openvm-static-verifier?/cuda",
 ]
-halo2-gpu = [
-    "cuda",
-    "openvm-static-verifier?/halo2-gpu",
-]
-cell-profiling = [
-    "evm-prove",
-    "openvm-static-verifier/cell-profiling",
-]
+halo2-gpu = ["cuda", "openvm-static-verifier?/halo2-gpu"]
+cell-profiling = ["evm-prove", "openvm-static-verifier/cell-profiling"]
 
 [[example]]
 name = "sdk_app"
