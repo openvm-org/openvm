@@ -23,10 +23,10 @@ use openvm_circuit_primitives::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_riscv_transpiler::{
-    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
-    DivRemOpcode, DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
-    Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode,
-    Rv64Phantom, ShiftOpcode, ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BitwiseImmOpcode, BranchEqualOpcode,
+    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode, MulHOpcode,
+    MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode,
+    Rv64LoadStoreOpcode, Rv64Phantom, ShiftImmOpcode, ShiftOpcode, ShiftWOpcode,
 };
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -118,6 +118,10 @@ pub enum Rv64IExecutor {
     AddSub(Rv64AddSubExecutor),
     AddI(Rv64AddIExecutor),
     BitwiseLogic(Rv64BitwiseLogicExecutor),
+    BitwiseLogicImm(Rv64BitwiseLogicImmExecutor),
+    LessThanImm(Rv64LessThanImmExecutor),
+    ShiftLogicalImm(Rv64ShiftLogicalImmExecutor),
+    ShiftRightArithmeticImm(Rv64ShiftRightArithmeticImmExecutor),
     AddSubW(Rv64AddSubWExecutor),
     LessThan(Rv64LessThanExecutor),
     ShiftLogical(Rv64ShiftLogicalExecutor),
@@ -356,6 +360,42 @@ impl VmExecutionExtension for Rv64I {
             BaseAluImmOpcode::ADDI as usize,
         );
         inventory.add_executor(addi, [BaseAluImmOpcode::ADDI].map(|x| x.global_opcode()))?;
+
+        let shift_logical_imm = Rv64ShiftLogicalImmExecutor::new(
+            Rv64ImmBaseAluU16AdapterExecutor,
+            ShiftImmOpcode::CLASS_OFFSET,
+        );
+        inventory.add_executor(
+            shift_logical_imm,
+            [ShiftImmOpcode::SLLI, ShiftImmOpcode::SRLI].map(|x| x.global_opcode()),
+        )?;
+
+        let shift_right_arithmetic_imm = Rv64ShiftRightArithmeticImmExecutor::new(
+            Rv64BaseAluU16ImmAdapterExecutor,
+            ShiftImmOpcode::CLASS_OFFSET,
+        );
+        inventory.add_executor(
+            shift_right_arithmetic_imm,
+            [ShiftImmOpcode::SRAI].map(|x| x.global_opcode()),
+        )?;
+
+        let less_than_imm = Rv64LessThanImmExecutor::new(
+            Rv64ImmBaseAluU16AdapterExecutor,
+            LessThanImmOpcode::CLASS_OFFSET,
+        );
+        inventory.add_executor(
+            less_than_imm,
+            LessThanImmOpcode::iter().map(|x| x.global_opcode()),
+        )?;
+
+        let bitwise_logic_imm = Rv64BitwiseLogicImmExecutor::new(
+            Rv64BaseAluImmAdapterExecutor,
+            BitwiseImmOpcode::CLASS_OFFSET,
+        );
+        inventory.add_executor(
+            bitwise_logic_imm,
+            BitwiseImmOpcode::iter().map(|x| x.global_opcode()),
+        )?;
 
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
         inventory.add_phantom_sub_executor(
@@ -623,6 +663,30 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
             ),
         );
         inventory.add_air(addi);
+
+        let shift_logical_imm = Rv64ShiftLogicalImmAir::new(
+            Rv64ImmBaseAluU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
+            ShiftLogicalImmCoreAir::new(range_checker, ShiftImmOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(shift_logical_imm);
+
+        let shift_right_arithmetic_imm = Rv64ShiftRightArithmeticImmAir::new(
+            Rv64BaseAluU16ImmAdapterAir::new(exec_bridge, memory_bridge, range_checker),
+            ShiftRightArithmeticCoreAir::new(range_checker, ShiftImmOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(shift_right_arithmetic_imm);
+
+        let less_than_imm = Rv64LessThanImmAir::new(
+            Rv64ImmBaseAluU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
+            LessThanImmCoreAir::new(range_checker, LessThanImmOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(less_than_imm);
+
+        let bitwise_logic_imm = Rv64BitwiseLogicImmAir::new(
+            Rv64BaseAluImmAdapterAir::new(exec_bridge, memory_bridge),
+            BitwiseLogicImmCoreAir::new(bitwise_lu, BitwiseImmOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(bitwise_logic_imm);
 
         Ok(())
     }
@@ -924,6 +988,50 @@ where
             mem_helper.clone(),
         );
         inventory.add_executor_chip(addi);
+
+        inventory.next_air::<Rv64ShiftLogicalImmAir>()?;
+        let shift_logical_imm = Rv64ShiftLogicalImmChip::new(
+            ShiftLogicalImmFiller::new(
+                Rv64ImmBaseAluU16AdapterFiller::new(range_checker.clone()),
+                range_checker.clone(),
+                ShiftImmOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(shift_logical_imm);
+
+        inventory.next_air::<Rv64ShiftRightArithmeticImmAir>()?;
+        let shift_right_arithmetic_imm = Rv64ShiftRightArithmeticImmChip::new(
+            ShiftRightArithmeticFiller::new(
+                Rv64BaseAluU16ImmAdapterFiller::new(range_checker.clone()),
+                range_checker.clone(),
+                ShiftImmOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(shift_right_arithmetic_imm);
+
+        inventory.next_air::<Rv64LessThanImmAir>()?;
+        let less_than_imm = Rv64LessThanImmChip::new(
+            LessThanImmFiller::new(
+                Rv64ImmBaseAluU16AdapterFiller::new(range_checker.clone()),
+                range_checker.clone(),
+                LessThanImmOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(less_than_imm);
+
+        inventory.next_air::<Rv64BitwiseLogicImmAir>()?;
+        let bitwise_logic_imm = Rv64BitwiseLogicImmChip::new(
+            BitwiseLogicImmFiller::new(
+                Rv64BaseAluImmAdapterFiller::new(),
+                bitwise_lu.clone(),
+                BitwiseImmOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(bitwise_logic_imm);
 
         Ok(())
     }
