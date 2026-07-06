@@ -4,7 +4,7 @@
 use halo2_base::{
     gates::{range::RangeChip, GateInstructions, RangeInstructions},
     utils::ScalarField,
-    AssignedValue, Context,
+    AssignedValue, ContextKind,
     QuantumCell::{self, Constant},
 };
 pub(crate) use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::{
@@ -57,7 +57,7 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
     /// ATTENTION: inputs.len() needs to be fixed at compile time.
     pub fn permutation(
         &mut self,
-        ctx: &mut Context<F>,
+        ctx: &mut impl ContextKind<F>,
         gate: &impl GateInstructions<F>,
         params: &Poseidon2Params<F, T>,
     ) {
@@ -85,7 +85,7 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
     }
 
     fn x_power5(
-        ctx: &mut Context<F>,
+        ctx: &mut impl ContextKind<F>,
         gate: &impl GateInstructions<F>,
         x: AssignedValue<F>,
     ) -> AssignedValue<F> {
@@ -94,13 +94,13 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
         gate.mul(ctx, x, x4)
     }
 
-    fn sbox(&mut self, ctx: &mut Context<F>, gate: &impl GateInstructions<F>) {
+    fn sbox(&mut self, ctx: &mut impl ContextKind<F>, gate: &impl GateInstructions<F>) {
         for x in self.s.iter_mut() {
             *x = Self::x_power5(ctx, gate, *x);
         }
     }
 
-    fn matmul_external(&mut self, ctx: &mut Context<F>, gate: &impl GateInstructions<F>) {
+    fn matmul_external(&mut self, ctx: &mut impl ContextKind<F>, gate: &impl GateInstructions<F>) {
         // M_E for T=2: circ(2, 1) = [[2,1],[1,2]]
         // M_E for T=3: circ(2, 1, 1)
         assert!(T == 2 || T == 3);
@@ -109,34 +109,37 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
         for (i, x) in self.s.iter_mut().enumerate() {
             // This is the same as `*x = gate.add(ctx, *x, sum)` but we save a cell by reusing
             // `sum`:
+            let new_x = *x.value() + sum.value();
             if i % 2 == 0 {
+                let start = ctx.get_offset();
                 ctx.assign_region(
                     [
-                        QuantumCell::Witness(*x.value() + sum.value()),
+                        QuantumCell::Witness(new_x),
                         QuantumCell::Existing(*x),
                         QuantumCell::Constant(-F::ONE),
                         QuantumCell::Existing(sum),
                     ],
                     [0],
                 );
-                *x = ctx.get(-4);
+                *x = ctx.to_assigned_value(QuantumCell::Witness(new_x), start);
             } else {
+                let start = ctx.get_offset();
                 ctx.assign_region(
                     [
                         QuantumCell::Existing(*x),
                         QuantumCell::Constant(F::ONE),
-                        QuantumCell::Witness(*x.value() + sum.value()),
+                        QuantumCell::Witness(new_x),
                     ],
                     [-1],
                 );
-                *x = ctx.get(-1);
+                *x = ctx.to_assigned_value(QuantumCell::Witness(new_x), start + 2);
             }
         }
     }
 
     fn add_rc(
         &mut self,
-        ctx: &mut Context<F>,
+        ctx: &mut impl ContextKind<F>,
         gate: &impl GateInstructions<F>,
         round_constants: [F; T],
     ) {
@@ -147,7 +150,7 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
 
     fn matmul_internal(
         &mut self,
-        ctx: &mut Context<F>,
+        ctx: &mut impl ContextKind<F>,
         gate: &impl GateInstructions<F>,
         mat_internal_diag_m_1: [F; T],
     ) {
@@ -157,38 +160,37 @@ impl<F: ScalarField, const T: usize> Poseidon2State<F, T> {
         for i in 0..T {
             // This is the same as `self.s[i] = gate.mul_add(ctx, self.s[i],
             // Constant(mat_internal_diag_m_1[i]), sum)` but we save a cell by reusing `sum`.
+            let new_s = *self.s[i].value() * mat_internal_diag_m_1[i] + sum.value();
             if i % 2 == 0 {
+                let start = ctx.get_offset();
                 ctx.assign_region(
                     [
-                        QuantumCell::Witness(
-                            *self.s[i].value() * mat_internal_diag_m_1[i] + sum.value(),
-                        ),
+                        QuantumCell::Witness(new_s),
                         QuantumCell::Existing(self.s[i]),
                         QuantumCell::Constant(-mat_internal_diag_m_1[i]),
                         QuantumCell::Existing(sum),
                     ],
                     [0],
                 );
-                self.s[i] = ctx.get(-4);
+                self.s[i] = ctx.to_assigned_value(QuantumCell::Witness(new_s), start);
             } else {
+                let start = ctx.get_offset();
                 ctx.assign_region(
                     [
                         QuantumCell::Existing(self.s[i]),
                         QuantumCell::Constant(mat_internal_diag_m_1[i]),
-                        QuantumCell::Witness(
-                            *self.s[i].value() * mat_internal_diag_m_1[i] + sum.value(),
-                        ),
+                        QuantumCell::Witness(new_s),
                     ],
                     [-1],
                 );
-                self.s[i] = ctx.get(-1);
+                self.s[i] = ctx.to_assigned_value(QuantumCell::Witness(new_s), start + 2);
             }
         }
     }
 }
 
 pub(crate) fn pack_base_2_31_cells(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     gate: &impl GateInstructions<Fr>,
     values: &[ReducedBabyBearWire],
 ) -> AssignedValue<Fr> {
@@ -207,7 +209,7 @@ pub(crate) fn pack_base_2_31_cells(
 }
 
 pub(crate) fn hash_babybear_slice_to_digest(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     range: &RangeChip<Fr>,
     values: &[ReducedBabyBearWire],
 ) -> AssignedValue<Fr> {
@@ -225,7 +227,7 @@ pub(crate) fn hash_babybear_slice_to_digest(
 }
 
 pub(crate) fn compress_bn254_digests(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     range: &RangeChip<Fr>,
     left: AssignedValue<Fr>,
     right: AssignedValue<Fr>,

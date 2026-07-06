@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use halo2_base::{
-    gates::GateInstructions, halo2_proofs::arithmetic::Field, AssignedValue, Context, QuantumCell,
+    gates::GateInstructions, halo2_proofs::arithmetic::Field, AssignedValue, Context, ContextKind, QuantumCell,
 };
 use openvm_continuations::circuit::root::{RootVerifierPvs, USER_PVS_COMMIT_AIR_ID};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE as APP_DIGEST_SIZE;
@@ -47,7 +47,7 @@ impl<T: Clone> StaticVerifierPvs<T> {
 /// re-exposed as public values of the static verifier circuit, but that is **not** done in this
 /// function.
 pub fn extract_public_values(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     chip: &BabyBearChip,
     proof: &ProofWire,
 ) -> StaticVerifierPvs<AssignedValue<Fr>> {
@@ -66,7 +66,7 @@ pub fn extract_public_values(
 }
 
 pub fn compress_babybear_wires_to_bn254(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     chip: &BabyBearChip,
     base_elts: [ReducedBabyBearWire; APP_DIGEST_SIZE],
 ) -> AssignedValue<Fr> {

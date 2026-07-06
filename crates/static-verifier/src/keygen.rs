@@ -14,6 +14,7 @@ use crate::{
     config::StaticVerifierShape,
     prover::{Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierProof},
 };
+use tracing::info;
 
 impl StaticVerifierCircuit {
     /// Run keygen to produce a [`Halo2ProvingPinning`].
@@ -32,7 +33,12 @@ impl StaticVerifierCircuit {
         let config_params = builder.calculate_params(Some(shape.minimum_rows));
 
         let vk = keygen_vk(params, &builder).expect("keygen_vk should succeed");
-        let pk = keygen_pk(params, vk, &builder).expect("keygen_pk should succeed");
+        let mut pk = keygen_pk(params, vk, &builder).expect("keygen_pk should succeed");
+        let ctx = builder.main(0);
+        pk.perf_hints.ctx_advice_shape = Some(ctx.get_offset());
+        // let copy_manager = ctx.copy_manager.lock().unwrap();
+        // pk.perf_hints.advice_equalities = Some(copy_manager.advice_equalities.len());
+        // pk.perf_hints.constant_equalities = Some(copy_manager.advice_equalities.len());
         let break_points = builder.break_points();
 
         Halo2ProvingPinning {
@@ -135,6 +141,7 @@ impl StaticVerifierProvingKey {
         .use_instance_columns(self.shape.instance_columns);
 
         let _public_inputs = self.circuit.populate(&mut builder, proof);
+        info!("advice_len {}", builder.main(0).get_offset());
 
         snark_verifier_sdk::halo2::gen_snark_shplonk(
             params,

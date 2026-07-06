@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use halo2_base::Context;
+use halo2_base::{Context, ContextKind};
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::stacked_pcs::StackedLayout},
@@ -37,7 +37,7 @@ pub struct StackingProofWire {
 }
 
 pub(crate) fn load_stacking_proof_wire(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     stacking_proof: &openvm_stark_sdk::openvm_stark_backend::proof::StackingProof<RootConfig>,
 ) -> StackingProofWire {
@@ -72,7 +72,7 @@ pub(crate) fn load_stacking_proof_wire(
 }
 
 fn eval_in_uni_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     l_skip: usize,
     n: isize,
@@ -89,7 +89,7 @@ fn eval_in_uni_assigned(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn constrain_stacked_reduction(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     transcript: &mut TranscriptChip,
     stacking_wire: &StackingProofWire,
@@ -104,7 +104,7 @@ pub(crate) fn constrain_stacked_reduction(
     let omega_order = 1usize << l_skip;
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
 
-    profiler.push("claim_batching", ctx.advice.len());
+    profiler.push("claim_batching", ctx.get_offset());
 
     let mut lambda_idx = 0usize;
     let lambda_indices_per_layout = layouts
@@ -173,8 +173,8 @@ pub(crate) fn constrain_stacked_reduction(
         s_0 = ext_chip.add(ctx, s_0, term);
     }
 
-    profiler.pop(ctx.advice.len());
-    profiler.push("univariate_sumcheck", ctx.advice.len());
+    profiler.pop(ctx.get_offset());
+    profiler.push("univariate_sumcheck", ctx.get_offset());
 
     let univariate_round_coeffs = &stacking_wire.univariate_round_coeffs;
     let univariate_round_coeffs_raw = univariate_round_coeffs
@@ -214,8 +214,8 @@ pub(crate) fn constrain_stacked_reduction(
         u.push(u_j);
     }
 
-    profiler.pop(ctx.advice.len());
-    profiler.push("derived_q_coeffs", ctx.advice.len());
+    profiler.pop(ctx.get_offset());
+    profiler.push("derived_q_coeffs", ctx.get_offset());
 
     let stacking_matrix_expected_widths = layouts
         .iter()
@@ -294,8 +294,8 @@ pub(crate) fn constrain_stacked_reduction(
         }
     }
 
-    profiler.pop(ctx.advice.len());
-    profiler.push("final_verification", ctx.advice.len());
+    profiler.pop(ctx.get_offset());
+    profiler.push("final_verification", ctx.get_offset());
 
     let stacking_openings = &stacking_wire.stacking_openings;
     let mut final_sum = ext_chip.zero(ctx);
@@ -309,7 +309,7 @@ pub(crate) fn constrain_stacked_reduction(
 
     ext_chip.assert_equal(ctx, final_claim, final_sum);
 
-    profiler.pop(ctx.advice.len());
+    profiler.pop(ctx.get_offset());
 
     StackedReductionIntermediatesWire {
         stacking_openings: stacking_openings.clone(),

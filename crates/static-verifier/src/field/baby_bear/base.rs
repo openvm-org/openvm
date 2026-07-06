@@ -8,7 +8,7 @@ use halo2_base::{
     },
     safe_types::SafeBool,
     utils::{bigint_to_fe, biguint_to_fe, bit_length, fe_to_bigint, modulus, BigPrimeField},
-    AssignedValue, Context, QuantumCell,
+    AssignedValue, Context, ContextKind, QuantumCell,
 };
 use itertools::Itertools;
 use num_bigint::{BigInt, BigUint};
@@ -112,7 +112,7 @@ impl BabyBearChip {
     /// The Rust input is canonicalized for the honest witness assignment, but the
     /// circuit does not prove the advice cell is `< p`. Use `load_reduced_witness`
     /// for values that will be absorbed into transcripts or hashes.
-    pub fn load_witness(&self, ctx: &mut Context<Fr>, value: BabyBear) -> BabyBearWire {
+    pub fn load_witness(&self, ctx: &mut impl ContextKind<Fr>, value: BabyBear) -> BabyBearWire {
         let value = ctx.load_witness(Fr::from(PrimeField64::as_canonical_u64(&value)));
         self.range.range_check(ctx, value, BABYBEAR_MAX_BITS);
         BabyBearWire {
@@ -124,7 +124,7 @@ impl BabyBearChip {
     /// Loads a witness and constrains it to the canonical BabyBear range `[0, p)`.
     pub fn load_reduced_witness(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         value: BabyBear,
     ) -> ReducedBabyBearWire {
         let value = ctx.load_witness(Fr::from(PrimeField64::as_canonical_u64(&value)));
@@ -136,7 +136,7 @@ impl BabyBearChip {
         })
     }
 
-    pub fn load_constant(&self, ctx: &mut Context<Fr>, value: BabyBear) -> BabyBearWire {
+    pub fn load_constant(&self, ctx: &mut impl ContextKind<Fr>, value: BabyBear) -> BabyBearWire {
         let key = value.as_canonical_u64();
         if let Some(&cached) = self.const_cache.borrow().get(&key) {
             return cached;
@@ -158,14 +158,14 @@ impl BabyBearChip {
     /// Loads a canonical BabyBear constant and returns it with reduced type evidence.
     pub fn load_reduced_constant(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         value: BabyBear,
     ) -> ReducedBabyBearWire {
         // Constants are canonical by construction.
         ReducedBabyBearWire(self.load_constant(ctx, value))
     }
 
-    pub fn reduce(&self, ctx: &mut Context<Fr>, a: BabyBearWire) -> BabyBearWire {
+    pub fn reduce(&self, ctx: &mut impl ContextKind<Fr>, a: BabyBearWire) -> BabyBearWire {
         assert!(a.max_bits <= Fr::CAPACITY as usize - RESERVED_HIGH_BITS);
         guarded_debug_assert!(fe_to_bigint(a.value.value()).bits() as usize <= a.max_bits);
         let (_, r) = signed_div_mod(&self.range, ctx, a.value, a.max_bits);
@@ -179,7 +179,7 @@ impl BabyBearChip {
 
     /// Reduce max_bits if possible. This function doesn't guarantee that the actual value is within
     /// BabyBear.
-    pub fn reduce_max_bits(&self, ctx: &mut Context<Fr>, a: BabyBearWire) -> BabyBearWire {
+    pub fn reduce_max_bits(&self, ctx: &mut impl ContextKind<Fr>, a: BabyBearWire) -> BabyBearWire {
         if a.max_bits > BABYBEAR_MAX_BITS {
             self.reduce(ctx, a)
         } else {
@@ -189,7 +189,7 @@ impl BabyBearChip {
 
     pub fn add(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         mut a: BabyBearWire,
         mut b: BabyBearWire,
     ) -> BabyBearWire {
@@ -206,7 +206,7 @@ impl BabyBearChip {
         c
     }
 
-    pub fn neg(&self, ctx: &mut Context<Fr>, a: BabyBearWire) -> BabyBearWire {
+    pub fn neg(&self, ctx: &mut impl ContextKind<Fr>, a: BabyBearWire) -> BabyBearWire {
         let value = self.gate().neg(ctx, a.value);
         let b = BabyBearWire {
             value,
@@ -218,7 +218,7 @@ impl BabyBearChip {
 
     pub fn sub(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         mut a: BabyBearWire,
         mut b: BabyBearWire,
     ) -> BabyBearWire {
@@ -239,7 +239,7 @@ impl BabyBearChip {
 
     pub fn mul(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         mut a: BabyBearWire,
         mut b: BabyBearWire,
     ) -> BabyBearWire {
@@ -262,7 +262,7 @@ impl BabyBearChip {
 
     pub fn mul_add(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         mut a: BabyBearWire,
         mut b: BabyBearWire,
         mut c: BabyBearWire,
@@ -292,7 +292,7 @@ impl BabyBearChip {
 
     pub fn div(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         mut a: BabyBearWire,
         mut b: BabyBearWire,
     ) -> BabyBearWire {
@@ -332,7 +332,7 @@ impl BabyBearChip {
     // multiplication.
     pub(super) fn special_inner_product(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         a: &mut [BabyBearWire],
         b: &mut [BabyBearWire],
         s: usize,
@@ -391,7 +391,7 @@ impl BabyBearChip {
 
     pub fn select(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         cond: SafeBool<Fr>,
         a: BabyBearWire,
         b: BabyBearWire,
@@ -401,7 +401,7 @@ impl BabyBearChip {
         BabyBearWire { value, max_bits }
     }
 
-    pub fn assert_zero(&self, ctx: &mut Context<Fr>, a: BabyBearWire) {
+    pub fn assert_zero(&self, ctx: &mut impl ContextKind<Fr>, a: BabyBearWire) {
         guarded_debug_assert_eq!(a.to_baby_bear(), BabyBear::ZERO);
         assert!(a.max_bits <= Fr::CAPACITY as usize - RESERVED_HIGH_BITS);
         let a_num_bits = a.max_bits;
@@ -411,17 +411,18 @@ impl BabyBearChip {
         // The honest input is congruent to zero modulo the BabyBear prime, so
         // Euclidean division by `b` has exact remainder zero.
         let (div, _) = a_val.div_mod_floor(&b.clone().into());
-        let div = bigint_to_fe(&div);
+        let div_val: Fr = bigint_to_fe(&div);
+        let start = ctx.get_offset();
         ctx.assign_region(
             [
                 QuantumCell::Constant(Fr::ZERO),
                 QuantumCell::Constant(biguint_to_fe(&b)),
-                QuantumCell::Witness(div),
+                QuantumCell::Witness(div_val),
                 a.value.into(),
             ],
             [0],
         );
-        let div = ctx.get(-2);
+        let div = ctx.to_assigned_value(QuantumCell::Witness(div_val), start + 2);
         // Constrain the exact quotient to the range implied by `|a| < 2^a_num_bits`.
         let bound = (BigUint::from(1u32) << (a_num_bits as u32)) / &b;
         let shifted_div =
@@ -433,32 +434,32 @@ impl BabyBearChip {
             .range_check(ctx, shifted_div, (bound * 2u32 + 1u32).bits() as usize);
     }
 
-    pub fn assert_equal(&self, ctx: &mut Context<Fr>, a: BabyBearWire, b: BabyBearWire) {
+    pub fn assert_equal(&self, ctx: &mut impl ContextKind<Fr>, a: BabyBearWire, b: BabyBearWire) {
         guarded_debug_assert_eq!(a.to_baby_bear(), b.to_baby_bear());
         let diff = self.sub(ctx, a, b);
         self.assert_zero(ctx, diff);
     }
 
-    pub fn zero(&self, ctx: &mut Context<Fr>) -> BabyBearWire {
+    pub fn zero(&self, ctx: &mut impl ContextKind<Fr>) -> BabyBearWire {
         self.load_constant(ctx, BabyBear::ZERO)
     }
 
-    pub fn one(&self, ctx: &mut Context<Fr>) -> BabyBearWire {
+    pub fn one(&self, ctx: &mut impl ContextKind<Fr>) -> BabyBearWire {
         self.load_constant(ctx, BabyBear::ONE)
     }
 
-    pub fn mul_const(&self, ctx: &mut Context<Fr>, a: BabyBearWire, c: BabyBear) -> BabyBearWire {
+    pub fn mul_const(&self, ctx: &mut impl ContextKind<Fr>, a: BabyBearWire, c: BabyBear) -> BabyBearWire {
         let c_wire = self.load_constant(ctx, c);
         self.mul(ctx, a, c_wire)
     }
 
-    pub fn square(&self, ctx: &mut Context<Fr>, a: BabyBearWire) -> BabyBearWire {
+    pub fn square(&self, ctx: &mut impl ContextKind<Fr>, a: BabyBearWire) -> BabyBearWire {
         self.mul(ctx, a, a)
     }
 
     pub fn pow_power_of_two(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         a: BabyBearWire,
         n: usize,
     ) -> BabyBearWire {
@@ -490,7 +491,7 @@ impl BabyBearChip {
 /// representative `A = fe_to_bigint(a)` satisfies `|A| < 2^a_num_bits`.
 fn signed_div_mod<F>(
     range: &RangeChip<F>,
-    ctx: &mut Context<F>,
+    ctx: &mut impl ContextKind<F>,
     a: impl Into<QuantumCell<F>>,
     a_num_bits: usize,
 ) -> (AssignedValue<F>, AssignedValue<F>)
@@ -568,18 +569,19 @@ where
     let a_val = fe_to_bigint(a.value());
     assert!(a_val.bits() <= a_num_bits as u64);
     let (div, rem) = a_val.div_mod_floor(&b.clone().into());
-    let [div, rem] = [div, rem].map(|v| bigint_to_fe(&v));
+    let [div_val, rem_val] = [div, rem].map(|v| bigint_to_fe(&v));
+    let start = ctx.get_offset();
     ctx.assign_region(
         [
-            QuantumCell::Witness(rem),
+            QuantumCell::Witness(rem_val),
             QuantumCell::Constant(biguint_to_fe(&b)),
-            QuantumCell::Witness(div),
+            QuantumCell::Witness(div_val),
             a,
         ],
         [0],
     );
-    let rem = ctx.get(-4);
-    let div = ctx.get(-2);
+    let rem = ctx.to_assigned_value(QuantumCell::Witness(rem_val), start);
+    let div = ctx.to_assigned_value(QuantumCell::Witness(div_val), start + 2);
     // `bound = ceil((2^a_num_bits - 1) / b)`; the bit-length range check below admits
     // `div in [-bound, 3*bound+1]`, and the assertion enforces the no-wrap headroom
     // `(4 * bound + 2) * b <= p`. See the proof above for both.

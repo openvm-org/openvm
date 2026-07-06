@@ -825,9 +825,9 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
     let ext_chip = BabyBearExtChip::new(BabyBearChip::new(std::sync::Arc::new(range)));
     let ctx = builder.main(0);
 
-    let initial_cells = ctx.advice.len();
+    let initial_cells = ctx.get_offset();
     circuit.populate_verify_stark_constraints(ctx, &ext_chip, &root_proof);
-    let final_cells = ctx.advice.len();
+    let final_cells = ctx.get_offset();
     eprintln!(
         "Static verifier cell count: {} (delta: {})",
         final_cells,

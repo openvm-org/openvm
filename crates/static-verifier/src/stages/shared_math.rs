@@ -1,4 +1,4 @@
-use halo2_base::Context;
+use halo2_base::{Context, ContextKind};
 use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
 use crate::{
@@ -9,7 +9,7 @@ use crate::{
 pub(crate) type BabyBearExtWire = crate::field::baby_bear::BabyBearExtWire;
 
 pub(crate) fn column_openings_by_rot_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     openings: &[BabyBearExtWire],
     need_rot: bool,
@@ -33,7 +33,7 @@ pub(crate) fn column_openings_by_rot_assigned(
 }
 
 pub(crate) fn horner_eval_ext_poly_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     coeffs: &[BabyBearExtWire],
     x: &BabyBearExtWire,
@@ -53,7 +53,7 @@ pub(crate) fn horner_eval_ext_poly_assigned(
 }
 
 pub(crate) fn horner_eval_ext_poly_f_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     coeffs: &[BabyBearExtWire],
     x: &BabyBearWire,
@@ -72,7 +72,7 @@ pub(crate) fn horner_eval_ext_poly_f_assigned(
 }
 
 pub(crate) fn interpolate_quadratic_at_012_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     evals: [&BabyBearExtWire; 3],
     x: &BabyBearExtWire,

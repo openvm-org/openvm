@@ -5,7 +5,7 @@ use std::{cell::RefCell, vec::Vec};
 #[cfg(test)]
 use halo2_base::AssignedValue;
 use halo2_base::{
-    gates::range::RangeChip, halo2_proofs::halo2curves::bn256::Fr, safe_types::SafeBool, Context,
+    gates::range::RangeChip, halo2_proofs::halo2curves::bn256::Fr, safe_types::SafeBool, Context, ContextKind,
 };
 use itertools::Itertools;
 #[cfg(test)]
@@ -99,7 +99,7 @@ impl BabyBearExt4Chip {
     /// The Rust input is canonicalized for the honest witness assignment, but the
     /// circuit does not prove each advice cell is `< p`. Use
     /// `load_reduced_witness` for transcript/hash inputs.
-    pub fn load_witness(&self, ctx: &mut Context<Fr>, value: BabyBearExt4) -> BabyBearExt4Wire {
+    pub fn load_witness(&self, ctx: &mut impl ContextKind<Fr>, value: BabyBearExt4) -> BabyBearExt4Wire {
         let coeffs = value.as_basis_coefficients_slice();
         BabyBearExt4Wire(array::from_fn(|i| self.base.load_witness(ctx, coeffs[i])))
     }
@@ -107,7 +107,7 @@ impl BabyBearExt4Chip {
     /// Loads each coefficient and constrains it to the canonical BabyBear range.
     pub fn load_reduced_witness(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         value: BabyBearExt4,
     ) -> ReducedBabyBearExt4Wire {
         let coeffs = value.as_basis_coefficients_slice();
@@ -120,7 +120,7 @@ impl BabyBearExt4Chip {
     /// with reduced type evidence.
     pub fn load_reduced_constant(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         value: BabyBearExt4,
     ) -> ReducedBabyBearExt4Wire {
         let coeffs = value.as_basis_coefficients_slice();
@@ -129,13 +129,13 @@ impl BabyBearExt4Chip {
             self.base.load_reduced_constant(ctx, coeffs[i])
         }))
     }
-    pub fn load_constant(&self, ctx: &mut Context<Fr>, value: BabyBearExt4) -> BabyBearExt4Wire {
+    pub fn load_constant(&self, ctx: &mut impl ContextKind<Fr>, value: BabyBearExt4) -> BabyBearExt4Wire {
         let coeffs = value.as_basis_coefficients_slice();
         BabyBearExt4Wire(array::from_fn(|i| self.base.load_constant(ctx, coeffs[i])))
     }
     pub fn add(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         a: BabyBearExt4Wire,
         b: BabyBearExt4Wire,
     ) -> BabyBearExt4Wire {
@@ -149,7 +149,7 @@ impl BabyBearExt4Chip {
         )
     }
 
-    pub fn neg(&self, ctx: &mut Context<Fr>, a: BabyBearExt4Wire) -> BabyBearExt4Wire {
+    pub fn neg(&self, ctx: &mut impl ContextKind<Fr>, a: BabyBearExt4Wire) -> BabyBearExt4Wire {
         BabyBearExt4Wire(
             a.0.iter()
                 .map(|x| self.base.neg(ctx, *x))
@@ -161,7 +161,7 @@ impl BabyBearExt4Chip {
 
     pub fn sub(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         a: BabyBearExt4Wire,
         b: BabyBearExt4Wire,
     ) -> BabyBearExt4Wire {
@@ -177,7 +177,7 @@ impl BabyBearExt4Chip {
 
     pub fn scalar_mul(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         a: BabyBearExt4Wire,
         b: BabyBearWire,
     ) -> BabyBearExt4Wire {
@@ -194,7 +194,7 @@ impl BabyBearExt4Chip {
     /// Uses `mul_add` gates to save cells vs separate `scalar_mul` + `add`.
     pub fn scalar_mul_add(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         a: BabyBearExt4Wire,
         b: BabyBearWire,
         c: BabyBearExt4Wire,
@@ -211,7 +211,7 @@ impl BabyBearExt4Chip {
 
     pub fn select(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         cond: SafeBool<Fr>,
         a: BabyBearExt4Wire,
         b: BabyBearExt4Wire,
@@ -226,13 +226,13 @@ impl BabyBearExt4Chip {
         )
     }
 
-    pub fn assert_zero(&self, ctx: &mut Context<Fr>, a: BabyBearExt4Wire) {
+    pub fn assert_zero(&self, ctx: &mut impl ContextKind<Fr>, a: BabyBearExt4Wire) {
         for x in a.0.iter() {
             self.base.assert_zero(ctx, *x);
         }
     }
 
-    pub fn assert_equal(&self, ctx: &mut Context<Fr>, a: BabyBearExt4Wire, b: BabyBearExt4Wire) {
+    pub fn assert_equal(&self, ctx: &mut impl ContextKind<Fr>, a: BabyBearExt4Wire, b: BabyBearExt4Wire) {
         for (a, b) in a.0.iter().zip(b.0.iter()) {
             self.base.assert_equal(ctx, *a, *b);
         }
@@ -240,7 +240,7 @@ impl BabyBearExt4Chip {
 
     pub fn mul(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         mut a: BabyBearExt4Wire,
         mut b: BabyBearExt4Wire,
     ) -> BabyBearExt4Wire {
@@ -265,7 +265,7 @@ impl BabyBearExt4Chip {
 
     pub fn div(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         a: BabyBearExt4Wire,
         b: BabyBearExt4Wire,
     ) -> BabyBearExt4Wire {
@@ -289,7 +289,7 @@ impl BabyBearExt4Chip {
         c
     }
 
-    pub fn reduce_max_bits(&self, ctx: &mut Context<Fr>, a: BabyBearExt4Wire) -> BabyBearExt4Wire {
+    pub fn reduce_max_bits(&self, ctx: &mut impl ContextKind<Fr>, a: BabyBearExt4Wire) -> BabyBearExt4Wire {
         BabyBearExt4Wire(
             a.0.into_iter()
                 .map(|x| self.base.reduce_max_bits(ctx, x))
@@ -307,11 +307,11 @@ impl BabyBearExt4Chip {
         self.base.range()
     }
 
-    pub fn zero(&self, ctx: &mut Context<Fr>) -> BabyBearExt4Wire {
+    pub fn zero(&self, ctx: &mut impl ContextKind<Fr>) -> BabyBearExt4Wire {
         self.from_base_const(ctx, BabyBear::ZERO)
     }
 
-    pub fn from_base_const(&self, ctx: &mut Context<Fr>, value: BabyBear) -> BabyBearExt4Wire {
+    pub fn from_base_const(&self, ctx: &mut impl ContextKind<Fr>, value: BabyBear) -> BabyBearExt4Wire {
         let base_val = self.base.load_constant(ctx, value);
         #[cfg(test)]
         RECORDED_EXT_BASE_CONSTS.with(|records| {
@@ -324,14 +324,14 @@ impl BabyBearExt4Chip {
         BabyBearExt4Wire([base_val, z, z, z])
     }
 
-    pub fn from_base_var(&self, ctx: &mut Context<Fr>, value: BabyBearWire) -> BabyBearExt4Wire {
+    pub fn from_base_var(&self, ctx: &mut impl ContextKind<Fr>, value: BabyBearWire) -> BabyBearExt4Wire {
         let z = self.base.load_constant(ctx, BabyBear::ZERO);
         BabyBearExt4Wire([value, z, z, z])
     }
 
     pub fn mul_base_const(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         a: BabyBearExt4Wire,
         c: BabyBear,
     ) -> BabyBearExt4Wire {
@@ -339,13 +339,13 @@ impl BabyBearExt4Chip {
         self.scalar_mul(ctx, a, c_wire)
     }
 
-    pub fn square(&self, ctx: &mut Context<Fr>, a: BabyBearExt4Wire) -> BabyBearExt4Wire {
+    pub fn square(&self, ctx: &mut impl ContextKind<Fr>, a: BabyBearExt4Wire) -> BabyBearExt4Wire {
         self.mul(ctx, a, a)
     }
 
     pub fn pow_power_of_two(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         a: BabyBearExt4Wire,
         n: usize,
     ) -> BabyBearExt4Wire {

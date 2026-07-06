@@ -5,7 +5,7 @@ use halo2_base::{
     gates::{GateInstructions, RangeInstructions},
     halo2_proofs::arithmetic::Field,
     utils::{biguint_to_fe, fe_to_biguint},
-    AssignedValue, Context, QuantumCell,
+    AssignedValue, Context, ContextKind, QuantumCell,
 };
 use num_bigint::BigUint;
 use openvm_stark_sdk::{
@@ -73,7 +73,7 @@ fn base_baby_bear_decomp_bounds() -> &'static BaseBabyBearDecompBounds {
 /// raw digit cells plus top quotient as witnesses. Constraints must be enforced
 /// separately before the digits are wrapped as `BabyBearWire`s.
 fn load_base_baby_bear_decomposition_witness(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     packed: AssignedValue<Fr>,
 ) -> ([AssignedValue<Fr>; NUM_SAMPLES_PER_WORD], AssignedValue<Fr>) {
     let p = BigUint::from(BABY_BEAR_MODULUS_U64);
@@ -97,7 +97,7 @@ fn load_base_baby_bear_decomposition_witness(
 }
 
 fn constrain_base_baby_bear_decomposition(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     gate: &impl GateInstructions<Fr>,
     range: &impl RangeInstructions<Fr>,
     packed: AssignedValue<Fr>,
@@ -163,7 +163,7 @@ fn constrain_base_baby_bear_decomposition(
 }
 
 fn decompose_bn254_to_base_baby_bear_digits(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     baby_bear: &BabyBearChip,
     packed: AssignedValue<Fr>,
 ) -> [BabyBearWire; NUM_SAMPLES_PER_WORD] {
@@ -216,7 +216,7 @@ impl TranscriptChip {
         &self.baby_bear
     }
 
-    pub fn new(ctx: &mut Context<Fr>, baby_bear: BabyBearChip) -> Self {
+    pub fn new(ctx: &mut impl ContextKind<Fr>, baby_bear: BabyBearChip) -> Self {
         let zero = ctx.load_zero();
         Self {
             baby_bear,
@@ -228,7 +228,7 @@ impl TranscriptChip {
         }
     }
 
-    pub fn load_digest_witness(ctx: &mut Context<Fr>, digest: RootDigest) -> DigestWire {
+    pub fn load_digest_witness(ctx: &mut impl ContextKind<Fr>, digest: RootDigest) -> DigestWire {
         DigestWire {
             elems: array::from_fn(|i| ctx.load_witness(bn254_to_halo2(digest[i]))),
         }
@@ -236,7 +236,7 @@ impl TranscriptChip {
 
     // --- Low-level sponge (matches DuplexSponge::absorb/squeeze) ---
 
-    fn sponge_absorb(&mut self, ctx: &mut Context<Fr>, value: AssignedValue<Fr>) {
+    fn sponge_absorb(&mut self, ctx: &mut impl ContextKind<Fr>, value: AssignedValue<Fr>) {
         self.sponge_state[self.absorb_idx] = value;
         self.absorb_idx += 1;
         if self.absorb_idx == POSEIDON2_RATE {
@@ -246,7 +246,7 @@ impl TranscriptChip {
         }
     }
 
-    fn sponge_squeeze(&mut self, ctx: &mut Context<Fr>) -> AssignedValue<Fr> {
+    fn sponge_squeeze(&mut self, ctx: &mut impl ContextKind<Fr>) -> AssignedValue<Fr> {
         if self.absorb_idx != 0 || self.sample_idx == 0 {
             self.permute_state(ctx);
             self.absorb_idx = 0;
@@ -256,7 +256,7 @@ impl TranscriptChip {
         self.sponge_state[self.sample_idx]
     }
 
-    fn permute_state(&mut self, ctx: &mut Context<Fr>) {
+    fn permute_state(&mut self, ctx: &mut impl ContextKind<Fr>) {
         let gate = self.baby_bear.range().gate();
         let mut state = Poseidon2State::new(self.sponge_state);
         state.permutation(ctx, gate, &POSEIDON2_PARAMS);
@@ -273,7 +273,7 @@ impl TranscriptChip {
         self.sample_buf.clear();
     }
 
-    fn flush_observe_buf(&mut self, ctx: &mut Context<Fr>) {
+    fn flush_observe_buf(&mut self, ctx: &mut impl ContextKind<Fr>) {
         if !self.observe_buf.is_empty() {
             let gate = self.baby_bear.range().gate();
             let packed = pack_base_2_31_cells(ctx, gate, &self.observe_buf);
@@ -282,7 +282,7 @@ impl TranscriptChip {
         }
     }
 
-    fn absorb_digest(&mut self, ctx: &mut Context<Fr>, digest: &DigestWire) {
+    fn absorb_digest(&mut self, ctx: &mut impl ContextKind<Fr>, digest: &DigestWire) {
         self.invalidate_samples();
         self.flush_observe_buf(ctx);
         for &elem in &digest.elems {
@@ -290,7 +290,7 @@ impl TranscriptChip {
         }
     }
 
-    pub fn observe(&mut self, ctx: &mut Context<Fr>, value: &ReducedBabyBearWire) {
+    pub fn observe(&mut self, ctx: &mut impl ContextKind<Fr>, value: &ReducedBabyBearWire) {
         self.invalidate_samples();
         self.observe_buf.push(*value);
         if self.observe_buf.len() == NUM_OBS_PER_WORD {
@@ -298,18 +298,18 @@ impl TranscriptChip {
         }
     }
 
-    pub fn observe_ext(&mut self, ctx: &mut Context<Fr>, value: &ReducedBabyBearExtWire) {
+    pub fn observe_ext(&mut self, ctx: &mut impl ContextKind<Fr>, value: &ReducedBabyBearExtWire) {
         for coeff in value.coeffs() {
             self.observe(ctx, coeff);
         }
     }
 
     /// Absorb digest words directly into the sponge (lossless).
-    pub fn observe_commit(&mut self, ctx: &mut Context<Fr>, digest: &DigestWire) {
+    pub fn observe_commit(&mut self, ctx: &mut impl ContextKind<Fr>, digest: &DigestWire) {
         self.absorb_digest(ctx, digest);
     }
 
-    pub fn sample(&mut self, ctx: &mut Context<Fr>) -> BabyBearWire {
+    pub fn sample(&mut self, ctx: &mut impl ContextKind<Fr>) -> BabyBearWire {
         if let Some(val) = self.sample_buf.pop() {
             return val;
         }
@@ -327,12 +327,12 @@ impl TranscriptChip {
             .expect("sample_buf should be non-empty")
     }
 
-    pub fn sample_ext(&mut self, ctx: &mut Context<Fr>) -> BabyBearExtWire {
+    pub fn sample_ext(&mut self, ctx: &mut impl ContextKind<Fr>) -> BabyBearExtWire {
         let coeffs = array::from_fn(|_| self.sample(ctx));
         BabyBearExt4Wire(coeffs)
     }
 
-    pub fn sample_bits(&mut self, ctx: &mut Context<Fr>, bits: usize) -> AssignedValue<Fr> {
+    pub fn sample_bits(&mut self, ctx: &mut impl ContextKind<Fr>, bits: usize) -> AssignedValue<Fr> {
         assert!(
             bits < (u32::BITS as usize),
             "sample_bits requires bits < 32: {bits}"
@@ -356,7 +356,7 @@ impl TranscriptChip {
     /// Asserts that the PoW witness must pass.
     pub fn check_witness(
         &mut self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         bits: usize,
         witness: &ReducedBabyBearWire,
     ) {

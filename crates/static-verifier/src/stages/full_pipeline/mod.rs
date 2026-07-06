@@ -1,4 +1,4 @@
-use halo2_base::{utils::biguint_to_fe, AssignedValue, Context};
+use halo2_base::{utils::biguint_to_fe, AssignedValue, Context, ContextKind};
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{BabyBearBn254Poseidon2Config as RootConfig, Bn254Scalar},
     openvm_stark_backend::{
@@ -51,7 +51,7 @@ pub(crate) fn digest_scalar_to_fr(value: Bn254Scalar) -> Fr {
 /// Load proof data into Halo2 cells. `log_heights_per_air` must match this circuit's fixed heights;
 /// host-side asserts that per-AIR log heights extracted from the proof match `log_heights_per_air`.
 pub fn load_proof_wire(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     proof: &Proof<RootConfig>,
     log_heights_per_air: &[usize],
@@ -113,7 +113,7 @@ pub fn load_proof_wire(
 
 #[allow(clippy::too_many_arguments)]
 fn observe_preamble(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     transcript: &mut TranscriptChip,
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     log_heights_per_air: &[usize],
@@ -170,7 +170,7 @@ fn observe_preamble(
 /// Returns the two statement public inputs as assigned cells:
 /// `[mvk_pre_hash_root, common_main_commit_root]`.
 pub fn constrained_verify(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     root_vk: &MultiStarkVerifyingKey<RootConfig>,
     proof_wire: &ProofWire, /* Root proof */
@@ -189,12 +189,12 @@ pub fn constrained_verify(
         .map(|&air_id| log_heights_per_air[air_id] as isize - l_skip as isize)
         .collect();
 
-    let mut profiler = crate::profiling::CellProfiler::new("constrained_verify", ctx.advice.len());
+    let mut profiler = crate::profiling::CellProfiler::new("constrained_verify", ctx.get_offset());
 
     let mvk_pre_hash_root = ctx.load_constant(digest_scalar_to_fr(root_vk.pre_hash[0]));
     let mut transcript = TranscriptChip::new(ctx, ext_chip.base().clone());
 
-    profiler.push("observe_preamble", ctx.advice.len());
+    profiler.push("observe_preamble", ctx.get_offset());
     observe_preamble(
         ctx,
         &mut transcript,
@@ -205,9 +205,9 @@ pub fn constrained_verify(
         digest_wire_from_root(mvk_pre_hash_root),
         digest_wire_from_root(proof_wire.common_main_commit_root),
     );
-    profiler.pop(ctx.advice.len());
+    profiler.pop(ctx.get_offset());
 
-    profiler.push("batch_constraints", ctx.advice.len());
+    profiler.push("batch_constraints", ctx.get_offset());
     let batch = constrain_batch_constraints_verification(
         ctx,
         ext_chip,
@@ -220,11 +220,11 @@ pub fn constrained_verify(
         proof_wire.public_values.clone(),
         &mut profiler,
     );
-    profiler.pop(ctx.advice.len());
+    profiler.pop(ctx.get_offset());
 
     let need_rot_per_commit = get_need_rot_per_commit(&root_vk.inner, trace_id_to_air_id);
 
-    profiler.push("stacked_reduction", ctx.advice.len());
+    profiler.push("stacked_reduction", ctx.get_offset());
     let stacked_reduction = constrain_stacked_reduction(
         ctx,
         ext_chip,
@@ -238,7 +238,7 @@ pub fn constrained_verify(
         &batch.r,
         &mut profiler,
     );
-    profiler.pop(ctx.advice.len());
+    profiler.pop(ctx.get_offset());
 
     let u_cube = {
         let u = &stacked_reduction.u;
@@ -266,7 +266,7 @@ pub fn constrained_verify(
         commits
     };
 
-    profiler.push("whir_verification", ctx.advice.len());
+    profiler.push("whir_verification", ctx.get_offset());
     constrain_whir_verification(
         ctx,
         ext_chip,
@@ -278,9 +278,9 @@ pub fn constrained_verify(
         &u_cube,
         &mut profiler,
     );
-    profiler.pop(ctx.advice.len());
+    profiler.pop(ctx.get_offset());
 
-    profiler.print(ctx.advice.len());
+    profiler.print(ctx.get_offset());
 
     #[cfg(feature = "cell-profiling")]
     if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
@@ -288,12 +288,12 @@ pub fn constrained_verify(
         profiler.write_flamegraph(
             &format!("{dir}/constrained_verify.svg"),
             "Constrained Verify Sub-stages",
-            ctx.advice.len(),
+            ctx.get_offset(),
         );
         profiler.write_flamegraph_reversed(
             &format!("{dir}/constrained_verify_rev.svg"),
             "Constrained Verify Sub-stages (reversed)",
-            ctx.advice.len(),
+            ctx.get_offset(),
         );
     }
 }

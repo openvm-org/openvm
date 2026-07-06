@@ -4,7 +4,7 @@ use core::cmp::Reverse;
 use std::{borrow::Borrow, fmt, sync::Arc};
 
 use halo2_base::{
-    gates::circuit::builder::BaseCircuitBuilder, halo2_proofs::halo2curves::bn256::Fr, Context,
+    gates::circuit::builder::BaseCircuitBuilder, halo2_proofs::halo2curves::bn256::Fr, Context, ContextKind,
 };
 use itertools::Itertools;
 use openvm_cpu_backend::CpuBackend;
@@ -166,17 +166,17 @@ impl StaticVerifierCircuit {
     /// Production uses with the continuations framework **must** use [`Self::populate`] instead.
     pub fn populate_verify_stark_constraints(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         ext_chip: &BabyBearExtChip,
         proof: &Proof<RootConfig>,
     ) -> ProofWire {
-        let mut profiler = crate::profiling::CellProfiler::new("static_verifier", ctx.advice.len());
+        let mut profiler = crate::profiling::CellProfiler::new("static_verifier", ctx.get_offset());
 
-        profiler.push("load_proof_wire", ctx.advice.len());
+        profiler.push("load_proof_wire", ctx.get_offset());
         let proof_wire = load_proof_wire(ctx, ext_chip, proof, &self.log_heights_per_air);
-        profiler.pop(ctx.advice.len());
+        profiler.pop(ctx.get_offset());
 
-        profiler.push("constrained_verify", ctx.advice.len());
+        profiler.push("constrained_verify", ctx.get_offset());
         constrained_verify(
             ctx,
             ext_chip,
@@ -186,9 +186,9 @@ impl StaticVerifierCircuit {
             &self.log_heights_per_air,
             &self.stacked_layouts,
         );
-        profiler.pop(ctx.advice.len());
+        profiler.pop(ctx.get_offset());
 
-        profiler.print(ctx.advice.len());
+        profiler.print(ctx.get_offset());
 
         #[cfg(feature = "cell-profiling")]
         if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
@@ -196,12 +196,12 @@ impl StaticVerifierCircuit {
             profiler.write_flamegraph(
                 &format!("{dir}/static_verifier_constraints.svg"),
                 "Static Verifier Constraints",
-                ctx.advice.len(),
+                ctx.get_offset(),
             );
             profiler.write_flamegraph_reversed(
                 &format!("{dir}/static_verifier_constraints_rev.svg"),
                 "Static Verifier Constraints (reversed)",
-                ctx.advice.len(),
+                ctx.get_offset(),
             );
         }
 
@@ -218,11 +218,11 @@ impl StaticVerifierCircuit {
         let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
         let ctx = builder.main(0);
 
-        let mut profiler = crate::profiling::CellProfiler::new("populate", ctx.advice.len());
+        let mut profiler = crate::profiling::CellProfiler::new("populate", ctx.get_offset());
 
-        profiler.push("verify_stark_constraints", ctx.advice.len());
+        profiler.push("verify_stark_constraints", ctx.get_offset());
         let proof_wire = &self.populate_verify_stark_constraints(ctx, &ext_chip, proof);
-        profiler.pop(ctx.advice.len());
+        profiler.pop(ctx.get_offset());
 
         debug_assert!(
             proof_wire
@@ -231,7 +231,7 @@ impl StaticVerifierCircuit {
                 .all(|commits| commits.is_empty()),
             "RootVerifierCircuit has no cached trace"
         );
-        profiler.push("pin_dag_onion_commit", ctx.advice.len());
+        profiler.push("pin_dag_onion_commit", ctx.get_offset());
         let &DagCommitPvs::<_> {
             commit: onion_commit,
         } = proof_wire.public_values[CONSTRAINT_EVAL_AIR_ID]
@@ -246,11 +246,11 @@ impl StaticVerifierCircuit {
                 .base()
                 .assert_equal(ctx, bb_wire.into(), loaded_const);
         }
-        profiler.pop(ctx.advice.len());
+        profiler.pop(ctx.get_offset());
 
-        profiler.push("extract_public_values", ctx.advice.len());
+        profiler.push("extract_public_values", ctx.get_offset());
         let pvs_wire = extract_public_values(ctx, ext_chip.base(), proof_wire);
-        profiler.pop(ctx.advice.len());
+        profiler.pop(ctx.get_offset());
 
         #[cfg(feature = "cell-profiling")]
         if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
@@ -258,12 +258,12 @@ impl StaticVerifierCircuit {
             profiler.write_flamegraph(
                 &format!("{dir}/populate.svg"),
                 "Static Verifier Populate",
-                ctx.advice.len(),
+                ctx.get_offset(),
             );
             profiler.write_flamegraph_reversed(
                 &format!("{dir}/populate_rev.svg"),
                 "Static Verifier Populate (reversed)",
-                ctx.advice.len(),
+                ctx.get_offset(),
             );
         }
 

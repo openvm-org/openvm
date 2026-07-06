@@ -1,7 +1,7 @@
 use halo2_base::{
     gates::{GateInstructions, RangeInstructions},
     utils::biguint_to_fe,
-    AssignedValue, Context, QuantumCell,
+    AssignedValue, Context, ContextKind, QuantumCell,
 };
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{
@@ -55,7 +55,7 @@ pub struct WhirProofWire {
 }
 
 pub(crate) fn load_whir_proof_wire(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     base_chip: &crate::field::baby_bear::BabyBearChip,
     ext_chip: &BabyBearExtChip,
     whir_proof: &WhirProof<RootConfig>,
@@ -190,7 +190,7 @@ fn digest_to_fr(digest: RootDigest) -> Fr {
 }
 
 fn eval_mobius_eq_mle_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     u: &[BabyBearExtWire],
     x: &[BabyBearExtWire],
@@ -213,7 +213,7 @@ fn eval_mobius_eq_mle_assigned(
 }
 
 fn eval_mle_evals_at_point_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     evals: &[BabyBearExtWire],
     x: &[BabyBearExtWire],
@@ -242,7 +242,7 @@ fn eval_mle_evals_at_point_assigned(
 }
 
 fn invert_base_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     base_chip: &BabyBearChip,
     value: BabyBearWire,
 ) -> BabyBearWire {
@@ -251,7 +251,7 @@ fn invert_base_assigned(
 }
 
 fn query_root_from_bits_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     base_chip: &BabyBearChip,
     query_bits: &[AssignedValue<Fr>],
     log_rs_domain_size: usize,
@@ -281,7 +281,7 @@ fn query_root_from_bits_assigned(
 }
 
 fn binary_k_fold_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     mut values: Vec<BabyBearExtWire>,
     alphas: &[BabyBearExtWire],
@@ -337,7 +337,7 @@ fn binary_k_fold_assigned(
 }
 
 fn tree_compress_assigned_digests(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     digests: Vec<AssignedValue<Fr>>,
 ) -> AssignedValue<Fr> {
@@ -364,7 +364,7 @@ fn tree_compress_assigned_digests(
 }
 
 fn constrain_merkle_path(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     query_bits: &[AssignedValue<Fr>],
     merkle_path: &MerklePathWire,
@@ -405,7 +405,7 @@ fn constrain_merkle_path(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn constrain_whir_verification(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     transcript: &mut TranscriptChip,
     mvk0: &MultiStarkVerifyingKey0<RootConfig>,
@@ -420,7 +420,7 @@ pub(crate) fn constrain_whir_verification(
     let k_whir = params.k_whir();
     let num_whir_rounds = params.num_whir_rounds();
 
-    profiler.push("mu_pows_and_claim", ctx.advice.len());
+    profiler.push("mu_pows_and_claim", ctx.get_offset());
 
     let mu_pow_witness = whir_wire.mu_pow_witness;
     transcript.check_witness(ctx, params.whir.mu_pow_bits, &mu_pow_witness);
@@ -466,7 +466,7 @@ pub(crate) fn constrain_whir_verification(
         }
     }
 
-    profiler.pop(ctx.advice.len());
+    profiler.pop(ctx.get_offset());
 
     let mut folding_alphas = Vec::new();
     let mut z0_challenges = Vec::new();
@@ -483,13 +483,13 @@ pub(crate) fn constrain_whir_verification(
 
     for (round_idx, round_params) in params.whir.rounds.iter().enumerate() {
         let round_label = format!("round_{round_idx}");
-        profiler.push(&round_label, ctx.advice.len());
+        profiler.push(&round_label, ctx.get_offset());
 
         let is_initial_round = round_idx == 0;
         let is_final_round = round_idx + 1 == num_whir_rounds;
         let mut alphas_round = Vec::new();
 
-        profiler.push("sumcheck", ctx.advice.len());
+        profiler.push("sumcheck", ctx.get_offset());
         for _ in 0..k_whir {
             if let Some(evals) = whir_sumcheck_polys.get(sumcheck_cursor) {
                 let ev1 = evals[0];
@@ -518,7 +518,7 @@ pub(crate) fn constrain_whir_verification(
             }
         }
         folding_counts_per_round.push(alphas_round.len());
-        profiler.pop(ctx.advice.len());
+        profiler.pop(ctx.get_offset());
 
         let y0 = if is_final_round {
             for coeff in final_poly_reduced {
@@ -548,7 +548,7 @@ pub(crate) fn constrain_whir_verification(
         let mut ys_round = Vec::with_capacity(num_queries);
         let mut zs_round = Vec::with_capacity(num_queries);
 
-        profiler.push("queries", ctx.advice.len());
+        profiler.push("queries", ctx.get_offset());
         for query_idx in 0..num_queries {
             let query_index = transcript.sample_bits(ctx, query_bits);
             query_index_bits.push(query_bits);
@@ -618,9 +618,9 @@ pub(crate) fn constrain_whir_verification(
             zs_round.push(zi);
             ys_round.push(yi);
         }
-        profiler.pop(ctx.advice.len());
+        profiler.pop(ctx.get_offset());
 
-        profiler.push("gamma_accumulation", ctx.advice.len());
+        profiler.push("gamma_accumulation", ctx.get_offset());
         let gamma = transcript.sample_ext(ctx);
         if let Some(y0) = y0 {
             let y0_term = ext_chip.mul(ctx, y0.into(), gamma);
@@ -634,34 +634,34 @@ pub(crate) fn constrain_whir_verification(
         }
 
         gammas.push(gamma);
-        profiler.pop(ctx.advice.len());
+        profiler.pop(ctx.get_offset());
 
         zs_per_round.push(zs_round);
         log_rs_domain_size = log_rs_domain_size.saturating_sub(1);
-        profiler.pop(ctx.advice.len());
+        profiler.pop(ctx.get_offset());
     }
 
-    profiler.push("final_verification", ctx.advice.len());
+    profiler.push("final_verification", ctx.get_offset());
     let rounds = query_counts_per_round.len();
     let t = k_whir * rounds;
 
-    profiler.push("eq_mle_prefix_suffix", ctx.advice.len());
+    profiler.push("eq_mle_prefix_suffix", ctx.get_offset());
     let prefix = eval_mobius_eq_mle_assigned(ctx, ext_chip, &u_cube[..t], &folding_alphas[..t]);
     let suffix = eval_mle_evals_at_point_assigned(ctx, ext_chip, &final_poly, &u_cube[t..]);
     let mut final_acc = ext_chip.mul(ctx, prefix, suffix);
-    profiler.pop(ctx.advice.len());
+    profiler.pop(ctx.get_offset());
 
     let mut alpha_offset = k_whir;
     for round_idx in 0..rounds {
         let final_round_label = format!("final_round_{round_idx}");
-        profiler.push(&final_round_label, ctx.advice.len());
+        profiler.push(&final_round_label, ctx.get_offset());
 
         let gamma = &gammas[round_idx];
         let alpha_slc = &folding_alphas[alpha_offset..t];
         let slc_len = (t - alpha_offset) + 1;
 
         if round_idx + 1 != rounds {
-            profiler.push("z0_ood_eval", ctx.advice.len());
+            profiler.push("z0_ood_eval", ctx.get_offset());
             let z0 = &z0_challenges[round_idx];
             let mut z0_pows = Vec::with_capacity(slc_len);
             z0_pows.push(*z0);
@@ -686,10 +686,10 @@ pub(crate) fn constrain_whir_verification(
             let term = ext_chip.mul(ctx, *gamma, eq);
             let term = ext_chip.mul(ctx, term, poly_eval);
             final_acc = ext_chip.add(ctx, final_acc, term);
-            profiler.pop(ctx.advice.len());
+            profiler.pop(ctx.get_offset());
         }
 
-        profiler.push("query_point_evals", ctx.advice.len());
+        profiler.push("query_point_evals", ctx.get_offset());
         let mut gamma_pow = ext_chip.mul(ctx, *gamma, *gamma);
         for zi in zs_per_round[round_idx].iter() {
             let mut zi_pows = Vec::with_capacity(slc_len);
@@ -724,12 +724,12 @@ pub(crate) fn constrain_whir_verification(
             final_acc = ext_chip.add(ctx, final_acc, term);
             gamma_pow = ext_chip.mul(ctx, gamma_pow, *gamma);
         }
-        profiler.pop(ctx.advice.len());
+        profiler.pop(ctx.get_offset());
 
-        profiler.pop(ctx.advice.len());
+        profiler.pop(ctx.get_offset());
         alpha_offset += k_whir;
     }
 
     ext_chip.assert_equal(ctx, final_acc, final_claim);
-    profiler.pop(ctx.advice.len());
+    profiler.pop(ctx.get_offset());
 }

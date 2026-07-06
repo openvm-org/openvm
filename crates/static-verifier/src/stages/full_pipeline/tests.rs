@@ -38,7 +38,7 @@ const END_TO_END_MIN_ROWS: usize = 32768;
 fn run_mock(
     instance_columns: usize,
     expect_satisfied: bool,
-    build: impl FnOnce(&mut Context<Fr>, BabyBearExtChip),
+    build: impl FnOnce(&mut Context<Fr>, BabyBearExtChip),  // Context concrete: builder.main(0) returns &mut Context<Fr>
 ) {
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)
         .use_k(END_TO_END_K as usize)
@@ -121,7 +121,7 @@ where
 }
 
 fn prank_recorded_ext_constant(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     records: &[RecordedExtBaseConst],
     family: &str,
     constant: u64,
@@ -257,9 +257,9 @@ fn pipeline_cell_count_profiling() {
     let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
     let ctx = builder.main(0);
 
-    let initial_cells = ctx.advice.len();
+    let initial_cells = ctx.get_offset();
     circuit.populate_verify_stark_constraints(ctx, &ext_chip, &proof);
-    let final_cells = ctx.advice.len();
+    let final_cells = ctx.get_offset();
     assert!(
         final_cells > initial_cells,
         "expected advice cells to increase during populate_verify_stark_constraints"

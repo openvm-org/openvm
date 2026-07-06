@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, iter::zip};
 
-use halo2_base::Context;
+use halo2_base::{Context, ContextKind};
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::{
@@ -49,7 +49,7 @@ pub struct BatchConstraintProofWire {
 }
 
 pub(crate) fn load_gkr_proof_wire(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     base_chip: &BabyBearChip,
     ext_chip: &BabyBearExtChip,
     gkr_proof: &openvm_stark_sdk::openvm_stark_backend::proof::GkrProof<RootConfig>,
@@ -86,7 +86,7 @@ pub(crate) fn load_gkr_proof_wire(
 }
 
 pub(crate) fn load_batch_constraint_proof_wire(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     batch_proof: &openvm_stark_sdk::openvm_stark_backend::proof::BatchConstraintProof<RootConfig>,
 ) -> BatchConstraintProofWire {
@@ -138,7 +138,7 @@ pub(crate) fn load_batch_constraint_proof_wire(
 }
 
 fn eval_lagrange_on_integer_grid(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     point: &BabyBearExtWire,
     evals: &[BabyBearExtWire],
@@ -181,7 +181,7 @@ fn eval_lagrange_on_integer_grid(
 }
 
 fn progression_exp_2_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     m: &BabyBearExtWire,
     l: usize,
@@ -198,7 +198,7 @@ fn progression_exp_2_assigned(
 }
 
 pub(crate) fn eval_eq_mle_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     x: &[BabyBearExtWire],
     y: &[BabyBearExtWire],
@@ -221,7 +221,7 @@ pub(crate) fn eval_eq_mle_assigned(
 }
 
 pub(crate) fn eval_eq_mle_ef_f_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     x: &[BabyBearExtWire],
     y: &[BabyBearWire],
@@ -245,7 +245,7 @@ pub(crate) fn eval_eq_mle_ef_f_assigned(
 }
 
 pub(crate) fn eval_eq_mle_binary_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     x: &[BabyBearExtWire],
     y_bits: &[bool],
@@ -269,7 +269,7 @@ pub(crate) fn eval_eq_mle_binary_assigned(
 }
 
 pub(crate) fn eval_eq_uni_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     l_skip: usize,
     x: &BabyBearExtWire,
@@ -294,7 +294,7 @@ pub(crate) fn eval_eq_uni_assigned(
 }
 
 pub(crate) fn eval_eq_uni_at_one_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     l_skip: usize,
     x: &BabyBearExtWire,
@@ -312,7 +312,7 @@ pub(crate) fn eval_eq_uni_at_one_assigned(
 }
 
 fn eval_eq_sharp_uni_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     omega_skip_pows: &[RootF],
     xi_1: &[BabyBearExtWire],
@@ -354,7 +354,7 @@ fn eval_eq_sharp_uni_assigned(
 }
 
 pub(crate) fn eval_eq_prism_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     l_skip: usize,
     x: &[BabyBearExtWire],
@@ -370,7 +370,7 @@ pub(crate) fn eval_eq_prism_assigned(
 }
 
 fn eval_eq_rot_cube_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     x: &[BabyBearExtWire],
     y: &[BabyBearExtWire],
@@ -397,7 +397,7 @@ fn eval_eq_rot_cube_assigned(
 }
 
 pub(crate) fn eval_rot_kernel_prism_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     l_skip: usize,
     x: &[BabyBearExtWire],
@@ -422,7 +422,7 @@ pub(crate) fn eval_rot_kernel_prism_assigned(
 }
 
 fn interpolate_linear_at_01_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     eval0: &BabyBearExtWire,
     eval1: &BabyBearExtWire,
@@ -434,7 +434,7 @@ fn interpolate_linear_at_01_assigned(
 }
 
 fn interpolate_cubic_at_0123_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     evals: [&BabyBearExtWire; 4],
     x: &BabyBearExtWire,
@@ -487,7 +487,7 @@ struct ConstraintEvaluatorWire<'a> {
 impl ConstraintEvaluatorWire<'_> {
     fn eval_var(
         &self,
-        ctx: &mut Context<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
         ext_chip: &BabyBearExtChip,
         symbolic_var: SymbolicVariable<RootF>,
     ) -> BabyBearExtWire {
@@ -519,7 +519,7 @@ impl ConstraintEvaluatorWire<'_> {
 }
 
 fn eval_symbolic_nodes_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     evaluator: &ConstraintEvaluatorWire<'_>,
     nodes: &[SymbolicExpressionNode<RootF>],
@@ -573,7 +573,7 @@ fn eval_symbolic_nodes_assigned(
 }
 
 fn local_next_opening_views(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     openings: &[ReducedBabyBearExtWire],
     need_rot: bool,
@@ -589,7 +589,7 @@ fn local_next_opening_views(
 }
 
 fn observe_layer_claims_assigned(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     transcript: &mut TranscriptChip,
     claims: &[ReducedBabyBearExtWire],
 ) {
@@ -600,7 +600,7 @@ fn observe_layer_claims_assigned(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn constrain_batch_constraints_verification(
-    ctx: &mut Context<Fr>,
+    ctx: &mut impl ContextKind<Fr>,
     ext_chip: &BabyBearExtChip,
     transcript: &mut TranscriptChip,
     mvk0: &MultiStarkVerifyingKey0<RootConfig>,
@@ -679,7 +679,7 @@ pub(crate) fn constrain_batch_constraints_verification(
     let alpha_logup = transcript.sample_ext(ctx);
     let beta_logup = transcript.sample_ext(ctx);
 
-    profiler.push("gkr_verification", ctx.advice.len());
+    profiler.push("gkr_verification", ctx.get_offset());
 
     let gkr_claims_per_layer = &gkr_wire.claims_per_layer;
     let gkr_sumcheck_polys = &gkr_wire.sumcheck_polys;
@@ -782,8 +782,8 @@ pub(crate) fn constrain_batch_constraints_verification(
 
     let lambda = transcript.sample_ext(ctx);
 
-    profiler.pop(ctx.advice.len());
-    profiler.push("batch_sumcheck", ctx.advice.len());
+    profiler.pop(ctx.get_offset());
+    profiler.push("batch_sumcheck", ctx.get_offset());
 
     let numerator_term_per_air = &batch_wire.numerator_term_per_air;
     let denominator_term_per_air = &batch_wire.denominator_term_per_air;
@@ -864,8 +864,8 @@ pub(crate) fn constrain_batch_constraints_verification(
         r.push(next_r);
     }
 
-    profiler.pop(ctx.advice.len());
-    profiler.push("observe_openings", ctx.advice.len());
+    profiler.pop(ctx.get_offset());
+    profiler.push("observe_openings", ctx.get_offset());
 
     let column_openings = &batch_wire.column_openings;
 
@@ -911,8 +911,8 @@ pub(crate) fn constrain_batch_constraints_verification(
         }
     }
 
-    profiler.pop(ctx.advice.len());
-    profiler.push("eq_3b_tree", ctx.advice.len());
+    profiler.pop(ctx.get_offset());
+    profiler.push("eq_3b_tree", ctx.get_offset());
 
     let mut eq_3b_per_trace = Vec::with_capacity(n_per_trace.len());
     let mut stacked_idx = 0usize;
@@ -987,8 +987,8 @@ pub(crate) fn constrain_batch_constraints_verification(
         eq_3b_per_trace.push(eq_3b);
     }
 
-    profiler.pop(ctx.advice.len());
-    profiler.push("eq_ns_precompute", ctx.advice.len());
+    profiler.pop(ctx.get_offset());
+    profiler.push("eq_ns_precompute", ctx.get_offset());
 
     let mut eq_ns = vec![one; n_max_host + 1];
     let mut eq_sharp_ns = vec![one; n_max_host + 1];
@@ -1019,8 +1019,8 @@ pub(crate) fn constrain_batch_constraints_verification(
         }
     }
 
-    profiler.pop(ctx.advice.len());
-    profiler.push("constraint_eval", ctx.advice.len());
+    profiler.pop(ctx.get_offset());
+    profiler.push("constraint_eval", ctx.get_offset());
 
     let mut interactions_evals = Vec::new();
     let mut constraints_evals = Vec::new();
@@ -1160,8 +1160,8 @@ pub(crate) fn constrain_batch_constraints_verification(
         interactions_evals.push(denom_scaled);
     }
 
-    profiler.pop(ctx.advice.len());
-    profiler.push("final_consistency", ctx.advice.len());
+    profiler.pop(ctx.get_offset());
+    profiler.push("final_consistency", ctx.get_offset());
 
     let mut consistency_rhs = ext_chip.zero(ctx);
     let mut cur_mu_pow = one;
@@ -1180,7 +1180,7 @@ pub(crate) fn constrain_batch_constraints_verification(
     }
     ext_chip.assert_equal(ctx, consistency_lhs, consistency_rhs);
 
-    profiler.pop(ctx.advice.len());
+    profiler.pop(ctx.get_offset());
 
     BatchConstraintIntermediatesWire {
         column_openings: column_openings.clone(),
