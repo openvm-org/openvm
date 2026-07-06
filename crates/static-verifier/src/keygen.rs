@@ -140,7 +140,13 @@ impl StaticVerifierProvingKey {
         params: &Halo2Params,
         proof: &Proof<RootConfig>,
     ) -> snark_verifier_sdk::Snark {
-        use halo2_base::gates::circuit::builder::WitnessCircuitBuilder;
+        use halo2_base::{
+            gates::circuit::builder::WitnessCircuitBuilder,
+            halo2_proofs::{
+                halo2curves::bn256::{Bn256, Fr, G1Affine},
+                plonk::create_constraint_system,
+            },
+        };
 
         let mut builder = WitnessCircuitBuilder::new(
             self.pinning.metadata.break_points[0].clone(),
@@ -149,14 +155,14 @@ impl StaticVerifierProvingKey {
         );
 
         self.circuit.populate_witness_gen(&mut builder, proof);
+        let (_, config) = create_constraint_system::<G1Affine, BaseCircuitBuilder<Fr>>(
+            self.pinning.metadata.config_params.clone(),
+        );
+
+        builder.assign_lookups_to_advice(&config, 0);
         info!("advice_len {}", builder.main().get_offset());
 
-        snark_verifier_sdk::halo2::gen_snark_shplonk(
-            params,
-            &self.pinning.pk,
-            builder,
-            None::<&str>,
-        )
+        snark_verifier_sdk::halo2::gen_snark_from_witness(params, &self.pinning.pk, builder)
     }
 
     /// Generate a dummy snark for wrapper keygen.
