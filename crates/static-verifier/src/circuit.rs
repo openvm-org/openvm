@@ -4,7 +4,9 @@ use core::cmp::Reverse;
 use std::{borrow::Borrow, fmt, sync::Arc};
 
 use halo2_base::{
-    gates::circuit::builder::BaseCircuitBuilder, halo2_proofs::halo2curves::bn256::Fr, Context, ContextKind,
+    gates::circuit::builder::{BaseCircuitBuilder, WitnessCircuitBuilder},
+    halo2_proofs::halo2curves::bn256::Fr,
+    AssignedValue, Context, ContextKind,
 };
 use itertools::Itertools;
 use openvm_cpu_backend::CpuBackend;
@@ -27,7 +29,7 @@ use openvm_verify_stark_host::pvs::CONSTRAINT_EVAL_AIR_ID;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    field::baby_bear::{BabyBearChip, BabyBearExtChip},
+    field::baby_bear::{BabyBearChip, BabyBearExt4Chip, BabyBearExtChip},
     stages::{
         full_pipeline::{
             constrained_verify, extract_public_values, load_proof_wire, ProofWire,
@@ -208,16 +210,12 @@ impl StaticVerifierCircuit {
         proof_wire
     }
 
-    /// Populate a builder with the static verifier constraints and return the public values.
-    pub fn populate(
+    pub fn populate_ctx(
         &self,
-        builder: &mut BaseCircuitBuilder<Fr>,
+        ctx: &mut impl ContextKind<Fr>,
+        ext_chip: &BabyBearExt4Chip,
         proof: &Proof<RootConfig>,
-    ) -> StaticVerifierPvs<Fr> {
-        let range = builder.range_chip();
-        let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
-        let ctx = builder.main(0);
-
+    ) -> StaticVerifierPvs<AssignedValue<Fr>> {
         let mut profiler = crate::profiling::CellProfiler::new("populate", ctx.get_offset());
 
         profiler.push("verify_stark_constraints", ctx.get_offset());
@@ -266,6 +264,36 @@ impl StaticVerifierCircuit {
                 ctx.get_offset(),
             );
         }
+
+        pvs_wire
+    }
+
+    pub fn populate_witness_gen(
+        &self,
+        builder: &mut WitnessCircuitBuilder<Fr>,
+        proof: &Proof<RootConfig>,
+    ) {
+        let range = builder.range_chip();
+        let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
+        let ctx = builder.main();
+
+        let pvs_wire = self.populate_ctx(ctx, &ext_chip, proof);
+
+        let pvs_vec = pvs_wire.to_vec();
+        builder.assigned_instances.push(pvs_vec);
+    }
+
+    /// Populate a builder with the static verifier constraints and return the public values.
+    pub fn populate(
+        &self,
+        builder: &mut BaseCircuitBuilder<Fr>,
+        proof: &Proof<RootConfig>,
+    ) -> StaticVerifierPvs<Fr> {
+        let range = builder.range_chip();
+        let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
+        let ctx = builder.main(0);
+
+        let pvs_wire = self.populate_ctx(ctx, &ext_chip, proof);
 
         let pvs_vec = pvs_wire.to_vec();
         let pvs_fr = pvs_vec.iter().map(|v| *v.value()).collect_vec();

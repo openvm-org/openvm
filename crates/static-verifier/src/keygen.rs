@@ -1,7 +1,12 @@
 use halo2_base::{
     gates::circuit::CircuitBuilderStage,
-    halo2_proofs::plonk::{keygen_pk, keygen_vk},
+    halo2_proofs::{
+        plonk::{keygen_pk, keygen_vk},
+        poly::commitment::Params,
+    },
+    ContextKind,
 };
+
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::proof::Proof,
@@ -33,9 +38,10 @@ impl StaticVerifierCircuit {
         let config_params = builder.calculate_params(Some(shape.minimum_rows));
 
         let vk = keygen_vk(params, &builder).expect("keygen_vk should succeed");
+        let col_size = vk.cs().num_advice_columns() * (params.n() as usize);
         let mut pk = keygen_pk(params, vk, &builder).expect("keygen_pk should succeed");
         let ctx = builder.main(0);
-        pk.perf_hints.ctx_advice_shape = Some(ctx.get_offset());
+        assert!(col_size >= ctx.get_offset());
         // let copy_manager = ctx.copy_manager.lock().unwrap();
         // pk.perf_hints.advice_equalities = Some(copy_manager.advice_equalities.len());
         // pk.perf_hints.constant_equalities = Some(copy_manager.advice_equalities.len());
@@ -134,14 +140,16 @@ impl StaticVerifierProvingKey {
         params: &Halo2Params,
         proof: &Proof<RootConfig>,
     ) -> snark_verifier_sdk::Snark {
-        let mut builder = BaseCircuitBuilder::prover(
-            self.pinning.metadata.config_params.clone(),
-            self.pinning.metadata.break_points.clone(),
-        )
-        .use_instance_columns(self.shape.instance_columns);
+        use halo2_base::gates::circuit::builder::WitnessCircuitBuilder;
 
-        let _public_inputs = self.circuit.populate(&mut builder, proof);
-        info!("advice_len {}", builder.main(0).get_offset());
+        let mut builder = WitnessCircuitBuilder::new(
+            self.pinning.metadata.break_points[0].clone(),
+            self.pinning.metadata.config_params.clone(),
+            (params.n() as usize) * self.pinning.pk.get_vk().cs().num_advice_columns(),
+        );
+
+        self.circuit.populate_witness_gen(&mut builder, proof);
+        info!("advice_len {}", builder.main().get_offset());
 
         snark_verifier_sdk::halo2::gen_snark_shplonk(
             params,
