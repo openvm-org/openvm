@@ -246,7 +246,7 @@ where
 }
 
 #[inline(always)]
-pub(super) fn run_bitwise_logic<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(crate) fn run_bitwise_logic<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: BaseAluOpcode,
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],

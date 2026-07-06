@@ -13,10 +13,10 @@ use openvm_instructions::{
     LocalOpcode, SysPhantom, SystemOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::{
-    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
-    DivRemOpcode, DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
-    Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode,
-    ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BitwiseImmOpcode, BranchEqualOpcode,
+    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode, MulHOpcode,
+    MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode,
+    ShiftImmOpcode, ShiftOpcode, ShiftWOpcode,
 };
 use rvr_openvm_ir::{
     AluOp, BranchCond, Instr, InstrAt, LiftedInstr, MemWidth, MulDivOp, Terminator,
@@ -89,6 +89,36 @@ pub fn lift_instruction(
 
     if opcode == BaseAluImmOpcode::ADDI.global_opcode_usize() {
         return lift_alu_imm(insn, pc, AluOp::Add);
+    }
+
+    // BitwiseImm: XORI, ORI, ANDI — always immediate (e == 0 from the transpiler)
+    if opcode == BitwiseImmOpcode::XORI.global_opcode_usize() {
+        return Some(lift_alu(insn, pc, e, AluOp::Xor));
+    }
+    if opcode == BitwiseImmOpcode::ORI.global_opcode_usize() {
+        return Some(lift_alu(insn, pc, e, AluOp::Or));
+    }
+    if opcode == BitwiseImmOpcode::ANDI.global_opcode_usize() {
+        return Some(lift_alu(insn, pc, e, AluOp::And));
+    }
+
+    // LessThanImm: SLTI, SLTIU — always immediate (e == 0 from the transpiler)
+    if opcode == LessThanImmOpcode::SLTI.global_opcode_usize() {
+        return Some(lift_alu(insn, pc, e, AluOp::Slt));
+    }
+    if opcode == LessThanImmOpcode::SLTIU.global_opcode_usize() {
+        return Some(lift_alu(insn, pc, e, AluOp::Sltu));
+    }
+
+    // ShiftImm: SLLI, SRLI, SRAI — always immediate (e == 0 from the transpiler)
+    if opcode == ShiftImmOpcode::SLLI.global_opcode_usize() {
+        return Some(lift_shift(insn, pc, e, AluOp::Sll));
+    }
+    if opcode == ShiftImmOpcode::SRLI.global_opcode_usize() {
+        return Some(lift_shift(insn, pc, e, AluOp::Srl));
+    }
+    if opcode == ShiftImmOpcode::SRAI.global_opcode_usize() {
+        return Some(lift_shift(insn, pc, e, AluOp::Sra));
     }
 
     // Shift: SLL=0x205, SRL=0x206, SRA=0x207, SLLW=0x275, SRLW=0x276, SRAW=0x277

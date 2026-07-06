@@ -13,20 +13,22 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use crate::{
     Rv64AddIAir, Rv64AddIChipGpu, Rv64AddSubAir, Rv64AddSubChipGpu, Rv64AddSubWAir,
     Rv64AddSubWChipGpu, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64BitwiseLogicAir,
-    Rv64BitwiseLogicChipGpu, Rv64BranchEqualAir, Rv64BranchEqualChipGpu, Rv64BranchLessThanAir,
-    Rv64BranchLessThanChipGpu, Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemWAir,
-    Rv64DivRemWChipGpu, Rv64HintStoreAir, Rv64HintStoreChipGpu, Rv64I, Rv64Io, Rv64JalLuiAir,
-    Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir, Rv64LessThanChipGpu,
-    Rv64LoadByteAir, Rv64LoadByteChipGpu, Rv64LoadDoublewordAir, Rv64LoadDoublewordChipGpu,
-    Rv64LoadHalfwordAir, Rv64LoadHalfwordChipGpu, Rv64LoadSignExtendByteAir,
-    Rv64LoadSignExtendByteChipGpu, Rv64LoadSignExtendHalfwordAir,
+    Rv64BitwiseLogicChipGpu, Rv64BitwiseLogicImmAir, Rv64BitwiseLogicImmChipGpu,
+    Rv64BranchEqualAir, Rv64BranchEqualChipGpu, Rv64BranchLessThanAir, Rv64BranchLessThanChipGpu,
+    Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemWAir, Rv64DivRemWChipGpu, Rv64HintStoreAir,
+    Rv64HintStoreChipGpu, Rv64I, Rv64Io, Rv64JalLuiAir, Rv64JalLuiChipGpu, Rv64JalrAir,
+    Rv64JalrChipGpu, Rv64LessThanAir, Rv64LessThanChipGpu, Rv64LessThanImmAir,
+    Rv64LessThanImmChipGpu, Rv64LoadByteAir, Rv64LoadByteChipGpu, Rv64LoadDoublewordAir,
+    Rv64LoadDoublewordChipGpu, Rv64LoadHalfwordAir, Rv64LoadHalfwordChipGpu,
+    Rv64LoadSignExtendByteAir, Rv64LoadSignExtendByteChipGpu, Rv64LoadSignExtendHalfwordAir,
     Rv64LoadSignExtendHalfwordChipGpu, Rv64LoadSignExtendWordAir, Rv64LoadSignExtendWordChipGpu,
     Rv64LoadWordAir, Rv64LoadWordChipGpu, Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulWAir,
     Rv64MulWChipGpu, Rv64MultiplicationAir, Rv64MultiplicationChipGpu, Rv64ShiftLogicalAir,
-    Rv64ShiftLogicalChipGpu, Rv64ShiftRightArithmeticAir, Rv64ShiftRightArithmeticChipGpu,
-    Rv64ShiftWLogicalAir, Rv64ShiftWLogicalChipGpu, Rv64ShiftWRightArithmeticAir,
-    Rv64ShiftWRightArithmeticChipGpu, Rv64StoreByteAir, Rv64StoreByteChipGpu,
-    Rv64StoreDoublewordAir, Rv64StoreDoublewordChipGpu, Rv64StoreHalfwordAir,
+    Rv64ShiftLogicalChipGpu, Rv64ShiftLogicalImmAir, Rv64ShiftLogicalImmChipGpu,
+    Rv64ShiftRightArithmeticAir, Rv64ShiftRightArithmeticChipGpu, Rv64ShiftRightArithmeticImmAir,
+    Rv64ShiftRightArithmeticImmChipGpu, Rv64ShiftWLogicalAir, Rv64ShiftWLogicalChipGpu,
+    Rv64ShiftWRightArithmeticAir, Rv64ShiftWRightArithmeticChipGpu, Rv64StoreByteAir,
+    Rv64StoreByteChipGpu, Rv64StoreDoublewordAir, Rv64StoreDoublewordChipGpu, Rv64StoreHalfwordAir,
     Rv64StoreHalfwordChipGpu, Rv64StoreWordAir, Rv64StoreWordChipGpu,
 };
 
@@ -209,6 +211,28 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.next_air::<Rv64AddIAir>()?;
         let addi = Rv64AddIChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(addi);
+
+        inventory.next_air::<Rv64ShiftLogicalImmAir>()?;
+        let shift_logical_imm =
+            Rv64ShiftLogicalImmChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(shift_logical_imm);
+
+        inventory.next_air::<Rv64ShiftRightArithmeticImmAir>()?;
+        let shift_right_arithmetic_imm =
+            Rv64ShiftRightArithmeticImmChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(shift_right_arithmetic_imm);
+
+        inventory.next_air::<Rv64LessThanImmAir>()?;
+        let lt_imm = Rv64LessThanImmChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(lt_imm);
+
+        inventory.next_air::<Rv64BitwiseLogicImmAir>()?;
+        let bitwise_logic_imm = Rv64BitwiseLogicImmChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(bitwise_logic_imm);
 
         Ok(())
     }

@@ -375,6 +375,78 @@ pub enum BaseAluImmOpcode {
     ADDI,
 }
 
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x291]
+#[repr(usize)]
+pub enum ShiftImmOpcode {
+    SLLI,
+    SRLI,
+    SRAI,
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x294]
+#[repr(usize)]
+pub enum LessThanImmOpcode {
+    SLTI,
+    SLTIU,
+}
+
+/// Immediate variants of the bitwise BaseAlu opcodes. Local indices mirror
+/// [`BaseAluOpcode`]'s layout (XOR = 2, OR = 3, AND = 4) so the shared
+/// `BitwiseLogicCoreAir` can be reused with `BitwiseImmOpcode::CLASS_OFFSET`;
+/// local slots 0 and 1 (the ADD/SUB positions) are intentionally unused.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x296]
+#[repr(usize)]
+pub enum BitwiseImmOpcode {
+    XORI = 2,
+    ORI = 3,
+    ANDI = 4,
+}
+
 // =================================================================================================
 // Phantom opcodes
 // =================================================================================================
