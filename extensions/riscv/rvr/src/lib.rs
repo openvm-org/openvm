@@ -401,11 +401,9 @@ pub extern "C" fn host_hint_input<F: PrimeField32>(ctx: *mut c_void) {
     if let Some(mut vec) = io.input_stream.pop_front() {
         let data_len = vec.len();
         let len_bytes = (data_len as u64).to_le_bytes();
-        for &b in &len_bytes {
-            io.hint_stream.push_back(F::from_u8(b));
-        }
+        io.hint_stream.extend(len_bytes);
         let padded_len = data_len.div_ceil(RV64_REGISTER_NUM_LIMBS) * RV64_REGISTER_NUM_LIMBS;
-        vec.resize(padded_len, F::ZERO);
+        vec.resize(padded_len, 0u8);
         io.hint_stream.extend(vec);
     }
 }
@@ -429,7 +427,7 @@ pub extern "C" fn host_hint_random<F: PrimeField32>(ctx: *mut c_void, num_words:
     let nbytes = num_words as usize * RV64_REGISTER_NUM_LIMBS;
     io.hint_stream.clear();
     for _ in 0..nbytes {
-        io.hint_stream.push_back(F::from_u8(io.rng.random::<u8>()));
+        io.hint_stream.push_back(io.rng.random::<u8>());
     }
 }
 
@@ -443,7 +441,7 @@ pub extern "C" fn host_hint_storew<F: PrimeField32>(ctx: *mut c_void, dest_addr:
     check_mem_bounds_range(dest_addr, RV64_REGISTER_NUM_LIMBS);
     let mut bytes = [0u8; RV64_REGISTER_NUM_LIMBS];
     for byte in &mut bytes {
-        *byte = io.hint_stream.pop_front().unwrap().as_canonical_u32() as u8;
+        *byte = io.hint_stream.pop_front().unwrap();
     }
     unsafe {
         std::ptr::copy_nonoverlapping(
@@ -454,8 +452,8 @@ pub extern "C" fn host_hint_storew<F: PrimeField32>(ctx: *mut c_void, dest_addr:
     }
 }
 
-/// HINT_BUFFER: pop `num_words * RV64_REGISTER_NUM_LIMBS` field elements from the hint stream
-/// and copy them as bytes into guest memory.
+/// HINT_BUFFER: pop `num_words * RV64_REGISTER_NUM_LIMBS` bytes from the hint stream
+/// and copy them into guest memory.
 pub extern "C" fn host_hint_buffer<F: PrimeField32>(
     ctx: *mut c_void,
     dest_addr: u64,
@@ -469,7 +467,7 @@ pub extern "C" fn host_hint_buffer<F: PrimeField32>(
     check_mem_bounds_range(dest_addr, nbytes);
     let dst = unsafe { io.memory_ptr.add(dest_addr as usize) };
     for i in 0..nbytes {
-        let byte = io.hint_stream.pop_front().unwrap().as_canonical_u32() as u8;
+        let byte = io.hint_stream.pop_front().unwrap();
         unsafe { *dst.add(i) = byte };
     }
 }

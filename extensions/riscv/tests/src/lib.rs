@@ -199,7 +199,7 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        let input = vec![[0, 1, 2, 3].map(F::from_u8).to_vec()];
+        let input = vec![vec![0u8, 1, 2, 3]];
         air_test_with_min_segments(Rv64ImBuilder, config, exe, input, 1);
         Ok(())
     }
@@ -226,9 +226,7 @@ mod tests {
         let expected_len = expected_words * RV64_REGISTER_NUM_LIMBS;
 
         // Create data with a pattern that can be verified
-        let data: Vec<F> = (0..expected_len)
-            .map(|i| F::from_u8((i % 256) as u8))
-            .collect();
+        let data: Vec<u8> = (0..expected_len).map(|i| (i % 256) as u8).collect();
 
         let input = vec![data];
         air_test_with_min_segments(Rv64ImBuilder, config, exe, input, 1);
@@ -257,10 +255,9 @@ mod tests {
             baz: vec![0, 1, 2, 3],
         };
         let serialized_foo = openvm::serde::to_vec(&foo).unwrap();
-        let input = serialized_foo
+        let input: Vec<u8> = serialized_foo
             .into_iter()
             .flat_map(|w| w.to_le_bytes())
-            .map(F::from_u8)
             .collect();
         air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![input], 1);
         Ok(())
@@ -396,7 +393,7 @@ mod tests {
 
         let executor = VmExecutor::new(config)?;
         let instance = executor.instance(&exe)?;
-        let input = vec![[0, 0, 0, 1].map(F::from_u8).to_vec()];
+        let input = vec![vec![0u8, 0, 0, 1]];
         match instance.execute(input.clone(), None) {
             Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
             Err(_) => panic!("should fail with `FailedWithExitCode`"),

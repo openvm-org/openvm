@@ -16,8 +16,8 @@ use crate::arch::deferral::DeferralState;
 ///
 /// `deferral_memory` aliases AS=4 as `F` cells for deferral accumulator updates.
 pub struct OpenVmIoState<'a, F: PrimeField32> {
-    pub input_stream: &'a mut VecDeque<Vec<F>>,
-    pub hint_stream: &'a mut VecDeque<F>,
+    pub input_stream: &'a mut VecDeque<Vec<u8>>,
+    pub hint_stream: &'a mut VecDeque<u8>,
     pub rng: &'a mut StdRng,
     pub memory_ptr: *mut u8,
     pub public_values: &'a mut [u8],
@@ -59,8 +59,6 @@ pub unsafe extern "C" fn host_hint_stream_set<F: PrimeField32>(
     io.hint_stream.clear();
     if len > 0 && !data.is_null() {
         let slice = unsafe { std::slice::from_raw_parts(data, len as usize) };
-        for &b in slice {
-            io.hint_stream.push_back(F::from_u8(b));
-        }
+        io.hint_stream.extend(slice.iter().copied());
     }
 }

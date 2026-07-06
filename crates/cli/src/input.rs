@@ -1,15 +1,15 @@
 use std::{fs::read, path::PathBuf, str::FromStr};
 
 use eyre::{Context, Result};
-use openvm_sdk::{StdIn, F};
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_sdk::StdIn;
 
 /// Input can be either:
 /// (1) one single hex string
 /// (2) A JSON file containing an array of hex strings.
 /// Each hex string (either in the file or the direct input) is either:
-/// - Hex strings of bytes, which is prefixed with 0x01
-/// - Hex strings of native field elements (represented as u32, little endian), prefixed with 0x02
+/// - Hex strings of bytes, prefixed with 0x01
+/// - Hex strings of little-endian u32 words (a whole number of 4-byte words), prefixed with 0x02;
+///   the words are written to the input stream as their raw little-endian bytes
 #[derive(Debug, Clone)]
 pub enum Input {
     FilePath(PathBuf),
@@ -52,7 +52,6 @@ pub fn decode_hex_string(s: &str) -> Result<Vec<u8>> {
 }
 
 pub fn read_bytes_into_stdin(stdin: &mut StdIn, bytes: &[u8]) -> Result<()> {
-    // should either write_bytes or write_field
     match bytes.first() {
         Some(0x01) => {
             stdin.write_bytes(&bytes[1..]);
@@ -65,12 +64,9 @@ pub fn read_bytes_into_stdin(stdin: &mut StdIn, bytes: &[u8]) -> Result<()> {
                     "Invalid input format: incorrect number of bytes"
                 ));
             }
-            let mut fields = Vec::with_capacity(data.len() / 4);
-            for chunk in data.chunks_exact(4) {
-                let value = u32::from_le_bytes(chunk.try_into().unwrap());
-                fields.push(F::from_u32(value));
-            }
-            stdin.write_field(&fields);
+            // 0x02 historically declared little-endian u32 field elements; they are now written
+            // as their raw little-endian bytes, matching how stream consumers read them.
+            stdin.write_bytes(data);
             Ok(())
         }
         _ => Err(eyre::eyre!(

@@ -121,9 +121,10 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let mut input = Vec::with_capacity(num_words as usize * RV64_REGISTER_NUM_LIMBS);
     for _ in 0..num_words {
-        let data = rng.next_u64().to_le_bytes().map(F::from_u8);
+        let bytes = rng.next_u64().to_le_bytes();
+        let data = bytes.map(F::from_u8);
         input.extend(data);
-        tester.streams_mut().hint_stream.extend(data);
+        tester.streams_mut().hint_stream.extend(bytes);
     }
 
     tester.execute(
@@ -215,7 +216,7 @@ fn test_hint_buffer_exceeds_max_words() {
     );
 
     for _ in 0..num_words {
-        let data = rng.next_u64().to_le_bytes().map(F::from_u8);
+        let data = rng.next_u64().to_le_bytes();
         tester.streams_mut().hint_stream.extend(data);
     }
 
@@ -253,7 +254,7 @@ fn test_hint_buffer_rem_words_range_check() {
     );
 
     for _ in 0..num_words {
-        let data = rng.next_u64().to_le_bytes().map(F::from_u8);
+        let data = rng.next_u64().to_le_bytes();
         tester.streams_mut().hint_stream.extend(data);
     }
 
@@ -310,7 +311,7 @@ fn test_hint_buffer_mem_ptr_range_check() {
     );
 
     for _ in 0..num_words {
-        let data = rng.next_u64().to_le_bytes().map(F::from_u8);
+        let data = rng.next_u64().to_le_bytes();
         tester.streams_mut().hint_stream.extend(data);
     }
 
@@ -358,7 +359,7 @@ fn test_hintstore_rs1_upper_bytes_non_zero() {
     mem_ptr_limbs[4] = F::from_u8(1);
     tester.write_bytes(RV64_REGISTER_AS as usize, b, mem_ptr_limbs);
 
-    let data = rng.next_u64().to_le_bytes().map(F::from_u8);
+    let data = rng.next_u64().to_le_bytes();
     tester.streams_mut().hint_stream.extend(data);
 
     tester.execute(

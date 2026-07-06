@@ -106,10 +106,8 @@ mod tests {
         state.store_input(INPUT_COMMIT_1.to_vec(), INPUT_RAW_1.to_vec());
         state.store_input(INPUT_COMMIT_2.to_vec(), INPUT_RAW_2.to_vec());
 
-        let streams = Streams {
-            deferrals: vec![state],
-            ..Default::default()
-        };
+        let mut streams = Streams::default();
+        streams.deferrals = vec![state];
         let config = make_config(1);
         run_test(config, "single", streams)
     }
@@ -124,10 +122,8 @@ mod tests {
         let mut state1 = DeferralState::new(Vec::<DeferralResult>::new());
         state1.store_input(INPUT_COMMIT_0.to_vec(), INPUT_RAW_0.to_vec());
 
-        let streams = Streams {
-            deferrals: vec![state0, state1],
-            ..Default::default()
-        };
+        let mut streams = Streams::default();
+        streams.deferrals = vec![state0, state1];
         let config = make_config(2);
         run_test(config, "multiple", streams)
     }
