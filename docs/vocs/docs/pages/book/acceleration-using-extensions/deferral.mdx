@@ -1,10 +1,14 @@
 # Deferral
 
-The deferral extension enables guest programs to offload expensive computations to standalone circuits that are proven separately during the aggregation phase. Rather than executing the computation inside the VM, the guest issues a **deferred call** that records an input commitment and receives an output commitment back. The actual computation is proven outside the VM and linked back via cryptographic accumulators.
+The deferral extension enables guest programs to offload expensive computations to standalone **deferral circuits** that are proven separately during the aggregation phase. Rather than executing the computation inside the VM, the guest issues a **deferred call** that records an input commitment and receives an output commitment back. The actual computation is proven outside the VM and linked back via cryptographic accumulators.
 
 This is particularly useful for recursive STARK verification, where verifying a proof inside the VM would be prohibitively expensive. See the [Verify STARK guest library](/book/guest-libraries/verify-stark) for the primary use case.
 
 For the full technical specification, see the [Deferral Framework spec](/specs/architecture/deferral).
+
+:::info
+Deferrals require programmatic setup and can only be configured through the [SDK](/book/advanced-usage/sdk); the OpenVM CLI does not currently support deferrals. Familiarity with the SDK is assumed throughout this page.
+:::
 
 ## How It Works
 
@@ -49,9 +53,14 @@ Retrieves the raw output bytes for a previous deferred call and authenticates th
 
 `DEFERRAL_IDX` is a compile-time constant that identifies which deferral circuit to invoke. A VM configuration can support up to `MAX_DEF_CIRCUITS = 512` deferral circuits. Each index corresponds to a deferral circuit entry in the VM's `DeferralConfig`, which is converted into the runtime `DeferralExtension`.
 
-## Configuration
+## Host Configuration
 
-The deferral extension requires programmatic setup through the [SDK](/book/advanced-usage/sdk) because each deferral circuit needs a `DeferralFn` (the function that computes outputs from inputs) and corresponding proving infrastructure. Once that setup has produced a `DeferralConfig`, supported deferral circuits such as verify-stark can be serialized into `openvm.toml`.
+The deferral extension is composed of zero or more deferral circuits, indexed by `DEFERRAL_IDX`. For each deferral circuit, the extension holds:
+
+- a **`DeferralFn`** — host-side function that computes the output from the input, used during proving to produce the deferred computation's result.
+- a **`def_circuit_commit`** — a 32-byte commitment to the deferral circuit, which binds a deferral index to the specific circuit allowed to prove it. This is the `commit` value serialized into `openvm.toml`.
+
+The deferral extension requires programmatic setup through the [SDK](/book/advanced-usage/sdk) because each deferral circuit (and its `DeferralFn`) needs to be initialized on the host side. Once that setup has produced a `DeferralConfig`, supported deferral circuits such as verify-stark can be serialized into `openvm.toml`.
 
 The default SDK memory config reserves cells for the deferral address space. `SdkVmConfig::optimize()` removes that address space when no deferrals are configured, and keeps it when `deferral` is present.
 
@@ -63,3 +72,33 @@ To enable deferrals in your VM configuration:
 4. Build the SDK with `Sdk::builder().multi_deferral_circuit_prover(multi_deferral_circuit_prover)`.
 
 See the [Verify STARK guest library](/book/guest-libraries/verify-stark#using-deferralconfig) for a complete example of wiring up the deferral extension with the STARK verification circuit.
+
+## Inputs and Proving
+
+The guest program only passes an **input commitment** to `deferred_compute`; the raw input never enters VM memory, and the deferred operation itself is not constrained in the VM. So the host must supply the deferral data for two phases: **execution** and **proving**.
+
+### `DeferralState` (for execution)
+
+To resolve an input commitment to its output during execution, the host sets `StdIn.deferrals`, a `Vec<DeferralState>` with one entry per deferral circuit, indexed by `DEFERRAL_IDX`:
+
+```rust
+stdin.deferrals = vec![deferral_state /* for DEFERRAL_IDX 0 */, /* ... */];
+```
+
+### `DeferralInput` (for proving)
+
+The host must also give the prover the actual input data, so each deferral circuit can prove its computation.
+
+```rust
+pub struct DeferralInput {
+    pub byte_vec: Vec<Vec<u8>>,
+}
+```
+
+Each inner `Vec<u8>` is the encoded input for one deferred call to that circuit, in call order; there must be exactly as many inputs as deferred calls the guest made to it. Pass a slice of `DeferralInput` to `Sdk::prove` (or `Sdk::prove_evm`), one per deferral circuit, indexed by `DEFERRAL_IDX`:
+
+```rust
+let (proof, _) = sdk.prove(exe, stdin, &def_inputs)?;
+```
+
+Both `DeferralState` and `DeferralInput` must be consistent with the input commitments the guest passed to `deferred_compute`; otherwise execution/proving will fail, or the generated proof will not verify.

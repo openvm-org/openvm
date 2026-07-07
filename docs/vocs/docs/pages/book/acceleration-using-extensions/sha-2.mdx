@@ -50,6 +50,8 @@ fn sha256(input: &[u8]) -> [u8; 32] {
 }
 ```
 
+Here, `add_padding` applies the standard SHA-2 padding (append a `1` bit, pad with `0` bits, then append the message length) so the input is a multiple of the block size, since `zkvm_shaXXX_impl` only operates on full blocks.
+
 :::tip
 Most users should prefer the [SHA-2 guest library](/book/guest-libraries/sha2) (`openvm-sha2`), which provides high-level `Sha256`, `Sha512`, and `Sha384` structs implementing the `sha2::Digest` trait.
 :::
