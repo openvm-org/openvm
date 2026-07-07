@@ -10,6 +10,24 @@ The P256 guest library uses [`openvm-ecc-guest`](/book/acceleration-using-extens
 `P256Point` stores raw affine coordinates. Deserializing a `P256Point` does not check that the point is on the P-256 curve. Validate points from untrusted input before using point addition, scalar multiplication, or MSM.
 :::
 
+## Example ECDSA verification
+
+See a working example [here](https://github.com/openvm-org/openvm/blob/main/examples/ecdsa/src/main.rs).
+
+To use the P256 guest library for ECDSA verification, add the following dependencies to `Cargo.toml`:
+
+```toml
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-p256 = { git = "https://github.com/openvm-org/openvm.git", package = "p256" }
+```
+
+The example verifies a P256 ECDSA signature from a SEC1-encoded public key. The `04` byte prefix on the public key indicates an uncompressed SEC1 point, followed by the 32-byte x-coordinate and 32-byte y-coordinate.
+
+```rust
+// [!include ~/snippets/examples/ecdsa/src/main.rs]
+```
+
 ### Config parameters
 
 For the guest program to build successfully, all used moduli and curves must be declared in the `.toml` config file in the following format:
