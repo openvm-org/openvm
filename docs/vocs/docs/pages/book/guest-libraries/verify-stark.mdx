@@ -100,7 +100,7 @@ The lower-level manual flow is:
 For example, to initialize the SDK with the `verify-stark` deferral circuit:
 
 ```rust
-let def_idx = 0;
+const VERIFY_STARK_DEF_IDX: usize = 0;
 let deferred_verify_prover = DeferredVerifyCpuProver::new::<E>(
     ir_vk,
     ir_pcs_data.commitment.into(),
@@ -108,7 +108,7 @@ let deferred_verify_prover = DeferredVerifyCpuProver::new::<E>(
     memory_dimensions,
     num_user_pvs,
     None,
-    def_idx,
+    VERIFY_STARK_DEF_IDX,
 );
 let verify_stark_prover = DeferredVerifyCpuCircuitProver::new(deferred_verify_prover);
 
