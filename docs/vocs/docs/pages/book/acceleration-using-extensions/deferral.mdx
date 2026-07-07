@@ -1,10 +1,14 @@
 # Deferral
 
-The deferral extension enables guest programs to offload expensive computations to standalone circuits that are proven separately during the aggregation phase. Rather than executing the computation inside the VM, the guest issues a **deferred call** that records an input commitment and receives an output commitment back. The actual computation is proven outside the VM and linked back via cryptographic accumulators.
+The deferral extension enables guest programs to offload expensive computations to standalone **deferral circuits** that are proven separately during the aggregation phase. Rather than executing the computation inside the VM, the guest issues a **deferred call** that records an input commitment and receives an output commitment back. The actual computation is proven outside the VM and linked back via cryptographic accumulators.
 
 This is particularly useful for recursive STARK verification, where verifying a proof inside the VM would be prohibitively expensive. See the [Verify STARK guest library](/book/guest-libraries/verify-stark) for the primary use case.
 
 For the full technical specification, see the [Deferral Framework spec](/specs/architecture/deferral).
+
+:::info
+Deferrals require programmatic setup and can only be configured through the [SDK](/book/advanced-usage/sdk); the OpenVM CLI does not currently support deferrals. Familiarity with the SDK is assumed throughout this page.
+:::
 
 ## How It Works
 
