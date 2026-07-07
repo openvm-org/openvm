@@ -17,9 +17,9 @@ See a working example [here](https://github.com/openvm-org/openvm/blob/main/exam
 To use the P256 guest library for ECDSA verification, add the following dependencies to `Cargo.toml`:
 
 ```toml
-openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-p256 = { git = "https://github.com/openvm-org/openvm.git", package = "p256" }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.0" }
+openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.0" }
+openvm-p256 = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.0", package = "p256" }
 ```
 
 The example verifies a P256 ECDSA signature from a SEC1-encoded public key. The `04` byte prefix on the public key indicates an uncompressed SEC1 point, followed by the 32-byte x-coordinate and 32-byte y-coordinate.
