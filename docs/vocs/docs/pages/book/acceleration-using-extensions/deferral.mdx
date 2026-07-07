@@ -53,9 +53,14 @@ Retrieves the raw output bytes for a previous deferred call and authenticates th
 
 `DEFERRAL_IDX` is a compile-time constant that identifies which deferral circuit to invoke. A VM configuration can support up to `MAX_DEF_CIRCUITS = 512` deferral circuits. Each index corresponds to a deferral circuit entry in the VM's `DeferralConfig`, which is converted into the runtime `DeferralExtension`.
 
-## Configuration
+## Host Configuration
 
-The deferral extension requires programmatic setup through the [SDK](/book/advanced-usage/sdk) because each deferral circuit needs a `DeferralFn` (the function that computes outputs from inputs) and corresponding proving infrastructure. Once that setup has produced a `DeferralConfig`, supported deferral circuits such as verify-stark can be serialized into `openvm.toml`.
+The deferral extension is composed of zero or more deferral circuits, indexed by `DEFERRAL_IDX`. For each deferral circuit, the extension holds:
+
+- a **`DeferralFn`** — host-side function that computes the output from the input, used during proving to produce the deferred computation's result.
+- a **`def_circuit_commit`** — a 32-byte commitment to the deferral circuit, which binds a deferral index to the specific circuit allowed to prove it. This is the `commit` value serialized into `openvm.toml`.
+
+The deferral extension requires programmatic setup through the [SDK](/book/advanced-usage/sdk) because each deferral circuit (and its `DeferralFn`) needs to be initialized on the host side. Once that setup has produced a `DeferralConfig`, supported deferral circuits such as verify-stark can be serialized into `openvm.toml`.
 
 The default SDK memory config reserves cells for the deferral address space. `SdkVmConfig::optimize()` removes that address space when no deferrals are configured, and keeps it when `deferral` is present.
 
