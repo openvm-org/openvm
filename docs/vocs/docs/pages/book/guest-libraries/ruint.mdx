@@ -13,7 +13,8 @@ See the full example [here](https://github.com/openvm-org/openvm/blob/main/examp
 To use `U256` outside the monorepo, add the following to your `Cargo.toml` file:
 
 ```toml
-openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.0", features = ["std"] }
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = ["std"] }
+openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git", features = ["export-intrinsics"] }
 openvm-ruint = { git = "https://github.com/openvm-org/uint.git", branch = "v1.14.0-openvm", package = "ruint" }
 ```
 
@@ -28,6 +29,8 @@ See the full example [here](https://github.com/openvm-org/openvm/blob/main/examp
 This example uses `alloy_primitives::I256`, which depends on `ruint`. The snippet below is the equivalent setup for using it outside the monorepo; the checked-in example uses a local `path` patch instead.
 
 ```toml
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = ["std"] }
+openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git", features = ["export-intrinsics"] }
 alloy-primitives = "1.1.2"
 
 [patch.crates-io]
