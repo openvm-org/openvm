@@ -23,21 +23,9 @@ The inputs to the pairing check are `AffinePoint`s in $\mathbb{F}_p$ and $\mathb
 `AffinePoint` does not validate that coordinates are canonical, on-curve, or in the correct prime-order subgroup. If pairing inputs are supplied by an untrusted source, validate those properties before calling `pairing_check`, `pairing_check_hint`, or `multi_miller_loop`. Callers should also enforce any protocol-specific policy about whether identity points are allowed.
 :::
 
-We can create a new struct to hold these `AffinePoint`s for the purpose of this guide. You may instead put them into a custom struct to serve your use case.
-
-```rust
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-pub struct PairingCheckInput {
-    p0: AffinePoint<Fp>,
-    p1: AffinePoint<Fp2>,
-    q0: AffinePoint<Fp>,
-    q1: AffinePoint<Fp2>,
-}
-```
-
 ## Pairing check
 
-Most users that use the pairing extension will want to assert that a pairing is valid (the final exponentiation equals one). With the `PairingCheck` trait imported from the previous section, we have access to the `pairing_check` function on the `Bls12_381` struct. After reading in the input struct, we can use its values in the `pairing_check`:
+Most users that use the pairing extension will want to assert that a pairing is valid (the final exponentiation equals one). With the `PairingCheck` trait imported from the previous section, we have access to the `pairing_check` function on the `Bls12_381` struct. Once we have constructed the input `AffinePoint`s, we can pass them to `pairing_check`:
 
 :::warning
 The `pairing_check` function assumes its inputs have already been validated by the caller. It does not perform point decompression, curve-membership checks, subgroup checks, or protocol-specific identity checks internally.
