@@ -140,18 +140,72 @@ impl StaticVerifierProvingKey {
         params: &Halo2Params,
         proof: &Proof<RootConfig>,
     ) -> snark_verifier_sdk::Snark {
+        use halo2_base::halo2_proofs::poly::DevicePolyExt;
         use halo2_base::{
             gates::circuit::builder::WitnessCircuitBuilder,
             halo2_proofs::{
-                halo2curves::bn256::{Bn256, Fr, G1Affine},
-                plonk::create_constraint_system,
+                halo2curves::bn256::{Fr, G1Affine},
+                plonk::{create_constraint_system, AdviceSingle, InstanceSingle},
             },
         };
+        use tracing::info_span;
 
+        // // --- Diagnostic comparison: OLD (BaseCircuitBuilder + populate → Circuit::synthesize)
+        // // vs NEW (WitnessCircuitBuilder + populate_witness_gen + materialize).
+        // // Both paths should yield identical (instance_single, advice_single, challenges).
+        // let (i_old, a_old, c_old) = {
+        //     let mut base_builder = BaseCircuitBuilder::prover(
+        //         self.pinning.metadata.config_params.clone(),
+        //         self.pinning.metadata.break_points.clone(),
+        //     )
+        //     .use_instance_columns(self.shape.instance_columns);
+        //     let _ = self.circuit.populate(&mut base_builder, proof);
+        //     let instances_old: Vec<Vec<Fr>> = base_builder
+        //         .assigned_instances
+        //         .iter()
+        //         .map(|column| column.iter().map(|av| *av.value()).collect())
+        //         .collect();
+        //     let (mut i, mut a, c) = snark_verifier_sdk::halo2::synthesize_witness_shplonk(
+        //         params,
+        //         &self.pinning.pk,
+        //         base_builder,
+        //         instances_old,
+        //     );
+        //     (i.remove(0), a.remove(0), c)
+        // };
+        //
+        // let (i_new, a_new, c_new) = {
+        //     let mut wit_builder_diag = WitnessCircuitBuilder::new(
+        //         self.pinning.metadata.break_points[0].clone(),
+        //         self.pinning.metadata.config_params.clone(),
+        //         self.pinning.pk.get_vk().cs().num_advice_columns(),
+        //     );
+        //     self.circuit
+        //         .populate_witness_gen(&mut wit_builder_diag, proof);
+        //     let (_, config) = create_constraint_system::<G1Affine, BaseCircuitBuilder<Fr>>(
+        //         self.pinning.metadata.config_params.clone(),
+        //     );
+        //     wit_builder_diag.assign_lookups_to_advice(&config, 0);
+        //     snark_verifier_sdk::halo2::materialize_witness_shplonk(
+        //         params,
+        //         &self.pinning.pk,
+        //         wit_builder_diag,
+        //     )
+        // };
+        //
+        // assert_eq!(c_old.len(), c_new.len(), "challenges differ in length");
+        // for i in 0..c_old.len() {
+        //     assert_eq!(c_old[i], c_new[i], "challenges differ in {i}")
+        // }
+        // assert_instance_single_eq(&i_old, &i_new);
+        // assert_advice_single_eq(&a_old, &a_new);
+        // info!("OLD vs NEW witness comparison: match");
+
+        // --- Actual proving via NEW path.
         let mut builder = WitnessCircuitBuilder::new(
             self.pinning.metadata.break_points[0].clone(),
             self.pinning.metadata.config_params.clone(),
-            (params.n() as usize) * self.pinning.pk.get_vk().cs().num_advice_columns(),
+            self.pinning.pk.get_vk().cs().num_advice_columns(),
         );
 
         self.circuit.populate_witness_gen(&mut builder, proof);
@@ -159,7 +213,8 @@ impl StaticVerifierProvingKey {
             self.pinning.metadata.config_params.clone(),
         );
 
-        builder.assign_lookups_to_advice(&config, 0);
+        info_span!("assign_lookups_to_advice")
+            .in_scope(|| builder.assign_lookups_to_advice(&config, 0));
         info!("advice_len {}", builder.main().get_offset());
 
         snark_verifier_sdk::halo2::gen_snark_from_witness(params, &self.pinning.pk, builder)
@@ -208,6 +263,114 @@ impl StaticVerifierProvingKey {
             instances: instances_vec,
             proof: snark,
         }
+    }
+}
+
+#[cfg(feature = "evm-prove")]
+fn assert_column_values_eq<F: PartialEq + std::fmt::Debug>(
+    kind: &str,
+    col: usize,
+    a: &[F],
+    b: &[F],
+) {
+    assert_eq!(
+        a.len(),
+        b.len(),
+        "{kind} column {col} length differs: old={} new={}",
+        a.len(),
+        b.len(),
+    );
+    let mut diff_count = 0;
+    for (row, (va, vb)) in a.iter().zip(b.iter()).enumerate() {
+        if va != vb {
+            diff_count += 1;
+            eprintln!("{kind} column {col} row {row} differs: old={va:?} new={vb:?}");
+            if diff_count >= 20 {
+                assert!(
+                    va == vb,
+                    "{kind} column {col} row {row} differs: old={va:?} new={vb:?}",
+                );
+            }
+        }
+    }
+}
+
+#[cfg(feature = "evm-prove")]
+fn assert_instance_single_eq(
+    a: &halo2_base::halo2_proofs::plonk::InstanceSingle<
+        halo2_base::halo2_proofs::halo2curves::bn256::G1Affine,
+    >,
+    b: &halo2_base::halo2_proofs::plonk::InstanceSingle<
+        halo2_base::halo2_proofs::halo2curves::bn256::G1Affine,
+    >,
+) {
+    use halo2_base::halo2_proofs::poly::DevicePolyExt;
+    assert_eq!(
+        a.instance_values.len(),
+        b.instance_values.len(),
+        "instance_values column count differs"
+    );
+    for (col, (pa, pb)) in a
+        .instance_values
+        .iter()
+        .zip(b.instance_values.iter())
+        .enumerate()
+    {
+        let ha = pa.to_host();
+        let hb = pb.to_host();
+        assert_column_values_eq("instance_values", col, ha.values(), hb.values());
+    }
+    assert_eq!(
+        a.instance_polys.len(),
+        b.instance_polys.len(),
+        "instance_polys column count differs"
+    );
+    for (col, (pa, pb)) in a
+        .instance_polys
+        .iter()
+        .zip(b.instance_polys.iter())
+        .enumerate()
+    {
+        let ha = pa.to_host();
+        let hb = pb.to_host();
+        assert_column_values_eq("instance_polys", col, ha.values(), hb.values());
+    }
+}
+
+#[cfg(feature = "evm-prove")]
+fn assert_advice_single_eq(
+    a: &halo2_base::halo2_proofs::plonk::AdviceSingle<
+        halo2_base::halo2_proofs::halo2curves::bn256::G1Affine,
+    >,
+    b: &halo2_base::halo2_proofs::plonk::AdviceSingle<
+        halo2_base::halo2_proofs::halo2curves::bn256::G1Affine,
+    >,
+) {
+    use halo2_base::halo2_proofs::poly::DevicePolyExt;
+    assert_eq!(
+        a.advice_values.len(),
+        b.advice_values.len(),
+        "advice_values column count differs"
+    );
+    for (col, (pa, pb)) in a
+        .advice_values
+        .iter()
+        .zip(b.advice_values.iter())
+        .enumerate()
+    {
+        let ha = pa.to_host();
+        let hb = pb.to_host();
+        assert_column_values_eq("advice_values", col, ha.values(), hb.values());
+    }
+    assert_eq!(
+        a.advice_polys.len(),
+        b.advice_polys.len(),
+        "advice_polys column count differs"
+    );
+    for (col, (pa, pb)) in a.advice_polys.iter().zip(b.advice_polys.iter()).enumerate() {
+        let ha = pa.to_host();
+        let hb = pb.to_host();
+        assert_column_values_eq("advice_polys", col, ha.values(), hb.values());
     }
 }
 
