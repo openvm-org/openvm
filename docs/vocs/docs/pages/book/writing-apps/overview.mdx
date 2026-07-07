@@ -31,12 +31,12 @@ The `--input` field needs to either be a single hex string or a file path to a j
 Each hex string (either in the file or as the direct input) is either:
 
 - Hex string of bytes, which is prefixed with `0x01`
-- Hex string of native field elements (represented as u32, little endian), prefixed with `0x02`
+- Hex string of native field elements (represented as `u32`, little endian), prefixed with `0x02`
 
 If you are providing input for a struct of type `T` that will be deserialized by the `openvm::io::read()` function, then the corresponding hex string should be prefixed by `0x01` followed by the serialization of `T` into bytes according to `openvm::serde::to_vec`. The serialization will serialize primitive types (e.g., `u8, u16, u32, u64`) into little-endian bytes. All serialized bytes are zero-padded to a multiple of `4` byte length.
 
 :::note
-The hex string must be of an even length. The reason for this is to avoid ambiguity: for example, if `12c` is passed, it is unclear whether it is supposed to be `012c`, `120c` or anything else.
+The hex string must be of an even length. The reason for this is to avoid ambiguity: for example, if `12c` is passed, it is unclear whether it is supposed to be `012c`, `120c` or anything else. For `0x02` inputs, the remaining hex string length after the `0x02` prefix must be a multiple of `8`, as each native field element is represented as a little-endian `u32`.
 :::
 
 As an example, the code snippet below generates an input json file from a struct of type `T`:
