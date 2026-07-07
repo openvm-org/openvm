@@ -1775,7 +1775,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2536,7 +2536,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "778e2ac28f6c47af28e4907f13ffd1e1ddbd400980a9abd7c8df189bf578a5ad"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2897,7 +2897,7 @@ dependencies = [
 [[package]]
 name = "halo2-axiom"
 version = "0.5.1"
-source = "git+https://github.com/axiom-crypto/halo2.git?tag=v0.5.1#5f2df84fa4043d7b1f3ae8a98c08e2829e1d5d94"
+source = "git+https://github.com/axiom-crypto/halo2.git?tag=v0.5.1#c9e642dd14561274de4f6f11625aa3ae73ea74d0"
 dependencies = [
  "blake2b_simd",
  "crossbeam",
@@ -2918,7 +2918,7 @@ dependencies = [
 [[package]]
 name = "halo2-axiom"
 version = "0.5.1"
-source = "git+https://github.com/axiom-crypto/halo2?branch=main#5f2df84fa4043d7b1f3ae8a98c08e2829e1d5d94"
+source = "git+https://github.com/axiom-crypto/halo2?branch=main#c9e642dd14561274de4f6f11625aa3ae73ea74d0"
 dependencies = [
  "blake2b_simd",
  "crossbeam",
@@ -2938,8 +2938,8 @@ dependencies = [
 
 [[package]]
 name = "halo2-axiom-gpu"
-version = "1.0.0-rc.0"
-source = "git+https://github.com/axiom-crypto/halo2-gpu.git?tag=v1.0.0-rc.1#62ecb5afc05ae1331212ccc34fcf2853bba7f668"
+version = "1.0.0"
+source = "git+https://github.com/axiom-crypto/halo2-gpu.git?tag=v1.0.0-rc.2#b167527ac58676a9cdcef8cb859163671e9bc83b"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2979,7 +2979,7 @@ dependencies = [
 [[package]]
 name = "halo2-base"
 version = "0.5.4"
-source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.4#5f4e38f52c45785c9f770ee7ab45223e61e74be9"
+source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.4#6522c1c5fd98daf92cba36f97fecd00e59d5ad70"
 dependencies = [
  "getset",
  "halo2-axiom 0.5.1 (git+https://github.com/axiom-crypto/halo2.git?tag=v0.5.1)",
@@ -3000,7 +3000,7 @@ dependencies = [
 [[package]]
 name = "halo2-ecc"
 version = "0.5.4"
-source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.4#5f4e38f52c45785c9f770ee7ab45223e61e74be9"
+source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.4#6522c1c5fd98daf92cba36f97fecd00e59d5ad70"
 dependencies = [
  "halo2-base",
  "itertools 0.11.0",
@@ -3574,7 +3574,7 @@ checksum = "e04d7f318608d35d4b61ddd75cbdaee86b023ebe2bd5a66ee0915f0bf93095a9"
 dependencies = [
  "hermit-abi 0.5.2",
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4251,7 +4251,7 @@ version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77e878c846a8abae00dd069496dbe8751b16ac1c3d6bd2a7283a938e8228f90d"
 dependencies = [
- "proc-macro-crate 3.3.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.118",
@@ -7031,7 +7031,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.60.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7481,7 +7481,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 [[package]]
 name = "snark-verifier"
 version = "0.2.6"
-source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.6#ed52bda581fbab0b16a462c4e54e3a84b2857f9c"
+source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.6#89abe4719d54c68ba07480a1b2204d736cdf0fec"
 dependencies = [
  "halo2-base",
  "halo2-ecc",
@@ -7502,7 +7502,7 @@ dependencies = [
 [[package]]
 name = "snark-verifier-sdk"
 version = "0.2.6"
-source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.6#ed52bda581fbab0b16a462c4e54e3a84b2857f9c"
+source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.6#89abe4719d54c68ba07480a1b2204d736cdf0fec"
 dependencies = [
  "bincode",
  "ethereum-types",
@@ -7727,7 +7727,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8451,7 +8451,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
