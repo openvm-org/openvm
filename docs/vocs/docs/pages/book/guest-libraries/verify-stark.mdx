@@ -20,7 +20,7 @@ Invokes a deferred call at deferral index `DEF_IDX` with the given `input_commit
 - `app_vm_commit: Commit` — commitment to the app VM configuration
 - `user_public_values: Vec<u8>` — user public values revealed by the verified app
 
-When correctly configured with the [`DeferredVerifyCircuit`](#circuit), verification is performed outside the VM circuit as part of the [deferral flow](/specs/architecture/deferral). From the guest perspective, this establishes that **there exists a proof** matching `input_commit` that verifies and yields the returned `ProofOutput`; the proof itself is never accessible from the guest program.
+When correctly configured with the [`DeferredVerifyCircuit`](#host), verification is performed outside the VM circuit as part of the [deferral flow](/specs/architecture/deferral). From the guest perspective, this establishes that **there exists a proof** matching `input_commit` that verifies and yields the returned `ProofOutput`; the proof itself is never accessible from the guest program.
 
 The deferral circuit output stores each user public value byte as a field element, but the guest helper returns the dense byte representation. `ProofOutput.user_public_values` should therefore match the bytes revealed by the verified app.
 
@@ -34,7 +34,7 @@ pub fn verify_stark<const DEF_IDX: u16>(input_commit: &Commit, expected: &ProofO
 
 Calls `verify_stark_unchecked` and panics if the result does not match `expected`.
 
-## Circuit
+## Host
 
 The circuit crate (`openvm-verify-stark-circuit`) provides the `DeferredVerifyCircuit`, which is the deferral circuit that actually verifies the STARK proof during aggregation. It:
 
@@ -135,6 +135,19 @@ let sdk = CpuSdk::builder()
 Passing `None` to `DeferredVerify*Prover::new(..., None, def_idx)` means that child proofs are asserted to be non-deferral proofs, i.e. they must not expose deferral public values or deferral Merkle proofs. To enable nested verification of deferral-enabled child proofs, pass `Some(expected_def_hook_commit)` instead. The `DeferralAggProver::verify_stark` constructor computes this value for the self-recursive SDK case.
 
 Each guest call using `DEF_IDX` corresponds to the deferral circuit inserted at `DEF_IDX`. If there is exactly one deferral function registered (as above), `DEF_IDX = 0`.
+
+### Generating Inputs and Proving
+
+The guest only passes an input commitment to `verify_stark_unchecked`; the child STARK proof being verified lives on the host and must be supplied to both phases described in the [deferral framework's Inputs and Proving section](/book/acceleration-using-extensions/deferral#inputs-and-proving). For verify-stark, the deferral input is the child proof itself:
+
+```rust
+// For execution: let the VM resolve the deferred output for the input commitment.
+stdin.deferrals = vec![get_deferral_state(&child_vk, from_ref(proof), verify_stark_cached_commit, VERIFY_STARK_DEF_IDX as u32)?];
+
+// For proving: hand the child proof to the deferral circuit prover.
+let def_input = DeferralInput::from_inputs(from_ref(proof));
+let (proof, _) = sdk.prove(exe, stdin, &[def_input])?;
+```
 
 ## End-to-End Example
 
