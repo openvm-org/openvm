@@ -50,16 +50,29 @@ pub const NUM_BN254_ACCUMULATOR: usize = 12;
 #[allow(dead_code)]
 pub(crate) const NUM_BN254_PROOF: usize = 43;
 
-#[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ProofData {
-    #[serde_as(as = "serde_with::hex::Hex")]
+    #[serde(with = "prefixed_hex")]
     /// KZG accumulator.
     pub accumulator: Vec<u8>,
-    #[serde_as(as = "serde_with::hex::Hex")]
+    #[serde(with = "prefixed_hex")]
     /// Bn254 proof in little-endian bytes. The circuit only has 1 advice column, so the proof is
     /// of length `NUM_BN254_PROOF * BN254_BYTES`.
     pub proof: Vec<u8>,
+}
+
+mod prefixed_hex {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(bytes: &Vec<u8>, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&format!("0x{}", hex::encode(bytes)))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
+        let hex_str = String::deserialize(deserializer)?;
+        let hex_str = hex_str.strip_prefix("0x").unwrap_or(&hex_str);
+        hex::decode(hex_str).map_err(serde::de::Error::custom)
+    }
 }
 
 // =================== EVM types (evm-prove feature) ===================
@@ -84,7 +97,6 @@ pub struct AppExecutionCommit {
 }
 
 #[cfg(feature = "evm-prove")]
-#[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EvmProof {
     /// The openvm major and minor version v{}.{}. The proof format will not change on patch
@@ -93,7 +105,7 @@ pub struct EvmProof {
     #[serde(flatten)]
     /// Bn254 public value app commits.
     pub app_commit: AppExecutionCommit,
-    #[serde_as(as = "serde_with::hex::Hex")]
+    #[serde(with = "prefixed_hex")]
     /// User public values packed into bytes.
     pub user_public_values: Vec<u8>,
     /// Byte encoding of the `proof`.
