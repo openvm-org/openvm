@@ -75,7 +75,7 @@ See the [Verify STARK guest library](/book/guest-libraries/verify-stark#using-de
 
 ## Inputs and Proving
 
-The guest program only passes an **input commitment** to `deferred_compute`; the raw input never enters the VM, and the VM writes the output back rather than computing it. So the host must supply the deferral data for two phases: **execution** and **proving**.
+The guest program only passes an **input commitment** to `deferred_compute`; the raw input never enters VM memory, and the deferred operation itself is not constrained in the VM. So the host must supply the deferral data for two phases: **execution** and **proving**.
 
 ### `DeferralState` (for execution)
 
