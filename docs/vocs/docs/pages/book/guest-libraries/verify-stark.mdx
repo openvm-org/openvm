@@ -138,7 +138,7 @@ Each guest call using `DEF_IDX` corresponds to the deferral circuit inserted at 
 
 ## End-to-End Example
 
-The repository includes an end-to-end verify-stark example under `examples/verify-stark`. It has:
+The repository includes an end-to-end verify-stark example under [`examples/verify-stark`](https://github.com/openvm-org/openvm/tree/main/examples/verify-stark). It has:
 
 - `guest/` - a guest program that calls `verify_stark_unchecked::<0>`.
 - `host/` - a standalone host crate that constructs the deferral-enabled SDK, writes its generated `openvm.toml`, caches the SDK proving keys, builds the guest, and proves a child STARK proof through the verify-stark circuit.
