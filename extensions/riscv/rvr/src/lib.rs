@@ -394,7 +394,7 @@ pub struct Rv64IoHostCallbacks {
 
 /// HintInput: pop next input record from VmState's input_stream and overwrite
 /// the active hint stream with `[len: u64 LE][data][padding to 8-byte align]`,
-/// each byte stored as one field element.
+/// stored directly as bytes.
 pub extern "C" fn host_hint_input<F: PrimeField32>(ctx: *mut c_void) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
     io.hint_stream.clear();
