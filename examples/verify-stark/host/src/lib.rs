@@ -83,7 +83,7 @@ pub fn keygen(
 
         // Create the verify-stark deferral circuit prover and use it in the DeferralAggProver.
         let verify_prover = VerifyProver::new::<E>(
-            child_agg_vk,
+            child_agg_vk.clone(),
             child_internal_recursive_cached_commit,
             verify_prover_params,
             memory_dimensions,
@@ -92,18 +92,32 @@ pub fn keygen(
             VERIFY_STARK_DEF_IDX,
         );
         let verify_circuit_prover = VerifyCircuitProver::new(verify_prover);
-        let multi_deferral_circuit_prover = Arc::new(MultiDeferralCircuitProver::new(
+        let multi_deferral_circuit_prover = MultiDeferralCircuitProver::new(
             verify_circuit_prover,
             agg_config.clone(),
             hook_params_with_100_bits_security(),
-        ));
-        DeferralAggProver::new(agg_config.clone(), multi_deferral_circuit_prover)
+        );
+        let verify_prover = VerifyProver::new::<E>(
+            child_agg_vk.clone(),
+            child_internal_recursive_cached_commit,
+            default_verify_stark_circuit_params(),
+            memory_dimensions,
+            num_user_pvs,
+            None,
+            VERIFY_STARK_DEF_IDX + 1,
+        );
+        let multi_deferral_circuit_prover =
+            multi_deferral_circuit_prover.with_prover(VerifyCircuitProver::new(verify_prover));
+        DeferralAggProver::new(agg_config.clone(), Arc::new(multi_deferral_circuit_prover))
     };
 
     // Create the SdkVmConfig from the DeferralAggProver
     let deferral_config = deferral_agg_prover
         .multi_deferral_circuit_prover
-        .make_config(vec![SupportedDeferral::VerifyStark]);
+        .make_config(vec![
+            SupportedDeferral::VerifyStark,
+            SupportedDeferral::VerifyStark,
+        ]);
     let vm_config = SdkVmConfig::builder()
         .system(Default::default())
         .rv32i(Default::default())
@@ -161,7 +175,7 @@ pub fn prove(
         child_baseline,
         verify_stark_cached_commit.into(),
     )?;
-    let (proof, _) = sdk.prove(exe, stdin, &[def_input])?;
+    let (proof, _) = sdk.prove(exe, stdin, &[def_input, DeferralInput::default()])?;
     VersionedVmStarkProof::new(proof)
 }
 
