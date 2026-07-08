@@ -287,25 +287,23 @@ pub(crate) fn asm_to_lib(asm_source: &str) -> Result<Library, StaticProgramError
     Ok(lib)
 }
 
-unsafe extern "C" fn should_suspend_shim<F, Ctx: ExecutionCtxTrait>(
-    state_ptr: *mut c_void,
-) -> bool {
+unsafe extern "C" fn should_suspend_shim<Ctx: ExecutionCtxTrait>(state_ptr: *mut c_void) -> bool {
     let state = &mut *(state_ptr as *mut VmExecState<GuestMemory, Ctx>);
     VmExecState::<GuestMemory, Ctx>::should_suspend(state)
 }
 
-unsafe extern "C" fn set_pc_shim<F, Ctx: ExecutionCtxTrait>(state_ptr: *mut c_void, pc: u32) {
+unsafe extern "C" fn set_pc_shim<Ctx: ExecutionCtxTrait>(state_ptr: *mut c_void, pc: u32) {
     let state = &mut *(state_ptr as *mut VmExecState<GuestMemory, Ctx>);
     state.vm_state.set_pc(pc);
 }
 
 // only needed for pure execution
-unsafe extern "C" fn set_instret_left_shim<F>(state_ptr: *mut c_void, instret_left: u64) {
+unsafe extern "C" fn set_instret_left_shim(state_ptr: *mut c_void, instret_left: u64) {
     let state = &mut *(state_ptr as *mut VmExecState<GuestMemory, ExecutionCtx>);
     state.ctx.instret_left = instret_left;
 }
 
-pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const PURE_EXECUTION: bool>(
+pub(crate) extern "C" fn extern_handler<Ctx: ExecutionCtxTrait, const PURE_EXECUTION: bool>(
     state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
     cur_pc: u32,
@@ -327,7 +325,7 @@ pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const PURE_EX
     }
 }
 
-extern "C" fn get_vm_address_space_addr<F, Ctx: ExecutionCtxTrait>(
+extern "C" fn get_vm_address_space_addr<Ctx: ExecutionCtxTrait>(
     exec_state_ptr: *mut c_void,
     addr_space: u64,
 ) -> *mut u64 {
@@ -336,7 +334,7 @@ extern "C" fn get_vm_address_space_addr<F, Ctx: ExecutionCtxTrait>(
     ptr.as_ptr() as *mut u64 // mut u64 because we want to write 8 bytes at a time
 }
 
-extern "C" fn get_vm_pc_ptr<F, Ctx: ExecutionCtxTrait>(exec_state_ptr: *mut c_void) -> *mut u64 {
+extern "C" fn get_vm_pc_ptr<Ctx: ExecutionCtxTrait>(exec_state_ptr: *mut c_void) -> *mut u64 {
     let vm_exec_state_ref = unsafe { &mut *(exec_state_ptr as *mut VmExecState<GuestMemory, Ctx>) };
     // since pc is the first element of the vm_state field and we use `repr(C)`
     // hence `ptr` will be equal to the address of pc in vm_state

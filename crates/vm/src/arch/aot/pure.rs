@@ -60,10 +60,10 @@ where
 
         let get_vm_address_space_addr_ptr = format!(
             "{:p}",
-            get_vm_address_space_addr::<F, ExecutionCtx> as *const ()
+            get_vm_address_space_addr::<ExecutionCtx> as *const ()
         );
 
-        let get_vm_pc_ptr = format!("{:p}", get_vm_pc_ptr::<F, ExecutionCtx> as *const ());
+        let get_vm_pc_ptr = format!("{:p}", get_vm_pc_ptr::<ExecutionCtx> as *const ());
 
         asm_str += &Self::push_internal_registers();
 
@@ -113,11 +113,10 @@ where
         let base_idx = (pc_base / DEFAULT_PC_STEP) as usize;
         let num_pc_slots = base_idx + exe.program.instructions_and_debug_infos.len();
 
-        let extern_handler_ptr =
-            format!("{:p}", extern_handler::<F, ExecutionCtx, true> as *const ());
-        let set_pc_ptr = format!("{:p}", set_pc_shim::<F, ExecutionCtx> as *const ());
+        let extern_handler_ptr = format!("{:p}", extern_handler::<ExecutionCtx, true> as *const ());
+        let set_pc_ptr = format!("{:p}", set_pc_shim::<ExecutionCtx> as *const ());
         let pre_compute_insns_ptr = format!("{:p}", pre_compute_insns_ptr as *const ());
-        let instret_left_ptr = format!("{:p}", set_instret_left_shim::<F> as *const ());
+        let instret_left_ptr = format!("{:p}", set_instret_left_shim as *const ());
 
         for pc_idx in 0..num_pc_slots {
             /* Preprocessing step, to check if we should suspend or not */

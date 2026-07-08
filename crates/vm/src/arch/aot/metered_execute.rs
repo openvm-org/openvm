@@ -102,10 +102,9 @@ where
             )
         };
 
-        let extern_handler_ptr =
-            format!("{:p}", extern_handler::<F, MeteredCtx, true> as *const ());
-        let set_pc_ptr = format!("{:p}", set_pc_shim::<F, MeteredCtx> as *const ());
-        let should_suspend_ptr = format!("{:p}", should_suspend_shim::<F, MeteredCtx> as *const ()); //needs state_ptr
+        let extern_handler_ptr = format!("{:p}", extern_handler::<MeteredCtx, true> as *const ());
+        let set_pc_ptr = format!("{:p}", set_pc_shim::<MeteredCtx> as *const ());
+        let should_suspend_ptr = format!("{:p}", should_suspend_shim::<MeteredCtx> as *const ()); //needs state_ptr
         let pre_compute_insns_ptr = format!("{:p}", pre_compute_insns_ptr as *const ());
 
         // generate the assembly based on exe.program
@@ -126,12 +125,10 @@ where
         asm_str += &format!("   mov {REG_B}, {REG_THIRD_ARG}\n");
         asm_str += &format!("   mov {REG_INSTRET_END}, {REG_FOURTH_ARG}\n");
 
-        let get_vm_address_space_addr_ptr = format!(
-            "{:p}",
-            get_vm_address_space_addr::<F, MeteredCtx> as *const ()
-        );
+        let get_vm_address_space_addr_ptr =
+            format!("{:p}", get_vm_address_space_addr::<MeteredCtx> as *const ());
 
-        let get_vm_pc_ptr = format!("{:p}", get_vm_pc_ptr::<F, MeteredCtx> as *const ());
+        let get_vm_pc_ptr = format!("{:p}", get_vm_pc_ptr::<MeteredCtx> as *const ());
 
         asm_str += &Self::push_internal_registers();
 
