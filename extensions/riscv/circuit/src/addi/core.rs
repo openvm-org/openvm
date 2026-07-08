@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_transpiler::ImmBaseAluOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -159,8 +159,8 @@ where
         (A::RecordMut<'buf>, &'buf mut AddICoreRecord<NUM_LIMBS>),
     >,
 {
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        format!("{:?}", ImmBaseAluOpcode::ADDI)
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", ImmBaseAluOpcode::from_usize(opcode - self.offset))
     }
 
     fn execute(
@@ -168,6 +168,11 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
+        debug_assert_eq!(
+            ImmBaseAluOpcode::from_usize(instruction.opcode.local_opcode_idx(self.offset)),
+            ImmBaseAluOpcode::ADDI
+        );
+
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);

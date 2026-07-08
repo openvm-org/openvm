@@ -170,8 +170,12 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64ImmBaseAluU16AdapterExecut
         instruction: &Instruction<F>,
         record: &mut &mut Rv64ImmBaseAluU16AdapterRecord,
     ) -> Self::ReadData {
-        let &Instruction { b, .. } = instruction;
-        // TODO: add debug assert
+        let &Instruction { b, d, e, .. } = instruction;
+
+        // rs1 is read from the register space; the operand is always an immediate.
+        debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV64_IMM_AS);
+
         record.rs1_ptr = b.as_canonical_u32();
         let rs1 = tracing_read_u16::<BLOCK_FE_WIDTH>(
             memory,
