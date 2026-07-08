@@ -9,7 +9,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_instructions::LocalOpcode;
-use openvm_riscv_transpiler::AddIOpcode;
+use openvm_riscv_transpiler::ImmBaseAluOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::PrimeCharacteristicRing,
@@ -25,8 +25,9 @@ use rand::{rngs::StdRng, Rng};
 use super::{core::run_addi, AddICoreAir, Rv64AddIChip, Rv64AddIExecutor};
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, Rv64AddIAdapterAir,
-        Rv64AddIAdapterExecutor, Rv64AddIAdapterFiller, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+        rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, Rv64ImmBaseAluU16AdapterAir,
+        Rv64ImmBaseAluU16AdapterExecutor, Rv64ImmBaseAluU16AdapterFiller, RV64_REGISTER_NUM_LIMBS,
+        U16_BITS,
     },
     addi::AddICoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
@@ -44,15 +45,18 @@ fn create_harness_fields(
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64AddIAir, Rv64AddIExecutor, Rv64AddIChip<F>) {
     let air = Rv64AddIAir::new(
-        Rv64AddIAdapterAir::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
-        AddICoreAir::new(range_checker_chip.bus(), AddIOpcode::CLASS_OFFSET),
+        Rv64ImmBaseAluU16AdapterAir::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
+        AddICoreAir::new(range_checker_chip.bus(), ImmBaseAluOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64AddIExecutor::new(Rv64AddIAdapterExecutor, AddIOpcode::CLASS_OFFSET);
+    let executor = Rv64AddIExecutor::new(
+        Rv64ImmBaseAluU16AdapterExecutor,
+        ImmBaseAluOpcode::CLASS_OFFSET,
+    );
     let chip = Rv64AddIChip::new(
         AddIFiller::new(
-            Rv64AddIAdapterFiller::new(range_checker_chip.clone()),
+            Rv64ImmBaseAluU16AdapterFiller::new(range_checker_chip.clone()),
             range_checker_chip,
-            AddIOpcode::CLASS_OFFSET,
+            ImmBaseAluOpcode::CLASS_OFFSET,
         ),
         memory_helper,
     );
@@ -91,7 +95,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         b,
         c,
         Some(imm),
-        AddIOpcode::ADDI.global_opcode().as_usize(),
+        ImmBaseAluOpcode::ADDI.global_opcode().as_usize(),
         rng,
     );
     tester.execute(executor, arena, &instruction);

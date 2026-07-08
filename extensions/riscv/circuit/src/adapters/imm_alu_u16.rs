@@ -33,10 +33,11 @@ use openvm_stark_backend::{
 
 use super::{byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_read_u16, tracing_write_u16};
 
-/// Adapter columns for ADDI — immediate-only variant of Rv64BaseAluU16AdapterCols.
+/// Adapter columns for immediate-operand base-ALU instructions (I-type: read rs1,
+/// write rd, immediate operand). Immediate-only variant of [`Rv64BaseAluU16AdapterCols`].
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
-pub struct Rv64AddIAdapterCols<T> {
+pub struct Rv64ImmBaseAluU16AdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
     pub rs1_ptr: T,
@@ -45,20 +46,20 @@ pub struct Rv64AddIAdapterCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64AddIAdapterCols<u8>)]
-pub struct Rv64AddIAdapterAir {
+#[columns_via(Rv64ImmBaseAluU16AdapterCols<u8>)]
+pub struct Rv64ImmBaseAluU16AdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub range_bus: VariableRangeCheckerBus,
 }
 
-impl<F: Field> BaseAir<F> for Rv64AddIAdapterAir {
+impl<F: Field> BaseAir<F> for Rv64ImmBaseAluU16AdapterAir {
     fn width(&self) -> usize {
-        Rv64AddIAdapterCols::<F>::width()
+        Rv64ImmBaseAluU16AdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64AddIAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64ImmBaseAluU16AdapterAir {
     type Interface = BasicAdapterInterface<
         AB::Expr,
         ImmInstruction<AB::Expr>,
@@ -74,7 +75,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64AddIAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local: &Rv64AddIAdapterCols<_> = local.borrow();
+        let local: &Rv64ImmBaseAluU16AdapterCols<_> = local.borrow();
         let timestamp = local.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
@@ -126,22 +127,22 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64AddIAdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64AddIAdapterCols<_> = local.borrow();
+        let cols: &Rv64ImmBaseAluU16AdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv64AddIAdapterExecutor;
+pub struct Rv64ImmBaseAluU16AdapterExecutor;
 
 #[derive(derive_new::new)]
-pub struct Rv64AddIAdapterFiller {
+pub struct Rv64ImmBaseAluU16AdapterFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64AddIAdapterRecord {
+pub struct Rv64ImmBaseAluU16AdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
     pub rd_ptr: u32,
@@ -150,14 +151,14 @@ pub struct Rv64AddIAdapterRecord {
     pub writes_aux: MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>,
 }
 
-impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64AddIAdapterExecutor {
-    const WIDTH: usize = size_of::<Rv64AddIAdapterCols<u8>>();
+impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64ImmBaseAluU16AdapterExecutor {
+    const WIDTH: usize = size_of::<Rv64ImmBaseAluU16AdapterCols<u8>>();
     type ReadData = [[u16; BLOCK_FE_WIDTH]; 1];
     type WriteData = [[u16; BLOCK_FE_WIDTH]; 1];
-    type RecordMut<'a> = &'a mut Rv64AddIAdapterRecord;
+    type RecordMut<'a> = &'a mut Rv64ImmBaseAluU16AdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut Rv64AddIAdapterRecord) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut Rv64ImmBaseAluU16AdapterRecord) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -167,7 +168,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64AddIAdapterExecutor {
         &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
-        record: &mut &mut Rv64AddIAdapterRecord,
+        record: &mut &mut Rv64ImmBaseAluU16AdapterRecord,
     ) -> Self::ReadData {
         let &Instruction { b, .. } = instruction;
         // TODO: add debug assert
@@ -188,7 +189,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64AddIAdapterExecutor {
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
-        record: &mut &mut Rv64AddIAdapterRecord,
+        record: &mut &mut Rv64ImmBaseAluU16AdapterRecord,
     ) {
         let &Instruction { a, d, .. } = instruction;
 
@@ -206,13 +207,14 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64AddIAdapterExecutor {
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64AddIAdapterFiller {
-    const WIDTH: usize = size_of::<Rv64AddIAdapterCols<u8>>();
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64ImmBaseAluU16AdapterFiller {
+    const WIDTH: usize = size_of::<Rv64ImmBaseAluU16AdapterCols<u8>>();
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
-        let record: &Rv64AddIAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let adapter_row: &mut Rv64AddIAdapterCols<F> = adapter_row.borrow_mut();
+        let record: &Rv64ImmBaseAluU16AdapterRecord =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let adapter_row: &mut Rv64ImmBaseAluU16AdapterCols<F> = adapter_row.borrow_mut();
 
         adapter_row
             .writes_aux

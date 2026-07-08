@@ -371,7 +371,7 @@ pub enum DivRemWOpcode {
 )]
 #[opcode_offset = 0x290]
 #[repr(usize)]
-pub enum AddIOpcode {
+pub enum ImmBaseAluOpcode {
     ADDI,
 }
 

@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
-use openvm_riscv_transpiler::AddIOpcode;
+use openvm_riscv_transpiler::ImmBaseAluOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -101,7 +101,7 @@ where
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            AB::Expr::from_u8(AddIOpcode::ADDI as u8),
+            AB::Expr::from_u8(ImmBaseAluOpcode::ADDI as u8),
         );
 
         AdapterAirContext {
@@ -160,7 +160,7 @@ where
     >,
 {
     fn get_opcode_name(&self, _opcode: usize) -> String {
-        format!("{:?}", AddIOpcode::ADDI)
+        format!("{:?}", ImmBaseAluOpcode::ADDI)
     }
 
     fn execute(

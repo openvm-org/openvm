@@ -12,7 +12,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use super::{AddICoreCols, AddICoreRecord};
 use crate::{
-    adapters::{Rv64AddIAdapterCols, Rv64AddIAdapterRecord, U16_BITS},
+    adapters::{Rv64ImmBaseAluU16AdapterCols, Rv64ImmBaseAluU16AdapterRecord, U16_BITS},
     cuda_abi::addi_cuda::tracegen,
 };
 
@@ -24,15 +24,17 @@ pub struct Rv64AddIChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64AddIChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize =
-            size_of::<(Rv64AddIAdapterRecord, AddICoreRecord<BLOCK_FE_WIDTH>)>();
+        const RECORD_SIZE: usize = size_of::<(
+            Rv64ImmBaseAluU16AdapterRecord,
+            AddICoreRecord<BLOCK_FE_WIDTH>,
+        )>();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64AddIAdapterCols::<F>::width()
+        let trace_width = Rv64ImmBaseAluU16AdapterCols::<F>::width()
             + AddICoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
