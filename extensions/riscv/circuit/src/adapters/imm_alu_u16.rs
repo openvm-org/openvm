@@ -33,8 +33,6 @@ use openvm_stark_backend::{
 
 use super::{byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, tracing_read_u16, tracing_write_u16};
 
-/// Adapter columns for immediate-operand base-ALU instructions (I-type: read rs1,
-/// write rd, immediate operand). Immediate-only variant of [`Rv64BaseAluU16AdapterCols`].
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
 pub struct Rv64ImmBaseAluU16AdapterCols<T> {
