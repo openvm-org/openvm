@@ -122,7 +122,7 @@ where
 {
     fn execute(
         &self,
-        state: VmStateMut<F, TracingMemory, RA>,
+        state: VmStateMut<TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         let record: &mut PhantomRecord = state.ctx.alloc(EmptyMultiRowLayout::default());

@@ -102,7 +102,6 @@ where
             ctx: arena,
             #[cfg(feature = "metrics")]
             metrics: &mut Default::default(),
-            phantom: std::marker::PhantomData,
         };
         executor
             .execute(state_mut, instruction)

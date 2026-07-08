@@ -53,10 +53,8 @@ impl<MEM> VmState<MEM> {
         }
     }
 
-    // `F` is retained on `VmStateMut` (and threaded to executors via `Instruction<F>`) until it is
-    // removed from `VmStateMut` in a follow-up step; source it as a generic here.
     #[inline(always)]
-    pub fn into_mut<'a, F, RA>(&'a mut self, ctx: &'a mut RA) -> VmStateMut<'a, F, MEM, RA> {
+    pub fn into_mut<'a, RA>(&'a mut self, ctx: &'a mut RA) -> VmStateMut<'a, MEM, RA> {
         VmStateMut {
             pc: &mut self.pc,
             memory: &mut self.memory,
@@ -65,7 +63,6 @@ impl<MEM> VmState<MEM> {
             ctx,
             #[cfg(feature = "metrics")]
             metrics: &mut self.metrics,
-            phantom: PhantomData,
         }
     }
 }

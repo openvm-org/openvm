@@ -61,7 +61,7 @@ pub fn preflight_executor_derive(input: TokenStream) -> TokenStream {
                 impl #impl_generics ::openvm_circuit::arch::PreflightExecutor<#field_ty_generic, RA> for #name #ty_generics #where_clause {
                     fn execute(
                         &self,
-                        state: ::openvm_circuit::arch::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory, RA>,
+                        state: ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::TracingMemory, RA>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#field_ty_generic>,
                     ) -> Result<(), ::openvm_circuit::arch::ExecutionError> {
                         self.0.execute(state, instruction)
@@ -113,7 +113,7 @@ pub fn preflight_executor_derive(input: TokenStream) -> TokenStream {
                 impl #impl_generics ::openvm_circuit::arch::PreflightExecutor<#field_ty_generic, RA> for #name #ty_generics #where_clause {
                     fn execute(
                         &self,
-                        state: ::openvm_circuit::arch::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory, RA>,
+                        state: ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::TracingMemory, RA>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#field_ty_generic>,
                     ) -> Result<(), ::openvm_circuit::arch::ExecutionError> {
                         match self {
