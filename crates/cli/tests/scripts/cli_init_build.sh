@@ -11,7 +11,10 @@ config_path="$temp_dir/openvm.toml"
 
 if [[ "${USE_LOCAL_OPENVM:-}" == "1" ]]; then
   local_openvm_path="$(cd ../toolchain/openvm && pwd)"
+  echo "Using local openvm dependency at $local_openvm_path"
   perl -0pi -e 's#openvm = \{ git = "https://github.com/openvm-org/openvm\.git".*?\}#openvm = { path = "'"$local_openvm_path"'", features = ["std"] }#' "$manifest_path"
+else
+  echo "Using generated openvm dependency from cargo openvm init"
 fi
 
 cargo openvm build \
