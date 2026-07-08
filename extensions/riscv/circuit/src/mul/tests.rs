@@ -329,7 +329,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
         .execute(vec![], None)
         .expect("AOT execution must succeed");
 
-    assert_vm_states_equivalent(&interp_state, &aot_state, &memory_dimensions);
+    assert_vm_states_equivalent::<F>(&interp_state, &aot_state, &memory_dimensions);
 
     (interp_state, aot_state)
 }

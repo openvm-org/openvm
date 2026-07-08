@@ -538,7 +538,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
         .execute(vec![], None)
         .expect("AOT execution must succeed");
 
-    assert_vm_states_equivalent(&interp_state, &aot_state, &memory_dimensions);
+    assert_vm_states_equivalent::<F>(&interp_state, &aot_state, &memory_dimensions);
 
     // Also test metered execution (interpreter and AOT) produce identical final state
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
@@ -562,7 +562,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
     let (_, metered_aot_state) = metered_aot
         .execute_metered(vec![], metered_ctx.clone())
         .expect("metered AOT execution must succeed");
-    assert_vm_states_equivalent(
+    assert_vm_states_equivalent::<F>(
         &metered_interp_state,
         &metered_aot_state,
         &memory_dimensions,

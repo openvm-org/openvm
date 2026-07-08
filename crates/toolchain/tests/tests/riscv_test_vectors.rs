@@ -48,7 +48,7 @@ fn test_rv64im_riscv_vector_runtime() -> Result<()> {
                     let interpreter_instance = executor.interpreter_instance(&exe)?;
                     let naive_state = interpreter_instance.execute(vec![], None)?;
                     let system_config: &SystemConfig = config.as_ref();
-                    assert_vm_states_equivalent(
+                    assert_vm_states_equivalent::<F>(
                         &state,
                         &naive_state,
                         &system_config.memory_config.memory_dimensions(),
