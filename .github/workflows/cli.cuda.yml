@@ -132,18 +132,19 @@ jobs:
         # SKIP_INSTALL=1 so the tests reuse the CUDA-built cargo-openvm on PATH
         # rather than `cargo install`'ing a non-CUDA copy.
         working-directory: crates/cli
-        run: |
-          export SKIP_INSTALL=1
-          cargo nextest run --cargo-profile=fast --test-threads=1 --features cuda,halo2-gpu
+        env:
+          SKIP_INSTALL: "1"
+          USE_LOCAL_OPENVM: ${{ env.USE_LOCAL_OPENVM }}
+        run: cargo nextest run --cargo-profile=fast --test-threads=1 --features cuda,halo2-gpu
 
       - name: Run ignored EVM end-to-end test (CUDA)
         # `test_cli_evm_e2e_simplified` is #[ignore]d because EVM proof generation
         # is expensive; opt in via the workflow_dispatch checkbox.
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_evm_e2e }}
         working-directory: crates/cli
-        run: |
-          export SKIP_INSTALL=1
-          cargo nextest run --cargo-profile=fast --test-threads=1 --features cuda,halo2-gpu --run-ignored=only -- test_cli_evm_e2e_simplified
+        env:
+          SKIP_INSTALL: "1"
+        run: cargo nextest run --cargo-profile=fast --test-threads=1 --features cuda,halo2-gpu --run-ignored=only -- test_cli_evm_e2e_simplified
 
       - name: sccache stats
         if: always()

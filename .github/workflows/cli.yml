@@ -116,18 +116,19 @@ jobs:
 
       - name: Run CLI integration tests
         working-directory: crates/cli
-        run: |
-          export SKIP_INSTALL=1
-          cargo nextest run --cargo-profile=fast --test-threads=1
+        env:
+          SKIP_INSTALL: "1"
+          USE_LOCAL_OPENVM: ${{ env.USE_LOCAL_OPENVM }}
+        run: cargo nextest run --cargo-profile=fast --test-threads=1
 
       - name: Run ignored EVM end-to-end test
         # `test_cli_evm_e2e_simplified` is #[ignore]d because EVM proof generation
         # is expensive; run it only when explicitly requested via workflow_dispatch.
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_evm_e2e }}
         working-directory: crates/cli
-        run: |
-          export SKIP_INSTALL=1
-          cargo nextest run --cargo-profile=fast --test-threads=1 --run-ignored=only -- test_cli_evm_e2e_simplified
+        env:
+          SKIP_INSTALL: "1"
+        run: cargo nextest run --cargo-profile=fast --test-threads=1 --run-ignored=only -- test_cli_evm_e2e_simplified
 
       - name: sccache stats
         if: always()
