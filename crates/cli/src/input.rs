@@ -64,8 +64,6 @@ pub fn read_bytes_into_stdin(stdin: &mut StdIn, bytes: &[u8]) -> Result<()> {
                     "Invalid input format: incorrect number of bytes"
                 ));
             }
-            // 0x02 historically declared little-endian u32 field elements; they are now written
-            // as their raw little-endian bytes, matching how stream consumers read them.
             stdin.write_bytes(data);
             Ok(())
         }
