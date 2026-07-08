@@ -40,9 +40,11 @@ impl From<StdIn> for Streams {
         while let Some(input) = std_in.read() {
             data.push(input);
         }
-        let mut ret = Streams::new(data);
-        ret.deferrals = std_in.deferrals;
-        ret
+        Streams {
+            input_stream: data.into(),
+            deferrals: std_in.deferrals,
+            ..Default::default()
+        }
     }
 }
 
