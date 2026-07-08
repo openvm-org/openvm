@@ -1,30 +1,18 @@
-use std::{collections::VecDeque, marker::PhantomData};
+use std::collections::VecDeque;
 
 use itertools::Itertools;
 use openvm_circuit::arch::{deferral::DeferralState, Streams};
 use openvm_stark_backend::codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-/// Program input. Both the input records and the derived hint stream are byte-backed;
-/// `F` is retained only so the type lines up with `Streams<F>` and the prover's field.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct StdIn<F = crate::F> {
+/// Program input. Both the input records and the derived hint stream are byte-backed.
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct StdIn {
     pub buffer: VecDeque<Vec<u8>>,
     pub deferrals: Vec<DeferralState>,
-    phantom: PhantomData<F>,
 }
 
-impl<F> Default for StdIn<F> {
-    fn default() -> Self {
-        Self {
-            buffer: VecDeque::default(),
-            deferrals: Vec::default(),
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<F> StdIn<F> {
+impl StdIn {
     pub fn from_bytes(data: &[u8]) -> Self {
         let mut ret = Self::default();
         ret.write_bytes(data);
@@ -46,8 +34,8 @@ impl<F> StdIn<F> {
     }
 }
 
-impl<F> From<StdIn<F>> for Streams<F> {
-    fn from(mut std_in: StdIn<F>) -> Self {
+impl From<StdIn> for Streams {
+    fn from(mut std_in: StdIn) -> Self {
         let mut data = Vec::<Vec<u8>>::new();
         while let Some(input) = std_in.read() {
             data.push(input);
@@ -58,9 +46,9 @@ impl<F> From<StdIn<F>> for Streams<F> {
     }
 }
 
-impl<F> From<Vec<Vec<u8>>> for StdIn<F> {
+impl From<Vec<Vec<u8>>> for StdIn {
     fn from(inputs: Vec<Vec<u8>>) -> Self {
-        let mut ret = StdIn::<F>::default();
+        let mut ret = StdIn::default();
         for input in inputs {
             ret.write_bytes(&input);
         }

@@ -37,10 +37,7 @@ impl<'a, F> RvrPureInstance<'a, F>
 where
     F: PrimeField32,
 {
-    pub fn create_initial_vm_state(
-        &self,
-        inputs: impl Into<Streams<F>>,
-    ) -> VmState<F, GuestMemory> {
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<F, GuestMemory> {
         VmState::initial(
             self.system_config,
             &self.exe.init_memory,
@@ -51,7 +48,7 @@ where
 
     pub fn execute(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);

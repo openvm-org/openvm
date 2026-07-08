@@ -120,10 +120,7 @@ where
         skip_all,
         fields(group = self.program_name.as_ref().unwrap_or(&"app_proof".to_string()))
     )]
-    pub fn prove(
-        &mut self,
-        input: StdIn<Val<E::SC>>,
-    ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
+    pub fn prove(&mut self, input: StdIn) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
     where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
             + MeteredExecutor<Val<E::SC>>

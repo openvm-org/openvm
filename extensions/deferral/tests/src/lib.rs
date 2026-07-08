@@ -83,7 +83,7 @@ mod tests {
         DeferralExtension::new(fns, commits)
     }
 
-    fn run_test(config: Rv64DeferralConfig, example_name: &str, streams: Streams<F>) -> Result<()> {
+    fn run_test(config: Rv64DeferralConfig, example_name: &str, streams: Streams) -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,

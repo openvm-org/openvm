@@ -404,7 +404,7 @@ where
     /// Assumes the program doesn't jump to out of bounds pc
     pub fn execute_metered(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);

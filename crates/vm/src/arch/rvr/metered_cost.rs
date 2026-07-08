@@ -87,7 +87,7 @@ impl<F: PrimeField32> RvrMeteredCostInstance<'_, F> {
 
     pub fn execute_metered_cost(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         ctx: MeteredCostCtx,
     ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
         let vm_state = VmState::initial(

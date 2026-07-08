@@ -84,10 +84,10 @@ where
 #[cfg(feature = "aot")]
 impl<F> AotExecutor<F> for PhantomExecutor<F> where F: PrimeField32 {}
 
-pub(super) struct PhantomStateMut<'a, F> {
+pub(super) struct PhantomStateMut<'a> {
     pub(super) pc: u32,
     pub(super) memory: &'a mut GuestMemory,
-    pub(super) streams: &'a mut Streams<F>,
+    pub(super) streams: &'a mut Streams,
     pub(super) rng: &'a mut StdRng,
 }
 
@@ -161,7 +161,7 @@ impl<F> AotMeteredExecutor<F> for PhantomExecutor<F> where F: PrimeField32 {}
 
 #[inline(always)]
 fn execute_impl<F>(
-    state: PhantomStateMut<F>,
+    state: PhantomStateMut,
     operands: &PhantomOperands,
     sub_executor: &dyn PhantomSubExecutor<F>,
 ) -> Result<(), ExecutionError> {

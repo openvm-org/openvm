@@ -351,7 +351,7 @@ where
     /// Returns the final VM state when execution stops.
     pub fn execute(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
         let vm_state =

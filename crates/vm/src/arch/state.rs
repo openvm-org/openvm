@@ -1,5 +1,6 @@
 use std::{
     fmt::Debug,
+    marker::PhantomData,
     mem::size_of,
     ops::{Deref, DerefMut},
 };
@@ -25,10 +26,14 @@ pub struct VmState<F, MEM = GuestMemory> {
     #[getset(get_copy = "pub", get_mut = "pub")]
     pc: u32,
     pub memory: MEM,
-    pub streams: Streams<F>,
+    pub streams: Streams,
     pub rng: StdRng,
     #[cfg(feature = "metrics")]
     pub metrics: VmMetrics,
+    // `Streams` is no longer generic in `F`; retain `F` here as a marker until it is removed from
+    // `VmState` itself in a follow-up step.
+    #[new(default)]
+    phantom: PhantomData<F>,
 }
 
 pub(super) const DEFAULT_RNG_SEED: u64 = 0;
@@ -41,12 +46,7 @@ impl<F, MEM> VmState<F, MEM> {
 }
 
 impl<F: Clone, MEM> VmState<F, MEM> {
-    pub fn new_with_defaults(
-        pc: u32,
-        memory: MEM,
-        streams: impl Into<Streams<F>>,
-        seed: u64,
-    ) -> Self {
+    pub fn new_with_defaults(pc: u32, memory: MEM, streams: impl Into<Streams>, seed: u64) -> Self {
         Self {
             pc,
             memory,
@@ -54,6 +54,7 @@ impl<F: Clone, MEM> VmState<F, MEM> {
             rng: StdRng::seed_from_u64(seed),
             #[cfg(feature = "metrics")]
             metrics: VmMetrics::default(),
+            phantom: PhantomData,
         }
     }
 
@@ -67,6 +68,7 @@ impl<F: Clone, MEM> VmState<F, MEM> {
             ctx,
             #[cfg(feature = "metrics")]
             metrics: &mut self.metrics,
+            phantom: PhantomData,
         }
     }
 }
@@ -77,7 +79,7 @@ impl<F: Clone> VmState<F, GuestMemory> {
         system_config: &SystemConfig,
         init_memory: &SparseMemoryImage,
         pc_start: u32,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
     ) -> Self {
         let memory = create_memory_image(&system_config.memory_config, init_memory);
         VmState::new_with_defaults(pc_start, memory, inputs.into(), DEFAULT_RNG_SEED)
@@ -87,7 +89,7 @@ impl<F: Clone> VmState<F, GuestMemory> {
         &mut self,
         init_memory: &SparseMemoryImage,
         pc_start: u32,
-        streams: impl Into<Streams<F>>,
+        streams: impl Into<Streams>,
     ) {
         self.pc = pc_start;
         self.memory.memory.fill_zero();

@@ -227,7 +227,7 @@ impl<F> PhantomSubExecutor<F> for NopPhantomExecutor {
     fn phantom_execute(
         &self,
         _memory: &GuestMemory,
-        _streams: &mut Streams<F>,
+        _streams: &mut Streams,
         _rng: &mut StdRng,
         _discriminant: PhantomDiscriminant,
         _a: u32,
@@ -243,7 +243,7 @@ impl<F> PhantomSubExecutor<F> for CycleStartPhantomExecutor {
     fn phantom_execute(
         &self,
         _memory: &GuestMemory,
-        _streams: &mut Streams<F>,
+        _streams: &mut Streams,
         _rng: &mut StdRng,
         _discriminant: PhantomDiscriminant,
         _a: u32,
@@ -260,7 +260,7 @@ impl<F> PhantomSubExecutor<F> for CycleEndPhantomExecutor {
     fn phantom_execute(
         &self,
         _memory: &GuestMemory,
-        _streams: &mut Streams<F>,
+        _streams: &mut Streams,
         _rng: &mut StdRng,
         _discriminant: PhantomDiscriminant,
         _a: u32,

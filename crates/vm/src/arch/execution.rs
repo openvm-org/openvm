@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use openvm_circuit_primitives::{AlignedBytesBorrow, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -289,11 +291,15 @@ pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>> {
 pub struct VmStateMut<'a, F, MEM, RA> {
     pub pc: &'a mut u32,
     pub memory: &'a mut MEM,
-    pub streams: &'a mut Streams<F>,
+    pub streams: &'a mut Streams,
     pub rng: &'a mut StdRng,
     pub ctx: &'a mut RA,
     #[cfg(feature = "metrics")]
     pub metrics: &'a mut VmMetrics,
+    // `Streams` is no longer generic in `F`; retain `F` here as a marker until it is removed from
+    // `VmStateMut` itself in a follow-up step.
+    #[new(default)]
+    pub phantom: PhantomData<F>,
 }
 
 /// Wrapper type for metered pre-computed data, which is always an AIR index together with the
@@ -521,7 +527,7 @@ pub trait PhantomSubExecutor<F>: Send + Sync {
     fn phantom_execute(
         &self,
         memory: &GuestMemory,
-        streams: &mut Streams<F>,
+        streams: &mut Streams,
         rng: &mut StdRng,
         discriminant: PhantomDiscriminant,
         a: u32,

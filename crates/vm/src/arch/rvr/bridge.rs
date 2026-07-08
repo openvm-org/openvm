@@ -2,7 +2,7 @@
 //!
 //! Memory and public-values bytes are aliased via raw pointer; registers are
 //! the only field still copied (a 256-byte memcpy at execution boundaries).
-//! `Streams<F>` and the host RNG are borrowed directly into [`OpenVmIoState`]
+//! `Streams` and the host RNG are borrowed directly into [`OpenVmIoState`]
 //! and never converted upfront.
 
 use std::mem::{align_of, size_of};

@@ -113,42 +113,32 @@ pub enum GenerationError {
     },
 }
 
-#[derive(Clone)]
-pub struct Streams<F> {
+#[derive(Clone, Default)]
+pub struct Streams {
     pub input_stream: VecDeque<Vec<u8>>,
     pub hint_stream: VecDeque<u8>,
     /// Cached deferred operation inputs and outputs. Each idx corresponds to a
     /// unique function that is constrained outside the VM in its own deferral circuit.
     pub deferrals: Vec<DeferralState>,
-    /// The input and hint streams are byte-backed; `F` is retained purely to thread the
-    /// field type through the execution state (`VmState<F>` and friends).
-    phantom: PhantomData<F>,
 }
 
-impl<F> Streams<F> {
+impl Streams {
     pub fn new(input_stream: impl Into<VecDeque<Vec<u8>>>) -> Self {
         Self {
             input_stream: input_stream.into(),
             hint_stream: VecDeque::default(),
             deferrals: Vec::default(),
-            phantom: PhantomData,
         }
     }
 }
 
-impl<F> Default for Streams<F> {
-    fn default() -> Self {
-        Self::new(VecDeque::default())
-    }
-}
-
-impl<F> From<VecDeque<Vec<u8>>> for Streams<F> {
+impl From<VecDeque<Vec<u8>>> for Streams {
     fn from(value: VecDeque<Vec<u8>>) -> Self {
         Streams::new(value)
     }
 }
 
-impl<F> From<Vec<Vec<u8>>> for Streams<F> {
+impl From<Vec<Vec<u8>>> for Streams {
     fn from(value: Vec<Vec<u8>>) -> Self {
         Streams::new(value)
     }
@@ -1063,7 +1053,7 @@ where
     pub fn create_initial_state(
         &self,
         exe: &VmExe<Val<E::SC>>,
-        inputs: impl Into<Streams<Val<E::SC>>>,
+        inputs: impl Into<Streams>,
     ) -> VmState<Val<E::SC>, GuestMemory> {
         #[allow(unused_mut)]
         let mut state = VmState::initial(
@@ -1390,7 +1380,7 @@ pub struct ContinuationVmProof<SC: StarkProtocolConfig> {
 pub trait ContinuationVmProver<SC: StarkProtocolConfig> {
     fn prove(
         &mut self,
-        input: impl Into<Streams<Val<SC>>>,
+        input: impl Into<Streams>,
     ) -> Result<ContinuationVmProof<SC>, VirtualMachineError>;
 }
 
@@ -1439,7 +1429,7 @@ where
     }
 
     #[instrument(name = "vm.reset_state", level = "debug", skip_all)]
-    pub fn reset_state(&mut self, inputs: impl Into<Streams<Val<E::SC>>>) {
+    pub fn reset_state(&mut self, inputs: impl Into<Streams>) {
         let state = self.state.as_mut().unwrap();
         state.reset(&self.exe.init_memory, self.exe.pc_start, inputs);
 
@@ -1465,7 +1455,7 @@ where
     /// the next segment does not start before the current proof finishes.
     fn prove(
         &mut self,
-        input: impl Into<Streams<Val<E::SC>>>,
+        input: impl Into<Streams>,
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
         self.prove_continuations(input, |_, _| {})
     }
@@ -1485,7 +1475,7 @@ where
     /// The closure `modify_ctx(seg_idx, &mut ctx)` is called sequentially for each segment.
     pub fn prove_continuations(
         &mut self,
-        input: impl Into<Streams<Val<E::SC>>>,
+        input: impl Into<Streams>,
         mut modify_ctx: impl FnMut(usize, &mut ProvingContext<E::PB>),
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
         let input = input.into();

@@ -2,7 +2,7 @@
 //!
 //! Each execution path takes `&mut VmState<F, GuestMemory>` directly: the
 //! transient `RvState` scratch struct aliases VmState's memory and registers,
-//! and `OpenVmIoState` borrows VmState's `Streams<F>` and rng. There is no
+//! and `OpenVmIoState` borrows VmState's `Streams` and rng. There is no
 //! separately-owned guest memory or stream conversion.
 
 use std::ffi::c_void;

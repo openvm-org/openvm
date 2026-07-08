@@ -181,7 +181,7 @@ where
         })
     }
 
-    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F> {
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<F> {
         VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs)
     }
 
@@ -304,7 +304,7 @@ where
     /// Returns the final VM state when execution stops.
     pub fn execute(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
         let vm_state =
@@ -360,7 +360,7 @@ where
     /// Returns the segmentation boundary data and the final VM state when execution stops.
     pub fn execute_metered(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);
@@ -447,7 +447,7 @@ where
     /// Returns the trace cost and final VM state when execution stops.
     pub fn execute_metered_cost(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         ctx: MeteredCostCtx,
     ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);

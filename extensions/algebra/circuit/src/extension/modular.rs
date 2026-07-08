@@ -508,7 +508,7 @@ pub(crate) mod phantom {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
-            streams: &mut Streams<F>,
+            streams: &mut Streams,
             _: &mut StdRng,
             _: PhantomDiscriminant,
             a: u32,
@@ -600,7 +600,7 @@ pub(crate) mod phantom {
         fn phantom_execute(
             &self,
             _: &GuestMemory,
-            streams: &mut Streams<F>,
+            streams: &mut Streams,
             _: &mut StdRng,
             _: PhantomDiscriminant,
             _: u32,

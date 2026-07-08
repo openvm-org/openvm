@@ -346,10 +346,7 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) -> u8
 }
 
 impl<F: PrimeField32, S> RvrMeteredInstanceWith<'_, F, S> {
-    pub fn create_initial_vm_state(
-        &self,
-        inputs: impl Into<Streams<F>>,
-    ) -> VmState<F, GuestMemory> {
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<F, GuestMemory> {
         VmState::initial(
             self.system_config,
             &self.exe.init_memory,
@@ -375,7 +372,7 @@ impl<F: PrimeField32, S> RvrMeteredInstanceWith<'_, F, S> {
 impl<F: PrimeField32> RvrMeteredInstance<'_, F> {
     pub fn execute_metered(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);
@@ -411,7 +408,7 @@ impl<F: PrimeField32> RvrMeteredSegmentInstance<'_, F> {
     /// Executes until termination or the next segment-boundary suspension.
     pub fn execute_metered_until_segment_boundary(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         ctx: MeteredCtx,
     ) -> Result<(RvrMeteredResult, VmState<F, GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);

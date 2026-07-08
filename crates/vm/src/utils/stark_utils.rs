@@ -70,7 +70,7 @@ pub fn air_test_with_min_segments<VB, VC>(
     builder: VB,
     config: VC,
     exe: impl Into<VmExe<BabyBear>>,
-    input: impl Into<Streams<BabyBear>>,
+    input: impl Into<Streams>,
     min_segments: usize,
 ) -> Option<MemoryImage>
 where
@@ -113,7 +113,7 @@ fn is_periphery_air(air_name: &str) -> bool {
 pub fn check_aot_equivalence<E, VB>(
     vm: &VirtualMachine<E, VB>,
     exe: &VmExe<Val<E::SC>>,
-    input: &Streams<Val<E::SC>>,
+    input: &Streams,
 ) -> eyre::Result<()>
 where
     E: StarkEngine,
@@ -217,7 +217,7 @@ fn check_vm_state_eq<F: PrimeField32>(
 pub fn check_rvr_equivalence<E, VB>(
     vm: &VirtualMachine<E, VB>,
     exe: &VmExe<Val<E::SC>>,
-    input: &Streams<Val<E::SC>>,
+    input: &Streams,
 ) -> eyre::Result<()>
 where
     E: StarkEngine,
@@ -346,7 +346,7 @@ pub fn air_test_impl<E, VB>(
     builder: VB,
     config: VB::VmConfig,
     exe: impl Into<VmExe<Val<E::SC>>>,
-    input: impl Into<Streams<Val<E::SC>>>,
+    input: impl Into<Streams>,
     min_segments: usize,
     debug: bool,
 ) -> eyre::Result<(
