@@ -22,7 +22,7 @@ use crate::{
 /// Represents the core state of a VM.
 #[repr(C)]
 #[derive(derive_new::new, CopyGetters, MutGetters, Clone)]
-pub struct VmState<F, MEM = GuestMemory> {
+pub struct VmState<MEM = GuestMemory> {
     #[getset(get_copy = "pub", get_mut = "pub")]
     pc: u32,
     pub memory: MEM,
@@ -30,22 +30,18 @@ pub struct VmState<F, MEM = GuestMemory> {
     pub rng: StdRng,
     #[cfg(feature = "metrics")]
     pub metrics: VmMetrics,
-    // `Streams` is no longer generic in `F`; retain `F` here as a marker until it is removed from
-    // `VmState` itself in a follow-up step.
-    #[new(default)]
-    phantom: PhantomData<F>,
 }
 
 pub(super) const DEFAULT_RNG_SEED: u64 = 0;
 
-impl<F, MEM> VmState<F, MEM> {
+impl<MEM> VmState<MEM> {
     #[inline(always)]
     pub fn set_pc(&mut self, pc: u32) {
         self.pc = pc;
     }
 }
 
-impl<F: Clone, MEM> VmState<F, MEM> {
+impl<MEM> VmState<MEM> {
     pub fn new_with_defaults(pc: u32, memory: MEM, streams: impl Into<Streams>, seed: u64) -> Self {
         Self {
             pc,
@@ -54,12 +50,13 @@ impl<F: Clone, MEM> VmState<F, MEM> {
             rng: StdRng::seed_from_u64(seed),
             #[cfg(feature = "metrics")]
             metrics: VmMetrics::default(),
-            phantom: PhantomData,
         }
     }
 
+    // `F` is retained on `VmStateMut` (and threaded to executors via `Instruction<F>`) until it is
+    // removed from `VmStateMut` in a follow-up step; source it as a generic here.
     #[inline(always)]
-    pub fn into_mut<'a, RA>(&'a mut self, ctx: &'a mut RA) -> VmStateMut<'a, F, MEM, RA> {
+    pub fn into_mut<'a, F, RA>(&'a mut self, ctx: &'a mut RA) -> VmStateMut<'a, F, MEM, RA> {
         VmStateMut {
             pc: &mut self.pc,
             memory: &mut self.memory,
@@ -73,7 +70,7 @@ impl<F: Clone, MEM> VmState<F, MEM> {
     }
 }
 
-impl<F: Clone> VmState<F, GuestMemory> {
+impl VmState<GuestMemory> {
     #[instrument(name = "VmState::initial", level = "debug", skip_all)]
     pub fn initial(
         system_config: &SystemConfig,
@@ -106,10 +103,13 @@ impl<F: Clone> VmState<F, GuestMemory> {
 #[repr(C)]
 pub struct VmExecState<F, MEM, CTX> {
     /// Core VM state
-    pub vm_state: VmState<F, MEM>,
+    pub vm_state: VmState<MEM>,
     pub ctx: CTX,
     /// Execution-specific fields
     pub exit_code: Result<Option<u32>, ExecutionError>,
+    // `VmState` is no longer generic in `F`; retain `F` here as a marker until it is removed from
+    // `VmExecState` itself in a follow-up step.
+    pub phantom: PhantomData<F>,
 }
 
 impl<F, CTX: ExecutionCtxTrait> VmExecState<F, GuestMemory, CTX> {
@@ -120,11 +120,12 @@ impl<F, CTX: ExecutionCtxTrait> VmExecState<F, GuestMemory, CTX> {
 }
 
 impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {
-    pub fn new(vm_state: VmState<F, MEM>, ctx: CTX) -> Self {
+    pub fn new(vm_state: VmState<MEM>, ctx: CTX) -> Self {
         Self {
             vm_state,
             ctx,
             exit_code: Ok(None),
+            phantom: PhantomData,
         }
     }
 
@@ -132,7 +133,7 @@ impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {
     /// cannot be cloned.
     pub fn try_clone(&self) -> eyre::Result<Self>
     where
-        VmState<F, MEM>: Clone,
+        VmState<MEM>: Clone,
         CTX: Clone,
     {
         if self.exit_code.is_err() {
@@ -144,12 +145,13 @@ impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {
             vm_state: self.vm_state.clone(),
             exit_code: Ok(*self.exit_code.as_ref().unwrap()),
             ctx: self.ctx.clone(),
+            phantom: PhantomData,
         })
     }
 }
 
 impl<F, MEM, CTX> Deref for VmExecState<F, MEM, CTX> {
-    type Target = VmState<F, MEM>;
+    type Target = VmState<MEM>;
 
     fn deref(&self) -> &Self::Target {
         &self.vm_state

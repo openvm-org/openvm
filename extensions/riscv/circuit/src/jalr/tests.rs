@@ -611,7 +611,7 @@ fn jalr_x0_write_suppression_test() {
 }
 
 #[cfg(feature = "aot")]
-fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>) {
+fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
     eprintln!("run_jalr_program called");
     let program = Program::from_instructions(&instructions);
     let exe = VmExe::new(program);
@@ -636,7 +636,7 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F
 }
 
 #[cfg(feature = "aot")]
-fn read_register(state: &VmState<F>, offset: usize) -> u32 {
+fn read_register(state: &VmState, offset: usize) -> u32 {
     let bytes = unsafe {
         state
             .memory

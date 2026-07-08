@@ -181,7 +181,7 @@ where
         })
     }
 
-    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<F> {
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState {
         VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs)
     }
 
@@ -306,7 +306,7 @@ where
         &self,
         inputs: impl Into<Streams>,
         num_insns: Option<u64>,
-    ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
         let vm_state =
             VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
         self.execute_from_state(vm_state, num_insns)
@@ -319,9 +319,9 @@ where
     /// Returns the final VM state when execution stops.
     pub fn execute_from_state(
         &self,
-        from_state: VmState<F, GuestMemory>,
+        from_state: VmState<GuestMemory>,
         num_insns: Option<u64>,
-    ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
         let ctx = ExecutionCtx::new(num_insns);
         let mut exec_state = VmExecState::new(from_state, ctx);
 
@@ -362,7 +362,7 @@ where
         &self,
         inputs: impl Into<Streams>,
         ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);
         self.execute_metered_from_state(vm_state, ctx)
     }
@@ -377,9 +377,9 @@ where
     /// [VirtualMachine::build_metered_ctx](super::VirtualMachine::build_metered_ctx).
     pub fn execute_metered_from_state(
         &self,
-        from_state: VmState<F, GuestMemory>,
+        from_state: VmState<GuestMemory>,
         ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         let mut exec_state = VmExecState::new(from_state, ctx);
 
         loop {
@@ -449,7 +449,7 @@ where
         &self,
         inputs: impl Into<Streams>,
         ctx: MeteredCostCtx,
-    ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(MeteredCostCtx, VmState<GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);
         self.execute_metered_cost_from_state(vm_state, ctx)
     }
@@ -460,9 +460,9 @@ where
     /// Returns the trace cost and final VM state when execution stops.
     pub fn execute_metered_cost_from_state(
         &self,
-        from_state: VmState<F, GuestMemory>,
+        from_state: VmState<GuestMemory>,
         ctx: MeteredCostCtx,
-    ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(MeteredCostCtx, VmState<GuestMemory>), ExecutionError> {
         let mut exec_state = VmExecState::new(from_state, ctx);
 
         #[cfg(feature = "metrics")]

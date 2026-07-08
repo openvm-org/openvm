@@ -172,8 +172,8 @@ where
 /// and both byte values on failure. Short-circuits at the first mismatch.
 #[cfg(any(feature = "aot", feature = "rvr"))]
 fn check_vm_state_eq<F: PrimeField32>(
-    lhs: &VmState<F, GuestMemory>,
-    rhs: &VmState<F, GuestMemory>,
+    lhs: &VmState<GuestMemory>,
+    rhs: &VmState<GuestMemory>,
 ) -> eyre::Result<()> {
     if lhs.pc() != rhs.pc() {
         eyre::bail!("pc mismatch: interp={}, rvr={}", lhs.pc(), rhs.pc());

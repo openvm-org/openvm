@@ -406,7 +406,7 @@ where
         &self,
         inputs: impl Into<Streams>,
         ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);
         self.execute_metered_from_state(vm_state, ctx)
     }
@@ -419,9 +419,9 @@ where
     /// Assume program doesn't jump to out of bounds pc
     pub fn execute_metered_from_state(
         &self,
-        from_state: VmState<F, GuestMemory>,
+        from_state: VmState<GuestMemory>,
         ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         let mut exec_state = VmExecState::new(from_state, ctx);
 
         loop {

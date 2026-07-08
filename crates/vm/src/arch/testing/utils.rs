@@ -55,8 +55,8 @@ pub fn default_tracing_memory(mem_config: &MemoryConfig) -> TracingMemory {
 /// Asserts that two final [`VmState`]s reached via different execution paths (e.g. interpreter
 /// vs AOT) are equivalent: same pc and same guest memory (compared via Merkle roots).
 pub fn assert_vm_states_equivalent<F: PrimeField32>(
-    state1: &VmState<F>,
-    state2: &VmState<F>,
+    state1: &VmState,
+    state2: &VmState,
     memory_dimensions: &MemoryDimensions,
 ) {
     assert_eq!(state1.pc(), state2.pc(), "PCs differ");

@@ -519,7 +519,7 @@ fn run_mulhsu_neg_sanity_test() {
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(feature = "aot")]
-fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>) {
+fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
     let program = Program::from_instructions(&instructions);
     let exe = VmExe::new(program);
     let config = Rv64ImConfig::default();
@@ -571,7 +571,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
 }
 
 #[cfg(feature = "aot")]
-fn read_register(state: &VmState<F>, offset: usize) -> u32 {
+fn read_register(state: &VmState, offset: usize) -> u32 {
     let bytes = unsafe {
         state
             .memory

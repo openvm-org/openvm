@@ -173,7 +173,7 @@ pub enum ExitCode {
 pub struct PreflightExecutionOutput<F, RA> {
     pub system_records: SystemRecords<F>,
     pub record_arenas: Vec<RA>,
-    pub to_state: VmState<F, GuestMemory>,
+    pub to_state: VmState<GuestMemory>,
 }
 
 impl<F, VC> VmExecutor<F, VC>
@@ -961,7 +961,7 @@ where
     pub fn execute_preflight(
         &self,
         interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
-        state: VmState<Val<E::SC>, GuestMemory>,
+        state: VmState<GuestMemory>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
     ) -> Result<PreflightExecutionOutput<Val<E::SC>, VB::RecordArena>, ExecutionError>
@@ -1054,7 +1054,7 @@ where
         &self,
         exe: &VmExe<Val<E::SC>>,
         inputs: impl Into<Streams>,
-    ) -> VmState<Val<E::SC>, GuestMemory> {
+    ) -> VmState<GuestMemory> {
         #[allow(unused_mut)]
         let mut state = VmState::initial(
             self.config().as_ref(),
@@ -1169,7 +1169,7 @@ where
     pub fn prove(
         &mut self,
         interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
-        state: VmState<Val<E::SC>, GuestMemory>,
+        state: VmState<GuestMemory>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
     ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError>
@@ -1402,7 +1402,7 @@ where
     #[getset(get = "pub")]
     exe: Arc<VmExe<Val<E::SC>>>,
     #[getset(get = "pub", get_mut = "pub")]
-    state: Option<VmState<Val<E::SC>, GuestMemory>>,
+    state: Option<VmState<GuestMemory>>,
 }
 
 impl<E, VB> VmInstance<E, VB>

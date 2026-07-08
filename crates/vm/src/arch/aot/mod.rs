@@ -48,7 +48,7 @@ where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,
 {
-    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<F> {
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState {
         VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs)
     }
 

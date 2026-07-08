@@ -1,6 +1,6 @@
 //! Load .so, bridge state, call rv_execute.
 //!
-//! Each execution path takes `&mut VmState<F, GuestMemory>` directly: the
+//! Each execution path takes `&mut VmState<GuestMemory>` directly: the
 //! transient `RvState` scratch struct aliases VmState's memory and registers,
 //! and `OpenVmIoState` borrows VmState's `Streams` and rng. There is no
 //! separately-owned guest memory or stream conversion.
@@ -55,7 +55,7 @@ pub enum ExecuteError {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn build_io_state_borrowed<'a, F: PrimeField32>(
-    vm_state: &'a mut VmState<F, GuestMemory>,
+    vm_state: &'a mut VmState<GuestMemory>,
 ) -> OpenVmIoState<'a, F> {
     let memory_ptr = rv64_memory_ptr(vm_state);
     let (deferral_memory, deferral_memory_len) =
@@ -133,7 +133,7 @@ pub unsafe fn rv_execute(
 fn run_and_finalize<F, T, S>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
-    vm_state: &mut VmState<F, GuestMemory>,
+    vm_state: &mut VmState<GuestMemory>,
     state: &mut RvState<Rv64, T, S>,
     allow_suspended: bool,
 ) -> Result<ExecutionStatus, ExecuteError>
@@ -142,7 +142,7 @@ where
     T: TracerState,
     S: SuspenderState,
 {
-    let mut io_state = build_io_state_borrowed(vm_state);
+    let mut io_state = build_io_state_borrowed::<F>(vm_state);
     unsafe {
         register_openvm_io_ctx(compiled, &mut io_state)?;
         extensions.register_host_callbacks(&compiled.lib)?;
@@ -184,7 +184,7 @@ where
 pub fn execute<F: PrimeField32>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
-    vm_state: &mut VmState<F, GuestMemory>,
+    vm_state: &mut VmState<GuestMemory>,
     num_insns: Option<u64>,
 ) -> Result<RvrPureResult, ExecuteError> {
     let pc = vm_state.pc();
@@ -216,7 +216,7 @@ pub fn execute<F: PrimeField32>(
 pub fn execute_metered_cost<F: PrimeField32>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
-    vm_state: &mut VmState<F, GuestMemory>,
+    vm_state: &mut VmState<GuestMemory>,
     widths: &[u64],
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
     let pc = vm_state.pc();
@@ -240,7 +240,7 @@ pub fn execute_metered_cost<F: PrimeField32>(
 pub fn execute_metered<F: PrimeField32>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
-    vm_state: &mut VmState<F, GuestMemory>,
+    vm_state: &mut VmState<GuestMemory>,
     seg_state: SegmentationState,
 ) -> Result<SegmentationState, ExecuteError> {
     execute_metered_impl(compiled, extensions, vm_state, seg_state, false).map(|result| {
@@ -253,7 +253,7 @@ pub fn execute_metered<F: PrimeField32>(
 pub fn execute_metered_segment_boundary<F: PrimeField32>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
-    vm_state: &mut VmState<F, GuestMemory>,
+    vm_state: &mut VmState<GuestMemory>,
     seg_state: SegmentationState,
 ) -> Result<RvrMeteredResult, ExecuteError> {
     execute_metered_impl(compiled, extensions, vm_state, seg_state, true)
@@ -262,7 +262,7 @@ pub fn execute_metered_segment_boundary<F: PrimeField32>(
 fn execute_metered_impl<F: PrimeField32>(
     compiled: &RvrCompiled,
     extensions: &ExtensionRegistry<F>,
-    vm_state: &mut VmState<F, GuestMemory>,
+    vm_state: &mut VmState<GuestMemory>,
     mut seg_state: SegmentationState,
     allow_suspended: bool,
 ) -> Result<RvrMeteredResult, ExecuteError> {

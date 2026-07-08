@@ -353,7 +353,7 @@ where
         &self,
         inputs: impl Into<Streams>,
         num_insns: Option<u64>,
-    ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
         let vm_state =
             VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
         self.execute_from_state(vm_state, num_insns)
@@ -364,9 +364,9 @@ where
     // Otherwise executes until termination
     pub fn execute_from_state(
         &self,
-        from_state: VmState<F, GuestMemory>,
+        from_state: VmState<GuestMemory>,
         num_insns: Option<u64>,
-    ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
         let from_state_pc = from_state.pc();
         let ctx = ExecutionCtx::new(num_insns);
         let instret_left = ctx.instret_left;
