@@ -1,4 +1,4 @@
-use std::{ffi::c_void, mem::offset_of};
+use std::{ffi::c_void, marker::PhantomData, mem::offset_of};
 
 use openvm_instructions::{exe::VmExe, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -74,19 +74,20 @@ where
             pc_start: exe.pc_start,
             init_memory,
             lib,
+            _phantom: PhantomData,
         })
     }
     fn create_metered_asm<E>(
         exe: &VmExe<F>,
         inventory: &ExecutorInventory<E>,
         executor_idx_to_air_idx: &[usize],
-        pre_compute_insns_ptr: *const PreComputeInstruction<F, MeteredCtx>,
+        pre_compute_insns_ptr: *const PreComputeInstruction<MeteredCtx>,
     ) -> Result<String, StaticProgramError>
     where
         E: MeteredExecutor<F>,
     {
         let mut asm_str = String::new();
-        let instret_until_end_offset = offset_of!(VmExecState<F, GuestMemory, MeteredCtx>, ctx)
+        let instret_until_end_offset = offset_of!(VmExecState<GuestMemory, MeteredCtx>, ctx)
             + offset_of!(MeteredCtx, segmentation_ctx)
             + offset_of!(SegmentationCtx, instrets_until_check);
 
@@ -442,11 +443,10 @@ where
     // TODO: implement execute_metered_until_suspend for AOT if needed
     pub fn execute_metered_until_suspend(
         &self,
-        vm_exec_state: VmExecState<F, GuestMemory, MeteredCtx>,
-    ) -> Result<VmExecState<F, GuestMemory, MeteredCtx>, ExecutionError> {
+        vm_exec_state: VmExecState<GuestMemory, MeteredCtx>,
+    ) -> Result<VmExecState<GuestMemory, MeteredCtx>, ExecutionError> {
         let from_state_pc = vm_exec_state.vm_state.pc();
-        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, MeteredCtx>> =
-            Box::new(vm_exec_state);
+        let mut vm_exec_state: Box<VmExecState<GuestMemory, MeteredCtx>> = Box::new(vm_exec_state);
 
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
@@ -460,7 +460,7 @@ where
                 .expect("Failed to get asm_run symbol");
 
             let vm_exec_state_ptr =
-                vm_exec_state.as_mut() as *mut VmExecState<F, GuestMemory, MeteredCtx>;
+                vm_exec_state.as_mut() as *mut VmExecState<GuestMemory, MeteredCtx>;
             let trace_heights_ptr = vm_exec_state.ctx.trace_heights.as_mut_ptr();
 
             let instret_until_end = vm_exec_state.ctx.segmentation_ctx.instrets_until_check;

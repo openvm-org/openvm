@@ -45,10 +45,10 @@ impl<A> Rv64JalLuiExecutor<A> {
 macro_rules! dispatch {
     ($execute_impl:ident, $is_jal:ident, $enabled:ident) => {
         match ($is_jal, $enabled) {
-            (true, true) => Ok($execute_impl::<_, _, true, true>),
-            (true, false) => Ok($execute_impl::<_, _, true, false>),
-            (false, true) => Ok($execute_impl::<_, _, false, true>),
-            (false, false) => Ok($execute_impl::<_, _, false, false>),
+            (true, true) => Ok($execute_impl::<F, _, true, true>),
+            (true, false) => Ok($execute_impl::<F, _, true, false>),
+            (false, true) => Ok($execute_impl::<F, _, false, true>),
+            (false, false) => Ok($execute_impl::<F, _, false, false>),
         }
     };
 }
@@ -68,7 +68,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut JalLuiPreCompute = data.borrow_mut();
         let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
         dispatch!(execute_e1_handler, is_jal, enabled)
@@ -153,7 +153,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -204,14 +204,9 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const IS_JAL: bool,
-    const ENABLED: bool,
->(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_JAL: bool, const ENABLED: bool>(
     pre_compute: &JalLuiPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let JalLuiPreCompute { a, signed_imm } = *pre_compute;
     let (pc, rd) = run_jal_lui(IS_JAL, exec_state.pc(), signed_imm);
@@ -231,11 +226,11 @@ unsafe fn execute_e1_impl<
     const ENABLED: bool,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &JalLuiPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<JalLuiPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, IS_JAL, ENABLED>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -247,7 +242,7 @@ unsafe fn execute_e2_impl<
     const ENABLED: bool,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<JalLuiPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<JalLuiPreCompute>>())
@@ -255,5 +250,5 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, IS_JAL, ENABLED>(&pre_compute.data, exec_state);
 }

@@ -75,7 +75,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -119,7 +119,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -226,9 +226,9 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: &AddSubPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1 = exec_state
         .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs1_ptr as u32);
@@ -251,18 +251,18 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &AddSubPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<AddSubPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<AddSubPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<AddSubPreCompute>>())
@@ -270,7 +270,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Al
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state);
 }
 
 trait AluOp {

@@ -58,7 +58,6 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
         unsafe fn #handler_name #handler_generics (
             interpreter: &::openvm_circuit::arch::interpreter::InterpretedInstance<'_, #f_type, #ctx_type>,
             exec_state: &mut ::openvm_circuit::arch::VmExecState<
-                #f_type,
                 ::openvm_circuit::system::memory::online::GuestMemory,
                 #ctx_type,
             >,
@@ -91,6 +90,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
 
     // Return both the original function and the new handler
     let output = quote! {
+        #[allow(clippy::extra_unused_type_parameters)]
         #input_fn
 
         #handler_fn

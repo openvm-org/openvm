@@ -126,8 +126,8 @@ pub enum AotError {
 /// arg, exec_state)`. The `pre_compute: *const u8` is a pre-computed buffer of data
 /// corresponding to a single instruction. The contents of `pre_compute` are determined from the
 /// program code as specified by the [Executor] and [MeteredExecutor] traits.
-pub type ExecuteFunc<F, CTX> =
-    unsafe fn(pre_compute: *const u8, exec_state: &mut VmExecState<F, GuestMemory, CTX>);
+pub type ExecuteFunc<CTX> =
+    unsafe fn(pre_compute: *const u8, exec_state: &mut VmExecState<GuestMemory, CTX>);
 
 /// Handler for tail call elimination. The `CTX` is assumed to contain pointers to the pre-computed
 /// buffer and the function handler table.
@@ -138,7 +138,7 @@ pub type ExecuteFunc<F, CTX> =
 #[cfg(feature = "tco")]
 pub type Handler<F, CTX> = unsafe fn(
     interpreter: &InterpretedInstance<'_, F, CTX>,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 );
 
 /// Trait for pure execution via a host interpreter. The trait methods provide the methods to
@@ -153,7 +153,7 @@ pub trait InterpreterExecutor<F> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait;
 
@@ -216,7 +216,7 @@ pub trait InterpreterMeteredExecutor<F> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait;
 

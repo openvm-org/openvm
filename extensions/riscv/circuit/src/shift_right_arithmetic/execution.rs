@@ -67,8 +67,8 @@ impl<A, const LIMB_BITS: usize> ShiftRightArithmeticExecutor<A, { BLOCK_FE_WIDTH
 macro_rules! dispatch {
     ($execute_impl:ident, $is_imm:ident) => {
         match $is_imm {
-            true => Ok($execute_impl::<_, _, true>),
-            false => Ok($execute_impl::<_, _, false>),
+            true => Ok($execute_impl::<F, _, true>),
+            false => Ok($execute_impl::<F, _, false>),
         }
     };
 }
@@ -88,7 +88,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut ShiftRightArithmeticPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
@@ -197,7 +197,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftRightArithmeticPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
@@ -244,9 +244,9 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_IMM: bool>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool>(
     pre_compute: &ShiftRightArithmeticPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1 =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
@@ -272,19 +272,19 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_IMM
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_IMM: bool>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &ShiftRightArithmeticPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<ShiftRightArithmeticPreCompute>())
             .borrow();
-    execute_e12_impl::<F, CTX, IS_IMM>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, IS_IMM>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_IMM: bool>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ShiftRightArithmeticPreCompute> = std::slice::from_raw_parts(
         pre_compute,
@@ -294,5 +294,5 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const 
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_IMM>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, IS_IMM>(&pre_compute.data, exec_state);
 }

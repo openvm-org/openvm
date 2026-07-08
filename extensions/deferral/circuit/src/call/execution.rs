@@ -95,13 +95,13 @@ impl<F: VmField> InterpreterExecutor<F> for DeferralCallExecutor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
         let pre_compute: &mut DeferralCallPrecompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, pre_compute)?;
-        Ok(execute_e1_impl::<_, _>)
+        Ok(execute_e1_impl::<F, _>)
     }
 
     #[cfg(feature = "tco")]
@@ -116,7 +116,7 @@ impl<F: VmField> InterpreterExecutor<F> for DeferralCallExecutor {
     {
         let pre_compute: &mut DeferralCallPrecompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, pre_compute)?;
-        Ok(execute_e1_handler::<_, _>)
+        Ok(execute_e1_handler::<F, _>)
     }
 }
 
@@ -135,14 +135,14 @@ impl<F: VmField> InterpreterMeteredExecutor<F> for DeferralCallExecutor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
         let pre_compute: &mut E2PreCompute<DeferralCallPrecompute> = data.borrow_mut();
         pre_compute.chip_idx = air_idx as u32;
         self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        Ok(execute_e2_impl::<_, _>)
+        Ok(execute_e2_impl::<F, _>)
     }
 
     #[cfg(feature = "tco")]
@@ -159,7 +159,7 @@ impl<F: VmField> InterpreterMeteredExecutor<F> for DeferralCallExecutor {
         let pre_compute: &mut E2PreCompute<DeferralCallPrecompute> = data.borrow_mut();
         pre_compute.chip_idx = air_idx as u32;
         self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        Ok(execute_e2_handler::<_, _>)
+        Ok(execute_e2_handler::<F, _>)
     }
 }
 
@@ -169,7 +169,7 @@ impl<F: VmField> AotMeteredExecutor<F> for DeferralCallExecutor {}
 #[inline(always)]
 unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     pre_compute: &DeferralCallPrecompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let output_ptr =
         rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rd_ptr));
@@ -248,18 +248,18 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
 #[inline(always)]
 unsafe fn execute_e1_impl<F: VmField, CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &DeferralCallPrecompute =
         from_raw_parts(pre_compute, size_of::<DeferralCallPrecompute>()).borrow();
-    execute_e12_impl(pre_compute, exec_state);
+    execute_e12_impl::<F, _>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: VmField, CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<DeferralCallPrecompute> = from_raw_parts(
         pre_compute,
@@ -267,7 +267,7 @@ unsafe fn execute_e2_impl<F: VmField, CTX: MeteredExecutionCtxTrait>(
     )
     .borrow();
 
-    execute_e12_impl(&pre_compute.data, exec_state);
+    execute_e12_impl::<F, _>(&pre_compute.data, exec_state);
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

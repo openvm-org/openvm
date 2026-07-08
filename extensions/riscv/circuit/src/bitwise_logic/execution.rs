@@ -67,12 +67,12 @@ macro_rules! dispatch {
                 $is_imm,
                 BaseAluOpcode::from_usize($opcode.local_opcode_idx($offset)),
             ) {
-                (true, BaseAluOpcode::XOR) => $execute_impl::<_, _, true, XorOp>,
-                (false, BaseAluOpcode::XOR) => $execute_impl::<_, _, false, XorOp>,
-                (true, BaseAluOpcode::OR) => $execute_impl::<_, _, true, OrOp>,
-                (false, BaseAluOpcode::OR) => $execute_impl::<_, _, false, OrOp>,
-                (true, BaseAluOpcode::AND) => $execute_impl::<_, _, true, AndOp>,
-                (false, BaseAluOpcode::AND) => $execute_impl::<_, _, false, AndOp>,
+                (true, BaseAluOpcode::XOR) => $execute_impl::<F, _, true, XorOp>,
+                (false, BaseAluOpcode::XOR) => $execute_impl::<F, _, false, XorOp>,
+                (true, BaseAluOpcode::OR) => $execute_impl::<F, _, true, OrOp>,
+                (false, BaseAluOpcode::OR) => $execute_impl::<F, _, false, OrOp>,
+                (true, BaseAluOpcode::AND) => $execute_impl::<F, _, true, AndOp>,
+                (false, BaseAluOpcode::AND) => $execute_impl::<F, _, false, AndOp>,
                 _ => unreachable!("BitwiseLogicExecutor received non-XOR/OR/AND opcode"),
             },
         )
@@ -95,7 +95,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -139,7 +139,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -256,14 +256,9 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: AluOp,
->(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: AluOp>(
     pre_compute: &BitwiseLogicPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2: [u8; 8] = if IS_IMM {
@@ -289,11 +284,11 @@ unsafe fn execute_e1_impl<
     OP: AluOp,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &BitwiseLogicPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<BitwiseLogicPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, IS_IMM, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -305,7 +300,7 @@ unsafe fn execute_e2_impl<
     OP: AluOp,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<BitwiseLogicPreCompute> = std::slice::from_raw_parts(
         pre_compute,
@@ -315,7 +310,7 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
 }
 
 trait AluOp {

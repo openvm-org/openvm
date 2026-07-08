@@ -2,6 +2,7 @@ use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout},
     borrow::{Borrow, BorrowMut},
     iter::repeat_n,
+    marker::PhantomData,
     ptr::NonNull,
 };
 
@@ -50,7 +51,7 @@ pub struct InterpretedInstance<'a, F, Ctx> {
     /// SAFETY: The first `pc_base / DEFAULT_PC_STEP` entries will be unreachable. We do this to
     /// avoid needing to subtract `pc_base` during runtime.
     #[cfg(not(feature = "tco"))]
-    pre_compute_insns: Vec<PreComputeInstruction<F, Ctx>>,
+    pre_compute_insns: Vec<PreComputeInstruction<Ctx>>,
     #[cfg(feature = "tco")]
     pre_compute_max_size: usize,
     /// Handler function pointers for tail call optimization.
@@ -60,17 +61,22 @@ pub struct InterpretedInstance<'a, F, Ctx> {
     pc_start: u32,
 
     init_memory: SparseMemoryImage,
+
+    // `F` is the program's field type: used by `handlers` (recursively via `Handler` ->
+    // `InterpretedInstance<F>`) under tco and by the `Program<F>` construction methods, but no
+    // stored field references it non-recursively, so retain it here as a marker.
+    _phantom: PhantomData<F>,
 }
 
 #[repr(C)]
 #[cfg_attr(feature = "tco", allow(dead_code))]
-pub(crate) struct PreComputeInstruction<F, Ctx> {
-    pub(crate) handler: ExecuteFunc<F, Ctx>,
+pub(crate) struct PreComputeInstruction<Ctx> {
+    pub(crate) handler: ExecuteFunc<Ctx>,
     pub(crate) pre_compute: *const u8,
 }
 
-unsafe impl<F, Ctx> Send for PreComputeInstruction<F, Ctx> {}
-unsafe impl<F, Ctx> Sync for PreComputeInstruction<F, Ctx> {}
+unsafe impl<Ctx> Send for PreComputeInstruction<Ctx> {}
+unsafe impl<Ctx> Sync for PreComputeInstruction<Ctx> {}
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -178,6 +184,7 @@ where
             pre_compute_max_size,
             #[cfg(feature = "tco")]
             handlers,
+            _phantom: PhantomData,
         })
     }
 
@@ -287,6 +294,7 @@ where
             pre_compute_max_size,
             #[cfg(feature = "tco")]
             handlers,
+            _phantom: PhantomData,
         })
     }
 }
@@ -407,19 +415,19 @@ where
     ///
     /// # Parameters
     /// - `self`: The reference to the current executor or VM context.
-    /// - `exec_state`: A mutable `VmExecState<F, GuestMemory, MeteredCtx>` which represents the
+    /// - `exec_state`: A mutable `VmExecState<GuestMemory, MeteredCtx>` which represents the
     ///   execution state of the virtual machine, including its program counter (`pc`), instruction
     ///   retirement (`instret`), and execution context (`MeteredCtx`).
     ///
     /// # Returns
-    /// - `Ok(VmExecState<F, GuestMemory, MeteredCtx>)`: The execution state after suspension or
-    ///   normal completion.
+    /// - `Ok(VmExecState<GuestMemory, MeteredCtx>)`: The execution state after suspension or normal
+    ///   completion.
     /// - `Err(ExecutionError)`: If there is an error during execution, such as an invalid state or
     ///   run-time error.
     pub fn execute_metered_until_suspend(
         &self,
-        mut exec_state: VmExecState<F, GuestMemory, MeteredCtx>,
-    ) -> Result<VmExecState<F, GuestMemory, MeteredCtx>, ExecutionError> {
+        mut exec_state: VmExecState<GuestMemory, MeteredCtx>,
+    ) -> Result<VmExecState<GuestMemory, MeteredCtx>, ExecutionError> {
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         #[cfg(feature = "metrics")]
@@ -518,9 +526,9 @@ pub(crate) fn split_pre_compute_buf<'a, F>(
 /// The `fn_ptrs` pointer to pre-computed buffers that outlive this function.
 #[cfg(not(feature = "tco"))]
 #[inline(always)]
-unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
-    exec_state: &mut VmExecState<F, GuestMemory, Ctx>,
-    fn_ptrs: &[PreComputeInstruction<F, Ctx>],
+unsafe fn execute_trampoline<Ctx: ExecutionCtxTrait>(
+    exec_state: &mut VmExecState<GuestMemory, Ctx>,
+    fn_ptrs: &[PreComputeInstruction<Ctx>],
 ) {
     while exec_state
         .exit_code
@@ -593,9 +601,9 @@ impl Drop for AlignedBuf {
 }
 
 #[inline(always)]
-unsafe fn terminate_execute_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn terminate_execute_impl<CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &TerminatePreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<TerminatePreCompute>()).borrow();
@@ -606,7 +614,7 @@ unsafe fn terminate_execute_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 #[cfg(feature = "tco")]
 unsafe fn terminate_execute_tco_handler<F: PrimeField32, CTX: ExecutionCtxTrait>(
     interpreter: &InterpretedInstance<'_, F, CTX>,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute = interpreter.get_pre_compute(exec_state.vm_state.pc());
     terminate_execute_impl(pre_compute, exec_state);
@@ -615,7 +623,7 @@ unsafe fn terminate_execute_tco_handler<F: PrimeField32, CTX: ExecutionCtxTrait>
 #[cfg(feature = "tco")]
 unsafe fn unreachable_tco_handler<F: PrimeField32, CTX>(
     _: &InterpretedInstance<'_, F, CTX>,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     exec_state.exit_code = Err(ExecutionError::Unreachable(exec_state.vm_state.pc()));
 }
@@ -684,13 +692,13 @@ pub(crate) fn get_pre_compute_instructions<F, Ctx, E>(
     program: &Program<F>,
     inventory: &ExecutorInventory<E>,
     pre_compute: &mut [&mut [u8]],
-) -> Result<Vec<PreComputeInstruction<F, Ctx>>, StaticProgramError>
+) -> Result<Vec<PreComputeInstruction<Ctx>>, StaticProgramError>
 where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,
     E: Executor<F>,
 {
-    let unreachable_handler: ExecuteFunc<F, Ctx> = |_, exec_state| {
+    let unreachable_handler: ExecuteFunc<Ctx> = |_, exec_state| {
         exec_state.exit_code = Err(ExecutionError::Unreachable(exec_state.pc()));
     };
 
@@ -741,13 +749,13 @@ pub(crate) fn get_metered_pre_compute_instructions<F, Ctx, E>(
     inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
     pre_compute: &mut [&mut [u8]],
-) -> Result<Vec<PreComputeInstruction<F, Ctx>>, StaticProgramError>
+) -> Result<Vec<PreComputeInstruction<Ctx>>, StaticProgramError>
 where
     F: PrimeField32,
     Ctx: MeteredExecutionCtxTrait,
     E: MeteredExecutor<F>,
 {
-    let unreachable_handler: ExecuteFunc<F, Ctx> = |_, exec_state| {
+    let unreachable_handler: ExecuteFunc<Ctx> = |_, exec_state| {
         exec_state.exit_code = Err(ExecutionError::Unreachable(exec_state.pc()));
     };
     repeat_n(&None, get_pc_index(program.pc_base))
@@ -799,7 +807,7 @@ where
 fn get_system_opcode_handler<F: PrimeField32, Ctx: ExecutionCtxTrait>(
     inst: &Instruction<F>,
     buf: &mut [u8],
-) -> Option<ExecuteFunc<F, Ctx>> {
+) -> Option<ExecuteFunc<Ctx>> {
     if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
         let pre_compute: &mut TerminatePreCompute = buf.borrow_mut();
         pre_compute.exit_code = inst.c.as_canonical_u32();

@@ -82,14 +82,14 @@ impl<A, const LOAD_WIDTH: usize> LoadExecutor<A, LOAD_WIDTH> {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident, $enabled:ident) => {
         match ($local_opcode, $enabled) {
-            (LOADD, true) => Ok($execute_impl::<_, _, LoadDOp, true>),
-            (LOADD, false) => Ok($execute_impl::<_, _, LoadDOp, false>),
-            (LOADWU, true) => Ok($execute_impl::<_, _, LoadWUOp, true>),
-            (LOADWU, false) => Ok($execute_impl::<_, _, LoadWUOp, false>),
-            (LOADHU, true) => Ok($execute_impl::<_, _, LoadHUOp, true>),
-            (LOADHU, false) => Ok($execute_impl::<_, _, LoadHUOp, false>),
-            (LOADBU, true) => Ok($execute_impl::<_, _, LoadBUOp, true>),
-            (LOADBU, false) => Ok($execute_impl::<_, _, LoadBUOp, false>),
+            (LOADD, true) => Ok($execute_impl::<F, _, LoadDOp, true>),
+            (LOADD, false) => Ok($execute_impl::<F, _, LoadDOp, false>),
+            (LOADWU, true) => Ok($execute_impl::<F, _, LoadWUOp, true>),
+            (LOADWU, false) => Ok($execute_impl::<F, _, LoadWUOp, false>),
+            (LOADHU, true) => Ok($execute_impl::<F, _, LoadHUOp, true>),
+            (LOADHU, false) => Ok($execute_impl::<F, _, LoadHUOp, false>),
+            (LOADBU, true) => Ok($execute_impl::<F, _, LoadBUOp, true>),
+            (LOADBU, false) => Ok($execute_impl::<F, _, LoadBUOp, false>),
             _ => Err(StaticProgramError::InvalidInstruction(0)),
         }
     };
@@ -111,7 +111,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut LoadPreCompute = data.borrow_mut();
         let (local_opcode, enabled) = self.pre_compute_impl(pc, inst, pre_compute)?;
         dispatch!(execute_e1_handler, local_opcode, enabled)
@@ -148,7 +148,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -178,13 +178,12 @@ where
 
 #[inline(always)]
 unsafe fn execute_e12_impl<
-    F: PrimeField32,
     CTX: ExecutionCtxTrait,
     OP: LoadOp,
     const ENABLED: bool,
 >(
     pre_compute: &LoadPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
     let rs1_bytes: [u8; RV64_REGISTER_NUM_LIMBS] =
@@ -224,11 +223,11 @@ unsafe fn execute_e1_impl<
     const ENABLED: bool,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &LoadPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<LoadPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, OP, ENABLED>(pre_compute, exec_state)
+    execute_e12_impl::<CTX, OP, ENABLED>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -240,14 +239,14 @@ unsafe fn execute_e2_impl<
     const ENABLED: bool,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<LoadPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<LoadPreCompute>>()).borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OP, ENABLED>(&pre_compute.data, exec_state)
+    execute_e12_impl::<CTX, OP, ENABLED>(&pre_compute.data, exec_state)
 }
 
 trait LoadOp {

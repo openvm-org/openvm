@@ -38,10 +38,10 @@ struct BranchLtPreCompute {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         Ok(match $local_opcode {
-            BranchLessThanOpcode::BLT => $execute_impl::<_, _, BltOp>,
-            BranchLessThanOpcode::BLTU => $execute_impl::<_, _, BltuOp>,
-            BranchLessThanOpcode::BGE => $execute_impl::<_, _, BgeOp>,
-            BranchLessThanOpcode::BGEU => $execute_impl::<_, _, BgeuOp>,
+            BranchLessThanOpcode::BLT => $execute_impl::<F, _, BltOp>,
+            BranchLessThanOpcode::BLTU => $execute_impl::<F, _, BltuOp>,
+            BranchLessThanOpcode::BGE => $execute_impl::<F, _, BgeOp>,
+            BranchLessThanOpcode::BGEU => $execute_impl::<F, _, BgeuOp>,
         })
     };
 }
@@ -57,7 +57,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BranchLessThan256Executor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -97,7 +97,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BranchLessThan256Exe
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -129,9 +129,9 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BranchLessThan256Exe
 impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64BranchLessThan256Executor {}
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
     pre_compute: &BranchLtPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let mut pc = exec_state.pc();
     let rs1_ptr =
@@ -153,18 +153,18 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLe
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &BranchLtPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<BranchLtPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: BranchLessThanOp>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<BranchLtPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<BranchLtPreCompute>>())
@@ -172,7 +172,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Br
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state);
 }
 
 impl Rv64BranchLessThan256Executor {

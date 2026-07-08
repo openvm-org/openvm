@@ -1,6 +1,5 @@
 use std::{
     fmt::Debug,
-    marker::PhantomData,
     mem::size_of,
     ops::{Deref, DerefMut},
 };
@@ -98,31 +97,27 @@ impl VmState<GuestMemory> {
 /// The host state is execution context specific.
 // @dev: Do not confuse with `ExecutionState` struct.
 #[repr(C)]
-pub struct VmExecState<F, MEM, CTX> {
+pub struct VmExecState<MEM, CTX> {
     /// Core VM state
     pub vm_state: VmState<MEM>,
     pub ctx: CTX,
     /// Execution-specific fields
     pub exit_code: Result<Option<u32>, ExecutionError>,
-    // `VmState` is no longer generic in `F`; retain `F` here as a marker until it is removed from
-    // `VmExecState` itself in a follow-up step.
-    pub phantom: PhantomData<F>,
 }
 
-impl<F, CTX: ExecutionCtxTrait> VmExecState<F, GuestMemory, CTX> {
+impl<CTX: ExecutionCtxTrait> VmExecState<GuestMemory, CTX> {
     #[inline(always)]
     pub fn should_suspend(&mut self) -> bool {
         CTX::should_suspend(self)
     }
 }
 
-impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {
+impl<MEM, CTX> VmExecState<MEM, CTX> {
     pub fn new(vm_state: VmState<MEM>, ctx: CTX) -> Self {
         Self {
             vm_state,
             ctx,
             exit_code: Ok(None),
-            phantom: PhantomData,
         }
     }
 
@@ -142,12 +137,11 @@ impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {
             vm_state: self.vm_state.clone(),
             exit_code: Ok(*self.exit_code.as_ref().unwrap()),
             ctx: self.ctx.clone(),
-            phantom: PhantomData,
         })
     }
 }
 
-impl<F, MEM, CTX> Deref for VmExecState<F, MEM, CTX> {
+impl<MEM, CTX> Deref for VmExecState<MEM, CTX> {
     type Target = VmState<MEM>;
 
     fn deref(&self) -> &Self::Target {
@@ -155,13 +149,13 @@ impl<F, MEM, CTX> Deref for VmExecState<F, MEM, CTX> {
     }
 }
 
-impl<F, MEM, CTX> DerefMut for VmExecState<F, MEM, CTX> {
+impl<MEM, CTX> DerefMut for VmExecState<MEM, CTX> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.vm_state
     }
 }
 
-impl<F, CTX> VmExecState<F, GuestMemory, CTX>
+impl<CTX> VmExecState<GuestMemory, CTX>
 where
     CTX: ExecutionCtxTrait,
 {

@@ -92,34 +92,34 @@ macro_rules! dispatch {
         } {
             match ($is_setup, curve_type) {
                 (true, CurveType::K256) => {
-                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::K256 as u8 }, true>)
+                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::K256 as u8 }, true>)
                 }
                 (true, CurveType::P256) => {
-                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::P256 as u8 }, true>)
+                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::P256 as u8 }, true>)
                 }
                 (true, CurveType::BN254) => {
-                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::BN254 as u8 }, true>)
+                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::BN254 as u8 }, true>)
                 }
                 (true, CurveType::BLS12_381) => {
-                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::BLS12_381 as u8 }, true>)
+                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::BLS12_381 as u8 }, true>)
                 }
                 (false, CurveType::K256) => {
-                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::K256 as u8 }, false>)
+                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::K256 as u8 }, false>)
                 }
                 (false, CurveType::P256) => {
-                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::P256 as u8 }, false>)
+                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::P256 as u8 }, false>)
                 }
                 (false, CurveType::BN254) => {
-                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::BN254 as u8 }, false>)
+                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::BN254 as u8 }, false>)
                 }
                 (false, CurveType::BLS12_381) => {
-                    Ok($execute_impl::<_, _, BLOCKS, { CurveType::BLS12_381 as u8 }, false>)
+                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::BLS12_381 as u8 }, false>)
                 }
             }
         } else if $is_setup {
-            Ok($execute_impl::<_, _, BLOCKS, { u8::MAX }, true>)
+            Ok($execute_impl::<F, _, BLOCKS, { u8::MAX }, true>)
         } else {
-            Ok($execute_impl::<_, _, BLOCKS, { u8::MAX }, false>)
+            Ok($execute_impl::<F, _, BLOCKS, { u8::MAX }, false>)
         }
     };
 }
@@ -136,7 +136,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcDoubleEx
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -181,7 +181,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -218,14 +218,13 @@ impl<F: PrimeField32, const BLOCKS: usize> AotMeteredExecutor<F> for EcDoubleExe
 
 #[inline(always)]
 unsafe fn execute_e12_impl<
-    F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
     pre_compute: &EcDoublePreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
     // Read register values
@@ -305,11 +304,11 @@ unsafe fn execute_e1_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &EcDoublePreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<EcDoublePreCompute>()).borrow();
-    execute_e12_impl::<_, _, BLOCKS, CURVE_TYPE, IS_SETUP>(pre_compute, exec_state)
+    execute_e12_impl::<_, BLOCKS, CURVE_TYPE, IS_SETUP>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -322,7 +321,7 @@ unsafe fn execute_e2_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<EcDoublePreCompute>>())
@@ -330,5 +329,5 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, BLOCKS, CURVE_TYPE, IS_SETUP>(&e2_pre_compute.data, exec_state)
+    execute_e12_impl::<_, BLOCKS, CURVE_TYPE, IS_SETUP>(&e2_pre_compute.data, exec_state)
 }

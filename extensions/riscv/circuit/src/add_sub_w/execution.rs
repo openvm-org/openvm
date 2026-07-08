@@ -63,10 +63,10 @@ macro_rules! dispatch {
                 $is_imm,
                 BaseAluWOpcode::from_usize($opcode.local_opcode_idx($offset)),
             ) {
-                (true, BaseAluWOpcode::ADDW) => $execute_impl::<_, _, true, AddwOp>,
-                (false, BaseAluWOpcode::ADDW) => $execute_impl::<_, _, false, AddwOp>,
-                (true, BaseAluWOpcode::SUBW) => $execute_impl::<_, _, true, SubwOp>,
-                (false, BaseAluWOpcode::SUBW) => $execute_impl::<_, _, false, SubwOp>,
+                (true, BaseAluWOpcode::ADDW) => $execute_impl::<F, _, true, AddwOp>,
+                (false, BaseAluWOpcode::ADDW) => $execute_impl::<F, _, false, AddwOp>,
+                (true, BaseAluWOpcode::SUBW) => $execute_impl::<F, _, true, SubwOp>,
+                (false, BaseAluWOpcode::SUBW) => $execute_impl::<F, _, false, SubwOp>,
             },
         )
     };
@@ -87,7 +87,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -130,7 +130,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -161,14 +161,9 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: AluWOp,
->(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: AluWOp>(
     pre_compute: &AddSubWPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1 =
         exec_state.vm_read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
@@ -203,11 +198,11 @@ unsafe fn execute_e1_impl<
     OP: AluWOp,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &AddSubWPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<AddSubWPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, IS_IMM, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -219,7 +214,7 @@ unsafe fn execute_e2_impl<
     OP: AluWOp,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<AddSubWPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<AddSubWPreCompute>>())
@@ -227,7 +222,7 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
 }
 
 trait AluWOp {

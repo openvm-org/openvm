@@ -1,4 +1,4 @@
-use std::ffi::c_void;
+use std::{ffi::c_void, marker::PhantomData};
 
 use openvm_instructions::{exe::VmExe, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -35,7 +35,7 @@ where
     fn create_pure_asm<E>(
         exe: &VmExe<F>,
         inventory: &ExecutorInventory<E>,
-        pre_compute_insns_ptr: *const PreComputeInstruction<F, ExecutionCtx>,
+        pre_compute_insns_ptr: *const PreComputeInstruction<ExecutionCtx>,
     ) -> Result<String, StaticProgramError>
     where
         E: Executor<F>,
@@ -343,6 +343,7 @@ where
             pc_start: exe.pc_start,
             init_memory,
             lib,
+            _phantom: PhantomData,
         })
     }
 
@@ -376,7 +377,7 @@ where
         #[cfg(feature = "metrics")]
         let start_instret_left = instret_left;
 
-        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> =
+        let mut vm_exec_state: Box<VmExecState<GuestMemory, ExecutionCtx>> =
             Box::new(VmExecState::new(from_state, ctx));
 
         tracing::info_span!("execute_pure").in_scope(|| unsafe {
@@ -386,7 +387,7 @@ where
                 .expect("Failed to get asm_run symbol");
 
             let vm_exec_state_ptr =
-                vm_exec_state.as_mut() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
+                vm_exec_state.as_mut() as *mut VmExecState<GuestMemory, ExecutionCtx>;
             let pre_compute_insns_ptr = self.pre_compute_insns.as_ptr();
 
             asm_run(

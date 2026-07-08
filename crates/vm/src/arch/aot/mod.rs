@@ -1,4 +1,4 @@
-use std::{ffi::c_void, io::Write, process::Command};
+use std::{ffi::c_void, io::Write, marker::PhantomData, process::Command};
 
 use libloading::Library;
 use openvm_instructions::{exe::SparseMemoryImage, program::DEFAULT_PC_STEP};
@@ -32,8 +32,11 @@ pub struct AotInstance<'a, F, Ctx> {
     #[allow(dead_code)]
     pre_compute_buf: AlignedBuf,
     lib: Library,
-    pre_compute_insns: Vec<PreComputeInstruction<F, Ctx>>,
+    pre_compute_insns: Vec<PreComputeInstruction<Ctx>>,
     pc_start: u32,
+    // `F` is the program's field type, used by the construction methods (`VmExe<F>`); the stored
+    // pre-computed data is field-erased, so retain `F` here as a marker.
+    _phantom: PhantomData<F>,
 }
 
 type AsmRunFn = unsafe extern "C" fn(
@@ -287,18 +290,18 @@ pub(crate) fn asm_to_lib(asm_source: &str) -> Result<Library, StaticProgramError
 unsafe extern "C" fn should_suspend_shim<F, Ctx: ExecutionCtxTrait>(
     state_ptr: *mut c_void,
 ) -> bool {
-    let state = &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>);
-    VmExecState::<F, GuestMemory, Ctx>::should_suspend(state)
+    let state = &mut *(state_ptr as *mut VmExecState<GuestMemory, Ctx>);
+    VmExecState::<GuestMemory, Ctx>::should_suspend(state)
 }
 
 unsafe extern "C" fn set_pc_shim<F, Ctx: ExecutionCtxTrait>(state_ptr: *mut c_void, pc: u32) {
-    let state = &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>);
+    let state = &mut *(state_ptr as *mut VmExecState<GuestMemory, Ctx>);
     state.vm_state.set_pc(pc);
 }
 
 // only needed for pure execution
 unsafe extern "C" fn set_instret_left_shim<F>(state_ptr: *mut c_void, instret_left: u64) {
-    let state = &mut *(state_ptr as *mut VmExecState<F, GuestMemory, ExecutionCtx>);
+    let state = &mut *(state_ptr as *mut VmExecState<GuestMemory, ExecutionCtx>);
     state.ctx.instret_left = instret_left;
 }
 
@@ -307,11 +310,11 @@ pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const PURE_EX
     pre_compute_insns_ptr: *const c_void,
     cur_pc: u32,
 ) -> u32 {
-    let vm_exec_state_ref = unsafe { &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+    let vm_exec_state_ref = unsafe { &mut *(state_ptr as *mut VmExecState<GuestMemory, Ctx>) };
     vm_exec_state_ref.set_pc(cur_pc);
 
     // pointer to the first element of `pre_compute_insns`
-    let pre_compute_insns_base_ptr = pre_compute_insns_ptr as *const PreComputeInstruction<F, Ctx>;
+    let pre_compute_insns_base_ptr = pre_compute_insns_ptr as *const PreComputeInstruction<Ctx>;
     let pc_idx = (cur_pc / DEFAULT_PC_STEP) as usize;
     let pre_compute_insns = unsafe { &*pre_compute_insns_base_ptr.add(pc_idx) };
     unsafe {
@@ -328,15 +331,13 @@ extern "C" fn get_vm_address_space_addr<F, Ctx: ExecutionCtxTrait>(
     exec_state_ptr: *mut c_void,
     addr_space: u64,
 ) -> *mut u64 {
-    let vm_exec_state_ref =
-        unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+    let vm_exec_state_ref = unsafe { &mut *(exec_state_ptr as *mut VmExecState<GuestMemory, Ctx>) };
     let ptr = &vm_exec_state_ref.vm_state.memory.memory.mem[addr_space as usize];
     ptr.as_ptr() as *mut u64 // mut u64 because we want to write 8 bytes at a time
 }
 
 extern "C" fn get_vm_pc_ptr<F, Ctx: ExecutionCtxTrait>(exec_state_ptr: *mut c_void) -> *mut u64 {
-    let vm_exec_state_ref =
-        unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+    let vm_exec_state_ref = unsafe { &mut *(exec_state_ptr as *mut VmExecState<GuestMemory, Ctx>) };
     // since pc is the first element of the vm_state field and we use `repr(C)`
     // hence `ptr` will be equal to the address of pc in vm_state
     let state = &mut vm_exec_state_ref.vm_state;

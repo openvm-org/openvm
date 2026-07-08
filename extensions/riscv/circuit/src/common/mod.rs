@@ -265,7 +265,7 @@ mod aot {
         // NOTE: This is DIRTY because PAGE_BITS is a generic parameter of E2 context.
         asm_str += &format!("    shr {ptr_reg}, {DEFAULT_PAGE_BITS}\n");
 
-        let memory_ctx_offset = offset_of!(VmExecState<F, GuestMemory, MeteredCtx>, ctx)
+        let memory_ctx_offset = offset_of!(VmExecState<GuestMemory, MeteredCtx>, ctx)
             + offset_of!(MeteredCtx, memory_ctx);
         let page_indices_ptr_offset =
             memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, page_indices);

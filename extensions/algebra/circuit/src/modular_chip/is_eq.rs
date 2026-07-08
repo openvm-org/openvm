@@ -532,9 +532,9 @@ impl<const NUM_LANES: usize, const TOTAL_READ_SIZE: usize>
 macro_rules! dispatch {
     ($execute_impl:ident, $is_setup:ident) => {
         Ok(if $is_setup {
-            $execute_impl::<_, _, NUM_LANES, TOTAL_READ_SIZE, true>
+            $execute_impl::<F, _, NUM_LANES, TOTAL_READ_SIZE, true>
         } else {
-            $execute_impl::<_, _, NUM_LANES, TOTAL_READ_SIZE, false>
+            $execute_impl::<F, _, NUM_LANES, TOTAL_READ_SIZE, false>
         })
     };
 }
@@ -555,7 +555,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE> = data.borrow_mut();
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
 
@@ -604,7 +604,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
             data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
@@ -649,7 +649,7 @@ unsafe fn execute_e1_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE> = std::slice::from_raw_parts(
         pre_compute,
@@ -657,7 +657,7 @@ unsafe fn execute_e1_impl<
     )
     .borrow();
 
-    execute_e12_impl::<_, _, NUM_LANES, TOTAL_READ_SIZE, IS_SETUP>(pre_compute, exec_state);
+    execute_e12_impl::<_, NUM_LANES, TOTAL_READ_SIZE, IS_SETUP>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -670,7 +670,7 @@ unsafe fn execute_e2_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
         std::slice::from_raw_parts(
@@ -681,19 +681,18 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, NUM_LANES, TOTAL_READ_SIZE, IS_SETUP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<_, NUM_LANES, TOTAL_READ_SIZE, IS_SETUP>(&pre_compute.data, exec_state);
 }
 
 #[inline(always)]
 unsafe fn execute_e12_impl<
-    F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const NUM_LANES: usize,
     const TOTAL_READ_SIZE: usize,
     const IS_SETUP: bool,
 >(
     pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE>,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     // Read register values (RV64: read 8 bytes, assert upper 4 are zero, cast to u32)
     let rs_vals = pre_compute

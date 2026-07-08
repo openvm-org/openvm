@@ -193,7 +193,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                         pc: u32,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
-                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
                         self.0.pre_compute(pc, inst, data)
@@ -292,7 +292,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                         pc: u32,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
-                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
                         match self {
@@ -505,7 +505,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                         pc: u32,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
-                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait, {
                         self.0.metered_pre_compute(chip_idx, pc, inst, data)
@@ -606,7 +606,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                         pc: u32,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
-                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait, {
                         match self {
@@ -1132,7 +1132,7 @@ fn parse_executor_type(
 /// #[create_tco_handler]
 /// unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool>(
 ///     pre_compute: *const u8,
-///     state: &mut VmExecState<F, GuestMemory, CTX>,
+///     state: &mut VmExecState<GuestMemory, CTX>,
 /// ) where
 ///     CTX: ExecutionCtxTrait,
 /// {

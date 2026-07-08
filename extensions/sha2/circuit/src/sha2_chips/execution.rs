@@ -33,13 +33,13 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterExecutor<F> for Sha2VmExecutor<C
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut Sha2PreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_impl::<_, _, C>)
+        Ok(execute_e1_impl::<F, _, C>)
     }
 
     #[cfg(feature = "tco")]
@@ -54,7 +54,7 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterExecutor<F> for Sha2VmExecutor<C
     {
         let data: &mut Sha2PreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_handler::<_, _, C>)
+        Ok(execute_e1_handler::<F, _, C>)
     }
 }
 
@@ -70,14 +70,14 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterMeteredExecutor<F> for Sha2VmExe
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
         let data: &mut E2PreCompute<Sha2PreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_impl::<_, _, C>)
+        Ok(execute_e2_impl::<F, _, C>)
     }
 
     #[cfg(feature = "tco")]
@@ -94,19 +94,14 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterMeteredExecutor<F> for Sha2VmExe
         let data: &mut E2PreCompute<Sha2PreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_handler::<_, _, C>)
+        Ok(execute_e2_handler::<F, _, C>)
     }
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<
-    F: PrimeField32,
-    C: Sha2Config,
-    CTX: ExecutionCtxTrait,
-    const IS_E1: bool,
->(
+unsafe fn execute_e12_impl<C: Sha2Config, CTX: ExecutionCtxTrait, const IS_E1: bool>(
     pre_compute: &Sha2PreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> u32 {
     let dst: [u8; RV64_REGISTER_NUM_LIMBS] =
         exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32);
@@ -157,18 +152,18 @@ unsafe fn execute_e12_impl<
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, C: Sha2Config>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &Sha2PreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<Sha2PreCompute>()).borrow();
-    execute_e12_impl::<F, C, CTX, true>(pre_compute, exec_state);
+    execute_e12_impl::<C, CTX, true>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, C: Sha2Config>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<Sha2PreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<Sha2PreCompute>>()).borrow();
@@ -176,7 +171,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, C: Sha
     let main_air_idx = pre_compute.chip_idx as usize;
 
     // Update Sha2MainChip height (1 row per instruction)
-    let height = execute_e12_impl::<F, C, CTX, false>(&pre_compute.data, exec_state);
+    let height = execute_e12_impl::<C, CTX, false>(&pre_compute.data, exec_state);
     exec_state.ctx.on_height_change(main_air_idx, height);
 
     // HACK: Sha2BlockHasherVmAir is added right before Sha2MainAir in extend_circuit,
