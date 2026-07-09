@@ -72,6 +72,11 @@ If called without the `--evm` flag, it writes the internal-recursive aggregation
 writes the root and proving key, downloads Halo2 parameters, and generates or downloads the
 Halo2 proving key and Solidity verifier artifacts used by the EVM flow.
 
+:::info
+`cargo openvm setup --evm` generates only the base aggregation and EVM artifacts, i.e. without deferral support.
+For deferral-enabled proving, see the [deferral documentation](/book/acceleration-using-extensions/deferral).
+:::
+
 :::warning
 `cargo openvm setup --evm` requires a large amount of computation and memory (~16 GB). Use `--download` to download the pre-built Halo2 proving key and verifier artifacts from S3 instead of generating them locally.
 :::

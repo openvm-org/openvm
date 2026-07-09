@@ -73,6 +73,13 @@ jobs:
       - name: Sync ~/.openvm with S3 bucket in tagged dir
         run: s5cmd sync ~/.openvm/ s3://${S3_BUCKET%/}/${{ env.version }}/
 
+      - name: Check uploaded artifacts via CLI download
+        run: |
+          generated_openvm="$(mktemp -d)"
+          cp -a ~/.openvm/. "${generated_openvm}/"
+          cargo openvm setup --evm --download --force
+          diff -r "${generated_openvm}" ~/.openvm
+
       - name: sccache stats
         if: always()
         run: sccache --show-stats || true

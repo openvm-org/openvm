@@ -217,23 +217,21 @@ impl SetupCmd {
         ];
 
         for (name, local_path) in &files {
-            if !local_path.exists() {
-                let key = if *name == EVM_HALO2_VERIFIER_INTERFACE_NAME {
-                    format!("{halo2_s3_prefix}/interfaces/{name}")
-                } else {
-                    format!("{halo2_s3_prefix}/{name}")
-                };
-                println!("Downloading {name}");
-                let resp = client
-                    .get_object()
-                    .bucket(ARTIFACTS_BUCKET)
-                    .key(&key)
-                    .send()
-                    .await
-                    .map_err(|e| eyre!("Failed to download s3://{ARTIFACTS_BUCKET}/{key}: {e}"))?;
-                let data = resp.body.collect().await?;
-                write(local_path, data.into_bytes())?;
-            }
+            let key = if *name == EVM_HALO2_VERIFIER_INTERFACE_NAME {
+                format!("{halo2_s3_prefix}/interfaces/{name}")
+            } else {
+                format!("{halo2_s3_prefix}/{name}")
+            };
+            println!("Downloading {name}");
+            let resp = client
+                .get_object()
+                .bucket(ARTIFACTS_BUCKET)
+                .key(&key)
+                .send()
+                .await
+                .map_err(|e| eyre!("Failed to download s3://{ARTIFACTS_BUCKET}/{key}: {e}"))?;
+            let data = resp.body.collect().await?;
+            write(local_path, data.into_bytes())?;
         }
 
         Ok(())
@@ -254,7 +252,7 @@ impl SetupCmd {
         const ARTIFACTS_BUCKET: &str = "openvm-public-artifacts-us-east-1";
         const FULL_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-        let key = format!("v{FULL_VERSION}/halo2/v{OPENVM_VERSION}/halo2.pk");
+        let key = format!("v{FULL_VERSION}/halo2.pk");
         println!(
             "Downloading Halo2 proving key to {}",
             halo2_pk_path.display()
