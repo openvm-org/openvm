@@ -75,8 +75,8 @@ pub(crate) fn signed_width_aligned_cases<const LOAD_WIDTH: usize>(
     }
 }
 
-fn encoder<const NUM_CASES: usize, const SELECTOR_WIDTH: usize>() -> Encoder {
-    let encoder = Encoder::new(NUM_CASES, SELECTOR_MAX_DEGREE, true);
+fn encoder<const SELECTOR_WIDTH: usize>(cases: &[SignedWidthAlignedCase]) -> Encoder {
+    let encoder = Encoder::new(cases.len(), SELECTOR_MAX_DEGREE, true);
     debug_assert_eq!(encoder.width(), SELECTOR_WIDTH);
     encoder
 }
@@ -96,45 +96,39 @@ pub struct LoadSignExtendWidthAlignedCoreCols<T, const SELECTOR_WIDTH: usize> {
 
 #[derive(Debug, Clone, ColumnsAir)]
 #[columns_via(LoadSignExtendWidthAlignedCoreCols<u8, SELECTOR_WIDTH>)]
-pub struct LoadSignExtendWidthAlignedCoreAir<
-    const LOAD_WIDTH: usize,
-    const NUM_CASES: usize,
-    const SELECTOR_WIDTH: usize,
-> {
+pub struct LoadSignExtendWidthAlignedCoreAir<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> {
     pub offset: usize,
     encoder: Encoder,
     range_bus: VariableRangeCheckerBus,
 }
 
-impl<const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
-    LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
+impl<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize>
+    LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
 {
     pub fn new(offset: usize, range_bus: VariableRangeCheckerBus) -> Self {
-        debug_assert_eq!(signed_width_aligned_cases::<LOAD_WIDTH>().len(), NUM_CASES);
         Self {
             offset,
-            encoder: encoder::<NUM_CASES, SELECTOR_WIDTH>(),
+            encoder: encoder::<SELECTOR_WIDTH>(signed_width_aligned_cases::<LOAD_WIDTH>()),
             range_bus,
         }
     }
 }
 
-impl<F: Field, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
-    BaseAir<F> for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
+impl<F: Field, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> BaseAir<F>
+    for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
 {
     fn width(&self) -> usize {
         LoadSignExtendWidthAlignedCoreCols::<F, SELECTOR_WIDTH>::width()
     }
 }
 
-impl<F: Field, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
-    BaseAirWithPublicValues<F>
-    for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
+impl<F: Field, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> BaseAirWithPublicValues<F>
+    for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
 {
 }
 
-impl<AB, I, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
-    VmCoreAir<AB, I> for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
+impl<AB, I, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> VmCoreAir<AB, I>
+    for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -225,7 +219,6 @@ where
 pub struct LoadSignExtendWidthAlignedFiller<
     A = Rv64LoadAdapterFiller,
     const LOAD_WIDTH: usize = LOAD_WIDTH_WORD,
-    const NUM_CASES: usize = 2,
     const SELECTOR_WIDTH: usize = 2,
 > {
     adapter: A,
@@ -234,31 +227,25 @@ pub struct LoadSignExtendWidthAlignedFiller<
     range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<A, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
-    LoadSignExtendWidthAlignedFiller<A, LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
+impl<A, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize>
+    LoadSignExtendWidthAlignedFiller<A, LOAD_WIDTH, SELECTOR_WIDTH>
 {
     pub fn new(
         adapter: A,
         offset: usize,
         range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
-        debug_assert_eq!(signed_width_aligned_cases::<LOAD_WIDTH>().len(), NUM_CASES);
         Self {
             adapter,
             offset,
-            encoder: encoder::<NUM_CASES, SELECTOR_WIDTH>(),
+            encoder: encoder::<SELECTOR_WIDTH>(signed_width_aligned_cases::<LOAD_WIDTH>()),
             range_checker_chip,
         }
     }
 }
 
-impl<F, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
-    for LoadSignExtendWidthAlignedFiller<
-        Rv64LoadAdapterFiller,
-        LOAD_WIDTH,
-        NUM_CASES,
-        SELECTOR_WIDTH,
-    >
+impl<F, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
+    for LoadSignExtendWidthAlignedFiller<Rv64LoadAdapterFiller, LOAD_WIDTH, SELECTOR_WIDTH>
 where
     F: PrimeField32,
 {
