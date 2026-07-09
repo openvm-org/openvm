@@ -23,64 +23,37 @@ use crate::{
 
 const SELECTOR_MAX_DEGREE: u32 = 2;
 
+/// Static description of a width-aligned store chip: the single opcode it handles and the byte
+/// shifts it supports, each shift encoded as a separate selector case.
 #[derive(Clone, Copy)]
-pub(crate) struct WidthAlignedCase {
+pub(crate) struct StoreInfo {
     opcode: Rv64LoadStoreOpcode,
-    byte_shift: usize,
+    byte_shifts: &'static [usize],
 }
 
-impl WidthAlignedCase {
-    fn cell_shift(self) -> usize {
-        self.byte_shift / 2
-    }
-}
-
-fn encoder<const SELECTOR_WIDTH: usize>(cases: &[WidthAlignedCase]) -> Encoder {
-    let encoder = Encoder::new(cases.len(), SELECTOR_MAX_DEGREE, true);
+fn encoder<const SELECTOR_WIDTH: usize>(byte_shifts: &[usize]) -> Encoder {
+    let encoder = Encoder::new(byte_shifts.len(), SELECTOR_MAX_DEGREE, true);
     debug_assert_eq!(encoder.width(), SELECTOR_WIDTH);
     encoder
 }
 
-const STORE_DOUBLEWORD_CASES: [WidthAlignedCase; 1] = [WidthAlignedCase {
+const STORE_DOUBLEWORD_INFO: StoreInfo = StoreInfo {
     opcode: STORED,
-    byte_shift: 0,
-}];
-
-const STORE_WORD_CASES: [WidthAlignedCase; 2] = [
-    WidthAlignedCase {
-        opcode: STOREW,
-        byte_shift: 0,
-    },
-    WidthAlignedCase {
-        opcode: STOREW,
-        byte_shift: 4,
-    },
-];
-
-const STORE_HALFWORD_CASES: [WidthAlignedCase; 4] = [
-    WidthAlignedCase {
-        opcode: STOREH,
-        byte_shift: 0,
-    },
-    WidthAlignedCase {
-        opcode: STOREH,
-        byte_shift: 2,
-    },
-    WidthAlignedCase {
-        opcode: STOREH,
-        byte_shift: 4,
-    },
-    WidthAlignedCase {
-        opcode: STOREH,
-        byte_shift: 6,
-    },
-];
-
-pub(crate) fn store_width_aligned_cases<const STORE_WIDTH: usize>() -> &'static [WidthAlignedCase] {
+    byte_shifts: &[0],
+};
+const STORE_WORD_INFO: StoreInfo = StoreInfo {
+    opcode: STOREW,
+    byte_shifts: &[0, 4],
+};
+const STORE_HALFWORD_INFO: StoreInfo = StoreInfo {
+    opcode: STOREH,
+    byte_shifts: &[0, 2, 4, 6],
+};
+pub(crate) fn store_info<const STORE_WIDTH: usize>() -> StoreInfo {
     match STORE_WIDTH {
-        STORE_WIDTH_DOUBLEWORD => &STORE_DOUBLEWORD_CASES,
-        STORE_WIDTH_WORD => &STORE_WORD_CASES,
-        STORE_WIDTH_HALFWORD => &STORE_HALFWORD_CASES,
+        STORE_WIDTH_DOUBLEWORD => STORE_DOUBLEWORD_INFO,
+        STORE_WIDTH_WORD => STORE_WORD_INFO,
+        STORE_WIDTH_HALFWORD => STORE_HALFWORD_INFO,
         _ => unreachable!("unsupported width for width-aligned store"),
     }
 }
@@ -89,7 +62,7 @@ pub(crate) fn store_width_aligned_cases<const STORE_WIDTH: usize>() -> &'static 
 /// previous memory block so bytes outside the store width stay unchanged.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct StoreWidthAlignedCoreCols<T, const SELECTOR_WIDTH: usize> {
+pub struct StoreCoreCols<T, const SELECTOR_WIDTH: usize> {
     pub selector: [T; SELECTOR_WIDTH],
     /// Kept as a degree-1 copy of the selector validity.
     pub is_valid: T,
@@ -98,38 +71,38 @@ pub struct StoreWidthAlignedCoreCols<T, const SELECTOR_WIDTH: usize> {
 }
 
 #[derive(Debug, Clone, ColumnsAir)]
-#[columns_via(StoreWidthAlignedCoreCols<u8, SELECTOR_WIDTH>)]
-pub struct StoreWidthAlignedCoreAir<const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize> {
+#[columns_via(StoreCoreCols<u8, SELECTOR_WIDTH>)]
+pub struct StoreCoreAir<const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize> {
     pub offset: usize,
     encoder: Encoder,
 }
 
 impl<const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize>
-    StoreWidthAlignedCoreAir<STORE_WIDTH, SELECTOR_WIDTH>
+    StoreCoreAir<STORE_WIDTH, SELECTOR_WIDTH>
 {
     pub fn new(offset: usize) -> Self {
         Self {
             offset,
-            encoder: encoder::<SELECTOR_WIDTH>(store_width_aligned_cases::<STORE_WIDTH>()),
+            encoder: encoder::<SELECTOR_WIDTH>(store_info::<STORE_WIDTH>().byte_shifts),
         }
     }
 }
 
 impl<F: Field, const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize> BaseAir<F>
-    for StoreWidthAlignedCoreAir<STORE_WIDTH, SELECTOR_WIDTH>
+    for StoreCoreAir<STORE_WIDTH, SELECTOR_WIDTH>
 {
     fn width(&self) -> usize {
-        StoreWidthAlignedCoreCols::<F, SELECTOR_WIDTH>::width()
+        StoreCoreCols::<F, SELECTOR_WIDTH>::width()
     }
 }
 
 impl<F: Field, const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize> BaseAirWithPublicValues<F>
-    for StoreWidthAlignedCoreAir<STORE_WIDTH, SELECTOR_WIDTH>
+    for StoreCoreAir<STORE_WIDTH, SELECTOR_WIDTH>
 {
 }
 
 impl<AB, I, const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize> VmCoreAir<AB, I>
-    for StoreWidthAlignedCoreAir<STORE_WIDTH, SELECTOR_WIDTH>
+    for StoreCoreAir<STORE_WIDTH, SELECTOR_WIDTH>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -143,8 +116,8 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &StoreWidthAlignedCoreCols<AB::Var, SELECTOR_WIDTH> = (*local_core).borrow();
-        let cases = store_width_aligned_cases::<STORE_WIDTH>();
+        let cols: &StoreCoreCols<AB::Var, SELECTOR_WIDTH> = (*local_core).borrow();
+        let info = store_info::<STORE_WIDTH>();
         let width = STORE_WIDTH / 2;
 
         self.encoder.eval(builder, &cols.selector);
@@ -152,33 +125,31 @@ where
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
         builder.assert_eq(cols.is_valid, is_valid.clone());
 
-        let expected_opcode = cases
+        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
+            self,
+            cols.is_valid * AB::Expr::from_u8(info.opcode as u8),
+        );
+        let shift_amount = info
+            .byte_shifts
             .iter()
             .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (i, case)| {
-                acc + flags[i].clone() * AB::Expr::from_u8(case.opcode as u8)
-            });
-        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(self, expected_opcode);
-        let shift_amount = cases
-            .iter()
-            .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (i, case)| {
-                acc + flags[i].clone() * AB::Expr::from_usize(case.byte_shift)
+            .fold(AB::Expr::ZERO, |acc, (i, &byte_shift)| {
+                acc + flags[i].clone() * AB::Expr::from_usize(byte_shift)
             });
 
         let write_data = std::array::from_fn(|i| {
-            cases
-                .iter()
-                .enumerate()
-                .fold(AB::Expr::ZERO, |acc, (case_idx, case)| {
-                    let shift = case.cell_shift();
+            info.byte_shifts.iter().enumerate().fold(
+                AB::Expr::ZERO,
+                |acc, (case_idx, &byte_shift)| {
+                    let shift = byte_shift / 2;
                     let term = if i >= shift && i < shift + width {
                         cols.read_data[i - shift].into()
                     } else {
                         cols.prev_data[i].into()
                     };
                     acc + flags[case_idx].clone() * term
-                })
+                },
+            )
         });
         AdapterAirContext {
             to_pc: None,
@@ -199,7 +170,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct StoreWidthAlignedFiller<
+pub struct StoreFiller<
     A = Rv64StoreAdapterFiller,
     const STORE_WIDTH: usize = STORE_WIDTH_WORD,
     const SELECTOR_WIDTH: usize = 1,
@@ -210,7 +181,7 @@ pub struct StoreWidthAlignedFiller<
 }
 
 impl<A, const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize>
-    StoreWidthAlignedFiller<A, STORE_WIDTH, SELECTOR_WIDTH>
+    StoreFiller<A, STORE_WIDTH, SELECTOR_WIDTH>
 {
     pub fn new(
         adapter: A,
@@ -220,19 +191,19 @@ impl<A, const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize>
         Self {
             adapter,
             offset,
-            encoder: encoder::<SELECTOR_WIDTH>(store_width_aligned_cases::<STORE_WIDTH>()),
+            encoder: encoder::<SELECTOR_WIDTH>(store_info::<STORE_WIDTH>().byte_shifts),
         }
     }
 }
 
 impl<F, const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
-    for StoreWidthAlignedFiller<Rv64StoreAdapterFiller, STORE_WIDTH, SELECTOR_WIDTH>
+    for StoreFiller<Rv64StoreAdapterFiller, STORE_WIDTH, SELECTOR_WIDTH>
 where
     F: PrimeField32,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
-        // StoreWidthAlignedCoreCols::width() elements.
+        // StoreCoreCols::width() elements.
         let (mut adapter_row, mut core_row) = unsafe {
             row_slice
                 .split_at_mut_unchecked(<Rv64StoreAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
@@ -247,11 +218,11 @@ where
         let record: &StoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let read_data = record.read_data;
         let prev_data = record.prev_data;
-        let core_row: &mut StoreWidthAlignedCoreCols<F, SELECTOR_WIDTH> = core_row.borrow_mut();
-        let cases = store_width_aligned_cases::<STORE_WIDTH>();
-        let case_idx = cases
+        let core_row: &mut StoreCoreCols<F, SELECTOR_WIDTH> = core_row.borrow_mut();
+        let case_idx = store_info::<STORE_WIDTH>()
+            .byte_shifts
             .iter()
-            .position(|case| case.byte_shift == shift)
+            .position(|&byte_shift| byte_shift == shift)
             .expect("invalid width-aligned store shift");
 
         core_row.read_data = read_data.map(F::from_u16);

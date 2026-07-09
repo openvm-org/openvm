@@ -6,15 +6,15 @@ use crate::{
     },
     store::{
         common::StoreExecutor,
-        core::{StoreWidthAlignedCoreAir, StoreWidthAlignedFiller},
+        core::{StoreCoreAir, StoreFiller},
     },
 };
 
 pub const STORE_WORD_SELECTOR_WIDTH: usize = 1;
 
-pub type StoreWordCoreAir = StoreWidthAlignedCoreAir<STORE_WIDTH_WORD, STORE_WORD_SELECTOR_WIDTH>;
+pub type StoreWordCoreAir = StoreCoreAir<STORE_WIDTH_WORD, STORE_WORD_SELECTOR_WIDTH>;
 pub type StoreWordFiller =
-    StoreWidthAlignedFiller<Rv64StoreAdapterFiller, STORE_WIDTH_WORD, STORE_WORD_SELECTOR_WIDTH>;
+    StoreFiller<Rv64StoreAdapterFiller, STORE_WIDTH_WORD, STORE_WORD_SELECTOR_WIDTH>;
 
 pub type Rv64StoreWordAir = VmAirWrapper<Rv64StoreAdapterAir, StoreWordCoreAir>;
 pub type Rv64StoreWordExecutor = StoreExecutor<Rv64StoreAdapterExecutor, STORE_WIDTH_WORD>;

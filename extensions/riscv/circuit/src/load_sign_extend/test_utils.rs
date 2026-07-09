@@ -67,9 +67,7 @@ pub(crate) use crate::{
         rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
         Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, RV64_BYTE_BITS,
     },
-    load_sign_extend::{
-        common::load_sign_extend_write_data, core::LoadSignExtendWidthAlignedCoreCols,
-    },
+    load_sign_extend::{common::load_sign_extend_write_data, core::LoadSignExtendCoreCols},
 };
 
 pub(crate) const IMM_BITS: usize = 16;
@@ -319,7 +317,7 @@ pub(crate) fn assert_pranked_byte_fails(prank: impl Fn(&mut LoadSignExtendByteCo
 }
 
 pub(crate) fn assert_pranked_halfword_fails(
-    prank: impl Fn(&mut LoadSignExtendWidthAlignedCoreCols<F, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH>),
+    prank: impl Fn(&mut LoadSignExtendCoreCols<F, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH>),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(memory_config_for());
@@ -351,7 +349,7 @@ pub(crate) fn assert_pranked_halfword_fails(
 }
 
 pub(crate) fn assert_pranked_word_fails(
-    prank: impl Fn(&mut LoadSignExtendWidthAlignedCoreCols<F, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH>),
+    prank: impl Fn(&mut LoadSignExtendCoreCols<F, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH>),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(memory_config_for());

@@ -11,7 +11,7 @@ use super::LOAD_HALFWORD_SELECTOR_WIDTH;
 use crate::{
     adapters::{Rv64LoadAdapterCols, Rv64LoadAdapterRecord},
     cuda_abi::load_halfword_cuda,
-    load::{core::LoadWidthAlignedCoreCols, LoadRecord},
+    load::{core::LoadCoreCols, LoadRecord},
 };
 
 #[derive(new)]
@@ -31,7 +31,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadHalfwordChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = Rv64LoadAdapterCols::<F>::width()
-            + LoadWidthAlignedCoreCols::<F, LOAD_HALFWORD_SELECTOR_WIDTH>::width();
+            + LoadCoreCols::<F, LOAD_HALFWORD_SELECTOR_WIDTH>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
