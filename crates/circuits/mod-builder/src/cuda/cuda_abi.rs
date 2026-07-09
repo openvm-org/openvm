@@ -1,29 +1,42 @@
 #![allow(clippy::missing_safety_doc, clippy::too_many_arguments)]
 
 use openvm_cuda_backend::prelude::F;
-use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::GpuDeviceCtx};
 
-extern "C" {
-    fn _field_expr_tracegen(
-        d_trace_core: *mut F,
-        height: usize,
-        rows_used: usize,
-        d_blob: *const u32,
-        d_records: *const u8,
-        rec_stride: usize,
-        rec_core_offset: usize,
-        d_range_checker: *mut u32,
-        d_aux: *mut u32,
-        aux_words: usize,
-        should_finalize: i32,
-        d_err: *mut u32,
-        stream: cudaStream_t,
-    ) -> i32;
+macro_rules! declare_launcher {
+    ($name:ident) => {
+        extern "C" {
+            fn $name(
+                d_trace: *mut F,
+                height: usize,
+                rows_used: usize,
+                d_blob: *const u32,
+                d_records: *const u8,
+                rec_stride: usize,
+                rec_core_offset: usize,
+                d_range_checker: *mut u32,
+                rc_bins: usize,
+                d_aux: *mut u32,
+                aux_words: usize,
+                pointer_max_bits: u32,
+                timestamp_max_bits: u32,
+                should_finalize: i32,
+                d_err: *mut u32,
+                stream: openvm_cuda_common::stream::cudaStream_t,
+            ) -> i32;
+        }
+    };
 }
+
+declare_launcher!(_field_expr_tracegen_r2_b4);
+declare_launcher!(_field_expr_tracegen_r2_b6);
+declare_launcher!(_field_expr_tracegen_r2_b8);
+declare_launcher!(_field_expr_tracegen_r2_b12);
+declare_launcher!(_field_expr_tracegen_r1_b8);
+declare_launcher!(_field_expr_tracegen_r1_b12);
 
 pub unsafe fn field_expr_tracegen(
     d_trace: &DeviceBuffer<F>,
-    adapter_width: usize,
     height: usize,
     rows_used: usize,
     d_blob: &DeviceBuffer<u32>,
@@ -33,14 +46,25 @@ pub unsafe fn field_expr_tracegen(
     d_range_checker: &DeviceBuffer<F>,
     d_aux: &DeviceBuffer<u32>,
     aux_words: usize,
+    num_reads: usize,
+    blocks: usize,
+    pointer_max_bits: u32,
+    timestamp_max_bits: u32,
     should_finalize: bool,
     d_err: &DeviceBuffer<u32>,
-    stream: cudaStream_t,
+    device_ctx: &GpuDeviceCtx,
 ) -> Result<(), CudaError> {
-    // Core columns are column-major starting after the adapter columns:
-    // pointer offset = adapter_width * height.
-    CudaError::from_result(_field_expr_tracegen(
-        d_trace.as_mut_ptr().add(adapter_width * height),
+    let launcher = match (num_reads, blocks) {
+        (2, 4) => _field_expr_tracegen_r2_b4,
+        (2, 6) => _field_expr_tracegen_r2_b6,
+        (2, 8) => _field_expr_tracegen_r2_b8,
+        (2, 12) => _field_expr_tracegen_r2_b12,
+        (1, 8) => _field_expr_tracegen_r1_b8,
+        (1, 12) => _field_expr_tracegen_r1_b12,
+        _ => panic!("unsupported (num_reads, blocks) = ({num_reads}, {blocks})"),
+    };
+    CudaError::from_result(launcher(
+        d_trace.as_mut_ptr(),
         height,
         rows_used,
         d_blob.as_ptr(),
@@ -48,10 +72,13 @@ pub unsafe fn field_expr_tracegen(
         rec_stride,
         rec_core_offset,
         d_range_checker.as_mut_ptr() as *mut u32,
+        d_range_checker.len(),
         d_aux.as_mut_ptr(),
         aux_words,
+        pointer_max_bits,
+        timestamp_max_bits,
         should_finalize as i32,
         d_err.as_mut_ptr(),
-        stream,
+        device_ctx.stream.as_raw(),
     ))
 }
