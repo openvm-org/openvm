@@ -1,4 +1,6 @@
-//! Prover extension for the GPU backend which still does trace generation on CPU.
+//! Prover extension for the GPU backend; FieldExpr chips do trace generation on GPU.
+
+use std::sync::Arc;
 
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::{
@@ -12,7 +14,8 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bigint::utils::big_uint_to_limbs, hybrid_chip::cpu_proving_ctx_to_gpu, Chip,
+    bigint::utils::big_uint_to_limbs, hybrid_chip::cpu_proving_ctx_to_gpu,
+    var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
@@ -22,16 +25,15 @@ use openvm_cuda_backend::{
 };
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::LocalOpcode;
-use std::sync::Arc;
-
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
-use openvm_mod_circuit_builder::{cuda::FieldExprChipGpu, ExprBuilderConfig, FieldExpressionMetadata};
+use openvm_mod_circuit_builder::{
+    cuda::FieldExprChipGpu, ExprBuilderConfig, FieldExpressionMetadata,
+};
 use openvm_riscv_adapters::{
     Rv64IsEqualModU16AdapterCols, Rv64IsEqualModU16AdapterExecutor, Rv64IsEqualModU16AdapterFiller,
     Rv64IsEqualModU16AdapterRecord, Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor,
 };
 use openvm_riscv_circuit::{adapters::U16_BITS, Rv64ImGpuProverExt};
-use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
+use openvm_stark_backend::prover::AirProvingContext;
 use strum::EnumCount;
 
 use crate::{

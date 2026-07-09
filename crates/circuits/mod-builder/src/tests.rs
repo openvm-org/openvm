@@ -753,7 +753,9 @@ fn bench_tracegen_ec_add_ne_shape() {
     let mut next_biguint = |p: &BigUint| -> BigUint {
         let bytes: Vec<u8> = (0..32)
             .map(|_| {
-                state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 (state >> 33) as u8
             })
             .collect();

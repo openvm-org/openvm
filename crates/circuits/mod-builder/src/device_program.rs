@@ -4,14 +4,14 @@
 //!
 //! Layout of the work per row (mirrors `FieldExpressionFiller::fill_trace_row`):
 //! 1. Decode record: opcode byte + input limbs. Map opcode -> flags.
-//! 2. Value phase: evaluate `computes` in Montgomery form to obtain each variable
-//!    (Div -> Fermat inversion), then store canonical limbs.
-//! 3. Constraint phase: for each constraint, evaluate the expression in the *limb*
-//!    domain (signed limbs, no carry propagation), derive the integer value N from
-//!    the limbs, compute q = N / p by exact division (multiply by p^{-1} mod 2^(32*2K)),
-//!    subtract conv(q, p_limbs) and run the carry chain.
-//! 4. Emit range checks: var limbs (limb_bits), q limbs shifted (limb_bits + 1),
-//!    carries shifted (per-constraint carry_bits).
+//! 2. Value phase: evaluate `computes` in Montgomery form to obtain each variable (Div -> Fermat
+//!    inversion), then store canonical limbs.
+//! 3. Constraint phase: for each constraint, evaluate the expression in the *limb* domain (signed
+//!    limbs, no carry propagation), derive the integer value N from the limbs, compute q = N / p by
+//!    exact division (multiply by p^{-1} mod 2^(32*2K)), subtract conv(q, p_limbs) and run the
+//!    carry chain.
+//! 4. Emit range checks: var limbs (limb_bits), q limbs shifted (limb_bits + 1), carries shifted
+//!    (per-constraint carry_bits).
 //! 5. Write the sub-row: [is_valid, inputs, vars, qs, carries, flags].
 
 use num_bigint::{BigInt, BigUint, Sign};
@@ -183,7 +183,9 @@ impl<'a> Serializer<'a> {
                 });
                 dst
             }
-            SymbolicExpr::Add(l, r2) | SymbolicExpr::Sub(l, r2) | SymbolicExpr::Mul(l, r2)
+            SymbolicExpr::Add(l, r2)
+            | SymbolicExpr::Sub(l, r2)
+            | SymbolicExpr::Mul(l, r2)
             | SymbolicExpr::Div(l, r2) => {
                 let a = self.emit_value(l);
                 let b = self.emit_value(r2);
@@ -194,7 +196,13 @@ impl<'a> Serializer<'a> {
                     _ => VOP_DIV,
                 };
                 let dst = alloc(self);
-                self.value_ops.push(ValueOp { opcode, dst, a, b, ..Default::default() });
+                self.value_ops.push(ValueOp {
+                    opcode,
+                    dst,
+                    a,
+                    b,
+                    ..Default::default()
+                });
                 dst
             }
             SymbolicExpr::IntAdd(l, s) | SymbolicExpr::IntMul(l, s) => {
@@ -207,7 +215,13 @@ impl<'a> Serializer<'a> {
                     VOP_INTMUL
                 };
                 let dst = alloc(self);
-                self.value_ops.push(ValueOp { opcode, dst, a, b: payload, ..Default::default() });
+                self.value_ops.push(ValueOp {
+                    opcode,
+                    dst,
+                    a,
+                    b: payload,
+                    ..Default::default()
+                });
                 dst
             }
             SymbolicExpr::Select(flag, l, r2) => {
@@ -279,7 +293,11 @@ impl<'a> Serializer<'a> {
                 let len = al.max(bl);
                 let off = alloc(self, len);
                 self.limb_ops.push(LimbOp {
-                    opcode: if matches!(node, SymbolicExpr::Add(..)) { LOP_ADD } else { LOP_SUB },
+                    opcode: if matches!(node, SymbolicExpr::Add(..)) {
+                        LOP_ADD
+                    } else {
+                        LOP_SUB
+                    },
                     dst_off: off,
                     dst_len: len,
                     a_off: ao,
@@ -393,12 +411,18 @@ pub fn serialize_field_expr(
     }
 
     // Constraint phase tapes + carry params via data-independent bound propagation.
-    use openvm_circuit_primitives::bigint::{check_carry_to_zero::get_carry_max_abs_and_bits, OverflowInt};
+    use openvm_circuit_primitives::bigint::{
+        check_carry_to_zero::get_carry_max_abs_and_bits, OverflowInt,
+    };
     let zero_inputs: Vec<OverflowInt<isize>> = (0..b.num_input)
-        .map(|_| OverflowInt::<isize>::from_biguint(&BigUint::zero(), b.limb_bits, Some(b.num_limbs)))
+        .map(|_| {
+            OverflowInt::<isize>::from_biguint(&BigUint::zero(), b.limb_bits, Some(b.num_limbs))
+        })
         .collect();
     let zero_vars: Vec<OverflowInt<isize>> = (0..b.num_variables)
-        .map(|_| OverflowInt::<isize>::from_biguint(&BigUint::zero(), b.limb_bits, Some(b.num_limbs)))
+        .map(|_| {
+            OverflowInt::<isize>::from_biguint(&BigUint::zero(), b.limb_bits, Some(b.num_limbs))
+        })
         .collect();
     let zero_consts: Vec<OverflowInt<isize>> = b
         .constants
@@ -419,7 +443,8 @@ pub fn serialize_field_expr(
         // Bound propagation only (limb values are zeros; bounds are data independent).
         // NOTE: for Select nodes the two sides must have identical static bounds, which
         // the builder enforces ("same structure").
-        let expr_bound = constraint.evaluate_overflow_isize(&zero_inputs, &zero_vars, &zero_consts, &flags);
+        let expr_bound =
+            constraint.evaluate_overflow_isize(&zero_inputs, &zero_vars, &zero_consts, &flags);
         let q_bound = OverflowInt::<isize>::from_signed_limbs(vec![0; b.q_limbs[i]], b.limb_bits);
         let total = expr_bound - q_bound * prime_overflow.clone();
         let (carry_min_abs, carry_bits) =
@@ -527,8 +552,15 @@ impl DeviceFieldExprProgram {
         blob[17] = blob.len() as u32;
         for op in &self.limb_ops {
             blob.extend([
-                op.opcode, op.flag, op.dst_off, op.dst_len, op.a_off, op.a_len, op.b_off,
-                op.b_len, op.imm as u32,
+                op.opcode,
+                op.flag,
+                op.dst_off,
+                op.dst_len,
+                op.a_off,
+                op.a_len,
+                op.b_off,
+                op.b_len,
+                op.imm as u32,
             ]);
         }
         blob[18] = blob.len() as u32;
@@ -586,10 +618,10 @@ impl<'a> ReferenceInterpreter<'a> {
         let k = self.prog.k;
         let p = &self.prog.p_u32;
         let mut t = vec![0u64; k + 2];
-        for i in 0..k {
+        for &ai in a.iter().take(k) {
             let mut carry = 0u64;
             for j in 0..k {
-                let cur = t[j] + a[i] as u64 * b[j] as u64 + carry;
+                let cur = t[j] + ai as u64 * b[j] as u64 + carry;
                 t[j] = cur & 0xffffffff;
                 carry = cur >> 32;
             }
@@ -766,7 +798,9 @@ impl<'a> ReferenceInterpreter<'a> {
         }
 
         let unpack8 = |v: &[u32]| -> Vec<i32> {
-            (0..nl).map(|i| ((v[i / 4] >> ((i % 4) * 8)) & 0xff) as i32).collect()
+            (0..nl)
+                .map(|i| ((v[i / 4] >> ((i % 4) * 8)) & 0xff) as i32)
+                .collect()
         };
         let var_limbs: Vec<Vec<i32>> = var_canon.iter().map(|v| unpack8(v)).collect();
 
@@ -792,14 +826,21 @@ impl<'a> ReferenceInterpreter<'a> {
                     }
                     LOP_CONST => {
                         for i in 0..dl {
-                            scratch[d + i] =
-                                prog.const_limbs_payload[op.a_off as usize + i] as i64;
+                            scratch[d + i] = prog.const_limbs_payload[op.a_off as usize + i] as i64;
                         }
                     }
                     LOP_ADD | LOP_SUB => {
                         for i in 0..dl {
-                            let a = if i < op.a_len as usize { scratch[op.a_off as usize + i] } else { 0 };
-                            let b = if i < op.b_len as usize { scratch[op.b_off as usize + i] } else { 0 };
+                            let a = if i < op.a_len as usize {
+                                scratch[op.a_off as usize + i]
+                            } else {
+                                0
+                            };
+                            let b = if i < op.b_len as usize {
+                                scratch[op.b_off as usize + i]
+                            } else {
+                                0
+                            };
                             scratch[d + i] = if op.opcode == LOP_ADD { a + b } else { a - b };
                         }
                     }
@@ -900,7 +941,11 @@ impl<'a> ReferenceInterpreter<'a> {
             let q_limbs: Vec<i64> = (0..c.q_limbs)
                 .map(|i| {
                     let byte = (mag[i / 4] >> ((i % 4) * 8)) & 0xff;
-                    if neg { -(byte as i64) } else { byte as i64 }
+                    if neg {
+                        -(byte as i64)
+                    } else {
+                        byte as i64
+                    }
                 })
                 .collect();
             for &q in &q_limbs {
@@ -937,9 +982,7 @@ impl<'a> ReferenceInterpreter<'a> {
         // ---- write row ----
         let mut row = Vec::with_capacity(prog.width);
         row.push(1u32);
-        for i in 0..prog.num_input * nl {
-            row.push(input_limbs[i] as u32);
-        }
+        row.extend(input_limbs.iter().map(|&x| x as u32));
         for vl in &var_limbs {
             row.extend(vl.iter().map(|&x| x as u32));
         }
@@ -995,8 +1038,12 @@ mod device_program_tests {
         n_random_repeats: usize,
     ) {
         let width = BaseAir::<BabyBear>::width(&expr);
-        let prog =
-            serialize_field_expr(&expr, local_opcode_idx.clone(), opcode_flag_idx.clone(), width);
+        let prog = serialize_field_expr(
+            &expr,
+            local_opcode_idx.clone(),
+            opcode_flag_idx.clone(),
+            width,
+        );
         assert_eq!(prog.width, width);
         let interp = ReferenceInterpreter { prog: &prog };
         let ref_checker = Arc::new(VariableRangeCheckerChip::new(range_checker.bus()));
@@ -1093,7 +1140,9 @@ mod device_program_tests {
         let lvar = FieldVariable::select(is_mul_flag, &x, &z);
         let rvar = FieldVariable::select(is_mul_flag, &z, &x);
         let constraint = lvar * y.clone() - rvar;
-        (*builder).borrow_mut().set_constraint(z_idx, constraint.expr);
+        (*builder)
+            .borrow_mut()
+            .set_constraint(z_idx, constraint.expr);
         let compute = SymbolicExpr::Select(
             is_mul_flag,
             Box::new(x.expr.clone() * y.expr.clone()),
@@ -1187,15 +1236,18 @@ mod device_program_dump {
         rows: usize,
     ) {
         let width = BaseAir::<BabyBear>::width(&expr);
-        let prog =
-            serialize_field_expr(&expr, local_opcode_idx.clone(), opcode_flag_idx.clone(), width);
+        let prog = serialize_field_expr(
+            &expr,
+            local_opcode_idx.clone(),
+            opcode_flag_idx.clone(),
+            width,
+        );
         let blob = prog.to_blob();
 
         let nl = expr.canonical_num_limbs();
         let prime = expr.builder.prime.clone();
         let rec_stride = 1 + expr.builder.num_input * nl;
-        let range_checker =
-            std::sync::Arc::new(VariableRangeCheckerChip::new(expr.range_bus));
+        let range_checker = std::sync::Arc::new(VariableRangeCheckerChip::new(expr.range_bus));
 
         let mut state = 0x0123456789abcdefu64;
         let mut records = Vec::with_capacity(rows * rec_stride);
@@ -1238,7 +1290,10 @@ mod device_program_dump {
             &format!("{dir}/{name}.meta"),
             &[rec_stride as u32, rows as u32, rc.len() as u32],
         );
-        println!("dumped {name}: width={width} rows={rows} rec_stride={rec_stride} rc_len={}", rc.len());
+        println!(
+            "dumped {name}: width={width} rows={rows} rec_stride={rec_stride} rc_len={}",
+            rc.len()
+        );
     }
 
     #[test]
@@ -1277,7 +1332,9 @@ mod device_program_dump {
             let lvar = FieldVariable::select(is_mul_flag, &x, &z);
             let rvar = FieldVariable::select(is_mul_flag, &z, &x);
             let constraint = lvar * y.clone() - rvar;
-            (*builder).borrow_mut().set_constraint(z_idx, constraint.expr);
+            (*builder)
+                .borrow_mut()
+                .set_constraint(z_idx, constraint.expr);
             let compute = SymbolicExpr::Select(
                 is_mul_flag,
                 Box::new(x.expr.clone() * y.expr.clone()),
@@ -1291,7 +1348,15 @@ mod device_program_dump {
             z.save_output();
             let b = (*builder).borrow().clone();
             let expr = crate::FieldExpr::new(b, range_checker.bus(), true);
-            dump_case(&dir, "muldiv", expr, vec![2, 3, 4], vec![0, 1], &[2, 3], 16384);
+            dump_case(
+                &dir,
+                "muldiv",
+                expr,
+                vec![2, 3, 4],
+                vec![0, 1],
+                &[2, 3],
+                16384,
+            );
         }
         // Int ops (EcDouble flavored)
         {

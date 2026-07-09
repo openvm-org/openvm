@@ -95,8 +95,7 @@ impl FieldExprChipGpu {
 
         let n_threads = height.div_ceil(256).min(512) * 256;
         assert!(n_threads * self.aux_words * 4 <= MAX_AUX_BYTES);
-        let d_aux =
-            DeviceBuffer::<u32>::with_capacity_on(n_threads * self.aux_words, device_ctx);
+        let d_aux = DeviceBuffer::<u32>::with_capacity_on(n_threads * self.aux_words, device_ctx);
         let d_err = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
 
         unsafe {
