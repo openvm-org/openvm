@@ -30,7 +30,7 @@ struct StoreDoublewordCore {
     }
 };
 
-__global__ void rv64_store_doubleword_tracegen_kernel(
+__global__ void rv64_store_doubleword_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
@@ -75,7 +75,7 @@ extern "C" int _rv64_store_doubleword_tracegen(
 ) {
     assert(width == sizeof(Rv64StoreDoublewordCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
-    rv64_store_doubleword_tracegen_kernel<<<grid, block, 0, stream>>>(
+    rv64_store_doubleword_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         width,
