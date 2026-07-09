@@ -63,6 +63,7 @@ rvr = [
 cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
+    "openvm-mod-circuit-builder/cuda",
     "dep:openvm-stark-sdk",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
