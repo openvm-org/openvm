@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    fmt::Debug,
     mem::size_of,
 };
 
@@ -200,7 +199,7 @@ unsafe fn execute_e12_impl<
     let ptr_val = ptr_val - shift_amount;
     let read_data: [u8; RV64_REGISTER_NUM_LIMBS] =
         exec_state.vm_read_bytes(pre_compute.e as u32, ptr_val);
-    let mut write_data = [U8::default(); RV64_REGISTER_NUM_LIMBS];
+    let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
 
     if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
         return Err(ExecutionError::Fail {
@@ -258,16 +257,12 @@ unsafe fn execute_e2_impl<
 trait LoadSignExtendOp {
     /// Return if the operation is valid.
     fn compute_write_data(
-        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool;
 }
 
-#[allow(dead_code)]
-/// Wrapper type for u8 so typed VM memory reads and writes can use opcode-specific helpers.
-#[derive(Copy, Clone, Debug, Default)]
-struct U8(u8);
 struct LoadWOp;
 struct LoadHOp;
 struct LoadBOp;
@@ -275,7 +270,7 @@ struct LoadBOp;
 impl LoadSignExtendOp for LoadWOp {
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
@@ -288,7 +283,7 @@ impl LoadSignExtendOp for LoadWOp {
             read_data[shift_amount + 2],
             read_data[shift_amount + 3],
         ]);
-        *write_data = (word as i64).to_le_bytes().map(U8);
+        *write_data = (word as i64).to_le_bytes();
         true
     }
 }
@@ -296,7 +291,7 @@ impl LoadSignExtendOp for LoadWOp {
 impl LoadSignExtendOp for LoadHOp {
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
@@ -304,7 +299,7 @@ impl LoadSignExtendOp for LoadHOp {
             return false;
         }
         let half = i16::from_le_bytes([read_data[shift_amount], read_data[shift_amount + 1]]);
-        *write_data = (half as i64).to_le_bytes().map(U8);
+        *write_data = (half as i64).to_le_bytes();
         true
     }
 }
@@ -312,12 +307,12 @@ impl LoadSignExtendOp for LoadHOp {
 impl LoadSignExtendOp for LoadBOp {
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
         let byte = read_data[shift_amount] as i8;
-        *write_data = (byte as i64).to_le_bytes().map(U8);
+        *write_data = (byte as i64).to_le_bytes();
         true
     }
 }

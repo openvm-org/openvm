@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    fmt::Debug,
     mem::size_of,
 };
 
@@ -201,7 +200,7 @@ unsafe fn execute_e12_impl<
     let ptr_val = ptr_val - shift_amount;
     let read_data: [u8; RV64_REGISTER_NUM_LIMBS] =
         exec_state.vm_read_bytes(pre_compute.e as u32, ptr_val);
-    let mut write_data = [U8::default(); RV64_REGISTER_NUM_LIMBS];
+    let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
 
     if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
         return Err(ExecutionError::Fail {
@@ -256,16 +255,12 @@ unsafe fn execute_e2_impl<
 trait LoadOp {
     /// Return if the operation is valid.
     fn compute_write_data(
-        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool;
 }
 
-#[allow(dead_code)]
-/// Wrapper type for u8 so typed VM memory reads and writes can use opcode-specific helpers.
-#[derive(Copy, Clone, Debug, Default)]
-struct U8(u8);
 struct LoadDOp;
 struct LoadWUOp;
 struct LoadHUOp;
@@ -274,11 +269,11 @@ struct LoadBUOp;
 impl LoadOp for LoadDOp {
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         _shift_amount: usize,
     ) -> bool {
-        *write_data = read_data.map(U8);
+        *write_data = read_data;
         true
     }
 }
@@ -286,17 +281,17 @@ impl LoadOp for LoadDOp {
 impl LoadOp for LoadWUOp {
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
         if shift_amount != 0 && shift_amount != 4 {
             return false;
         }
-        write_data[0] = U8(read_data[shift_amount]);
-        write_data[1] = U8(read_data[shift_amount + 1]);
-        write_data[2] = U8(read_data[shift_amount + 2]);
-        write_data[3] = U8(read_data[shift_amount + 3]);
+        write_data[0] = read_data[shift_amount];
+        write_data[1] = read_data[shift_amount + 1];
+        write_data[2] = read_data[shift_amount + 2];
+        write_data[3] = read_data[shift_amount + 3];
         true
     }
 }
@@ -304,15 +299,15 @@ impl LoadOp for LoadWUOp {
 impl LoadOp for LoadHUOp {
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
         if shift_amount != 0 && shift_amount != 2 && shift_amount != 4 && shift_amount != 6 {
             return false;
         }
-        write_data[0] = U8(read_data[shift_amount]);
-        write_data[1] = U8(read_data[shift_amount + 1]);
+        write_data[0] = read_data[shift_amount];
+        write_data[1] = read_data[shift_amount + 1];
         true
     }
 }
@@ -320,11 +315,11 @@ impl LoadOp for LoadHUOp {
 impl LoadOp for LoadBUOp {
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
-        write_data[0] = U8(read_data[shift_amount]);
+        write_data[0] = read_data[shift_amount];
         true
     }
 }
