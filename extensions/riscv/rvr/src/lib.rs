@@ -1,5 +1,5 @@
-//! rvr lifter for the RISC-V I/O sub-extension: HINT_STORED, HINT_BUFFER,
-//! and stores to public values, including REVEAL.
+//! rvr lifter for the RISC-V I/O sub-extension (HINT_STORED, HINT_BUFFER,
+//! REVEAL).
 //!
 //! TODO: check if other RISC-V instructions/opcodes can be separated into
 //! extensions.
@@ -9,15 +9,13 @@ use std::{ffi::c_void, io::Write};
 
 use openvm_circuit::arch::rvr::io::{check_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
-    instruction::Instruction,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_NUM_LIMBS},
-    LocalOpcode, SystemOpcode,
+    instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode, SystemOpcode,
 };
 use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, Rv64Phantom};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::Rng;
-use rvr_openvm_ext_ffi_common::{AS_PUBLIC_VALUES, AS_REGISTER};
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, MemWidth, Reg};
+use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
+use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
     air_index_to_c, decode_imm_cg, decode_reg, opcode_air_idx, AirIndex, ExtensionError,
     RvrExtension, RvrExtensionCtx,
@@ -36,8 +34,10 @@ impl ExtInstr for HintStoreWInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let ptr = ctx.read_reg(self.ptr_reg);
-        ctx.trace_mem_access(&ptr, RV64_MEMORY_AS);
-        ctx.extern_call("openvm_hint_storew", &[&ptr]);
+        // HINT_STORED has the same 3-tick AIR shape as HINT_BUFFER:
+        // mem_ptr read, a num_words placeholder tick, then the memory write.
+        ctx.trace_timestamp();
+        ctx.extern_call("openvm_hint_storew", &["state", &ptr]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -69,9 +69,8 @@ impl ExtInstr for HintBufferInstr {
         ctx.trace_chip(chip_idx, &format!("{n} - 1"));
         ctx.write_line("}");
         ctx.write_line(&format!("if ({n} > 0) {{"));
-        ctx.trace_mem_access_u64_range(&ptr, &n, RV64_MEMORY_AS);
+        ctx.extern_call("openvm_hint_buffer", &["state", &ptr, &n]);
         ctx.write_line("}");
-        ctx.extern_call("openvm_hint_buffer", &[&ptr, &n]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -79,14 +78,13 @@ impl ExtInstr for HintBufferInstr {
     }
 }
 
-/// Store bytes from `reg[src_reg]` into public values at `reg[ptr_reg] + offset`.
-/// This is also used for REVEAL.
+/// REVEAL: write `reg[src_reg]` to user public-output
+/// address space at `reg[ptr_reg] + offset`.
 #[derive(Debug, Clone)]
 pub struct RevealInstr {
     pub src_reg: Reg,
     pub ptr_reg: Reg,
     pub offset: u32,
-    pub width: MemWidth,
 }
 
 impl ExtInstr for RevealInstr {
@@ -108,8 +106,7 @@ impl ExtInstr for RevealInstr {
         };
         ctx.trace_mem_access(&addr, AS_PUBLIC_VALUES);
         let offset = format!("0x{:08x}u", self.offset);
-        let width = self.width.bytes().to_string();
-        ctx.extern_call("openvm_reveal", &[&src, &ptr, &offset, &width]);
+        ctx.extern_call("openvm_reveal", &[&src, &ptr, &offset]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -128,6 +125,7 @@ impl ExtInstr for HintInputInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         ctx.extern_call("openvm_hint_input", &[]);
+        ctx.trace_timestamp();
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -151,6 +149,7 @@ impl ExtInstr for PrintStrInstr {
         let ptr = ctx.read_reg_raw(self.ptr_reg);
         let len = ctx.read_reg_raw(self.len_reg);
         ctx.extern_call("openvm_print_str", &[&ptr, &len]);
+        ctx.trace_timestamp();
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -158,7 +157,7 @@ impl ExtInstr for PrintStrInstr {
     }
 }
 
-/// HINT_RANDOM phantom: fill the hint stream with `reg[num_words_reg] * 8`
+/// HINT_RANDOM phantom: fill the hint stream with `reg[num_words_reg] * 4`
 /// random bytes drawn from the host's persistent RNG.
 #[derive(Debug, Clone)]
 pub struct HintRandomInstr {
@@ -173,6 +172,7 @@ impl ExtInstr for HintRandomInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let n = ctx.read_reg_raw(self.num_words_reg);
         ctx.extern_call("openvm_hint_random", &[&n]);
+        ctx.trace_timestamp();
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -181,7 +181,7 @@ impl ExtInstr for HintRandomInstr {
 }
 
 /// rvr extension for the RISC-V I/O instructions HINT_STORED, HINT_BUFFER, and
-/// stores to public values, including REVEAL.
+/// REVEAL.
 pub struct Rv64IoExtension {
     hint_store_chip_idx: Option<AirIndex>,
 }
@@ -222,7 +222,10 @@ impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
             }));
         }
 
-        if let Some(width) = public_values_store_width(insn) {
+        // REVEAL: STORED with address-space e = AS_PUBLIC_VALUES.
+        if opcode == Rv64LoadStoreOpcode::STORED.global_opcode_usize()
+            && insn.e.as_canonical_u32() == AS_PUBLIC_VALUES
+        {
             let src_reg = decode_reg(insn.a);
             let ptr_reg = decode_reg(insn.b);
             let offset = decode_imm_cg(insn);
@@ -232,7 +235,6 @@ impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
                     src_reg,
                     ptr_reg,
                     offset,
-                    width,
                 })),
                 source_loc: None,
             }));
@@ -275,30 +277,7 @@ impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
     }
 }
 
-fn public_values_store_width<F: PrimeField32>(insn: &Instruction<F>) -> Option<MemWidth> {
-    if insn.d.as_canonical_u32() != AS_REGISTER || insn.e.as_canonical_u32() != AS_PUBLIC_VALUES {
-        return None;
-    }
-
-    match insn.opcode.as_usize() {
-        opcode if opcode == Rv64LoadStoreOpcode::STORED.global_opcode_usize() => {
-            Some(MemWidth::Double)
-        }
-        opcode if opcode == Rv64LoadStoreOpcode::STOREW.global_opcode_usize() => {
-            Some(MemWidth::Word)
-        }
-        opcode if opcode == Rv64LoadStoreOpcode::STOREH.global_opcode_usize() => {
-            Some(MemWidth::Half)
-        }
-        opcode if opcode == Rv64LoadStoreOpcode::STOREB.global_opcode_usize() => {
-            Some(MemWidth::Byte)
-        }
-        _ => None,
-    }
-}
-
-/// rvr extension for the RISC-V base IO phantoms HINT_INPUT, PRINT_STR,
-/// HINT_RANDOM, and the extension hint-stream setter.
+/// rvr extension for the RISC-V base IO phantoms HINT_INPUT, PRINT_STR, and HINT_RANDOM.
 pub struct Rv64IExtension;
 
 impl Rv64IExtension {
@@ -385,9 +364,9 @@ pub struct Rv64IPhantomCallbacks {
 /// Must match the C `Rv64IoHostCallbacks` layout in `rv64io_callbacks.c`.
 #[repr(C)]
 pub struct Rv64IoHostCallbacks {
-    pub hint_storew: extern "C" fn(*mut c_void, u64),
-    pub hint_buffer: extern "C" fn(*mut c_void, u64, u32),
-    pub reveal: extern "C" fn(*mut c_void, u64, u64, u32, u32),
+    pub hint_storew: extern "C" fn(*mut c_void, u64) -> u64,
+    pub hint_buffer: extern "C" fn(*mut c_void, u64, u32, u32) -> u64,
+    pub reveal: extern "C" fn(*mut c_void, u64, u64, u32),
 }
 
 // ── Callback implementations ────────────────────────────────────────────────
@@ -435,64 +414,84 @@ pub extern "C" fn host_hint_random<F: PrimeField32>(ctx: *mut c_void, num_words:
 
 /// HINT_STOREW: pop one rv64 register-width word (8 bytes) from the hint stream
 /// and write it to guest memory at `dest_addr`.
-pub extern "C" fn host_hint_storew<F: PrimeField32>(ctx: *mut c_void, dest_addr: u64) {
+///
+/// Error-path note: exhausted hint streams currently return a zero word and
+/// continue on the rvr host-callback path, while interpreter preflight returns
+/// `ExecutionError::HintOutOfBounds`. Well-formed transpiled programs provision
+/// enough hints; M4 documents this as an unreachable error-equivalence gap.
+pub extern "C" fn host_hint_storew<F: PrimeField32>(ctx: *mut c_void, dest_addr: u64) -> u64 {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
-    if io.hint_stream.len() < RV64_REGISTER_NUM_LIMBS || io.memory_ptr.is_null() {
-        return;
+    if io.hint_stream.len() < RV64_REGISTER_NUM_LIMBS {
+        return 0;
     }
     check_mem_bounds_range(dest_addr, RV64_REGISTER_NUM_LIMBS);
     let mut bytes = [0u8; RV64_REGISTER_NUM_LIMBS];
     for byte in &mut bytes {
         *byte = io.hint_stream.pop_front().unwrap().as_canonical_u32() as u8;
     }
-    unsafe {
-        std::ptr::copy_nonoverlapping(
-            bytes.as_ptr(),
-            io.memory_ptr.add(dest_addr as usize),
-            bytes.len(),
-        );
-    }
+    u64::from_le_bytes(bytes)
 }
 
 /// HINT_BUFFER: pop `num_words * RV64_REGISTER_NUM_LIMBS` field elements from the hint stream
 /// and copy them as bytes into guest memory.
+///
+/// See `host_hint_storew` for the deliberate M4-documented exhausted-stream
+/// error-path asymmetry with interpreter preflight.
 pub extern "C" fn host_hint_buffer<F: PrimeField32>(
     ctx: *mut c_void,
     dest_addr: u64,
     num_words: u32,
-) {
+    word_index: u32,
+) -> u64 {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
     let nbytes = num_words as usize * RV64_REGISTER_NUM_LIMBS;
-    if io.hint_stream.len() < nbytes || io.memory_ptr.is_null() {
-        return;
+    if word_index == 0 {
+        check_mem_bounds_range(dest_addr, nbytes);
+        if io.hint_stream.len() < nbytes {
+            return 0;
+        }
     }
-    check_mem_bounds_range(dest_addr, nbytes);
-    let dst = unsafe { io.memory_ptr.add(dest_addr as usize) };
-    for i in 0..nbytes {
-        let byte = io.hint_stream.pop_front().unwrap().as_canonical_u32() as u8;
-        unsafe { *dst.add(i) = byte };
+    if word_index >= num_words || io.hint_stream.len() < RV64_REGISTER_NUM_LIMBS {
+        return 0;
     }
+    let mut bytes = [0u8; RV64_REGISTER_NUM_LIMBS];
+    for byte in &mut bytes {
+        *byte = io.hint_stream.pop_front().unwrap().as_canonical_u32() as u8;
+    }
+    u64::from_le_bytes(bytes)
 }
 
-/// Host callback for stores to `PUBLIC_VALUES_AS`.
-/// Cost corrections are handled in generated C.
+/// REVEAL: write public output bytes directly into the guest's `PUBLIC_VALUES_AS`
+/// byte slice. Cost corrections handled in C.
 pub extern "C" fn host_reveal<F: PrimeField32>(
     ctx: *mut c_void,
     src_val: u64,
     ptr: u64,
     offset: u32,
-    width: u32,
 ) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
-    let start = ptr as usize + offset as usize;
-    let width = width as usize;
-    let end = start + width;
-    assert!(
-        end <= io.public_values.len(),
-        "reveal out of bounds: writing bytes [{start}..{end}) but public_values size is {} (configured via SystemConfig::with_public_values_bytes or SystemConfig::with_public_values)",
-        io.public_values.len(),
-    );
-    io.public_values[start..end].copy_from_slice(&src_val.to_le_bytes()[..width]);
+    let Some((start, end)) = reveal_public_values_bounds(ptr, offset, io.public_values.len())
+    else {
+        panic!(
+            "reveal out of bounds: ptr={ptr} offset={offset} write_size={} but public_values size is {} (configured via SystemConfig::with_public_values_bytes or SystemConfig::with_public_values)",
+            RV64_REGISTER_NUM_LIMBS,
+            io.public_values.len(),
+        );
+    };
+    io.public_values[start..end].copy_from_slice(&src_val.to_le_bytes());
+}
+
+fn reveal_public_values_bounds(
+    ptr: u64,
+    offset: u32,
+    public_values_len: usize,
+) -> Option<(usize, usize)> {
+    let start = ptr.checked_add(u64::from(offset))?;
+    let end = start.checked_add(RV64_REGISTER_NUM_LIMBS as u64)?;
+    if end > u64::try_from(public_values_len).ok()? {
+        return None;
+    }
+    Some((usize::try_from(start).ok()?, usize::try_from(end).ok()?))
 }
 
 #[cfg(test)]
@@ -566,84 +565,10 @@ mod tests {
                 "trace_mem_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
             ));
         }
-    }
 
-    #[test]
-    fn rv64io_lifts_public_values_store_widths() {
-        let ext = Rv64IoExtension::new(None).unwrap();
-
-        for (opcode, width) in [
-            (Rv64LoadStoreOpcode::STORED, 8),
-            (Rv64LoadStoreOpcode::STOREW, 4),
-            (Rv64LoadStoreOpcode::STOREH, 2),
-            (Rv64LoadStoreOpcode::STOREB, 1),
-        ] {
-            let inst = Instruction::<BabyBear>::from_usize(
-                opcode.global_opcode(),
-                [
-                    8,
-                    16,
-                    0,
-                    AS_REGISTER as usize,
-                    AS_PUBLIC_VALUES as usize,
-                    1,
-                    0,
-                ],
-            );
-            let lifted = ext.try_lift(&inst, 0x100).unwrap();
-            let LiftedInstr::Body(InstrAt {
-                instr: Instr::Ext(instr),
-                ..
-            }) = lifted
-            else {
-                panic!("expected public-values store extension instruction");
-            };
-
-            let mut ctx = TestEmitCtx::default();
-            instr.emit_c(&mut ctx);
-            assert_eq!(
-                ctx.lines[1],
-                format!("openvm_reveal(r1, r2, 0x00000000u, {width});")
-            );
+        fn trace_timestamp(&mut self) {
+            self.write_line("trace_timestamp(state);");
         }
-    }
-
-    #[test]
-    fn rv64io_rejects_public_values_store_with_non_register_d() {
-        let ext = Rv64IoExtension::new(None).unwrap();
-        let inst = Instruction::<BabyBear>::from_usize(
-            Rv64LoadStoreOpcode::STORED.global_opcode(),
-            [
-                8,
-                16,
-                0,
-                AS_PUBLIC_VALUES as usize,
-                AS_PUBLIC_VALUES as usize,
-                1,
-                0,
-            ],
-        );
-
-        assert!(ext.try_lift(&inst, 0x100).is_none());
-    }
-
-    #[test]
-    fn rv64io_ignores_non_store_public_values_shaped_instruction() {
-        let ext = Rv64IoExtension::new(None).unwrap();
-        let inst = Instruction::<BabyBear>::from_usize(
-            SystemOpcode::TERMINATE.global_opcode(),
-            [
-                8,
-                16,
-                0,
-                AS_REGISTER as usize,
-                AS_PUBLIC_VALUES as usize,
-                1,
-                0,
-            ],
-        );
-
-        assert!(ext.try_lift(&inst, 0x100).is_none());
     }
 
     #[test]
@@ -653,7 +578,6 @@ mod tests {
             src_reg: 5,
             ptr_reg: 10,
             offset: 12,
-            width: MemWidth::Word,
         }
         .emit_c(&mut ctx);
 
@@ -661,7 +585,7 @@ mod tests {
             ctx.lines[0],
             format!("trace_mem_access(state, (r10 + 0x0000000cu), {AS_PUBLIC_VALUES}u);")
         );
-        assert_eq!(ctx.lines[1], "openvm_reveal(r5, r10, 0x0000000cu, 4);");
+        assert_eq!(ctx.lines[1], "openvm_reveal(r5, r10, 0x0000000cu);");
     }
 
     #[test]
@@ -689,46 +613,28 @@ mod tests {
             0x11223344,
             4,
             2,
-            4,
         );
 
         assert_eq!(&io.public_values[6..10], &[0x44, 0x33, 0x22, 0x11]);
     }
 
     #[test]
-    fn host_reveal_honors_store_width() {
-        let mut input_stream = VecDeque::new();
-        let mut hint_stream = VecDeque::new();
-        let mut rng = StdRng::seed_from_u64(0);
-        let mut memory = vec![0u8; 16];
-        let mut public_values = vec![0u8; 16];
-        let mut deferrals = Vec::new();
-
-        let mut io = OpenVmIoState::<BabyBear> {
-            input_stream: &mut input_stream,
-            hint_stream: &mut hint_stream,
-            rng: &mut rng,
-            memory_ptr: memory.as_mut_ptr(),
-            public_values: &mut public_values,
-            deferral_memory: std::ptr::null_mut(),
-            deferral_memory_len: 0,
-            deferrals: &mut deferrals,
-        };
-
-        host_reveal::<BabyBear>(
-            &mut io as *mut OpenVmIoState<'_, BabyBear> as *mut c_void,
-            0x1122334455667788,
-            3,
-            0,
-            2,
-        );
-
-        assert_eq!(&io.public_values[3..5], &[0x88, 0x77]);
-        assert_eq!(io.public_values[5], 0);
+    fn reveal_public_values_bounds_accepts_valid_range() {
+        assert_eq!(reveal_public_values_bounds(4, 2, 16), Some((6, 14)));
     }
 
     #[test]
-    fn hint_buffer_traces_u64_range() {
+    fn reveal_public_values_bounds_rejects_64_bit_overflow() {
+        assert_eq!(reveal_public_values_bounds(u64::MAX - 3, 8, 16), None);
+    }
+
+    #[test]
+    fn reveal_public_values_bounds_rejects_out_of_range_write() {
+        assert_eq!(reveal_public_values_bounds(9, 0, 16), None);
+    }
+
+    #[test]
+    fn hint_buffer_uses_traced_host_callback() {
         let mut ctx = TestEmitCtx::default();
         HintBufferInstr {
             ptr_reg: 1,
@@ -740,8 +646,8 @@ mod tests {
         assert!(
             ctx.lines
                 .iter()
-                .any(|l| l.contains("trace_mem_access_u64_range")),
-            "expected trace_mem_access_u64_range, got: {:#?}",
+                .any(|l| l.contains("openvm_hint_buffer(state, r1, r2)")),
+            "expected stateful openvm_hint_buffer call, got: {:#?}",
             ctx.lines
         );
     }

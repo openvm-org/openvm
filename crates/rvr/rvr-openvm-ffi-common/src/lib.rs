@@ -38,10 +38,30 @@ pub use openvm_instructions::{
 // Redefined here to avoid a cycle with openvm-circuit. Checked against
 // upstream in `openvm-circuit`'s `arch::rvr::abi_consts`.
 
-/// Number of bits needed to index the leaves represented by one `u64` page mask.
 pub const PAGE_BITS: usize = 6;
 /// Default, not an invariant; see TODO in `abi_consts.rs`.
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u32 = 1000;
+
+// TODO(dedup): make a common crate that is imported by rvr and openvm-circuit
+// ── OpenVM preflight tracer ABI ─────────────────────────────────────
+
+/// Preflight tracer kind ID. Existing IDs: MeteredCost=10, Metered=11, Pure=12.
+pub const PREFLIGHT_TRACER_KIND: u32 = 13;
+
+/// Initial timestamp for preflight memory logs. Matches `TracingMemory`:
+/// `INITIAL_TIMESTAMP + 1`.
+pub const PREFLIGHT_INITIAL_TIMESTAMP: u32 = 1;
+
+pub const PREFLIGHT_MEMORY_KIND_READ: u8 = 0;
+pub const PREFLIGHT_MEMORY_KIND_WRITE: u8 = 1;
+pub const PREFLIGHT_MEMORY_KIND_TOUCH: u8 = 2;
+
+pub const PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE: usize = 16;
+pub const PREFLIGHT_PROGRAM_LOG_ENTRY_ALIGN: usize = 8;
+pub const PREFLIGHT_MEMORY_LOG_ENTRY_SIZE: usize = 24;
+pub const PREFLIGHT_MEMORY_LOG_ENTRY_ALIGN: usize = 8;
+pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 48;
+pub const PREFLIGHT_TRACER_DATA_ALIGN: usize = 8;
 
 extern "C" {
     // ── Memory access (single u64 word, data) ─────────────────────────
@@ -87,6 +107,7 @@ extern "C" {
     // ── Instruction dispatch / chip cost ──────────────────────────────
     pub fn trace_pc_wrapper(state: *mut c_void, pc: u64);
     pub fn trace_chip_wrapper(state: *mut c_void, chip_idx: u32, count: u32);
+    pub fn trace_timestamp_wrapper(state: *mut c_void);
 
     // ── Block metering ────────────────────────────────────────────────
     pub fn trace_block_wrapper(state: *mut c_void, pc: u64, block_insn_count: u32);
@@ -178,4 +199,12 @@ pub unsafe fn trace_mem_access_range(
         "trace_mem_access_range requires num_words >= 1"
     );
     trace_mem_access_u64_range_wrapper(state, base_addr, num_words, addr_space);
+}
+
+/// Advance the active tracer timestamp without recording a memory event.
+///
+/// # Safety
+/// `state` must be a valid `RvState` pointer.
+pub unsafe fn trace_timestamp_tick(state: *mut c_void) {
+    trace_timestamp_wrapper(state);
 }

@@ -11,12 +11,14 @@ use super::{
     bridge::rv64_memory_ptr,
     metered::MeteredTracer,
     metered_cost::{MeteredCostMeter, PureTracer},
+    preflight::PreflightTracer,
 };
 use crate::{arch::VmState, system::memory::online::GuestMemory};
 
 pub type PureState = RvState<Rv64, PureTracer, InstretSuspender>;
 pub type MeteredCostState = RvState<Rv64, MeteredCostMeter, InstretSuspender>;
 pub type MeteredState = RvState<Rv64, MeteredTracer, InstretSuspender>;
+pub type PreflightState = RvState<Rv64, PreflightTracer, InstretSuspender>;
 
 /// A payload type that can sit behind a [`TracerPtr`]. The const `KIND`
 /// matches the tracer-kind ABI the rvr-generated C code expects.
@@ -105,6 +107,18 @@ pub fn init_rvr_state_with_metered<F: PrimeField32>(
 ) -> MeteredState {
     let memory_ptr = rv64_memory_ptr(vm_state);
     let mut state = MeteredState::new();
+    state.set_memory(memory_ptr);
+    state.pc = pc as u64;
+    state.suspender.disable();
+    state
+}
+
+pub fn init_rvr_state_with_preflight<F: PrimeField32>(
+    vm_state: &mut VmState<F, GuestMemory>,
+    pc: u32,
+) -> PreflightState {
+    let memory_ptr = rv64_memory_ptr(vm_state);
+    let mut state = PreflightState::new();
     state.set_memory(memory_ptr);
     state.pc = pc as u64;
     state.suspender.disable();
