@@ -14,8 +14,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
     DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode,
-    Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom,
-    ShiftOpcode, ShiftWOpcode,
+    Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::{AS_MEMORY, AS_PUBLIC_VALUES, AS_REGISTER};
@@ -27,30 +26,6 @@ use crate::{
     helpers::{decode_imm_cg, sext32},
     ExtensionRegistry,
 };
-
-pub const RV64_LOAD_STORE_OPCODE_START: usize =
-    Rv64LoadStoreOpcode::CLASS_OFFSET + Rv64LoadStoreOpcode::LOADD as usize;
-pub const RV64_LOAD_STORE_OPCODE_END: usize =
-    Rv64LoadStoreOpcode::CLASS_OFFSET + Rv64LoadStoreOpcode::LOADW as usize;
-
-pub const RV64_HINT_STORE_OPCODE_START: usize =
-    Rv64HintStoreOpcode::CLASS_OFFSET + Rv64HintStoreOpcode::HINT_STORED as usize;
-pub const RV64_HINT_STORE_OPCODE_END: usize =
-    Rv64HintStoreOpcode::CLASS_OFFSET + Rv64HintStoreOpcode::HINT_BUFFER as usize;
-
-/// Returns whether an instruction is an RV64IM-owned opcode that is lifted
-/// through a registered rvr extension rather than by the base lifter.
-pub fn is_rv64im_preflight_extension_opcode<F: PrimeField32>(insn: &Instruction<F>) -> bool {
-    let opcode = insn.opcode.as_usize();
-    if (RV64_HINT_STORE_OPCODE_START..=RV64_HINT_STORE_OPCODE_END).contains(&opcode) {
-        return true;
-    }
-    if opcode == SystemOpcode::PHANTOM.global_opcode_usize() {
-        let discriminant = (field_to_u32(insn.c) & 0xffff) as u16;
-        return Rv64Phantom::from_repr(discriminant).is_some();
-    }
-    false
-}
 
 /// Lift a single OpenVM instruction to the new IR types.
 ///

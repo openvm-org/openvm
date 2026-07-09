@@ -6,6 +6,7 @@ pub mod compile;
 pub mod debug;
 pub mod execute;
 pub mod io;
+pub mod log_native;
 pub mod metered;
 pub mod metered_cost;
 pub mod preflight;
@@ -24,6 +25,10 @@ pub use debug::{default_addr2line_cmd, GuestDebugMap};
 pub use execute::{
     execute, execute_metered, execute_metered_cost, execute_metered_segment_boundary,
     execute_preflight, rv_execute, ExecuteError, RvrPreflightRunResult,
+};
+pub use log_native::{
+    generate_record_arenas_from_logs, LogNativeAccessView, LogNativeAssembler,
+    LogNativeAssemblerRegistry, LogNativeOpcodeAdmitter, VmRvrLogNativeExtension,
 };
 pub use metered::{
     RunToCompletion, RvrMeteredInstance, RvrMeteredInstanceWith, RvrMeteredResult,
