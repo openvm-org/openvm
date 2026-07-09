@@ -16,8 +16,8 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        load_adapter_context, LoadInstruction, Rv64LoadAdapterFiller, Rv64LoadAdapterRecord,
-        LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD, RV64_U16_SIGN_BIT, U16_BITS,
+        LoadInstruction, Rv64LoadAdapterFiller, Rv64LoadAdapterRecord, LOAD_WIDTH_HALFWORD,
+        LOAD_WIDTH_WORD, RV64_U16_SIGN_BIT, U16_BITS,
     },
     load::LoadRecord,
 };
@@ -203,13 +203,17 @@ where
                     acc + flags[case_idx].clone() * term
                 })
         });
-        load_adapter_context::<AB, I>(
-            cols.is_valid.into(),
-            expected_opcode,
-            load_shift_amount,
-            cols.read_data,
-            write_data,
-        )
+        AdapterAirContext {
+            to_pc: None,
+            reads: cols.read_data.map(Into::into).into(),
+            writes: [write_data].into(),
+            instruction: LoadInstruction {
+                is_valid: cols.is_valid.into(),
+                opcode: expected_opcode,
+                shift_amount: load_shift_amount,
+            }
+            .into(),
+        }
     }
 
     fn start_offset(&self) -> usize {
