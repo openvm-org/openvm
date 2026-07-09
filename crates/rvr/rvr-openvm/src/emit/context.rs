@@ -270,6 +270,18 @@ impl<'a> EmitContext<'a> {
         self.read_reg_impl(idx, RegisterReadKind::Peek)
     }
 
+    /// Read a variable without emitting a trace event.
+    pub fn read_var_raw(&self, var: Variable) -> String {
+        let idx = reg_index(var);
+        if idx == 0 {
+            "0ull".to_string()
+        } else if self.hot_regs.contains(&idx) {
+            Self::abi_name(idx).to_string()
+        } else {
+            format!("state->regs[{idx}]")
+        }
+    }
+
     /// Write a register as a VM memory access, emitting `trace_reg_write` in
     /// value-tracing mode.
     pub fn write_reg(&mut self, idx: u8, val: &str) {
@@ -310,6 +322,11 @@ impl<'a> EmitContext<'a> {
         } else {
             self.write_line(&format!("state->regs[{idx}] = {val};"));
         }
+    }
+
+    /// Write a variable without emitting a trace event.
+    pub fn write_var_raw(&mut self, var: Variable, val: &str) {
+        self.write_reg_direct(reg_index(var), val);
     }
 
     fn addr_expr(base: &str, offset: i16) -> String {
@@ -626,8 +643,16 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::peek_reg(self, reg_index(var))
     }
 
+    fn read_var_raw(&mut self, var: Variable) -> String {
+        EmitContext::read_var_raw(self, var)
+    }
+
     fn write_var(&mut self, var: Variable, val: &str) {
         EmitContext::write_reg(self, reg_index(var), val)
+    }
+
+    fn write_var_raw(&mut self, var: Variable, val: &str) {
+        EmitContext::write_var_raw(self, var, val)
     }
 
     fn write_line(&mut self, s: &str) {
@@ -650,11 +675,23 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::emit_call(self, name, args);
     }
 
+    fn extern_call(&mut self, name: &str, args: &[&str]) {
+        EmitContext::emit_call(self, name, args);
+    }
+
     fn emit_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
         EmitContext::emit_call_without_page_flush(self, name, args);
     }
 
+    fn extern_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+        EmitContext::emit_call_without_page_flush(self, name, args);
+    }
+
     fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+        EmitContext::emit_call_expr(self, ret_ty, name, args)
+    }
+
+    fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
         EmitContext::emit_call_expr(self, ret_ty, name, args)
     }
 

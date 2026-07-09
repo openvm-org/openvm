@@ -50,8 +50,18 @@ pub trait ExtEmitCtx {
     /// Read a variable at the current logical memory timestamp.
     fn peek_var(&mut self, var: Variable) -> String;
 
+    /// Read a variable without emitting any trace event.
+    fn read_var_raw(&mut self, var: Variable) -> String {
+        self.peek_var(var)
+    }
+
     /// Write a variable through a VM memory access.
     fn write_var(&mut self, var: Variable, val: &str);
+
+    /// Write a variable without emitting any trace event.
+    fn write_var_raw(&mut self, var: Variable, val: &str) {
+        self.write_var(var, val);
+    }
 
     /// Append a line of C code (indented).
     fn write_line(&mut self, s: &str);
@@ -68,12 +78,27 @@ pub trait ExtEmitCtx {
     /// Flush local page state, emit a C call, then reload the page state.
     fn emit_call(&mut self, name: &str, args: &[&str]);
 
+    /// Emit an opaque C call that may update state observed by the tracer.
+    fn extern_call(&mut self, name: &str, args: &[&str]) {
+        self.emit_call(name, args);
+    }
+
     /// Emit a C call that cannot access RVR state, without flushing page state.
     fn emit_call_without_page_flush(&mut self, name: &str, args: &[&str]);
+
+    /// Emit an opaque C call without flushing local page trace state.
+    fn extern_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+        self.emit_call_without_page_flush(name, args);
+    }
 
     /// Flush local page state, emit a C call that returns a value, then reload
     /// the page state.
     fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String;
+
+    /// Emit an opaque C call that returns a value.
+    fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+        self.emit_call_expr(ret_ty, name, args)
+    }
 
     /// Emit a call and save its result only when chip tracing needs it.
     ///

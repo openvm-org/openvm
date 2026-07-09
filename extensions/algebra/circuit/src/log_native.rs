@@ -1,6 +1,6 @@
-//! Log-native record assembly for modular arithmetic.
+//! Log-native record assembly for modular and quadratic-extension arithmetic.
 
-use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
+use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
 use openvm_circuit::{
     arch::{
         rvr::{
@@ -32,8 +32,9 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
 use crate::{
-    modular_chip::ModularIsEqualRecord, ModularExtension, Rv64ModularConfig, MODULAR_BLOCKS_32,
-    MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_32_U16, NUM_LIMBS_48, NUM_LIMBS_48_U16,
+    modular_chip::ModularIsEqualRecord, Fp2Extension, ModularExtension, Rv64ModularConfig,
+    Rv64ModularWithFp2Config, FP2_BLOCKS_32, FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48,
+    NUM_LIMBS_32, NUM_LIMBS_32_U16, NUM_LIMBS_48, NUM_LIMBS_48_U16,
 };
 
 /// Field-expression record layout backed by `Rv64VecHeapAdapter`.
@@ -103,6 +104,38 @@ impl<F, RA> ModularRecordArena<F> for RA where
 {
 }
 
+/// Record-arena requirements contributed by the Fp2 extension.
+///
+/// Each record holds two base-field coordinates, so the 32-byte and 48-byte
+/// base-field configurations use 8 and 12 VecHeap blocks respectively.
+pub trait Fp2RecordArena<F>:
+    Arena
+    + for<'a> RecordArena<
+        'a,
+        VecHeapLayout<F, 2, FP2_BLOCKS_32, FP2_BLOCKS_32>,
+        VecHeapRecordMut<'a, 2, FP2_BLOCKS_32, FP2_BLOCKS_32>,
+    > + for<'a> RecordArena<
+        'a,
+        VecHeapLayout<F, 2, FP2_BLOCKS_48, FP2_BLOCKS_48>,
+        VecHeapRecordMut<'a, 2, FP2_BLOCKS_48, FP2_BLOCKS_48>,
+    >
+{
+}
+
+impl<F, RA> Fp2RecordArena<F> for RA where
+    RA: Arena
+        + for<'a> RecordArena<
+            'a,
+            VecHeapLayout<F, 2, FP2_BLOCKS_32, FP2_BLOCKS_32>,
+            VecHeapRecordMut<'a, 2, FP2_BLOCKS_32, FP2_BLOCKS_32>,
+        > + for<'a> RecordArena<
+            'a,
+            VecHeapLayout<F, 2, FP2_BLOCKS_48, FP2_BLOCKS_48>,
+            VecHeapRecordMut<'a, 2, FP2_BLOCKS_48, FP2_BLOCKS_48>,
+        >
+{
+}
+
 impl<F, RA> VmRvrLogNativeExtension<F, RA> for ModularExtension
 where
     F: PrimeField32,
@@ -124,6 +157,26 @@ where
     }
 }
 
+impl<F, RA> VmRvrLogNativeExtension<F, RA> for Fp2Extension
+where
+    F: PrimeField32,
+    RA: Fp2RecordArena<F>,
+{
+    fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
+        for (mod_idx, (_, modulus)) in self.supported_moduli.iter().enumerate() {
+            let offset = Fp2Opcode::CLASS_OFFSET + mod_idx * Fp2Opcode::COUNT;
+            let bytes = modulus.bits().div_ceil(8) as usize;
+            if bytes <= NUM_LIMBS_32 {
+                register_fp2::<F, RA, FP2_BLOCKS_32>(registry, offset);
+            } else if bytes <= NUM_LIMBS_48 {
+                register_fp2::<F, RA, FP2_BLOCKS_48>(registry, offset);
+            } else {
+                panic!("Fp2 modulus exceeds maximum supported size of 384 bits");
+            }
+        }
+    }
+}
+
 impl<F, RA> VmRvrLogNativeExtension<F, RA> for Rv64ModularConfig
 where
     F: PrimeField32,
@@ -134,6 +187,21 @@ where
         self.mul.extend_rvr_log_native(registry);
         self.io.extend_rvr_log_native(registry);
         self.modular.extend_rvr_log_native(registry);
+    }
+}
+
+impl<F, RA> VmRvrLogNativeExtension<F, RA> for Rv64ModularWithFp2Config
+where
+    F: PrimeField32,
+    RA: Rv64IRecordArena<F>
+        + Rv64MRecordArena<F>
+        + Rv64IoRecordArena<F>
+        + ModularRecordArena<F>
+        + Fp2RecordArena<F>,
+{
+    fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
+        self.modular.extend_rvr_log_native(registry);
+        self.fp2.extend_rvr_log_native(registry);
     }
 }
 
@@ -186,11 +254,44 @@ fn register_modulus<F: PrimeField32, RA, const BLOCKS: usize, const U16_LIMBS: u
     );
 }
 
+fn register_fp2<F: PrimeField32, RA, const BLOCKS: usize>(
+    registry: &mut LogNativeAssemblerRegistry<F, RA>,
+    offset: usize,
+) where
+    RA: Fp2RecordArena<F>,
+    for<'a> RA: RecordArena<
+        'a,
+        VecHeapLayout<F, 2, BLOCKS, BLOCKS>,
+        VecHeapRecordMut<'a, 2, BLOCKS, BLOCKS>,
+    >,
+{
+    registry.register_if(
+        [Fp2Opcode::ADD, Fp2Opcode::SUB, Fp2Opcode::SETUP_ADDSUB]
+            .map(|opcode| fp2_opcode(offset, opcode)),
+        is_vec_heap_instruction,
+        assemble_fp2_addsub::<F, RA, BLOCKS>,
+    );
+    registry.register_if(
+        [Fp2Opcode::MUL, Fp2Opcode::DIV, Fp2Opcode::SETUP_MULDIV]
+            .map(|opcode| fp2_opcode(offset, opcode)),
+        is_vec_heap_instruction,
+        assemble_fp2_muldiv::<F, RA, BLOCKS>,
+    );
+}
+
 fn modular_opcode(offset: usize, opcode: Rv64ModularArithmeticOpcode) -> VmOpcode {
     VmOpcode::from_usize(offset + opcode as usize)
 }
 
+fn fp2_opcode(offset: usize, opcode: Fp2Opcode) -> VmOpcode {
+    VmOpcode::from_usize(offset + opcode as usize)
+}
+
 fn is_modular_instruction<F: PrimeField32>(instruction: &Instruction<F>) -> bool {
+    is_vec_heap_instruction(instruction)
+}
+
+fn is_vec_heap_instruction<F: PrimeField32>(instruction: &Instruction<F>) -> bool {
     instruction.d.as_canonical_u32() == RV64_REGISTER_AS
         && instruction.e.as_canonical_u32() == RV64_MEMORY_AS
 }
@@ -248,6 +349,58 @@ where
         timestamp,
         modular_local_opcode(instruction),
         modular_heap_read_kinds(instruction),
+    )
+}
+
+fn assemble_fp2_addsub<F: PrimeField32, RA, const BLOCKS: usize>(
+    arena: &mut RA,
+    access: &LogNativeAccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError>
+where
+    RA: Arena
+        + for<'a> RecordArena<
+            'a,
+            VecHeapLayout<F, 2, BLOCKS, BLOCKS>,
+            VecHeapRecordMut<'a, 2, BLOCKS, BLOCKS>,
+        >,
+{
+    assemble_rv64_vec_heap_field_expression::<F, RA, 2, BLOCKS, BLOCKS>(
+        arena,
+        access,
+        instruction,
+        pc,
+        timestamp,
+        fp2_local_opcode(instruction),
+        fp2_heap_read_kinds(instruction),
+    )
+}
+
+fn assemble_fp2_muldiv<F: PrimeField32, RA, const BLOCKS: usize>(
+    arena: &mut RA,
+    access: &LogNativeAccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError>
+where
+    RA: Arena
+        + for<'a> RecordArena<
+            'a,
+            VecHeapLayout<F, 2, BLOCKS, BLOCKS>,
+            VecHeapRecordMut<'a, 2, BLOCKS, BLOCKS>,
+        >,
+{
+    assemble_rv64_vec_heap_field_expression::<F, RA, 2, BLOCKS, BLOCKS>(
+        arena,
+        access,
+        instruction,
+        pc,
+        timestamp,
+        fp2_local_opcode(instruction),
+        fp2_heap_read_kinds(instruction),
     )
 }
 
@@ -525,6 +678,28 @@ fn modular_heap_read_kinds<F: PrimeField32>(instruction: &Instruction<F>) -> [u8
         local,
         x if x == Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize
             || x == Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize
+    ) {
+        PREFLIGHT_MEMORY_KIND_TOUCH
+    } else {
+        PREFLIGHT_MEMORY_KIND_READ
+    };
+    [PREFLIGHT_MEMORY_KIND_READ, second]
+}
+
+fn fp2_local_opcode<F: PrimeField32>(instruction: &Instruction<F>) -> u8 {
+    (instruction
+        .opcode
+        .as_usize()
+        .wrapping_sub(Fp2Opcode::CLASS_OFFSET)
+        % Fp2Opcode::COUNT) as u8
+}
+
+fn fp2_heap_read_kinds<F: PrimeField32>(instruction: &Instruction<F>) -> [u8; 2] {
+    let local = fp2_local_opcode(instruction) as usize;
+    let second = if matches!(
+        local,
+        x if x == Fp2Opcode::SETUP_ADDSUB as usize
+            || x == Fp2Opcode::SETUP_MULDIV as usize
     ) {
         PREFLIGHT_MEMORY_KIND_TOUCH
     } else {
