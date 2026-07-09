@@ -64,6 +64,10 @@ impl EmitMode {
         matches!(self, Self::ValueTrace)
     }
 
+    fn traces_register_values(self) -> bool {
+        matches!(self, Self::ValueTrace)
+    }
+
     fn is_metered_without_memory_pages(self) -> bool {
         matches!(
             self,
@@ -228,6 +232,9 @@ impl<'a> EmitContext<'a> {
 
     fn read_reg_impl(&mut self, idx: u8, kind: RegisterReadKind) -> String {
         if idx == 0 {
+            if self.mode.traces_register_values() {
+                self.write_line("trace_reg_read(state, 0, 0);");
+            }
             return "0ull".to_string();
         }
 
@@ -267,21 +274,30 @@ impl<'a> EmitContext<'a> {
     /// value-tracing mode.
     pub fn write_reg(&mut self, idx: u8, val: &str) {
         if idx == 0 {
+            if self.mode.traces_register_values() {
+                self.write_line("trace_timestamp(state);");
+            }
             return;
         }
         if self.mode.traces_values() {
             let tmp = self.next_var();
             self.write_line(&format!("uint64_t {tmp} = (uint64_t)({val});"));
+            debug_assert!(self.hot_regs.is_empty());
+            self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
             self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
-            if self.hot_regs.contains(&idx) {
-                let name = Self::abi_name(idx);
-                self.write_line(&format!("{name} = {tmp};"));
-            } else {
-                self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
-            }
             return;
         }
         self.write_reg_direct(idx, &format!("(uint64_t)({val})"));
+    }
+
+    pub fn trace_immediate(&mut self) {
+        self.trace_timestamp();
+    }
+
+    pub fn trace_timestamp(&mut self) {
+        if self.mode.traces_register_values() {
+            self.write_line("trace_timestamp(state);");
+        }
     }
 
     fn write_reg_direct(&mut self, idx: u8, val: &str) {
@@ -536,6 +552,22 @@ impl<'a> EmitContext<'a> {
         }
     }
 
+    pub fn trace_mem_access_u64_range(
+        &mut self,
+        base_addr: &str,
+        num_dwords: &str,
+        addr_space: PageAddressSpace,
+    ) {
+        if self.mode.traces_values() {
+            self.write_line(&format!(
+                "trace_mem_access_u64_range(state, {base_addr}, {num_dwords}, {}u);",
+                addr_space.id()
+            ));
+        } else {
+            self.trace_page_access_u64_range(base_addr, num_dwords, addr_space);
+        }
+    }
+
     fn sorted_hot_regs(&self) -> Vec<u8> {
         let mut regs: Vec<u8> = self.hot_regs.iter().copied().collect();
         regs.sort();
@@ -654,6 +686,19 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         addr_space: PageAddressSpace,
     ) {
         EmitContext::trace_page_access_u64_range(self, base_addr, num_dwords, addr_space);
+    }
+
+    fn trace_mem_access_u64_range(
+        &mut self,
+        base_addr: &str,
+        num_dwords: &str,
+        addr_space: PageAddressSpace,
+    ) {
+        EmitContext::trace_mem_access_u64_range(self, base_addr, num_dwords, addr_space);
+    }
+
+    fn trace_timestamp(&mut self) {
+        EmitContext::trace_timestamp(self);
     }
 }
 

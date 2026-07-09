@@ -11,6 +11,27 @@ use std::ffi::c_void;
 
 use openvm_platform::{memory::MEM_SIZE, WORD_SIZE};
 
+// TODO(dedup): make a common crate that is imported by rvr and openvm-circuit
+// ── OpenVM preflight tracer ABI ─────────────────────────────────────
+
+/// Preflight tracer kind ID. Existing IDs: MeteredCost=10, Metered=11, Pure=12.
+pub const PREFLIGHT_TRACER_KIND: u32 = 13;
+
+/// Initial timestamp for preflight memory logs. Matches `TracingMemory`:
+/// `INITIAL_TIMESTAMP + 1`.
+pub const PREFLIGHT_INITIAL_TIMESTAMP: u32 = 1;
+
+pub const PREFLIGHT_MEMORY_KIND_READ: u8 = 0;
+pub const PREFLIGHT_MEMORY_KIND_WRITE: u8 = 1;
+pub const PREFLIGHT_MEMORY_KIND_TOUCH: u8 = 2;
+
+pub const PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE: usize = 16;
+pub const PREFLIGHT_PROGRAM_LOG_ENTRY_ALIGN: usize = 8;
+pub const PREFLIGHT_MEMORY_LOG_ENTRY_SIZE: usize = 24;
+pub const PREFLIGHT_MEMORY_LOG_ENTRY_ALIGN: usize = 8;
+pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 48;
+pub const PREFLIGHT_TRACER_DATA_ALIGN: usize = 8;
+
 const _: () = assert!(MEM_SIZE / WORD_SIZE <= u32::MAX as usize);
 
 extern "C" {
@@ -40,6 +61,23 @@ extern "C" {
         addr_space: u32,
     );
 
+    // ── Memory access (u64-word ranges, trace-only) ───────────────────
+    pub fn trace_rd_mem_u64_range_wrapper(
+        state: *mut c_void,
+        base_addr: u64,
+        vals: *const u64,
+        num_words: u32,
+    );
+    pub fn trace_wr_mem_u64_range_wrapper(
+        state: *mut c_void,
+        base_addr: u64,
+        vals: *const u64,
+        num_words: u32,
+    );
+
+    // ── Chip cost ─────────────────────────────────────────────────────
+    pub fn trace_chip_wrapper(state: *mut c_void, chip_idx: u32, count: u32);
+    pub fn trace_timestamp_wrapper(state: *mut c_void);
     // ── Hint stream (for extension phantom instructions) ──────────────
     /// Replace the hint stream contents. Forwarded through `openvm_io.c`
     /// to `OpenVmIoState.hint_stream` via the host callback mechanism.
@@ -164,4 +202,12 @@ pub unsafe fn record_page_access_range(
         "record_page_access_range requires num_words >= 1"
     );
     record_page_access_u64_range_wrapper(state, base_addr, num_words, addr_space);
+}
+
+/// Advance the active tracer timestamp without recording a memory event.
+///
+/// # Safety
+/// `state` must be a valid `RvState` pointer.
+pub unsafe fn trace_timestamp_tick(state: *mut c_void) {
+    trace_timestamp_wrapper(state);
 }

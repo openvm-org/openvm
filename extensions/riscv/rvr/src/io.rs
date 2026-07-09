@@ -36,12 +36,10 @@ impl ExtInstr for HintStoreWInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let ptr = ctx.read_var(self.ptr_reg);
-        ctx.emit_checked_call_without_page_flush("openvm_hint_storew", &[&ptr]);
-        ctx.trace_page_access(
-            &ptr,
-            MemWidth::Double,
-            PageAddressSpace::MainMemory(RV64_MEMORY_AS),
-        );
+        // HINT_STORED has the same three-tick shape as HINT_BUFFER: pointer
+        // read, row-count placeholder, and memory write.
+        ctx.trace_timestamp();
+        ctx.emit_checked_call_without_page_flush("openvm_hint_storew", &["state", &ptr]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -75,14 +73,18 @@ impl ExtInstr for HintBufferInstr {
         ));
         ctx.emit_trap();
         ctx.write_line("}");
-        let callback_count = format!("(uint16_t)({n})");
-        ctx.emit_checked_call_without_page_flush("openvm_hint_buffer", &[&ptr, &callback_count]);
         // Block entry credits one row; runtime metering adds the remaining
         // `(n - 1)` rows.
         let chip_idx = air_index_to_c(self.chip_idx);
         // After the check above, n - 1 is at most 1022.
         ctx.trace_chip_if_nonzero(chip_idx, &format!("(uint32_t)({n} - 1ull)"));
-        ctx.trace_page_access_u64_range(&ptr, &n, PageAddressSpace::MainMemory(RV64_MEMORY_AS));
+        ctx.write_line(&format!("if ({n} > 0) {{"));
+        let callback_count = format!("(uint16_t)({n})");
+        ctx.emit_checked_call_without_page_flush(
+            "openvm_hint_buffer",
+            &["state", &ptr, &callback_count],
+        );
+        ctx.write_line("}");
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -426,6 +428,22 @@ mod tests {
                 "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {}u);",
                 addr_space.id()
             ));
+        }
+
+        fn trace_mem_access_u64_range(
+            &mut self,
+            base_addr: &str,
+            num_dwords: &str,
+            addr_space: PageAddressSpace,
+        ) {
+            self.write_line(&format!(
+                "trace_mem_access_u64_range(state, {base_addr}, {num_dwords}, {}u);",
+                addr_space.id()
+            ));
+        }
+
+        fn trace_timestamp(&mut self) {
+            self.write_line("trace_timestamp(state);");
         }
     }
 

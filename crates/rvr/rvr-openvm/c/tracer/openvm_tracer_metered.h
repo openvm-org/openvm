@@ -326,9 +326,84 @@ static __attribute__((always_inline)) inline void trace_memory_access_span(
   }
 }
 
-/* Extension range access includes page accounting in metered mode. */
+static __attribute__((always_inline)) inline void trace_memory_access(
+    TraceMemory* restrict memory, uint64_t addr) {
+  trace_memory_access_leaf(memory, addr);
+}
 
-/* Precondition for all range functions: num_words >= 1.
+/* ── Trace-only register access (no-ops in metered mode) ─────────── */
+
+static __attribute__((always_inline)) inline void trace_reg_read(
+    RvState* restrict state, uint8_t idx, uint32_t val) {}
+static __attribute__((always_inline)) inline void trace_reg_write(
+    RvState* restrict state, uint8_t idx, uint32_t new_val) {}
+
+static __attribute__((always_inline)) inline void trace_timestamp(
+    RvState* restrict state) {}
+
+/* ── Trace-only memory reads (record page in metered mode) ───────── */
+
+static __attribute__((always_inline)) inline void trace_rd_mem_u8(
+    RvState* restrict state, uint64_t addr, uint8_t val) {
+  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint8_t));
+}
+
+static __attribute__((always_inline)) inline void trace_rd_mem_i8(
+    RvState* restrict state, uint64_t addr, int8_t val) {
+  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(int8_t));
+}
+
+static __attribute__((always_inline)) inline void trace_rd_mem_u16(
+    RvState* restrict state, uint64_t addr, uint16_t val) {
+  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint16_t));
+}
+
+static __attribute__((always_inline)) inline void trace_rd_mem_i16(
+    RvState* restrict state, uint64_t addr, int16_t val) {
+  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(int16_t));
+}
+
+static __attribute__((always_inline)) inline void trace_rd_mem_u32(
+    RvState* restrict state, uint64_t addr, uint32_t val) {
+  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint32_t));
+}
+
+static __attribute__((always_inline)) inline void trace_rd_mem_i32(
+    RvState* restrict state, uint64_t addr, int32_t val) {
+  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(int32_t));
+}
+
+static __attribute__((always_inline)) inline void trace_rd_mem_u64(
+    RvState* restrict state, uint64_t addr, uint64_t val) {
+  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint64_t));
+}
+
+/* ── Trace-only memory writes (record page in metered mode) ──────── */
+
+static __attribute__((always_inline)) inline void trace_wr_mem_u8(
+    RvState* restrict state, uint64_t addr, uint8_t new_val) {
+  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint8_t));
+}
+
+static __attribute__((always_inline)) inline void trace_wr_mem_u16(
+    RvState* restrict state, uint64_t addr, uint16_t new_val) {
+  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint16_t));
+}
+
+static __attribute__((always_inline)) inline void trace_wr_mem_u32(
+    RvState* restrict state, uint64_t addr, uint32_t new_val) {
+  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint32_t));
+}
+
+static __attribute__((always_inline)) inline void trace_wr_mem_u64(
+    RvState* restrict state, uint64_t addr, uint64_t new_val) {
+  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint64_t));
+}
+
+/* ── Trace-only word-range memory access ──────────────────────────── */
+
+/* Extension range access includes page accounting in metered mode.
+ * Precondition for all range functions: num_words >= 1.
  * Callers are responsible for guarding empty ranges (e.g. xorin with len=0)
  * so we can skip the branch on the hot path. */
 

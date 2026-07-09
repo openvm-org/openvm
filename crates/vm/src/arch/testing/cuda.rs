@@ -17,7 +17,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
-    data_transporter::assert_eq_host_and_device_matrix_col_maj,
+    data_transporter::{assert_eq_device_matrix, assert_eq_host_and_device_matrix_col_maj},
     prelude::{EF, F, SC},
     BabyBearPoseidon2GpuEngine, GpuBackend, ProverError,
 };
@@ -582,6 +582,47 @@ impl GpuChipTester {
         );
         self.airs.push(Arc::new(air) as AirRef<SC>);
         self.ctxs.push(proving_ctx);
+        self
+    }
+
+    pub fn load_and_compare_3way<A, G, RA, C, CRA>(
+        mut self,
+        air: A,
+        gpu_chip: G,
+        gpu_log_arena: RA,
+        gpu_record_arena: RA,
+        cpu_chip: C,
+        cpu_arena: CRA,
+    ) -> Self
+    where
+        A: AnyAir<SC> + 'static,
+        C: Chip<CRA, CpuBackend<SC>>,
+        G: Chip<RA, GpuBackend>,
+    {
+        let log_ctx = gpu_chip.generate_proving_ctx(gpu_log_arena);
+        let record_ctx = gpu_chip.generate_proving_ctx(gpu_record_arena);
+        let expected_ctx = cpu_chip.generate_proving_ctx(cpu_arena);
+        #[cfg(feature = "touchemall")]
+        {
+            check_trace_validity(&log_ctx, &air.name());
+            check_trace_validity(&record_ctx, &air.name());
+        }
+        let expected_trace_cm = ColMajorMatrix::from_row_major(&expected_ctx.common_main);
+        device_synchronize().unwrap();
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        assert_eq_device_matrix(&log_ctx.common_main, &record_ctx.common_main, &device_ctx);
+        assert_eq_host_and_device_matrix_col_maj(
+            &expected_trace_cm,
+            &record_ctx.common_main,
+            &device_ctx,
+        );
+        assert_eq!(log_ctx.public_values, record_ctx.public_values);
+        assert_eq!(expected_ctx.public_values, record_ctx.public_values);
+        self.airs.push(Arc::new(air) as AirRef<SC>);
+        self.ctxs.push(log_ctx);
         self
     }
 

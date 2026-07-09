@@ -307,6 +307,13 @@ pub struct Rv64HintStoreMetadata {
     num_words: usize,
 }
 
+impl Rv64HintStoreMetadata {
+    #[cfg(feature = "rvr")]
+    pub(crate) fn new(num_words: usize) -> Self {
+        Self { num_words }
+    }
+}
+
 impl MultiRowMetadata for Rv64HintStoreMetadata {
     #[inline(always)]
     fn get_num_rows(&self) -> usize {

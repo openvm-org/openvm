@@ -55,7 +55,9 @@ fn lift_system_phantom(pc: u64, phantom: SysPhantom) -> LiftedInstr {
 pub(crate) struct NopInstr;
 
 impl ExtInstr for NopInstr {
-    fn emit_c(&self, _ctx: &mut dyn ExtEmitCtx) {}
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        ctx.trace_timestamp();
+    }
 
     fn opname(&self) -> &str {
         "nop"

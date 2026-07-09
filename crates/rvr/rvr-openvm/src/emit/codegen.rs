@@ -28,6 +28,8 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
         } => {
             if let Some(dst) = link_dst {
                 ctx.write_var(dst, &hex_u64(next_pc));
+            } else {
+                ctx.trace_timestamp();
             }
             emit_tail_call(ctx, target, &args, tc.valid_blocks);
         }
@@ -53,6 +55,8 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             };
             if let Some(dst) = link_dst {
                 ctx.write_var(dst, &hex_u64(next_pc));
+            } else {
+                ctx.trace_timestamp();
             }
             let target = indirect_target_expr(ctx, &base_value, offset, target_mask);
             ctx.write_line(&format!(
