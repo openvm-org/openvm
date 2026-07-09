@@ -17,7 +17,7 @@ use rvr_openvm_lift::{
     ExtensionRegistry, RvrInstruction, TraceChipIndex,
 };
 
-use super::debug::GuestDebugMap;
+use super::{debug::GuestDebugMap, LogNativeOpcodeAdmitter};
 use crate::arch::ExecutorInventory;
 
 /// A compiled rvr shared library ready for execution.
@@ -255,7 +255,7 @@ pub enum CompileError {
         num_airs: u32,
     },
     #[error(
-        "rvr preflight only supports opcodes claimed by its registered extensions; opcode {opcode:?} at pc {pc:#x} requires interpreter routing"
+        "rvr preflight has no registered log-native assembler for opcode {opcode:?} at pc {pc:#x}; requires interpreter routing"
     )]
     PreflightExtensionOpcode { pc: u32, opcode: VmOpcode },
     #[error("invalid compile options: {0}")]
@@ -287,42 +287,53 @@ fn pc_for_instruction_index(pc_base: u32, instruction_index: usize) -> Result<u3
 /// Opcode classification for the rvr preflight routing seam.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RvrPreflightOpcodeClass {
-    Rv64ImOnly,
-    UsesExtension { pc: u32, opcode: VmOpcode },
+    Supported,
+    Unsupported { pc: u32, opcode: VmOpcode },
 }
 
 impl RvrPreflightOpcodeClass {
-    pub fn is_rv64im_only(self) -> bool {
-        matches!(self, Self::Rv64ImOnly)
+    pub fn is_supported(self) -> bool {
+        matches!(self, Self::Supported)
     }
 }
 
 /// Classify instructions handled by the base system lifter only.
 pub fn classify_preflight_opcodes<F: PrimeField32>(exe: &VmExe<F>) -> RvrPreflightOpcodeClass {
     let extensions = ExtensionRegistry::new();
-    classify_preflight_opcodes_with_extensions(exe, &extensions)
+    classify_preflight_opcodes_with_extensions(exe, &extensions, &())
 }
 
-/// Classify whether every instruction is handled by the registered RVR
-/// extensions. #3059 moved RV64I and RV64M into this registry too, so an empty
-/// base lifter is no longer a useful classification baseline.
+/// Classify whether every extension-lifted instruction has a registered
+/// log-native assembler. #3059 moved RV64I/M into the extension registry, so
+/// they use the same admission seam as the other RVR extensions.
 pub fn classify_preflight_opcodes_with_extensions<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry,
+    assembler_admitter: &dyn LogNativeOpcodeAdmitter<F>,
 ) -> RvrPreflightOpcodeClass {
+    let base_only = ExtensionRegistry::new();
     for (pc, insn, _) in exe.program.enumerate_by_pc() {
-        let insn = RvrInstruction::from_field(&insn);
-        if !matches!(
-            lift_instruction(&insn, u64::from(pc), extensions),
+        let rvr_insn = RvrInstruction::from_field(&insn);
+        if matches!(
+            lift_instruction(&rvr_insn, u64::from(pc), &base_only),
             Ok(Some(_))
         ) {
-            return RvrPreflightOpcodeClass::UsesExtension {
-                pc,
-                opcode: insn.opcode,
-            };
+            continue;
         }
+        if assembler_admitter.has_log_native_assembler(&insn)
+            && matches!(
+                lift_instruction(&rvr_insn, u64::from(pc), extensions),
+                Ok(Some(_))
+            )
+        {
+            continue;
+        }
+        return RvrPreflightOpcodeClass::Unsupported {
+                pc,
+                opcode: rvr_insn.opcode,
+            };
     }
-    RvrPreflightOpcodeClass::Rv64ImOnly
+    RvrPreflightOpcodeClass::Supported
 }
 
 pub fn build_pc_to_chip<F, E>(
@@ -359,11 +370,13 @@ pub fn build_pc_to_chip<F, E>(
 }
 
 /// Options for the compilation pipeline.
-pub struct CompileOptions<'a> {
+pub struct CompileOptions<'a, F> {
     /// Base name for generated files and library artifact.
     pub base_name: Option<&'a str>,
     pub execution_kind: RvrExecutionKind,
     pub extensions: &'a ExtensionRegistry,
+    /// Opcode admitter for extension-lifted preflight instructions.
+    pub preflight_assembler_admitter: Option<&'a dyn LogNativeOpcodeAdmitter<F>>,
     pub chips: Option<&'a ChipMapping>,
     /// Guest debug map: OpenVM PC -> SourceLoc.
     pub guest_debug_map: Option<&'a GuestDebugMap>,
@@ -375,7 +388,7 @@ pub struct CompileOptions<'a> {
 
 pub fn compile_with_options<F: PrimeField32>(
     exe: &VmExe<F>,
-    opts: CompileOptions<'_>,
+    opts: CompileOptions<'_, F>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(exe, &opts)
 }
@@ -392,6 +405,7 @@ pub fn compile<F: PrimeField32>(
             base_name: None,
             execution_kind: RvrExecutionKind::Pure,
             extensions,
+            preflight_assembler_admitter: None,
             chips: None,
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
@@ -412,6 +426,7 @@ pub fn compile_with_instret_tracking<F: PrimeField32>(
             base_name: None,
             execution_kind: RvrExecutionKind::PureWithInstretTracking,
             extensions,
+            preflight_assembler_admitter: None,
             chips: None,
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
@@ -433,6 +448,7 @@ pub fn compile_metered<F: PrimeField32>(
             base_name: None,
             execution_kind: RvrExecutionKind::Metered,
             extensions,
+            preflight_assembler_admitter: None,
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
@@ -454,6 +470,7 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
             base_name: None,
             execution_kind: RvrExecutionKind::MeteredSegment,
             extensions,
+            preflight_assembler_admitter: None,
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
@@ -475,6 +492,7 @@ pub fn compile_metered_cost<F: PrimeField32>(
             base_name: None,
             execution_kind: RvrExecutionKind::MeteredCost,
             extensions,
+            preflight_assembler_admitter: None,
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
@@ -493,13 +511,14 @@ pub fn compile_preflight<F: PrimeField32>(
     guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
     let extensions = ExtensionRegistry::new();
-    compile_preflight_with_extensions(exe, &extensions, chips, guest_debug_map)
+    compile_preflight_with_extensions(exe, &extensions, &(), chips, guest_debug_map)
 }
 
 /// Compile a registered-RVR executable with the preflight tracer.
 pub fn compile_preflight_with_extensions<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry,
+    assembler_admitter: &dyn LogNativeOpcodeAdmitter<F>,
     chips: &ChipMapping,
     guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
@@ -509,6 +528,7 @@ pub fn compile_preflight_with_extensions<F: PrimeField32>(
             base_name: None,
             execution_kind: RvrExecutionKind::Preflight,
             extensions,
+            preflight_assembler_admitter: Some(assembler_admitter),
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
@@ -585,11 +605,15 @@ fn load_num_airs(
 
 fn compile_impl<F: PrimeField32>(
     exe: &VmExe<F>,
-    opts: &CompileOptions<'_>,
+    opts: &CompileOptions<'_, F>,
 ) -> Result<RvrCompiled, CompileError> {
     if opts.execution_kind == RvrExecutionKind::Preflight {
-        if let RvrPreflightOpcodeClass::UsesExtension { pc, opcode } =
-            classify_preflight_opcodes_with_extensions(exe, opts.extensions)
+        let no_extension_assemblers = ();
+        let assembler_admitter = opts
+            .preflight_assembler_admitter
+            .unwrap_or(&no_extension_assemblers);
+        if let RvrPreflightOpcodeClass::Unsupported { pc, opcode } =
+            classify_preflight_opcodes_with_extensions(exe, opts.extensions, assembler_admitter)
         {
             return Err(CompileError::PreflightExtensionOpcode { pc, opcode });
         }
