@@ -28,7 +28,6 @@ struct ModulusInfo {
     non_qr_bytes: Vec<u8>,
     num_limbs: u32,
 }
-
 fn make_moduli(moduli: Vec<BigUint>) -> Vec<ModulusInfo> {
     // Use the same deterministic seed as the circuit-side `NonQrHintSubEx::new`
     // (single rng across the full modulus list), so rvr-emitted NQRs match
