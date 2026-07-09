@@ -16,7 +16,6 @@ use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{
-    base::DeviceMatrix,
     prelude::{F, SC},
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
@@ -24,8 +23,7 @@ use openvm_mod_circuit_builder::{
     cuda::FieldExprChipGpu, ExprBuilderConfig, FieldExpressionMetadata,
 };
 use openvm_riscv_adapters::{
-    Rv64IsEqualModU16AdapterCols, Rv64IsEqualModU16AdapterRecord, Rv64VecHeapAdapterCols,
-    Rv64VecHeapAdapterExecutor,
+    Rv64IsEqualModU16AdapterRecord, Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor,
 };
 use openvm_riscv_circuit::{adapters::U16_BITS, Rv64ImGpuProverExt};
 use openvm_stark_backend::prover::AirProvingContext;
