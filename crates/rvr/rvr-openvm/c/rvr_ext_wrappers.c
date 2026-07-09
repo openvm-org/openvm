@@ -73,6 +73,8 @@ void trace_chip_wrapper(RvState* s, uint32_t chip_idx, uint32_t count) {
   trace_chip(s, chip_idx, count);
 }
 
+void trace_timestamp_wrapper(RvState* s) { trace_timestamp(s); }
+
 /* ── Block metering ────────────────────────────────────────────────── */
 
 void trace_block_wrapper(RvState* s, uint64_t pc, uint32_t block_insn_count) {

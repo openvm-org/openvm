@@ -8,13 +8,18 @@ use std::{
 };
 
 use openvm_instructions::{
-    exe::VmExe, program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode, VmOpcode,
+    exe::VmExe, program::DEFAULT_PC_STEP, riscv::RV64_MEMORY_AS, LocalOpcode, SystemOpcode,
+    VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{CProject, SuspendPolicy, TracerMode};
 use rvr_openvm_lift::{
-    build_blocks, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers, AirIndex,
-    ExtensionRegistry, TraceChipIndex,
+    build_blocks, convert_vmexe_to_ir_with_debug,
+    opcode::{
+        is_rv64im_preflight_extension_opcode, lift_instruction, RV64_LOAD_STORE_OPCODE_END,
+        RV64_LOAD_STORE_OPCODE_START,
+    },
+    scan_init_memory_for_code_pointers, AirIndex, ExtensionRegistry, TraceChipIndex,
 };
 
 use super::debug::GuestDebugMap;
@@ -164,6 +169,10 @@ pub enum CompileError {
     LibLoad(String),
     #[error("unknown opcode {opcode:?} at pc {pc:#x}")]
     UnknownOpcode { pc: u32, opcode: VmOpcode },
+    #[error(
+        "rvr preflight only supports RV64IM/system opcodes; opcode {opcode:?} at pc {pc:#x} requires config routing"
+    )]
+    PreflightExtensionOpcode { pc: u32, opcode: VmOpcode },
     #[error("invalid compile options: {0}")]
     InvalidOptions(&'static str),
 }
@@ -178,6 +187,60 @@ pub struct ChipMapping {
     /// increments `cost` by a single constant instead of loading from the
     /// `chip_widths` array at runtime.
     pub chip_widths: Option<Vec<u64>>,
+}
+
+/// Opcode classification for the M1 rvr preflight routing seam.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RvrPreflightOpcodeClass {
+    Rv64ImOnly,
+    UsesExtension { pc: u32, opcode: VmOpcode },
+}
+
+impl RvrPreflightOpcodeClass {
+    pub fn is_rv64im_only(self) -> bool {
+        matches!(self, Self::Rv64ImOnly)
+    }
+}
+
+/// Classify whether the executable can be lifted by the base RV64IM/system
+/// rvr lifter without any registered extensions.
+pub fn classify_preflight_opcodes<F: PrimeField32>(exe: &VmExe<F>) -> RvrPreflightOpcodeClass {
+    let base_only = ExtensionRegistry::new();
+    classify_preflight_opcodes_with_extensions(exe, &base_only)
+}
+
+/// Classify whether the executable can be lifted by the RV64IM rvr lifter plus
+/// the RV64IM-owned rvr extensions (Rv64I phantoms and hintstore). Other
+/// extension-lifted opcodes are deliberately rejected so non-RV64IM configs
+/// still route through the interpreter preflight path.
+pub fn classify_preflight_opcodes_with_extensions<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry<F>,
+) -> RvrPreflightOpcodeClass {
+    let base_only = ExtensionRegistry::new();
+    for (pc, insn, _) in exe.program.enumerate_by_pc() {
+        let opcode = insn.opcode.as_usize();
+        if (RV64_LOAD_STORE_OPCODE_START..=RV64_LOAD_STORE_OPCODE_END).contains(&opcode)
+            && insn.e.as_canonical_u32() != RV64_MEMORY_AS
+        {
+            return RvrPreflightOpcodeClass::UsesExtension {
+                pc,
+                opcode: insn.opcode,
+            };
+        }
+        if lift_instruction(&insn, u64::from(pc), &base_only).is_none() {
+            if is_rv64im_preflight_extension_opcode(&insn)
+                && lift_instruction(&insn, u64::from(pc), extensions).is_some()
+            {
+                continue;
+            }
+            return RvrPreflightOpcodeClass::UsesExtension {
+                pc,
+                opcode: insn.opcode,
+            };
+        }
+    }
+    RvrPreflightOpcodeClass::Rv64ImOnly
 }
 
 pub fn build_pc_to_chip<F, E>(
@@ -324,6 +387,39 @@ pub fn compile_metered_cost<F: PrimeField32>(
     )
 }
 
+/// Compile a base-RV64IM VmExe with the preflight tracer.
+pub fn compile_preflight<F: PrimeField32>(
+    exe: &VmExe<F>,
+    chips: &ChipMapping,
+    guest_debug_map: Option<&GuestDebugMap>,
+) -> Result<RvrCompiled, CompileError> {
+    let extensions = ExtensionRegistry::new();
+    compile_preflight_with_extensions(exe, &extensions, chips, guest_debug_map)
+}
+
+/// Compile an RV64IM VmExe with the preflight tracer and the RV64IM-owned rvr
+/// extensions needed for hintstore and Rv64I phantom opcodes.
+pub fn compile_preflight_with_extensions<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry<F>,
+    chips: &ChipMapping,
+    guest_debug_map: Option<&GuestDebugMap>,
+) -> Result<RvrCompiled, CompileError> {
+    compile_impl(
+        exe,
+        &CompileOptions {
+            base_name: None,
+            tracer_mode: TracerMode::Preflight,
+            extensions,
+            chips: Some(chips),
+            guest_debug_map,
+            native_debug_info: cfg!(feature = "profiling"),
+            keep_artifacts: false,
+            suspend_policy: None,
+        },
+    )
+}
+
 /// Open a previously saved `.so`/`.dylib` and wrap it in an [`RvrCompiled`].
 ///
 /// Note: no compatibility validation is performed — the caller must ensure
@@ -350,6 +446,14 @@ fn compile_impl<F: PrimeField32>(
     exe: &VmExe<F>,
     opts: &CompileOptions<'_, F>,
 ) -> Result<RvrCompiled, CompileError> {
+    if opts.tracer_mode == TracerMode::Preflight {
+        if let RvrPreflightOpcodeClass::UsesExtension { pc, opcode } =
+            classify_preflight_opcodes_with_extensions(exe, opts.extensions)
+        {
+            return Err(CompileError::PreflightExtensionOpcode { pc, opcode });
+        }
+    }
+
     let toolchain = ensure_toolchain_available()?;
 
     let base_name = sanitize_base_name(opts.base_name.unwrap_or("openvm"));
@@ -384,7 +488,10 @@ fn compile_impl<F: PrimeField32>(
                 "metered rvr cannot use instret-limit suspension",
             ));
         }
-        (TracerMode::Pure | TracerMode::MeteredCost, SuspendPolicy::SegmentBoundary) => {
+        (
+            TracerMode::Pure | TracerMode::MeteredCost | TracerMode::Preflight,
+            SuspendPolicy::SegmentBoundary,
+        ) => {
             return Err(CompileError::InvalidOptions(
                 "segment-boundary suspension requires metered rvr",
             ));
@@ -394,12 +501,17 @@ fn compile_impl<F: PrimeField32>(
 
     match opts.tracer_mode {
         TracerMode::Pure => {}
-        TracerMode::Metered | TracerMode::MeteredCost => {
+        TracerMode::Metered | TracerMode::MeteredCost | TracerMode::Preflight => {
             let chips = opts.chips.ok_or(CompileError::InvalidOptions(
-                "metered rvr compile requires ChipMapping",
+                "metered/preflight rvr compile requires ChipMapping",
             ))?;
             project.pc_to_chip = Some(chips.pc_to_chip.clone());
-            project.chip_widths = chips.chip_widths.clone();
+            if matches!(
+                opts.tracer_mode,
+                TracerMode::Metered | TracerMode::MeteredCost
+            ) {
+                project.chip_widths = chips.chip_widths.clone();
+            }
         }
     }
 

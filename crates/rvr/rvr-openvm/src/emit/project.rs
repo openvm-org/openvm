@@ -26,6 +26,8 @@ pub enum TracerMode {
     MeteredCost,
     /// Per-chip trace heights (MeteredCtx).
     Metered,
+    /// Preflight execution logging program and memory accesses.
+    Preflight,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +44,7 @@ impl TracerMode {
             TracerMode::Pure => "openvm_tracer_pure.h",
             TracerMode::MeteredCost => "openvm_tracer_metered_cost.h",
             TracerMode::Metered => "openvm_tracer_metered.h",
+            TracerMode::Preflight => "openvm_tracer_preflight.h",
         }
     }
 
@@ -52,12 +55,15 @@ impl TracerMode {
                 include_str!("../../c/tracer/openvm_tracer_metered_cost.h")
             }
             TracerMode::Metered => include_str!("../../c/tracer/openvm_tracer_metered.h"),
+            TracerMode::Preflight => include_str!("../../c/tracer/openvm_tracer_preflight.h"),
         }
     }
 
     pub fn default_suspend_policy(self) -> SuspendPolicy {
         match self {
-            TracerMode::Pure | TracerMode::MeteredCost => SuspendPolicy::InstretLimit,
+            TracerMode::Pure | TracerMode::MeteredCost | TracerMode::Preflight => {
+                SuspendPolicy::InstretLimit
+            }
             TracerMode::Metered => SuspendPolicy::Disabled,
         }
     }
@@ -68,7 +74,7 @@ impl TracerMode {
                 include_str!("../../c/block/openvm_block_metered_segment.h")
             }
             (TracerMode::Metered, _) => include_str!("../../c/block/openvm_block_metered.h"),
-            (TracerMode::Pure | TracerMode::MeteredCost, _) => {
+            (TracerMode::Pure | TracerMode::MeteredCost | TracerMode::Preflight, _) => {
                 include_str!("../../c/block/openvm_block_instret.h")
             }
         }
@@ -171,7 +177,13 @@ impl CProject {
 
                 Self::REG_PRIORITY[..NUM_HOT_REGS].iter().copied().collect()
             }
-            TracerMode::Pure | TracerMode::MeteredCost => Self::default_hot_regs(),
+            TracerMode::Pure | TracerMode::MeteredCost | TracerMode::Preflight => {
+                if mode == TracerMode::Preflight {
+                    HashSet::new()
+                } else {
+                    Self::default_hot_regs()
+                }
+            }
         }
     }
 
@@ -260,25 +272,6 @@ impl CProject {
         out
     }
 
-    fn trap_signature(&self) -> String {
-        self.block_signature("__attribute__((preserve_none, cold)) void", "rv_trap")
-    }
-
-    fn emit_trap_declaration(&self, out: &mut String) {
-        let trap_signature = self.trap_signature();
-        writeln!(
-            out,
-            "// Used when a computed jump or dispatch slot does not point to a real block."
-        )
-        .unwrap();
-        writeln!(
-            out,
-            "// It takes the same arguments as a block so those register values can still be saved."
-        )
-        .unwrap();
-        writeln!(out, "{trap_signature};").unwrap();
-    }
-
     /// C argument list extracting hot regs from state:
     /// "state, state->regs[1], state->regs[2]".
     fn fn_args_from_state(&self) -> String {
@@ -343,6 +336,7 @@ impl CProject {
                 trace_memory_pages: block_accesses_memory(block),
             },
             TracerMode::MeteredCost => EmitMode::Direct,
+            TracerMode::Preflight => EmitMode::ValueTrace,
         }
     }
 
@@ -362,7 +356,7 @@ impl CProject {
         let mapping = self
             .pc_to_chip
             .as_ref()
-            .expect("pc_to_chip must be set for metered rvr codegen");
+            .expect("pc_to_chip must be set for metered/preflight rvr codegen");
         let Some(offset) = pc.checked_sub(self.pc_base) else {
             return TraceChipIndex::NoChip;
         };
@@ -547,8 +541,11 @@ impl CProject {
             "typedef __attribute__((preserve_none)) void (*BlockFn)({typedef_params});"
         )
         .unwrap();
-        self.emit_trap_declaration(&mut h);
         writeln!(h, "extern BlockFn dispatch_table[RV_DISPATCH_TABLE_SIZE];").unwrap();
+        writeln!(h).unwrap();
+        let trap_signature =
+            self.block_signature("__attribute__((preserve_none, cold)) void", "rv_trap");
+        writeln!(h, "{trap_signature};").unwrap();
         writeln!(h).unwrap();
 
         // Block function declarations.
@@ -805,6 +802,7 @@ impl CProject {
     ///     pointer carried through the block ABI.
     ///   - MeteredCost: `state->tracer->cost += <constant>;` where the constant is `sum(width[chip]
     ///     * count)` precomputed at emit time from `self.chip_widths`.
+    ///   - Preflight: `trace_chip(state, idx, count);` per distinct chip.
     fn emit_per_block_chip_updates(&self, out: &mut String, block: &Block) {
         if matches!(self.tracer_mode, TracerMode::Pure) {
             return;
@@ -841,6 +839,11 @@ impl CProject {
                     .sum();
                 if total > 0 {
                     writeln!(out, "        state->tracer->cost += {total}u;").unwrap();
+                }
+            }
+            TracerMode::Preflight => {
+                for (chip, count) in &chip_counts {
+                    writeln!(out, "        trace_chip(state, {chip}u, {count}u);").unwrap();
                 }
             }
         }
@@ -888,17 +891,9 @@ impl CProject {
         writeln!(src).unwrap();
 
         let save = self.save_hot_regs_call();
-        let trap_signature = self.trap_signature();
-        writeln!(
-            src,
-            "// If a computed jump reaches an invalid PC, guest registers are still in"
-        )
-        .unwrap();
-        writeln!(
-            src,
-            "// this function's arguments. Save them back to state before trapping."
-        )
-        .unwrap();
+        // rv_trap — cold fallback for dispatch to non-block PCs.
+        let trap_signature =
+            self.block_signature("__attribute__((preserve_none, cold)) void", "rv_trap");
         writeln!(src, "{trap_signature} {{").unwrap();
         writeln!(src, "    {save}").unwrap();
         if self.tracer_mode == TracerMode::Metered {

@@ -129,7 +129,7 @@ where
     */
     {
         let interp_state_pure = vm
-            .interpreter_instance(exe)?
+            .naive_interpreter(exe)?
             .execute(input.clone(), None)
             .expect("Failed to execute");
 
@@ -151,7 +151,7 @@ where
             .execute_metered(input.clone(), metered_ctx.clone())?;
 
         let (segments, interp_state_metered) = vm
-            .metered_interpreter_instance(exe)?
+            .naive_metered_interpreter(exe)?
             .execute_metered(input.clone(), metered_ctx.clone())?;
 
         check_vm_state_eq(&interp_state_metered, &aot_state_metered)?;
@@ -233,7 +233,7 @@ where
     */
     {
         let interp_state_pure = vm
-            .interpreter_instance(exe)?
+            .naive_interpreter(exe)?
             .execute(input.clone(), None)
             .expect("Failed to execute");
 
@@ -285,7 +285,7 @@ where
             .execute_metered(input.clone(), metered_ctx.clone())?;
 
         let (interp_segments, _interp_state_metered) = vm
-            .metered_interpreter_instance(exe)?
+            .naive_metered_interpreter(exe)?
             .execute_metered(input.clone(), metered_ctx.clone())?;
 
         let interp_total: u64 = interp_segments.iter().map(|s| s.num_insns).sum();
@@ -377,7 +377,7 @@ where
     check_rvr_equivalence(&vm, &exe, &input)?;
 
     let (segments, _) = vm
-        .metered_instance(&exe)?
+        .metered_interpreter(&exe)?
         .execute_metered(input.clone(), metered_ctx.clone())?;
 
     let cached_program_trace = vm.commit_program_on_device(&exe.program);

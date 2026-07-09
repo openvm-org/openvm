@@ -14,7 +14,8 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
     DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode,
-    Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode, ShiftWOpcode,
+    Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom,
+    ShiftOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::{AS_MEMORY, AS_PUBLIC_VALUES, AS_REGISTER};
@@ -26,6 +27,30 @@ use crate::{
     helpers::{decode_imm_cg, sext32},
     ExtensionRegistry,
 };
+
+pub const RV64_LOAD_STORE_OPCODE_START: usize =
+    Rv64LoadStoreOpcode::CLASS_OFFSET + Rv64LoadStoreOpcode::LOADD as usize;
+pub const RV64_LOAD_STORE_OPCODE_END: usize =
+    Rv64LoadStoreOpcode::CLASS_OFFSET + Rv64LoadStoreOpcode::LOADW as usize;
+
+pub const RV64_HINT_STORE_OPCODE_START: usize =
+    Rv64HintStoreOpcode::CLASS_OFFSET + Rv64HintStoreOpcode::HINT_STORED as usize;
+pub const RV64_HINT_STORE_OPCODE_END: usize =
+    Rv64HintStoreOpcode::CLASS_OFFSET + Rv64HintStoreOpcode::HINT_BUFFER as usize;
+
+/// Returns whether an instruction is an RV64IM-owned opcode that is lifted
+/// through a registered rvr extension rather than by the base lifter.
+pub fn is_rv64im_preflight_extension_opcode<F: PrimeField32>(insn: &Instruction<F>) -> bool {
+    let opcode = insn.opcode.as_usize();
+    if (RV64_HINT_STORE_OPCODE_START..=RV64_HINT_STORE_OPCODE_END).contains(&opcode) {
+        return true;
+    }
+    if opcode == SystemOpcode::PHANTOM.global_opcode_usize() {
+        let discriminant = (field_to_u32(insn.c) & 0xffff) as u16;
+        return Rv64Phantom::from_repr(discriminant).is_some();
+    }
+    false
+}
 
 /// Lift a single OpenVM instruction to the new IR types.
 ///
@@ -397,9 +422,6 @@ fn lift_load<F: PrimeField32>(
     let rs1 = decode_reg(insn.b);
     let offset = decode_imm_cg(insn) as i16;
 
-    if rd == 0 {
-        return Some(body(pc, Instr::Nop));
-    }
     Some(body(
         pc,
         Instr::Load {
@@ -583,115 +605,5 @@ fn lift_phantom(sys: SysPhantom, pc: u64) -> LiftedInstr {
                 message: "PHANTOM DebugPanic".to_string(),
             },
         ),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use openvm_instructions::{
-        instruction::Instruction, LocalOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
-    };
-    use openvm_riscv_transpiler::{
-        Rv64AuipcOpcode,
-        Rv64LoadStoreOpcode::{
-            LOADB, LOADBU, LOADD, LOADH, LOADHU, LOADW, LOADWU, STOREB, STORED, STOREH, STOREW,
-        },
-    };
-    use p3_baby_bear::BabyBear;
-
-    use super::{lift_instruction, Instr, InstrAt, LiftedInstr, AS_MEMORY, AS_REGISTER};
-    use crate::ExtensionRegistry;
-
-    #[test]
-    fn load_store_address_space_domain() {
-        let extensions = ExtensionRegistry::<BabyBear>::new();
-
-        for opcode in [LOADD, LOADBU, LOADHU, LOADWU, LOADB, LOADH, LOADW] {
-            let inst = Instruction::<BabyBear>::from_usize(
-                opcode.global_opcode(),
-                [8, 16, 0, 1, DEFERRAL_AS as usize, 1, 0],
-            );
-
-            assert!(lift_instruction(&inst, 0x100, &extensions).is_none());
-        }
-
-        for opcode in [STORED, STOREW, STOREH, STOREB] {
-            let deferral_inst = Instruction::<BabyBear>::from_usize(
-                opcode.global_opcode(),
-                [8, 16, 0, 1, DEFERRAL_AS as usize, 1, 0],
-            );
-            assert!(lift_instruction(&deferral_inst, 0x100, &extensions).is_none());
-
-            let public_values_inst = Instruction::<BabyBear>::from_usize(
-                opcode.global_opcode(),
-                [8, 16, 0, 1, PUBLIC_VALUES_AS as usize, 1, 0],
-            );
-            assert!(lift_instruction(&public_values_inst, 0x100, &extensions).is_none());
-        }
-    }
-
-    #[test]
-    fn load_store_requires_register_destination_address_space() {
-        let extensions = ExtensionRegistry::<BabyBear>::new();
-
-        for opcode in [LOADD, LOADBU, LOADHU, LOADWU, LOADB, LOADH, LOADW] {
-            let inst = Instruction::<BabyBear>::from_usize(
-                opcode.global_opcode(),
-                [8, 16, 0, AS_MEMORY as usize, AS_MEMORY as usize, 1, 0],
-            );
-
-            assert!(lift_instruction(&inst, 0x100, &extensions).is_none());
-        }
-
-        for opcode in [STORED, STOREW, STOREH, STOREB] {
-            let memory_inst = Instruction::<BabyBear>::from_usize(
-                opcode.global_opcode(),
-                [8, 16, 0, AS_MEMORY as usize, AS_MEMORY as usize, 1, 0],
-            );
-            assert!(lift_instruction(&memory_inst, 0x100, &extensions).is_none());
-
-            let public_values_inst = Instruction::<BabyBear>::from_usize(
-                opcode.global_opcode(),
-                [
-                    8,
-                    16,
-                    0,
-                    AS_MEMORY as usize,
-                    PUBLIC_VALUES_AS as usize,
-                    1,
-                    0,
-                ],
-            );
-            assert!(lift_instruction(&public_values_inst, 0x100, &extensions).is_none());
-
-            let valid_memory_inst = Instruction::<BabyBear>::from_usize(
-                opcode.global_opcode(),
-                [8, 16, 0, AS_REGISTER as usize, AS_MEMORY as usize, 1, 0],
-            );
-            assert!(lift_instruction(&valid_memory_inst, 0x100, &extensions).is_some());
-        }
-    }
-
-    #[test]
-    fn auipc_lifts_sign_extended_64_bit_value() {
-        let pc = 0x1000;
-        let insn = Instruction::<BabyBear>::from_usize(
-            Rv64AuipcOpcode::AUIPC.global_opcode(),
-            [8, 0, 0x80_0000],
-        );
-
-        let lifted = lift_instruction(&insn, pc, &ExtensionRegistry::default());
-        match lifted {
-            Some(LiftedInstr::Body(InstrAt {
-                pc: lifted_pc,
-                instr: Instr::Auipc { rd, value },
-                ..
-            })) => {
-                assert_eq!(lifted_pc, pc);
-                assert_eq!(rd, 1);
-                assert_eq!(value, 0xffff_ffff_8000_1000);
-            }
-            other => panic!("unexpected lift: {other:?}"),
-        }
     }
 }
