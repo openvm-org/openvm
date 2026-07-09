@@ -29,7 +29,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::extension::{HybridModularChip, ModularIsEqualChipGpu},
+    crate::{cuda::ModularIsEqualChipGpu, extension::HybridModularChip},
     openvm_circuit::arch::testing::{
         default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
