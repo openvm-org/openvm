@@ -8,21 +8,18 @@
 using namespace riscv;
 using namespace program;
 
-template <typename T, size_t NUM_CELLS> struct LoadSignExtendCoreCols {
-    /// This chip treats each (opcode, inner_shift) pair as a different instruction
-    T opcode_loadb_flag0;
-    T opcode_loadb_flag1;
-    T opcode_loadb_flag2;
-    T opcode_loadb_flag3;
-    T opcode_loadh_flag0;
-    T opcode_loadh_flag2;
-    T opcode_loadw_flag;
+// One case per (opcode, shift) pair, op order [LOADB, LOADH, LOADW], case index
+// op_idx * 8 + shift. Access width is 1 << op_idx.
+constexpr size_t LOAD_SIGN_EXTEND_CASES = 24;
 
-    T shift_most_sig_bit;
+template <typename T, size_t NUM_CELLS> struct LoadSignExtendCoreCols {
+    /// One boolean flag per (opcode, shift) case.
+    T flags[LOAD_SIGN_EXTEND_CASES];
     // The bit that is extended to the remaining bits
     T data_most_sig_bit;
 
-    T shifted_read_data[NUM_CELLS];
+    T read_data[NUM_CELLS];
+    T read_data1[NUM_CELLS];
     T prev_data[NUM_CELLS];
 };
 
@@ -31,6 +28,7 @@ template <size_t NUM_CELLS> struct LoadSignExtendCoreRecord {
     bool is_word;
     uint8_t shift_amount;
     uint8_t read_data[NUM_CELLS];
+    uint8_t read_data1[NUM_CELLS];
     uint8_t prev_data[NUM_CELLS];
 };
 
@@ -47,46 +45,37 @@ template <size_t NUM_CELLS> struct LoadSignExtendCore {
         : range_checker(range_checker), bitwise_lookup(bitwise_lookup) {}
 
     __device__ void fill_trace_row(RowSlice row, LoadSignExtendCoreRecord<NUM_CELLS> record) {
-        uint8_t shift = record.shift_amount;
-        uint8_t shift_most_sig_bit = (shift >> 2) & 1;
-        uint8_t inner_shift = shift & 3;
-        uint8_t rotate = shift_most_sig_bit * (NUM_CELLS / 2);
+        size_t shift = record.shift_amount;
+        size_t op_idx = record.is_byte ? 0 : (record.is_word ? 2 : 1);
+        size_t width = size_t(1) << op_idx;
+        size_t case_idx = op_idx * NUM_CELLS + shift;
+        bool crosses = shift + width > NUM_CELLS;
 
-        uint8_t shifted_read_data[NUM_CELLS];
-#pragma unroll
-        for (size_t i = 0; i < NUM_CELLS; i++) {
-            shifted_read_data[i] = record.read_data[(i + rotate) % NUM_CELLS];
-        }
-
-        uint8_t most_sig_limb;
-        if (record.is_byte) {
-            most_sig_limb = shifted_read_data[inner_shift];
-        } else if (record.is_word) {
-            most_sig_limb = shifted_read_data[NUM_CELLS / 2 - 1];
-        } else {
-            most_sig_limb = shifted_read_data[inner_shift + 1];
-        }
-
+        // Byte at global position k in read_data ++ read_data1.
+        size_t top = shift + width - 1;
+        uint8_t most_sig_limb =
+            top < NUM_CELLS ? record.read_data[top] : record.read_data1[top - NUM_CELLS];
         uint8_t most_sig_bit = most_sig_limb & (1u << (RV64_BYTE_BITS - 1));
-        bool is_word = record.is_word;
-        bool is_half = !record.is_byte && !is_word;
 
         range_checker.add_count(most_sig_limb - most_sig_bit, RV64_BYTE_BITS - 1);
 #pragma unroll
         for (size_t i = 0; i < NUM_CELLS; i += 2) {
-            bitwise_lookup.add_range(shifted_read_data[i], shifted_read_data[i + 1]);
+            bitwise_lookup.add_range(record.read_data[i], record.read_data[i + 1]);
         }
-        COL_WRITE_VALUE(row, Cols, opcode_loadb_flag0, record.is_byte && inner_shift == 0);
-        COL_WRITE_VALUE(row, Cols, opcode_loadb_flag1, record.is_byte && inner_shift == 1);
-        COL_WRITE_VALUE(row, Cols, opcode_loadb_flag2, record.is_byte && inner_shift == 2);
-        COL_WRITE_VALUE(row, Cols, opcode_loadb_flag3, record.is_byte && inner_shift == 3);
-        COL_WRITE_VALUE(row, Cols, opcode_loadh_flag0, is_half && inner_shift == 0);
-        COL_WRITE_VALUE(row, Cols, opcode_loadh_flag2, is_half && inner_shift == 2);
-        COL_WRITE_VALUE(row, Cols, opcode_loadw_flag, is_word);
+        if (crosses) {
+#pragma unroll
+            for (size_t i = 0; i < NUM_CELLS; i += 2) {
+                bitwise_lookup.add_range(record.read_data1[i], record.read_data1[i + 1]);
+            }
+        }
 
+#pragma unroll
+        for (size_t i = 0; i < LOAD_SIGN_EXTEND_CASES; i++) {
+            row[COL_INDEX(Cols, flags) + i] = Fp(i == case_idx);
+        }
         COL_WRITE_VALUE(row, Cols, data_most_sig_bit, most_sig_bit != 0);
-        COL_WRITE_VALUE(row, Cols, shift_most_sig_bit, shift_most_sig_bit == 1);
-        COL_WRITE_ARRAY(row, Cols, shifted_read_data, shifted_read_data);
+        COL_WRITE_ARRAY(row, Cols, read_data, record.read_data);
+        COL_WRITE_ARRAY(row, Cols, read_data1, record.read_data1);
         COL_WRITE_ARRAY(row, Cols, prev_data, record.prev_data);
     }
 };

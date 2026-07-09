@@ -49,7 +49,7 @@ use {
     },
 };
 
-use super::{run_write_data_sign_extend, LoadSignExtendCoreAir};
+use super::{core::LOAD_SIGN_EXTEND_CASES, run_write_data_sign_extend, LoadSignExtendCoreAir};
 use crate::{
     adapters::{
         rv64_bytes_to_u32, Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterExecutor,
@@ -69,6 +69,27 @@ type Harness = TestChipHarness<
     Rv64LoadSignExtendChip<F>,
 >;
 type F = BabyBear;
+
+fn access_width(opcode: Rv64LoadStoreOpcode) -> usize {
+    match opcode {
+        LOADB => 1,
+        LOADH => 2,
+        LOADW => 4,
+        _ => unreachable!(),
+    }
+}
+
+/// One-hot flags array claiming the given `(opcode, shift)` case, with case index
+/// `op_idx * 8 + shift` and op order [LOADB, LOADH, LOADW].
+fn flags_for(opcode: Rv64LoadStoreOpcode, shift: usize) -> [bool; LOAD_SIGN_EXTEND_CASES] {
+    let op_idx = match opcode {
+        LOADB => 0,
+        LOADH => 1,
+        LOADW => 2,
+        _ => unreachable!(),
+    };
+    array::from_fn(|i| i == op_idx * RV64_REGISTER_NUM_LIMBS + shift)
+}
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
@@ -146,14 +167,9 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let imm_sign = imm_sign.unwrap_or(rng.random_range(0..2));
     let imm_ext = imm + imm_sign * (0xffff0000);
 
-    let alignment = match opcode {
-        LOADB => 0,
-        LOADH => 1,
-        LOADW => 2,
-        _ => unreachable!(),
-    };
-
-    let ptr_val: u32 = rng.random_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
+    // Any byte shift is supported; keep the containing block and its successor in bounds.
+    let ptr_val: u32 =
+        rng.random_range(0..((1u32 << tester.address_bits()) - 2 * RV64_REGISTER_NUM_LIMBS as u32));
     // rs1 is 8 bytes, but only low 4 bytes used for address
     let rs1 = rs1.unwrap_or_else(|| {
         let low4 = ptr_val.wrapping_sub(imm_ext).to_le_bytes();
@@ -163,7 +179,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let a = gen_pointer(rng, 8);
     let b = gen_pointer(rng, 8);
 
-    let shift_amount = ptr_val % 8;
+    let shift_amount = (ptr_val % 8) as usize;
+    let crosses = shift_amount + access_width(opcode) > RV64_REGISTER_NUM_LIMBS;
     tester.write_bytes(1, b, rs1.map(F::from_u8));
 
     let some_prev_data: [F; RV64_REGISTER_NUM_LIMBS] = if a != 0 {
@@ -173,13 +190,20 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     };
     let read_data: [u8; RV64_REGISTER_NUM_LIMBS] =
         read_data.unwrap_or(array::from_fn(|_| rng.random()));
+    // Second block contents; only used (and only written to memory) when the access spans
+    // two blocks.
+    let block1_data: [u8; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|_| rng.random());
 
     tester.write_bytes(1, a, some_prev_data);
-    tester.write_bytes(
-        2,
-        (ptr_val - shift_amount) as usize,
-        read_data.map(F::from_u8),
-    );
+    let aligned_ptr = (ptr_val as usize) - shift_amount;
+    tester.write_bytes(2, aligned_ptr, read_data.map(F::from_u8));
+    if crosses {
+        tester.write_bytes(
+            2,
+            aligned_ptr + RV64_REGISTER_NUM_LIMBS,
+            block1_data.map(F::from_u8),
+        );
+    }
 
     tester.execute(
         executor,
@@ -198,10 +222,16 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         ),
     );
 
+    let read_data1 = if crosses {
+        block1_data
+    } else {
+        [0; RV64_REGISTER_NUM_LIMBS]
+    };
     let write_data = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
         opcode,
         read_data,
-        shift_amount as usize,
+        read_data1,
+        shift_amount,
     );
     if a != 0 {
         assert_eq!(write_data.map(F::from_u8), tester.read_bytes::<8>(1, a));
@@ -214,7 +244,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 /// POSITIVE TESTS
 ///
 /// Randomly generate computations and execute, ensuring that the generated trace
-/// passes all constraints.
+/// passes all constraints. Shifts cover the full 0..8 range, including block-spanning
+/// accesses.
 ///////////////////////////////////////////////////////////////////////////////////////
 #[test_case(LOADB, 100)]
 #[test_case(LOADH, 100)]
@@ -246,72 +277,26 @@ fn rand_load_sign_extend_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
     tester.simple_test().expect("Verification failed");
 }
 
-#[test]
-fn positive_loadb_shift7_test() {
+#[test_case(LOADB, 7)]
+#[test_case(LOADH, 3)]
+#[test_case(LOADH, 7)]
+#[test_case(LOADW, 2)]
+#[test_case(LOADW, 5)]
+#[test_case(LOADW, 7)]
+fn positive_load_sign_extend_shift_test(opcode: Rv64LoadStoreOpcode, shift: u8) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_test_chip(&mut tester);
 
+    // ptr = 64 + shift, imm = 0.
     set_and_execute(
         &mut tester,
         &mut harness.executor,
         &mut harness.arena,
         &mut rng,
-        LOADB,
+        opcode,
         None,
-        Some([7, 0, 0, 0, 0, 0, 0, 0]),
-        Some(0),
-        Some(0),
-    );
-
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn positive_loadh_shift6_test() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_chip(&mut tester);
-
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        &mut rng,
-        LOADH,
-        None,
-        Some([6, 0, 0, 0, 0, 0, 0, 0]),
-        Some(0),
-        Some(0),
-    );
-
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn positive_loadw_shift4_test() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_chip(&mut tester);
-
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        &mut rng,
-        LOADW,
-        None,
-        Some([4, 0, 0, 0, 0, 0, 0, 0]),
+        Some([64 + shift, 0, 0, 0, 0, 0, 0, 0]),
         Some(0),
         Some(0),
     );
@@ -334,8 +319,8 @@ fn positive_loadw_shift4_test() {
 #[derive(Clone, Copy, Default, PartialEq)]
 struct LoadSignExtPrankValues {
     data_most_sig_bit: Option<u32>,
-    shift_most_sig_bit: Option<u32>,
-    opcode_flags: Option<[bool; 7]>,
+    flags: Option<[bool; LOAD_SIGN_EXTEND_CASES]>,
+    read_data1: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -371,23 +356,17 @@ fn run_negative_load_sign_extend_test(
 
         let core_cols: &mut LoadSignExtendCoreCols<F, RV64_REGISTER_NUM_LIMBS> =
             core_row.borrow_mut();
-        if let Some(shifted_read_data) = read_data {
-            core_cols.shifted_read_data = shifted_read_data.map(F::from_u8);
+        if let Some(read_data) = read_data {
+            core_cols.read_data = read_data.map(F::from_u8);
         }
         if let Some(data_most_sig_bit) = prank_vals.data_most_sig_bit {
             core_cols.data_most_sig_bit = F::from_u32(data_most_sig_bit);
         }
-        if let Some(shift_most_sig_bit) = prank_vals.shift_most_sig_bit {
-            core_cols.shift_most_sig_bit = F::from_u32(shift_most_sig_bit);
+        if let Some(flags) = prank_vals.flags {
+            core_cols.flags = flags.map(F::from_bool);
         }
-        if let Some(opcode_flags) = prank_vals.opcode_flags {
-            core_cols.opcode_loadb_flag0 = F::from_bool(opcode_flags[0]);
-            core_cols.opcode_loadb_flag1 = F::from_bool(opcode_flags[1]);
-            core_cols.opcode_loadb_flag2 = F::from_bool(opcode_flags[2]);
-            core_cols.opcode_loadb_flag3 = F::from_bool(opcode_flags[3]);
-            core_cols.opcode_loadh_flag0 = F::from_bool(opcode_flags[4]);
-            core_cols.opcode_loadh_flag2 = F::from_bool(opcode_flags[5]);
-            core_cols.opcode_loadw_flag = F::from_bool(opcode_flags[6]);
+        if let Some(read_data1) = prank_vals.read_data1 {
+            core_cols.read_data1 = read_data1.map(F::from_u8);
         }
 
         *trace = RowMajorMatrix::new(trace_row, trace.width());
@@ -406,13 +385,13 @@ fn run_negative_load_sign_extend_test(
 
 #[test]
 fn loadstore_negative_tests() {
-    // Pranking shifted_read_data + data_most_sig_bit breaks memory read interaction
+    // Pranking data_most_sig_bit breaks the sign-bit range check.
     run_negative_load_sign_extend_test(
         LOADB,
         Some([233, 187, 145, 238, 12, 55, 200, 99]),
-        None,
-        None,
-        None,
+        Some([64, 0, 0, 0, 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
         LoadSignExtPrankValues {
             data_most_sig_bit: Some(0),
             ..Default::default()
@@ -420,33 +399,76 @@ fn loadstore_negative_tests() {
         true,
     );
 
-    // Pranking shift_most_sig_bit breaks the read_data unrotation → memory interaction error
+    // Claiming a different shift than the actual pointer breaks the adapter range check.
     run_negative_load_sign_extend_test(
         LOADH,
         None,
-        Some([202, 109, 183, 26, 0, 0, 0, 0]),
-        Some(31212),
-        None,
+        Some([66, 0, 0, 0, 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
         LoadSignExtPrankValues {
-            shift_most_sig_bit: Some(0),
+            flags: Some(flags_for(LOADH, 0)),
             ..Default::default()
         },
         true,
     );
 
-    // Pranking opcode_flags to wrong value → execution bridge interaction error
+    // Claiming a different opcode than the program's breaks the execution bridge.
     run_negative_load_sign_extend_test(
-        LOADB,
+        LOADH,
         None,
-        Some([250, 132, 77, 5, 0, 0, 0, 0]),
-        Some(47741),
-        None,
+        Some([66, 0, 0, 0, 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
         LoadSignExtPrankValues {
-            opcode_flags: Some([true, false, false, false, false, false, false]),
+            flags: Some(flags_for(LOADB, 2)),
             ..Default::default()
         },
         true,
     );
+}
+
+#[test]
+fn crossing_negative_tests() {
+    // LOADW at ptr 64 + 5: spans two blocks. Denying the second block read (claiming the
+    // non-crossing shift 1 instead) breaks the adapter range check.
+    run_negative_load_sign_extend_test(
+        LOADW,
+        None,
+        Some([69, 0, 0, 0, 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        LoadSignExtPrankValues {
+            flags: Some(flags_for(LOADW, 1)),
+            ..Default::default()
+        },
+        true,
+    );
+
+    // Forging the second block's contents breaks the second block read interaction.
+    run_negative_load_sign_extend_test(
+        LOADW,
+        None,
+        Some([69, 0, 0, 0, 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        LoadSignExtPrankValues {
+            read_data1: Some([1, 2, 3, 4, 5, 6, 7, 8]),
+            ..Default::default()
+        },
+        true,
+    );
+}
+
+fn solve(
+    opcode: Rv64LoadStoreOpcode,
+    read_data: [u8; RV64_REGISTER_NUM_LIMBS],
+    read_data1: [u8; RV64_REGISTER_NUM_LIMBS],
+    shift: usize,
+) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
+        opcode, read_data, read_data1, shift,
+    )
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -454,178 +476,107 @@ fn loadstore_negative_tests() {
 ///
 /// Ensure that solve functions produce the correct results.
 ///////////////////////////////////////////////////////////////////////////////////////
-
 #[test]
 fn solve_loadh_extend_sign_sanity_test() {
     let read_data = [34, 159, 237, 151, 100, 200, 50, 25];
-    let write_data0 =
-        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADH, read_data, 0);
-    let write_data2 =
-        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADH, read_data, 2);
-    let write_data4 =
-        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADH, read_data, 4);
-    let write_data6 =
-        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADH, read_data, 6);
-
-    assert_eq!(write_data0, [34, 159, 255, 255, 255, 255, 255, 255]);
-    assert_eq!(write_data2, [237, 151, 255, 255, 255, 255, 255, 255]);
-    assert_eq!(write_data4, [100, 200, 255, 255, 255, 255, 255, 255]);
-    assert_eq!(write_data6, [50, 25, 0, 0, 0, 0, 0, 0]);
+    let zero = [0; 8];
+    assert_eq!(
+        solve(LOADH, read_data, zero, 0),
+        [34, 159, 255, 255, 255, 255, 255, 255]
+    );
+    assert_eq!(
+        solve(LOADH, read_data, zero, 1),
+        [159, 237, 255, 255, 255, 255, 255, 255]
+    );
+    assert_eq!(
+        solve(LOADH, read_data, zero, 2),
+        [237, 151, 255, 255, 255, 255, 255, 255]
+    );
+    assert_eq!(
+        solve(LOADH, read_data, zero, 4),
+        [100, 200, 255, 255, 255, 255, 255, 255]
+    );
+    assert_eq!(solve(LOADH, read_data, zero, 6), [50, 25, 0, 0, 0, 0, 0, 0]);
 }
 
 #[test]
 fn solve_loadh_extend_zero_sanity_test() {
     let read_data = [34, 121, 237, 97, 10, 20, 30, 40];
-    let write_data0 =
-        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADH, read_data, 0);
-    let write_data2 =
-        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADH, read_data, 2);
-    let write_data4 =
-        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADH, read_data, 4);
-    let write_data6 =
-        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADH, read_data, 6);
-
-    assert_eq!(write_data0, [34, 121, 0, 0, 0, 0, 0, 0]);
-    assert_eq!(write_data2, [237, 97, 0, 0, 0, 0, 0, 0]);
-    assert_eq!(write_data4, [10, 20, 0, 0, 0, 0, 0, 0]);
-    assert_eq!(write_data6, [30, 40, 0, 0, 0, 0, 0, 0]);
+    let zero = [0; 8];
+    assert_eq!(
+        solve(LOADH, read_data, zero, 0),
+        [34, 121, 0, 0, 0, 0, 0, 0]
+    );
+    assert_eq!(
+        solve(LOADH, read_data, zero, 2),
+        [237, 97, 0, 0, 0, 0, 0, 0]
+    );
+    assert_eq!(solve(LOADH, read_data, zero, 3), [97, 10, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(solve(LOADH, read_data, zero, 4), [10, 20, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(solve(LOADH, read_data, zero, 6), [30, 40, 0, 0, 0, 0, 0, 0]);
 }
 
 #[test]
-fn solve_loadb_extend_sign_sanity_test() {
+fn solve_loadb_sanity_test() {
     let read_data = [45, 82, 99, 127, 200, 150, 180, 210];
     for shift in 0..8 {
-        let write_data = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
-            LOADB, read_data, shift,
-        );
-        let byte = read_data[shift];
-        let expected = (byte as i8 as i64).to_le_bytes();
+        let write_data = solve(LOADB, read_data, [0; 8], shift);
+        let expected = (read_data[shift] as i8 as i64).to_le_bytes();
         assert_eq!(write_data, expected, "LOADB shift={shift}");
     }
 }
 
 #[test]
-fn solve_loadb_extend_zero_sanity_test() {
-    let read_data = [173, 210, 227, 255, 128, 250, 200, 190];
-    for shift in 0..8 {
-        let write_data = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
-            LOADB, read_data, shift,
-        );
-        let byte = read_data[shift];
-        let expected = (byte as i8 as i64).to_le_bytes();
-        assert_eq!(write_data, expected, "LOADB shift={shift}");
-    }
-}
-
-#[test]
-fn solve_loadw_extend_sign_sanity_test() {
-    // shift=0: word = [0x01, 0x02, 0x03, 0x84] => 0x84030201 (negative)
-    let read_data = [0x01, 0x02, 0x03, 0x84, 0xAA, 0xBB, 0xCC, 0xDD];
-    let write_data0 =
-        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADW, read_data, 0);
+fn solve_loadw_sanity_test() {
+    let read_data = [0x01, 0x02, 0x03, 0x84, 0xAA, 0xBB, 0xCC, 0x7D];
+    let zero = [0; 8];
+    // shift=0: word = 0x84030201 (negative)
     assert_eq!(
-        write_data0,
+        solve(LOADW, read_data, zero, 0),
         [0x01, 0x02, 0x03, 0x84, 0xFF, 0xFF, 0xFF, 0xFF]
     );
-
-    // shift=4: word = [0xAA, 0xBB, 0xCC, 0xDD] => 0xDDCCBBAA (negative)
-    let write_data4 =
-        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADW, read_data, 4);
+    // shift=2: word = [0x03, 0x84, 0xAA, 0xBB] => negative
     assert_eq!(
-        write_data4,
-        [0xAA, 0xBB, 0xCC, 0xDD, 0xFF, 0xFF, 0xFF, 0xFF]
+        solve(LOADW, read_data, zero, 2),
+        [0x03, 0x84, 0xAA, 0xBB, 0xFF, 0xFF, 0xFF, 0xFF]
     );
-}
-
-#[test]
-fn solve_loadw_extend_zero_sanity_test() {
-    // shift=0: word = [0x01, 0x02, 0x03, 0x04] => 0x04030201 (positive)
-    let read_data = [0x01, 0x02, 0x03, 0x04, 0xAA, 0xBB, 0xCC, 0xDD];
-    let write_data0 =
-        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADW, read_data, 0);
+    // shift=4: word = [0xAA, 0xBB, 0xCC, 0x7D] => positive
     assert_eq!(
-        write_data0,
-        [0x01, 0x02, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00]
-    );
-
-    // shift=4: word = [0xAA, 0xBB, 0xCC, 0x7D] => 0x7DCCBBAA (positive)
-    let read_data2 = [0x01, 0x02, 0x03, 0x04, 0xAA, 0xBB, 0xCC, 0x7D];
-    let write_data4 =
-        run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADW, read_data2, 4);
-    assert_eq!(
-        write_data4,
+        solve(LOADW, read_data, zero, 4),
         [0xAA, 0xBB, 0xCC, 0x7D, 0x00, 0x00, 0x00, 0x00]
     );
 }
 
 #[test]
-#[should_panic(expected = "LOADW requires 4-byte aligned shift")]
-fn solve_loadw_rejects_shift_2() {
-    let read_data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADW, read_data, 2);
-}
+fn solve_crossing_sanity_test() {
+    let read_data = [34, 159, 237, 151, 100, 200, 50, 25];
+    let read_data1 = [200, 100, 3, 250, 66, 88, 120, 233];
 
-#[test]
-#[should_panic(expected = "LOADW requires 4-byte aligned shift")]
-fn solve_loadw_rejects_shift_6() {
-    let read_data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADW, read_data, 6);
-}
-
-#[test]
-#[should_panic(expected = "LOADH requires 2-byte aligned shift")]
-fn solve_loadh_rejects_shift_1() {
-    let read_data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADH, read_data, 1);
-}
-
-#[test]
-#[should_panic(expected = "LOADH requires 2-byte aligned shift")]
-fn solve_loadh_rejects_shift_3() {
-    let read_data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADH, read_data, 3);
-}
-
-#[test]
-#[should_panic(expected = "LOADH requires 2-byte aligned shift")]
-fn solve_loadh_rejects_shift_5() {
-    let read_data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADH, read_data, 5);
-}
-
-#[test]
-#[should_panic(expected = "LOADH requires 2-byte aligned shift")]
-fn solve_loadh_rejects_shift_7() {
-    let read_data = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(LOADH, read_data, 7);
-}
-
-/// Assert the full set of accepted shifts per opcode:
-/// LOADB: 0..7, LOADH: {0,2,4,6}, LOADW: {0,4}
-#[test]
-fn accepted_shift_sets() {
-    let read_data = [0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80];
-
-    // LOADB accepts all shifts 0..7
-    for shift in 0..8 {
-        let _ = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
-            LOADB, read_data, shift,
-        );
-    }
-
-    // LOADH accepts even shifts {0, 2, 4, 6}
-    for shift in [0, 2, 4, 6] {
-        let _ = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
-            LOADH, read_data, shift,
-        );
-    }
-
-    // LOADW accepts only {0, 4}
-    for shift in [0, 4] {
-        let _ = run_write_data_sign_extend::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(
-            LOADW, read_data, shift,
-        );
-    }
+    // LOADH at shift 7: bytes [25, 200] => negative halfword.
+    assert_eq!(
+        solve(LOADH, read_data, read_data1, 7),
+        [25, 200, 255, 255, 255, 255, 255, 255]
+    );
+    // LOADB at shift 7 stays within the first block.
+    assert_eq!(
+        solve(LOADB, read_data, read_data1, 7),
+        [25, 0, 0, 0, 0, 0, 0, 0]
+    );
+    // LOADW at shift 5: bytes [200, 50, 25, 200] => negative word.
+    assert_eq!(
+        solve(LOADW, read_data, read_data1, 5),
+        [200, 50, 25, 200, 255, 255, 255, 255]
+    );
+    // LOADW at shift 6: bytes [50, 25, 200, 100] => positive word.
+    assert_eq!(
+        solve(LOADW, read_data, read_data1, 6),
+        [50, 25, 200, 100, 0, 0, 0, 0]
+    );
+    // LOADW at shift 7: bytes [25, 200, 100, 3] => positive word.
+    assert_eq!(
+        solve(LOADW, read_data, read_data1, 7),
+        [25, 200, 100, 3, 0, 0, 0, 0]
+    );
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

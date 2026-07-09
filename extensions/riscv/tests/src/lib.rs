@@ -164,6 +164,31 @@ mod tests {
         Ok(())
     }
 
+    /// Misaligned (unsigned) loads and stores, including accesses spanning two 8-byte
+    /// blocks, through the full pipeline: transpile, pure and metered execution, preflight,
+    /// and proof. The guest asserts every loaded value and the read-modify-write behavior
+    /// of every store.
+    ///
+    /// RVR skips this test: the generated C memory helpers currently assume aligned
+    /// accesses. AOT skips it: metered AOT does not yet account the second block of a
+    /// spanning access in its adapter height updates.
+    #[test]
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    fn test_misaligned_mem_access() -> Result<()> {
+        let config = test_rv64im_config();
+        let elf =
+            build_example_program_at_path(get_programs_dir!(), "misaligned_mem_access", &config)?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension),
+        )?;
+        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![], 1);
+        Ok(())
+    }
+
     // Exercises the std path: guest is built with --features std, which pulls in
     // libstd compiled for riscv64im-unknown-openvm-elf and links against our PAL.
     #[test_case("fibonacci", 1)]

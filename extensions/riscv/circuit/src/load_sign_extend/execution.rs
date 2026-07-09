@@ -172,11 +172,15 @@ where
     }
 }
 
+/// Sign-extends the `WIDTH` bytes starting at the byte shift in the concatenation of the two
+/// read blocks. Any byte shift is supported.
 trait LoadSignExtOp {
+    const WIDTH: usize;
+
     fn compute_write_data(
-        read_data: &[u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: u32,
-    ) -> Option<[u8; RV64_REGISTER_NUM_LIMBS]>;
+        src: &[u8; 2 * RV64_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> [u8; RV64_REGISTER_NUM_LIMBS];
 }
 
 struct LoadBOp;
@@ -184,41 +188,40 @@ struct LoadHOp;
 struct LoadWOp;
 
 impl LoadSignExtOp for LoadBOp {
+    const WIDTH: usize = 1;
+
     #[inline(always)]
     fn compute_write_data(
-        read_data: &[u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: u32,
-    ) -> Option<[u8; RV64_REGISTER_NUM_LIMBS]> {
-        let byte = read_data[shift_amount as usize];
-        Some(((byte as i8) as i64).to_le_bytes())
+        src: &[u8; 2 * RV64_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+        ((src[shift_amount] as i8) as i64).to_le_bytes()
     }
 }
 
 impl LoadSignExtOp for LoadHOp {
+    const WIDTH: usize = 2;
+
     #[inline(always)]
     fn compute_write_data(
-        read_data: &[u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: u32,
-    ) -> Option<[u8; RV64_REGISTER_NUM_LIMBS]> {
-        if !shift_amount.is_multiple_of(2) {
-            return None;
-        }
-        let half: [u8; 2] = array::from_fn(|i| read_data[shift_amount as usize + i]);
-        Some((i16::from_le_bytes(half) as i64).to_le_bytes())
+        src: &[u8; 2 * RV64_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+        let half: [u8; 2] = array::from_fn(|i| src[shift_amount + i]);
+        (i16::from_le_bytes(half) as i64).to_le_bytes()
     }
 }
 
 impl LoadSignExtOp for LoadWOp {
+    const WIDTH: usize = 4;
+
     #[inline(always)]
     fn compute_write_data(
-        read_data: &[u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: u32,
-    ) -> Option<[u8; RV64_REGISTER_NUM_LIMBS]> {
-        if shift_amount != 0 && shift_amount != 4 {
-            return None;
-        }
-        let word: [u8; 4] = array::from_fn(|i| read_data[shift_amount as usize + i]);
-        Some((i32::from_le_bytes(word) as i64).to_le_bytes())
+        src: &[u8; 2 * RV64_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+        let word: [u8; 4] = array::from_fn(|i| src[shift_amount + i]);
+        (i32::from_le_bytes(word) as i64).to_le_bytes()
     }
 }
 
@@ -240,19 +243,28 @@ unsafe fn execute_e12_impl<
     debug_assert!((addr as usize) < RV64_MEMORY_BYTES);
     let ptr_val = addr as u32;
 
-    let shift_amount = ptr_val % RV64_REGISTER_NUM_LIMBS as u32;
-    let ptr_val = ptr_val - shift_amount; // aligned ptr
+    let shift_amount = (ptr_val as usize) % RV64_REGISTER_NUM_LIMBS;
+    let aligned_ptr = ptr_val - shift_amount as u32;
+    // Whether the access spans two adjacent 8-byte blocks.
+    let crosses = shift_amount + OP::WIDTH > RV64_REGISTER_NUM_LIMBS;
+    debug_assert!(
+        !crosses || (aligned_ptr as usize) + 2 * RV64_REGISTER_NUM_LIMBS <= RV64_MEMORY_BYTES
+    );
 
-    let read_data: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read_bytes(pre_compute.e as u32, ptr_val);
-
-    let write_data =
-        OP::compute_write_data(&read_data, shift_amount).ok_or(ExecutionError::Fail {
-            pc,
-            msg: "Invalid LoadSignExtendOp",
-        })?;
+    let mut src = [0u8; 2 * RV64_REGISTER_NUM_LIMBS];
+    let block0: [u8; RV64_REGISTER_NUM_LIMBS] =
+        exec_state.vm_read_bytes(pre_compute.e as u32, aligned_ptr);
+    src[..RV64_REGISTER_NUM_LIMBS].copy_from_slice(&block0);
+    if crosses {
+        let block1: [u8; RV64_REGISTER_NUM_LIMBS] = exec_state.vm_read_bytes(
+            pre_compute.e as u32,
+            aligned_ptr + RV64_REGISTER_NUM_LIMBS as u32,
+        );
+        src[RV64_REGISTER_NUM_LIMBS..].copy_from_slice(&block1);
+    }
 
     if ENABLED {
+        let write_data = OP::compute_write_data(&src, shift_amount);
         exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
     }
 
