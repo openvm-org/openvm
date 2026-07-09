@@ -439,6 +439,24 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(all(not(feature = "aot")))]
+    #[test_case("misaligned_load", 1)]
+    #[test_case("misaligned_signed_load", 1)]
+    #[test_case("misaligned_store", 1)]
+    fn test_misaligned_mem_access(example_name: &str, min_segments: usize) -> Result<()> {
+        let config = test_rv64im_config();
+        let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension),
+        )?;
+        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![], min_segments);
+        Ok(())
+    }
+
     #[test]
     #[should_panic]
     // AOT and RVR skip this test since it is not a trusted program: both
