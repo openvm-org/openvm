@@ -25,6 +25,10 @@ impl EmitMode {
         matches!(self, Self::ValueTrace)
     }
 
+    fn traces_register_values(self) -> bool {
+        matches!(self, Self::ValueTrace)
+    }
+
     fn is_metered_without_memory_pages(self) -> bool {
         matches!(
             self,
@@ -152,6 +156,9 @@ impl EmitContext {
     /// Read a register with tracing. Returns a C expression for the value.
     pub fn read_reg(&mut self, idx: u8) -> String {
         if idx == 0 {
+            if self.mode.traces_register_values() {
+                self.write_line("trace_reg_read(state, 0, 0);");
+            }
             return "0".to_string();
         }
         if self.hot_regs.contains(&idx) {
@@ -187,16 +194,36 @@ impl EmitContext {
     /// an `rvr_ext_*` extension entry point) that the C compiler cannot CSE.
     pub fn write_reg(&mut self, idx: u8, val: &str) {
         if idx == 0 {
+            if self.mode.traces_register_values() {
+                self.write_line("trace_timestamp(state);");
+            }
             return;
         }
         let tmp = self.next_var();
         self.write_line(&format!("uint64_t {tmp} = {val};"));
-        self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
-        if self.hot_regs.contains(&idx) {
-            let name = Self::abi_name(idx);
-            self.write_line(&format!("{name} = {tmp};"));
-        } else {
+
+        if self.mode.traces_register_values() {
+            debug_assert!(self.hot_regs.is_empty());
             self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
+            self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
+        } else {
+            self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
+            if self.hot_regs.contains(&idx) {
+                let name = Self::abi_name(idx);
+                self.write_line(&format!("{name} = {tmp};"));
+            } else {
+                self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
+            }
+        }
+    }
+
+    pub fn trace_immediate(&mut self) {
+        self.trace_timestamp();
+    }
+
+    pub fn trace_timestamp(&mut self) {
+        if self.mode.traces_register_values() {
+            self.write_line("trace_timestamp(state);");
         }
     }
 
@@ -293,7 +320,7 @@ impl EmitContext {
     }
 
     fn emit_inline_page_record(&mut self, addr: &str) {
-        self.write_line(&format!("trace_memory_access_leaf(&trace_memory, {addr});"));
+        self.write_line(&format!("trace_memory_access(&trace_memory, {addr});"));
     }
 
     pub fn flush_page_locals(&mut self) {
@@ -466,6 +493,10 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
 
     fn trace_mem_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32) {
         EmitContext::trace_mem_access_u64_range(self, base_addr, num_dwords, addr_space);
+    }
+
+    fn trace_timestamp(&mut self) {
+        EmitContext::trace_timestamp(self);
     }
 }
 

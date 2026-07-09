@@ -4,11 +4,10 @@
 #include <stdint.h>
 
 /* Forwarding stubs owned by the RISC-V IO (Rv64Io) extension: the hint-store
- * consumers (HINT_STOREW, HINT_BUFFER) and public-values stores routed through
- * openvm_reveal. Backed by a thread-local dispatch table installed at execution
- * time by `Rv64IoRuntimeHooks`. */
-void openvm_hint_storew(uint64_t dest_addr);
-void openvm_hint_buffer(uint64_t dest_addr, uint32_t num_words);
-void openvm_reveal(uint64_t src_val, uint64_t ptr, uint32_t offset, uint32_t width);
+ * consumers (HINT_STOREW, HINT_BUFFER) and REVEAL. Backed by a dispatch table
+ * installed at execution time by `Rv64IoRuntimeHooks`. */
+void openvm_hint_storew(void* state, uint64_t dest_addr);
+void openvm_hint_buffer(void* state, uint64_t dest_addr, uint32_t num_words);
+void openvm_reveal(uint64_t src_val, uint64_t ptr, uint32_t offset);
 
 #endif /* RV64IO_CALLBACKS_H */

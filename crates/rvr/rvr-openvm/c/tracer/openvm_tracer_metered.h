@@ -280,12 +280,20 @@ static __attribute__((always_inline)) inline void trace_memory_access_leaf(
                            1ull << (leaf & ((1u << TRACER_PAGE_BITS) - 1u)));
 }
 
+static __attribute__((always_inline)) inline void trace_memory_access(
+    TraceMemory* restrict memory, uint64_t addr) {
+  trace_memory_access_leaf(memory, addr);
+}
+
 /* ── Trace-only register access (no-ops in metered mode) ─────────── */
 
 static __attribute__((always_inline)) inline void trace_reg_read(
     RvState* restrict state, uint8_t idx, uint32_t val) {}
 static __attribute__((always_inline)) inline void trace_reg_write(
     RvState* restrict state, uint8_t idx, uint32_t new_val) {}
+
+static __attribute__((always_inline)) inline void trace_timestamp(
+    RvState* restrict state) {}
 
 /* ── Trace-only memory reads (record page in metered mode) ───────── */
 

@@ -29,11 +29,13 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
         }
         Instr::AluImm { op, rd, rs1, imm } => {
             let l = ctx.read_reg(*rs1);
+            ctx.trace_immediate();
             let r = imm_literal(*imm);
             ctx.write_reg(*rd, &alu_expr(*op, &l, &r));
         }
         Instr::ShiftImm { op, rd, rs1, shamt } => {
             let v = ctx.read_reg(*rs1);
+            ctx.trace_immediate();
             ctx.write_reg(*rd, &shift_imm_expr(*op, &v, *shamt));
         }
         Instr::Lui { rd, value } => {
@@ -70,11 +72,13 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
         }
         Instr::AluWImm { op, rd, rs1, imm } => {
             let l = ctx.read_reg(*rs1);
+            ctx.trace_immediate();
             let r = imm_literal(*imm);
             ctx.write_reg(*rd, &alu_w_expr(*op, &l, &r));
         }
         Instr::ShiftWImm { op, rd, rs1, shamt } => {
             let v = ctx.read_reg(*rs1);
+            ctx.trace_immediate();
             ctx.write_reg(*rd, &shift_w_imm_expr(*op, &v, *shamt));
         }
         Instr::MulDiv { op, rd, rs1, rs2 } => {
@@ -85,7 +89,9 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
         }
 
         // ── OpenVM system/IO instructions ────────────────────────────
-        Instr::Nop => {}
+        Instr::Nop => {
+            ctx.trace_timestamp();
+        }
 
         Instr::Ext(ext) => {
             ext.emit_c(ctx);
@@ -112,9 +118,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             emit_tail_call(ctx, next_pc, &args, tc.valid_blocks);
         }
         Terminator::Jump { link_rd, target } => {
-            if let Some(rd) = link_rd {
-                ctx.write_reg(*rd, &hex_u64(next_pc));
-            }
+            ctx.write_reg(link_rd.unwrap_or(0), &hex_u64(next_pc));
             emit_tail_call(ctx, *target, &args, tc.valid_blocks);
         }
         Terminator::JumpDyn {
@@ -128,9 +132,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             } else {
                 base
             };
-            if let Some(rd) = link_rd {
-                ctx.write_reg(*rd, &hex_u64(next_pc));
-            }
+            ctx.write_reg(link_rd.unwrap_or(0), &hex_u64(next_pc));
             let imm_val = *imm;
             let next_pc = if imm_val == 0 {
                 ctx.materialize_u64(&format!("{base} & ~0x0000000000000001ull"))

@@ -17,6 +17,8 @@ use openvm_instructions::{
     program::Program,
     DIGEST_WIDTH,
 };
+#[cfg(feature = "rvr")]
+use openvm_instructions::{LocalOpcode, SystemOpcode};
 #[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
 use openvm_stark_backend::AirRef;
 use openvm_stark_backend::{
@@ -43,10 +45,11 @@ use tracing::{info_span, instrument};
 use super::aot::AotInstance;
 #[cfg(feature = "rvr")]
 use super::rvr::{
-    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
-    compile_metered_cost, compile_metered_segment_boundary, load_compiled_from_path, ChipMapping,
-    GuestDebugMap, RvrInitialImage, RvrMeteredCostInstance, RvrMeteredInstance,
-    RvrMeteredSegmentInstance, RvrPureInstance,
+    bridge::map_rvr_compile_error, build_pc_to_chip, classify_preflight_opcodes_with_extensions,
+    compile, compile_metered, compile_metered_cost, compile_metered_segment_boundary,
+    compile_preflight_with_extensions, load_compiled_from_path, ChipMapping, GuestDebugMap,
+    RvrInitialImage, RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance,
+    RvrPreflightInstance, RvrPreflightOpcodeClass, RvrPreflightRoute, RvrPureInstance,
 };
 use super::{
     execution_mode::{
@@ -89,6 +92,10 @@ pub const BABYBEAR_S_BOX_DEGREE: u64 = 7;
 
 pub trait VmField: PrimeField32 + InjectiveMonomial<BABYBEAR_S_BOX_DEGREE> {}
 impl<T> VmField for T where T: PrimeField32 + InjectiveMonomial<BABYBEAR_S_BOX_DEGREE> {}
+
+#[cfg(feature = "rvr")]
+type VmRvrPreflightRoute<'a, F, VC> =
+    RvrPreflightRoute<'a, F, <VC as VmExecutionConfig<F>>::Executor>;
 
 #[derive(Error, Debug)]
 pub enum GenerationError {
@@ -478,6 +485,54 @@ where
         ))
     }
 
+    pub fn preflight_routed_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        guest_debug_map: Option<&GuestDebugMap>,
+    ) -> Result<RvrPreflightRoute<'_, F, VC::Executor>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        match classify_preflight_opcodes_with_extensions(exe, extensions.lifters()) {
+            RvrPreflightOpcodeClass::Rv64ImOnly => {
+                #[cfg(feature = "metrics")]
+                let _compilation_span =
+                    tracing::info_span!("compile_preflight", backend = "rvr").entered();
+                let chips = ChipMapping {
+                    pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                        .map_err(map_rvr_compile_error)?,
+                    chip_widths: None,
+                };
+                let compiled = compile_preflight_with_extensions(
+                    exe,
+                    extensions.lifters(),
+                    &chips,
+                    guest_debug_map,
+                )
+                .map_err(map_rvr_compile_error)?;
+                let runtime_hooks = extensions.into_runtime_hooks();
+                Ok(RvrPreflightRoute::Rvr(RvrPreflightInstance::new(
+                    self.inventory.config(),
+                    Arc::new(exe.clone()),
+                    runtime_hooks,
+                    compiled,
+                    &chips,
+                )))
+            }
+            RvrPreflightOpcodeClass::UsesExtension { .. } => {
+                #[cfg(feature = "metrics")]
+                let _compilation_span =
+                    tracing::info_span!("compile_preflight", backend = "interpreter").entered();
+                Ok(RvrPreflightRoute::Interpreter(
+                    PreflightInterpretedInstance::new(
+                        &exe.program,
+                        self.inventory.clone(),
+                        executor_idx_to_air_idx.to_vec(),
+                    )?,
+                ))
+            }
+        }
+    }
+
     pub fn metered_cost_instance(
         &self,
         exe: &VmExe<F>,
@@ -644,6 +699,8 @@ where
     #[getset(get = "pub", get_mut = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
     chip_complex: VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>,
+    #[cfg(feature = "rvr")]
+    builder: VB,
 }
 
 impl<E, VB> VirtualMachine<E, VB>
@@ -666,6 +723,8 @@ where
             executor,
             pk: d_pk,
             chip_complex,
+            #[cfg(feature = "rvr")]
+            builder,
         })
     }
 
@@ -686,9 +745,9 @@ where
         &self.executor.config
     }
 
-    /// Pure execution instance.
+    /// Pure interpreter.
     #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
-    pub fn instance(
+    pub fn interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, ExecutionCtx>, StaticProgramError>
@@ -700,7 +759,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn instance(
+    pub fn interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<RvrPureInstance<'_>, StaticProgramError>
@@ -725,7 +784,7 @@ where
 
     // Pure AOT / RVR execution
     #[cfg(any(feature = "aot", feature = "rvr"))]
-    pub fn interpreter_instance(
+    pub fn naive_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, ExecutionCtx>, StaticProgramError>
@@ -738,7 +797,7 @@ where
 
     // Pure AOT execution
     #[cfg(feature = "aot")]
-    pub fn instance(
+    pub fn interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<AotInstance<'_, ExecutionCtx>, StaticProgramError>
@@ -762,7 +821,7 @@ where
     }
 
     #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
-    pub fn metered_instance(
+    pub fn metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, MeteredCtx>, StaticProgramError>
@@ -776,7 +835,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn metered_instance(
+    pub fn metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<RvrMeteredInstance<'_>, StaticProgramError>
@@ -818,7 +877,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn load_metered_instance(
+    pub fn load_metered_interpreter(
         &self,
         lib_path: &std::path::Path,
         exe: &VmExe<Val<E::SC>>,
@@ -833,7 +892,7 @@ where
     }
 
     #[cfg(feature = "aot")]
-    pub fn metered_instance(
+    pub fn metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<AotInstance<'_, MeteredCtx>, StaticProgramError>
@@ -862,7 +921,7 @@ where
     }
 
     #[cfg(any(feature = "aot", feature = "rvr"))]
-    pub fn metered_interpreter_instance(
+    pub fn naive_metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, MeteredCtx>, StaticProgramError>
@@ -876,7 +935,7 @@ where
     }
 
     #[cfg(not(feature = "rvr"))]
-    pub fn metered_cost_instance(
+    pub fn metered_cost_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, MeteredCostCtx>, StaticProgramError>
@@ -890,7 +949,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn metered_cost_instance(
+    pub fn metered_cost_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError>
@@ -922,7 +981,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn load_metered_cost_instance(
+    pub fn load_metered_cost_interpreter(
         &self,
         lib_path: &std::path::Path,
         exe: &VmExe<Val<E::SC>>,
@@ -953,6 +1012,20 @@ where
         )
     }
 
+    #[cfg(feature = "rvr")]
+    pub fn preflight_routed_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<VmRvrPreflightRoute<'_, Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .preflight_routed_instance(exe, &executor_idx_to_air_idx, None)
+    }
+
     /// Preflight execution for a single segment. Executes for exactly `num_insns` instructions
     /// using an interpreter. Preflight execution must be provided with `trace_heights`
     /// instrumentation data that was collected from a previous run of metered execution so that the
@@ -978,16 +1051,7 @@ where
             .iter()
             .all(|&air_idx| air_idx < trace_heights.len()));
 
-        // TODO[jpw]: figure out how to compute RA specific main_widths
-        let main_widths = self
-            .pk
-            .per_air
-            .iter()
-            .map(|pk| pk.vk.params.width.main_width())
-            .collect_vec();
-        let capacities = zip_eq(trace_heights, main_widths)
-            .map(|(&h, w)| (h as usize, w))
-            .collect::<Vec<_>>();
+        let capacities = self.preflight_capacities(trace_heights);
         let ctx = PreflightCtx::new_with_capacity(&capacities, num_insns);
 
         let pc = state.pc();
@@ -1011,15 +1075,6 @@ where
             interpreter.opcode_counts_by_air::<VB::RecordArena>(),
         );
         let touched_memory = exec_state.vm_state.memory.finalize::<Val<E::SC>>();
-        // Grow the touched-page sets on the carried-forward memory image so the next segment's
-        // host-to-device transfer (`set_initial_memory`) stays a correct superset of non-zero
-        // pages.
-        exec_state
-            .vm_state
-            .memory
-            .data
-            .memory
-            .extend_touched_pages_from_touched(&touched_memory);
         #[cfg(feature = "perf-metrics")]
         end_segment_metrics(&mut exec_state);
 
@@ -1048,6 +1103,99 @@ where
             record_arenas,
             to_state,
         })
+    }
+
+    #[cfg(feature = "rvr")]
+    #[instrument(name = "execute_rvr_preflight_for_proving", skip_all)]
+    fn execute_rvr_preflight_for_proving(
+        &self,
+        interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
+        exe: &VmExe<Val<E::SC>>,
+        state: VmState<GuestMemory>,
+        num_insns: Option<u64>,
+        trace_heights: &[u32],
+    ) -> Result<PreflightExecutionOutput<Val<E::SC>, VB::RecordArena>, ExecutionError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+            MeteredExecutor<Val<E::SC>> + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    {
+        match self.preflight_routed_instance(exe)? {
+            RvrPreflightRoute::Rvr(rvr_instance) => {
+                let rvr_output =
+                    rvr_instance.execute_preflight_from_state(state.clone(), num_insns)?;
+                let capacities = self.preflight_capacities(trace_heights);
+                let pc_to_air_idx = self.pc_to_air_idx(exe)?;
+                let record_arenas = self
+                    .builder
+                    .generate_rvr_record_arenas_from_logs(
+                        self.config(),
+                        exe,
+                        &rvr_output,
+                        &capacities,
+                        &pc_to_air_idx,
+                    )?
+                    .ok_or_else(|| {
+                        ExecutionError::RvrExecution(
+                            "rvr log-native tracegen is not implemented for this VM builder"
+                                .to_string(),
+                        )
+                    })?;
+
+                Ok(PreflightExecutionOutput {
+                    system_records: rvr_output.system_records,
+                    record_arenas,
+                    to_state: rvr_output.to_state,
+                })
+            }
+            RvrPreflightRoute::Interpreter(_) => {
+                self.execute_preflight(interpreter, state, num_insns, trace_heights)
+            }
+        }
+    }
+
+    fn preflight_capacities(&self, trace_heights: &[u32]) -> Vec<(usize, usize)> {
+        // TODO[jpw]: figure out how to compute RA specific main_widths
+        let main_widths = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.main_width())
+            .collect_vec();
+        zip_eq(trace_heights, main_widths)
+            .map(|(&h, w)| (h as usize, w))
+            .collect()
+    }
+
+    #[cfg(feature = "rvr")]
+    /// Maps defined program instruction slots to AIR IDs for rvr log-native record routing.
+    pub fn pc_to_air_idx(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<Vec<Option<usize>>, StaticProgramError> {
+        let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        exe.program
+            .instructions_and_debug_infos
+            .iter()
+            .map(|slot| {
+                let Some((inst, _)) = slot else {
+                    return Ok(None);
+                };
+                if inst.opcode == terminate_opcode {
+                    return Ok(None);
+                }
+                let executor_idx = *self
+                    .executor
+                    .inventory
+                    .instruction_lookup
+                    .get(&inst.opcode)
+                    .ok_or(StaticProgramError::ExecutorNotFound {
+                        opcode: inst.opcode,
+                    })? as usize;
+                Ok(Some(executor_idx_to_air_idx[executor_idx]))
+            })
+            .collect()
     }
 
     /// Calls [`VmState::initial`] but sets more information for
@@ -1487,8 +1635,8 @@ where
         self.reset_state(input.clone());
         let vm = &mut self.vm;
         let metered_ctx = vm.build_metered_ctx(&self.exe);
-        let metered_instance = vm.metered_instance(&self.exe)?;
-        let (segments, _) = metered_instance.execute_metered(input, metered_ctx)?;
+        let metered_interpreter = vm.metered_interpreter(&self.exe)?;
+        let (segments, _) = metered_interpreter.execute_metered(input, metered_ctx)?;
         let mut proofs = Vec::with_capacity(segments.len());
         let mut state = self.state.take();
         for (seg_idx, segment) in segments.into_iter().enumerate() {
@@ -1502,6 +1650,19 @@ where
             } = segment;
             let from_state = Option::take(&mut state).unwrap();
             vm.transport_init_memory_to_device(&from_state.memory);
+            #[cfg(feature = "rvr")]
+            let PreflightExecutionOutput {
+                system_records,
+                record_arenas,
+                to_state,
+            } = vm.execute_rvr_preflight_for_proving(
+                &mut self.interpreter,
+                &self.exe,
+                from_state,
+                Some(num_insns),
+                &trace_heights,
+            )?;
+            #[cfg(not(feature = "rvr"))]
             let PreflightExecutionOutput {
                 system_records,
                 record_arenas,
