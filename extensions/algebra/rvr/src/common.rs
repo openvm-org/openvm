@@ -123,9 +123,9 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
+        let rd = ctx.read_reg(self.rd_reg);
         let num_limbs = format!("{}u", self.num_limbs);
         let name = format!("rvr_ext_{}_setup", K::c_prefix());
         ctx.extern_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs]);
@@ -185,9 +185,9 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
+        let rd = ctx.read_reg(self.rd_reg);
         let op_name = self.op.c_name();
         let prefix = K::c_prefix();
         let known_suffix = detect_known_field(&self.modulus).and_then(K::known_suffix);
