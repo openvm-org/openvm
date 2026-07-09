@@ -197,4 +197,17 @@ where
         VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
         Ok(chip_complex)
     }
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_log_native_assembler_registry(
+        &self,
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<E::SC>, Self::RecordArena>
+    where
+        Val<E::SC>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        registry
+    }
 }

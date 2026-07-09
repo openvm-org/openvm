@@ -53,9 +53,12 @@ impl ExtInstr for HintFinalExpInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
+        // Phantom subexecutors inspect memory without going through the VM memory bus.
+        // Keep the generated path equally untraced so PHANTOM still consumes one timestamp.
+        let rs1 = ctx.read_reg_raw(self.rs1_reg);
+        let rs2 = ctx.read_reg_raw(self.rs2_reg);
         ctx.extern_call(self.curve.ffi_symbol(), &["state", &rs1, &rs2]);
+        ctx.trace_timestamp();
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {

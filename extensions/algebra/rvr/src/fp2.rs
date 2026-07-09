@@ -55,9 +55,9 @@ impl ExtInstr for Fp2ArithInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
+        let rd = ctx.read_reg(self.rd_reg);
         let op_name = self.op.c_name();
         let fp2_suffix = detect_known_field(&self.modulus).and_then(|f| f.fp2_c_suffix());
         if let Some(suffix) = fp2_suffix {
@@ -98,9 +98,9 @@ impl ExtInstr for Fp2SetupInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
+        let rd = ctx.read_reg(self.rd_reg);
         let num_limbs = format!("{}u", self.num_limbs);
         ctx.extern_call("rvr_ext_fp2_setup", &["state", &rd, &rs1, &rs2, &num_limbs]);
     }
