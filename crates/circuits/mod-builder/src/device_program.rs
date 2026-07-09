@@ -229,7 +229,7 @@ impl<'a> Serializer<'a> {
     /// Emit limb ops computing `node`; returns (scratch_off, len).
     fn emit_limb(&mut self, node: &SymbolicExpr) -> (u32, u32) {
         let num_limbs = self.expr.builder.num_limbs;
-        let mut alloc = |s: &mut Self, len: u32| {
+        let alloc = |s: &mut Self, len: u32| {
             let off = s.scratch_top;
             s.scratch_top += len;
             off
@@ -843,7 +843,7 @@ impl<'a> ReferenceInterpreter<'a> {
             // N mod 2^(64K) from result limbs (signed, two's complement in 2K u32 words).
             let res = &scratch[c.result_off as usize..(c.result_off + c.result_len) as usize];
             let mut n = vec![0u32; 2 * k];
-            let mut add_signed_shifted = |n: &mut Vec<u32>, v: i64, byte_off: usize| {
+            let add_signed_shifted = |n: &mut Vec<u32>, v: i64, byte_off: usize| {
                 // add v * 2^(8*byte_off) into n (two's complement)
                 let (word, shift) = (byte_off / 4, (byte_off % 4) * 8);
                 let mag = v.unsigned_abs() as u128;
