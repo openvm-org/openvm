@@ -114,6 +114,27 @@ mod tests {
         test_keccak256_base("LongMsgKAT_256.txt", false)
     }
 
+    #[cfg(all(feature = "rvr", not(feature = "cuda")))]
+    #[test]
+    fn test_keccak256_rvr_preflight_prove() -> Result<()> {
+        let config = Keccak256Rv64Config::default();
+        let elf = build_example_program_at_path(
+            get_programs_dir!("tests/programs"),
+            "keccak_rvr",
+            &config,
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Keccak256TranspilerExtension)
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension),
+        )?;
+        air_test_with_min_segments(TestBuilder, config, openvm_exe, StdIn::default(), 1);
+        Ok(())
+    }
+
     #[test]
     #[ignore = "proving on CPU is slow"]
     fn test_keccak256_prove() -> Result<()> {
