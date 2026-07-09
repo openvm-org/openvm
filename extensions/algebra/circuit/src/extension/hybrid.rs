@@ -15,7 +15,8 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bigint::utils::big_uint_to_limbs, bitwise_op_lookup::BitwiseOperationLookupChipGPU, Chip,
+    bigint::utils::big_uint_to_limbs, bitwise_op_lookup::BitwiseOperationLookupChipGPU,
+    var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{
     base::DeviceMatrix,
@@ -26,8 +27,8 @@ use openvm_mod_circuit_builder::{
     cuda::FieldExprChipGpu, ExprBuilderConfig, FieldExpressionMetadata,
 };
 use openvm_rv32_adapters::{
-    Rv32IsEqualModAdapterCols, Rv32IsEqualModAdapterExecutor, Rv32IsEqualModAdapterFiller,
-    Rv32IsEqualModAdapterRecord, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor,
+    Rv32IsEqualModAdapterCols, Rv32IsEqualModAdapterRecord, Rv32VecHeapAdapterCols,
+    Rv32VecHeapAdapterExecutor,
 };
 use openvm_rv32im_circuit::Rv32ImGpuProverExt;
 use openvm_stark_backend::prover::AirProvingContext;
@@ -133,7 +134,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(
                     addsub,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),
@@ -149,7 +150,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(
                     muldiv,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),
@@ -169,7 +170,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     NUM_LIMBS_32,
                 >::new(
                     modulus_limbs,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),
@@ -192,7 +193,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(
                     addsub,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),
@@ -208,7 +209,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(
                     muldiv,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),
@@ -228,7 +229,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     NUM_LIMBS_48,
                 >::new(
                     modulus_limbs,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),
@@ -332,7 +333,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(
                     addsub,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),
@@ -348,7 +349,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(
                     muldiv,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),
@@ -370,7 +371,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(
                     addsub,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),
@@ -386,7 +387,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(
                     muldiv,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),

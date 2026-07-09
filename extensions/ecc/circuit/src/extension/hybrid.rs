@@ -131,7 +131,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(
                     addne,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),
@@ -148,7 +148,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(
                     double,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),
@@ -170,7 +170,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(
                     addne,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),
@@ -187,7 +187,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(
                     double,
-                    byte_ptr_max_bits,
+                    pointer_max_bits,
                     timestamp_max_bits,
                     range_checker_gpu.clone(),
                     bitwise_lu_gpu.clone(),
