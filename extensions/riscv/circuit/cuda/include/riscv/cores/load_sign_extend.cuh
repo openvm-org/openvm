@@ -11,12 +11,6 @@
 using namespace riscv;
 using namespace program;
 
-enum Rv64LoadSignExtendOpcode {
-    LOADB = 8,
-    LOADH = 9,
-    LOADW = 10,
-};
-
 constexpr size_t LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH = 3;
 constexpr uint32_t LOAD_SIGN_EXTEND_BYTE_CASES = 8;
 constexpr size_t LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH = 2;

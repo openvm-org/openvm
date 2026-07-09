@@ -11,13 +11,6 @@
 using namespace riscv;
 using namespace program;
 
-enum Rv64StoreOpcode {
-    STORED = 4,
-    STOREW = 5,
-    STOREH = 6,
-    STOREB = 7,
-};
-
 constexpr size_t STORE_BYTE_SELECTOR_WIDTH = 3;
 constexpr uint32_t STORE_BYTE_CASES = 8;
 constexpr size_t STORE_HALFWORD_SELECTOR_WIDTH = 2;
