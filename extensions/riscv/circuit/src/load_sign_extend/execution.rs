@@ -192,9 +192,21 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: LoadSignExtendOp, const E
 
     let shift_amount = ptr_val % RV64_REGISTER_NUM_LIMBS as u32;
     let ptr_val = ptr_val - shift_amount;
-    let read_data: [u8; RV64_REGISTER_NUM_LIMBS] =
+    // read_data is the containing block followed by the next block, which is only read
+    // when the access spans both.
+    let mut read_data = [0u8; 2 * RV64_REGISTER_NUM_LIMBS];
+    let block0: [u8; RV64_REGISTER_NUM_LIMBS] =
         exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr_val);
-    let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
+    read_data[..RV64_REGISTER_NUM_LIMBS].copy_from_slice(&block0);
+    if shift_amount as usize + OP::WIDTH > RV64_REGISTER_NUM_LIMBS {
+        debug_assert!((ptr_val as usize) + 2 * RV64_REGISTER_NUM_LIMBS <= MEM_SIZE);
+        let block1: [u8; RV64_REGISTER_NUM_LIMBS] = exec_state.vm_read_bytes(
+            RV64_MEMORY_AS,
+            ptr_val + RV64_REGISTER_NUM_LIMBS as u32,
+        );
+        read_data[RV64_REGISTER_NUM_LIMBS..].copy_from_slice(&block1);
+    }
+    let mut write_data = [U8::default(); RV64_REGISTER_NUM_LIMBS];
 
     if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
         return Err(ExecutionError::Fail {
@@ -244,10 +256,13 @@ unsafe fn execute_e2_impl<
 }
 
 trait LoadSignExtendOp {
+    /// Access width in bytes.
+    const WIDTH: usize;
+
     /// Return if the operation is valid.
     fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool;
 }
@@ -257,15 +272,14 @@ struct LoadHOp;
 struct LoadBOp;
 
 impl LoadSignExtendOp for LoadWOp {
+    const WIDTH: usize = 4;
+
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
-        if shift_amount != 0 && shift_amount != 4 {
-            return false;
-        }
         let word = i32::from_le_bytes([
             read_data[shift_amount],
             read_data[shift_amount + 1],
@@ -278,15 +292,14 @@ impl LoadSignExtendOp for LoadWOp {
 }
 
 impl LoadSignExtendOp for LoadHOp {
+    const WIDTH: usize = 2;
+
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
-        if shift_amount != 0 && shift_amount != 2 && shift_amount != 4 && shift_amount != 6 {
-            return false;
-        }
         let half = i16::from_le_bytes([read_data[shift_amount], read_data[shift_amount + 1]]);
         *write_data = (half as i64).to_le_bytes();
         true
@@ -294,10 +307,12 @@ impl LoadSignExtendOp for LoadHOp {
 }
 
 impl LoadSignExtendOp for LoadBOp {
+    const WIDTH: usize = 1;
+
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
         let byte = read_data[shift_amount] as i8;
