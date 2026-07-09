@@ -4,6 +4,8 @@ use std::{
 };
 
 use derive_more::derive::From;
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::rvr::{LogNativeAssemblerRegistry, VmRvrLogNativeExtension};
 use openvm_circuit::{
     arch::{
         to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
@@ -112,6 +114,19 @@ where
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha2, inventory)?;
         Ok(chip_complex)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_log_native_assembler_registry(
+        &self,
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<E::SC>, Self::RecordArena>
+    where
+        Val<E::SC>: PrimeField32,
+    {
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        registry
     }
 }
 

@@ -185,6 +185,13 @@ impl RvrExtension for Sha2Extension {
         vec![("rvr_ext_sha2.h", include_str!("../c/rvr_ext_sha2.h"))]
     }
 
+    fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
+        vec![(
+            "rvr_ext_sha2_mode.c",
+            include_str!("../c/rvr_ext_sha2_mode.c"),
+        )]
+    }
+
     fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
         vec![(
             "librvr_openvm_ext_sha2_ffi.a",

@@ -9,6 +9,14 @@ pub use sha2_chips::*;
 mod extension;
 pub use extension::*;
 
+#[cfg(feature = "rvr")]
+mod log_native;
+#[cfg(feature = "rvr")]
+pub use log_native::*;
+
+#[cfg(all(test, feature = "rvr"))]
+mod rvr_preflight_tests;
+
 #[cfg(feature = "cuda")]
 mod cuda;
 #[cfg(feature = "cuda")]
