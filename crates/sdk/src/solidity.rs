@@ -37,6 +37,20 @@ pub(crate) fn generate_halo2_verifier_solidity(
     halo2_pk: &crate::keygen::Halo2ProvingKey,
     halo2_params_reader: &crate::halo2_params::CacheHalo2ParamsReader,
 ) -> Result<EvmHalo2Verifier, SdkError> {
+    generate_halo2_verifier_solidity_with_version_name(
+        halo2_pk,
+        halo2_params_reader,
+        &format!("v{OPENVM_VERSION}"),
+    )
+}
+
+/// Generate the EVM Halo2 verifier Solidity contract, compile it with solc under
+/// `src/{version_name}`, and return the verifier artifact.
+pub(crate) fn generate_halo2_verifier_solidity_with_version_name(
+    halo2_pk: &crate::keygen::Halo2ProvingKey,
+    halo2_params_reader: &crate::halo2_params::CacheHalo2ParamsReader,
+    version_name: &str,
+) -> Result<EvmHalo2Verifier, SdkError> {
     let wrapper_k = halo2_pk.wrapper.pinning.metadata.config_params.k;
     let params = halo2_params_reader.read_params(wrapper_k);
 
@@ -79,7 +93,7 @@ pub(crate) fn generate_halo2_verifier_solidity(
         .wrap_err("Failed to create temp dir")
         .map_err(SdkError::Other)?;
     let temp_path = temp_dir.path();
-    let root_path = Path::new("src").join(format!("v{OPENVM_VERSION}"));
+    let root_path = Path::new("src").join(version_name);
 
     // Make interfaces dir
     let interfaces_path = root_path.join("interfaces");
@@ -167,8 +181,8 @@ pub(crate) fn generate_halo2_verifier_solidity(
     let bytecode = parsed
         .get("contracts")
         .expect("No 'contracts' field found")
-        .get(format!("src/v{OPENVM_VERSION}/OpenVmHalo2Verifier.sol"))
-        .unwrap_or_else(|| panic!("No 'src/v{OPENVM_VERSION}/OpenVmHalo2Verifier.sol' field found"))
+        .get(base_file_path.to_str().unwrap())
+        .unwrap_or_else(|| panic!("No '{}' field found", base_file_path.to_string_lossy()))
         .get("OpenVmHalo2Verifier")
         .expect("No 'OpenVmHalo2Verifier' field found")
         .get("evm")
