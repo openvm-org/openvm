@@ -31,6 +31,8 @@ extern uint32_t rvr_ext_mod_iseq(RvState* state, uint64_t rs1_ptr, uint64_t rs2_
 /* Modular SETUP extension FFI entry point (implemented in Rust). */
 extern void rvr_ext_mod_setup(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr,
                               uint32_t num_limbs);
+extern uint32_t rvr_ext_mod_setup_iseq(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr,
+                                       uint32_t num_limbs);
 
 /* HintSqrt phantom: computes sqrt hint and sets hint stream (implemented in
  * Rust). */
