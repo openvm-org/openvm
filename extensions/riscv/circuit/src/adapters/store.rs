@@ -60,35 +60,6 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64StoreAdapterAi
     type ProcessedInstruction = StoreInstruction<AB::Expr>;
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn store_adapter_context<AB, I>(
-    is_valid: AB::Expr,
-    expected_opcode: AB::Expr,
-    shift_amount: AB::Expr,
-    read_data: [AB::Var; BLOCK_FE_WIDTH],
-    prev_data: [AB::Var; BLOCK_FE_WIDTH],
-    write_data: [AB::Expr; BLOCK_FE_WIDTH],
-) -> AdapterAirContext<AB::Expr, I>
-where
-    AB: InteractionBuilder,
-    I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<([AB::Var; BLOCK_FE_WIDTH], [AB::Expr; BLOCK_FE_WIDTH])>,
-    I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
-    I::ProcessedInstruction: From<StoreInstruction<AB::Expr>>,
-{
-    AdapterAirContext {
-        to_pc: None,
-        reads: (prev_data, read_data.map(|x| x.into())).into(),
-        writes: [write_data].into(),
-        instruction: StoreInstruction {
-            is_valid,
-            opcode: expected_opcode,
-            shift_amount,
-        }
-        .into(),
-    }
-}
-
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct Rv64StoreAdapterCols<T> {
