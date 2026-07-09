@@ -47,7 +47,7 @@ impl MultiRowMetadata for Sha2Metadata {
     }
 }
 
-pub(crate) type Sha2RecordLayout = MultiRowLayout<Sha2Metadata>;
+pub type Sha2RecordLayout = MultiRowLayout<Sha2Metadata>;
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug, Clone)]
