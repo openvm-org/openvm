@@ -72,9 +72,10 @@ impl ExtInstr for ModArithInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
+        // Match Rv64VecHeapAdapter's memory-bus order: rs1, rs2, then rd.
+        let rd = ctx.read_reg(self.rd_reg);
         let op_name = self.op.c_name();
         if let Some(field) = detect_known_field(&self.modulus) {
             let suffix = field.c_suffix();
@@ -156,15 +157,52 @@ pub struct ModSetupInstr {
     pub num_limbs: u32,
 }
 
+/// IR node for modular SETUP_ISEQ, whose circuit writes the comparison
+/// result to `rd` instead of treating `rd` as a heap pointer.
+#[derive(Debug, Clone)]
+pub struct ModIsEqSetupInstr {
+    pub rd_reg: Reg,
+    pub rs1_reg: Reg,
+    pub rs2_reg: Reg,
+    pub num_limbs: u32,
+}
+
+impl ExtInstr for ModIsEqSetupInstr {
+    fn opname(&self) -> &str {
+        "mod_iseq_setup"
+    }
+
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let rs1 = ctx.read_reg(self.rs1_reg);
+        let rs2 = ctx.read_reg(self.rs2_reg);
+        let num_limbs = format!("{}u", self.num_limbs);
+        let val = ctx.extern_call_expr(
+            "uint32_t",
+            "rvr_ext_mod_setup_iseq",
+            &["state", &rs1, &rs2, &num_limbs],
+        );
+        ctx.write_reg(self.rd_reg, &val);
+    }
+
+    fn clone_box(&self) -> Box<dyn ExtInstr> {
+        Box::new(self.clone())
+    }
+
+    fn is_block_end(&self) -> bool {
+        false
+    }
+}
+
 impl ExtInstr for ModSetupInstr {
     fn opname(&self) -> &str {
         "mod_setup"
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
+        // Match Rv64VecHeapAdapter's memory-bus order: rs1, rs2, then rd.
+        let rd = ctx.read_reg(self.rd_reg);
         let num_limbs = format!("{}u", self.num_limbs);
         ctx.extern_call("rvr_ext_mod_setup", &["state", &rd, &rs1, &rs2, &num_limbs]);
     }
@@ -431,7 +469,7 @@ impl ModularRvrExtension {
                 }))
             }
             x if x == Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize => {
-                Instr::Ext(Box::new(ModSetupInstr {
+                Instr::Ext(Box::new(ModIsEqSetupInstr {
                     rd_reg,
                     rs1_reg,
                     rs2_reg,

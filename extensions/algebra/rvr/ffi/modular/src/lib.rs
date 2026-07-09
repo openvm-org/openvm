@@ -273,6 +273,28 @@ pub unsafe extern "C" fn rvr_ext_mod_setup(
     wr_mem_words_traced(state, rd_ptr, &output_words);
 }
 
+/// SETUP_ISEQ has the same two heap reads as the equality adapter and writes
+/// the raw comparison result to `rd`. The setup operands are the modulus and
+/// zero, so the circuit-side raw-limb comparison is always false.
+///
+/// # Safety
+/// `state` must be a valid `RvState` pointer.
+#[no_mangle]
+pub unsafe extern "C" fn rvr_ext_mod_setup_iseq(
+    state: *mut c_void,
+    rs1_ptr: u64,
+    rs2_ptr: u64,
+    num_limbs: u32,
+) -> u32 {
+    let num_words = num_limbs / WORD_SIZE as u32;
+    debug_assert!(num_words >= 1);
+
+    let mut input_words = vec![0u64; num_words as usize];
+    rd_mem_words_traced(state, rs1_ptr, &mut input_words);
+    trace_mem_access_range(state, rs2_ptr, num_words, AS_MEMORY);
+    0
+}
+
 // ── Phantom: HintSqrt ────────────────────────────────────────────────────────
 
 fn mod_sqrt_impl(x: &BigUint, modulus: &BigUint, non_qr: &BigUint) -> Option<BigUint> {
