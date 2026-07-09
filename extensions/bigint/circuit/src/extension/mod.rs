@@ -36,9 +36,12 @@ use openvm_riscv_adapters::{
 use openvm_riscv_circuit::Rv64ImCpuProverExt;
 use openvm_riscv_transpiler::{BaseAluOpcode, ShiftOpcode};
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
-#[cfg(feature = "rvr")]
-use rvr_openvm_lift::VmRvrExtension;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "rvr")]
+use {
+    openvm_circuit::arch::rvr::{LogNativeAssemblerRegistry, VmRvrLogNativeExtension},
+    rvr_openvm_lift::VmRvrExtension,
+};
 
 use crate::{
     AluAdapterAir, AluAdapterExecutor, AluU16AdapterAir, AluU16AdapterExecutor, BranchAdapterAir,
@@ -524,5 +527,18 @@ where
             inventory,
         )?;
         Ok(chip_complex)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_log_native_assembler_registry(
+        &self,
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<E::SC>, Self::RecordArena>
+    where
+        Val<E::SC>: PrimeField32,
+    {
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        registry
     }
 }
