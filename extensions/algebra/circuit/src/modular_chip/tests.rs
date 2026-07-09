@@ -29,7 +29,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::extension::{HybridModularChip, HybridModularIsEqualChip},
+    crate::extension::{HybridModularChip, ModularIsEqualChipGpu},
     openvm_circuit::arch::testing::{
         default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
@@ -139,7 +139,9 @@ mod addsub_tests {
                 tester.cpu_range_checker(),
                 tester.address_bits(),
             ),
-            tester.range_checker().device_ctx.clone(),
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+            tester.range_checker(),
         );
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -464,7 +466,9 @@ mod muldiv_tests {
                 tester.cpu_range_checker(),
                 tester.address_bits(),
             ),
-            tester.range_checker().device_ctx.clone(),
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+            tester.range_checker(),
         );
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -877,7 +881,7 @@ mod is_equal_tests {
         F,
         VmModularIsEqualU16Executor<NUM_LANES, TOTAL_LIMBS>,
         ModularIsEqualU16Air<NUM_LANES, TOTAL_LIMBS>,
-        HybridModularIsEqualChip<F, NUM_LANES, TOTAL_LIMBS>,
+        ModularIsEqualChipGpu<NUM_LANES, TOTAL_LIMBS>,
         ModularIsEqualU16Chip<F, NUM_LANES, TOTAL_LIMBS>,
     >;
 
@@ -920,21 +924,11 @@ mod is_equal_tests {
             tester.dummy_memory_helper(),
         );
 
-        // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip = HybridModularIsEqualChip::new(
-            ModularIsEqualU16Chip::<F, NUM_LANES, TOTAL_LIMBS>::new(
-                ModularIsEqualFiller::new(
-                    Rv64IsEqualModU16AdapterFiller::new(
-                        tester.address_bits(),
-                        tester.cpu_range_checker(),
-                    ),
-                    offset,
-                    modulus_limbs,
-                    tester.cpu_range_checker(),
-                ),
-                tester.cpu_memory_helper(),
-            ),
-            tester.range_checker().device_ctx.clone(),
+        let hybrid_chip = ModularIsEqualChipGpu::<NUM_LANES, TOTAL_LIMBS>::new(
+            modulus_limbs,
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+            tester.range_checker(),
         );
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)

@@ -20,7 +20,6 @@ use openvm_cuda_backend::{
     prelude::{F, SC},
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
-use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::{
     cuda::FieldExprChipGpu, ExprBuilderConfig, FieldExpressionMetadata,
 };
@@ -30,7 +29,6 @@ use openvm_riscv_adapters::{
 };
 use openvm_riscv_circuit::{adapters::U16_BITS, Rv64ImGpuProverExt};
 use openvm_stark_backend::prover::AirProvingContext;
-use strum::EnumCount;
 
 use crate::{
     fp2_chip::{get_fp2_addsub_chip, get_fp2_muldiv_chip, Fp2Air, Fp2Chip},

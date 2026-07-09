@@ -4878,7 +4878,6 @@ dependencies = [
  "openvm-circuit-primitives",
  "openvm-cpu-backend",
  "openvm-cuda-backend",
- "openvm-cuda-common",
  "openvm-ecc-transpiler",
  "openvm-instructions",
  "openvm-mod-circuit-builder",
