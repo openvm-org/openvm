@@ -6,19 +6,15 @@ use crate::{
     },
     load::{
         common::LoadExecutor,
-        core::{LoadWidthAlignedCoreAir, LoadWidthAlignedFiller},
+        core::{LoadCoreAir, LoadFiller},
     },
 };
 
 pub const LOAD_HALFWORD_SELECTOR_WIDTH: usize = 2;
 
-pub type LoadHalfwordCoreAir =
-    LoadWidthAlignedCoreAir<LOAD_WIDTH_HALFWORD, LOAD_HALFWORD_SELECTOR_WIDTH>;
-pub type LoadHalfwordFiller = LoadWidthAlignedFiller<
-    Rv64LoadAdapterFiller,
-    LOAD_WIDTH_HALFWORD,
-    LOAD_HALFWORD_SELECTOR_WIDTH,
->;
+pub type LoadHalfwordCoreAir = LoadCoreAir<LOAD_WIDTH_HALFWORD, LOAD_HALFWORD_SELECTOR_WIDTH>;
+pub type LoadHalfwordFiller =
+    LoadFiller<Rv64LoadAdapterFiller, LOAD_WIDTH_HALFWORD, LOAD_HALFWORD_SELECTOR_WIDTH>;
 
 pub type Rv64LoadHalfwordAir = VmAirWrapper<Rv64LoadAdapterAir, LoadHalfwordCoreAir>;
 pub type Rv64LoadHalfwordExecutor = LoadExecutor<Rv64LoadAdapterExecutor, LOAD_WIDTH_HALFWORD>;

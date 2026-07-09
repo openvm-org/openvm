@@ -4,15 +4,15 @@ use crate::{
     adapters::{Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, LOAD_WIDTH_WORD},
     load_sign_extend::{
         common::LoadSignExtendExecutor,
-        core::{LoadSignExtendWidthAlignedCoreAir, LoadSignExtendWidthAlignedFiller},
+        core::{LoadSignExtendCoreAir, LoadSignExtendFiller},
     },
 };
 
 pub const LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH: usize = 1;
 
 pub type LoadSignExtendWordCoreAir =
-    LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH_WORD, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH>;
-pub type LoadSignExtendWordFiller = LoadSignExtendWidthAlignedFiller<
+    LoadSignExtendCoreAir<LOAD_WIDTH_WORD, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH>;
+pub type LoadSignExtendWordFiller = LoadSignExtendFiller<
     crate::adapters::Rv64LoadAdapterFiller,
     LOAD_WIDTH_WORD,
     LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,

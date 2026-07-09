@@ -12,7 +12,7 @@ use crate::{
     adapters::{Rv64LoadAdapterCols, Rv64LoadAdapterRecord},
     cuda_abi::load_sign_extend_halfword_cuda,
     load::LoadRecord,
-    load_sign_extend::core::LoadSignExtendWidthAlignedCoreCols,
+    load_sign_extend::core::LoadSignExtendCoreCols,
 };
 
 #[derive(new)]
@@ -32,7 +32,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendHalfwordChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = Rv64LoadAdapterCols::<F>::width()
-            + LoadSignExtendWidthAlignedCoreCols::<F, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH>::width();
+            + LoadSignExtendCoreCols::<F, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
