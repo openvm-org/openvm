@@ -11,6 +11,11 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
 };
 
+/// Pinned host-memory pool backing [DenseRecordArena] buffers under CUDA; see
+/// that module for the design and the async-copy lifetime hazard it handles.
+#[cfg(feature = "cuda")]
+use super::cuda::pinned;
+
 pub trait Arena {
     /// Currently `width` always refers to the main trace width.
     fn with_capacity(height: usize, width: usize) -> Self;
@@ -174,9 +179,20 @@ pub struct DenseRecordArena {
 const MAX_ALIGNMENT: usize = 32;
 
 impl DenseRecordArena {
+    fn new_buffer(size_bytes: usize) -> Vec<u8> {
+        #[cfg(feature = "cuda")]
+        {
+            pinned::take(size_bytes + MAX_ALIGNMENT)
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            vec![0; size_bytes + MAX_ALIGNMENT]
+        }
+    }
+
     /// Creates a new [DenseRecordArena] with the given capacity in bytes.
     pub fn with_byte_capacity(size_bytes: usize) -> Self {
-        let buffer = vec![0; size_bytes + MAX_ALIGNMENT];
+        let buffer = Self::new_buffer(size_bytes);
         let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
         let mut cursor = Cursor::new(buffer);
         cursor.set_position(offset as u64);
@@ -186,10 +202,15 @@ impl DenseRecordArena {
     }
 
     pub fn set_byte_capacity(&mut self, size_bytes: usize) {
-        let buffer = vec![0; size_bytes + MAX_ALIGNMENT];
+        let buffer = Self::new_buffer(size_bytes);
         let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
         let mut cursor = Cursor::new(buffer);
         cursor.set_position(offset as u64);
+        #[cfg(feature = "cuda")]
+        {
+            let dirty_len = self.records_buffer.position() as usize;
+            pinned::give_back(std::mem::take(self.records_buffer.get_mut()), dirty_len);
+        }
         self.records_buffer = cursor;
     }
 
@@ -249,6 +270,14 @@ impl DenseRecordArena {
     // Returns a [RecordSeeker] on the allocated buffer
     pub fn get_record_seeker<R, L>(&mut self) -> RecordSeeker<'_, DenseRecordArena, R, L> {
         RecordSeeker::new(self.allocated_mut())
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl Drop for DenseRecordArena {
+    fn drop(&mut self) {
+        let dirty_len = self.records_buffer.position() as usize;
+        pinned::give_back(std::mem::take(self.records_buffer.get_mut()), dirty_len);
     }
 }
 
