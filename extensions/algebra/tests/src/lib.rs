@@ -25,6 +25,26 @@ mod tests {
 
     type F = BabyBear;
 
+    #[cfg(feature = "rvr")]
+    use std::collections::BTreeMap;
+
+    #[cfg(feature = "rvr")]
+    use openvm_algebra_circuit::Rv64ModularCpuBuilder;
+    #[cfg(feature = "rvr")]
+    use openvm_circuit::{
+        arch::{
+            rvr::{
+                generate_record_arenas_from_logs, LogNativeAssemblerRegistry, RvrPreflightOutput,
+                RvrPreflightRoute, VmRvrLogNativeExtension,
+            },
+            MatrixRecordArena, Streams, VirtualMachine,
+        },
+        system::SystemRecords,
+        utils::test_cpu_engine,
+    };
+    #[cfg(feature = "rvr")]
+    use openvm_instructions::LocalOpcode;
+
     #[cfg(test)]
     fn test_rv64modular_config(moduli: Vec<BigUint>) -> Rv64ModularConfig {
         let mut config = Rv64ModularConfig::new(moduli);
@@ -39,6 +59,243 @@ mod tests {
         let mut config = Rv64ModularWithFp2Config::new(moduli_with_names);
         *config.as_mut() = test_system_config();
         config
+    }
+
+    #[cfg(feature = "rvr")]
+    fn build_rvr_modular_exe(config: &Rv64ModularConfig) -> Result<VmExe<F>> {
+        let elf = build_example_program_at_path(get_programs_dir!(), "rvr_modular", config)?;
+        Ok(VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn assert_system_records_eq(label: &str, interp: &SystemRecords<F>, rvr: &SystemRecords<F>) {
+        assert_eq!(interp.from_state, rvr.from_state, "{label}: from_state");
+        assert_eq!(interp.to_state, rvr.to_state, "{label}: to_state");
+        assert_eq!(interp.exit_code, rvr.exit_code, "{label}: exit_code");
+        assert_eq!(
+            interp.filtered_exec_frequencies, rvr.filtered_exec_frequencies,
+            "{label}: filtered_exec_frequencies"
+        );
+        assert_eq!(
+            interp.touched_memory, rvr.touched_memory,
+            "{label}: touched_memory"
+        );
+    }
+
+    #[cfg(feature = "rvr")]
+    fn assert_modular_timestamp_deltas(exe: &VmExe<F>, output: &RvrPreflightOutput<F>) {
+        use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode as Op;
+
+        for (idx, entry) in output.raw_logs.program_log.iter().enumerate() {
+            let pc = entry.pc as u32;
+            let instruction_idx = ((pc - exe.program.pc_base) / 4) as usize;
+            let Some((instruction, _)) = &exe.program.instructions_and_debug_infos[instruction_idx]
+            else {
+                continue;
+            };
+            let opcode = instruction.opcode.as_usize();
+            if opcode < Op::CLASS_OFFSET {
+                continue;
+            }
+            let local = (opcode - Op::CLASS_OFFSET) % (Op::SETUP_ISEQ as usize + 1);
+            let expected_delta = if matches!(local, x if x == Op::IS_EQ as usize || x == Op::SETUP_ISEQ as usize)
+            {
+                2 + 2 * 4 + 1
+            } else {
+                2 + 1 + 2 * 4 + 4
+            };
+            let next_timestamp = output
+                .raw_logs
+                .program_log
+                .get(idx + 1)
+                .map(|next| next.timestamp)
+                .unwrap_or(output.system_records.to_state.timestamp);
+            assert_eq!(
+                next_timestamp - entry.timestamp,
+                expected_delta,
+                "modular opcode {opcode:#x} at pc {pc:#x} timestamp delta"
+            );
+        }
+    }
+
+    #[cfg(feature = "rvr")]
+    fn assert_rvr_differential(
+        label: &str,
+        exe: &VmExe<F>,
+        config: &Rv64ModularConfig,
+        segments: Vec<(Option<u64>, Vec<u32>)>,
+    ) {
+        let (mut interp_vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ModularCpuBuilder,
+            config.clone(),
+        )
+        .expect("interpreter vm init");
+        let (mut rvr_vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ModularCpuBuilder,
+            config.clone(),
+        )
+        .expect("rvr vm init");
+        let air_names = rvr_vm.air_names().map(str::to_owned).collect::<Vec<_>>();
+        assert_eq!(
+            interp_vm.air_names().collect::<Vec<_>>(),
+            rvr_vm.air_names().collect::<Vec<_>>(),
+            "{label}: AIR order"
+        );
+        let pc_to_air_idx = rvr_vm.pc_to_air_idx(exe).expect("pc to air mapping");
+        let widths = rvr_vm
+            .pk()
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.main_width())
+            .collect::<Vec<_>>();
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        let mut interpreter = interp_vm
+            .preflight_interpreter(exe)
+            .expect("interpreter preflight");
+        let mut state = interp_vm.create_initial_state(exe, Streams::default());
+        let segments = if segments.is_empty() {
+            vec![(None, vec![32768; rvr_vm.num_airs()])]
+        } else {
+            segments
+        };
+
+        let segment_outputs = {
+            let route = rvr_vm
+                .preflight_routed_instance(exe)
+                .expect("routed preflight instance");
+            let RvrPreflightRoute::Rvr(instance) = route else {
+                panic!("{label}: modular program must route to RVR preflight");
+            };
+            let mut outputs = Vec::with_capacity(segments.len());
+            for (segment_idx, (num_insns, trace_heights)) in segments.into_iter().enumerate() {
+                let segment_label = format!("{label}_segment_{segment_idx}");
+                let from_state = state.clone();
+                let interp_output = interp_vm
+                    .execute_preflight(
+                        &mut interpreter,
+                        from_state.clone(),
+                        num_insns,
+                        &trace_heights,
+                    )
+                    .expect("interpreter execution");
+                let rvr_output = instance
+                    .execute_preflight_from_state(from_state.clone(), num_insns)
+                    .expect("rvr preflight execution");
+                assert_system_records_eq(
+                    &segment_label,
+                    &interp_output.system_records,
+                    &rvr_output.system_records,
+                );
+                assert_modular_timestamp_deltas(exe, &rvr_output);
+                let capacities = trace_heights
+                    .iter()
+                    .zip(&widths)
+                    .map(|(&height, &width)| (height as usize, width))
+                    .collect::<Vec<_>>();
+                let rvr_arenas = generate_record_arenas_from_logs::<F, MatrixRecordArena<F>>(
+                    &registry,
+                    exe,
+                    &rvr_output,
+                    &capacities,
+                    &pc_to_air_idx,
+                )
+                .expect("rvr log-native record assembly");
+                state = rvr_output.to_state.clone();
+                outputs.push((
+                    from_state,
+                    interp_output,
+                    rvr_output.system_records,
+                    rvr_arenas,
+                ));
+            }
+            outputs
+        };
+
+        let interp_program = interp_vm.commit_program_on_device(&exe.program);
+        interp_vm.load_program(interp_program);
+        let rvr_program = rvr_vm.commit_program_on_device(&exe.program);
+        rvr_vm.load_program(rvr_program);
+        let mut active_modular_airs = Vec::new();
+
+        for (segment_idx, (from_state, interp_output, rvr_system_records, rvr_arenas)) in
+            segment_outputs.into_iter().enumerate()
+        {
+            let segment_label = format!("{label}_segment_{segment_idx}");
+            interp_vm.transport_init_memory_to_device(&from_state.memory);
+            let interp_ctx = interp_vm
+                .generate_proving_ctx(interp_output.system_records, interp_output.record_arenas)
+                .expect("interpreter trace generation");
+            rvr_vm.transport_init_memory_to_device(&from_state.memory);
+            let rvr_ctx = rvr_vm
+                .generate_proving_ctx(rvr_system_records, rvr_arenas)
+                .expect("rvr trace generation");
+
+            let is_modular_air = |air_idx: usize| {
+                air_names[air_idx].contains("FieldExpressionCoreAir")
+                    || air_names[air_idx].contains("ModularIsEqualCoreAir")
+            };
+            let mut interp_traces = interp_ctx
+                .per_trace
+                .into_iter()
+                .filter(|(air_idx, _)| is_modular_air(*air_idx))
+                .collect::<BTreeMap<_, _>>();
+            let mut rvr_traces = rvr_ctx
+                .per_trace
+                .into_iter()
+                .filter(|(air_idx, _)| is_modular_air(*air_idx))
+                .collect::<BTreeMap<_, _>>();
+            let interp_air_ids = interp_traces.keys().copied().collect::<Vec<_>>();
+            assert_eq!(
+                interp_air_ids,
+                rvr_traces.keys().copied().collect::<Vec<_>>(),
+                "{segment_label}: active AIR set"
+            );
+            for air_idx in interp_air_ids {
+                let interp_trace = interp_traces.remove(&air_idx).unwrap();
+                let rvr_trace = rvr_traces.remove(&air_idx).unwrap();
+                let air_name = &air_names[air_idx];
+                assert_eq!(
+                    interp_trace.common_main.width, rvr_trace.common_main.width,
+                    "{segment_label}: {air_name} width"
+                );
+                if interp_trace.common_main.values != rvr_trace.common_main.values {
+                    let first_mismatch = interp_trace
+                        .common_main
+                        .values
+                        .iter()
+                        .zip(&rvr_trace.common_main.values)
+                        .position(|(left, right)| left != right);
+                    panic!(
+                        "{segment_label}: {air_name} values: left_len={} right_len={} first_mismatch={first_mismatch:?}",
+                        interp_trace.common_main.values.len(),
+                        rvr_trace.common_main.values.len(),
+                    );
+                }
+                assert_eq!(
+                    interp_trace.public_values, rvr_trace.public_values,
+                    "{segment_label}: {air_name} public values"
+                );
+                active_modular_airs.push(air_idx);
+            }
+        }
+
+        active_modular_airs.sort_unstable();
+        active_modular_airs.dedup();
+        assert_eq!(
+            active_modular_airs.len(),
+            3,
+            "{label}: addsub, muldiv, and is-eq traces must all be active"
+        );
     }
 
     #[test]
@@ -73,6 +330,44 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
         air_test(Rv64ModularBuilder, config, openvm_exe);
+        Ok(())
+    }
+
+    #[cfg(feature = "rvr")]
+    #[test]
+    fn test_modular_rvr_preflight_differential() -> Result<()> {
+        let config = test_rv64modular_config(vec![SECP256K1_CONFIG.modulus.clone()]);
+        let exe = build_rvr_modular_exe(&config)?;
+        assert_rvr_differential("modular_single", &exe, &config, Vec::new());
+        Ok(())
+    }
+
+    #[cfg(feature = "rvr")]
+    #[test]
+    fn test_modular_rvr_preflight_multi_segment_differential() -> Result<()> {
+        let mut config = test_rv64modular_config(vec![SECP256K1_CONFIG.modulus.clone()]);
+        config.system.segmentation_max_memory = 1;
+        let exe = build_rvr_modular_exe(&config)?;
+        let (vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ModularCpuBuilder,
+            config.clone(),
+        )
+        .expect("metered vm init");
+        let metered_ctx = vm.build_metered_ctx(&exe);
+        let metered = vm.metered_interpreter(&exe).expect("metered interpreter");
+        let (segments, _) = metered
+            .execute_metered(Streams::default(), metered_ctx)
+            .expect("metered execution");
+        assert!(
+            segments.len() > 1,
+            "tight memory limit must force multiple modular segments"
+        );
+        let segments = segments
+            .into_iter()
+            .map(|segment| (Some(segment.num_insns), segment.trace_heights))
+            .collect();
+        assert_rvr_differential("modular_multi", &exe, &config, segments);
         Ok(())
     }
 
