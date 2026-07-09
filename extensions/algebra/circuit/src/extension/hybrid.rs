@@ -561,8 +561,8 @@ pub struct ModularIsEqualChipGpu<
     timestamp_max_bits: u32,
 }
 
-impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
-    ModularIsEqualChipGpu<NUM_LANES, TOTAL_LIMBS>
+impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
+    ModularIsEqualChipGpu<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
 {
     pub fn new(
         modulus_limbs: [u8; TOTAL_LIMBS],
