@@ -28,6 +28,8 @@ pub enum RvrExecutionKind {
     MeteredCost = 2,
     Metered = 3,
     MeteredSegment = 4,
+    /// Preflight execution logging program and memory accesses.
+    Preflight = 5,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -44,6 +46,7 @@ impl TryFrom<u32> for RvrExecutionKind {
             2 => Ok(Self::MeteredCost),
             3 => Ok(Self::Metered),
             4 => Ok(Self::MeteredSegment),
+            5 => Ok(Self::Preflight),
             value => Err(InvalidRvrExecutionKind(value)),
         }
     }
@@ -57,6 +60,7 @@ impl RvrExecutionKind {
             Self::MeteredCost => "metered-cost",
             Self::Metered => "metered",
             Self::MeteredSegment => "metered-segment",
+            Self::Preflight => "preflight",
         }
     }
 
@@ -65,6 +69,7 @@ impl RvrExecutionKind {
             Self::Pure | Self::PureWithInstretTracking => "openvm_tracer_pure.h",
             Self::MeteredCost => "openvm_tracer_metered_cost.h",
             Self::Metered | Self::MeteredSegment => "openvm_tracer_metered.h",
+            Self::Preflight => "openvm_tracer_preflight.h",
         }
     }
 
@@ -77,6 +82,7 @@ impl RvrExecutionKind {
             Self::Metered | Self::MeteredSegment => {
                 include_str!("../../c/tracer/openvm_tracer_metered.h")
             }
+            Self::Preflight => include_str!("../../c/tracer/openvm_tracer_preflight.h"),
         }
     }
 
@@ -86,7 +92,7 @@ impl RvrExecutionKind {
             Self::MeteredSegment => {
                 Some(include_str!("../../c/block/openvm_block_metered_segment.h"))
             }
-            Self::Pure | Self::PureWithInstretTracking | Self::MeteredCost => None,
+            Self::Pure | Self::PureWithInstretTracking | Self::MeteredCost | Self::Preflight => None,
         }
     }
 
@@ -96,7 +102,7 @@ impl RvrExecutionKind {
         writeln!(out, "#define OPENVM_STATE_LAYOUT_H").unwrap();
         writeln!(out).unwrap();
         match self {
-            Self::Pure => {}
+            Self::Pure | Self::Preflight => {}
             Self::PureWithInstretTracking => {
                 writeln!(out, "typedef struct InstretTrackingState {{").unwrap();
                 writeln!(out, "  uint64_t retired;").unwrap();
@@ -136,7 +142,7 @@ impl RvrExecutionKind {
         writeln!(out, "  uint8_t exit_code;").unwrap();
         writeln!(out, "  uint8_t* memory;").unwrap();
         match self {
-            Self::Pure => {}
+            Self::Pure | Self::Preflight => {}
             Self::PureWithInstretTracking => {
                 writeln!(out, "  InstretTrackingState mode_state;").unwrap();
             }
@@ -162,7 +168,7 @@ impl RvrExecutionKind {
 
     const fn block_abi(self) -> BlockAbi {
         match self {
-            Self::Pure | Self::MeteredCost => BlockAbi::Plain,
+            Self::Pure | Self::MeteredCost | Self::Preflight => BlockAbi::Plain,
             Self::PureWithInstretTracking => BlockAbi::InstretCountdown,
             Self::Metered | Self::MeteredSegment => BlockAbi::Metered,
         }
@@ -233,6 +239,9 @@ impl CProject {
 
     /// Reserve argument registers for values carried through the block ABI.
     fn hot_regs_for_kind(kind: RvrExecutionKind) -> HashSet<u8> {
+        if kind == RvrExecutionKind::Preflight {
+            return HashSet::new();
+        }
         let count = Self::max_non_state_args() - kind.block_abi().extra_args();
         Self::REG_PRIORITY[..count].iter().copied().collect()
     }
@@ -360,25 +369,6 @@ impl CProject {
         out
     }
 
-    fn trap_signature(&self) -> String {
-        self.block_signature("__attribute__((preserve_none, cold)) void", "rv_trap")
-    }
-
-    fn emit_trap_declaration(&self, out: &mut String) {
-        let trap_signature = self.trap_signature();
-        writeln!(
-            out,
-            "// Used when a computed jump or dispatch slot does not point to a real block."
-        )
-        .unwrap();
-        writeln!(
-            out,
-            "// It takes the same arguments as a block so those register values can still be saved."
-        )
-        .unwrap();
-        writeln!(out, "{trap_signature};").unwrap();
-    }
-
     /// C argument list extracting hot regs from state:
     /// "state, state->regs[1], state->regs[2]".
     fn fn_args_from_state(&self) -> String {
@@ -444,6 +434,7 @@ impl CProject {
             RvrExecutionKind::Pure
             | RvrExecutionKind::PureWithInstretTracking
             | RvrExecutionKind::MeteredCost => EmitMode::Direct,
+            RvrExecutionKind::Preflight => EmitMode::ValueTrace,
         }
     }
 
@@ -463,7 +454,7 @@ impl CProject {
         let mapping = self
             .pc_to_chip
             .as_ref()
-            .expect("pc_to_chip must be set for metered rvr codegen");
+            .expect("pc_to_chip must be set for metered/preflight rvr codegen");
         let Some(offset) = pc.checked_sub(self.pc_base) else {
             return TraceChipIndex::NoChip;
         };
@@ -658,6 +649,10 @@ impl CProject {
             writeln!(h, "{signature};").unwrap();
         }
         writeln!(h, "extern BlockFn dispatch_table[RV_DISPATCH_TABLE_SIZE];").unwrap();
+        writeln!(h).unwrap();
+        let trap_signature =
+            self.block_signature("__attribute__((preserve_none, cold)) void", "rv_trap");
+        writeln!(h, "{trap_signature};").unwrap();
         writeln!(h).unwrap();
 
         // Block function declarations.
@@ -939,6 +934,7 @@ impl CProject {
     ///   - MeteredCost: `state->mode_state.cost += <constant>;` where the constant is
     ///     `sum(width[chip]
     ///     * count)` precomputed at emit time from `self.chip_widths`.
+    ///   - Preflight: `trace_chip(state, idx, count);` per distinct chip.
     fn emit_per_block_chip_updates(&self, out: &mut String, block: &Block) {
         if matches!(
             self.execution_kind,
@@ -978,6 +974,11 @@ impl CProject {
                     .sum();
                 if total > 0 {
                     writeln!(out, "        state->mode_state.cost += {total}u;").unwrap();
+                }
+            }
+            TracerMode::Preflight => {
+                for (chip, count) in &chip_counts {
+                    writeln!(out, "        trace_chip(state, {chip}u, {count}u);").unwrap();
                 }
             }
         }
@@ -1029,17 +1030,9 @@ impl CProject {
         }
 
         let save = self.save_hot_regs_call();
-        let trap_signature = self.trap_signature();
-        writeln!(
-            src,
-            "// If a computed jump reaches an invalid PC, guest registers are still in"
-        )
-        .unwrap();
-        writeln!(
-            src,
-            "// this function's arguments. Save them back to state before trapping."
-        )
-        .unwrap();
+        // rv_trap — cold fallback for dispatch to non-block PCs.
+        let trap_signature =
+            self.block_signature("__attribute__((preserve_none, cold)) void", "rv_trap");
         writeln!(src, "{trap_signature} {{").unwrap();
         writeln!(src, "    {save}").unwrap();
         match self.block_abi() {

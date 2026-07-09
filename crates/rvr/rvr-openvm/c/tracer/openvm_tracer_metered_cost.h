@@ -20,6 +20,9 @@ static __attribute__((always_inline)) inline void trace_reg_read(
 static __attribute__((always_inline)) inline void trace_reg_write(
     RvState* restrict state, uint8_t idx, uint32_t new_val) {}
 
+static __attribute__((always_inline)) inline void trace_timestamp(
+    RvState* restrict state) {}
+
 /* ── Trace-only memory reads (no-ops in metered cost mode) ───────── */
 
 static __attribute__((always_inline)) inline void trace_rd_mem_u8(

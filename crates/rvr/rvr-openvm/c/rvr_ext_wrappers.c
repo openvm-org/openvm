@@ -67,3 +67,5 @@ void trace_mem_access_u64_range_wrapper(RvState* s, uint64_t base_addr,
 void trace_chip_wrapper(RvState* s, uint32_t chip_idx, uint32_t count) {
   trace_chip(s, chip_idx, count);
 }
+
+void trace_timestamp_wrapper(RvState* s) { trace_timestamp(s); }
