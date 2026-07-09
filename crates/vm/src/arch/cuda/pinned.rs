@@ -33,6 +33,21 @@ use std::{
 /// A dropped arena buffer together with its dirty-prefix length.
 type ReturnedBuffer = (Vec<u8>, usize);
 
+/// Page-locks `len` bytes at `ptr` in a single `cudaHostRegister` call.
+/// NOTE: registration must be one call per buffer: `cudaMemcpyAsync` rejects
+/// (cudaErrorInvalidValue) source ranges that span multiple distinct
+/// page-locked registrations, so chunked registration corrupts nothing but
+/// breaks every copy crossing a chunk boundary.
+fn register_buffer(ptr: *mut u8, len: usize) -> bool {
+    // SAFETY: [ptr, ptr+len) is a live allocation owned by the caller.
+    let rc = unsafe { cudaHostRegister(ptr as *mut c_void, len, 0) };
+    if rc != 0 {
+        tracing::debug!("cudaHostRegister failed with {rc}; record arena buffer stays pageable");
+        return false;
+    }
+    true
+}
+
 extern "C" {
     fn cudaHostRegister(ptr: *mut c_void, size: usize, flags: u32) -> i32;
     fn cudaHostUnregister(ptr: *mut c_void) -> i32;
@@ -60,6 +75,7 @@ fn cleaner() -> &'static Mutex<mpsc::Sender<ReturnedBuffer>> {
         std::thread::Builder::new()
             .name("record-arena-pinner".into())
             .spawn(move || {
+                let mut batch_idx = 0usize;
                 while let Ok(first) = rx.recv() {
                     // Coalesce the per-segment burst of arena drops behind
                     // one device sync; repeated device-wide syncs stall
@@ -76,6 +92,12 @@ fn cleaner() -> &'static Mutex<mpsc::Sender<ReturnedBuffer>> {
                     // The H2D copies reading these buffers were enqueued
                     // before the owning arenas dropped; wait for them (and
                     // anything else in flight) before touching contents.
+                    // Unique label per batch: the timing metric derived from
+                    // this span is a gauge, so identical label sets overwrite.
+                    let _span =
+                        tracing::info_span!("arena_cleaner_batch", batch = batch_idx.to_string())
+                            .entered();
+                    batch_idx += 1;
                     let rc = unsafe { cudaDeviceSynchronize() };
                     if rc != 0 {
                         // No usable CUDA context (teardown or no device):
@@ -91,17 +113,9 @@ fn cleaner() -> &'static Mutex<mpsc::Sender<ReturnedBuffer>> {
                         let ptr = buffer.as_mut_ptr();
                         let is_new = !registered().lock().unwrap().contains(&(ptr as usize));
                         if is_new {
-                            // SAFETY: the buffer is a live allocation of `len`
-                            // bytes; the pool keeps it alive while registered.
-                            let rc =
-                                unsafe { cudaHostRegister(ptr as *mut c_void, buffer.len(), 0) };
-                            if rc != 0 {
+                            if !register_buffer(ptr, buffer.len()) {
                                 // Out of pinnable memory: drop the buffer,
                                 // never pool it.
-                                tracing::debug!(
-                                    "cudaHostRegister failed with {rc}; \
-                                     record arena buffer stays pageable"
-                                );
                                 continue;
                             }
                             registered().lock().unwrap().insert(ptr as usize);

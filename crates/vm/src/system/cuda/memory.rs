@@ -172,6 +172,7 @@ impl MemoryInventoryGPU {
                 true,
             )
         } else {
+            let _span = tracing::info_span!("mem_merge_records").entered();
             // Convert MemoryInventoryRecord<4, 1> to MemoryInventoryRecord<8, 2>
             let in_records: Vec<MemoryInventoryRecord<4, 1>> = partition
                 .iter()
@@ -270,9 +271,14 @@ impl MemoryInventoryGPU {
             {
                 self.unpadded_merkle_height = unpadded_merkle_height;
             }
+            drop(_span);
 
-            self.prepare_poseidon2_records(out_num_records, unpadded_merkle_height);
+            {
+                let _span = tracing::info_span!("poseidon2_prepare").entered();
+                self.prepare_poseidon2_records(out_num_records, unpadded_merkle_height);
+            }
             mem.tracing_info("merkle update");
+            let _span = tracing::info_span!("merkle_update").entered();
             self.merkle_tree.finalize();
             self.merkle_tree.update_with_touched_blocks(
                 unpadded_merkle_height,
@@ -283,9 +289,15 @@ impl MemoryInventoryGPU {
             )
         };
         mem.tracing_info("boundary tracegen");
-        let ret = vec![self.boundary.generate_proving_ctx(()), merkle_proof_ctx];
+        let ret = {
+            let _span = tracing::info_span!("boundary_trace_gen").entered();
+            vec![self.boundary.generate_proving_ctx(()), merkle_proof_ctx]
+        };
         mem.tracing_info("dropping merkle tree");
-        self.merkle_tree.drop_subtrees();
+        {
+            let _span = tracing::info_span!("merkle_drop").entered();
+            self.merkle_tree.drop_subtrees();
+        }
         self.initial_memory = Vec::new();
         mem.emit_metrics();
         ret

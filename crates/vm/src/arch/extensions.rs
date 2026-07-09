@@ -11,7 +11,7 @@
 //! get around Rust orphan rules.
 use std::{
     any::{type_name, Any},
-    iter::{self, zip},
+    iter::zip,
     sync::Arc,
 };
 
@@ -682,6 +682,11 @@ pub enum ChipInventoryError {
 
 // ======================= VM Chip Complex Implementation =============================
 
+/// A chip whose trace generation is deferred until after system tracegen:
+/// (position in the verifying-key AIR order relative to the first extension
+/// AIR, insertion index, chip, its (empty) record arena).
+type DeferredChipTraceGen<'a, RA, PB> = (usize, usize, &'a dyn AnyChip<RA, PB>, RA);
+
 impl<SC, RA, PB, SCC> VmChipComplex<SC, RA, PB, SCC>
 where
     SC: StarkProtocolConfig,
@@ -729,36 +734,74 @@ where
         // chip is parallelized). We could introduce more parallelism, while potentially increasing
         // the peak memory usage, by keeping a dependency tree and generating traces at the same
         // layer of the tree in parallel.
-        let ctx_without_empties: Vec<(usize, AirProvingContext<_>)> = iter::empty()
-            .chain(info_span!("system_trace_gen").in_scope(|| {
-                self.system
-                    .generate_proving_ctx(system_records, sys_record_arenas)
-            }))
-            .chain(
-                zip(self.inventory.chips.iter().enumerate().rev(), record_arenas).map(
-                    |((insertion_idx, chip), records)| {
-                        // Only create a span if record is not empty:
-                        let _span = (!records.is_empty()).then(|| {
-                            let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
-                            info_span!("single_trace_gen", air = air_name).entered()
-                        });
-                        #[cfg(feature = "metrics")]
-                        if let Some(allocated_bytes) = (!records.is_empty())
-                            .then(|| records.allocated_bytes())
-                            .flatten()
-                        {
-                            let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
-                            let labels = [
-                                ("air_name", air_name.to_string()),
-                                ("air_id", (num_sys_airs + insertion_idx).to_string()),
-                            ];
-                            metrics::counter!("trace_gen.record_arena_bytes", &labels)
-                                .absolute(allocated_bytes as u64);
-                        }
-                        chip.generate_proving_ctx(records)
-                    },
-                ),
-            )
+        // Executor chips with record arenas run BEFORE system tracegen: their
+        // fills are CPU-heavy while the memory Merkle subtree builds (enqueued
+        // at memory transport time) run on the GPU stream, and system tracegen
+        // blocks on those builds at its first D2H. Running them first extends
+        // the overlap window; they depend on neither system chips (invariant
+        // above) nor each other. Chips with EMPTY arenas are deferred until
+        // after system tracegen, in their original relative order: those are
+        // the periphery chips (hashers, lookup tables) whose inputs are pushed
+        // by other chips' kernels — including system tracegen's — through
+        // shared device buffers. The final (air_id -> ctx) assignment is
+        // position-based and unchanged.
+        let chip_ctx = |insertion_idx: usize,
+                        chip: &dyn AnyChip<RA, PB>,
+                        records: RA|
+         -> AirProvingContext<PB> {
+            let _span = {
+                let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
+                info_span!("single_trace_gen", air = air_name).entered()
+            };
+            #[cfg(feature = "metrics")]
+            if let Some(allocated_bytes) = (!records.is_empty())
+                .then(|| records.allocated_bytes())
+                .flatten()
+            {
+                let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
+                let labels = [
+                    ("air_name", air_name.to_string()),
+                    ("air_id", (num_sys_airs + insertion_idx).to_string()),
+                ];
+                metrics::counter!("trace_gen.record_arena_bytes", &labels)
+                    .absolute(allocated_bytes as u64);
+            }
+            chip.generate_proving_ctx(records)
+        };
+
+        let num_ext_airs = self.inventory.chips.len();
+        let mut exec_ctxs: Vec<Option<AirProvingContext<PB>>> = Vec::new();
+        exec_ctxs.resize_with(num_ext_airs, || None);
+        let mut deferred: Vec<DeferredChipTraceGen<'_, RA, PB>> = Vec::new();
+        {
+            let _span = info_span!("executor_trace_gen").entered();
+            for (chain_pos, ((insertion_idx, chip), records)) in
+                zip(self.inventory.chips.iter().enumerate().rev(), record_arenas).enumerate()
+            {
+                if records.is_empty() {
+                    deferred.push((chain_pos, insertion_idx, chip.as_ref(), records));
+                } else {
+                    exec_ctxs[chain_pos] = Some(chip_ctx(insertion_idx, chip.as_ref(), records));
+                }
+            }
+        }
+        let sys_ctxs = {
+            // Bind the span guard so it closes when system tracegen returns; a
+            // temporary inside an iterator chain would live (and keep timing)
+            // until the end of the whole statement.
+            let _span = info_span!("system_trace_gen").entered();
+            self.system
+                .generate_proving_ctx(system_records, sys_record_arenas)
+        };
+        {
+            let _span = info_span!("periphery_trace_gen").entered();
+            for (chain_pos, insertion_idx, chip, records) in deferred {
+                exec_ctxs[chain_pos] = Some(chip_ctx(insertion_idx, chip, records));
+            }
+        }
+        let ctx_without_empties: Vec<(usize, AirProvingContext<_>)> = sys_ctxs
+            .into_iter()
+            .chain(exec_ctxs.into_iter().map(|ctx| ctx.unwrap()))
             .enumerate()
             .filter(|(_air_id, ctx)| ctx.common_main.height() > 0)
             .collect();
