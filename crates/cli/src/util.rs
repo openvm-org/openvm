@@ -17,6 +17,14 @@ use crate::{
     },
 };
 
+/// Versioned directory name for the EVM halo2 verifier artifacts stored under
+/// `~/.openvm/halo2/src/` (e.g. `v2.0-base`). The `-base` suffix matches the
+/// openvm-solidity-sdk layout for verifiers with deferrals disabled, which is the only
+/// config `cargo openvm setup --evm` generates.
+pub fn evm_verifier_version_dir() -> String {
+    format!("v{}-base", openvm_sdk::OPENVM_VERSION)
+}
+
 pub(crate) fn read_to_struct_toml<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T> {
     let path = path.as_ref();
     let toml = read_to_string(path)

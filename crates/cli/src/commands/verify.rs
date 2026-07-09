@@ -242,7 +242,11 @@ impl VerifyCmd {
                 let verifier_path = evm_verifier
                     .clone()
                     .unwrap_or_else(|| crate::default::default_evm_halo2_verifier_path().into());
-                let evm_verifier = read_evm_halo2_verifier_from_folder(&verifier_path).map_err(
+                let evm_verifier = read_evm_halo2_verifier_from_folder(
+                    &verifier_path,
+                    Some(&crate::util::evm_verifier_version_dir()),
+                )
+                .map_err(
                     |e| {
                         eyre::eyre!(
                             "Failed to read EVM verifier from {}: {e}\nRun 'cargo openvm setup --evm' to generate it",

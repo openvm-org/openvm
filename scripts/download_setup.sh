@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Download ~/.openvm setup artifacts
-HALO2_DIR="halo2/src/v2.0"
+HALO2_DIR="halo2/src/v2.0-base"
 mkdir -p ~/.openvm
 mkdir -p ~/.openvm/$HALO2_DIR
 mkdir -p ~/.openvm/$HALO2_DIR/interfaces
@@ -9,7 +9,7 @@ mkdir -p ~/.openvm/params
 
 BASE_URL="https://openvm-public-artifacts-us-east-1.s3.us-east-1.amazonaws.com/v2.0.0"
 
-for file in "agg_stark.pk" "agg_stark.vk" "agg_halo2.pk" "root.asm"; do
+for file in "internal_recursive.pk" "internal_recursive.vk" "root.pk" "halo2.pk"; do
     URL="$BASE_URL/$file"
     LOCAL=~/.openvm/$file
     wget "$URL" -O "$LOCAL" || curl -L "$URL" -o "$LOCAL"
