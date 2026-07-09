@@ -13,6 +13,8 @@ mod extension;
 mod weierstrass_chip;
 
 pub use extension::*;
+#[cfg(feature = "rvr")]
+pub mod log_native;
 // Re-export limb constants from algebra for consistency
 pub use openvm_algebra_circuit::{NUM_LIMBS_32, NUM_LIMBS_48};
 pub use weierstrass_chip::*;
