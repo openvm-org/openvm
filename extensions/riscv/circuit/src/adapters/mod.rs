@@ -52,10 +52,15 @@ pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 /// register). Numerically equal to [`RV64_PTR_U16_LIMBS`], but named for arithmetic-word use.
 pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 
-pub(crate) const RV64_ACCESS_SIZE_BYTE: usize = 0;
-pub(crate) const RV64_ACCESS_SIZE_HALFWORD: usize = 1;
-pub(crate) const RV64_ACCESS_SIZE_WORD: usize = 2;
-pub(crate) const RV64_ACCESS_SIZE_DOUBLEWORD: usize = 3;
+/// Load/store memory access widths in bytes.
+pub(crate) const LOAD_WIDTH_BYTE: usize = 1;
+pub(crate) const LOAD_WIDTH_HALFWORD: usize = 2;
+pub(crate) const LOAD_WIDTH_WORD: usize = 4;
+pub(crate) const LOAD_WIDTH_DOUBLEWORD: usize = 8;
+pub(crate) const STORE_WIDTH_BYTE: usize = 1;
+pub(crate) const STORE_WIDTH_HALFWORD: usize = 2;
+pub(crate) const STORE_WIDTH_WORD: usize = 4;
+pub(crate) const STORE_WIDTH_DOUBLEWORD: usize = 8;
 
 /// Packs two little-endian u8 limbs into one u16-shaped field element.
 #[inline(always)]

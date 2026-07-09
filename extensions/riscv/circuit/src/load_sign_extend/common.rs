@@ -2,17 +2,16 @@ use openvm_circuit::arch::*;
 use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 
-pub(crate) use crate::adapters::{
-    RV64_ACCESS_SIZE_BYTE as KIND_BYTE, RV64_ACCESS_SIZE_HALFWORD as KIND_HALFWORD,
-    RV64_ACCESS_SIZE_WORD as KIND_WORD,
-};
 use crate::{
-    adapters::{u16_cell_byte, RV64_BYTE_SIGN_BIT, RV64_U16_SIGN_BIT},
+    adapters::{
+        u16_cell_byte, LOAD_WIDTH_BYTE, LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD, RV64_BYTE_SIGN_BIT,
+        RV64_U16_SIGN_BIT,
+    },
     load::LoadRecord,
 };
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct LoadSignExtendExecutor<A, const KIND: usize> {
+pub struct LoadSignExtendExecutor<A, const LOAD_WIDTH: usize> {
     adapter: A,
     pub offset: usize,
 }
@@ -55,16 +54,17 @@ pub(crate) fn load_sign_extend_write_data(
     }
 }
 
-pub(crate) fn load_sign_extend_kind_for_opcode(opcode: Rv64LoadStoreOpcode) -> usize {
+pub(crate) fn load_sign_extend_width_for_opcode(opcode: Rv64LoadStoreOpcode) -> usize {
     match opcode {
-        LOADW => KIND_WORD,
-        LOADH => KIND_HALFWORD,
-        LOADB => KIND_BYTE,
+        LOADW => LOAD_WIDTH_WORD,
+        LOADH => LOAD_WIDTH_HALFWORD,
+        LOADB => LOAD_WIDTH_BYTE,
         _ => unreachable!("unsupported signed load opcode: {opcode:?}"),
     }
 }
 
-impl<F, A, RA, const KIND: usize> PreflightExecutor<F, RA> for LoadSignExtendExecutor<A, KIND>
+impl<F, A, RA, const LOAD_WIDTH: usize> PreflightExecutor<F, RA>
+    for LoadSignExtendExecutor<A, LOAD_WIDTH>
 where
     F: openvm_stark_backend::p3_field::PrimeField32,
     A: 'static

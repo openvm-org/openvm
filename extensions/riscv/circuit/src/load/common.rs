@@ -4,10 +4,8 @@ use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, Lo
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::adapters::u16_cell_byte;
-pub(crate) use crate::adapters::{
-    RV64_ACCESS_SIZE_BYTE as KIND_BYTE, RV64_ACCESS_SIZE_DOUBLEWORD as KIND_DOUBLEWORD,
-    RV64_ACCESS_SIZE_HALFWORD as KIND_HALFWORD, RV64_ACCESS_SIZE_WORD as KIND_WORD,
+use crate::adapters::{
+    u16_cell_byte, LOAD_WIDTH_BYTE, LOAD_WIDTH_DOUBLEWORD, LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD,
 };
 
 #[repr(C)]
@@ -17,12 +15,12 @@ pub struct LoadRecord {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct LoadExecutor<A, const KIND: usize> {
+pub struct LoadExecutor<A, const LOAD_WIDTH: usize> {
     adapter: A,
     pub offset: usize,
 }
 
-impl<F, A, RA, const KIND: usize> PreflightExecutor<F, RA> for LoadExecutor<A, KIND>
+impl<F, A, RA, const LOAD_WIDTH: usize> PreflightExecutor<F, RA> for LoadExecutor<A, LOAD_WIDTH>
 where
     F: PrimeField32,
     A: 'static
@@ -94,12 +92,12 @@ pub(crate) fn load_write_data(
     }
 }
 
-pub(crate) fn load_kind_for_opcode(opcode: Rv64LoadStoreOpcode) -> usize {
+pub(crate) fn load_width_for_opcode(opcode: Rv64LoadStoreOpcode) -> usize {
     match opcode {
-        LOADD => KIND_DOUBLEWORD,
-        LOADWU => KIND_WORD,
-        LOADHU => KIND_HALFWORD,
-        LOADBU => KIND_BYTE,
+        LOADD => LOAD_WIDTH_DOUBLEWORD,
+        LOADWU => LOAD_WIDTH_WORD,
+        LOADHU => LOAD_WIDTH_HALFWORD,
+        LOADBU => LOAD_WIDTH_BYTE,
         _ => unreachable!("unsupported unsigned load opcode: {opcode:?}"),
     }
 }

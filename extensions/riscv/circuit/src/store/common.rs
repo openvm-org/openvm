@@ -4,10 +4,9 @@ use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, Lo
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::adapters::{set_u16_cell_byte, u16_cell_byte};
-pub(crate) use crate::adapters::{
-    RV64_ACCESS_SIZE_BYTE as KIND_BYTE, RV64_ACCESS_SIZE_DOUBLEWORD as KIND_DOUBLEWORD,
-    RV64_ACCESS_SIZE_HALFWORD as KIND_HALFWORD, RV64_ACCESS_SIZE_WORD as KIND_WORD,
+use crate::adapters::{
+    set_u16_cell_byte, u16_cell_byte, STORE_WIDTH_BYTE, STORE_WIDTH_DOUBLEWORD,
+    STORE_WIDTH_HALFWORD, STORE_WIDTH_WORD,
 };
 
 #[repr(C)]
@@ -18,12 +17,12 @@ pub struct StoreRecord {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct StoreExecutor<A, const KIND: usize> {
+pub struct StoreExecutor<A, const STORE_WIDTH: usize> {
     adapter: A,
     pub offset: usize,
 }
 
-impl<F, A, RA, const KIND: usize> PreflightExecutor<F, RA> for StoreExecutor<A, KIND>
+impl<F, A, RA, const STORE_WIDTH: usize> PreflightExecutor<F, RA> for StoreExecutor<A, STORE_WIDTH>
 where
     F: PrimeField32,
     A: 'static
@@ -107,12 +106,12 @@ pub(crate) fn store_write_data(
     }
 }
 
-pub(crate) fn store_kind_for_opcode(opcode: Rv64LoadStoreOpcode) -> usize {
+pub(crate) fn store_width_for_opcode(opcode: Rv64LoadStoreOpcode) -> usize {
     match opcode {
-        STORED => KIND_DOUBLEWORD,
-        STOREW => KIND_WORD,
-        STOREH => KIND_HALFWORD,
-        STOREB => KIND_BYTE,
+        STORED => STORE_WIDTH_DOUBLEWORD,
+        STOREW => STORE_WIDTH_WORD,
+        STOREH => STORE_WIDTH_HALFWORD,
+        STOREB => STORE_WIDTH_BYTE,
         _ => unreachable!("unsupported store opcode: {opcode:?}"),
     }
 }
