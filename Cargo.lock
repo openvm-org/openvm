@@ -5526,6 +5526,7 @@ dependencies = [
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-riscv-circuit",
+ "openvm-riscv-transpiler",
  "openvm-sha2-air",
  "openvm-sha2-transpiler",
  "openvm-stark-backend",
