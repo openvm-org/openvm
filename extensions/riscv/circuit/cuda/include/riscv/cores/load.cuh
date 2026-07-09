@@ -11,13 +11,6 @@
 using namespace riscv;
 using namespace program;
 
-enum Rv64UnsignedLoadOpcode {
-    LOADD = 0,
-    LOADBU = 1,
-    LOADHU = 2,
-    LOADWU = 3,
-};
-
 constexpr size_t LOAD_BYTE_SELECTOR_WIDTH = 3;
 constexpr uint32_t LOAD_BYTE_CASES = 8;
 constexpr size_t LOAD_HALFWORD_SELECTOR_WIDTH = 2;
