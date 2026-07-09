@@ -159,7 +159,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct StoreByteFiller<A = crate::adapters::Rv64StoreAdapterFiller> {
+pub struct StoreByteFiller<A = Rv64StoreAdapterFiller> {
     adapter: A,
     pub offset: usize,
     encoder: Encoder,
