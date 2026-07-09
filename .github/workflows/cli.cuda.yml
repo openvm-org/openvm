@@ -18,6 +18,10 @@ on:
         description: "Also run the ignored EVM end-to-end test (expensive)"
         type: boolean
         default: true
+      run_verify_stark_stress:
+        description: "Also run expensive verify-stark multi-circuit/proof cases"
+        type: boolean
+        default: false
       instance_family:
         type: string
         required: false
@@ -200,6 +204,36 @@ jobs:
       - name: Verify book examples with verify-stark
         run: |
           ./examples/verify-stark/verify-book-examples.sh
+
+      - name: Verify multi-circuit/proof cases with verify-stark
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_verify_stark_stress }}
+        run: |
+          set -euo pipefail
+
+          example=sha2
+          cases=(
+            "1|1"
+            "1|2"
+            "1|3"
+            "1|5"
+            "1|6"
+            "1|8"
+            "1|1000"
+            "2|0,0"
+            "2|0,1"
+            "3|0,1,0"
+            "3|2,1,0"
+            "3|3,0,1"
+            "3|1,1000,0"
+            "8|3,0,0,0,0,0,0,0"
+            "8|0,1,0,2,2,0,0,0"
+          )
+
+          for case in "${cases[@]}"; do
+            IFS='|' read -r num_def_circuits num_proves_per_circuit <<< "$case"
+            echo "Verifying $example with $num_def_circuits deferral circuit(s) and proof distribution $num_proves_per_circuit"
+            ./examples/verify-stark/verify-book-examples.sh "$num_def_circuits" "$num_proves_per_circuit" "$example"
+          done
 
       - name: sccache stats
         if: always()

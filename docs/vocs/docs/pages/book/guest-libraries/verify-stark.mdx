@@ -153,8 +153,8 @@ let (proof, _) = sdk.prove(exe, stdin, &[def_input])?;
 
 The repository includes an end-to-end verify-stark example under [`examples/verify-stark`](https://github.com/openvm-org/openvm/tree/main/examples/verify-stark). It has:
 
-- `guest/` - a guest program that calls `verify_stark_unchecked::<0>`.
-- `host/` - a standalone host crate that constructs the deferral-enabled SDK, writes its generated `openvm.toml`, caches the SDK proving keys, builds the guest, and proves a child STARK proof through the verify-stark circuit.
-- `verify-book-examples.sh` - a CUDA-oriented CI script that proves each book example, wraps each proof through the verify-stark example, and verifies the resulting STARK proof with `cargo openvm verify stark`.
+- `guest/` - a guest program that calls `verify_stark_unchecked`, optionally across multiple deferral circuits and with multiple verify calls per circuit.
+- `host/` - a standalone host crate that constructs the deferral-enabled SDK (with a configurable number of verify-stark deferral circuits), writes its generated `openvm.toml`, caches the SDK proving keys, builds the guest, and proves child STARK proofs through the verify-stark circuits.
+- `verify-book-examples.sh` - a CUDA-oriented CI script that proves each book example, wraps each proof through the verify-stark example, and verifies the resulting STARK proof with `cargo openvm verify stark`. It accepts optional `[num_def_circuits] [num_proves_per_circuit] [example]` arguments.
 
 The host crate uses `Sdk::cached_proving_key()` after keygen and reconstructs the SDK later with `Sdk::from_deferral_cached_proving_key(...)`, so the expensive verify-stark proving keys are built once and reused by the `build` and `prove` commands.

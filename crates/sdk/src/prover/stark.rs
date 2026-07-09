@@ -101,7 +101,9 @@ where
         let (mut stark_proof, mut internal_metadata) =
             self.agg_prover.prove_vm(continuation_proof)?;
 
-        if !def_inputs.is_empty() {
+        // Skip aggregation unless some circuit received a deferred call. Note that
+        // deferrals are also skipped if def_inputs is an empty slice.
+        if def_inputs.iter().any(|input| !input.is_empty()) {
             let def_agg_prover = self.deferral_setup.prover().ok_or_else(|| {
                 eyre::eyre!("non-empty deferral inputs require a deferral aggregation prover")
             })?;

@@ -69,6 +69,10 @@ pub struct DeferralInput {
 }
 
 impl DeferralInput {
+    pub fn is_empty(&self) -> bool {
+        self.byte_vec.is_empty()
+    }
+
     pub fn into_inputs<I: Decode>(self) -> Vec<I> {
         self.byte_vec
             .iter()

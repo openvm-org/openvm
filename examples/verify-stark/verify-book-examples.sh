@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Usage: ./verify-book-examples.sh [num_def_circuits] [num_proves_per_circuit] [example]
+# Defaults to num_def_circuits=1 and num_proves_per_circuit=1.
+# Omitting example verifies all examples.
+# Example: ./verify-book-examples.sh 1 1 sha2
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 examples_dir="$repo_root/examples"
@@ -15,6 +20,16 @@ verify_stark_agg_vk="$artifacts_dir/internal_recursive.vk"
 child_agg_vk="$HOME/.openvm/internal_recursive.vk"
 host_features="${VERIFY_STARK_HOST_FEATURES-cuda}"
 
+num_def_circuits="${1:-1}"
+num_proves_per_circuit="${2:-1}"
+single_example="${3:-}"
+
+IFS=',' read -r -a prove_counts <<< "$num_proves_per_circuit"
+if [[ "${#prove_counts[@]}" -ne "$num_def_circuits" ]]; then
+  echo "num_proves_per_circuit length (${#prove_counts[@]}) must equal num_def_circuits ($num_def_circuits)"
+  exit 1
+fi
+
 mkdir -p "$artifacts_dir"
 
 cargo openvm setup --force
@@ -27,6 +42,7 @@ fi
 
 "$host_bin" keygen \
   --child-agg-vk "$child_agg_vk" \
+  --num-def-circuits "$num_def_circuits" \
   --sdk-pk "$sdk_pk" \
   --openvm-toml "$artifacts_dir/openvm.toml" \
   --agg-vk "$verify_stark_agg_vk"
@@ -35,7 +51,17 @@ fi
   --vmexe "$vmexe" \
   --baseline "$baseline"
 
-for manifest in "$examples_dir"/*/Cargo.toml; do
+if [[ -n "$single_example" ]]; then
+  manifests=("$examples_dir/$single_example/Cargo.toml")
+  if [[ ! -f "${manifests[0]}" ]]; then
+    echo "Example '$single_example' not found at ${manifests[0]}"
+    exit 1
+  fi
+else
+  manifests=("$examples_dir"/*/Cargo.toml)
+fi
+
+for manifest in "${manifests[@]}"; do
   example_dir="$(dirname "$manifest")"
   example="$(basename "$example_dir")"
   target_name="$example-example"
@@ -55,6 +81,7 @@ for manifest in "$examples_dir"/*/Cargo.toml; do
     --child-agg-vk "$child_agg_vk" \
     --child-baseline "$example_dir/openvm/release/$target_name.baseline.json" \
     --input-proof "$example_dir/$target_name.stark.proof" \
+    --num-proves-per-circuit "$num_proves_per_circuit" \
     --output-proof "$verify_stark_proof"
   cargo openvm verify stark \
     --manifest-path "$manifest" \
