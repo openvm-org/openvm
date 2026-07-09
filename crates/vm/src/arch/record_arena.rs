@@ -15,6 +15,11 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
 };
 
+/// Pinned host-memory pool backing [DenseRecordArena] buffers under CUDA; see
+/// that module for the design and the async-copy lifetime hazard it handles.
+#[cfg(feature = "cuda")]
+use super::cuda::pinned;
+
 pub trait Arena {
     /// Currently `width` always refers to the main trace width.
     fn with_capacity(height: usize, width: usize) -> Self;
