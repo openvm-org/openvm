@@ -1,4 +1,6 @@
-//! Prover extension for the GPU backend which still does trace generation on CPU.
+//! Prover extension for the GPU backend; FieldExpr chips do trace generation on GPU.
+
+use std::sync::Arc;
 
 use openvm_algebra_circuit::Rv64ModularHybridBuilder;
 use openvm_circuit::{
@@ -8,20 +10,16 @@ use openvm_circuit::{
         memory::SharedMemoryHelper,
     },
 };
-use openvm_circuit_primitives::{hybrid_chip::cpu_proving_ctx_to_gpu, Chip};
-use openvm_cpu_backend::CpuBackend;
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{
-    base::DeviceMatrix,
     prelude::{F, SC},
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
-use openvm_cuda_common::stream::GpuDeviceCtx;
-use std::sync::Arc;
-
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
-use openvm_mod_circuit_builder::{cuda::FieldExprChipGpu, ExprBuilderConfig, FieldExpressionMetadata};
+use openvm_mod_circuit_builder::{
+    cuda::FieldExprChipGpu, ExprBuilderConfig, FieldExpressionMetadata,
+};
 use openvm_riscv_adapters::{Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor};
-use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     get_ec_addne_chip, get_ec_double_chip, EccRecord, Rv64WeierstrassConfig, WeierstrassAir,
@@ -47,11 +45,10 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
             F,
             Rv64VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS>,
         >::new(total_input_limbs));
-        let (adapter_size, core_size) = RecordSeeker::<
-            DenseRecordArena,
-            EccRecord<NUM_READS, BLOCKS>,
-            _,
-        >::get_aligned_sizes(&layout);
+        let (adapter_size, core_size) =
+            RecordSeeker::<DenseRecordArena, EccRecord<NUM_READS, BLOCKS>, _>::get_aligned_sizes(
+                &layout,
+            );
         let gpu = FieldExprChipGpu::new(
             &cpu.inner,
             NUM_READS,
@@ -96,8 +93,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let range_checker = range_checker_gpu.cpu_chip.clone().unwrap();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-
-        let device_ctx = range_checker_gpu.device_ctx.clone();
 
         for curve in extension.supported_curves.iter() {
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
