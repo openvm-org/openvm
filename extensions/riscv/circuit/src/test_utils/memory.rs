@@ -2,7 +2,10 @@ pub(crate) use std::{array, borrow::BorrowMut, sync::Arc};
 
 pub(crate) use openvm_circuit::{
     arch::{
-        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        testing::{
+            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            BITWISE_OP_LOOKUP_BUS,
+        },
         Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
     },
     system::memory::merkle::public_values::PUBLIC_VALUES_AS,
@@ -107,10 +110,6 @@ pub(crate) type StoreDoublewordHarness = TestChipHarness<
     Rv64StoreDoublewordChip<F>,
 >;
 
-pub(crate) fn u16_block_to_f_bytes(block: [u16; BLOCK_FE_WIDTH]) -> [F; 8] {
-    rv64_u16_block_to_bytes(block).map(F::from_u8)
-}
-
 struct MemoryAccess {
     a: usize,
     b: usize,
@@ -151,8 +150,8 @@ fn random_memory_access(
     let shift_amount = (ptr_val as usize) & 7;
     let base_ptr = (ptr_val as usize) - shift_amount;
 
-    let a = rng.random_range(0..(max_addr - 8)) / 8 * 8;
-    let b = rng.random_range(0..(max_addr - 8)) / 8 * 8;
+    let a = gen_pointer(rng, 8);
+    let b = gen_pointer(rng, 8);
 
     MemoryAccess {
         a,
@@ -445,9 +444,13 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
         access.a,
-        u16_block_to_f_bytes(prev_data),
+        rv64_u16_block_to_bytes(prev_data).map(F::from_u8),
     );
-    tester.write_bytes(mem_as, access.base_ptr, u16_block_to_f_bytes(read_data));
+    tester.write_bytes(
+        mem_as,
+        access.base_ptr,
+        rv64_u16_block_to_bytes(read_data).map(F::from_u8),
+    );
 
     let enabled_write = access.a != 0;
     tester.execute(
@@ -469,7 +472,7 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let write_data = load_write_data(opcode, read_data, access.shift_amount);
     let expected = if enabled_write {
-        u16_block_to_f_bytes(write_data)
+        rv64_u16_block_to_bytes(write_data).map(F::from_u8)
     } else {
         [F::ZERO; 8]
     };
@@ -516,11 +519,15 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
     if access.a == 0 {
         read_data = [0; BLOCK_FE_WIDTH];
     }
-    tester.write_bytes(mem_as, access.base_ptr, u16_block_to_f_bytes(prev_data));
+    tester.write_bytes(
+        mem_as,
+        access.base_ptr,
+        rv64_u16_block_to_bytes(prev_data).map(F::from_u8),
+    );
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
         access.a,
-        u16_block_to_f_bytes(read_data),
+        rv64_u16_block_to_bytes(read_data).map(F::from_u8),
     );
 
     tester.execute(
@@ -542,7 +549,7 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let write_data = store_write_data(opcode, read_data, prev_data, access.shift_amount);
     assert_eq!(
-        u16_block_to_f_bytes(write_data),
+        rv64_u16_block_to_bytes(write_data).map(F::from_u8),
         tester.read_bytes::<8>(mem_as, access.base_ptr)
     );
 }
@@ -571,9 +578,6 @@ pub(crate) fn store_gpu_memory_config() -> MemoryConfig {
     let mut mem_config = load_gpu_memory_config();
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << mem_config.pointer_max_bits;
     mem_config
-}
-pub(crate) fn b(bytes: [u8; 8]) -> [u16; BLOCK_FE_WIDTH] {
-    rv64_bytes_to_u16_block(bytes)
 }
 pub(crate) fn assert_pranked_load_byte_fails(prank: impl Fn(&mut LoadByteCoreCols<F>)) {
     let mut rng = create_seeded_rng();

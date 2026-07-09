@@ -4,9 +4,9 @@ use openvm_circuit::arch::testing::TestBuilder;
 use openvm_instructions::LocalOpcode;
 
 use crate::test_utils::memory::{
-    b, create_seeded_rng, create_word_harness, load_memory_config, load_sign_extend_write_data,
-    load_write_data, set_and_execute_load, VmChipTestBuilder, LOADB, LOADH, LOADHU, LOADW, LOADWU,
-    RV64_MEMORY_AS,
+    create_seeded_rng, create_word_harness, load_memory_config, load_sign_extend_write_data,
+    load_write_data, rv64_bytes_to_u16_block, set_and_execute_load, VmChipTestBuilder, LOADB,
+    LOADH, LOADHU, LOADW, LOADWU, RV64_MEMORY_AS,
 };
 #[cfg(feature = "cuda")]
 use crate::test_utils::memory::{
@@ -69,32 +69,32 @@ fn rand_load_word_test() {
 
 #[test]
 fn run_loadwu_sanity_test() {
-    let read_data = b([138, 45, 202, 76, 131, 74, 186, 29]);
+    let read_data = rv64_bytes_to_u16_block([138, 45, 202, 76, 131, 74, 186, 29]);
     assert_eq!(
         load_write_data(LOADWU, read_data, 0),
-        b([138, 45, 202, 76, 0, 0, 0, 0])
+        rv64_bytes_to_u16_block([138, 45, 202, 76, 0, 0, 0, 0])
     );
     assert_eq!(
         load_write_data(LOADWU, read_data, 4),
-        b([131, 74, 186, 29, 0, 0, 0, 0])
+        rv64_bytes_to_u16_block([131, 74, 186, 29, 0, 0, 0, 0])
     );
 }
 
 #[test]
 #[should_panic]
 fn solve_loadw_rejects_shift_2() {
-    load_sign_extend_write_data(LOADW, b([1, 2, 3, 4, 5, 6, 7, 8]), 2);
+    load_sign_extend_write_data(LOADW, rv64_bytes_to_u16_block([1, 2, 3, 4, 5, 6, 7, 8]), 2);
 }
 
 #[test]
 #[should_panic]
 fn solve_loadw_rejects_shift_6() {
-    load_sign_extend_write_data(LOADW, b([1, 2, 3, 4, 5, 6, 7, 8]), 6);
+    load_sign_extend_write_data(LOADW, rv64_bytes_to_u16_block([1, 2, 3, 4, 5, 6, 7, 8]), 6);
 }
 
 #[test]
 fn accepted_shift_sets() {
-    let read_data = b([0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80]);
+    let read_data = rv64_bytes_to_u16_block([0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80]);
     for shift in 0..8 {
         let _ = load_sign_extend_write_data(LOADB, read_data, shift);
     }
