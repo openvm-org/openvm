@@ -137,7 +137,9 @@ extern "C" int _rv64_load_sign_extend_tracegen(
     cudaStream_t stream
 ) {
     assert(width == sizeof(Rv64LoadSignExtendCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height, 512);
+    // Capped below the previous 512: the two-block sign-extension fill increased the
+    // per-thread register footprint.
+    auto [grid, block] = kernel_launch_params(height, 256);
 
     rv64_load_sign_extend_tracegen<<<grid, block, 0, stream>>>(
         d_trace,

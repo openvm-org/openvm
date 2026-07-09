@@ -200,7 +200,10 @@ extern "C" int _rv64_load_store_tracegen(
     cudaStream_t stream
 ) {
     assert(width == sizeof(Rv64LoadStoreCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height);
+    // The per-thread register footprint of this kernel (two-block merge, six byte arrays)
+    // is too large for the default 1024-thread blocks; 256 keeps the launch within the
+    // SM register file for any register count.
+    auto [grid, block] = kernel_launch_params(height, 256);
 
     rv64_load_store_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
