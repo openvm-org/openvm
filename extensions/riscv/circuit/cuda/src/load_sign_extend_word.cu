@@ -30,7 +30,7 @@ struct LoadSignExtendWordCore {
     }
 };
 
-__global__ void rv64_load_sign_extend_word_tracegen_kernel(
+__global__ void rv64_load_sign_extend_word_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
@@ -77,7 +77,7 @@ extern "C" int _rv64_load_sign_extend_word_tracegen(
 ) {
     assert(width == sizeof(Rv64LoadSignExtendWordCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
-    rv64_load_sign_extend_word_tracegen_kernel<<<grid, block, 0, stream>>>(
+    rv64_load_sign_extend_word_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         width,

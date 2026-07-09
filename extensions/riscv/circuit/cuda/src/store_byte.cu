@@ -46,7 +46,7 @@ struct StoreByteCore {
     }
 };
 
-__global__ void rv64_store_byte_tracegen_kernel(
+__global__ void rv64_store_byte_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
@@ -93,7 +93,7 @@ extern "C" int _rv64_store_byte_tracegen(
 ) {
     assert(width == sizeof(Rv64StoreByteCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
-    rv64_store_byte_tracegen_kernel<<<grid, block, 0, stream>>>(
+    rv64_store_byte_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         width,
