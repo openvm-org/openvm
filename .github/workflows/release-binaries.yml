@@ -101,6 +101,97 @@ jobs:
         if: always()
         run: sccache --show-stats || true
 
+  build-linux-cuda-release:
+    name: Build x86_64-unknown-linux-gnu CUDA ${{ matrix.cuda_version }}
+    runs-on:
+      - runs-on=${{ github.run_id }}-${{ github.run_attempt }}-cargo-openvm-linux-x64-cuda-${{ matrix.cuda_package_version }}/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=80gb/spot=capacity-optimized/extras=s3-cache
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cuda_version: "12.9"
+            cuda_package_version: "12-9"
+          - cuda_version: "13.0"
+            cuda_package_version: "13-0"
+    steps:
+      - uses: runs-on/action@v2
+        with:
+          sccache: s3
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.version }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - uses: ./.github/actions/sccache
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: release-cuda-${{ matrix.cuda_version }}
+
+      - name: Set package version
+        id: meta
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Select CUDA toolkit
+        shell: bash
+        env:
+          CUDA_VERSION: ${{ matrix.cuda_version }}
+          CUDA_PACKAGE_VERSION: ${{ matrix.cuda_package_version }}
+        run: |
+          cuda_dir="/usr/local/cuda-${CUDA_VERSION}"
+          if [ ! -x "${cuda_dir}/bin/nvcc" ]; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends "cuda-toolkit-${CUDA_PACKAGE_VERSION}"
+          fi
+          echo "${cuda_dir}/bin" >> "$GITHUB_PATH"
+          echo "CUDA_PATH=${cuda_dir}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=${cuda_dir}/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> "$GITHUB_ENV"
+          echo "CUDA_LIB_DIR=${cuda_dir}/lib64" >> "$GITHUB_ENV"
+          echo "CUDA_ARCH=86,89,120" >> "$GITHUB_ENV"
+          "${cuda_dir}/bin/nvcc" --version
+
+      - name: Build cargo-openvm
+        run: cargo build --release --locked -p cargo-openvm --target x86_64-unknown-linux-gnu --features cuda,halo2-gpu
+
+      - name: Smoke test binary
+        run: ./target/x86_64-unknown-linux-gnu/release/${BINARY_NAME} openvm --version
+
+      - name: Package binary
+        id: package
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          CUDA_VERSION: ${{ matrix.cuda_version }}
+        run: |
+          artifact="${BINARY_NAME}-${VERSION}-x86_64-unknown-linux-gnu-cuda-${CUDA_VERSION}.tar.gz"
+          mkdir -p package artifacts
+          cp "target/x86_64-unknown-linux-gnu/release/${BINARY_NAME}" "package/${BINARY_NAME}"
+          chmod +x "package/${BINARY_NAME}"
+          tar -czf "artifacts/${artifact}" -C package "${BINARY_NAME}"
+          (cd artifacts && shasum -a 256 "${artifact}" > "${artifact}.sha256")
+          echo "artifact=${artifact}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload packaged binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.artifact }}
+          path: artifacts/*
+          if-no-files-found: error
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
   build-macos-release:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
@@ -167,6 +258,7 @@ jobs:
     if: ${{ !inputs.dry_run }}
     needs:
       - build-linux-release
+      - build-linux-cuda-release
       - build-macos-release
     runs-on: ubuntu-latest
     permissions:

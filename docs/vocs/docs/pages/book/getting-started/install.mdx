@@ -145,7 +145,7 @@ To check that CUDA toolkit is installed, run
 nvcc --version
 ```
 
-The OpenVM CLI has been tested with CUDA toolkit version 12.9, and this is the version we recommend installing. The CLI is likely to also work with CUDA toolkit version 13.0, but it has not been tested as thoroughly.
+The OpenVM CLI has been tested with CUDA toolkit versions 12.9, 13.0, and 13.1. OpenVM's default CI runners use CUDA toolkit version 12.9, so we regard 12.9 as the most stable target.
 
 Post-installation, ensure that you set the proper [path variables for CUDA](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#environment-setup):
 ```bash
