@@ -29,6 +29,8 @@ use super::ExecutionError;
 use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
 #[cfg(feature = "rvr")]
 use crate::arch::rvr::RvrPreflightOutput;
+#[cfg(feature = "rvr")]
+use crate::arch::rvr::{generate_record_arenas_from_logs, LogNativeAssemblerRegistry};
 use crate::{
     arch::{
         execution_mode::metered::segment_ctx::DEFAULT_MAX_MEMORY, AirInventory, AirInventoryError,
@@ -168,13 +170,31 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         ChipInventoryError,
     >;
 
+    /// Build the registry used by rvr preflight routing and record assembly.
+    ///
+    /// A composed builder adds its inner config's registrations first, then
+    /// calls [`crate::arch::rvr::VmRvrLogNativeExtension::extend_rvr_log_native`]
+    /// for each extension it owns.
+    #[cfg(feature = "rvr")]
+    #[allow(unused_variables)]
+    fn create_rvr_log_native_assembler_registry(
+        &self,
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<E::SC>, Self::RecordArena>
+    where
+        Val<E::SC>: PrimeField32,
+    {
+        LogNativeAssemblerRegistry::new()
+    }
+
     /// Optional rvr log-native record assembly hook.
     ///
-    /// Implementations return `Some(record_arenas)` only when every non-system
-    /// per-chip record for the segment was assembled from the rvr preflight
-    /// logs. Returning `None` means this builder has no log-native support; the
-    /// rvr proving path treats that as an explicit unsupported error rather
-    /// than falling back to interpreter-generated records.
+    /// Builders normally customize this by overriding
+    /// [`Self::create_rvr_log_native_assembler_registry`] and composing the
+    /// registrations from their inner config plus their own extensions. An
+    /// empty registry returns `None`; the proving path reports that as an
+    /// explicit unsupported error rather than falling back to interpreter
+    /// records after rvr execution.
     #[cfg(feature = "rvr")]
     #[allow(unused_variables)]
     fn generate_rvr_record_arenas_from_logs(
@@ -188,7 +208,12 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
     where
         Val<E::SC>: PrimeField32,
     {
-        Ok(None)
+        let registry = self.create_rvr_log_native_assembler_registry(config);
+        if registry.is_empty() {
+            return Ok(None);
+        }
+        generate_record_arenas_from_logs(&registry, exe, output, capacities, pc_to_air_idx)
+            .map(Some)
     }
 }
 

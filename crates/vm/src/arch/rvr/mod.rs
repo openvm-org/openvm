@@ -7,6 +7,7 @@ pub mod debug;
 pub mod execute;
 mod initial_image;
 pub mod io;
+pub mod log_native;
 pub mod metered;
 pub mod metered_cost;
 pub mod preflight;
@@ -27,6 +28,10 @@ pub use execute::{
     execute_preflight, rv_execute, ExecuteError, RvrPreflightRunResult,
 };
 pub use initial_image::RvrInitialImage;
+pub use log_native::{
+    generate_record_arenas_from_logs, LogNativeAccessView, LogNativeAssembler,
+    LogNativeAssemblerRegistry, LogNativeOpcodeAdmitter, VmRvrLogNativeExtension,
+};
 pub use metered::{RvrMeteredInstance, RvrMeteredResult, RvrMeteredSegmentInstance};
 pub use metered_cost::{
     MeteredCostData, MeteredCostMeter, PureTracer, PureTracerData, RvrMeteredCostInstance,

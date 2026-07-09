@@ -582,14 +582,14 @@ mod tests {
         let base = rv64im_memory_exe();
         assert_eq!(
             classify_preflight_opcodes(&base),
-            RvrPreflightOpcodeClass::Rv64ImOnly
+            RvrPreflightOpcodeClass::Supported
         );
-        assert!(classify_preflight_opcodes(&base).is_rv64im_only());
+        assert!(classify_preflight_opcodes(&base).is_supported());
 
         let extension = VmExe::new(Program::from_instructions(&[reveal_like_store()]));
         assert_eq!(
             classify_preflight_opcodes(&extension),
-            RvrPreflightOpcodeClass::UsesExtension {
+            RvrPreflightOpcodeClass::Unsupported {
                 pc: 0,
                 opcode: VmOpcode::from_usize(OPCODE_STORED),
             }
@@ -598,7 +598,7 @@ mod tests {
         let non_memory_store = VmExe::new(Program::from_instructions(&[deferral_like_store()]));
         assert_eq!(
             classify_preflight_opcodes(&non_memory_store),
-            RvrPreflightOpcodeClass::UsesExtension {
+            RvrPreflightOpcodeClass::Unsupported {
                 pc: 0,
                 opcode: VmOpcode::from_usize(OPCODE_STORED),
             }
