@@ -4925,6 +4925,7 @@ dependencies = [
  "openvm-circuit",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
+ "openvm-instructions",
  "openvm-riscv-transpiler",
  "openvm-sdk",
  "openvm-sdk-config",

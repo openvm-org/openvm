@@ -70,9 +70,10 @@ impl ExtInstr for EcAddNeInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
+        // Match Rv64VecHeapAdapter's memory-bus order: rs1, rs2, then rd.
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
+        let rd = ctx.read_reg(self.rd_reg);
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
         let name = format!("rvr_ext_{setup_prefix}ec_add_ne_{suffix}");
@@ -103,8 +104,9 @@ impl ExtInstr for EcDoubleInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
+        // Match Rv64VecHeapAdapter's memory-bus order: rs1, then rd.
         let rs1 = ctx.read_reg(self.rs1_reg);
+        let rd = ctx.read_reg(self.rd_reg);
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
         let name = format!("rvr_ext_{setup_prefix}ec_double_{suffix}");
