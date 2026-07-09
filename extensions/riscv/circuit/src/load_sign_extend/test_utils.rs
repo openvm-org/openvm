@@ -205,7 +205,7 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let imm = imm.unwrap_or_else(|| rng.random_range(0..(1 << IMM_BITS)));
     let imm_sign = imm_sign.unwrap_or_else(|| rng.random_range(0..2));
     let imm_ext = sign_extend_imm16(imm, imm_sign);
-    let alignment = match opcode {
+    let alignment_bit = match opcode {
         LOADW => 2,
         LOADH => 1,
         LOADB => 0,
@@ -218,9 +218,9 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         imm as i64 - (1 << IMM_BITS)
     };
     let min_ptr = imm_signed.max(0) as usize;
-    let alignment_mask = (1usize << alignment) - 1;
-    let min_aligned_ptr = (min_ptr + alignment_mask) >> alignment;
-    let ptr_val = rng.random_range(min_aligned_ptr..(max_addr >> alignment)) << alignment;
+    let alignment_mask = (1usize << alignment_bit) - 1;
+    let min_aligned_ptr = (min_ptr + alignment_mask) >> alignment_bit;
+    let ptr_val = rng.random_range(min_aligned_ptr..(max_addr >> alignment_bit)) << alignment_bit;
     let rs1 = rs1.unwrap_or_else(|| {
         let low4 = (ptr_val as i64 - imm_signed).to_le_bytes();
         [low4[0], low4[1], low4[2], low4[3], 0, 0, 0, 0]
