@@ -14,6 +14,8 @@ use openvm_stark_sdk::{
     },
 };
 
+use tracing::info_span;
+
 use crate::{
     field::baby_bear::{
         BabyBearChip, BabyBearExtChip, BabyBearExtWire, BabyBearWire, ReducedBabyBearExtWire,
@@ -680,6 +682,7 @@ pub(crate) fn constrain_batch_constraints_verification(
     let beta_logup = transcript.sample_ext(ctx);
 
     profiler.push("gkr_verification", ctx.get_offset());
+    let span = info_span!("gkr_verification").entered();
 
     let gkr_claims_per_layer = &gkr_wire.claims_per_layer;
     let gkr_sumcheck_polys = &gkr_wire.sumcheck_polys;
@@ -782,8 +785,10 @@ pub(crate) fn constrain_batch_constraints_verification(
 
     let lambda = transcript.sample_ext(ctx);
 
+    span.exit();
     profiler.pop(ctx.get_offset());
     profiler.push("batch_sumcheck", ctx.get_offset());
+    let span = info_span!("batch_sumcheck").entered();
 
     let numerator_term_per_air = &batch_wire.numerator_term_per_air;
     let denominator_term_per_air = &batch_wire.denominator_term_per_air;
@@ -864,8 +869,10 @@ pub(crate) fn constrain_batch_constraints_verification(
         r.push(next_r);
     }
 
+    span.exit();
     profiler.pop(ctx.get_offset());
     profiler.push("observe_openings", ctx.get_offset());
+    let span = info_span!("observe_openings").entered();
 
     let column_openings = &batch_wire.column_openings;
 
@@ -911,8 +918,10 @@ pub(crate) fn constrain_batch_constraints_verification(
         }
     }
 
+    span.exit();
     profiler.pop(ctx.get_offset());
     profiler.push("eq_3b_tree", ctx.get_offset());
+    let span = info_span!("eq_3b_tree").entered();
 
     let mut eq_3b_per_trace = Vec::with_capacity(n_per_trace.len());
     let mut stacked_idx = 0usize;
@@ -987,8 +996,10 @@ pub(crate) fn constrain_batch_constraints_verification(
         eq_3b_per_trace.push(eq_3b);
     }
 
+    span.exit();
     profiler.pop(ctx.get_offset());
     profiler.push("eq_ns_precompute", ctx.get_offset());
+    let span = info_span!("eq_ns_precompute").entered();
 
     let mut eq_ns = vec![one; n_max_host + 1];
     let mut eq_sharp_ns = vec![one; n_max_host + 1];
@@ -1019,8 +1030,10 @@ pub(crate) fn constrain_batch_constraints_verification(
         }
     }
 
+    span.exit();
     profiler.pop(ctx.get_offset());
     profiler.push("constraint_eval", ctx.get_offset());
+    let span = info_span!("constraint_eval").entered();
 
     let mut interactions_evals = Vec::new();
     let mut constraints_evals = Vec::new();
@@ -1160,8 +1173,10 @@ pub(crate) fn constrain_batch_constraints_verification(
         interactions_evals.push(denom_scaled);
     }
 
+    span.exit();
     profiler.pop(ctx.get_offset());
     profiler.push("final_consistency", ctx.get_offset());
+    let span = info_span!("final_consistency").entered();
 
     let mut consistency_rhs = ext_chip.zero(ctx);
     let mut cur_mu_pow = one;
@@ -1180,6 +1195,7 @@ pub(crate) fn constrain_batch_constraints_verification(
     }
     ext_chip.assert_equal(ctx, consistency_lhs, consistency_rhs);
 
+    span.exit();
     profiler.pop(ctx.get_offset());
 
     BatchConstraintIntermediatesWire {

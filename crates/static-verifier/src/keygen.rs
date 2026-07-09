@@ -1,25 +1,66 @@
+#[cfg(feature = "evm-prove")]
+use std::io::Write;
+
 use halo2_base::{
     gates::circuit::CircuitBuilderStage,
     halo2_proofs::{
         plonk::{keygen_pk, keygen_vk},
         poly::commitment::Params,
     },
-    ContextKind,
+    ContextKind, DummyContext,
 };
-
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
     openvm_stark_backend::proof::Proof,
 };
 #[cfg(feature = "evm-prove")]
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::{
     circuit::StaticVerifierCircuit,
     config::StaticVerifierShape,
     prover::{Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierProof},
 };
-use tracing::info;
+
+#[cfg(feature = "evm-prove")]
+struct PerfCtlGuard {
+    pipe: Option<std::fs::File>,
+}
+
+#[cfg(feature = "evm-prove")]
+impl PerfCtlGuard {
+    fn enable() -> Self {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("perf.ctl");
+        let pipe = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)
+            .ok()
+            .and_then(|mut pipe| {
+                if pipe
+                    .write_all(b"enable\n")
+                    .and_then(|_| pipe.flush())
+                    .is_ok()
+                {
+                    Some(pipe)
+                } else {
+                    None
+                }
+            });
+
+        Self { pipe }
+    }
+}
+
+#[cfg(feature = "evm-prove")]
+impl Drop for PerfCtlGuard {
+    fn drop(&mut self) {
+        if let Some(pipe) = &mut self.pipe {
+            let _ = pipe.write_all(b"disable\n").and_then(|_| pipe.flush());
+        }
+    }
+}
 
 impl StaticVerifierCircuit {
     /// Run keygen to produce a [`Halo2ProvingPinning`].
@@ -140,19 +181,19 @@ impl StaticVerifierProvingKey {
         params: &Halo2Params,
         proof: &Proof<RootConfig>,
     ) -> snark_verifier_sdk::Snark {
-        use halo2_base::halo2_proofs::poly::DevicePolyExt;
         use halo2_base::{
             gates::circuit::builder::WitnessCircuitBuilder,
             halo2_proofs::{
                 halo2curves::bn256::{Fr, G1Affine},
                 plonk::{create_constraint_system, AdviceSingle, InstanceSingle},
+                poly::DevicePolyExt,
             },
         };
         use tracing::info_span;
 
-        // // --- Diagnostic comparison: OLD (BaseCircuitBuilder + populate → Circuit::synthesize)
-        // // vs NEW (WitnessCircuitBuilder + populate_witness_gen + materialize).
-        // // Both paths should yield identical (instance_single, advice_single, challenges).
+        // --- Diagnostic comparison: OLD (BaseCircuitBuilder + populate → Circuit::synthesize)
+        // vs NEW (WitnessCircuitBuilder + populate_witness_gen + materialize).
+        // Both paths should yield identical (instance_single, advice_single, challenges).
         // let (i_old, a_old, c_old) = {
         //     let mut base_builder = BaseCircuitBuilder::prover(
         //         self.pinning.metadata.config_params.clone(),
@@ -201,6 +242,25 @@ impl StaticVerifierProvingKey {
         // assert_advice_single_eq(&a_old, &a_new);
         // info!("OLD vs NEW witness comparison: match");
 
+        // --- Diagnostic: measure the pure witness-generation code cost with
+        // no advice buffer writes or GPU traffic. Builder construction is kept
+        // out of the span so only populate_ctx is timed.
+        // {
+        //     use crate::field::baby_bear::{BabyBearChip, BabyBearExtChip};
+        //     use std::sync::Arc;
+        //
+        //     let dummy_builder = WitnessCircuitBuilder::<Fr>::new(
+        //         self.pinning.metadata.break_points[0].clone(),
+        //         self.pinning.metadata.config_params.clone(),
+        //         self.pinning.pk.get_vk().cs().num_advice_columns(),
+        //     );
+        //     let range = dummy_builder.range_chip();
+        //     let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
+        //     let mut dummy = DummyContext::<Fr>::new();
+        //     info_span!("dummy witness-gen")
+        //         .in_scope(|| self.circuit.populate_ctx(&mut dummy, &ext_chip, proof));
+        // }
+
         // --- Actual proving via NEW path.
         let mut builder = WitnessCircuitBuilder::new(
             self.pinning.metadata.break_points[0].clone(),
@@ -208,7 +268,10 @@ impl StaticVerifierProvingKey {
             self.pinning.pk.get_vk().cs().num_advice_columns(),
         );
 
-        self.circuit.populate_witness_gen(&mut builder, proof);
+        info_span!("witness_gen").in_scope(|| {
+            let _perf_ctl = PerfCtlGuard::enable();
+            self.circuit.populate_witness_gen(&mut builder, proof);
+        });
         let (_, config) = create_constraint_system::<G1Affine, BaseCircuitBuilder<Fr>>(
             self.pinning.metadata.config_params.clone(),
         );

@@ -448,7 +448,12 @@ impl BabyBearChip {
         self.load_constant(ctx, BabyBear::ONE)
     }
 
-    pub fn mul_const(&self, ctx: &mut impl ContextKind<Fr>, a: BabyBearWire, c: BabyBear) -> BabyBearWire {
+    pub fn mul_const(
+        &self,
+        ctx: &mut impl ContextKind<Fr>,
+        a: BabyBearWire,
+        c: BabyBear,
+    ) -> BabyBearWire {
         let c_wire = self.load_constant(ctx, c);
         self.mul(ctx, a, c_wire)
     }

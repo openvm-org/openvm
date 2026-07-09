@@ -10,6 +10,8 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 
+use tracing::info_span;
+
 use crate::{
     field::baby_bear::{BabyBearExtChip, ReducedBabyBearWire},
     stages::{
@@ -194,53 +196,68 @@ pub fn constrained_verify(
     let mvk_pre_hash_root = ctx.load_constant(digest_scalar_to_fr(root_vk.pre_hash[0]));
     let mut transcript = TranscriptChip::new(ctx, ext_chip.base().clone());
 
-    profiler.push("observe_preamble", ctx.get_offset());
-    observe_preamble(
-        ctx,
-        &mut transcript,
-        root_vk,
-        log_heights_per_air,
-        &proof_wire.public_values,
-        &proof_wire.cached_commitment_roots,
-        digest_wire_from_root(mvk_pre_hash_root),
-        digest_wire_from_root(proof_wire.common_main_commit_root),
-    );
-    profiler.pop(ctx.get_offset());
+    {
+        let span = info_span!("observe_preamble").entered();
+        profiler.push("observe_preamble", ctx.get_offset());
+        observe_preamble(
+            ctx,
+            &mut transcript,
+            root_vk,
+            log_heights_per_air,
+            &proof_wire.public_values,
+            &proof_wire.cached_commitment_roots,
+            digest_wire_from_root(mvk_pre_hash_root),
+            digest_wire_from_root(proof_wire.common_main_commit_root),
+        );
+        profiler.pop(ctx.get_offset());
+        span.exit();
+    }
 
-    profiler.push("batch_constraints", ctx.get_offset());
-    let batch = constrain_batch_constraints_verification(
-        ctx,
-        ext_chip,
-        &mut transcript,
-        &root_vk.inner,
-        &proof_wire.gkr,
-        &proof_wire.batch,
-        &n_per_trace,
-        trace_id_to_air_id,
-        proof_wire.public_values.clone(),
-        &mut profiler,
-    );
-    profiler.pop(ctx.get_offset());
+    let batch = {
+        let span = info_span!("batch_constraints").entered();
+        profiler.push("batch_constraints", ctx.get_offset());
+        let batch = constrain_batch_constraints_verification(
+            ctx,
+            ext_chip,
+            &mut transcript,
+            &root_vk.inner,
+            &proof_wire.gkr,
+            &proof_wire.batch,
+            &n_per_trace,
+            trace_id_to_air_id,
+            proof_wire.public_values.clone(),
+            &mut profiler,
+        );
+        profiler.pop(ctx.get_offset());
+        span.exit();
+        batch
+    };
 
     let need_rot_per_commit = get_need_rot_per_commit(&root_vk.inner, trace_id_to_air_id);
 
-    profiler.push("stacked_reduction", ctx.get_offset());
-    let stacked_reduction = constrain_stacked_reduction(
-        ctx,
-        ext_chip,
-        &mut transcript,
-        &proof_wire.stacking,
-        stacked_layouts,
-        &need_rot_per_commit,
-        l_skip,
-        root_vk.inner.params.n_stack,
-        &batch.column_openings,
-        &batch.r,
-        &mut profiler,
-    );
-    profiler.pop(ctx.get_offset());
+    let stacked_reduction = {
+        let span = info_span!("stacked_reduction").entered();
+        profiler.push("stacked_reduction", ctx.get_offset());
+        let stacked_reduction = constrain_stacked_reduction(
+            ctx,
+            ext_chip,
+            &mut transcript,
+            &proof_wire.stacking,
+            stacked_layouts,
+            &need_rot_per_commit,
+            l_skip,
+            root_vk.inner.params.n_stack,
+            &batch.column_openings,
+            &batch.r,
+            &mut profiler,
+        );
+        profiler.pop(ctx.get_offset());
+        span.exit();
+        stacked_reduction
+    };
 
     let u_cube = {
+        let span = info_span!("u_cube").entered();
         let u = &stacked_reduction.u;
         assert!(!u.is_empty());
         let mut u_cube = Vec::with_capacity(l_skip + u.len().saturating_sub(1));
@@ -251,10 +268,12 @@ pub fn constrained_verify(
             power = ext_chip.reduce_max_bits(ctx, power);
         }
         u_cube.extend(u.iter().skip(1).copied());
+        span.exit();
         u_cube
     };
 
     let initial_commitment_roots = {
+        let span = info_span!("initial_commitment_roots").entered();
         let common_main_root = proof_wire.common_main_commit_root;
         let mut commits = vec![common_main_root];
         for &air_id in trace_id_to_air_id {
@@ -263,22 +282,27 @@ pub fn constrained_verify(
             }
             commits.extend(proof_wire.cached_commitment_roots[air_id].iter().copied());
         }
+        span.exit();
         commits
     };
 
-    profiler.push("whir_verification", ctx.get_offset());
-    constrain_whir_verification(
-        ctx,
-        ext_chip,
-        &mut transcript,
-        &root_vk.inner,
-        &proof_wire.whir,
-        &stacked_reduction.stacking_openings,
-        &initial_commitment_roots,
-        &u_cube,
-        &mut profiler,
-    );
-    profiler.pop(ctx.get_offset());
+    {
+        let span = info_span!("whir_verification").entered();
+        profiler.push("whir_verification", ctx.get_offset());
+        constrain_whir_verification(
+            ctx,
+            ext_chip,
+            &mut transcript,
+            &root_vk.inner,
+            &proof_wire.whir,
+            &stacked_reduction.stacking_openings,
+            &initial_commitment_roots,
+            &u_cube,
+            &mut profiler,
+        );
+        profiler.pop(ctx.get_offset());
+        span.exit();
+    }
 
     profiler.print(ctx.get_offset());
 

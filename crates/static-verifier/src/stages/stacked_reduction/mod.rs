@@ -6,6 +6,8 @@ use openvm_stark_sdk::{
     openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::stacked_pcs::StackedLayout},
 };
 
+use tracing::info_span;
+
 use crate::{
     field::baby_bear::{BabyBearExtChip, BabyBearExtWire, ReducedBabyBearExtWire},
     profiling::CellProfiler,
@@ -105,6 +107,7 @@ pub(crate) fn constrain_stacked_reduction(
     let one = ext_chip.from_base_const(ctx, RootF::ONE);
 
     profiler.push("claim_batching", ctx.get_offset());
+    let span = info_span!("claim_batching").entered();
 
     let mut lambda_idx = 0usize;
     let lambda_indices_per_layout = layouts
@@ -173,8 +176,10 @@ pub(crate) fn constrain_stacked_reduction(
         s_0 = ext_chip.add(ctx, s_0, term);
     }
 
+    span.exit();
     profiler.pop(ctx.get_offset());
     profiler.push("univariate_sumcheck", ctx.get_offset());
+    let span = info_span!("univariate_sumcheck").entered();
 
     let univariate_round_coeffs = &stacking_wire.univariate_round_coeffs;
     let univariate_round_coeffs_raw = univariate_round_coeffs
@@ -214,8 +219,10 @@ pub(crate) fn constrain_stacked_reduction(
         u.push(u_j);
     }
 
+    span.exit();
     profiler.pop(ctx.get_offset());
     profiler.push("derived_q_coeffs", ctx.get_offset());
+    let span = info_span!("derived_q_coeffs").entered();
 
     let stacking_matrix_expected_widths = layouts
         .iter()
@@ -294,8 +301,10 @@ pub(crate) fn constrain_stacked_reduction(
         }
     }
 
+    span.exit();
     profiler.pop(ctx.get_offset());
     profiler.push("final_verification", ctx.get_offset());
+    let span = info_span!("final_verification").entered();
 
     let stacking_openings = &stacking_wire.stacking_openings;
     let mut final_sum = ext_chip.zero(ctx);
@@ -309,6 +318,7 @@ pub(crate) fn constrain_stacked_reduction(
 
     ext_chip.assert_equal(ctx, final_claim, final_sum);
 
+    span.exit();
     profiler.pop(ctx.get_offset());
 
     StackedReductionIntermediatesWire {

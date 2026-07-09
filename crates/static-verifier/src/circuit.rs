@@ -27,6 +27,7 @@ use openvm_stark_sdk::{
 };
 use openvm_verify_stark_host::pvs::CONSTRAINT_EVAL_AIR_ID;
 use serde::{Deserialize, Serialize};
+use tracing::info_span;
 
 use crate::{
     field::baby_bear::{BabyBearChip, BabyBearExt4Chip, BabyBearExtChip},
@@ -174,21 +175,30 @@ impl StaticVerifierCircuit {
     ) -> ProofWire {
         let mut profiler = crate::profiling::CellProfiler::new("static_verifier", ctx.get_offset());
 
-        profiler.push("load_proof_wire", ctx.get_offset());
-        let proof_wire = load_proof_wire(ctx, ext_chip, proof, &self.log_heights_per_air);
-        profiler.pop(ctx.get_offset());
+        let proof_wire = {
+            let span = info_span!("load_proof_wire").entered();
+            profiler.push("load_proof_wire", ctx.get_offset());
+            let proof_wire = load_proof_wire(ctx, ext_chip, proof, &self.log_heights_per_air);
+            profiler.pop(ctx.get_offset());
+            span.exit();
+            proof_wire
+        };
 
-        profiler.push("constrained_verify", ctx.get_offset());
-        constrained_verify(
-            ctx,
-            ext_chip,
-            &self.root_vk,
-            &proof_wire,
-            &self.trace_id_to_air_id,
-            &self.log_heights_per_air,
-            &self.stacked_layouts,
-        );
-        profiler.pop(ctx.get_offset());
+        {
+            let span = info_span!("constrained_verify").entered();
+            profiler.push("constrained_verify", ctx.get_offset());
+            constrained_verify(
+                ctx,
+                ext_chip,
+                &self.root_vk,
+                &proof_wire,
+                &self.trace_id_to_air_id,
+                &self.log_heights_per_air,
+                &self.stacked_layouts,
+            );
+            profiler.pop(ctx.get_offset());
+            span.exit();
+        }
 
         profiler.print(ctx.get_offset());
 
@@ -216,11 +226,18 @@ impl StaticVerifierCircuit {
         ext_chip: &BabyBearExt4Chip,
         proof: &Proof<RootConfig>,
     ) -> StaticVerifierPvs<AssignedValue<Fr>> {
+        let span = info_span!("populate_ctx").entered();
         let mut profiler = crate::profiling::CellProfiler::new("populate", ctx.get_offset());
 
-        profiler.push("verify_stark_constraints", ctx.get_offset());
-        let proof_wire = &self.populate_verify_stark_constraints(ctx, &ext_chip, proof);
-        profiler.pop(ctx.get_offset());
+        let proof_wire = {
+            let span = info_span!("verify_stark_constraints").entered();
+            profiler.push("verify_stark_constraints", ctx.get_offset());
+            let proof_wire = self.populate_verify_stark_constraints(ctx, &ext_chip, proof);
+            profiler.pop(ctx.get_offset());
+            span.exit();
+            proof_wire
+        };
+        let proof_wire = &proof_wire;
 
         debug_assert!(
             proof_wire
@@ -229,26 +246,37 @@ impl StaticVerifierCircuit {
                 .all(|commits| commits.is_empty()),
             "RootVerifierCircuit has no cached trace"
         );
-        profiler.push("pin_dag_onion_commit", ctx.get_offset());
-        let &DagCommitPvs::<_> {
-            commit: onion_commit,
-        } = proof_wire.public_values[CONSTRAINT_EVAL_AIR_ID]
-            .as_slice()
-            .borrow();
-        for (bb_wire, bb_const) in onion_commit
-            .into_iter()
-            .zip_eq(self.internal_recursive_dag_onion_commit)
         {
-            let loaded_const = ext_chip.base().load_constant(ctx, bb_const);
-            ext_chip
-                .base()
-                .assert_equal(ctx, bb_wire.into(), loaded_const);
+            let span = info_span!("pin_dag_onion_commit").entered();
+            profiler.push("pin_dag_onion_commit", ctx.get_offset());
+            let &DagCommitPvs::<_> {
+                commit: onion_commit,
+            } = proof_wire.public_values[CONSTRAINT_EVAL_AIR_ID]
+                .as_slice()
+                .borrow();
+            for (bb_wire, bb_const) in onion_commit
+                .into_iter()
+                .zip_eq(self.internal_recursive_dag_onion_commit)
+            {
+                let loaded_const = ext_chip.base().load_constant(ctx, bb_const);
+                ext_chip
+                    .base()
+                    .assert_equal(ctx, bb_wire.into(), loaded_const);
+            }
+            profiler.pop(ctx.get_offset());
+            span.exit();
         }
-        profiler.pop(ctx.get_offset());
 
-        profiler.push("extract_public_values", ctx.get_offset());
-        let pvs_wire = extract_public_values(ctx, ext_chip.base(), proof_wire);
-        profiler.pop(ctx.get_offset());
+        let pvs_wire = {
+            let span = info_span!("extract_public_values").entered();
+            profiler.push("extract_public_values", ctx.get_offset());
+            let pvs_wire = extract_public_values(ctx, ext_chip.base(), proof_wire);
+            profiler.pop(ctx.get_offset());
+            span.exit();
+            pvs_wire
+        };
+
+        span.exit();
 
         #[cfg(feature = "cell-profiling")]
         if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
