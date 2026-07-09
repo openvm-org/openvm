@@ -72,6 +72,11 @@ If called without the `--evm` flag, it writes the internal-recursive aggregation
 writes the root and proving key, downloads Halo2 parameters, and generates or downloads the
 Halo2 proving key and Solidity verifier artifacts used by the EVM flow.
 
+:::info
+`cargo openvm setup --evm` generates only the base aggregation and EVM artifacts, i.e. without deferral support.
+For deferral-enabled proving, see the [deferral documentation](/book/acceleration-using-extensions/deferral).
+:::
+
 :::warning
 `cargo openvm setup --evm` requires a large amount of computation and memory (~16 GB). Use `--download` to download the pre-built Halo2 proving key and verifier artifacts from S3 instead of generating them locally.
 :::
@@ -85,14 +90,16 @@ generates a smart contract verifier for EVM chains. Upon a successful run, the c
 - `internal_recursive.vk`
 - `root.pk`
 - `halo2.pk`
-- `halo2/src/[OPENVM_VERSION]/Halo2Verifier.sol`
-- `halo2/src/[OPENVM_VERSION]/OpenVmHalo2Verifier.sol`
-- `halo2/src/[OPENVM_VERSION]/interfaces/IOpenVmHalo2Verifier.sol`
-- `halo2/src/[OPENVM_VERSION]/verifier.bytecode.json`
+- `halo2/src/[OPENVM_VERSION]-base/Halo2Verifier.sol`
+- `halo2/src/[OPENVM_VERSION]-base/OpenVmHalo2Verifier.sol`
+- `halo2/src/[OPENVM_VERSION]-base/interfaces/IOpenVmHalo2Verifier.sol`
+- `halo2/src/[OPENVM_VERSION]-base/verifier.bytecode.json`
 - `params/`
 
 to `~/.openvm/`, where `~` is the directory specified by environment variable `$HOME` and
-`OPENVM_VERSION` is the version of OpenVM. Every command that requires these files will
+`OPENVM_VERSION` is the version of OpenVM. The `-base` suffix matches the
+[OpenVM Solidity SDK](/book/writing-apps/solidity-sdk) directory layout for verifiers with
+deferrals disabled. Every command that requires these files will
 look for them in this directory. The smart contract verifier is also available via the
 [OpenVM Solidity SDK](/book/writing-apps/solidity-sdk) for released versions of OpenVM.
 

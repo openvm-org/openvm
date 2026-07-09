@@ -837,6 +837,22 @@ where
     }
 
     #[cfg(feature = "evm-verify")]
+    /// Generates Solidity verifier artifacts under `src/{version_name}` in the solc source map.
+    ///
+    /// Solidity embeds source metadata in bytecode, so `version_name` should match the directory
+    /// where the generated verifier contracts will be written.
+    pub fn generate_halo2_verifier_solidity_with_version_name(
+        &self,
+        version_name: &str,
+    ) -> Result<types::EvmHalo2Verifier, SdkError> {
+        solidity::generate_halo2_verifier_solidity_with_version_name(
+            &self.halo2_pk(),
+            &self.halo2_params_reader,
+            version_name,
+        )
+    }
+
+    #[cfg(feature = "evm-verify")]
     /// Uses the `verify(..)` interface of the `OpenVmHalo2Verifier` contract.
     ///
     /// Requires the `evm-verify` feature. Internally deploys the verifier bytecode in a local EVM

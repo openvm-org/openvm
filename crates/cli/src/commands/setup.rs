@@ -13,12 +13,15 @@ use openvm_sdk::{
         write_object_to_file, EVM_HALO2_VERIFIER_BASE_NAME, EVM_HALO2_VERIFIER_INTERFACE_NAME,
         EVM_HALO2_VERIFIER_PARENT_NAME, EVM_VERIFIER_ARTIFACT_FILENAME,
     },
-    Sdk, OPENVM_VERSION,
+    Sdk,
 };
 
-use crate::default::{
-    default_app_config, default_evm_halo2_verifier_path, default_internal_recursive_pk_path,
-    default_internal_recursive_vk_path, default_params_dir, default_root_pk_path,
+use crate::{
+    default::{
+        default_app_config, default_evm_halo2_verifier_path, default_internal_recursive_pk_path,
+        default_internal_recursive_vk_path, default_params_dir, default_root_pk_path,
+    },
+    util::evm_verifier_version_dir,
 };
 
 /// The maximum value of `k` to download Halo2 KZG trusted setup parameters for. This depends on the
@@ -94,7 +97,7 @@ impl SetupCmd {
         }
 
         let verifier_dir = PathBuf::from(default_evm_halo2_verifier_path());
-        let versioned_verifier_dir = verifier_dir.join("src").join(format!("v{OPENVM_VERSION}"));
+        let versioned_verifier_dir = verifier_dir.join("src").join(evm_verifier_version_dir());
         if !self.force && Self::verifier_artifacts_exist(&versioned_verifier_dir) {
             println!(
                 "EVM verifier artifacts already exist in {}",
@@ -144,9 +147,10 @@ impl SetupCmd {
             use openvm_sdk::fs::write_evm_halo2_verifier_to_folder;
 
             println!("Generating verifier contract locally. Tip: use `--download` to download pre-built artifacts from S3 instead.");
-            let verifier = sdk.generate_halo2_verifier_solidity()?;
+            let version_dir = evm_verifier_version_dir();
+            let verifier = sdk.generate_halo2_verifier_solidity_with_version_name(&version_dir)?;
             println!("Writing verifier contract to {}", verifier_dir.display());
-            write_evm_halo2_verifier_to_folder(verifier, verifier_dir)?;
+            write_evm_halo2_verifier_to_folder(verifier, verifier_dir, Some(&version_dir))?;
             Ok(())
         }
 
@@ -196,7 +200,7 @@ impl SetupCmd {
         const ARTIFACTS_BUCKET: &str = "openvm-public-artifacts-us-east-1";
         const FULL_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-        let halo2_s3_prefix = format!("v{FULL_VERSION}/halo2/src/v{OPENVM_VERSION}");
+        let halo2_s3_prefix = format!("v{FULL_VERSION}/halo2/src/{}", evm_verifier_version_dir());
         let files = [
             (
                 EVM_HALO2_VERIFIER_PARENT_NAME,
@@ -217,23 +221,21 @@ impl SetupCmd {
         ];
 
         for (name, local_path) in &files {
-            if !local_path.exists() {
-                let key = if *name == EVM_HALO2_VERIFIER_INTERFACE_NAME {
-                    format!("{halo2_s3_prefix}/interfaces/{name}")
-                } else {
-                    format!("{halo2_s3_prefix}/{name}")
-                };
-                println!("Downloading {name}");
-                let resp = client
-                    .get_object()
-                    .bucket(ARTIFACTS_BUCKET)
-                    .key(&key)
-                    .send()
-                    .await
-                    .map_err(|e| eyre!("Failed to download s3://{ARTIFACTS_BUCKET}/{key}: {e}"))?;
-                let data = resp.body.collect().await?;
-                write(local_path, data.into_bytes())?;
-            }
+            let key = if *name == EVM_HALO2_VERIFIER_INTERFACE_NAME {
+                format!("{halo2_s3_prefix}/interfaces/{name}")
+            } else {
+                format!("{halo2_s3_prefix}/{name}")
+            };
+            println!("Downloading {name}");
+            let resp = client
+                .get_object()
+                .bucket(ARTIFACTS_BUCKET)
+                .key(&key)
+                .send()
+                .await
+                .map_err(|e| eyre!("Failed to download s3://{ARTIFACTS_BUCKET}/{key}: {e}"))?;
+            let data = resp.body.collect().await?;
+            write(local_path, data.into_bytes())?;
         }
 
         Ok(())
@@ -254,7 +256,7 @@ impl SetupCmd {
         const ARTIFACTS_BUCKET: &str = "openvm-public-artifacts-us-east-1";
         const FULL_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-        let key = format!("v{FULL_VERSION}/halo2/v{OPENVM_VERSION}/halo2.pk");
+        let key = format!("v{FULL_VERSION}/halo2.pk");
         println!(
             "Downloading Halo2 proving key to {}",
             halo2_pk_path.display()

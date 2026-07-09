@@ -21,14 +21,19 @@ pub const EVM_HALO2_VERIFIER_PARENT_NAME: &str = "Halo2Verifier.sol";
 pub const EVM_HALO2_VERIFIER_BASE_NAME: &str = "OpenVmHalo2Verifier.sol";
 pub const EVM_VERIFIER_ARTIFACT_FILENAME: &str = "verifier.bytecode.json";
 
+/// Reads the EVM halo2 verifier written by [`write_evm_halo2_verifier_to_folder`]. If
+/// `version_dir` is `Some`, it replaces the default `v[OPENVM_VERSION]` directory name.
 #[cfg(feature = "evm-prove")]
-pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<EvmHalo2Verifier> {
+pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(
+    folder: P,
+    version_dir: Option<&str>,
+) -> Result<EvmHalo2Verifier> {
     use std::fs::read_to_string;
 
     let folder = folder
         .as_ref()
         .join("src")
-        .join(format!("v{OPENVM_VERSION}"));
+        .join(version_dir.map_or_else(|| format!("v{OPENVM_VERSION}"), str::to_string));
     let halo2_verifier_code_path = folder.join(EVM_HALO2_VERIFIER_PARENT_NAME);
     let openvm_verifier_code_path = folder.join(EVM_HALO2_VERIFIER_BASE_NAME);
     let interface_path = folder
@@ -68,16 +73,18 @@ pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<
 ///         └── Halo2Verifier.sol
 /// ```
 ///
+/// If `version_dir` is `Some`, it replaces the default `v[OPENVM_VERSION]` directory name.
 /// If the relevant directories do not exist, they will be created.
 #[cfg(feature = "evm-prove")]
 pub fn write_evm_halo2_verifier_to_folder<P: AsRef<Path>>(
     verifier: EvmHalo2Verifier,
     folder: P,
+    version_dir: Option<&str>,
 ) -> Result<()> {
     let folder = folder
         .as_ref()
         .join("src")
-        .join(format!("v{OPENVM_VERSION}"));
+        .join(version_dir.map_or_else(|| format!("v{OPENVM_VERSION}"), str::to_string));
     if !folder.exists() {
         create_dir_all(&folder)?; // Make sure directories exist
     }
