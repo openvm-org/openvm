@@ -35,18 +35,18 @@ impl WidthAlignedCase {
     }
 }
 
-fn encoder<const CASES: usize, const SELECTOR_WIDTH: usize>() -> Encoder {
-    let encoder = Encoder::new(CASES, SELECTOR_MAX_DEGREE, true);
+fn encoder<const NUM_CASES: usize, const SELECTOR_WIDTH: usize>() -> Encoder {
+    let encoder = Encoder::new(NUM_CASES, SELECTOR_MAX_DEGREE, true);
     debug_assert_eq!(encoder.width(), SELECTOR_WIDTH);
     encoder
 }
 
-const DOUBLEWORD_STORE_CASES: [WidthAlignedCase; 1] = [WidthAlignedCase {
+const STORE_DOUBLEWORD_CASES: [WidthAlignedCase; 1] = [WidthAlignedCase {
     opcode: STORED,
     byte_shift: 0,
 }];
 
-const WORD_STORE_CASES: [WidthAlignedCase; 2] = [
+const STORE_WORD_CASES: [WidthAlignedCase; 2] = [
     WidthAlignedCase {
         opcode: STOREW,
         byte_shift: 0,
@@ -57,7 +57,7 @@ const WORD_STORE_CASES: [WidthAlignedCase; 2] = [
     },
 ];
 
-const HALFWORD_STORE_CASES: [WidthAlignedCase; 4] = [
+const STORE_HALFWORD_CASES: [WidthAlignedCase; 4] = [
     WidthAlignedCase {
         opcode: STOREH,
         byte_shift: 0,
@@ -78,9 +78,9 @@ const HALFWORD_STORE_CASES: [WidthAlignedCase; 4] = [
 
 pub(crate) fn store_width_aligned_cases<const STORE_WIDTH: usize>() -> &'static [WidthAlignedCase] {
     match STORE_WIDTH {
-        STORE_WIDTH_DOUBLEWORD => &DOUBLEWORD_STORE_CASES,
-        STORE_WIDTH_WORD => &WORD_STORE_CASES,
-        STORE_WIDTH_HALFWORD => &HALFWORD_STORE_CASES,
+        STORE_WIDTH_DOUBLEWORD => &STORE_DOUBLEWORD_CASES,
+        STORE_WIDTH_WORD => &STORE_WORD_CASES,
+        STORE_WIDTH_HALFWORD => &STORE_HALFWORD_CASES,
         _ => unreachable!("unsupported width for width-aligned store"),
     }
 }
@@ -101,40 +101,41 @@ pub struct StoreWidthAlignedCoreCols<T, const SELECTOR_WIDTH: usize> {
 #[columns_via(StoreWidthAlignedCoreCols<u8, SELECTOR_WIDTH>)]
 pub struct StoreWidthAlignedCoreAir<
     const STORE_WIDTH: usize,
-    const CASES: usize,
+    const NUM_CASES: usize,
     const SELECTOR_WIDTH: usize,
 > {
     pub offset: usize,
     encoder: Encoder,
 }
 
-impl<const STORE_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    StoreWidthAlignedCoreAir<STORE_WIDTH, CASES, SELECTOR_WIDTH>
+impl<const STORE_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
+    StoreWidthAlignedCoreAir<STORE_WIDTH, NUM_CASES, SELECTOR_WIDTH>
 {
     pub fn new(offset: usize) -> Self {
-        debug_assert_eq!(store_width_aligned_cases::<STORE_WIDTH>().len(), CASES);
+        debug_assert_eq!(store_width_aligned_cases::<STORE_WIDTH>().len(), NUM_CASES);
         Self {
             offset,
-            encoder: encoder::<CASES, SELECTOR_WIDTH>(),
+            encoder: encoder::<NUM_CASES, SELECTOR_WIDTH>(),
         }
     }
 }
 
-impl<F: Field, const STORE_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize> BaseAir<F>
-    for StoreWidthAlignedCoreAir<STORE_WIDTH, CASES, SELECTOR_WIDTH>
+impl<F: Field, const STORE_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
+    BaseAir<F> for StoreWidthAlignedCoreAir<STORE_WIDTH, NUM_CASES, SELECTOR_WIDTH>
 {
     fn width(&self) -> usize {
         StoreWidthAlignedCoreCols::<F, SELECTOR_WIDTH>::width()
     }
 }
 
-impl<F: Field, const STORE_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    BaseAirWithPublicValues<F> for StoreWidthAlignedCoreAir<STORE_WIDTH, CASES, SELECTOR_WIDTH>
+impl<F: Field, const STORE_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
+    BaseAirWithPublicValues<F>
+    for StoreWidthAlignedCoreAir<STORE_WIDTH, NUM_CASES, SELECTOR_WIDTH>
 {
 }
 
-impl<AB, I, const STORE_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    VmCoreAir<AB, I> for StoreWidthAlignedCoreAir<STORE_WIDTH, CASES, SELECTOR_WIDTH>
+impl<AB, I, const STORE_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
+    VmCoreAir<AB, I> for StoreWidthAlignedCoreAir<STORE_WIDTH, NUM_CASES, SELECTOR_WIDTH>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -207,7 +208,7 @@ where
 pub struct StoreWidthAlignedFiller<
     A = Rv64StoreAdapterFiller,
     const STORE_WIDTH: usize = STORE_WIDTH_WORD,
-    const CASES: usize = 2,
+    const NUM_CASES: usize = 2,
     const SELECTOR_WIDTH: usize = 1,
 > {
     adapter: A,
@@ -215,25 +216,26 @@ pub struct StoreWidthAlignedFiller<
     encoder: Encoder,
 }
 
-impl<A, const STORE_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    StoreWidthAlignedFiller<A, STORE_WIDTH, CASES, SELECTOR_WIDTH>
+impl<A, const STORE_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
+    StoreWidthAlignedFiller<A, STORE_WIDTH, NUM_CASES, SELECTOR_WIDTH>
 {
     pub fn new(
         adapter: A,
         offset: usize,
         _range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
-        debug_assert_eq!(store_width_aligned_cases::<STORE_WIDTH>().len(), CASES);
+        debug_assert_eq!(store_width_aligned_cases::<STORE_WIDTH>().len(), NUM_CASES);
         Self {
             adapter,
             offset,
-            encoder: encoder::<CASES, SELECTOR_WIDTH>(),
+            encoder: encoder::<NUM_CASES, SELECTOR_WIDTH>(),
         }
     }
 }
 
-impl<F, const STORE_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
-    for StoreWidthAlignedFiller<Rv64StoreAdapterFiller, STORE_WIDTH, CASES, SELECTOR_WIDTH>
+impl<F, const STORE_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
+    TraceFiller<F>
+    for StoreWidthAlignedFiller<Rv64StoreAdapterFiller, STORE_WIDTH, NUM_CASES, SELECTOR_WIDTH>
 where
     F: PrimeField32,
 {

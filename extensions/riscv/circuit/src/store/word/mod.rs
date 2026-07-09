@@ -10,16 +10,16 @@ use crate::{
     },
 };
 
-pub const WORD_STORE_CASES: usize = 2;
-pub const WORD_STORE_SELECTOR_WIDTH: usize = 1;
+pub const STORE_WORD_NUM_CASES: usize = 2;
+pub const STORE_WORD_SELECTOR_WIDTH: usize = 1;
 
 pub type StoreWordCoreAir =
-    StoreWidthAlignedCoreAir<STORE_WIDTH_WORD, WORD_STORE_CASES, WORD_STORE_SELECTOR_WIDTH>;
+    StoreWidthAlignedCoreAir<STORE_WIDTH_WORD, STORE_WORD_NUM_CASES, STORE_WORD_SELECTOR_WIDTH>;
 pub type StoreWordFiller = StoreWidthAlignedFiller<
     Rv64StoreAdapterFiller,
     STORE_WIDTH_WORD,
-    WORD_STORE_CASES,
-    WORD_STORE_SELECTOR_WIDTH,
+    STORE_WORD_NUM_CASES,
+    STORE_WORD_SELECTOR_WIDTH,
 >;
 
 pub type Rv64StoreWordAir = VmAirWrapper<Rv64StoreAdapterAir, StoreWordCoreAir>;

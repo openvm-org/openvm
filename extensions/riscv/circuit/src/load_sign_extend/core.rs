@@ -36,7 +36,7 @@ impl SignedWidthAlignedCase {
     }
 }
 
-const WORD_CASES: [SignedWidthAlignedCase; 2] = [
+const LOAD_SIGN_EXTEND_WORD_CASES: [SignedWidthAlignedCase; 2] = [
     SignedWidthAlignedCase {
         opcode: LOADW,
         byte_shift: 0,
@@ -47,7 +47,7 @@ const WORD_CASES: [SignedWidthAlignedCase; 2] = [
     },
 ];
 
-const HALFWORD_CASES: [SignedWidthAlignedCase; 4] = [
+const LOAD_SIGN_EXTEND_HALFWORD_CASES: [SignedWidthAlignedCase; 4] = [
     SignedWidthAlignedCase {
         opcode: LOADH,
         byte_shift: 0,
@@ -69,14 +69,14 @@ const HALFWORD_CASES: [SignedWidthAlignedCase; 4] = [
 pub(crate) fn signed_width_aligned_cases<const LOAD_WIDTH: usize>(
 ) -> &'static [SignedWidthAlignedCase] {
     match LOAD_WIDTH {
-        LOAD_WIDTH_WORD => &WORD_CASES,
-        LOAD_WIDTH_HALFWORD => &HALFWORD_CASES,
+        LOAD_WIDTH_WORD => &LOAD_SIGN_EXTEND_WORD_CASES,
+        LOAD_WIDTH_HALFWORD => &LOAD_SIGN_EXTEND_HALFWORD_CASES,
         _ => unreachable!("unsupported width for signed width-aligned load"),
     }
 }
 
-fn encoder<const CASES: usize, const SELECTOR_WIDTH: usize>() -> Encoder {
-    let encoder = Encoder::new(CASES, SELECTOR_MAX_DEGREE, true);
+fn encoder<const NUM_CASES: usize, const SELECTOR_WIDTH: usize>() -> Encoder {
+    let encoder = Encoder::new(NUM_CASES, SELECTOR_MAX_DEGREE, true);
     debug_assert_eq!(encoder.width(), SELECTOR_WIDTH);
     encoder
 }
@@ -98,7 +98,7 @@ pub struct LoadSignExtendWidthAlignedCoreCols<T, const SELECTOR_WIDTH: usize> {
 #[columns_via(LoadSignExtendWidthAlignedCoreCols<u8, SELECTOR_WIDTH>)]
 pub struct LoadSignExtendWidthAlignedCoreAir<
     const LOAD_WIDTH: usize,
-    const CASES: usize,
+    const NUM_CASES: usize,
     const SELECTOR_WIDTH: usize,
 > {
     pub offset: usize,
@@ -106,35 +106,35 @@ pub struct LoadSignExtendWidthAlignedCoreAir<
     range_bus: VariableRangeCheckerBus,
 }
 
-impl<const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, CASES, SELECTOR_WIDTH>
+impl<const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
+    LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
 {
     pub fn new(offset: usize, range_bus: VariableRangeCheckerBus) -> Self {
-        debug_assert_eq!(signed_width_aligned_cases::<LOAD_WIDTH>().len(), CASES);
+        debug_assert_eq!(signed_width_aligned_cases::<LOAD_WIDTH>().len(), NUM_CASES);
         Self {
             offset,
-            encoder: encoder::<CASES, SELECTOR_WIDTH>(),
+            encoder: encoder::<NUM_CASES, SELECTOR_WIDTH>(),
             range_bus,
         }
     }
 }
 
-impl<F: Field, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize> BaseAir<F>
-    for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, CASES, SELECTOR_WIDTH>
+impl<F: Field, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
+    BaseAir<F> for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
 {
     fn width(&self) -> usize {
         LoadSignExtendWidthAlignedCoreCols::<F, SELECTOR_WIDTH>::width()
     }
 }
 
-impl<F: Field, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
+impl<F: Field, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
     BaseAirWithPublicValues<F>
-    for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, CASES, SELECTOR_WIDTH>
+    for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
 {
 }
 
-impl<AB, I, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    VmCoreAir<AB, I> for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, CASES, SELECTOR_WIDTH>
+impl<AB, I, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
+    VmCoreAir<AB, I> for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -225,7 +225,7 @@ where
 pub struct LoadSignExtendWidthAlignedFiller<
     A = Rv64LoadAdapterFiller,
     const LOAD_WIDTH: usize = LOAD_WIDTH_WORD,
-    const CASES: usize = 2,
+    const NUM_CASES: usize = 2,
     const SELECTOR_WIDTH: usize = 2,
 > {
     adapter: A,
@@ -234,26 +234,31 @@ pub struct LoadSignExtendWidthAlignedFiller<
     range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<A, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    LoadSignExtendWidthAlignedFiller<A, LOAD_WIDTH, CASES, SELECTOR_WIDTH>
+impl<A, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
+    LoadSignExtendWidthAlignedFiller<A, LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
 {
     pub fn new(
         adapter: A,
         offset: usize,
         range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
-        debug_assert_eq!(signed_width_aligned_cases::<LOAD_WIDTH>().len(), CASES);
+        debug_assert_eq!(signed_width_aligned_cases::<LOAD_WIDTH>().len(), NUM_CASES);
         Self {
             adapter,
             offset,
-            encoder: encoder::<CASES, SELECTOR_WIDTH>(),
+            encoder: encoder::<NUM_CASES, SELECTOR_WIDTH>(),
             range_checker_chip,
         }
     }
 }
 
-impl<F, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
-    for LoadSignExtendWidthAlignedFiller<Rv64LoadAdapterFiller, LOAD_WIDTH, CASES, SELECTOR_WIDTH>
+impl<F, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
+    for LoadSignExtendWidthAlignedFiller<
+        Rv64LoadAdapterFiller,
+        LOAD_WIDTH,
+        NUM_CASES,
+        SELECTOR_WIDTH,
+    >
 where
     F: PrimeField32,
 {

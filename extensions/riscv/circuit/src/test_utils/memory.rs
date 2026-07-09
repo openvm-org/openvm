@@ -64,7 +64,7 @@ pub(crate) use crate::{
         Rv64LoadByteExecutor, Rv64LoadDoublewordAir, Rv64LoadDoublewordChip,
         Rv64LoadDoublewordExecutor, Rv64LoadHalfwordAir, Rv64LoadHalfwordChip,
         Rv64LoadHalfwordExecutor, Rv64LoadWordAir, Rv64LoadWordChip, Rv64LoadWordExecutor,
-        DOUBLEWORD_LOAD_SELECTOR_WIDTH, HALFWORD_LOAD_SELECTOR_WIDTH, WORD_LOAD_SELECTOR_WIDTH,
+        LOAD_DOUBLEWORD_SELECTOR_WIDTH, LOAD_HALFWORD_SELECTOR_WIDTH, LOAD_WORD_SELECTOR_WIDTH,
     },
     load_sign_extend::common::load_sign_extend_write_data,
     store::{
@@ -74,7 +74,7 @@ pub(crate) use crate::{
         Rv64StoreHalfwordExecutor, Rv64StoreWordAir, Rv64StoreWordChip, Rv64StoreWordExecutor,
         StoreByteCoreAir, StoreByteCoreCols, StoreByteFiller, StoreDoublewordCoreAir,
         StoreDoublewordFiller, StoreHalfwordCoreAir, StoreHalfwordFiller, StoreWordCoreAir,
-        StoreWordFiller, HALFWORD_STORE_SELECTOR_WIDTH,
+        StoreWordFiller, STORE_HALFWORD_SELECTOR_WIDTH,
     },
 };
 
@@ -640,7 +640,7 @@ pub(crate) fn assert_pranked_store_byte_fails(prank: impl Fn(&mut StoreByteCoreC
 }
 
 pub(crate) fn assert_pranked_load_halfword_fails(
-    prank: impl Fn(&mut LoadWidthAlignedCoreCols<F, { HALFWORD_LOAD_SELECTOR_WIDTH }>),
+    prank: impl Fn(&mut LoadWidthAlignedCoreCols<F, { LOAD_HALFWORD_SELECTOR_WIDTH }>),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());
@@ -673,7 +673,7 @@ pub(crate) fn assert_pranked_load_halfword_fails(
 }
 
 pub(crate) fn assert_pranked_store_halfword_fails(
-    prank: impl Fn(&mut StoreWidthAlignedCoreCols<F, { HALFWORD_STORE_SELECTOR_WIDTH }>),
+    prank: impl Fn(&mut StoreWidthAlignedCoreCols<F, { STORE_HALFWORD_SELECTOR_WIDTH }>),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(store_memory_config());
@@ -706,7 +706,7 @@ pub(crate) fn assert_pranked_store_halfword_fails(
 }
 
 pub(crate) fn assert_pranked_load_word_fails(
-    prank: impl Fn(&mut LoadWidthAlignedCoreCols<F, { WORD_LOAD_SELECTOR_WIDTH }>),
+    prank: impl Fn(&mut LoadWidthAlignedCoreCols<F, { LOAD_WORD_SELECTOR_WIDTH }>),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());
@@ -739,7 +739,7 @@ pub(crate) fn assert_pranked_load_word_fails(
 }
 
 pub(crate) fn assert_pranked_load_doubleword_fails(
-    prank: impl Fn(&mut LoadWidthAlignedCoreCols<F, { DOUBLEWORD_LOAD_SELECTOR_WIDTH }>),
+    prank: impl Fn(&mut LoadWidthAlignedCoreCols<F, { LOAD_DOUBLEWORD_SELECTOR_WIDTH }>),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());

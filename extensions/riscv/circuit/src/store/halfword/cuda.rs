@@ -7,7 +7,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
-use super::HALFWORD_STORE_SELECTOR_WIDTH;
+use super::STORE_HALFWORD_SELECTOR_WIDTH;
 use crate::{
     adapters::{Rv64StoreAdapterCols, Rv64StoreAdapterRecord},
     cuda_abi::store_halfword_cuda,
@@ -31,7 +31,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64StoreHalfwordChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = Rv64StoreAdapterCols::<F>::width()
-            + StoreWidthAlignedCoreCols::<F, HALFWORD_STORE_SELECTOR_WIDTH>::width();
+            + StoreWidthAlignedCoreCols::<F, STORE_HALFWORD_SELECTOR_WIDTH>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
