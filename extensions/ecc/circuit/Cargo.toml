@@ -25,7 +25,6 @@ openvm-ecc-transpiler = { workspace = true }
 rvr-openvm-lift = { workspace = true, optional = true }
 rvr-openvm-ext-ecc = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
-openvm-cuda-common = { workspace = true, optional = true }
 openvm-stark-sdk = { workspace = true, optional = true, features = ["cpu-backend"] }
 
 num-bigint = { workspace = true }
@@ -61,7 +60,6 @@ rvr = [
     "openvm-algebra-circuit/rvr",
 ]
 cuda = [
-    "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
     "openvm-mod-circuit-builder/cuda",
     "dep:openvm-stark-sdk",
@@ -74,7 +72,6 @@ touchemall = [
     "openvm-circuit/touchemall",
     "openvm-circuit-primitives/touchemall",
     "openvm-cuda-backend/touchemall",
-    "openvm-cuda-common/touchemall",
     "openvm-algebra-circuit/touchemall",
 ]
 
