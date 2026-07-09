@@ -10,18 +10,13 @@ use crate::{
     },
 };
 
-pub const LOAD_DOUBLEWORD_NUM_CASES: usize = 1;
 pub const LOAD_DOUBLEWORD_SELECTOR_WIDTH: usize = 1;
 
-pub type LoadDoublewordCoreAir = LoadWidthAlignedCoreAir<
-    LOAD_WIDTH_DOUBLEWORD,
-    LOAD_DOUBLEWORD_NUM_CASES,
-    LOAD_DOUBLEWORD_SELECTOR_WIDTH,
->;
+pub type LoadDoublewordCoreAir =
+    LoadWidthAlignedCoreAir<LOAD_WIDTH_DOUBLEWORD, LOAD_DOUBLEWORD_SELECTOR_WIDTH>;
 pub type LoadDoublewordFiller = LoadWidthAlignedFiller<
     Rv64LoadAdapterFiller,
     LOAD_WIDTH_DOUBLEWORD,
-    LOAD_DOUBLEWORD_NUM_CASES,
     LOAD_DOUBLEWORD_SELECTOR_WIDTH,
 >;
 

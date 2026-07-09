@@ -35,8 +35,8 @@ impl WidthAlignedCase {
     }
 }
 
-fn encoder<const NUM_CASES: usize, const SELECTOR_WIDTH: usize>() -> Encoder {
-    let encoder = Encoder::new(NUM_CASES, SELECTOR_MAX_DEGREE, true);
+fn encoder<const SELECTOR_WIDTH: usize>(cases: &[WidthAlignedCase]) -> Encoder {
+    let encoder = Encoder::new(cases.len(), SELECTOR_MAX_DEGREE, true);
     debug_assert_eq!(encoder.width(), SELECTOR_WIDTH);
     encoder
 }
@@ -96,42 +96,37 @@ pub struct LoadWidthAlignedCoreCols<T, const SELECTOR_WIDTH: usize> {
 
 #[derive(Debug, Clone, ColumnsAir)]
 #[columns_via(LoadWidthAlignedCoreCols<u8, SELECTOR_WIDTH>)]
-pub struct LoadWidthAlignedCoreAir<
-    const LOAD_WIDTH: usize,
-    const NUM_CASES: usize,
-    const SELECTOR_WIDTH: usize,
-> {
+pub struct LoadWidthAlignedCoreAir<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> {
     pub offset: usize,
     encoder: Encoder,
 }
 
-impl<const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
-    LoadWidthAlignedCoreAir<LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
+impl<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize>
+    LoadWidthAlignedCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
 {
     pub fn new(offset: usize) -> Self {
-        debug_assert_eq!(load_width_aligned_cases::<LOAD_WIDTH>().len(), NUM_CASES);
         Self {
             offset,
-            encoder: encoder::<NUM_CASES, SELECTOR_WIDTH>(),
+            encoder: encoder::<SELECTOR_WIDTH>(load_width_aligned_cases::<LOAD_WIDTH>()),
         }
     }
 }
 
-impl<F: Field, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
-    BaseAir<F> for LoadWidthAlignedCoreAir<LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
+impl<F: Field, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> BaseAir<F>
+    for LoadWidthAlignedCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
 {
     fn width(&self) -> usize {
         LoadWidthAlignedCoreCols::<F, SELECTOR_WIDTH>::width()
     }
 }
 
-impl<F: Field, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
-    BaseAirWithPublicValues<F> for LoadWidthAlignedCoreAir<LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
+impl<F: Field, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> BaseAirWithPublicValues<F>
+    for LoadWidthAlignedCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
 {
 }
 
-impl<AB, I, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
-    VmCoreAir<AB, I> for LoadWidthAlignedCoreAir<LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
+impl<AB, I, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> VmCoreAir<AB, I>
+    for LoadWidthAlignedCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -204,7 +199,6 @@ where
 pub struct LoadWidthAlignedFiller<
     A = Rv64LoadAdapterFiller,
     const LOAD_WIDTH: usize = LOAD_WIDTH_WORD,
-    const NUM_CASES: usize = 2,
     const SELECTOR_WIDTH: usize = 1,
 > {
     adapter: A,
@@ -212,25 +206,24 @@ pub struct LoadWidthAlignedFiller<
     encoder: Encoder,
 }
 
-impl<A, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize>
-    LoadWidthAlignedFiller<A, LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
+impl<A, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize>
+    LoadWidthAlignedFiller<A, LOAD_WIDTH, SELECTOR_WIDTH>
 {
     pub fn new(
         adapter: A,
         offset: usize,
         _range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
-        debug_assert_eq!(load_width_aligned_cases::<LOAD_WIDTH>().len(), NUM_CASES);
         Self {
             adapter,
             offset,
-            encoder: encoder::<NUM_CASES, SELECTOR_WIDTH>(),
+            encoder: encoder::<SELECTOR_WIDTH>(load_width_aligned_cases::<LOAD_WIDTH>()),
         }
     }
 }
 
-impl<F, const LOAD_WIDTH: usize, const NUM_CASES: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
-    for LoadWidthAlignedFiller<Rv64LoadAdapterFiller, LOAD_WIDTH, NUM_CASES, SELECTOR_WIDTH>
+impl<F, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
+    for LoadWidthAlignedFiller<Rv64LoadAdapterFiller, LOAD_WIDTH, SELECTOR_WIDTH>
 where
     F: PrimeField32,
 {
