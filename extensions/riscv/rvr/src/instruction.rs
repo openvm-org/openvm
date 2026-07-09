@@ -50,7 +50,9 @@ impl ExtInstr for NopInstr {
         false
     }
 
-    fn emit_c(&self, _ctx: &mut dyn ExtEmitCtx) {}
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        ctx.trace_timestamp();
+    }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
         Box::new(*self)

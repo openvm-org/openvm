@@ -72,6 +72,9 @@ pub use store::*;
 mod extension;
 pub use extension::*;
 
+#[cfg(feature = "rvr")]
+mod log_native;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_circuit::arch::DenseRecordArena;
@@ -91,6 +94,8 @@ cfg_if::cfg_if! {
     }
 }
 
+#[cfg(all(test, feature = "rvr"))]
+mod rvr_preflight_tests;
 #[cfg(any(test, feature = "test-utils"))]
 mod test_utils;
 
@@ -185,6 +190,27 @@ where
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         Ok(chip_complex)
     }
+
+    #[cfg(feature = "rvr")]
+    fn generate_rvr_record_arenas_from_logs(
+        &self,
+        _config: &Self::VmConfig,
+        exe: &openvm_instructions::exe::VmExe<Val<E::SC>>,
+        output: &openvm_circuit::arch::rvr::RvrPreflightOutput<Val<E::SC>>,
+        capacities: &[(usize, usize)],
+        pc_to_air_idx: &[Option<usize>],
+    ) -> Result<Option<Vec<Self::RecordArena>>, openvm_circuit::arch::ExecutionError>
+    where
+        Val<E::SC>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        log_native::generate_rv64im_record_arenas_from_logs::<Val<E::SC>, Self::RecordArena>(
+            exe,
+            output,
+            capacities,
+            pc_to_air_idx,
+        )
+        .map(Some)
+    }
 }
 
 #[derive(Clone)]
@@ -219,6 +245,27 @@ where
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
         Ok(chip_complex)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn generate_rvr_record_arenas_from_logs(
+        &self,
+        _config: &Self::VmConfig,
+        exe: &openvm_instructions::exe::VmExe<Val<E::SC>>,
+        output: &openvm_circuit::arch::rvr::RvrPreflightOutput<Val<E::SC>>,
+        capacities: &[(usize, usize)],
+        pc_to_air_idx: &[Option<usize>],
+    ) -> Result<Option<Vec<Self::RecordArena>>, openvm_circuit::arch::ExecutionError>
+    where
+        Val<E::SC>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        log_native::generate_rv64im_record_arenas_from_logs::<Val<E::SC>, Self::RecordArena>(
+            exe,
+            output,
+            capacities,
+            pc_to_air_idx,
+        )
+        .map(Some)
     }
 }
 
@@ -265,6 +312,25 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
         )?;
         Ok(chip_complex)
     }
+
+    #[cfg(feature = "rvr")]
+    fn generate_rvr_record_arenas_from_logs(
+        &self,
+        _config: &Self::VmConfig,
+        exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+        output: &openvm_circuit::arch::rvr::RvrPreflightOutput<Val<BabyBearPoseidon2Config>>,
+        capacities: &[(usize, usize)],
+        pc_to_air_idx: &[Option<usize>],
+    ) -> Result<Option<Vec<Self::RecordArena>>, openvm_circuit::arch::ExecutionError>
+    where
+        Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        log_native::generate_rv64im_record_arenas_from_logs::<
+            Val<BabyBearPoseidon2Config>,
+            Self::RecordArena,
+        >(exe, output, capacities, pc_to_air_idx)
+        .map(Some)
+    }
 }
 
 #[cfg(feature = "cuda")]
@@ -304,5 +370,24 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
             inventory,
         )?;
         Ok(chip_complex)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn generate_rvr_record_arenas_from_logs(
+        &self,
+        _config: &Self::VmConfig,
+        exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+        output: &openvm_circuit::arch::rvr::RvrPreflightOutput<Val<BabyBearPoseidon2Config>>,
+        capacities: &[(usize, usize)],
+        pc_to_air_idx: &[Option<usize>],
+    ) -> Result<Option<Vec<Self::RecordArena>>, openvm_circuit::arch::ExecutionError>
+    where
+        Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        log_native::generate_rv64im_record_arenas_from_logs::<
+            Val<BabyBearPoseidon2Config>,
+            Self::RecordArena,
+        >(exe, output, capacities, pc_to_air_idx)
+        .map(Some)
     }
 }

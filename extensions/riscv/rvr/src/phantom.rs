@@ -23,6 +23,7 @@ impl ExtInstr for HintInputInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         ctx.emit_call_without_page_flush("openvm_hint_input", &[]);
+        ctx.trace_timestamp();
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -50,6 +51,7 @@ impl ExtInstr for PrintStrInstr {
         let ptr = ctx.peek_var(self.ptr_reg);
         let len = ctx.peek_var(self.len_reg);
         ctx.emit_checked_call_without_page_flush("openvm_print_str", &[&ptr, &len]);
+        ctx.trace_timestamp();
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -76,6 +78,7 @@ impl ExtInstr for HintRandomInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let num_words = ctx.peek_var(self.num_words_reg);
         ctx.emit_checked_call_without_page_flush("openvm_hint_random", &[&num_words]);
+        ctx.trace_timestamp();
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {

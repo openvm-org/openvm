@@ -7,6 +7,8 @@ use std::{
 
 use derive_new::new;
 use getset::{Setters, WithSetters};
+#[cfg(feature = "rvr")]
+use openvm_instructions::exe::VmExe;
 use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
@@ -22,7 +24,11 @@ use openvm_stark_backend::{
 use rvr_openvm_lift::RvrExtensions;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+#[cfg(feature = "rvr")]
+use super::ExecutionError;
 use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
+#[cfg(feature = "rvr")]
+use crate::arch::rvr::RvrPreflightOutput;
 use crate::{
     arch::{
         execution_mode::metered::segment_ctx::DEFAULT_MAX_MEMORY, AirInventory, AirInventoryError,
@@ -161,6 +167,29 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     >;
+
+    /// Optional rvr log-native record assembly hook.
+    ///
+    /// Implementations return `Some(record_arenas)` only when every non-system
+    /// per-chip record for the segment was assembled from the rvr preflight
+    /// logs. Returning `None` means this builder has no log-native support; the
+    /// rvr proving path treats that as an explicit unsupported error rather
+    /// than falling back to interpreter-generated records.
+    #[cfg(feature = "rvr")]
+    #[allow(unused_variables)]
+    fn generate_rvr_record_arenas_from_logs(
+        &self,
+        config: &Self::VmConfig,
+        exe: &VmExe<Val<E::SC>>,
+        output: &RvrPreflightOutput<Val<E::SC>>,
+        capacities: &[(usize, usize)],
+        pc_to_air_idx: &[Option<usize>],
+    ) -> Result<Option<Vec<Self::RecordArena>>, ExecutionError>
+    where
+        Val<E::SC>: PrimeField32,
+    {
+        Ok(None)
+    }
 }
 
 impl<SC, VC> VmConfig<SC> for VC
@@ -268,7 +297,7 @@ impl MemoryConfig {
         addr_spaces
     }
 
-    /// Config for aggregation usage with only deferral address space.
+    /// Config for aggregation usage with only native address space.
     pub fn aggregation() -> Self {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);

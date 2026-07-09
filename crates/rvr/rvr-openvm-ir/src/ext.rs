@@ -120,4 +120,15 @@ pub trait ExtEmitCtx {
         num_dwords: &str,
         addr_space: PageAddressSpace,
     );
+
+    /// Emit a dword-range memory trace (one dword is 8 bytes).
+    fn trace_mem_access_u64_range(
+        &mut self,
+        base_addr: &str,
+        num_dwords: &str,
+        addr_space: PageAddressSpace,
+    );
+
+    /// Emit a timestamp-only trace tick.
+    fn trace_timestamp(&mut self);
 }

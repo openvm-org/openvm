@@ -9,22 +9,39 @@ mod initial_image;
 pub mod io;
 pub mod metered;
 pub mod metered_cost;
+pub mod preflight;
+pub mod preflight_normalizer;
 pub mod pure;
 pub mod state;
 
 pub use compile::{
     build_pc_to_chip, compile, compile_metered, compile_metered_cost,
-    compile_metered_segment_boundary, compile_with_instret_tracking, compile_with_options,
+    compile_metered_segment_boundary, compile_preflight, compile_preflight_with_extensions,
+    compile_with_instret_tracking, compile_with_options,
     load_compiled_from_path, ChipMapping, CompileError, CompileOptions, RvrCompiled,
+    RvrPreflightOpcodeClass,
 };
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
-pub use execute::ExecuteError;
+pub use execute::{
+    execute, execute_metered, execute_metered_cost, execute_metered_segment_boundary,
+    execute_preflight, rv_execute, ExecuteError, RvrPreflightRunResult,
+};
 pub use initial_image::RvrInitialImage;
 pub use metered::{RvrMeteredExecutionOutcome, RvrMeteredInstance, RvrMeteredSegmentInstance};
 pub use metered_cost::{MeteredCostState, RvrMeteredCostInstance};
 pub use pure::{
     RvrPureInstance, RvrPureWithInstretTrackingInstance, RvrTrackedExecution,
     RvrTrackedExecutionOutcome,
+};
+pub use preflight::{
+    MemoryLogEntry, PreflightRawLogs, PreflightTracer, PreflightTracerData, ProgramLogEntry,
+    RvrPreflightInstance, RvrPreflightOutput, RvrPreflightRoute, PREFLIGHT_INITIAL_TIMESTAMP,
+    PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE,
+    PREFLIGHT_TRACER_KIND,
+};
+pub use preflight_normalizer::{
+    normalize_preflight_memory_logs, PreflightMemoryAccessAux, PreflightMemoryReplay,
+    PreflightNormalizeError,
 };
 pub use rvr_openvm::{
     default_compiler as default_native_compiler, default_compiler_command, default_dwarfdump_cmd,

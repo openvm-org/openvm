@@ -20,9 +20,10 @@ use super::{
     io::{host_hint_stream_set, OpenVmIoState},
     metered::{metered_periodic_check, RvrMeteredExecutionOutcome, SegmentationState},
     metered_cost::RvrMeteredCostResult,
+    preflight::PreflightTracerData,
     state::{
         init_rvr_state, MeteredCostRvState, MeteredRvState, PureRvState,
-        PureWithInstretTrackingRvState,
+        PureWithInstretTrackingRvState, PreflightRvState,
     },
 };
 use crate::{arch::VmState, system::memory::online::GuestMemory};
@@ -138,7 +139,10 @@ unsafe fn register_openvm_io_ctx(
 ///
 /// - `compiled` must contain a valid rvr-compiled shared library exporting the `rv_execute` symbol.
 /// - `state_ptr` must point to the `RvState` layout selected by the compiled artifact.
-unsafe fn rv_execute(compiled: &RvrCompiled, state_ptr: *mut c_void) -> Result<(), ExecuteError> {
+pub unsafe fn rv_execute(
+    compiled: &RvrCompiled,
+    state_ptr: *mut c_void,
+) -> Result<(), ExecuteError> {
     let execute_fn: ExecuteFn = unsafe {
         let sym = compiled
             .lib
@@ -188,6 +192,47 @@ fn run_and_finalize<ModeState>(
                 u32::try_from(state.pc).expect("PC must be within u32 range after C bounds check"),
             );
             Ok(status)
+        }
+        _ => Err(if status == ExecutionStatus::Terminated {
+            ExecuteError::GuestExit(exit_code)
+        } else {
+            ExecuteError::ExecutionFailed(status as i32)
+        }),
+    }
+}
+
+fn run_preflight_and_finalize(
+    compiled: &RvrCompiled,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
+    vm_state: &mut VmState<GuestMemory>,
+    state: &mut PreflightState,
+    allow_suspended: bool,
+) -> Result<(ExecutionStatus, Option<u32>), ExecuteError> {
+    let mut io_state = build_io_state_borrowed(vm_state);
+    unsafe {
+        register_openvm_io_ctx(compiled, &mut io_state)?;
+        for hook in runtime_hooks {
+            hook.register_host_callbacks(&compiled.lib)?;
+        }
+        rv_execute(compiled, state.as_void_ptr())?;
+    }
+
+    let status = state.execution_status();
+    let exit_code = state.result_code();
+    match status {
+        ExecutionStatus::Terminated => {
+            write_rv64_registers(vm_state, &state.regs);
+            vm_state.set_pc(
+                u32::try_from(state.pc).expect("PC must be within u32 range after C bounds check"),
+            );
+            Ok((status, Some(exit_code as u32)))
+        }
+        ExecutionStatus::Suspended if allow_suspended => {
+            write_rv64_registers(vm_state, &state.regs);
+            vm_state.set_pc(
+                u32::try_from(state.pc).expect("PC must be within u32 range after C bounds check"),
+            );
+            Ok((status, None))
         }
         _ => Err(if status == ExecutionStatus::Terminated {
             ExecuteError::GuestExit(exit_code)
@@ -302,6 +347,53 @@ pub(super) fn execute_metered_cost(
         instret: state.mode_state.instret,
         cost: state.mode_state.cost,
     })
+}
+
+pub struct RvrPreflightRunResult {
+    pub state: PreflightState,
+    pub suspended: bool,
+    pub exit_code: Option<u32>,
+}
+
+pub fn execute_preflight(
+    compiled: &RvrCompiled,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
+    vm_state: &mut VmState<GuestMemory>,
+    tracer_data: &mut PreflightTracerData,
+    num_insns: Option<u64>,
+) -> Result<RvrPreflightRunResult, ExecuteError> {
+    let pc = vm_state.pc();
+    let initial_regs = read_rv64_registers(vm_state);
+
+    let mut state = init_rvr_state_with_preflight(vm_state, pc);
+    state.regs = initial_regs;
+    state.tracer = TracerPtr(tracer_data);
+    if let Some(n) = num_insns {
+        state.suspender.set_target(n);
+    }
+
+    let (status, exit_code) = run_preflight_and_finalize(
+        compiled,
+        runtime_hooks,
+        vm_state,
+        &mut state,
+        num_insns.is_some(),
+    )
+    .inspect_err(|error| tracing::warn!(%error, "rvr preflight execution failed"))?;
+    Ok(RvrPreflightRunResult {
+        state,
+        suspended: status == ExecutionStatus::Suspended,
+        exit_code,
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn execute_preflight_for_test(
+    compiled: &RvrCompiled,
+    vm_state: &mut VmState<GuestMemory>,
+    tracer_data: &mut PreflightTracerData,
+) -> Result<PreflightState, ExecuteError> {
+    execute_preflight(compiled, &[], vm_state, tracer_data, None).map(|result| result.state)
 }
 
 /// Execute a VmExe with per-chip metered execution and segmentation.
