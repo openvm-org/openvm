@@ -117,10 +117,13 @@ impl ExtInstr for Int256AluInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_var(self.rd_reg);
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
-        ctx.emit_call(self.op.ffi_name(), &["state", &rd, &rs1, &rs2]);
+        // Match Rv64VecHeapAdapterExecutor's preflight order: source pointers first, then the
+        // destination pointer. This ordering is observable because every traced access advances
+        // the shared OpenVM timestamp.
+        let rd = ctx.read_var(self.rd_reg);
+        ctx.extern_call(self.op.ffi_name(), &["state", &rd, &rs1, &rs2]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
