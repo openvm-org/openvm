@@ -44,8 +44,8 @@ use {
 };
 
 use super::{
-    run_write_data, selector_point_for_opcode_shift, LoadStoreCoreAir, LoadStoreCoreCols,
-    Rv64LoadStoreChip, LOADSTORE_SELECTOR_WIDTH,
+    selector_point_for_opcode_shift, LoadStoreCoreAir, LoadStoreCoreCols, Rv64LoadStoreChip,
+    LOADSTORE_SELECTOR_WIDTH,
 };
 use crate::{
     adapters::{
@@ -58,6 +58,25 @@ use crate::{
 
 const IMM_BITS: usize = 16;
 const MAX_INS_CAPACITY: usize = 128;
+
+/// Convenience wrapper for single block (non block-spanning) accesses: passes zero second
+/// blocks and returns only the first output block.
+fn run_write_data_aligned(
+    opcode: Rv64LoadStoreOpcode,
+    read_data: [u8; RV64_REGISTER_NUM_LIMBS],
+    prev_data: [u8; RV64_REGISTER_NUM_LIMBS],
+    shift: usize,
+) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    let [write_data, _] = super::run_write_data(
+        opcode,
+        read_data,
+        [0; RV64_REGISTER_NUM_LIMBS],
+        prev_data,
+        [0; RV64_REGISTER_NUM_LIMBS],
+        shift,
+    );
+    write_data
+}
 
 type F = BabyBear;
 type Harness = TestChipHarness<F, Rv64LoadStoreExecutor, Rv64LoadStoreAir, Rv64LoadStoreChip<F>>;
@@ -172,9 +191,16 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     tester.write_bytes(1, b, rs1.map(F::from_u8));
 
+    let aligned_ptr = (ptr_val as usize) - shift_amount;
+    let crosses = shift_amount + access_width(opcode) > RV64_REGISTER_NUM_LIMBS;
+
     let mut prev_data: [F; RV64_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_BYTE_BITS))));
     let mut read_data: [F; RV64_REGISTER_NUM_LIMBS] =
+        array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_BYTE_BITS))));
+    // Second block contents; only used (and only written to memory) when the access spans
+    // two blocks.
+    let block1_data: [F; RV64_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV64_BYTE_BITS))));
 
     if is_load {
@@ -182,12 +208,18 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
             prev_data = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
         }
         tester.write_bytes(1, a, prev_data);
-        tester.write_bytes(mem_as, (ptr_val as usize) - shift_amount, read_data);
+        tester.write_bytes(mem_as, aligned_ptr, read_data);
+        if crosses {
+            tester.write_bytes(mem_as, aligned_ptr + RV64_REGISTER_NUM_LIMBS, block1_data);
+        }
     } else {
         if a == 0 {
             read_data = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
         }
-        tester.write_bytes(mem_as, (ptr_val as usize) - shift_amount, prev_data);
+        tester.write_bytes(mem_as, aligned_ptr, prev_data);
+        if crosses {
+            tester.write_bytes(mem_as, aligned_ptr + RV64_REGISTER_NUM_LIMBS, block1_data);
+        }
         tester.write_bytes(1, a, read_data);
     }
 
@@ -210,13 +242,27 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         ),
     );
 
-    let write_data = run_write_data(
+    // For loads block1_data acts as the second read block; for stores it acts as the second
+    // block's previous contents.
+    let block1_bytes = block1_data.map(|x| x.as_canonical_u32() as u8);
+    let (read_data1, prev_data1) = if crosses {
+        if is_load {
+            (block1_bytes, [0; RV64_REGISTER_NUM_LIMBS])
+        } else {
+            ([0; RV64_REGISTER_NUM_LIMBS], block1_bytes)
+        }
+    } else {
+        ([0; RV64_REGISTER_NUM_LIMBS], [0; RV64_REGISTER_NUM_LIMBS])
+    };
+    let [write_data, write_data1] = super::run_write_data(
         opcode,
         read_data.map(|x| x.as_canonical_u32() as u8),
+        read_data1,
         prev_data.map(|x| x.as_canonical_u32() as u8),
+        prev_data1,
         shift_amount,
-    )
-    .map(F::from_u8);
+    );
+    let write_data = write_data.map(F::from_u8);
     if is_load {
         if enabled_write {
             assert_eq!(
@@ -232,9 +278,77 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     } else {
         assert_eq!(
             write_data,
-            tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(mem_as, (ptr_val as usize) - shift_amount)
+            tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(mem_as, aligned_ptr)
         );
+        if crosses {
+            assert_eq!(
+                write_data1.map(F::from_u8),
+                tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(
+                    mem_as,
+                    aligned_ptr + RV64_REGISTER_NUM_LIMBS
+                )
+            );
+        }
     }
+}
+
+fn access_width(opcode: Rv64LoadStoreOpcode) -> usize {
+    match opcode {
+        LOADD | STORED => 8,
+        LOADWU | STOREW => 4,
+        LOADHU | STOREH => 2,
+        LOADBU | STOREB => 1,
+        _ => unreachable!("loadstore tests should not handle sign-extension load opcodes"),
+    }
+}
+
+/// Executes `opcode` at a random block-spanning (misaligned) address: picks a random
+/// crossing shift for the opcode's width and a random in-bounds aligned base.
+fn set_and_execute_crossing<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
+    rng: &mut StdRng,
+    opcode: Rv64LoadStoreOpcode,
+) {
+    let width = access_width(opcode);
+    assert!(width > 1, "byte accesses can never span two blocks");
+    let crossing_shifts: Vec<usize> =
+        (RV64_REGISTER_NUM_LIMBS - width + 1..RV64_REGISTER_NUM_LIMBS).collect();
+    let shift = *crossing_shifts.choose(rng).unwrap();
+
+    let imm = rng.random_range(0..(1 << IMM_BITS));
+    let imm_sign = rng.random_range(0..2);
+    let imm_ext = sign_extend_imm16(imm, imm_sign);
+
+    // Both touched blocks must be in bounds: aligned_ptr + 16 <= 2^address_bits.
+    let max_addr = 1usize << tester.address_bits();
+    let aligned_ptr =
+        rng.random_range(0..(max_addr / RV64_REGISTER_NUM_LIMBS - 1)) * RV64_REGISTER_NUM_LIMBS;
+    let ptr_val = (aligned_ptr + shift) as u32;
+    let rs1_bytes = ptr_val.wrapping_sub(imm_ext).to_le_bytes();
+    let rs1 = [
+        rs1_bytes[0],
+        rs1_bytes[1],
+        rs1_bytes[2],
+        rs1_bytes[3],
+        0,
+        0,
+        0,
+        0,
+    ];
+
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some(rs1),
+        Some(imm),
+        Some(imm_sign),
+        None,
+    );
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -281,6 +395,132 @@ fn rand_loadstore_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
         .load_periphery(bitwise)
         .finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[test_case(LOADHU, 100)]
+#[test_case(LOADWU, 100)]
+#[test_case(LOADD, 100)]
+#[test_case(STOREH, 100)]
+#[test_case(STOREW, 100)]
+#[test_case(STORED, 100)]
+fn rand_loadstore_crossing_test(opcode: Rv64LoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut mem_config = MemoryConfig::default();
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    if [STORED, STOREW, STOREH].contains(&opcode) {
+        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
+    }
+    let mut tester = VmChipTestBuilder::from_config(mem_config);
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    for _ in 0..num_ops {
+        set_and_execute_crossing(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            opcode,
+        );
+    }
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn positive_loadd_crossing_shift3_test() {
+    let mut rng = create_seeded_rng();
+    let mut mem_config = MemoryConfig::default();
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    let mut tester = VmChipTestBuilder::from_config(mem_config);
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    // ptr = 80 + 3: LOADD reads bytes 83..91, spanning blocks at 80 and 88.
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        LOADD,
+        Some([83, 0, 0, 0, 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        Some(2),
+    );
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn positive_stored_crossing_shift5_test() {
+    let mut rng = create_seeded_rng();
+    let mut mem_config = MemoryConfig::default();
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
+    let mut tester = VmChipTestBuilder::from_config(mem_config);
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    // ptr = 160 + 5: STORED writes bytes 165..173, spanning blocks at 160 and 168.
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        STORED,
+        Some([165, 0, 0, 0, 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        Some(2),
+    );
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+#[should_panic(expected = "block-spanning access exceeds implemented memory address space")]
+fn negative_crossing_out_of_bounds_test() {
+    let mut rng = create_seeded_rng();
+    let mut mem_config = MemoryConfig::default();
+    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
+    let mut tester = VmChipTestBuilder::from_config(mem_config);
+    let (mut harness, _bitwise) = create_harness(&mut tester);
+
+    // ptr = 2^29 - 4: the first block (at 2^29 - 8) is in bounds but the LOADD access
+    // spans into the block at 2^29, which is out of bounds. The adapter executor must
+    // reject it before touching memory, so only rs1 needs to be set up.
+    let _ = &mut rng;
+    let ptr: u32 = (1 << 29) - 4;
+    let rs1_bytes = ptr.to_le_bytes();
+    let rs1 = [
+        rs1_bytes[0],
+        rs1_bytes[1],
+        rs1_bytes[2],
+        rs1_bytes[3],
+        0,
+        0,
+        0,
+        0,
+    ];
+    tester.write_bytes(1, 16, rs1.map(F::from_u8));
+    tester.execute(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(LOADD.global_opcode(), [8, 16, 0, 1, 2, 1, 0]),
+    );
 }
 
 #[test]
@@ -379,10 +619,15 @@ fn positive_storew_public_values_test() {
 struct LoadStorePrankValues {
     rs1_data: Option<[u32; RV64_WORD_NUM_LIMBS]>,
     read_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    read_data1: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     prev_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prev_data1: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     write_data: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    write_data1: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
     flags: Option<[u32; LOADSTORE_SELECTOR_WIDTH]>,
     is_load: Option<bool>,
+    load_cross: Option<bool>,
+    store_cross: Option<bool>,
     mem_as: Option<u32>,
 }
 
@@ -429,17 +674,32 @@ fn run_negative_loadstore_test(
         if let Some(read_data) = prank_vals.read_data {
             core_cols.read_data = read_data.map(F::from_u32);
         }
+        if let Some(read_data1) = prank_vals.read_data1 {
+            core_cols.read_data1 = read_data1.map(F::from_u32);
+        }
         if let Some(prev_data) = prank_vals.prev_data {
             core_cols.prev_data = prev_data.map(F::from_u32);
         }
+        if let Some(prev_data1) = prank_vals.prev_data1 {
+            core_cols.prev_data1 = prev_data1.map(F::from_u32);
+        }
         if let Some(write_data) = prank_vals.write_data {
             core_cols.write_data = write_data.map(F::from_u32);
+        }
+        if let Some(write_data1) = prank_vals.write_data1 {
+            core_cols.write_data1 = write_data1.map(F::from_u32);
         }
         if let Some(flags) = prank_vals.flags {
             core_cols.selector = flags.map(F::from_u32);
         }
         if let Some(is_load) = prank_vals.is_load {
             core_cols.is_load = F::from_bool(is_load);
+        }
+        if let Some(load_cross) = prank_vals.load_cross {
+            core_cols.load_cross = F::from_bool(load_cross);
+        }
+        if let Some(store_cross) = prank_vals.store_cross {
+            core_cols.store_cross = F::from_bool(store_cross);
         }
         if let Some(mem_as) = prank_vals.mem_as {
             adapter_cols.mem_as = F::from_u32(mem_as);
@@ -519,13 +779,12 @@ fn negative_write_data_tests() {
         Some(43641),
         None,
         LoadStorePrankValues {
-            rs1_data: None,
             read_data: Some([175, 33, 198, 250, 131, 74, 186, 29]),
             prev_data: Some([90, 121, 64, 205, 159, 213, 89, 34]),
             write_data: Some([175, 33, 0, 0, 0, 0, 0, 0]),
             flags: Some(selector_point_for_opcode_shift(LOADHU, 0)),
             is_load: Some(true),
-            mem_as: None,
+            ..Default::default()
         },
         true,
     );
@@ -536,13 +795,11 @@ fn negative_write_data_tests() {
         Some(28122),
         Some(0),
         LoadStorePrankValues {
-            rs1_data: None,
             read_data: Some([175, 33, 198, 250, 131, 74, 186, 29]),
             prev_data: Some([90, 121, 64, 205, 159, 213, 89, 34]),
             write_data: Some([175, 121, 64, 205, 159, 213, 89, 34]),
             flags: Some(selector_point_for_opcode_shift(STOREB, 3)),
-            is_load: None,
-            mem_as: None,
+            ..Default::default()
         },
         false,
     );
@@ -553,13 +810,12 @@ fn negative_write_data_tests() {
         Some(0),
         Some(0),
         LoadStorePrankValues {
-            rs1_data: None,
             read_data: Some([138, 45, 202, 76, 131, 74, 186, 29]),
             prev_data: Some([159, 213, 89, 34, 142, 67, 210, 88]),
             write_data: Some([138, 45, 202, 76, 0, 0, 0, 0]),
             flags: Some(selector_point_for_opcode_shift(LOADWU, 4)),
             is_load: Some(true),
-            mem_as: None,
+            ..Default::default()
         },
         false,
     );
@@ -647,11 +903,122 @@ fn negative_wrong_address_space_tests() {
 /// Ensure that solve functions produce the correct results.
 ///////////////////////////////////////////////////////////////////////////////////////
 #[test]
+fn negative_crossing_tests() {
+    // LOADD at ptr 83: shift 3, spans two blocks. Denying the second block read (while the
+    // selector case still claims a crossing load) must break the load_cross binding.
+    run_negative_loadstore_test(
+        LOADD,
+        Some([83, 0, 0, 0, 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        LoadStorePrankValues {
+            load_cross: Some(false),
+            ..Default::default()
+        },
+        false,
+    );
+
+    // Forging the second block's contents must break either the read1 bus receive or the
+    // write mux over the concatenated blocks.
+    run_negative_loadstore_test(
+        LOADD,
+        Some([83, 0, 0, 0, 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        LoadStorePrankValues {
+            read_data1: Some([1, 2, 3, 4, 5, 6, 7, 8]),
+            ..Default::default()
+        },
+        true,
+    );
+
+    // STORED at ptr 165: shift 5, spans two blocks. Denying the second block write must
+    // break the store_cross binding.
+    run_negative_loadstore_test(
+        STORED,
+        Some([165, 0, 0, 0, 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        LoadStorePrankValues {
+            store_cross: Some(false),
+            ..Default::default()
+        },
+        false,
+    );
+
+    // Forging the second block's new contents must break the write_data1 mux.
+    run_negative_loadstore_test(
+        STORED,
+        Some([165, 0, 0, 0, 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        LoadStorePrankValues {
+            write_data1: Some([1, 2, 3, 4, 5, 6, 7, 8]),
+            ..Default::default()
+        },
+        true,
+    );
+}
+
+#[test]
+fn run_crossing_write_data_sanity_test() {
+    let read_data = [138, 45, 202, 76, 131, 74, 186, 29];
+    let read_data1 = [10, 20, 30, 40, 50, 60, 70, 80];
+    let prev_data = [159, 213, 89, 34, 142, 67, 210, 88];
+    let prev_data1 = [91, 92, 93, 94, 95, 96, 97, 98];
+
+    // Crossing loads select from the concatenation read_data ++ read_data1.
+    assert_eq!(
+        super::run_write_data(LOADD, read_data, read_data1, prev_data, prev_data1, 3),
+        [[76, 131, 74, 186, 29, 10, 20, 30], [0; 8]]
+    );
+    assert_eq!(
+        super::run_write_data(LOADWU, read_data, read_data1, prev_data, prev_data1, 6),
+        [[186, 29, 10, 20, 0, 0, 0, 0], [0; 8]]
+    );
+    assert_eq!(
+        super::run_write_data(LOADHU, read_data, read_data1, prev_data, prev_data1, 7),
+        [[29, 10, 0, 0, 0, 0, 0, 0], [0; 8]]
+    );
+
+    // Crossing stores spill the high source bytes into the second block and preserve the
+    // rest of both blocks.
+    let rs2 = [1, 2, 3, 4, 5, 6, 7, 8];
+    assert_eq!(
+        super::run_write_data(STORED, rs2, [0; 8], prev_data, prev_data1, 5),
+        [
+            [159, 213, 89, 34, 142, 1, 2, 3],
+            [4, 5, 6, 7, 8, 96, 97, 98]
+        ]
+    );
+    assert_eq!(
+        super::run_write_data(STOREW, rs2, [0; 8], prev_data, prev_data1, 6),
+        [
+            [159, 213, 89, 34, 142, 67, 1, 2],
+            [3, 4, 93, 94, 95, 96, 97, 98]
+        ]
+    );
+    assert_eq!(
+        super::run_write_data(STOREH, rs2, [0; 8], prev_data, prev_data1, 7),
+        [
+            [159, 213, 89, 34, 142, 67, 210, 1],
+            [2, 92, 93, 94, 95, 96, 97, 98]
+        ]
+    );
+}
+
+#[test]
 fn run_loadd_stored_sanity_test() {
     let read_data = [138, 45, 202, 76, 131, 74, 186, 29];
     let prev_data = [159, 213, 89, 34, 142, 67, 210, 88];
-    assert_eq!(run_write_data(LOADD, read_data, prev_data, 0), read_data);
-    assert_eq!(run_write_data(STORED, read_data, prev_data, 0), read_data);
+    assert_eq!(
+        run_write_data_aligned(LOADD, read_data, prev_data, 0),
+        read_data
+    );
+    assert_eq!(
+        run_write_data_aligned(STORED, read_data, prev_data, 0),
+        read_data
+    );
 }
 
 #[test]
@@ -660,19 +1027,19 @@ fn run_loadwu_storew_sanity_test() {
     let prev_data = [159, 213, 89, 34, 142, 67, 210, 88];
 
     assert_eq!(
-        run_write_data(LOADWU, read_data, prev_data, 0),
+        run_write_data_aligned(LOADWU, read_data, prev_data, 0),
         [138, 45, 202, 76, 0, 0, 0, 0]
     );
     assert_eq!(
-        run_write_data(LOADWU, read_data, prev_data, 4),
+        run_write_data_aligned(LOADWU, read_data, prev_data, 4),
         [131, 74, 186, 29, 0, 0, 0, 0]
     );
     assert_eq!(
-        run_write_data(STOREW, read_data, prev_data, 0),
+        run_write_data_aligned(STOREW, read_data, prev_data, 0),
         [138, 45, 202, 76, 142, 67, 210, 88]
     );
     assert_eq!(
-        run_write_data(STOREW, read_data, prev_data, 4),
+        run_write_data_aligned(STOREW, read_data, prev_data, 4),
         [159, 213, 89, 34, 138, 45, 202, 76]
     );
 }
@@ -683,19 +1050,19 @@ fn run_storeh_sanity_test() {
     let prev_data = [144, 56, 175, 92, 90, 121, 64, 205];
 
     assert_eq!(
-        run_write_data(STOREH, read_data, prev_data, 0),
+        run_write_data_aligned(STOREH, read_data, prev_data, 0),
         [250, 123, 175, 92, 90, 121, 64, 205]
     );
     assert_eq!(
-        run_write_data(STOREH, read_data, prev_data, 2),
+        run_write_data_aligned(STOREH, read_data, prev_data, 2),
         [144, 56, 250, 123, 90, 121, 64, 205]
     );
     assert_eq!(
-        run_write_data(STOREH, read_data, prev_data, 4),
+        run_write_data_aligned(STOREH, read_data, prev_data, 4),
         [144, 56, 175, 92, 250, 123, 64, 205]
     );
     assert_eq!(
-        run_write_data(STOREH, read_data, prev_data, 6),
+        run_write_data_aligned(STOREH, read_data, prev_data, 6),
         [144, 56, 175, 92, 90, 121, 250, 123]
     );
 }
@@ -706,35 +1073,35 @@ fn run_storeb_sanity_test() {
     let prev_data = [199, 83, 243, 12, 90, 121, 64, 205];
 
     assert_eq!(
-        run_write_data(STOREB, read_data, prev_data, 0),
+        run_write_data_aligned(STOREB, read_data, prev_data, 0),
         [221, 83, 243, 12, 90, 121, 64, 205]
     );
     assert_eq!(
-        run_write_data(STOREB, read_data, prev_data, 1),
+        run_write_data_aligned(STOREB, read_data, prev_data, 1),
         [199, 221, 243, 12, 90, 121, 64, 205]
     );
     assert_eq!(
-        run_write_data(STOREB, read_data, prev_data, 2),
+        run_write_data_aligned(STOREB, read_data, prev_data, 2),
         [199, 83, 221, 12, 90, 121, 64, 205]
     );
     assert_eq!(
-        run_write_data(STOREB, read_data, prev_data, 3),
+        run_write_data_aligned(STOREB, read_data, prev_data, 3),
         [199, 83, 243, 221, 90, 121, 64, 205]
     );
     assert_eq!(
-        run_write_data(STOREB, read_data, prev_data, 4),
+        run_write_data_aligned(STOREB, read_data, prev_data, 4),
         [199, 83, 243, 12, 221, 121, 64, 205]
     );
     assert_eq!(
-        run_write_data(STOREB, read_data, prev_data, 5),
+        run_write_data_aligned(STOREB, read_data, prev_data, 5),
         [199, 83, 243, 12, 90, 221, 64, 205]
     );
     assert_eq!(
-        run_write_data(STOREB, read_data, prev_data, 6),
+        run_write_data_aligned(STOREB, read_data, prev_data, 6),
         [199, 83, 243, 12, 90, 121, 221, 205]
     );
     assert_eq!(
-        run_write_data(STOREB, read_data, prev_data, 7),
+        run_write_data_aligned(STOREB, read_data, prev_data, 7),
         [199, 83, 243, 12, 90, 121, 64, 221]
     );
 }
@@ -745,19 +1112,19 @@ fn run_loadhu_sanity_test() {
     let prev_data = [90, 121, 64, 205, 142, 67, 210, 88];
 
     assert_eq!(
-        run_write_data(LOADHU, read_data, prev_data, 0),
+        run_write_data_aligned(LOADHU, read_data, prev_data, 0),
         [175, 33, 0, 0, 0, 0, 0, 0]
     );
     assert_eq!(
-        run_write_data(LOADHU, read_data, prev_data, 2),
+        run_write_data_aligned(LOADHU, read_data, prev_data, 2),
         [198, 250, 0, 0, 0, 0, 0, 0]
     );
     assert_eq!(
-        run_write_data(LOADHU, read_data, prev_data, 4),
+        run_write_data_aligned(LOADHU, read_data, prev_data, 4),
         [131, 74, 0, 0, 0, 0, 0, 0]
     );
     assert_eq!(
-        run_write_data(LOADHU, read_data, prev_data, 6),
+        run_write_data_aligned(LOADHU, read_data, prev_data, 6),
         [186, 29, 0, 0, 0, 0, 0, 0]
     );
 }
@@ -768,35 +1135,35 @@ fn run_loadbu_sanity_test() {
     let prev_data = [142, 67, 210, 88, 159, 213, 89, 34];
 
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 0),
+        run_write_data_aligned(LOADBU, read_data, prev_data, 0),
         [131, 0, 0, 0, 0, 0, 0, 0]
     );
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 1),
+        run_write_data_aligned(LOADBU, read_data, prev_data, 1),
         [74, 0, 0, 0, 0, 0, 0, 0]
     );
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 2),
+        run_write_data_aligned(LOADBU, read_data, prev_data, 2),
         [186, 0, 0, 0, 0, 0, 0, 0]
     );
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 3),
+        run_write_data_aligned(LOADBU, read_data, prev_data, 3),
         [29, 0, 0, 0, 0, 0, 0, 0]
     );
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 4),
+        run_write_data_aligned(LOADBU, read_data, prev_data, 4),
         [138, 0, 0, 0, 0, 0, 0, 0]
     );
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 5),
+        run_write_data_aligned(LOADBU, read_data, prev_data, 5),
         [45, 0, 0, 0, 0, 0, 0, 0]
     );
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 6),
+        run_write_data_aligned(LOADBU, read_data, prev_data, 6),
         [202, 0, 0, 0, 0, 0, 0, 0]
     );
     assert_eq!(
-        run_write_data(LOADBU, read_data, prev_data, 7),
+        run_write_data_aligned(LOADBU, read_data, prev_data, 7),
         [76, 0, 0, 0, 0, 0, 0, 0]
     );
 }

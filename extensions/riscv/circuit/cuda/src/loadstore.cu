@@ -9,99 +9,75 @@
 using namespace riscv;
 using namespace program;
 
-constexpr uint32_t LOADSTORE_SELECTOR_CASES = 30;
+// Every (opcode, shift) pair is a selector case: 8 opcodes (LOADD..STOREB, transpiler order
+// 0..=7) times 8 byte shifts. Case index = opcode * 8 + shift.
+constexpr uint32_t LOADSTORE_SELECTOR_CASES = 64;
 constexpr uint32_t LOADSTORE_SELECTOR_MAX_DEGREE = 2;
-constexpr size_t LOADSTORE_SELECTOR_WIDTH = 7;
+constexpr size_t LOADSTORE_SELECTOR_WIDTH = 10;
 
 template <typename T, size_t NUM_CELLS> struct LoadStoreCoreCols {
     T selector[LOADSTORE_SELECTOR_WIDTH];
-    /// we need to keep the degree of is_valid and is_load to 1
+    /// we need to keep the degree of is_valid, is_load and the cross flags to 1
     T is_valid;
     T is_load;
+    /// 1 iff this is a load spanning two blocks; multiplicity of the second block read.
+    T load_cross;
+    /// 1 iff this is a store spanning two blocks; multiplicity of the second block write.
+    T store_cross;
 
     T read_data[NUM_CELLS];
+    T read_data1[NUM_CELLS];
     T prev_data[NUM_CELLS];
-    /// write_data will be constrained against read_data and prev_data
-    /// depending on the opcode and the shift amount
+    T prev_data1[NUM_CELLS];
     T write_data[NUM_CELLS];
+    T write_data1[NUM_CELLS];
 };
 
 template <size_t NUM_CELLS> struct LoadStoreCoreRecord {
     uint8_t local_opcode;
     uint8_t shift_amount;
     uint8_t read_data[NUM_CELLS];
+    uint8_t read_data1[NUM_CELLS];
     uint8_t prev_data[NUM_CELLS];
+    uint8_t prev_data1[NUM_CELLS];
 };
 
-enum Rv64LoadStoreOpcode {
-    LOADD,
-    LOADBU,
-    LOADHU,
-    LOADWU,
-    STORED,
-    STOREW,
-    STOREH,
-    STOREB,
-};
-
-// Lookup table mapping (opcode, shift) -> InstructionCase index for the Encoder.
-// Indexed as INSTRUCTION_CASE[opcode][shift]. Invalid entries are 0xFF.
-// clang-format off
-__device__ constexpr uint8_t INSTRUCTION_CASE[8][8] = {
-    // LOADD:  shift=0
-    {  0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF },
-    // LOADBU: shift=0..7
-    {  7,    8,    9,   10,   11,   12,   13,   14 },
-    // LOADHU: shift=0,2,4,6
-    {  3, 0xFF,    4, 0xFF,    5, 0xFF,    6, 0xFF },
-    // LOADWU: shift=0,4
-    {  1, 0xFF, 0xFF, 0xFF,    2, 0xFF, 0xFF, 0xFF },
-    // STORED: shift=0
-    { 15, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF },
-    // STOREW: shift=0,4
-    { 16, 0xFF, 0xFF, 0xFF,   17, 0xFF, 0xFF, 0xFF },
-    // STOREH: shift=0,2,4,6
-    { 18, 0xFF,   19, 0xFF,   20, 0xFF,   21, 0xFF },
-    // STOREB: shift=0..7
-    { 22,   23,   24,   25,   26,   27,   28,   29 },
-};
-// clang-format on
-
-__device__ __forceinline__ uint32_t instruction_case_from_opcode_shift(
-    Rv64LoadStoreOpcode opcode,
-    uint8_t shift
-) {
-    uint8_t idx = INSTRUCTION_CASE[opcode][shift];
-    assert(idx != 0xFF);
-    return idx;
-}
-
-__device__ constexpr uint32_t LOADSTORE_WIDTH[] = {
-    // LOADD, LOADBU, LOADHU, LOADWU, STORED, STOREW, STOREH, STOREB
-    8, 1, 2, 4, 8, 4, 2, 1,
-};
-
+// Computes [write_data, write_data1]: the new rd value (loads, write_data1 unused) or the
+// new contents of the touched block(s) (stores).
 template <size_t NUM_CELLS>
 __device__ __forceinline__ void run_write_data(
     uint8_t (&write_data)[NUM_CELLS],
-    Rv64LoadStoreOpcode opcode,
+    uint8_t (&write_data1)[NUM_CELLS],
+    uint8_t local_opcode,
     const uint8_t (&read_data)[NUM_CELLS],
+    const uint8_t (&read_data1)[NUM_CELLS],
     const uint8_t (&prev_data)[NUM_CELLS],
+    const uint8_t (&prev_data1)[NUM_CELLS],
     uint8_t shift
 ) {
-    bool is_store = opcode >= STORED;
-    uint32_t width = LOADSTORE_WIDTH[opcode];
+    bool is_load = rv64_loadstore_is_load(local_opcode);
+    uint32_t width = RV64_LOADSTORE_ACCESS_WIDTH[local_opcode];
 
-    if (is_store) {
+    if (is_load) {
 #pragma unroll
         for (size_t i = 0; i < NUM_CELLS; i++) {
-            bool in_range = (i >= shift) && (i < shift + width);
-            write_data[i] = in_range ? read_data[i - shift] : prev_data[i];
+            if (i < width) {
+                size_t src = i + shift;
+                write_data[i] = (src < NUM_CELLS) ? read_data[src] : read_data1[src - NUM_CELLS];
+            } else {
+                write_data[i] = 0u;
+            }
+            write_data1[i] = 0u;
         }
     } else {
 #pragma unroll
         for (size_t i = 0; i < NUM_CELLS; i++) {
-            write_data[i] = (i < width) ? read_data[i + shift] : 0u;
+            bool in_range = (i >= shift) && (i < shift + width);
+            write_data[i] = in_range ? read_data[i - shift] : prev_data[i];
+            size_t global = NUM_CELLS + i;
+            bool spills = (shift + width > NUM_CELLS) && (global < shift + width);
+            write_data1[i] = spills ? read_data[global - shift]
+                                    : ((shift + width > NUM_CELLS) ? prev_data1[i] : 0u);
         }
     }
 }
@@ -115,36 +91,56 @@ template <size_t NUM_CELLS> struct LoadStoreCore {
     template <typename T> using Cols = LoadStoreCoreCols<T, NUM_CELLS>;
 
     __device__ void fill_trace_row(RowSlice row, LoadStoreCoreRecord<NUM_CELLS> record) {
-        Rv64LoadStoreOpcode opcode = static_cast<Rv64LoadStoreOpcode>(record.local_opcode);
         Encoder encoder(
             LOADSTORE_SELECTOR_CASES,
             LOADSTORE_SELECTOR_MAX_DEGREE,
             true
         );
         uint8_t shift = record.shift_amount;
+        bool is_load = rv64_loadstore_is_load(record.local_opcode);
+        bool crosses = shift + RV64_LOADSTORE_ACCESS_WIDTH[record.local_opcode] > NUM_CELLS;
         uint8_t write_data[NUM_CELLS] = {0};
+        uint8_t write_data1[NUM_CELLS] = {0};
 
         COL_WRITE_VALUE(row, Cols, is_valid, 1);
-        COL_WRITE_VALUE(
-            row,
-            Cols,
-            is_load,
-            (opcode == LOADD || opcode == LOADWU || opcode == LOADHU || opcode == LOADBU)
-        );
+        COL_WRITE_VALUE(row, Cols, is_load, is_load);
+        COL_WRITE_VALUE(row, Cols, load_cross, is_load && crosses);
+        COL_WRITE_VALUE(row, Cols, store_cross, !is_load && crosses);
         encoder.write_flag_pt(
             row.slice_from(COL_INDEX(Cols, selector)),
-            instruction_case_from_opcode_shift(opcode, shift)
+            uint32_t(record.local_opcode) * NUM_CELLS + shift
         );
         COL_WRITE_ARRAY(row, Cols, read_data, record.read_data);
+        COL_WRITE_ARRAY(row, Cols, read_data1, record.read_data1);
         COL_WRITE_ARRAY(row, Cols, prev_data, record.prev_data);
+        COL_WRITE_ARRAY(row, Cols, prev_data1, record.prev_data1);
 #pragma unroll
         for (size_t i = 0; i < NUM_CELLS; i += 2) {
             bitwise_lookup.add_range(record.read_data[i], record.read_data[i + 1]);
             bitwise_lookup.add_range(record.prev_data[i], record.prev_data[i + 1]);
         }
+        // The second-block witnesses are only live on block-spanning rows; range check them
+        // exactly there (loads check read_data1, stores check prev_data1).
+        if (crosses) {
+            const uint8_t *checked_block1 = is_load ? record.read_data1 : record.prev_data1;
+#pragma unroll
+            for (size_t i = 0; i < NUM_CELLS; i += 2) {
+                bitwise_lookup.add_range(checked_block1[i], checked_block1[i + 1]);
+            }
+        }
 
-        run_write_data(write_data, opcode, record.read_data, record.prev_data, shift);
+        run_write_data(
+            write_data,
+            write_data1,
+            record.local_opcode,
+            record.read_data,
+            record.read_data1,
+            record.prev_data,
+            record.prev_data1,
+            shift
+        );
         COL_WRITE_ARRAY(row, Cols, write_data, write_data);
+        COL_WRITE_ARRAY(row, Cols, write_data1, write_data1);
     }
 };
 

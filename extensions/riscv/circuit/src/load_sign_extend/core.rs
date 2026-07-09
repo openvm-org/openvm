@@ -94,8 +94,11 @@ impl<AB, I, const NUM_CELLS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<([AB::Var; NUM_CELLS], [AB::Expr; NUM_CELLS])>,
-    I::Writes: From<[[AB::Expr; NUM_CELLS]; 1]>,
+    I::Reads: From<(
+        ([AB::Var; NUM_CELLS], [AB::Expr; NUM_CELLS]),
+        ([AB::Expr; NUM_CELLS], [AB::Expr; NUM_CELLS]),
+    )>,
+    I::Writes: From<[[AB::Expr; NUM_CELLS]; 2]>,
     I::ProcessedInstruction: From<LoadStoreInstruction<AB::Expr>>,
 {
     fn eval(
@@ -198,14 +201,22 @@ where
 
         AdapterAirContext {
             to_pc: None,
-            reads: (prev_data, read_data).into(),
-            writes: [write_data].into(),
+            // The sign-extension chip only performs aligned (single block) accesses; the
+            // second block slots are unused and zero.
+            reads: (
+                (prev_data, array::from_fn(|_| AB::Expr::ZERO)),
+                (read_data, array::from_fn(|_| AB::Expr::ZERO)),
+            )
+                .into(),
+            writes: [write_data, array::from_fn(|_| AB::Expr::ZERO)].into(),
             instruction: LoadStoreInstruction {
                 is_valid: is_valid.clone(),
                 opcode: expected_opcode,
                 is_load: is_valid,
                 load_shift_amount,
                 store_shift_amount: AB::Expr::ZERO,
+                load_cross: AB::Expr::ZERO,
+                store_cross: AB::Expr::ZERO,
             }
             .into(),
         }
@@ -266,8 +277,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u8),
-            WriteData = [u8; NUM_CELLS],
+            ReadData = (([[u8; NUM_CELLS]; 2], [[u8; NUM_CELLS]; 2]), u8),
+            WriteData = [[u8; NUM_CELLS]; 2],
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -308,8 +319,10 @@ where
 
         core_record.is_byte = local_opcode == LOADB;
         core_record.is_word = local_opcode == LOADW;
-        core_record.prev_data = tmp.0 .0;
-        core_record.read_data = tmp.0 .1;
+        // Sign-extension loads are always single block accesses; the second block entries
+        // of the adapter read data are unused.
+        core_record.prev_data = tmp.0 .0[0];
+        core_record.read_data = tmp.0 .1[0];
         core_record.shift_amount = tmp.1;
 
         let write_data = run_write_data_sign_extend::<NUM_CELLS, LIMB_BITS>(
@@ -318,8 +331,12 @@ where
             core_record.shift_amount as usize,
         );
 
-        self.adapter
-            .write(state.memory, instruction, write_data, &mut adapter_record);
+        self.adapter.write(
+            state.memory,
+            instruction,
+            [write_data, [0; NUM_CELLS]],
+            &mut adapter_record,
+        );
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

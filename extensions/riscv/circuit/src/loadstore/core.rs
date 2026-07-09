@@ -30,148 +30,51 @@ use openvm_stark_backend::{
 
 use crate::adapters::{LoadStoreInstruction, Rv64LoadStoreAdapterFiller};
 
-const LOADSTORE_SELECTOR_CASES: usize = 30;
+/// Every `(opcode, shift)` pair is a selector case: 8 opcodes (LOADD..STOREB, transpiler
+/// order 0..=7) times 8 byte shifts. Case index = `opcode as usize * 8 + shift`.
+const LOADSTORE_SELECTOR_CASES: usize = 64;
 const LOADSTORE_SELECTOR_MAX_DEGREE: u32 = 2;
-pub(crate) const LOADSTORE_SELECTOR_WIDTH: usize = 7;
+pub(crate) const LOADSTORE_SELECTOR_WIDTH: usize = 10;
 
-#[derive(Debug, Clone, Copy)]
-enum InstructionCase {
-    LoadD0,
-    LoadWu0,
-    LoadWu4,
-    LoadHu0,
-    LoadHu2,
-    LoadHu4,
-    LoadHu6,
-    LoadBu0,
-    LoadBu1,
-    LoadBu2,
-    LoadBu3,
-    LoadBu4,
-    LoadBu5,
-    LoadBu6,
-    LoadBu7,
-    StoreD0,
-    StoreW0,
-    StoreW4,
-    StoreH0,
-    StoreH2,
-    StoreH4,
-    StoreH6,
-    StoreB0,
-    StoreB1,
-    StoreB2,
-    StoreB3,
-    StoreB4,
-    StoreB5,
-    StoreB6,
-    StoreB7,
+const NUM_LOADSTORE_OPCODES: usize = 8;
+
+#[inline(always)]
+fn case_index(opcode: Rv64LoadStoreOpcode, shift: usize) -> usize {
+    debug_assert!((opcode as usize) < NUM_LOADSTORE_OPCODES);
+    debug_assert!(shift < RV64_REGISTER_NUM_LIMBS);
+    opcode as usize * RV64_REGISTER_NUM_LIMBS + shift
 }
 
-use InstructionCase::*;
+#[inline(always)]
+fn case_opcode(case: usize) -> Rv64LoadStoreOpcode {
+    Rv64LoadStoreOpcode::from_usize(case / RV64_REGISTER_NUM_LIMBS)
+}
 
-impl InstructionCase {
-    const ALL: [Self; LOADSTORE_SELECTOR_CASES] = [
-        LoadD0, LoadWu0, LoadWu4, LoadHu0, LoadHu2, LoadHu4, LoadHu6, LoadBu0, LoadBu1, LoadBu2,
-        LoadBu3, LoadBu4, LoadBu5, LoadBu6, LoadBu7, StoreD0, StoreW0, StoreW4, StoreH0, StoreH2,
-        StoreH4, StoreH6, StoreB0, StoreB1, StoreB2, StoreB3, StoreB4, StoreB5, StoreB6, StoreB7,
-    ];
+#[inline(always)]
+fn case_shift(case: usize) -> usize {
+    case % RV64_REGISTER_NUM_LIMBS
+}
 
-    fn opcode(self) -> Rv64LoadStoreOpcode {
-        match self {
-            LoadD0 => LOADD,
-            LoadWu0 | LoadWu4 => LOADWU,
-            LoadHu0 | LoadHu2 | LoadHu4 | LoadHu6 => LOADHU,
-            LoadBu0 | LoadBu1 | LoadBu2 | LoadBu3 | LoadBu4 | LoadBu5 | LoadBu6 | LoadBu7 => LOADBU,
-            StoreD0 => STORED,
-            StoreW0 | StoreW4 => STOREW,
-            StoreH0 | StoreH2 | StoreH4 | StoreH6 => STOREH,
-            StoreB0 | StoreB1 | StoreB2 | StoreB3 | StoreB4 | StoreB5 | StoreB6 | StoreB7 => STOREB,
-        }
+#[inline(always)]
+fn opcode_width(opcode: Rv64LoadStoreOpcode) -> usize {
+    match opcode {
+        LOADD | STORED => 8,
+        LOADWU | STOREW => 4,
+        LOADHU | STOREH => 2,
+        LOADBU | STOREB => 1,
+        _ => unreachable!("loadstore core should not handle sign-extension loads"),
     }
+}
 
-    fn shift(self) -> usize {
-        match self {
-            LoadD0 | StoreD0 => 0,
-            LoadWu0 | StoreW0 | LoadHu0 | StoreH0 | LoadBu0 | StoreB0 => 0,
-            LoadBu1 | StoreB1 => 1,
-            LoadHu2 | StoreH2 | LoadBu2 | StoreB2 => 2,
-            LoadBu3 | StoreB3 => 3,
-            LoadWu4 | StoreW4 | LoadHu4 | StoreH4 | LoadBu4 | StoreB4 => 4,
-            LoadBu5 | StoreB5 => 5,
-            LoadHu6 | StoreH6 | LoadBu6 | StoreB6 => 6,
-            LoadBu7 | StoreB7 => 7,
-        }
-    }
+#[inline(always)]
+fn opcode_is_load(opcode: Rv64LoadStoreOpcode) -> bool {
+    matches!(opcode, LOADD | LOADWU | LOADHU | LOADBU)
+}
 
-    fn is_load(self) -> bool {
-        matches!(
-            self,
-            LoadD0
-                | LoadWu0
-                | LoadWu4
-                | LoadHu0
-                | LoadHu2
-                | LoadHu4
-                | LoadHu6
-                | LoadBu0
-                | LoadBu1
-                | LoadBu2
-                | LoadBu3
-                | LoadBu4
-                | LoadBu5
-                | LoadBu6
-                | LoadBu7
-        )
-    }
-
-    fn width(self) -> usize {
-        match self.opcode() {
-            LOADD | STORED => 8,
-            LOADWU | STOREW => 4,
-            LOADHU | STOREH => 2,
-            LOADBU | STOREB => 1,
-            _ => unreachable!("loadstore core should not handle sign-extension loads"),
-        }
-    }
-
-    fn from_opcode_shift(opcode: Rv64LoadStoreOpcode, shift: usize) -> Self {
-        match (opcode, shift) {
-            (LOADD, 0) => LoadD0,
-            (LOADWU, 0) => LoadWu0,
-            (LOADWU, 4) => LoadWu4,
-            (LOADHU, 0) => LoadHu0,
-            (LOADHU, 2) => LoadHu2,
-            (LOADHU, 4) => LoadHu4,
-            (LOADHU, 6) => LoadHu6,
-            (LOADBU, 0) => LoadBu0,
-            (LOADBU, 1) => LoadBu1,
-            (LOADBU, 2) => LoadBu2,
-            (LOADBU, 3) => LoadBu3,
-            (LOADBU, 4) => LoadBu4,
-            (LOADBU, 5) => LoadBu5,
-            (LOADBU, 6) => LoadBu6,
-            (LOADBU, 7) => LoadBu7,
-            (STORED, 0) => StoreD0,
-            (STOREW, 0) => StoreW0,
-            (STOREW, 4) => StoreW4,
-            (STOREH, 0) => StoreH0,
-            (STOREH, 2) => StoreH2,
-            (STOREH, 4) => StoreH4,
-            (STOREH, 6) => StoreH6,
-            (STOREB, 0) => StoreB0,
-            (STOREB, 1) => StoreB1,
-            (STOREB, 2) => StoreB2,
-            (STOREB, 3) => StoreB3,
-            (STOREB, 4) => StoreB4,
-            (STOREB, 5) => StoreB5,
-            (STOREB, 6) => StoreB6,
-            (STOREB, 7) => StoreB7,
-            _ => unreachable!(
-                "unaligned memory access not supported by this execution environment: {opcode:?}, shift: {shift}"
-            ),
-        }
-    }
+/// Whether the access at this shift spans two adjacent 8-byte blocks.
+#[inline(always)]
+fn case_crosses(case: usize) -> bool {
+    case_shift(case) + opcode_width(case_opcode(case)) > RV64_REGISTER_NUM_LIMBS
 }
 
 fn loadstore_encoder() -> Encoder {
@@ -190,28 +93,42 @@ pub(crate) fn selector_point_for_opcode_shift(
     shift: usize,
 ) -> [u32; LOADSTORE_SELECTOR_WIDTH] {
     loadstore_encoder()
-        .get_flag_pt(InstructionCase::from_opcode_shift(opcode, shift) as usize)
+        .get_flag_pt(case_index(opcode, shift))
         .try_into()
         .unwrap()
 }
 
-/// LoadStore Core Chip handles byte/halfword/word into doubleword conversions and unsigned
-/// extends. This chip uses read_data and prev_data to constrain the write_data. It also handles
-/// the shifting in case of not 8 byte aligned instructions. This chip treats each `(opcode,
-/// shift)` pair as a separate instruction.
+/// LoadStore Core Chip handles byte/halfword/word/doubleword loads and stores at any byte
+/// shift inside the containing 8-byte block, including accesses that span two adjacent
+/// blocks. Loads select their bytes from the concatenation `read_data ++ read_data1` and
+/// zero-extend into `write_data`. Stores merge the source register bytes (`read_data`) into
+/// the previous contents of the touched block(s) (`prev_data`, `prev_data1`), producing
+/// `write_data` and (for block-spanning stores) `write_data1`. This chip treats each
+/// `(opcode, shift)` pair as a separate instruction.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub selector: [T; LOADSTORE_SELECTOR_WIDTH],
-    /// we need to keep the degree of is_valid and is_load to 1
+    /// we need to keep the degree of is_valid, is_load and the cross flags to 1
     pub is_valid: T,
     pub is_load: T,
+    /// 1 iff this is a load spanning two blocks; multiplicity of the second block read.
+    pub load_cross: T,
+    /// 1 iff this is a store spanning two blocks; multiplicity of the second block write.
+    pub store_cross: T,
 
+    /// First (always accessed) block for loads; source register value for stores.
     pub read_data: [T; NUM_CELLS],
+    /// Second block for block-spanning loads; zero otherwise.
+    pub read_data1: [T; NUM_CELLS],
+    /// Previous rd value for loads; previous contents of the first block for stores.
     pub prev_data: [T; NUM_CELLS],
-    /// write_data will be constrained against read_data and prev_data
-    /// depending on the opcode and the shift amount
+    /// Previous contents of the second block for block-spanning stores; zero otherwise.
+    pub prev_data1: [T; NUM_CELLS],
+    /// write_data (and write_data1 for block-spanning stores) will be constrained against
+    /// read_data, read_data1, prev_data and prev_data1 depending on the opcode and shift
     pub write_data: [T; NUM_CELLS],
+    pub write_data1: [T; NUM_CELLS],
 }
 
 #[derive(Debug, Clone, ColumnsAir)]
@@ -245,8 +162,11 @@ impl<AB, I, const NUM_CELLS: usize> VmCoreAir<AB, I> for LoadStoreCoreAir<NUM_CE
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<([AB::Var; NUM_CELLS], [AB::Expr; NUM_CELLS])>,
-    I::Writes: From<[[AB::Expr; NUM_CELLS]; 1]>,
+    I::Reads: From<(
+        ([AB::Var; NUM_CELLS], [AB::Expr; NUM_CELLS]),
+        ([AB::Expr; NUM_CELLS], [AB::Expr; NUM_CELLS]),
+    )>,
+    I::Writes: From<[[AB::Expr; NUM_CELLS]; 2]>,
     I::ProcessedInstruction: From<LoadStoreInstruction<AB::Expr>>,
 {
     fn eval(
@@ -260,27 +180,41 @@ where
             selector,
             is_valid,
             is_load,
+            load_cross,
+            store_cross,
             read_data,
+            read_data1,
             prev_data,
+            prev_data1,
             write_data,
+            write_data1,
         } = *cols;
 
         self.encoder.eval(builder, &selector);
 
         let selector_flags = self.encoder.flags::<AB>(&selector);
         let expected_is_valid = self.encoder.is_valid::<AB>(&selector);
-        let expected_is_load = InstructionCase::ALL
-            .iter()
-            .fold(AB::Expr::ZERO, |acc, &case| {
-                if case.is_load() {
-                    acc + selector_flags[case as usize].clone()
+
+        let sum_flags_where = |pred: &dyn Fn(usize) -> bool| {
+            (0..LOADSTORE_SELECTOR_CASES).fold(AB::Expr::ZERO, |acc, case| {
+                if pred(case) {
+                    acc + selector_flags[case].clone()
                 } else {
                     acc
                 }
-            });
+            })
+        };
+
+        let expected_is_load = sum_flags_where(&|case| opcode_is_load(case_opcode(case)));
+        let expected_load_cross =
+            sum_flags_where(&|case| opcode_is_load(case_opcode(case)) && case_crosses(case));
+        let expected_store_cross =
+            sum_flags_where(&|case| !opcode_is_load(case_opcode(case)) && case_crosses(case));
 
         builder.assert_eq(is_valid, expected_is_valid.clone());
         builder.assert_eq(is_load, expected_is_load.clone());
+        builder.assert_eq(load_cross, expected_load_cross);
+        builder.assert_eq(store_cross, expected_store_cross);
 
         for pair in read_data.chunks_exact(2) {
             self.bitwise_lookup_bus
@@ -292,66 +226,106 @@ where
                 .send_range(pair[0], pair[1])
                 .eval(builder, is_valid.into());
         }
+        // The second-block witnesses are only live (and only reach a bus with nonzero
+        // multiplicity) on block-spanning rows; range check them exactly there.
+        for pair in read_data1.chunks_exact(2) {
+            self.bitwise_lookup_bus
+                .send_range(pair[0], pair[1])
+                .eval(builder, load_cross.into());
+        }
+        for pair in prev_data1.chunks_exact(2) {
+            self.bitwise_lookup_bus
+                .send_range(pair[0], pair[1])
+                .eval(builder, store_cross.into());
+        }
 
-        let expected_opcode = InstructionCase::ALL
-            .iter()
-            .fold(AB::Expr::ZERO, |acc, &case| {
-                acc + selector_flags[case as usize].clone() * AB::Expr::from_u8(case.opcode() as u8)
-            });
+        let expected_opcode = (0..LOADSTORE_SELECTOR_CASES).fold(AB::Expr::ZERO, |acc, case| {
+            acc + selector_flags[case].clone() * AB::Expr::from_u8(case_opcode(case) as u8)
+        });
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(self, expected_opcode);
 
-        let load_shift_amount = InstructionCase::ALL
-            .iter()
-            .fold(AB::Expr::ZERO, |acc, &case| {
-                if case.is_load() {
-                    acc + selector_flags[case as usize].clone() * AB::Expr::from_usize(case.shift())
-                } else {
-                    acc
-                }
-            });
-        let store_shift_amount = InstructionCase::ALL
-            .iter()
-            .fold(AB::Expr::ZERO, |acc, &case| {
-                if case.is_load() {
-                    acc
-                } else {
-                    acc + selector_flags[case as usize].clone() * AB::Expr::from_usize(case.shift())
-                }
-            });
+        let load_shift_amount = (0..LOADSTORE_SELECTOR_CASES).fold(AB::Expr::ZERO, |acc, case| {
+            if opcode_is_load(case_opcode(case)) {
+                acc + selector_flags[case].clone() * AB::Expr::from_usize(case_shift(case))
+            } else {
+                acc
+            }
+        });
+        let store_shift_amount = (0..LOADSTORE_SELECTOR_CASES).fold(AB::Expr::ZERO, |acc, case| {
+            if opcode_is_load(case_opcode(case)) {
+                acc
+            } else {
+                acc + selector_flags[case].clone() * AB::Expr::from_usize(case_shift(case))
+            }
+        });
 
+        // Loads select `width` bytes starting at `shift` from read_data ++ read_data1 and
+        // zero-extend. Stores merge the low `width` source bytes into the previous block
+        // contents at byte positions [shift, shift + width), spilling into the second block
+        // when shift + width > NUM_CELLS.
         for (i, cell) in write_data.iter().enumerate() {
-            let expected = InstructionCase::ALL
-                .iter()
-                .fold(AB::Expr::ZERO, |acc, &case| {
-                    let width = case.width();
-                    let shift = case.shift();
-                    debug_assert!(shift + width <= NUM_CELLS);
-                    let term = if case.is_load() {
-                        if i < width {
-                            read_data[i + shift].into()
+            let expected = (0..LOADSTORE_SELECTOR_CASES).fold(AB::Expr::ZERO, |acc, case| {
+                let opcode = case_opcode(case);
+                let width = opcode_width(opcode);
+                let shift = case_shift(case);
+                let term = if opcode_is_load(opcode) {
+                    if i < width {
+                        let src = i + shift;
+                        if src < NUM_CELLS {
+                            read_data[src].into()
                         } else {
-                            AB::Expr::ZERO
+                            read_data1[src - NUM_CELLS].into()
                         }
-                    } else if i >= shift && i < shift + width {
-                        read_data[i - shift].into()
                     } else {
-                        prev_data[i].into()
-                    };
-                    acc + selector_flags[case as usize].clone() * term
-                });
+                        AB::Expr::ZERO
+                    }
+                } else if i >= shift && i < shift + width {
+                    read_data[i - shift].into()
+                } else {
+                    prev_data[i].into()
+                };
+                acc + selector_flags[case].clone() * term
+            });
+            builder.assert_eq(*cell, expected);
+        }
+        for (i, cell) in write_data1.iter().enumerate() {
+            let expected = (0..LOADSTORE_SELECTOR_CASES).fold(AB::Expr::ZERO, |acc, case| {
+                let opcode = case_opcode(case);
+                let width = opcode_width(opcode);
+                let shift = case_shift(case);
+                // Only block-spanning stores write a second block; every other case forces
+                // write_data1 to zero.
+                let term = if !opcode_is_load(opcode) && case_crosses(case) {
+                    let global = NUM_CELLS + i;
+                    if global < shift + width {
+                        read_data[global - shift].into()
+                    } else {
+                        prev_data1[i].into()
+                    }
+                } else {
+                    AB::Expr::ZERO
+                };
+                acc + selector_flags[case].clone() * term
+            });
             builder.assert_eq(*cell, expected);
         }
 
         AdapterAirContext {
             to_pc: None,
-            reads: (prev_data, read_data.map(|x| x.into())).into(),
-            writes: [write_data.map(|x| x.into())].into(),
+            reads: (
+                (prev_data, prev_data1.map(|x| x.into())),
+                (read_data.map(|x| x.into()), read_data1.map(|x| x.into())),
+            )
+                .into(),
+            writes: [write_data.map(|x| x.into()), write_data1.map(|x| x.into())].into(),
             instruction: LoadStoreInstruction {
                 is_valid: is_valid.into(),
                 opcode: expected_opcode,
                 is_load: is_load.into(),
                 load_shift_amount,
                 store_shift_amount,
+                load_cross: load_cross.into(),
+                store_cross: store_cross.into(),
             }
             .into(),
         }
@@ -368,7 +342,11 @@ pub struct LoadStoreCoreRecord<const NUM_CELLS: usize> {
     pub local_opcode: u8,
     pub shift_amount: u8,
     pub read_data: [u8; NUM_CELLS],
+    /// Second block contents for block-spanning loads; zero otherwise.
+    pub read_data1: [u8; NUM_CELLS],
     pub prev_data: [u8; NUM_CELLS],
+    /// Second block previous contents for block-spanning stores; zero otherwise.
+    pub prev_data1: [u8; NUM_CELLS],
 }
 
 #[derive(Clone, Copy, derive_new::new)]
@@ -410,8 +388,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u8),
-            WriteData = [u8; NUM_CELLS],
+            ReadData = (([[u8; NUM_CELLS]; 2], [[u8; NUM_CELLS]; 2]), u8),
+            WriteData = [[u8; NUM_CELLS]; 2],
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -445,11 +423,13 @@ where
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
-        let ((prev_data, read_data), shift_amount) =
+        let (([prev_data, prev_data1], [read_data, read_data1]), shift_amount) =
             self.adapter
                 .read(state.memory, instruction, &mut adapter_record);
         core_record.prev_data = prev_data;
+        core_record.prev_data1 = prev_data1;
         core_record.read_data = read_data;
+        core_record.read_data1 = read_data1;
         core_record.shift_amount = shift_amount;
 
         core_record.local_opcode = local_opcode as u8;
@@ -457,7 +437,9 @@ where
         let write_data = run_write_data(
             local_opcode,
             core_record.read_data,
+            core_record.read_data1,
             core_record.prev_data,
+            core_record.prev_data1,
             core_record.shift_amount as usize,
         );
         self.adapter
@@ -487,7 +469,16 @@ where
 
         let opcode = Rv64LoadStoreOpcode::from_usize(record.local_opcode as usize);
         let shift = record.shift_amount as usize;
-        let write_data = run_write_data(opcode, record.read_data, record.prev_data, shift);
+        let is_load = opcode_is_load(opcode);
+        let crosses = shift + opcode_width(opcode) > NUM_CELLS;
+        let [write_data, write_data1] = run_write_data(
+            opcode,
+            record.read_data,
+            record.read_data1,
+            record.prev_data,
+            record.prev_data1,
+            shift,
+        );
 
         for pair in record.read_data.chunks_exact(2) {
             self.bitwise_lookup_chip
@@ -497,82 +488,86 @@ where
             self.bitwise_lookup_chip
                 .request_range(pair[0] as u32, pair[1] as u32);
         }
+        if crosses {
+            let checked_block1 = if is_load {
+                &record.read_data1
+            } else {
+                &record.prev_data1
+            };
+            for pair in checked_block1.chunks_exact(2) {
+                self.bitwise_lookup_chip
+                    .request_range(pair[0] as u32, pair[1] as u32);
+            }
+        }
 
+        core_row.write_data1 = write_data1.map(F::from_u8);
         core_row.write_data = write_data.map(F::from_u8);
+        core_row.prev_data1 = record.prev_data1.map(F::from_u8);
         core_row.prev_data = record.prev_data.map(F::from_u8);
+        core_row.read_data1 = record.read_data1.map(F::from_u8);
         core_row.read_data = record.read_data.map(F::from_u8);
-        core_row.is_load = F::from_bool(matches!(opcode, LOADD | LOADWU | LOADHU | LOADBU));
+        core_row.store_cross = F::from_bool(!is_load && crosses);
+        core_row.load_cross = F::from_bool(is_load && crosses);
+        core_row.is_load = F::from_bool(is_load);
         core_row.is_valid = F::ONE;
         let pt: [u32; LOADSTORE_SELECTOR_WIDTH] = self
             .encoder
-            .get_flag_pt(InstructionCase::from_opcode_shift(opcode, shift) as usize)
+            .get_flag_pt(case_index(opcode, shift))
             .try_into()
             .unwrap();
         core_row.selector = pt.map(F::from_u32);
     }
 }
 
-// Returns the write data
+// Returns [write_data, write_data1]: the new rd value (loads, write_data1 unused) or the new
+// contents of the touched block(s) (stores).
 #[inline(always)]
 pub(super) fn run_write_data<const NUM_CELLS: usize>(
     opcode: Rv64LoadStoreOpcode,
     read_data: [u8; NUM_CELLS],
+    read_data1: [u8; NUM_CELLS],
     prev_data: [u8; NUM_CELLS],
+    prev_data1: [u8; NUM_CELLS],
     shift: usize,
-) -> [u8; NUM_CELLS] {
+) -> [[u8; NUM_CELLS]; 2] {
     const { assert!(NUM_CELLS == RV64_REGISTER_NUM_LIMBS) };
-    let word_width = NUM_CELLS / 2;
-    let half_width = NUM_CELLS / 4;
+    debug_assert!(shift < NUM_CELLS);
+    let width = opcode_width(opcode);
 
-    match opcode {
-        LOADD if shift == 0 => read_data,
-        LOADWU if shift == 0 || shift == word_width => array::from_fn(|i| {
-            if i < word_width {
-                read_data[i + shift]
-            } else {
-                0
-            }
-        }),
-        LOADHU if [0, half_width, word_width, word_width + half_width].contains(&shift) => {
-            array::from_fn(|i| {
-                if i < half_width {
-                    read_data[i + shift]
+    if opcode_is_load(opcode) {
+        let write_data = array::from_fn(|i| {
+            if i < width {
+                let src = i + shift;
+                if src < NUM_CELLS {
+                    read_data[src]
                 } else {
-                    0
+                    read_data1[src - NUM_CELLS]
                 }
-            })
-        }
-        LOADBU if shift < NUM_CELLS => array::from_fn(|i| {
-            if i == 0 {
-                read_data[shift]
             } else {
                 0
             }
-        }),
-        STORED if shift == 0 => read_data,
-        STOREW if shift == 0 || shift == word_width => array::from_fn(|i| {
-            if i >= shift && i < shift + word_width {
+        });
+        [write_data, [0; NUM_CELLS]]
+    } else {
+        let write_data = array::from_fn(|i| {
+            if i >= shift && i < shift + width {
                 read_data[i - shift]
             } else {
                 prev_data[i]
             }
-        }),
-        STOREH if [0, half_width, word_width, word_width + half_width].contains(&shift) => {
+        });
+        let write_data1 = if shift + width > NUM_CELLS {
             array::from_fn(|i| {
-                if i >= shift && i < shift + half_width {
-                    read_data[i - shift]
+                let global = NUM_CELLS + i;
+                if global < shift + width {
+                    read_data[global - shift]
                 } else {
-                    prev_data[i]
+                    prev_data1[i]
                 }
             })
-        }
-        STOREB if shift < NUM_CELLS => {
-            let mut write_data = prev_data;
-            write_data[shift] = read_data[0];
-            write_data
-        }
-        _ => unreachable!(
-            "unaligned memory access not supported by this execution environment: {opcode:?}, shift: {shift}"
-        ),
+        } else {
+            [0; NUM_CELLS]
+        };
+        [write_data, write_data1]
     }
 }
