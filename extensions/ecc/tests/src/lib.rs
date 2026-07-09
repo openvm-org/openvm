@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod test_vectors;
 
+#[cfg(all(test, feature = "rvr"))]
+mod rvr_preflight_tests;
+
 #[cfg(test)]
 mod tests {
     use core::str::FromStr;
