@@ -15,6 +15,21 @@ verify_stark_agg_vk="$artifacts_dir/internal_recursive.vk"
 child_agg_vk="$HOME/.openvm/internal_recursive.vk"
 host_features="${VERIFY_STARK_HOST_FEATURES-cuda}"
 
+if [[ $# -ne 2 ]]; then
+  echo "Usage: $0 <num_def_circuits> <num_proves_per_circuit>"
+  echo "Example: $0 5 1,0,3,0,2"
+  exit 1
+fi
+
+num_def_circuits="$1"
+num_proves_per_circuit="$2"
+
+IFS=',' read -r -a prove_counts <<< "$num_proves_per_circuit"
+if [[ "${#prove_counts[@]}" -ne "$num_def_circuits" ]]; then
+  echo "num_proves_per_circuit length (${#prove_counts[@]}) must equal num_def_circuits ($num_def_circuits)"
+  exit 1
+fi
+
 mkdir -p "$artifacts_dir"
 
 cargo openvm setup --force
@@ -27,6 +42,7 @@ fi
 
 "$host_bin" keygen \
   --child-agg-vk "$child_agg_vk" \
+  --num-def-circuits "$num_def_circuits" \
   --sdk-pk "$sdk_pk" \
   --openvm-toml "$artifacts_dir/openvm.toml" \
   --agg-vk "$verify_stark_agg_vk"
@@ -55,6 +71,7 @@ for manifest in "$examples_dir"/*/Cargo.toml; do
     --child-agg-vk "$child_agg_vk" \
     --child-baseline "$example_dir/openvm/release/$target_name.baseline.json" \
     --input-proof "$example_dir/$target_name.stark.proof" \
+    --num-proves-per-circuit "$num_proves_per_circuit" \
     --output-proof "$verify_stark_proof"
   cargo openvm verify stark \
     --manifest-path "$manifest" \

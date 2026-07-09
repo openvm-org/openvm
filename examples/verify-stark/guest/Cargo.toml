@@ -13,6 +13,13 @@ openvm-verify-stark-guest = { git = "https://github.com/openvm-org/openvm.git", 
 
 [features]
 default = []
+deferral-1 = []
+deferral-2 = ["deferral-1"]
+deferral-3 = ["deferral-2"]
+deferral-4 = ["deferral-3"]
+deferral-5 = ["deferral-4"]
+deferral-6 = ["deferral-5"]
+deferral-7 = ["deferral-6"]
 
 [profile.release]
 panic = "abort"

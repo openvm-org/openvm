@@ -41,6 +41,7 @@ cfg_if::cfg_if! {
 }
 
 pub const VERIFY_STARK_DEF_IDX: usize = 0;
+const MAX_VERIFY_STARK_GUEST_DEF_CIRCUITS: usize = 8;
 
 pub fn verify_stark_example_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -55,6 +56,7 @@ pub fn verify_stark_guest_dir() -> PathBuf {
 
 pub fn keygen(
     child_agg_vk: Arc<MultiStarkVerifyingKey<SC>>,
+    num_def_circuits: u32,
 ) -> Result<(
     SdkCachedProvingKey<SdkVmConfig>,
     SdkVmConfig,
@@ -82,42 +84,49 @@ pub fn keygen(
             .into();
 
         // Create the verify-stark deferral circuit prover and use it in the DeferralAggProver.
+        assert!(num_def_circuits > 0);
+        assert!(num_def_circuits as usize <= MAX_VERIFY_STARK_GUEST_DEF_CIRCUITS);
+
         let verify_prover = VerifyProver::new::<E>(
             child_agg_vk.clone(),
             child_internal_recursive_cached_commit,
-            verify_prover_params,
+            verify_prover_params.clone(),
             memory_dimensions,
             num_user_pvs,
             None,
             VERIFY_STARK_DEF_IDX,
         );
         let verify_circuit_prover = VerifyCircuitProver::new(verify_prover);
-        let multi_deferral_circuit_prover = MultiDeferralCircuitProver::new(
+        let mut multi_deferral_circuit_prover = MultiDeferralCircuitProver::new(
             verify_circuit_prover,
             agg_config.clone(),
             hook_params_with_100_bits_security(),
         );
-        let verify_prover = VerifyProver::new::<E>(
-            child_agg_vk.clone(),
-            child_internal_recursive_cached_commit,
-            default_verify_stark_circuit_params(),
-            memory_dimensions,
-            num_user_pvs,
-            None,
-            VERIFY_STARK_DEF_IDX + 1,
-        );
-        let multi_deferral_circuit_prover =
-            multi_deferral_circuit_prover.with_prover(VerifyCircuitProver::new(verify_prover));
+
+        for def_offset in 1..num_def_circuits as usize {
+            let verify_prover = VerifyProver::new::<E>(
+                child_agg_vk.clone(),
+                child_internal_recursive_cached_commit,
+                verify_prover_params.clone(),
+                memory_dimensions,
+                num_user_pvs,
+                None,
+                VERIFY_STARK_DEF_IDX + def_offset,
+            );
+            let verify_circuit_prover = VerifyCircuitProver::new(verify_prover);
+            multi_deferral_circuit_prover =
+                multi_deferral_circuit_prover.with_prover(verify_circuit_prover);
+        }
         DeferralAggProver::new(agg_config.clone(), Arc::new(multi_deferral_circuit_prover))
     };
 
     // Create the SdkVmConfig from the DeferralAggProver
+    let supported_deferrals = (0..num_def_circuits)
+        .map(|_| SupportedDeferral::VerifyStark)
+        .collect();
     let deferral_config = deferral_agg_prover
         .multi_deferral_circuit_prover
-        .make_config(vec![
-            SupportedDeferral::VerifyStark,
-            SupportedDeferral::VerifyStark,
-        ]);
+        .make_config(supported_deferrals);
     let vm_config = SdkVmConfig::builder()
         .system(Default::default())
         .rv32i(Default::default())
@@ -142,9 +151,16 @@ pub fn keygen(
 pub fn build(
     cached_pk: SdkCachedProvingKey<SdkVmConfig>,
 ) -> Result<(Arc<VmExe<F>>, VerificationBaseline)> {
+    let num_configured_def_circuits = get_num_configured_def_circuits(&cached_pk);
+    let guest_features = if num_configured_def_circuits <= 1 {
+        Vec::new()
+    } else {
+        vec![format!("deferral-{}", num_configured_def_circuits - 1)]
+    };
+
     let sdk = Sdk::from_deferral_cached_proving_key(cached_pk)?;
     let elf = sdk.build(
-        GuestOptions::default(),
+        GuestOptions::default().with_features(guest_features),
         verify_stark_guest_dir(),
         &None,
         None,
@@ -161,7 +177,11 @@ pub fn prove(
     child_agg_vk: Arc<MultiStarkVerifyingKey<SC>>,
     child_baseline: VerificationBaseline,
     input_proof: VersionedVmStarkProof,
+    num_proves_per_circuit: Vec<u32>,
 ) -> Result<VersionedVmStarkProof> {
+    let num_configured_def_circuits = get_num_configured_def_circuits(&cached_pk);
+    assert_eq!(num_proves_per_circuit.len(), num_configured_def_circuits);
+
     let sdk = Sdk::from_deferral_cached_proving_key(cached_pk)?;
 
     let mut verify_stark_cached_commits =
@@ -169,14 +189,28 @@ pub fn prove(
     assert_eq!(verify_stark_cached_commits.len(), 1);
     let verify_stark_cached_commit = verify_stark_cached_commits.pop().unwrap();
 
-    let (stdin, def_input) = verify_stark_guest_inputs(
+    let (stdin, def_inputs) = verify_stark_guest_inputs(
         &input_proof.try_into()?,
         child_agg_vk.as_ref().clone(),
         child_baseline,
         verify_stark_cached_commit.into(),
+        &num_proves_per_circuit,
     )?;
-    let (proof, _) = sdk.prove(exe, stdin, &[def_input, DeferralInput::default()])?;
+    let (proof, _) = sdk.prove(exe, stdin, &def_inputs)?;
     VersionedVmStarkProof::new(proof)
+}
+
+fn get_num_configured_def_circuits(cached_pk: &SdkCachedProvingKey<SdkVmConfig>) -> usize {
+    let num_configured_def_circuits = cached_pk
+        .app_pk
+        .app_vm_pk
+        .vm_config
+        .deferral
+        .as_ref()
+        .map_or(0, |deferral| deferral.circuits.len());
+    assert!(num_configured_def_circuits > 0);
+    assert!(num_configured_def_circuits <= MAX_VERIFY_STARK_GUEST_DEF_CIRCUITS);
+    num_configured_def_circuits
 }
 
 fn verify_stark_guest_inputs(
@@ -184,7 +218,8 @@ fn verify_stark_guest_inputs(
     agg_vk: MultiStarkVerifyingKey<SC>,
     baseline: VerificationBaseline,
     verify_stark_cached_commit: Digest,
-) -> Result<(StdIn, DeferralInput)> {
+    num_proves_per_circuit: &[u32],
+) -> Result<(StdIn, Vec<DeferralInput>)> {
     let child_vk = VmStarkVerifyingKey {
         mvk: agg_vk,
         baseline,
@@ -196,12 +231,27 @@ fn verify_stark_guest_inputs(
 
     let mut stdin = StdIn::default();
     stdin.write(&input_commit);
-    stdin.deferrals = vec![get_deferral_state(
-        &child_vk,
-        from_ref(proof),
-        verify_stark_cached_commit,
-        0,
-    )?];
+    stdin.write(&(num_proves_per_circuit.len() as u32));
 
-    Ok((stdin, DeferralInput::from_inputs(from_ref(proof))))
+    stdin.deferrals = vec![Default::default(); num_proves_per_circuit.len()];
+    let mut def_inputs = vec![DeferralInput::default(); num_proves_per_circuit.len()];
+
+    for (def_idx, &num_proves) in num_proves_per_circuit.iter().enumerate() {
+        stdin.write(&num_proves);
+
+        if num_proves == 0 {
+            continue;
+        }
+
+        let proofs = vec![proof.clone(); num_proves as usize];
+        stdin.deferrals[def_idx] = get_deferral_state(
+            &child_vk,
+            &proofs,
+            verify_stark_cached_commit,
+            def_idx as u32,
+        )?;
+        def_inputs[def_idx] = DeferralInput::from_inputs(&proofs);
+    }
+
+    Ok((stdin, def_inputs))
 }
