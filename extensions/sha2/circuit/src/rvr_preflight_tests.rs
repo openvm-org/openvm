@@ -45,6 +45,10 @@ const INPUT_PTR: u32 = 0x2000;
 const STATE_REG: usize = 1;
 const INPUT_REG: usize = 3;
 const SHA256_TIMESTAMP_DELTA: u32 = 19;
+const SHA256_TRACE_AIR_NAMES: [&str; 2] = [
+    "Sha2MainAir<Sha256Config>",
+    "Sha2BlockHasherVmAir<Sha256Config>",
+];
 
 fn reg(idx: usize) -> usize {
     idx * RV64_REGISTER_NUM_LIMBS
@@ -253,17 +257,21 @@ fn assert_sha256_access_schedule(
     num_sha256_entries
 }
 
-fn collect_trace_map(
+fn collect_sha256_trace_map(
     ctx: CpuProvingCtx,
-    num_system_airs: usize,
+    air_names: &[String],
 ) -> BTreeMap<usize, CpuAirProvingCtx> {
     ctx.per_trace
         .into_iter()
-        .filter(|(air_idx, _)| *air_idx >= num_system_airs)
+        .filter(|(air_idx, _)| {
+            air_names
+                .get(*air_idx)
+                .is_some_and(|air_name| SHA256_TRACE_AIR_NAMES.contains(&air_name.as_str()))
+        })
         .collect()
 }
 
-fn assert_trace_maps_eq(
+fn assert_sha256_trace_maps_eq(
     label: &str,
     air_names: &[String],
     mut interp: BTreeMap<usize, CpuAirProvingCtx>,
@@ -272,7 +280,11 @@ fn assert_trace_maps_eq(
     let interp_ids = interp.keys().copied().collect::<Vec<_>>();
     let rvr_ids = rvr.keys().copied().collect::<Vec<_>>();
     assert_eq!(interp_ids, rvr_ids, "{label}: trace AIR set");
-    assert!(!interp_ids.is_empty(), "{label}: expected extension traces");
+    assert_eq!(
+        interp_ids.len(),
+        SHA256_TRACE_AIR_NAMES.len(),
+        "{label}: expected deterministic SHA-256 extension traces"
+    );
 
     for air_idx in interp_ids {
         let interp_air = interp.remove(&air_idx).unwrap();
@@ -352,7 +364,6 @@ fn assert_segment_trace_matches_interpreter(
         VirtualMachine::new_with_keygen(test_cpu_engine(), Sha2Rv64CpuBuilder, config.clone())
             .expect("rvr vm init");
     let air_names = rvr_vm.air_names().map(str::to_owned).collect::<Vec<_>>();
-    let num_system_airs = rvr_vm.config().system.num_airs();
     let capacities = trace_heights
         .iter()
         .zip(rvr_vm.pk().per_air.iter())
@@ -393,10 +404,10 @@ fn assert_segment_trace_matches_interpreter(
         .generate_proving_ctx(rvr_output.system_records, rvr_record_arenas)
         .expect("rvr trace generation");
 
-    let interp_traces = collect_trace_map(interp_ctx, num_system_airs);
-    let rvr_traces = collect_trace_map(rvr_ctx, num_system_airs);
+    let interp_traces = collect_sha256_trace_map(interp_ctx, &air_names);
+    let rvr_traces = collect_sha256_trace_map(rvr_ctx, &air_names);
     assert_sha256_trace_heights(label, &air_names, &rvr_traces, num_sha256_entries);
-    assert_trace_maps_eq(label, &air_names, interp_traces, rvr_traces);
+    assert_sha256_trace_maps_eq(label, &air_names, interp_traces, rvr_traces);
     next_state
 }
 
