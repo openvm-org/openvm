@@ -5,10 +5,14 @@ pub use openvm_pairing_guest::{
 
 mod config;
 mod fp12;
+#[cfg(feature = "rvr")]
+mod log_native;
 mod pairing_extension;
 
 pub use config::*;
 pub use fp12::*;
+#[cfg(feature = "rvr")]
+pub use log_native::*;
 pub use pairing_extension::*;
 
 cfg_if::cfg_if! {
