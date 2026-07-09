@@ -47,8 +47,9 @@ use super::rvr::{
     compile_metered_cost, compile_metered_segment_boundary, compile_with_instret_tracking,
     classify_preflight_opcodes_with_extensions, compile_preflight_with_extensions,
     load_compiled_from_path, ChipMapping, GuestDebugMap, RvrExecutionKind, RvrInitialImage,
+    LogNativeOpcodeAdmitter,
     RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
-    RvrPreflightInstance, RvrPreflightOpcodeClass, RvrPreflightRoute, RvrPureInstance,
+    RvrPreflightInstance, RvrPreflightOpcodeClass, RvrPreflightRoute,
     RvrPureWithInstretTrackingInstance,
 };
 use super::{
@@ -486,10 +487,15 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
         guest_debug_map: Option<&GuestDebugMap>,
+        assembler_admitter: &dyn LogNativeOpcodeAdmitter<F>,
     ) -> Result<RvrPreflightRoute<'_, F, VC::Executor>, StaticProgramError> {
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
-        match classify_preflight_opcodes_with_extensions(exe, extensions.lifters()) {
-            RvrPreflightOpcodeClass::Rv64ImOnly => {
+        match classify_preflight_opcodes_with_extensions(
+            exe,
+            extensions.lifters(),
+            assembler_admitter,
+        ) {
+            RvrPreflightOpcodeClass::Supported => {
                 #[cfg(feature = "metrics")]
                 let _compilation_span =
                     tracing::info_span!("compile_preflight", backend = "rvr").entered();
@@ -501,6 +507,7 @@ where
                 let compiled = compile_preflight_with_extensions(
                     exe,
                     extensions.lifters(),
+                    assembler_admitter,
                     &chips,
                     guest_debug_map,
                 )
@@ -514,7 +521,7 @@ where
                     &chips,
                 )))
             }
-            RvrPreflightOpcodeClass::UsesExtension { .. } => {
+            RvrPreflightOpcodeClass::Unsupported { .. } => {
                 #[cfg(feature = "metrics")]
                 let _compilation_span =
                     tracing::info_span!("compile_preflight", backend = "interpreter").entered();
@@ -1014,8 +1021,15 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
     {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
-        self.executor()
-            .preflight_routed_instance(exe, &executor_idx_to_air_idx, None)
+        let assembler_registry = self
+            .builder
+            .create_rvr_log_native_assembler_registry(self.config());
+        self.executor().preflight_routed_instance(
+            exe,
+            &executor_idx_to_air_idx,
+            None,
+            &assembler_registry,
+        )
     }
 
     /// Preflight execution for a single segment. Executes for exactly `num_insns` instructions

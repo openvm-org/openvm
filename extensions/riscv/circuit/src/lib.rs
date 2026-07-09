@@ -2,6 +2,8 @@
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 #![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::rvr::{LogNativeAssemblerRegistry, VmRvrLogNativeExtension};
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
@@ -73,7 +75,7 @@ mod extension;
 pub use extension::*;
 
 #[cfg(feature = "rvr")]
-mod log_native;
+pub mod log_native;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -192,24 +194,16 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    fn generate_rvr_record_arenas_from_logs(
+    fn create_rvr_log_native_assembler_registry(
         &self,
-        _config: &Self::VmConfig,
-        exe: &openvm_instructions::exe::VmExe<Val<E::SC>>,
-        output: &openvm_circuit::arch::rvr::RvrPreflightOutput<Val<E::SC>>,
-        capacities: &[(usize, usize)],
-        pc_to_air_idx: &[Option<usize>],
-    ) -> Result<Option<Vec<Self::RecordArena>>, openvm_circuit::arch::ExecutionError>
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<E::SC>, Self::RecordArena>
     where
         Val<E::SC>: openvm_stark_backend::p3_field::PrimeField32,
     {
-        log_native::generate_rv64im_record_arenas_from_logs::<Val<E::SC>, Self::RecordArena>(
-            exe,
-            output,
-            capacities,
-            pc_to_air_idx,
-        )
-        .map(Some)
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        registry
     }
 }
 
@@ -248,24 +242,16 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    fn generate_rvr_record_arenas_from_logs(
+    fn create_rvr_log_native_assembler_registry(
         &self,
-        _config: &Self::VmConfig,
-        exe: &openvm_instructions::exe::VmExe<Val<E::SC>>,
-        output: &openvm_circuit::arch::rvr::RvrPreflightOutput<Val<E::SC>>,
-        capacities: &[(usize, usize)],
-        pc_to_air_idx: &[Option<usize>],
-    ) -> Result<Option<Vec<Self::RecordArena>>, openvm_circuit::arch::ExecutionError>
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<E::SC>, Self::RecordArena>
     where
         Val<E::SC>: openvm_stark_backend::p3_field::PrimeField32,
     {
-        log_native::generate_rv64im_record_arenas_from_logs::<Val<E::SC>, Self::RecordArena>(
-            exe,
-            output,
-            capacities,
-            pc_to_air_idx,
-        )
-        .map(Some)
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        registry
     }
 }
 
@@ -314,22 +300,16 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
     }
 
     #[cfg(feature = "rvr")]
-    fn generate_rvr_record_arenas_from_logs(
+    fn create_rvr_log_native_assembler_registry(
         &self,
-        _config: &Self::VmConfig,
-        exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
-        output: &openvm_circuit::arch::rvr::RvrPreflightOutput<Val<BabyBearPoseidon2Config>>,
-        capacities: &[(usize, usize)],
-        pc_to_air_idx: &[Option<usize>],
-    ) -> Result<Option<Vec<Self::RecordArena>>, openvm_circuit::arch::ExecutionError>
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<BabyBearPoseidon2Config>, Self::RecordArena>
     where
         Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
     {
-        log_native::generate_rv64im_record_arenas_from_logs::<
-            Val<BabyBearPoseidon2Config>,
-            Self::RecordArena,
-        >(exe, output, capacities, pc_to_air_idx)
-        .map(Some)
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        registry
     }
 }
 
@@ -373,21 +353,15 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
     }
 
     #[cfg(feature = "rvr")]
-    fn generate_rvr_record_arenas_from_logs(
+    fn create_rvr_log_native_assembler_registry(
         &self,
-        _config: &Self::VmConfig,
-        exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
-        output: &openvm_circuit::arch::rvr::RvrPreflightOutput<Val<BabyBearPoseidon2Config>>,
-        capacities: &[(usize, usize)],
-        pc_to_air_idx: &[Option<usize>],
-    ) -> Result<Option<Vec<Self::RecordArena>>, openvm_circuit::arch::ExecutionError>
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<BabyBearPoseidon2Config>, Self::RecordArena>
     where
         Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
     {
-        log_native::generate_rv64im_record_arenas_from_logs::<
-            Val<BabyBearPoseidon2Config>,
-            Self::RecordArena,
-        >(exe, output, capacities, pc_to_air_idx)
-        .map(Some)
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        registry
     }
 }

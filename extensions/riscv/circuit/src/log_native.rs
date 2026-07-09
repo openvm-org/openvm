@@ -1,10 +1,9 @@
-use std::collections::HashMap;
-
 use openvm_circuit::{
     arch::{
         rvr::{
-            PreflightMemoryAccessAux, RvrPreflightOutput, PREFLIGHT_MEMORY_KIND_READ,
-            PREFLIGHT_MEMORY_KIND_WRITE,
+            generate_record_arenas_from_logs, LogNativeAccessView, LogNativeAssemblerRegistry,
+            PreflightMemoryAccessAux, RvrPreflightOutput, VmRvrLogNativeExtension,
+            PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
         },
         Arena, EmptyAdapterCoreLayout, EmptyMultiRowLayout, ExecutionError, MultiRowLayout,
         RecordArena, BLOCK_FE_WIDTH,
@@ -21,7 +20,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
-    LocalOpcode, SystemOpcode, VmOpcode,
+    LocalOpcode, SystemOpcode,
 };
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
@@ -30,7 +29,7 @@ use openvm_riscv_transpiler::{
     ShiftWOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use strum::EnumCount;
+use strum::IntoEnumIterator;
 
 use crate::{
     adapters::{
@@ -145,7 +144,7 @@ pub(crate) type DivRemWRecordMut<'a> = (
 pub(crate) type HintStoreRecordMut<'a> = Rv64HintStoreRecordMut<'a>;
 pub(crate) type PhantomRecordMut<'a> = &'a mut PhantomRecord;
 
-pub(crate) trait Rv64StandardRecordArena<F>:
+pub trait Rv64IRecordArena<F>:
     Arena
     + for<'a> RecordArena<'a, BaseAluU16Layout<F>, AddSubRecordMut<'a>>
     + for<'a> RecordArena<'a, BaseAluU16Layout<F>, LessThanRecordMut<'a>>
@@ -160,19 +159,13 @@ pub(crate) trait Rv64StandardRecordArena<F>:
     + for<'a> RecordArena<'a, CondRdWriteLayout<F>, JalLuiRecordMut<'a>>
     + for<'a> RecordArena<'a, JalrLayout<F>, JalrRecordMut<'a>>
     + for<'a> RecordArena<'a, RdWriteLayout<F>, AuipcRecordMut<'a>>
-    + for<'a> RecordArena<'a, MultLayout<F>, MulRecordMut<'a>>
-    + for<'a> RecordArena<'a, MultLayout<F>, MulHRecordMut<'a>>
-    + for<'a> RecordArena<'a, MultWLayout<F>, MulWRecordMut<'a>>
     + for<'a> RecordArena<'a, LoadStoreLayout<F>, LoadStoreRecordMut<'a>>
     + for<'a> RecordArena<'a, LoadStoreLayout<F>, LoadSignExtendRecordMut<'a>>
-    + for<'a> RecordArena<'a, MultLayout<F>, DivRemRecordMut<'a>>
-    + for<'a> RecordArena<'a, MultWLayout<F>, DivRemWRecordMut<'a>>
-    + for<'a> RecordArena<'a, Rv64HintStoreLayout, HintStoreRecordMut<'a>>
     + for<'a> RecordArena<'a, EmptyMultiRowLayout, PhantomRecordMut<'a>>
 {
 }
 
-impl<F, RA> Rv64StandardRecordArena<F> for RA where
+impl<F, RA> Rv64IRecordArena<F> for RA where
     RA: Arena
         + for<'a> RecordArena<'a, BaseAluU16Layout<F>, AddSubRecordMut<'a>>
         + for<'a> RecordArena<'a, BaseAluU16Layout<F>, LessThanRecordMut<'a>>
@@ -187,82 +180,98 @@ impl<F, RA> Rv64StandardRecordArena<F> for RA where
         + for<'a> RecordArena<'a, CondRdWriteLayout<F>, JalLuiRecordMut<'a>>
         + for<'a> RecordArena<'a, JalrLayout<F>, JalrRecordMut<'a>>
         + for<'a> RecordArena<'a, RdWriteLayout<F>, AuipcRecordMut<'a>>
-        + for<'a> RecordArena<'a, MultLayout<F>, MulRecordMut<'a>>
-        + for<'a> RecordArena<'a, MultLayout<F>, MulHRecordMut<'a>>
-        + for<'a> RecordArena<'a, MultWLayout<F>, MulWRecordMut<'a>>
         + for<'a> RecordArena<'a, LoadStoreLayout<F>, LoadStoreRecordMut<'a>>
         + for<'a> RecordArena<'a, LoadStoreLayout<F>, LoadSignExtendRecordMut<'a>>
-        + for<'a> RecordArena<'a, MultLayout<F>, DivRemRecordMut<'a>>
-        + for<'a> RecordArena<'a, MultWLayout<F>, DivRemWRecordMut<'a>>
-        + for<'a> RecordArena<'a, Rv64HintStoreLayout, HintStoreRecordMut<'a>>
         + for<'a> RecordArena<'a, EmptyMultiRowLayout, PhantomRecordMut<'a>>
 {
 }
 
-struct AccessView<'a, F> {
-    by_timestamp: HashMap<u32, &'a PreflightMemoryAccessAux<F>>,
+pub trait Rv64MRecordArena<F>:
+    Arena
+    + for<'a> RecordArena<'a, MultLayout<F>, MulRecordMut<'a>>
+    + for<'a> RecordArena<'a, MultLayout<F>, MulHRecordMut<'a>>
+    + for<'a> RecordArena<'a, MultWLayout<F>, MulWRecordMut<'a>>
+    + for<'a> RecordArena<'a, MultLayout<F>, DivRemRecordMut<'a>>
+    + for<'a> RecordArena<'a, MultWLayout<F>, DivRemWRecordMut<'a>>
+{
 }
 
-impl<'a, F: PrimeField32> AccessView<'a, F> {
-    fn new(access_aux: &'a [PreflightMemoryAccessAux<F>]) -> Result<Self, ExecutionError> {
-        let mut by_timestamp = HashMap::with_capacity(access_aux.len());
-        for aux in access_aux {
-            if by_timestamp.insert(aux.entry.timestamp, aux).is_some() {
-                return Err(rvr_error(format!(
-                    "multiple memory-log entries share timestamp {}",
-                    aux.entry.timestamp
-                )));
-            }
-        }
-        Ok(Self { by_timestamp })
-    }
+impl<F, RA> Rv64MRecordArena<F> for RA where
+    RA: Arena
+        + for<'a> RecordArena<'a, MultLayout<F>, MulRecordMut<'a>>
+        + for<'a> RecordArena<'a, MultLayout<F>, MulHRecordMut<'a>>
+        + for<'a> RecordArena<'a, MultWLayout<F>, MulWRecordMut<'a>>
+        + for<'a> RecordArena<'a, MultLayout<F>, DivRemRecordMut<'a>>
+        + for<'a> RecordArena<'a, MultWLayout<F>, DivRemWRecordMut<'a>>
+{
+}
 
-    fn expect(
-        &self,
-        timestamp: u32,
-        kind: u8,
-        addr_space: u32,
-        address: u64,
-        pc: u32,
-    ) -> Result<&'a PreflightMemoryAccessAux<F>, ExecutionError> {
-        let aux = self.by_timestamp.get(&timestamp).ok_or_else(|| {
-            rvr_error(format!(
-                "missing memory-log entry for pc {pc:#x} timestamp {timestamp}"
-            ))
-        })?;
-        let entry = aux.entry;
-        if entry.kind != kind
-            || entry.addr_space as u32 != addr_space
-            || entry.address != address
-            || entry.width != RV64_REGISTER_NUM_LIMBS as u8
-        {
-            return Err(rvr_error(format!(
-                "unexpected memory-log entry for pc {pc:#x} timestamp {timestamp}: \
-                 got kind={} as={} addr={} width={}, expected kind={} as={} addr={} width={}",
-                entry.kind,
-                entry.addr_space,
-                entry.address,
-                entry.width,
-                kind,
-                addr_space,
-                address,
-                RV64_REGISTER_NUM_LIMBS
-            )));
-        }
-        Ok(aux)
-    }
+pub trait Rv64IoRecordArena<F>:
+    Arena + for<'a> RecordArena<'a, Rv64HintStoreLayout, HintStoreRecordMut<'a>>
+{
+}
 
+impl<F, RA> Rv64IoRecordArena<F> for RA where
+    RA: Arena + for<'a> RecordArena<'a, Rv64HintStoreLayout, HintStoreRecordMut<'a>>
+{
+}
+
+/// Arena union for the composed RV64IM configuration.
+pub trait Rv64StandardRecordArena<F>:
+    Rv64IRecordArena<F> + Rv64MRecordArena<F> + Rv64IoRecordArena<F>
+{
+}
+
+impl<F, RA> Rv64StandardRecordArena<F> for RA where
+    RA: Rv64IRecordArena<F> + Rv64MRecordArena<F> + Rv64IoRecordArena<F>
+{
+}
+
+type AccessView<'a, F> = LogNativeAccessView<'a, F>;
+
+trait Rv64AccessView<F> {
     fn expect_reg_read(
         &self,
         timestamp: u32,
         reg_ptr: u32,
         pc: u32,
-    ) -> Result<&'a PreflightMemoryAccessAux<F>, ExecutionError> {
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError>;
+
+    fn expect_reg_write(
+        &self,
+        timestamp: u32,
+        reg_ptr: u32,
+        pc: u32,
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError>;
+
+    fn expect_memory_read(
+        &self,
+        timestamp: u32,
+        address: u32,
+        pc: u32,
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError>;
+
+    fn expect_memory_write(
+        &self,
+        timestamp: u32,
+        address: u32,
+        pc: u32,
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError>;
+}
+
+impl<F: PrimeField32> Rv64AccessView<F> for AccessView<'_, F> {
+    fn expect_reg_read(
+        &self,
+        timestamp: u32,
+        reg_ptr: u32,
+        pc: u32,
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError> {
         self.expect(
             timestamp,
             PREFLIGHT_MEMORY_KIND_READ,
             RV64_REGISTER_AS,
             u64::from(reg_ptr),
+            RV64_REGISTER_NUM_LIMBS,
             pc,
         )
     }
@@ -272,12 +281,13 @@ impl<'a, F: PrimeField32> AccessView<'a, F> {
         timestamp: u32,
         reg_ptr: u32,
         pc: u32,
-    ) -> Result<&'a PreflightMemoryAccessAux<F>, ExecutionError> {
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError> {
         self.expect(
             timestamp,
             PREFLIGHT_MEMORY_KIND_WRITE,
             RV64_REGISTER_AS,
             u64::from(reg_ptr),
+            RV64_REGISTER_NUM_LIMBS,
             pc,
         )
     }
@@ -287,12 +297,13 @@ impl<'a, F: PrimeField32> AccessView<'a, F> {
         timestamp: u32,
         address: u32,
         pc: u32,
-    ) -> Result<&'a PreflightMemoryAccessAux<F>, ExecutionError> {
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError> {
         self.expect(
             timestamp,
             PREFLIGHT_MEMORY_KIND_READ,
             RV64_MEMORY_AS,
             u64::from(address),
+            RV64_REGISTER_NUM_LIMBS,
             pc,
         )
     }
@@ -302,212 +313,170 @@ impl<'a, F: PrimeField32> AccessView<'a, F> {
         timestamp: u32,
         address: u32,
         pc: u32,
-    ) -> Result<&'a PreflightMemoryAccessAux<F>, ExecutionError> {
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError> {
         self.expect(
             timestamp,
             PREFLIGHT_MEMORY_KIND_WRITE,
             RV64_MEMORY_AS,
             u64::from(address),
+            RV64_REGISTER_NUM_LIMBS,
             pc,
         )
     }
 }
 
-pub(crate) fn generate_rv64im_record_arenas_from_logs<
-    F: PrimeField32,
-    RA: Rv64StandardRecordArena<F>,
->(
+pub fn generate_rv64im_record_arenas_from_logs<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     exe: &VmExe<F>,
     output: &RvrPreflightOutput<F>,
     capacities: &[(usize, usize)],
     pc_to_air_idx: &[Option<usize>],
 ) -> Result<Vec<RA>, ExecutionError> {
-    let mut arenas = capacities
-        .iter()
-        .map(|&(height, width)| RA::with_capacity(height, width))
-        .collect::<Vec<_>>();
-    let access = AccessView::new(&output.access_aux)?;
-
-    for program_entry in &output.raw_logs.program_log {
-        let pc = u32::try_from(program_entry.pc).map_err(|_| {
-            rvr_error(format!(
-                "program-log pc {:#x} does not fit OpenVM pc width",
-                program_entry.pc
-            ))
-        })?;
-        let Some((instruction, air_idx)) = instruction_and_air_idx(exe, pc_to_air_idx, pc)? else {
-            continue;
-        };
-        let num_arenas = arenas.len();
-        let arena = arenas.get_mut(air_idx).ok_or_else(|| {
-            rvr_error(format!(
-                "pc {:#x} maps to air_idx {} but only {} arenas exist",
-                program_entry.pc, air_idx, num_arenas
-            ))
-        })?;
-        assemble_standard_record(arena, &access, instruction, pc, program_entry.timestamp)?;
-    }
-
-    Ok(arenas)
+    let mut registry = LogNativeAssemblerRegistry::new();
+    crate::Rv64ImConfig::default().extend_rvr_log_native(&mut registry);
+    generate_record_arenas_from_logs(&registry, exe, output, capacities, pc_to_air_idx)
 }
 
-fn instruction_and_air_idx<'a, F: PrimeField32>(
-    exe: &'a VmExe<F>,
-    pc_to_air_idx: &[Option<usize>],
-    pc: u32,
-) -> Result<Option<(&'a Instruction<F>, usize)>, ExecutionError> {
-    if pc < exe.program.pc_base || !(pc - exe.program.pc_base).is_multiple_of(DEFAULT_PC_STEP) {
-        return Err(rvr_error(format!(
-            "program-log pc {pc:#x} is not a valid program pc"
-        )));
+impl<F, RA> VmRvrLogNativeExtension<F, RA> for crate::Rv64I
+where
+    F: PrimeField32,
+    RA: Rv64IRecordArena<F>,
+{
+    fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
+        registry.register(
+            [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|opcode| opcode.global_opcode()),
+            assemble_add_sub::<F, RA>,
+        );
+        registry.register(
+            [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
+                .map(|opcode| opcode.global_opcode()),
+            assemble_bitwise::<F, RA>,
+        );
+        registry.register(
+            BaseAluWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_add_sub_w::<F, RA>,
+        );
+        registry.register(
+            LessThanOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_less_than::<F, RA>,
+        );
+        registry.register(
+            ShiftOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_shift::<F, RA>,
+        );
+        registry.register(
+            ShiftWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_shift_w::<F, RA>,
+        );
+        registry.register(
+            BranchEqualOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_branch_eq::<F, RA>,
+        );
+        registry.register(
+            BranchLessThanOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_branch_lt::<F, RA>,
+        );
+        registry.register(
+            Rv64JalLuiOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_jal_lui::<F, RA>,
+        );
+        registry.register(
+            Rv64JalrOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_jalr::<F, RA>,
+        );
+        registry.register(
+            Rv64AuipcOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_auipc::<F, RA>,
+        );
+        registry.register_if(
+            Rv64LoadStoreOpcode::iter()
+                .take(Rv64LoadStoreOpcode::STOREB as usize + 1)
+                .map(|opcode| opcode.global_opcode()),
+            is_rv64_memory_instruction,
+            assemble_loadstore::<F, RA>,
+        );
+        registry.register_if(
+            Rv64LoadStoreOpcode::iter()
+                .skip(Rv64LoadStoreOpcode::STOREB as usize + 1)
+                .map(|opcode| opcode.global_opcode()),
+            is_rv64_memory_instruction,
+            assemble_load_sign_extend::<F, RA>,
+        );
+        registry.register(
+            [SystemOpcode::PHANTOM.global_opcode()],
+            assemble_phantom::<F, RA>,
+        );
     }
-    let index = ((pc - exe.program.pc_base) / DEFAULT_PC_STEP) as usize;
-    let Some(slot) = exe.program.instructions_and_debug_infos.get(index) else {
-        return Err(rvr_error(format!(
-            "program-log pc {pc:#x} is out of program bounds"
-        )));
-    };
-    let Some((instruction, _)) = slot else {
-        return Ok(None);
-    };
-    let Some(air_idx) = pc_to_air_idx.get(index).copied().flatten() else {
-        return Ok(None);
-    };
-    Ok(Some((instruction, air_idx)))
 }
 
-fn assemble_standard_record<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
-    arena: &mut RA,
-    access: &AccessView<'_, F>,
-    instruction: &Instruction<F>,
-    pc: u32,
-    timestamp: u32,
-) -> Result<(), ExecutionError> {
-    let opcode = instruction.opcode;
-    if opcode == SystemOpcode::PHANTOM.global_opcode() {
-        return assemble_phantom(arena, instruction, pc, timestamp);
+impl<F, RA> VmRvrLogNativeExtension<F, RA> for crate::Rv64M
+where
+    F: PrimeField32,
+    RA: Rv64MRecordArena<F>,
+{
+    fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
+        registry.register(
+            MulOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_mul::<F, RA>,
+        );
+        registry.register(
+            MulHOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_mulh::<F, RA>,
+        );
+        registry.register(
+            MulWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_mul_w::<F, RA>,
+        );
+        registry.register(
+            DivRemOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_divrem::<F, RA>,
+        );
+        registry.register(
+            DivRemWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_divrem_w::<F, RA>,
+        );
     }
-    if opcode == BaseAluOpcode::ADD.global_opcode() || opcode == BaseAluOpcode::SUB.global_opcode()
-    {
-        return assemble_add_sub(arena, access, instruction, pc, timestamp);
-    }
-    if let Some(local) = local_in_class(
-        opcode,
-        Rv64LoadStoreOpcode::CLASS_OFFSET,
-        Rv64LoadStoreOpcode::COUNT,
-    ) {
-        let local_opcode =
-            Rv64LoadStoreOpcode::from_repr(local).expect("opcode already classified");
-        if local <= Rv64LoadStoreOpcode::STOREB as usize {
-            return assemble_loadstore(arena, access, instruction, pc, timestamp, local_opcode);
-        }
-        return assemble_load_sign_extend(arena, access, instruction, pc, timestamp, local_opcode);
-    }
-    if matches!(
-        local_in_class(opcode, BaseAluOpcode::CLASS_OFFSET, 5).and_then(BaseAluOpcode::from_repr),
-        Some(BaseAluOpcode::XOR | BaseAluOpcode::OR | BaseAluOpcode::AND)
-    ) {
-        return assemble_bitwise(arena, access, instruction, pc, timestamp);
-    }
-    if matches!(
-        local_in_class(opcode, BaseAluWOpcode::CLASS_OFFSET, 2).and_then(BaseAluWOpcode::from_repr),
-        Some(BaseAluWOpcode::ADDW | BaseAluWOpcode::SUBW)
-    ) {
-        return assemble_add_sub_w(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(opcode, LessThanOpcode::CLASS_OFFSET, 2)
-        .and_then(LessThanOpcode::from_repr)
-        .is_some()
-    {
-        return assemble_less_than(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(opcode, ShiftOpcode::CLASS_OFFSET, 3)
-        .and_then(ShiftOpcode::from_repr)
-        .is_some()
-    {
-        return assemble_shift(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(opcode, ShiftWOpcode::CLASS_OFFSET, 3)
-        .and_then(ShiftWOpcode::from_repr)
-        .is_some()
-    {
-        return assemble_shift_w(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(opcode, BranchEqualOpcode::CLASS_OFFSET, 2)
-        .and_then(BranchEqualOpcode::from_repr)
-        .is_some()
-    {
-        return assemble_branch_eq(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(opcode, BranchLessThanOpcode::CLASS_OFFSET, 4)
-        .and_then(BranchLessThanOpcode::from_repr)
-        .is_some()
-    {
-        return assemble_branch_lt(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(opcode, Rv64JalLuiOpcode::CLASS_OFFSET, 2)
-        .and_then(Rv64JalLuiOpcode::from_repr)
-        .is_some()
-    {
-        return assemble_jal_lui(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(opcode, Rv64JalrOpcode::CLASS_OFFSET, 1)
-        .and_then(Rv64JalrOpcode::from_repr)
-        .is_some()
-    {
-        return assemble_jalr(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(opcode, Rv64AuipcOpcode::CLASS_OFFSET, 1)
-        .and_then(Rv64AuipcOpcode::from_repr)
-        .is_some()
-    {
-        return assemble_auipc(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(opcode, MulOpcode::CLASS_OFFSET, 1)
-        .and_then(MulOpcode::from_repr)
-        .is_some()
-    {
-        return assemble_mul(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(opcode, MulHOpcode::CLASS_OFFSET, 3)
-        .and_then(MulHOpcode::from_repr)
-        .is_some()
-    {
-        return assemble_mulh(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(opcode, MulWOpcode::CLASS_OFFSET, 1)
-        .and_then(MulWOpcode::from_repr)
-        .is_some()
-    {
-        return assemble_mul_w(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(opcode, DivRemOpcode::CLASS_OFFSET, 4)
-        .and_then(DivRemOpcode::from_repr)
-        .is_some()
-    {
-        return assemble_divrem(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(opcode, DivRemWOpcode::CLASS_OFFSET, 4)
-        .and_then(DivRemWOpcode::from_repr)
-        .is_some()
-    {
-        return assemble_divrem_w(arena, access, instruction, pc, timestamp);
-    }
-    if local_in_class(
-        opcode,
-        Rv64HintStoreOpcode::CLASS_OFFSET,
-        Rv64HintStoreOpcode::COUNT,
-    )
-    .and_then(Rv64HintStoreOpcode::from_repr)
-    .is_some()
-    {
-        return assemble_hintstore(arena, access, instruction, pc, timestamp);
-    }
-
-    Err(unsupported_opcode(pc, opcode))
 }
 
-fn assemble_add_sub<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+impl<F, RA> VmRvrLogNativeExtension<F, RA> for crate::Rv64Io
+where
+    F: PrimeField32,
+    RA: Rv64IoRecordArena<F>,
+{
+    fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
+        registry.register(
+            Rv64HintStoreOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_hintstore::<F, RA>,
+        );
+    }
+}
+
+impl<F, RA> VmRvrLogNativeExtension<F, RA> for crate::Rv64IConfig
+where
+    F: PrimeField32,
+    RA: Rv64IRecordArena<F> + Rv64IoRecordArena<F>,
+{
+    fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
+        self.base.extend_rvr_log_native(registry);
+        self.io.extend_rvr_log_native(registry);
+    }
+}
+
+impl<F, RA> VmRvrLogNativeExtension<F, RA> for crate::Rv64ImConfig
+where
+    F: PrimeField32,
+    RA: Rv64StandardRecordArena<F>,
+{
+    fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
+        self.rv64i.extend_rvr_log_native(registry);
+        self.mul.extend_rvr_log_native(registry);
+    }
+}
+
+fn is_rv64_memory_instruction<F: PrimeField32>(instruction: &Instruction<F>) -> bool {
+    instruction.e.as_canonical_u32() == RV64_MEMORY_AS
+}
+
+fn assemble_add_sub<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -528,7 +497,7 @@ fn assemble_add_sub<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_less_than<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_less_than<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -548,7 +517,7 @@ fn assemble_less_than<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_bitwise<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_bitwise<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -572,7 +541,7 @@ fn assemble_bitwise<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_shift<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_shift<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -609,7 +578,7 @@ fn assemble_shift<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_add_sub_w<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_add_sub_w<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -637,7 +606,7 @@ fn assemble_add_sub_w<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_shift_w<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_shift_w<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -678,7 +647,7 @@ fn assemble_shift_w<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_branch_eq<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_branch_eq<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -699,7 +668,7 @@ fn assemble_branch_eq<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_branch_lt<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_branch_lt<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -720,7 +689,7 @@ fn assemble_branch_lt<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_jal_lui<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_jal_lui<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -751,7 +720,7 @@ fn assemble_jal_lui<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_jalr<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_jalr<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -786,7 +755,7 @@ fn assemble_jalr<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_auipc<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_auipc<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -801,7 +770,7 @@ fn assemble_auipc<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_mul<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_mul<F: PrimeField32, RA: Rv64MRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -818,7 +787,7 @@ fn assemble_mul<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_mulh<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_mulh<F: PrimeField32, RA: Rv64MRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -838,7 +807,7 @@ fn assemble_mulh<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_mul_w<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_mul_w<F: PrimeField32, RA: Rv64MRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -855,14 +824,19 @@ fn assemble_mul_w<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_loadstore<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_loadstore<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
     pc: u32,
     timestamp: u32,
-    local_opcode: Rv64LoadStoreOpcode,
 ) -> Result<(), ExecutionError> {
+    let local_opcode = Rv64LoadStoreOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
+    )
+    .expect("assembler is registered only for RV64 load/store opcodes");
     let (adapter_record, core_record): (
         &mut Rv64LoadStoreAdapterRecord,
         &mut LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
@@ -916,14 +890,19 @@ fn assemble_loadstore<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_load_sign_extend<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_load_sign_extend<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
     pc: u32,
     timestamp: u32,
-    local_opcode: Rv64LoadStoreOpcode,
 ) -> Result<(), ExecutionError> {
+    let local_opcode = Rv64LoadStoreOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
+    )
+    .expect("assembler is registered only for RV64 load/store opcodes");
     let (adapter_record, core_record): (
         &mut Rv64LoadStoreAdapterRecord,
         &mut LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
@@ -957,7 +936,7 @@ fn assemble_load_sign_extend<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_divrem<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_divrem<F: PrimeField32, RA: Rv64MRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -977,7 +956,7 @@ fn assemble_divrem<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_divrem_w<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_divrem_w<F: PrimeField32, RA: Rv64MRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -997,7 +976,7 @@ fn assemble_divrem_w<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_hintstore<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_hintstore<F: PrimeField32, RA: Rv64IoRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -1057,8 +1036,9 @@ fn assemble_hintstore<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_phantom<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+fn assemble_phantom<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
+    _access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
     pc: u32,
     timestamp: u32,
@@ -1392,21 +1372,6 @@ fn run_jal_lui_value(is_jal: bool, pc: u32, imm: i32) -> [u16; BLOCK_FE_WIDTH] {
             0
         };
         [lo, hi, sign, sign]
-    }
-}
-
-fn unsupported_opcode(pc: u32, opcode: VmOpcode) -> ExecutionError {
-    rvr_error(format!(
-        "rvr log-native tracegen unsupported for opcode {opcode:?} at pc {pc:#x}"
-    ))
-}
-
-fn local_in_class(opcode: VmOpcode, offset: usize, len: usize) -> Option<usize> {
-    let value = opcode.as_usize();
-    if value >= offset && value < offset + len {
-        Some(value - offset)
-    } else {
-        None
     }
 }
 
