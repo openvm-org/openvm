@@ -68,8 +68,7 @@ pub(crate) use crate::{
         Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, RV64_BYTE_BITS,
     },
     load_sign_extend::{
-        common::load_sign_extend_write_data,
-        width_aligned::core::LoadSignExtendWidthAlignedCoreCols,
+        common::load_sign_extend_write_data, core::LoadSignExtendWidthAlignedCoreCols,
     },
 };
 

@@ -6,7 +6,7 @@ use crate::{
     },
     load::{
         common::LoadExecutor,
-        width_aligned::{LoadWidthAlignedCoreAir, LoadWidthAlignedFiller},
+        core::{LoadWidthAlignedCoreAir, LoadWidthAlignedFiller},
     },
 };
 

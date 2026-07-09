@@ -11,7 +11,7 @@ use super::WORD_STORE_SELECTOR_WIDTH;
 use crate::{
     adapters::{Rv64StoreAdapterCols, Rv64StoreAdapterRecord},
     cuda_abi::store_word_cuda,
-    store::{width_aligned::StoreWidthAlignedCoreCols, StoreRecord},
+    store::{core::StoreWidthAlignedCoreCols, StoreRecord},
 };
 
 #[derive(new)]

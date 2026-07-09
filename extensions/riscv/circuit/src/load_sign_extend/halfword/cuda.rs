@@ -12,7 +12,7 @@ use crate::{
     adapters::{Rv64LoadAdapterCols, Rv64LoadAdapterRecord},
     cuda_abi::load_sign_extend_halfword_cuda,
     load::LoadRecord,
-    load_sign_extend::width_aligned::core::LoadSignExtendWidthAlignedCoreCols,
+    load_sign_extend::core::LoadSignExtendWidthAlignedCoreCols,
 };
 
 #[derive(new)]

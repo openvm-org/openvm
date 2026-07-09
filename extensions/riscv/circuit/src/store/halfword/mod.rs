@@ -6,7 +6,7 @@ use crate::{
     },
     store::{
         common::StoreExecutor,
-        width_aligned::{StoreWidthAlignedCoreAir, StoreWidthAlignedFiller},
+        core::{StoreWidthAlignedCoreAir, StoreWidthAlignedFiller},
     },
 };
 

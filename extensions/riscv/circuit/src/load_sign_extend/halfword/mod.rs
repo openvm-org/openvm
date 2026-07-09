@@ -4,9 +4,7 @@ use crate::{
     adapters::{Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, LOAD_WIDTH_HALFWORD},
     load_sign_extend::{
         common::LoadSignExtendExecutor,
-        width_aligned::core::{
-            LoadSignExtendWidthAlignedCoreAir, LoadSignExtendWidthAlignedFiller,
-        },
+        core::{LoadSignExtendWidthAlignedCoreAir, LoadSignExtendWidthAlignedFiller},
     },
 };
 
