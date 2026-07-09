@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::*,
     system::{
@@ -14,23 +13,20 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bigint::utils::big_uint_to_limbs, hybrid_chip::cpu_proving_ctx_to_gpu,
-    var_range::VariableRangeCheckerChipGPU, Chip,
+    bigint::utils::big_uint_to_limbs, var_range::VariableRangeCheckerChipGPU, Chip,
 };
-use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
     base::DeviceMatrix,
     prelude::{F, SC},
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
-use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::{
     cuda::FieldExprChipGpu, ExprBuilderConfig, FieldExpressionMetadata,
 };
 use openvm_riscv_adapters::{
-    Rv64IsEqualModU16AdapterCols, Rv64IsEqualModU16AdapterExecutor, Rv64IsEqualModU16AdapterFiller,
-    Rv64IsEqualModU16AdapterRecord, Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor,
+    Rv64IsEqualModU16AdapterCols, Rv64IsEqualModU16AdapterRecord, Rv64VecHeapAdapterCols,
+    Rv64VecHeapAdapterExecutor,
 };
 use openvm_riscv_circuit::{adapters::U16_BITS, Rv64ImGpuProverExt};
 use openvm_stark_backend::prover::AirProvingContext;
@@ -92,44 +88,6 @@ impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for HybridModularCh
     }
 }
 
-#[derive(derive_new::new)]
-pub struct HybridModularIsEqualChip<F, const NUM_LANES: usize, const TOTAL_LIMBS: usize> {
-    cpu: ModularIsEqualU16Chip<F, NUM_LANES, TOTAL_LIMBS>,
-    device_ctx: GpuDeviceCtx,
-}
-
-impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize> Chip<DenseRecordArena, GpuBackend>
-    for HybridModularIsEqualChip<F, NUM_LANES, TOTAL_LIMBS>
-{
-    fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let record_size = size_of::<(
-            Rv64IsEqualModU16AdapterRecord<2, NUM_LANES>,
-            ModularIsEqualRecord<TOTAL_LIMBS>,
-        )>();
-        let trace_width = Rv64IsEqualModU16AdapterCols::<F, 2, NUM_LANES>::width()
-            + ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width();
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % record_size, 0);
-
-        let num_records = records.len() / record_size;
-        let height = num_records.next_power_of_two();
-        let mut seeker = arena.get_record_seeker::<(
-            &mut Rv64IsEqualModU16AdapterRecord<2, NUM_LANES>,
-            &mut ModularIsEqualRecord<TOTAL_LIMBS>,
-        ), EmptyAdapterCoreLayout<
-            F,
-            Rv64IsEqualModU16AdapterExecutor<2, NUM_LANES, TOTAL_LIMBS>,
-        >>();
-        let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, trace_width);
-        seeker.transfer_to_matrix_arena(&mut matrix_arena, EmptyAdapterCoreLayout::new());
-        let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
-        cpu_proving_ctx_to_gpu(cpu_ctx, &self.device_ctx)
-    }
-}
-
 #[derive(Clone, Copy, Default)]
 pub struct AlgebraHybridProverExt;
 
@@ -146,13 +104,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let range_checker = range_checker_gpu.cpu_chip.clone().unwrap();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let device_ctx = range_checker_gpu.device_ctx.clone();
 
-        for (i, modulus) in extension.supported_moduli.iter().enumerate() {
+        for modulus in extension.supported_moduli.iter() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
-            let start_offset =
-                Rv64ModularArithmeticOpcode::CLASS_OFFSET + i * Rv64ModularArithmeticOpcode::COUNT;
 
             let modulus_limbs = big_uint_to_limbs(modulus, U16_BITS);
 
@@ -200,20 +155,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 });
                 inventory
                     .next_air::<ModularIsEqualU16Air<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>>()?;
-                let is_eq = ModularIsEqualU16Chip::<F, MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>::new(
-                    ModularIsEqualFiller::new(
-                        Rv64IsEqualModU16AdapterFiller::new(
-                            byte_ptr_max_bits,
-                            range_checker.clone(),
-                        ),
-                        start_offset,
-                        modulus_limbs,
-                        range_checker.clone(),
-                    ),
-                    mem_helper.clone(),
+                let is_eq = ModularIsEqualChipGpu::<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>::new(
+                    modulus_limbs,
+                    byte_ptr_max_bits,
+                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
-                inventory
-                    .add_executor_chip(HybridModularIsEqualChip::new(is_eq, device_ctx.clone()));
+                inventory.add_executor_chip(is_eq);
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
@@ -258,20 +206,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 });
                 inventory
                     .next_air::<ModularIsEqualU16Air<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>>()?;
-                let is_eq = ModularIsEqualU16Chip::<F, MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>::new(
-                    ModularIsEqualFiller::new(
-                        Rv64IsEqualModU16AdapterFiller::new(
-                            byte_ptr_max_bits,
-                            range_checker.clone(),
-                        ),
-                        start_offset,
-                        modulus_limbs,
-                        range_checker.clone(),
-                    ),
-                    mem_helper.clone(),
+                let is_eq = ModularIsEqualChipGpu::<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>::new(
+                    modulus_limbs,
+                    byte_ptr_max_bits,
+                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
-                inventory
-                    .add_executor_chip(HybridModularIsEqualChip::new(is_eq, device_ctx.clone()));
+                inventory.add_executor_chip(is_eq);
             } else {
                 panic!("Modulus too large");
             }
@@ -342,7 +283,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let range_checker = range_checker_gpu.cpu_chip.clone().unwrap();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let device_ctx = range_checker_gpu.device_ctx.clone();
 
         for (_, modulus) in extension.supported_moduli.iter() {
             // determine the number of bytes needed to represent a prime field element
@@ -497,5 +437,145 @@ impl VmBuilder<E> for Rv64ModularWithFp2HybridBuilder {
             inventory,
         )?;
         Ok(chip_complex)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GPU tracegen for ModularIsEqual (dedicated kernel; see cuda/src/modular_is_eq.cu)
+// ---------------------------------------------------------------------------
+
+mod is_eq_cuda_abi {
+    #![allow(clippy::missing_safety_doc, clippy::too_many_arguments)]
+    use openvm_cuda_backend::prelude::F;
+    use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
+
+    macro_rules! declare_is_eq_launcher {
+        ($name:ident) => {
+            extern "C" {
+                fn $name(
+                    d_trace: *mut F,
+                    height: usize,
+                    rows_used: usize,
+                    d_records: *const u8,
+                    rec_stride: usize,
+                    rec_core_offset: usize,
+                    d_modulus_limbs: *const u16,
+                    d_range_checker: *mut u32,
+                    rc_bins: usize,
+                    pointer_max_bits: u32,
+                    timestamp_max_bits: u32,
+                    stream: cudaStream_t,
+                ) -> i32;
+            }
+        };
+    }
+    declare_is_eq_launcher!(_modular_is_eq_tracegen_l4);
+    declare_is_eq_launcher!(_modular_is_eq_tracegen_l6);
+
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        rows_used: usize,
+        d_records: &DeviceBuffer<u8>,
+        rec_stride: usize,
+        rec_core_offset: usize,
+        d_modulus_limbs: &DeviceBuffer<u16>,
+        d_range_checker: &DeviceBuffer<F>,
+        num_lanes: usize,
+        pointer_max_bits: u32,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        let launcher = match num_lanes {
+            4 => _modular_is_eq_tracegen_l4,
+            6 => _modular_is_eq_tracegen_l6,
+            _ => panic!("unsupported ModularIsEqual num_lanes {num_lanes}"),
+        };
+        CudaError::from_result(launcher(
+            d_trace.as_mut_ptr(),
+            height,
+            rows_used,
+            d_records.as_ptr(),
+            rec_stride,
+            rec_core_offset,
+            d_modulus_limbs.as_ptr(),
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len(),
+            pointer_max_bits,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+}
+
+pub struct ModularIsEqualChipGpu<const NUM_LANES: usize, const TOTAL_LIMBS: usize> {
+    range_checker: Arc<VariableRangeCheckerChipGPU>,
+    d_modulus: openvm_cuda_common::d_buffer::DeviceBuffer<u16>,
+    pointer_max_bits: u32,
+    timestamp_max_bits: u32,
+}
+
+impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize>
+    ModularIsEqualChipGpu<NUM_LANES, TOTAL_LIMBS>
+{
+    pub fn new(
+        modulus_limbs: [u16; TOTAL_LIMBS],
+        byte_ptr_max_bits: usize,
+        timestamp_max_bits: usize,
+        range_checker: Arc<VariableRangeCheckerChipGPU>,
+    ) -> Self {
+        use openvm_cuda_common::copy::MemCopyH2D;
+        let d_modulus = modulus_limbs
+            .as_slice()
+            .to_device_on(&range_checker.device_ctx)
+            .unwrap();
+        Self {
+            range_checker,
+            d_modulus,
+            pointer_max_bits: byte_ptr_max_bits as u32,
+            timestamp_max_bits: timestamp_max_bits as u32,
+        }
+    }
+}
+
+impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize> Chip<DenseRecordArena, GpuBackend>
+    for ModularIsEqualChipGpu<NUM_LANES, TOTAL_LIMBS>
+{
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        use openvm_cuda_common::copy::MemCopyH2D;
+        type ARec<const L: usize> = Rv64IsEqualModU16AdapterRecord<2, L>;
+        let record_stride = size_of::<(ARec<NUM_LANES>, ModularIsEqualRecord<TOTAL_LIMBS>)>();
+        let rec_core_offset = size_of::<ARec<NUM_LANES>>();
+        let records = arena.allocated();
+        if records.is_empty() {
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        }
+        debug_assert_eq!(records.len() % record_stride, 0);
+        let rows_used = records.len() / record_stride;
+        let height = rows_used.next_power_of_two();
+        let width = Rv64IsEqualModU16AdapterCols::<F, 2, NUM_LANES>::width()
+            + ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width();
+
+        let device_ctx = &self.range_checker.device_ctx;
+        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
+        unsafe {
+            is_eq_cuda_abi::tracegen(
+                d_trace.buffer(),
+                height,
+                rows_used,
+                &d_records,
+                record_stride,
+                rec_core_offset,
+                &self.d_modulus,
+                &self.range_checker.count,
+                NUM_LANES,
+                self.pointer_max_bits,
+                self.timestamp_max_bits,
+                device_ctx.stream.as_raw(),
+            )
+            .unwrap();
+        }
+        AirProvingContext::simple_no_pis(d_trace)
     }
 }
