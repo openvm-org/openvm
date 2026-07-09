@@ -39,6 +39,8 @@ mod branch_eq;
 mod branch_lt;
 pub(crate) mod common;
 mod less_than;
+#[cfg(feature = "rvr")]
+pub mod log_native;
 mod mult;
 mod shift;
 
@@ -47,6 +49,8 @@ mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
 
+#[cfg(all(test, feature = "rvr"))]
+mod rvr_preflight_tests;
 #[cfg(test)]
 mod tests;
 
@@ -75,7 +79,7 @@ type AluAdapterAir = VecToFlatAluAdapterAir<
 >;
 
 /// Type alias for the ALU adapter executor wrapper
-type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
+pub type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
     Rv64VecHeapAdapterExecutor<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
     NUM_READS,
     INT256_NUM_MEMORY_BLOCKS,
@@ -95,7 +99,7 @@ type AluU16AdapterAir = VecToFlatAluAdapterAir<
     INT256_NUM_U16_LIMBS,
 >;
 
-type AluU16AdapterExecutor = VecToFlatAluU16AdapterExecutor<
+pub type AluU16AdapterExecutor = VecToFlatAluU16AdapterExecutor<
     Rv64VecHeapU16AdapterExecutor<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
     NUM_READS,
     INT256_NUM_MEMORY_BLOCKS,
