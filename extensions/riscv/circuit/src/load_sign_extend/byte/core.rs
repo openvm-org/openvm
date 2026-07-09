@@ -23,13 +23,13 @@ use crate::{
     load::LoadRecord,
 };
 
-const LOAD_SIGN_EXTEND_BYTE_CASES: usize = 8;
+const LOAD_SIGN_EXTEND_BYTE_NUM_CASES: usize = 8;
 const LOAD_SIGN_EXTEND_BYTE_SELECTOR_MAX_DEGREE: u32 = 2;
 pub(crate) const LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH: usize = 3;
 
 fn encoder() -> Encoder {
     let encoder = Encoder::new(
-        LOAD_SIGN_EXTEND_BYTE_CASES,
+        LOAD_SIGN_EXTEND_BYTE_NUM_CASES,
         LOAD_SIGN_EXTEND_BYTE_SELECTOR_MAX_DEGREE,
         true,
     );

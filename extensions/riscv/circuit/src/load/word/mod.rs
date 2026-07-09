@@ -10,16 +10,16 @@ use crate::{
     },
 };
 
-pub const WORD_LOAD_CASES: usize = 2;
-pub const WORD_LOAD_SELECTOR_WIDTH: usize = 1;
+pub const LOAD_WORD_NUM_CASES: usize = 2;
+pub const LOAD_WORD_SELECTOR_WIDTH: usize = 1;
 
 pub type LoadWordCoreAir =
-    LoadWidthAlignedCoreAir<LOAD_WIDTH_WORD, WORD_LOAD_CASES, WORD_LOAD_SELECTOR_WIDTH>;
+    LoadWidthAlignedCoreAir<LOAD_WIDTH_WORD, LOAD_WORD_NUM_CASES, LOAD_WORD_SELECTOR_WIDTH>;
 pub type LoadWordFiller = LoadWidthAlignedFiller<
     Rv64LoadAdapterFiller,
     LOAD_WIDTH_WORD,
-    WORD_LOAD_CASES,
-    WORD_LOAD_SELECTOR_WIDTH,
+    LOAD_WORD_NUM_CASES,
+    LOAD_WORD_SELECTOR_WIDTH,
 >;
 
 pub type Rv64LoadWordAir = VmAirWrapper<Rv64LoadAdapterAir, LoadWordCoreAir>;

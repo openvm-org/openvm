@@ -10,19 +10,19 @@ use crate::{
     },
 };
 
-pub const HALFWORD_STORE_CASES: usize = 4;
-pub const HALFWORD_STORE_SELECTOR_WIDTH: usize = 2;
+pub const STORE_HALFWORD_NUM_CASES: usize = 4;
+pub const STORE_HALFWORD_SELECTOR_WIDTH: usize = 2;
 
 pub type StoreHalfwordCoreAir = StoreWidthAlignedCoreAir<
     STORE_WIDTH_HALFWORD,
-    HALFWORD_STORE_CASES,
-    HALFWORD_STORE_SELECTOR_WIDTH,
+    STORE_HALFWORD_NUM_CASES,
+    STORE_HALFWORD_SELECTOR_WIDTH,
 >;
 pub type StoreHalfwordFiller = StoreWidthAlignedFiller<
     Rv64StoreAdapterFiller,
     STORE_WIDTH_HALFWORD,
-    HALFWORD_STORE_CASES,
-    HALFWORD_STORE_SELECTOR_WIDTH,
+    STORE_HALFWORD_NUM_CASES,
+    STORE_HALFWORD_SELECTOR_WIDTH,
 >;
 
 pub type Rv64StoreHalfwordAir = VmAirWrapper<Rv64StoreAdapterAir, StoreHalfwordCoreAir>;

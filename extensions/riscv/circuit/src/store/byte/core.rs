@@ -24,7 +24,7 @@ use crate::{
 };
 
 const BYTE_SELECTOR_MAX_DEGREE: u32 = 2;
-const STORE_BYTE_CASES: usize = 8;
+const STORE_BYTE_NUM_CASES: usize = 8;
 pub(crate) const STORE_BYTE_SELECTOR_WIDTH: usize = 3;
 
 /// Handles byte stores by replacing one byte in the previous memory block and preserving all other
@@ -53,7 +53,7 @@ impl StoreByteCoreAir {
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
         Self {
             offset,
-            encoder: Encoder::new(STORE_BYTE_CASES, BYTE_SELECTOR_MAX_DEGREE, true),
+            encoder: Encoder::new(STORE_BYTE_NUM_CASES, BYTE_SELECTOR_MAX_DEGREE, true),
             bitwise_lookup_bus,
         }
     }
@@ -176,7 +176,7 @@ impl<A> StoreByteFiller<A> {
         Self {
             adapter,
             offset,
-            encoder: Encoder::new(STORE_BYTE_CASES, BYTE_SELECTOR_MAX_DEGREE, true),
+            encoder: Encoder::new(STORE_BYTE_NUM_CASES, BYTE_SELECTOR_MAX_DEGREE, true),
             bitwise_lookup_chip,
         }
     }

@@ -8,18 +8,18 @@ use crate::{
     },
 };
 
-pub const LOAD_SIGN_EXTEND_WORD_CASES: usize = 2;
+pub const LOAD_SIGN_EXTEND_WORD_NUM_CASES: usize = 2;
 pub const LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH: usize = 1;
 
 pub type LoadSignExtendWordCoreAir = LoadSignExtendWidthAlignedCoreAir<
     LOAD_WIDTH_WORD,
-    LOAD_SIGN_EXTEND_WORD_CASES,
+    LOAD_SIGN_EXTEND_WORD_NUM_CASES,
     LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
 >;
 pub type LoadSignExtendWordFiller = LoadSignExtendWidthAlignedFiller<
     crate::adapters::Rv64LoadAdapterFiller,
     LOAD_WIDTH_WORD,
-    LOAD_SIGN_EXTEND_WORD_CASES,
+    LOAD_SIGN_EXTEND_WORD_NUM_CASES,
     LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
 >;
 
