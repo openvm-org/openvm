@@ -4,8 +4,8 @@ use openvm_circuit::arch::testing::TestBuilder;
 use openvm_instructions::LocalOpcode;
 
 use crate::test_utils::memory::{
-    b, create_seeded_rng, create_store_halfword_harness, set_and_execute_store,
-    store_memory_config, store_write_data, VmChipTestBuilder, STOREH,
+    create_seeded_rng, create_store_halfword_harness, rv64_bytes_to_u16_block,
+    set_and_execute_store, store_memory_config, store_write_data, VmChipTestBuilder, STOREH,
 };
 #[cfg(feature = "cuda")]
 use crate::test_utils::memory::{
@@ -45,23 +45,23 @@ fn rand_store_halfword_test() {
 
 #[test]
 fn run_storeh_sanity_test() {
-    let read_data = b([250, 123, 67, 198, 175, 33, 198, 250]);
-    let prev_data = b([144, 56, 175, 92, 90, 121, 64, 205]);
+    let read_data = rv64_bytes_to_u16_block([250, 123, 67, 198, 175, 33, 198, 250]);
+    let prev_data = rv64_bytes_to_u16_block([144, 56, 175, 92, 90, 121, 64, 205]);
     assert_eq!(
         store_write_data(STOREH, read_data, prev_data, 0),
-        b([250, 123, 175, 92, 90, 121, 64, 205])
+        rv64_bytes_to_u16_block([250, 123, 175, 92, 90, 121, 64, 205])
     );
     assert_eq!(
         store_write_data(STOREH, read_data, prev_data, 2),
-        b([144, 56, 250, 123, 90, 121, 64, 205])
+        rv64_bytes_to_u16_block([144, 56, 250, 123, 90, 121, 64, 205])
     );
     assert_eq!(
         store_write_data(STOREH, read_data, prev_data, 4),
-        b([144, 56, 175, 92, 250, 123, 64, 205])
+        rv64_bytes_to_u16_block([144, 56, 175, 92, 250, 123, 64, 205])
     );
     assert_eq!(
         store_write_data(STOREH, read_data, prev_data, 6),
-        b([144, 56, 175, 92, 90, 121, 250, 123])
+        rv64_bytes_to_u16_block([144, 56, 175, 92, 90, 121, 250, 123])
     );
 }
 

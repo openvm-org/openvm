@@ -4,8 +4,8 @@ use openvm_circuit::arch::testing::TestBuilder;
 use openvm_instructions::LocalOpcode;
 
 use crate::test_utils::memory::{
-    b, create_seeded_rng, create_store_byte_harness, set_and_execute_store, store_memory_config,
-    store_write_data, VmChipTestBuilder, STOREB,
+    create_seeded_rng, create_store_byte_harness, rv64_bytes_to_u16_block, set_and_execute_store,
+    store_memory_config, store_write_data, VmChipTestBuilder, STOREB,
 };
 #[cfg(feature = "cuda")]
 use crate::test_utils::memory::{
@@ -46,39 +46,39 @@ fn rand_store_byte_test() {
 
 #[test]
 fn run_storeb_sanity_test() {
-    let read_data = b([221, 104, 58, 147, 175, 33, 198, 250]);
-    let prev_data = b([199, 83, 243, 12, 90, 121, 64, 205]);
+    let read_data = rv64_bytes_to_u16_block([221, 104, 58, 147, 175, 33, 198, 250]);
+    let prev_data = rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 64, 205]);
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 0),
-        b([221, 83, 243, 12, 90, 121, 64, 205])
+        rv64_bytes_to_u16_block([221, 83, 243, 12, 90, 121, 64, 205])
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 1),
-        b([199, 221, 243, 12, 90, 121, 64, 205])
+        rv64_bytes_to_u16_block([199, 221, 243, 12, 90, 121, 64, 205])
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 2),
-        b([199, 83, 221, 12, 90, 121, 64, 205])
+        rv64_bytes_to_u16_block([199, 83, 221, 12, 90, 121, 64, 205])
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 3),
-        b([199, 83, 243, 221, 90, 121, 64, 205])
+        rv64_bytes_to_u16_block([199, 83, 243, 221, 90, 121, 64, 205])
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 4),
-        b([199, 83, 243, 12, 221, 121, 64, 205])
+        rv64_bytes_to_u16_block([199, 83, 243, 12, 221, 121, 64, 205])
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 5),
-        b([199, 83, 243, 12, 90, 221, 64, 205])
+        rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 221, 64, 205])
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 6),
-        b([199, 83, 243, 12, 90, 121, 221, 205])
+        rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 221, 205])
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 7),
-        b([199, 83, 243, 12, 90, 121, 64, 221])
+        rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 64, 221])
     );
 }
 

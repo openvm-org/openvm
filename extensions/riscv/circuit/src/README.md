@@ -112,7 +112,7 @@ Given
 
 - `rs1`, `rs2` are register addresses
 - `imm` is an immediate value
-- `mem_as` is the target address space
+- `mem_as` is the target address space, constrained to be the RV64 memory address space (`2`) or the public values address space (`3`)
 - `from_pc` is the current program address
 
 This circuit proves the following:
@@ -336,7 +336,7 @@ The RV64 signed-load circuit is split by access width: [byte](./load_sign_extend
 
 Given:
 
-- `read_data` is the data read from `mem_as[aligned(val(rs1) + imm)]`
+- `read_data` is the data read from the RV64 memory address space at `aligned(val(rs1) + imm)`
 - `opcode` indicates the operation to be performed
 
 These circuits prove that:

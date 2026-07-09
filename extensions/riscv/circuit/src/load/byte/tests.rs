@@ -4,8 +4,8 @@ use openvm_circuit::arch::testing::TestBuilder;
 use openvm_instructions::LocalOpcode;
 
 use crate::test_utils::memory::{
-    b, create_byte_harness, create_seeded_rng, load_memory_config, load_write_data,
-    set_and_execute_load, VmChipTestBuilder, LOADBU,
+    create_byte_harness, create_seeded_rng, load_memory_config, load_write_data,
+    rv64_bytes_to_u16_block, set_and_execute_load, VmChipTestBuilder, LOADBU,
 };
 #[cfg(feature = "cuda")]
 use crate::test_utils::memory::{
@@ -65,7 +65,7 @@ fn negative_load_address_wraparound_test() {
 
 #[test]
 fn run_loadbu_sanity_test() {
-    let read_data = b([131, 74, 186, 29, 138, 45, 202, 76]);
+    let read_data = rv64_bytes_to_u16_block([131, 74, 186, 29, 138, 45, 202, 76]);
     for (shift, expected) in [
         (0, [131, 0, 0, 0, 0, 0, 0, 0]),
         (1, [74, 0, 0, 0, 0, 0, 0, 0]),
@@ -76,7 +76,10 @@ fn run_loadbu_sanity_test() {
         (6, [202, 0, 0, 0, 0, 0, 0, 0]),
         (7, [76, 0, 0, 0, 0, 0, 0, 0]),
     ] {
-        assert_eq!(load_write_data(LOADBU, read_data, shift), b(expected));
+        assert_eq!(
+            load_write_data(LOADBU, read_data, shift),
+            rv64_bytes_to_u16_block(expected)
+        );
     }
 }
 

@@ -4,8 +4,8 @@ use openvm_circuit::arch::testing::TestBuilder;
 use openvm_instructions::LocalOpcode;
 
 use crate::test_utils::memory::{
-    b, create_seeded_rng, create_store_doubleword_harness, set_and_execute_store,
-    store_memory_config, store_write_data, VmChipTestBuilder, STORED,
+    create_seeded_rng, create_store_doubleword_harness, rv64_bytes_to_u16_block,
+    set_and_execute_store, store_memory_config, store_write_data, VmChipTestBuilder, STORED,
 };
 #[cfg(feature = "cuda")]
 use crate::test_utils::memory::{
@@ -45,8 +45,8 @@ fn rand_store_doubleword_test() {
 
 #[test]
 fn run_stored_sanity_test() {
-    let read_data = b([138, 45, 202, 76, 131, 74, 186, 29]);
-    let prev_data = b([159, 213, 89, 34, 142, 67, 210, 88]);
+    let read_data = rv64_bytes_to_u16_block([138, 45, 202, 76, 131, 74, 186, 29]);
+    let prev_data = rv64_bytes_to_u16_block([159, 213, 89, 34, 142, 67, 210, 88]);
     assert_eq!(store_write_data(STORED, read_data, prev_data, 0), read_data);
 }
 

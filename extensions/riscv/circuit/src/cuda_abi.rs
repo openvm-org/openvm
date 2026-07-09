@@ -632,7 +632,6 @@ pub mod load_sign_extend_word_cuda {
 }
 
 pub mod mul_cuda {
-
     use super::*;
 
     extern "C" {
