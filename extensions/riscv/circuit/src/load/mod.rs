@@ -1,9 +1,9 @@
 mod byte;
 pub(crate) mod common;
+pub(crate) mod core;
 mod doubleword;
 mod execution;
 mod halfword;
-pub(crate) mod width_aligned;
 mod word;
 
 pub use byte::*;

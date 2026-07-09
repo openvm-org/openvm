@@ -11,7 +11,7 @@ use super::DOUBLEWORD_LOAD_SELECTOR_WIDTH;
 use crate::{
     adapters::{Rv64LoadAdapterCols, Rv64LoadAdapterRecord},
     cuda_abi::load_doubleword_cuda,
-    load::{width_aligned::LoadWidthAlignedCoreCols, LoadRecord},
+    load::{core::LoadWidthAlignedCoreCols, LoadRecord},
 };
 
 #[derive(new)]
