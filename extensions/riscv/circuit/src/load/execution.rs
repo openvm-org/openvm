@@ -198,9 +198,21 @@ unsafe fn execute_e12_impl<
 
     let shift_amount = ptr_val % RV64_REGISTER_NUM_LIMBS as u32;
     let ptr_val = ptr_val - shift_amount;
-    let read_data: [u8; RV64_REGISTER_NUM_LIMBS] =
+    // read_data is the containing block followed by the next block, which is only read
+    // when the access spans both.
+    let mut read_data = [0u8; 2 * RV64_REGISTER_NUM_LIMBS];
+    let block0: [u8; RV64_REGISTER_NUM_LIMBS] =
         exec_state.vm_read_bytes(pre_compute.e as u32, ptr_val);
-    let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
+    read_data[..RV64_REGISTER_NUM_LIMBS].copy_from_slice(&block0);
+    if shift_amount as usize + OP::WIDTH > RV64_REGISTER_NUM_LIMBS {
+        debug_assert!((ptr_val as usize) + 2 * RV64_REGISTER_NUM_LIMBS <= RV64_MEMORY_BYTES);
+        let block1: [u8; RV64_REGISTER_NUM_LIMBS] = exec_state.vm_read_bytes(
+            pre_compute.e as u32,
+            ptr_val + RV64_REGISTER_NUM_LIMBS as u32,
+        );
+        read_data[RV64_REGISTER_NUM_LIMBS..].copy_from_slice(&block1);
+    }
+    let mut write_data = [U8::default(); RV64_REGISTER_NUM_LIMBS];
 
     if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
         return Err(ExecutionError::Fail {
@@ -253,10 +265,13 @@ unsafe fn execute_e2_impl<
 }
 
 trait LoadOp {
+    /// Access width in bytes.
+    const WIDTH: usize;
+
     /// Return if the operation is valid.
     fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool;
 }
@@ -267,56 +282,60 @@ struct LoadHUOp;
 struct LoadBUOp;
 
 impl LoadOp for LoadDOp {
+    const WIDTH: usize = 8;
+
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        _shift_amount: usize,
+        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
     ) -> bool {
-        *write_data = read_data;
+        for i in 0..Self::WIDTH {
+            write_data[i] = U8(read_data[shift_amount + i]);
+        }
         true
     }
 }
 
 impl LoadOp for LoadWUOp {
+    const WIDTH: usize = 4;
+
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
-        if shift_amount != 0 && shift_amount != 4 {
-            return false;
-        }
-        write_data[0] = read_data[shift_amount];
-        write_data[1] = read_data[shift_amount + 1];
-        write_data[2] = read_data[shift_amount + 2];
-        write_data[3] = read_data[shift_amount + 3];
+        write_data[0] = U8(read_data[shift_amount]);
+        write_data[1] = U8(read_data[shift_amount + 1]);
+        write_data[2] = U8(read_data[shift_amount + 2]);
+        write_data[3] = U8(read_data[shift_amount + 3]);
         true
     }
 }
 
 impl LoadOp for LoadHUOp {
+    const WIDTH: usize = 2;
+
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
-        if shift_amount != 0 && shift_amount != 2 && shift_amount != 4 && shift_amount != 6 {
-            return false;
-        }
-        write_data[0] = read_data[shift_amount];
-        write_data[1] = read_data[shift_amount + 1];
+        write_data[0] = U8(read_data[shift_amount]);
+        write_data[1] = U8(read_data[shift_amount + 1]);
         true
     }
 }
 
 impl LoadOp for LoadBUOp {
+    const WIDTH: usize = 1;
+
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
         write_data[0] = read_data[shift_amount];
