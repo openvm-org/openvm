@@ -42,7 +42,6 @@ use crate::{
     keccakf_perm::{KeccakfPermAir, KeccakfPermChip},
     xorin::{air::XorinVmAir, XorinVmChip, XorinVmExecutor, XorinVmFiller},
 };
-
 #[cfg(feature = "cuda")]
 mod cuda;
 #[cfg(feature = "cuda")]
@@ -116,6 +115,21 @@ where
             inventory,
         )?;
         Ok(chip_complex)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_log_native_assembler_registry(
+        &self,
+        config: &Self::VmConfig,
+    ) -> openvm_circuit::arch::rvr::LogNativeAssemblerRegistry<Val<E::SC>, Self::RecordArena>
+    where
+        Val<E::SC>: PrimeField32,
+    {
+        use openvm_circuit::arch::rvr::VmRvrLogNativeExtension;
+
+        let mut registry = openvm_circuit::arch::rvr::LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        registry
     }
 }
 

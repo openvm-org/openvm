@@ -17,7 +17,10 @@ __attribute__((preserve_most)) void rvr_ext_keccakf(RvState* restrict state,
   uint64_t st[KECCAK_WIDTH_WORDS];
   static_assert(sizeof(st) == KECCAK_WIDTH_BYTES, "keccak state size mismatch");
 
-  read_mem_u64_range(state, buffer_ptr, st, KECCAK_WIDTH_WORDS);
+  /* KeccakfOp models the preimage as each write's previous data, not as
+   * separate memory reads. Keep the load needed by the native permutation,
+   * but do not consume preflight timestamps for it. */
+  read_mem_u64_range_raw(state, buffer_ptr, st, KECCAK_WIDTH_WORDS);
   rvr_keccak_f1600(st);
   write_mem_u64_range(state, buffer_ptr, st, KECCAK_WIDTH_WORDS);
 }
