@@ -17,10 +17,9 @@ use openvm_stark_backend::{
 use crate::{
     adapters::{
         load_adapter_context, LoadInstruction, Rv64LoadAdapterFiller, Rv64LoadAdapterRecord,
-        RV64_U16_SIGN_BIT, U16_BITS,
+        LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD, RV64_U16_SIGN_BIT, U16_BITS,
     },
     load::LoadRecord,
-    load_sign_extend::common::{KIND_HALFWORD, KIND_WORD},
 };
 
 const SELECTOR_MAX_DEGREE: u32 = 2;
@@ -67,19 +66,12 @@ const HALFWORD_CASES: [SignedWidthAlignedCase; 4] = [
     },
 ];
 
-pub(crate) fn signed_width_aligned_cases<const KIND: usize>() -> &'static [SignedWidthAlignedCase] {
-    match KIND {
-        KIND_WORD => &WORD_CASES,
-        KIND_HALFWORD => &HALFWORD_CASES,
-        _ => unreachable!("unsupported signed width-aligned load kind"),
-    }
-}
-
-fn access_cells<const KIND: usize>() -> usize {
-    match KIND {
-        KIND_WORD => 2,
-        KIND_HALFWORD => 1,
-        _ => unreachable!("unsupported signed width-aligned load kind"),
+pub(crate) fn signed_width_aligned_cases<const LOAD_WIDTH: usize>(
+) -> &'static [SignedWidthAlignedCase] {
+    match LOAD_WIDTH {
+        LOAD_WIDTH_WORD => &WORD_CASES,
+        LOAD_WIDTH_HALFWORD => &HALFWORD_CASES,
+        _ => unreachable!("unsupported width for signed width-aligned load"),
     }
 }
 
@@ -105,7 +97,7 @@ pub struct LoadSignExtendWidthAlignedCoreCols<T, const SELECTOR_WIDTH: usize> {
 #[derive(Debug, Clone, ColumnsAir)]
 #[columns_via(LoadSignExtendWidthAlignedCoreCols<u8, SELECTOR_WIDTH>)]
 pub struct LoadSignExtendWidthAlignedCoreAir<
-    const KIND: usize,
+    const LOAD_WIDTH: usize,
     const CASES: usize,
     const SELECTOR_WIDTH: usize,
 > {
@@ -114,11 +106,11 @@ pub struct LoadSignExtendWidthAlignedCoreAir<
     range_bus: VariableRangeCheckerBus,
 }
 
-impl<const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    LoadSignExtendWidthAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
+impl<const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
+    LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, CASES, SELECTOR_WIDTH>
 {
     pub fn new(offset: usize, range_bus: VariableRangeCheckerBus) -> Self {
-        debug_assert_eq!(signed_width_aligned_cases::<KIND>().len(), CASES);
+        debug_assert_eq!(signed_width_aligned_cases::<LOAD_WIDTH>().len(), CASES);
         Self {
             offset,
             encoder: encoder::<CASES, SELECTOR_WIDTH>(),
@@ -127,21 +119,22 @@ impl<const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
     }
 }
 
-impl<F: Field, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize> BaseAir<F>
-    for LoadSignExtendWidthAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
+impl<F: Field, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize> BaseAir<F>
+    for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, CASES, SELECTOR_WIDTH>
 {
     fn width(&self) -> usize {
         LoadSignExtendWidthAlignedCoreCols::<F, SELECTOR_WIDTH>::width()
     }
 }
 
-impl<F: Field, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    BaseAirWithPublicValues<F> for LoadSignExtendWidthAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
+impl<F: Field, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
+    BaseAirWithPublicValues<F>
+    for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, CASES, SELECTOR_WIDTH>
 {
 }
 
-impl<AB, I, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize> VmCoreAir<AB, I>
-    for LoadSignExtendWidthAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
+impl<AB, I, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
+    VmCoreAir<AB, I> for LoadSignExtendWidthAlignedCoreAir<LOAD_WIDTH, CASES, SELECTOR_WIDTH>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -157,8 +150,8 @@ where
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &LoadSignExtendWidthAlignedCoreCols<AB::Var, SELECTOR_WIDTH> =
             (*local_core).borrow();
-        let cases = signed_width_aligned_cases::<KIND>();
-        let width = access_cells::<KIND>();
+        let cases = signed_width_aligned_cases::<LOAD_WIDTH>();
+        let width = LOAD_WIDTH / 2;
 
         self.encoder.eval(builder, &cols.selector);
         let flags = self.encoder.flags::<AB>(&cols.selector);
@@ -227,7 +220,7 @@ where
 #[derive(Clone)]
 pub struct LoadSignExtendWidthAlignedFiller<
     A = Rv64LoadAdapterFiller,
-    const KIND: usize = KIND_WORD,
+    const LOAD_WIDTH: usize = LOAD_WIDTH_WORD,
     const CASES: usize = 2,
     const SELECTOR_WIDTH: usize = 2,
 > {
@@ -237,15 +230,15 @@ pub struct LoadSignExtendWidthAlignedFiller<
     range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<A, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    LoadSignExtendWidthAlignedFiller<A, KIND, CASES, SELECTOR_WIDTH>
+impl<A, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
+    LoadSignExtendWidthAlignedFiller<A, LOAD_WIDTH, CASES, SELECTOR_WIDTH>
 {
     pub fn new(
         adapter: A,
         offset: usize,
         range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
-        debug_assert_eq!(signed_width_aligned_cases::<KIND>().len(), CASES);
+        debug_assert_eq!(signed_width_aligned_cases::<LOAD_WIDTH>().len(), CASES);
         Self {
             adapter,
             offset,
@@ -255,8 +248,8 @@ impl<A, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
     }
 }
 
-impl<F, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
-    for LoadSignExtendWidthAlignedFiller<Rv64LoadAdapterFiller, KIND, CASES, SELECTOR_WIDTH>
+impl<F, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
+    for LoadSignExtendWidthAlignedFiller<Rv64LoadAdapterFiller, LOAD_WIDTH, CASES, SELECTOR_WIDTH>
 where
     F: PrimeField32,
 {
@@ -278,13 +271,13 @@ where
         let read_data = record.read_data;
         let core_row: &mut LoadSignExtendWidthAlignedCoreCols<F, SELECTOR_WIDTH> =
             core_row.borrow_mut();
-        let cases = signed_width_aligned_cases::<KIND>();
+        let cases = signed_width_aligned_cases::<LOAD_WIDTH>();
         let case_idx = cases
             .iter()
             .position(|case| case.byte_shift == shift)
             .expect("invalid signed width-aligned load shift");
 
-        let width = access_cells::<KIND>();
+        let width = LOAD_WIDTH / 2;
         let sign_cell = read_data[shift / 2 + width - 1];
         let sign_bit = sign_cell & RV64_U16_SIGN_BIT;
         self.range_checker_chip

@@ -23,7 +23,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREB, STORED, STOREH, STOREW};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::common::{store_kind_for_opcode, StoreExecutor};
+use super::common::{store_width_for_opcode, StoreExecutor};
 use crate::adapters::{rv64_address_add_imm, rv64_bytes_to_u32, sign_extend_imm16};
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -35,7 +35,7 @@ struct StorePreCompute {
     e: u8,
 }
 
-impl<A, const KIND: usize> StoreExecutor<A, KIND> {
+impl<A, const STORE_WIDTH: usize> StoreExecutor<A, STORE_WIDTH> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -69,7 +69,8 @@ impl<A, const KIND: usize> StoreExecutor<A, KIND> {
             opcode.local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
         );
         match local_opcode {
-            STORED | STOREW | STOREH | STOREB if store_kind_for_opcode(local_opcode) == KIND => {}
+            STORED | STOREW | STOREH | STOREB
+                if store_width_for_opcode(local_opcode) == STORE_WIDTH => {}
             _ => return Err(StaticProgramError::InvalidInstruction(pc)),
         }
 
@@ -97,7 +98,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const KIND: usize> InterpreterExecutor<F> for StoreExecutor<A, KIND>
+impl<F, A, const STORE_WIDTH: usize> InterpreterExecutor<F> for StoreExecutor<A, STORE_WIDTH>
 where
     F: PrimeField32,
 {
@@ -135,7 +136,7 @@ where
     }
 }
 
-impl<F, A, const KIND: usize> InterpreterMeteredExecutor<F> for StoreExecutor<A, KIND>
+impl<F, A, const STORE_WIDTH: usize> InterpreterMeteredExecutor<F> for StoreExecutor<A, STORE_WIDTH>
 where
     F: PrimeField32,
 {

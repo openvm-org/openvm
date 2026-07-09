@@ -1,9 +1,11 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use crate::{
-    adapters::{Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller},
+    adapters::{
+        Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, LOAD_WIDTH_DOUBLEWORD,
+    },
     load::{
-        common::{LoadExecutor, KIND_DOUBLEWORD},
+        common::LoadExecutor,
         width_aligned::{LoadWidthAlignedCoreAir, LoadWidthAlignedFiller},
     },
 };
@@ -11,17 +13,20 @@ use crate::{
 pub const DOUBLEWORD_LOAD_CASES: usize = 1;
 pub const DOUBLEWORD_LOAD_SELECTOR_WIDTH: usize = 1;
 
-pub type LoadDoublewordCoreAir =
-    LoadWidthAlignedCoreAir<KIND_DOUBLEWORD, DOUBLEWORD_LOAD_CASES, DOUBLEWORD_LOAD_SELECTOR_WIDTH>;
+pub type LoadDoublewordCoreAir = LoadWidthAlignedCoreAir<
+    LOAD_WIDTH_DOUBLEWORD,
+    DOUBLEWORD_LOAD_CASES,
+    DOUBLEWORD_LOAD_SELECTOR_WIDTH,
+>;
 pub type LoadDoublewordFiller = LoadWidthAlignedFiller<
     Rv64LoadAdapterFiller,
-    KIND_DOUBLEWORD,
+    LOAD_WIDTH_DOUBLEWORD,
     DOUBLEWORD_LOAD_CASES,
     DOUBLEWORD_LOAD_SELECTOR_WIDTH,
 >;
 
 pub type Rv64LoadDoublewordAir = VmAirWrapper<Rv64LoadAdapterAir, LoadDoublewordCoreAir>;
-pub type Rv64LoadDoublewordExecutor = LoadExecutor<Rv64LoadAdapterExecutor, KIND_DOUBLEWORD>;
+pub type Rv64LoadDoublewordExecutor = LoadExecutor<Rv64LoadAdapterExecutor, LOAD_WIDTH_DOUBLEWORD>;
 pub type Rv64LoadDoublewordChip<F> = VmChipWrapper<F, LoadDoublewordFiller>;
 
 #[cfg(feature = "cuda")]

@@ -24,7 +24,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADB, LOADH, LOADW};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::common::{load_sign_extend_kind_for_opcode, LoadSignExtendExecutor};
+use super::common::{load_sign_extend_width_for_opcode, LoadSignExtendExecutor};
 use crate::adapters::{rv64_address_add_imm, rv64_bytes_to_u32, sign_extend_imm16};
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -36,7 +36,7 @@ struct LoadSignExtendPreCompute {
     e: u8,
 }
 
-impl<A, const KIND: usize> LoadSignExtendExecutor<A, KIND> {
+impl<A, const LOAD_WIDTH: usize> LoadSignExtendExecutor<A, LOAD_WIDTH> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -65,7 +65,8 @@ impl<A, const KIND: usize> LoadSignExtendExecutor<A, KIND> {
             opcode.local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
         );
         match local_opcode {
-            LOADW | LOADH | LOADB if load_sign_extend_kind_for_opcode(local_opcode) == KIND => {}
+            LOADW | LOADH | LOADB
+                if load_sign_extend_width_for_opcode(local_opcode) == LOAD_WIDTH => {}
             _ => return Err(StaticProgramError::InvalidInstruction(pc)),
         }
 
@@ -95,7 +96,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const KIND: usize> InterpreterExecutor<F> for LoadSignExtendExecutor<A, KIND>
+impl<F, A, const LOAD_WIDTH: usize> InterpreterExecutor<F> for LoadSignExtendExecutor<A, LOAD_WIDTH>
 where
     F: PrimeField32,
 {
@@ -133,7 +134,8 @@ where
     }
 }
 
-impl<F, A, const KIND: usize> InterpreterMeteredExecutor<F> for LoadSignExtendExecutor<A, KIND>
+impl<F, A, const LOAD_WIDTH: usize> InterpreterMeteredExecutor<F>
+    for LoadSignExtendExecutor<A, LOAD_WIDTH>
 where
     F: PrimeField32,
 {

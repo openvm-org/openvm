@@ -24,7 +24,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADBU, LOADD, LOADHU, LOADWU};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::common::{load_kind_for_opcode, LoadExecutor};
+use super::common::{load_width_for_opcode, LoadExecutor};
 use crate::adapters::{rv64_address_add_imm, rv64_bytes_to_u32, sign_extend_imm16};
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -36,7 +36,7 @@ struct LoadPreCompute {
     e: u8,
 }
 
-impl<A, const KIND: usize> LoadExecutor<A, KIND> {
+impl<A, const LOAD_WIDTH: usize> LoadExecutor<A, LOAD_WIDTH> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -65,7 +65,8 @@ impl<A, const KIND: usize> LoadExecutor<A, KIND> {
             opcode.local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
         );
         match local_opcode {
-            LOADD | LOADWU | LOADHU | LOADBU if load_kind_for_opcode(local_opcode) == KIND => {}
+            LOADD | LOADWU | LOADHU | LOADBU
+                if load_width_for_opcode(local_opcode) == LOAD_WIDTH => {}
             _ => return Err(StaticProgramError::InvalidInstruction(pc)),
         }
 
@@ -97,7 +98,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const KIND: usize> InterpreterExecutor<F> for LoadExecutor<A, KIND>
+impl<F, A, const LOAD_WIDTH: usize> InterpreterExecutor<F> for LoadExecutor<A, LOAD_WIDTH>
 where
     F: PrimeField32,
 {
@@ -135,7 +136,7 @@ where
     }
 }
 
-impl<F, A, const KIND: usize> InterpreterMeteredExecutor<F> for LoadExecutor<A, KIND>
+impl<F, A, const LOAD_WIDTH: usize> InterpreterMeteredExecutor<F> for LoadExecutor<A, LOAD_WIDTH>
 where
     F: PrimeField32,
 {

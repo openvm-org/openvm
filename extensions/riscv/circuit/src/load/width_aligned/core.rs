@@ -16,8 +16,9 @@ use openvm_stark_backend::{
 use crate::{
     adapters::{
         load_adapter_context, LoadInstruction, Rv64LoadAdapterFiller, Rv64LoadAdapterRecord,
+        LOAD_WIDTH_DOUBLEWORD, LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD,
     },
-    load::common::{LoadRecord, KIND_DOUBLEWORD, KIND_HALFWORD, KIND_WORD},
+    load::common::LoadRecord,
 };
 
 const SELECTOR_MAX_DEGREE: u32 = 2;
@@ -31,15 +32,6 @@ pub(crate) struct WidthAlignedCase {
 impl WidthAlignedCase {
     fn cell_shift(self) -> usize {
         self.byte_shift / 2
-    }
-}
-
-fn access_cells<const KIND: usize>() -> usize {
-    match KIND {
-        KIND_DOUBLEWORD => 4,
-        KIND_WORD => 2,
-        KIND_HALFWORD => 1,
-        _ => unreachable!("unsupported width-aligned load kind"),
     }
 }
 
@@ -81,12 +73,12 @@ const HALFWORD_LOAD_CASES: [WidthAlignedCase; 4] = [
         byte_shift: 6,
     },
 ];
-pub(crate) fn load_width_aligned_cases<const KIND: usize>() -> &'static [WidthAlignedCase] {
-    match KIND {
-        KIND_DOUBLEWORD => &DOUBLEWORD_LOAD_CASES,
-        KIND_WORD => &WORD_LOAD_CASES,
-        KIND_HALFWORD => &HALFWORD_LOAD_CASES,
-        _ => unreachable!("unsupported width-aligned load kind"),
+pub(crate) fn load_width_aligned_cases<const LOAD_WIDTH: usize>() -> &'static [WidthAlignedCase] {
+    match LOAD_WIDTH {
+        LOAD_WIDTH_DOUBLEWORD => &DOUBLEWORD_LOAD_CASES,
+        LOAD_WIDTH_WORD => &WORD_LOAD_CASES,
+        LOAD_WIDTH_HALFWORD => &HALFWORD_LOAD_CASES,
+        _ => unreachable!("unsupported width for width-aligned load"),
     }
 }
 
@@ -105,7 +97,7 @@ pub struct LoadWidthAlignedCoreCols<T, const SELECTOR_WIDTH: usize> {
 #[derive(Debug, Clone, ColumnsAir)]
 #[columns_via(LoadWidthAlignedCoreCols<u8, SELECTOR_WIDTH>)]
 pub struct LoadWidthAlignedCoreAir<
-    const KIND: usize,
+    const LOAD_WIDTH: usize,
     const CASES: usize,
     const SELECTOR_WIDTH: usize,
 > {
@@ -113,11 +105,11 @@ pub struct LoadWidthAlignedCoreAir<
     encoder: Encoder,
 }
 
-impl<const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    LoadWidthAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
+impl<const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
+    LoadWidthAlignedCoreAir<LOAD_WIDTH, CASES, SELECTOR_WIDTH>
 {
     pub fn new(offset: usize) -> Self {
-        debug_assert_eq!(load_width_aligned_cases::<KIND>().len(), CASES);
+        debug_assert_eq!(load_width_aligned_cases::<LOAD_WIDTH>().len(), CASES);
         Self {
             offset,
             encoder: encoder::<CASES, SELECTOR_WIDTH>(),
@@ -125,21 +117,21 @@ impl<const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
     }
 }
 
-impl<F: Field, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize> BaseAir<F>
-    for LoadWidthAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
+impl<F: Field, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize> BaseAir<F>
+    for LoadWidthAlignedCoreAir<LOAD_WIDTH, CASES, SELECTOR_WIDTH>
 {
     fn width(&self) -> usize {
         LoadWidthAlignedCoreCols::<F, SELECTOR_WIDTH>::width()
     }
 }
 
-impl<F: Field, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    BaseAirWithPublicValues<F> for LoadWidthAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
+impl<F: Field, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
+    BaseAirWithPublicValues<F> for LoadWidthAlignedCoreAir<LOAD_WIDTH, CASES, SELECTOR_WIDTH>
 {
 }
 
-impl<AB, I, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize> VmCoreAir<AB, I>
-    for LoadWidthAlignedCoreAir<KIND, CASES, SELECTOR_WIDTH>
+impl<AB, I, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
+    VmCoreAir<AB, I> for LoadWidthAlignedCoreAir<LOAD_WIDTH, CASES, SELECTOR_WIDTH>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -154,8 +146,8 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &LoadWidthAlignedCoreCols<AB::Var, SELECTOR_WIDTH> = (*local_core).borrow();
-        let cases = load_width_aligned_cases::<KIND>();
-        let width = access_cells::<KIND>();
+        let cases = load_width_aligned_cases::<LOAD_WIDTH>();
+        let width = LOAD_WIDTH / 2;
 
         self.encoder.eval(builder, &cols.selector);
         let flags = self.encoder.flags::<AB>(&cols.selector);
@@ -207,7 +199,7 @@ where
 #[derive(Clone)]
 pub struct LoadWidthAlignedFiller<
     A = Rv64LoadAdapterFiller,
-    const KIND: usize = KIND_WORD,
+    const LOAD_WIDTH: usize = LOAD_WIDTH_WORD,
     const CASES: usize = 2,
     const SELECTOR_WIDTH: usize = 1,
 > {
@@ -216,15 +208,15 @@ pub struct LoadWidthAlignedFiller<
     encoder: Encoder,
 }
 
-impl<A, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
-    LoadWidthAlignedFiller<A, KIND, CASES, SELECTOR_WIDTH>
+impl<A, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
+    LoadWidthAlignedFiller<A, LOAD_WIDTH, CASES, SELECTOR_WIDTH>
 {
     pub fn new(
         adapter: A,
         offset: usize,
         _range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
-        debug_assert_eq!(load_width_aligned_cases::<KIND>().len(), CASES);
+        debug_assert_eq!(load_width_aligned_cases::<LOAD_WIDTH>().len(), CASES);
         Self {
             adapter,
             offset,
@@ -233,8 +225,8 @@ impl<A, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize>
     }
 }
 
-impl<F, const KIND: usize, const CASES: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
-    for LoadWidthAlignedFiller<Rv64LoadAdapterFiller, KIND, CASES, SELECTOR_WIDTH>
+impl<F, const LOAD_WIDTH: usize, const CASES: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
+    for LoadWidthAlignedFiller<Rv64LoadAdapterFiller, LOAD_WIDTH, CASES, SELECTOR_WIDTH>
 where
     F: PrimeField32,
 {
@@ -255,7 +247,7 @@ where
         let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let read_data = record.read_data;
         let core_row: &mut LoadWidthAlignedCoreCols<F, SELECTOR_WIDTH> = core_row.borrow_mut();
-        let cases = load_width_aligned_cases::<KIND>();
+        let cases = load_width_aligned_cases::<LOAD_WIDTH>();
         let case_idx = cases
             .iter()
             .position(|case| case.byte_shift == shift)
