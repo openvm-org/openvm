@@ -1,33 +1,11 @@
 #include "riscv/cores/load_sign_extend.cuh"
 
+using LoadSignExtendWordCore =
+    LoadSignExtendWidthCore<LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH, 3, LOAD_SIGN_EXTEND_WORD_CASES, 4>;
+
 template <typename T> struct Rv64LoadSignExtendWordCols {
     Rv64LoadAdapterCols<T> adapter;
-    LoadSignExtendWidthAlignedCoreCols<T, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH> core;
-};
-
-struct LoadSignExtendWordCore {
-    VariableRangeChecker range_checker;
-
-    __device__ LoadSignExtendWordCore(VariableRangeChecker range_checker)
-        : range_checker(range_checker) {}
-
-    __device__ void fill_trace_row(RowSlice row, LoadSignExtendRecord record, uint8_t shift) {
-        uint32_t case_idx = shift >> 2;
-        uint16_t sign_cell = record.read_data[(shift >> 1) + 1];
-        uint16_t sign_bit = sign_cell & SIGN_U16;
-        range_checker.add_count(sign_cell - sign_bit, U16_BITS - 1);
-
-        Encoder encoder(
-            LOAD_SIGN_EXTEND_WORD_CASES,
-            LOAD_SIGN_EXTEND_SELECTOR_MAX_DEGREE,
-            true,
-            LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH
-        );
-        encoder.write_flag_pt(row, case_idx);
-        row[LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH] = 1;
-        row[LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH + 1] = sign_bit != 0;
-        row.write_array(LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH + 2, BLOCK_FE_WIDTH, record.read_data);
-    }
+    LoadSignExtendWidthCoreCols<T, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH, 3> core;
 };
 
 __global__ void rv64_load_sign_extend_word_tracegen(
@@ -38,22 +16,23 @@ __global__ void rv64_load_sign_extend_word_tracegen(
     size_t pointer_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
+    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
         auto const &record = records[idx];
-
         auto adapter = Rv64LoadAdapter(
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
-
-        auto core =
-            LoadSignExtendWordCore(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
+        auto core = LoadSignExtendWordCore(
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            BitwiseOperationLookup(bitwise_lookup_ptr)
+        );
         core.fill_trace_row(
             row.slice_from(COL_INDEX(Rv64LoadSignExtendWordCols, core)),
             record.core,
@@ -72,6 +51,7 @@ extern "C" int _rv64_load_sign_extend_word_tracegen(
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
+    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -85,6 +65,7 @@ extern "C" int _rv64_load_sign_extend_word_tracegen(
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,
+        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();

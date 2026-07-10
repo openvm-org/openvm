@@ -28,8 +28,8 @@ struct StoreByteCore {
             store_byte_from_cell(record.read_data[0], 1),
         };
         uint16_t prev_cell_bytes[2] = {
-            store_byte_from_cell(record.prev_data[cell_shift], 0),
-            store_byte_from_cell(record.prev_data[cell_shift], 1),
+            store_byte_from_cell(record.prev_data[0][cell_shift], 0),
+            store_byte_from_cell(record.prev_data[0][cell_shift], 1),
         };
         bitwise_lookup.add_range(read_cell_bytes[0], read_cell_bytes[1]);
         bitwise_lookup.add_range(prev_cell_bytes[0], prev_cell_bytes[1]);
@@ -42,7 +42,7 @@ struct StoreByteCore {
         COL_WRITE_ARRAY(row, StoreByteCoreCols, read_cell_bytes, read_cell_bytes);
         COL_WRITE_ARRAY(row, StoreByteCoreCols, prev_cell_bytes, prev_cell_bytes);
         COL_WRITE_ARRAY(row, StoreByteCoreCols, read_data, record.read_data);
-        COL_WRITE_ARRAY(row, StoreByteCoreCols, prev_data, record.prev_data);
+        COL_WRITE_ARRAY(row, StoreByteCoreCols, prev_data, record.prev_data[0]);
     }
 };
 

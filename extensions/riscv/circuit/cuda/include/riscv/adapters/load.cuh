@@ -15,9 +15,11 @@ template <typename T> struct Rv64LoadAdapterCols {
     MemoryReadAuxCols<T> rs1_aux_cols;
     T rd_ptr;
     MemoryReadAuxCols<T> read_data_aux;
+    MemoryReadAuxCols<T> read_data1_aux;
     T imm;
     T imm_sign;
     T mem_ptr_limbs[2];
+    T mem_ptr_carry;
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
     T needs_write;
 };
@@ -32,6 +34,8 @@ struct Rv64LoadAdapterRecord {
 
     uint32_t rd_ptr;
     MemoryReadAuxRecord read_data_aux;
+    // prev_timestamp == UINT32_MAX means the access does not cross a block boundary.
+    MemoryReadAuxRecord read_data1_aux;
     uint16_t imm;
     bool imm_sign;
 
@@ -81,6 +85,16 @@ struct Rv64LoadAdapter {
             record.read_data_aux.prev_timestamp,
             record.from_timestamp + 1
         );
+        bool crosses = record.read_data1_aux.prev_timestamp != UINT32_MAX;
+        if (crosses) {
+            mem_helper.fill(
+                row.slice_from(COL_INDEX(Rv64LoadAdapterCols, read_data1_aux)),
+                record.read_data1_aux.prev_timestamp,
+                record.from_timestamp + 2
+            );
+        } else {
+            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv64LoadAdapterCols, read_data1_aux)));
+        }
 
         bool needs_write = record.rd_ptr != UINT32_MAX;
         COL_WRITE_VALUE(row, Rv64LoadAdapterCols, rd_ptr, needs_write ? record.rd_ptr : 0);
@@ -89,7 +103,7 @@ struct Rv64LoadAdapter {
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv64LoadAdapterCols, write_aux.base)),
                 record.write_prev_timestamp,
-                record.from_timestamp + 2
+                record.from_timestamp + 3
             );
             Fp prev_data[BLOCK_FE_WIDTH];
             copy_u16_cells(prev_data, record.write_prev_data);
@@ -108,7 +122,17 @@ struct Rv64LoadAdapter {
         COL_WRITE_ARRAY(row, Rv64LoadAdapterCols, mem_ptr_limbs, ptr_limbs);
 
         uint32_t shift_amount = rv64_load_shift_amount(record);
-        range_checker.add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);
+        uint32_t aligned_limb0 = ptr_limbs[0] - shift_amount;
+        range_checker.add_count(aligned_limb0 >> 3, U16_BITS - 3);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
+
+        bool carry = crosses && (aligned_limb0 + 8 == (1u << U16_BITS));
+        COL_WRITE_VALUE(row, Rv64LoadAdapterCols, mem_ptr_carry, carry);
+        if (crosses) {
+            range_checker.add_count(
+                (aligned_limb0 + 8 - (uint32_t(carry) << U16_BITS)) >> 3, U16_BITS - 3
+            );
+            range_checker.add_count(ptr_limbs[1] + carry, pointer_max_bits - U16_BITS);
+        }
     }
 };

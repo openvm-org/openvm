@@ -439,7 +439,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(all(not(feature = "aot")))]
+    #[cfg(not(feature = "aot"))]
     #[test_case("misaligned_load", 1)]
     #[test_case("misaligned_signed_load", 1)]
     #[test_case("misaligned_store", 1)]

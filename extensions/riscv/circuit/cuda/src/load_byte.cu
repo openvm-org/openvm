@@ -19,7 +19,7 @@ struct LoadByteCore {
         : bitwise_lookup(bitwise_lookup) {}
 
     __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
-        uint16_t read_cell = record.read_data[shift >> 1];
+        uint16_t read_cell = record.read_data[0][shift >> 1];
         uint16_t read_cell_bytes[2] = {
             load_byte_from_cell(read_cell, 0),
             load_byte_from_cell(read_cell, 1),
@@ -30,7 +30,7 @@ struct LoadByteCore {
         encoder.write_flag_pt(row.slice_from(COL_INDEX(LoadByteCoreCols, selector)), shift);
         COL_WRITE_VALUE(row, LoadByteCoreCols, is_valid, 1);
         COL_WRITE_ARRAY(row, LoadByteCoreCols, read_cell_bytes, read_cell_bytes);
-        COL_WRITE_ARRAY(row, LoadByteCoreCols, read_data, record.read_data);
+        COL_WRITE_ARRAY(row, LoadByteCoreCols, read_data, record.read_data[0]);
     }
 };
 

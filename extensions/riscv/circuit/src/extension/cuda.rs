@@ -116,6 +116,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.next_air::<Rv64LoadSignExtendHalfwordAir>()?;
         let load_sign_extend_halfword = Rv64LoadSignExtendHalfwordChipGpu::new(
             range_checker.clone(),
+            bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );
@@ -124,6 +125,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.next_air::<Rv64LoadHalfwordAir>()?;
         let load_halfword = Rv64LoadHalfwordChipGpu::new(
             range_checker.clone(),
+            bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );
@@ -132,6 +134,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.next_air::<Rv64StoreHalfwordAir>()?;
         let store_halfword = Rv64StoreHalfwordChipGpu::new(
             range_checker.clone(),
+            bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );
@@ -140,24 +143,34 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.next_air::<Rv64LoadSignExtendWordAir>()?;
         let load_sign_extend_word = Rv64LoadSignExtendWordChipGpu::new(
             range_checker.clone(),
+            bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );
         inventory.add_executor_chip(load_sign_extend_word);
 
         inventory.next_air::<Rv64LoadWordAir>()?;
-        let load_word =
-            Rv64LoadWordChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
+        let load_word = Rv64LoadWordChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+        );
         inventory.add_executor_chip(load_word);
 
         inventory.next_air::<Rv64StoreWordAir>()?;
-        let store_word =
-            Rv64StoreWordChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
+        let store_word = Rv64StoreWordChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+        );
         inventory.add_executor_chip(store_word);
 
         inventory.next_air::<Rv64LoadDoublewordAir>()?;
         let load_doubleword = Rv64LoadDoublewordChipGpu::new(
             range_checker.clone(),
+            bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );
@@ -166,6 +179,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.next_air::<Rv64StoreDoublewordAir>()?;
         let store_doubleword = Rv64StoreDoublewordChipGpu::new(
             range_checker.clone(),
+            bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
         );

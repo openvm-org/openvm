@@ -1,33 +1,11 @@
 #include "riscv/cores/store.cuh"
 
-template <typename T> struct StoreDoublewordCoreCols {
-    T selector[STORE_DOUBLEWORD_SELECTOR_WIDTH];
-    T is_valid;
-    T read_data[BLOCK_FE_WIDTH];
-    T prev_data[BLOCK_FE_WIDTH];
-};
+using StoreDoublewordCore =
+    StoreWidthCore<STORE_DOUBLEWORD_SELECTOR_WIDTH, 4, STORE_DOUBLEWORD_CASES, 8>;
 
 template <typename T> struct Rv64StoreDoublewordCols {
     Rv64StoreAdapterCols<T> adapter;
-    StoreDoublewordCoreCols<T> core;
-};
-
-struct StoreDoublewordCore {
-    __device__ void fill_trace_row(RowSlice row, StoreRecord record, uint8_t shift) {
-        assert(shift == 0);
-
-        Encoder encoder(
-            STORE_DOUBLEWORD_CASES, STORE_SELECTOR_MAX_DEGREE, true, STORE_DOUBLEWORD_SELECTOR_WIDTH
-        );
-        encoder.write_flag_pt(row, 0);
-        row[STORE_DOUBLEWORD_SELECTOR_WIDTH] = 1;
-        row.write_array(STORE_DOUBLEWORD_SELECTOR_WIDTH + 1, BLOCK_FE_WIDTH, record.read_data);
-        row.write_array(
-            STORE_DOUBLEWORD_SELECTOR_WIDTH + 1 + BLOCK_FE_WIDTH,
-            BLOCK_FE_WIDTH,
-            record.prev_data
-        );
-    }
+    StoreWidthCoreCols<T, STORE_DOUBLEWORD_SELECTOR_WIDTH, 4> core;
 };
 
 __global__ void rv64_store_doubleword_tracegen(
@@ -38,6 +16,7 @@ __global__ void rv64_store_doubleword_tracegen(
     size_t pointer_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
+    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -50,7 +29,7 @@ __global__ void rv64_store_doubleword_tracegen(
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
-        StoreDoublewordCore core;
+        auto core = StoreDoublewordCore(BitwiseOperationLookup(bitwise_lookup_ptr));
         core.fill_trace_row(
             row.slice_from(COL_INDEX(Rv64StoreDoublewordCols, core)),
             record.core,
@@ -70,6 +49,7 @@ extern "C" int _rv64_store_doubleword_tracegen(
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
+    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -83,6 +63,7 @@ extern "C" int _rv64_store_doubleword_tracegen(
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,
+        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();

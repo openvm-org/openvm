@@ -1,27 +1,11 @@
 #include "riscv/cores/load.cuh"
 
-template <typename T> struct LoadHalfwordCoreCols {
-    T selector[LOAD_HALFWORD_SELECTOR_WIDTH];
-    T is_valid;
-    T read_data[BLOCK_FE_WIDTH];
-};
+using LoadHalfwordCore =
+    LoadWidthCore<LOAD_HALFWORD_SELECTOR_WIDTH, 2, LOAD_HALFWORD_CASES, 2>;
 
 template <typename T> struct Rv64LoadHalfwordCols {
     Rv64LoadAdapterCols<T> adapter;
-    LoadHalfwordCoreCols<T> core;
-};
-
-struct LoadHalfwordCore {
-    __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
-        uint32_t case_idx = shift >> 1;
-
-        Encoder encoder(
-            LOAD_HALFWORD_CASES, LOAD_SELECTOR_MAX_DEGREE, true, LOAD_HALFWORD_SELECTOR_WIDTH
-        );
-        encoder.write_flag_pt(row, case_idx);
-        row[LOAD_HALFWORD_SELECTOR_WIDTH] = 1;
-        row.write_array(LOAD_HALFWORD_SELECTOR_WIDTH + 1, BLOCK_FE_WIDTH, record.read_data);
-    }
+    LoadWidthCoreCols<T, LOAD_HALFWORD_SELECTOR_WIDTH, 2> core;
 };
 
 __global__ void rv64_load_halfword_tracegen(
@@ -32,6 +16,7 @@ __global__ void rv64_load_halfword_tracegen(
     size_t pointer_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
+    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -44,7 +29,7 @@ __global__ void rv64_load_halfword_tracegen(
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
-        LoadHalfwordCore core;
+        auto core = LoadHalfwordCore(BitwiseOperationLookup(bitwise_lookup_ptr));
         core.fill_trace_row(
             row.slice_from(COL_INDEX(Rv64LoadHalfwordCols, core)),
             record.core,
@@ -63,6 +48,7 @@ extern "C" int _rv64_load_halfword_tracegen(
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
+    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -76,6 +62,7 @@ extern "C" int _rv64_load_halfword_tracegen(
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,
+        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();
