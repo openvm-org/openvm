@@ -287,6 +287,34 @@ pub mod program {
     use super::*;
 
     extern "C" {
+        fn _program_fill_frequencies(
+            d_freqs: *const u32,
+            filtered_len: usize,
+            d_out: *mut F,
+            height: usize,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    /// Converts raw u32 execution frequencies to field elements on device,
+    /// zero-filling `[filtered_len, height)`.
+    pub unsafe fn fill_frequencies(
+        d_freqs: &DeviceBuffer<u32>,
+        filtered_len: usize,
+        d_out: &DeviceBuffer<F>,
+        height: usize,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_program_fill_frequencies(
+            d_freqs.as_ptr(),
+            filtered_len,
+            d_out.as_mut_ptr(),
+            height,
+            stream,
+        ))
+    }
+
+    extern "C" {
         fn _program_cached_tracegen(
             d_trace: *mut F,
             height: usize,
