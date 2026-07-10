@@ -97,16 +97,28 @@ impl ExtInstr for RevealInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let src = ctx.read_reg(self.src_reg);
+        // Interpreter (LoadStore chip) access order for a store: rs1 (ptr)
+        // register read, then rs2 (src) register read, then the traced
+        // public-values write carrying the stored value.
         let ptr = ctx.read_reg(self.ptr_reg);
+        let src = ctx.read_reg(self.src_reg);
         let addr = if self.offset == 0 {
             ptr.clone()
         } else {
             format!("({ptr} + 0x{:08x}u)", self.offset)
         };
-        ctx.trace_mem_access(&addr, PUBLIC_VALUES_AS);
         let offset = format!("0x{:08x}u", self.offset);
         let width = self.width.bytes().to_string();
+        ctx.extern_call(
+            "trace_wr_as",
+            &[
+                "state",
+                &addr,
+                &src,
+                &width,
+                &format!("{PUBLIC_VALUES_AS}u"),
+            ],
+        );
         ctx.extern_call_without_page_flush("openvm_reveal", &[&src, &ptr, &offset, &width]);
     }
 
@@ -223,9 +235,7 @@ impl RvrExtension for Rv64IoExtension {
             }));
         }
 
-        // REVEAL: STORED with address-space e = AS_PUBLIC_VALUES.
-        if opcode == Rv64LoadStoreOpcode::STORED.global_opcode_usize() && insn.e == AS_PUBLIC_VALUES
-        {
+        if let Some(width) = public_values_store_width(insn) {
             let src_reg = decode_reg(insn.a);
             let ptr_reg = decode_reg(insn.b);
             let offset = decode_imm_cg(insn);
@@ -235,6 +245,7 @@ impl RvrExtension for Rv64IoExtension {
                     src_reg,
                     ptr_reg,
                     offset,
+                    width,
                 })),
                 source_loc: None,
             }));
@@ -397,7 +408,7 @@ pub struct Rv64IPhantomCallbacks {
 pub struct Rv64IoHostCallbacks {
     pub hint_storew: extern "C" fn(*mut c_void, u64) -> u64,
     pub hint_buffer: extern "C" fn(*mut c_void, u64, u32, u32) -> u64,
-    pub reveal: extern "C" fn(*mut c_void, u64, u64, u32),
+    pub reveal: extern "C" fn(*mut c_void, u64, u64, u32, u32),
 }
 
 // ── Callback implementations ────────────────────────────────────────────────
@@ -505,26 +516,30 @@ pub extern "C" fn host_hint_buffer(
 
 /// REVEAL: write public output bytes directly into the guest's `PUBLIC_VALUES_AS`
 /// byte slice. Cost corrections handled in C.
-pub extern "C" fn host_reveal(ctx: *mut c_void, src_val: u64, ptr: u64, offset: u32) {
+pub extern "C" fn host_reveal(ctx: *mut c_void, src_val: u64, ptr: u64, offset: u32, width: u32) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
-    let Some((start, end)) = reveal_public_values_bounds(ptr, offset, io.public_values.len())
+    let Some((start, end)) =
+        reveal_public_values_bounds(ptr, offset, width, io.public_values.len())
     else {
         panic!(
-            "reveal out of bounds: ptr={ptr} offset={offset} write_size={} but public_values size is {} (configured via SystemConfig::with_public_values_bytes or SystemConfig::with_public_values)",
-            RV64_REGISTER_NUM_LIMBS,
+            "reveal out of bounds: ptr={ptr} offset={offset} write_size={width} but public_values size is {} (configured via SystemConfig::with_public_values_bytes or SystemConfig::with_public_values)",
             io.public_values.len(),
         );
     };
-    io.public_values[start..end].copy_from_slice(&src_val.to_le_bytes());
+    io.public_values[start..end].copy_from_slice(&src_val.to_le_bytes()[..width as usize]);
 }
 
 fn reveal_public_values_bounds(
     ptr: u64,
     offset: u32,
+    width: u32,
     public_values_len: usize,
 ) -> Option<(usize, usize)> {
+    if width as usize > RV64_REGISTER_NUM_LIMBS {
+        return None;
+    }
     let start = ptr.checked_add(u64::from(offset))?;
-    let end = start.checked_add(RV64_REGISTER_NUM_LIMBS as u64)?;
+    let end = start.checked_add(u64::from(width))?;
     if end > u64::try_from(public_values_len).ok()? {
         return None;
     }
@@ -548,6 +563,7 @@ mod tests {
 
     impl ExtEmitCtx for TestEmitCtx {
         fn read_reg(&mut self, idx: u8) -> String {
+            self.lines.push(format!("trace_reg_read(state, {idx});"));
             format!("r{idx}")
         }
 
@@ -604,6 +620,12 @@ mod tests {
             ));
         }
 
+        fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32) {
+            self.write_line(&format!(
+                "trace_wr_as_u64(state, {addr}, {val}, {addr_space}u);"
+            ));
+        }
+
         fn trace_timestamp(&mut self) {
             self.write_line("trace_timestamp(state);");
         }
@@ -643,7 +665,7 @@ mod tests {
             let mut ctx = TestEmitCtx::default();
             instr.emit_c(&mut ctx);
             assert_eq!(
-                ctx.lines[1],
+                ctx.lines[3],
                 format!("openvm_reveal(r1, r2, 0x00000000u, {width});")
             );
         }
@@ -688,7 +710,7 @@ mod tests {
     }
 
     #[test]
-    fn reveal_traces_the_offset_public_values_address() {
+    fn reveal_traces_interpreter_order_and_writes_public_values_address() {
         let mut ctx = TestEmitCtx::default();
         RevealInstr {
             src_reg: 5,
@@ -698,11 +720,15 @@ mod tests {
         }
         .emit_c(&mut ctx);
 
+        // Interpreter store parity: rs1 (ptr) tick, rs2 (src) tick, then the
+        // value-carrying public-values write.
+        assert_eq!(ctx.lines[0], "trace_reg_read(state, 10);");
+        assert_eq!(ctx.lines[1], "trace_reg_read(state, 5);");
         assert_eq!(
-            ctx.lines[0],
-            format!("trace_mem_access(state, (r10 + 0x0000000cu), {PUBLIC_VALUES_AS}u);")
+            ctx.lines[2],
+            format!("trace_wr_as(state, (r10 + 0x0000000cu), r5, 4, {PUBLIC_VALUES_AS}u);")
         );
-        assert_eq!(ctx.lines[1], "openvm_reveal(r5, r10, 0x0000000cu, 4);");
+        assert_eq!(ctx.lines[3], "openvm_reveal(r5, r10, 0x0000000cu, 4);");
     }
 
     #[test]
@@ -730,6 +756,7 @@ mod tests {
             0x11223344,
             4,
             2,
+            8,
         );
 
         assert_eq!(&io.public_values[6..10], &[0x44, 0x33, 0x22, 0x11]);
@@ -737,17 +764,17 @@ mod tests {
 
     #[test]
     fn reveal_public_values_bounds_accepts_valid_range() {
-        assert_eq!(reveal_public_values_bounds(4, 2, 16), Some((6, 14)));
+        assert_eq!(reveal_public_values_bounds(4, 2, 8, 16), Some((6, 14)));
     }
 
     #[test]
     fn reveal_public_values_bounds_rejects_64_bit_overflow() {
-        assert_eq!(reveal_public_values_bounds(u64::MAX - 3, 8, 16), None);
+        assert_eq!(reveal_public_values_bounds(u64::MAX - 3, 8, 8, 16), None);
     }
 
     #[test]
     fn reveal_public_values_bounds_rejects_out_of_range_write() {
-        assert_eq!(reveal_public_values_bounds(9, 0, 16), None);
+        assert_eq!(reveal_public_values_bounds(9, 0, 8, 16), None);
     }
 
     #[test]

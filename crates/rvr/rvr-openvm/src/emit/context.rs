@@ -434,6 +434,14 @@ impl EmitContext {
         }
     }
 
+    pub fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32) {
+        self.flush_page_locals();
+        self.write_line(&format!(
+            "trace_wr_as_u64(state, {addr}, {val}, {addr_space}u);"
+        ));
+        self.reload_page_locals();
+    }
+
     fn sorted_hot_regs(&self) -> Vec<u8> {
         let mut regs: Vec<u8> = self.hot_regs.iter().copied().collect();
         regs.sort();
@@ -534,6 +542,10 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
 
     fn trace_mem_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32) {
         EmitContext::trace_mem_access_u64_range(self, base_addr, num_dwords, addr_space);
+    }
+
+    fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32) {
+        EmitContext::trace_wr_as_u64(self, addr, val, addr_space);
     }
 
     fn trace_timestamp(&mut self) {
