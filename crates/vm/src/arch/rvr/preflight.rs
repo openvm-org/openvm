@@ -567,6 +567,15 @@ where
             num_insns,
         )
         .map_err(map_rvr_execute_error)?;
+        // Handoff fence: the generated C emits compact records with
+        // non-temporal (write-combining) stores, which are weakly ordered
+        // with respect to other stores. Drain them before the buffers are
+        // read — record assembly and trace generation may run on other
+        // threads.
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            core::arch::x86_64::_mm_sfence();
+        }
         if let Some(target_instret) = num_insns {
             if run_result.suspended && run_result.state.instret != target_instret {
                 return Err(ExecutionError::RvrExecution(format!(
