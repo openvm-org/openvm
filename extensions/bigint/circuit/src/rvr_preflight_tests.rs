@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use openvm_bigint_transpiler::{
     Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
@@ -182,6 +185,32 @@ fn assert_system_records_eq(label: &str, interpreter: &SystemRecords<F>, rvr: &S
     );
 }
 
+fn is_int256_opcode(opcode: usize) -> bool {
+    Rv64BaseAlu256Opcode::iter()
+        .map(|opcode| opcode.global_opcode())
+        .chain(Rv64Shift256Opcode::iter().map(|opcode| opcode.global_opcode()))
+        .chain(Rv64LessThan256Opcode::iter().map(|opcode| opcode.global_opcode()))
+        .chain(Rv64BranchEqual256Opcode::iter().map(|opcode| opcode.global_opcode()))
+        .chain(Rv64BranchLessThan256Opcode::iter().map(|opcode| opcode.global_opcode()))
+        .chain(Rv64Mul256Opcode::iter().map(|opcode| opcode.global_opcode()))
+        .any(|candidate| candidate.as_usize() == opcode)
+}
+
+fn int256_air_ids(exe: &VmExe<F>, pc_to_air_idx: &[Option<usize>]) -> BTreeSet<usize> {
+    let ids = exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .zip(pc_to_air_idx)
+        .filter_map(|(slot, &air_idx)| {
+            let (instruction, _) = slot.as_ref()?;
+            is_int256_opcode(instruction.opcode.as_usize()).then_some(air_idx?)
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(ids.len(), 8, "all eight Int256 AIRs must be mapped");
+    ids
+}
+
 fn assert_single_segment_trace_matches_interpreter(exe: VmExe<F>) {
     let config = Int256Rv64Config::default();
     let (mut interpreter_vm, _) =
@@ -208,13 +237,13 @@ fn assert_single_segment_trace_matches_interpreter(exe: VmExe<F>) {
         VirtualMachine::new_with_keygen(test_cpu_engine(), Int256Rv64CpuBuilder, config.clone())
             .expect("rvr vm init");
     let air_names = rvr_vm.air_names().map(str::to_owned).collect::<Vec<_>>();
-    let num_system_airs = rvr_vm.config().as_ref().num_airs();
     let capacities = trace_heights
         .iter()
         .zip(rvr_vm.pk().per_air.iter())
         .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
         .collect::<Vec<_>>();
     let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+    let int256_air_ids = int256_air_ids(&exe, &pc_to_air_idx);
     let rvr_initial_state = rvr_vm.create_initial_state(&exe, Streams::default());
     let rvr_output = {
         let route = rvr_vm.preflight_routed_instance(&exe).expect("rvr route");
@@ -250,25 +279,29 @@ fn assert_single_segment_trace_matches_interpreter(exe: VmExe<F>) {
         .generate_proving_ctx(rvr_output.system_records, rvr_arenas)
         .expect("rvr trace generation");
 
+    // HARD-5: byte-compare only opcode-mapped Int256 AIRs. Shared lookup and
+    // Poseidon2 periphery rows are order-independent and are covered by the
+    // SystemRecords/touched-memory equality above instead of raw row order.
     let mut interpreter_traces = interpreter_ctx
         .per_trace
         .into_iter()
-        .filter(|(air_idx, _)| *air_idx >= num_system_airs)
+        .filter(|(air_idx, _)| int256_air_ids.contains(air_idx))
         .collect::<BTreeMap<_, _>>();
     let mut rvr_traces = rvr_ctx
         .per_trace
         .into_iter()
-        .filter(|(air_idx, _)| *air_idx >= num_system_airs)
+        .filter(|(air_idx, _)| int256_air_ids.contains(air_idx))
         .collect::<BTreeMap<_, _>>();
     let interpreter_air_ids = interpreter_traces.keys().copied().collect::<Vec<_>>();
     assert_eq!(
         interpreter_air_ids,
         rvr_traces.keys().copied().collect::<Vec<_>>(),
-        "non-system trace AIR set"
+        "Int256 trace AIR set"
     );
-    assert!(
-        !interpreter_air_ids.is_empty(),
-        "expected instruction traces"
+    assert_eq!(
+        interpreter_air_ids,
+        int256_air_ids.iter().copied().collect::<Vec<_>>(),
+        "all Int256 traces must be active"
     );
 
     for air_idx in interpreter_air_ids {

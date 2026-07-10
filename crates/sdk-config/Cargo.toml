@@ -96,3 +96,6 @@ jemalloc = ["openvm-circuit/jemalloc"]
 # derive_more is referenced by the VmConfig derive expansion
 [package.metadata.cargo-shear]
 ignored = ["openvm-cuda-backend", "derive_more"]
+
+[dev-dependencies]
+openvm-instructions.workspace = true
