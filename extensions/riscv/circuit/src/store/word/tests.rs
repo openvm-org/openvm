@@ -180,7 +180,8 @@ fn create_cuda_store_word_harness(tester: &GpuChipTestBuilder) -> GpuStoreWordHa
 fn test_cuda_rand_store_word_tracegen(mem_as: usize) {
     let mut rng = create_seeded_rng();
     let mut tester =
-        GpuChipTestBuilder::new(store_gpu_memory_config(), default_var_range_checker_bus());
+        GpuChipTestBuilder::new(store_gpu_memory_config(), default_var_range_checker_bus())
+            .with_bitwise_op_lookup(default_bitwise_lookup_bus());
     let mut harness = create_cuda_store_word_harness(&tester);
     for _ in 0..100 {
         set_and_execute_store(
