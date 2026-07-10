@@ -19,7 +19,9 @@ template <typename T> struct Rv64StoreAdapterCols {
     T imm_sign;
     T mem_ptr_limbs[2];
     T mem_as;
+    T mem_ptr_carry;
     MemoryBaseAuxCols<T> write_base_aux;
+    MemoryBaseAuxCols<T> write1_base_aux;
 };
 
 struct Rv64StoreAdapterRecord {
@@ -37,6 +39,8 @@ struct Rv64StoreAdapterRecord {
     uint8_t mem_as;
 
     uint32_t write_prev_timestamp;
+    // UINT32_MAX means the access does not cross a block boundary.
+    uint32_t write1_prev_timestamp;
 };
 
 static __device__ __forceinline__ uint32_t
@@ -87,6 +91,17 @@ struct Rv64StoreAdapter {
             record.write_prev_timestamp,
             record.from_timestamp + 2
         );
+        bool crosses = record.write1_prev_timestamp != UINT32_MAX;
+        if (crosses) {
+            mem_helper.fill(
+                row.slice_from(COL_INDEX(Rv64StoreAdapterCols, write1_base_aux)),
+                record.write1_prev_timestamp,
+                record.from_timestamp + 3
+            );
+        } else {
+            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv64StoreAdapterCols, write1_base_aux))
+            );
+        }
 
         COL_WRITE_VALUE(row, Rv64StoreAdapterCols, rs2_ptr, record.rs2_ptr);
         COL_WRITE_VALUE(row, Rv64StoreAdapterCols, imm, record.imm);
@@ -99,7 +114,17 @@ struct Rv64StoreAdapter {
         COL_WRITE_ARRAY(row, Rv64StoreAdapterCols, mem_ptr_limbs, ptr_limbs);
 
         uint32_t shift_amount = rv64_store_shift_amount(record);
-        range_checker.add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);
+        uint32_t aligned_limb0 = ptr_limbs[0] - shift_amount;
+        range_checker.add_count(aligned_limb0 >> 3, U16_BITS - 3);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
+
+        bool carry = crosses && (aligned_limb0 + 8 == (1u << U16_BITS));
+        COL_WRITE_VALUE(row, Rv64StoreAdapterCols, mem_ptr_carry, carry);
+        if (crosses) {
+            range_checker.add_count(
+                (aligned_limb0 + 8 - (uint32_t(carry) << U16_BITS)) >> 3, U16_BITS - 3
+            );
+            range_checker.add_count(ptr_limbs[1] + carry, pointer_max_bits - U16_BITS);
+        }
     }
 };

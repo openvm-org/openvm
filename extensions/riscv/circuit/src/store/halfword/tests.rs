@@ -247,6 +247,7 @@ fn create_cuda_store_halfword_harness(tester: &GpuChipTestBuilder) -> GpuStoreHa
     );
     let gpu_chip = Rv64StoreHalfwordChipGpu::new(
         tester.range_checker(),
+        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );

@@ -1,31 +1,11 @@
 #include "riscv/cores/store.cuh"
 
-template <typename T> struct StoreWordCoreCols {
-    T selector[STORE_WORD_SELECTOR_WIDTH];
-    T is_valid;
-    T read_data[BLOCK_FE_WIDTH];
-    T prev_data[BLOCK_FE_WIDTH];
-};
+using StoreWordCore =
+    StoreWidthCore<STORE_WORD_SELECTOR_WIDTH, 2, STORE_WORD_CASES, 4>;
 
 template <typename T> struct Rv64StoreWordCols {
     Rv64StoreAdapterCols<T> adapter;
-    StoreWordCoreCols<T> core;
-};
-
-struct StoreWordCore {
-    __device__ void fill_trace_row(RowSlice row, StoreRecord record, uint8_t shift) {
-        uint32_t case_idx = shift >> 2;
-
-        Encoder encoder(
-            STORE_WORD_CASES, STORE_SELECTOR_MAX_DEGREE, true, STORE_WORD_SELECTOR_WIDTH
-        );
-        encoder.write_flag_pt(row, case_idx);
-        row[STORE_WORD_SELECTOR_WIDTH] = 1;
-        row.write_array(STORE_WORD_SELECTOR_WIDTH + 1, BLOCK_FE_WIDTH, record.read_data);
-        row.write_array(
-            STORE_WORD_SELECTOR_WIDTH + 1 + BLOCK_FE_WIDTH, BLOCK_FE_WIDTH, record.prev_data
-        );
-    }
+    StoreWidthCoreCols<T, STORE_WORD_SELECTOR_WIDTH, 2> core;
 };
 
 __global__ void rv64_store_word_tracegen(
@@ -36,6 +16,7 @@ __global__ void rv64_store_word_tracegen(
     size_t pointer_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
+    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -48,7 +29,7 @@ __global__ void rv64_store_word_tracegen(
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
-        StoreWordCore core;
+        auto core = StoreWordCore(BitwiseOperationLookup(bitwise_lookup_ptr));
         core.fill_trace_row(
             row.slice_from(COL_INDEX(Rv64StoreWordCols, core)),
             record.core,
@@ -68,6 +49,7 @@ extern "C" int _rv64_store_word_tracegen(
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
+    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -81,6 +63,7 @@ extern "C" int _rv64_store_word_tracegen(
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,
+        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();

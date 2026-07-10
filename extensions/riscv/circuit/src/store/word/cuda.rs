@@ -2,14 +2,16 @@ use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
-use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
+};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use super::{STORE_WORD_SELECTOR_WIDTH, STORE_WORD_VALUE_CELLS};
 use crate::{
-    adapters::{Rv64StoreAdapterCols, Rv64StoreAdapterRecord},
+    adapters::{Rv64StoreAdapterCols, Rv64StoreAdapterRecord, RV64_BYTE_BITS},
     cuda_abi::store_word_cuda,
     store::{core::StoreCoreCols, StoreRecord},
 };
@@ -17,6 +19,7 @@ use crate::{
 #[derive(new)]
 pub struct Rv64StoreWordChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
@@ -47,6 +50,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64StoreWordChipGpu {
                 &d_records,
                 self.pointer_max_bits,
                 &self.range_checker.count,
+                &self.bitwise_lookup.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )

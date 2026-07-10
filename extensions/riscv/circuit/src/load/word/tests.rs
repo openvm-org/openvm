@@ -264,6 +264,7 @@ fn create_cuda_word_harness(tester: &GpuChipTestBuilder) -> GpuWordHarness {
     );
     let gpu_chip = Rv64LoadWordChipGpu::new(
         tester.range_checker(),
+        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );

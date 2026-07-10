@@ -272,6 +272,7 @@ fn create_cuda_store_word_harness(tester: &GpuChipTestBuilder) -> GpuStoreWordHa
     );
     let gpu_chip = Rv64StoreWordChipGpu::new(
         tester.range_checker(),
+        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
     );
