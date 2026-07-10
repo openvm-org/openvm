@@ -22,6 +22,10 @@ pub use compile::{
     load_compiled_from_path, ChipMapping, CompileError, CompileOptions, RvrCompiled,
     RvrPreflightOpcodeClass,
 };
+#[cfg(any(test, feature = "test-utils"))]
+pub use compile::{
+    preflight_compile_invocations_for_test, reset_preflight_compile_invocations_for_test,
+};
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
 pub use execute::{
     execute, execute_metered, execute_metered_cost, execute_metered_segment_boundary,
