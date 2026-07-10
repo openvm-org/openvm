@@ -2454,9 +2454,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-epoch"
-version = "0.9.18"
+version = "0.9.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b82ac4a3c2ca9c3460964f020e1402edd5753411d7737aa39c3714ad1b5420e"
+checksum = "2d6914041f254d6e9176c01941b21115dcfb7089e55135a35411081bd106ef3f"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -5720,6 +5720,7 @@ dependencies = [
  "codspeed-divan-compat",
  "derive_more 1.0.0",
  "eyre",
+ "k256 0.13.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
  "openvm-benchmarks-utils",
@@ -5735,13 +5736,16 @@ dependencies = [
  "openvm-pairing-transpiler",
  "openvm-riscv-circuit",
  "openvm-riscv-transpiler",
+ "openvm-sdk-config",
  "openvm-sha2-circuit",
  "openvm-sha2-transpiler",
  "openvm-stark-sdk",
  "openvm-transpiler",
  "rand 0.9.2",
+ "rand_chacha 0.3.1",
  "rvr-openvm-lift",
  "serde",
+ "tiny-keccak",
 ]
 
 [[package]]
