@@ -2026,3 +2026,45 @@ fn rvr_preflight_proves_and_verifies_multi_segment() {
         "rvr preflight native library must be compiled once and reused across all {segments} segments"
     );
 }
+
+/// Regression fixture for bug #2 (D1, outcome A): a register set once to a
+/// constant, carried across continuation boundaries, and read repeatedly by
+/// AddSub. The pre-R1 normalizer produced a deterministic **+4 prev_timestamp
+/// offset** for exactly this carried-register-read pattern, leaving the
+/// MemoryBus (bus 1) LogUp one-sided on the AddSub AIR (reth CPU seg-28 /
+/// GPU seg-18: 15×+1 orphaned sends at T, 15×−1 orphaned receives at T+4).
+///
+/// R1 replaced that normalizer with shadow-derived prev_timestamps; this fixture
+/// is the mandatory guard that R1 keeps the MemoryBus balanced across the
+/// boundary. prove+verify is the **global per-bus LogUp balance** gate: a
+/// one-sided MemoryBus makes a segment proof invalid (and, with the debug
+/// interaction checker on, trips `check_logup` exactly as reth did). x5/x1/x2
+/// are never used as `rd`, so x5 stays constant and is carried across every
+/// forced boundary while being read as an AddSub operand throughout.
+fn carried_register_addsub_exe(reads: usize) -> VmExe<F> {
+    let mut ins = vec![addi(5, 0, 0x1f), addi(1, 0, 1), addi(2, 0, 2)];
+    for i in 0..reads {
+        let rd = 6 + (i % 20); // x6..x25 — never x5/x1/x2
+        ins.push(alu_r(BaseAluOpcode::ADD, rd, 5, 1)); // reads x5
+        ins.push(alu_r(BaseAluOpcode::SUB, rd, 5, 2)); // reads x5 again
+        ins.push(alu_r(BaseAluOpcode::ADD, 1, 1, 2)); // intervening block event (rewrites x1)
+    }
+    ins.push(terminate());
+    exe(&ins)
+}
+
+#[test]
+fn rvr_preflight_carried_register_addsub_bus_balance_across_boundary() {
+    // Force the per-bus LogUp interaction check on regardless of the ambient
+    // OPENVM_SKIP_DEBUG (nextest isolates each test in its own process); the
+    // continuation prove+verify is the balance gate even if debug is skipped.
+    std::env::remove_var("OPENVM_SKIP_DEBUG");
+    reset_preflight_compile_invocations_for_test();
+    let mut config = Rv64ImConfig::default();
+    config.rv64i.system.segmentation_max_memory = 1;
+    let segments = prove_rvr_preflight_and_verify(carried_register_addsub_exe(500), config);
+    assert!(
+        segments > 1,
+        "tight segmentation must split the x5-read stream so x5 is carried across a boundary"
+    );
+}
