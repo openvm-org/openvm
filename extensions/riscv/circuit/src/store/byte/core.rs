@@ -33,8 +33,6 @@ pub(crate) const STORE_BYTE_SELECTOR_WIDTH: usize = 3;
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct StoreByteCoreCols<T> {
     pub selector: [T; STORE_BYTE_SELECTOR_WIDTH],
-    /// Kept as a degree-1 copy of the selector validity.
-    pub is_valid: T,
     pub read_cell_bytes: [T; 2],
     pub prev_cell_bytes: [T; 2],
     pub read_data: [T; BLOCK_FE_WIDTH],
@@ -85,7 +83,6 @@ where
         self.encoder.eval(builder, &cols.selector);
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
-        builder.assert_eq(cols.is_valid, is_valid.clone());
 
         self.bitwise_lookup_bus
             .send_range(cols.read_cell_bytes[0], cols.read_cell_bytes[1])
@@ -154,7 +151,7 @@ where
                 .into(),
             writes: [write_data, std::array::from_fn(|_| AB::Expr::ZERO)].into(),
             instruction: StoreInstruction {
-                is_valid: cols.is_valid.into(),
+                is_valid,
                 opcode: expected_opcode,
                 shift_amount,
                 store_cross: AB::Expr::ZERO,
@@ -241,7 +238,6 @@ where
 
         core_row.read_data = read_data.map(F::from_u16);
         core_row.prev_data = prev_data.map(F::from_u16);
-        core_row.is_valid = F::ONE;
         let pt: [u32; STORE_BYTE_SELECTOR_WIDTH] =
             self.encoder.get_flag_pt(shift).try_into().unwrap();
         core_row.selector = pt.map(F::from_u32);

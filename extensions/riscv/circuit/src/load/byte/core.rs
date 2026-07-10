@@ -33,8 +33,6 @@ pub(crate) const LOAD_BYTE_SELECTOR_WIDTH: usize = 3;
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct LoadByteCoreCols<T> {
     pub selector: [T; LOAD_BYTE_SELECTOR_WIDTH],
-    /// Kept as a degree-1 copy of the selector validity.
-    pub is_valid: T,
     pub read_cell_bytes: [T; 2],
     pub read_data: [T; BLOCK_FE_WIDTH],
 }
@@ -83,7 +81,6 @@ where
         self.encoder.eval(builder, &cols.selector);
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
-        builder.assert_eq(cols.is_valid, is_valid.clone());
 
         self.bitwise_lookup_bus
             .send_range(cols.read_cell_bytes[0], cols.read_cell_bytes[1])
@@ -138,7 +135,7 @@ where
             .into(),
             writes: [write_data].into(),
             instruction: LoadInstruction {
-                is_valid: cols.is_valid.into(),
+                is_valid,
                 opcode: expected_opcode,
                 shift_amount,
                 load_cross: AB::Expr::ZERO,
@@ -204,7 +201,6 @@ where
             .request_range(read_cell_bytes[0] as u32, read_cell_bytes[1] as u32);
         core_row.read_cell_bytes = read_cell_bytes.map(F::from_u16);
         core_row.read_data = read_data.map(F::from_u16);
-        core_row.is_valid = F::ONE;
         let pt: [u32; LOAD_BYTE_SELECTOR_WIDTH] =
             self.encoder.get_flag_pt(shift).try_into().unwrap();
         core_row.selector = pt.map(F::from_u32);

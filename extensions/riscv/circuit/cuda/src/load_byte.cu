@@ -2,7 +2,6 @@
 
 template <typename T> struct LoadByteCoreCols {
     T selector[LOAD_BYTE_SELECTOR_WIDTH];
-    T is_valid;
     T read_cell_bytes[2];
     T read_data[BLOCK_FE_WIDTH];
 };
@@ -28,7 +27,6 @@ struct LoadByteCore {
 
         Encoder encoder(LOAD_BYTE_CASES, LOAD_SELECTOR_MAX_DEGREE, true, LOAD_BYTE_SELECTOR_WIDTH);
         encoder.write_flag_pt(row.slice_from(COL_INDEX(LoadByteCoreCols, selector)), shift);
-        COL_WRITE_VALUE(row, LoadByteCoreCols, is_valid, 1);
         COL_WRITE_ARRAY(row, LoadByteCoreCols, read_cell_bytes, read_cell_bytes);
         COL_WRITE_ARRAY(row, LoadByteCoreCols, read_data, record.read_data[0]);
     }
