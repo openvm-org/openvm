@@ -176,8 +176,10 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
-        let add_sub =
-            Rv64AddSubExecutor::new(Rv64AddSubAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+        let add_sub = Rv64AddSubExecutor::new(
+            Rv64RegBaseAluU16AdapterExecutor,
+            BaseAluOpcode::CLASS_OFFSET,
+        );
         inventory.add_executor(
             add_sub,
             [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|x| x.global_opcode()),
@@ -406,7 +408,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         };
 
         let add_sub = Rv64AddSubAir::new(
-            Rv64AddSubAdapterAir::new(exec_bridge, memory_bridge),
+            Rv64RegBaseAluU16AdapterAir::new(exec_bridge, memory_bridge),
             AddSubCoreAir::new(range_checker, BaseAluOpcode::CLASS_OFFSET),
         );
         inventory.add_air(add_sub);
@@ -610,7 +612,7 @@ where
         inventory.next_air::<Rv64AddSubAir>()?;
         let add_sub = Rv64AddSubChip::new(
             AddSubFiller::new(
-                Rv64AddSubAdapterFiller,
+                Rv64RegBaseAluU16AdapterFiller,
                 range_checker.clone(),
                 BaseAluOpcode::CLASS_OFFSET,
             ),

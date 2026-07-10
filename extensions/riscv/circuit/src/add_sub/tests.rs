@@ -24,7 +24,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64AddSubAdapterRecord, AddSubCoreRecord, Rv64AddSubChipGpu},
+    crate::{adapters::Rv64RegBaseAluU16AdapterRecord, AddSubCoreRecord, Rv64AddSubChipGpu},
     openvm_circuit::arch::{
         testing::{GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -36,8 +36,9 @@ use {
 use super::{core::run_add_sub, AddSubCoreAir, Rv64AddSubChip, Rv64AddSubExecutor};
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, Rv64AddSubAdapterAir,
-        Rv64AddSubAdapterExecutor, Rv64AddSubAdapterFiller, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+        rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, Rv64RegBaseAluU16AdapterAir,
+        Rv64RegBaseAluU16AdapterExecutor, Rv64RegBaseAluU16AdapterFiller, RV64_REGISTER_NUM_LIMBS,
+        U16_BITS,
     },
     add_sub::AddSubCoreCols,
     test_utils::rv64_rand_write_register_or_imm,
@@ -55,13 +56,16 @@ fn create_harness_fields(
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64AddSubAir, Rv64AddSubExecutor, Rv64AddSubChip<F>) {
     let air = Rv64AddSubAir::new(
-        Rv64AddSubAdapterAir::new(execution_bridge, memory_bridge),
+        Rv64RegBaseAluU16AdapterAir::new(execution_bridge, memory_bridge),
         AddSubCoreAir::new(range_checker_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64AddSubExecutor::new(Rv64AddSubAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+    let executor = Rv64AddSubExecutor::new(
+        Rv64RegBaseAluU16AdapterExecutor,
+        BaseAluOpcode::CLASS_OFFSET,
+    );
     let chip = Rv64AddSubChip::new(
         AddSubFiller::new(
-            Rv64AddSubAdapterFiller,
+            Rv64RegBaseAluU16AdapterFiller,
             range_checker_chip,
             BaseAluOpcode::CLASS_OFFSET,
         ),
@@ -372,7 +376,7 @@ fn test_cuda_rand_add_sub_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut Rv64AddSubAdapterRecord,
+        &'a mut Rv64RegBaseAluU16AdapterRecord,
         &'a mut AddSubCoreRecord<BLOCK_FE_WIDTH>,
     );
 
@@ -381,7 +385,7 @@ fn test_cuda_rand_add_sub_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64AddSubAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64RegBaseAluU16AdapterExecutor>::new(),
         );
 
     tester

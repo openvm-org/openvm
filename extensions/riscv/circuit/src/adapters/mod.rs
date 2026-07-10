@@ -20,7 +20,6 @@ use openvm_stark_backend::{
 mod alu;
 mod alu_imm_u16;
 mod alu_u16;
-mod alu_u16_addsub;
 mod alu_w;
 mod alu_w_u16;
 mod branch;
@@ -29,12 +28,12 @@ mod load;
 mod mul;
 mod mul_w;
 mod rdwrite;
+mod reg_alu_u16;
 mod store;
 
 pub use alu::*;
 pub use alu_imm_u16::*;
 pub use alu_u16::*;
-pub use alu_u16_addsub::*;
 pub use alu_w::*;
 pub use alu_w_u16::*;
 pub use branch::*;
@@ -46,6 +45,7 @@ pub use openvm_instructions::riscv::{
     RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 pub use rdwrite::*;
+pub use reg_alu_u16::*;
 pub use store::*;
 
 /// Number of u16 limbs needed for a low-32-bit RV64 pointer.
