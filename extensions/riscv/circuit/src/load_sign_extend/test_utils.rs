@@ -35,7 +35,10 @@ pub(crate) use {
         Rv64LoadSignExtendByteChipGpu, Rv64LoadSignExtendHalfwordChipGpu,
         Rv64LoadSignExtendWordChipGpu,
     },
-    crate::{adapters::Rv64LoadAdapterRecord, load::LoadRecord},
+    crate::{
+        adapters::{Rv64LoadAdapterRecord, LOAD_WIDTH_WORD},
+        load::LoadRecord,
+    },
     openvm_circuit::arch::{
         testing::{
             default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
@@ -54,12 +57,12 @@ pub(crate) use super::{
     halfword::{
         LoadSignExtendHalfwordCoreAir, LoadSignExtendHalfwordFiller, Rv64LoadSignExtendHalfwordAir,
         Rv64LoadSignExtendHalfwordChip, Rv64LoadSignExtendHalfwordExecutor,
-        LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
+        LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH, LOAD_SIGN_EXTEND_HALFWORD_TOUCHED_CELLS,
     },
     word::{
         LoadSignExtendWordCoreAir, LoadSignExtendWordFiller, Rv64LoadSignExtendWordAir,
         Rv64LoadSignExtendWordChip, Rv64LoadSignExtendWordExecutor,
-        LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
+        LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH, LOAD_SIGN_EXTEND_WORD_TOUCHED_CELLS,
     },
 };
 pub(crate) use crate::{
@@ -139,8 +142,20 @@ pub(crate) fn create_byte_harness(
     )
 }
 
-pub(crate) fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> HalfwordHarness {
+pub(crate) fn create_halfword_harness(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    HalfwordHarness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
     let range_checker = tester.range_checker();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
     let air = Rv64LoadSignExtendHalfwordAir::new(
         Rv64LoadAdapterAir::new(
             tester.memory_bridge(),
@@ -148,7 +163,11 @@ pub(crate) fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> Half
             range_checker.bus(),
             tester.address_bits(),
         ),
-        LoadSignExtendHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
+        LoadSignExtendHalfwordCoreAir::new(
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.bus(),
+            range_checker.bus(),
+        ),
     );
     let executor = Rv64LoadSignExtendHalfwordExecutor::new(
         Rv64LoadAdapterExecutor::new(tester.address_bits()),
@@ -158,15 +177,31 @@ pub(crate) fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> Half
         LoadSignExtendHalfwordFiller::new(
             Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.clone(),
             range_checker,
         ),
         tester.memory_helper(),
     );
-    HalfwordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    (
+        HalfwordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        (bitwise_chip.air, bitwise_chip),
+    )
 }
 
-pub(crate) fn create_word_harness(tester: &mut VmChipTestBuilder<F>) -> WordHarness {
+pub(crate) fn create_word_harness(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    WordHarness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
     let range_checker = tester.range_checker();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
     let air = Rv64LoadSignExtendWordAir::new(
         Rv64LoadAdapterAir::new(
             tester.memory_bridge(),
@@ -174,7 +209,11 @@ pub(crate) fn create_word_harness(tester: &mut VmChipTestBuilder<F>) -> WordHarn
             range_checker.bus(),
             tester.address_bits(),
         ),
-        LoadSignExtendWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
+        LoadSignExtendWordCoreAir::new(
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.bus(),
+            range_checker.bus(),
+        ),
     );
     let executor = Rv64LoadSignExtendWordExecutor::new(
         Rv64LoadAdapterExecutor::new(tester.address_bits()),
@@ -184,11 +223,15 @@ pub(crate) fn create_word_harness(tester: &mut VmChipTestBuilder<F>) -> WordHarn
         LoadSignExtendWordFiller::new(
             Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.clone(),
             range_checker,
         ),
         tester.memory_helper(),
     );
-    WordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    (
+        WordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        (bitwise_chip.air, bitwise_chip),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -205,12 +248,10 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let imm = imm.unwrap_or_else(|| rng.random_range(0..(1 << IMM_BITS)));
     let imm_sign = imm_sign.unwrap_or_else(|| rng.random_range(0..2));
     let imm_ext = sign_extend_imm16(imm, imm_sign);
-    let alignment_bit = match opcode {
-        LOADW => 2,
-        LOADH => 1,
-        LOADB => 0,
+    match opcode {
+        LOADB | LOADH | LOADW => {}
         _ => unreachable!("signed load test only supports LOADB/LOADH/LOADW"),
-    };
+    }
     let max_addr = 1usize << tester.address_bits();
     let imm_signed = if imm_sign == 0 {
         imm as i64
@@ -218,9 +259,10 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         imm as i64 - (1 << IMM_BITS)
     };
     let min_ptr = imm_signed.max(0) as usize;
-    let alignment_mask = (1usize << alignment_bit) - 1;
-    let min_aligned_ptr = (min_ptr + alignment_mask) >> alignment_bit;
-    let ptr_val = rng.random_range(min_aligned_ptr..(max_addr >> alignment_bit)) << alignment_bit;
+    // Signed loads support any byte shift, so sample fully misaligned pointers, staying 16
+    // bytes clear of the top of the address space so a block-crossing access always has a
+    // valid second block.
+    let ptr_val = rng.random_range(min_ptr..max_addr - 8);
     let rs1 = rs1.unwrap_or_else(|| {
         let low4 = (ptr_val as i64 - imm_signed).to_le_bytes();
         [low4[0], low4[1], low4[2], low4[3], 0, 0, 0, 0]
@@ -229,7 +271,7 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let shift_amount = ptr_val % 8;
     let a = gen_pointer(rng, 8);
     let b = gen_pointer(rng, 8);
-    let read_data: [u8; 8] = array::from_fn(|_| rng.random());
+    let read_data: [[u8; 8]; 2] = array::from_fn(|_| array::from_fn(|_| rng.random()));
     let prev_data: [F; 8] = if a != 0 {
         array::from_fn(|_| F::from_u8(rng.random()))
     } else {
@@ -241,7 +283,12 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.write_bytes(
         2,
         (ptr_val - shift_amount) as usize,
-        read_data.map(F::from_u8),
+        read_data[0].map(F::from_u8),
+    );
+    tester.write_bytes(
+        2,
+        (ptr_val - shift_amount) as usize + 8,
+        read_data[1].map(F::from_u8),
     );
 
     tester.execute(
@@ -263,7 +310,7 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let expected = load_sign_extend_write_data(
         opcode,
-        rv64_bytes_to_u16_block(read_data),
+        read_data.map(rv64_bytes_to_u16_block),
         shift_amount as usize,
     );
     if a != 0 {
@@ -317,11 +364,17 @@ pub(crate) fn assert_pranked_byte_fails(prank: impl Fn(&mut LoadSignExtendByteCo
 }
 
 pub(crate) fn assert_pranked_halfword_fails(
-    prank: impl Fn(&mut LoadSignExtendCoreCols<F, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH>),
+    prank: impl Fn(
+        &mut LoadSignExtendCoreCols<
+            F,
+            LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
+            LOAD_SIGN_EXTEND_HALFWORD_TOUCHED_CELLS,
+        >,
+    ),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(memory_config_for());
-    let mut harness = create_halfword_harness(&mut tester);
+    let (mut harness, bitwise) = create_halfword_harness(&mut tester);
     set_and_execute(
         &mut tester,
         &mut harness.executor,
@@ -343,17 +396,24 @@ pub(crate) fn assert_pranked_halfword_fails(
     tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .expect_err("pranked signed halfword load trace should fail");
 }
 
 pub(crate) fn assert_pranked_word_fails(
-    prank: impl Fn(&mut LoadSignExtendCoreCols<F, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH>),
+    prank: impl Fn(
+        &mut LoadSignExtendCoreCols<
+            F,
+            LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
+            LOAD_SIGN_EXTEND_WORD_TOUCHED_CELLS,
+        >,
+    ),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(memory_config_for());
-    let mut harness = create_word_harness(&mut tester);
+    let (mut harness, bitwise) = create_word_harness(&mut tester);
     set_and_execute(
         &mut tester,
         &mut harness.executor,
@@ -375,6 +435,7 @@ pub(crate) fn assert_pranked_word_fails(
     tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .expect_err("pranked signed word load trace should fail");
@@ -401,6 +462,6 @@ pub(crate) fn transfer_load_sign_extend_records<G, C, A, E>(
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor<LOAD_WIDTH_WORD>>::new(),
         );
 }

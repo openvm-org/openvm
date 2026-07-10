@@ -4,8 +4,8 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 
 use crate::{
     adapters::{
-        u16_cell_byte, LOAD_WIDTH_BYTE, LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD, RV64_BYTE_SIGN_BIT,
-        RV64_U16_SIGN_BIT,
+        rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, LOAD_WIDTH_BYTE, LOAD_WIDTH_HALFWORD,
+        LOAD_WIDTH_WORD,
     },
     load::LoadRecord,
 };
@@ -16,42 +16,22 @@ pub struct LoadSignExtendExecutor<A, const LOAD_WIDTH: usize> {
     pub offset: usize,
 }
 
-/// Returns the register write data for a signed load.
+/// Returns the register write data for a signed load at any byte shift, including accesses that
+/// span both blocks.
 pub(crate) fn load_sign_extend_write_data(
     opcode: Rv64LoadStoreOpcode,
-    read_data: [u16; BLOCK_FE_WIDTH],
+    read_data: [[u16; BLOCK_FE_WIDTH]; 2],
     byte_shift: usize,
 ) -> [u16; BLOCK_FE_WIDTH] {
-    let cell_shift = byte_shift / 2;
-    match opcode {
-        LOADW if byte_shift == 0 || byte_shift == 4 => {
-            let sign = if read_data[cell_shift + 1] & RV64_U16_SIGN_BIT != 0 {
-                u16::MAX
-            } else {
-                0
-            };
-            [read_data[cell_shift], read_data[cell_shift + 1], sign, sign]
-        }
-        LOADH if byte_shift == 0 || byte_shift == 2 || byte_shift == 4 || byte_shift == 6 => {
-            let sign = if read_data[cell_shift] & RV64_U16_SIGN_BIT != 0 {
-                u16::MAX
-            } else {
-                0
-            };
-            [read_data[cell_shift], sign, sign, sign]
-        }
-        LOADB if byte_shift < 8 => {
-            let byte = u16_cell_byte(read_data[cell_shift], byte_shift % 2);
-            if byte & RV64_BYTE_SIGN_BIT != 0 {
-                [byte | 0xff00, u16::MAX, u16::MAX, u16::MAX]
-            } else {
-                [byte, 0, 0, 0]
-            }
-        }
-        _ => unreachable!(
-            "unaligned signed load not supported by this execution environment: {opcode:?}, byte_shift: {byte_shift}"
-        ),
-    }
+    debug_assert!(byte_shift < 2 * BLOCK_FE_WIDTH);
+    let width = load_sign_extend_width_for_opcode(opcode);
+    let mut bytes = [0u8; 4 * BLOCK_FE_WIDTH];
+    bytes[..2 * BLOCK_FE_WIDTH].copy_from_slice(&rv64_u16_block_to_bytes(read_data[0]));
+    bytes[2 * BLOCK_FE_WIDTH..].copy_from_slice(&rv64_u16_block_to_bytes(read_data[1]));
+    let sign = (bytes[byte_shift + width - 1] as i8) < 0;
+    let mut loaded = [if sign { 0xff } else { 0 }; 2 * BLOCK_FE_WIDTH];
+    loaded[..width].copy_from_slice(&bytes[byte_shift..byte_shift + width]);
+    rv64_bytes_to_u16_block(loaded)
 }
 
 pub(crate) fn load_sign_extend_width_for_opcode(opcode: Rv64LoadStoreOpcode) -> usize {
@@ -99,9 +79,8 @@ where
         *core_record = LoadRecord { read_data };
 
         let local_opcode = Rv64LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        // Signed loads only support in-block shifts so far, so only the first block is used.
         let write_data =
-            load_sign_extend_write_data(local_opcode, read_data[0], shift_amount as usize);
+            load_sign_extend_write_data(local_opcode, read_data, shift_amount as usize);
         self.adapter
             .write(state.memory, instruction, write_data, &mut adapter_record);
 

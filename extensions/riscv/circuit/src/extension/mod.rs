@@ -472,7 +472,11 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let load_sign_extend_halfword = Rv64LoadSignExtendHalfwordAir::new(
             Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            LoadSignExtendHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker),
+            LoadSignExtendHalfwordCoreAir::new(
+                Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu,
+                range_checker,
+            ),
         );
         inventory.add_air(load_sign_extend_halfword);
 
@@ -490,7 +494,11 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let load_sign_extend_word = Rv64LoadSignExtendWordAir::new(
             Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            LoadSignExtendWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker),
+            LoadSignExtendWordCoreAir::new(
+                Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu,
+                range_checker,
+            ),
         );
         inventory.add_air(load_sign_extend_word);
 
@@ -718,6 +726,7 @@ where
             LoadSignExtendHalfwordFiller::new(
                 Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu.clone(),
                 range_checker.clone(),
             ),
             mem_helper.clone(),
@@ -752,6 +761,7 @@ where
             LoadSignExtendWordFiller::new(
                 Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu.clone(),
                 range_checker.clone(),
             ),
             mem_helper.clone(),
