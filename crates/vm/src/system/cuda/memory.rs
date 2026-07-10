@@ -16,8 +16,18 @@ use openvm_cuda_common::{
     stream::GpuDeviceCtx,
 };
 use openvm_instructions::VM_DIGEST_WIDTH;
-use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
+use openvm_stark_backend::{
+    p3_field::PrimeCharacteristicRing,
+    p3_maybe_rayon::prelude::{
+        IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator, ParallelSlice,
+        ParallelSliceMut,
+    },
+    prover::AirProvingContext,
+};
 use tracing::instrument;
+
+/// Chunk size for packing touched memory runs into pinned upload staging.
+const UPLOAD_PACK_CHUNK: usize = 8 << 20;
 
 use super::{
     boundary::BoundaryChipGPU,
@@ -41,8 +51,47 @@ pub struct MemoryInventoryGPU {
     pub hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
     pub initial_memory: Vec<Arc<DeviceBuffer<u8>>>,
     pub merkle_records: Option<DeviceBuffer<u32>>,
+    upload_staging: PinnedStaging,
     #[cfg(feature = "metrics")]
     pub(super) unpadded_merkle_height: usize,
+}
+
+/// Owned page-locked staging for sparse per-segment memory-image uploads.
+///
+/// The full device address spaces stay zero-filled, while only touched host
+/// runs are packed contiguously here and uploaded to their device offsets.
+/// This preserves the sparse-transfer correctness fix and avoids registering
+/// memory owned by the executor.
+#[derive(Default)]
+struct PinnedStaging {
+    buf: Vec<u8>,
+    registered: bool,
+}
+
+impl PinnedStaging {
+    fn ensure(&mut self, len: usize) -> &mut [u8] {
+        if self.buf.len() < len {
+            if self.registered {
+                crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr());
+                self.registered = false;
+            }
+            self.buf = vec![0u8; len];
+            self.registered =
+                crate::arch::cuda::pinned::register_region(self.buf.as_mut_ptr(), len);
+            if !self.registered {
+                tracing::debug!("memory-image staging stays pageable ({len} bytes)");
+            }
+        }
+        &mut self.buf[..len]
+    }
+}
+
+impl Drop for PinnedStaging {
+    fn drop(&mut self) {
+        if self.registered {
+            crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr());
+        }
+    }
 }
 
 #[repr(C)]
@@ -81,6 +130,7 @@ impl MemoryInventoryGPU {
             hasher_chip,
             initial_memory: Vec::new(),
             merkle_records: None,
+            upload_staging: PinnedStaging::default(),
             #[cfg(feature = "metrics")]
             unpadded_merkle_height: 0,
         }
@@ -89,16 +139,31 @@ impl MemoryInventoryGPU {
     #[instrument(name = "set_initial_memory", skip_all)]
     pub fn set_initial_memory(&mut self, initial_memory: &AddressMap) {
         let mem = MemTracker::start("set initial memory");
-        for (addr_sp, raw_mem) in initial_memory
+        let memory: Vec<&[u8]> = initial_memory
             .get_memory()
             .iter()
             .map(|mem| mem.as_slice())
+            .collect();
+        let runs_per_as: Vec<Vec<(usize, usize)>> = memory
+            .iter()
             .enumerate()
-        {
+            .map(|(addr_sp, raw_mem)| {
+                initial_memory.touched_pages[addr_sp].touched_byte_ranges(raw_mem.len())
+            })
+            .collect();
+        let staging_len = runs_per_as
+            .iter()
+            .flatten()
+            .map(|(start, end)| end - start)
+            .sum();
+        let staging = self.upload_staging.ensure(staging_len);
+        let mut staging_offset = 0usize;
+
+        for (addr_sp, raw_mem) in memory.into_iter().enumerate() {
             // Only transfer pages that may contain non-zero data; the rest are zero-filled
             // on-device. The merkle kernel reads the full address-space region, so the device
             // buffer is full-size and the skipped pages must read as zero.
-            let runs = initial_memory.touched_pages[addr_sp].touched_byte_ranges(raw_mem.len());
+            let runs = &runs_per_as[addr_sp];
             tracing::debug!(
                 "Setting initial memory for address space {}: {} bytes, {} touched run(s)",
                 addr_sp,
@@ -136,19 +201,26 @@ impl MemoryInventoryGPU {
                 // Device-bandwidth memset (cheap) so all un-copied pages read as zero.
                 buf.fill_zero_on(&self.device_ctx)
                     .expect("failed to zero device memory");
-                for (start, end) in runs {
+                for &(start, end) in runs {
+                    let len = end - start;
+                    let staged = &mut staging[staging_offset..staging_offset + len];
+                    staged
+                        .par_chunks_mut(UPLOAD_PACK_CHUNK)
+                        .zip(raw_mem[start..end].par_chunks(UPLOAD_PACK_CHUNK))
+                        .for_each(|(dst, src)| dst.copy_from_slice(src));
                     // SAFETY: `touched_byte_ranges` clamps ranges to `raw_mem.len()`, and `buf` has
-                    // the same length, so both the host slice and the device
-                    // offset stay in bounds.
+                    // the same length. `staged` is an owned registered region
+                    // kept alive by this inventory while the async DMA runs.
                     unsafe {
                         cuda_memcpy_on::<false, true>(
                             buf.as_mut_ptr().add(start) as *mut std::ffi::c_void,
-                            raw_mem[start..end].as_ptr() as *const std::ffi::c_void,
-                            end - start,
+                            staged.as_ptr() as *const std::ffi::c_void,
+                            len,
                             &self.device_ctx,
                         )
                         .expect("failed to copy memory to device");
                     }
+                    staging_offset += len;
                 }
                 buf
             }));
