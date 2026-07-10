@@ -332,6 +332,34 @@ fn load_to_x0_exe() -> VmExe<F> {
     ])
 }
 
+#[cfg(feature = "cuda")]
+fn continuation_boundary_memory_exe() -> VmExe<F> {
+    const TOUCHED_BLOCKS: usize = 135;
+    // The empty initial image has no marked pages, including page zero. Keep the
+    // pointer in ADDI's immediate range so interpreter and RVR semantics agree.
+    let mut instructions = vec![addi(1, 0, 64), addi(2, 0, 0x5a)];
+    for block_idx in 0..TOUCHED_BLOCKS {
+        instructions.push(store(
+            Rv64LoadStoreOpcode::STORED,
+            2,
+            1,
+            block_idx * size_of::<u64>(),
+        ));
+    }
+    // The taken branch is the exact block-aligned suspension point between segments.
+    instructions.push(beq(0, 0, 4));
+    for block_idx in 0..TOUCHED_BLOCKS {
+        instructions.push(load(
+            Rv64LoadStoreOpcode::LOADD,
+            3,
+            1,
+            block_idx * size_of::<u64>(),
+        ));
+    }
+    instructions.push(terminate());
+    exe(&instructions)
+}
+
 fn block_boundary_branch_exe() -> VmExe<F> {
     exe(&[beq(0, 0, 8), addi(9, 0, 99), addi(1, 0, 7), terminate()])
 }
@@ -905,6 +933,17 @@ fn full_rv64im_instruction_air_ids(air_names: &[String]) -> Vec<usize> {
 }
 
 #[cfg(feature = "cuda")]
+fn persistent_boundary_air_id(air_names: &[String]) -> usize {
+    let ids = air_names
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, name)| name.starts_with("PersistentBoundaryAir<").then_some(idx))
+        .collect::<Vec<_>>();
+    assert_eq!(ids.len(), 1, "expected one persistent-boundary AIR");
+    ids[0]
+}
+
+#[cfg(feature = "cuda")]
 fn collect_cpu_trace_map(ctx: CpuProvingCtx) -> BTreeMap<usize, HostTrace> {
     ctx.per_trace
         .into_iter()
@@ -1247,6 +1286,15 @@ fn assert_gpu_rvr_three_way_from_state(
         &gpu_arena_traces,
         &cpu_traces,
         &active_instruction_air_ids,
+    );
+    assert_trace_maps_eq_for_air_ids(
+        label,
+        "gpu_from_record_arenas",
+        "cpu_interpreter",
+        &air_names,
+        &gpu_arena_traces,
+        &cpu_traces,
+        &[persistent_boundary_air_id(&air_names)],
     );
 
     rvr_to_state
@@ -1762,6 +1810,37 @@ fn rvr_gpu_log_native_full_rv64im_three_way_matrix() {
         "hard_chip_multi_segment",
         hard_chip_with_add_tail_exe(400),
         hard_chip_streams(1),
+    );
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn rvr_gpu_log_native_continuation_boundary_memory_matches_cpu() {
+    const FIRST_SEGMENT_INSNS: u64 = 2 + 135 + 1;
+    let exe = continuation_boundary_memory_exe();
+    let config = Rv64ImConfig::default();
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
+            .expect("vm init");
+    let trace_heights = vec![4096u32; vm.num_airs()];
+    let state = vm.create_initial_state(&exe, Streams::default());
+    let state = assert_gpu_rvr_three_way_from_state(
+        "continuation_boundary_memory_segment_0",
+        &exe,
+        &config,
+        state,
+        Some(FIRST_SEGMENT_INSNS),
+        &trace_heights,
+        None,
+    );
+    assert_gpu_rvr_three_way_from_state(
+        "continuation_boundary_memory_segment_1",
+        &exe,
+        &config,
+        state,
+        None,
+        &trace_heights,
+        None,
     );
 }
 

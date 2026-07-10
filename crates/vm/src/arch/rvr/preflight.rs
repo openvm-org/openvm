@@ -299,6 +299,10 @@ where
 
         let replay = normalize_preflight_memory_logs::<F>(&initial_memory, &memory_log)
             .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
+        run_state
+            .memory
+            .memory
+            .extend_touched_pages_from_touched(&replay.touched_memory);
         let filtered_exec_frequencies = filtered_exec_frequencies(exe, &program_log)?;
         let to_state = ExecutionState::new(run_state.pc(), tracer.timestamp);
         let system_records = SystemRecords {
