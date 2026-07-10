@@ -8,6 +8,7 @@
  * installed at execution time by `Rv64IoRuntimeHooks`. */
 void openvm_hint_storew(void* state, uint64_t dest_addr);
 void openvm_hint_buffer(void* state, uint64_t dest_addr, uint32_t num_words);
-void openvm_reveal(uint64_t src_val, uint64_t ptr, uint32_t offset);
+void openvm_reveal(uint64_t src_val, uint64_t ptr, uint32_t offset,
+                   uint32_t width);
 
 #endif /* RV64IO_CALLBACKS_H */
