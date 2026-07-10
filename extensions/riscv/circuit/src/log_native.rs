@@ -5,8 +5,8 @@ use openvm_circuit::{
             PreflightMemoryAccessAux, RvrPreflightOutput, VmRvrLogNativeExtension,
             PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
         },
-        AdapterTraceExecutor, Arena, EmptyAdapterCoreLayout, EmptyMultiRowLayout, ExecutionError,
-        InlineRecordLayout, MultiRowLayout, RecordArena, BLOCK_FE_WIDTH,
+        Arena, EmptyAdapterCoreLayout, EmptyMultiRowLayout, ExecutionError, MultiRowLayout,
+        RecordArena, BLOCK_FE_WIDTH,
     },
     system::{
         memory::offline_checker::{
@@ -338,30 +338,99 @@ pub fn generate_rv64im_record_arenas_from_logs<F: PrimeField32, RA: Rv64Standard
     generate_record_arenas_from_logs(&registry, exe, output, capacities, pc_to_air_idx)
 }
 
-/// Packed-record byte layout of the inline (C-emitted) base-ALU AddSub record:
-/// `DenseRecordArena`'s concatenation of `Rv64BaseAluU16AdapterRecord` and
-/// `AddSubCoreRecord<BLOCK_FE_WIDTH>`. The C `PreflightAddSubRecord` mirrors
-/// this layout, `_Static_assert`-guarded against `PREFLIGHT_ADDSUB_RECORD_SIZE`
-/// on the C side and by the const drift guard below on the Rust side.
-fn addsub_inline_record_layout<F: PrimeField32>() -> InlineRecordLayout {
-    InlineRecordLayout {
-        aligned_adapter_size: ADDSUB_ALIGNED_ADAPTER_SIZE,
-        aligned_core_size: ADDSUB_ALIGNED_CORE_SIZE,
-        adapter_row_bytes: <Rv64BaseAluU16AdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
-            * size_of::<F>(),
+/// Host mirror of the C `PreflightAddSubRecord` (R3 L1+L5 compact record):
+/// the dynamic witness only — program-redundant operands are re-derived from
+/// the instruction at `from_pc` by [`assemble_add_sub_inline`]. Parsed
+/// field-by-field from little-endian bytes, so no alignment requirements.
+struct PreflightAddSubCompact {
+    from_pc: u32,
+    from_timestamp: u32,
+    reads_prev_timestamp: [u32; 2],
+    write_prev_timestamp: u32,
+    write_prev_data: [u16; BLOCK_FE_WIDTH],
+    b: [u16; BLOCK_FE_WIDTH],
+    c: [u16; BLOCK_FE_WIDTH],
+}
+
+// Drift guard: the compact stride must match the C record the preflight
+// tracer writes (guarded by `_Static_assert`s on the C side).
+const _: () = assert!(PREFLIGHT_ADDSUB_RECORD_SIZE == 44);
+
+impl PreflightAddSubCompact {
+    fn read(bytes: &[u8]) -> Self {
+        debug_assert_eq!(bytes.len(), PREFLIGHT_ADDSUB_RECORD_SIZE);
+        let u32_at =
+            |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().expect("4-byte field"));
+        let u16x4_at = |at: usize| {
+            core::array::from_fn(|i| {
+                u16::from_le_bytes(
+                    bytes[at + 2 * i..at + 2 * i + 2]
+                        .try_into()
+                        .expect("2-byte limb"),
+                )
+            })
+        };
+        Self {
+            from_pc: u32_at(0),
+            from_timestamp: u32_at(4),
+            reads_prev_timestamp: [u32_at(8), u32_at(12)],
+            write_prev_timestamp: u32_at(16),
+            write_prev_data: u16x4_at(20),
+            b: u16x4_at(28),
+            c: u16x4_at(36),
+        }
     }
 }
 
-const ADDSUB_ALIGNED_ADAPTER_SIZE: usize = size_of::<Rv64BaseAluU16AdapterRecord>()
-    .next_multiple_of(align_of::<AddSubCoreRecord<BLOCK_FE_WIDTH>>());
-const ADDSUB_ALIGNED_CORE_SIZE: usize = (ADDSUB_ALIGNED_ADAPTER_SIZE
-    + size_of::<AddSubCoreRecord<BLOCK_FE_WIDTH>>())
-.next_multiple_of(align_of::<Rv64BaseAluU16AdapterRecord>())
-    - ADDSUB_ALIGNED_ADAPTER_SIZE;
-// Drift guard: the packed AddSub record stride must match the C record the
-// preflight tracer writes.
-const _: () =
-    assert!(ADDSUB_ALIGNED_ADAPTER_SIZE + ADDSUB_ALIGNED_CORE_SIZE == PREFLIGHT_ADDSUB_RECORD_SIZE);
+/// Expand one C-written compact AddSub record into the full
+/// adapter+core record, re-deriving the program-redundant operands
+/// (rd_ptr/rs1_ptr/rs2/rs2_as/rs2_imm_sign/local_opcode) from the instruction
+/// exactly as [`fill_base_alu_u16_adapter`] does from the log path.
+fn assemble_add_sub_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAddSubCompact::read(compact);
+    if compact.from_pc != pc {
+        return Err(ExecutionError::RvrExecution(format!(
+            "inline AddSub record order mismatch: record from_pc {:#x} vs program-log pc {pc:#x}",
+            compact.from_pc
+        )));
+    }
+    let (adapter_record, core_record): (
+        &mut Rv64BaseAluU16AdapterRecord,
+        &mut AddSubCoreRecord<BLOCK_FE_WIDTH>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new());
+    adapter_record.from_pc = pc;
+    adapter_record.from_timestamp = compact.from_timestamp;
+    adapter_record.rs1_ptr = instruction.b.as_canonical_u32();
+    adapter_record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
+    adapter_record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
+    if instruction.e.as_canonical_u32() == RV64_REGISTER_AS {
+        adapter_record.rs2_as = RV64_REGISTER_AS as u8;
+        adapter_record.rs2_imm_sign = false;
+        adapter_record.rs2 = instruction.c.as_canonical_u32();
+    } else {
+        adapter_record.rs2_as = RV64_IMM_AS as u8;
+        let imm = instruction.c.as_canonical_u32();
+        adapter_record.rs2 = imm;
+        let imm64 = imm_to_rv64_u64(imm);
+        adapter_record.rs2_imm_sign = ((imm64 >> U16_BITS) as u16) != 0;
+    }
+    adapter_record.rd_ptr = instruction.a.as_canonical_u32();
+    adapter_record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: compact.write_prev_data,
+    };
+    core_record.b = compact.b;
+    core_record.c = compact.c;
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(BaseAluOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
 
 impl<F, RA> VmRvrLogNativeExtension<F, RA> for crate::Rv64I
 where
@@ -373,9 +442,10 @@ where
             [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|opcode| opcode.global_opcode()),
             assemble_add_sub::<F, RA>,
         );
-        registry.register_inline_layout(
+        registry.register_inline(
             [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|opcode| opcode.global_opcode()),
-            addsub_inline_record_layout::<F>(),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_add_sub_inline::<F, RA>,
         );
         registry.register(
             [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]

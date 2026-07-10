@@ -8,7 +8,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{PreflightMemoryAccessAux, RvrPreflightOutput};
-use crate::arch::{Arena, ExecutionError, InlineRecordLayout};
+use crate::arch::{Arena, ExecutionError};
 
 /// Timestamp-indexed view of normalized rvr preflight memory accesses.
 ///
@@ -109,40 +109,57 @@ struct RegisteredAssembler<F, RA> {
     assemble: LogNativeAssembler<F, RA>,
 }
 
+/// Assembler for one instruction's inline compact record (R3): expands the
+/// C-written `compact` bytes into the chip's full record allocated from the
+/// arena, re-deriving program-redundant operands from `instruction`.
+pub type LogNativeInlineAssembler<F, RA> =
+    fn(&mut RA, &Instruction<F>, &[u8], u32) -> Result<(), ExecutionError>;
+
+struct RegisteredInlineAssembler<F, RA> {
+    /// Compact record stride in bytes; must match the compile metadata.
+    record_size: usize,
+    assemble: LogNativeInlineAssembler<F, RA>,
+}
+
 /// Opcode-keyed registry of log-native record assemblers.
 pub struct LogNativeAssemblerRegistry<F, RA> {
     assemblers: HashMap<VmOpcode, RegisteredAssembler<F, RA>>,
-    inline_layouts: HashMap<VmOpcode, InlineRecordLayout>,
+    inline_assemblers: HashMap<VmOpcode, RegisteredInlineAssembler<F, RA>>,
 }
 
 impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
     pub fn new() -> Self {
         Self {
             assemblers: HashMap::new(),
-            inline_layouts: HashMap::new(),
+            inline_assemblers: HashMap::new(),
         }
     }
 
-    /// Register the packed-record byte layout for opcodes the preflight
-    /// codegen can migrate to inline compact records (R3). The assembler for
-    /// these opcodes stays registered — it still runs when a library is
-    /// compiled without inline records; which path a pc takes is decided by
-    /// the compile metadata (`RvrPreflightOutput::inline_pc_slots`).
-    pub fn register_inline_layout(
+    /// Register the compact-record assembler for opcodes the preflight codegen
+    /// can migrate to inline records (R3). The log assembler for these opcodes
+    /// stays registered — it still runs when a library is compiled without
+    /// inline records; which path a pc takes is decided by the compile
+    /// metadata (`RvrPreflightOutput::inline_pc_slots`).
+    pub fn register_inline(
         &mut self,
         opcodes: impl IntoIterator<Item = VmOpcode>,
-        layout: InlineRecordLayout,
+        record_size: usize,
+        assembler: LogNativeInlineAssembler<F, RA>,
     ) {
         for opcode in opcodes {
             assert!(
-                self.inline_layouts.insert(opcode, layout).is_none(),
-                "multiple inline record layouts registered for opcode {opcode:?}"
+                self.inline_assemblers
+                    .insert(
+                        opcode,
+                        RegisteredInlineAssembler {
+                            record_size,
+                            assemble: assembler
+                        }
+                    )
+                    .is_none(),
+                "multiple inline record assemblers registered for opcode {opcode:?}"
             );
         }
-    }
-
-    fn inline_layout(&self, opcode: &VmOpcode) -> Option<&InlineRecordLayout> {
-        self.inline_layouts.get(opcode)
     }
 
     /// Register `assembler` for every opcode in `opcodes`.
@@ -265,13 +282,15 @@ impl<F> LogNativeOpcodeAdmitter<F> for () {
 /// Assemble every non-system record arena for a preflight segment.
 ///
 /// Instructions migrated to inline compact records (R3) have no memory-log
-/// entries and no assembler run: their pcs are skipped (per
-/// `output.inline_pc_slots`, the compile metadata mirroring the generated C)
-/// and each migrated chip's arena instead adopts the C-written record buffer
-/// from `output.inline_records` (taken out of `output`). The adopted byte
-/// count must equal the program-log record count for that chip, so a record
-/// dropped in C (buffer overflow, unmapped chip) fails loudly here rather
-/// than surfacing as a bus imbalance at proving.
+/// entries and no log assembler run: for each such pc (per
+/// `output.inline_pc_slots`, the compile metadata mirroring the generated C),
+/// the next compact record is consumed from that chip's C-written buffer —
+/// records are emitted in program-log order per chip — and expanded into the
+/// arena by the opcode's registered inline assembler, which re-derives
+/// program-redundant operands from the instruction. Every chip's buffer must
+/// be consumed exactly (cursor == written bytes), so a record dropped in C
+/// (buffer overflow, unmapped chip) fails loudly here rather than surfacing
+/// as a bus imbalance at proving.
 pub fn generate_record_arenas_from_logs<F: PrimeField32, RA: Arena>(
     registry: &LogNativeAssemblerRegistry<F, RA>,
     exe: &VmExe<F>,
@@ -287,7 +306,17 @@ pub fn generate_record_arenas_from_logs<F: PrimeField32, RA: Arena>(
         .collect::<Vec<_>>();
     let access = LogNativeAccessView::new(&output.access_aux)?;
 
-    let mut inline_record_counts = vec![0u64; arenas.len()];
+    // Per-air (compact bytes, cursor, compiled record stride).
+    let mut inline_bufs: HashMap<usize, (&[u8], usize, usize)> = inline_records
+        .iter()
+        .map(|chip| {
+            (
+                chip.air_idx,
+                (chip.bytes.as_slice(), 0usize, chip.record_size),
+            )
+        })
+        .collect();
+
     for program_entry in &output.raw_logs.program_log {
         let pc = u32::try_from(program_entry.pc).map_err(|_| {
             rvr_error(format!(
@@ -301,113 +330,64 @@ pub fn generate_record_arenas_from_logs<F: PrimeField32, RA: Arena>(
             continue;
         };
         let num_arenas = arenas.len();
-        if inline_pc_slots.get(slot_idx).copied().unwrap_or(false) {
-            let counts = inline_record_counts.get_mut(air_idx).ok_or_else(|| {
-                rvr_error(format!(
-                    "pc {:#x} maps to air_idx {} but only {} arenas exist",
-                    program_entry.pc, air_idx, num_arenas
-                ))
-            })?;
-            *counts += 1;
-            continue;
-        }
         let arena = arenas.get_mut(air_idx).ok_or_else(|| {
             rvr_error(format!(
                 "pc {:#x} maps to air_idx {} but only {} arenas exist",
                 program_entry.pc, air_idx, num_arenas
             ))
         })?;
+        if inline_pc_slots.get(slot_idx).copied().unwrap_or(false) {
+            let registered = registry
+                .inline_assemblers
+                .get(&instruction.opcode)
+                .ok_or_else(|| {
+                    rvr_error(format!(
+                        "no inline record assembler registered for opcode {:?} at pc {pc:#x}",
+                        instruction.opcode
+                    ))
+                })?;
+            let (bytes, cursor, compiled_size) =
+                inline_bufs.get_mut(&air_idx).ok_or_else(|| {
+                    rvr_error(format!(
+                        "pc {pc:#x} is inline but air_idx {air_idx} has no compact record buffer"
+                    ))
+                })?;
+            if registered.record_size != *compiled_size {
+                return Err(rvr_error(format!(
+                    "compact record size mismatch for air_idx {air_idx}: compiled \
+                     {compiled_size} vs registered {}",
+                    registered.record_size
+                )));
+            }
+            let end = *cursor + registered.record_size;
+            let compact = bytes.get(*cursor..end).ok_or_else(|| {
+                rvr_error(format!(
+                    "compact record buffer for air_idx {air_idx} exhausted at pc {pc:#x} \
+                     (cursor {cursor}, {} bytes written — record dropped in C?)",
+                    bytes.len()
+                ))
+            })?;
+            *cursor = end;
+            (registered.assemble)(arena, instruction, compact, pc)?;
+            continue;
+        }
         registry.assemble(arena, &access, instruction, pc, program_entry.timestamp)?;
     }
 
-    let air_layouts = bind_inline_layouts_to_airs(registry, exe, &inline_pc_slots, pc_to_air_idx)?;
-    for chip in inline_records {
-        let air_idx = chip.air_idx;
-        let layout = air_layouts.get(&air_idx).copied().ok_or_else(|| {
-            rvr_error(format!(
-                "inline record buffer for air_idx {air_idx} has no registered record layout"
-            ))
-        })?;
-        if layout.record_size() != chip.record_size {
+    // Every compact buffer must be consumed exactly.
+    for chip in &inline_records {
+        let (bytes, cursor, _) = inline_bufs[&chip.air_idx];
+        if cursor != bytes.len() {
             return Err(rvr_error(format!(
-                "inline record size mismatch for air_idx {air_idx}: compiled {} vs registered {}",
-                chip.record_size,
-                layout.record_size()
+                "compact record buffer for air_idx {} has {} bytes but the program log consumed \
+                 {cursor} (record count mismatch between C and the program log)",
+                chip.air_idx,
+                bytes.len()
             )));
         }
-        let expected_bytes = inline_record_counts
-            .get(air_idx)
-            .copied()
-            .unwrap_or(0)
-            .checked_mul(chip.record_size as u64)
-            .expect("inline record bytes overflow u64");
-        if chip.records.written as u64 != expected_bytes {
-            return Err(rvr_error(format!(
-                "inline record bytes for air_idx {air_idx} do not match the program log: \
-                 C wrote {} bytes, expected {expected_bytes}",
-                chip.records.written
-            )));
-        }
-        let arena = arenas
-            .get_mut(air_idx)
-            .ok_or_else(|| rvr_error(format!("inline air_idx {air_idx} out of arena range")))?;
-        arena
-            .adopt_inline_records(chip.records, &layout)
-            .map_err(|err| {
-                rvr_error(format!(
-                    "adopting inline records for air_idx {air_idx} failed: {err}"
-                ))
-            })?;
     }
 
     Ok(arenas)
-}
-
-/// Bind each inline-record chip (AIR) to its packed-record layout from the
-/// registry, using the static program: every pc slot flagged inline maps its
-/// opcode's registered layout to its AIR.
-fn bind_inline_layouts_to_airs<F: PrimeField32, RA: Arena>(
-    registry: &LogNativeAssemblerRegistry<F, RA>,
-    exe: &VmExe<F>,
-    inline_pc_slots: &[bool],
-    pc_to_air_idx: &[Option<usize>],
-) -> Result<HashMap<usize, InlineRecordLayout>, ExecutionError> {
-    let mut air_layouts = HashMap::new();
-    for (slot_idx, _) in inline_pc_slots
-        .iter()
-        .enumerate()
-        .filter(|(_, &inline)| inline)
-    {
-        let instruction = exe
-            .program
-            .instructions_and_debug_infos
-            .get(slot_idx)
-            .and_then(|slot| slot.as_ref().map(|(instruction, _)| instruction))
-            .ok_or_else(|| {
-                rvr_error(format!(
-                    "inline pc slot {slot_idx} has no program instruction"
-                ))
-            })?;
-        let air_idx = pc_to_air_idx
-            .get(slot_idx)
-            .copied()
-            .flatten()
-            .ok_or_else(|| rvr_error(format!("inline pc slot {slot_idx} maps to no AIR index")))?;
-        let layout = registry.inline_layout(&instruction.opcode).ok_or_else(|| {
-            rvr_error(format!(
-                "no inline record layout registered for opcode {:?} at inline pc slot {slot_idx}",
-                instruction.opcode
-            ))
-        })?;
-        if let Some(previous) = air_layouts.insert(air_idx, *layout) {
-            if previous != *layout {
-                return Err(rvr_error(format!(
-                    "conflicting inline record layouts for air_idx {air_idx}"
-                )));
-            }
-        }
-    }
-    Ok(air_layouts)
 }
 
 /// `(instruction, air_idx, program_slot_idx)` for one program-log pc.

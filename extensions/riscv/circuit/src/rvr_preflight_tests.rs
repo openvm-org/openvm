@@ -2225,7 +2225,7 @@ fn rvr_preflight_inline_addsub_net_timing() {
         let inline_bytes: usize = output
             .inline_records
             .iter()
-            .map(|chip| chip.records.written)
+            .map(|chip| chip.bytes.len())
             .sum();
         eprintln!(
             "{label}: memory_log_entries={} inline_record_bytes={inline_bytes}",

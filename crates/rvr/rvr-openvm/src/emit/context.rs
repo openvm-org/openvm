@@ -386,13 +386,9 @@ impl<'a> EmitContext<'a> {
         let pw = self.next_var();
         self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
         self.write_line(&format!("reg_write(state, {rd}, {res});"));
-        let local = is_sub as u8;
         self.write_line(&format!(
-            "preflight_emit_addsub(state, {chip}u, {pc}, {fromts}, {rd_ptr}u, {rs1_ptr}u, \
-             {rs2_ptr}u, AS_REGISTER, 0, {p1}, {p2}, {pw}, {rdprev}, {v1}, {v2}, {local}u);",
-            rd_ptr = rd as u32 * 8,
-            rs1_ptr = rs1 as u32 * 8,
-            rs2_ptr = rs2 as u32 * 8,
+            "preflight_emit_addsub(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {rdprev}, \
+             {v1}, {v2});"
         ));
     }
 
@@ -419,16 +415,12 @@ impl<'a> EmitContext<'a> {
         let pw = self.next_var();
         self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
         self.write_line(&format!("reg_write(state, {rd}, {res});"));
-        // record.rs2 = the raw 24-bit immediate operand; rs2_as = RV64_IMM_AS (0);
-        // rs2_imm_sign = whether the sign-extension limb is nonzero.
-        let raw_imm = (imm as u32) & 0x00ff_ffff;
-        let imm_sign = (((imm_u64 >> 16) & 0xffff) != 0) as u8;
-        let local = is_sub as u8;
+        // The immediate's `c` limbs come from the sign-extended value; the raw
+        // immediate operand itself is program-redundant and re-derived from
+        // `from_pc` at host record assembly (rs2 read slot: prev_timestamp 0).
         self.write_line(&format!(
-            "preflight_emit_addsub(state, {chip}u, {pc}, {fromts}, {rd_ptr}u, {rs1_ptr}u, \
-             {raw_imm}u, 0, {imm_sign}, {p1}, 0u, {pw}, {rdprev}, {v1}, {vimm}, {local}u);",
-            rd_ptr = rd as u32 * 8,
-            rs1_ptr = rs1 as u32 * 8,
+            "preflight_emit_addsub(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {pw}, {rdprev}, \
+             {v1}, {vimm});"
         ));
     }
 
