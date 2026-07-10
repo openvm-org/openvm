@@ -36,12 +36,8 @@ impl StdIn {
 
 impl From<StdIn> for Streams {
     fn from(mut std_in: StdIn) -> Self {
-        let mut data = Vec::<Vec<u8>>::new();
-        while let Some(input) = std_in.read() {
-            data.push(input);
-        }
         Streams {
-            input_stream: data.into(),
+            input_stream: std_in.buffer,
             deferrals: std_in.deferrals,
             ..Default::default()
         }

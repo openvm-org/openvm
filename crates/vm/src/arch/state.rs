@@ -38,9 +38,7 @@ impl<MEM> VmState<MEM> {
     pub fn set_pc(&mut self, pc: u32) {
         self.pc = pc;
     }
-}
 
-impl<MEM> VmState<MEM> {
     pub fn new_with_defaults(pc: u32, memory: MEM, streams: impl Into<Streams>, seed: u64) -> Self {
         Self {
             pc,
