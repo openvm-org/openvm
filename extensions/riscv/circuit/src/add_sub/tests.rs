@@ -154,6 +154,7 @@ fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
+#[allow(clippy::too_many_arguments)]
 fn run_negative_add_sub_test(
     opcode: BaseAluOpcode,
     prank_a: [u32; BLOCK_FE_WIDTH],
