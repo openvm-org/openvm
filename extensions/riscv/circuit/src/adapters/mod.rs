@@ -22,11 +22,13 @@ mod alu_w;
 mod alu_w_u16;
 mod branch;
 mod jalr;
-mod load;
+mod load_aligned;
+mod load_misaligned;
 mod mul;
 mod mul_w;
 mod rdwrite;
-mod store;
+mod store_aligned;
+mod store_misaligned;
 
 pub use alu::*;
 pub use alu_imm_u16::*;
@@ -36,14 +38,16 @@ pub use alu_w::*;
 pub use alu_w_u16::*;
 pub use branch::*;
 pub use jalr::*;
-pub use load::*;
+pub use load_aligned::*;
+pub use load_misaligned::*;
 pub use mul::*;
 pub use mul_w::*;
 pub use openvm_instructions::riscv::{
     RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 pub use rdwrite::*;
-pub use store::*;
+pub use store_aligned::*;
+pub use store_misaligned::*;
 
 /// Number of u16 limbs needed for a low-32-bit RV64 pointer.
 pub const RV64_PTR_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;

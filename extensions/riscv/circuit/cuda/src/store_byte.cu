@@ -10,7 +10,7 @@ template <typename T> struct StoreByteCoreCols {
 };
 
 template <typename T> struct Rv64StoreByteCols {
-    Rv64StoreAdapterCols<T> adapter;
+    Rv64StoreByteAdapterCols<T> adapter;
     StoreByteCoreCols<T> core;
 };
 
@@ -61,7 +61,7 @@ __global__ void rv64_store_byte_tracegen(
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
         auto const &record = records[idx];
-        auto adapter = Rv64StoreAdapter(
+        auto adapter = Rv64StoreByteAdapter(
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits

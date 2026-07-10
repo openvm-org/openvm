@@ -11,7 +11,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use super::LoadSignExtendByteCoreCols;
 use crate::{
-    adapters::{Rv64LoadAdapterCols, Rv64LoadAdapterRecord, RV64_BYTE_BITS},
+    adapters::{Rv64LoadAdapterRecord, Rv64LoadByteAdapterCols, RV64_BYTE_BITS},
     cuda_abi::load_sign_extend_byte_cuda,
     load::LoadRecord,
 };
@@ -34,7 +34,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendByteChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width =
-            Rv64LoadAdapterCols::<F>::width() + LoadSignExtendByteCoreCols::<F>::width();
+            Rv64LoadByteAdapterCols::<F>::width() + LoadSignExtendByteCoreCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 

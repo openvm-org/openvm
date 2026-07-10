@@ -9,7 +9,7 @@ template <typename T> struct LoadSignExtendByteCoreCols {
 };
 
 template <typename T> struct Rv64LoadSignExtendByteCols {
-    Rv64LoadAdapterCols<T> adapter;
+    Rv64LoadByteAdapterCols<T> adapter;
     LoadSignExtendByteCoreCols<T> core;
 };
 
@@ -68,7 +68,7 @@ __global__ void rv64_load_sign_extend_byte_tracegen(
     if (idx < records.len()) {
         auto const &record = records[idx];
 
-        auto adapter = Rv64LoadAdapter(
+        auto adapter = Rv64LoadByteAdapter(
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits

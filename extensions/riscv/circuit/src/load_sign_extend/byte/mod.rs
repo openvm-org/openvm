@@ -1,7 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use crate::{
-    adapters::{Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, LOAD_WIDTH_BYTE},
+    adapters::{Rv64LoadByteAdapterAir, Rv64LoadByteAdapterExecutor, LOAD_WIDTH_BYTE},
     load_sign_extend::common::LoadSignExtendExecutor,
 };
 
@@ -16,7 +16,8 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64LoadSignExtendByteAir = VmAirWrapper<Rv64LoadAdapterAir, LoadSignExtendByteCoreAir>;
+pub type Rv64LoadSignExtendByteAir =
+    VmAirWrapper<Rv64LoadByteAdapterAir, LoadSignExtendByteCoreAir>;
 pub type Rv64LoadSignExtendByteExecutor =
-    LoadSignExtendExecutor<Rv64LoadAdapterExecutor<LOAD_WIDTH_BYTE>, LOAD_WIDTH_BYTE>;
+    LoadSignExtendExecutor<Rv64LoadByteAdapterExecutor, LOAD_WIDTH_BYTE>;
 pub type Rv64LoadSignExtendByteChip<F> = VmChipWrapper<F, LoadSignExtendByteFiller>;

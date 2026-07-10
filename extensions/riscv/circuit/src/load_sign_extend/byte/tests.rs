@@ -31,7 +31,8 @@ use crate::load_sign_extend::{
 };
 use crate::{
     adapters::{
-        Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, RV64_BYTE_BITS,
+        Rv64LoadByteAdapterAir, Rv64LoadByteAdapterExecutor, Rv64LoadByteAdapterFiller,
+        RV64_BYTE_BITS,
     },
     load_sign_extend::{
         byte::{
@@ -64,7 +65,7 @@ fn create_byte_harness(
         bitwise_bus,
     ));
     let air = Rv64LoadSignExtendByteAir::new(
-        Rv64LoadAdapterAir::new(
+        Rv64LoadByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -77,12 +78,12 @@ fn create_byte_harness(
         ),
     );
     let executor = Rv64LoadSignExtendByteExecutor::new(
-        Rv64LoadAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = Rv64LoadSignExtendByteChip::<F>::new(
         LoadSignExtendByteFiller::new(
-            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
             range_checker,
@@ -194,7 +195,7 @@ fn create_cuda_byte_harness(tester: &GpuChipTestBuilder) -> GpuByteHarness {
         default_bitwise_lookup_bus(),
     ));
     let air = Rv64LoadSignExtendByteAir::new(
-        Rv64LoadAdapterAir::new(
+        Rv64LoadByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -207,12 +208,12 @@ fn create_cuda_byte_harness(tester: &GpuChipTestBuilder) -> GpuByteHarness {
         ),
     );
     let executor = Rv64LoadSignExtendByteExecutor::new(
-        Rv64LoadAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let cpu_chip = Rv64LoadSignExtendByteChip::<F>::new(
         LoadSignExtendByteFiller::new(
-            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
             range_checker,
