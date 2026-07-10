@@ -57,12 +57,12 @@ pub(crate) use super::{
     halfword::{
         LoadSignExtendHalfwordCoreAir, LoadSignExtendHalfwordFiller, Rv64LoadSignExtendHalfwordAir,
         Rv64LoadSignExtendHalfwordChip, Rv64LoadSignExtendHalfwordExecutor,
-        LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH, LOAD_SIGN_EXTEND_HALFWORD_TOUCHED_CELLS,
+        LOAD_SIGN_EXTEND_HALFWORD_LOADED_CELLS, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
     },
     word::{
         LoadSignExtendWordCoreAir, LoadSignExtendWordFiller, Rv64LoadSignExtendWordAir,
         Rv64LoadSignExtendWordChip, Rv64LoadSignExtendWordExecutor,
-        LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH, LOAD_SIGN_EXTEND_WORD_TOUCHED_CELLS,
+        LOAD_SIGN_EXTEND_WORD_LOADED_CELLS, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
     },
 };
 pub(crate) use crate::{
@@ -368,7 +368,7 @@ pub(crate) fn assert_pranked_halfword_fails(
         &mut LoadSignExtendCoreCols<
             F,
             LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
-            LOAD_SIGN_EXTEND_HALFWORD_TOUCHED_CELLS,
+            LOAD_SIGN_EXTEND_HALFWORD_LOADED_CELLS,
         >,
     ),
 ) {
@@ -407,7 +407,7 @@ pub(crate) fn assert_pranked_word_fails(
         &mut LoadSignExtendCoreCols<
             F,
             LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
-            LOAD_SIGN_EXTEND_WORD_TOUCHED_CELLS,
+            LOAD_SIGN_EXTEND_WORD_LOADED_CELLS,
         >,
     ),
 ) {

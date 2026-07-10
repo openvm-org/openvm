@@ -11,19 +11,19 @@ use crate::{
 };
 
 pub const LOAD_DOUBLEWORD_SELECTOR_WIDTH: usize = 3;
-/// Cells overlapped by an odd-shift doubleword load: `LOAD_WIDTH_DOUBLEWORD / 2 + 1`.
-pub const LOAD_DOUBLEWORD_TOUCHED_CELLS: usize = 5;
+/// Cells loaded by a doubleword load: `LOAD_WIDTH_DOUBLEWORD / 2`.
+pub const LOAD_DOUBLEWORD_LOADED_CELLS: usize = 4;
 
 pub type LoadDoublewordCoreAir = LoadCoreAir<
     LOAD_WIDTH_DOUBLEWORD,
     LOAD_DOUBLEWORD_SELECTOR_WIDTH,
-    LOAD_DOUBLEWORD_TOUCHED_CELLS,
+    LOAD_DOUBLEWORD_LOADED_CELLS,
 >;
 pub type LoadDoublewordFiller = LoadFiller<
     Rv64LoadAdapterFiller,
     LOAD_WIDTH_DOUBLEWORD,
     LOAD_DOUBLEWORD_SELECTOR_WIDTH,
-    LOAD_DOUBLEWORD_TOUCHED_CELLS,
+    LOAD_DOUBLEWORD_LOADED_CELLS,
 >;
 
 pub type Rv64LoadDoublewordAir = VmAirWrapper<Rv64LoadAdapterAir, LoadDoublewordCoreAir>;

@@ -102,8 +102,8 @@ fn negative_split_signed_load_tests() {
     assert_pranked_byte_fails(|core| core.data_most_sig_bit += F::ONE);
     assert_pranked_halfword_fails(|core| core.data_most_sig_bit += F::ONE);
     assert_pranked_word_fails(|core| core.data_most_sig_bit += F::ONE);
-    assert_pranked_halfword_fails(|core| core.touched_cell_bytes[0][0] += F::ONE);
-    assert_pranked_word_fails(|core| core.touched_cell_bytes[0][0] += F::ONE);
-    assert_pranked_halfword_fails(|core| core.cross += F::ONE);
-    assert_pranked_word_fails(|core| core.cross += F::ONE);
+    assert_pranked_halfword_fails(|core| core.loaded_cell_bytes[0][0] += F::ONE);
+    assert_pranked_word_fails(|core| core.loaded_cell_bytes[0][0] += F::ONE);
+    assert_pranked_halfword_fails(|core| core.read_data[0][0] += F::ONE);
+    assert_pranked_word_fails(|core| core.read_data[0][0] += F::ONE);
 }

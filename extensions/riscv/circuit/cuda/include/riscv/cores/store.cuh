@@ -51,12 +51,10 @@ store_prev_full_cell(StoreRecord const &record, uint32_t cell) {
 
 template <typename T, size_t SELECTOR_WIDTH, size_t NUM_VALUE_CELLS> struct StoreWidthCoreCols {
     T selector[SELECTOR_WIDTH];
-    T is_valid;
-    T cross;
     T read_data[BLOCK_FE_WIDTH];
     T prev_data[2][BLOCK_FE_WIDTH];
     T value_bytes[NUM_VALUE_CELLS][2];
-    T prev_bound_bytes[2][2];
+    T prev_bound_bytes[2];
 };
 
 // Shared tracegen for the halfword/word/doubleword store cores. `WIDTH_BYTES` is the access
@@ -73,13 +71,14 @@ struct StoreWidthCore {
     __device__ void fill_trace_row(RowSlice row, StoreRecord record, uint8_t shift) {
         Encoder encoder(CASES, STORE_SELECTOR_MAX_DEGREE, true, SELECTOR_WIDTH);
         encoder.write_flag_pt(row.slice_from(offsetof(Cols, selector)), shift);
-        row[offsetof(Cols, is_valid)] = 1;
-        row[offsetof(Cols, cross)] = (shift + WIDTH_BYTES > 2 * BLOCK_FE_WIDTH) ? 1 : 0;
         row.write_array(offsetof(Cols, read_data), BLOCK_FE_WIDTH, record.read_data);
         row.write_array(offsetof(Cols, prev_data), 2 * BLOCK_FE_WIDTH, &record.prev_data[0][0]);
 
+        // Only the preserved boundary bytes are materialized: the low byte of the first
+        // overlapped cell and the high byte of the last. The overwritten boundary-cell bytes
+        // are only range checked, mirroring the AIR's derived bytes.
         uint16_t value_bytes[NUM_VALUE_CELLS][2] = {};
-        uint16_t prev_bound_bytes[2][2] = {};
+        uint16_t prev_bound_cells[2][2] = {};
         if (shift & 1) {
             for (size_t i = 0; i < NUM_VALUE_CELLS; i++) {
                 value_bytes[i][0] = store_byte_from_cell(record.read_data[i], 0);
@@ -88,17 +87,18 @@ struct StoreWidthCore {
             for (size_t which = 0; which < 2; which++) {
                 uint16_t cell =
                     store_prev_full_cell(record, (shift >> 1) + which * NUM_VALUE_CELLS);
-                prev_bound_bytes[which][0] = store_byte_from_cell(cell, 0);
-                prev_bound_bytes[which][1] = store_byte_from_cell(cell, 1);
+                prev_bound_cells[which][0] = store_byte_from_cell(cell, 0);
+                prev_bound_cells[which][1] = store_byte_from_cell(cell, 1);
             }
         }
         for (size_t i = 0; i < NUM_VALUE_CELLS; i++) {
             bitwise_lookup.add_range(value_bytes[i][0], value_bytes[i][1]);
         }
         for (size_t which = 0; which < 2; which++) {
-            bitwise_lookup.add_range(prev_bound_bytes[which][0], prev_bound_bytes[which][1]);
+            bitwise_lookup.add_range(prev_bound_cells[which][0], prev_bound_cells[which][1]);
         }
         row.write_array(offsetof(Cols, value_bytes), NUM_VALUE_CELLS * 2, &value_bytes[0][0]);
-        row.write_array(offsetof(Cols, prev_bound_bytes), 4, &prev_bound_bytes[0][0]);
+        uint16_t prev_bound_bytes[2] = {prev_bound_cells[0][0], prev_bound_cells[1][1]};
+        row.write_array(offsetof(Cols, prev_bound_bytes), 2, prev_bound_bytes);
     }
 };

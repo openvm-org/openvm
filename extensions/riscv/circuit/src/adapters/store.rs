@@ -43,14 +43,15 @@ use super::{
 use crate::adapters::{memory_read_u16, timed_write_u16, tracing_read, tracing_read_u16};
 
 pub struct StoreInstruction<T> {
-    /// Constrained to be boolean by the core selector.
+    /// Guaranteed boolean by the core selector; may be a degree-2 expression.
     pub is_valid: T,
     /// Absolute opcode number.
     pub opcode: T,
     /// Byte offset of the effective pointer inside the 8-byte memory block.
     pub shift_amount: T,
-    /// Boolean flag for accesses that span two consecutive memory blocks; constrained by the
-    /// core to match the selected shift and access width.
+    /// Flag for accesses that span two consecutive memory blocks; guaranteed boolean by the core
+    /// as a sum of mutually exclusive selector flags matching the selected shift and access
+    /// width. May be a degree-2 expression.
     pub store_cross: T,
 }
 
@@ -128,7 +129,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
         let is_valid = ctx.instruction.is_valid;
         let shift_amount = ctx.instruction.shift_amount;
         let cross = ctx.instruction.store_cross;
-        builder.assert_bool(cross.clone());
 
         // Read rs1 as a low 32-bit pointer value; the upper register cells are zero on the bus.
         let rs1_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&local_cols.rs1_data);
@@ -144,17 +144,17 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
             )
             .eval(builder, is_valid.clone());
 
-        // Constrain mem_ptr = rs1 + sign_extend(imm) as a 32-bit addition.
+        // Constrain mem_ptr = rs1 + sign_extend(imm) as a 32-bit addition. The booleanity
+        // checks hold unconditionally (dummy rows are all-zero except `mem_as`), which keeps
+        // their degree low since `is_valid` may be a degree-2 expression.
         let inv = AB::F::from_u32(1u32 << U16_BITS).inverse();
         let carry = (local_cols.rs1_data[0] + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
-        builder.when(is_valid.clone()).assert_bool(carry.clone());
-        builder
-            .when(is_valid.clone())
-            .assert_bool(local_cols.imm_sign);
+        builder.assert_bool(carry.clone());
+        builder.assert_bool(local_cols.imm_sign);
         let imm_extend_limb = local_cols.imm_sign * AB::F::from_u32(u16::MAX as u32);
         let carry =
             (local_cols.rs1_data[1] + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
-        builder.when(is_valid.clone()).assert_bool(carry.clone());
+        builder.assert_bool(carry.clone());
         builder
             .when(is_valid.clone())
             .assert_eq(carry, local_cols.imm_sign);

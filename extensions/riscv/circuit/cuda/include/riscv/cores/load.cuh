@@ -47,19 +47,17 @@ load_read_full_cell(LoadRecord const &record, uint32_t cell) {
     return record.read_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH];
 }
 
-template <typename T, size_t SELECTOR_WIDTH, size_t NUM_TOUCHED_CELLS> struct LoadWidthCoreCols {
+template <typename T, size_t SELECTOR_WIDTH, size_t NUM_LOADED_CELLS> struct LoadWidthCoreCols {
     T selector[SELECTOR_WIDTH];
-    T is_valid;
-    T cross;
     T read_data[2][BLOCK_FE_WIDTH];
-    T touched_cell_bytes[NUM_TOUCHED_CELLS][2];
+    T loaded_cell_bytes[NUM_LOADED_CELLS][2];
 };
 
 // Shared tracegen for the halfword/word/doubleword load cores. `WIDTH_BYTES` is the access
-// width; `NUM_TOUCHED_CELLS` must equal `WIDTH_BYTES / 2 + 1`.
-template <size_t SELECTOR_WIDTH, size_t NUM_TOUCHED_CELLS, uint32_t CASES, size_t WIDTH_BYTES>
+// width; `NUM_LOADED_CELLS` must equal `WIDTH_BYTES / 2`.
+template <size_t SELECTOR_WIDTH, size_t NUM_LOADED_CELLS, uint32_t CASES, size_t WIDTH_BYTES>
 struct LoadWidthCore {
-    using Cols = LoadWidthCoreCols<uint8_t, SELECTOR_WIDTH, NUM_TOUCHED_CELLS>;
+    using Cols = LoadWidthCoreCols<uint8_t, SELECTOR_WIDTH, NUM_LOADED_CELLS>;
 
     BitwiseOperationLookup bitwise_lookup;
 
@@ -69,25 +67,34 @@ struct LoadWidthCore {
     __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
         Encoder encoder(CASES, LOAD_SELECTOR_MAX_DEGREE, true, SELECTOR_WIDTH);
         encoder.write_flag_pt(row.slice_from(offsetof(Cols, selector)), shift);
-        row[offsetof(Cols, is_valid)] = 1;
-        row[offsetof(Cols, cross)] = (shift + WIDTH_BYTES > 2 * BLOCK_FE_WIDTH) ? 1 : 0;
         row.write_array(offsetof(Cols, read_data), 2 * BLOCK_FE_WIDTH, &record.read_data[0][0]);
 
-        uint16_t touched_cell_bytes[NUM_TOUCHED_CELLS][2] = {};
+        // On odd shifts, slot `i` holds the byte decomposition [lo, hi] of result cell `i`: the
+        // high byte of overlapped cell `i` and the low byte of overlapped cell `i + 1`. The two
+        // overlapped-cell bytes outside the loaded range are only range checked, mirroring the
+        // AIR's derived boundary bytes.
+        uint16_t loaded_cell_bytes[NUM_LOADED_CELLS][2] = {};
+        uint16_t bound_bytes[2] = {};
         if (shift & 1) {
-            for (size_t j = 0; j < NUM_TOUCHED_CELLS; j++) {
-                uint16_t cell = load_read_full_cell(record, (shift >> 1) + j);
-                touched_cell_bytes[j][0] = load_byte_from_cell(cell, 0);
-                touched_cell_bytes[j][1] = load_byte_from_cell(cell, 1);
+            for (size_t i = 0; i < NUM_LOADED_CELLS; i++) {
+                loaded_cell_bytes[i][0] =
+                    load_byte_from_cell(load_read_full_cell(record, (shift >> 1) + i), 1);
+                loaded_cell_bytes[i][1] =
+                    load_byte_from_cell(load_read_full_cell(record, (shift >> 1) + i + 1), 0);
             }
+            bound_bytes[0] = load_byte_from_cell(load_read_full_cell(record, shift >> 1), 0);
+            bound_bytes[1] = load_byte_from_cell(
+                load_read_full_cell(record, (shift >> 1) + NUM_LOADED_CELLS), 1
+            );
         }
-        for (size_t j = 0; j < NUM_TOUCHED_CELLS; j++) {
-            bitwise_lookup.add_range(touched_cell_bytes[j][0], touched_cell_bytes[j][1]);
+        for (size_t i = 0; i < NUM_LOADED_CELLS; i++) {
+            bitwise_lookup.add_range(loaded_cell_bytes[i][0], loaded_cell_bytes[i][1]);
         }
+        bitwise_lookup.add_range(bound_bytes[0], bound_bytes[1]);
         row.write_array(
-            offsetof(Cols, touched_cell_bytes),
-            NUM_TOUCHED_CELLS * 2,
-            &touched_cell_bytes[0][0]
+            offsetof(Cols, loaded_cell_bytes),
+            NUM_LOADED_CELLS * 2,
+            &loaded_cell_bytes[0][0]
         );
     }
 };

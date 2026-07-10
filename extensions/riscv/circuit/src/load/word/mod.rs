@@ -11,16 +11,16 @@ use crate::{
 };
 
 pub const LOAD_WORD_SELECTOR_WIDTH: usize = 3;
-/// Cells overlapped by an odd-shift word load: `LOAD_WIDTH_WORD / 2 + 1`.
-pub const LOAD_WORD_TOUCHED_CELLS: usize = 3;
+/// Cells loaded by a word load: `LOAD_WIDTH_WORD / 2`.
+pub const LOAD_WORD_LOADED_CELLS: usize = 2;
 
 pub type LoadWordCoreAir =
-    LoadCoreAir<LOAD_WIDTH_WORD, LOAD_WORD_SELECTOR_WIDTH, LOAD_WORD_TOUCHED_CELLS>;
+    LoadCoreAir<LOAD_WIDTH_WORD, LOAD_WORD_SELECTOR_WIDTH, LOAD_WORD_LOADED_CELLS>;
 pub type LoadWordFiller = LoadFiller<
     Rv64LoadAdapterFiller,
     LOAD_WIDTH_WORD,
     LOAD_WORD_SELECTOR_WIDTH,
-    LOAD_WORD_TOUCHED_CELLS,
+    LOAD_WORD_LOADED_CELLS,
 >;
 
 pub type Rv64LoadWordAir = VmAirWrapper<Rv64LoadAdapterAir, LoadWordCoreAir>;

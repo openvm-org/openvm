@@ -63,42 +63,40 @@ pub(crate) fn load_info<const LOAD_WIDTH: usize>() -> LoadInfo {
 /// Handles unsigned halfword, word, and doubleword loads. Each supported byte shift is encoded
 /// as a separate selector case.
 ///
-/// Even shifts move whole u16 cells. Odd shifts additionally use `touched_cell_bytes`: byte
-/// decompositions of the `LOAD_WIDTH / 2 + 1` consecutive cells overlapped by the load, from
-/// which every result cell is the linear recombination `hi_i + 2^8 * lo_{i+1}`.
+/// Even shifts move whole u16 cells. Odd shifts additionally use `loaded_cell_bytes`: byte
+/// decompositions of the `LOAD_WIDTH / 2` result cells, whose bytes are also the interior bytes
+/// of the `LOAD_WIDTH / 2 + 1` consecutive cells overlapped by the load. The two overlapped-cell
+/// bytes outside the loaded range are derived in the AIR instead of being materialized.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct LoadCoreCols<T, const SELECTOR_WIDTH: usize, const NUM_TOUCHED_CELLS: usize> {
+pub struct LoadCoreCols<T, const SELECTOR_WIDTH: usize, const NUM_LOADED_CELLS: usize> {
     pub selector: [T; SELECTOR_WIDTH],
-    /// Kept as a degree-1 copy of the selector validity.
-    pub is_valid: T,
-    /// Kept as a degree-1 copy of the sum of block-crossing selector flags.
-    pub cross: T,
     /// Two consecutive 8-byte memory blocks; the second is used only when the access crosses a
     /// block boundary.
     pub read_data: [[T; BLOCK_FE_WIDTH]; 2],
-    /// Byte decompositions `[lo, hi]` of the cells overlapped by an odd-shift load, starting at
-    /// the cell containing the first loaded byte. All-zero on even shifts.
-    pub touched_cell_bytes: [[T; 2]; NUM_TOUCHED_CELLS],
+    /// Byte decompositions `[lo, hi]` of the result cells of an odd-shift load: `[i][0]` is the
+    /// high byte of overlapped cell `i` and `[i][1]` is the low byte of overlapped cell `i + 1`,
+    /// so result cell `i` is `[i][0] + 2^8 * [i][1]`. All-zero on even shifts.
+    pub loaded_cell_bytes: [[T; 2]; NUM_LOADED_CELLS],
 }
 
 #[derive(Debug, Clone, ColumnsAir)]
-#[columns_via(LoadCoreCols<u8, SELECTOR_WIDTH, NUM_TOUCHED_CELLS>)]
+#[columns_via(LoadCoreCols<u8, SELECTOR_WIDTH, NUM_LOADED_CELLS>)]
 pub struct LoadCoreAir<
     const LOAD_WIDTH: usize,
     const SELECTOR_WIDTH: usize,
-    const NUM_TOUCHED_CELLS: usize,
+    const NUM_LOADED_CELLS: usize,
 > {
     pub offset: usize,
     encoder: Encoder,
     bitwise_lookup_bus: BitwiseOperationLookupBus,
 }
 
-impl<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_TOUCHED_CELLS: usize>
-    LoadCoreAir<LOAD_WIDTH, SELECTOR_WIDTH, NUM_TOUCHED_CELLS>
+impl<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_LOADED_CELLS: usize>
+    LoadCoreAir<LOAD_WIDTH, SELECTOR_WIDTH, NUM_LOADED_CELLS>
 {
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
-        debug_assert_eq!(NUM_TOUCHED_CELLS, LOAD_WIDTH / 2 + 1);
+        debug_assert_eq!(NUM_LOADED_CELLS, LOAD_WIDTH / 2);
         Self {
             offset,
             encoder: encoder::<SELECTOR_WIDTH>(load_info::<LOAD_WIDTH>().byte_shifts),
@@ -111,11 +109,11 @@ impl<
         F: Field,
         const LOAD_WIDTH: usize,
         const SELECTOR_WIDTH: usize,
-        const NUM_TOUCHED_CELLS: usize,
-    > BaseAir<F> for LoadCoreAir<LOAD_WIDTH, SELECTOR_WIDTH, NUM_TOUCHED_CELLS>
+        const NUM_LOADED_CELLS: usize,
+    > BaseAir<F> for LoadCoreAir<LOAD_WIDTH, SELECTOR_WIDTH, NUM_LOADED_CELLS>
 {
     fn width(&self) -> usize {
-        LoadCoreCols::<F, SELECTOR_WIDTH, NUM_TOUCHED_CELLS>::width()
+        LoadCoreCols::<F, SELECTOR_WIDTH, NUM_LOADED_CELLS>::width()
     }
 }
 
@@ -123,8 +121,8 @@ impl<
         F: Field,
         const LOAD_WIDTH: usize,
         const SELECTOR_WIDTH: usize,
-        const NUM_TOUCHED_CELLS: usize,
-    > BaseAirWithPublicValues<F> for LoadCoreAir<LOAD_WIDTH, SELECTOR_WIDTH, NUM_TOUCHED_CELLS>
+        const NUM_LOADED_CELLS: usize,
+    > BaseAirWithPublicValues<F> for LoadCoreAir<LOAD_WIDTH, SELECTOR_WIDTH, NUM_LOADED_CELLS>
 {
 }
 
@@ -133,8 +131,8 @@ impl<
         I,
         const LOAD_WIDTH: usize,
         const SELECTOR_WIDTH: usize,
-        const NUM_TOUCHED_CELLS: usize,
-    > VmCoreAir<AB, I> for LoadCoreAir<LOAD_WIDTH, SELECTOR_WIDTH, NUM_TOUCHED_CELLS>
+        const NUM_LOADED_CELLS: usize,
+    > VmCoreAir<AB, I> for LoadCoreAir<LOAD_WIDTH, SELECTOR_WIDTH, NUM_LOADED_CELLS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -148,17 +146,15 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &LoadCoreCols<AB::Var, SELECTOR_WIDTH, NUM_TOUCHED_CELLS> =
-            (*local_core).borrow();
+        let cols: &LoadCoreCols<AB::Var, SELECTOR_WIDTH, NUM_LOADED_CELLS> = (*local_core).borrow();
         let info = load_info::<LOAD_WIDTH>();
         let width = LOAD_WIDTH / 2;
 
         self.encoder.eval(builder, &cols.selector);
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
-        builder.assert_eq(cols.is_valid, is_valid.clone());
 
-        let cross_flags = info.byte_shifts.iter().enumerate().fold(
+        let cross = info.byte_shifts.iter().enumerate().fold(
             AB::Expr::ZERO,
             |acc, (case_idx, &byte_shift)| {
                 if byte_shift + LOAD_WIDTH > 2 * BLOCK_FE_WIDTH {
@@ -168,7 +164,6 @@ where
                 }
             },
         );
-        builder.assert_eq(cols.cross, cross_flags);
 
         // Cell `k` of the two consecutive memory blocks.
         let read_full = |cell: usize| {
@@ -178,15 +173,9 @@ where
                 cols.read_data[1][cell - BLOCK_FE_WIDTH]
             }
         };
-
-        for (j, cell_bytes) in cols.touched_cell_bytes.iter().enumerate() {
-            self.bitwise_lookup_bus
-                .send_range(cell_bytes[0], cell_bytes[1])
-                .eval(builder, is_valid.clone());
-            // On an odd shift the j-th slot recomposes to the j-th overlapped cell; the byte
-            // range checks above make the decomposition unique. On even shifts every term of
-            // the sum is zero, which forces the slot bytes to zero.
-            let expected_cell = info.byte_shifts.iter().enumerate().fold(
+        // The j-th cell overlapped by an odd-shift load; zero on even shifts and invalid rows.
+        let odd_cell = |j: usize| {
+            info.byte_shifts.iter().enumerate().fold(
                 AB::Expr::ZERO,
                 |acc, (case_idx, &byte_shift)| {
                     if byte_shift % 2 == 1 {
@@ -195,12 +184,34 @@ where
                         acc
                     }
                 },
-            );
+            )
+        };
+
+        for cell_bytes in cols.loaded_cell_bytes.iter() {
+            self.bitwise_lookup_bus
+                .send_range(cell_bytes[0], cell_bytes[1])
+                .eval(builder, is_valid.clone());
+        }
+        // On an odd shift, interior overlapped cell `j` recomposes from adjacent result-cell
+        // bytes; the byte range checks above make the decomposition unique. On even shifts the
+        // overlapped-cell sums are zero, which forces the bytes to zero.
+        for j in 1..width {
             builder.assert_eq(
-                cell_bytes[0] + cell_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS),
-                expected_cell,
+                cols.loaded_cell_bytes[j - 1][1]
+                    + cols.loaded_cell_bytes[j][0] * AB::Expr::from_u32(1 << RV64_BYTE_BITS),
+                odd_cell(j),
             );
         }
+        // The two overlapped-cell bytes outside the loaded range are derived from the boundary
+        // cells; range checking them completes the decompositions of both boundary cells (and
+        // forces the remaining loaded bytes to zero on even shifts).
+        let first_cell_lo =
+            odd_cell(0) - cols.loaded_cell_bytes[0][0] * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
+        let last_cell_hi = (odd_cell(width) - cols.loaded_cell_bytes[width - 1][1])
+            * AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
+        self.bitwise_lookup_bus
+            .send_range(first_cell_lo, last_cell_hi)
+            .eval(builder, is_valid.clone());
 
         let odd_shift = info.byte_shifts.iter().enumerate().fold(
             AB::Expr::ZERO,
@@ -215,7 +226,7 @@ where
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            cols.is_valid * AB::Expr::from_u8(info.opcode as u8),
+            is_valid.clone() * AB::Expr::from_u8(info.opcode as u8),
         );
         let shift_amount = info
             .byte_shifts
@@ -230,8 +241,7 @@ where
                 return AB::Expr::ZERO;
             }
             // Even shifts move whole cells. All odd shifts share one slot-indexed term: result
-            // cell `i` is the high byte of overlapped cell `i` next to the low byte of
-            // overlapped cell `i + 1`.
+            // cell `i` recomposes from its own byte decomposition.
             let even_term = info.byte_shifts.iter().enumerate().fold(
                 AB::Expr::ZERO,
                 |acc, (case_idx, &byte_shift)| {
@@ -244,19 +254,18 @@ where
             );
             even_term
                 + odd_shift.clone()
-                    * (cols.touched_cell_bytes[i][1]
-                        + cols.touched_cell_bytes[i + 1][0]
-                            * AB::Expr::from_u32(1 << RV64_BYTE_BITS))
+                    * (cols.loaded_cell_bytes[i][0]
+                        + cols.loaded_cell_bytes[i][1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS))
         });
         AdapterAirContext {
             to_pc: None,
             reads: cols.read_data.map(|block| block.map(Into::into)).into(),
             writes: [write_data].into(),
             instruction: LoadInstruction {
-                is_valid: cols.is_valid.into(),
+                is_valid,
                 opcode: expected_opcode,
                 shift_amount,
-                load_cross: cols.cross.into(),
+                load_cross: cross,
             }
             .into(),
         }
@@ -272,7 +281,7 @@ pub struct LoadFiller<
     A = Rv64LoadAdapterFiller,
     const LOAD_WIDTH: usize = LOAD_WIDTH_WORD,
     const SELECTOR_WIDTH: usize = 3,
-    const NUM_TOUCHED_CELLS: usize = 3,
+    const NUM_LOADED_CELLS: usize = 2,
 > {
     adapter: A,
     pub offset: usize,
@@ -280,8 +289,8 @@ pub struct LoadFiller<
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
 }
 
-impl<A, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_TOUCHED_CELLS: usize>
-    LoadFiller<A, LOAD_WIDTH, SELECTOR_WIDTH, NUM_TOUCHED_CELLS>
+impl<A, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_LOADED_CELLS: usize>
+    LoadFiller<A, LOAD_WIDTH, SELECTOR_WIDTH, NUM_LOADED_CELLS>
 {
     pub fn new(
         adapter: A,
@@ -298,9 +307,9 @@ impl<A, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_TOUCHED_
     }
 }
 
-impl<F, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_TOUCHED_CELLS: usize>
+impl<F, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_LOADED_CELLS: usize>
     TraceFiller<F>
-    for LoadFiller<Rv64LoadAdapterFiller, LOAD_WIDTH, SELECTOR_WIDTH, NUM_TOUCHED_CELLS>
+    for LoadFiller<Rv64LoadAdapterFiller, LOAD_WIDTH, SELECTOR_WIDTH, NUM_LOADED_CELLS>
 where
     F: PrimeField32,
 {
@@ -320,7 +329,7 @@ where
         // generation.
         let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let read_data = record.read_data;
-        let core_row: &mut LoadCoreCols<F, SELECTOR_WIDTH, NUM_TOUCHED_CELLS> =
+        let core_row: &mut LoadCoreCols<F, SELECTOR_WIDTH, NUM_LOADED_CELLS> =
             core_row.borrow_mut();
         let case_idx = load_info::<LOAD_WIDTH>()
             .byte_shifts
@@ -330,23 +339,32 @@ where
 
         let read_full: [u16; 2 * BLOCK_FE_WIDTH] =
             std::array::from_fn(|cell| read_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH]);
-        let touched_cell_bytes: [[u16; 2]; NUM_TOUCHED_CELLS] = if shift % 2 == 1 {
-            std::array::from_fn(|j| {
-                let cell = read_full[shift / 2 + j];
-                [u16_cell_byte(cell, 0), u16_cell_byte(cell, 1)]
-            })
-        } else {
-            [[0; 2]; NUM_TOUCHED_CELLS]
-        };
-        for cell_bytes in &touched_cell_bytes {
+        let (loaded_cell_bytes, bound_bytes): ([[u16; 2]; NUM_LOADED_CELLS], [u16; 2]) =
+            if shift % 2 == 1 {
+                (
+                    std::array::from_fn(|i| {
+                        [
+                            u16_cell_byte(read_full[shift / 2 + i], 1),
+                            u16_cell_byte(read_full[shift / 2 + i + 1], 0),
+                        ]
+                    }),
+                    [
+                        u16_cell_byte(read_full[shift / 2], 0),
+                        u16_cell_byte(read_full[shift / 2 + NUM_LOADED_CELLS], 1),
+                    ],
+                )
+            } else {
+                ([[0; 2]; NUM_LOADED_CELLS], [0; 2])
+            };
+        for cell_bytes in &loaded_cell_bytes {
             self.bitwise_lookup_chip
                 .request_range(cell_bytes[0] as u32, cell_bytes[1] as u32);
         }
+        self.bitwise_lookup_chip
+            .request_range(bound_bytes[0] as u32, bound_bytes[1] as u32);
 
-        core_row.touched_cell_bytes = touched_cell_bytes.map(|bytes| bytes.map(F::from_u16));
+        core_row.loaded_cell_bytes = loaded_cell_bytes.map(|bytes| bytes.map(F::from_u16));
         core_row.read_data = read_data.map(|block| block.map(F::from_u16));
-        core_row.cross = F::from_bool(shift + LOAD_WIDTH > 2 * BLOCK_FE_WIDTH);
-        core_row.is_valid = F::ONE;
         let pt: [u32; SELECTOR_WIDTH] = self.encoder.get_flag_pt(case_idx).try_into().unwrap();
         core_row.selector = pt.map(F::from_u32);
     }
