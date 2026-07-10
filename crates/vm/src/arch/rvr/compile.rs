@@ -522,6 +522,8 @@ pub fn compile_preflight_with_extensions<F: PrimeField32>(
     chips: &ChipMapping,
     guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
+    #[cfg(any(test, feature = "test-utils"))]
+    PREFLIGHT_COMPILE_INVOCATIONS.with(|count| count.set(count.get() + 1));
     compile_impl(
         exe,
         &CompileOptions {
@@ -535,6 +537,23 @@ pub fn compile_preflight_with_extensions<F: PrimeField32>(
             keep_artifacts: false,
         },
     )
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+thread_local! {
+    static PREFLIGHT_COMPILE_INVOCATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Resets the preflight compiler invocation count for the current test thread.
+#[cfg(any(test, feature = "test-utils"))]
+pub fn reset_preflight_compile_invocations_for_test() {
+    PREFLIGHT_COMPILE_INVOCATIONS.with(|count| count.set(0));
+}
+
+/// Returns the preflight compiler invocation count for the current test thread.
+#[cfg(any(test, feature = "test-utils"))]
+pub fn preflight_compile_invocations_for_test() -> usize {
+    PREFLIGHT_COMPILE_INVOCATIONS.with(std::cell::Cell::get)
 }
 
 /// Open a previously saved `.so`/`.dylib` and wrap it in an [`RvrCompiled`].

@@ -9,6 +9,7 @@ use openvm_circuit::utils::test_gpu_engine;
 use openvm_circuit::{
     arch::{
         rvr::{
+            preflight_compile_invocations_for_test, reset_preflight_compile_invocations_for_test,
             LogNativeAssemblerRegistry, RvrPreflightOutput, RvrPreflightRoute,
             VmRvrLogNativeExtension, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
         },
@@ -1829,11 +1830,17 @@ fn rvr_preflight_proves_hard_chip_multi_segment() {
 
 #[test]
 fn rvr_preflight_proves_and_verifies_multi_segment() {
+    reset_preflight_compile_invocations_for_test();
     let mut config = Rv64ImConfig::default();
     config.rv64i.system.segmentation_max_memory = 1;
     let segments = prove_rvr_preflight_and_verify(repeated_adds_exe(400), config);
     assert!(
         segments > 1,
         "tight segmentation memory limit should force multiple segments"
+    );
+    assert_eq!(
+        preflight_compile_invocations_for_test(),
+        1,
+        "rvr preflight native library must be compiled once and reused across all {segments} segments"
     );
 }
