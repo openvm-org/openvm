@@ -1,11 +1,55 @@
 #include "riscv/cores/load.cuh"
 
-using LoadDoublewordCore =
-    LoadWidthCore<LOAD_DOUBLEWORD_SELECTOR_WIDTH, 4, LOAD_DOUBLEWORD_CASES, 8>;
+// Doubleword load with the column-reduced layout (see the Rust `LoadDoublewordCoreAir`): the two
+// read blocks are reconstructed for the bus from the `NUM_SLOTS` window-cell decompositions plus
+// the `NUM_NONOVERLAP` cells outside the window, so `read_data` is not stored.
+static constexpr size_t LOAD_DOUBLEWORD_NUM_SLOTS = 5;
+static constexpr size_t LOAD_DOUBLEWORD_NUM_NONOVERLAP = 3;
+
+template <typename T> struct LoadDoublewordCoreCols {
+    T selector[LOAD_DOUBLEWORD_SELECTOR_WIDTH];
+    T read_nonoverlap[LOAD_DOUBLEWORD_NUM_NONOVERLAP];
+    T cell_bytes[LOAD_DOUBLEWORD_NUM_SLOTS][2];
+};
 
 template <typename T> struct Rv64LoadDoublewordCols {
     Rv64LoadAdapterCols<T> adapter;
-    LoadWidthCoreCols<T, LOAD_DOUBLEWORD_SELECTOR_WIDTH, 4> core;
+    LoadDoublewordCoreCols<T> core;
+};
+
+struct LoadDoublewordCore {
+    using Cols = LoadDoublewordCoreCols<uint8_t>;
+
+    BitwiseOperationLookup bitwise_lookup;
+
+    __device__ LoadDoublewordCore(BitwiseOperationLookup bitwise_lookup)
+        : bitwise_lookup(bitwise_lookup) {}
+
+    __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
+        Encoder encoder(
+            LOAD_DOUBLEWORD_CASES, LOAD_SELECTOR_MAX_DEGREE, true, LOAD_DOUBLEWORD_SELECTOR_WIDTH
+        );
+        encoder.write_flag_pt(row.slice_from(offsetof(Cols, selector)), shift);
+
+        uint32_t c0 = shift >> 1;
+        uint16_t cell_bytes[LOAD_DOUBLEWORD_NUM_SLOTS][2];
+        for (size_t j = 0; j < LOAD_DOUBLEWORD_NUM_SLOTS; j++) {
+            uint16_t cell = load_read_full_cell(record, c0 + j);
+            cell_bytes[j][0] = load_byte_from_cell(cell, 0);
+            cell_bytes[j][1] = load_byte_from_cell(cell, 1);
+            bitwise_lookup.add_range(cell_bytes[j][0], cell_bytes[j][1]);
+        }
+        row.write_array(offsetof(Cols, cell_bytes), LOAD_DOUBLEWORD_NUM_SLOTS * 2, &cell_bytes[0][0]);
+
+        uint16_t read_nonoverlap[LOAD_DOUBLEWORD_NUM_NONOVERLAP];
+        for (size_t k = 0; k < LOAD_DOUBLEWORD_NUM_NONOVERLAP; k++) {
+            uint32_t p = (k < c0) ? k : k + LOAD_DOUBLEWORD_NUM_SLOTS;
+            read_nonoverlap[k] = load_read_full_cell(record, p);
+        }
+        row.write_array(
+            offsetof(Cols, read_nonoverlap), LOAD_DOUBLEWORD_NUM_NONOVERLAP, read_nonoverlap
+        );
+    }
 };
 
 __global__ void rv64_load_doubleword_tracegen(

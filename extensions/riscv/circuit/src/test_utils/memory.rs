@@ -67,13 +67,13 @@ pub(crate) use crate::{
     },
     load::{
         common::load_write_data, core::LoadCoreCols, LoadByteCoreAir, LoadByteCoreCols,
-        LoadByteFiller, LoadDoublewordCoreAir, LoadDoublewordFiller, LoadHalfwordCoreAir,
-        LoadHalfwordFiller, LoadWordCoreAir, LoadWordFiller, Rv64LoadByteAir, Rv64LoadByteChip,
-        Rv64LoadByteExecutor, Rv64LoadDoublewordAir, Rv64LoadDoublewordChip,
+        LoadByteFiller, LoadDoublewordCoreAir, LoadDoublewordCoreCols, LoadDoublewordFiller,
+        LoadHalfwordCoreAir, LoadHalfwordFiller, LoadWordCoreAir, LoadWordFiller, Rv64LoadByteAir,
+        Rv64LoadByteChip, Rv64LoadByteExecutor, Rv64LoadDoublewordAir, Rv64LoadDoublewordChip,
         Rv64LoadDoublewordExecutor, Rv64LoadHalfwordAir, Rv64LoadHalfwordChip,
         Rv64LoadHalfwordExecutor, Rv64LoadWordAir, Rv64LoadWordChip, Rv64LoadWordExecutor,
-        LOAD_DOUBLEWORD_LOADED_CELLS, LOAD_DOUBLEWORD_SELECTOR_WIDTH, LOAD_HALFWORD_LOADED_CELLS,
-        LOAD_HALFWORD_SELECTOR_WIDTH, LOAD_WORD_LOADED_CELLS, LOAD_WORD_SELECTOR_WIDTH,
+        LOAD_HALFWORD_LOADED_CELLS, LOAD_HALFWORD_SELECTOR_WIDTH, LOAD_WORD_LOADED_CELLS,
+        LOAD_WORD_SELECTOR_WIDTH,
     },
     load_sign_extend::common::load_sign_extend_write_data,
     store::{
@@ -863,11 +863,7 @@ pub(crate) fn assert_pranked_load_word_fails(
         .expect_err("pranked word memory access trace should fail");
 }
 
-pub(crate) fn assert_pranked_load_doubleword_fails(
-    prank: impl Fn(
-        &mut LoadCoreCols<F, { LOAD_DOUBLEWORD_SELECTOR_WIDTH }, { LOAD_DOUBLEWORD_LOADED_CELLS }>,
-    ),
-) {
+pub(crate) fn assert_pranked_load_doubleword_fails(prank: impl Fn(&mut LoadDoublewordCoreCols<F>)) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());
     let (mut harness, bitwise) = create_doubleword_harness(&mut tester);
@@ -985,7 +981,7 @@ mod tests {
         assert_pranked_store_byte_fails(|core| core.read_data[0] += F::ONE);
         assert_pranked_load_halfword_fails(|core| core.read_data[0][0] += F::ONE);
         assert_pranked_load_word_fails(|core| core.read_data[0][0] += F::ONE);
-        assert_pranked_load_doubleword_fails(|core| core.read_data[0][0] += F::ONE);
+        assert_pranked_load_doubleword_fails(|core| core.cell_bytes[0][0] += F::ONE);
     }
 
     #[test]
