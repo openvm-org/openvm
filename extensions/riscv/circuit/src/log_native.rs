@@ -20,7 +20,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
-    LocalOpcode, SystemOpcode,
+    LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
@@ -254,6 +254,7 @@ trait Rv64AccessView<F> {
     fn expect_memory_write(
         &self,
         timestamp: u32,
+        addr_space: u32,
         address: u32,
         pc: u32,
     ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError>;
@@ -311,13 +312,14 @@ impl<F: PrimeField32> Rv64AccessView<F> for AccessView<'_, F> {
     fn expect_memory_write(
         &self,
         timestamp: u32,
+        addr_space: u32,
         address: u32,
         pc: u32,
     ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError> {
         self.expect(
             timestamp,
             PREFLIGHT_MEMORY_KIND_WRITE,
-            RV64_MEMORY_AS,
+            addr_space,
             u64::from(address),
             RV64_REGISTER_NUM_LIMBS,
             pc,
@@ -387,11 +389,26 @@ where
             Rv64AuipcOpcode::iter().map(|opcode| opcode.global_opcode()),
             assemble_auipc::<F, RA>,
         );
+        // Zero-extension loads (LOADD..=LOADWU) read main memory only.
         registry.register_if(
             Rv64LoadStoreOpcode::iter()
-                .take(Rv64LoadStoreOpcode::STOREB as usize + 1)
+                .take(Rv64LoadStoreOpcode::STORED as usize)
                 .map(|opcode| opcode.global_opcode()),
             is_rv64_memory_instruction,
+            assemble_loadstore::<F, RA>,
+        );
+        // Stores (STORED..=STOREB) additionally write the public-values
+        // address space (REVEAL). One stored predicate gates both routing and
+        // assembly, mirroring the interpreter LoadStoreExecutor domain.
+        registry.register_if(
+            [
+                Rv64LoadStoreOpcode::STORED,
+                Rv64LoadStoreOpcode::STOREW,
+                Rv64LoadStoreOpcode::STOREH,
+                Rv64LoadStoreOpcode::STOREB,
+            ]
+            .map(|opcode| opcode.global_opcode()),
+            is_rv64_store_instruction,
             assemble_loadstore::<F, RA>,
         );
         registry.register_if(
@@ -474,6 +491,11 @@ where
 
 fn is_rv64_memory_instruction<F: PrimeField32>(instruction: &Instruction<F>) -> bool {
     instruction.e.as_canonical_u32() == RV64_MEMORY_AS
+}
+
+fn is_rv64_store_instruction<F: PrimeField32>(instruction: &Instruction<F>) -> bool {
+    let mem_as = instruction.e.as_canonical_u32();
+    mem_as == RV64_MEMORY_AS || mem_as == PUBLIC_VALUES_AS
 }
 
 fn assemble_add_sub<F: PrimeField32, RA: Rv64IRecordArena<F>>(
@@ -873,11 +895,15 @@ fn assemble_loadstore<F: PrimeField32, RA: Rv64IRecordArena<F>>(
         };
         (read_data, prev_data)
     } else {
-        adapter_record.mem_as = instruction.e.as_canonical_u32() as u8;
+        // Stores write the instruction's actual address space: main memory or
+        // the public-values address space for REVEAL, exactly as the
+        // interpreter LoadStoreAdapterExecutor does.
+        let mem_as = instruction.e.as_canonical_u32();
+        adapter_record.mem_as = mem_as as u8;
         adapter_record.rd_rs2_ptr = instruction.a.as_canonical_u32();
         let read_aux = access.expect_reg_read(timestamp + 1, adapter_record.rd_rs2_ptr, pc)?;
         adapter_record.read_data_aux.prev_timestamp = read_aux.prev_timestamp;
-        let write_aux = access.expect_memory_write(timestamp + 2, aligned_ptr, pc)?;
+        let write_aux = access.expect_memory_write(timestamp + 2, mem_as, aligned_ptr, pc)?;
         adapter_record.write_prev_timestamp = write_aux.prev_timestamp;
         (read_bytes(read_aux.entry.value), prev_bytes(write_aux))
     };
@@ -1026,7 +1052,8 @@ fn assemble_hintstore<F: PrimeField32, RA: Rv64IoRecordArena<F>>(
     for (idx, var) in record.var.iter_mut().enumerate() {
         let write_timestamp = timestamp + 2 + idx as u32 * 3;
         let write_addr = mem_ptr + idx as u32 * RV64_REGISTER_NUM_LIMBS as u32;
-        let write_aux = access.expect_memory_write(write_timestamp, write_addr, pc)?;
+        let write_aux =
+            access.expect_memory_write(write_timestamp, RV64_MEMORY_AS, write_addr, pc)?;
         var.data = read_bytes(write_aux.entry.value);
         var.data_write_aux = MemoryWriteBytesAuxRecord {
             prev_timestamp: write_aux.prev_timestamp,

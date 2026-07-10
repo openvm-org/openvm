@@ -74,6 +74,10 @@ static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
     RvState* restrict state, uint64_t base_addr, uint32_t num_dwords,
     uint32_t addr_space) {}
 
+static __attribute__((always_inline)) inline void trace_wr_as_u64(
+    RvState* restrict state, uint64_t addr, uint64_t new_val,
+    uint32_t addr_space) {}
+
 static __attribute__((always_inline)) inline void trace_pc(
     RvState* restrict state, uint64_t pc) {}
 

@@ -41,6 +41,11 @@ pub trait ExtEmitCtx {
     /// Emit a dword-range memory-page trace (rv64: each unit is 8 bytes).
     fn trace_mem_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32);
 
+    /// Emit a value-carrying full-word (rv64: 8-byte, block-aligned) write
+    /// trace to an arbitrary address space. Preflight logs a WRITE entry with
+    /// the written value; metered records the page; pure is a no-op.
+    fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32);
+
     /// Emit a timestamp-only trace tick.
     fn trace_timestamp(&mut self);
 }

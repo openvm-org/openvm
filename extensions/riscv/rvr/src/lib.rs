@@ -97,14 +97,17 @@ impl ExtInstr for RevealInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let src = ctx.read_reg(self.src_reg);
+        // Interpreter (LoadStore chip) access order for a store: rs1 (ptr)
+        // register read, then rs2 (src) register read, then the traced
+        // public-values write carrying the stored value.
         let ptr = ctx.read_reg(self.ptr_reg);
+        let src = ctx.read_reg(self.src_reg);
         let addr = if self.offset == 0 {
             ptr.clone()
         } else {
             format!("({ptr} + 0x{:08x}u)", self.offset)
         };
-        ctx.trace_mem_access(&addr, AS_PUBLIC_VALUES);
+        ctx.trace_wr_as_u64(&addr, &src, AS_PUBLIC_VALUES);
         let offset = format!("0x{:08x}u", self.offset);
         ctx.extern_call("openvm_reveal", &[&src, &ptr, &offset]);
     }
@@ -510,6 +513,7 @@ mod tests {
 
     impl ExtEmitCtx for TestEmitCtx {
         fn read_reg(&mut self, idx: u8) -> String {
+            self.lines.push(format!("trace_reg_read(state, {idx});"));
             format!("r{idx}")
         }
 
@@ -566,13 +570,19 @@ mod tests {
             ));
         }
 
+        fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32) {
+            self.write_line(&format!(
+                "trace_wr_as_u64(state, {addr}, {val}, {addr_space}u);"
+            ));
+        }
+
         fn trace_timestamp(&mut self) {
             self.write_line("trace_timestamp(state);");
         }
     }
 
     #[test]
-    fn reveal_traces_the_offset_public_values_address() {
+    fn reveal_traces_interpreter_order_and_writes_public_values_address() {
         let mut ctx = TestEmitCtx::default();
         RevealInstr {
             src_reg: 5,
@@ -581,11 +591,15 @@ mod tests {
         }
         .emit_c(&mut ctx);
 
+        // Interpreter store parity: rs1 (ptr) tick, rs2 (src) tick, then the
+        // value-carrying public-values write.
+        assert_eq!(ctx.lines[0], "trace_reg_read(state, 10);");
+        assert_eq!(ctx.lines[1], "trace_reg_read(state, 5);");
         assert_eq!(
-            ctx.lines[0],
-            format!("trace_mem_access(state, (r10 + 0x0000000cu), {AS_PUBLIC_VALUES}u);")
+            ctx.lines[2],
+            format!("trace_wr_as_u64(state, (r10 + 0x0000000cu), r5, {AS_PUBLIC_VALUES}u);")
         );
-        assert_eq!(ctx.lines[1], "openvm_reveal(r5, r10, 0x0000000cu);");
+        assert_eq!(ctx.lines[3], "openvm_reveal(r5, r10, 0x0000000cu);");
     }
 
     #[test]
