@@ -178,6 +178,30 @@ impl MemoryInventoryGPU {
                 raw_mem.len(),
                 runs.len()
             );
+            // The CPU backend clones the full host image, while this sparse transfer zero-fills
+            // every unmarked page on device. A nonzero byte outside the touched runs therefore
+            // means some writer mutated this address space without marking the page (see
+            // `AddressMap::extend_touched_pages_from_touched`), and the two backends would
+            // silently diverge — surfacing later as an unattributable memory-bus LogUp
+            // imbalance. The scan is O(address-space bytes) on host, so it is enabled only in
+            // debug builds and `stark-debug` (the feature used by GPU debug gate runs).
+            #[cfg(any(debug_assertions, feature = "stark-debug"))]
+            {
+                let mut cursor = 0usize;
+                let sentinel = (raw_mem.len(), raw_mem.len());
+                for &(start, end) in runs.iter().chain(std::iter::once(&sentinel)) {
+                    if let Some(pos) = raw_mem[cursor..start].iter().position(|&b| b != 0) {
+                        let offset = cursor + pos;
+                        panic!(
+                            "address space {addr_sp}: nonzero byte at offset {offset} (page {}) \
+                             is outside touched_pages; the sparse H2D transfer would zero it on \
+                             device while the CPU backend keeps it",
+                            offset / crate::system::memory::online::PAGE_SIZE,
+                        );
+                    }
+                    cursor = end;
+                }
+            }
             self.initial_memory.push(Arc::new(if raw_mem.is_empty() {
                 DeviceBuffer::new()
             } else {
