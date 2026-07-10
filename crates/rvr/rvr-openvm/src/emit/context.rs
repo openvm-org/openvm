@@ -202,8 +202,11 @@ impl EmitContext {
 
         if self.mode.traces_register_values() {
             debug_assert!(self.hot_regs.is_empty());
-            self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
+            // Trace before the store so the preflight tracer reads the previous
+            // register value (for `prev_value`) from `state->regs`; the new
+            // value is passed explicitly.
             self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
+            self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
         } else {
             self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
             if self.hot_regs.contains(&idx) {
