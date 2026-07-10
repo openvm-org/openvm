@@ -4,8 +4,10 @@ description = "OpenVM circuit extension for uint256 and int256"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 repository.workspace = true
+license.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }
@@ -31,8 +33,8 @@ cfg-if.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
-openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
+openvm-circuit = { path = "../../../crates/vm", default-features = false, features = ["test-utils"] }
+openvm-rv32-adapters = { path = "../../rv32-adapters", default-features = false, features = ["test-utils"] }
 test-case.workspace = true
 alloy-primitives = { version = "1.2.1" }
 

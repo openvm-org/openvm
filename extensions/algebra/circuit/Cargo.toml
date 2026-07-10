@@ -4,8 +4,10 @@ description = "OpenVM circuit extension for algebra (modular arithmetic)"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 repository.workspace = true
+license.workspace = true
 
 [dependencies]
 openvm-circuit-primitives = { workspace = true }
@@ -39,10 +41,10 @@ halo2curves-axiom = { workspace = true }
 blstrs = { workspace = true, features = ["__private_bench"] }
 
 [dev-dependencies]
-openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
-openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
-openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
+openvm-mod-circuit-builder = { path = "../../../crates/circuits/mod-builder", default-features = false, features = ["test-utils"] }
+openvm-circuit = { path = "../../../crates/vm", default-features = false, features = ["test-utils"] }
+openvm-rv32-adapters = { path = "../../rv32-adapters", default-features = false, features = ["test-utils"] }
+openvm-pairing-guest = { path = "../../pairing/guest", default-features = false, features = ["halo2curves"] }
 test-case = { workspace = true }
 
 [features]

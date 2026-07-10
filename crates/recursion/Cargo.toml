@@ -1,9 +1,13 @@
 [package]
 name = "openvm-recursion-circuit"
+description = "OpenVM STARK recursion (sub-)circuit"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVM STARK recursion (sub-)circuit"
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 p3-maybe-rayon.workspace = true

@@ -4,6 +4,7 @@ description = "Modular arithmetic framework for building OpenVM circuits."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
@@ -25,10 +26,10 @@ tracing.workspace = true
 itertools.workspace = true
 
 [dev-dependencies]
-openvm-circuit-primitives = { workspace = true }
-openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
+openvm-circuit-primitives = { path = "../primitives", default-features = false }
+openvm-pairing-guest = { path = "../../../extensions/pairing/guest", default-features = false, features = ["halo2curves"] }
 halo2curves-axiom = { workspace = true }
-openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-circuit = { path = "../../vm", default-features = false, features = ["test-utils"] }
 rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
 [features]

@@ -1,9 +1,13 @@
 [package]
 name = "openvm-sha2-circuit"
+description = "OpenVM circuit extension for SHA-2"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "OpenVM circuit extension for SHA-2"
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }
@@ -33,7 +37,7 @@ itertools = { workspace = true }
 [dev-dependencies]
 hex = { workspace = true }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
-openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-circuit = { path = "../../../crates/vm", default-features = false, features = ["test-utils"] }
 
 [build-dependencies]
 openvm-cuda-builder = { workspace = true, optional = true }

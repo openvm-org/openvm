@@ -2,9 +2,9 @@
 name = "openvm-ff-derive"
 description = "OpenVM fork of ff_derive for finite field arithmetic"
 version.workspace = true
+authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-authors.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
@@ -28,14 +28,14 @@ quote = "1"
 syn = { version = "1", features = ["full"] }
 
 [dev-dependencies]
-openvm-instructions = { workspace = true }
+openvm-instructions = { path = "../../crates/toolchain/instructions", default-features = false }
 openvm-stark-sdk = { workspace = true }
-openvm-circuit = { workspace = true, features = ["test-utils", "parallel"]}
-openvm-transpiler = { workspace = true }
-openvm-algebra-transpiler = { workspace = true }
-openvm-algebra-circuit = { workspace = true }
-openvm-rv32im-transpiler = { workspace = true }
-openvm-toolchain-tests = { workspace = true }
+openvm-circuit = { path = "../../crates/vm", default-features = false, features = ["test-utils", "parallel"] }
+openvm-transpiler = { path = "../../crates/toolchain/transpiler", default-features = false }
+openvm-algebra-transpiler = { path = "../../extensions/algebra/transpiler", default-features = false }
+openvm-algebra-circuit = { path = "../../extensions/algebra/circuit", default-features = false }
+openvm-rv32im-transpiler = { path = "../../extensions/rv32im/transpiler", default-features = false }
+openvm-toolchain-tests = { path = "../../crates/toolchain/tests", default-features = false }
 
 eyre = { workspace = true }
 num-bigint = { workspace = true }

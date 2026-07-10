@@ -1,9 +1,13 @@
 [package]
 name = "openvm-continuations"
+description = "Continuation AIRs and utilities"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Continuation AIRs and utilities"
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 p3-air = { workspace = true }
@@ -34,11 +38,11 @@ openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 
 [dev-dependencies]
-openvm-rv32im-circuit = { workspace = true, features = ["test-utils"] }
-openvm-rv32im-transpiler = { workspace = true }
-openvm-deferral-circuit = { workspace = true }
-openvm-deferral-transpiler = { workspace = true }
-openvm-transpiler = { workspace = true }
+openvm-rv32im-circuit = { path = "../../extensions/rv32im/circuit", default-features = false, features = ["test-utils"] }
+openvm-rv32im-transpiler = { path = "../../extensions/rv32im/transpiler", default-features = false }
+openvm-deferral-circuit = { path = "../../extensions/deferral/circuit", default-features = false }
+openvm-deferral-transpiler = { path = "../../extensions/deferral/transpiler", default-features = false }
+openvm-transpiler = { path = "../toolchain/transpiler", default-features = false }
 test-case = { workspace = true }
 
 [features]

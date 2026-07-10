@@ -3,8 +3,10 @@ name = "openvm-deferral-guest"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 repository.workspace = true
+license.workspace = true
 
 [dependencies]
 openvm-custom-insn = { workspace = true }

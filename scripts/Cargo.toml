@@ -1,5 +1,6 @@
 [package]
 name = "openvm-scripts"
+publish = false
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -41,4 +42,3 @@ required-features = ["cuda"]
 [[bin]]
 name = "generate-param-sweep"
 path = "bin/generate_param_sweep.rs"
-

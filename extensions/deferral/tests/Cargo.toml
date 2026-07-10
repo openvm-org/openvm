@@ -1,6 +1,7 @@
 [package]
 name = "openvm-deferral-integration-tests"
 description = "Integration tests for the OpenVM deferral extension"
+publish = false
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

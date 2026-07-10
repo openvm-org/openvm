@@ -1,6 +1,7 @@
 [package]
 name = "openvm-toolchain-tests"
 description = "Tests for the OpenVM toolchain starting from Rust"
+publish = false
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -16,15 +17,15 @@ eyre.workspace = true
 [dev-dependencies]
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
-openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-algebra-transpiler.workspace = true
-openvm-bigint-circuit.workspace = true
-openvm-rv32im-circuit.workspace = true
-openvm-rv32im-transpiler.workspace = true
-openvm-algebra-circuit.workspace = true
-openvm-ecc-circuit = { workspace = true }
-openvm-instructions = { workspace = true }
-openvm-platform = { workspace = true }
+openvm-circuit = { path = "../../vm", default-features = false, features = ["test-utils"] }
+openvm-algebra-transpiler = { path = "../../../extensions/algebra/transpiler", default-features = false }
+openvm-bigint-circuit = { path = "../../../extensions/bigint/circuit", default-features = false }
+openvm-rv32im-circuit = { path = "../../../extensions/rv32im/circuit", default-features = false }
+openvm-rv32im-transpiler = { path = "../../../extensions/rv32im/transpiler", default-features = false }
+openvm-algebra-circuit = { path = "../../../extensions/algebra/circuit", default-features = false }
+openvm-ecc-circuit = { path = "../../../extensions/ecc/circuit", default-features = false }
+openvm-instructions = { path = "../instructions", default-features = false }
+openvm-platform = { path = "../platform", default-features = false }
 test-case.workspace = true
 rand = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }

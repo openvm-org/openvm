@@ -1,6 +1,7 @@
 [package]
 name = "openvm-algebra-tests"
 description = "Integration tests for the OpenVM algebra extension"
+publish = false
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

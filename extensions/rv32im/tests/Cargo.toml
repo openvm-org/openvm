@@ -1,6 +1,7 @@
 [package]
 name = "openvm-rv32im-integration-tests"
 description = "Integration tests for the OpenVM rv32im extension"
+publish = false
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

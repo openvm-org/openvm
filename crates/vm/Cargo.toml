@@ -4,8 +4,10 @@ description = "OpenVM circuits"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 repository.workspace = true
+license.workspace = true
 
 [dependencies]
 p3-baby-bear = { workspace = true }
@@ -57,7 +59,7 @@ test-case.workspace = true
 
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
-openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-circuit = { path = ".", default-features = false, features = ["test-utils"] }
 
 [features]
 default = ["parallel", "jemalloc"]
