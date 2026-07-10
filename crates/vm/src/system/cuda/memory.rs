@@ -19,8 +19,8 @@ use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     p3_maybe_rayon::prelude::{
-        IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator, ParallelSlice,
-        ParallelSliceMut,
+        IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+        ParallelSlice, ParallelSliceMut,
     },
     prover::AirProvingContext,
 };
@@ -347,10 +347,25 @@ impl MemoryInventoryGPU {
                 .expect("merge_records failed");
             }
 
-            // Host work overlapping the merge kernels: the unpadded height
-            // scan needs only the partition, and the Poseidon2 records buffer
-            // can be sized by the input count (an upper bound on the merged
-            // count), so neither needs to wait for the merge to finish.
+            // The merged record count is a pure function of input adjacency
+            // (the device merge flags a record iff its (address_space,
+            // ptr / OUT_BLOCK) differs from its predecessor's, and the
+            // partition is sorted), so it can be computed here and the
+            // mid-merge D2H sync dropped entirely.
+            const OUT_BLOCK_CELLS: u32 = 8;
+            let out_num_records = 1
+                + (1..in_num_records)
+                    .into_par_iter()
+                    .filter(|&i| {
+                        let (a, p) = partition[i].0;
+                        let (pa, pp) = partition[i - 1].0;
+                        (a, p / OUT_BLOCK_CELLS) != (pa, pp / OUT_BLOCK_CELLS)
+                    })
+                    .count();
+
+            // Host work overlapping the merge kernels: neither the unpadded
+            // height scan nor the Poseidon2 records buffer depends on the
+            // merge kernels.
             let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
             #[cfg(feature = "metrics")]
             {
@@ -358,11 +373,18 @@ impl MemoryInventoryGPU {
             }
             {
                 let _span = tracing::info_span!("poseidon2_prepare").entered();
-                self.prepare_poseidon2_records(in_num_records, unpadded_merkle_height);
+                self.prepare_poseidon2_records(out_num_records, unpadded_merkle_height);
+            }
+
+            // Cross-check the host-computed count against the device merge in
+            // debug builds (a mismatch would corrupt the boundary trace).
+            #[cfg(debug_assertions)]
+            {
+                let device_count = d_out_num_records.to_host_on(&self.device_ctx).unwrap()[0];
+                assert_eq!(device_count, out_num_records, "merged-count mismatch");
             }
 
             // Send records to boundary chip
-            let out_num_records = d_out_num_records.to_host_on(&self.device_ctx).unwrap()[0];
             self.boundary
                 .finalize_records_device::<VM_DIGEST_WIDTH>(d_out_records, out_num_records);
 
