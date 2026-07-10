@@ -328,6 +328,21 @@ mod tests {
     }
 
     #[test]
+    fn test_memcpy() -> Result<()> {
+        let config = test_rv32im_config();
+        let elf = build_example_program_at_path(get_programs_dir!(), "memcpy", &config)?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )?;
+        air_test(Rv32ImBuilder, config, exe);
+        Ok(())
+    }
+
+    #[test]
     fn test_tiny_mem_test() -> Result<()> {
         let config = test_rv32im_config();
         let elf = build_example_program_at_path_with_features(
