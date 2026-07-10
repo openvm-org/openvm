@@ -349,6 +349,18 @@ impl CProject {
         out.push_str("    }\n");
     }
 
+    /// R3: whether the preflight codegen emits inline compact records for
+    /// migrated opcodes (base-ALU ADD/SUB), writing them into the chip's record
+    /// buffer instead of relying solely on the host-side log transcode. Gated by
+    /// the `OPENVM_RVR_INLINE_RECORDS` env var (prototype gating; to be replaced
+    /// by a `CompileOptions` field) and only active in preflight mode, where
+    /// `pc_to_chip` is set.
+    fn inline_records_enabled(&self) -> bool {
+        self.tracer_mode == TracerMode::Preflight
+            && self.pc_to_chip.is_some()
+            && std::env::var_os("OPENVM_RVR_INLINE_RECORDS").is_some()
+    }
+
     /// Look up the chip index for a given PC. Must only be called in metered
     /// modes; panics if `pc_to_chip` is unset.
     fn chip_idx_for_pc(&self, pc: u64) -> TraceChipIndex {
@@ -634,6 +646,8 @@ impl CProject {
 
         // Body instructions (each in its own scope to avoid variable collisions).
         let mut ctx = EmitContext::new(self.hot_regs.clone(), mode);
+        let inline_records = self.inline_records_enabled();
+        ctx.set_inline_records(inline_records);
 
         writeln!(out, "    uint8_t* memory = state->memory;").unwrap();
 
@@ -660,6 +674,13 @@ impl CProject {
                 instr_at.instr.opname(),
                 instr_at.source_loc.as_ref(),
             );
+            if inline_records {
+                let chip_idx = match self.chip_idx_for_pc(instr_at.pc) {
+                    TraceChipIndex::Chip(air) => air.as_u32(),
+                    TraceChipIndex::NoChip => u32::MAX,
+                };
+                ctx.set_current_instr(chip_idx, instr_at.pc);
+            }
             ctx.trace_pc(instr_at.pc);
             instr_at.instr.emit_c(&mut ctx);
             Self::emit_context_scope(out, &mut ctx);

@@ -23,15 +23,23 @@ impl InstrCodegen for Instr {
 pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
     match instr {
         Instr::AluReg { op, rd, rs1, rs2 } => {
-            let l = ctx.read_reg(*rs1);
-            let r = ctx.read_reg(*rs2);
-            ctx.write_reg(*rd, &alu_expr(*op, &l, &r));
+            if ctx.inline_records_enabled() && matches!(op, AluOp::Add | AluOp::Sub) {
+                ctx.emit_addsub_reg(*op == AluOp::Sub, *rd, *rs1, *rs2);
+            } else {
+                let l = ctx.read_reg(*rs1);
+                let r = ctx.read_reg(*rs2);
+                ctx.write_reg(*rd, &alu_expr(*op, &l, &r));
+            }
         }
         Instr::AluImm { op, rd, rs1, imm } => {
-            let l = ctx.read_reg(*rs1);
-            ctx.trace_immediate();
-            let r = imm_literal(*imm);
-            ctx.write_reg(*rd, &alu_expr(*op, &l, &r));
+            if ctx.inline_records_enabled() && matches!(op, AluOp::Add | AluOp::Sub) {
+                ctx.emit_addsub_imm(*op == AluOp::Sub, *rd, *rs1, *imm);
+            } else {
+                let l = ctx.read_reg(*rs1);
+                ctx.trace_immediate();
+                let r = imm_literal(*imm);
+                ctx.write_reg(*rd, &alu_expr(*op, &l, &r));
+            }
         }
         Instr::ShiftImm { op, rd, rs1, shamt } => {
             let v = ctx.read_reg(*rs1);
