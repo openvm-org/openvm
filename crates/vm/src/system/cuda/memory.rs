@@ -18,9 +18,15 @@ use openvm_cuda_common::{
 use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
-    p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
+    p3_maybe_rayon::prelude::{
+        IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator, ParallelSlice,
+        ParallelSliceMut,
+    },
     prover::AirProvingContext,
 };
+
+/// Chunk size for the parallel pack into the upload staging buffer.
+const UPLOAD_PACK_CHUNK: usize = 8 << 20;
 use tracing::instrument;
 
 use super::{
@@ -45,8 +51,53 @@ pub struct MemoryInventoryGPU {
     pub hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
     pub initial_memory: Vec<Arc<DeviceBuffer<u8>>>,
     pub merkle_records: Option<DeviceBuffer<u32>>,
+    upload_staging: PinnedStaging,
     #[cfg(feature = "metrics")]
     pub(super) unpadded_merkle_height: usize,
+}
+
+/// Page-locked host staging for the per-segment memory-image upload.
+///
+/// Copies from pageable memory run at staging-pipeline speed and only return
+/// once the source is consumed; copies from registered memory take the DMA
+/// fast path (~2x) and return immediately. Registering the guest memory
+/// itself would tie a registration to an allocation this module does not own
+/// (freed-while-registered is undefined), so the image is packed into this
+/// owned, once-registered buffer instead: the pack memcpy is parallel and
+/// fully consumes the guest memory before returning, so preflight may mutate
+/// it right away, while the DMA reads the staging asynchronously.
+#[derive(Default)]
+struct PinnedStaging {
+    buf: Vec<u8>,
+    registered: bool,
+}
+
+impl PinnedStaging {
+    /// Returns a staging slice of exactly `len` bytes, growing and
+    /// re-registering the underlying buffer if needed.
+    fn ensure(&mut self, len: usize) -> &mut [u8] {
+        if self.buf.len() < len {
+            if self.registered {
+                crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr());
+                self.registered = false;
+            }
+            self.buf = vec![0u8; len];
+            self.registered =
+                crate::arch::cuda::pinned::register_region(self.buf.as_mut_ptr(), len);
+            if !self.registered {
+                tracing::debug!("memory-image staging stays pageable ({len} bytes)");
+            }
+        }
+        &mut self.buf[..len]
+    }
+}
+
+impl Drop for PinnedStaging {
+    fn drop(&mut self) {
+        if self.registered {
+            crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr());
+        }
+    }
 }
 
 #[repr(C)]
@@ -85,6 +136,7 @@ impl MemoryInventoryGPU {
             hasher_chip,
             initial_memory: Vec::new(),
             merkle_records: None,
+            upload_staging: PinnedStaging::default(),
             #[cfg(feature = "metrics")]
             unpadded_merkle_height: 0,
         }
@@ -93,16 +145,26 @@ impl MemoryInventoryGPU {
     #[instrument(name = "set_initial_memory", skip_all)]
     pub fn set_initial_memory(&mut self, initial_memory: &AddressMap) {
         let mem = MemTracker::start("set initial memory");
-        for (addr_sp, raw_mem) in initial_memory
+        // Only transfer pages that may contain non-zero data; the rest are zero-filled
+        // on-device. The merkle kernel reads the full address-space region, so the device
+        // buffer is full-size and the skipped pages must read as zero.
+        let per_as: Vec<_> = initial_memory
             .get_memory()
             .iter()
-            .map(|mem| mem.as_slice())
             .enumerate()
-        {
-            // Only transfer pages that may contain non-zero data; the rest are zero-filled
-            // on-device. The merkle kernel reads the full address-space region, so the device
-            // buffer is full-size and the skipped pages must read as zero.
-            let runs = initial_memory.touched_pages[addr_sp].touched_byte_ranges(raw_mem.len());
+            .map(|(addr_sp, mem)| {
+                let raw = mem.as_slice();
+                let runs = initial_memory.touched_pages[addr_sp].touched_byte_ranges(raw.len());
+                (raw, runs)
+            })
+            .collect();
+        let total: usize = per_as
+            .iter()
+            .flat_map(|(_, runs)| runs.iter().map(|(s, e)| e - s))
+            .sum();
+        let staging = self.upload_staging.ensure(total);
+        let mut offset = 0usize;
+        for (addr_sp, (raw_mem, runs)) in per_as.into_iter().enumerate() {
             tracing::debug!(
                 "Setting initial memory for address space {}: {} bytes, {} touched run(s)",
                 addr_sp,
@@ -113,17 +175,20 @@ impl MemoryInventoryGPU {
                 DeviceBuffer::new()
             } else {
                 let buf = DeviceBuffer::<u8>::with_capacity_on(raw_mem.len(), &self.device_ctx);
-                // Device-bandwidth memset (cheap) so all un-copied pages read as zero.
                 buf.fill_zero_on(&self.device_ctx)
                     .expect("failed to zero device memory");
                 for (start, end) in runs {
-                    // SAFETY: `touched_byte_ranges` clamps ranges to `raw_mem.len()`, and `buf` has
-                    // the same length, so both the host slice and the device
-                    // offset stay in bounds.
+                    let dst = &mut staging[offset..offset + (end - start)];
+                    offset += end - start;
+                    dst.par_chunks_mut(UPLOAD_PACK_CHUNK)
+                        .zip(raw_mem[start..end].par_chunks(UPLOAD_PACK_CHUNK))
+                        .for_each(|(d, s)| d.copy_from_slice(s));
+                    // SAFETY: runs are clamped to raw_mem.len() and buf has the same
+                    // length; dst is exactly end-start bytes of the staging.
                     unsafe {
                         cuda_memcpy_on::<false, true>(
                             buf.as_mut_ptr().add(start) as *mut std::ffi::c_void,
-                            raw_mem[start..end].as_ptr() as *const std::ffi::c_void,
+                            dst.as_ptr() as *const std::ffi::c_void,
                             end - start,
                             &self.device_ctx,
                         )

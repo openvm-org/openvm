@@ -38,7 +38,7 @@ type ReturnedBuffer = (Vec<u8>, usize);
 /// (cudaErrorInvalidValue) source ranges that span multiple distinct
 /// page-locked registrations, so chunked registration corrupts nothing but
 /// breaks every copy crossing a chunk boundary.
-fn register_buffer(ptr: *mut u8, len: usize) -> bool {
+pub(crate) fn register_region(ptr: *mut u8, len: usize) -> bool {
     // SAFETY: [ptr, ptr+len) is a live allocation owned by the caller.
     let rc = unsafe { cudaHostRegister(ptr as *mut c_void, len, 0) };
     if rc != 0 {
@@ -52,6 +52,13 @@ extern "C" {
     fn cudaHostRegister(ptr: *mut c_void, size: usize, flags: u32) -> i32;
     fn cudaHostUnregister(ptr: *mut c_void) -> i32;
     fn cudaDeviceSynchronize() -> i32;
+}
+
+/// Reverses a successful [`register_region`]. The caller must ensure no copy
+/// from the region is still in flight.
+pub(crate) fn unregister_region(ptr: *mut u8) {
+    // SAFETY: mirrors a successful registration of the same base pointer.
+    unsafe { cudaHostUnregister(ptr as *mut c_void) };
 }
 
 /// Registered, all-zero buffers ready for reuse, keyed by allocation size.
@@ -113,7 +120,7 @@ fn cleaner() -> &'static Mutex<mpsc::Sender<ReturnedBuffer>> {
                         let ptr = buffer.as_mut_ptr();
                         let is_new = !registered().lock().unwrap().contains(&(ptr as usize));
                         if is_new {
-                            if !register_buffer(ptr, buffer.len()) {
+                            if !register_region(ptr, buffer.len()) {
                                 // Out of pinnable memory: drop the buffer,
                                 // never pool it.
                                 continue;
