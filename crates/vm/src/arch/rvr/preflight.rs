@@ -235,7 +235,6 @@ where
         num_insns: Option<u64>,
     ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
         execute_rvr_preflight(
-            self.system_config,
             &self.exe,
             &self.runtime_hooks,
             &self.compiled,
@@ -246,8 +245,7 @@ where
     }
 }
 
-fn execute_rvr_preflight<F>(
-    _system_config: &SystemConfig,
+pub(crate) fn execute_rvr_preflight<F>(
     exe: &VmExe<F>,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     compiled: &RvrCompiled,
