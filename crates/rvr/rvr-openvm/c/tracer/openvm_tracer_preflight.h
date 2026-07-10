@@ -185,29 +185,19 @@ _Static_assert(offsetof(ChipRecordBuf, len) == 8,
 _Static_assert(offsetof(ChipRecordBuf, cap) == 12,
                "ChipRecordBuf cap offset drift");
 
-/* R3: compact base-ALU AddSub record, laid out exactly as `DenseRecordArena`
- * concatenates the adapter (`Rv64BaseAluU16AdapterRecord`, 44 B) and core
- * (`AddSubCoreRecord<4>`, 18 B) records: adapter at [0,44), core at [44,62),
- * padded to 64. Field names/offsets mirror the Rust records; the riscv circuit
- * asserts the Rust side matches (its rvr record-ABI guard). */
+/* R3 (L1+L5 compact): base-ALU AddSub record holding the dynamic witness
+ * only. Program-redundant operands (rd_ptr/rs1_ptr/rs2/rs2_as/rs2_imm_sign/
+ * local_opcode) are re-derived from the instruction at `from_pc` during host
+ * record assembly, and the layout has no padding. Field names/offsets mirror
+ * the riscv circuit's compact-record mirror (its rvr record-ABI guard). */
 typedef struct PreflightAddSubRecord {
-  /* adapter Rv64BaseAluU16AdapterRecord */
-  uint32_t from_pc;                    /* 0  */
-  uint32_t from_timestamp;             /* 4  */
-  uint32_t rd_ptr;                     /* 8  */
-  uint32_t rs1_ptr;                    /* 12 */
-  uint32_t rs2;                        /* 16 */
-  uint8_t rs2_as;                      /* 20 */
-  uint8_t rs2_imm_sign;                /* 21 */
-  uint8_t _pad0[2];                    /* 22 */
-  uint32_t reads_aux[2];               /* 24: [prev_timestamp; 2] */
-  uint32_t writes_aux_prev_timestamp;  /* 32 */
-  uint16_t writes_aux_prev_data[4];    /* 36 */
-  /* core AddSubCoreRecord<4> at 44 */
-  uint16_t b[4];                       /* 44 */
-  uint16_t c[4];                       /* 52 */
-  uint8_t local_opcode;                /* 60 */
-  uint8_t _pad1[3];                    /* 61 */
+  uint32_t from_pc;                   /* 0  */
+  uint32_t from_timestamp;            /* 4  */
+  uint32_t reads_aux[2];              /* 8: [prev_timestamp; 2] */
+  uint32_t writes_aux_prev_timestamp; /* 16 */
+  uint16_t writes_aux_prev_data[4];   /* 20 */
+  uint16_t b[4];                      /* 28 */
+  uint16_t c[4];                      /* 36 */
 } PreflightAddSubRecord;
 
 _Static_assert(sizeof(PreflightAddSubRecord) == PREFLIGHT_ADDSUB_RECORD_SIZE,
@@ -218,28 +208,16 @@ _Static_assert(offsetof(PreflightAddSubRecord, from_pc) == 0,
                "PreflightAddSubRecord from_pc offset drift");
 _Static_assert(offsetof(PreflightAddSubRecord, from_timestamp) == 4,
                "PreflightAddSubRecord from_timestamp offset drift");
-_Static_assert(offsetof(PreflightAddSubRecord, rd_ptr) == 8,
-               "PreflightAddSubRecord rd_ptr offset drift");
-_Static_assert(offsetof(PreflightAddSubRecord, rs1_ptr) == 12,
-               "PreflightAddSubRecord rs1_ptr offset drift");
-_Static_assert(offsetof(PreflightAddSubRecord, rs2) == 16,
-               "PreflightAddSubRecord rs2 offset drift");
-_Static_assert(offsetof(PreflightAddSubRecord, rs2_as) == 20,
-               "PreflightAddSubRecord rs2_as offset drift");
-_Static_assert(offsetof(PreflightAddSubRecord, rs2_imm_sign) == 21,
-               "PreflightAddSubRecord rs2_imm_sign offset drift");
-_Static_assert(offsetof(PreflightAddSubRecord, reads_aux) == 24,
+_Static_assert(offsetof(PreflightAddSubRecord, reads_aux) == 8,
                "PreflightAddSubRecord reads_aux offset drift");
-_Static_assert(offsetof(PreflightAddSubRecord, writes_aux_prev_timestamp) == 32,
+_Static_assert(offsetof(PreflightAddSubRecord, writes_aux_prev_timestamp) == 16,
                "PreflightAddSubRecord writes_aux_prev_timestamp offset drift");
-_Static_assert(offsetof(PreflightAddSubRecord, writes_aux_prev_data) == 36,
+_Static_assert(offsetof(PreflightAddSubRecord, writes_aux_prev_data) == 20,
                "PreflightAddSubRecord writes_aux_prev_data offset drift");
-_Static_assert(offsetof(PreflightAddSubRecord, b) == 44,
+_Static_assert(offsetof(PreflightAddSubRecord, b) == 28,
                "PreflightAddSubRecord b offset drift");
-_Static_assert(offsetof(PreflightAddSubRecord, c) == 52,
+_Static_assert(offsetof(PreflightAddSubRecord, c) == 36,
                "PreflightAddSubRecord c offset drift");
-_Static_assert(offsetof(PreflightAddSubRecord, local_opcode) == 60,
-               "PreflightAddSubRecord local_opcode offset drift");
 
 /* ── Timestamp shadow ─────────────────────────────────────────────── */
 
@@ -397,20 +375,18 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_touch(
 }
 
 /* R3: emit one compact base-ALU AddSub record into chip `chip_idx`'s inline
- * buffer. Every field is supplied by the caller (which already computes them
- * for execution): the two register operand values (`rs1_val`/`rs2_val`, split
- * into the core `b`/`c` u16 limbs), the three access `prev_timestamp`s from the
- * touches, the old `rd` block value (`writes_aux` prev_data), and the decoded
- * operands. A null buffer array / null buffer / out-of-range chip / full buffer
- * is a no-op: the chip then has a missing inline record, which the host record
- * assembly detects as a byte-count mismatch and rejects loudly rather than
- * silently corrupting. */
+ * buffer: the dynamic witness the caller already holds — the two operand
+ * values (`rs1_val`/`rs2_val`, split into the `b`/`c` u16 limbs), the three
+ * access `prev_timestamp`s from the touches, and the old `rd` block value
+ * (`writes_aux` prev_data). A null buffer array / null buffer / out-of-range
+ * chip / full buffer is a no-op: the chip then has a missing inline record,
+ * which the host record assembly detects as a byte-count mismatch and rejects
+ * loudly rather than silently corrupting. */
 static __attribute__((always_inline)) inline void preflight_emit_addsub(
     RvState* restrict state, uint32_t chip_idx, uint32_t from_pc,
-    uint32_t from_timestamp, uint32_t rd_ptr, uint32_t rs1_ptr, uint32_t rs2,
-    uint8_t rs2_as, uint8_t rs2_imm_sign, uint32_t rs1_prev_ts,
-    uint32_t rs2_prev_ts, uint32_t rd_prev_ts, uint64_t rd_prev_value,
-    uint64_t rs1_val, uint64_t rs2_val, uint8_t local_opcode) {
+    uint32_t from_timestamp, uint32_t rs1_prev_ts, uint32_t rs2_prev_ts,
+    uint32_t rd_prev_ts, uint64_t rd_prev_value, uint64_t rs1_val,
+    uint64_t rs2_val) {
   Tracer* restrict t = state->tracer;
   if (unlikely(t->chip_records == NULL || chip_idx >= t->chip_counts_len)) {
     return;
@@ -428,13 +404,6 @@ static __attribute__((always_inline)) inline void preflight_emit_addsub(
       (PreflightAddSubRecord*)(buf->base + off);
   r->from_pc = from_pc;
   r->from_timestamp = from_timestamp;
-  r->rd_ptr = rd_ptr;
-  r->rs1_ptr = rs1_ptr;
-  r->rs2 = rs2;
-  r->rs2_as = rs2_as;
-  r->rs2_imm_sign = rs2_imm_sign;
-  r->_pad0[0] = 0;
-  r->_pad0[1] = 0;
   r->reads_aux[0] = rs1_prev_ts;
   r->reads_aux[1] = rs2_prev_ts;
   r->writes_aux_prev_timestamp = rd_prev_ts;
@@ -450,10 +419,6 @@ static __attribute__((always_inline)) inline void preflight_emit_addsub(
   r->c[1] = (uint16_t)(rs2_val >> 16);
   r->c[2] = (uint16_t)(rs2_val >> 32);
   r->c[3] = (uint16_t)(rs2_val >> 48);
-  r->local_opcode = local_opcode;
-  r->_pad1[0] = 0;
-  r->_pad1[1] = 0;
-  r->_pad1[2] = 0;
 }
 
 /* ── Trace-only memory reads ─────────────────────────────────────── */
