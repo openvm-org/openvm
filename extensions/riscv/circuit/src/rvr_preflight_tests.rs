@@ -291,6 +291,109 @@ fn alu_vector_exe() -> VmExe<F> {
     ])
 }
 
+/// R3 slice: the inline compact AddSub records the generated preflight C writes
+/// (shadow mode — the verbose memory log is still emitted, so end-to-end
+/// differentials stay byte-identical) must be byte-identical to what the host
+/// `assemble_add_sub` pass produces into a `DenseRecordArena`. This is the tight
+/// ABI oracle for the C record emission.
+#[test]
+fn rvr_preflight_inline_addsub_records_match_assembler() {
+    use openvm_circuit::arch::DenseRecordArena;
+
+    // Opt into inline record emission for this test process's fresh compile
+    // (nextest runs each test in its own process, so the env + compile cache are
+    // isolated). Must be set before the preflight `.so` is compiled below.
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+
+    // AddSub-heavy program: register-register and register-immediate ADD/SUB,
+    // with register reuse (non-trivial prev_timestamps), x0 as a source, and a
+    // negative immediate (sign path). rd is never x0 (that lifts to a nop).
+    let exe = exe(&[
+        addi(1, 0, 5),                      // x1 = 5      (imm, rs1 = x0)
+        addi(2, 0, 100),                    // x2 = 100
+        alu_r(BaseAluOpcode::ADD, 3, 1, 2), // x3 = 105    (reg-reg)
+        alu_r(BaseAluOpcode::SUB, 4, 2, 1), // x4 = 95
+        addi(5, 3, 0x00ff_ffff),            // x5 = x3 + (-1) = 104 (negative imm)
+        alu_r(BaseAluOpcode::ADD, 1, 4, 5), // x1 = 199    (rewrites x1 → prev_ts chain)
+        alu_r(BaseAluOpcode::SUB, 6, 1, 0), // x6 = x1 - x0 (rs2 = x0)
+        terminate(),
+    ]);
+
+    let (mut rvr_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("rvr vm init");
+    let trace_heights = vec![4096u32; rvr_vm.num_airs()];
+    let capacities = trace_heights
+        .iter()
+        .zip(rvr_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+
+    // AddSub air index = the air an ADD/SUB instruction maps to.
+    let addsub_air_idx = exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .find_map(|(i, slot)| {
+            slot.as_ref().and_then(|(insn, _)| {
+                (insn.opcode == BaseAluOpcode::ADD.global_opcode()
+                    || insn.opcode == BaseAluOpcode::SUB.global_opcode())
+                .then(|| pc_to_air_idx[i].expect("ADD/SUB must map to an air"))
+            })
+        })
+        .expect("program must contain an ADD/SUB");
+
+    let rvr_output = {
+        let route = rvr_vm
+            .preflight_routed_instance(&exe)
+            .expect("routed preflight instance");
+        let RvrPreflightRoute::Rvr(instance) = route else {
+            panic!("program must route to RVR preflight");
+        };
+        instance
+            .execute_preflight_inline(Streams::default(), None, &[addsub_air_idx])
+            .expect("rvr preflight execution")
+    };
+
+    // Oracle: run the host assembler into a `DenseRecordArena` over the same log
+    // and take the AddSub air's compact bytes.
+    let oracle_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        DenseRecordArena,
+    >(&exe, &rvr_output, &capacities, &pc_to_air_idx)
+    .expect("assembler record arenas");
+    let oracle_bytes = oracle_arenas[addsub_air_idx].allocated();
+
+    let (_, c_bytes) = rvr_output
+        .chip_record_bufs
+        .iter()
+        .find(|(air, _)| *air == addsub_air_idx)
+        .expect("inline AddSub record buffer must be present");
+
+    assert!(
+        !c_bytes.is_empty(),
+        "C inline AddSub buffer is empty — codegen emitted no records (was \
+         OPENVM_RVR_INLINE_RECORDS honored at compile time?)"
+    );
+    assert_eq!(
+        c_bytes.len(),
+        oracle_bytes.len(),
+        "inline AddSub record byte length mismatch: C={} vs assembler={}",
+        c_bytes.len(),
+        oracle_bytes.len()
+    );
+    assert_eq!(
+        c_bytes.as_slice(),
+        oracle_bytes,
+        "inline AddSub record bytes differ from the assembler oracle"
+    );
+}
+
 fn mul_div_vector_exe() -> VmExe<F> {
     exe(&[
         addi(1, 0, 21),

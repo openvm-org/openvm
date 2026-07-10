@@ -132,6 +132,10 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
             self.chip_counts_len,
             state,
             num_insns,
+            // R3 inline records are opt-in per call (currently exercised only by
+            // the riscv circuit's compact-record differential test); the proving
+            // path takes the verbose-log route until the host wrap lands.
+            &[],
         )
     }
 }
