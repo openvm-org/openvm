@@ -36,13 +36,27 @@ pub const PREFLIGHT_MEMORY_LOG_ENTRY_ALIGN: usize = 8;
 // R1: the tracer gained per-address-space timestamp-shadow pointers, a
 // public-values base pointer (for `prev_value` reads on reveal writes), a
 // touched-block buffer, and its length/capacity counters.
-pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 96;
+// R3: the tracer gained a `chip_records` pointer (appended at the end so no
+// existing field offsets shift) for inline compact per-chip record emission.
+pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 104;
 pub const PREFLIGHT_TRACER_DATA_ALIGN: usize = 8;
 /// One entry in the preflight touched-block buffer: the address space and the
 /// block-aligned byte address of a block touched (for the first time) this
 /// segment. The host finalizes `touched_memory` from this list.
 pub const PREFLIGHT_TOUCHED_BLOCK_SIZE: usize = 8;
 pub const PREFLIGHT_TOUCHED_BLOCK_ALIGN: usize = 4;
+
+// R3: inline compact records. `ChipRecordBuf` is one per-chip record-buffer
+// descriptor (base pointer + byte cursor + byte capacity); the tracer holds an
+// array of `chip_counts_len` of them. A null `base` means the chip is not
+// migrated to inline records (it uses the verbose memory log instead).
+pub const PREFLIGHT_CHIP_RECORD_BUF_SIZE: usize = 16;
+pub const PREFLIGHT_CHIP_RECORD_BUF_ALIGN: usize = 8;
+/// Byte size of one compact base-ALU AddSub record as concatenated by
+/// `DenseRecordArena`: adapter `Rv64BaseAluU16AdapterRecord` (44) + core
+/// `AddSubCoreRecord<4>` (18), aligned to 64. The riscv circuit asserts this
+/// against the actual record layout (see its rvr record-ABI guard).
+pub const PREFLIGHT_ADDSUB_RECORD_SIZE: usize = 64;
 
 const _: () = assert!(MEM_SIZE / WORD_SIZE <= u32::MAX as usize);
 

@@ -108,6 +108,16 @@ pub struct EmitContext<'a> {
     chip_widths: Option<&'a [u64]>,
     num_airs: Option<u32>,
     invalid_chip_index: Option<InvalidChipIndex>,
+    /// R3: whether migrated opcodes (currently base-ALU ADD/SUB) emit compact
+    /// inline records into their chip's record buffer. Only meaningful in the
+    /// preflight (`ValueTrace`) mode.
+    inline_records: bool,
+    /// Chip (AIR) index of the instruction currently being emitted, or
+    /// `u32::MAX` if it maps to no chip. Set per instruction by the block emit
+    /// loop before `emit_c`.
+    current_chip_idx: u32,
+    /// Program counter of the instruction currently being emitted.
+    current_pc: u64,
 }
 
 impl<'a> EmitContext<'a> {
@@ -130,7 +140,27 @@ impl<'a> EmitContext<'a> {
             chip_widths,
             num_airs,
             invalid_chip_index: None,
+            inline_records: false,
+            current_chip_idx: u32::MAX,
+            current_pc: 0,
         }
+    }
+
+    /// R3: enable inline compact-record emission for migrated opcodes.
+    pub(crate) fn set_inline_records(&mut self, enabled: bool) {
+        self.inline_records = enabled;
+    }
+
+    /// Set the chip index and pc of the instruction about to be emitted.
+    pub(crate) fn set_current_instr(&mut self, chip_idx: u32, pc: u64) {
+        self.current_chip_idx = chip_idx;
+        self.current_pc = pc;
+    }
+
+    /// Whether the current instruction should emit an inline compact record
+    /// (R3 enabled and the instruction maps to a chip).
+    pub(crate) fn inline_records_enabled(&self) -> bool {
+        self.inline_records && self.current_chip_idx != u32::MAX
     }
 
     fn next_var(&mut self) -> String {
@@ -313,6 +343,96 @@ impl<'a> EmitContext<'a> {
         if self.mode.traces_register_values() {
             self.write_line("trace_timestamp(state);");
         }
+    }
+
+    /// R3 helper: emit a traced register read and capture the block's
+    /// `prev_timestamp`. Returns the C value expression and the prev-timestamp
+    /// variable name. Mirrors the log side of [`Self::read_reg`] exactly (same
+    /// `reg_read`/`trace_reg_read` calls) so the memory log stays byte-identical;
+    /// preflight has no hot registers, so no ABI-name fast path is needed.
+    fn reg_read_capture(&mut self, idx: u8) -> (String, String) {
+        debug_assert!(self.hot_regs.is_empty());
+        let pts = self.next_var();
+        if idx == 0 {
+            self.write_line(&format!("uint32_t {pts} = trace_reg_read(state, 0, 0);"));
+            ("0".to_string(), pts)
+        } else {
+            let val = self.next_var();
+            self.write_line(&format!("uint64_t {val} = reg_read(state, {idx});"));
+            self.write_line(&format!(
+                "uint32_t {pts} = trace_reg_read(state, {idx}, {val});"
+            ));
+            (val, pts)
+        }
+    }
+
+    /// R3: emit a register-register base-ALU ADD/SUB with an inline compact
+    /// AddSub record (shadow mode — the verbose memory log is still emitted by
+    /// the `trace_reg_*` calls, so output stays byte-identical; the record is
+    /// filled in parallel for the migrated chip). `is_sub` selects SUB.
+    pub fn emit_addsub_reg(&mut self, is_sub: bool, rd: u8, rs1: u8, rs2: u8) {
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        let (v2, p2) = self.reg_read_capture(rs2);
+        let op = if is_sub { "-" } else { "+" };
+        let res = self.next_var();
+        self.write_line(&format!("uint64_t {res} = {v1} {op} {v2};"));
+        let rdprev = self.next_var();
+        self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+        let pw = self.next_var();
+        self.write_line(&format!(
+            "uint32_t {pw} = trace_reg_write(state, {rd}, {res});"
+        ));
+        self.write_line(&format!("reg_write(state, {rd}, {res});"));
+        let local = is_sub as u8;
+        self.write_line(&format!(
+            "preflight_emit_addsub(state, {chip}u, {pc}, {fromts}, {rd_ptr}u, {rs1_ptr}u, \
+             {rs2_ptr}u, AS_REGISTER, 0, {p1}, {p2}, {pw}, {rdprev}, {v1}, {v2}, {local}u);",
+            rd_ptr = rd as u32 * 8,
+            rs1_ptr = rs1 as u32 * 8,
+            rs2_ptr = rs2 as u32 * 8,
+        ));
+    }
+
+    /// R3: emit a register-immediate base-ALU ADD/SUB with an inline compact
+    /// AddSub record (shadow mode; see [`Self::emit_addsub_reg`]). The immediate
+    /// occupies a timestamp slot without a memory touch (matching
+    /// `trace_immediate`), so `reads_aux[1].prev_timestamp` is 0.
+    pub fn emit_addsub_imm(&mut self, is_sub: bool, rd: u8, rs1: u8, imm: i32) {
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let imm_u64 = imm as i64 as u64;
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        // Immediate consumes a timestamp slot but touches no block.
+        self.write_line("trace_timestamp(state);");
+        let vimm = self.next_var();
+        self.write_line(&format!("uint64_t {vimm} = 0x{imm_u64:016x}ull;"));
+        let op = if is_sub { "-" } else { "+" };
+        let res = self.next_var();
+        self.write_line(&format!("uint64_t {res} = {v1} {op} {vimm};"));
+        let rdprev = self.next_var();
+        self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+        let pw = self.next_var();
+        self.write_line(&format!(
+            "uint32_t {pw} = trace_reg_write(state, {rd}, {res});"
+        ));
+        self.write_line(&format!("reg_write(state, {rd}, {res});"));
+        // record.rs2 = the raw 24-bit immediate operand; rs2_as = RV64_IMM_AS (0);
+        // rs2_imm_sign = whether the sign-extension limb is nonzero.
+        let raw_imm = (imm as u32) & 0x00ff_ffff;
+        let imm_sign = (((imm_u64 >> 16) & 0xffff) != 0) as u8;
+        let local = is_sub as u8;
+        self.write_line(&format!(
+            "preflight_emit_addsub(state, {chip}u, {pc}, {fromts}, {rd_ptr}u, {rs1_ptr}u, \
+             {raw_imm}u, 0, {imm_sign}, {p1}, 0u, {pw}, {rdprev}, {v1}, {vimm}, {local}u);",
+            rd_ptr = rd as u32 * 8,
+            rs1_ptr = rs1 as u32 * 8,
+        ));
     }
 
     fn write_reg_direct(&mut self, idx: u8, val: &str) {

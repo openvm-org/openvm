@@ -43,8 +43,8 @@ pub use pure::{
     RvrTrackedExecutionOutcome,
 };
 pub use preflight::{
-    MemoryLogEntry, PreflightRawLogs, PreflightTracer, PreflightTracerData, ProgramLogEntry,
-    RvrPreflightInstance, RvrPreflightOutput, RvrPreflightRoute, TouchedBlock,
+    ChipRecordBuf, MemoryLogEntry, PreflightRawLogs, PreflightTracer, PreflightTracerData,
+    ProgramLogEntry, RvrPreflightInstance, RvrPreflightOutput, RvrPreflightRoute, TouchedBlock,
     PREFLIGHT_INITIAL_TIMESTAMP, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH,
     PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_TRACER_KIND,
 };

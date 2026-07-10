@@ -7,7 +7,7 @@ use openvm_instructions::VM_DIGEST_WIDTH;
 use rvr_openvm_ext_ffi_common as ffi;
 
 use crate::arch::rvr::preflight::{
-    MemoryLogEntry, PreflightTracerData, ProgramLogEntry, TouchedBlock,
+    ChipRecordBuf, MemoryLogEntry, PreflightTracerData, ProgramLogEntry, TouchedBlock,
     PREFLIGHT_INITIAL_TIMESTAMP, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH,
     PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_TRACER_KIND,
 };
@@ -61,3 +61,9 @@ const _: () = assert!(offset_of!(PreflightTracerData, chip_counts_len) == 80);
 const _: () = assert!(offset_of!(PreflightTracerData, touched_len) == 84);
 const _: () = assert!(offset_of!(PreflightTracerData, touched_cap) == 88);
 const _: () = assert!(offset_of!(PreflightTracerData, timestamp) == 92);
+const _: () = assert!(offset_of!(PreflightTracerData, chip_records) == 96);
+const _: () = assert!(size_of::<ChipRecordBuf>() == ffi::PREFLIGHT_CHIP_RECORD_BUF_SIZE);
+const _: () = assert!(align_of::<ChipRecordBuf>() == ffi::PREFLIGHT_CHIP_RECORD_BUF_ALIGN);
+const _: () = assert!(offset_of!(ChipRecordBuf, base) == 0);
+const _: () = assert!(offset_of!(ChipRecordBuf, len) == 8);
+const _: () = assert!(offset_of!(ChipRecordBuf, cap) == 12);
