@@ -1,6 +1,6 @@
 //! Extension-extensible record assembly from rvr preflight logs.
 
-use std::collections::HashMap;
+use std::{cell::Cell, collections::HashMap};
 
 use openvm_instructions::{
     exe::VmExe, instruction::Instruction, program::DEFAULT_PC_STEP, VmOpcode,
@@ -12,24 +12,47 @@ use crate::arch::{Arena, ExecutionError};
 
 /// Timestamp-indexed view of normalized rvr preflight memory accesses.
 ///
+/// The access-aux slice is already sorted by (strictly increasing) timestamp
+/// (log emission order), and assemblers request timestamps monotonically
+/// (program-log order, and `ts`, `ts+1`, … within an instruction). So instead
+/// of a per-access `HashMap`, this holds a forward cursor into the slice: each
+/// `expect` advances it, giving amortized O(1), cache-friendly lookups with no
+/// build cost. A request behind the cursor (never expected in practice) restarts
+/// the forward scan, keeping correctness independent of call order.
+///
 /// Assemblers pass their expected access width to [`Self::expect`], so the
 /// same view can validate records for extensions with different memory widths.
 pub struct LogNativeAccessView<'a, F> {
-    by_timestamp: HashMap<u32, &'a PreflightMemoryAccessAux<F>>,
+    access_aux: &'a [PreflightMemoryAccessAux<F>],
+    cursor: Cell<usize>,
 }
 
 impl<'a, F: PrimeField32> LogNativeAccessView<'a, F> {
     pub fn new(access_aux: &'a [PreflightMemoryAccessAux<F>]) -> Result<Self, ExecutionError> {
-        let mut by_timestamp = HashMap::with_capacity(access_aux.len());
-        for aux in access_aux {
-            if by_timestamp.insert(aux.entry.timestamp, aux).is_some() {
-                return Err(rvr_error(format!(
-                    "multiple memory-log entries share timestamp {}",
-                    aux.entry.timestamp
-                )));
-            }
+        Ok(Self {
+            access_aux,
+            cursor: Cell::new(0),
+        })
+    }
+
+    /// Find the access with the given timestamp by advancing the forward cursor.
+    fn find(&self, timestamp: u32) -> Option<&'a PreflightMemoryAccessAux<F>> {
+        let n = self.access_aux.len();
+        let mut i = self.cursor.get();
+        // Requested timestamp is behind the cursor: restart the scan. Does not
+        // happen for in-order assembly, but keeps `find` order-independent.
+        if i >= n || self.access_aux[i].entry.timestamp > timestamp {
+            i = 0;
         }
-        Ok(Self { by_timestamp })
+        while i < n && self.access_aux[i].entry.timestamp < timestamp {
+            i += 1;
+        }
+        if i < n && self.access_aux[i].entry.timestamp == timestamp {
+            self.cursor.set(i);
+            Some(&self.access_aux[i])
+        } else {
+            None
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -42,7 +65,7 @@ impl<'a, F: PrimeField32> LogNativeAccessView<'a, F> {
         width: usize,
         pc: u32,
     ) -> Result<&'a PreflightMemoryAccessAux<F>, ExecutionError> {
-        let aux = self.by_timestamp.get(&timestamp).ok_or_else(|| {
+        let aux = self.find(timestamp).ok_or_else(|| {
             rvr_error(format!(
                 "missing memory-log entry for pc {pc:#x} timestamp {timestamp}"
             ))

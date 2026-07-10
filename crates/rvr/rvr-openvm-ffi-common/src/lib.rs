@@ -27,10 +27,22 @@ pub const PREFLIGHT_MEMORY_KIND_TOUCH: u8 = 2;
 
 pub const PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE: usize = 16;
 pub const PREFLIGHT_PROGRAM_LOG_ENTRY_ALIGN: usize = 8;
-pub const PREFLIGHT_MEMORY_LOG_ENTRY_SIZE: usize = 24;
+// R1: MemoryLogEntry is self-contained — it carries `prev_timestamp` (the
+// block's previous-access timestamp, from the C timestamp shadow) and
+// `prev_value` (the block's value before this access), so the host side no
+// longer replays the log to recover them.
+pub const PREFLIGHT_MEMORY_LOG_ENTRY_SIZE: usize = 40;
 pub const PREFLIGHT_MEMORY_LOG_ENTRY_ALIGN: usize = 8;
-pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 48;
+// R1: the tracer gained per-address-space timestamp-shadow pointers, a
+// public-values base pointer (for `prev_value` reads on reveal writes), a
+// touched-block buffer, and its length/capacity counters.
+pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 96;
 pub const PREFLIGHT_TRACER_DATA_ALIGN: usize = 8;
+/// One entry in the preflight touched-block buffer: the address space and the
+/// block-aligned byte address of a block touched (for the first time) this
+/// segment. The host finalizes `touched_memory` from this list.
+pub const PREFLIGHT_TOUCHED_BLOCK_SIZE: usize = 8;
+pub const PREFLIGHT_TOUCHED_BLOCK_ALIGN: usize = 4;
 
 const _: () = assert!(MEM_SIZE / WORD_SIZE <= u32::MAX as usize);
 
