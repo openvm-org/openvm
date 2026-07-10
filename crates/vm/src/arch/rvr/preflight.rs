@@ -789,7 +789,7 @@ mod tests {
                 .map(|entry| entry.pc)
                 .collect::<Vec<_>>(),
             (0..program_len as u32)
-                .map(|idx| idx * DEFAULT_PC_STEP)
+                .map(|idx| u64::from(idx * DEFAULT_PC_STEP))
                 .collect::<Vec<_>>()
         );
         assert_eq!(

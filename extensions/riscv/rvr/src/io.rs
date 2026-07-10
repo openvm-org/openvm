@@ -116,8 +116,10 @@ impl ExtInstr for RevealInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let src = ctx.read_var(self.src_reg);
+        // Match the LoadStore adapter order: pointer read, source read, then
+        // the public-values write carrying the stored value.
         let ptr = ctx.read_var(self.ptr_reg);
+        let src = ctx.read_var(self.src_reg);
         let addr = match self.offset.cmp(&0) {
             std::cmp::Ordering::Less => {
                 format!("({ptr} - 0x{:08x}ull)", self.offset.unsigned_abs())
@@ -125,9 +127,18 @@ impl ExtInstr for RevealInstr {
             std::cmp::Ordering::Equal => ptr,
             std::cmp::Ordering::Greater => format!("({ptr} + 0x{:08x}ull)", self.offset),
         };
-        let width = format!("{}u", self.width.bytes());
+        let width = self.width.bytes().to_string();
+        ctx.extern_call(
+            "trace_wr_as",
+            &[
+                "state",
+                &addr,
+                &src,
+                &width,
+                &format!("{PUBLIC_VALUES_AS}u"),
+            ],
+        );
         ctx.emit_checked_call_without_page_flush("openvm_reveal", &[&src, &addr, &width]);
-        ctx.trace_page_access(&addr, self.width, PageAddressSpace::Other(PUBLIC_VALUES_AS));
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -444,6 +455,12 @@ mod tests {
 
         fn trace_timestamp(&mut self) {
             self.write_line("trace_timestamp(state);");
+        }
+
+        fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32) {
+            self.write_line(&format!(
+                "trace_wr_as_u64(state, {addr}, {val}, {addr_space}u);"
+            ));
         }
     }
 

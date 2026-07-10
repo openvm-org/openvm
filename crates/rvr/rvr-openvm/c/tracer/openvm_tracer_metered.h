@@ -460,6 +460,26 @@ flush_main_memory_page_buffer(RvState* restrict state) {
   state->mode_state.on_memory_flush(&state->mode_state);
 }
 
+static __attribute__((always_inline)) inline void trace_wr_as_u64(
+    RvState* restrict state, uint64_t addr, uint64_t new_val,
+    uint32_t addr_space) {
+  record_page(&state->mode_state, addr_space, addr, WORD_SIZE);
+}
+
+static __attribute__((always_inline)) inline void trace_wr_as(
+    RvState* restrict state, uint64_t addr, uint64_t new_val, uint32_t width,
+    uint32_t addr_space) {
+  record_page(&state->mode_state, addr_space, addr, width);
+}
+
+static __attribute__((always_inline)) inline void trace_pc(
+    RvState* restrict state, uint64_t pc) {}
+
+static __attribute__((always_inline)) inline void trace_chip(
+    RvState* restrict state, uint32_t chip_idx, uint32_t count) {
+  (*state->mode_state.trace_heights)[chip_idx] += count;
+}
+
 #pragma clang unsafe_buffer_usage end
 
 #endif /* OPENVM_TRACER_METERED_H */
