@@ -615,12 +615,35 @@ fn push_standard_group_ops(instructions: &mut Vec<Instruction<F>>) {
     instructions.push(addi(10, 0, jalr_next_pc));
     instructions.push(jalr(23, 10, 0));
 
+    // rd=x0 control flow: the register write is suppressed (f=0, matching the
+    // transpiler's rd != 0 encoding) but the timestamp tick and AIR row remain.
+    instructions.push(jal_lui(Rv64JalLuiOpcode::JAL, 0, 4));
+    let jalr_x0_next_pc = (instructions.len() + 2) * 4;
+    instructions.push(addi(10, 0, jalr_x0_next_pc));
+    instructions.push(jalr(0, 10, 0));
+
     instructions.push(mul(24, 1, 2));
     instructions.extend([
         mulh(MulHOpcode::MULH, 25, 1, 2),
         mulh(MulHOpcode::MULHSU, 26, 1, 2),
         mulh(MulHOpcode::MULHU, 27, 1, 2),
         mul_w(28, 1, 2),
+    ]);
+
+    // Sign-edge sweep: MSB-set (negative) operands through the sign-sensitive
+    // compare/branch/mulh/shift paths; all prior fixture operands are positive.
+    instructions.extend([
+        alu_r(BaseAluOpcode::SUB, 29, 0, 2),
+        less_than(LessThanOpcode::SLT, 30, 29, 1),
+        less_than(LessThanOpcode::SLT, 31, 1, 29),
+        less_than(LessThanOpcode::SLTU, 30, 29, 1),
+        branch_lt(BranchLessThanOpcode::BLT, 29, 1, 4),
+        branch_lt(BranchLessThanOpcode::BGE, 1, 29, 4),
+        branch_lt(BranchLessThanOpcode::BLTU, 1, 29, 4),
+        mulh(MulHOpcode::MULH, 30, 29, 2),
+        mulh(MulHOpcode::MULHSU, 31, 29, 2),
+        shift(ShiftOpcode::SRA, 30, 29, 3),
+        shift_w(ShiftWOpcode::SRAW, 31, 29, 3),
     ]);
 }
 
@@ -677,6 +700,28 @@ fn push_hard_chip_ops(instructions: &mut Vec<Instruction<F>>) {
         divrem_w(DivRemWOpcode::DIVUW, 17, 10, 11),
         divrem_w(DivRemWOpcode::REMW, 18, 10, 11),
         divrem_w(DivRemWOpcode::REMUW, 19, 10, 11),
+        // divrem special cases: zero divisor (rs2 = x0) and signed overflow
+        // (MIN / -1), 64- and 32-bit — the only core branches the plain
+        // 21/5 operands above never take.
+        divrem(DivRemOpcode::DIV, 26, 10, 0),
+        divrem(DivRemOpcode::REM, 27, 10, 0),
+        divrem(DivRemOpcode::DIVU, 28, 10, 0),
+        divrem(DivRemOpcode::REMU, 29, 10, 0),
+        divrem_w(DivRemWOpcode::DIVW, 26, 10, 0),
+        divrem_w(DivRemWOpcode::REMW, 27, 10, 0),
+        addi(28, 0, 1),
+        shift(ShiftOpcode::SLL, 28, 28, 63),
+        shift(ShiftOpcode::SRA, 29, 28, 63),
+        divrem(DivRemOpcode::DIV, 30, 28, 29),
+        divrem(DivRemOpcode::REM, 31, 28, 29),
+        addi(30, 0, 1),
+        shift(ShiftOpcode::SLL, 30, 30, 31),
+        divrem_w(DivRemWOpcode::DIVW, 31, 30, 29),
+        divrem_w(DivRemWOpcode::REMW, 26, 30, 29),
+        // LOADB sign edge: a stored byte with the MSB set must sign-extend.
+        addi(9, 0, 0xaa),
+        store(Rv64LoadStoreOpcode::STOREB, 9, 1, 3),
+        load(Rv64LoadStoreOpcode::LOADB, 22, 1, 3),
         phantom(SysPhantom::Nop),
         phantom(SysPhantom::CtStart),
         phantom(SysPhantom::CtEnd),
@@ -727,6 +772,10 @@ fn full_rv64im_matrix_exe() -> VmExe<F> {
     let mut instructions = vec![addi(1, 0, 9), addi(2, 0, 5)];
     push_standard_group_ops(&mut instructions);
     push_hard_chip_ops(&mut instructions);
+    // REVEAL row: STORED to PUBLIC_VALUES_AS (x0 as the AS3 pointer, r10 = 21
+    // from the hard-chip group) so the loadstore mem_as=3 path is locked in the
+    // CPU-vs-GPU three-way, not only in the reveal-specific tests.
+    instructions.push(extension_store(10, 0, 0));
     instructions.push(terminate());
     exe(&instructions)
 }
@@ -1170,6 +1219,15 @@ fn system_compare_air_ids(air_names: &[String]) -> Vec<usize> {
             .then_some(idx)
         })
         .collect::<Vec<_>>();
+    // Recorded evidence for the GPU re-gate: this set first *executes* on GPU, so
+    // print the resolved ids (visible via `--no-capture` / on failure) rather than
+    // relying on the assert message alone.
+    eprintln!(
+        "system_compare_air_ids: {:?}",
+        ids.iter()
+            .map(|idx| (*idx, air_names[*idx].as_str()))
+            .collect::<Vec<_>>()
+    );
     assert_eq!(
         ids.len(),
         5,
