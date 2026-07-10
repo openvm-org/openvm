@@ -52,11 +52,14 @@ pub const PREFLIGHT_TOUCHED_BLOCK_ALIGN: usize = 4;
 // migrated to inline records (it uses the verbose memory log instead).
 pub const PREFLIGHT_CHIP_RECORD_BUF_SIZE: usize = 16;
 pub const PREFLIGHT_CHIP_RECORD_BUF_ALIGN: usize = 8;
-/// Byte size of one compact base-ALU AddSub record as concatenated by
-/// `DenseRecordArena`: adapter `Rv64BaseAluU16AdapterRecord` (44) + core
-/// `AddSubCoreRecord<4>` (18), aligned to 64. The riscv circuit asserts this
-/// against the actual record layout (see its rvr record-ABI guard).
-pub const PREFLIGHT_ADDSUB_RECORD_SIZE: usize = 64;
+/// Byte size of one compact base-ALU AddSub record as stored by the preflight
+/// tracer (R3 L1+L5): the dynamic witness only — from_pc, from_timestamp, the
+/// three access prev_timestamps, the old rd block, and the b/c operand limbs.
+/// Program-redundant operands (rd_ptr/rs1_ptr/rs2/rs2_as/rs2_imm_sign/
+/// local_opcode) are re-derived from the instruction at `from_pc` during host
+/// record assembly. The riscv circuit asserts this against its compact-record
+/// mirror (see its rvr record-ABI guard).
+pub const PREFLIGHT_ADDSUB_RECORD_SIZE: usize = 44;
 
 const _: () = assert!(MEM_SIZE / WORD_SIZE <= u32::MAX as usize);
 

@@ -34,7 +34,8 @@ pub use execute::{
 pub use initial_image::RvrInitialImage;
 pub use log_native::{
     generate_record_arenas_from_logs, LogNativeAccessView, LogNativeAssembler,
-    LogNativeAssemblerRegistry, LogNativeOpcodeAdmitter, VmRvrLogNativeExtension,
+    LogNativeAssemblerRegistry, LogNativeInlineAssembler, LogNativeOpcodeAdmitter,
+    VmRvrLogNativeExtension,
 };
 pub use metered::{RvrMeteredExecutionOutcome, RvrMeteredInstance, RvrMeteredSegmentInstance};
 pub use metered_cost::{MeteredCostState, RvrMeteredCostInstance};

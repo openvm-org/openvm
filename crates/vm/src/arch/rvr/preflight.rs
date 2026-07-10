@@ -21,8 +21,8 @@ use super::{
 };
 use crate::{
     arch::{
-        interpreter_preflight::PreflightInterpretedInstance, DenseRecordArena, ExecutionError,
-        ExecutionState, InlineRecordBytes, Streams, SystemConfig, VmState, BLOCK_FE_WIDTH,
+        interpreter_preflight::PreflightInterpretedInstance, ExecutionError, ExecutionState,
+        Streams, SystemConfig, VmState, BLOCK_FE_WIDTH,
     },
     system::{
         memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory},
@@ -247,13 +247,16 @@ pub struct PreflightRawLogs {
 }
 
 /// One migrated chip's inline compact records for a segment, written by the
-/// generated C directly in the record arena's packed format (R3).
+/// generated C (R3). `bytes` holds `record_size`-strided compact records in
+/// program-log order; host record assembly expands each into the chip's full
+/// record, re-deriving program-redundant operands from the instruction at the
+/// record's `from_pc`.
 #[derive(Debug)]
 pub struct RvrInlineChipRecords {
     pub air_idx: usize,
-    /// Packed record stride in bytes (from the compile metadata).
+    /// Compact record stride in bytes (from the compile metadata).
     pub record_size: usize,
-    pub records: InlineRecordBytes,
+    pub bytes: Vec<u8>,
 }
 
 pub struct RvrPreflightOutput<F> {
@@ -436,12 +439,11 @@ where
         let mut touched = vec![TouchedBlock::default(); memory_log_cap];
         let pv_base = public_values_slice(&mut run_state.memory.memory).as_mut_ptr();
 
-        // R3: per migrated chip, an inline compact-record buffer in the record
-        // arena's packed format (32-aligned start so the arena can adopt the
-        // buffer zero-copy). Sized by the metered per-AIR trace heights when
-        // available, else by one record per instruction.
+        // R3: per migrated chip, an inline compact-record buffer. Sized by the
+        // metered per-AIR trace heights when available, else by one record per
+        // instruction.
         let inline_meta = compiled.inline_records();
-        let mut record_bufs: Vec<(Vec<u8>, usize, usize)> = inline_meta
+        let mut record_bufs: Vec<Vec<u8>> = inline_meta
             .airs
             .iter()
             .map(|&(air, record_size)| {
@@ -449,22 +451,16 @@ where
                     .and_then(|heights| heights.get(air))
                     .map(|&height| height as usize)
                     .unwrap_or(program_log_cap);
-                let cap_bytes = rows * record_size;
-                let (buffer, offset) = DenseRecordArena::backing_with_capacity(cap_bytes);
-                (buffer, offset, cap_bytes)
+                vec![0u8; rows * record_size]
             })
             .collect();
         let mut chip_records = vec![ChipRecordBuf::default(); chip_counts_len.max(1)];
-        for (&(air, _), (buffer, offset, cap_bytes)) in
-            inline_meta.airs.iter().zip(record_bufs.iter_mut())
-        {
+        for (&(air, _), buffer) in inline_meta.airs.iter().zip(record_bufs.iter_mut()) {
             debug_assert!(air < chip_records.len(), "inline air {air} out of range");
             chip_records[air] = ChipRecordBuf {
-                // SAFETY: `offset` is within the buffer (backing_with_capacity
-                // over-allocates by the alignment slack).
-                base: unsafe { buffer.as_mut_ptr().add(*offset) },
+                base: buffer.as_mut_ptr(),
                 len: 0,
-                cap: *cap_bytes as u32,
+                cap: buffer.len() as u32,
             };
         }
 
@@ -541,21 +537,19 @@ where
         };
 
         // R3: harvest each migrated chip's inline records (the C-advanced
-        // cursor gives the written length). The backing buffers move out
-        // whole so a dense arena can adopt them zero-copy.
+        // cursor gives the written length).
         let inline_records: Vec<RvrInlineChipRecords> = inline_meta
             .airs
             .iter()
             .zip(record_bufs.iter_mut())
-            .map(|(&(air_idx, record_size), (buffer, _, _))| {
+            .map(|(&(air_idx, record_size), buffer)| {
                 let written = chip_records[air_idx].len as usize;
+                let mut bytes = std::mem::take(buffer);
+                bytes.truncate(written);
                 RvrInlineChipRecords {
                     air_idx,
                     record_size,
-                    records: InlineRecordBytes {
-                        buffer: std::mem::take(buffer),
-                        written,
-                    },
+                    bytes,
                 }
             })
             .collect();
