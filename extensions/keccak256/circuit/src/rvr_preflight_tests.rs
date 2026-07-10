@@ -271,9 +271,12 @@ fn assert_trace_segment_matches(
         .generate_proving_ctx(rvr_output.system_records, rvr_record_arenas)
         .expect("rvr trace generation");
 
+    // HARD-5: these are the three deterministic extension-owned AIRs. Shared
+    // lookup/Poseidon2 periphery rows are excluded from raw row-order equality;
+    // SystemRecords (including touched_memory) remain compared above.
     let is_keccak_air = |air_idx: &usize| {
         let name = &air_names[*air_idx];
-        name.contains("Keccak") || name.contains("Xorin")
+        name.contains("KeccakfOp") || name.contains("KeccakfPerm") || name.contains("XorinVm")
     };
     let mut interp_traces = interp_ctx
         .per_trace
@@ -310,9 +313,7 @@ fn assert_trace_segment_matches(
             interp.public_values, rvr.public_values,
             "{label}: {air_name} public values"
         );
-        if air_name.contains("Keccak") || air_name.contains("Xorin") {
-            active_keccak_airs.push(air_name.clone());
-        }
+        active_keccak_airs.push(air_name.clone());
     }
 
     (rvr_output.to_state, active_keccak_airs)

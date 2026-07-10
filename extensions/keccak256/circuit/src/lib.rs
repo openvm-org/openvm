@@ -14,6 +14,8 @@ pub mod xorin;
 
 #[cfg(feature = "rvr")]
 mod log_native;
+#[cfg(feature = "rvr")]
+pub use log_native::*;
 
 #[cfg(feature = "cuda")]
 mod cuda;

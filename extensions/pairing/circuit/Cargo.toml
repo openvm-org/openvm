@@ -45,6 +45,8 @@ cfg-if = { workspace = true }
 halo2curves-axiom = { workspace = true }
 
 [dev-dependencies]
+openvm-algebra-transpiler.workspace = true
+openvm-ecc-transpiler.workspace = true
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }

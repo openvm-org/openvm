@@ -20,12 +20,16 @@ use openvm_riscv_circuit::log_native::{Rv64IRecordArena, Rv64IoRecordArena, Rv64
 use openvm_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
-use crate::{Rv64WeierstrassConfig, WeierstrassExtension, ECC_BLOCKS_32, NUM_LIMBS_32};
+use crate::{
+    Rv64WeierstrassConfig, WeierstrassExtension, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32,
+    NUM_LIMBS_48,
+};
 
-/// Record-arena requirements contributed by 32-byte Weierstrass curves.
+/// Record-arena requirements contributed by 32- and 48-byte Weierstrass curves.
 ///
-/// One point occupies eight memory blocks: four blocks for each 32-byte
-/// coordinate. The bounds remain arena-agnostic for CPU and GPU reuse.
+/// One point occupies two coordinates, so the supported layouts use eight
+/// memory blocks for 32-byte coordinates and twelve for 48-byte coordinates.
+/// The bounds remain arena-agnostic for CPU and GPU reuse.
 pub trait WeierstrassRecordArena<F>:
     Arena
     + for<'a> RecordArena<
@@ -36,6 +40,14 @@ pub trait WeierstrassRecordArena<F>:
         'a,
         VecHeapLayout<F, 1, ECC_BLOCKS_32, ECC_BLOCKS_32>,
         VecHeapRecordMut<'a, 1, ECC_BLOCKS_32, ECC_BLOCKS_32>,
+    > + for<'a> RecordArena<
+        'a,
+        VecHeapLayout<F, 2, ECC_BLOCKS_48, ECC_BLOCKS_48>,
+        VecHeapRecordMut<'a, 2, ECC_BLOCKS_48, ECC_BLOCKS_48>,
+    > + for<'a> RecordArena<
+        'a,
+        VecHeapLayout<F, 1, ECC_BLOCKS_48, ECC_BLOCKS_48>,
+        VecHeapRecordMut<'a, 1, ECC_BLOCKS_48, ECC_BLOCKS_48>,
     >
 {
 }
@@ -50,6 +62,14 @@ impl<F, RA> WeierstrassRecordArena<F> for RA where
             'a,
             VecHeapLayout<F, 1, ECC_BLOCKS_32, ECC_BLOCKS_32>,
             VecHeapRecordMut<'a, 1, ECC_BLOCKS_32, ECC_BLOCKS_32>,
+        > + for<'a> RecordArena<
+            'a,
+            VecHeapLayout<F, 2, ECC_BLOCKS_48, ECC_BLOCKS_48>,
+            VecHeapRecordMut<'a, 2, ECC_BLOCKS_48, ECC_BLOCKS_48>,
+        > + for<'a> RecordArena<
+            'a,
+            VecHeapLayout<F, 1, ECC_BLOCKS_48, ECC_BLOCKS_48>,
+            VecHeapRecordMut<'a, 1, ECC_BLOCKS_48, ECC_BLOCKS_48>,
         >
 {
 }
@@ -62,30 +82,15 @@ where
     fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
         for (curve_idx, curve) in self.supported_curves.iter().enumerate() {
             let bytes = curve.modulus.bits().div_ceil(8) as usize;
-            assert!(
-                bytes <= NUM_LIMBS_32,
-                "rvr log-native Weierstrass preflight currently supports only 32-byte curves"
-            );
             let offset =
                 Rv64WeierstrassOpcode::CLASS_OFFSET + curve_idx * Rv64WeierstrassOpcode::COUNT;
-            registry.register_if(
-                [
-                    Rv64WeierstrassOpcode::EC_ADD_NE,
-                    Rv64WeierstrassOpcode::SETUP_EC_ADD_NE,
-                ]
-                .map(|opcode| weierstrass_opcode(offset, opcode)),
-                is_weierstrass_instruction,
-                assemble_ec_add_ne::<F, RA>,
-            );
-            registry.register_if(
-                [
-                    Rv64WeierstrassOpcode::EC_DOUBLE,
-                    Rv64WeierstrassOpcode::SETUP_EC_DOUBLE,
-                ]
-                .map(|opcode| weierstrass_opcode(offset, opcode)),
-                is_weierstrass_instruction,
-                assemble_ec_double::<F, RA>,
-            );
+            if bytes <= NUM_LIMBS_32 {
+                register_curve::<F, RA, ECC_BLOCKS_32>(registry, offset);
+            } else if bytes <= NUM_LIMBS_48 {
+                register_curve::<F, RA, ECC_BLOCKS_48>(registry, offset);
+            } else {
+                panic!("Weierstrass modulus exceeds maximum supported size of 384 bits");
+            }
         }
     }
 }
@@ -109,12 +114,47 @@ fn weierstrass_opcode(offset: usize, opcode: Rv64WeierstrassOpcode) -> VmOpcode 
     VmOpcode::from_usize(offset + opcode as usize)
 }
 
+fn register_curve<F: PrimeField32, RA, const BLOCKS: usize>(
+    registry: &mut LogNativeAssemblerRegistry<F, RA>,
+    offset: usize,
+) where
+    RA: WeierstrassRecordArena<F>
+        + for<'a> RecordArena<
+            'a,
+            VecHeapLayout<F, 2, BLOCKS, BLOCKS>,
+            VecHeapRecordMut<'a, 2, BLOCKS, BLOCKS>,
+        > + for<'a> RecordArena<
+            'a,
+            VecHeapLayout<F, 1, BLOCKS, BLOCKS>,
+            VecHeapRecordMut<'a, 1, BLOCKS, BLOCKS>,
+        >,
+{
+    registry.register_if(
+        [
+            Rv64WeierstrassOpcode::EC_ADD_NE,
+            Rv64WeierstrassOpcode::SETUP_EC_ADD_NE,
+        ]
+        .map(|opcode| weierstrass_opcode(offset, opcode)),
+        is_weierstrass_instruction,
+        assemble_ec_add_ne::<F, RA, BLOCKS>,
+    );
+    registry.register_if(
+        [
+            Rv64WeierstrassOpcode::EC_DOUBLE,
+            Rv64WeierstrassOpcode::SETUP_EC_DOUBLE,
+        ]
+        .map(|opcode| weierstrass_opcode(offset, opcode)),
+        is_weierstrass_instruction,
+        assemble_ec_double::<F, RA, BLOCKS>,
+    );
+}
+
 fn is_weierstrass_instruction<F: PrimeField32>(instruction: &Instruction<F>) -> bool {
     instruction.d.as_canonical_u32() == RV64_REGISTER_AS
         && instruction.e.as_canonical_u32() == RV64_MEMORY_AS
 }
 
-fn assemble_ec_add_ne<F: PrimeField32, RA>(
+fn assemble_ec_add_ne<F: PrimeField32, RA, const BLOCKS: usize>(
     arena: &mut RA,
     access: &LogNativeAccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -122,9 +162,14 @@ fn assemble_ec_add_ne<F: PrimeField32, RA>(
     timestamp: u32,
 ) -> Result<(), ExecutionError>
 where
-    RA: WeierstrassRecordArena<F>,
+    RA: WeierstrassRecordArena<F>
+        + for<'a> RecordArena<
+            'a,
+            VecHeapLayout<F, 2, BLOCKS, BLOCKS>,
+            VecHeapRecordMut<'a, 2, BLOCKS, BLOCKS>,
+        >,
 {
-    assemble_rv64_vec_heap_field_expression::<F, RA, 2, ECC_BLOCKS_32, ECC_BLOCKS_32>(
+    assemble_rv64_vec_heap_field_expression::<F, RA, 2, BLOCKS, BLOCKS>(
         arena,
         access,
         instruction,
@@ -135,7 +180,7 @@ where
     )
 }
 
-fn assemble_ec_double<F: PrimeField32, RA>(
+fn assemble_ec_double<F: PrimeField32, RA, const BLOCKS: usize>(
     arena: &mut RA,
     access: &LogNativeAccessView<'_, F>,
     instruction: &Instruction<F>,
@@ -143,9 +188,14 @@ fn assemble_ec_double<F: PrimeField32, RA>(
     timestamp: u32,
 ) -> Result<(), ExecutionError>
 where
-    RA: WeierstrassRecordArena<F>,
+    RA: WeierstrassRecordArena<F>
+        + for<'a> RecordArena<
+            'a,
+            VecHeapLayout<F, 1, BLOCKS, BLOCKS>,
+            VecHeapRecordMut<'a, 1, BLOCKS, BLOCKS>,
+        >,
 {
-    assemble_rv64_vec_heap_field_expression::<F, RA, 1, ECC_BLOCKS_32, ECC_BLOCKS_32>(
+    assemble_rv64_vec_heap_field_expression::<F, RA, 1, BLOCKS, BLOCKS>(
         arena,
         access,
         instruction,

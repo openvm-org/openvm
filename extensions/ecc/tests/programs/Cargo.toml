@@ -23,6 +23,9 @@ openvm-k256 = { path = "../../../../guest-libs/k256", package = "k256", features
 openvm-p256 = { path = "../../../../guest-libs/p256", package = "p256", features = [
     "ecdsa",
 ], optional = true }
+openvm-pairing = { path = "../../../../guest-libs/pairing", features = [
+    "bls12_381",
+], optional = true }
 
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
@@ -44,6 +47,7 @@ default = []
 std = ["serde/std", "openvm/std"]
 k256 = ["dep:openvm-k256"]
 p256 = ["dep:openvm-p256"]
+bls12_381 = ["dep:openvm-pairing"]
 
 [profile.release]
 panic = "abort"
@@ -85,6 +89,10 @@ required-features = ["k256"]
 [[example]]
 name = "invalid_setup"
 required-features = ["k256", "p256"]
+
+[[example]]
+name = "ec_bls12_381"
+required-features = ["bls12_381"]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(target_os, values("openvm"))'] }
