@@ -1732,7 +1732,12 @@ where
         let metered_ctx = vm.build_metered_ctx(&self.exe);
         let metered_interpreter = vm.metered_interpreter(&self.exe)?;
         let (segments, _) = metered_interpreter.execute_metered(input, metered_ctx)?;
-        let mut proofs = Vec::with_capacity(segments.len());
+        let num_segments = segments.len();
+        #[cfg(feature = "stark-debug")]
+        if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1") {
+            eprintln!("OPENVM_STARK_DEBUG_TOTAL_SEGMENTS={num_segments}");
+        }
+        let mut proofs = Vec::with_capacity(num_segments);
         let mut state = self.state.take();
         for (seg_idx, segment) in segments.into_iter().enumerate() {
             let _segment_span = info_span!("prove_segment", segment = seg_idx).entered();
@@ -1792,6 +1797,19 @@ where
 
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
             modify_ctx(seg_idx, &mut ctx);
+            #[cfg(feature = "stark-debug")]
+            if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1") {
+                eprintln!("OPENVM_STARK_DEBUG_SEGMENT_BALANCED={seg_idx}");
+                let stop_after = std::env::var("OPENVM_STARK_DEBUG_STOP_AFTER_SEGMENT")
+                    .ok()
+                    .and_then(|value| value.parse::<usize>().ok());
+                if stop_after == Some(seg_idx) {
+                    eprintln!("OPENVM_STARK_DEBUG_CHECKED_SEGMENTS={}", seg_idx + 1);
+                    eprintln!("OPENVM_STARK_DEBUG_TRACE_ONLY_COMPLETE=1");
+                    std::process::exit(0);
+                }
+                continue;
+            }
             let proof = vm.engine.prove(vm.pk(), ctx).unwrap();
             proofs.push(proof);
         }
