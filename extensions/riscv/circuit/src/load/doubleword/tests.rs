@@ -33,7 +33,7 @@ use crate::{
     load::{
         common::load_write_data, core::LoadCoreCols, LoadDoublewordCoreAir, LoadDoublewordFiller,
         Rv64LoadDoublewordAir, Rv64LoadDoublewordChip, Rv64LoadDoublewordExecutor,
-        LOAD_DOUBLEWORD_SELECTOR_WIDTH,
+        LOAD_DOUBLEWORD_SELECTOR_WIDTH, LOAD_DOUBLEWORD_TOUCHED_CELLS,
     },
     test_utils::memory::{load_memory_config, set_and_execute_load, F, MAX_INS_CAPACITY},
 };
@@ -160,7 +160,9 @@ fn run_loadd_sanity_test() {
 }
 
 fn assert_pranked_load_doubleword_fails(
-    prank: impl Fn(&mut LoadCoreCols<F, LOAD_DOUBLEWORD_SELECTOR_WIDTH>),
+    prank: impl Fn(
+        &mut LoadCoreCols<F, LOAD_DOUBLEWORD_SELECTOR_WIDTH, LOAD_DOUBLEWORD_TOUCHED_CELLS>,
+    ),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());
@@ -195,7 +197,7 @@ fn assert_pranked_load_doubleword_fails(
 
 #[test]
 fn negative_split_write_data_test() {
-    assert_pranked_load_doubleword_fails(|core| core.read_data[0] += F::ONE);
+    assert_pranked_load_doubleword_fails(|core| core.read_data[0][0] += F::ONE);
 }
 
 #[test]

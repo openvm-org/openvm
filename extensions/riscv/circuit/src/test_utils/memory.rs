@@ -19,7 +19,7 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, seq::IndexedRandom, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::adapters::{Rv64LoadAdapterRecord, Rv64StoreAdapterRecord},
+    crate::adapters::{Rv64LoadAdapterRecord, Rv64StoreAdapterRecord, LOAD_WIDTH_WORD},
     crate::load::LoadRecord,
     crate::store::StoreRecord,
     openvm_circuit::arch::{
@@ -292,7 +292,7 @@ pub(crate) fn transfer_load_records<G, C, A, E>(harness: &mut GpuTestChipHarness
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor<LOAD_WIDTH_WORD>>::new(),
         );
 }
 

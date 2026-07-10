@@ -15,7 +15,10 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64LoadAdapterRecord, load::LoadRecord},
+    crate::{
+        adapters::{Rv64LoadAdapterRecord, LOAD_WIDTH_WORD},
+        load::LoadRecord,
+    },
     openvm_circuit::arch::{
         testing::{default_var_range_checker_bus, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -50,12 +53,10 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let imm = imm.unwrap_or_else(|| rng.random_range(0..(1 << IMM_BITS)));
     let imm_sign = imm_sign.unwrap_or_else(|| rng.random_range(0..2));
     let imm_ext = sign_extend_imm16(imm, imm_sign);
-    let alignment_bit = match opcode {
-        LOADW => 2,
-        LOADH => 1,
-        LOADB => 0,
+    match opcode {
+        LOADB | LOADH | LOADW => {}
         _ => unreachable!("signed load test only supports LOADB/LOADH/LOADW"),
-    };
+    }
     let max_addr = 1usize << tester.address_bits();
     let imm_signed = if imm_sign == 0 {
         imm as i64
@@ -63,9 +64,10 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         imm as i64 - (1 << IMM_BITS)
     };
     let min_ptr = imm_signed.max(0) as usize;
-    let alignment_mask = (1usize << alignment_bit) - 1;
-    let min_aligned_ptr = (min_ptr + alignment_mask) >> alignment_bit;
-    let ptr_val = rng.random_range(min_aligned_ptr..(max_addr >> alignment_bit)) << alignment_bit;
+    // Signed loads support any byte shift, so sample fully misaligned pointers, staying 16
+    // bytes clear of the top of the address space so a block-crossing access always has a
+    // valid second block.
+    let ptr_val = rng.random_range(min_ptr..max_addr - 8);
     let rs1 = rs1.unwrap_or_else(|| {
         let low4 = (ptr_val as i64 - imm_signed).to_le_bytes();
         [low4[0], low4[1], low4[2], low4[3], 0, 0, 0, 0]
@@ -74,7 +76,7 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let shift_amount = ptr_val % 8;
     let a = gen_pointer(rng, 8);
     let b = gen_pointer(rng, 8);
-    let read_data: [u8; 8] = array::from_fn(|_| rng.random());
+    let read_data: [[u8; 8]; 2] = array::from_fn(|_| array::from_fn(|_| rng.random()));
     let prev_data: [F; 8] = if a != 0 {
         array::from_fn(|_| F::from_u8(rng.random()))
     } else {
@@ -86,7 +88,12 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.write_bytes(
         2,
         (ptr_val - shift_amount) as usize,
-        read_data.map(F::from_u8),
+        read_data[0].map(F::from_u8),
+    );
+    tester.write_bytes(
+        2,
+        (ptr_val - shift_amount) as usize + 8,
+        read_data[1].map(F::from_u8),
     );
 
     tester.execute(
@@ -108,7 +115,7 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let expected = load_sign_extend_write_data(
         opcode,
-        rv64_bytes_to_u16_block(read_data),
+        read_data.map(rv64_bytes_to_u16_block),
         shift_amount as usize,
     );
     if a != 0 {
@@ -152,6 +159,6 @@ pub(crate) fn transfer_load_sign_extend_records<G, C, A, E>(
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor<LOAD_WIDTH_WORD>>::new(),
         );
 }

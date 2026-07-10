@@ -10,14 +10,20 @@ use crate::{
     },
 };
 
-pub const LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH: usize = 1;
+pub const LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH: usize = 3;
+/// Cells overlapped by an odd-shift word load: `LOAD_WIDTH_WORD / 2 + 1`.
+pub const LOAD_SIGN_EXTEND_WORD_TOUCHED_CELLS: usize = 3;
 
-pub type LoadSignExtendWordCoreAir =
-    LoadSignExtendCoreAir<LOAD_WIDTH_WORD, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH>;
+pub type LoadSignExtendWordCoreAir = LoadSignExtendCoreAir<
+    LOAD_WIDTH_WORD,
+    LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
+    LOAD_SIGN_EXTEND_WORD_TOUCHED_CELLS,
+>;
 pub type LoadSignExtendWordFiller = LoadSignExtendFiller<
     Rv64LoadAdapterFiller,
     LOAD_WIDTH_WORD,
     LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
+    LOAD_SIGN_EXTEND_WORD_TOUCHED_CELLS,
 >;
 
 pub type Rv64LoadSignExtendWordAir = VmAirWrapper<Rv64LoadAdapterAir, LoadSignExtendWordCoreAir>;

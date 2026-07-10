@@ -33,6 +33,7 @@ use crate::{
     load::{
         common::load_write_data, core::LoadCoreCols, LoadWordCoreAir, LoadWordFiller,
         Rv64LoadWordAir, Rv64LoadWordChip, Rv64LoadWordExecutor, LOAD_WORD_SELECTOR_WIDTH,
+        LOAD_WORD_TOUCHED_CELLS,
     },
     load_sign_extend::common::load_sign_extend_write_data,
     test_utils::memory::{load_memory_config, set_and_execute_load, F, MAX_INS_CAPACITY},
@@ -166,38 +167,23 @@ fn run_loadwu_sanity_test() {
 }
 
 #[test]
-#[should_panic]
-fn solve_loadw_rejects_shift_2() {
-    load_sign_extend_write_data(LOADW, rv64_bytes_to_u16_block([1, 2, 3, 4, 5, 6, 7, 8]), 2);
-}
-
-#[test]
-#[should_panic]
-fn solve_loadw_rejects_shift_6() {
-    load_sign_extend_write_data(LOADW, rv64_bytes_to_u16_block([1, 2, 3, 4, 5, 6, 7, 8]), 6);
-}
-
-#[test]
 fn accepted_shift_sets() {
-    let read_data = rv64_bytes_to_u16_block([0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80]);
     let read_blocks = [
-        read_data,
+        rv64_bytes_to_u16_block([0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80]),
         rv64_bytes_to_u16_block([0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x11]),
     ];
     for shift in 0..8 {
-        let _ = load_sign_extend_write_data(LOADB, read_data, shift);
+        let _ = load_sign_extend_write_data(LOADB, read_blocks, shift);
+        let _ = load_sign_extend_write_data(LOADH, read_blocks, shift);
+        let _ = load_sign_extend_write_data(LOADW, read_blocks, shift);
         let _ = load_write_data(LOADHU, read_blocks, shift);
         let _ = load_write_data(LOADWU, read_blocks, shift);
     }
-    for shift in [0, 2, 4, 6] {
-        let _ = load_sign_extend_write_data(LOADH, read_data, shift);
-    }
-    for shift in [0, 4] {
-        let _ = load_sign_extend_write_data(LOADW, read_data, shift);
-    }
 }
 
-fn assert_pranked_load_word_fails(prank: impl Fn(&mut LoadCoreCols<F, LOAD_WORD_SELECTOR_WIDTH>)) {
+fn assert_pranked_load_word_fails(
+    prank: impl Fn(&mut LoadCoreCols<F, LOAD_WORD_SELECTOR_WIDTH, LOAD_WORD_TOUCHED_CELLS>),
+) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());
     let (mut harness, bitwise) = create_word_harness(&mut tester);
@@ -231,7 +217,7 @@ fn assert_pranked_load_word_fails(prank: impl Fn(&mut LoadCoreCols<F, LOAD_WORD_
 
 #[test]
 fn negative_split_write_data_test() {
-    assert_pranked_load_word_fails(|core| core.read_data[0] += F::ONE);
+    assert_pranked_load_word_fails(|core| core.read_data[0][0] += F::ONE);
 }
 
 #[test]

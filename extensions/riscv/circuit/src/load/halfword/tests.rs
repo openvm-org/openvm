@@ -33,7 +33,7 @@ use crate::{
     load::{
         common::load_write_data, core::LoadCoreCols, LoadHalfwordCoreAir, LoadHalfwordFiller,
         Rv64LoadHalfwordAir, Rv64LoadHalfwordChip, Rv64LoadHalfwordExecutor,
-        LOAD_HALFWORD_SELECTOR_WIDTH,
+        LOAD_HALFWORD_SELECTOR_WIDTH, LOAD_HALFWORD_TOUCHED_CELLS,
     },
     test_utils::memory::{load_memory_config, set_and_execute_load, F, MAX_INS_CAPACITY},
 };
@@ -194,8 +194,12 @@ fn negative_split_write_data_test() {
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
-        let core: &mut LoadCoreCols<F, LOAD_HALFWORD_SELECTOR_WIDTH> = core_row.borrow_mut();
-        core.read_data[0] += F::ONE;
+        let core: &mut LoadCoreCols<
+            F,
+            LOAD_HALFWORD_SELECTOR_WIDTH,
+            LOAD_HALFWORD_TOUCHED_CELLS,
+        > = core_row.borrow_mut();
+        core.read_data[0][0] += F::ONE;
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
     disable_debug_builder();
