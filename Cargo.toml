@@ -115,14 +115,12 @@ incremental = true
 lto = "thin"
 
 [workspace.dependencies]
-# Stark Backend
-# TODO: update to tag = "v2.0.0" after stark-backend is tagged
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-cpu-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
+openvm-stark-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false } # Stark Backend
+openvm-stark-sdk = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
+openvm-cpu-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
+openvm-cuda-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
+openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
+openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
 
 # OpenVM
 openvm-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
