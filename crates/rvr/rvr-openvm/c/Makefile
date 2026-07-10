@@ -60,7 +60,7 @@ $(VENDOR_OBJS): CFLAGS += $(EXT_CFLAGS) $(VENDOR_WARNINGS)
 shared: $(LIB)
 
 $(LIB): $(ALL_OBJS)
-	$(CC) -shared $(CFLAGS) $(LDFLAGS) -o $@ $^ $(EXT_LIBS) $(LDLIBS)
+	$(CC) -shared $(CFLAGS) $(LDFLAGS) -Wl,--thinlto-jobs=1 -o $@ $^ $(EXT_LIBS) $(LDLIBS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
