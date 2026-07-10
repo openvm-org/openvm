@@ -2,6 +2,6 @@ pub mod codegen;
 mod context;
 mod project;
 
-pub use codegen::InstrCodegen;
+pub use codegen::{instr_emits_inline_record, InstrCodegen};
 pub use context::EmitContext;
 pub use project::{CProject, SuspendPolicy, TracerMode};
