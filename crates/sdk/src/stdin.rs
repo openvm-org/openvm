@@ -35,7 +35,7 @@ impl StdIn {
 }
 
 impl From<StdIn> for Streams {
-    fn from(mut std_in: StdIn) -> Self {
+    fn from(std_in: StdIn) -> Self {
         Streams {
             input_stream: std_in.buffer,
             deferrals: std_in.deferrals,

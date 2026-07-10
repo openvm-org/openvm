@@ -177,11 +177,7 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<
-    CTX: ExecutionCtxTrait,
-    OP: LoadOp,
-    const ENABLED: bool,
->(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: LoadOp, const ENABLED: bool>(
     pre_compute: &LoadPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
