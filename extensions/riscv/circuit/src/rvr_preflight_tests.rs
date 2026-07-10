@@ -13,8 +13,8 @@ use openvm_circuit::{
             LogNativeAssemblerRegistry, RvrPreflightOutput, RvrPreflightRoute,
             VmRvrLogNativeExtension,
         },
-        verify_segments, ContinuationVmProver, ExecutionError, MatrixRecordArena, Streams,
-        VirtualMachine, VmInstance,
+        verify_segments, ContinuationVmProver, DenseRecordArena, ExecutionError, MatrixRecordArena,
+        Streams, VirtualMachine, VmInstance,
     },
     system::SystemRecords,
     utils::test_cpu_engine,
@@ -1152,15 +1152,33 @@ fn full_rv64im_instruction_air_ids(air_names: &[String]) -> Vec<usize> {
     ids
 }
 
+/// System AIRs whose CPU-vs-GPU traces must match byte-for-byte in the three-way
+/// comparison: the persistent boundary and memory merkle chips (continuation-state
+/// transport), the connector, and the range/lookup count tables fed by every other
+/// chip's side effects.
 #[cfg(feature = "cuda")]
-fn persistent_boundary_air_id(air_names: &[String]) -> usize {
+fn system_compare_air_ids(air_names: &[String]) -> Vec<usize> {
     let ids = air_names
         .iter()
         .enumerate()
-        .filter_map(|(idx, name)| name.starts_with("PersistentBoundaryAir<").then_some(idx))
+        .filter_map(|(idx, name)| {
+            (name.starts_with("PersistentBoundaryAir<")
+                || name.starts_with("MemoryMerkleAir<")
+                || name == "VmConnectorAir"
+                || name == "VariableRangeCheckerAir"
+                || name.starts_with("RangeTupleCheckerAir<"))
+            .then_some(idx)
+        })
         .collect::<Vec<_>>();
-    assert_eq!(ids.len(), 1, "expected one persistent-boundary AIR");
-    ids[0]
+    assert_eq!(
+        ids.len(),
+        5,
+        "expected boundary/merkle/connector/range system AIRs, found: {:?}",
+        ids.iter()
+            .map(|idx| air_names[*idx].as_str())
+            .collect::<Vec<_>>()
+    );
+    ids
 }
 
 #[cfg(feature = "cuda")]
@@ -1520,7 +1538,7 @@ fn assert_gpu_rvr_three_way_from_state(
         &air_names,
         &gpu_arena_traces,
         &cpu_traces,
-        &[persistent_boundary_air_id(&air_names)],
+        &system_compare_air_ids(&air_names),
     );
 
     rvr_to_state
@@ -1537,7 +1555,22 @@ fn assert_gpu_rvr_three_way_single_segment(
     let (vm, _) =
         VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
             .expect("vm init");
-    let trace_heights = vec![4096u32; vm.num_airs()];
+    // Size the arenas from the real metered heights so the test exercises production
+    // sizing: DenseRecordArena capacity is exact with no slack, so a metering/assembly
+    // count mismatch fails here instead of only at reth scale.
+    let segments = {
+        let metered_ctx = vm.build_metered_ctx(&exe);
+        let metered = vm.metered_interpreter(&exe).expect("metered interpreter");
+        let (segments, _) = metered
+            .execute_metered(streams.clone(), metered_ctx)
+            .expect("metered execution");
+        segments
+    };
+    assert_eq!(
+        segments.len(),
+        1,
+        "{label}: single-segment fixture must meter into one segment"
+    );
     let from_state = vm.create_initial_state(&exe, streams);
     assert_gpu_rvr_three_way_from_state(
         label,
@@ -1545,7 +1578,7 @@ fn assert_gpu_rvr_three_way_single_segment(
         &config,
         from_state,
         None,
-        &trace_heights,
+        &segments[0].trace_heights,
         expected_active_instruction_air_count,
     );
 }
@@ -2067,6 +2100,52 @@ fn rvr_preflight_proves_standard_group_single_segment() {
 #[test]
 fn rvr_preflight_standard_group_trace_matches_interpreter() {
     assert_standard_group_trace_matches_interpreter();
+}
+
+/// A metered-height undercount must fail loudly at record-assembly time: the GPU-path
+/// `DenseRecordArena` is sized exactly from metered heights with no slack, so before the
+/// capacity assert was made unconditional an undercount wrote past the buffer and silently
+/// corrupted the heap. This pins the loud-failure contract host-side, with no GPU needed.
+#[test]
+#[should_panic(expected = "failed to allocate")]
+fn rvr_preflight_dense_arena_capacity_undercount_panics() {
+    let exe = standard_group_exe(1);
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("vm init");
+    let air_names = vm.air_names().map(str::to_owned).collect::<Vec<_>>();
+    let add_sub_air_idx = air_names
+        .iter()
+        .position(|name| name.starts_with("VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<"))
+        .expect("AddSub AIR present");
+    let mut trace_heights = vec![4096u32; vm.num_airs()];
+    trace_heights[add_sub_air_idx] = 0;
+    let capacities = trace_heights
+        .iter()
+        .zip(vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+    let rvr_output = {
+        let route = vm
+            .preflight_routed_instance(&exe)
+            .expect("routed preflight instance");
+        let RvrPreflightRoute::Rvr(instance) = route else {
+            panic!("program must route to RVR preflight");
+        };
+        instance
+            .execute_preflight(Streams::default(), None)
+            .expect("rvr preflight execution")
+    };
+    let _ = crate::log_native::generate_rv64im_record_arenas_from_logs::<F, DenseRecordArena>(
+        &exe,
+        &rvr_output,
+        &capacities,
+        &pc_to_air_idx,
+    );
 }
 
 #[cfg(feature = "cuda")]
