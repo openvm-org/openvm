@@ -2250,9 +2250,14 @@ fn rvr_preflight_inline_addsub_net_timing() {
         .collect();
     for _ in 0..ITERS {
         for (arm, (_, instance)) in instances.iter().enumerate() {
+            let init_state = instance.create_initial_state(Streams::default());
             let t0 = Instant::now();
             let mut output = instance
-                .execute_preflight(Streams::default(), None)
+                .execute_preflight_from_state_with_capacities(
+                    init_state,
+                    Some((adds * 3 + 3) as u64),
+                    &trace_heights,
+                )
                 .expect("rvr preflight execution");
             let execute_s = t0.elapsed().as_secs_f64();
 
@@ -2267,9 +2272,14 @@ fn rvr_preflight_inline_addsub_net_timing() {
             let dense_s = t1.elapsed().as_secs_f64();
             std::hint::black_box(&dense);
 
+            let init_state2 = instance.create_initial_state(Streams::default());
             let t2 = Instant::now();
             let mut output2 = instance
-                .execute_preflight(Streams::default(), None)
+                .execute_preflight_from_state_with_capacities(
+                    init_state2,
+                    Some((adds * 3 + 3) as u64),
+                    &trace_heights,
+                )
                 .expect("rvr preflight execution");
             let execute2_s = t2.elapsed().as_secs_f64();
             let t3 = Instant::now();
@@ -2293,7 +2303,7 @@ fn rvr_preflight_inline_addsub_net_timing() {
         let best = &bests[arm];
         eprintln!(
             "{label}: n_instr={} execute={:.3}ms dense_gen={:.3}ms matrix_gen={:.3}ms \
-             total_dense={:.3}ms total_matrix={:.3}ms (min of {ITERS}, interleaved)",
+             total_dense={:.3}ms total_matrix={:.3}ms (min of {ITERS}, interleaved, single-shot)",
             adds * 3 + 3,
             best.execute * 1e3,
             best.dense_gen * 1e3,
