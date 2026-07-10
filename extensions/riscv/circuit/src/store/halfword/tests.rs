@@ -9,19 +9,19 @@ use crate::test_utils::memory::{
 };
 #[cfg(feature = "cuda")]
 use crate::test_utils::memory::{
-    default_var_range_checker_bus, dummy_range_checker, store_gpu_memory_config,
-    transfer_store_records, GpuChipTestBuilder, GpuTestChipHarness, Rv64LoadStoreOpcode,
-    Rv64StoreAdapterAir, Rv64StoreAdapterExecutor, Rv64StoreAdapterFiller, Rv64StoreHalfwordAir,
-    Rv64StoreHalfwordChip, Rv64StoreHalfwordChipGpu, Rv64StoreHalfwordExecutor,
-    StoreHalfwordCoreAir, StoreHalfwordFiller, F, MAX_INS_CAPACITY, PUBLIC_VALUES_AS,
-    RV64_MEMORY_AS,
+    default_bitwise_lookup_bus, default_var_range_checker_bus, dummy_range_checker,
+    store_gpu_memory_config, transfer_store_records, Arc, BitwiseOperationLookupChip,
+    GpuChipTestBuilder, GpuTestChipHarness, Rv64LoadStoreOpcode, Rv64StoreAdapterAir,
+    Rv64StoreAdapterExecutor, Rv64StoreAdapterFiller, Rv64StoreHalfwordAir, Rv64StoreHalfwordChip,
+    Rv64StoreHalfwordChipGpu, Rv64StoreHalfwordExecutor, StoreHalfwordCoreAir, StoreHalfwordFiller,
+    F, MAX_INS_CAPACITY, PUBLIC_VALUES_AS, RV64_BYTE_BITS, RV64_MEMORY_AS,
 };
 
 #[test]
 fn rand_store_halfword_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(store_memory_config());
-    let mut harness = create_store_halfword_harness(&mut tester);
+    let (mut harness, bitwise) = create_store_halfword_harness(&mut tester);
     for _ in 0..100 {
         set_and_execute_store(
             &mut tester,
@@ -38,6 +38,7 @@ fn rand_store_halfword_test() {
     tester
         .build()
         .load(harness)
+        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .unwrap();
@@ -46,22 +47,53 @@ fn rand_store_halfword_test() {
 #[test]
 fn run_storeh_sanity_test() {
     let read_data = rv64_bytes_to_u16_block([250, 123, 67, 198, 175, 33, 198, 250]);
-    let prev_data = rv64_bytes_to_u16_block([144, 56, 175, 92, 90, 121, 64, 205]);
+    let prev_data = [
+        rv64_bytes_to_u16_block([144, 56, 175, 92, 90, 121, 64, 205]),
+        rv64_bytes_to_u16_block([61, 92, 17, 203, 44, 118, 240, 5]),
+    ];
     assert_eq!(
         store_write_data(STOREH, read_data, prev_data, 0),
-        rv64_bytes_to_u16_block([250, 123, 175, 92, 90, 121, 64, 205])
+        [
+            rv64_bytes_to_u16_block([250, 123, 175, 92, 90, 121, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREH, read_data, prev_data, 2),
-        rv64_bytes_to_u16_block([144, 56, 250, 123, 90, 121, 64, 205])
+        [
+            rv64_bytes_to_u16_block([144, 56, 250, 123, 90, 121, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREH, read_data, prev_data, 4),
-        rv64_bytes_to_u16_block([144, 56, 175, 92, 250, 123, 64, 205])
+        [
+            rv64_bytes_to_u16_block([144, 56, 175, 92, 250, 123, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREH, read_data, prev_data, 6),
-        rv64_bytes_to_u16_block([144, 56, 175, 92, 90, 121, 250, 123])
+        [
+            rv64_bytes_to_u16_block([144, 56, 175, 92, 90, 121, 250, 123]),
+            prev_data[1]
+        ]
+    );
+    // Misaligned within one block.
+    assert_eq!(
+        store_write_data(STOREH, read_data, prev_data, 3),
+        [
+            rv64_bytes_to_u16_block([144, 56, 175, 250, 123, 121, 64, 205]),
+            prev_data[1]
+        ]
+    );
+    // Misaligned across the block boundary.
+    assert_eq!(
+        store_write_data(STOREH, read_data, prev_data, 7),
+        [
+            rv64_bytes_to_u16_block([144, 56, 175, 92, 90, 121, 64, 250]),
+            rv64_bytes_to_u16_block([123, 92, 17, 203, 44, 118, 240, 5]),
+        ]
     );
 }
 
@@ -77,6 +109,9 @@ type GpuStoreHalfwordHarness = GpuTestChipHarness<
 #[cfg(feature = "cuda")]
 fn create_cuda_store_halfword_harness(tester: &GpuChipTestBuilder) -> GpuStoreHalfwordHarness {
     let range_checker = dummy_range_checker();
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        default_bitwise_lookup_bus(),
+    ));
     let air = Rv64StoreHalfwordAir::new(
         Rv64StoreAdapterAir::new(
             tester.memory_bridge(),
@@ -84,7 +119,7 @@ fn create_cuda_store_halfword_harness(tester: &GpuChipTestBuilder) -> GpuStoreHa
             range_checker.bus(),
             tester.address_bits(),
         ),
-        StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+        StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64StoreHalfwordExecutor::new(
         Rv64StoreAdapterExecutor::new(tester.address_bits()),
@@ -94,6 +129,7 @@ fn create_cuda_store_halfword_harness(tester: &GpuChipTestBuilder) -> GpuStoreHa
         StoreHalfwordFiller::new(
             Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip,
             range_checker,
         ),
         tester.dummy_memory_helper(),

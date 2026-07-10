@@ -49,14 +49,20 @@ pub struct StoreInstruction<T> {
     pub opcode: T,
     /// Byte offset of the effective pointer inside the 8-byte memory block.
     pub shift_amount: T,
+    /// Boolean flag for accesses that span two consecutive memory blocks; constrained by the
+    /// core to match the selected shift and access width.
+    pub store_cross: T,
 }
 
 pub struct Rv64StoreAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
 
-/// Uses AB::Var for previous memory data and AB::Expr for source register data.
+/// The previous contents of the two consecutive memory blocks (the second is used only when the
+/// access crosses a block boundary), followed by the source register data. The previous contents
+/// feed both write auxes, so the core's read-modify-write inputs and the offline checker's
+/// receive-side data are the same expressions by construction.
 impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64StoreAdapterAirInterface<AB> {
-    type Reads = ([AB::Var; BLOCK_FE_WIDTH], [AB::Expr; BLOCK_FE_WIDTH]);
-    type Writes = [[AB::Expr; BLOCK_FE_WIDTH]; 1];
+    type Reads = ([[AB::Expr; BLOCK_FE_WIDTH]; 2], [AB::Expr; BLOCK_FE_WIDTH]);
+    type Writes = [[AB::Expr; BLOCK_FE_WIDTH]; 2];
     type ProcessedInstruction = StoreInstruction<AB::Expr>;
 }
 
@@ -76,8 +82,14 @@ pub struct Rv64StoreAdapterCols<T> {
     /// Intermediate effective pointer limbs for constraining rs1 + sign_extend(imm).
     pub mem_ptr_limbs: [T; 2],
     pub mem_as: T,
+    /// Carry from the low into the high pointer limb when the crossing block starts at a
+    /// multiple of 2^16; forced by the crossing range check below.
+    pub mem_ptr_carry: T,
     /// Timestamp aux for the memory write; previous data is provided by the core chip.
     pub write_base_aux: MemoryBaseAuxCols<T>,
+    /// Timestamp aux for the second block write; only used when the access crosses a block
+    /// boundary. Previous data is provided by the core chip.
+    pub write1_base_aux: MemoryBaseAuxCols<T>,
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
@@ -115,6 +127,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
 
         let is_valid = ctx.instruction.is_valid;
         let shift_amount = ctx.instruction.shift_amount;
+        let cross = ctx.instruction.store_cross;
+        builder.assert_bool(cross.clone());
 
         // Read rs1 as a low 32-bit pointer value; the upper register cells are zero on the bus.
         let rs1_data: [AB::Expr; BLOCK_FE_WIDTH] = expand_to_rv64_block(&local_cols.rs1_data);
@@ -146,11 +160,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
             .assert_eq(carry, local_cols.imm_sign);
 
         // Prevent mem_ptr overflow while allowing the adapter to write the containing 8-byte block.
+        let block_bytes = AB::F::from_u32(RV64_REGISTER_NUM_LIMBS as u32);
+        let aligned_limb0 = local_cols.mem_ptr_limbs[0] - shift_amount.clone();
         self.range_bus
             .range_check(
                 // (limb[0] - shift_amount) / 8 < 2^13 => limb[0] - shift_amount < 2^16
-                (local_cols.mem_ptr_limbs[0] - shift_amount.clone())
-                    * AB::F::from_u32(RV64_REGISTER_NUM_LIMBS as u32).inverse(),
+                aligned_limb0.clone() * block_bytes.inverse(),
                 U16_BITS - 3,
             )
             .eval(builder, is_valid.clone());
@@ -161,10 +176,34 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
             )
             .eval(builder, is_valid.clone());
 
+        // When the access crosses into the next block, additionally bound `aligned + 8` by
+        // range checking its limbs. mem_ptr_carry claims whether the +8 wraps the low limb at
+        // 2^16; the low-limb check forces it: with the wrong carry the argument is either 2^13
+        // or negative, and in both cases out of range.
+        builder.assert_bool(local_cols.mem_ptr_carry);
+        self.range_bus
+            .range_check(
+                (aligned_limb0.clone() + block_bytes
+                    - local_cols.mem_ptr_carry * AB::F::from_u32(1u32 << U16_BITS))
+                    * block_bytes.inverse(),
+                U16_BITS - 3,
+            )
+            .eval(builder, cross.clone());
+        self.range_bus
+            .range_check(
+                local_cols.mem_ptr_limbs[1] + local_cols.mem_ptr_carry,
+                self.pointer_max_bits - U16_BITS,
+            )
+            .eval(builder, cross.clone());
+
         let mem_ptr = local_cols.mem_ptr_limbs[0]
             + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1u32 << U16_BITS);
         // Constrain stores to writable u16-celled address spaces.
         builder.assert_bool(local_cols.mem_as - AB::Expr::TWO);
+
+        let (prev_data, read_data) = ctx.reads;
+        let [prev_data0, prev_data1] = prev_data;
+        let [write_data0, write_data1] = ctx.writes;
 
         // Read the source register data to be written into memory.
         self.memory_bridge
@@ -173,7 +212,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
                     AB::F::from_u32(RV64_REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rs2_ptr),
                 ),
-                ctx.reads.1,
+                read_data,
                 timestamp_pp(),
                 &local_cols.read_data_aux,
             )
@@ -185,16 +224,27 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
             .write(
                 MemoryAddress::new(
                     local_cols.mem_as,
-                    byte_ptr_to_u16_ptr::<AB>(mem_ptr - shift_amount),
+                    byte_ptr_to_u16_ptr::<AB>(mem_ptr.clone() - shift_amount.clone()),
                 ),
-                ctx.writes[0].clone(),
+                write_data0,
                 timestamp_pp(),
-                MemoryWriteAuxInput::from_prev_data_exprs(
-                    &local_cols.write_base_aux,
-                    ctx.reads.0.map(Into::into),
-                ),
+                MemoryWriteAuxInput::from_prev_data_exprs(&local_cols.write_base_aux, prev_data0),
             )
             .eval(builder, is_valid.clone());
+
+        // Write the next block when the access crosses into it. The timestamp slot is consumed
+        // either way so the instruction has a static timestamp layout.
+        self.memory_bridge
+            .write(
+                MemoryAddress::new(
+                    local_cols.mem_as,
+                    byte_ptr_to_u16_ptr::<AB>(mem_ptr - shift_amount + block_bytes),
+                ),
+                write_data1,
+                timestamp_pp(),
+                MemoryWriteAuxInput::from_prev_data_exprs(&local_cols.write1_base_aux, prev_data1),
+            )
+            .eval(builder, cross);
 
         let to_pc = ctx
             .to_pc
@@ -240,6 +290,9 @@ pub struct Rv64StoreAdapterRecord {
     pub imm_sign: bool,
     pub mem_as: u8,
     pub write_prev_timestamp: u32,
+    /// Prev timestamp of the second block write; `u32::MAX` when the access does not cross a
+    /// block boundary.
+    pub write1_prev_timestamp: u32,
 }
 
 impl Rv64StoreAdapterRecord {
@@ -254,12 +307,16 @@ impl Rv64StoreAdapterRecord {
     pub(crate) fn shift_amount(&self) -> usize {
         (self.effective_ptr() & (RV64_REGISTER_NUM_LIMBS as u32 - 1)) as usize
     }
+
+    pub(crate) fn crosses(&self) -> bool {
+        self.write1_prev_timestamp != u32::MAX
+    }
 }
 
 /// Reads rs1, computes the effective memory pointer, reads rs2, and writes the containing memory
-/// block.
+/// block (and the next block when the `STORE_WIDTH`-byte access crosses into it).
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64StoreAdapterExecutor {
+pub struct Rv64StoreAdapterExecutor<const STORE_WIDTH: usize> {
     pointer_max_bits: usize,
 }
 
@@ -269,13 +326,13 @@ pub struct Rv64StoreAdapterFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F> AdapterTraceExecutor<F> for Rv64StoreAdapterExecutor
+impl<F, const STORE_WIDTH: usize> AdapterTraceExecutor<F> for Rv64StoreAdapterExecutor<STORE_WIDTH>
 where
     F: PrimeField32,
 {
     const WIDTH: usize = size_of::<Rv64StoreAdapterCols<u8>>();
-    type ReadData = (([u16; BLOCK_FE_WIDTH], [u16; BLOCK_FE_WIDTH]), u8);
-    type WriteData = [u16; BLOCK_FE_WIDTH];
+    type ReadData = (([[u16; BLOCK_FE_WIDTH]; 2], [u16; BLOCK_FE_WIDTH]), u8);
+    type WriteData = [[u16; BLOCK_FE_WIDTH]; 2];
     type RecordMut<'a> = &'a mut Rv64StoreAdapterRecord;
 
     #[inline(always)]
@@ -334,13 +391,26 @@ where
             byte_ptr_to_u16_ptr_value(record.rs2_ptr),
             &mut record.read_data_aux.prev_timestamp,
         );
-        let prev_data = memory_read_u16(
+        let prev_data0 = memory_read_u16(
             memory.data(),
             mem_as,
             byte_ptr_to_u16_ptr_value(aligned_ptr),
         );
+        let crosses = shift_amount as usize + STORE_WIDTH > RV64_REGISTER_NUM_LIMBS;
+        let prev_data1 = if crosses {
+            let block1_ptr = aligned_ptr + RV64_REGISTER_NUM_LIMBS as u32;
+            assert!(
+                self.pointer_max_bits >= RV64_PTR_BITS
+                    || u64::from(block1_ptr) + RV64_REGISTER_NUM_LIMBS as u64
+                        <= (1u64 << self.pointer_max_bits),
+                "crossing access exceeds implemented memory address space"
+            );
+            memory_read_u16(memory.data(), mem_as, byte_ptr_to_u16_ptr_value(block1_ptr))
+        } else {
+            [0; BLOCK_FE_WIDTH]
+        };
 
-        ((prev_data, read_data), shift_amount as u8)
+        (([prev_data0, prev_data1], read_data), shift_amount as u8)
     }
 
     #[inline(always)]
@@ -351,14 +421,29 @@ where
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     ) {
+        let shift_amount = record.shift_amount();
         let ptr = record.effective_ptr() & !(RV64_REGISTER_NUM_LIMBS as u32 - 1);
         record.write_prev_timestamp = timed_write_u16(
             memory,
             record.mem_as as u32,
             byte_ptr_to_u16_ptr_value(ptr),
-            data,
+            data[0],
         )
         .0;
+        // The second block's timestamp slot is consumed either way so the instruction has a
+        // static timestamp layout.
+        if shift_amount + STORE_WIDTH > RV64_REGISTER_NUM_LIMBS {
+            record.write1_prev_timestamp = timed_write_u16(
+                memory,
+                record.mem_as as u32,
+                byte_ptr_to_u16_ptr_value(ptr + RV64_REGISTER_NUM_LIMBS as u32),
+                data[1],
+            )
+            .0;
+        } else {
+            record.write1_prev_timestamp = u32::MAX;
+            memory.increment_timestamp();
+        }
     }
 }
 
@@ -388,10 +473,21 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreAdapterFiller {
         let imm_sign = record.imm_sign;
         let mem_as = record.mem_as;
         let write_prev_timestamp = record.write_prev_timestamp;
+        let write1_prev_timestamp = record.write1_prev_timestamp;
+        let crosses = record.crosses();
         let ptr = record.effective_ptr();
         let shift_amount = record.shift_amount() as u32;
         let adapter_row: &mut Rv64StoreAdapterCols<F> = adapter_row.borrow_mut();
 
+        if crosses {
+            mem_helper.fill(
+                write1_prev_timestamp,
+                from_timestamp + 3,
+                &mut adapter_row.write1_base_aux,
+            );
+        } else {
+            mem_helper.fill_zero(&mut adapter_row.write1_base_aux);
+        }
         mem_helper.fill(
             write_prev_timestamp,
             from_timestamp + 2,
@@ -400,11 +496,25 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreAdapterFiller {
 
         adapter_row.mem_as = F::from_u8(mem_as);
         let ptr_limbs = ptr_to_u16_limbs(ptr).map(u32::from);
+        let aligned_limb0 = ptr_limbs[0] - shift_amount;
         self.range_checker_chip
-            .add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);
+            .add_count(aligned_limb0 >> 3, U16_BITS - 3);
         self.range_checker_chip
             .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
         adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_u32);
+
+        let carry = crosses && aligned_limb0 + 8 == 1 << U16_BITS;
+        adapter_row.mem_ptr_carry = F::from_bool(carry);
+        if crosses {
+            self.range_checker_chip.add_count(
+                (aligned_limb0 + 8 - ((carry as u32) << U16_BITS)) >> 3,
+                U16_BITS - 3,
+            );
+            self.range_checker_chip.add_count(
+                ptr_limbs[1] + carry as u32,
+                self.pointer_max_bits - U16_BITS,
+            );
+        }
 
         adapter_row.imm_sign = F::from_bool(imm_sign);
         adapter_row.imm = F::from_u16(imm);

@@ -35,7 +35,9 @@ pub(crate) use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_r
 pub(crate) use rand::{rngs::StdRng, seq::IndexedRandom, Rng};
 #[cfg(feature = "cuda")]
 pub(crate) use {
-    crate::adapters::{Rv64LoadAdapterRecord, Rv64StoreAdapterRecord, LOAD_WIDTH_WORD},
+    crate::adapters::{
+        Rv64LoadAdapterRecord, Rv64StoreAdapterRecord, LOAD_WIDTH_WORD, STORE_WIDTH_WORD,
+    },
     crate::load::{
         LoadRecord, Rv64LoadByteChipGpu, Rv64LoadDoublewordChipGpu, Rv64LoadHalfwordChipGpu,
         Rv64LoadWordChipGpu,
@@ -79,7 +81,7 @@ pub(crate) use crate::{
         Rv64StoreHalfwordExecutor, Rv64StoreWordAir, Rv64StoreWordChip, Rv64StoreWordExecutor,
         StoreByteCoreAir, StoreByteCoreCols, StoreByteFiller, StoreDoublewordCoreAir,
         StoreDoublewordFiller, StoreHalfwordCoreAir, StoreHalfwordFiller, StoreWordCoreAir,
-        StoreWordFiller, STORE_HALFWORD_SELECTOR_WIDTH,
+        StoreWordFiller, STORE_HALFWORD_SELECTOR_WIDTH, STORE_HALFWORD_VALUE_CELLS,
     },
 };
 
@@ -296,8 +298,18 @@ pub(crate) fn create_halfword_harness(
 
 pub(crate) fn create_store_halfword_harness(
     tester: &mut VmChipTestBuilder<F>,
-) -> StoreHalfwordHarness {
+) -> (
+    StoreHalfwordHarness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
     let range_checker = tester.range_checker();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
     let air = Rv64StoreHalfwordAir::new(
         Rv64StoreAdapterAir::new(
             tester.memory_bridge(),
@@ -305,7 +317,7 @@ pub(crate) fn create_store_halfword_harness(
             range_checker.bus(),
             tester.address_bits(),
         ),
-        StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+        StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64StoreHalfwordExecutor::new(
         Rv64StoreAdapterExecutor::new(tester.address_bits()),
@@ -315,11 +327,15 @@ pub(crate) fn create_store_halfword_harness(
         StoreHalfwordFiller::new(
             Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.clone(),
             range_checker,
         ),
         tester.memory_helper(),
     );
-    StoreHalfwordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    (
+        StoreHalfwordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        (bitwise_chip.air, bitwise_chip),
+    )
 }
 
 pub(crate) fn create_word_harness(
@@ -364,8 +380,20 @@ pub(crate) fn create_word_harness(
     )
 }
 
-pub(crate) fn create_store_word_harness(tester: &mut VmChipTestBuilder<F>) -> StoreWordHarness {
+pub(crate) fn create_store_word_harness(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    StoreWordHarness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
     let range_checker = tester.range_checker();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
     let air = Rv64StoreWordAir::new(
         Rv64StoreAdapterAir::new(
             tester.memory_bridge(),
@@ -373,7 +401,7 @@ pub(crate) fn create_store_word_harness(tester: &mut VmChipTestBuilder<F>) -> St
             range_checker.bus(),
             tester.address_bits(),
         ),
-        StoreWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+        StoreWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64StoreWordExecutor::new(
         Rv64StoreAdapterExecutor::new(tester.address_bits()),
@@ -383,11 +411,15 @@ pub(crate) fn create_store_word_harness(tester: &mut VmChipTestBuilder<F>) -> St
         StoreWordFiller::new(
             Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.clone(),
             range_checker,
         ),
         tester.memory_helper(),
     );
-    StoreWordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    (
+        StoreWordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        (bitwise_chip.air, bitwise_chip),
+    )
 }
 
 pub(crate) fn create_doubleword_harness(
@@ -434,8 +466,18 @@ pub(crate) fn create_doubleword_harness(
 
 pub(crate) fn create_store_doubleword_harness(
     tester: &mut VmChipTestBuilder<F>,
-) -> StoreDoublewordHarness {
+) -> (
+    StoreDoublewordHarness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
     let range_checker = tester.range_checker();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
     let air = Rv64StoreDoublewordAir::new(
         Rv64StoreAdapterAir::new(
             tester.memory_bridge(),
@@ -443,7 +485,7 @@ pub(crate) fn create_store_doubleword_harness(
             range_checker.bus(),
             tester.address_bits(),
         ),
-        StoreDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+        StoreDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64StoreDoublewordExecutor::new(
         Rv64StoreAdapterExecutor::new(tester.address_bits()),
@@ -453,11 +495,15 @@ pub(crate) fn create_store_doubleword_harness(
         StoreDoublewordFiller::new(
             Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.clone(),
             range_checker,
         ),
         tester.memory_helper(),
     );
-    StoreDoublewordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    (
+        StoreDoublewordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        (bitwise_chip.air, bitwise_chip),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -550,14 +596,12 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
     imm_sign: Option<u32>,
     mem_as: Option<usize>,
 ) {
-    let alignment = match opcode {
-        STORED => 3,
-        STOREW => 2,
-        STOREH => 1,
-        STOREB => 0,
+    match opcode {
+        STORED | STOREW | STOREH | STOREB => {}
         _ => unreachable!("unsupported store opcode: {opcode:?}"),
-    };
-    let access = random_memory_access(tester, rng, alignment, rs1, imm, imm_sign);
+    }
+    // Stores support any byte shift, so sample fully misaligned pointers.
+    let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
     let mem_as = mem_as.unwrap_or_else(|| {
         *[RV64_MEMORY_AS as usize, PUBLIC_VALUES_AS as usize]
             .choose(rng)
@@ -570,7 +614,8 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
         access.rs1.map(F::from_u8),
     );
 
-    let prev_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|_| rng.random());
+    let prev_data: [[u16; BLOCK_FE_WIDTH]; 2] =
+        array::from_fn(|_| array::from_fn(|_| rng.random()));
     let mut read_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|_| rng.random());
     if access.a == 0 {
         read_data = [0; BLOCK_FE_WIDTH];
@@ -578,7 +623,12 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.write_bytes(
         mem_as,
         access.base_ptr,
-        rv64_u16_block_to_bytes(prev_data).map(F::from_u8),
+        rv64_u16_block_to_bytes(prev_data[0]).map(F::from_u8),
+    );
+    tester.write_bytes(
+        mem_as,
+        access.base_ptr + 8,
+        rv64_u16_block_to_bytes(prev_data[1]).map(F::from_u8),
     );
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
@@ -605,8 +655,14 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let write_data = store_write_data(opcode, read_data, prev_data, access.shift_amount);
     assert_eq!(
-        rv64_u16_block_to_bytes(write_data).map(F::from_u8),
+        rv64_u16_block_to_bytes(write_data[0]).map(F::from_u8),
         tester.read_bytes::<8>(mem_as, access.base_ptr)
+    );
+    // The second block is either rewritten by the crossing store or untouched; both must match
+    // the model.
+    assert_eq!(
+        rv64_u16_block_to_bytes(write_data[1]).map(F::from_u8),
+        tester.read_bytes::<8>(mem_as, access.base_ptr + 8)
     );
 }
 
@@ -736,11 +792,13 @@ pub(crate) fn assert_pranked_load_halfword_fails(
 }
 
 pub(crate) fn assert_pranked_store_halfword_fails(
-    prank: impl Fn(&mut StoreCoreCols<F, { STORE_HALFWORD_SELECTOR_WIDTH }>),
+    prank: impl Fn(
+        &mut StoreCoreCols<F, { STORE_HALFWORD_SELECTOR_WIDTH }, { STORE_HALFWORD_VALUE_CELLS }>,
+    ),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(store_memory_config());
-    let mut harness = create_store_halfword_harness(&mut tester);
+    let (mut harness, bitwise) = create_store_halfword_harness(&mut tester);
     set_and_execute_store(
         &mut tester,
         &mut harness.executor,
@@ -763,6 +821,7 @@ pub(crate) fn assert_pranked_store_halfword_fails(
     tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .expect_err("pranked halfword store trace should fail");
@@ -843,7 +902,7 @@ pub(crate) fn assert_pranked_store_word_adapter_fails(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(store_memory_config());
-    let mut harness = create_store_word_harness(&mut tester);
+    let (mut harness, bitwise) = create_store_word_harness(&mut tester);
     set_and_execute_store(
         &mut tester,
         &mut harness.executor,
@@ -866,6 +925,7 @@ pub(crate) fn assert_pranked_store_word_adapter_fails(
     tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .expect_err("pranked store adapter trace should fail");
@@ -902,7 +962,7 @@ pub(crate) fn transfer_store_records<G, C, A, E>(harness: &mut GpuTestChipHarnes
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64StoreAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64StoreAdapterExecutor<STORE_WIDTH_WORD>>::new(),
         );
 }
 

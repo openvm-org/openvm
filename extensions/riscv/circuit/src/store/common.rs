@@ -5,7 +5,7 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::adapters::{
-    set_u16_cell_byte, u16_cell_byte, STORE_WIDTH_BYTE, STORE_WIDTH_DOUBLEWORD,
+    rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, STORE_WIDTH_BYTE, STORE_WIDTH_DOUBLEWORD,
     STORE_WIDTH_HALFWORD, STORE_WIDTH_WORD,
 };
 
@@ -13,7 +13,9 @@ use crate::adapters::{
 #[derive(AlignedBytesBorrow, Clone, Copy, Debug)]
 pub struct StoreRecord {
     pub read_data: [u16; BLOCK_FE_WIDTH],
-    pub prev_data: [u16; BLOCK_FE_WIDTH],
+    /// Previous contents of the two touched memory blocks; the second is all-zero unless the
+    /// access crosses a block boundary.
+    pub prev_data: [[u16; BLOCK_FE_WIDTH]; 2],
 }
 
 #[derive(Clone, Copy, derive_new::new)]
@@ -28,8 +30,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData = (([u16; BLOCK_FE_WIDTH], [u16; BLOCK_FE_WIDTH]), u8),
-            WriteData = [u16; BLOCK_FE_WIDTH],
+            ReadData = (([[u16; BLOCK_FE_WIDTH]; 2], [u16; BLOCK_FE_WIDTH]), u8),
+            WriteData = [[u16; BLOCK_FE_WIDTH]; 2],
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -73,37 +75,26 @@ where
     }
 }
 
-/// Returns the memory write data, preserving previous cells outside the store width.
+/// Returns the contents of the two written memory blocks for a store at any byte shift,
+/// preserving previous bytes outside the store width. The second block is written back
+/// unchanged unless the access crosses a block boundary.
 pub(crate) fn store_write_data(
     opcode: Rv64LoadStoreOpcode,
     read_data: [u16; BLOCK_FE_WIDTH],
-    prev_data: [u16; BLOCK_FE_WIDTH],
+    prev_data: [[u16; BLOCK_FE_WIDTH]; 2],
     byte_shift: usize,
-) -> [u16; BLOCK_FE_WIDTH] {
-    let cell_shift = byte_shift / 2;
-    match opcode {
-        STORED if byte_shift == 0 => read_data,
-        STOREW if byte_shift == 0 || byte_shift == 4 => {
-            let mut write_data = prev_data;
-            write_data[cell_shift] = read_data[0];
-            write_data[cell_shift + 1] = read_data[1];
-            write_data
-        }
-        STOREH if byte_shift == 0 || byte_shift == 2 || byte_shift == 4 || byte_shift == 6 => {
-            let mut write_data = prev_data;
-            write_data[cell_shift] = read_data[0];
-            write_data
-        }
-        STOREB if byte_shift < 8 => {
-            let mut write_data = prev_data;
-            let byte = u16_cell_byte(read_data[0], 0);
-            write_data[cell_shift] = set_u16_cell_byte(prev_data[cell_shift], byte_shift % 2, byte);
-            write_data
-        }
-        _ => unreachable!(
-            "unaligned store not supported by this execution environment: {opcode:?}, byte_shift: {byte_shift}"
-        ),
-    }
+) -> [[u16; BLOCK_FE_WIDTH]; 2] {
+    debug_assert!(byte_shift < 2 * BLOCK_FE_WIDTH);
+    let width = store_width_for_opcode(opcode);
+    let mut bytes = [0u8; 4 * BLOCK_FE_WIDTH];
+    bytes[..2 * BLOCK_FE_WIDTH].copy_from_slice(&rv64_u16_block_to_bytes(prev_data[0]));
+    bytes[2 * BLOCK_FE_WIDTH..].copy_from_slice(&rv64_u16_block_to_bytes(prev_data[1]));
+    let value = rv64_u16_block_to_bytes(read_data);
+    bytes[byte_shift..byte_shift + width].copy_from_slice(&value[..width]);
+    [
+        rv64_bytes_to_u16_block(bytes[..2 * BLOCK_FE_WIDTH].try_into().unwrap()),
+        rv64_bytes_to_u16_block(bytes[2 * BLOCK_FE_WIDTH..].try_into().unwrap()),
+    ]
 }
 
 pub(crate) fn store_width_for_opcode(opcode: Rv64LoadStoreOpcode) -> usize {

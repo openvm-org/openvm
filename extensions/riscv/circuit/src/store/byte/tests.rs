@@ -47,38 +47,65 @@ fn rand_store_byte_test() {
 #[test]
 fn run_storeb_sanity_test() {
     let read_data = rv64_bytes_to_u16_block([221, 104, 58, 147, 175, 33, 198, 250]);
-    let prev_data = rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 64, 205]);
+    let prev_data = [
+        rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 64, 205]),
+        rv64_bytes_to_u16_block([61, 92, 17, 203, 44, 118, 240, 5]),
+    ];
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 0),
-        rv64_bytes_to_u16_block([221, 83, 243, 12, 90, 121, 64, 205])
+        [
+            rv64_bytes_to_u16_block([221, 83, 243, 12, 90, 121, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 1),
-        rv64_bytes_to_u16_block([199, 221, 243, 12, 90, 121, 64, 205])
+        [
+            rv64_bytes_to_u16_block([199, 221, 243, 12, 90, 121, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 2),
-        rv64_bytes_to_u16_block([199, 83, 221, 12, 90, 121, 64, 205])
+        [
+            rv64_bytes_to_u16_block([199, 83, 221, 12, 90, 121, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 3),
-        rv64_bytes_to_u16_block([199, 83, 243, 221, 90, 121, 64, 205])
+        [
+            rv64_bytes_to_u16_block([199, 83, 243, 221, 90, 121, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 4),
-        rv64_bytes_to_u16_block([199, 83, 243, 12, 221, 121, 64, 205])
+        [
+            rv64_bytes_to_u16_block([199, 83, 243, 12, 221, 121, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 5),
-        rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 221, 64, 205])
+        [
+            rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 221, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 6),
-        rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 221, 205])
+        [
+            rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 221, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 7),
-        rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 64, 221])
+        [
+            rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 64, 221]),
+            prev_data[1]
+        ]
     );
 }
 

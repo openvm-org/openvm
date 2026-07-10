@@ -5,23 +5,25 @@ use openvm_instructions::LocalOpcode;
 
 use crate::test_utils::memory::{
     create_seeded_rng, create_store_doubleword_harness, rv64_bytes_to_u16_block,
-    set_and_execute_store, store_memory_config, store_write_data, VmChipTestBuilder, STORED,
+    set_and_execute_store, store_memory_config, store_write_data, VmChipTestBuilder,
+    RV64_MEMORY_AS, STORED,
 };
 #[cfg(feature = "cuda")]
 use crate::test_utils::memory::{
-    default_var_range_checker_bus, dummy_range_checker, store_gpu_memory_config,
-    transfer_store_records, GpuChipTestBuilder, GpuTestChipHarness, Rv64LoadStoreOpcode,
-    Rv64StoreAdapterAir, Rv64StoreAdapterExecutor, Rv64StoreAdapterFiller, Rv64StoreDoublewordAir,
+    default_bitwise_lookup_bus, default_var_range_checker_bus, dummy_range_checker,
+    store_gpu_memory_config, transfer_store_records, Arc, BitwiseOperationLookupChip,
+    GpuChipTestBuilder, GpuTestChipHarness, Rv64LoadStoreOpcode, Rv64StoreAdapterAir,
+    Rv64StoreAdapterExecutor, Rv64StoreAdapterFiller, Rv64StoreDoublewordAir,
     Rv64StoreDoublewordChip, Rv64StoreDoublewordChipGpu, Rv64StoreDoublewordExecutor,
     StoreDoublewordCoreAir, StoreDoublewordFiller, F, MAX_INS_CAPACITY, PUBLIC_VALUES_AS,
-    RV64_MEMORY_AS,
+    RV64_BYTE_BITS,
 };
 
 #[test]
 fn rand_store_doubleword_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(store_memory_config());
-    let mut harness = create_store_doubleword_harness(&mut tester);
+    let (mut harness, bitwise) = create_store_doubleword_harness(&mut tester);
     for _ in 0..100 {
         set_and_execute_store(
             &mut tester,
@@ -38,6 +40,33 @@ fn rand_store_doubleword_test() {
     tester
         .build()
         .load(harness)
+        .load_periphery(bitwise)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[test]
+fn positive_stored_page_boundary_cross_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(store_memory_config());
+    let (mut harness, bitwise) = create_store_doubleword_harness(&mut tester);
+    // ptr = 0xfff9: the crossing block starts at 0x10000, exercising the pointer limb carry.
+    set_and_execute_store(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        STORED,
+        Some([0xf9, 0xff, 0x00, 0x00, 0, 0, 0, 0]),
+        Some(0),
+        Some(0),
+        Some(RV64_MEMORY_AS as usize),
+    );
+    tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .unwrap();
@@ -46,8 +75,22 @@ fn rand_store_doubleword_test() {
 #[test]
 fn run_stored_sanity_test() {
     let read_data = rv64_bytes_to_u16_block([138, 45, 202, 76, 131, 74, 186, 29]);
-    let prev_data = rv64_bytes_to_u16_block([159, 213, 89, 34, 142, 67, 210, 88]);
-    assert_eq!(store_write_data(STORED, read_data, prev_data, 0), read_data);
+    let prev_data = [
+        rv64_bytes_to_u16_block([159, 213, 89, 34, 142, 67, 210, 88]),
+        rv64_bytes_to_u16_block([61, 92, 17, 203, 44, 118, 240, 5]),
+    ];
+    assert_eq!(
+        store_write_data(STORED, read_data, prev_data, 0),
+        [read_data, prev_data[1]]
+    );
+    // Every nonzero doubleword shift crosses the block boundary.
+    assert_eq!(
+        store_write_data(STORED, read_data, prev_data, 5),
+        [
+            rv64_bytes_to_u16_block([159, 213, 89, 34, 142, 138, 45, 202]),
+            rv64_bytes_to_u16_block([76, 131, 74, 186, 29, 118, 240, 5]),
+        ]
+    );
 }
 
 #[cfg(feature = "cuda")]
@@ -62,6 +105,9 @@ type GpuStoreDoublewordHarness = GpuTestChipHarness<
 #[cfg(feature = "cuda")]
 fn create_cuda_store_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuStoreDoublewordHarness {
     let range_checker = dummy_range_checker();
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        default_bitwise_lookup_bus(),
+    ));
     let air = Rv64StoreDoublewordAir::new(
         Rv64StoreAdapterAir::new(
             tester.memory_bridge(),
@@ -69,7 +115,7 @@ fn create_cuda_store_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuStore
             range_checker.bus(),
             tester.address_bits(),
         ),
-        StoreDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+        StoreDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64StoreDoublewordExecutor::new(
         Rv64StoreAdapterExecutor::new(tester.address_bits()),
@@ -79,6 +125,7 @@ fn create_cuda_store_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuStore
         StoreDoublewordFiller::new(
             Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip,
             range_checker,
         ),
         tester.dummy_memory_helper(),
