@@ -245,7 +245,7 @@ fn assert_single_segment_trace_matches_interpreter(exe: VmExe<F>) {
     let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
     let int256_air_ids = int256_air_ids(&exe, &pc_to_air_idx);
     let rvr_initial_state = rvr_vm.create_initial_state(&exe, Streams::default());
-    let rvr_output = {
+    let mut rvr_output = {
         let route = rvr_vm.preflight_routed_instance(&exe).expect("rvr route");
         let RvrPreflightRoute::Rvr(instance) = route else {
             panic!("Int256 program must route to rvr");
@@ -262,9 +262,14 @@ fn assert_single_segment_trace_matches_interpreter(exe: VmExe<F>) {
 
     let mut registry = LogNativeAssemblerRegistry::<F, MatrixRecordArena<F>>::new();
     config.extend_rvr_log_native(&mut registry);
-    let rvr_arenas =
-        generate_record_arenas_from_logs(&registry, &exe, &rvr_output, &capacities, &pc_to_air_idx)
-            .expect("rvr record assembly");
+    let rvr_arenas = generate_record_arenas_from_logs(
+        &registry,
+        &exe,
+        &mut rvr_output,
+        &capacities,
+        &pc_to_air_idx,
+    )
+    .expect("rvr record assembly");
 
     let interpreter_ctx = interpreter_vm
         .generate_proving_ctx(

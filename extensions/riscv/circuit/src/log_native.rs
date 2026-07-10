@@ -3,10 +3,10 @@ use openvm_circuit::{
         rvr::{
             generate_record_arenas_from_logs, LogNativeAccessView, LogNativeAssemblerRegistry,
             PreflightMemoryAccessAux, RvrPreflightOutput, VmRvrLogNativeExtension,
-            PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
+            PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
         },
-        Arena, EmptyAdapterCoreLayout, EmptyMultiRowLayout, ExecutionError, MultiRowLayout,
-        RecordArena, BLOCK_FE_WIDTH,
+        AdapterTraceExecutor, Arena, EmptyAdapterCoreLayout, EmptyMultiRowLayout, ExecutionError,
+        InlineRecordLayout, MultiRowLayout, RecordArena, BLOCK_FE_WIDTH,
     },
     system::{
         memory::offline_checker::{
@@ -329,7 +329,7 @@ impl<F: PrimeField32> Rv64AccessView<F> for AccessView<'_, F> {
 
 pub fn generate_rv64im_record_arenas_from_logs<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
     exe: &VmExe<F>,
-    output: &RvrPreflightOutput<F>,
+    output: &mut RvrPreflightOutput<F>,
     capacities: &[(usize, usize)],
     pc_to_air_idx: &[Option<usize>],
 ) -> Result<Vec<RA>, ExecutionError> {
@@ -337,6 +337,31 @@ pub fn generate_rv64im_record_arenas_from_logs<F: PrimeField32, RA: Rv64Standard
     crate::Rv64ImConfig::default().extend_rvr_log_native(&mut registry);
     generate_record_arenas_from_logs(&registry, exe, output, capacities, pc_to_air_idx)
 }
+
+/// Packed-record byte layout of the inline (C-emitted) base-ALU AddSub record:
+/// `DenseRecordArena`'s concatenation of `Rv64BaseAluU16AdapterRecord` and
+/// `AddSubCoreRecord<BLOCK_FE_WIDTH>`. The C `PreflightAddSubRecord` mirrors
+/// this layout, `_Static_assert`-guarded against `PREFLIGHT_ADDSUB_RECORD_SIZE`
+/// on the C side and by the const drift guard below on the Rust side.
+fn addsub_inline_record_layout<F: PrimeField32>() -> InlineRecordLayout {
+    InlineRecordLayout {
+        aligned_adapter_size: ADDSUB_ALIGNED_ADAPTER_SIZE,
+        aligned_core_size: ADDSUB_ALIGNED_CORE_SIZE,
+        adapter_row_bytes: <Rv64BaseAluU16AdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+            * size_of::<F>(),
+    }
+}
+
+const ADDSUB_ALIGNED_ADAPTER_SIZE: usize = size_of::<Rv64BaseAluU16AdapterRecord>()
+    .next_multiple_of(align_of::<AddSubCoreRecord<BLOCK_FE_WIDTH>>());
+const ADDSUB_ALIGNED_CORE_SIZE: usize = (ADDSUB_ALIGNED_ADAPTER_SIZE
+    + size_of::<AddSubCoreRecord<BLOCK_FE_WIDTH>>())
+.next_multiple_of(align_of::<Rv64BaseAluU16AdapterRecord>())
+    - ADDSUB_ALIGNED_ADAPTER_SIZE;
+// Drift guard: the packed AddSub record stride must match the C record the
+// preflight tracer writes.
+const _: () =
+    assert!(ADDSUB_ALIGNED_ADAPTER_SIZE + ADDSUB_ALIGNED_CORE_SIZE == PREFLIGHT_ADDSUB_RECORD_SIZE);
 
 impl<F, RA> VmRvrLogNativeExtension<F, RA> for crate::Rv64I
 where
@@ -347,6 +372,10 @@ where
         registry.register(
             [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|opcode| opcode.global_opcode()),
             assemble_add_sub::<F, RA>,
+        );
+        registry.register_inline_layout(
+            [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|opcode| opcode.global_opcode()),
+            addsub_inline_record_layout::<F>(),
         );
         registry.register(
             [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]

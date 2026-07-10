@@ -63,6 +63,30 @@ pub trait ExtEmitCtx {
         self.write_var(var, val);
     }
 
+    /// Emit a compact ADD/SUB register record when the current transport owns
+    /// this instruction. Returns whether normal emission was replaced.
+    fn emit_addsub_reg(
+        &mut self,
+        _is_sub: bool,
+        _rd: Variable,
+        _rs1: Variable,
+        _rs2: Variable,
+    ) -> bool {
+        false
+    }
+
+    /// Emit a compact ADDI record when the current transport owns this
+    /// instruction. Returns whether normal emission was replaced.
+    fn emit_addsub_imm(
+        &mut self,
+        _is_sub: bool,
+        _rd: Variable,
+        _rs1: Variable,
+        _imm: i32,
+    ) -> bool {
+        false
+    }
+
     /// Append a line of C code (indented).
     fn write_line(&mut self, s: &str);
 

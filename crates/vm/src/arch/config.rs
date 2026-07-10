@@ -201,7 +201,7 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         &self,
         config: &Self::VmConfig,
         exe: &VmExe<Val<E::SC>>,
-        output: &RvrPreflightOutput<Val<E::SC>>,
+        output: &mut RvrPreflightOutput<Val<E::SC>>,
         capacities: &[(usize, usize)],
         pc_to_air_idx: &[Option<usize>],
     ) -> Result<Option<Vec<Self::RecordArena>>, ExecutionError>

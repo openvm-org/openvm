@@ -21,6 +21,20 @@ pub trait Arena {
 
     fn is_empty(&self) -> bool;
 
+    /// Populate this arena from a buffer of packed adapter+core records
+    /// produced by an external writer (the rvr preflight C tracer) instead of
+    /// per-record `alloc` calls. The packed format is exactly
+    /// [`DenseRecordArena`]'s concatenation: aligned adapter bytes followed by
+    /// aligned core bytes per record, starting at the buffer's
+    /// [`DenseRecordArena::aligned_start_offset`].
+    fn adopt_inline_records(
+        &mut self,
+        _records: InlineRecordBytes,
+        _layout: &InlineRecordLayout,
+    ) -> Result<(), String> {
+        Err("this record arena does not support inline rvr records".to_string())
+    }
+
     /// Only used for metric collection purposes. Intended usage is that for a record arena that
     /// corresponds to a single trace matrix, this function can extract the current number of used
     /// rows of the corresponding trace matrix. This is currently expected to work only for
@@ -34,6 +48,35 @@ pub trait Arena {
     fn allocated_bytes(&self) -> Option<usize> {
         None
     }
+}
+
+/// Byte layout of one chip's packed inline (externally written) record, the
+/// same quantities [`RecordSeeker::get_aligned_sizes`] derives from the record
+/// types: `aligned_adapter_size` spans record start → core start,
+/// `aligned_core_size` spans core start → next record. `adapter_row_bytes` is
+/// the adapter AIR width in bytes, the core-record byte offset within a
+/// [`MatrixRecordArena`] trace row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InlineRecordLayout {
+    pub aligned_adapter_size: usize,
+    pub aligned_core_size: usize,
+    pub adapter_row_bytes: usize,
+}
+
+impl InlineRecordLayout {
+    pub fn record_size(&self) -> usize {
+        self.aligned_adapter_size + self.aligned_core_size
+    }
+}
+
+/// One chip's inline compact records as written by the rvr preflight C tracer
+/// into a [`DenseRecordArena`]-compatible backing buffer allocated via
+/// [`DenseRecordArena::backing_with_capacity`]: `written` record bytes start
+/// at the buffer's [`DenseRecordArena::aligned_start_offset`].
+#[derive(Debug)]
+pub struct InlineRecordBytes {
+    pub buffer: Vec<u8>,
+    pub written: usize,
 }
 
 /// Given some minimum layout of type `Layout`, the `RecordArena` should allocate a buffer, of
@@ -132,6 +175,49 @@ impl<F: Field> Arena for MatrixRecordArena<F> {
         self.trace_offset == 0
     }
 
+    /// Expands each packed record into one trace row: adapter bytes at the row
+    /// start, core bytes at the adapter-width offset — the same split
+    /// [`RecordSeeker::transfer_to_matrix_arena`] performs, driven by the
+    /// numeric layout instead of the record types.
+    fn adopt_inline_records(
+        &mut self,
+        records: InlineRecordBytes,
+        layout: &InlineRecordLayout,
+    ) -> Result<(), String> {
+        let record_size = layout.record_size();
+        if record_size == 0 || !records.written.is_multiple_of(record_size) {
+            return Err(format!(
+                "inline record bytes ({}) are not a multiple of the record size ({record_size})",
+                records.written
+            ));
+        }
+        let row_bytes = self.width * size_of::<F>();
+        if layout.aligned_adapter_size > layout.adapter_row_bytes
+            || layout.adapter_row_bytes + layout.aligned_core_size > row_bytes
+        {
+            return Err(format!(
+                "inline record layout {layout:?} does not fit a {row_bytes}-byte trace row"
+            ));
+        }
+        let start = DenseRecordArena::aligned_start_offset(&records.buffer);
+        let num_rows = records.written / record_size;
+        if self.trace_offset + num_rows * self.width > self.trace_buffer.len() {
+            return Err(format!(
+                "{num_rows} inline records exceed the arena capacity of {} rows",
+                self.trace_buffer.len() / self.width.max(1),
+            ));
+        }
+        let src = &records.buffer[start..start + records.written];
+        for record in src.chunks_exact(record_size) {
+            let row = self.alloc_single_row();
+            row[..layout.aligned_adapter_size]
+                .copy_from_slice(&record[..layout.aligned_adapter_size]);
+            row[layout.adapter_row_bytes..layout.adapter_row_bytes + layout.aligned_core_size]
+                .copy_from_slice(&record[layout.aligned_adapter_size..]);
+        }
+        Ok(())
+    }
+
     #[cfg(feature = "metrics")]
     fn current_trace_height(&self) -> usize {
         self.trace_offset / self.width
@@ -191,10 +277,44 @@ impl DenseRecordArena {
 
     /// Creates a new [DenseRecordArena] with the given capacity in bytes.
     pub fn with_byte_capacity(size_bytes: usize) -> Self {
-        let buffer = Self::new_buffer(size_bytes);
-        let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
+        let (buffer, offset) = Self::backing_with_capacity(size_bytes);
         let mut cursor = Cursor::new(buffer);
         cursor.set_position(offset as u64);
+        Self {
+            records_buffer: cursor,
+        }
+    }
+
+    /// Byte offset within `buffer` at which record data starts (and must be
+    /// written by an external producer): the first `MAX_ALIGNMENT`-aligned
+    /// position. Stable across moves of the `Vec` (the heap pointer does not
+    /// change), so a buffer filled externally can later be adopted with
+    /// [`Self::from_prewritten`].
+    pub fn aligned_start_offset(buffer: &[u8]) -> usize {
+        (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT
+    }
+
+    /// Allocates a zeroed backing buffer holding `size_bytes` of record
+    /// capacity at its aligned start offset, for an external (C) record
+    /// writer. Returns the buffer and its [`Self::aligned_start_offset`].
+    pub fn backing_with_capacity(size_bytes: usize) -> (Vec<u8>, usize) {
+        let buffer = Self::new_buffer(size_bytes);
+        let offset = Self::aligned_start_offset(&buffer);
+        (buffer, offset)
+    }
+
+    /// Wraps a backing buffer whose aligned region already holds `written`
+    /// bytes of packed records (zero-copy adoption of an externally written
+    /// buffer from [`Self::backing_with_capacity`]).
+    pub fn from_prewritten(buffer: Vec<u8>, written: usize) -> Self {
+        let offset = Self::aligned_start_offset(&buffer);
+        assert!(
+            offset + written <= buffer.len(),
+            "prewritten record length {written} exceeds backing capacity {}",
+            buffer.len() - offset,
+        );
+        let mut cursor = Cursor::new(buffer);
+        cursor.set_position((offset + written) as u64);
         Self {
             records_buffer: cursor,
         }
@@ -289,6 +409,24 @@ impl Arena for DenseRecordArena {
 
     fn is_empty(&self) -> bool {
         self.allocated().is_empty()
+    }
+
+    /// Zero-copy: the packed buffer already is this arena's record format, so
+    /// adoption just wraps it.
+    fn adopt_inline_records(
+        &mut self,
+        records: InlineRecordBytes,
+        layout: &InlineRecordLayout,
+    ) -> Result<(), String> {
+        let record_size = layout.record_size();
+        if record_size == 0 || !records.written.is_multiple_of(record_size) {
+            return Err(format!(
+                "inline record bytes ({}) are not a multiple of the record size ({record_size})",
+                records.written
+            ));
+        }
+        *self = DenseRecordArena::from_prewritten(records.buffer, records.written);
+        Ok(())
     }
 
     #[cfg(feature = "metrics")]

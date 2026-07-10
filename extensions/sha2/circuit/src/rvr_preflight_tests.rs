@@ -376,7 +376,7 @@ fn assert_segment_trace_matches_interpreter(
     let RvrPreflightRoute::Rvr(instance) = route else {
         panic!("{label}: SHA-256 program must route to rvr preflight");
     };
-    let rvr_output = instance
+    let mut rvr_output = instance
         .execute_preflight_from_state(segment_initial_state.clone(), num_insns)
         .expect("rvr preflight execution");
     assert_system_records_eq(
@@ -388,9 +388,14 @@ fn assert_segment_trace_matches_interpreter(
 
     let mut registry = LogNativeAssemblerRegistry::new();
     config.extend_rvr_log_native(&mut registry);
-    let rvr_record_arenas =
-        generate_record_arenas_from_logs(&registry, exe, &rvr_output, &capacities, &pc_to_air_idx)
-            .expect("rvr log-native record assembly");
+    let rvr_record_arenas = generate_record_arenas_from_logs(
+        &registry,
+        exe,
+        &mut rvr_output,
+        &capacities,
+        &pc_to_air_idx,
+    )
+    .expect("rvr log-native record assembly");
 
     let interp_ctx = interp_vm
         .generate_proving_ctx(interp_output.system_records, interp_output.record_arenas)

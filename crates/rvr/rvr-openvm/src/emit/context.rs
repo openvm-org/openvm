@@ -345,31 +345,32 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    /// R3 helper: emit a traced register read and capture the block's
-    /// `prev_timestamp`. Returns the C value expression and the prev-timestamp
-    /// variable name. Mirrors the log side of [`Self::read_reg`] exactly (same
-    /// `reg_read`/`trace_reg_read` calls) so the memory log stays byte-identical;
-    /// preflight has no hot registers, so no ABI-name fast path is needed.
+    /// R3 helper: emit a touch-only register read for a migrated opcode and
+    /// capture the block's `prev_timestamp`. Returns the C value expression and
+    /// the prev-timestamp variable name. `trace_reg_touch` consumes the exact
+    /// tick `trace_reg_read` would (same shadow/touched updates), but appends no
+    /// memory-log entry — the inline compact record carries the aux data.
+    /// Preflight has no hot registers, so no ABI-name fast path is needed.
     fn reg_read_capture(&mut self, idx: u8) -> (String, String) {
         debug_assert!(self.hot_regs.is_empty());
         let pts = self.next_var();
         if idx == 0 {
-            self.write_line(&format!("uint32_t {pts} = trace_reg_read(state, 0, 0);"));
+            self.write_line(&format!("uint32_t {pts} = trace_reg_touch(state, 0);"));
             ("0".to_string(), pts)
         } else {
             let val = self.next_var();
             self.write_line(&format!("uint64_t {val} = reg_read(state, {idx});"));
-            self.write_line(&format!(
-                "uint32_t {pts} = trace_reg_read(state, {idx}, {val});"
-            ));
+            self.write_line(&format!("uint32_t {pts} = trace_reg_touch(state, {idx});"));
             (val, pts)
         }
     }
 
     /// R3: emit a register-register base-ALU ADD/SUB with an inline compact
-    /// AddSub record (shadow mode — the verbose memory log is still emitted by
-    /// the `trace_reg_*` calls, so output stays byte-identical; the record is
-    /// filled in parallel for the migrated chip). `is_sub` selects SUB.
+    /// AddSub record. All three register accesses are touch-only (timestamp,
+    /// shadow, and touched updates identical to the logging helpers; no
+    /// memory-log entries) — the record carries the aux data and the host
+    /// consumes it directly instead of running the log assembler. `is_sub`
+    /// selects SUB.
     pub fn emit_addsub_reg(&mut self, is_sub: bool, rd: u8, rs1: u8, rs2: u8) {
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
@@ -383,9 +384,7 @@ impl<'a> EmitContext<'a> {
         let rdprev = self.next_var();
         self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
         let pw = self.next_var();
-        self.write_line(&format!(
-            "uint32_t {pw} = trace_reg_write(state, {rd}, {res});"
-        ));
+        self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
         self.write_line(&format!("reg_write(state, {rd}, {res});"));
         let local = is_sub as u8;
         self.write_line(&format!(
@@ -398,8 +397,8 @@ impl<'a> EmitContext<'a> {
     }
 
     /// R3: emit a register-immediate base-ALU ADD/SUB with an inline compact
-    /// AddSub record (shadow mode; see [`Self::emit_addsub_reg`]). The immediate
-    /// occupies a timestamp slot without a memory touch (matching
+    /// AddSub record (touch-only accesses; see [`Self::emit_addsub_reg`]). The
+    /// immediate occupies a timestamp slot without a memory touch (matching
     /// `trace_immediate`), so `reads_aux[1].prev_timestamp` is 0.
     pub fn emit_addsub_imm(&mut self, is_sub: bool, rd: u8, rs1: u8, imm: i32) {
         let chip = self.current_chip_idx;
@@ -418,9 +417,7 @@ impl<'a> EmitContext<'a> {
         let rdprev = self.next_var();
         self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
         let pw = self.next_var();
-        self.write_line(&format!(
-            "uint32_t {pw} = trace_reg_write(state, {rd}, {res});"
-        ));
+        self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
         self.write_line(&format!("reg_write(state, {rd}, {res});"));
         // record.rs2 = the raw 24-bit immediate operand; rs2_as = RV64_IMM_AS (0);
         // rs2_imm_sign = whether the sign-extension limb is nonzero.
@@ -784,6 +781,40 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
 
     fn write_var_raw(&mut self, var: Variable, val: &str) {
         EmitContext::write_var_raw(self, var, val)
+    }
+
+    fn emit_addsub_reg(
+        &mut self,
+        is_sub: bool,
+        rd: Variable,
+        rs1: Variable,
+        rs2: Variable,
+    ) -> bool {
+        if !self.inline_records_enabled() {
+            return false;
+        }
+        EmitContext::emit_addsub_reg(
+            self,
+            is_sub,
+            reg_index(rd),
+            reg_index(rs1),
+            reg_index(rs2),
+        );
+        true
+    }
+
+    fn emit_addsub_imm(
+        &mut self,
+        is_sub: bool,
+        rd: Variable,
+        rs1: Variable,
+        imm: i32,
+    ) -> bool {
+        if !self.inline_records_enabled() {
+            return false;
+        }
+        EmitContext::emit_addsub_imm(self, is_sub, reg_index(rd), reg_index(rs1), imm);
+        true
     }
 
     fn write_line(&mut self, s: &str) {

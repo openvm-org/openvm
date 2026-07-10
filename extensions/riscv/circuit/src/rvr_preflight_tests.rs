@@ -28,7 +28,7 @@ use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
-    program::Program,
+    program::{Program, DEFAULT_PC_STEP},
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, SysPhantom, SystemOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
@@ -291,24 +291,13 @@ fn alu_vector_exe() -> VmExe<F> {
     ])
 }
 
-/// R3 slice: the inline compact AddSub records the generated preflight C writes
-/// (shadow mode — the verbose memory log is still emitted, so end-to-end
-/// differentials stay byte-identical) must be byte-identical to what the host
-/// `assemble_add_sub` pass produces into a `DenseRecordArena`. This is the tight
-/// ABI oracle for the C record emission.
-#[test]
-fn rvr_preflight_inline_addsub_records_match_assembler() {
-    use openvm_circuit::arch::DenseRecordArena;
-
-    // Opt into inline record emission for this test process's fresh compile
-    // (nextest runs each test in its own process, so the env + compile cache are
-    // isolated). Must be set before the preflight `.so` is compiled below.
-    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
-
-    // AddSub-heavy program: register-register and register-immediate ADD/SUB,
-    // with register reuse (non-trivial prev_timestamps), x0 as a source, and a
-    // negative immediate (sign path). rd is never x0 (that lifts to a nop).
-    let exe = exe(&[
+/// The AddSub-heavy fixture for the inline-record differential: reg-reg and
+/// reg-imm ADD/SUB with register reuse (non-trivial prev_timestamps), x0 as a
+/// source, and a negative immediate (sign path). rd is never x0 (that lifts to
+/// a nop). One non-migrated instruction (SLTU) keeps the mixed-mode assembler
+/// path live in the same segment.
+fn inline_addsub_differential_exe() -> VmExe<F> {
+    exe(&[
         addi(1, 0, 5),                      // x1 = 5      (imm, rs1 = x0)
         addi(2, 0, 100),                    // x2 = 100
         alu_r(BaseAluOpcode::ADD, 3, 1, 2), // x3 = 105    (reg-reg)
@@ -316,10 +305,24 @@ fn rvr_preflight_inline_addsub_records_match_assembler() {
         addi(5, 3, 0x00ff_ffff),            // x5 = x3 + (-1) = 104 (negative imm)
         alu_r(BaseAluOpcode::ADD, 1, 4, 5), // x1 = 199    (rewrites x1 → prev_ts chain)
         alu_r(BaseAluOpcode::SUB, 6, 1, 0), // x6 = x1 - x0 (rs2 = x0)
+        sltu(7, 2, 1),                      // non-migrated: stays on the log path
         terminate(),
-    ]);
+    ])
+}
 
-    let (mut rvr_vm, _) = VirtualMachine::new_with_keygen(
+/// Execute the fixture through the routed rvr preflight and assemble all
+/// record arenas via the standard generation path (which adopts inline C
+/// buffers for migrated chips and runs the log assembler for the rest).
+fn run_inline_addsub_differential_arm(
+    exe: &VmExe<F>,
+) -> (
+    RvrPreflightOutput<F>,
+    Vec<openvm_circuit::arch::DenseRecordArena>,
+    Vec<Option<usize>>,
+) {
+    use openvm_circuit::arch::DenseRecordArena;
+
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(
         test_cpu_engine(),
         Rv64ImCpuBuilder,
         Rv64ImConfig::default(),
@@ -331,9 +334,51 @@ fn rvr_preflight_inline_addsub_records_match_assembler() {
         .zip(rvr_vm.pk().per_air.iter())
         .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
         .collect::<Vec<_>>();
-    let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(exe).expect("pc to air mapping");
 
-    // AddSub air index = the air an ADD/SUB instruction maps to.
+    let mut rvr_output = {
+        let route = rvr_vm
+            .preflight_routed_instance(exe)
+            .expect("routed preflight instance");
+        let RvrPreflightRoute::Rvr(instance) = route else {
+            panic!("program must route to RVR preflight");
+        };
+        instance
+            .execute_preflight(Streams::default(), None)
+            .expect("rvr preflight execution")
+    };
+    let arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<F, DenseRecordArena>(
+        exe,
+        &mut rvr_output,
+        &capacities,
+        &pc_to_air_idx,
+    )
+    .expect("record arena generation");
+    (rvr_output, arenas, pc_to_air_idx)
+}
+
+/// R3 Phase-1 differential for the C-consumed record path: the same program is
+/// compiled twice — inline records ON (default: AddSub memory-log entries
+/// suppressed, host adopts the C-written record buffer) and OFF
+/// (`OPENVM_RVR_INLINE_RECORDS=0`: verbose log + host assembler for every
+/// opcode). The two runs must agree on every record arena byte-for-byte and on
+/// the full tick model (program-log timestamps, system records), and the ON
+/// run's memory log must be exactly the OFF log minus the suppressed AddSub
+/// entries. nextest runs each test in its own process, so the env mutation is
+/// isolated.
+#[test]
+fn rvr_preflight_inline_addsub_records_match_assembler() {
+    let exe = inline_addsub_differential_exe();
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+    let (off_output, off_arenas, pc_to_air_idx) = run_inline_addsub_differential_arm(&exe);
+    assert!(
+        off_output.inline_records.is_empty(),
+        "opt-out compile must not produce inline record buffers"
+    );
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    let (on_output, on_arenas, _) = run_inline_addsub_differential_arm(&exe);
     let addsub_air_idx = exe
         .program
         .instructions_and_debug_infos
@@ -347,51 +392,72 @@ fn rvr_preflight_inline_addsub_records_match_assembler() {
             })
         })
         .expect("program must contain an ADD/SUB");
-
-    let rvr_output = {
-        let route = rvr_vm
-            .preflight_routed_instance(&exe)
-            .expect("routed preflight instance");
-        let RvrPreflightRoute::Rvr(instance) = route else {
-            panic!("program must route to RVR preflight");
-        };
-        instance
-            .execute_preflight_inline(Streams::default(), None, &[addsub_air_idx])
-            .expect("rvr preflight execution")
-    };
-
-    // Oracle: run the host assembler into a `DenseRecordArena` over the same log
-    // and take the AddSub air's compact bytes.
-    let oracle_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
-        F,
-        DenseRecordArena,
-    >(&exe, &rvr_output, &capacities, &pc_to_air_idx)
-    .expect("assembler record arenas");
-    let oracle_bytes = oracle_arenas[addsub_air_idx].allocated();
-
-    let (_, c_bytes) = rvr_output
-        .chip_record_bufs
-        .iter()
-        .find(|(air, _)| *air == addsub_air_idx)
-        .expect("inline AddSub record buffer must be present");
-
     assert!(
-        !c_bytes.is_empty(),
-        "C inline AddSub buffer is empty — codegen emitted no records (was \
-         OPENVM_RVR_INLINE_RECORDS honored at compile time?)"
+        !on_arenas[addsub_air_idx].allocated().is_empty(),
+        "inline run must materialize AddSub records (was the inline compile honored?)"
     );
+
+    // Ticking is untouchable: identical program log (pcs and timestamps) and
+    // identical system records (to_state timestamp, touched_memory, exec
+    // frequencies) between the suppressed and verbose compiles.
     assert_eq!(
-        c_bytes.len(),
-        oracle_bytes.len(),
-        "inline AddSub record byte length mismatch: C={} vs assembler={}",
-        c_bytes.len(),
-        oracle_bytes.len()
+        off_output.raw_logs.program_log, on_output.raw_logs.program_log,
+        "log suppression must not change the program log or its timestamps"
     );
+    assert_system_records_eq(
+        "inline_addsub_differential",
+        &off_output.system_records,
+        &on_output.system_records,
+    );
+
+    // The ON memory log is exactly the OFF log minus the suppressed AddSub
+    // entries: drop every OFF entry whose timestamp falls in an AddSub
+    // instruction's tick window [t, t+3).
+    let addsub_windows: Vec<(u32, u32)> = off_output
+        .raw_logs
+        .program_log
+        .iter()
+        .filter(|entry| {
+            let slot =
+                ((entry.pc - u64::from(exe.program.pc_base)) / u64::from(DEFAULT_PC_STEP)) as usize;
+            on_output
+                .inline_pc_slots
+                .get(slot)
+                .copied()
+                .unwrap_or(false)
+        })
+        .map(|entry| (entry.timestamp, entry.timestamp + 3))
+        .collect();
+    assert!(
+        !addsub_windows.is_empty(),
+        "fixture must contain migrated AddSub instructions"
+    );
+    let off_log_minus_addsub: Vec<_> = off_output
+        .raw_logs
+        .memory_log
+        .iter()
+        .filter(|entry| {
+            !addsub_windows
+                .iter()
+                .any(|&(start, end)| entry.timestamp >= start && entry.timestamp < end)
+        })
+        .cloned()
+        .collect();
     assert_eq!(
-        c_bytes.as_slice(),
-        oracle_bytes,
-        "inline AddSub record bytes differ from the assembler oracle"
+        on_output.raw_logs.memory_log, off_log_minus_addsub,
+        "suppression must drop exactly the AddSub memory-log entries"
     );
+
+    // Byte-identical record arenas across every AIR: the adopted C buffer for
+    // AddSub and the untouched assembler output for everything else.
+    assert_eq!(off_arenas.len(), on_arenas.len());
+    for (air_idx, (off_arena, on_arena)) in off_arenas.iter().zip(on_arenas.iter()).enumerate() {
+        assert_eq!(
+            off_arena.allocated(),
+            on_arena.allocated(),
+            "record arena bytes differ for air_idx {air_idx}"
+        );
+    }
 }
 
 fn mul_div_vector_exe() -> VmExe<F> {
@@ -894,7 +960,7 @@ fn assert_trace_matches_interpreter(
         .collect::<Vec<_>>();
     let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
     let rvr_initial_state = rvr_vm.create_initial_state(&exe, streams.clone());
-    let rvr_output = {
+    let mut rvr_output = {
         let route = rvr_vm
             .preflight_routed_instance(&exe)
             .expect("routed preflight instance");
@@ -913,7 +979,7 @@ fn assert_trace_matches_interpreter(
     let rvr_record_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
         F,
         MatrixRecordArena<F>,
-    >(&exe, &rvr_output, &capacities, &pc_to_air_idx)
+    >(&exe, &mut rvr_output, &capacities, &pc_to_air_idx)
     .expect("rvr log-native record assembly");
 
     let interp_ctx = interp_vm
@@ -1293,7 +1359,7 @@ fn assert_gpu_rvr_three_way_from_state(
         "{label}: GPU log/arena AIR name order"
     );
     let instruction_air_ids = full_rv64im_instruction_air_ids(&air_names);
-    let rvr_output = {
+    let mut rvr_output = {
         let route = gpu_log_vm
             .preflight_routed_instance(exe)
             .expect("routed preflight instance");
@@ -1323,7 +1389,13 @@ fn assert_gpu_rvr_three_way_from_state(
         .collect::<Vec<_>>();
     let pc_to_air_idx = gpu_log_vm.pc_to_air_idx(exe).expect("pc to air mapping");
     let gpu_log_record_arenas = Rv64ImGpuBuilder
-        .generate_rvr_record_arenas_from_logs(config, exe, &rvr_output, &capacities, &pc_to_air_idx)
+        .generate_rvr_record_arenas_from_logs(
+            config,
+            exe,
+            &mut rvr_output,
+            &capacities,
+            &pc_to_air_idx,
+        )
         .expect("gpu builder log-native record assembly")
         .expect("gpu builder must support rvr log-native tracegen");
 
@@ -2066,5 +2138,177 @@ fn rvr_preflight_carried_register_addsub_bus_balance_across_boundary() {
     assert!(
         segments > 1,
         "tight segmentation must split the x5-read stream so x5 is carried across a boundary"
+    );
+}
+
+/// R3 Phase-1 net timing harness: R1 (verbose log + host assembler) vs R3
+/// (log-suppressed inline records + host-adopted C buffers) on an
+/// AddSub-dominant program, end to end (preflight execute + record-arena
+/// generation), for both arena types. Manual, not a CI gate — run with:
+/// `cargo nextest run --cargo-profile=fast -p openvm-riscv-circuit \
+///  --features rvr --run-ignored only -- rvr_preflight_inline_addsub_net_timing`
+/// (release numbers: swap `--cargo-profile=fast` for `--cargo-profile=release`).
+#[test]
+#[ignore = "manual Phase-1 timing harness, not a correctness gate"]
+fn rvr_preflight_inline_addsub_net_timing() {
+    use std::time::Instant;
+
+    use openvm_circuit::arch::DenseRecordArena;
+
+    struct ArmBest {
+        execute: f64,
+        dense_gen: f64,
+        matrix_gen: f64,
+        total_dense: f64,
+        total_matrix: f64,
+    }
+
+    const ITERS: usize = 25;
+    let adds = 3000usize; // 2 + 3*3000 + 1 = 9003 instructions, ~9002 AddSub records
+    let exe = repeated_adds_exe(adds);
+
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("vm init");
+    let trace_heights = vec![16384u32; rvr_vm.num_airs()];
+    let capacities = trace_heights
+        .iter()
+        .zip(rvr_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+
+    // Compile both arms up front (the env gate is read at compile time), then
+    // interleave their measurement iterations so host drift hits both equally.
+    let mut instances = Vec::new();
+    for (label, env) in [("R1-log", "0"), ("R3-inline", "1")] {
+        std::env::set_var("OPENVM_RVR_INLINE_RECORDS", env);
+        let route = rvr_vm
+            .preflight_routed_instance(&exe)
+            .expect("routed preflight instance");
+        let RvrPreflightRoute::Rvr(instance) = route else {
+            panic!("program must route to RVR preflight");
+        };
+        instances.push((label, instance));
+    }
+
+    // Decompose the records-independent per-call baseline: initial-state
+    // construction and the guest-state clone `execute_rvr_preflight` performs.
+    {
+        let (_, instance) = &instances[0];
+        let mut best_init = f64::MAX;
+        let mut best_clone = f64::MAX;
+        for _ in 0..5 {
+            let t0 = Instant::now();
+            let state = instance.create_initial_state(Streams::default());
+            best_init = best_init.min(t0.elapsed().as_secs_f64());
+            let t1 = Instant::now();
+            let cloned = state.clone();
+            best_clone = best_clone.min(t1.elapsed().as_secs_f64());
+            std::hint::black_box(&cloned);
+        }
+        eprintln!(
+            "baseline: create_initial_state={:.3}ms state.clone={:.3}ms (min of 5)",
+            best_init * 1e3,
+            best_clone * 1e3,
+        );
+    }
+
+    // Structural evidence, printed once per arm: log volume and record source.
+    for (label, instance) in &instances {
+        let mut output = instance
+            .execute_preflight(Streams::default(), None)
+            .expect("rvr preflight execution");
+        let inline_bytes: usize = output
+            .inline_records
+            .iter()
+            .map(|chip| chip.records.written)
+            .sum();
+        eprintln!(
+            "{label}: memory_log_entries={} inline_record_bytes={inline_bytes}",
+            output.raw_logs.memory_log.len()
+        );
+        let arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+            F,
+            DenseRecordArena,
+        >(&exe, &mut output, &capacities, &pc_to_air_idx)
+        .expect("dense generation");
+        std::hint::black_box(&arenas);
+    }
+
+    let mut bests: Vec<ArmBest> = (0..instances.len())
+        .map(|_| ArmBest {
+            execute: f64::MAX,
+            dense_gen: f64::MAX,
+            matrix_gen: f64::MAX,
+            total_dense: f64::MAX,
+            total_matrix: f64::MAX,
+        })
+        .collect();
+    for _ in 0..ITERS {
+        for (arm, (_, instance)) in instances.iter().enumerate() {
+            let t0 = Instant::now();
+            let mut output = instance
+                .execute_preflight(Streams::default(), None)
+                .expect("rvr preflight execution");
+            let execute_s = t0.elapsed().as_secs_f64();
+
+            // Dense generation consumes the inline buffers (zero-copy), so time
+            // it on this output, then re-execute for the matrix arm.
+            let t1 = Instant::now();
+            let dense = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+                F,
+                DenseRecordArena,
+            >(&exe, &mut output, &capacities, &pc_to_air_idx)
+            .expect("dense generation");
+            let dense_s = t1.elapsed().as_secs_f64();
+            std::hint::black_box(&dense);
+
+            let t2 = Instant::now();
+            let mut output2 = instance
+                .execute_preflight(Streams::default(), None)
+                .expect("rvr preflight execution");
+            let execute2_s = t2.elapsed().as_secs_f64();
+            let t3 = Instant::now();
+            let matrix = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+                F,
+                MatrixRecordArena<F>,
+            >(&exe, &mut output2, &capacities, &pc_to_air_idx)
+            .expect("matrix generation");
+            let matrix_s = t3.elapsed().as_secs_f64();
+            std::hint::black_box(&matrix);
+
+            let best = &mut bests[arm];
+            best.execute = best.execute.min(execute_s.min(execute2_s));
+            best.dense_gen = best.dense_gen.min(dense_s);
+            best.matrix_gen = best.matrix_gen.min(matrix_s);
+            best.total_dense = best.total_dense.min(execute_s + dense_s);
+            best.total_matrix = best.total_matrix.min(execute2_s + matrix_s);
+        }
+    }
+    for (arm, (label, _)) in instances.iter().enumerate() {
+        let best = &bests[arm];
+        eprintln!(
+            "{label}: n_instr={} execute={:.3}ms dense_gen={:.3}ms matrix_gen={:.3}ms \
+             total_dense={:.3}ms total_matrix={:.3}ms (min of {ITERS}, interleaved)",
+            adds * 3 + 3,
+            best.execute * 1e3,
+            best.dense_gen * 1e3,
+            best.matrix_gen * 1e3,
+            best.total_dense * 1e3,
+            best.total_matrix * 1e3,
+        );
+    }
+    eprintln!(
+        "net R1->R3: dense {:.3}ms -> {:.3}ms ({:.2}x); matrix {:.3}ms -> {:.3}ms ({:.2}x)",
+        bests[0].total_dense * 1e3,
+        bests[1].total_dense * 1e3,
+        bests[0].total_dense / bests[1].total_dense,
+        bests[0].total_matrix * 1e3,
+        bests[1].total_matrix * 1e3,
+        bests[0].total_matrix / bests[1].total_matrix,
     );
 }

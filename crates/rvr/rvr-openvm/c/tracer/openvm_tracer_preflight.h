@@ -383,14 +383,28 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_write(
                                  WORD_SIZE, new_val, state->regs[idx]);
 }
 
+/* Touch-only register access for opcodes migrated to inline compact records
+ * (R3): advances the timestamp and updates the shadow/touched bookkeeping
+ * exactly like the logging `trace_reg_*` helpers, but appends no
+ * `MemoryLogEntry` — the compact record carries the aux data instead. The tick
+ * model must stay byte-identical to the logging variants. Returns the register
+ * block's previous-access timestamp. */
+static __attribute__((always_inline)) inline uint32_t trace_reg_touch(
+    RvState* restrict state, uint8_t idx) {
+  uint32_t timestamp;
+  return preflight_touch(state->tracer, AS_REGISTER, (uint32_t)idx * WORD_SIZE,
+                         &timestamp);
+}
+
 /* R3: emit one compact base-ALU AddSub record into chip `chip_idx`'s inline
  * buffer. Every field is supplied by the caller (which already computes them
  * for execution): the two register operand values (`rs1_val`/`rs2_val`, split
  * into the core `b`/`c` u16 limbs), the three access `prev_timestamp`s from the
  * touches, the old `rd` block value (`writes_aux` prev_data), and the decoded
- * operands. A null buffer / out-of-range chip / full buffer is a no-op: the
- * chip then has a missing inline record, which fails loudly downstream (bus
- * imbalance / trace mismatch) rather than silently corrupting. */
+ * operands. A null buffer array / null buffer / out-of-range chip / full buffer
+ * is a no-op: the chip then has a missing inline record, which the host record
+ * assembly detects as a byte-count mismatch and rejects loudly rather than
+ * silently corrupting. */
 static __attribute__((always_inline)) inline void preflight_emit_addsub(
     RvState* restrict state, uint32_t chip_idx, uint32_t from_pc,
     uint32_t from_timestamp, uint32_t rd_ptr, uint32_t rs1_ptr, uint32_t rs2,
@@ -398,7 +412,7 @@ static __attribute__((always_inline)) inline void preflight_emit_addsub(
     uint32_t rs2_prev_ts, uint32_t rd_prev_ts, uint64_t rd_prev_value,
     uint64_t rs1_val, uint64_t rs2_val, uint8_t local_opcode) {
   Tracer* restrict t = state->tracer;
-  if (unlikely(chip_idx >= t->chip_counts_len)) {
+  if (unlikely(t->chip_records == NULL || chip_idx >= t->chip_counts_len)) {
     return;
   }
   ChipRecordBuf* restrict buf = &t->chip_records[chip_idx];

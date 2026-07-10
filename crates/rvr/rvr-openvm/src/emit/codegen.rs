@@ -2,7 +2,7 @@
 use std::collections::HashSet;
 
 use openvm_instructions::program::DEFAULT_PC_STEP;
-use rvr_openvm_ir::{CfgBranchCond, CfgIntWidth, CfgOperand, CfgTerm, ExtEmitCtx, Terminator};
+use rvr_openvm_ir::{CfgBranchCond, CfgIntWidth, CfgOperand, CfgTerm, ExtEmitCtx, ExtInstr, Terminator};
 
 use super::context::EmitContext;
 
@@ -10,6 +10,13 @@ use super::context::EmitContext;
 pub struct TermCtx<'a> {
     /// Set of valid block start PCs for direct tail calls.
     pub valid_blocks: &'a HashSet<u64>,
+}
+
+/// Whether the current compact-record phase migrates this extension-owned
+/// instruction. #3059 moved RV64I into `ExtInstr` nodes, so the instruction's
+/// stable opcode name replaces the removed monolithic `Instr` enum match.
+pub fn instr_emits_inline_record(instr: &dyn ExtInstr) -> bool {
+    matches!(instr.opname(), "add" | "sub" | "addi")
 }
 
 /// Emit C code for a terminator using tail calls between blocks.

@@ -21,8 +21,8 @@ use super::{
 };
 use crate::{
     arch::{
-        interpreter_preflight::PreflightInterpretedInstance, ExecutionError, ExecutionState,
-        Streams, SystemConfig, VmState, BLOCK_FE_WIDTH,
+        interpreter_preflight::PreflightInterpretedInstance, DenseRecordArena, ExecutionError,
+        ExecutionState, InlineRecordBytes, Streams, SystemConfig, VmState, BLOCK_FE_WIDTH,
     },
     system::{
         memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory},
@@ -246,6 +246,16 @@ pub struct PreflightRawLogs {
     pub chip_counts: Vec<u32>,
 }
 
+/// One migrated chip's inline compact records for a segment, written by the
+/// generated C directly in the record arena's packed format (R3).
+#[derive(Debug)]
+pub struct RvrInlineChipRecords {
+    pub air_idx: usize,
+    /// Packed record stride in bytes (from the compile metadata).
+    pub record_size: usize,
+    pub records: InlineRecordBytes,
+}
+
 pub struct RvrPreflightOutput<F> {
     pub system_records: SystemRecords<F>,
     pub raw_logs: PreflightRawLogs,
@@ -253,10 +263,14 @@ pub struct RvrPreflightOutput<F> {
     pub to_state: VmState<GuestMemory>,
     pub instret: u64,
     pub suspended: bool,
-    /// R3: per-chip inline compact-record buffers filled by the generated C,
-    /// each `(air_idx, record_bytes)`. Empty unless inline records were
-    /// requested via [`RvrPreflightInstance::execute_preflight_inline`].
-    pub chip_record_bufs: Vec<(usize, Vec<u8>)>,
+    /// R3: per migrated chip, the inline compact records the generated C wrote
+    /// for this segment. Empty when the library was compiled without inline
+    /// records.
+    pub inline_records: Vec<RvrInlineChipRecords>,
+    /// R3: per program slot, whether that instruction emits an inline compact
+    /// record — its memory-log entries are suppressed, so record assembly must
+    /// skip the log assembler for it and consume `inline_records` instead.
+    pub inline_pc_slots: Arc<Vec<bool>>,
 }
 
 pub struct RvrPreflightInstance<'a, F: PrimeField32> {
@@ -336,23 +350,8 @@ where
         inputs: impl Into<Streams>,
         num_insns: Option<u64>,
     ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
-        self.execute_preflight_inline(inputs, num_insns, &[])
-    }
-
-    /// Like [`Self::execute_preflight`] but requests inline compact records
-    /// (R3) for the given chip (AIR) indices: the generated C writes each
-    /// migrated chip's records into a per-chip buffer returned in
-    /// `RvrPreflightOutput::chip_record_bufs`. Requires the `.so` to have been
-    /// compiled with inline records enabled (see the codegen gating); otherwise
-    /// the buffers come back empty.
-    pub fn execute_preflight_inline(
-        &self,
-        inputs: impl Into<Streams<F>>,
-        num_insns: Option<u64>,
-        inline_record_airs: &[usize],
-    ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
         let state = self.create_initial_state(inputs);
-        self.execute_preflight_from_state_inline(state, num_insns, inline_record_airs)
+        self.execute_preflight_from_state(state, num_insns)
     }
 
     /// Executes from an already-constructed VM state.
@@ -376,17 +375,6 @@ where
         state: VmState<GuestMemory>,
         num_insns: Option<u64>,
     ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
-        self.execute_preflight_from_state_inline(state, num_insns, &[])
-    }
-
-    /// [`Self::execute_preflight_from_state`] with inline compact records (R3)
-    /// requested for the given chip (AIR) indices.
-    pub fn execute_preflight_from_state_inline(
-        &self,
-        state: VmState<F, GuestMemory>,
-        num_insns: Option<u64>,
-        inline_record_airs: &[usize],
-    ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
         execute_rvr_preflight(
             &self.exe,
             &self.runtime_hooks,
@@ -394,11 +382,16 @@ where
             self.chip_counts_len,
             state,
             num_insns,
-            inline_record_airs,
+            None,
         )
     }
 }
 
+/// Executes a compiled preflight library. `record_capacity_rows`, when
+/// present, bounds each migrated chip's inline-record count for this segment
+/// (the metered per-AIR trace heights, indexed by AIR); without it the record
+/// buffers fall back to the one-record-per-instruction bound of the program
+/// log.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn execute_rvr_preflight<F>(
     exe: &VmExe<F>,
@@ -407,7 +400,7 @@ pub(crate) fn execute_rvr_preflight<F>(
     chip_counts_len: usize,
     state: VmState<GuestMemory>,
     num_insns: Option<u64>,
-    inline_record_airs: &[usize],
+    record_capacity_rows: Option<&[u32]>,
 ) -> Result<RvrPreflightOutput<F>, ExecutionError>
 where
     F: PrimeField32,
@@ -443,22 +436,35 @@ where
         let mut touched = vec![TouchedBlock::default(); memory_log_cap];
         let pv_base = public_values_slice(&mut run_state.memory.memory).as_mut_ptr();
 
-        // R3: per-chip inline compact-record buffers. Prototype sizing bounds a
-        // chip's records by one record per instruction (the same bound as the
-        // program log), an over-estimate that never overflows; the full port
-        // will size these by the metered per-chip trace heights. Currently only
-        // the AddSub chip is migrated, so every inline air uses that record size.
-        let mut record_bufs: Vec<Vec<u8>> = inline_record_airs
+        // R3: per migrated chip, an inline compact-record buffer in the record
+        // arena's packed format (32-aligned start so the arena can adopt the
+        // buffer zero-copy). Sized by the metered per-AIR trace heights when
+        // available, else by one record per instruction.
+        let inline_meta = compiled.inline_records();
+        let mut record_bufs: Vec<(Vec<u8>, usize, usize)> = inline_meta
+            .airs
             .iter()
-            .map(|_| vec![0u8; program_log_cap * PREFLIGHT_ADDSUB_RECORD_SIZE])
+            .map(|&(air, record_size)| {
+                let rows = record_capacity_rows
+                    .and_then(|heights| heights.get(air))
+                    .map(|&height| height as usize)
+                    .unwrap_or(program_log_cap);
+                let cap_bytes = rows * record_size;
+                let (buffer, offset) = DenseRecordArena::backing_with_capacity(cap_bytes);
+                (buffer, offset, cap_bytes)
+            })
             .collect();
         let mut chip_records = vec![ChipRecordBuf::default(); chip_counts_len.max(1)];
-        for (i, &air) in inline_record_airs.iter().enumerate() {
-            let cap = record_bufs[i].len() as u32;
+        for (&(air, _), (buffer, offset, cap_bytes)) in
+            inline_meta.airs.iter().zip(record_bufs.iter_mut())
+        {
+            debug_assert!(air < chip_records.len(), "inline air {air} out of range");
             chip_records[air] = ChipRecordBuf {
-                base: record_bufs[i].as_mut_ptr(),
+                // SAFETY: `offset` is within the buffer (backing_with_capacity
+                // over-allocates by the alignment slack).
+                base: unsafe { buffer.as_mut_ptr().add(*offset) },
                 len: 0,
-                cap,
+                cap: *cap_bytes as u32,
             };
         }
 
@@ -492,17 +498,18 @@ where
 
         let program_len = tracer.program_log_len as usize;
         let memory_len = tracer.memory_log_len as usize;
-        if program_len > program_log_cap || memory_len > memory_log_cap {
+        let touched_len = tracer.touched_len as usize;
+        // With inline records (R3), migrated opcodes touch without logging, so
+        // `touched` can outgrow the memory log; growing `memory_log_cap` grows
+        // the touched buffer with it.
+        if program_len > program_log_cap
+            || memory_len > memory_log_cap
+            || touched_len > touched.len()
+        {
             program_log_cap = grow_capacity(program_log_cap, program_len);
-            memory_log_cap = grow_capacity(memory_log_cap, memory_len);
+            memory_log_cap = grow_capacity(memory_log_cap, memory_len.max(touched_len));
             continue;
         }
-        let touched_len = tracer.touched_len as usize;
-        debug_assert!(
-            touched_len <= touched.len(),
-            "touched buffer overflow: {touched_len} > {}",
-            touched.len()
-        );
 
         program_log.truncate(program_len);
         memory_log.truncate(memory_len);
@@ -533,17 +540,23 @@ where
             touched_memory: replay.touched_memory,
         };
 
-        // R3: harvest each migrated chip's inline record bytes (the C-advanced
-        // cursor gives the written length). Read the length before taking the
-        // buffer, since the tracer's raw pointers into `record_bufs` go stale.
-        let chip_record_bufs: Vec<(usize, Vec<u8>)> = inline_record_airs
+        // R3: harvest each migrated chip's inline records (the C-advanced
+        // cursor gives the written length). The backing buffers move out
+        // whole so a dense arena can adopt them zero-copy.
+        let inline_records: Vec<RvrInlineChipRecords> = inline_meta
+            .airs
             .iter()
-            .enumerate()
-            .map(|(i, &air)| {
-                let written = chip_records[air].len as usize;
-                let mut buf = std::mem::take(&mut record_bufs[i]);
-                buf.truncate(written);
-                (air, buf)
+            .zip(record_bufs.iter_mut())
+            .map(|(&(air_idx, record_size), (buffer, _, _))| {
+                let written = chip_records[air_idx].len as usize;
+                RvrInlineChipRecords {
+                    air_idx,
+                    record_size,
+                    records: InlineRecordBytes {
+                        buffer: std::mem::take(buffer),
+                        written,
+                    },
+                }
             })
             .collect();
 
@@ -558,7 +571,8 @@ where
             to_state: run_state,
             instret: run_result.state.instret,
             suspended: run_result.suspended,
-            chip_record_bufs,
+            inline_records,
+            inline_pc_slots: inline_meta.pc_slots.clone(),
         });
     }
 }
@@ -881,6 +895,11 @@ mod tests {
 
     #[test]
     fn preflight_compiles_and_logs_rv64im_program() {
+        // This test asserts the verbose-log tracer contract (the path
+        // non-migrated opcodes take), so opt out of R3 inline records — the
+        // default compile suppresses AddSub memory-log entries. Safe under
+        // nextest (one process per test).
+        std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
         let exe = rv64im_memory_exe();
         let chips = chip_mapping(&exe);
         let compiled = compile_preflight(&exe, &chips, None).expect("compile preflight");
@@ -1032,6 +1051,9 @@ mod tests {
 
     #[test]
     fn preflight_phantoms_tick_shared_timestamp_and_chip_counts() {
+        // Verbose-log contract test; opt out of R3 inline records (see
+        // `preflight_compiles_and_logs_rv64im_program`).
+        std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
         let exe = phantom_timestamp_exe();
         let chips = phantom_chip_mapping(&exe);
         let compiled = compile_preflight(&exe, &chips, None).expect("compile preflight");
