@@ -216,7 +216,7 @@ impl MemoryInventoryGPU {
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let mem = MemTracker::start("generate mem proving ctxs");
         let partition = touched_memory;
-        let boundary_records = if partition.is_empty() {
+        let unpadded_merkle_height = if partition.is_empty() {
             let leftmost_values = 'left: {
                 let mut res = [F::ZERO; VM_DIGEST_WIDTH];
                 if self.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
@@ -258,29 +258,52 @@ impl MemoryInventoryGPU {
             };
             self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
 
+            let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
+            #[cfg(feature = "metrics")]
+            {
+                self.unpadded_merkle_height = unpadded_merkle_height;
+            }
             self.boundary
                 .finalize_records::<VM_DIGEST_WIDTH>(Vec::new());
-            0
+            self.prepare_poseidon2_records(0, unpadded_merkle_height);
+            unpadded_merkle_height
         } else {
             let _span = tracing::info_span!("mem_merge_records").entered();
-            // `inventory.cu` merges 4-cell block records into 8-cell leaf records.
-            let in_records: Vec<MemoryInventoryRecord<BLOCK_FE_WIDTH, 1>> = partition
-                .par_iter()
-                .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
-                    address_space: addr_space,
-                    ptr,
-                    timestamps: [ts_values.timestamp],
-                    values: ts_values.values.map(Self::field_to_raw_u32),
-                })
-                .collect();
-            let in_num_records = in_records.len();
+            // Convert to MemoryInventoryRecord<BLOCK_FE_WIDTH, 1> layout,
+            // packing straight into a pooled page-locked buffer so the upload
+            // takes the DMA fast path; giving the buffer back routes through
+            // the arena cleaner, which synchronizes the device before reuse,
+            // so the in-flight copy is safe.
+            const IN_REC_WORDS: usize =
+                std::mem::size_of::<MemoryInventoryRecord<BLOCK_FE_WIDTH, 1>>()
+                    / std::mem::size_of::<u32>();
+            let in_num_records = partition.len();
+            let mut h_in = crate::arch::cuda::pinned::take(in_num_records * IN_REC_WORDS * 4 + 4);
+            let align = h_in.as_ptr().align_offset(std::mem::size_of::<u32>());
+            let dirty_len = align + in_num_records * IN_REC_WORDS * 4;
+            // SAFETY: the slice is within the buffer and 4-aligned by `align`.
+            let in_words: &mut [u32] = unsafe {
+                std::slice::from_raw_parts_mut(
+                    h_in.as_mut_ptr().add(align) as *mut u32,
+                    in_num_records * IN_REC_WORDS,
+                )
+            };
+            in_words
+                .par_chunks_mut(IN_REC_WORDS)
+                .zip(partition.par_iter())
+                .for_each(|(w, &((addr_space, ptr), ts_values))| {
+                    w[0] = addr_space;
+                    w[1] = ptr;
+                    w[2] = ts_values.timestamp;
+                    for (dst, v) in w[3..].iter_mut().zip(ts_values.values) {
+                        *dst = Self::field_to_raw_u32(v);
+                    }
+                });
             let out_words = in_num_records
                 * (std::mem::size_of::<MemoryInventoryRecord<VM_DIGEST_WIDTH, BLOCKS_PER_LEAF>>()
                     / std::mem::size_of::<u32>());
-            let d_in_records = in_records
-                .to_device_on(&self.device_ctx)
-                .unwrap()
-                .as_buffer::<u32>();
+            let d_in_records = (*in_words).to_device_on(&self.device_ctx).unwrap();
+            crate::arch::cuda::pinned::give_back(h_in, dirty_len);
             let d_tmp_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_num_records = DeviceBuffer::<usize>::with_capacity_on(1, &self.device_ctx);
@@ -324,6 +347,20 @@ impl MemoryInventoryGPU {
                 .expect("merge_records failed");
             }
 
+            // Host work overlapping the merge kernels: the unpadded height
+            // scan needs only the partition, and the Poseidon2 records buffer
+            // can be sized by the input count (an upper bound on the merged
+            // count), so neither needs to wait for the merge to finish.
+            let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
+            #[cfg(feature = "metrics")]
+            {
+                self.unpadded_merkle_height = unpadded_merkle_height;
+            }
+            {
+                let _span = tracing::info_span!("poseidon2_prepare").entered();
+                self.prepare_poseidon2_records(in_num_records, unpadded_merkle_height);
+            }
+
             // Send records to boundary chip
             let out_num_records = d_out_num_records.to_host_on(&self.device_ctx).unwrap()[0];
             self.boundary
@@ -347,19 +384,9 @@ impl MemoryInventoryGPU {
                 .expect("inventory_to_merkle_records failed");
             }
             self.merkle_records = Some(d_merkle_records);
-            out_num_records
+            unpadded_merkle_height
         };
 
-        let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
-        #[cfg(feature = "metrics")]
-        {
-            self.unpadded_merkle_height = unpadded_merkle_height;
-        }
-
-        {
-            let _span = tracing::info_span!("poseidon2_prepare").entered();
-            self.prepare_poseidon2_records(boundary_records, unpadded_merkle_height);
-        }
         mem.tracing_info("merkle update");
         let merkle_proof_ctx = {
             let _span = tracing::info_span!("merkle_update").entered();
