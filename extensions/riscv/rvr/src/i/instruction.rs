@@ -177,11 +177,28 @@ impl ExtInstr for Rv64IInstr {
             Self::Alu {
                 op,
                 word,
+                immediate,
                 rd,
                 lhs,
                 rhs,
-                ..
             } => {
+                if !*word && matches!(op, AluOp::Add | AluOp::Sub) {
+                    let emitted = match rhs {
+                        CfgOperand::Var(rhs) => {
+                            ctx.emit_addsub_reg(*op == AluOp::Sub, *rd, *lhs, *rhs)
+                        }
+                        CfgOperand::Const(imm) if *immediate => ctx.emit_addsub_imm(
+                            *op == AluOp::Sub,
+                            *rd,
+                            *lhs,
+                            *imm as i64 as i32,
+                        ),
+                        CfgOperand::Const(_) => false,
+                    };
+                    if emitted {
+                        return;
+                    }
+                }
                 let lhs_value = ctx.read_var(*lhs);
                 let rhs_value = operand_c(ctx, *rhs);
                 let value = (!*word)

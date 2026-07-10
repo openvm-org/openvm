@@ -239,7 +239,7 @@ fn assert_rvr_differential(
                     &trace_heights,
                 )
                 .expect("interpreter execution");
-            let rvr_output = instance
+            let mut rvr_output = instance
                 .execute_preflight_from_state(from_state.clone(), num_insns)
                 .expect("rvr preflight execution");
             assert_system_records_eq(
@@ -256,7 +256,7 @@ fn assert_rvr_differential(
             let rvr_arenas = generate_record_arenas_from_logs::<F, MatrixRecordArena<F>>(
                 &registry,
                 exe,
-                &rvr_output,
+                &mut rvr_output,
                 &capacities,
                 &pc_to_air_idx,
             )

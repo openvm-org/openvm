@@ -106,6 +106,7 @@ trait CachedRvrPreflightExecutor<F>: Send + Sync {
         exe: &VmExe<F>,
         state: VmState<GuestMemory>,
         num_insns: Option<u64>,
+        record_capacity_rows: Option<&[u32]>,
     ) -> Result<RvrPreflightOutput<F>, ExecutionError>;
 }
 
@@ -124,6 +125,7 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
         exe: &VmExe<F>,
         state: VmState<GuestMemory>,
         num_insns: Option<u64>,
+        record_capacity_rows: Option<&[u32]>,
     ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
         execute_rvr_preflight(
             exe,
@@ -132,10 +134,7 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
             self.chip_counts_len,
             state,
             num_insns,
-            // R3 inline records are opt-in per call (currently exercised only by
-            // the riscv circuit's compact-record differential test); the proving
-            // path takes the verbose-log route until the host wrap lands.
-            &[],
+            record_capacity_rows,
         )
     }
 }
@@ -1210,7 +1209,12 @@ where
     {
         match rvr_preflight {
             CachedRvrPreflight::Rvr(rvr_preflight) => {
-                let rvr_output = rvr_preflight.execute(exe, state.clone(), num_insns)?;
+                // `state` moves in whole: `execute_rvr_preflight` clones it
+                // internally for its capacity-retry loop, and a guest-state
+                // clone is the dominant per-segment fixed cost (~hundreds of
+                // ms), so it must not be paid twice.
+                let mut rvr_output =
+                    rvr_preflight.execute(exe, state, num_insns, Some(trace_heights))?;
                 let capacities = self.preflight_capacities(trace_heights);
                 let pc_to_air_idx = self.pc_to_air_idx(exe)?;
                 let record_arenas = self
@@ -1218,7 +1222,7 @@ where
                     .generate_rvr_record_arenas_from_logs(
                         self.config(),
                         exe,
-                        &rvr_output,
+                        &mut rvr_output,
                         &capacities,
                         &pc_to_air_idx,
                     )?

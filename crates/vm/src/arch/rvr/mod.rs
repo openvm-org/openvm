@@ -20,7 +20,7 @@ pub use compile::{
     compile_metered_segment_boundary, compile_preflight, compile_preflight_with_extensions,
     compile_with_instret_tracking, compile_with_options,
     load_compiled_from_path, ChipMapping, CompileError, CompileOptions, RvrCompiled,
-    RvrPreflightOpcodeClass,
+    RvrInlineRecordsMeta, RvrPreflightOpcodeClass,
 };
 #[cfg(any(test, feature = "test-utils"))]
 pub use compile::{
@@ -44,9 +44,10 @@ pub use pure::{
 };
 pub use preflight::{
     ChipRecordBuf, MemoryLogEntry, PreflightRawLogs, PreflightTracer, PreflightTracerData,
-    ProgramLogEntry, RvrPreflightInstance, RvrPreflightOutput, RvrPreflightRoute, TouchedBlock,
-    PREFLIGHT_INITIAL_TIMESTAMP, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH,
-    PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_TRACER_KIND,
+    ProgramLogEntry, RvrInlineChipRecords, RvrPreflightInstance, RvrPreflightOutput,
+    RvrPreflightRoute, TouchedBlock, PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_INITIAL_TIMESTAMP,
+    PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE,
+    PREFLIGHT_TRACER_KIND,
 };
 pub use preflight_normalizer::{
     build_preflight_replay, PreflightMemoryAccessAux, PreflightMemoryReplay,

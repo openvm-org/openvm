@@ -210,6 +210,9 @@ pub struct CProject {
     pub native_debug_info: bool,
     /// Compile the generated C with trap-mode UBSan and bounds sanitizers.
     pub sanitize: bool,
+    /// R3: emit inline compact records (log-suppressed) for migrated opcodes.
+    /// Preflight mode only; see [`Self::inline_records_enabled`].
+    pub inline_records: bool,
 }
 
 impl CProject {
@@ -231,6 +234,7 @@ impl CProject {
             num_airs: None,
             native_debug_info: false,
             sanitize: false,
+            inline_records: false,
         }
     }
 
@@ -492,15 +496,15 @@ impl CProject {
     }
 
     /// R3: whether the preflight codegen emits inline compact records for
-    /// migrated opcodes (base-ALU ADD/SUB), writing them into the chip's record
-    /// buffer instead of relying solely on the host-side log transcode. Gated by
-    /// the `OPENVM_RVR_INLINE_RECORDS` env var (prototype gating; to be replaced
-    /// by a `CompileOptions` field) and only active in preflight mode, where
-    /// `pc_to_chip` is set.
+    /// migrated opcodes (base-ALU ADD/SUB), suppressing their memory-log
+    /// entries and writing the record into the chip's record buffer instead.
+    /// Set by the compile pipeline (see `crates/vm` rvr `compile.rs`, which
+    /// also derives the matching host-side skip/adopt metadata) and only
+    /// active in preflight mode, where `pc_to_chip` is set.
     fn inline_records_enabled(&self) -> bool {
         self.tracer_mode == TracerMode::Preflight
             && self.pc_to_chip.is_some()
-            && std::env::var_os("OPENVM_RVR_INLINE_RECORDS").is_some()
+            && self.inline_records
     }
 
     /// Look up the chip index for a given PC. Must only be called in metered
