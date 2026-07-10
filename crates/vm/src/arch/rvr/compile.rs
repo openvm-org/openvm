@@ -733,16 +733,35 @@ fn compile_impl<F: PrimeField32>(
         // Override an inherited Make environment variable as well as CProject's default.
         make_args.push("LTO=".to_string());
     }
-    if matches!(
-        opts.execution_kind,
-        RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment
-    ) {
-        if let Some(opt) = metered_opt_level()? {
+    let opt_env = match opts.execution_kind {
+        RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => Some((
+            "OPENVM_RVR_METERED_OPT",
+            "OPENVM_RVR_METERED_OPT must be one of -O0, -O1, -O2, -O3, -Os, or -Oz",
+        )),
+        RvrExecutionKind::Preflight => Some((
+            "OPENVM_RVR_PREFLIGHT_OPT",
+            "OPENVM_RVR_PREFLIGHT_OPT must be one of -O0, -O1, -O2, -O3, -Os, or -Oz",
+        )),
+        RvrExecutionKind::Pure
+        | RvrExecutionKind::PureWithInstretTracking
+        | RvrExecutionKind::MeteredCost => None,
+    };
+    if let Some((env, invalid_message)) = opt_env {
+        if let Some(opt) = native_opt_level(env, invalid_message)? {
             make_args.push(format!("OPT={opt}"));
         }
     }
-    let cache = if opts.execution_kind == RvrExecutionKind::Preflight {
-        std::env::var_os("OPENVM_RVR_PREFLIGHT_LIB")
+    let cache_env = match opts.execution_kind {
+        RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {
+            Some("OPENVM_RVR_METERED_LIB")
+        }
+        RvrExecutionKind::Preflight => Some("OPENVM_RVR_PREFLIGHT_LIB"),
+        RvrExecutionKind::Pure
+        | RvrExecutionKind::PureWithInstretTracking
+        | RvrExecutionKind::MeteredCost => None,
+    };
+    let cache = if let Some(cache_env) = cache_env {
+        std::env::var_os(cache_env)
             .filter(|path| !path.is_empty())
             .map(|path| {
                 let lib_path = PathBuf::from(path);
@@ -764,7 +783,8 @@ fn compile_impl<F: PrimeField32>(
                     tracing::info!(
                         path = %lib_path.display(),
                         cache_key = %expected_key,
-                        "loading hash-validated rvr preflight artifact"
+                        execution_kind = ?opts.execution_kind,
+                        "loading hash-validated rvr native artifact"
                     );
                     // The cache key covers the generated C tree, which encodes
                     // the inline-record decision, so this metadata matches the
@@ -777,7 +797,8 @@ fn compile_impl<F: PrimeField32>(
         tracing::info!(
             path = %lib_path.display(),
             cache_key = %expected_key,
-            "rvr preflight artifact cache miss"
+            execution_kind = ?opts.execution_kind,
+            "rvr native artifact cache miss"
         );
     }
 
@@ -819,7 +840,8 @@ fn compile_impl<F: PrimeField32>(
         tracing::info!(
             path = %cache_lib.display(),
             cache_key = %cache_key,
-            "saved hash-validated rvr preflight artifact"
+            execution_kind = ?opts.execution_kind,
+            "saved hash-validated rvr native artifact"
         );
     }
     Ok(compiled)
@@ -830,8 +852,11 @@ fn env_flag_is_off(name: &str) -> bool {
         .is_ok_and(|value| matches!(value.to_ascii_lowercase().as_str(), "0" | "false" | "off"))
 }
 
-fn metered_opt_level() -> Result<Option<String>, CompileError> {
-    let Some(value) = std::env::var_os("OPENVM_RVR_METERED_OPT") else {
+fn native_opt_level(
+    env: &str,
+    invalid_message: &'static str,
+) -> Result<Option<String>, CompileError> {
+    let Some(value) = std::env::var_os(env) else {
         return Ok(None);
     };
     let value = value.to_string_lossy().into_owned();
@@ -841,9 +866,7 @@ fn metered_opt_level() -> Result<Option<String>, CompileError> {
     ) {
         Ok(Some(value))
     } else {
-        Err(CompileError::InvalidOptions(
-            "OPENVM_RVR_METERED_OPT must be one of -O0, -O1, -O2, -O3, -Os, or -Oz",
-        ))
+        Err(CompileError::InvalidOptions(invalid_message))
     }
 }
 
@@ -915,11 +938,12 @@ fn load_verified_preflight_cache_copy(
         libloading::Library::new(&private_lib)
             .map_err(|err| CompileError::LibLoad(format!("{}: {err}", private_lib.display())))?
     };
+    let execution_kind = load_execution_kind(&lib)?;
     Ok(Some(RvrCompiled {
         lib,
         lib_path: private_lib,
         artifact_dir: Some(ArtifactDir::Temp(temp_dir)),
-        execution_kind: RvrExecutionKind::Preflight,
+        execution_kind,
         inline_records: RvrInlineRecordsMeta::default(),
     }))
 }
