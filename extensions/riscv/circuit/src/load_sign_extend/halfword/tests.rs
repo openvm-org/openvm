@@ -39,7 +39,7 @@ use crate::{
             LoadSignExtendHalfwordCoreAir, LoadSignExtendHalfwordFiller,
             Rv64LoadSignExtendHalfwordAir, Rv64LoadSignExtendHalfwordChip,
             Rv64LoadSignExtendHalfwordExecutor, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
-            LOAD_SIGN_EXTEND_HALFWORD_TOUCHED_CELLS,
+            LOAD_SIGN_EXTEND_HALFWORD_LOADED_CELLS,
         },
         test_utils::{memory_config_for, set_and_execute, F, MAX_INS_CAPACITY},
     },
@@ -153,7 +153,7 @@ fn assert_pranked_halfword_fails(
         &mut LoadSignExtendCoreCols<
             F,
             LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
-            LOAD_SIGN_EXTEND_HALFWORD_TOUCHED_CELLS,
+            LOAD_SIGN_EXTEND_HALFWORD_LOADED_CELLS,
         >,
     ),
 ) {
@@ -190,8 +190,8 @@ fn assert_pranked_halfword_fails(
 #[test]
 fn negative_split_signed_load_test() {
     assert_pranked_halfword_fails(|core| core.data_most_sig_bit += F::ONE);
-    assert_pranked_halfword_fails(|core| core.touched_cell_bytes[0][0] += F::ONE);
-    assert_pranked_halfword_fails(|core| core.cross += F::ONE);
+    assert_pranked_halfword_fails(|core| core.loaded_cell_bytes[0][0] += F::ONE);
+    assert_pranked_halfword_fails(|core| core.read_data[0][0] += F::ONE);
 }
 
 #[cfg(feature = "cuda")]

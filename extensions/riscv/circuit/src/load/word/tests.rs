@@ -32,8 +32,8 @@ use crate::{
     },
     load::{
         common::load_write_data, core::LoadCoreCols, LoadWordCoreAir, LoadWordFiller,
-        Rv64LoadWordAir, Rv64LoadWordChip, Rv64LoadWordExecutor, LOAD_WORD_SELECTOR_WIDTH,
-        LOAD_WORD_TOUCHED_CELLS,
+        Rv64LoadWordAir, Rv64LoadWordChip, Rv64LoadWordExecutor, LOAD_WORD_LOADED_CELLS,
+        LOAD_WORD_SELECTOR_WIDTH,
     },
     load_sign_extend::common::load_sign_extend_write_data,
     test_utils::memory::{load_memory_config, set_and_execute_load, F, MAX_INS_CAPACITY},
@@ -182,7 +182,7 @@ fn accepted_shift_sets() {
 }
 
 fn assert_pranked_load_word_fails(
-    prank: impl Fn(&mut LoadCoreCols<F, LOAD_WORD_SELECTOR_WIDTH, LOAD_WORD_TOUCHED_CELLS>),
+    prank: impl Fn(&mut LoadCoreCols<F, LOAD_WORD_SELECTOR_WIDTH, LOAD_WORD_LOADED_CELLS>),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());

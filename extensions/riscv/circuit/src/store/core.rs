@@ -65,17 +65,14 @@ pub(crate) fn store_info<const STORE_WIDTH: usize>() -> StoreInfo {
 /// previous contents of the touched memory blocks so bytes outside the store width stay unchanged.
 ///
 /// Even shifts move whole u16 cells. Odd shifts additionally use byte decompositions: all source
-/// value cells (`value_bytes`) plus the first and last overlapped memory cells
-/// (`prev_bound_bytes`), from which every touched cell of the written blocks is a linear
-/// recombination that splices the value bytes between the preserved boundary bytes.
+/// value cells (`value_bytes`) plus the two preserved bytes of the first and last overlapped
+/// memory cells (`prev_bound_bytes`), from which every touched cell of the written blocks is a
+/// linear recombination that splices the value bytes between the preserved boundary bytes. The
+/// two overwritten boundary-cell bytes are derived in the AIR instead of being materialized.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct StoreCoreCols<T, const SELECTOR_WIDTH: usize, const NUM_VALUE_CELLS: usize> {
     pub selector: [T; SELECTOR_WIDTH],
-    /// Kept as a degree-1 copy of the selector validity.
-    pub is_valid: T,
-    /// Kept as a degree-1 copy of the sum of block-crossing selector flags.
-    pub cross: T,
     pub read_data: [T; BLOCK_FE_WIDTH],
     /// Previous contents of the two consecutive memory blocks; the second is used only when the
     /// access crosses a block boundary.
@@ -83,9 +80,9 @@ pub struct StoreCoreCols<T, const SELECTOR_WIDTH: usize, const NUM_VALUE_CELLS: 
     /// Byte decompositions `[lo, hi]` of the low `STORE_WIDTH / 2` source register cells.
     /// All-zero on even shifts.
     pub value_bytes: [[T; 2]; NUM_VALUE_CELLS],
-    /// Byte decompositions `[lo, hi]` of the first and last memory cells overlapped by an
-    /// odd-shift store. All-zero on even shifts.
-    pub prev_bound_bytes: [[T; 2]; 2],
+    /// The bytes preserved by an odd-shift store: the low byte of the first overlapped memory
+    /// cell and the high byte of the last. All-zero on even shifts.
+    pub prev_bound_bytes: [T; 2],
 }
 
 #[derive(Debug, Clone, ColumnsAir)]
@@ -161,9 +158,8 @@ where
         self.encoder.eval(builder, &cols.selector);
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
-        builder.assert_eq(cols.is_valid, is_valid.clone());
 
-        let cross_flags = info.byte_shifts.iter().enumerate().fold(
+        let cross = info.byte_shifts.iter().enumerate().fold(
             AB::Expr::ZERO,
             |acc, (case_idx, &byte_shift)| {
                 if byte_shift + STORE_WIDTH > 2 * BLOCK_FE_WIDTH {
@@ -173,7 +169,6 @@ where
                 }
             },
         );
-        builder.assert_eq(cols.cross, cross_flags);
 
         let odd_shift = info.byte_shifts.iter().enumerate().fold(
             AB::Expr::ZERO,
@@ -207,12 +202,10 @@ where
                 odd_shift.clone() * cols.read_data[i],
             );
         }
-        // The first and last overlapped memory cells are flag-selected per odd shift.
-        for (which, cell_bytes) in cols.prev_bound_bytes.iter().enumerate() {
-            self.bitwise_lookup_bus
-                .send_range(cell_bytes[0], cell_bytes[1])
-                .eval(builder, is_valid.clone());
-            let expected_cell = info.byte_shifts.iter().enumerate().fold(
+        // The first and last overlapped memory cells, flag-selected per odd shift; zero on even
+        // shifts and invalid rows.
+        let prev_bound_cell = |which: usize| {
+            info.byte_shifts.iter().enumerate().fold(
                 AB::Expr::ZERO,
                 |acc, (case_idx, &byte_shift)| {
                     if byte_shift % 2 == 1 {
@@ -221,16 +214,25 @@ where
                         acc
                     }
                 },
-            );
-            builder.assert_eq(
-                cell_bytes[0] + cell_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS),
-                expected_cell,
-            );
-        }
+            )
+        };
+        // The overwritten boundary-cell bytes are derived from the overlapped cells; range
+        // checking them completes the decompositions of both boundary cells (and forces the
+        // preserved bytes to zero on even shifts).
+        let first_cell_hi = (prev_bound_cell(0) - cols.prev_bound_bytes[0])
+            * AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
+        let last_cell_lo =
+            prev_bound_cell(1) - cols.prev_bound_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
+        self.bitwise_lookup_bus
+            .send_range(cols.prev_bound_bytes[0], first_cell_hi)
+            .eval(builder, is_valid.clone());
+        self.bitwise_lookup_bus
+            .send_range(last_cell_lo, cols.prev_bound_bytes[1])
+            .eval(builder, is_valid.clone());
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            cols.is_valid * AB::Expr::from_u8(info.opcode as u8),
+            is_valid.clone() * AB::Expr::from_u8(info.opcode as u8),
         );
         let shift_amount = info
             .byte_shifts
@@ -259,12 +261,11 @@ where
                         } else if cell < first || cell > first + width {
                             prev_full(cell).into()
                         } else if cell == first {
-                            cols.prev_bound_bytes[0][0]
+                            cols.prev_bound_bytes[0]
                                 + cols.value_bytes[0][0] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
                         } else if cell == first + width {
                             cols.value_bytes[width - 1][1]
-                                + cols.prev_bound_bytes[1][1]
-                                    * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
+                                + cols.prev_bound_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
                         } else {
                             cols.value_bytes[cell - first - 1][1]
                                 + cols.value_bytes[cell - first][0]
@@ -284,10 +285,10 @@ where
                 .into(),
             writes: write_data.into(),
             instruction: StoreInstruction {
-                is_valid: cols.is_valid.into(),
+                is_valid,
                 opcode: expected_opcode,
                 shift_amount,
-                store_cross: cols.cross.into(),
+                store_cross: cross,
             }
             .into(),
         }
@@ -363,33 +364,35 @@ where
         let width = STORE_WIDTH / 2;
         let prev_full: [u16; 2 * BLOCK_FE_WIDTH] =
             std::array::from_fn(|cell| prev_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH]);
-        let (value_bytes, prev_bound_bytes) = if shift % 2 == 1 {
-            (
-                std::array::from_fn(|i| {
-                    [
-                        u16_cell_byte(read_data[i], 0),
-                        u16_cell_byte(read_data[i], 1),
-                    ]
-                }),
-                std::array::from_fn(|which| {
-                    let cell = prev_full[shift / 2 + which * width];
-                    [u16_cell_byte(cell, 0), u16_cell_byte(cell, 1)]
-                }),
-            )
-        } else {
-            ([[0; 2]; NUM_VALUE_CELLS], [[0; 2]; 2])
-        };
-        for cell_bytes in value_bytes.iter().chain(prev_bound_bytes.iter()) {
+        let (value_bytes, prev_bound_cells): ([[u16; 2]; NUM_VALUE_CELLS], [[u16; 2]; 2]) =
+            if shift % 2 == 1 {
+                (
+                    std::array::from_fn(|i| {
+                        [
+                            u16_cell_byte(read_data[i], 0),
+                            u16_cell_byte(read_data[i], 1),
+                        ]
+                    }),
+                    std::array::from_fn(|which| {
+                        let cell = prev_full[shift / 2 + which * width];
+                        [u16_cell_byte(cell, 0), u16_cell_byte(cell, 1)]
+                    }),
+                )
+            } else {
+                ([[0; 2]; NUM_VALUE_CELLS], [[0; 2]; 2])
+            };
+        for cell_bytes in value_bytes.iter().chain(prev_bound_cells.iter()) {
             self.bitwise_lookup_chip
                 .request_range(cell_bytes[0] as u32, cell_bytes[1] as u32);
         }
 
         core_row.value_bytes = value_bytes.map(|bytes| bytes.map(F::from_u16));
-        core_row.prev_bound_bytes = prev_bound_bytes.map(|bytes| bytes.map(F::from_u16));
+        // Only the preserved bytes are materialized: the low byte of the first overlapped cell
+        // and the high byte of the last.
+        core_row.prev_bound_bytes =
+            [prev_bound_cells[0][0], prev_bound_cells[1][1]].map(F::from_u16);
         core_row.read_data = read_data.map(F::from_u16);
         core_row.prev_data = prev_data.map(|block| block.map(F::from_u16));
-        core_row.cross = F::from_bool(shift + STORE_WIDTH > 2 * BLOCK_FE_WIDTH);
-        core_row.is_valid = F::ONE;
         let pt: [u32; SELECTOR_WIDTH] = self.encoder.get_flag_pt(case_idx).try_into().unwrap();
         core_row.selector = pt.map(F::from_u32);
     }

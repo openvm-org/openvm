@@ -11,16 +11,16 @@ use crate::{
 };
 
 pub const LOAD_HALFWORD_SELECTOR_WIDTH: usize = 3;
-/// Cells overlapped by an odd-shift halfword load: `LOAD_WIDTH_HALFWORD / 2 + 1`.
-pub const LOAD_HALFWORD_TOUCHED_CELLS: usize = 2;
+/// Cells loaded by a halfword load: `LOAD_WIDTH_HALFWORD / 2`.
+pub const LOAD_HALFWORD_LOADED_CELLS: usize = 1;
 
 pub type LoadHalfwordCoreAir =
-    LoadCoreAir<LOAD_WIDTH_HALFWORD, LOAD_HALFWORD_SELECTOR_WIDTH, LOAD_HALFWORD_TOUCHED_CELLS>;
+    LoadCoreAir<LOAD_WIDTH_HALFWORD, LOAD_HALFWORD_SELECTOR_WIDTH, LOAD_HALFWORD_LOADED_CELLS>;
 pub type LoadHalfwordFiller = LoadFiller<
     Rv64LoadAdapterFiller,
     LOAD_WIDTH_HALFWORD,
     LOAD_HALFWORD_SELECTOR_WIDTH,
-    LOAD_HALFWORD_TOUCHED_CELLS,
+    LOAD_HALFWORD_LOADED_CELLS,
 >;
 
 pub type Rv64LoadHalfwordAir = VmAirWrapper<Rv64LoadAdapterAir, LoadHalfwordCoreAir>;

@@ -33,7 +33,7 @@ use crate::{
     load::{
         common::load_write_data, core::LoadCoreCols, LoadHalfwordCoreAir, LoadHalfwordFiller,
         Rv64LoadHalfwordAir, Rv64LoadHalfwordChip, Rv64LoadHalfwordExecutor,
-        LOAD_HALFWORD_SELECTOR_WIDTH, LOAD_HALFWORD_TOUCHED_CELLS,
+        LOAD_HALFWORD_LOADED_CELLS, LOAD_HALFWORD_SELECTOR_WIDTH,
     },
     test_utils::memory::{load_memory_config, set_and_execute_load, F, MAX_INS_CAPACITY},
 };
@@ -197,7 +197,7 @@ fn negative_split_write_data_test() {
         let core: &mut LoadCoreCols<
             F,
             LOAD_HALFWORD_SELECTOR_WIDTH,
-            LOAD_HALFWORD_TOUCHED_CELLS,
+            LOAD_HALFWORD_LOADED_CELLS,
         > = core_row.borrow_mut();
         core.read_data[0][0] += F::ONE;
         *trace = RowMajorMatrix::new(trace_row, trace.width());
