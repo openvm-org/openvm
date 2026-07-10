@@ -295,8 +295,11 @@ impl<'a> EmitContext<'a> {
             let tmp = self.next_var();
             self.write_line(&format!("uint64_t {tmp} = (uint64_t)({val});"));
             debug_assert!(self.hot_regs.is_empty());
-            self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
+            // Trace before the store so the preflight tracer reads the previous
+            // register value (for `prev_value`) from `state->regs`; the new
+            // value is passed explicitly.
             self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
+            self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
             return;
         }
         self.write_reg_direct(idx, &format!("(uint64_t)({val})"));

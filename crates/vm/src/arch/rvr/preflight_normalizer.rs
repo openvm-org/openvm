@@ -1,20 +1,30 @@
-//! Replay rvr preflight memory logs into OpenVM memory records.
+//! Build OpenVM memory records from self-contained rvr preflight logs.
+//!
+//! R1: the C tracer emits self-contained events (each carries `prev_timestamp`
+//! from the timestamp shadow and `prev_value`, the block's pre-access value) and
+//! records first-touched blocks in a `touched` buffer. This module therefore
+//! does two cheap linear passes — build the per-access aux vector, and finalize
+//! `touched_memory` from the touched-block list + shadow + live memory — with no
+//! log replay, sort, or per-access map.
 
-use std::{array, collections::BTreeMap};
+use std::array;
 
+use openvm_instructions::riscv::RV64_REGISTER_AS;
 use openvm_stark_backend::p3_field::Field;
 
-use super::preflight::{
-    MemoryLogEntry, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH,
-    PREFLIGHT_MEMORY_KIND_WRITE,
-};
+use super::preflight::{MemoryLogEntry, TouchedBlock};
 use crate::{
     arch::{AddressSpaceHostLayout, BLOCK_FE_WIDTH},
     system::{
-        memory::{online::GuestMemory, TimestampedValues},
+        memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, TimestampedValues},
         TouchedMemory,
     },
 };
+
+/// Traced blocks are `WORD_BYTES` bytes; the C shadow indexes by
+/// `block_addr / WORD_BYTES`. All rvr-traced address spaces (register, memory,
+/// public values) use U16 cells, so this equals `BLOCK_FE_WIDTH` cells.
+const WORD_BYTES: usize = 8;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PreflightMemoryAccessAux<F> {
@@ -35,148 +45,114 @@ pub struct PreflightMemoryReplay<F> {
 pub enum PreflightNormalizeError {
     #[error("memory log entry {index} has invalid address space {addr_space}")]
     InvalidAddressSpace { index: usize, addr_space: u32 },
-    #[error("memory log entry {index} has unsupported kind {kind}")]
-    UnsupportedKind { index: usize, kind: u8 },
-    #[error("memory log entry {index} width {width} exceeds block size {block_bytes}")]
-    WidthExceedsBlock {
-        index: usize,
-        width: usize,
-        block_bytes: usize,
-    },
-    #[error("memory log entry {index} range [{start}, {end}) exceeds block size {block_bytes}")]
-    AccessCrossesBlock {
-        index: usize,
-        start: usize,
-        end: usize,
-        block_bytes: usize,
-    },
     #[error("memory log entry {index} address {address:#x} exceeds OpenVM pointer range")]
     AddressOutOfRange { index: usize, address: u64 },
 }
 
-#[derive(Clone)]
-struct BlockState {
-    timestamp: u32,
-    bytes: Vec<u8>,
+/// Read-only view of the per-address-space timestamp shadows, used to recover
+/// each touched block's final-access timestamp.
+pub struct PreflightShadowsView<'a> {
+    pub register: &'a [u32],
+    pub memory: &'a [u32],
+    pub public_values: &'a [u32],
 }
 
-/// Replay byte-addressed rvr memory events into OpenVM block-timestamped memory.
+impl PreflightShadowsView<'_> {
+    #[inline]
+    fn final_timestamp(&self, addr_space: u32, block_idx: usize) -> u32 {
+        let shadow = if addr_space == RV64_REGISTER_AS {
+            self.register
+        } else if addr_space == PUBLIC_VALUES_AS {
+            self.public_values
+        } else {
+            self.memory
+        };
+        shadow.get(block_idx).copied().unwrap_or(0)
+    }
+}
+
+/// Build the per-access aux vector and the finalized `touched_memory` from the
+/// self-contained preflight log and touched-block buffer.
 ///
-/// `MemoryLogEntry.address` is a byte pointer in the address space's host
-/// layout. The returned touched-memory pointer is the AS-native cell pointer
-/// used by `TracingMemory::finalize()`.
-pub fn normalize_preflight_memory_logs<F: Field>(
-    initial_memory: &GuestMemory,
+/// `memory` is the post-execution live memory (final block values); `shadows`
+/// supplies each block's final-access timestamp; `touched` lists every block
+/// first-touched this segment (in first-touch order); `logs` is the
+/// self-contained, already timestamp-ordered memory log.
+pub fn build_preflight_replay<F: Field>(
+    memory: &GuestMemory,
+    shadows: &PreflightShadowsView,
+    touched: &[TouchedBlock],
     logs: &[MemoryLogEntry],
 ) -> Result<PreflightMemoryReplay<F>, PreflightNormalizeError> {
-    let mut indexed_logs = logs.iter().copied().enumerate().collect::<Vec<_>>();
-    indexed_logs.sort_by_key(|(index, entry)| (entry.timestamp, *index));
-
-    let mut blocks = BTreeMap::<(u32, u32), BlockState>::new();
-    let mut aux_by_log = (0..logs.len()).map(|_| None).collect::<Vec<_>>();
-
-    for (index, entry) in indexed_logs {
-        let addr_space = entry.addr_space as u32;
-        let config = initial_memory
-            .memory
-            .config
-            .get(addr_space as usize)
-            .ok_or(PreflightNormalizeError::InvalidAddressSpace { index, addr_space })?;
-        let cell_size = config.layout.size();
-        let block_bytes = BLOCK_FE_WIDTH * cell_size;
-        let entry_address = usize::try_from(entry.address).map_err(|_| {
-            PreflightNormalizeError::AddressOutOfRange {
-                index,
-                address: entry.address,
-            }
-        })?;
-        let aligned_byte_addr = (entry_address / block_bytes) * block_bytes;
-        let block_ptr = u32::try_from(aligned_byte_addr / cell_size).map_err(|_| {
-            PreflightNormalizeError::AddressOutOfRange {
-                index,
-                address: entry.address,
-            }
-        })?;
-        let block_key = (addr_space, block_ptr);
-
-        let block = match blocks.entry(block_key) {
-            std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
-            std::collections::btree_map::Entry::Vacant(vacant) => {
-                let bytes = unsafe {
-                    initial_memory
-                        .memory
-                        .get_u8_slice(addr_space, aligned_byte_addr, block_bytes)
-                        .to_vec()
-                };
-                vacant.insert(BlockState {
-                    timestamp: 0,
-                    bytes,
+    let access_aux =
+        logs.iter()
+            .enumerate()
+            .map(|(index, entry)| {
+                let addr_space = entry.addr_space as u32;
+                let config =
+                    memory.memory.config.get(addr_space as usize).ok_or(
+                        PreflightNormalizeError::InvalidAddressSpace { index, addr_space },
+                    )?;
+                let cell_size = config.layout.size();
+                let block_bytes = BLOCK_FE_WIDTH * cell_size;
+                let entry_address = usize::try_from(entry.address).map_err(|_| {
+                    PreflightNormalizeError::AddressOutOfRange {
+                        index,
+                        address: entry.address,
+                    }
+                })?;
+                let aligned_byte_addr = (entry_address / block_bytes) * block_bytes;
+                let block_ptr = u32::try_from(aligned_byte_addr / cell_size).map_err(|_| {
+                    PreflightNormalizeError::AddressOutOfRange {
+                        index,
+                        address: entry.address,
+                    }
+                })?;
+                Ok(PreflightMemoryAccessAux {
+                    log_index: index,
+                    entry: *entry,
+                    block_addr: (addr_space, block_ptr),
+                    prev_timestamp: entry.prev_timestamp,
+                    prev_data: block_bytes_to_fields(
+                        memory,
+                        addr_space,
+                        &entry.prev_value.to_le_bytes(),
+                    ),
                 })
-            }
-        };
-
-        let prev_timestamp = block.timestamp;
-        let prev_data = block_bytes_to_fields(initial_memory, addr_space, &block.bytes);
-        aux_by_log[index] = Some(PreflightMemoryAccessAux {
-            log_index: index,
-            entry,
-            block_addr: block_key,
-            prev_timestamp,
-            prev_data,
-        });
-
-        match entry.kind {
-            PREFLIGHT_MEMORY_KIND_READ | PREFLIGHT_MEMORY_KIND_TOUCH => {}
-            PREFLIGHT_MEMORY_KIND_WRITE => {
-                let width = entry.width as usize;
-                if width > block_bytes {
-                    return Err(PreflightNormalizeError::WidthExceedsBlock {
-                        index,
-                        width,
-                        block_bytes,
-                    });
-                }
-                let start = entry_address - aligned_byte_addr;
-                let end = start + width;
-                if end > block_bytes {
-                    return Err(PreflightNormalizeError::AccessCrossesBlock {
-                        index,
-                        start,
-                        end,
-                        block_bytes,
-                    });
-                }
-                block.bytes[start..end].copy_from_slice(&entry.value.to_le_bytes()[..width]);
-            }
-            kind => {
-                return Err(PreflightNormalizeError::UnsupportedKind { index, kind });
-            }
-        }
-        // OpenVM's online memory updates block metadata on every access, not
-        // just writes. A trailing read therefore determines touched_memory's
-        // timestamp while preserving the last written value.
-        block.timestamp = entry.timestamp;
-    }
-
-    let touched_memory = blocks
-        .into_iter()
-        .filter_map(|(addr, block)| {
-            (block.timestamp > 0).then(|| {
-                let values = block_bytes_to_fields(initial_memory, addr.0, &block.bytes);
-                (
-                    addr,
-                    TimestampedValues {
-                        timestamp: block.timestamp,
-                        values,
-                    },
-                )
             })
+            .collect::<Result<Vec<_>, _>>()?;
+
+    // Finalize touched_memory from the touched-block list: final value from live
+    // memory, final timestamp from the shadow. Sorted by (addr_space, block_ptr)
+    // to match `TracingMemory::touched_blocks_to_equipartition`.
+    let mut touched_memory: TouchedMemory<F> = touched
+        .iter()
+        .map(|tb| {
+            let addr_space = tb.addr_space;
+            let config = &memory.memory.config[addr_space as usize];
+            let cell_size = config.layout.size();
+            let block_bytes = BLOCK_FE_WIDTH * cell_size;
+            debug_assert_eq!(
+                block_bytes, WORD_BYTES,
+                "rvr preflight shadow assumes WORD_BYTES blocks (U16 cells)"
+            );
+            let aligned_byte_addr = tb.block_addr as usize;
+            let block_ptr = (aligned_byte_addr / cell_size) as u32;
+            let block_idx = aligned_byte_addr / WORD_BYTES;
+            let timestamp = shadows.final_timestamp(addr_space, block_idx);
+            let bytes = unsafe {
+                memory
+                    .memory
+                    .get_u8_slice(addr_space, aligned_byte_addr, block_bytes)
+            };
+            let values = block_bytes_to_fields(memory, addr_space, bytes);
+            (
+                (addr_space, block_ptr),
+                TimestampedValues { timestamp, values },
+            )
         })
         .collect();
-    let access_aux = aux_by_log
-        .into_iter()
-        .map(|aux| aux.expect("one aux record is produced for every memory log entry"))
-        .collect();
+    touched_memory.sort_unstable_by_key(|(addr, _)| *addr);
 
     Ok(PreflightMemoryReplay {
         touched_memory,

@@ -44,13 +44,13 @@ pub use pure::{
 };
 pub use preflight::{
     MemoryLogEntry, PreflightRawLogs, PreflightTracer, PreflightTracerData, ProgramLogEntry,
-    RvrPreflightInstance, RvrPreflightOutput, RvrPreflightRoute, PREFLIGHT_INITIAL_TIMESTAMP,
-    PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE,
-    PREFLIGHT_TRACER_KIND,
+    RvrPreflightInstance, RvrPreflightOutput, RvrPreflightRoute, TouchedBlock,
+    PREFLIGHT_INITIAL_TIMESTAMP, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH,
+    PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_TRACER_KIND,
 };
 pub use preflight_normalizer::{
-    normalize_preflight_memory_logs, PreflightMemoryAccessAux, PreflightMemoryReplay,
-    PreflightNormalizeError,
+    build_preflight_replay, PreflightMemoryAccessAux, PreflightMemoryReplay,
+    PreflightNormalizeError, PreflightShadowsView,
 };
 pub use rvr_openvm::{
     default_compiler as default_native_compiler, default_compiler_command, default_dwarfdump_cmd,
