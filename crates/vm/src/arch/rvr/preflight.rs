@@ -1,6 +1,6 @@
 //! Preflight tracer ABI mirror for rvr-generated native execution.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, mem::MaybeUninit, sync::Arc};
 
 use openvm_instructions::{
     exe::VmExe,
@@ -177,6 +177,38 @@ impl PreflightTracerData {
             timestamp: PREFLIGHT_INITIAL_TIMESTAMP,
             chip_records: std::ptr::null_mut(),
         }
+    }
+
+    /// Build a tracer over uninitialized log buffers. The C tracer only ever
+    /// writes these buffers and the host only reads the written prefix (the
+    /// `*_len` counters), so the backing stores never need the zero-fill —
+    /// which is a real per-call cost at the multi-GB capacities of large
+    /// segments. Shadow pointers are left null; call
+    /// [`PreflightTracerData::set_shadows`] before executing.
+    pub fn new_uninit(
+        program_log: &mut [MaybeUninit<ProgramLogEntry>],
+        memory_log: &mut [MaybeUninit<MemoryLogEntry>],
+        chip_counts: &mut [u32],
+    ) -> Self {
+        Self {
+            program_log: program_log.as_mut_ptr().cast(),
+            memory_log: memory_log.as_mut_ptr().cast(),
+            chip_counts: chip_counts.as_mut_ptr(),
+            program_log_cap: program_log.len() as u32,
+            memory_log_cap: memory_log.len() as u32,
+            chip_counts_len: chip_counts.len() as u32,
+            ..Self::default()
+        }
+    }
+
+    /// Attach an uninitialized touched-block buffer (see
+    /// [`PreflightTracerData::new_uninit`]; write-only from C, prefix-read by
+    /// the host). Must be called after [`PreflightTracerData::set_shadows`],
+    /// which also sets the (initialized) touched buffer fields.
+    pub fn set_touched_uninit(&mut self, touched: &mut [MaybeUninit<TouchedBlock>]) {
+        self.touched = touched.as_mut_ptr().cast();
+        self.touched_len = 0;
+        self.touched_cap = touched.len() as u32;
     }
 
     /// Attach the per-chip inline-record buffers (R3). The slice must have one
@@ -427,8 +459,11 @@ where
 
     loop {
         let mut run_state = state.clone();
-        let mut program_log = vec![ProgramLogEntry::default(); program_log_cap];
-        let mut memory_log = vec![MemoryLogEntry::default(); memory_log_cap];
+        // The log buffers are write-only from the C tracer and prefix-read by
+        // the host, so they are allocated uninitialized: the zero-fill of
+        // multi-GB capacities was a real per-call cost on large segments.
+        let mut program_log = vec_uninit::<ProgramLogEntry>(program_log_cap);
+        let mut memory_log = vec_uninit::<MemoryLogEntry>(memory_log_cap);
         let mut chip_counts = vec![0u32; chip_counts_len.max(1)];
         // Shadows are zeroed each run (0 = untouched this segment). Distinct
         // touched blocks are bounded by the number of memory-log entries, so
@@ -436,7 +471,7 @@ where
         let mut shadow_register = vec![0u32; reg_shadow_blocks];
         let mut shadow_memory = vec![0u32; mem_shadow_blocks];
         let mut shadow_public_values = vec![0u32; pv_shadow_blocks];
-        let mut touched = vec![TouchedBlock::default(); memory_log_cap];
+        let mut touched = vec_uninit::<TouchedBlock>(memory_log_cap);
         let pv_base = public_values_slice(&mut run_state.memory.memory).as_mut_ptr();
 
         // R3: per migrated chip, an inline compact-record buffer. Sized by the
@@ -465,14 +500,15 @@ where
         }
 
         let mut tracer =
-            PreflightTracerData::new(&mut program_log, &mut memory_log, &mut chip_counts);
+            PreflightTracerData::new_uninit(&mut program_log, &mut memory_log, &mut chip_counts);
         tracer.set_shadows(
             &mut shadow_register,
             &mut shadow_memory,
             &mut shadow_public_values,
             pv_base,
-            &mut touched,
+            &mut [],
         );
+        tracer.set_touched_uninit(&mut touched);
         tracer.set_chip_records(&mut chip_records);
 
         let run_result = execute_preflight_raw(
@@ -507,21 +543,21 @@ where
             continue;
         }
 
-        program_log.truncate(program_len);
-        memory_log.truncate(memory_len);
+        // SAFETY: the C tracer fully wrote the first `*_len` entries of each
+        // log (its append helpers bounds-check against the caps, and the
+        // overflow check above rejected any run whose counters passed them).
+        let program_log = unsafe { assume_init_prefix(program_log, program_len) };
+        let memory_log = unsafe { assume_init_prefix(memory_log, memory_len) };
+        let touched = unsafe { assume_init_prefix(touched, touched_len) };
 
         let shadows = PreflightShadowsView {
             register: &shadow_register,
             memory: &shadow_memory,
             public_values: &shadow_public_values,
         };
-        let replay = build_preflight_replay::<F>(
-            &run_state.memory,
-            &shadows,
-            &touched[..touched_len],
-            &memory_log,
-        )
-        .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
+        let replay =
+            build_preflight_replay::<F>(&run_state.memory, &shadows, &touched, &memory_log)
+                .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
         run_state
             .memory
             .memory
@@ -631,6 +667,29 @@ fn grow_capacity(current: usize, needed: usize) -> usize {
         .saturating_mul(2)
         .max(needed.saturating_mul(2))
         .max(1)
+}
+
+/// Allocates an uninitialized buffer for an external (C) writer.
+fn vec_uninit<T>(cap: usize) -> Vec<MaybeUninit<T>> {
+    let mut buffer = Vec::with_capacity(cap);
+    // SAFETY: `MaybeUninit<T>` requires no initialization.
+    unsafe { buffer.set_len(cap) };
+    buffer
+}
+
+/// Converts the written prefix of an externally filled uninit buffer into an
+/// initialized `Vec` without copying.
+///
+/// # Safety
+/// The first `len` elements must have been fully written.
+unsafe fn assume_init_prefix<T>(mut buffer: Vec<MaybeUninit<T>>, len: usize) -> Vec<T> {
+    assert!(len <= buffer.len());
+    let ptr = buffer.as_mut_ptr().cast::<T>();
+    let cap = buffer.capacity();
+    std::mem::forget(buffer);
+    // SAFETY: `MaybeUninit<T>` and `T` have identical layout; the caller
+    // guarantees the first `len` elements are initialized.
+    unsafe { Vec::from_raw_parts(ptr, len, cap) }
 }
 
 #[cfg(test)]
