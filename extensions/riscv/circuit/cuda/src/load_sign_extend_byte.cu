@@ -2,7 +2,6 @@
 
 template <typename T> struct LoadSignExtendByteCoreCols {
     T selector[LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH];
-    T is_valid;
     T data_most_sig_bit;
     T read_cell_bytes[2];
     T read_data[BLOCK_FE_WIDTH];
@@ -45,7 +44,6 @@ struct LoadSignExtendByteCore {
             row.slice_from(COL_INDEX(LoadSignExtendByteCoreCols, selector)),
             shift
         );
-        COL_WRITE_VALUE(row, LoadSignExtendByteCoreCols, is_valid, 1);
         COL_WRITE_VALUE(row, LoadSignExtendByteCoreCols, data_most_sig_bit, sign_bit != 0);
         COL_WRITE_ARRAY(row, LoadSignExtendByteCoreCols, read_cell_bytes, read_cell_bytes);
         COL_WRITE_ARRAY(row, LoadSignExtendByteCoreCols, read_data, record.read_data[0]);

@@ -117,17 +117,17 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreByteAdapterAir {
             )
             .eval(builder, is_valid.clone());
 
-        // Constrain mem_ptr = rs1 + sign_extend(imm) as a 32-bit addition.
+        // Constrain mem_ptr = rs1 + sign_extend(imm) as a 32-bit addition. The booleanity
+        // checks hold unconditionally (dummy rows are all-zero except `mem_as`), which keeps
+        // their degree low since `is_valid` may be a degree-2 expression.
         let inv = AB::F::from_u32(1u32 << U16_BITS).inverse();
         let carry = (local_cols.rs1_data[0] + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
-        builder.when(is_valid.clone()).assert_bool(carry.clone());
-        builder
-            .when(is_valid.clone())
-            .assert_bool(local_cols.imm_sign);
+        builder.assert_bool(carry.clone());
+        builder.assert_bool(local_cols.imm_sign);
         let imm_extend_limb = local_cols.imm_sign * AB::F::from_u32(u16::MAX as u32);
         let carry =
             (local_cols.rs1_data[1] + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
-        builder.when(is_valid.clone()).assert_bool(carry.clone());
+        builder.assert_bool(carry.clone());
         builder
             .when(is_valid.clone())
             .assert_eq(carry, local_cols.imm_sign);

@@ -43,8 +43,6 @@ fn encoder() -> Encoder {
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct LoadSignExtendByteCoreCols<T> {
     pub selector: [T; LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH],
-    /// Kept as a degree-1 copy of the selector validity.
-    pub is_valid: T,
     /// The sign bit that is extended to the remaining cells.
     pub data_most_sig_bit: T,
     pub read_cell_bytes: [T; 2],
@@ -102,7 +100,6 @@ where
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
 
-        builder.assert_eq(cols.is_valid, is_valid.clone());
         builder.assert_bool(cols.data_most_sig_bit);
 
         self.bitwise_lookup_bus
@@ -168,7 +165,7 @@ where
             .into(),
             writes: [write_data].into(),
             instruction: LoadInstruction {
-                is_valid: cols.is_valid.into(),
+                is_valid,
                 opcode: expected_opcode,
                 shift_amount: load_shift_amount,
                 load_cross: AB::Expr::ZERO,
@@ -242,7 +239,6 @@ where
             .add_count((byte - sign_bit) as u32, RV64_BYTE_BITS - 1);
         core_row.data_most_sig_bit = F::from_bool(sign_bit != 0);
         core_row.read_data = read_data.map(F::from_u16);
-        core_row.is_valid = F::ONE;
         let pt: [u32; LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH] =
             self.encoder.get_flag_pt(shift).try_into().unwrap();
         core_row.selector = pt.map(F::from_u32);

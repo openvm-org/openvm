@@ -2,7 +2,6 @@
 
 template <typename T> struct StoreByteCoreCols {
     T selector[STORE_BYTE_SELECTOR_WIDTH];
-    T is_valid;
     T read_cell_bytes[2];
     T prev_cell_bytes[2];
     T read_data[BLOCK_FE_WIDTH];
@@ -38,7 +37,6 @@ struct StoreByteCore {
             STORE_BYTE_CASES, STORE_SELECTOR_MAX_DEGREE, true, STORE_BYTE_SELECTOR_WIDTH
         );
         encoder.write_flag_pt(row.slice_from(COL_INDEX(StoreByteCoreCols, selector)), shift);
-        COL_WRITE_VALUE(row, StoreByteCoreCols, is_valid, 1);
         COL_WRITE_ARRAY(row, StoreByteCoreCols, read_cell_bytes, read_cell_bytes);
         COL_WRITE_ARRAY(row, StoreByteCoreCols, prev_cell_bytes, prev_cell_bytes);
         COL_WRITE_ARRAY(row, StoreByteCoreCols, read_data, record.read_data);
