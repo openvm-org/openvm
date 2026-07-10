@@ -12,7 +12,11 @@ use openvm_cuda_common::{
     memory_manager::MemTracker,
     stream::GpuDeviceCtx,
 };
-use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
+use openvm_stark_backend::{
+    p3_field::PrimeCharacteristicRing,
+    p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
+    prover::AirProvingContext,
+};
 use tracing::instrument;
 
 use super::{
@@ -175,7 +179,7 @@ impl MemoryInventoryGPU {
             let _span = tracing::info_span!("mem_merge_records").entered();
             // Convert MemoryInventoryRecord<4, 1> to MemoryInventoryRecord<8, 2>
             let in_records: Vec<MemoryInventoryRecord<4, 1>> = partition
-                .iter()
+                .par_iter()
                 .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
                     address_space: addr_space,
                     ptr,
@@ -238,33 +242,24 @@ impl MemoryInventoryGPU {
             self.boundary
                 .finalize_records_device::<DIGEST_WIDTH>(d_out_records, out_num_records);
 
-            // Send records to memory merkle tree
-            let out_records = self
-                .boundary
-                .records()
-                .to_host_on(&self.device_ctx)
-                .unwrap();
-            let record_words = 4 + DIGEST_WIDTH;
-            let mut merkle_records = Vec::with_capacity(out_num_records);
-            for i in 0..out_num_records {
-                let base = i * record_words;
-                let mut values = [0u32; DIGEST_WIDTH];
-                values.copy_from_slice(&out_records[base + 4..base + 4 + DIGEST_WIDTH]);
-                let record = MemoryMerkleRecord {
-                    address_space: out_records[base],
-                    ptr: out_records[base + 1],
-                    timestamp: out_records[base + 2].max(out_records[base + 3]),
-                    values,
-                };
-                merkle_records.push(record);
-            }
-            let merkle_words: &[u32] = unsafe {
-                std::slice::from_raw_parts(
-                    merkle_records.as_ptr() as *const u32,
-                    merkle_records.len() * MERKLE_TOUCHED_BLOCK_WIDTH,
+            // Send records to memory merkle tree: convert boundary-layout
+            // records to Merkle touched-block records on device (the merged
+            // records already live there; a host round-trip would serialize
+            // on the stream and rebuild the buffer one record at a time).
+            let d_merkle_records = DeviceBuffer::<u32>::with_capacity_on(
+                out_num_records * MERKLE_TOUCHED_BLOCK_WIDTH,
+                &self.device_ctx,
+            );
+            unsafe {
+                inventory::to_merkle_records(
+                    self.boundary.records(),
+                    out_num_records,
+                    &d_merkle_records,
+                    self.device_ctx.stream.as_raw(),
                 )
-            };
-            self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
+                .expect("inventory_to_merkle_records failed");
+            }
+            self.merkle_records = Some(d_merkle_records);
 
             let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
             #[cfg(feature = "metrics")]
