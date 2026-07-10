@@ -296,6 +296,21 @@ static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
   }
 }
 
+static __attribute__((always_inline)) inline void trace_wr_as_u64(
+    RvState* restrict state, uint64_t addr, uint64_t new_val,
+    uint32_t addr_space) {
+  preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
+                          (uint8_t)addr_space, preflight_block_addr(addr),
+                          WORD_SIZE, new_val);
+}
+
+static __attribute__((always_inline)) inline void trace_wr_as(
+    RvState* restrict state, uint64_t addr, uint64_t new_val, uint32_t width,
+    uint32_t addr_space) {
+  preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
+                          (uint8_t)addr_space, addr, (uint8_t)width, new_val);
+}
+
 static __attribute__((always_inline)) inline void trace_pc(
     RvState* restrict state, uint64_t pc) {
   preflight_append_program(state->tracer, pc);

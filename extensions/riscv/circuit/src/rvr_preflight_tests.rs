@@ -9,8 +9,8 @@ use openvm_circuit::utils::test_gpu_engine;
 use openvm_circuit::{
     arch::{
         rvr::{
-            RvrPreflightOutput, RvrPreflightRoute, PREFLIGHT_MEMORY_KIND_READ,
-            PREFLIGHT_MEMORY_KIND_WRITE,
+            LogNativeAssemblerRegistry, RvrPreflightOutput, RvrPreflightRoute,
+            VmRvrLogNativeExtension, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
         },
         verify_segments, ContinuationVmProver, ExecutionError, MatrixRecordArena, Streams,
         VirtualMachine, VmInstance,
@@ -29,7 +29,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::Program,
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    LocalOpcode, SysPhantom, SystemOpcode, PUBLIC_VALUES_AS,
+    LocalOpcode, SysPhantom, SystemOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
@@ -37,7 +37,7 @@ use openvm_riscv_transpiler::{
     Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom,
     ShiftOpcode, ShiftWOpcode,
 };
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 #[cfg(feature = "cuda")]
 use openvm_stark_backend::{
     prover::{ColMajorMatrix, MatrixDimensions, ProvingContext},
@@ -521,11 +521,38 @@ fn print_str_then_memory_exe() -> VmExe<F> {
     ])
 }
 
+fn deferral_store() -> Instruction<F> {
+    Instruction::from_usize(
+        Rv64LoadStoreOpcode::STORED.global_opcode(),
+        [reg(1), reg(2), 0, 1, DEFERRAL_AS as usize, 1, 0],
+    )
+}
+
 fn public_values_reveal_exe(offset: usize) -> VmExe<F> {
     exe(&[
         addi(1, 0, 0x2a + offset),
         addi(2, 0, offset),
         extension_store(1, 2, 0),
+        terminate(),
+    ])
+}
+
+/// REVEAL differential fixture: repeated public-values stores (write-after-write
+/// on the same AS=3 block, a second AS=3 block, an x0-sourced reveal) interleaved
+/// with ordinary main-memory load/store traffic so register/memory
+/// prev-timestamps around the reveals are non-trivial.
+fn public_values_reveal_differential_exe() -> VmExe<F> {
+    exe(&[
+        addi(1, 0, 0x2a),                            // x1 = value A
+        addi(2, 0, 0),                               // x2 = public-values base pointer
+        addi(3, 0, 0x77),                            // x3 = value B
+        addi(4, 0, 64),                              // x4 = main-memory scratch pointer
+        extension_store(1, 2, 0),                    // reveal A -> pv[0..8]
+        store(Rv64LoadStoreOpcode::STORED, 1, 4, 0), // interleaved AS=2 store
+        extension_store(3, 2, 0),                    // reveal B -> pv[0..8] (write-after-write)
+        extension_store(1, 2, 8),                    // reveal A -> pv[8..16] (second AS=3 block)
+        extension_store(0, 2, 16),                   // reveal x0 -> pv[16..24]
+        load(Rv64LoadStoreOpcode::LOADD, 5, 4, 0),   // read back the AS=2 store
         terminate(),
     ])
 }
@@ -584,7 +611,7 @@ fn prove_rvr_preflight_and_verify(exe: VmExe<F>, config: Rv64ImConfig) -> usize 
     prove_rvr_preflight_and_verify_with_streams(exe, config, Streams::default())
 }
 
-fn assert_interpreter_route_and_proves(
+fn assert_rvr_route_and_proves(
     label: &str,
     exe: VmExe<F>,
     config: Rv64ImConfig,
@@ -597,7 +624,10 @@ fn assert_interpreter_route_and_proves(
         let route = vm
             .preflight_routed_instance(&exe)
             .expect("route extension program");
-        assert!(route.is_interpreter(), "{label}: must route to interpreter");
+        assert!(
+            matches!(route, RvrPreflightRoute::Rvr(_)),
+            "{label}: must route to rvr preflight"
+        );
     }
 
     let vk = pk.get_vk();
@@ -678,11 +708,26 @@ fn assert_preflight_matches_interpreter(
     assert_preflight_matches_interpreter_with_streams(label, exe, num_insns, Streams::default())
 }
 
+/// Which AIR traces to byte-compare between interpreter and rvr tracegen.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TraceCompareScope {
+    /// Every AIR, including system AIRs.
+    All,
+    /// Every non-system AIR.
+    NonSystem,
+    /// Only the LoadStore AIR, selected by opcode→AIR-id from the fixture's
+    /// public-values STORED (REVEAL) instruction. Shared periphery/lookup
+    /// chips (Poseidon2 etc.) build their rows from unordered parallel
+    /// iterators and are excluded from the byte-compare (HARD-5);
+    /// `assert_system_records_eq` remains the order-independent oracle.
+    RevealLoadStore,
+}
+
 fn assert_trace_matches_interpreter(
     label: &str,
     exe: VmExe<F>,
     streams: Streams<F>,
-    include_system: bool,
+    scope: TraceCompareScope,
 ) {
     let (mut interp_vm, _) = VirtualMachine::new_with_keygen(
         test_cpu_engine(),
@@ -750,15 +795,34 @@ fn assert_trace_matches_interpreter(
         .generate_proving_ctx(rvr_output.system_records, rvr_record_arenas)
         .expect("rvr trace generation");
 
+    let reveal_loadstore_air_idx = (scope == TraceCompareScope::RevealLoadStore).then(|| {
+        let index = exe
+            .program
+            .instructions_and_debug_infos
+            .iter()
+            .position(|slot| {
+                slot.as_ref().is_some_and(|(insn, _)| {
+                    insn.opcode == Rv64LoadStoreOpcode::STORED.global_opcode()
+                        && insn.e.as_canonical_u32() == PUBLIC_VALUES_AS
+                })
+            })
+            .expect("reveal fixture must contain a public-values STORED");
+        pc_to_air_idx[index].expect("public-values STORED must map to the LoadStore AIR")
+    });
+    let in_scope = |air_idx: usize| match scope {
+        TraceCompareScope::All => true,
+        TraceCompareScope::NonSystem => air_idx >= num_sys_airs,
+        TraceCompareScope::RevealLoadStore => Some(air_idx) == reveal_loadstore_air_idx,
+    };
     let mut interp_chip_traces = interp_ctx
         .per_trace
         .into_iter()
-        .filter(|(air_idx, _)| include_system || *air_idx >= num_sys_airs)
+        .filter(|(air_idx, _)| in_scope(*air_idx))
         .collect::<BTreeMap<_, _>>();
     let mut rvr_chip_traces = rvr_ctx
         .per_trace
         .into_iter()
-        .filter(|(air_idx, _)| include_system || *air_idx >= num_sys_airs)
+        .filter(|(air_idx, _)| in_scope(*air_idx))
         .collect::<BTreeMap<_, _>>();
     let interp_air_ids = interp_chip_traces.keys().copied().collect::<Vec<_>>();
     let rvr_air_ids = rvr_chip_traces.keys().copied().collect::<Vec<_>>();
@@ -797,7 +861,7 @@ fn assert_standard_group_trace_matches_interpreter() {
         "standard_group_trace",
         standard_group_exe(1),
         Streams::default(),
-        false,
+        TraceCompareScope::NonSystem,
     );
 }
 
@@ -1428,7 +1492,7 @@ fn rvr_preflight_hint_input_phantom_ticks_before_memory_access() {
         "hint_input_then_memory_trace",
         hint_input_then_memory_exe(),
         hint_input_streams(),
-        true,
+        TraceCompareScope::All,
     );
 }
 
@@ -1444,7 +1508,7 @@ fn rvr_preflight_hint_random_phantom_ticks_before_memory_access() {
         "hint_random_then_memory_trace",
         hint_random_then_memory_exe(),
         Streams::default(),
-        true,
+        TraceCompareScope::All,
     );
 }
 
@@ -1460,7 +1524,7 @@ fn rvr_preflight_print_str_phantom_ticks_before_memory_access() {
         "print_str_then_memory_trace",
         print_str_then_memory_exe(),
         Streams::default(),
-        true,
+        TraceCompareScope::All,
     );
 }
 
@@ -1477,31 +1541,123 @@ fn rvr_preflight_routing_finalization_rv64im_to_rvr_extension_to_interpreter() {
         .expect("route RV64IM program");
     assert!(matches!(rvr_route, RvrPreflightRoute::Rvr(_)));
 
+    // The public-values REVEAL (STORED with e == PUBLIC_VALUES_AS) is a
+    // supported base-seam opcode: the classifier must return Supported and
+    // route it to the rvr preflight (the exact reth blocker instruction).
     for (label, exe) in [
         ("public_values_reveal_0", public_values_reveal_exe(0)),
         ("public_values_reveal_8", public_values_reveal_exe(8)),
     ] {
         let route = vm
             .preflight_routed_instance(&exe)
-            .expect("route extension program");
-        assert!(route.is_interpreter(), "{label}: must route to interpreter");
+            .expect("route reveal program");
+        assert!(
+            matches!(route, RvrPreflightRoute::Rvr(_)),
+            "{label}: reveal must route to rvr preflight"
+        );
     }
+
+    // A store to an address space outside {RV64_MEMORY_AS, PUBLIC_VALUES_AS}
+    // still finalizes to the interpreter.
+    let route = vm
+        .preflight_routed_instance(&exe(&[deferral_store(), terminate()]))
+        .expect("route deferral-store program");
+    assert!(
+        route.is_interpreter(),
+        "deferral-store: must route to interpreter"
+    );
 }
 
 #[test]
-fn rvr_preflight_extension_routes_prove_and_verify_end_to_end() {
+fn rvr_preflight_reveal_registry_admits_stores_only() {
+    // Registry-level HARD-2 proof: the single registered predicate that gates
+    // routing also gates assembly, so checking `contains_instruction` checks
+    // both. Stores admit e in {RV64_MEMORY_AS, PUBLIC_VALUES_AS}; loads and
+    // other address spaces stay rejected.
+    let mut registry = LogNativeAssemblerRegistry::<F, MatrixRecordArena<F>>::new();
+    Rv64ImConfig::default().extend_rvr_log_native(&mut registry);
+
+    assert!(
+        registry.contains_instruction(&extension_store(1, 2, 0)),
+        "STORED with e == PUBLIC_VALUES_AS must be admitted"
+    );
+    assert!(
+        registry.contains_instruction(&store(Rv64LoadStoreOpcode::STORED, 1, 2, 0)),
+        "STORED with e == RV64_MEMORY_AS must stay admitted"
+    );
+    assert!(
+        !registry.contains_instruction(&deferral_store()),
+        "STORED with e == DEFERRAL_AS must stay rejected"
+    );
+
+    let mut public_values_load = load(Rv64LoadStoreOpcode::LOADD, 1, 2, 0);
+    public_values_load.e = F::from_u32(PUBLIC_VALUES_AS);
+    assert!(
+        !registry.contains_instruction(&public_values_load),
+        "LOADD with e == PUBLIC_VALUES_AS must stay rejected"
+    );
+    let mut public_values_sign_extend_load = load(Rv64LoadStoreOpcode::LOADW, 1, 2, 0);
+    public_values_sign_extend_load.e = F::from_u32(PUBLIC_VALUES_AS);
+    assert!(
+        !registry.contains_instruction(&public_values_sign_extend_load),
+        "LOADW with e == PUBLIC_VALUES_AS must stay rejected"
+    );
+}
+
+#[test]
+fn rvr_preflight_reveal_differential_matches_interpreter() {
+    let exe = public_values_reveal_differential_exe();
+    // SystemRecords parity: from/to state (next timestamp), exec frequencies,
+    // and touched_memory including the AS=3 blocks' values and last-access
+    // timestamps.
+    assert_preflight_matches_interpreter("public_values_reveal_diff", exe.clone(), None);
+    // Byte-compare the LoadStore AIR trace, selected by opcode→AIR-id.
+    assert_trace_matches_interpreter(
+        "public_values_reveal_diff_trace",
+        exe,
+        Streams::default(),
+        TraceCompareScope::RevealLoadStore,
+    );
+}
+
+#[test]
+fn rvr_preflight_reveal_routes_prove_and_verify_end_to_end() {
     let config = Rv64ImConfig::with_public_values_bytes(16);
     for (label, exe) in [
         ("public_values_reveal_0", public_values_reveal_exe(0)),
         ("public_values_reveal_8", public_values_reveal_exe(8)),
     ] {
-        let segments =
-            assert_interpreter_route_and_proves(label, exe, config.clone(), Streams::default());
+        let segments = assert_rvr_route_and_proves(label, exe, config.clone(), Streams::default());
         assert_eq!(
             segments, 1,
-            "{label}: small extension program is single segment"
+            "{label}: small reveal program is single segment"
         );
     }
+}
+
+#[test]
+fn rvr_preflight_proves_reveal_multi_segment() {
+    // The reveal's AS=3 write must be accounted by rvr metered so segment
+    // boundaries still coincide with preflight when segmentation is tight.
+    let mut config = Rv64ImConfig::with_public_values_bytes(16);
+    config.rv64i.system.segmentation_max_memory = 1;
+    let mut instructions = vec![
+        addi(1, 0, 0x2a),
+        addi(2, 0, 0),
+        extension_store(1, 2, 0),
+        extension_store(1, 2, 8),
+    ];
+    for _ in 0..400 {
+        instructions.push(alu_r(BaseAluOpcode::ADD, 3, 1, 2));
+        instructions.push(alu_r(BaseAluOpcode::ADD, 1, 2, 0));
+        instructions.push(alu_r(BaseAluOpcode::ADD, 2, 3, 0));
+    }
+    instructions.push(terminate());
+    let segments = prove_rvr_preflight_and_verify(exe(&instructions), config);
+    assert!(
+        segments > 1,
+        "tight segmentation memory limit should force the reveal program into multiple segments"
+    );
 }
 
 #[test]
@@ -1625,7 +1781,7 @@ fn rvr_preflight_hard_chip_trace_matches_interpreter() {
         "hard_chip_trace",
         hard_chip_exe(1, false),
         hard_chip_streams(1),
-        true,
+        TraceCompareScope::All,
     );
 }
 

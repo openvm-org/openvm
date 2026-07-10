@@ -61,13 +61,19 @@ static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
     RvState* restrict state, uint64_t base_addr, uint32_t num_dwords,
     uint32_t addr_space) {}
 
+static __attribute__((always_inline)) inline void trace_wr_as_u64(
+    RvState* restrict state, uint64_t addr, uint64_t new_val,
+    uint32_t addr_space) {}
+
+static __attribute__((always_inline)) inline void trace_wr_as(
+    RvState* restrict state, uint64_t addr, uint64_t new_val, uint32_t width,
+    uint32_t addr_space) {}
+
 static __attribute__((always_inline)) inline void trace_pc(
     RvState* restrict state, uint64_t pc) {}
 
 static __attribute__((always_inline)) inline void trace_chip(
-    RvState* restrict state, uint32_t chip_idx, uint32_t count) {
-  state->mode_state.cost += state->mode_state.chip_widths[chip_idx] * (uint64_t)count;
-}
+    RvState* restrict state, uint32_t chip_idx, uint32_t count) {}
 
 /* Memory page accounting does not contribute to scalar metered cost. */
 static __attribute__((always_inline)) inline void read_mem_u64_range(
