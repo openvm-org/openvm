@@ -19,11 +19,29 @@ impl InstrCodegen for Instr {
     }
 }
 
+/// Whether preflight codegen migrates this instruction to an inline compact
+/// record (suppressing its memory-log entries) when inline records are enabled
+/// and the instruction maps to a chip. The single source of truth shared by
+/// [`emit_instr`] and the host-side compile metadata (`crates/vm` rvr
+/// `compile.rs`), which must skip the log assembler for exactly these pcs.
+pub fn instr_emits_inline_record(instr: &Instr) -> bool {
+    matches!(
+        instr,
+        Instr::AluReg {
+            op: AluOp::Add | AluOp::Sub,
+            ..
+        } | Instr::AluImm {
+            op: AluOp::Add | AluOp::Sub,
+            ..
+        }
+    )
+}
+
 /// Emit C code for a body instruction.
 pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
     match instr {
         Instr::AluReg { op, rd, rs1, rs2 } => {
-            if ctx.inline_records_enabled() && matches!(op, AluOp::Add | AluOp::Sub) {
+            if ctx.inline_records_enabled() && instr_emits_inline_record(instr) {
                 ctx.emit_addsub_reg(*op == AluOp::Sub, *rd, *rs1, *rs2);
             } else {
                 let l = ctx.read_reg(*rs1);
@@ -32,7 +50,7 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             }
         }
         Instr::AluImm { op, rd, rs1, imm } => {
-            if ctx.inline_records_enabled() && matches!(op, AluOp::Add | AluOp::Sub) {
+            if ctx.inline_records_enabled() && instr_emits_inline_record(instr) {
                 ctx.emit_addsub_imm(*op == AluOp::Sub, *rd, *rs1, *imm);
             } else {
                 let l = ctx.read_reg(*rs1);
