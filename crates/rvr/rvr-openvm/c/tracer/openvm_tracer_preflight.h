@@ -26,7 +26,28 @@
 #include <stdint.h>
 #include <string.h>
 
+#if defined(__x86_64__)
+#include <immintrin.h>
+#endif
+
 #include "openvm_state.h"
+
+/* Non-temporal u32 store for the write-once compact-record stream: records
+ * are consumed by the host after execution, never re-read by the writer, so
+ * streaming them past the cache roughly doubles sustainable write bandwidth
+ * at large-segment sizes and stops record emission from evicting the execute
+ * working set. MOVNTI has no alignment requirement. The host issues the
+ * corresponding sfence at the execution/harvest boundary before the buffers
+ * are read (possibly from other threads). Non-x86 targets use a plain store
+ * (byte-identical output either way). */
+static __attribute__((always_inline)) inline void nt_store_u32(
+    uint32_t* restrict dst, uint32_t value) {
+#if defined(__x86_64__)
+  _mm_stream_si32((int*)dst, (int)value);
+#else
+  *dst = value;
+#endif
+}
 
 typedef struct ProgramLogEntry {
   uint16_t opcode;
@@ -400,25 +421,21 @@ static __attribute__((always_inline)) inline void preflight_emit_addsub(
     return;
   }
   buf->len = off + PREFLIGHT_ADDSUB_RECORD_SIZE;
-  PreflightAddSubRecord* restrict r =
-      (PreflightAddSubRecord*)(buf->base + off);
-  r->from_pc = from_pc;
-  r->from_timestamp = from_timestamp;
-  r->reads_aux[0] = rs1_prev_ts;
-  r->reads_aux[1] = rs2_prev_ts;
-  r->writes_aux_prev_timestamp = rd_prev_ts;
-  r->writes_aux_prev_data[0] = (uint16_t)rd_prev_value;
-  r->writes_aux_prev_data[1] = (uint16_t)(rd_prev_value >> 16);
-  r->writes_aux_prev_data[2] = (uint16_t)(rd_prev_value >> 32);
-  r->writes_aux_prev_data[3] = (uint16_t)(rd_prev_value >> 48);
-  r->b[0] = (uint16_t)rs1_val;
-  r->b[1] = (uint16_t)(rs1_val >> 16);
-  r->b[2] = (uint16_t)(rs1_val >> 32);
-  r->b[3] = (uint16_t)(rs1_val >> 48);
-  r->c[0] = (uint16_t)rs2_val;
-  r->c[1] = (uint16_t)(rs2_val >> 16);
-  r->c[2] = (uint16_t)(rs2_val >> 32);
-  r->c[3] = (uint16_t)(rs2_val >> 48);
+  /* The 44-byte record is exactly 11 u32 words: the u16 limb arrays are the
+   * low/high halves of the u64 values they were split from, so the whole
+   * record streams as non-temporal u32 stores (see nt_store_u32). */
+  uint32_t* restrict words = (uint32_t*)(buf->base + off);
+  nt_store_u32(&words[0], from_pc);
+  nt_store_u32(&words[1], from_timestamp);
+  nt_store_u32(&words[2], rs1_prev_ts);
+  nt_store_u32(&words[3], rs2_prev_ts);
+  nt_store_u32(&words[4], rd_prev_ts);
+  nt_store_u32(&words[5], (uint32_t)rd_prev_value);
+  nt_store_u32(&words[6], (uint32_t)(rd_prev_value >> 32));
+  nt_store_u32(&words[7], (uint32_t)rs1_val);
+  nt_store_u32(&words[8], (uint32_t)(rs1_val >> 32));
+  nt_store_u32(&words[9], (uint32_t)rs2_val);
+  nt_store_u32(&words[10], (uint32_t)(rs2_val >> 32));
 }
 
 /* ── Trace-only memory reads ─────────────────────────────────────── */
