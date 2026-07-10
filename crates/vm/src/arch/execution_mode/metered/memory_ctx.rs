@@ -30,10 +30,29 @@ const FIRST_BIT_PER_U16: u64 = 0x0001_0001_0001_0001;
 const FIRST_BIT_PER_U32: u64 = 0x0000_0001_0000_0001;
 const FIRST_BIT_PER_U64: u64 = 0x0000_0000_0000_0001;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct BitSet {
     words: Box<[u64]>,
     dirty_words: Vec<usize>,
+}
+
+impl Clone for BitSet {
+    fn clone(&self) -> Self {
+        // `words` spans the whole index space but is non-zero only at
+        // `dirty_words` entries (each pushed exactly once, on the word's
+        // 0 -> non-zero transition). Allocate the clone zeroed — the untouched
+        // words stay lazily-mapped zero pages — and replay the dirty words,
+        // instead of memcpying (and faulting in) the full table as a derived
+        // `Clone` would. Cloning an untouched template this way is ~free.
+        let mut words = vec![0u64; self.words.len()].into_boxed_slice();
+        for &word_index in &self.dirty_words {
+            words[word_index] = self.words[word_index];
+        }
+        Self {
+            words,
+            dirty_words: self.dirty_words.clone(),
+        }
+    }
 }
 
 impl BitSet {
@@ -158,7 +177,7 @@ pub struct PageAccess {
     pub leaf_mask: u64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct MemoryPageTracker {
     page_masks: Box<[u64]>,
     dirty_pages: Vec<usize>,
@@ -166,6 +185,27 @@ pub struct MemoryPageTracker {
     upper_height: usize,
     merkle_nodes: u32,
     leaves: u32,
+}
+
+impl Clone for MemoryPageTracker {
+    fn clone(&self) -> Self {
+        // Same sparse-clone rationale as [`BitSet::clone`]: `page_masks` is
+        // non-zero only at `dirty_pages` entries, so replay those instead of
+        // memcpying the full table (which is sized for the entire page-id
+        // space and dominates `MeteredCtx::clone` otherwise).
+        let mut page_masks = vec![0u64; self.page_masks.len()].into_boxed_slice();
+        for &page_id in &self.dirty_pages {
+            page_masks[page_id] = self.page_masks[page_id];
+        }
+        Self {
+            page_masks,
+            dirty_pages: self.dirty_pages.clone(),
+            upper_nodes: self.upper_nodes.clone(),
+            upper_height: self.upper_height,
+            merkle_nodes: self.merkle_nodes,
+            leaves: self.leaves,
+        }
+    }
 }
 
 impl MemoryPageTracker {
@@ -771,5 +811,43 @@ mod tests {
         range_ctx.apply_height_updates(&mut range_heights);
         explicit_ctx.apply_height_updates(&mut explicit_heights);
         assert_eq!(range_heights, explicit_heights);
+    }
+
+    #[test]
+    fn test_bitset_sparse_clone_preserves_contents() {
+        let mut set = BitSet::new(1024);
+        set.insert(5);
+        set.insert(700);
+        set.insert_range(64, 130);
+
+        let mut cloned = set.clone();
+        assert!(!cloned.insert(5), "bit 5 must survive the clone");
+        assert!(!cloned.insert(700), "bit 700 must survive the clone");
+        assert!(!cloned.insert(64), "range start must survive the clone");
+        assert!(!cloned.insert(129), "range end must survive the clone");
+        assert!(cloned.insert(4), "absent bit must still be insertable");
+
+        // clear() walks dirty_words; it must reach every set word in the clone.
+        cloned.clear();
+        assert!(cloned.insert(5));
+        assert!(cloned.insert(129));
+    }
+
+    #[test]
+    fn test_page_tracker_sparse_clone_preserves_contents() {
+        let mut tracker = MemoryPageTracker::new(10);
+        tracker.insert(3, 0b1010);
+        tracker.insert(900, u64::MAX);
+
+        let mut cloned = tracker.clone();
+        assert_eq!(cloned.merkle_nodes, tracker.merkle_nodes);
+        assert_eq!(cloned.leaves, tracker.leaves);
+        // Re-inserting already-tracked leaves must add nothing.
+        assert_eq!(cloned.insert(3, 0b1010), (0, 0));
+        assert_eq!(cloned.insert(900, 1), (0, 0));
+        // An untouched page still accumulates.
+        let (leaves, merkle_nodes) = cloned.insert(5, 1);
+        assert_eq!(leaves, 1);
+        assert!(merkle_nodes > 0);
     }
 }
