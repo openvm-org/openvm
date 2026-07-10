@@ -1,10 +1,12 @@
 //! IR -> CProject -> make -> .so pipeline.
 
 use std::{
+    collections::BTreeMap,
     fs::{self, File},
     io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -12,7 +14,8 @@ use openvm_instructions::{
     exe::VmExe, program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm::{CProject, RvrExecutionKind};
+use rvr_openvm::{instr_emits_inline_record, CProject, RvrExecutionKind};
+use rvr_openvm_ir::Block;
 use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, opcode::lift_instruction,
     scan_init_memory_for_code_pointers, AirIndex, ExtensionRegistry, RvrInstruction,
@@ -34,6 +37,28 @@ pub struct RvrCompiled {
     artifact_dir: Option<ArtifactDir>,
     /// Generated state, tracing, and block ABI family baked into this artifact.
     execution_kind: RvrExecutionKind,
+    /// R3 inline-record metadata for preflight libraries; empty otherwise.
+    inline_records: RvrInlineRecordsMeta,
+}
+
+/// Which instructions a compiled preflight library migrated to inline compact
+/// records. The host must mirror the codegen exactly: skip the log assembler
+/// for flagged pc slots (their memory-log entries are suppressed) and hand
+/// each listed chip's C-written record buffer to the record arena directly.
+#[derive(Clone, Debug, Default)]
+pub struct RvrInlineRecordsMeta {
+    /// Per program slot (`(pc - pc_base) / DEFAULT_PC_STEP`): true when the
+    /// instruction emits an inline compact record.
+    pub pc_slots: Arc<Vec<bool>>,
+    /// `(air_idx, record_size_bytes)` per chip receiving inline records,
+    /// sorted by `air_idx`.
+    pub airs: Vec<(usize, usize)>,
+}
+
+impl RvrInlineRecordsMeta {
+    pub fn is_empty(&self) -> bool {
+        self.airs.is_empty()
+    }
 }
 
 enum ArtifactDir {
@@ -73,6 +98,12 @@ impl RvrCompiled {
     /// Valid while the returned [`RvrCompiled`] is alive.
     pub fn artifact_dir(&self) -> Option<&Path> {
         self.artifact_dir.as_ref().map(ArtifactDir::path)
+    }
+
+    /// R3 inline-record metadata for a preflight library (empty for other
+    /// tracer modes and for libraries loaded without compile metadata).
+    pub fn inline_records(&self) -> &RvrInlineRecordsMeta {
+        &self.inline_records
     }
 
     pub fn lib_file_name_with_suffix(&self, suffix: &str) -> Result<String, CompileError> {
@@ -282,6 +313,47 @@ pub fn build_pc_to_chip<F, E>(
         .collect()
 }
 
+/// Collect which instructions the preflight codegen migrates to inline compact
+/// records: the emitter's per-instruction decision is
+/// [`instr_emits_inline_record`] on the lifted IR instruction plus a
+/// `TraceChipIndex::Chip` mapping for its pc (mirroring
+/// `CProject::chip_idx_for_pc`). Walks the same lifted blocks the emitter
+/// walks so the host metadata cannot drift from the generated C.
+fn collect_inline_records_meta<F: PrimeField32>(
+    exe: &VmExe<F>,
+    blocks: &[Block],
+    chips: &ChipMapping,
+) -> RvrInlineRecordsMeta {
+    let num_slots = exe.program.instructions_and_debug_infos.len();
+    let pc_base = u64::from(exe.program.pc_base);
+    let mut pc_slots = vec![false; num_slots];
+    let mut airs = BTreeMap::new();
+    for instr_at in blocks.iter().flat_map(|block| &block.instructions) {
+        if !instr_emits_inline_record(&instr_at.instr) {
+            continue;
+        }
+        let Some(offset) = instr_at.pc.checked_sub(pc_base) else {
+            continue;
+        };
+        let slot = (offset / u64::from(DEFAULT_PC_STEP)) as usize;
+        let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) else {
+            continue;
+        };
+        if let Some(flag) = pc_slots.get_mut(slot) {
+            *flag = true;
+        }
+        // All Phase-1 migrated shapes are base-ALU ADD/SUB records.
+        airs.insert(
+            air.as_u32() as usize,
+            rvr_openvm_ext_ffi_common::PREFLIGHT_ADDSUB_RECORD_SIZE,
+        );
+    }
+    RvrInlineRecordsMeta {
+        pc_slots: Arc::new(pc_slots),
+        airs: airs.into_iter().collect(),
+    }
+}
+
 /// Options for the compilation pipeline.
 pub struct CompileOptions<'a, F> {
     /// Base name for generated files and library artifact.
@@ -470,8 +542,11 @@ pub fn preflight_compile_invocations_for_test() -> usize {
 ///
 /// The generated execution kind is validated before the artifact can be
 /// executed.
-/// The caller must still ensure the artifact matches the current `exe`, config,
-/// and codebase version.
+/// Inline-record metadata is not recoverable from a bare library, so
+/// this path is only valid for tracer modes without inline records (pure /
+/// metered); a preflight library compiled with inline records would suppress
+/// memory-log entries the host then expects, failing loudly at record
+/// assembly.
 pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileError> {
     tracing::warn!(
         path = %lib_path.display(),
@@ -488,6 +563,7 @@ pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileEr
         lib_path: lib_path.to_path_buf(),
         artifact_dir: None,
         execution_kind,
+        inline_records: RvrInlineRecordsMeta::default(),
     })
 }
 
@@ -562,6 +638,11 @@ fn compile_impl<F: PrimeField32>(
         );
     }
     project.pc_base = u64::from(exe.program.pc_base);
+
+    // Preflight compiles emit inline compact records for migrated opcodes by default.
+    let inline_records = opts.execution_kind == RvrExecutionKind::Preflight
+        && !env_flag_is_off("OPENVM_RVR_INLINE_RECORDS");
+    let mut inline_meta = RvrInlineRecordsMeta::default();
     match opts.execution_kind {
         RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => {}
         RvrExecutionKind::Metered
@@ -579,6 +660,10 @@ fn compile_impl<F: PrimeField32>(
                     | RvrExecutionKind::MeteredCost
             ) {
                 project.chip_widths = chips.chip_widths.clone();
+            }
+            if inline_records {
+                project.inline_records = true;
+                inline_meta = collect_inline_records_meta(exe, &blocks, chips);
             }
         }
     }
@@ -651,13 +736,18 @@ fn compile_impl<F: PrimeField32>(
     if let Some((lib_path, key_path, expected_key)) = cache.as_ref() {
         if let Some((project_key, artifact_key)) = read_preflight_cache_manifest(key_path) {
             if project_key == *expected_key {
-                if let Some(compiled) = load_verified_preflight_cache_copy(lib_path, &artifact_key)?
+                if let Some(mut compiled) =
+                    load_verified_preflight_cache_copy(lib_path, &artifact_key)?
                 {
                     tracing::info!(
                         path = %lib_path.display(),
                         cache_key = %expected_key,
                         "loading hash-validated rvr preflight artifact"
                     );
+                    // The cache key covers the generated C tree, which encodes
+                    // the inline-record decision, so this metadata matches the
+                    // cached library.
+                    compiled.inline_records = inline_meta;
                     return Ok(compiled);
                 }
             }
@@ -700,6 +790,7 @@ fn compile_impl<F: PrimeField32>(
         lib_path,
         artifact_dir: Some(artifact_dir),
         execution_kind,
+        inline_records: inline_meta,
     };
     if let Some((cache_lib, cache_key_path, cache_key)) = cache {
         publish_preflight_cache(&compiled, &cache_lib, &cache_key_path, &cache_key)?;
@@ -807,6 +898,7 @@ fn load_verified_preflight_cache_copy(
         lib_path: private_lib,
         artifact_dir: Some(ArtifactDir::Temp(temp_dir)),
         execution_kind: RvrExecutionKind::Preflight,
+        inline_records: RvrInlineRecordsMeta::default(),
     }))
 }
 
