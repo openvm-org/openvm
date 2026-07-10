@@ -122,6 +122,44 @@ impl SegmentationConfig {
     }
 }
 
+/// Per-AIR data for the periodic segmentation scan, packed contiguously so the
+/// hot loop touches one cache line per few AIRs instead of five parallel slices.
+#[derive(Clone, Debug)]
+struct ScanAir {
+    air_idx: u32,
+    width: u32,
+    interactions: u32,
+    need_rot: bool,
+}
+
+/// Precomputed data for the periodic segmentation scan. Constant-height AIRs
+/// contribute fixed cell/interaction counts, so they are aggregated once here
+/// and the per-check loop walks only the non-constant AIRs.
+#[derive(Clone, Debug)]
+struct ScanPlan {
+    /// Non-constant AIRs in index order.
+    airs: Vec<ScanAir>,
+    /// Padded main-trace cells of constant-height AIRs that open rotations.
+    const_main_with_rot: usize,
+    /// Padded main-trace cells of constant-height AIRs without rotations.
+    const_main_no_rot: usize,
+    /// Padded interaction cells of constant-height AIRs.
+    const_interaction_cells: usize,
+    /// Total interactions of constant-height AIRs.
+    const_total_interactions: u64,
+}
+
+/// Accumulated totals from one periodic scan.
+struct ScanResult {
+    main_cnt_with_rot: usize,
+    main_cnt_no_rot: usize,
+    interaction_cells: usize,
+    total_interactions: u64,
+    /// First non-constant AIR whose padded height exceeds the max, if any.
+    /// When set, the other accumulators are meaningless.
+    height_overshoot_air: Option<usize>,
+}
+
 #[derive(Clone, Debug)]
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
@@ -132,6 +170,9 @@ pub struct SegmentationCtx {
     pub(crate) checkpoint_trace_heights: Vec<u32>,
     /// Instruction count at the checkpoint
     checkpoint_instret: u64,
+    /// Built via [`Self::prepare_scan_plan`]; `segmentation_trigger` falls back
+    /// to scanning every AIR when absent.
+    scan_plan: Option<ScanPlan>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -207,7 +248,61 @@ impl SegmentationCtx {
             instret: 0,
             checkpoint_trace_heights: vec![0; num_airs],
             checkpoint_instret: 0,
+            scan_plan: None,
         }
+    }
+
+    /// Precompute the periodic-scan plan: aggregate the contributions of
+    /// constant-height AIRs (their `trace_heights` entries never change) and
+    /// pack the remaining AIRs' scan parameters contiguously.
+    ///
+    /// `trace_heights` must hold the constant AIRs' heights at their fixed
+    /// values (true from construction onward).
+    pub(crate) fn prepare_scan_plan(
+        &mut self,
+        trace_heights: &[u32],
+        is_trace_height_constant: &[bool],
+    ) {
+        debug_assert_eq!(trace_heights.len(), is_trace_height_constant.len());
+        debug_assert_eq!(trace_heights.len(), self.config.widths.len());
+
+        let mut plan = ScanPlan {
+            airs: Vec::with_capacity(trace_heights.len()),
+            const_main_with_rot: 0,
+            const_main_no_rot: 0,
+            const_interaction_cells: 0,
+            const_total_interactions: 0,
+        };
+        for (i, (&height, &is_constant)) in trace_heights
+            .iter()
+            .zip(is_trace_height_constant.iter())
+            .enumerate()
+        {
+            let width = self.config.widths[i];
+            let interactions = self.config.interactions[i];
+            if is_constant {
+                let padded_height = next_power_of_two_or_zero(height as usize);
+                let main_cells = padded_height * width;
+                if self.config.need_rot[i] {
+                    plan.const_main_with_rot += main_cells;
+                } else {
+                    plan.const_main_no_rot += main_cells;
+                }
+                plan.const_interaction_cells += padded_height * interactions;
+                plan.const_total_interactions +=
+                    add_one_or_zero(height) as u64 * interactions as u64;
+            } else {
+                plan.airs.push(ScanAir {
+                    air_idx: i as u32,
+                    width: width.try_into().expect("AIR width must fit in u32"),
+                    interactions: interactions
+                        .try_into()
+                        .expect("AIR interaction count must fit in u32"),
+                    need_rot: self.config.need_rot[i],
+                });
+            }
+        }
+        self.scan_plan = Some(plan);
     }
 
     #[inline(always)]
@@ -251,6 +346,7 @@ impl SegmentationCtx {
             instret: 0,
             checkpoint_trace_heights: vec![0; num_airs],
             checkpoint_instret: 0,
+            scan_plan: None,
         }
     }
 
@@ -433,46 +529,33 @@ impl SegmentationCtx {
             return None;
         }
 
-        let mut main_cnt_with_rot = 0usize;
-        let mut main_cnt_no_rot = 0usize;
-        let mut interaction_cells = 0usize;
-        for (i, ((((padded_height, width), interactions), is_constant), &need_rot)) in trace_heights
-            .iter()
-            .map(|&height| next_power_of_two_or_zero(height as usize) as u32)
-            .zip(self.config.widths.iter())
-            .zip(self.config.interactions.iter())
-            .zip(is_trace_height_constant.iter())
-            .zip(self.config.need_rot.iter())
-            .enumerate()
-        {
-            // Only segment if the height is not constant and exceeds the maximum height after
-            // padding
-            if !is_constant && padded_height > self.config.max_trace_height {
-                let air_name = unsafe { self.config.air_names.get_unchecked(i) };
-                tracing::info!(
-                    "overshoot: instret {:10} | height ({:8}) > max ({:8}) | chip {:3} ({}) ",
-                    instret,
-                    padded_height,
-                    self.config.max_trace_height,
-                    i,
-                    air_name,
-                );
-                return Some(SegmentationTrigger::Height {
-                    #[cfg(feature = "metrics")]
-                    air_id: i,
-                });
-            }
-            let main_cells = padded_height as usize * width;
-            if need_rot {
-                main_cnt_with_rot += main_cells;
-            } else {
-                main_cnt_no_rot += main_cells;
-            }
-            interaction_cells += padded_height as usize * interactions;
+        let scan = if let Some(plan) = &self.scan_plan {
+            self.scan_with_plan(plan, trace_heights)
+        } else {
+            self.scan_all_airs(trace_heights, is_trace_height_constant)
+        };
+
+        if let Some(i) = scan.height_overshoot_air {
+            let padded_height = next_power_of_two_or_zero(trace_heights[i] as usize);
+            tracing::info!(
+                "overshoot: instret {:10} | height ({:8}) > max ({:8}) | chip {:3} ({}) ",
+                instret,
+                padded_height,
+                self.config.max_trace_height,
+                i,
+                self.config.air_names[i],
+            );
+            return Some(SegmentationTrigger::Height {
+                #[cfg(feature = "metrics")]
+                air_id: i,
+            });
         }
 
-        let (total_memory, main_memory, interaction_memory) =
-            self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells);
+        let (total_memory, main_memory, interaction_memory) = self.counts_to_memory(
+            scan.main_cnt_with_rot,
+            scan.main_cnt_no_rot,
+            scan.interaction_cells,
+        );
         if total_memory > self.config.max_memory {
             tracing::info!(
                 "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5})",
@@ -485,18 +568,93 @@ impl SegmentationCtx {
             return Some(SegmentationTrigger::Memory);
         }
 
-        let total_interactions = self.calculate_total_interactions(trace_heights);
-        if total_interactions > u64::from(self.config.max_interactions) {
+        if scan.total_interactions > u64::from(self.config.max_interactions) {
             tracing::info!(
                 "overshoot: instret {:10} | total interactions ({:10}) > max ({:10})",
                 instret,
-                total_interactions,
+                scan.total_interactions,
                 self.config.max_interactions
             );
             return Some(SegmentationTrigger::Interactions);
         }
 
         None
+    }
+
+    /// Scan only the non-constant AIRs, seeding accumulators with the
+    /// precomputed constant-AIR contributions. Single fused pass over packed
+    /// per-AIR data (heights, memory, and interactions together).
+    #[inline(always)]
+    fn scan_with_plan(&self, plan: &ScanPlan, trace_heights: &[u32]) -> ScanResult {
+        let mut result = ScanResult {
+            main_cnt_with_rot: plan.const_main_with_rot,
+            main_cnt_no_rot: plan.const_main_no_rot,
+            interaction_cells: plan.const_interaction_cells,
+            total_interactions: plan.const_total_interactions,
+            height_overshoot_air: None,
+        };
+        for air in &plan.airs {
+            let i = air.air_idx as usize;
+            debug_assert!(i < trace_heights.len());
+            // SAFETY: `prepare_scan_plan` builds `air_idx` from enumerating a
+            // slice of the same length as `trace_heights` (asserted above).
+            let height = unsafe { *trace_heights.get_unchecked(i) };
+            let padded_height = next_power_of_two_or_zero(height as usize);
+            if padded_height as u32 > self.config.max_trace_height {
+                result.height_overshoot_air = Some(i);
+                return result;
+            }
+            let main_cells = padded_height * air.width as usize;
+            if air.need_rot {
+                result.main_cnt_with_rot += main_cells;
+            } else {
+                result.main_cnt_no_rot += main_cells;
+            }
+            result.interaction_cells += padded_height * air.interactions as usize;
+            result.total_interactions += add_one_or_zero(height) as u64 * air.interactions as u64;
+        }
+        result
+    }
+
+    /// Fallback scan over every AIR, for contexts constructed without a scan
+    /// plan. Decision-equivalent to [`Self::scan_with_plan`].
+    fn scan_all_airs(
+        &self,
+        trace_heights: &[u32],
+        is_trace_height_constant: &[bool],
+    ) -> ScanResult {
+        let mut result = ScanResult {
+            main_cnt_with_rot: 0,
+            main_cnt_no_rot: 0,
+            interaction_cells: 0,
+            total_interactions: 0,
+            height_overshoot_air: None,
+        };
+        for (i, ((((&height, &width), &interactions), &is_constant), &need_rot)) in trace_heights
+            .iter()
+            .zip(self.config.widths.iter())
+            .zip(self.config.interactions.iter())
+            .zip(is_trace_height_constant.iter())
+            .zip(self.config.need_rot.iter())
+            .enumerate()
+        {
+            let padded_height = next_power_of_two_or_zero(height as usize);
+            // Only segment if the height is not constant and exceeds the maximum height after
+            // padding
+            if !is_constant && padded_height as u32 > self.config.max_trace_height {
+                result.height_overshoot_air = Some(i);
+                return result;
+            }
+            let main_cells = padded_height * width;
+            if need_rot {
+                result.main_cnt_with_rot += main_cells;
+            } else {
+                result.main_cnt_no_rot += main_cells;
+            }
+            result.interaction_cells += padded_height * interactions;
+            result.total_interactions += add_one_or_zero(height) as u64 * interactions as u64;
+        }
+        result
     }
 
     #[inline(always)]
@@ -842,5 +1000,65 @@ mod tests {
         assert_eq!(ctx.segments[0].instret_start, 0);
         assert_eq!(ctx.segments[0].num_insns, 10);
         assert_eq!(ctx.segments[0].trace_heights, vec![2]);
+    }
+
+    /// The precomputed scan plan must reach the same segmentation decisions as
+    /// the fallback scan over every AIR, across all three trigger types.
+    #[test]
+    fn test_scan_plan_matches_fallback_scan() {
+        let num_airs = 6;
+        let is_constant = [false, true, false, true, false, false];
+        // Constant AIRs keep these heights in every vector below.
+        let base_heights: [u32; 6] = [0, 100, 0, 7, 0, 0];
+
+        let make_ctx = |max_memory: usize, max_interactions: u32| {
+            SegmentationCtx::new(
+                (0..num_airs).map(|i| format!("air{i}")).collect(),
+                vec![4, 2, 8, 1, 16, 3],
+                vec![2, 1, 0, 3, 5, 2],
+                vec![false, true, false, false, true, false],
+                SegmentationLimits {
+                    max_trace_height_bits: 11,
+                    max_memory,
+                    max_interactions,
+                },
+                ProvingMemoryConfig {
+                    base_field_size: 4,
+                    extension_degree: 4,
+                    log_blowup: 1,
+                    l_skip: 4,
+                    max_constraint_degree: 4,
+                    cache_rs_code_matrix: false,
+                },
+            )
+        };
+
+        let limit_cases = [
+            (usize::MAX, u32::MAX), // only height can trigger
+            (200_000, u32::MAX),    // memory can trigger
+            (usize::MAX, 10_000),   // interactions can trigger
+        ];
+        let height_cases: [[u32; 6]; 5] = [
+            base_heights,
+            [1000, 100, 500, 7, 100, 900],
+            [3000, 100, 0, 7, 0, 0], // height overshoot (padded 4096 > 2048)
+            [2048, 100, 2048, 7, 2048, 2048],
+            [1, 100, 1, 7, 1, 1],
+        ];
+
+        for (max_memory, max_interactions) in limit_cases {
+            let fallback_ctx = make_ctx(max_memory, max_interactions);
+            let mut plan_ctx = make_ctx(max_memory, max_interactions);
+            plan_ctx.prepare_scan_plan(&base_heights, &is_constant);
+            assert!(plan_ctx.scan_plan.is_some());
+            for heights in &height_cases {
+                assert_eq!(
+                    plan_ctx.should_segment(50, heights, &is_constant),
+                    fallback_ctx.should_segment(50, heights, &is_constant),
+                    "plan and fallback disagree for heights={heights:?}, \
+                     max_memory={max_memory}, max_interactions={max_interactions}"
+                );
+            }
+        }
     }
 }

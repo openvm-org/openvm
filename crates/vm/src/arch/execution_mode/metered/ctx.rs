@@ -97,6 +97,9 @@ impl MeteredCtx {
         ctx.memory_ctx.add_register_merkle_heights();
         ctx.memory_ctx.apply_height_updates(&mut ctx.trace_heights);
 
+        ctx.segmentation_ctx
+            .prepare_scan_plan(&ctx.trace_heights, &ctx.config.is_trace_height_constant);
+
         ctx
     }
 
@@ -125,11 +128,12 @@ impl MeteredCtx {
         segmentation_config: SegmentationConfig,
         system_config: &SystemConfig,
     ) -> Self {
-        let segmentation_ctx = SegmentationCtx::from_config(segmentation_config);
+        let mut segmentation_ctx = SegmentationCtx::from_config(segmentation_config);
         let mut memory_ctx = MemoryCtx::new(system_config, segmentation_ctx.segment_check_insns());
         let mut trace_heights = config.initial_trace_heights.clone();
         memory_ctx.add_register_merkle_heights();
         memory_ctx.apply_height_updates(&mut trace_heights);
+        segmentation_ctx.prepare_scan_plan(&trace_heights, &config.is_trace_height_constant);
         Self {
             trace_heights,
             config,
