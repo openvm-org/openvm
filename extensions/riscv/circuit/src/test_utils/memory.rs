@@ -19,7 +19,9 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, seq::IndexedRandom, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::adapters::{Rv64LoadAdapterRecord, Rv64StoreAdapterRecord, LOAD_WIDTH_WORD},
+    crate::adapters::{
+        Rv64LoadAdapterRecord, Rv64StoreAdapterRecord, LOAD_WIDTH_WORD, STORE_WIDTH_WORD,
+    },
     crate::load::LoadRecord,
     crate::store::StoreRecord,
     openvm_circuit::arch::{
@@ -50,7 +52,6 @@ struct MemoryAccess {
     rs1: [u8; 8],
     shift_amount: usize,
 }
-
 fn random_memory_access(
     tester: &impl TestBuilder<F>,
     rng: &mut StdRng,
@@ -187,14 +188,12 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
     imm_sign: Option<u32>,
     mem_as: Option<usize>,
 ) {
-    let alignment = match opcode {
-        STORED => 3,
-        STOREW => 2,
-        STOREH => 1,
-        STOREB => 0,
+    match opcode {
+        STORED | STOREW | STOREH | STOREB => {}
         _ => unreachable!("unsupported store opcode: {opcode:?}"),
-    };
-    let access = random_memory_access(tester, rng, alignment, rs1, imm, imm_sign);
+    }
+    // Stores support any byte shift, so sample fully misaligned pointers.
+    let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
     let mem_as = mem_as.unwrap_or_else(|| {
         *[RV64_MEMORY_AS as usize, PUBLIC_VALUES_AS as usize]
             .choose(rng)
@@ -207,7 +206,8 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
         access.rs1.map(F::from_u8),
     );
 
-    let prev_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|_| rng.random());
+    let prev_data: [[u16; BLOCK_FE_WIDTH]; 2] =
+        array::from_fn(|_| array::from_fn(|_| rng.random()));
     let mut read_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|_| rng.random());
     if access.a == 0 {
         read_data = [0; BLOCK_FE_WIDTH];
@@ -215,7 +215,12 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.write_bytes(
         mem_as,
         access.base_ptr,
-        rv64_u16_block_to_bytes(prev_data).map(F::from_u8),
+        rv64_u16_block_to_bytes(prev_data[0]).map(F::from_u8),
+    );
+    tester.write_bytes(
+        mem_as,
+        access.base_ptr + 8,
+        rv64_u16_block_to_bytes(prev_data[1]).map(F::from_u8),
     );
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
@@ -242,8 +247,14 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let write_data = store_write_data(opcode, read_data, prev_data, access.shift_amount);
     assert_eq!(
-        rv64_u16_block_to_bytes(write_data).map(F::from_u8),
+        rv64_u16_block_to_bytes(write_data[0]).map(F::from_u8),
         tester.read_bytes::<8>(mem_as, access.base_ptr)
+    );
+    // The second block is either rewritten by the crossing store or untouched; both must match
+    // the model.
+    assert_eq!(
+        rv64_u16_block_to_bytes(write_data[1]).map(F::from_u8),
+        tester.read_bytes::<8>(mem_as, access.base_ptr + 8)
     );
 }
 
@@ -304,6 +315,6 @@ pub(crate) fn transfer_store_records<G, C, A, E>(harness: &mut GpuTestChipHarnes
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64StoreAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64StoreAdapterExecutor<STORE_WIDTH_WORD>>::new(),
         );
 }

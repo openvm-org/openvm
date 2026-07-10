@@ -505,7 +505,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let store_halfword = Rv64StoreHalfwordAir::new(
             Rv64StoreAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(store_halfword);
 
@@ -527,7 +527,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let store_word = Rv64StoreWordAir::new(
             Rv64StoreAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            StoreWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            StoreWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(store_word);
 
@@ -539,7 +539,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let store_doubleword = Rv64StoreDoublewordAir::new(
             Rv64StoreAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            StoreDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            StoreDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(store_doubleword);
 
@@ -772,6 +772,7 @@ where
             StoreHalfwordFiller::new(
                 Rv64StoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu.clone(),
                 range_checker.clone(),
             ),
             mem_helper.clone(),
@@ -807,6 +808,7 @@ where
             StoreWordFiller::new(
                 Rv64StoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu.clone(),
                 range_checker.clone(),
             ),
             mem_helper.clone(),
@@ -830,6 +832,7 @@ where
             StoreDoublewordFiller::new(
                 Rv64StoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu.clone(),
                 range_checker.clone(),
             ),
             mem_helper.clone(),

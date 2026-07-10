@@ -71,8 +71,8 @@ impl<AB, I> VmCoreAir<AB, I> for StoreByteCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<([AB::Var; BLOCK_FE_WIDTH], [AB::Expr; BLOCK_FE_WIDTH])>,
-    I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
+    I::Reads: From<([[AB::Expr; BLOCK_FE_WIDTH]; 2], [AB::Expr; BLOCK_FE_WIDTH])>,
+    I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 2]>,
     I::ProcessedInstruction: From<StoreInstruction<AB::Expr>>,
 {
     fn eval(
@@ -142,12 +142,22 @@ where
 
         AdapterAirContext {
             to_pc: None,
-            reads: (cols.prev_data, cols.read_data.map(Into::into)).into(),
-            writes: [write_data].into(),
+            // A byte store never crosses a block boundary, so the second block is never
+            // touched.
+            reads: (
+                [
+                    cols.prev_data.map(Into::into),
+                    std::array::from_fn(|_| AB::Expr::ZERO),
+                ],
+                cols.read_data.map(Into::into),
+            )
+                .into(),
+            writes: [write_data, std::array::from_fn(|_| AB::Expr::ZERO)].into(),
             instruction: StoreInstruction {
                 is_valid: cols.is_valid.into(),
                 opcode: expected_opcode,
                 shift_amount,
+                store_cross: AB::Expr::ZERO,
             }
             .into(),
         }
@@ -202,7 +212,7 @@ where
         // generation.
         let record: &StoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let read_data = record.read_data;
-        let prev_data = record.prev_data;
+        let prev_data = record.prev_data[0];
         let core_row: &mut StoreByteCoreCols<F> = core_row.borrow_mut();
         let cell_shift = shift / 2;
         let byte_idx = shift % 2;
@@ -223,7 +233,8 @@ where
             .request_range(prev_cell_bytes[0] as u32, prev_cell_bytes[1] as u32);
         core_row.prev_cell_bytes = prev_cell_bytes.map(F::from_u16);
         debug_assert_eq!(
-            store_write_data(STOREB, read_data, prev_data, shift)[cell_shift],
+            store_write_data(STOREB, read_data, [prev_data, [0; BLOCK_FE_WIDTH]], shift)[0]
+                [cell_shift],
             set_u16_cell_byte(prev_data[cell_shift], byte_idx, read_cell_bytes[0])
         );
 

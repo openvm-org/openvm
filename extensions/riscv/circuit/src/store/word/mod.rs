@@ -10,14 +10,22 @@ use crate::{
     },
 };
 
-pub const STORE_WORD_SELECTOR_WIDTH: usize = 1;
+pub const STORE_WORD_SELECTOR_WIDTH: usize = 3;
+/// Source register cells decomposed on an odd-shift word store: `STORE_WIDTH_WORD / 2`.
+pub const STORE_WORD_VALUE_CELLS: usize = 2;
 
-pub type StoreWordCoreAir = StoreCoreAir<STORE_WIDTH_WORD, STORE_WORD_SELECTOR_WIDTH>;
-pub type StoreWordFiller =
-    StoreFiller<Rv64StoreAdapterFiller, STORE_WIDTH_WORD, STORE_WORD_SELECTOR_WIDTH>;
+pub type StoreWordCoreAir =
+    StoreCoreAir<STORE_WIDTH_WORD, STORE_WORD_SELECTOR_WIDTH, STORE_WORD_VALUE_CELLS>;
+pub type StoreWordFiller = StoreFiller<
+    Rv64StoreAdapterFiller,
+    STORE_WIDTH_WORD,
+    STORE_WORD_SELECTOR_WIDTH,
+    STORE_WORD_VALUE_CELLS,
+>;
 
 pub type Rv64StoreWordAir = VmAirWrapper<Rv64StoreAdapterAir, StoreWordCoreAir>;
-pub type Rv64StoreWordExecutor = StoreExecutor<Rv64StoreAdapterExecutor, STORE_WIDTH_WORD>;
+pub type Rv64StoreWordExecutor =
+    StoreExecutor<Rv64StoreAdapterExecutor<STORE_WIDTH_WORD>, STORE_WIDTH_WORD>;
 pub type Rv64StoreWordChip<F> = VmChipWrapper<F, StoreWordFiller>;
 
 #[cfg(feature = "cuda")]

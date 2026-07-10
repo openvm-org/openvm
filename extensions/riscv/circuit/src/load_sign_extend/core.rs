@@ -384,7 +384,7 @@ where
                 .request_range(cell_bytes[0] as u32, cell_bytes[1] as u32);
         }
 
-        let sign_bit = if shift % 2 == 0 {
+        let sign_bit = if shift.is_multiple_of(2) {
             let sign_cell = read_full[shift / 2 + width - 1];
             let bit = sign_cell & RV64_U16_SIGN_BIT;
             self.range_checker_chip
