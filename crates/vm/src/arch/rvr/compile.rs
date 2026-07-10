@@ -2,6 +2,7 @@
 
 use std::{
     fs::{self, File},
+    io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::{Duration, Instant},
@@ -16,6 +17,7 @@ use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, opcode::lift_instruction, AirIndex,
     ExtensionRegistry, RvrInstruction, TraceChipIndex,
 };
+use sha2::{Digest, Sha256};
 
 use super::{debug::GuestDebugMap, LogNativeOpcodeAdmitter};
 use crate::arch::ExecutorInventory;
@@ -664,6 +666,23 @@ fn compile_impl<F: PrimeField32>(
     let output_dir = temp_dir.path();
 
     let mut project = CProject::new(output_dir, &base_name, opts.execution_kind);
+    let lto_env = match opts.execution_kind {
+        RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {
+            Some("OPENVM_RVR_METERED_LTO")
+        }
+        RvrExecutionKind::Preflight => Some("OPENVM_RVR_PREFLIGHT_LTO"),
+        RvrExecutionKind::Pure
+        | RvrExecutionKind::PureWithInstretTracking
+        | RvrExecutionKind::MeteredCost => None,
+    };
+    let disable_lto = lto_env.is_some_and(env_flag_is_off);
+    if disable_lto {
+        project.enable_lto = false;
+        tracing::info!(
+            execution_kind = ?opts.execution_kind,
+            "disabled ThinLTO for rvr native compilation"
+        );
+    }
     project.pc_base = u64::from(exe.program.pc_base);
 
     match opts.execution_kind {
@@ -775,16 +794,60 @@ fn compile_impl<F: PrimeField32>(
         .collect();
     let ext_cflags = opts.extensions.extra_cflags();
 
-    compile_generated_project(
-        output_dir,
-        &project.make_args_with_extensions(
-            &ext_staticlibs,
-            &ext_sources,
-            &vendor_sources,
-            &ext_cflags,
-        ),
-        &toolchain,
-    )?;
+    let mut make_args = project.make_args_with_extensions(
+        &ext_staticlibs,
+        &ext_sources,
+        &vendor_sources,
+        &ext_cflags,
+    );
+    if disable_lto {
+        // Override an inherited Make environment variable as well as CProject's default.
+        make_args.push("LTO=".to_string());
+    }
+    if matches!(
+        opts.execution_kind,
+        RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment
+    ) {
+        if let Some(opt) = metered_opt_level()? {
+            make_args.push(format!("OPT={opt}"));
+        }
+    }
+    let cache = if opts.execution_kind == RvrExecutionKind::Preflight {
+        std::env::var_os("OPENVM_RVR_PREFLIGHT_LIB")
+            .filter(|path| !path.is_empty())
+            .map(|path| {
+                let lib_path = PathBuf::from(path);
+                let key_path = preflight_cache_key_path(&lib_path);
+                let key = generated_project_cache_key(output_dir, &make_args, &toolchain)?;
+                Ok::<_, CompileError>((lib_path, key_path, key))
+            })
+            .transpose()?
+    } else {
+        None
+    };
+
+    if let Some((lib_path, key_path, expected_key)) = cache.as_ref() {
+        if let Some((project_key, artifact_key)) = read_preflight_cache_manifest(key_path) {
+            if project_key == *expected_key {
+                if let Some(compiled) = load_verified_preflight_cache_copy(lib_path, &artifact_key)?
+                {
+                    tracing::info!(
+                        path = %lib_path.display(),
+                        cache_key = %expected_key,
+                        "loading hash-validated rvr preflight artifact"
+                    );
+                    return Ok(compiled);
+                }
+            }
+        }
+        tracing::info!(
+            path = %lib_path.display(),
+            cache_key = %expected_key,
+            "rvr preflight artifact cache miss"
+        );
+    }
+
+    compile_generated_project(output_dir, &make_args, &toolchain)?;
 
     let lib_path = find_shared_lib(output_dir)?;
     let lib = unsafe {
@@ -810,13 +873,325 @@ fn compile_impl<F: PrimeField32>(
         ArtifactDir::Temp(temp_dir)
     };
 
-    Ok(RvrCompiled {
+    let compiled = RvrCompiled {
         lib,
         lib_path,
         artifact_dir: Some(artifact_dir),
         execution_kind,
         num_airs,
-    })
+    };
+    if let Some((cache_lib, cache_key_path, cache_key)) = cache {
+        publish_preflight_cache(&compiled, &cache_lib, &cache_key_path, &cache_key)?;
+        tracing::info!(
+            path = %cache_lib.display(),
+            cache_key = %cache_key,
+            "saved hash-validated rvr preflight artifact"
+        );
+    }
+    Ok(compiled)
+}
+
+fn env_flag_is_off(name: &str) -> bool {
+    std::env::var(name)
+        .is_ok_and(|value| matches!(value.to_ascii_lowercase().as_str(), "0" | "false" | "off"))
+}
+
+fn metered_opt_level() -> Result<Option<String>, CompileError> {
+    let Some(value) = std::env::var_os("OPENVM_RVR_METERED_OPT") else {
+        return Ok(None);
+    };
+    let value = value.to_string_lossy().into_owned();
+    if matches!(
+        value.as_str(),
+        "-O0" | "-O1" | "-O2" | "-O3" | "-Os" | "-Oz"
+    ) {
+        Ok(Some(value))
+    } else {
+        Err(CompileError::InvalidOptions(
+            "OPENVM_RVR_METERED_OPT must be one of -O0, -O1, -O2, -O3, -Os, or -Oz",
+        ))
+    }
+}
+
+fn preflight_cache_key_path(lib_path: &Path) -> PathBuf {
+    let mut path = lib_path.as_os_str().to_os_string();
+    path.push(".sha256");
+    PathBuf::from(path)
+}
+
+fn artifact_sha256(path: &Path) -> Result<String, CompileError> {
+    let mut file = File::open(path).map_err(|source| CompileError::CProject {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0u8; 1024 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|source| CompileError::CProject {
+                path: path.to_path_buf(),
+                source,
+            })?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hex_digest(hasher.finalize()))
+}
+
+fn read_preflight_cache_manifest(path: &Path) -> Option<(String, String)> {
+    let manifest = fs::read_to_string(path).ok()?;
+    let mut lines = manifest.lines();
+    let project_key = lines.next()?.strip_prefix("project=")?.to_string();
+    let artifact_key = lines.next()?.strip_prefix("artifact=")?.to_string();
+    (lines.next().is_none()).then_some((project_key, artifact_key))
+}
+
+fn load_verified_preflight_cache_copy(
+    cache_lib: &Path,
+    expected_artifact_key: &str,
+) -> Result<Option<RvrCompiled>, CompileError> {
+    if !cache_lib.is_file() {
+        return Ok(None);
+    }
+    let parent = cache_lib.parent().unwrap_or_else(|| Path::new("."));
+    let temp_dir = tempfile::Builder::new()
+        .prefix(".openvm-rvr-cache-load-")
+        .tempdir_in(parent)
+        .map_err(|source| CompileError::CProject {
+            path: parent.to_path_buf(),
+            source,
+        })?;
+    let file_name = cache_lib
+        .file_name()
+        .ok_or_else(|| CompileError::LibLoad("cached library path has no file name".into()))?;
+    let private_lib = temp_dir.path().join(file_name);
+    if fs::hard_link(cache_lib, &private_lib).is_err() {
+        fs::copy(cache_lib, &private_lib).map_err(|source| CompileError::CProject {
+            path: private_lib.clone(),
+            source,
+        })?;
+    }
+    if artifact_sha256(&private_lib)? != expected_artifact_key {
+        return Ok(None);
+    }
+    let lib = unsafe {
+        libloading::Library::new(&private_lib)
+            .map_err(|err| CompileError::LibLoad(format!("{}: {err}", private_lib.display())))?
+    };
+    let num_airs = load_num_airs(&lib, RvrExecutionKind::Preflight)?;
+    Ok(Some(RvrCompiled {
+        lib,
+        lib_path: private_lib,
+        artifact_dir: Some(ArtifactDir::Temp(temp_dir)),
+        execution_kind: RvrExecutionKind::Preflight,
+        num_airs,
+    }))
+}
+
+fn publish_preflight_cache(
+    compiled: &RvrCompiled,
+    cache_lib: &Path,
+    cache_key_path: &Path,
+    project_key: &str,
+) -> Result<(), CompileError> {
+    let parent = cache_lib.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent).map_err(|source| CompileError::CProject {
+        path: parent.to_path_buf(),
+        source,
+    })?;
+    let temp_lib = tempfile::Builder::new()
+        .prefix(".openvm-rvr-cache-lib-")
+        .tempfile_in(parent)
+        .map_err(|source| CompileError::CProject {
+            path: parent.to_path_buf(),
+            source,
+        })?;
+    compiled.save_artifact(temp_lib.path())?;
+    temp_lib
+        .as_file()
+        .sync_all()
+        .map_err(|source| CompileError::CProject {
+            path: temp_lib.path().to_path_buf(),
+            source,
+        })?;
+    let artifact_key = artifact_sha256(temp_lib.path())?;
+
+    let key_parent = cache_key_path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(key_parent).map_err(|source| CompileError::CProject {
+        path: key_parent.to_path_buf(),
+        source,
+    })?;
+    let temp_manifest = tempfile::Builder::new()
+        .prefix(".openvm-rvr-cache-manifest-")
+        .tempfile_in(key_parent)
+        .map_err(|source| CompileError::CProject {
+            path: key_parent.to_path_buf(),
+            source,
+        })?;
+    fs::write(
+        temp_manifest.path(),
+        format!("project={project_key}\nartifact={artifact_key}\n"),
+    )
+    .map_err(|source| CompileError::CProject {
+        path: temp_manifest.path().to_path_buf(),
+        source,
+    })?;
+    temp_manifest
+        .as_file()
+        .sync_all()
+        .map_err(|source| CompileError::CProject {
+            path: temp_manifest.path().to_path_buf(),
+            source,
+        })?;
+
+    temp_lib
+        .persist(cache_lib)
+        .map_err(|err| CompileError::CProject {
+            path: cache_lib.to_path_buf(),
+            source: err.error,
+        })?;
+    temp_manifest
+        .persist(cache_key_path)
+        .map_err(|err| CompileError::CProject {
+            path: cache_key_path.to_path_buf(),
+            source: err.error,
+        })?;
+    Ok(())
+}
+
+fn generated_project_cache_key(
+    output_dir: &Path,
+    make_args: &[String],
+    toolchain: &rvr_openvm::RuntimeToolchain,
+) -> Result<String, CompileError> {
+    fn collect_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), CompileError> {
+        for entry in fs::read_dir(dir).map_err(|source| CompileError::CProject {
+            path: dir.to_path_buf(),
+            source,
+        })? {
+            let entry = entry.map_err(|source| CompileError::CProject {
+                path: dir.to_path_buf(),
+                source,
+            })?;
+            let path = entry.path();
+            if path.is_dir() {
+                collect_files(&path, files)?;
+            } else if path.is_file() {
+                files.push(path);
+            }
+        }
+        Ok(())
+    }
+
+    let mut files = Vec::new();
+    collect_files(output_dir, &mut files)?;
+    files.sort_by(|lhs, rhs| {
+        lhs.strip_prefix(output_dir)
+            .unwrap()
+            .cmp(rhs.strip_prefix(output_dir).unwrap())
+    });
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"openvm-rvr-preflight-artifact-v2\0");
+    hasher.update(std::env::consts::OS.as_bytes());
+    hasher.update([0]);
+    hasher.update(std::env::consts::ARCH.as_bytes());
+    hasher.update([0]);
+    hasher.update(toolchain.compiler.as_bytes());
+    hasher.update([0]);
+    hasher.update(toolchain.linker.as_bytes());
+    hasher.update([0]);
+    hasher.update(toolchain.make.as_bytes());
+    hasher.update([0]);
+    hasher.update(toolchain.host_os.as_bytes());
+    hasher.update([0]);
+    update_command_identity(&mut hasher, &toolchain.compiler, &["--version"])?;
+    update_command_identity(&mut hasher, &toolchain.linker, &["--version"])?;
+    update_command_identity(&mut hasher, &toolchain.make, &["--version"])?;
+    update_command_identity(
+        &mut hasher,
+        &toolchain.compiler,
+        &["-march=native", "-###", "-E", "-x", "c", "-"],
+    )?;
+    for name in [
+        "OPT",
+        "DEBUG",
+        "LTO",
+        "LDFLAGS",
+        "LDLIBS",
+        "EXT_LIBS",
+        "EXT_SRCS",
+        "EXT_CFLAGS",
+        "LIB",
+        "HOST_OS",
+    ] {
+        hasher.update(name.as_bytes());
+        hasher.update([0]);
+        if let Some(value) = std::env::var_os(name) {
+            hasher.update(value.as_encoded_bytes());
+        }
+        hasher.update([0]);
+    }
+
+    let output_dir_text = output_dir.to_string_lossy();
+    for arg in make_args {
+        hasher.update(arg.replace(output_dir_text.as_ref(), "$OUT").as_bytes());
+        hasher.update([0]);
+    }
+    for path in files {
+        let relative = path.strip_prefix(output_dir).unwrap();
+        hasher.update(relative.as_os_str().as_encoded_bytes());
+        hasher.update([0]);
+        let contents = fs::read(&path).map_err(|source| CompileError::CProject {
+            path: path.clone(),
+            source,
+        })?;
+        hasher.update((contents.len() as u64).to_le_bytes());
+        hasher.update(contents);
+    }
+
+    Ok(hex_digest(hasher.finalize()))
+}
+
+fn update_command_identity(
+    hasher: &mut Sha256,
+    command: &str,
+    args: &[&str],
+) -> Result<(), CompileError> {
+    let output = Command::new(command)
+        .args(args)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|source| CompileError::ToolchainCommand {
+            command: command.to_string(),
+            source,
+        })?;
+    hasher.update(command.as_bytes());
+    hasher.update([0]);
+    for arg in args {
+        hasher.update(arg.as_bytes());
+        hasher.update([0]);
+    }
+    hasher.update(output.status.code().unwrap_or(-1).to_le_bytes());
+    hasher.update((output.stdout.len() as u64).to_le_bytes());
+    hasher.update(output.stdout);
+    hasher.update((output.stderr.len() as u64).to_le_bytes());
+    hasher.update(output.stderr);
+    Ok(())
+}
+
+fn hex_digest(digest: impl AsRef<[u8]>) -> String {
+    let digest = digest.as_ref();
+    let mut key = String::with_capacity(digest.len() * 2);
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    for byte in digest {
+        key.push(HEX[(byte >> 4) as usize] as char);
+        key.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    key
 }
 
 pub fn ensure_toolchain_available() -> Result<rvr_openvm::RuntimeToolchain, CompileError> {
@@ -877,10 +1252,15 @@ fn compile_generated_project(
         source,
     })?;
     let total_objects = count_outputs(output_dir, "c");
-    let jobs = std::thread::available_parallelism()
-        .map_or(4, |n| n.get().saturating_sub(2).max(1))
+    let default_jobs =
+        std::thread::available_parallelism().map_or(4, |n| n.get().saturating_sub(2).max(1));
+    let jobs = std::env::var("OPENVM_RVR_MAKE_JOBS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|jobs| *jobs > 0)
+        .unwrap_or(default_jobs)
         .to_string();
-    tracing::debug!(
+    tracing::info!(
         translation_units = total_objects,
         make = %toolchain.make,
         jobs = %jobs,
