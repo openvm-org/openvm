@@ -249,7 +249,8 @@ fn create_cuda_halfword_harness(tester: &GpuChipTestBuilder) -> GpuHalfwordHarne
 #[test]
 fn test_cuda_rand_load_sign_extend_halfword_tracegen() {
     let mut rng = create_seeded_rng();
-    let mut tester = GpuChipTestBuilder::default();
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
     let mut harness = create_cuda_halfword_harness(&tester);
     for _ in 0..100 {
         set_and_execute(

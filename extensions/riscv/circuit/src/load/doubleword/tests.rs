@@ -257,7 +257,8 @@ fn create_cuda_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuDoublewordH
 fn test_cuda_rand_load_doubleword_tracegen() {
     let mut rng = create_seeded_rng();
     let mut tester =
-        GpuChipTestBuilder::new(load_gpu_memory_config(), default_var_range_checker_bus());
+        GpuChipTestBuilder::new(load_gpu_memory_config(), default_var_range_checker_bus())
+            .with_bitwise_op_lookup(default_bitwise_lookup_bus());
     let mut harness = create_cuda_doubleword_harness(&tester);
     for _ in 0..100 {
         set_and_execute_load(
