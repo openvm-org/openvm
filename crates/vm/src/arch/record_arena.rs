@@ -221,16 +221,20 @@ impl DenseRecordArena {
     }
 
     /// Allocates `count` bytes and returns as a mutable slice.
+    ///
+    /// Panics if the arena does not have `count` bytes of remaining capacity. The arena is
+    /// sized exactly from metered trace heights with no slack, so an undercount would
+    /// otherwise write past the buffer and silently corrupt the heap in release builds.
     pub fn alloc_bytes<'a>(&mut self, count: usize) -> &'a mut [u8] {
         let begin = self.records_buffer.position();
-        debug_assert!(
+        assert!(
             begin as usize + count <= self.records_buffer.get_ref().len(),
             "failed to allocate {count} bytes from {begin} when the capacity is {}",
             self.records_buffer.get_ref().len()
         );
         self.records_buffer.set_position(begin + count as u64);
         // SAFETY:
-        // - `begin` is within bounds and caller must ensure `count` bytes are available
+        // - the assert above guarantees `begin + count` is within the buffer
         // - The resulting slice is valid for the lifetime of self
         unsafe {
             std::slice::from_raw_parts_mut(
