@@ -7,7 +7,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
-use super::LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH;
+use super::{LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH, LOAD_SIGN_EXTEND_WORD_TOUCHED_CELLS};
 use crate::{
     adapters::{Rv64LoadAdapterCols, Rv64LoadAdapterRecord},
     cuda_abi::load_sign_extend_word_cuda,
@@ -32,7 +32,11 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendWordChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = Rv64LoadAdapterCols::<F>::width()
-            + LoadSignExtendCoreCols::<F, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH>::width();
+            + LoadSignExtendCoreCols::<
+                F,
+                LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
+                LOAD_SIGN_EXTEND_WORD_TOUCHED_CELLS,
+            >::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
