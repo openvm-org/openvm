@@ -57,6 +57,16 @@ typedef struct TouchedBlock {
   uint32_t block_addr;
 } TouchedBlock;
 
+/* R3: one per-chip inline-record buffer descriptor. `base` points at a
+ * host-allocated, metered-height-sized byte buffer of compact records for one
+ * chip; `len` is the byte cursor; `cap` the byte capacity. A null `base` means
+ * the chip is not migrated to inline records and uses the verbose memory log. */
+typedef struct ChipRecordBuf {
+  uint8_t* base;
+  uint32_t len;
+  uint32_t cap;
+} ChipRecordBuf;
+
 typedef struct Tracer {
   ProgramLogEntry* program_log;
   MemoryLogEntry* memory_log;
@@ -79,6 +89,9 @@ typedef struct Tracer {
   uint32_t touched_len;
   uint32_t touched_cap;
   uint32_t timestamp;
+  /* R3: array of `chip_counts_len` per-chip inline-record buffers, indexed by
+   * chip (AIR) index. Appended last so R1 field offsets are unchanged. */
+  ChipRecordBuf* chip_records;
 } Tracer;
 
 _Static_assert(sizeof(ProgramLogEntry) == PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE,
@@ -159,6 +172,74 @@ _Static_assert(offsetof(Tracer, touched_cap) == 88,
                "Tracer touched_cap offset drift");
 _Static_assert(offsetof(Tracer, timestamp) == 92,
                "Tracer timestamp offset drift");
+_Static_assert(offsetof(Tracer, chip_records) == 96,
+               "Tracer chip_records offset drift");
+_Static_assert(sizeof(ChipRecordBuf) == PREFLIGHT_CHIP_RECORD_BUF_SIZE,
+               "ChipRecordBuf size drift");
+_Static_assert(_Alignof(ChipRecordBuf) == PREFLIGHT_CHIP_RECORD_BUF_ALIGN,
+               "ChipRecordBuf align drift");
+_Static_assert(offsetof(ChipRecordBuf, base) == 0,
+               "ChipRecordBuf base offset drift");
+_Static_assert(offsetof(ChipRecordBuf, len) == 8,
+               "ChipRecordBuf len offset drift");
+_Static_assert(offsetof(ChipRecordBuf, cap) == 12,
+               "ChipRecordBuf cap offset drift");
+
+/* R3: compact base-ALU AddSub record, laid out exactly as `DenseRecordArena`
+ * concatenates the adapter (`Rv64BaseAluU16AdapterRecord`, 44 B) and core
+ * (`AddSubCoreRecord<4>`, 18 B) records: adapter at [0,44), core at [44,62),
+ * padded to 64. Field names/offsets mirror the Rust records; the riscv circuit
+ * asserts the Rust side matches (its rvr record-ABI guard). */
+typedef struct PreflightAddSubRecord {
+  /* adapter Rv64BaseAluU16AdapterRecord */
+  uint32_t from_pc;                    /* 0  */
+  uint32_t from_timestamp;             /* 4  */
+  uint32_t rd_ptr;                     /* 8  */
+  uint32_t rs1_ptr;                    /* 12 */
+  uint32_t rs2;                        /* 16 */
+  uint8_t rs2_as;                      /* 20 */
+  uint8_t rs2_imm_sign;                /* 21 */
+  uint8_t _pad0[2];                    /* 22 */
+  uint32_t reads_aux[2];               /* 24: [prev_timestamp; 2] */
+  uint32_t writes_aux_prev_timestamp;  /* 32 */
+  uint16_t writes_aux_prev_data[4];    /* 36 */
+  /* core AddSubCoreRecord<4> at 44 */
+  uint16_t b[4];                       /* 44 */
+  uint16_t c[4];                       /* 52 */
+  uint8_t local_opcode;                /* 60 */
+  uint8_t _pad1[3];                    /* 61 */
+} PreflightAddSubRecord;
+
+_Static_assert(sizeof(PreflightAddSubRecord) == PREFLIGHT_ADDSUB_RECORD_SIZE,
+               "PreflightAddSubRecord size drift");
+_Static_assert(_Alignof(PreflightAddSubRecord) == 4,
+               "PreflightAddSubRecord align drift");
+_Static_assert(offsetof(PreflightAddSubRecord, from_pc) == 0,
+               "PreflightAddSubRecord from_pc offset drift");
+_Static_assert(offsetof(PreflightAddSubRecord, from_timestamp) == 4,
+               "PreflightAddSubRecord from_timestamp offset drift");
+_Static_assert(offsetof(PreflightAddSubRecord, rd_ptr) == 8,
+               "PreflightAddSubRecord rd_ptr offset drift");
+_Static_assert(offsetof(PreflightAddSubRecord, rs1_ptr) == 12,
+               "PreflightAddSubRecord rs1_ptr offset drift");
+_Static_assert(offsetof(PreflightAddSubRecord, rs2) == 16,
+               "PreflightAddSubRecord rs2 offset drift");
+_Static_assert(offsetof(PreflightAddSubRecord, rs2_as) == 20,
+               "PreflightAddSubRecord rs2_as offset drift");
+_Static_assert(offsetof(PreflightAddSubRecord, rs2_imm_sign) == 21,
+               "PreflightAddSubRecord rs2_imm_sign offset drift");
+_Static_assert(offsetof(PreflightAddSubRecord, reads_aux) == 24,
+               "PreflightAddSubRecord reads_aux offset drift");
+_Static_assert(offsetof(PreflightAddSubRecord, writes_aux_prev_timestamp) == 32,
+               "PreflightAddSubRecord writes_aux_prev_timestamp offset drift");
+_Static_assert(offsetof(PreflightAddSubRecord, writes_aux_prev_data) == 36,
+               "PreflightAddSubRecord writes_aux_prev_data offset drift");
+_Static_assert(offsetof(PreflightAddSubRecord, b) == 44,
+               "PreflightAddSubRecord b offset drift");
+_Static_assert(offsetof(PreflightAddSubRecord, c) == 52,
+               "PreflightAddSubRecord c offset drift");
+_Static_assert(offsetof(PreflightAddSubRecord, local_opcode) == 60,
+               "PreflightAddSubRecord local_opcode offset drift");
 
 /* ── Timestamp shadow ─────────────────────────────────────────────── */
 
@@ -252,7 +333,7 @@ static __attribute__((always_inline)) inline uint32_t preflight_touch(
  * the shadow index and touched-block key are derived from the aligned block.
  * `prev_value` is the block's value before this access (only consumed for
  * writes) and is supplied by the caller, which holds the store pointer. */
-static __attribute__((always_inline)) inline void preflight_append_memory(
+static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
     Tracer* restrict t, uint8_t kind, uint8_t addr_space, uint64_t address,
     uint8_t width, uint64_t value, uint64_t prev_value) {
   uint32_t timestamp;
@@ -274,6 +355,7 @@ static __attribute__((always_inline)) inline void preflight_append_memory(
     };
     t->memory_log[idx] = entry;
   }
+  return prev_timestamp;
 }
 
 static __attribute__((always_inline)) inline void trace_timestamp(
@@ -283,21 +365,81 @@ static __attribute__((always_inline)) inline void trace_timestamp(
 
 /* ── Trace-only register access ──────────────────────────────────── */
 
-static __attribute__((always_inline)) inline void trace_reg_read(
+static __attribute__((always_inline)) inline uint32_t trace_reg_read(
     RvState* restrict state, uint8_t idx, uint32_t val) {
   uint64_t reg_value = idx == 0 ? 0 : state->regs[idx];
-  preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ,
-                          AS_REGISTER, (uint32_t)idx * WORD_SIZE, WORD_SIZE,
-                          reg_value, reg_value);
+  return preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ,
+                                 AS_REGISTER, (uint32_t)idx * WORD_SIZE,
+                                 WORD_SIZE, reg_value, reg_value);
 }
 /* Traced BEFORE the register store (see `write_reg` codegen), so
  * `state->regs[idx]` still holds the previous value for `prev_value`; the new
- * value arrives as `new_val`. */
-static __attribute__((always_inline)) inline void trace_reg_write(
+ * value arrives as `new_val`. Returns the register block's `prev_timestamp`
+ * (consumed by inline record emission). */
+static __attribute__((always_inline)) inline uint32_t trace_reg_write(
     RvState* restrict state, uint8_t idx, uint32_t new_val) {
-  preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
-                          AS_REGISTER, (uint32_t)idx * WORD_SIZE, WORD_SIZE,
-                          new_val, state->regs[idx]);
+  return preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
+                                 AS_REGISTER, (uint32_t)idx * WORD_SIZE,
+                                 WORD_SIZE, new_val, state->regs[idx]);
+}
+
+/* R3: emit one compact base-ALU AddSub record into chip `chip_idx`'s inline
+ * buffer. Every field is supplied by the caller (which already computes them
+ * for execution): the two register operand values (`rs1_val`/`rs2_val`, split
+ * into the core `b`/`c` u16 limbs), the three access `prev_timestamp`s from the
+ * touches, the old `rd` block value (`writes_aux` prev_data), and the decoded
+ * operands. A null buffer / out-of-range chip / full buffer is a no-op: the
+ * chip then has a missing inline record, which fails loudly downstream (bus
+ * imbalance / trace mismatch) rather than silently corrupting. */
+static __attribute__((always_inline)) inline void preflight_emit_addsub(
+    RvState* restrict state, uint32_t chip_idx, uint32_t from_pc,
+    uint32_t from_timestamp, uint32_t rd_ptr, uint32_t rs1_ptr, uint32_t rs2,
+    uint8_t rs2_as, uint8_t rs2_imm_sign, uint32_t rs1_prev_ts,
+    uint32_t rs2_prev_ts, uint32_t rd_prev_ts, uint64_t rd_prev_value,
+    uint64_t rs1_val, uint64_t rs2_val, uint8_t local_opcode) {
+  Tracer* restrict t = state->tracer;
+  if (unlikely(chip_idx >= t->chip_counts_len)) {
+    return;
+  }
+  ChipRecordBuf* restrict buf = &t->chip_records[chip_idx];
+  if (buf->base == NULL) {
+    return;
+  }
+  uint32_t off = buf->len;
+  if (unlikely(off + PREFLIGHT_ADDSUB_RECORD_SIZE > buf->cap)) {
+    return;
+  }
+  buf->len = off + PREFLIGHT_ADDSUB_RECORD_SIZE;
+  PreflightAddSubRecord* restrict r =
+      (PreflightAddSubRecord*)(buf->base + off);
+  r->from_pc = from_pc;
+  r->from_timestamp = from_timestamp;
+  r->rd_ptr = rd_ptr;
+  r->rs1_ptr = rs1_ptr;
+  r->rs2 = rs2;
+  r->rs2_as = rs2_as;
+  r->rs2_imm_sign = rs2_imm_sign;
+  r->_pad0[0] = 0;
+  r->_pad0[1] = 0;
+  r->reads_aux[0] = rs1_prev_ts;
+  r->reads_aux[1] = rs2_prev_ts;
+  r->writes_aux_prev_timestamp = rd_prev_ts;
+  r->writes_aux_prev_data[0] = (uint16_t)rd_prev_value;
+  r->writes_aux_prev_data[1] = (uint16_t)(rd_prev_value >> 16);
+  r->writes_aux_prev_data[2] = (uint16_t)(rd_prev_value >> 32);
+  r->writes_aux_prev_data[3] = (uint16_t)(rd_prev_value >> 48);
+  r->b[0] = (uint16_t)rs1_val;
+  r->b[1] = (uint16_t)(rs1_val >> 16);
+  r->b[2] = (uint16_t)(rs1_val >> 32);
+  r->b[3] = (uint16_t)(rs1_val >> 48);
+  r->c[0] = (uint16_t)rs2_val;
+  r->c[1] = (uint16_t)(rs2_val >> 16);
+  r->c[2] = (uint16_t)(rs2_val >> 32);
+  r->c[3] = (uint16_t)(rs2_val >> 48);
+  r->local_opcode = local_opcode;
+  r->_pad1[0] = 0;
+  r->_pad1[1] = 0;
+  r->_pad1[2] = 0;
 }
 
 /* ── Trace-only memory reads ─────────────────────────────────────── */
