@@ -7,9 +7,9 @@ use openvm_instructions::VM_DIGEST_WIDTH;
 use rvr_openvm_ext_ffi_common as ffi;
 
 use crate::arch::rvr::preflight::{
-    MemoryLogEntry, PreflightTracerData, ProgramLogEntry, PREFLIGHT_INITIAL_TIMESTAMP,
-    PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE,
-    PREFLIGHT_TRACER_KIND,
+    MemoryLogEntry, PreflightTracerData, ProgramLogEntry, TouchedBlock,
+    PREFLIGHT_INITIAL_TIMESTAMP, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH,
+    PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_TRACER_KIND,
 };
 
 #[cfg(any(feature = "test-utils", feature = "cuda"))]
@@ -31,20 +31,33 @@ const _: () = assert!(offset_of!(ProgramLogEntry, pc) == 8);
 const _: () = assert!(size_of::<MemoryLogEntry>() == ffi::PREFLIGHT_MEMORY_LOG_ENTRY_SIZE);
 const _: () = assert!(align_of::<MemoryLogEntry>() == ffi::PREFLIGHT_MEMORY_LOG_ENTRY_ALIGN);
 const _: () = assert!(offset_of!(MemoryLogEntry, timestamp) == 0);
-const _: () = assert!(offset_of!(MemoryLogEntry, kind) == 4);
-const _: () = assert!(offset_of!(MemoryLogEntry, addr_space) == 5);
-const _: () = assert!(offset_of!(MemoryLogEntry, width) == 6);
-const _: () = assert!(offset_of!(MemoryLogEntry, _pad0) == 7);
-const _: () = assert!(offset_of!(MemoryLogEntry, address) == 8);
-const _: () = assert!(offset_of!(MemoryLogEntry, value) == 16);
+const _: () = assert!(offset_of!(MemoryLogEntry, prev_timestamp) == 4);
+const _: () = assert!(offset_of!(MemoryLogEntry, kind) == 8);
+const _: () = assert!(offset_of!(MemoryLogEntry, addr_space) == 9);
+const _: () = assert!(offset_of!(MemoryLogEntry, width) == 10);
+const _: () = assert!(offset_of!(MemoryLogEntry, _pad0) == 11);
+const _: () = assert!(offset_of!(MemoryLogEntry, address) == 16);
+const _: () = assert!(offset_of!(MemoryLogEntry, value) == 24);
+const _: () = assert!(offset_of!(MemoryLogEntry, prev_value) == 32);
+const _: () = assert!(size_of::<TouchedBlock>() == ffi::PREFLIGHT_TOUCHED_BLOCK_SIZE);
+const _: () = assert!(align_of::<TouchedBlock>() == ffi::PREFLIGHT_TOUCHED_BLOCK_ALIGN);
+const _: () = assert!(offset_of!(TouchedBlock, addr_space) == 0);
+const _: () = assert!(offset_of!(TouchedBlock, block_addr) == 4);
 const _: () = assert!(size_of::<PreflightTracerData>() == ffi::PREFLIGHT_TRACER_DATA_SIZE);
 const _: () = assert!(align_of::<PreflightTracerData>() == ffi::PREFLIGHT_TRACER_DATA_ALIGN);
 const _: () = assert!(offset_of!(PreflightTracerData, program_log) == 0);
 const _: () = assert!(offset_of!(PreflightTracerData, memory_log) == 8);
 const _: () = assert!(offset_of!(PreflightTracerData, chip_counts) == 16);
-const _: () = assert!(offset_of!(PreflightTracerData, program_log_len) == 24);
-const _: () = assert!(offset_of!(PreflightTracerData, memory_log_len) == 28);
-const _: () = assert!(offset_of!(PreflightTracerData, program_log_cap) == 32);
-const _: () = assert!(offset_of!(PreflightTracerData, memory_log_cap) == 36);
-const _: () = assert!(offset_of!(PreflightTracerData, chip_counts_len) == 40);
-const _: () = assert!(offset_of!(PreflightTracerData, timestamp) == 44);
+const _: () = assert!(offset_of!(PreflightTracerData, shadow_register) == 24);
+const _: () = assert!(offset_of!(PreflightTracerData, shadow_memory) == 32);
+const _: () = assert!(offset_of!(PreflightTracerData, shadow_public_values) == 40);
+const _: () = assert!(offset_of!(PreflightTracerData, public_values_base) == 48);
+const _: () = assert!(offset_of!(PreflightTracerData, touched) == 56);
+const _: () = assert!(offset_of!(PreflightTracerData, program_log_len) == 64);
+const _: () = assert!(offset_of!(PreflightTracerData, memory_log_len) == 68);
+const _: () = assert!(offset_of!(PreflightTracerData, program_log_cap) == 72);
+const _: () = assert!(offset_of!(PreflightTracerData, memory_log_cap) == 76);
+const _: () = assert!(offset_of!(PreflightTracerData, chip_counts_len) == 80);
+const _: () = assert!(offset_of!(PreflightTracerData, touched_len) == 84);
+const _: () = assert!(offset_of!(PreflightTracerData, touched_cap) == 88);
+const _: () = assert!(offset_of!(PreflightTracerData, timestamp) == 92);

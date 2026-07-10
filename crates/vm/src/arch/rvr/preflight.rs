@@ -2,23 +2,32 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use openvm_instructions::{exe::VmExe, program::DEFAULT_PC_STEP};
+use openvm_instructions::{
+    exe::VmExe,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+};
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use rvr_openvm_lift::{RvrRuntimeExtension, TraceChipIndex};
 
 use super::{
-    bridge::map_rvr_execute_error,
+    bridge::{map_rvr_execute_error, public_values_slice},
     compile::{ChipMapping, RvrCompiled},
     execute::execute_preflight as execute_preflight_raw,
-    preflight_normalizer::{normalize_preflight_memory_logs, PreflightMemoryAccessAux},
+    preflight_normalizer::{
+        build_preflight_replay, PreflightMemoryAccessAux, PreflightShadowsView,
+    },
     state::{TracerPayload, TracerPtr},
 };
 use crate::{
     arch::{
         interpreter_preflight::PreflightInterpretedInstance, ExecutionError, ExecutionState,
-        Streams, SystemConfig, VmState,
+        Streams, SystemConfig, VmState, BLOCK_FE_WIDTH,
     },
-    system::{memory::online::GuestMemory, SystemRecords},
+    system::{
+        memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory},
+        SystemRecords,
+    },
 };
 
 pub const PREFLIGHT_TRACER_KIND: u32 = rvr_openvm_ext_ffi_common::PREFLIGHT_TRACER_KIND;
@@ -44,16 +53,38 @@ pub struct ProgramLogEntry {
 /// C-compatible preflight memory log entry.
 ///
 /// Layout matches `MemoryLogEntry` in `openvm_tracer_preflight.h`.
+///
+/// R1: self-contained. `prev_timestamp` is the block's previous-access
+/// timestamp (from the C timestamp shadow) and `prev_value` is the block's
+/// value before this access (only meaningful for writes). Together they let the
+/// host build memory-record aux data in a single linear pass without replaying
+/// the log.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MemoryLogEntry {
     pub timestamp: u32,
+    pub prev_timestamp: u32,
     pub kind: u8,
     pub addr_space: u8,
     pub width: u8,
     pub _pad0: u8,
+    pub _pad1: u32,
     pub address: u64,
     pub value: u64,
+    pub prev_value: u64,
+}
+
+/// C-compatible preflight touched-block entry.
+///
+/// Layout matches `TouchedBlock` in `openvm_tracer_preflight.h`. Records a block
+/// touched for the first time this segment; the host finalizes `touched_memory`
+/// from this list (final value from live memory, final timestamp from the
+/// shadow) in O(touched-blocks).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TouchedBlock {
+    pub addr_space: u32,
+    pub block_addr: u32,
 }
 
 /// C-compatible preflight tracer data.
@@ -66,15 +97,28 @@ pub struct PreflightTracerData {
     pub program_log: *mut ProgramLogEntry,
     pub memory_log: *mut MemoryLogEntry,
     pub chip_counts: *mut u32,
+    /// Per-address-space last-access timestamp shadows, indexed by block index
+    /// (`block_addr / WORD_SIZE`). 0 means untouched this segment.
+    pub shadow_register: *mut u32,
+    pub shadow_memory: *mut u32,
+    pub shadow_public_values: *mut u32,
+    /// Public-values byte buffer, aliased so reveal writes can read the block's
+    /// previous value.
+    pub public_values_base: *mut u8,
+    pub touched: *mut TouchedBlock,
     pub program_log_len: u32,
     pub memory_log_len: u32,
     pub program_log_cap: u32,
     pub memory_log_cap: u32,
     pub chip_counts_len: u32,
+    pub touched_len: u32,
+    pub touched_cap: u32,
     pub timestamp: u32,
 }
 
 impl PreflightTracerData {
+    /// Build a tracer over the log/chip buffers with the shadow pointers left
+    /// null; call [`PreflightTracerData::set_shadows`] before executing.
     pub fn new(
         program_log: &mut [ProgramLogEntry],
         memory_log: &mut [MemoryLogEntry],
@@ -84,13 +128,41 @@ impl PreflightTracerData {
             program_log: program_log.as_mut_ptr(),
             memory_log: memory_log.as_mut_ptr(),
             chip_counts: chip_counts.as_mut_ptr(),
+            shadow_register: std::ptr::null_mut(),
+            shadow_memory: std::ptr::null_mut(),
+            shadow_public_values: std::ptr::null_mut(),
+            public_values_base: std::ptr::null_mut(),
+            touched: std::ptr::null_mut(),
             program_log_len: 0,
             memory_log_len: 0,
             program_log_cap: program_log.len() as u32,
             memory_log_cap: memory_log.len() as u32,
             chip_counts_len: chip_counts.len() as u32,
+            touched_len: 0,
+            touched_cap: 0,
             timestamp: PREFLIGHT_INITIAL_TIMESTAMP,
         }
+    }
+
+    /// Attach the per-address-space timestamp shadows, the public-values base
+    /// pointer, and the touched-block buffer. The shadow slices must be sized to
+    /// each address space's block count and zero-initialized.
+    #[allow(clippy::too_many_arguments)]
+    pub fn set_shadows(
+        &mut self,
+        shadow_register: &mut [u32],
+        shadow_memory: &mut [u32],
+        shadow_public_values: &mut [u32],
+        public_values_base: *mut u8,
+        touched: &mut [TouchedBlock],
+    ) {
+        self.shadow_register = shadow_register.as_mut_ptr();
+        self.shadow_memory = shadow_memory.as_mut_ptr();
+        self.shadow_public_values = shadow_public_values.as_mut_ptr();
+        self.public_values_base = public_values_base;
+        self.touched = touched.as_mut_ptr();
+        self.touched_len = 0;
+        self.touched_cap = touched.len() as u32;
     }
 }
 
@@ -100,11 +172,18 @@ impl Default for PreflightTracerData {
             program_log: std::ptr::null_mut(),
             memory_log: std::ptr::null_mut(),
             chip_counts: std::ptr::null_mut(),
+            shadow_register: std::ptr::null_mut(),
+            shadow_memory: std::ptr::null_mut(),
+            shadow_public_values: std::ptr::null_mut(),
+            public_values_base: std::ptr::null_mut(),
+            touched: std::ptr::null_mut(),
             program_log_len: 0,
             memory_log_len: 0,
             program_log_cap: 0,
             memory_log_cap: 0,
             chip_counts_len: 0,
+            touched_len: 0,
+            touched_cap: 0,
             timestamp: PREFLIGHT_INITIAL_TIMESTAMP,
         }
     }
@@ -257,7 +336,19 @@ where
     F: PrimeField32,
 {
     let from_state = ExecutionState::new(state.pc(), PREFLIGHT_INITIAL_TIMESTAMP);
-    let initial_memory = state.memory.clone();
+    // Per-address-space timestamp-shadow block counts (the C mirror of
+    // `TracingMemory.meta`). Blocks are `WORD_SIZE` bytes = `BLOCK_FE_WIDTH`
+    // U16 cells, so the block count equals `num_cells / BLOCK_FE_WIDTH`.
+    let shadow_blocks = |addr_space: u32| {
+        state.memory.memory.config[addr_space as usize]
+            .num_cells
+            .div_ceil(BLOCK_FE_WIDTH)
+            .max(1)
+    };
+    let reg_shadow_blocks = shadow_blocks(RV64_REGISTER_AS);
+    let mem_shadow_blocks = shadow_blocks(RV64_MEMORY_AS);
+    let pv_shadow_blocks = shadow_blocks(PUBLIC_VALUES_AS);
+
     let mut program_log_cap = initial_program_log_cap(exe, num_insns);
     let mut memory_log_cap = initial_memory_log_cap(program_log_cap);
 
@@ -266,8 +357,24 @@ where
         let mut program_log = vec![ProgramLogEntry::default(); program_log_cap];
         let mut memory_log = vec![MemoryLogEntry::default(); memory_log_cap];
         let mut chip_counts = vec![0u32; chip_counts_len.max(1)];
+        // Shadows are zeroed each run (0 = untouched this segment). Distinct
+        // touched blocks are bounded by the number of memory-log entries, so
+        // sizing `touched` to `memory_log_cap` guarantees it never overflows.
+        let mut shadow_register = vec![0u32; reg_shadow_blocks];
+        let mut shadow_memory = vec![0u32; mem_shadow_blocks];
+        let mut shadow_public_values = vec![0u32; pv_shadow_blocks];
+        let mut touched = vec![TouchedBlock::default(); memory_log_cap];
+        let pv_base = public_values_slice(&mut run_state.memory.memory).as_mut_ptr();
+
         let mut tracer =
             PreflightTracerData::new(&mut program_log, &mut memory_log, &mut chip_counts);
+        tracer.set_shadows(
+            &mut shadow_register,
+            &mut shadow_memory,
+            &mut shadow_public_values,
+            pv_base,
+            &mut touched,
+        );
 
         let run_result = execute_preflight_raw(
             compiled,
@@ -293,12 +400,28 @@ where
             memory_log_cap = grow_capacity(memory_log_cap, memory_len);
             continue;
         }
+        let touched_len = tracer.touched_len as usize;
+        debug_assert!(
+            touched_len <= touched.len(),
+            "touched buffer overflow: {touched_len} > {}",
+            touched.len()
+        );
 
         program_log.truncate(program_len);
         memory_log.truncate(memory_len);
 
-        let replay = normalize_preflight_memory_logs::<F>(&initial_memory, &memory_log)
-            .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
+        let shadows = PreflightShadowsView {
+            register: &shadow_register,
+            memory: &shadow_memory,
+            public_values: &shadow_public_values,
+        };
+        let replay = build_preflight_replay::<F>(
+            &run_state.memory,
+            &shadows,
+            &touched[..touched_len],
+            &memory_log,
+        )
+        .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
         run_state
             .memory
             .memory
@@ -416,6 +539,43 @@ mod tests {
         },
         utils::test_system_config,
     };
+
+    /// Owns the per-address-space timestamp shadows + touched buffer for a
+    /// direct-`execute_preflight_for_test` call and attaches them to the tracer.
+    struct TestShadows {
+        register: Vec<u32>,
+        memory: Vec<u32>,
+        public_values: Vec<u32>,
+        touched: Vec<TouchedBlock>,
+    }
+
+    impl TestShadows {
+        fn new(vm_state: &VmState<BabyBear>, touched_cap: usize) -> Self {
+            let blocks = |addr_space: u32| {
+                vm_state.memory.memory.config[addr_space as usize]
+                    .num_cells
+                    .div_ceil(BLOCK_FE_WIDTH)
+                    .max(1)
+            };
+            Self {
+                register: vec![0u32; blocks(RV64_REGISTER_AS)],
+                memory: vec![0u32; blocks(RV64_MEMORY_AS)],
+                public_values: vec![0u32; blocks(AS_PUBLIC_VALUES)],
+                touched: vec![TouchedBlock::default(); touched_cap],
+            }
+        }
+
+        fn attach(&mut self, vm_state: &mut VmState<BabyBear>, tracer: &mut PreflightTracerData) {
+            let pv_base = public_values_slice(&mut vm_state.memory.memory).as_mut_ptr();
+            tracer.set_shadows(
+                &mut self.register,
+                &mut self.memory,
+                &mut self.public_values,
+                pv_base,
+                &mut self.touched,
+            );
+        }
+    }
 
     const OPCODE_ADD: usize = 0x200;
     const OPCODE_LOADD: usize = 0x210;
@@ -625,6 +785,8 @@ mod tests {
         let mut chip_counts = vec![0u32; 4];
         let mut tracer =
             PreflightTracerData::new(&mut program_log, &mut memory_log, &mut chip_counts);
+        let mut shadows = TestShadows::new(&vm_state, 64);
+        shadows.attach(&mut vm_state, &mut tracer);
 
         let state = execute_preflight_for_test(&compiled, &mut vm_state, &mut tracer)
             .expect("execute preflight");
@@ -773,6 +935,8 @@ mod tests {
         let mut chip_counts = vec![0u32; 4];
         let mut tracer =
             PreflightTracerData::new(&mut program_log, &mut memory_log, &mut chip_counts);
+        let mut shadows = TestShadows::new(&vm_state, 32);
+        shadows.attach(&mut vm_state, &mut tracer);
 
         let state = execute_preflight_for_test(&compiled, &mut vm_state, &mut tracer)
             .expect("execute preflight");
