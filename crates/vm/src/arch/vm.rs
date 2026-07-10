@@ -46,10 +46,11 @@ use super::aot::AotInstance;
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, classify_preflight_opcodes_with_extensions,
     compile, compile_metered, compile_metered_cost, compile_metered_segment_boundary,
-    compile_preflight_with_extensions, load_compiled_from_path, ChipMapping, GuestDebugMap,
-    LogNativeOpcodeAdmitter, RunToCompletion, RvrMeteredCostInstance, RvrMeteredInstance,
-    RvrMeteredSegmentInstance, RvrPreflightInstance, RvrPreflightOpcodeClass, RvrPreflightRoute,
-    RvrPureInstance, SegmentBoundary,
+    compile_preflight_with_extensions, load_compiled_from_path, preflight::execute_rvr_preflight,
+    ChipMapping, GuestDebugMap, LogNativeOpcodeAdmitter, RunToCompletion, RvrCompiled,
+    RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPreflightInstance,
+    RvrPreflightOpcodeClass, RvrPreflightOutput, RvrPreflightRoute, RvrPureInstance,
+    SegmentBoundary,
 };
 use super::{
     execution_mode::{
@@ -96,6 +97,50 @@ impl<T> VmField for T where T: PrimeField32 + InjectiveMonomial<BABYBEAR_S_BOX_D
 #[cfg(feature = "rvr")]
 type VmRvrPreflightRoute<'a, F, VC> =
     RvrPreflightRoute<'a, F, <VC as VmExecutionConfig<F>>::Executor>;
+
+#[cfg(feature = "rvr")]
+trait CachedRvrPreflightExecutor<F>: Send + Sync {
+    fn execute(
+        &self,
+        exe: &VmExe<F>,
+        state: VmState<F, GuestMemory>,
+        num_insns: Option<u64>,
+    ) -> Result<RvrPreflightOutput<F>, ExecutionError>;
+}
+
+/// The program-dependent, owned pieces of an rvr preflight instance.
+#[cfg(feature = "rvr")]
+struct CachedRvrCompiledPreflight<F: PrimeField32> {
+    compiled: RvrCompiled,
+    extensions: ExtensionRegistry<F>,
+    chip_counts_len: usize,
+}
+
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflight<F> {
+    fn execute(
+        &self,
+        exe: &VmExe<F>,
+        state: VmState<F, GuestMemory>,
+        num_insns: Option<u64>,
+    ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
+        execute_rvr_preflight(
+            exe,
+            &self.extensions,
+            &self.compiled,
+            self.chip_counts_len,
+            state,
+            num_insns,
+        )
+    }
+}
+
+/// Cached program-derived preflight route for a fixed [`VmInstance`].
+#[cfg(feature = "rvr")]
+enum CachedRvrPreflight<F> {
+    Rvr(Box<dyn CachedRvrPreflightExecutor<F>>),
+    Interpreter,
+}
 
 #[derive(Error, Debug)]
 pub enum GenerationError {
@@ -1121,6 +1166,7 @@ where
     #[instrument(name = "execute_rvr_preflight_for_proving", skip_all)]
     fn execute_rvr_preflight_for_proving(
         &self,
+        rvr_preflight: &CachedRvrPreflight<Val<E::SC>>,
         interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
         exe: &VmExe<Val<E::SC>>,
         state: VmState<Val<E::SC>, GuestMemory>,
@@ -1132,10 +1178,9 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
             MeteredExecutor<Val<E::SC>> + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     {
-        match self.preflight_routed_instance(exe)? {
-            RvrPreflightRoute::Rvr(rvr_instance) => {
-                let rvr_output =
-                    rvr_instance.execute_preflight_from_state(state.clone(), num_insns)?;
+        match rvr_preflight {
+            CachedRvrPreflight::Rvr(rvr_preflight) => {
+                let rvr_output = rvr_preflight.execute(exe, state.clone(), num_insns)?;
                 let capacities = self.preflight_capacities(trace_heights);
                 let pc_to_air_idx = self.pc_to_air_idx(exe)?;
                 let record_arenas = self
@@ -1160,7 +1205,7 @@ where
                     to_state: rvr_output.to_state,
                 })
             }
-            RvrPreflightRoute::Interpreter(_) => {
+            CachedRvrPreflight::Interpreter => {
                 self.execute_preflight(interpreter, state, num_insns, trace_heights)
             }
         }
@@ -1560,6 +1605,8 @@ where
 {
     pub vm: VirtualMachine<E, VB>,
     pub interpreter: PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
+    #[cfg(feature = "rvr")]
+    rvr_preflight: Option<CachedRvrPreflight<Val<E::SC>>>,
     #[getset(get = "pub")]
     program_commitment: <E::PB as ProverBackend>::Commitment,
     #[getset(get = "pub")]
@@ -1585,6 +1632,8 @@ where
         Ok(Self {
             vm,
             interpreter,
+            #[cfg(feature = "rvr")]
+            rvr_preflight: None,
             program_commitment,
             exe,
             state: Some(state),
@@ -1661,11 +1710,31 @@ where
             let from_state = Option::take(&mut state).unwrap();
             vm.transport_init_memory_to_device(&from_state.memory);
             #[cfg(feature = "rvr")]
+            let rvr_preflight = if let Some(rvr_preflight) = self.rvr_preflight.as_ref() {
+                rvr_preflight
+            } else {
+                let cached = match vm.preflight_routed_instance(&self.exe)? {
+                    RvrPreflightRoute::Rvr(RvrPreflightInstance {
+                        extensions,
+                        compiled,
+                        chip_counts_len,
+                        ..
+                    }) => CachedRvrPreflight::Rvr(Box::new(CachedRvrCompiledPreflight {
+                        compiled,
+                        extensions,
+                        chip_counts_len,
+                    })),
+                    RvrPreflightRoute::Interpreter(_) => CachedRvrPreflight::Interpreter,
+                };
+                self.rvr_preflight.insert(cached)
+            };
+            #[cfg(feature = "rvr")]
             let PreflightExecutionOutput {
                 system_records,
                 record_arenas,
                 to_state,
             } = vm.execute_rvr_preflight_for_proving(
+                rvr_preflight,
                 &mut self.interpreter,
                 &self.exe,
                 from_state,
