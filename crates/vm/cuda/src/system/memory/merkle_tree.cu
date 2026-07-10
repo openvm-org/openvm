@@ -13,46 +13,6 @@ struct alignas(32) digest_t {
 
 #define COPY_DIGEST(dst, src) memcpy(dst, src, sizeof(digest_t))
 
-// `ADDR_SPACE_IDX` is the address space minus `ADDR_SPACE_OFFSET` (which is 1)
-template <int ADDR_SPACE_IDX>
-__global__ void merkle_tree_init(uint8_t *__restrict__ data, digest_t *__restrict__ out) {
-    auto gid = blockDim.x * blockIdx.x + threadIdx.x;
-
-    Fp cells[CELLS] = {0};
-    // TODO: revisit when we sort out address space handling
-#pragma unroll
-    for (size_t i = 0; i < CELLS_OUT; ++i) {
-        if constexpr (ADDR_SPACE_IDX < 3) {
-            cells[i] = Fp(data[CELLS_OUT * gid + i]);
-        } else {
-            cells[i] = reinterpret_cast<Fp *>(data)[CELLS_OUT * gid + i];
-        }
-    }
-
-    poseidon2_mix(cells);
-
-    COPY_DIGEST(&out[gid], cells);
-}
-
-__global__ void merkle_tree_compress(
-    digest_t *__restrict__ in,
-    digest_t *__restrict__ out,
-    size_t num_compressions
-) {
-    auto gid = blockDim.x * blockIdx.x + threadIdx.x;
-    if (gid >= num_compressions) {
-        return;
-    }
-
-    Fp cells[CELLS];
-    COPY_DIGEST(cells, &in[2 * gid]);
-    COPY_DIGEST(cells + CELLS_OUT, &in[2 * gid + 1]);
-
-    poseidon2_mix(cells);
-
-    COPY_DIGEST(&out[gid], cells);
-}
-
 __global__ void merkle_tree_restore_path(
     digest_t *__restrict__ in_out,
     digest_t *__restrict__ zero_hash,
@@ -474,9 +434,98 @@ __global__ void get_subtree_root(
     COPY_DIGEST(out, subtrees[address_space_idx]);
 }
 
-#undef COPY_DIGEST
 
 // `addr_space_idx` is the address space _shifted_ by ADDR_SPACE_OFFSET = 1
+
+// ---- fused subtree build ----------------------------------------------------
+//
+// The level-by-level build launches one kernel per level and re-reads every
+// level from global memory. The fused build processes tiles of up to
+// FUSED_TILE input nodes per block and ascends up to FUSED_LEVELS levels in
+// shared memory: every level is still written to its heap position (sibling
+// lookups need the full tree) but never read back. Levels alternate between
+// two shared regions (ping-pong) because an in-place tree reduction races:
+// thread i writes slot i while thread i/2 still reads it.
+
+inline constexpr int FUSED_LEVELS = 8;
+inline constexpr int FUSED_TILE = 1 << FUSED_LEVELS;
+
+// Ascends `levels` levels above the current input level. On entry, `sh_a`
+// holds this block's `tile` input digests, already written to global.
+// `in_count` is the input level's total node count; `tile_base` this block's
+// first input node index.
+__device__ inline void merkle_ascend(
+    digest_t *sh_a,
+    digest_t *sh_b,
+    digest_t *__restrict__ tree,
+    size_t in_count,
+    size_t tile_base,
+    int tile,
+    int levels
+) {
+    digest_t *src = sh_a;
+    digest_t *dst = sh_b;
+    for (int l = 1; l <= levels; ++l) {
+        __syncthreads();
+        int n = tile >> l;
+        if (threadIdx.x < (uint32_t)n) {
+            Fp cells[CELLS] = {0};
+            COPY_DIGEST(cells, &src[2 * threadIdx.x]);
+            COPY_DIGEST(cells + CELLS_OUT, &src[2 * threadIdx.x + 1]);
+            poseidon2_mix(cells);
+            COPY_DIGEST(&dst[threadIdx.x], cells);
+            size_t count_l = in_count >> l;
+            COPY_DIGEST(&tree[(count_l - 1) + (tile_base >> l) + threadIdx.x], cells);
+        }
+        digest_t *tmp = src;
+        src = dst;
+        dst = tmp;
+    }
+}
+
+template <int ADDR_SPACE_IDX>
+__global__ void merkle_tree_build_fused(
+    uint8_t *__restrict__ data,
+    digest_t *__restrict__ tree,
+    size_t in_count,
+    int levels
+) {
+    __shared__ digest_t sh_a[FUSED_TILE];
+    __shared__ digest_t sh_b[FUSED_TILE / 2];
+    size_t gid = (size_t)blockDim.x * blockIdx.x + threadIdx.x;
+    int tile = (int)min((size_t)FUSED_TILE, in_count);
+    if (gid < in_count) {
+        Fp cells[CELLS] = {0};
+#pragma unroll
+        for (size_t i = 0; i < CELLS_OUT; ++i) {
+            if constexpr (ADDR_SPACE_IDX < 3) {
+                cells[i] = Fp(data[CELLS_OUT * gid + i]);
+            } else {
+                cells[i] = reinterpret_cast<Fp *>(data)[CELLS_OUT * gid + i];
+            }
+        }
+        poseidon2_mix(cells);
+        COPY_DIGEST(&sh_a[threadIdx.x], cells);
+        COPY_DIGEST(&tree[(in_count - 1) + gid], cells);
+    }
+    merkle_ascend(sh_a, sh_b, tree, in_count, (size_t)blockDim.x * blockIdx.x, tile, levels);
+}
+
+__global__ void merkle_tree_compress_fused(
+    digest_t *__restrict__ tree,
+    size_t in_count,
+    int levels
+) {
+    __shared__ digest_t sh_a[FUSED_TILE];
+    __shared__ digest_t sh_b[FUSED_TILE / 2];
+    size_t gid = (size_t)blockDim.x * blockIdx.x + threadIdx.x;
+    int tile = (int)min((size_t)FUSED_TILE, in_count);
+    if (gid < in_count) {
+        sh_a[threadIdx.x] = tree[(in_count - 1) + gid];
+    }
+    merkle_ascend(sh_a, sh_b, tree, in_count, (size_t)blockDim.x * blockIdx.x, tile, levels);
+}
+
 extern "C" int _build_merkle_subtree(
     uint8_t *data,
     const size_t size,
@@ -487,28 +536,44 @@ extern "C" int _build_merkle_subtree(
 ) {
     digest_t *tree = buffer + tree_offset;
     assert((size & (size - 1)) == 0);
+    size_t count = size;
+    int stage_levels;
     {
-        auto [grid, block] = kernel_launch_params(size);
+        stage_levels = 0;
+        for (size_t c = count; c > 1 && stage_levels < FUSED_LEVELS; c >>= 1) {
+            ++stage_levels;
+        }
+        size_t blocks = (count + FUSED_TILE - 1) / FUSED_TILE;
         switch (addr_space_idx) { // TODO: revisit when we sort out address space handling
         case 0:
-            merkle_tree_init<0><<<grid, block, 0, stream>>>(data, tree + (size - 1));
+            merkle_tree_build_fused<0>
+                <<<blocks, FUSED_TILE, 0, stream>>>(data, tree, count, stage_levels);
             break;
         case 1:
-            merkle_tree_init<1><<<grid, block, 0, stream>>>(data, tree + (size - 1));
+            merkle_tree_build_fused<1>
+                <<<blocks, FUSED_TILE, 0, stream>>>(data, tree, count, stage_levels);
             break;
         case 2:
-            merkle_tree_init<2><<<grid, block, 0, stream>>>(data, tree + (size - 1));
+            merkle_tree_build_fused<2>
+                <<<blocks, FUSED_TILE, 0, stream>>>(data, tree, count, stage_levels);
             break;
         case 3:
-            merkle_tree_init<3><<<grid, block, 0, stream>>>(data, tree + (size - 1));
+            merkle_tree_build_fused<3>
+                <<<blocks, FUSED_TILE, 0, stream>>>(data, tree, count, stage_levels);
             break;
         default:
             return -1;
         }
+        count >>= stage_levels;
     }
-    for (auto i = size / 2; i > 0; i /= 2) {
-        auto [grid, block] = kernel_launch_params(i);
-        merkle_tree_compress<<<grid, block, 0, stream>>>(tree + (2 * i - 1), tree + (i - 1), i);
+    while (count > 1) {
+        stage_levels = 0;
+        for (size_t c = count; c > 1 && stage_levels < FUSED_LEVELS; c >>= 1) {
+            ++stage_levels;
+        }
+        size_t blocks = (count + FUSED_TILE - 1) / FUSED_TILE;
+        merkle_tree_compress_fused<<<blocks, FUSED_TILE, 0, stream>>>(tree, count, stage_levels);
+        count >>= stage_levels;
     }
     return CHECK_KERNEL();
 }
@@ -692,3 +757,5 @@ extern "C" int _update_merkle_tree(
 
     return CHECK_KERNEL();
 }
+
+#undef COPY_DIGEST
