@@ -1,6 +1,10 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    str::FromStr,
+};
 
 use eyre::Result;
+use num_bigint::BigUint;
 use openvm_algebra_transpiler::ModularTranspilerExtension;
 use openvm_circuit::{
     arch::{
@@ -14,7 +18,8 @@ use openvm_circuit::{
     utils::{test_cpu_engine, test_system_config},
 };
 use openvm_ecc_circuit::{
-    Rv64WeierstrassConfig, Rv64WeierstrassCpuBuilder, ECC_BLOCKS_32, SECP256K1_CONFIG,
+    CurveConfig, Rv64WeierstrassConfig, Rv64WeierstrassCpuBuilder, ECC_BLOCKS_32, ECC_BLOCKS_48,
+    SECP256K1_CONFIG,
 };
 use openvm_ecc_transpiler::{EccTranspilerExtension, Rv64WeierstrassOpcode};
 use openvm_instructions::{exe::VmExe, LocalOpcode};
@@ -26,6 +31,7 @@ use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_pr
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 type F = BabyBear;
+const WEIERSTRASS_OPCODE_COUNT: usize = 4;
 
 fn secp256k1_config() -> Rv64WeierstrassConfig {
     let mut config = Rv64WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
@@ -36,6 +42,43 @@ fn secp256k1_config() -> Rv64WeierstrassConfig {
 fn build_ecc_exe(config: &Rv64WeierstrassConfig) -> Result<VmExe<F>> {
     let elf =
         build_example_program_at_path_with_features(get_programs_dir!(), "ec", ["k256"], config)?;
+    Ok(VmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension)
+            .with_extension(EccTranspilerExtension)
+            .with_extension(ModularTranspilerExtension),
+    )?)
+}
+
+fn bls12_381_config() -> Rv64WeierstrassConfig {
+    let curve = CurveConfig {
+        struct_name: "Bls12_381G1Affine".to_string(),
+        modulus: BigUint::from_str(
+            "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787",
+        )
+        .unwrap(),
+        scalar: BigUint::from_str(
+            "52435875175126190479447740508185965837690552500527637822603658699938581184513",
+        )
+        .unwrap(),
+        a: BigUint::from(0u8),
+        b: BigUint::from(4u8),
+    };
+    let mut config = Rv64WeierstrassConfig::new(vec![curve]);
+    *config.as_mut() = test_system_config();
+    config
+}
+
+fn build_bls12_381_ecc_exe(config: &Rv64WeierstrassConfig) -> Result<VmExe<F>> {
+    let elf = build_example_program_at_path_with_features(
+        get_programs_dir!(),
+        "ec_bls12_381",
+        ["bls12_381"],
+        config,
+    )?;
     Ok(VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
@@ -61,12 +104,18 @@ fn assert_system_records_eq(label: &str, interp: &SystemRecords<F>, rvr: &System
     );
 }
 
-fn ecc_local_opcode(opcode: usize) -> Option<usize> {
+fn ecc_opcode(opcode: usize) -> Option<(usize, usize)> {
     let offset = opcode.checked_sub(Rv64WeierstrassOpcode::CLASS_OFFSET)?;
-    (offset <= Rv64WeierstrassOpcode::SETUP_EC_DOUBLE as usize).then_some(offset)
+    let local_opcode = offset % WEIERSTRASS_OPCODE_COUNT;
+    (local_opcode <= Rv64WeierstrassOpcode::SETUP_EC_DOUBLE as usize)
+        .then_some((offset / WEIERSTRASS_OPCODE_COUNT, local_opcode))
 }
 
-fn assert_ecc_timestamp_deltas(exe: &VmExe<F>, output: &RvrPreflightOutput<F>) {
+fn assert_ecc_timestamp_deltas(
+    exe: &VmExe<F>,
+    config: &Rv64WeierstrassConfig,
+    output: &RvrPreflightOutput<F>,
+) {
     for (idx, entry) in output.raw_logs.program_log.iter().enumerate() {
         let pc = entry.pc as u32;
         let instruction_idx = ((pc - exe.program.pc_base) / 4) as usize;
@@ -74,8 +123,17 @@ fn assert_ecc_timestamp_deltas(exe: &VmExe<F>, output: &RvrPreflightOutput<F>) {
         else {
             continue;
         };
-        let Some(local_opcode) = ecc_local_opcode(instruction.opcode.as_usize()) else {
+        let Some((curve_idx, local_opcode)) = ecc_opcode(instruction.opcode.as_usize()) else {
             continue;
+        };
+        let coordinate_bytes = config.weierstrass.supported_curves[curve_idx]
+            .modulus
+            .bits()
+            .div_ceil(8) as usize;
+        let blocks = if coordinate_bytes <= 32 {
+            ECC_BLOCKS_32
+        } else {
+            ECC_BLOCKS_48
         };
         let num_reads = if matches!(
             local_opcode,
@@ -86,7 +144,7 @@ fn assert_ecc_timestamp_deltas(exe: &VmExe<F>, output: &RvrPreflightOutput<F>) {
         } else {
             1
         };
-        let expected_delta = num_reads + 1 + num_reads * ECC_BLOCKS_32 + ECC_BLOCKS_32;
+        let expected_delta = num_reads + 1 + num_reads * blocks + blocks;
         let next_timestamp = output
             .raw_logs
             .program_log
@@ -110,7 +168,7 @@ fn ecc_air_ids(exe: &VmExe<F>, pc_to_air_idx: &[Option<usize>]) -> BTreeSet<usiz
         .zip(pc_to_air_idx)
         .filter_map(|(slot, &air_idx)| {
             let (instruction, _) = slot.as_ref()?;
-            ecc_local_opcode(instruction.opcode.as_usize())?;
+            ecc_opcode(instruction.opcode.as_usize())?;
             air_idx
         })
         .collect::<BTreeSet<_>>();
@@ -189,7 +247,7 @@ fn assert_rvr_differential(
                 &interp_output.system_records,
                 &rvr_output.system_records,
             );
-            assert_ecc_timestamp_deltas(exe, &rvr_output);
+            assert_ecc_timestamp_deltas(exe, config, &rvr_output);
             let capacities = trace_heights
                 .iter()
                 .zip(&widths)
@@ -283,6 +341,14 @@ fn test_weierstrass_rvr_preflight_differential() -> Result<()> {
     let config = secp256k1_config();
     let exe = build_ecc_exe(&config)?;
     assert_rvr_differential("weierstrass_single", &exe, &config, Vec::new());
+    Ok(())
+}
+
+#[test]
+fn test_weierstrass_rvr_preflight_bls12_381_differential() -> Result<()> {
+    let config = bls12_381_config();
+    let exe = build_bls12_381_ecc_exe(&config)?;
+    assert_rvr_differential("weierstrass_bls12_381", &exe, &config, Vec::new());
     Ok(())
 }
 

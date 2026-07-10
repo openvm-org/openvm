@@ -240,6 +240,9 @@ mod tests {
                 .generate_proving_ctx(rvr_system_records, rvr_arenas)
                 .expect("rvr trace generation");
 
+            // HARD-5: compare only deterministic modular AIR rows. Shared
+            // lookup/Poseidon2 periphery rows are excluded from raw row order;
+            // full SystemRecords/touched_memory equality remains the oracle.
             let is_modular_air = |air_idx: usize| {
                 air_names[air_idx].contains("FieldExpressionCoreAir")
                     || air_names[air_idx].contains("ModularIsEqualCoreAir")
