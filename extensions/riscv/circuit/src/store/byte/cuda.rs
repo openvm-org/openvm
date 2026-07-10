@@ -11,7 +11,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use super::StoreByteCoreCols;
 use crate::{
-    adapters::{Rv64StoreAdapterCols, Rv64StoreAdapterRecord, RV64_BYTE_BITS},
+    adapters::{Rv64StoreAdapterRecord, Rv64StoreByteAdapterCols, RV64_BYTE_BITS},
     cuda_abi::store_byte_cuda,
     store::StoreRecord,
 };
@@ -33,7 +33,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64StoreByteChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64StoreAdapterCols::<F>::width() + StoreByteCoreCols::<F>::width();
+        let trace_width = Rv64StoreByteAdapterCols::<F>::width() + StoreByteCoreCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 

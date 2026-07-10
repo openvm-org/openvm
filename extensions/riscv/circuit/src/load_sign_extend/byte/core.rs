@@ -17,7 +17,7 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        u16_cell_byte, LoadInstruction, Rv64LoadAdapterFiller, Rv64LoadAdapterRecord,
+        u16_cell_byte, LoadInstruction, Rv64LoadAdapterRecord, Rv64LoadByteAdapterFiller,
         RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
     },
     load::LoadRecord,
@@ -183,7 +183,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct LoadSignExtendByteFiller<A = Rv64LoadAdapterFiller> {
+pub struct LoadSignExtendByteFiller<A = Rv64LoadByteAdapterFiller> {
     adapter: A,
     pub offset: usize,
     encoder: Encoder,
@@ -208,7 +208,7 @@ impl<A> LoadSignExtendByteFiller<A> {
     }
 }
 
-impl<F> TraceFiller<F> for LoadSignExtendByteFiller<Rv64LoadAdapterFiller>
+impl<F> TraceFiller<F> for LoadSignExtendByteFiller<Rv64LoadByteAdapterFiller>
 where
     F: PrimeField32,
 {
@@ -217,7 +217,7 @@ where
         // LoadSignExtendByteCoreCols::width() elements.
         let (mut adapter_row, mut core_row) = unsafe {
             row_slice
-                .split_at_mut_unchecked(<Rv64LoadAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
+                .split_at_mut_unchecked(<Rv64LoadByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
         };
         let adapter_record: &Rv64LoadAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };

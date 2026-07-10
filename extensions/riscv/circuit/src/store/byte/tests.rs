@@ -11,8 +11,8 @@ use crate::test_utils::memory::{
 use crate::test_utils::memory::{
     default_bitwise_lookup_bus, default_var_range_checker_bus, dummy_range_checker,
     store_gpu_memory_config, transfer_store_records, Arc, BitwiseOperationLookupChip,
-    GpuChipTestBuilder, GpuTestChipHarness, Rv64LoadStoreOpcode, Rv64StoreAdapterAir,
-    Rv64StoreAdapterExecutor, Rv64StoreAdapterFiller, Rv64StoreByteAir, Rv64StoreByteChip,
+    GpuChipTestBuilder, GpuTestChipHarness, Rv64LoadStoreOpcode, Rv64StoreByteAdapterAir,
+    Rv64StoreByteAdapterExecutor, Rv64StoreByteAdapterFiller, Rv64StoreByteAir, Rv64StoreByteChip,
     Rv64StoreByteChipGpu, Rv64StoreByteExecutor, StoreByteCoreAir, StoreByteFiller, F,
     MAX_INS_CAPACITY, PUBLIC_VALUES_AS, RV64_BYTE_BITS, RV64_MEMORY_AS,
 };
@@ -125,7 +125,7 @@ fn create_cuda_store_byte_harness(tester: &GpuChipTestBuilder) -> GpuStoreByteHa
         default_bitwise_lookup_bus(),
     ));
     let air = Rv64StoreByteAir::new(
-        Rv64StoreAdapterAir::new(
+        Rv64StoreByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -134,12 +134,12 @@ fn create_cuda_store_byte_harness(tester: &GpuChipTestBuilder) -> GpuStoreByteHa
         StoreByteCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64StoreByteExecutor::new(
-        Rv64StoreAdapterExecutor::new(tester.address_bits()),
+        Rv64StoreByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let cpu_chip = Rv64StoreByteChip::<F>::new(
         StoreByteFiller::new(
-            Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64StoreByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
             range_checker,

@@ -8,7 +8,7 @@ template <typename T> struct LoadByteCoreCols {
 };
 
 template <typename T> struct Rv64LoadByteCols {
-    Rv64LoadAdapterCols<T> adapter;
+    Rv64LoadByteAdapterCols<T> adapter;
     LoadByteCoreCols<T> core;
 };
 
@@ -49,7 +49,7 @@ __global__ void rv64_load_byte_tracegen(
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
         auto const &record = records[idx];
-        auto adapter = Rv64LoadAdapter(
+        auto adapter = Rv64LoadByteAdapter(
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits

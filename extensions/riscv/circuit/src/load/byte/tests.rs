@@ -11,10 +11,10 @@ use crate::test_utils::memory::{
 use crate::test_utils::memory::{
     default_bitwise_lookup_bus, default_var_range_checker_bus, dummy_range_checker,
     load_gpu_memory_config, transfer_load_records, Arc, BitwiseOperationLookupChip,
-    GpuChipTestBuilder, GpuTestChipHarness, LoadByteCoreAir, LoadByteFiller, Rv64LoadAdapterAir,
-    Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, Rv64LoadByteAir, Rv64LoadByteChip,
-    Rv64LoadByteChipGpu, Rv64LoadByteExecutor, Rv64LoadStoreOpcode, F, MAX_INS_CAPACITY,
-    RV64_BYTE_BITS, RV64_MEMORY_AS,
+    GpuChipTestBuilder, GpuTestChipHarness, LoadByteCoreAir, LoadByteFiller,
+    Rv64LoadByteAdapterAir, Rv64LoadByteAdapterExecutor, Rv64LoadByteAdapterFiller,
+    Rv64LoadByteAir, Rv64LoadByteChip, Rv64LoadByteChipGpu, Rv64LoadByteExecutor,
+    Rv64LoadStoreOpcode, F, MAX_INS_CAPACITY, RV64_BYTE_BITS, RV64_MEMORY_AS,
 };
 
 #[test]
@@ -102,7 +102,7 @@ fn create_cuda_byte_harness(tester: &GpuChipTestBuilder) -> GpuByteHarness {
         default_bitwise_lookup_bus(),
     ));
     let air = Rv64LoadByteAir::new(
-        Rv64LoadAdapterAir::new(
+        Rv64LoadByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -111,12 +111,12 @@ fn create_cuda_byte_harness(tester: &GpuChipTestBuilder) -> GpuByteHarness {
         LoadByteCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64LoadByteExecutor::new(
-        Rv64LoadAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let cpu_chip = Rv64LoadByteChip::<F>::new(
         LoadByteFiller::new(
-            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
             range_checker,

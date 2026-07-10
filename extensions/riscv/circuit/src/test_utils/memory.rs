@@ -59,8 +59,11 @@ pub(crate) use {
 pub(crate) use crate::{
     adapters::{
         rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
-        Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, Rv64StoreAdapterAir,
-        Rv64StoreAdapterCols, Rv64StoreAdapterExecutor, Rv64StoreAdapterFiller, RV64_BYTE_BITS,
+        Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, Rv64LoadByteAdapterAir,
+        Rv64LoadByteAdapterExecutor, Rv64LoadByteAdapterFiller, Rv64StoreAdapterAir,
+        Rv64StoreAdapterCols, Rv64StoreAdapterExecutor, Rv64StoreAdapterFiller,
+        Rv64StoreByteAdapterAir, Rv64StoreByteAdapterExecutor, Rv64StoreByteAdapterFiller,
+        RV64_BYTE_BITS,
     },
     load::{
         common::load_write_data, core::LoadCoreCols, LoadByteCoreAir, LoadByteCoreCols,
@@ -184,7 +187,7 @@ pub(crate) fn create_byte_harness(
         bitwise_bus,
     ));
     let air = Rv64LoadByteAir::new(
-        Rv64LoadAdapterAir::new(
+        Rv64LoadByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -193,12 +196,12 @@ pub(crate) fn create_byte_harness(
         LoadByteCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64LoadByteExecutor::new(
-        Rv64LoadAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = Rv64LoadByteChip::<F>::new(
         LoadByteFiller::new(
-            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
             range_checker,
@@ -226,7 +229,7 @@ pub(crate) fn create_store_byte_harness(
         bitwise_bus,
     ));
     let air = Rv64StoreByteAir::new(
-        Rv64StoreAdapterAir::new(
+        Rv64StoreByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -235,12 +238,12 @@ pub(crate) fn create_store_byte_harness(
         StoreByteCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64StoreByteExecutor::new(
-        Rv64StoreAdapterExecutor::new(tester.address_bits()),
+        Rv64StoreByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = Rv64StoreByteChip::<F>::new(
         StoreByteFiller::new(
-            Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64StoreByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
             range_checker,

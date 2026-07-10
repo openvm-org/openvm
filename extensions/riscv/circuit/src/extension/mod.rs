@@ -232,7 +232,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         )?;
 
         let load_sign_extend_byte = Rv64LoadSignExtendByteExecutor::new(
-            Rv64LoadAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64LoadByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -241,7 +241,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         )?;
 
         let load_byte = Rv64LoadByteExecutor::new(
-            Rv64LoadAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64LoadByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -250,7 +250,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         )?;
 
         let store_byte = Rv64StoreByteExecutor::new(
-            Rv64StoreAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64StoreByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -449,7 +449,12 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(shift_w_right_arithmetic);
 
         let load_sign_extend_byte = Rv64LoadSignExtendByteAir::new(
-            Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
+            Rv64LoadByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
             LoadSignExtendByteCoreAir::new(
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu,
@@ -459,13 +464,23 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(load_sign_extend_byte);
 
         let load_byte = Rv64LoadByteAir::new(
-            Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
+            Rv64LoadByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
             LoadByteCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(load_byte);
 
         let store_byte = Rv64StoreByteAir::new(
-            Rv64StoreAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
+            Rv64StoreByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
             StoreByteCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(store_byte);
@@ -688,7 +703,7 @@ where
         inventory.next_air::<Rv64LoadSignExtendByteAir>()?;
         let load_sign_extend_byte_chip = Rv64LoadSignExtendByteChip::new(
             LoadSignExtendByteFiller::new(
-                Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64LoadByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
                 range_checker.clone(),
@@ -700,7 +715,7 @@ where
         inventory.next_air::<Rv64LoadByteAir>()?;
         let load_byte_chip = Rv64LoadByteChip::new(
             LoadByteFiller::new(
-                Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64LoadByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
                 range_checker.clone(),
@@ -712,7 +727,7 @@ where
         inventory.next_air::<Rv64StoreByteAir>()?;
         let store_byte_chip = Rv64StoreByteChip::new(
             StoreByteFiller::new(
-                Rv64StoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64StoreByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
                 range_checker.clone(),

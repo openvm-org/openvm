@@ -17,8 +17,8 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        set_u16_cell_byte, u16_cell_byte, Rv64StoreAdapterCols, Rv64StoreAdapterFiller,
-        Rv64StoreAdapterRecord, StoreInstruction, RV64_BYTE_BITS,
+        set_u16_cell_byte, u16_cell_byte, Rv64StoreAdapterRecord, Rv64StoreByteAdapterCols,
+        Rv64StoreByteAdapterFiller, StoreInstruction, RV64_BYTE_BITS,
     },
     store::common::{store_write_data, StoreRecord},
 };
@@ -169,7 +169,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct StoreByteFiller<A = Rv64StoreAdapterFiller> {
+pub struct StoreByteFiller<A = Rv64StoreByteAdapterFiller> {
     adapter: A,
     pub offset: usize,
     encoder: Encoder,
@@ -192,7 +192,7 @@ impl<A> StoreByteFiller<A> {
     }
 }
 
-impl<F> TraceFiller<F> for StoreByteFiller<Rv64StoreAdapterFiller>
+impl<F> TraceFiller<F> for StoreByteFiller<Rv64StoreByteAdapterFiller>
 where
     F: PrimeField32,
 {
@@ -200,8 +200,9 @@ where
         // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
         // StoreByteCoreCols::width() elements.
         let (mut adapter_row, mut core_row) = unsafe {
-            row_slice
-                .split_at_mut_unchecked(<Rv64StoreAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
+            row_slice.split_at_mut_unchecked(
+                <Rv64StoreByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
+            )
         };
         let adapter_record: &Rv64StoreAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
@@ -248,10 +249,11 @@ where
 
     fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {
         let (adapter_row, _) = unsafe {
-            row_slice
-                .split_at_mut_unchecked(<Rv64StoreAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
+            row_slice.split_at_mut_unchecked(
+                <Rv64StoreByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
+            )
         };
-        let adapter_row: &mut Rv64StoreAdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_row: &mut Rv64StoreByteAdapterCols<F> = adapter_row.borrow_mut();
         adapter_row.mem_as = F::from_u32(2);
     }
 }
