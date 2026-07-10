@@ -22,9 +22,9 @@ use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP};
 use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET, DEFAULT_BLOCK_SIZE},
     primitives::Chip,
-    system::memory::{
-        controller::CHUNK, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
-        TimestampedEquipartition,
+    system::{
+        memory::{controller::CHUNK, offline_checker::MemoryBus, MemoryAddress, MemoryImage},
+        TouchedMemory,
     },
 };
 
@@ -162,15 +162,15 @@ type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // (chunk_key, block_info)
 pub(crate) type ChunkedTouchedMemory<F> = Vec<((u32, u32), Vec<BlockInfo<F>>)>;
 
 pub(crate) fn group_touched_memory_by_chunk<F: Copy + Send + Sync>(
-    final_memory: &TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>,
+    final_memory: &TouchedMemory<F>,
 ) -> ChunkedTouchedMemory<F> {
     let mut enriched: Vec<EnrichedEntry<F>> = final_memory
         .par_iter()
-        .map(|&((addr_space, ptr), ts_values)| {
-            let chunk_label = ptr / CHUNK as u32;
-            let block_idx = ((ptr % CHUNK as u32) / DEFAULT_BLOCK_SIZE as u32) as usize;
-            let key = (addr_space, chunk_label);
-            let block_info = (block_idx, ts_values.timestamp, ts_values.values);
+        .map(|block| {
+            let chunk_label = block.ptr / CHUNK as u32;
+            let block_idx = ((block.ptr % CHUNK as u32) / DEFAULT_BLOCK_SIZE as u32) as usize;
+            let key = (block.address_space, chunk_label);
+            let block_info = (block_idx, block.timestamp, block.values);
             (key, block_info)
         })
         .collect();
@@ -218,7 +218,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         &mut self,
         initial_memory: &MemoryImage,
         // Touched stuff at DEFAULT_BLOCK_SIZE granularity
-        final_memory: &TimestampedEquipartition<F, DEFAULT_BLOCK_SIZE>,
+        final_memory: &TouchedMemory<F>,
         hasher: &H,
     ) where
         H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,

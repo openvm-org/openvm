@@ -10,7 +10,7 @@ use tracing::instrument;
 
 use crate::{
     arch::{AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryConfig, DEFAULT_BLOCK_SIZE},
-    system::{memory::TimestampedValues, TouchedMemory},
+    system::TouchedMemory,
 };
 
 mod basic;
@@ -542,7 +542,12 @@ impl TracingMemory {
                             cell_size,
                         ))
                 });
-                ((addr_space, ptr), TimestampedValues { timestamp, values })
+                crate::system::TouchedBlock {
+                    address_space: addr_space,
+                    ptr,
+                    timestamp,
+                    values,
+                }
             })
             .collect()
     }

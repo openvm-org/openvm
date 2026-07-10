@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{AddressSpaceHostLayout, MemoryConfig, ADDR_SPACE_OFFSET},
-    system::{memory::AddressMap, TouchedMemory},
+    system::{memory::AddressMap, TouchedBlock, TouchedMemory},
 };
 use openvm_circuit_primitives::Chip;
 use openvm_cuda_backend::{prelude::F, GpuBackend};
@@ -15,8 +15,8 @@ use openvm_cuda_common::{
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     p3_maybe_rayon::prelude::{
-        IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
-        ParallelSlice, ParallelSliceMut,
+        IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSlice,
+        ParallelSliceMut,
     },
     prover::AirProvingContext,
 };
@@ -222,7 +222,9 @@ impl MemoryInventoryGPU {
             };
             let d_merkle_touched_memory = merkle_words.to_device_on(&self.device_ctx).unwrap();
 
-            let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
+            let unpadded_merkle_height = self
+                .merkle_tree
+                .calculate_unpadded_height(&partition, |b| (b.address_space, b.ptr));
             #[cfg(feature = "metrics")]
             {
                 self.unpadded_merkle_height = unpadded_merkle_height;
@@ -239,38 +241,42 @@ impl MemoryInventoryGPU {
             )
         } else {
             let _span = tracing::info_span!("mem_merge_records").entered();
-            // Convert to MemoryInventoryRecord<4, 1> layout, packing straight
-            // into a pooled page-locked buffer so the upload takes the DMA
-            // fast path; giving the buffer back routes through the arena
-            // cleaner, which synchronizes the device before reuse, so the
-            // in-flight copy is safe.
+            // TouchedBlock is repr(C) with 4-byte fields and matches the
+            // device InRec layout exactly, so the partition uploads as raw
+            // bytes: bulk-copy into a pooled page-locked buffer so the copy
+            // takes the DMA fast path. Giving the buffer back routes through
+            // the arena cleaner, which synchronizes the device before reuse,
+            // so the in-flight copy is safe.
             const IN_REC_WORDS: usize =
-                std::mem::size_of::<MemoryInventoryRecord<4, 1>>() / std::mem::size_of::<u32>();
+                std::mem::size_of::<TouchedBlock<F>>() / std::mem::size_of::<u32>();
+            const _: () = assert!(std::mem::size_of::<TouchedBlock<F>>() == 28);
             let in_num_records = partition.len();
-            let mut h_in = crate::arch::cuda::pinned::take(in_num_records * IN_REC_WORDS * 4 + 4);
+            let in_bytes = in_num_records * IN_REC_WORDS * std::mem::size_of::<u32>();
+            let mut h_in = crate::arch::cuda::pinned::take(in_bytes + 4);
             let align = h_in.as_ptr().align_offset(std::mem::size_of::<u32>());
-            let dirty_len = align + in_num_records * IN_REC_WORDS * 4;
-            // SAFETY: the slice is within the buffer and 4-aligned by `align`.
-            let in_words: &mut [u32] = unsafe {
-                std::slice::from_raw_parts_mut(
-                    h_in.as_mut_ptr().add(align) as *mut u32,
+            let dirty_len = align + in_bytes;
+            {
+                // SAFETY: TouchedBlock is repr(C) with only 4-byte fields (F
+                // is the 4-byte BabyBear here), so its bytes are plain data;
+                // the destination is within the buffer.
+                let src: &[u8] = unsafe {
+                    std::slice::from_raw_parts(partition.as_ptr() as *const u8, in_bytes)
+                };
+                let dst = &mut h_in[align..align + in_bytes];
+                dst.par_chunks_mut(UPLOAD_PACK_CHUNK)
+                    .zip(src.par_chunks(UPLOAD_PACK_CHUNK))
+                    .for_each(|(d, s)| d.copy_from_slice(s));
+            }
+            // SAFETY: 4-aligned by `align`, within the buffer.
+            let in_words: &[u32] = unsafe {
+                std::slice::from_raw_parts(
+                    h_in.as_ptr().add(align) as *const u32,
                     in_num_records * IN_REC_WORDS,
                 )
             };
-            in_words
-                .par_chunks_mut(IN_REC_WORDS)
-                .zip(partition.par_iter())
-                .for_each(|(w, &((addr_space, ptr), ts_values))| {
-                    w[0] = addr_space;
-                    w[1] = ptr;
-                    w[2] = ts_values.timestamp;
-                    for (dst, v) in w[3..].iter_mut().zip(ts_values.values) {
-                        *dst = Self::field_to_raw_u32(v);
-                    }
-                });
             let out_words = in_num_records
                 * (std::mem::size_of::<MemoryInventoryRecord<8, 2>>() / std::mem::size_of::<u32>());
-            let d_in_records = (*in_words).to_device_on(&self.device_ctx).unwrap();
+            let d_in_records = in_words.to_device_on(&self.device_ctx).unwrap();
             crate::arch::cuda::pinned::give_back(h_in, dirty_len);
             let d_tmp_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
@@ -325,16 +331,18 @@ impl MemoryInventoryGPU {
                 + (1..in_num_records)
                     .into_par_iter()
                     .filter(|&i| {
-                        let (a, p) = partition[i].0;
-                        let (pa, pp) = partition[i - 1].0;
-                        (a, p / OUT_BLOCK_CELLS) != (pa, pp / OUT_BLOCK_CELLS)
+                        let (a, b) = (&partition[i], &partition[i - 1]);
+                        (a.address_space, a.ptr / OUT_BLOCK_CELLS)
+                            != (b.address_space, b.ptr / OUT_BLOCK_CELLS)
                     })
                     .count();
 
             // Host work overlapping the merge kernels: neither the unpadded
             // height scan nor the Poseidon2 records buffer depends on the
             // merge kernels.
-            let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
+            let unpadded_merkle_height = self
+                .merkle_tree
+                .calculate_unpadded_height(&partition, |b| (b.address_space, b.ptr));
             #[cfg(feature = "metrics")]
             {
                 self.unpadded_merkle_height = unpadded_merkle_height;
@@ -427,8 +435,9 @@ mod tests {
     use openvm_circuit::{
         arch::{vm_poseidon2_config, MemoryConfig},
         system::{
-            memory::{merkle::MerkleTree, online::GuestMemory, AddressMap, TimestampedValues},
+            memory::{merkle::MerkleTree, online::GuestMemory, AddressMap},
             poseidon2::Poseidon2PeripheryChip,
+            TouchedBlock,
         },
     };
     use openvm_cuda_backend::prelude::F;
@@ -542,20 +551,18 @@ mod tests {
         inventory.set_initial_memory(&memory.memory);
 
         let touched_memory = vec![
-            (
-                (RV32_MEMORY_AS, 0),
-                TimestampedValues {
-                    timestamp: 1,
-                    values: touched_bytes.map(F::from_u8),
-                },
-            ),
-            (
-                (RV32_MEMORY_AS, crate::arch::DEFAULT_BLOCK_SIZE as u32),
-                TimestampedValues {
-                    timestamp: 3,
-                    values: touched_bytes_late.map(F::from_u8),
-                },
-            ),
+            TouchedBlock {
+                address_space: RV32_MEMORY_AS,
+                ptr: 0,
+                timestamp: 1,
+                values: touched_bytes.map(F::from_u8),
+            },
+            TouchedBlock {
+                address_space: RV32_MEMORY_AS,
+                ptr: crate::arch::DEFAULT_BLOCK_SIZE as u32,
+                timestamp: 3,
+                values: touched_bytes_late.map(F::from_u8),
+            },
         ];
         let ctxs = inventory.generate_proving_ctxs(touched_memory);
         let boundary_ctx = ctxs.first().expect("missing boundary ctx");
