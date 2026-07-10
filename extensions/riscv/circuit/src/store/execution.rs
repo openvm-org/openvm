@@ -201,12 +201,12 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: StoreOp>(
     let crosses = shift_amount as usize + OP::WIDTH > RV64_REGISTER_NUM_LIMBS;
     // write_data is the containing block followed by the next block, initialized to their
     // previous contents; the next block is only touched when the access spans both.
-    let mut write_data = [U8::default(); 2 * RV64_REGISTER_NUM_LIMBS];
-    let block0: [U8; RV64_REGISTER_NUM_LIMBS] = exec_state.host_read(RV64_MEMORY_AS, ptr_val);
+    let mut write_data = [0u8; 2 * RV64_REGISTER_NUM_LIMBS];
+    let block0: [u8; RV64_REGISTER_NUM_LIMBS] = exec_state.host_read(RV64_MEMORY_AS, ptr_val);
     write_data[..RV64_REGISTER_NUM_LIMBS].copy_from_slice(&block0);
     if crosses {
         debug_assert!((ptr_val as usize) + 2 * RV64_REGISTER_NUM_LIMBS <= MEM_SIZE);
-        let block1: [U8; RV64_REGISTER_NUM_LIMBS] = exec_state.host_read(
+        let block1: [u8; RV64_REGISTER_NUM_LIMBS] = exec_state.host_read(
             RV64_MEMORY_AS,
             ptr_val + RV64_REGISTER_NUM_LIMBS as u32,
         );
@@ -269,7 +269,7 @@ trait StoreOp {
 
     /// Return if the operation is valid.
     fn compute_write_data(
-        write_data: &mut [U8; 2 * RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool;
@@ -285,12 +285,12 @@ impl StoreOp for StoreDOp {
 
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; 2 * RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
         write_data[shift_amount..shift_amount + RV64_REGISTER_NUM_LIMBS]
-            .copy_from_slice(&read_data.map(U8));
+            .copy_from_slice(&read_data);
         true
     }
 }
@@ -300,14 +300,14 @@ impl StoreOp for StoreWOp {
 
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; 2 * RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
-        write_data[shift_amount] = U8(read_data[0]);
-        write_data[shift_amount + 1] = U8(read_data[1]);
-        write_data[shift_amount + 2] = U8(read_data[2]);
-        write_data[shift_amount + 3] = U8(read_data[3]);
+        write_data[shift_amount] = read_data[0];
+        write_data[shift_amount + 1] = read_data[1];
+        write_data[shift_amount + 2] = read_data[2];
+        write_data[shift_amount + 3] = read_data[3];
         true
     }
 }
@@ -317,12 +317,12 @@ impl StoreOp for StoreHOp {
 
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; 2 * RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
-        write_data[shift_amount] = U8(read_data[0]);
-        write_data[shift_amount + 1] = U8(read_data[1]);
+        write_data[shift_amount] = read_data[0];
+        write_data[shift_amount + 1] = read_data[1];
         true
     }
 }
@@ -332,7 +332,7 @@ impl StoreOp for StoreBOp {
 
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; 2 * RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {

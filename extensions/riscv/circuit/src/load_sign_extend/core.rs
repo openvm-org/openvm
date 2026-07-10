@@ -105,7 +105,7 @@ impl<AB, I, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> VmCoreAir<AB, 
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<[AB::Expr; BLOCK_FE_WIDTH]>,
+    I::Reads: From<[[AB::Expr; BLOCK_FE_WIDTH]; 2]>,
     I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
     I::ProcessedInstruction: From<LoadInstruction<AB::Expr>>,
 {
@@ -170,12 +170,19 @@ where
         });
         AdapterAirContext {
             to_pc: None,
-            reads: cols.read_data.map(Into::into).into(),
+            // Signed loads only support in-block shifts so far, so the second block is never
+            // read.
+            reads: [
+                cols.read_data.map(Into::into),
+                std::array::from_fn(|_| AB::Expr::ZERO),
+            ]
+            .into(),
             writes: [write_data].into(),
             instruction: LoadInstruction {
                 is_valid: cols.is_valid.into(),
                 opcode: expected_opcode,
                 shift_amount: load_shift_amount,
+                load_cross: AB::Expr::ZERO,
             }
             .into(),
         }
@@ -235,7 +242,7 @@ where
         // SAFETY: core_row contains a valid LoadRecord written by the executor during trace
         // generation.
         let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-        let read_data = record.read_data;
+        let read_data = record.read_data[0];
         let core_row: &mut LoadSignExtendCoreCols<F, SELECTOR_WIDTH> = core_row.borrow_mut();
         let case_idx = load_sign_extend_info::<LOAD_WIDTH>()
             .byte_shifts

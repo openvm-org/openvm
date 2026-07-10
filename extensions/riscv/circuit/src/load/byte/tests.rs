@@ -136,7 +136,10 @@ fn negative_load_address_wraparound_test() {
 
 #[test]
 fn run_loadbu_sanity_test() {
-    let read_data = rv64_bytes_to_u16_block([131, 74, 186, 29, 138, 45, 202, 76]);
+    let read_data = [
+        rv64_bytes_to_u16_block([131, 74, 186, 29, 138, 45, 202, 76]),
+        rv64_bytes_to_u16_block([0; 8]),
+    ];
     for (shift, expected) in [
         (0, [131, 0, 0, 0, 0, 0, 0, 0]),
         (1, [74, 0, 0, 0, 0, 0, 0, 0]),

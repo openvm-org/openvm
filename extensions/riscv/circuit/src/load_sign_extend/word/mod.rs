@@ -22,7 +22,7 @@ pub type LoadSignExtendWordFiller = LoadSignExtendFiller<
 
 pub type Rv64LoadSignExtendWordAir = VmAirWrapper<Rv64LoadAdapterAir, LoadSignExtendWordCoreAir>;
 pub type Rv64LoadSignExtendWordExecutor =
-    LoadSignExtendExecutor<Rv64LoadAdapterExecutor, LOAD_WIDTH_WORD>;
+    LoadSignExtendExecutor<Rv64LoadAdapterExecutor<LOAD_WIDTH_WORD>, LOAD_WIDTH_WORD>;
 pub type Rv64LoadSignExtendWordChip<F> = VmChipWrapper<F, LoadSignExtendWordFiller>;
 
 #[cfg(feature = "cuda")]

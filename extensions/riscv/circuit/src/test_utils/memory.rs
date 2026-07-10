@@ -72,7 +72,9 @@ fn random_memory_access(
     let min_ptr = imm_signed.max(0) as usize;
     let alignment_mask = (1usize << alignment) - 1;
     let min_aligned_ptr = (min_ptr + alignment_mask) >> alignment;
-    let ptr_val = rng.random_range(min_aligned_ptr..(max_addr >> alignment)) << alignment;
+    // Stay 16 bytes clear of the top of the address space so a block-crossing access always
+    // has a valid second block.
+    let ptr_val = rng.random_range(min_aligned_ptr..((max_addr - 8) >> alignment)) << alignment;
     let rs1_low = (ptr_val as i64 - imm_signed) as u32;
     let ptr = rs1_low.to_le_bytes();
     let rs1 = rs1.unwrap_or([ptr[0], ptr[1], ptr[2], ptr[3], 0, 0, 0, 0]);
@@ -107,14 +109,12 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
     imm_sign: Option<u32>,
     mem_as: Option<usize>,
 ) {
-    let alignment = match opcode {
-        LOADD => 3,
-        LOADWU => 2,
-        LOADHU => 1,
-        LOADBU => 0,
+    match opcode {
+        LOADD | LOADWU | LOADHU | LOADBU => {}
         _ => unreachable!("unsupported unsigned load opcode: {opcode:?}"),
-    };
-    let access = random_memory_access(tester, rng, alignment, rs1, imm, imm_sign);
+    }
+    // Unsigned loads support any byte shift, so sample fully misaligned pointers.
+    let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
     let mem_as = mem_as.unwrap_or(RV64_MEMORY_AS as usize);
 
     tester.write_bytes(
@@ -124,7 +124,8 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
 
     let mut prev_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|_| rng.random());
-    let read_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|_| rng.random());
+    let read_data: [[u16; BLOCK_FE_WIDTH]; 2] =
+        array::from_fn(|_| array::from_fn(|_| rng.random()));
     if access.a == 0 {
         prev_data = [0; BLOCK_FE_WIDTH];
     }
@@ -136,7 +137,12 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.write_bytes(
         mem_as,
         access.base_ptr,
-        rv64_u16_block_to_bytes(read_data).map(F::from_u8),
+        rv64_u16_block_to_bytes(read_data[0]).map(F::from_u8),
+    );
+    tester.write_bytes(
+        mem_as,
+        access.base_ptr + 8,
+        rv64_u16_block_to_bytes(read_data[1]).map(F::from_u8),
     );
 
     let enabled_write = access.a != 0;
@@ -266,6 +272,7 @@ pub(crate) fn store_gpu_memory_config() -> MemoryConfig {
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << mem_config.pointer_max_bits;
     mem_config
 }
+
 // ////////////////////////////////////////////////////////////////////////////////////
 //  CUDA TESTS
 //
