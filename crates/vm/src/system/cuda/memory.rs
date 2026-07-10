@@ -14,9 +14,15 @@ use openvm_cuda_common::{
 };
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
-    p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
+    p3_maybe_rayon::prelude::{
+        IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator, ParallelSlice,
+        ParallelSliceMut,
+    },
     prover::AirProvingContext,
 };
+
+/// Chunk size for the parallel pack into the upload staging buffer.
+const UPLOAD_PACK_CHUNK: usize = 8 << 20;
 use tracing::instrument;
 
 use super::{
@@ -33,8 +39,53 @@ pub struct MemoryInventoryGPU {
     pub hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
     pub initial_memory: Vec<DeviceBuffer<u8>>,
     pub merkle_records: Option<DeviceBuffer<u32>>,
+    upload_staging: PinnedStaging,
     #[cfg(feature = "metrics")]
     pub(super) unpadded_merkle_height: usize,
+}
+
+/// Page-locked host staging for the per-segment memory-image upload.
+///
+/// Copies from pageable memory run at staging-pipeline speed and only return
+/// once the source is consumed; copies from registered memory take the DMA
+/// fast path (~2x) and return immediately. Registering the guest memory
+/// itself would tie a registration to an allocation this module does not own
+/// (freed-while-registered is undefined), so the image is packed into this
+/// owned, once-registered buffer instead: the pack memcpy is parallel and
+/// fully consumes the guest memory before returning, so preflight may mutate
+/// it right away, while the DMA reads the staging asynchronously.
+#[derive(Default)]
+struct PinnedStaging {
+    buf: Vec<u8>,
+    registered: bool,
+}
+
+impl PinnedStaging {
+    /// Returns a staging slice of exactly `len` bytes, growing and
+    /// re-registering the underlying buffer if needed.
+    fn ensure(&mut self, len: usize) -> &mut [u8] {
+        if self.buf.len() < len {
+            if self.registered {
+                crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr());
+                self.registered = false;
+            }
+            self.buf = vec![0u8; len];
+            self.registered =
+                crate::arch::cuda::pinned::register_region(self.buf.as_mut_ptr(), len);
+            if !self.registered {
+                tracing::debug!("memory-image staging stays pageable ({len} bytes)");
+            }
+        }
+        &mut self.buf[..len]
+    }
+}
+
+impl Drop for PinnedStaging {
+    fn drop(&mut self) {
+        if self.registered {
+            crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr());
+        }
+    }
 }
 
 #[repr(C)]
@@ -73,6 +124,7 @@ impl MemoryInventoryGPU {
             hasher_chip,
             initial_memory: Vec::new(),
             merkle_records: None,
+            upload_staging: PinnedStaging::default(),
             #[cfg(feature = "metrics")]
             unpadded_merkle_height: 0,
         }
@@ -81,12 +133,15 @@ impl MemoryInventoryGPU {
     #[instrument(name = "set_initial_memory", skip_all)]
     pub fn set_initial_memory(&mut self, initial_memory: &AddressMap) {
         let mem = MemTracker::start("set initial memory");
-        for (addr_sp, raw_mem) in initial_memory
+        let slices: Vec<&[u8]> = initial_memory
             .get_memory()
             .iter()
             .map(|mem| mem.as_slice())
-            .enumerate()
-        {
+            .collect();
+        let total: usize = slices.iter().map(|s| s.len()).sum();
+        let staging = self.upload_staging.ensure(total);
+        let mut offset = 0usize;
+        for (addr_sp, raw_mem) in slices.into_iter().enumerate() {
             tracing::debug!(
                 "Setting initial memory for address space {}: {} bytes",
                 addr_sp,
@@ -95,7 +150,14 @@ impl MemoryInventoryGPU {
             self.initial_memory.push(if raw_mem.is_empty() {
                 DeviceBuffer::new()
             } else {
-                raw_mem
+                let dst = &mut staging[offset..offset + raw_mem.len()];
+                offset += raw_mem.len();
+                // Parallel pack: fully consumes the guest memory before the
+                // async DMA from the (registered) staging is enqueued.
+                dst.par_chunks_mut(UPLOAD_PACK_CHUNK)
+                    .zip(raw_mem.par_chunks(UPLOAD_PACK_CHUNK))
+                    .for_each(|(d, s)| d.copy_from_slice(s));
+                (*dst)
                     .to_device_on(&self.device_ctx)
                     .expect("failed to copy memory to device")
             });

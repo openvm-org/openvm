@@ -1,7 +1,7 @@
 mod config;
 /// CUDA-specific support (pinned host-memory pool for record arenas).
 #[cfg(feature = "cuda")]
-mod cuda;
+pub(crate) mod cuda;
 /// Streams-like deferral state
 pub mod deferral;
 /// Instruction execution traits and types.
