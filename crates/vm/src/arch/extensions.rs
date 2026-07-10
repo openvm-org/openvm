@@ -749,10 +749,15 @@ where
                         chip: &dyn AnyChip<RA, PB>,
                         records: RA|
          -> AirProvingContext<PB> {
-            let _span = {
+            // Span only for non-empty arenas: span + metric emission costs
+            // tens of microseconds each and most chips in a segment are
+            // empty. Chips doing real work from an empty arena (periphery
+            // hashers, lookup tables) are covered in aggregate by the
+            // periphery_trace_gen span.
+            let _span = (!records.is_empty()).then(|| {
                 let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
                 info_span!("single_trace_gen", air = air_name).entered()
-            };
+            });
             #[cfg(feature = "metrics")]
             if let Some(allocated_bytes) = (!records.is_empty())
                 .then(|| records.allocated_bytes())
