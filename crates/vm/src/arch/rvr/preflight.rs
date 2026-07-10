@@ -420,6 +420,26 @@ where
             None,
         )
     }
+
+    /// [`Self::execute_preflight_from_state`] with the metered per-AIR trace
+    /// heights, taking the single-shot (clone-free, exact-capacity) path the
+    /// proving loop uses.
+    pub fn execute_preflight_from_state_with_capacities(
+        &self,
+        state: VmState<F, GuestMemory>,
+        num_insns: Option<u64>,
+        record_capacity_rows: &[u32],
+    ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
+        execute_rvr_preflight(
+            &self.exe,
+            &self.extensions,
+            &self.compiled,
+            self.chip_counts_len,
+            state,
+            num_insns,
+            Some(record_capacity_rows),
+        )
+    }
 }
 
 /// Executes a compiled preflight library. `record_capacity_rows`, when
@@ -455,10 +475,38 @@ where
     let pv_shadow_blocks = shadow_blocks(PUBLIC_VALUES_AS);
 
     let mut program_log_cap = initial_program_log_cap(exe, num_insns);
-    let mut memory_log_cap = initial_memory_log_cap(program_log_cap);
+    // C1b: on the proving path — exact `num_insns` plus the metered per-AIR
+    // trace heights — the log capacities are derived soundly up front, so the
+    // run executes directly on `state` with no retry and, critically, no
+    // guest-state clone (the dominant per-segment fixed cost: a large flat
+    // memory image copy). Soundness of the bound: every memory-log entry
+    // belongs to one retired instruction; fixed-shape instructions log well
+    // under 64 accesses each (the largest current chips are in the ~30s), and
+    // variable-length instructions (multi-word HintStore) log at most 2x their
+    // metered trace rows. Overflow is therefore a capacity-model bug and
+    // errors loudly below instead of retrying. Callers without metered
+    // heights keep the clone-and-retry loop. The buffers are uninitialized
+    // (write-only from C), so the generous virtual capacity costs only
+    // touched pages.
+    let single_shot = num_insns.is_some() && record_capacity_rows.is_some();
+    let mut memory_log_cap = if let (Some(n), Some(heights)) = (num_insns, record_capacity_rows) {
+        let height_sum: usize = heights.iter().map(|&h| h as usize).sum();
+        initial_memory_log_cap(program_log_cap)
+            .max((n as usize).saturating_mul(64) + height_sum.saturating_mul(2) + 64)
+    } else {
+        initial_memory_log_cap(program_log_cap)
+    };
+    let mut state = Some(state);
 
     loop {
-        let mut run_state = state.clone();
+        let mut run_state = if single_shot {
+            state.take().expect("single-shot preflight never retries")
+        } else {
+            state
+                .as_ref()
+                .expect("retry keeps the pristine state")
+                .clone()
+        };
         // The log buffers are write-only from the C tracer and prefix-read by
         // the host, so they are allocated uninitialized: the zero-fill of
         // multi-GB capacities was a real per-call cost on large segments.
@@ -538,6 +586,18 @@ where
             || memory_len > memory_log_cap
             || touched_len > touched.len()
         {
+            if single_shot {
+                // The metered-derived bound was violated: a capacity-model
+                // bug (a chip logging more accesses per instruction/row than
+                // the bound assumes), not a runtime condition to retry.
+                return Err(ExecutionError::RvrExecution(format!(
+                    "metered-derived preflight log capacity exceeded: \
+                     program {program_len}/{program_log_cap}, \
+                     memory {memory_len}/{memory_log_cap}, \
+                     touched {touched_len}/{} — capacity-model bug",
+                    touched.len()
+                )));
+            }
             program_log_cap = grow_capacity(program_log_cap, program_len);
             memory_log_cap = grow_capacity(memory_log_cap, memory_len.max(touched_len));
             continue;
