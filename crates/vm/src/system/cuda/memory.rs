@@ -25,10 +25,10 @@ use openvm_stark_backend::{
     },
     prover::AirProvingContext,
 };
-
-/// Chunk size for the parallel pack into the upload staging buffer.
-const UPLOAD_PACK_CHUNK: usize = 8 << 20;
 use tracing::instrument;
+
+/// Chunk size for packing touched memory runs into pinned upload staging.
+const UPLOAD_PACK_CHUNK: usize = 8 << 20;
 
 use super::{
     boundary::BoundaryChipGPU,
@@ -64,16 +64,12 @@ pub struct MemoryInventoryGPU {
     pub(super) unpadded_merkle_height: usize,
 }
 
-/// Page-locked host staging for the per-segment memory-image upload.
+/// Owned page-locked staging for sparse per-segment memory-image uploads.
 ///
-/// Copies from pageable memory run at staging-pipeline speed and only return
-/// once the source is consumed; copies from registered memory take the DMA
-/// fast path (~2x) and return immediately. Registering the guest memory
-/// itself would tie a registration to an allocation this module does not own
-/// (freed-while-registered is undefined), so the image is packed into this
-/// owned, once-registered buffer instead: the pack memcpy is parallel and
-/// fully consumes the guest memory before returning, so preflight may mutate
-/// it right away, while the DMA reads the staging asynchronously.
+/// The full device address spaces stay zero-filled, while only touched host
+/// runs are packed contiguously here and uploaded to their device offsets.
+/// This preserves the sparse-transfer correctness fix and avoids registering
+/// memory owned by the executor.
 #[derive(Default)]
 struct PinnedStaging {
     buf: Vec<u8>,
@@ -81,16 +77,15 @@ struct PinnedStaging {
 }
 
 impl PinnedStaging {
-    /// Returns a staging slice of exactly `len` bytes, growing and
-    /// re-registering the underlying buffer if needed.
     fn ensure(&mut self, len: usize) -> &mut [u8] {
         if self.buf.len() < len {
             if self.registered {
-                pinned::unregister_region(self.buf.as_mut_ptr());
+                crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr());
                 self.registered = false;
             }
             self.buf = vec![0u8; len];
-            self.registered = pinned::register_region(self.buf.as_mut_ptr(), len);
+            self.registered =
+                crate::arch::cuda::pinned::register_region(self.buf.as_mut_ptr(), len);
             if !self.registered {
                 tracing::debug!("memory-image staging stays pageable ({len} bytes)");
             }
@@ -102,7 +97,7 @@ impl PinnedStaging {
 impl Drop for PinnedStaging {
     fn drop(&mut self) {
         if self.registered {
-            pinned::unregister_region(self.buf.as_mut_ptr());
+            crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr());
         }
     }
 }
