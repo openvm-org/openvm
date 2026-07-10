@@ -18,5 +18,5 @@ mod tests;
 
 pub type Rv64LoadSignExtendByteAir = VmAirWrapper<Rv64LoadAdapterAir, LoadSignExtendByteCoreAir>;
 pub type Rv64LoadSignExtendByteExecutor =
-    LoadSignExtendExecutor<Rv64LoadAdapterExecutor, LOAD_WIDTH_BYTE>;
+    LoadSignExtendExecutor<Rv64LoadAdapterExecutor<LOAD_WIDTH_BYTE>, LOAD_WIDTH_BYTE>;
 pub type Rv64LoadSignExtendByteChip<F> = VmChipWrapper<F, LoadSignExtendByteFiller>;

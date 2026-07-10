@@ -67,7 +67,9 @@ pub(crate) use crate::{
         Rv64LoadByteExecutor, Rv64LoadDoublewordAir, Rv64LoadDoublewordChip,
         Rv64LoadDoublewordExecutor, Rv64LoadHalfwordAir, Rv64LoadHalfwordChip,
         Rv64LoadHalfwordExecutor, Rv64LoadWordAir, Rv64LoadWordChip, Rv64LoadWordExecutor,
-        LOAD_DOUBLEWORD_SELECTOR_WIDTH, LOAD_HALFWORD_SELECTOR_WIDTH, LOAD_WORD_SELECTOR_WIDTH,
+        LOAD_DOUBLEWORD_SELECTOR_WIDTH, LOAD_DOUBLEWORD_TOUCHED_CELLS,
+        LOAD_HALFWORD_SELECTOR_WIDTH, LOAD_HALFWORD_TOUCHED_CELLS, LOAD_WORD_SELECTOR_WIDTH,
+        LOAD_WORD_TOUCHED_CELLS,
     },
     load_sign_extend::common::load_sign_extend_write_data,
     store::{
@@ -141,7 +143,9 @@ fn random_memory_access(
     let min_ptr = imm_signed.max(0) as usize;
     let alignment_mask = (1usize << alignment) - 1;
     let min_aligned_ptr = (min_ptr + alignment_mask) >> alignment;
-    let ptr_val = rng.random_range(min_aligned_ptr..(max_addr >> alignment)) << alignment;
+    // Stay 16 bytes clear of the top of the address space so a block-crossing access always
+    // has a valid second block.
+    let ptr_val = rng.random_range(min_aligned_ptr..((max_addr - 8) >> alignment)) << alignment;
     let rs1_low = (ptr_val as i64 - imm_signed) as u32;
     let ptr = rs1_low.to_le_bytes();
     let rs1 = rs1.unwrap_or([ptr[0], ptr[1], ptr[2], ptr[3], 0, 0, 0, 0]);
@@ -248,8 +252,20 @@ pub(crate) fn create_store_byte_harness(
     )
 }
 
-pub(crate) fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> HalfwordHarness {
+pub(crate) fn create_halfword_harness(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    HalfwordHarness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
     let range_checker = tester.range_checker();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
     let air = Rv64LoadHalfwordAir::new(
         Rv64LoadAdapterAir::new(
             tester.memory_bridge(),
@@ -257,7 +273,7 @@ pub(crate) fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> Half
             range_checker.bus(),
             tester.address_bits(),
         ),
-        LoadHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+        LoadHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64LoadHalfwordExecutor::new(
         Rv64LoadAdapterExecutor::new(tester.address_bits()),
@@ -267,11 +283,15 @@ pub(crate) fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> Half
         LoadHalfwordFiller::new(
             Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.clone(),
             range_checker,
         ),
         tester.memory_helper(),
     );
-    HalfwordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    (
+        HalfwordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        (bitwise_chip.air, bitwise_chip),
+    )
 }
 
 pub(crate) fn create_store_halfword_harness(
@@ -302,8 +322,20 @@ pub(crate) fn create_store_halfword_harness(
     StoreHalfwordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
-pub(crate) fn create_word_harness(tester: &mut VmChipTestBuilder<F>) -> WordHarness {
+pub(crate) fn create_word_harness(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    WordHarness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
     let range_checker = tester.range_checker();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
     let air = Rv64LoadWordAir::new(
         Rv64LoadAdapterAir::new(
             tester.memory_bridge(),
@@ -311,7 +343,7 @@ pub(crate) fn create_word_harness(tester: &mut VmChipTestBuilder<F>) -> WordHarn
             range_checker.bus(),
             tester.address_bits(),
         ),
-        LoadWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+        LoadWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64LoadWordExecutor::new(
         Rv64LoadAdapterExecutor::new(tester.address_bits()),
@@ -321,11 +353,15 @@ pub(crate) fn create_word_harness(tester: &mut VmChipTestBuilder<F>) -> WordHarn
         LoadWordFiller::new(
             Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.clone(),
             range_checker,
         ),
         tester.memory_helper(),
     );
-    WordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    (
+        WordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        (bitwise_chip.air, bitwise_chip),
+    )
 }
 
 pub(crate) fn create_store_word_harness(tester: &mut VmChipTestBuilder<F>) -> StoreWordHarness {
@@ -354,8 +390,20 @@ pub(crate) fn create_store_word_harness(tester: &mut VmChipTestBuilder<F>) -> St
     StoreWordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
-pub(crate) fn create_doubleword_harness(tester: &mut VmChipTestBuilder<F>) -> DoublewordHarness {
+pub(crate) fn create_doubleword_harness(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    DoublewordHarness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
     let range_checker = tester.range_checker();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
     let air = Rv64LoadDoublewordAir::new(
         Rv64LoadAdapterAir::new(
             tester.memory_bridge(),
@@ -363,7 +411,7 @@ pub(crate) fn create_doubleword_harness(tester: &mut VmChipTestBuilder<F>) -> Do
             range_checker.bus(),
             tester.address_bits(),
         ),
-        LoadDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+        LoadDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64LoadDoublewordExecutor::new(
         Rv64LoadAdapterExecutor::new(tester.address_bits()),
@@ -373,11 +421,15 @@ pub(crate) fn create_doubleword_harness(tester: &mut VmChipTestBuilder<F>) -> Do
         LoadDoublewordFiller::new(
             Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.clone(),
             range_checker,
         ),
         tester.memory_helper(),
     );
-    DoublewordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+    (
+        DoublewordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        (bitwise_chip.air, bitwise_chip),
+    )
 }
 
 pub(crate) fn create_store_doubleword_harness(
@@ -420,14 +472,12 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
     imm_sign: Option<u32>,
     mem_as: Option<usize>,
 ) {
-    let alignment = match opcode {
-        LOADD => 3,
-        LOADWU => 2,
-        LOADHU => 1,
-        LOADBU => 0,
+    match opcode {
+        LOADD | LOADWU | LOADHU | LOADBU => {}
         _ => unreachable!("unsupported unsigned load opcode: {opcode:?}"),
-    };
-    let access = random_memory_access(tester, rng, alignment, rs1, imm, imm_sign);
+    }
+    // Unsigned loads support any byte shift, so sample fully misaligned pointers.
+    let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
     let mem_as = mem_as.unwrap_or(RV64_MEMORY_AS as usize);
 
     tester.write_bytes(
@@ -437,7 +487,8 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
 
     let mut prev_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|_| rng.random());
-    let read_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|_| rng.random());
+    let read_data: [[u16; BLOCK_FE_WIDTH]; 2] =
+        array::from_fn(|_| array::from_fn(|_| rng.random()));
     if access.a == 0 {
         prev_data = [0; BLOCK_FE_WIDTH];
     }
@@ -449,7 +500,12 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester.write_bytes(
         mem_as,
         access.base_ptr,
-        rv64_u16_block_to_bytes(read_data).map(F::from_u8),
+        rv64_u16_block_to_bytes(read_data[0]).map(F::from_u8),
+    );
+    tester.write_bytes(
+        mem_as,
+        access.base_ptr + 8,
+        rv64_u16_block_to_bytes(read_data[1]).map(F::from_u8),
     );
 
     let enabled_write = access.a != 0;
@@ -644,11 +700,13 @@ pub(crate) fn assert_pranked_store_byte_fails(prank: impl Fn(&mut StoreByteCoreC
 }
 
 pub(crate) fn assert_pranked_load_halfword_fails(
-    prank: impl Fn(&mut LoadCoreCols<F, { LOAD_HALFWORD_SELECTOR_WIDTH }>),
+    prank: impl Fn(
+        &mut LoadCoreCols<F, { LOAD_HALFWORD_SELECTOR_WIDTH }, { LOAD_HALFWORD_TOUCHED_CELLS }>,
+    ),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());
-    let mut harness = create_halfword_harness(&mut tester);
+    let (mut harness, bitwise) = create_halfword_harness(&mut tester);
     set_and_execute_load(
         &mut tester,
         &mut harness.executor,
@@ -671,6 +729,7 @@ pub(crate) fn assert_pranked_load_halfword_fails(
     tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .expect_err("pranked halfword memory access trace should fail");
@@ -710,11 +769,11 @@ pub(crate) fn assert_pranked_store_halfword_fails(
 }
 
 pub(crate) fn assert_pranked_load_word_fails(
-    prank: impl Fn(&mut LoadCoreCols<F, { LOAD_WORD_SELECTOR_WIDTH }>),
+    prank: impl Fn(&mut LoadCoreCols<F, { LOAD_WORD_SELECTOR_WIDTH }, { LOAD_WORD_TOUCHED_CELLS }>),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());
-    let mut harness = create_word_harness(&mut tester);
+    let (mut harness, bitwise) = create_word_harness(&mut tester);
     set_and_execute_load(
         &mut tester,
         &mut harness.executor,
@@ -737,17 +796,20 @@ pub(crate) fn assert_pranked_load_word_fails(
     tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .expect_err("pranked word memory access trace should fail");
 }
 
 pub(crate) fn assert_pranked_load_doubleword_fails(
-    prank: impl Fn(&mut LoadCoreCols<F, { LOAD_DOUBLEWORD_SELECTOR_WIDTH }>),
+    prank: impl Fn(
+        &mut LoadCoreCols<F, { LOAD_DOUBLEWORD_SELECTOR_WIDTH }, { LOAD_DOUBLEWORD_TOUCHED_CELLS }>,
+    ),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());
-    let mut harness = create_doubleword_harness(&mut tester);
+    let (mut harness, bitwise) = create_doubleword_harness(&mut tester);
     set_and_execute_load(
         &mut tester,
         &mut harness.executor,
@@ -770,6 +832,7 @@ pub(crate) fn assert_pranked_load_doubleword_fails(
     tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .finalize()
         .simple_test()
         .expect_err("pranked doubleword memory access trace should fail");
@@ -858,9 +921,9 @@ mod tests {
     #[test]
     fn negative_split_write_data_tests() {
         assert_pranked_store_byte_fails(|core| core.read_data[0] += F::ONE);
-        assert_pranked_load_halfword_fails(|core| core.read_data[0] += F::ONE);
-        assert_pranked_load_word_fails(|core| core.read_data[0] += F::ONE);
-        assert_pranked_load_doubleword_fails(|core| core.read_data[0] += F::ONE);
+        assert_pranked_load_halfword_fails(|core| core.read_data[0][0] += F::ONE);
+        assert_pranked_load_word_fails(|core| core.read_data[0][0] += F::ONE);
+        assert_pranked_load_doubleword_fails(|core| core.read_data[0][0] += F::ONE);
     }
 
     #[test]

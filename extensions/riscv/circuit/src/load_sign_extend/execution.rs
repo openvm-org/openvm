@@ -211,7 +211,7 @@ unsafe fn execute_e12_impl<
         );
         read_data[RV64_REGISTER_NUM_LIMBS..].copy_from_slice(&block1);
     }
-    let mut write_data = [U8::default(); RV64_REGISTER_NUM_LIMBS];
+    let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
 
     if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
         return Err(ExecutionError::Fail {
@@ -272,7 +272,7 @@ trait LoadSignExtendOp {
 
     /// Return if the operation is valid.
     fn compute_write_data(
-        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool;
@@ -287,7 +287,7 @@ impl LoadSignExtendOp for LoadWOp {
 
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
@@ -307,7 +307,7 @@ impl LoadSignExtendOp for LoadHOp {
 
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
@@ -322,7 +322,7 @@ impl LoadSignExtendOp for LoadBOp {
 
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [U8; RV64_REGISTER_NUM_LIMBS],
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {

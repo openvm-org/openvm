@@ -478,7 +478,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let load_halfword = Rv64LoadHalfwordAir::new(
             Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            LoadHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            LoadHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(load_halfword);
 
@@ -496,7 +496,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let load_word = Rv64LoadWordAir::new(
             Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            LoadWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            LoadWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(load_word);
 
@@ -508,7 +508,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let load_doubleword = Rv64LoadDoublewordAir::new(
             Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            LoadDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            LoadDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(load_doubleword);
 
@@ -729,6 +729,7 @@ where
             LoadHalfwordFiller::new(
                 Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu.clone(),
                 range_checker.clone(),
             ),
             mem_helper.clone(),
@@ -762,6 +763,7 @@ where
             LoadWordFiller::new(
                 Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu.clone(),
                 range_checker.clone(),
             ),
             mem_helper.clone(),
@@ -784,6 +786,7 @@ where
             LoadDoublewordFiller::new(
                 Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu.clone(),
                 range_checker.clone(),
             ),
             mem_helper.clone(),

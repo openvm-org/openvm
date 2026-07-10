@@ -5,13 +5,16 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::adapters::{
-    u16_cell_byte, LOAD_WIDTH_BYTE, LOAD_WIDTH_DOUBLEWORD, LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD,
+    rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, LOAD_WIDTH_BYTE, LOAD_WIDTH_DOUBLEWORD,
+    LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD,
 };
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Clone, Copy, Debug)]
 pub struct LoadRecord {
-    pub read_data: [u16; BLOCK_FE_WIDTH],
+    /// The memory block containing the effective address, followed by the next block, which is
+    /// all-zero unless the access crosses a block boundary.
+    pub read_data: [[u16; BLOCK_FE_WIDTH]; 2],
 }
 
 #[derive(Clone, Copy, derive_new::new)]
@@ -26,7 +29,7 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData = (([u16; BLOCK_FE_WIDTH], [u16; BLOCK_FE_WIDTH]), u8),
+            ReadData = (([u16; BLOCK_FE_WIDTH], [[u16; BLOCK_FE_WIDTH]; 2]), u8),
             WriteData = [u16; BLOCK_FE_WIDTH],
         >,
     for<'buf> RA:
@@ -64,32 +67,21 @@ where
     }
 }
 
-/// Returns the register write data for an unsigned load.
+/// Returns the register write data for an unsigned load at any byte shift, including accesses
+/// that span both blocks.
 pub(crate) fn load_write_data(
     opcode: Rv64LoadStoreOpcode,
-    read_data: [u16; BLOCK_FE_WIDTH],
+    read_data: [[u16; BLOCK_FE_WIDTH]; 2],
     byte_shift: usize,
 ) -> [u16; BLOCK_FE_WIDTH] {
-    let cell_shift = byte_shift / 2;
-    match opcode {
-        LOADD if byte_shift == 0 => read_data,
-        LOADWU if byte_shift == 0 || byte_shift == 4 => [
-            read_data[cell_shift],
-            read_data[cell_shift + 1],
-            0,
-            0,
-        ],
-        LOADHU if byte_shift == 0 || byte_shift == 2 || byte_shift == 4 || byte_shift == 6 => {
-            [read_data[cell_shift], 0, 0, 0]
-        }
-        LOADBU if byte_shift < 8 => {
-            let byte = u16_cell_byte(read_data[cell_shift], byte_shift % 2);
-            [byte, 0, 0, 0]
-        }
-        _ => unreachable!(
-            "unaligned load not supported by this execution environment: {opcode:?}, byte_shift: {byte_shift}"
-        ),
-    }
+    debug_assert!(byte_shift < 2 * BLOCK_FE_WIDTH);
+    let width = load_width_for_opcode(opcode);
+    let mut bytes = [0u8; 4 * BLOCK_FE_WIDTH];
+    bytes[..2 * BLOCK_FE_WIDTH].copy_from_slice(&rv64_u16_block_to_bytes(read_data[0]));
+    bytes[2 * BLOCK_FE_WIDTH..].copy_from_slice(&rv64_u16_block_to_bytes(read_data[1]));
+    let mut loaded = [0u8; 2 * BLOCK_FE_WIDTH];
+    loaded[..width].copy_from_slice(&bytes[byte_shift..byte_shift + width]);
+    rv64_bytes_to_u16_block(loaded)
 }
 
 pub(crate) fn load_width_for_opcode(opcode: Rv64LoadStoreOpcode) -> usize {

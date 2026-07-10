@@ -69,7 +69,7 @@ impl<AB, I> VmCoreAir<AB, I> for LoadByteCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<[AB::Expr; BLOCK_FE_WIDTH]>,
+    I::Reads: From<[[AB::Expr; BLOCK_FE_WIDTH]; 2]>,
     I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
     I::ProcessedInstruction: From<LoadInstruction<AB::Expr>>,
 {
@@ -130,12 +130,18 @@ where
 
         AdapterAirContext {
             to_pc: None,
-            reads: cols.read_data.map(Into::into).into(),
+            // A byte load never crosses a block boundary, so the second block is never read.
+            reads: [
+                cols.read_data.map(Into::into),
+                std::array::from_fn(|_| AB::Expr::ZERO),
+            ]
+            .into(),
             writes: [write_data].into(),
             instruction: LoadInstruction {
                 is_valid: cols.is_valid.into(),
                 opcode: expected_opcode,
                 shift_amount,
+                load_cross: AB::Expr::ZERO,
             }
             .into(),
         }
@@ -189,7 +195,7 @@ where
         // SAFETY: core_row contains a valid LoadRecord written by the executor during trace
         // generation.
         let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-        let read_data = record.read_data;
+        let read_data = record.read_data[0];
         let core_row: &mut LoadByteCoreCols<F> = core_row.borrow_mut();
 
         let read_cell = read_data[shift / 2];

@@ -17,5 +17,6 @@ pub use cuda::*;
 mod tests;
 
 pub type Rv64LoadByteAir = VmAirWrapper<Rv64LoadAdapterAir, LoadByteCoreAir>;
-pub type Rv64LoadByteExecutor = LoadExecutor<Rv64LoadAdapterExecutor, LOAD_WIDTH_BYTE>;
+pub type Rv64LoadByteExecutor =
+    LoadExecutor<Rv64LoadAdapterExecutor<LOAD_WIDTH_BYTE>, LOAD_WIDTH_BYTE>;
 pub type Rv64LoadByteChip<F> = VmChipWrapper<F, LoadByteFiller>;

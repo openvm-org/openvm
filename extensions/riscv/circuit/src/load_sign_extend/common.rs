@@ -70,7 +70,7 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData = (([u16; BLOCK_FE_WIDTH], [u16; BLOCK_FE_WIDTH]), u8),
+            ReadData = (([u16; BLOCK_FE_WIDTH], [[u16; BLOCK_FE_WIDTH]; 2]), u8),
             WriteData = [u16; BLOCK_FE_WIDTH],
         >,
     for<'buf> RA:
@@ -99,8 +99,9 @@ where
         *core_record = LoadRecord { read_data };
 
         let local_opcode = Rv64LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        // Signed loads only support in-block shifts so far, so only the first block is used.
         let write_data =
-            load_sign_extend_write_data(local_opcode, read_data, shift_amount as usize);
+            load_sign_extend_write_data(local_opcode, read_data[0], shift_amount as usize);
         self.adapter
             .write(state.memory, instruction, write_data, &mut adapter_record);
 
