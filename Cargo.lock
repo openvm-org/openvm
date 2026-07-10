@@ -3883,9 +3883,8 @@ dependencies = [
 
 [[package]]
 name = "halo2-axiom"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0aee3f8178b78275038e5ea0e2577140056d2c4c87fccaf6777dc0a8eebe455a"
+version = "0.5.2"
+source = "git+https://github.com/axiom-crypto/halo2.git?tag=v0.5.2#1eed471495b64ec1edf22f0661bbc65d0e4381d5"
 dependencies = [
  "blake2b_simd",
  "crossbeam",
@@ -3905,8 +3904,8 @@ dependencies = [
 
 [[package]]
 name = "halo2-axiom-gpu"
-version = "1.0.0-rc.0"
-source = "git+https://github.com/axiom-crypto/halo2-gpu.git?tag=v1.0.0-rc.0#fa3d662335d8f913660460d443509a84d1f3242f"
+version = "1.0.0"
+source = "git+https://github.com/axiom-crypto/halo2-gpu.git?tag=v1.0.0#97ef2d02aa3348fc04b520c3c2562a9c13b57126"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3920,6 +3919,7 @@ dependencies = [
  "ff 0.13.1",
  "git-version",
  "group 0.13.0",
+ "halo2-axiom",
  "halo2curves-axiom 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.11.0",
  "lazy_static",
@@ -3944,8 +3944,8 @@ dependencies = [
 
 [[package]]
 name = "halo2-base"
-version = "0.5.2"
-source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.2#b4031ae0adb7cb37650ebd85c40631d8fca44237"
+version = "0.5.4"
+source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.4#a69fdee77f41bdd48ad658b69673dea5a0815db4"
 dependencies = [
  "getset",
  "halo2-axiom",
@@ -3965,8 +3965,8 @@ dependencies = [
 
 [[package]]
 name = "halo2-ecc"
-version = "0.5.2"
-source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.2#b4031ae0adb7cb37650ebd85c40631d8fca44237"
+version = "0.5.4"
+source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.4#a69fdee77f41bdd48ad658b69673dea5a0815db4"
 dependencies = [
  "halo2-base",
  "itertools 0.11.0",
@@ -5959,8 +5959,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-codec-derive"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -6006,8 +6006,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cpu-backend"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "cfg-if 1.0.1",
  "derive-new 0.7.0",
@@ -6031,8 +6031,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-backend"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -6053,13 +6053,13 @@ dependencies = [
  "serde",
  "thiserror 1.0.69",
  "tracing",
- "zkhash",
+ "zkhash-axiom",
 ]
 
 [[package]]
 name = "openvm-cuda-builder"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "cc",
  "glob",
@@ -6067,8 +6067,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-common"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6866,8 +6866,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-backend"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "cfg-if 1.0.1",
  "derivative",
@@ -6901,8 +6901,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-sdk"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
 dependencies = [
  "dashmap",
  "derive-new 0.7.0",
@@ -6927,7 +6927,7 @@ dependencies = [
  "tracing",
  "tracing-forest",
  "tracing-subscriber 0.3.20",
- "zkhash",
+ "zkhash-axiom",
 ]
 
 [[package]]
@@ -9675,8 +9675,8 @@ checksum = "1b6b67fb9a61334225b5b790716f609cd58395f895b3fe8b328786812a40bc3b"
 
 [[package]]
 name = "snark-verifier"
-version = "0.2.4"
-source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.4#c45e7d357b93d7b040d9e71d2787ba8fa3da2802"
+version = "0.2.6"
+source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.6#364e82654c746b063aff528d8cb660890908278a"
 dependencies = [
  "halo2-base",
  "halo2-ecc",
@@ -9696,8 +9696,8 @@ dependencies = [
 
 [[package]]
 name = "snark-verifier-sdk"
-version = "0.2.4"
-source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.4#c45e7d357b93d7b040d9e71d2787ba8fa3da2802"
+version = "0.2.6"
+source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.6#364e82654c746b063aff528d8cb660890908278a"
 dependencies = [
  "bincode",
  "ethereum-types",
@@ -11766,6 +11766,33 @@ dependencies = [
 name = "zkhash"
 version = "0.2.0"
 source = "git+https://github.com/HorizenLabs/poseidon2.git?rev=bb476b9#bb476b9ca38198cf5092487283c8b8c5d4317c4e"
+dependencies = [
+ "ark-ff 0.4.2",
+ "ark-std 0.4.0",
+ "bitvec",
+ "blake2",
+ "bls12_381",
+ "byteorder",
+ "cfg-if 1.0.1",
+ "group 0.12.1",
+ "group 0.13.0",
+ "halo2",
+ "hex",
+ "jubjub",
+ "lazy_static",
+ "pasta_curves 0.5.1",
+ "rand 0.8.5",
+ "serde",
+ "sha2 0.10.9",
+ "sha3",
+ "subtle",
+]
+
+[[package]]
+name = "zkhash-axiom"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d038a7895d0e3ab0a352f53e7eb4f1f829f88fce2fb3cff93d665a8a0e01af6"
 dependencies = [
  "ark-ff 0.4.2",
  "ark-std 0.4.0",

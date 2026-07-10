@@ -25,7 +25,7 @@ openvm-continuations = { workspace = true }
 openvm-verify-stark-host = { workspace = true }
 openvm-verify-stark-circuit = { workspace = true }
 openvm-static-verifier = { workspace = true, optional = true }
-halo2-base = { workspace = true, optional = true, features = ["halo2-axiom"] }
+halo2-base = { workspace = true, optional = true }
 
 alloy-sol-types = { workspace = true, optional = true }
 forge-fmt = { workspace = true, optional = true }
