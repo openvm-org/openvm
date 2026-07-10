@@ -217,13 +217,18 @@ static __attribute__((always_inline)) inline uint64_t preflight_patch_mem_block(
   return (block & ~(mask << shift)) | ((value & mask) << shift);
 }
 
-/* Append one self-contained memory event. `address` need not be block-aligned;
- * the shadow index and touched-block key are derived from the aligned block.
- * `prev_value` is the block's value before this access (only consumed for
- * writes) and is supplied by the caller, which holds the store pointer. */
-static __attribute__((always_inline)) inline void preflight_append_memory(
-    Tracer* restrict t, uint8_t kind, uint8_t addr_space, uint64_t address,
-    uint8_t width, uint64_t value, uint64_t prev_value) {
+/* Advance the timestamp, update the block's shadow entry, and record the block
+ * on first touch this segment. Returns the block's previous-access timestamp
+ * (0 = first touch) and writes the consumed timestamp to `*out_timestamp`.
+ *
+ * Every traced access must call this — whether it goes on to append a verbose
+ * `MemoryLogEntry` (non-migrated opcodes) or to fill an inline compact record
+ * (migrated RV64IM opcodes). Keeping the shadow/touched updates common to both
+ * is what makes cross-instruction `prev_timestamp` chains and `touched_memory`
+ * finalization byte-identical across a mixed-mode segment. */
+static __attribute__((always_inline)) inline uint32_t preflight_touch(
+    Tracer* restrict t, uint8_t addr_space, uint64_t address,
+    uint32_t* restrict out_timestamp) {
   uint32_t timestamp = t->timestamp++;
   uint64_t block_addr = address & ~(uint64_t)(WORD_SIZE - 1u);
   uint32_t block_idx = (uint32_t)(block_addr / WORD_SIZE);
@@ -238,6 +243,20 @@ static __attribute__((always_inline)) inline void preflight_append_memory(
       t->touched[ti].block_addr = (uint32_t)block_addr;
     }
   }
+
+  *out_timestamp = timestamp;
+  return prev_timestamp;
+}
+
+/* Append one self-contained memory event. `address` need not be block-aligned;
+ * the shadow index and touched-block key are derived from the aligned block.
+ * `prev_value` is the block's value before this access (only consumed for
+ * writes) and is supplied by the caller, which holds the store pointer. */
+static __attribute__((always_inline)) inline void preflight_append_memory(
+    Tracer* restrict t, uint8_t kind, uint8_t addr_space, uint64_t address,
+    uint8_t width, uint64_t value, uint64_t prev_value) {
+  uint32_t timestamp;
+  uint32_t prev_timestamp = preflight_touch(t, addr_space, address, &timestamp);
 
   uint32_t idx = t->memory_log_len++;
   if (likely(idx < t->memory_log_cap)) {
