@@ -4,6 +4,7 @@ description = "Library of plonky3 primitives for general purpose use in other ZK
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true

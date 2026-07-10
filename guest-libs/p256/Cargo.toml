@@ -1,12 +1,12 @@
 [package]
 # for patching purposes, the name must be the same as the original `p256` crate
 name = "p256"
+description = "OpenVM fork of p256"
 # for patching purposes, version must match that of original `p256` crate
 version = "0.13.2"
-description = "OpenVM fork of p256"
+authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-authors.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
@@ -27,15 +27,15 @@ hex-literal = { workspace = true }
 ff = { workspace = true }
 
 [dev-dependencies]
-openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
-openvm-transpiler.workspace = true
-openvm-algebra-transpiler.workspace = true
-openvm-ecc-transpiler.workspace = true
-openvm-ecc-circuit.workspace = true
-openvm-sha2-circuit.workspace = true
-openvm-sha2-transpiler.workspace = true
-openvm-rv32im-transpiler.workspace = true
-openvm-toolchain-tests.workspace = true
+openvm-circuit = { path = "../../crates/vm", default-features = false, features = ["test-utils", "parallel"] }
+openvm-transpiler = { path = "../../crates/toolchain/transpiler", default-features = false }
+openvm-algebra-transpiler = { path = "../../extensions/algebra/transpiler", default-features = false }
+openvm-ecc-transpiler = { path = "../../extensions/ecc/transpiler", default-features = false }
+openvm-ecc-circuit = { path = "../../extensions/ecc/circuit", default-features = false }
+openvm-sha2-circuit = { path = "../../extensions/sha2/circuit", default-features = false }
+openvm-sha2-transpiler = { path = "../../extensions/sha2/transpiler", default-features = false }
+openvm-rv32im-transpiler = { path = "../../extensions/rv32im/transpiler", default-features = false }
+openvm-toolchain-tests = { path = "../../crates/toolchain/tests", default-features = false }
 
 openvm-stark-backend.workspace = true
 openvm-cpu-backend = { workspace = true }

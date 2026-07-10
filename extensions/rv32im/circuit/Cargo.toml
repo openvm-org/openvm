@@ -4,8 +4,10 @@ description = "OpenVM circuit extension for RISC-V 32-bit IM instruction set"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 repository.workspace = true
+license.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }
@@ -34,7 +36,7 @@ serde = { workspace = true, features = ["derive", "std"] }
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
-openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-circuit = { path = "../../../crates/vm", default-features = false, features = ["test-utils"] }
 test-case.workspace = true
 
 [build-dependencies]

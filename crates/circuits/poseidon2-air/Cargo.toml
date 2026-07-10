@@ -4,6 +4,7 @@ description = "Wrapper for the Plonky3 Poseidon2 AIR."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true

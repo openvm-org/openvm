@@ -115,7 +115,8 @@ incremental = true
 lto = "thin"
 
 [workspace.dependencies]
-openvm-stark-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false } # Stark Backend
+# Stark Backend
+openvm-stark-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
 openvm-stark-sdk = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
 openvm-cpu-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
 openvm-cuda-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
@@ -123,61 +124,61 @@ openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/
 openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
 
 # OpenVM
-openvm-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
-openvm-poseidon2-air = { path = "crates/circuits/poseidon2-air", default-features = false }
-openvm-sha2-air = { path = "crates/circuits/sha2-air", default-features = false }
-openvm-circuit-primitives = { path = "crates/circuits/primitives", default-features = false }
-openvm-circuit-primitives-derive = { path = "crates/circuits/primitives/derive", default-features = false }
-openvm = { path = "crates/toolchain/openvm", default-features = false }
-openvm-build = { path = "crates/toolchain/build", default-features = false }
-openvm-instructions = { path = "crates/toolchain/instructions", default-features = false }
-openvm-instructions-derive = { path = "crates/toolchain/instructions/derive", default-features = false }
-openvm-macros-common = { path = "crates/toolchain/macros", default-features = false }
-openvm-platform = { path = "crates/toolchain/platform", default-features = false }
-openvm-transpiler = { path = "crates/toolchain/transpiler", default-features = false }
+openvm-mod-circuit-builder = { version = "2.0.0", path = "crates/circuits/mod-builder", default-features = false }
+openvm-poseidon2-air = { version = "2.0.0", path = "crates/circuits/poseidon2-air", default-features = false }
+openvm-sha2-air = { version = "2.0.0", path = "crates/circuits/sha2-air", default-features = false }
+openvm-circuit-primitives = { version = "2.0.0", path = "crates/circuits/primitives", default-features = false }
+openvm-circuit-primitives-derive = { version = "2.0.0", path = "crates/circuits/primitives/derive", default-features = false }
+openvm = { version = "2.0.0", path = "crates/toolchain/openvm", default-features = false }
+openvm-build = { version = "2.0.0", path = "crates/toolchain/build", default-features = false }
+openvm-instructions = { version = "2.0.0", path = "crates/toolchain/instructions", default-features = false }
+openvm-instructions-derive = { version = "2.0.0", path = "crates/toolchain/instructions/derive", default-features = false }
+openvm-macros-common = { version = "2.0.0", path = "crates/toolchain/macros", default-features = false }
+openvm-platform = { version = "2.0.0", path = "crates/toolchain/platform", default-features = false }
+openvm-transpiler = { version = "2.0.0", path = "crates/toolchain/transpiler", default-features = false }
 openvm-toolchain-tests = { path = "crates/toolchain/tests", default-features = false }
-openvm-custom-insn = { path = "crates/toolchain/custom_insn", default-features = false }
-openvm-circuit = { path = "crates/vm", default-features = false }
-openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
-openvm-recursion-circuit = { path = "crates/recursion", default-features = false }
-openvm-recursion-circuit-derive = { path = "crates/recursion/derive", default-features = false }
-openvm-continuations = { path = "crates/continuations", default-features = false }
-openvm-verify-stark-host = { path = "crates/verify", default-features = false }
-openvm-static-verifier = { path = "crates/static-verifier", default-features = false }
-openvm-sdk = { path = "crates/sdk", default-features = false }
-openvm-sdk-config = { path = "crates/sdk-config", default-features = false }
-cargo-openvm = { path = "crates/cli", default-features = false }
+openvm-custom-insn = { version = "0.1.0", path = "crates/toolchain/custom_insn", default-features = false }
+openvm-circuit = { version = "2.0.0", path = "crates/vm", default-features = false }
+openvm-circuit-derive = { version = "2.0.0", path = "crates/vm/derive", default-features = false }
+openvm-recursion-circuit = { version = "2.0.0", path = "crates/recursion", default-features = false }
+openvm-recursion-circuit-derive = { version = "2.0.0", path = "crates/recursion/derive", default-features = false }
+openvm-continuations = { version = "2.0.0", path = "crates/continuations", default-features = false }
+openvm-verify-stark-host = { version = "2.0.0", path = "crates/verify", default-features = false }
+openvm-static-verifier = { version = "2.0.0", path = "crates/static-verifier", default-features = false }
+openvm-sdk = { version = "2.0.0", path = "crates/sdk", default-features = false }
+openvm-sdk-config = { version = "2.0.0", path = "crates/sdk-config", default-features = false }
+cargo-openvm = { version = "2.0.0", path = "crates/cli", default-features = false }
 
 # Extensions
-openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
-openvm-rv32im-transpiler = { path = "extensions/rv32im/transpiler", default-features = false }
-openvm-rv32im-guest = { path = "extensions/rv32im/guest", default-features = false }
-openvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = false }
-openvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
-openvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
-openvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }
-openvm-sha2-circuit = { path = "extensions/sha2/circuit", default-features = false }
-openvm-sha2-transpiler = { path = "extensions/sha2/transpiler", default-features = false }
-openvm-sha2-guest = { path = "extensions/sha2/guest", default-features = false }
-openvm-bigint-circuit = { path = "extensions/bigint/circuit", default-features = false }
-openvm-bigint-transpiler = { path = "extensions/bigint/transpiler", default-features = false }
-openvm-bigint-guest = { path = "extensions/bigint/guest", default-features = false }
-openvm-algebra-circuit = { path = "extensions/algebra/circuit", default-features = false }
-openvm-algebra-transpiler = { path = "extensions/algebra/transpiler", default-features = false }
-openvm-algebra-guest = { path = "extensions/algebra/guest", default-features = false }
-openvm-algebra-moduli-macros = { path = "extensions/algebra/moduli-macros", default-features = false }
-openvm-algebra-complex-macros = { path = "extensions/algebra/complex-macros", default-features = false }
-openvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false }
-openvm-ecc-transpiler = { path = "extensions/ecc/transpiler", default-features = false }
-openvm-ecc-guest = { path = "extensions/ecc/guest", default-features = false }
-openvm-ecc-sw-macros = { path = "extensions/ecc/sw-macros", default-features = false }
-openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
-openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
-openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
-openvm-verify-stark-circuit = { path = "guest-libs/verify-stark/circuit", default-features = false }
-openvm-deferral-circuit = { path = "extensions/deferral/circuit", default-features = false }
-openvm-deferral-guest = { path = "extensions/deferral/guest", default-features = false }
-openvm-deferral-transpiler = { path = "extensions/deferral/transpiler", default-features = false }
+openvm-rv32im-circuit = { version = "2.0.0", path = "extensions/rv32im/circuit", default-features = false }
+openvm-rv32im-transpiler = { version = "2.0.0", path = "extensions/rv32im/transpiler", default-features = false }
+openvm-rv32im-guest = { version = "2.0.0", path = "extensions/rv32im/guest", default-features = false }
+openvm-rv32-adapters = { version = "2.0.0", path = "extensions/rv32-adapters", default-features = false }
+openvm-keccak256-circuit = { version = "2.0.0", path = "extensions/keccak256/circuit", default-features = false }
+openvm-keccak256-transpiler = { version = "2.0.0", path = "extensions/keccak256/transpiler", default-features = false }
+openvm-keccak256-guest = { version = "2.0.0", path = "extensions/keccak256/guest", default-features = false }
+openvm-sha2-circuit = { version = "2.0.0", path = "extensions/sha2/circuit", default-features = false }
+openvm-sha2-transpiler = { version = "2.0.0", path = "extensions/sha2/transpiler", default-features = false }
+openvm-sha2-guest = { version = "2.0.0", path = "extensions/sha2/guest", default-features = false }
+openvm-bigint-circuit = { version = "2.0.0", path = "extensions/bigint/circuit", default-features = false }
+openvm-bigint-transpiler = { version = "2.0.0", path = "extensions/bigint/transpiler", default-features = false }
+openvm-bigint-guest = { version = "2.0.0", path = "extensions/bigint/guest", default-features = false }
+openvm-algebra-circuit = { version = "2.0.0", path = "extensions/algebra/circuit", default-features = false }
+openvm-algebra-transpiler = { version = "2.0.0", path = "extensions/algebra/transpiler", default-features = false }
+openvm-algebra-guest = { version = "2.0.0", path = "extensions/algebra/guest", default-features = false }
+openvm-algebra-moduli-macros = { version = "2.0.0", path = "extensions/algebra/moduli-macros", default-features = false }
+openvm-algebra-complex-macros = { version = "2.0.0", path = "extensions/algebra/complex-macros", default-features = false }
+openvm-ecc-circuit = { version = "2.0.0", path = "extensions/ecc/circuit", default-features = false }
+openvm-ecc-transpiler = { version = "2.0.0", path = "extensions/ecc/transpiler", default-features = false }
+openvm-ecc-guest = { version = "2.0.0", path = "extensions/ecc/guest", default-features = false }
+openvm-ecc-sw-macros = { version = "2.0.0", path = "extensions/ecc/sw-macros", default-features = false }
+openvm-pairing-circuit = { version = "2.0.0", path = "extensions/pairing/circuit", default-features = false }
+openvm-pairing-transpiler = { version = "2.0.0", path = "extensions/pairing/transpiler", default-features = false }
+openvm-pairing-guest = { version = "2.0.0", path = "extensions/pairing/guest", default-features = false }
+openvm-verify-stark-circuit = { version = "2.0.0", path = "guest-libs/verify-stark/circuit", default-features = false }
+openvm-deferral-circuit = { version = "2.0.0", path = "extensions/deferral/circuit", default-features = false }
+openvm-deferral-guest = { version = "2.0.0", path = "extensions/deferral/guest", default-features = false }
+openvm-deferral-transpiler = { version = "2.0.0", path = "extensions/deferral/transpiler", default-features = false }
 
 # Benchmarking
 openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }
@@ -195,11 +196,11 @@ p3-poseidon2-air = { version = "=0.4.3", default-features = false }
 p3-symmetric = { version = "=0.4.3", default-features = false }
 
 zkhash = { package = "zkhash-axiom", version = "0.2.0" }
-snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.2.6", default-features = false, features = [
+snark-verifier-sdk = { version = "0.2.6", git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.2.6", default-features = false, features = [
   "loader_halo2",
 ] }
-halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib.git", tag = "v0.5.4", default-features = false }
-halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.2" }
+halo2-base = { version = "0.5.4", git = "https://github.com/axiom-crypto/halo2-lib.git", tag = "v0.5.4", default-features = false }
+halo2curves-axiom = { version = "0.7.2", git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.2" }
 struct-reflection = "0.1.0"
 
 cargo_metadata = "0.18"

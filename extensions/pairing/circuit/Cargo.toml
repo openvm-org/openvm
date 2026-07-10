@@ -4,8 +4,10 @@ description = "OpenVM circuit extension for elliptic curve pairing"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 repository.workspace = true
+license.workspace = true
 
 [dependencies]
 openvm-circuit-primitives = { workspace = true }
@@ -47,11 +49,11 @@ openvm-pairing-guest = { workspace = true }
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
-openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
-openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-mod-circuit-builder = { path = "../../../crates/circuits/mod-builder", default-features = false, features = ["test-utils"] }
+openvm-circuit = { path = "../../../crates/vm", default-features = false, features = ["test-utils"] }
 halo2curves-axiom = { workspace = true }
-openvm-ecc-guest = { workspace = true }
-openvm-pairing-guest = { workspace = true, features = [
+openvm-ecc-guest = { path = "../../ecc/guest", default-features = false }
+openvm-pairing-guest = { path = "../guest", default-features = false, features = [
     "halo2curves",
     "bls12_381",
     "bn254",

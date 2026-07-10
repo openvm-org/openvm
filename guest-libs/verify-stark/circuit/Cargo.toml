@@ -2,9 +2,9 @@
 name = "openvm-verify-stark-circuit"
 description = "OpenVM guest library for verifying STARKs"
 version.workspace = true
+authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-authors.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
@@ -38,13 +38,13 @@ bitcode = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-openvm-continuations = { workspace = true }
-openvm-circuit = { workspace = true, features = ["parallel"] }
-openvm-rv32im-circuit = { workspace = true, features = ["test-utils"] }
-openvm-rv32im-transpiler = { workspace = true }
+openvm-continuations = { path = "../../../crates/continuations", default-features = false }
+openvm-circuit = { path = "../../../crates/vm", default-features = false, features = ["parallel"] }
+openvm-rv32im-circuit = { path = "../../../extensions/rv32im/circuit", default-features = false, features = ["test-utils"] }
+openvm-rv32im-transpiler = { path = "../../../extensions/rv32im/transpiler", default-features = false }
 openvm-stark-sdk = { workspace = true }
-openvm-transpiler = { workspace = true }
-openvm-verify-stark-host = { workspace = true }
+openvm-transpiler = { path = "../../../crates/toolchain/transpiler", default-features = false }
+openvm-verify-stark-host = { path = "../../../crates/verify", default-features = false }
 eyre.workspace = true
 test-case.workspace = true
 
