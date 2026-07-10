@@ -23,8 +23,9 @@ use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP};
 use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     primitives::Chip,
-    system::memory::{
-        offline_checker::MemoryBus, MemoryAddress, MemoryImage, TimestampedEquipartition,
+    system::{
+        memory::{offline_checker::MemoryBus, MemoryAddress, MemoryImage},
+        TouchedMemory,
     },
 };
 
@@ -161,15 +162,15 @@ type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // ((addr_space, leaf_label)
 pub(crate) type LeafGroupedTouchedMemory<F> = Vec<((u32, u32), Vec<BlockInfo<F>>)>;
 
 pub(crate) fn group_touched_memory_by_leaf<F: Copy + Send + Sync>(
-    final_memory: &TimestampedEquipartition<F, BLOCK_FE_WIDTH>,
+    final_memory: &TouchedMemory<F>,
 ) -> LeafGroupedTouchedMemory<F> {
     let mut enriched: Vec<EnrichedEntry<F>> = final_memory
         .par_iter()
-        .map(|&((addr_space, ptr), ts_values)| {
-            let leaf_label = ptr / VM_DIGEST_WIDTH as u32;
-            let block_idx = ((ptr % VM_DIGEST_WIDTH as u32) / BLOCK_FE_WIDTH as u32) as usize;
-            let key = (addr_space, leaf_label);
-            let block_info = (block_idx, ts_values.timestamp, ts_values.values);
+        .map(|block| {
+            let leaf_label = block.ptr / VM_DIGEST_WIDTH as u32;
+            let block_idx = ((block.ptr % VM_DIGEST_WIDTH as u32) / BLOCK_FE_WIDTH as u32) as usize;
+            let key = (block.address_space, leaf_label);
+            let block_info = (block_idx, block.timestamp, block.values);
             (key, block_info)
         })
         .collect();

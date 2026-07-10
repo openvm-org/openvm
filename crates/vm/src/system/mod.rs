@@ -36,7 +36,7 @@ use crate::{
         memory::{
             offline_checker::{MemoryBridge, MemoryBus},
             online::GuestMemory,
-            MemoryAirInventory, MemoryController, TimestampedEquipartition,
+            MemoryAirInventory, MemoryController,
         },
         phantom::{
             CycleEndPhantomExecutor, CycleStartPhantomExecutor, NopPhantomExecutor, PhantomAir,
@@ -113,7 +113,24 @@ pub struct SystemRecords<F> {
     pub touched_memory: TouchedMemory<F>,
 }
 
-pub type TouchedMemory<F> = TimestampedEquipartition<F, BLOCK_FE_WIDTH>;
+/// A memory block touched during a segment: final values and last-access
+/// timestamp at [BLOCK_FE_WIDTH] granularity. The touched-memory list is
+/// sorted by `(address_space, ptr)`.
+///
+/// `repr(C)` with 4-byte fields: for a 4-byte field type this is exactly the
+/// GPU memory-inventory input-record layout (7 u32 words), so the device path
+/// uploads the vector's bytes without repacking. Keep in sync with `InRec` in
+/// `inventory.cu`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TouchedBlock<F> {
+    pub address_space: u32,
+    pub ptr: u32,
+    pub timestamp: u32,
+    pub values: [F; BLOCK_FE_WIDTH],
+}
+
+pub type TouchedMemory<F> = Vec<TouchedBlock<F>>;
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]
 pub enum SystemExecutor {

@@ -2,7 +2,7 @@ use std::{ffi::c_void, sync::Arc};
 
 use openvm_circuit::{
     arch::{MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
-    system::memory::{merkle::MemoryMerkleCols, TimestampedEquipartition},
+    system::memory::merkle::MemoryMerkleCols,
     utils::next_power_of_two_or_zero,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
@@ -448,9 +448,10 @@ impl MemoryMerkleTree {
 
     /// An auxiliary function to calculate the required number of rows for the merkle trace.
     /// Generic over BLOCK_SIZE since only addresses are used, not values.
-    pub fn calculate_unpadded_height<const BLOCK_SIZE: usize>(
+    pub fn calculate_unpadded_height<A: Sync>(
         &self,
-        touched_memory: &TimestampedEquipartition<F, BLOCK_SIZE>,
+        touched_memory: &[A],
+        address: impl Fn(&A) -> (u32, u32) + Sync,
     ) -> usize {
         let md = self.mem_config.memory_dimensions();
         let tree_height = md.overall_height();
@@ -462,8 +463,8 @@ impl MemoryMerkleTree {
                 + (0..(touched_memory.len() - 1))
                     .into_par_iter()
                     .map(|i| {
-                        let x = md.label_to_index(shift_address(touched_memory[i].0));
-                        let y = md.label_to_index(shift_address(touched_memory[i + 1].0));
+                        let x = md.label_to_index(shift_address(address(&touched_memory[i])));
+                        let y = md.label_to_index(shift_address(address(&touched_memory[i + 1])));
                         let xor = x ^ y;
                         if xor == 0 {
                             0
@@ -727,7 +728,8 @@ mod tests {
             .to_device_on(&gpu_merkle_tree.device_ctx)
             .unwrap();
 
-        let unpadded_height = gpu_merkle_tree.calculate_unpadded_height(&touched_blocks);
+        let unpadded_height =
+            gpu_merkle_tree.calculate_unpadded_height(&touched_blocks, |(addr, _)| *addr);
         gpu_hasher_chip.prepare_records(unpadded_height);
         gpu_merkle_tree.update_with_touched_blocks(unpadded_height, &d_touched_blocks, false);
 
@@ -901,7 +903,8 @@ mod tests {
             .to_device_on(&gpu_merkle_tree.device_ctx)
             .unwrap();
 
-        let unpadded_height = gpu_merkle_tree.calculate_unpadded_height(&touched_blocks);
+        let unpadded_height =
+            gpu_merkle_tree.calculate_unpadded_height(&touched_blocks, |(addr, _)| *addr);
         gpu_hasher_chip.prepare_records(unpadded_height);
         let merkle_ctx =
             gpu_merkle_tree.update_with_touched_blocks(unpadded_height, &d_touched_blocks, false);
