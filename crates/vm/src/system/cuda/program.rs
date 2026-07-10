@@ -104,19 +104,39 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
             filtered_len <= height,
             "filtered_exec_freqs len={filtered_len} > cached trace height={height}"
         );
-        let mut buffer: DeviceBuffer<F> = DeviceBuffer::with_capacity_on(height, &self.device_ctx);
+        let buffer: DeviceBuffer<F> = DeviceBuffer::with_capacity_on(height, &self.device_ctx);
 
-        filtered_exec_freqs
-            .into_iter()
-            .map(F::from_u32)
-            .collect::<Vec<_>>()
-            .copy_to_on(&mut buffer, &self.device_ctx)
-            .unwrap();
-        // Making sure to zero-out the untouched part of the buffer.
-        if filtered_len < height {
-            buffer
-                .fill_zero_suffix_on(filtered_len, &self.device_ctx)
-                .unwrap();
+        // Upload the raw u32 frequencies through a pooled pinned buffer and
+        // convert to field elements on device (also zero-filling the tail).
+        // The previous host-side serial map + pageable copy cost ~15 ms per
+        // segment on large programs. Returning the buffer routes through the
+        // arena cleaner, which synchronizes before reuse.
+        let bytes = filtered_len * std::mem::size_of::<u32>();
+        let mut h_freqs = crate::arch::cuda::pinned::take(bytes + std::mem::size_of::<u32>());
+        let off = h_freqs.as_ptr().align_offset(std::mem::size_of::<u32>());
+        // SAFETY: the ranges are in-bounds, disjoint allocations, and the
+        // destination is 4-aligned by `off`.
+        let words: &[u32] = unsafe {
+            std::ptr::copy_nonoverlapping(
+                filtered_exec_freqs.as_ptr() as *const u8,
+                h_freqs.as_mut_ptr().add(off),
+                bytes,
+            );
+            std::slice::from_raw_parts(h_freqs.as_ptr().add(off) as *const u32, filtered_len)
+        };
+        let d_freqs = words
+            .to_device_on(&self.device_ctx)
+            .expect("failed to copy exec frequencies to device");
+        crate::arch::cuda::pinned::give_back(h_freqs, off + bytes);
+        unsafe {
+            crate::cuda_abi::program::fill_frequencies(
+                &d_freqs,
+                filtered_len,
+                &buffer,
+                height,
+                self.device_ctx.stream.as_raw(),
+            )
+            .expect("program_fill_frequencies failed");
         }
 
         let common_main = DeviceMatrix::new(Arc::new(buffer), height, 1);

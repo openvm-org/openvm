@@ -56,3 +56,35 @@ extern "C" int _program_cached_tracegen(
     );
     return CHECK_KERNEL();
 }
+
+/// Converts raw u32 execution frequencies to field elements in place on
+/// device, zero-filling [filtered_len, height). Replaces a host-side serial
+/// map + pageable copy that cost ~15 ms per segment on large programs.
+__global__ void program_fill_frequencies(
+    const uint32_t *__restrict__ freqs,
+    size_t filtered_len,
+    Fp *__restrict__ out,
+    size_t height
+) {
+    size_t stride = gridDim.x * (size_t)blockDim.x;
+    for (size_t i = blockIdx.x * (size_t)blockDim.x + threadIdx.x; i < height; i += stride) {
+        out[i] = i < filtered_len ? Fp(freqs[i]) : Fp(0);
+    }
+}
+
+extern "C" int _program_fill_frequencies(
+    const uint32_t *d_freqs,
+    size_t filtered_len,
+    Fp *d_out,
+    size_t height,
+    cudaStream_t stream
+) {
+    if (height == 0) {
+        return 0;
+    }
+    const int threads = 256;
+    const size_t want = (height + threads - 1) / threads;
+    const int blocks = (int)(want < 2048 ? want : 2048);
+    program_fill_frequencies<<<blocks, threads, 0, stream>>>(d_freqs, filtered_len, d_out, height);
+    return CHECK_KERNEL();
+}
