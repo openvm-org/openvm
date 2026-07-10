@@ -26,7 +26,7 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 
 #[cfg(feature = "cuda")]
 use crate::load_sign_extend::{
-    test_utils::{dummy_range_checker, transfer_load_sign_extend_records},
+    test_utils::{dummy_range_checker, transfer_load_sign_extend_byte_records},
     Rv64LoadSignExtendByteChipGpu,
 };
 use crate::{
@@ -249,7 +249,7 @@ fn test_cuda_rand_load_sign_extend_byte_tracegen() {
             None,
         );
     }
-    transfer_load_sign_extend_records(&mut harness);
+    transfer_load_sign_extend_byte_records(&mut harness);
     tester
         .build()
         .load_gpu_harness(harness)

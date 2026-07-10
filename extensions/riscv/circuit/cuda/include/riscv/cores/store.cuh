@@ -53,7 +53,7 @@ template <typename T, size_t SELECTOR_WIDTH, size_t NUM_VALUE_CELLS> struct Stor
     T selector[SELECTOR_WIDTH];
     T read_data[BLOCK_FE_WIDTH];
     T prev_data[2][BLOCK_FE_WIDTH];
-    T value_bytes[NUM_VALUE_CELLS][2];
+    T value_lo_bytes[NUM_VALUE_CELLS];
     T prev_bound_bytes[2];
 };
 
@@ -74,31 +74,29 @@ struct StoreWidthCore {
         row.write_array(offsetof(Cols, read_data), BLOCK_FE_WIDTH, record.read_data);
         row.write_array(offsetof(Cols, prev_data), 2 * BLOCK_FE_WIDTH, &record.prev_data[0][0]);
 
-        // Only the preserved boundary bytes are materialized: the low byte of the first
-        // overlapped cell and the high byte of the last. The overwritten boundary-cell bytes
-        // are only range checked, mirroring the AIR's derived bytes.
-        uint16_t value_bytes[NUM_VALUE_CELLS][2] = {};
-        uint16_t prev_bound_cells[2][2] = {};
+        // Only the value cells' low bytes and the preserved boundary bytes (the low byte of the
+        // first overlapped cell, the high byte of the last) are materialized; their counterparts
+        // are derived in the AIR and only range checked. The AIR's range checks are gated on the
+        // odd-shift selector sum, so even shifts request no lookups.
+        uint16_t value_lo_bytes[NUM_VALUE_CELLS] = {};
+        uint16_t prev_bound_bytes[2] = {};
         if (shift & 1) {
             for (size_t i = 0; i < NUM_VALUE_CELLS; i++) {
-                value_bytes[i][0] = store_byte_from_cell(record.read_data[i], 0);
-                value_bytes[i][1] = store_byte_from_cell(record.read_data[i], 1);
+                value_lo_bytes[i] = store_byte_from_cell(record.read_data[i], 0);
+                bitwise_lookup.add_range(
+                    value_lo_bytes[i], store_byte_from_cell(record.read_data[i], 1)
+                );
             }
             for (size_t which = 0; which < 2; which++) {
                 uint16_t cell =
                     store_prev_full_cell(record, (shift >> 1) + which * NUM_VALUE_CELLS);
-                prev_bound_cells[which][0] = store_byte_from_cell(cell, 0);
-                prev_bound_cells[which][1] = store_byte_from_cell(cell, 1);
+                bitwise_lookup.add_range(
+                    store_byte_from_cell(cell, 0), store_byte_from_cell(cell, 1)
+                );
+                prev_bound_bytes[which] = store_byte_from_cell(cell, which);
             }
         }
-        for (size_t i = 0; i < NUM_VALUE_CELLS; i++) {
-            bitwise_lookup.add_range(value_bytes[i][0], value_bytes[i][1]);
-        }
-        for (size_t which = 0; which < 2; which++) {
-            bitwise_lookup.add_range(prev_bound_cells[which][0], prev_bound_cells[which][1]);
-        }
-        row.write_array(offsetof(Cols, value_bytes), NUM_VALUE_CELLS * 2, &value_bytes[0][0]);
-        uint16_t prev_bound_bytes[2] = {prev_bound_cells[0][0], prev_bound_cells[1][1]};
+        row.write_array(offsetof(Cols, value_lo_bytes), NUM_VALUE_CELLS, value_lo_bytes);
         row.write_array(offsetof(Cols, prev_bound_bytes), 2, prev_bound_bytes);
     }
 };

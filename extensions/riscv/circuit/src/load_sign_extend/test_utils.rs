@@ -162,3 +162,19 @@ pub(crate) fn transfer_load_sign_extend_records<G, C, A, E>(
             EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor<LOAD_WIDTH_WORD>>::new(),
         );
 }
+
+// The byte chip uses the lean byte adapter, whose trace rows are narrower than the width
+// (misaligned) adapter's; the layout must match or the core record lands at the wrong offset.
+#[cfg(feature = "cuda")]
+pub(crate) fn transfer_load_sign_extend_byte_records<G, C, A, E>(
+    harness: &mut GpuTestChipHarness<F, E, A, G, C>,
+) {
+    type Record<'a> = (&'a mut Rv64LoadAdapterRecord, &'a mut LoadRecord);
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64LoadByteAdapterExecutor>::new(),
+        );
+}

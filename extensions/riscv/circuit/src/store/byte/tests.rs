@@ -41,7 +41,9 @@ use crate::{
 #[cfg(feature = "cuda")]
 use crate::{
     store::Rv64StoreByteChipGpu,
-    test_utils::memory::{dummy_range_checker, store_gpu_memory_config, transfer_store_records},
+    test_utils::memory::{
+        dummy_range_checker, store_gpu_memory_config, transfer_store_byte_records,
+    },
 };
 
 type StoreByteHarness =
@@ -284,7 +286,7 @@ fn test_cuda_rand_store_byte_tracegen(mem_as: usize) {
             Some(mem_as),
         );
     }
-    transfer_store_records(&mut harness);
+    transfer_store_byte_records(&mut harness);
     tester
         .build()
         .load_gpu_harness(harness)

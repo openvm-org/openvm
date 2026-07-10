@@ -33,7 +33,9 @@ pub(crate) const STORE_BYTE_SELECTOR_WIDTH: usize = 3;
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct StoreByteCoreCols<T> {
     pub selector: [T; STORE_BYTE_SELECTOR_WIDTH],
-    pub read_cell_bytes: [T; 2],
+    /// Low byte of the first source register cell — the stored byte. The cell's high byte is
+    /// derived in the AIR.
+    pub read_lo_byte: T,
     pub prev_cell_bytes: [T; 2],
     pub read_data: [T; BLOCK_FE_WIDTH],
     pub prev_data: [T; BLOCK_FE_WIDTH],
@@ -84,16 +86,16 @@ where
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
 
+        // The stored byte is the low byte of the first source cell; the cell's high byte is
+        // derived from it, and range checking the pair makes the decomposition unique.
+        let read_hi_byte = (cols.read_data[0] - cols.read_lo_byte)
+            * AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
         self.bitwise_lookup_bus
-            .send_range(cols.read_cell_bytes[0], cols.read_cell_bytes[1])
+            .send_range(cols.read_lo_byte, read_hi_byte)
             .eval(builder, is_valid.clone());
         self.bitwise_lookup_bus
             .send_range(cols.prev_cell_bytes[0], cols.prev_cell_bytes[1])
             .eval(builder, is_valid.clone());
-
-        let read_cell = cols.read_cell_bytes[0]
-            + cols.read_cell_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
-        builder.assert_eq(read_cell, cols.read_data[0]);
 
         let prev_cell = cols.prev_cell_bytes[0]
             + cols.prev_cell_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
@@ -114,11 +116,11 @@ where
                     let byte_idx = shift % 2;
                     let term = if i == cell_shift {
                         if byte_idx == 0 {
-                            cols.read_cell_bytes[0]
+                            cols.read_lo_byte
                                 + cols.prev_cell_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
                         } else {
                             cols.prev_cell_bytes[0]
-                                + cols.read_cell_bytes[0] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
+                                + cols.read_lo_byte * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
                         }
                     } else {
                         cols.prev_data[i].into()
@@ -215,13 +217,11 @@ where
         let cell_shift = shift / 2;
         let byte_idx = shift % 2;
 
-        let read_cell_bytes = [
-            u16_cell_byte(read_data[0], 0),
-            u16_cell_byte(read_data[0], 1),
-        ];
+        // The cell's high byte is derived in the AIR and only range checked here.
+        let read_lo_byte = u16_cell_byte(read_data[0], 0);
         self.bitwise_lookup_chip
-            .request_range(read_cell_bytes[0] as u32, read_cell_bytes[1] as u32);
-        core_row.read_cell_bytes = read_cell_bytes.map(F::from_u16);
+            .request_range(read_lo_byte as u32, u16_cell_byte(read_data[0], 1) as u32);
+        core_row.read_lo_byte = F::from_u16(read_lo_byte);
 
         let prev_cell_bytes = [
             u16_cell_byte(prev_data[cell_shift], 0),
@@ -233,7 +233,7 @@ where
         debug_assert_eq!(
             store_write_data(STOREB, read_data, [prev_data, [0; BLOCK_FE_WIDTH]], shift)[0]
                 [cell_shift],
-            set_u16_cell_byte(prev_data[cell_shift], byte_idx, read_cell_bytes[0])
+            set_u16_cell_byte(prev_data[cell_shift], byte_idx, read_lo_byte)
         );
 
         core_row.read_data = read_data.map(F::from_u16);

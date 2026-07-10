@@ -32,7 +32,10 @@ use {
 };
 
 #[cfg(feature = "cuda")]
-use crate::adapters::{Rv64LoadAdapterExecutor, Rv64StoreAdapterExecutor};
+use crate::adapters::{
+    Rv64LoadAdapterExecutor, Rv64LoadByteAdapterExecutor, Rv64StoreAdapterExecutor,
+    Rv64StoreByteAdapterExecutor,
+};
 use crate::{
     adapters::{rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16},
     load::common::load_write_data,
@@ -316,5 +319,34 @@ pub(crate) fn transfer_store_records<G, C, A, E>(harness: &mut GpuTestChipHarnes
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
             EmptyAdapterCoreLayout::<F, Rv64StoreAdapterExecutor<STORE_WIDTH_WORD>>::new(),
+        );
+}
+
+// Byte chips use lean aligned adapters, so their record layout differs from the width adapters.
+#[cfg(feature = "cuda")]
+pub(crate) fn transfer_load_byte_records<G, C, A, E>(
+    harness: &mut GpuTestChipHarness<F, E, A, G, C>,
+) {
+    type Record<'a> = (&'a mut Rv64LoadAdapterRecord, &'a mut LoadRecord);
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64LoadByteAdapterExecutor>::new(),
+        );
+}
+
+#[cfg(feature = "cuda")]
+pub(crate) fn transfer_store_byte_records<G, C, A, E>(
+    harness: &mut GpuTestChipHarness<F, E, A, G, C>,
+) {
+    type Record<'a> = (&'a mut Rv64StoreAdapterRecord, &'a mut StoreRecord);
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64StoreByteAdapterExecutor>::new(),
         );
 }
