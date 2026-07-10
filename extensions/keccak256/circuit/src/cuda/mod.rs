@@ -9,7 +9,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_backend::prover::AirProvingContext;
 use p3_keccak_air::NUM_ROUNDS;
@@ -45,7 +45,9 @@ impl Chip<DenseRecordArena, GpuBackend> for XorinVmChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records =
+            openvm_circuit::arch::cuda::copy_stream::records_to_device(records, device_ctx)
+                .unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -111,7 +113,9 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
         let device_ctx = &self.range_checker.device_ctx;
 
         // Transfer records to GPU
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records =
+            openvm_circuit::arch::cuda::copy_stream::records_to_device(records, device_ctx)
+                .unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {

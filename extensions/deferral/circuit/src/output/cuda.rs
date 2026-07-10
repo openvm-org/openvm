@@ -115,7 +115,9 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
         let device_ctx = &self.range_checker.device_ctx;
         let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
-        let d_raw_records = records.to_device_on(device_ctx).unwrap();
+        let d_raw_records =
+            openvm_circuit::arch::cuda::copy_stream::records_to_device(records, device_ctx)
+                .unwrap();
         let d_per_call = per_call.to_device_on(device_ctx).unwrap();
         let d_per_row = per_row.to_device_on(device_ctx).unwrap();
 

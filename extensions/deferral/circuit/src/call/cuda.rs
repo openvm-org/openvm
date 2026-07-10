@@ -6,7 +6,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+use openvm_cuda_common::d_buffer::DeviceBuffer;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_backend::prover::AirProvingContext;
 
@@ -44,7 +44,9 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCallChipGpu {
             DeferralCallAdapterCols::<F>::width() + DeferralCallCoreCols::<F>::width();
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records =
+            openvm_circuit::arch::cuda::copy_stream::records_to_device(records, device_ctx)
+                .unwrap();
         let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {

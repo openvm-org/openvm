@@ -80,7 +80,9 @@ where
         let trace =
             DeviceMatrix::<F>::with_capacity_on(trace_height, C::MAIN_CHIP_WIDTH, device_ctx);
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records =
+            openvm_circuit::arch::cuda::copy_stream::records_to_device(records, device_ctx)
+                .unwrap();
         let d_record_offsets = record_offsets.to_device_on(device_ctx).unwrap();
 
         unsafe {
