@@ -103,6 +103,27 @@ pub trait ExtEmitCtx {
         false
     }
 
+    fn emit_load_inline(
+        &mut self,
+        _width: u8,
+        _signed: bool,
+        _rd: Option<Variable>,
+        _base: Variable,
+        _offset: i16,
+    ) -> bool {
+        false
+    }
+
+    fn emit_store_inline(
+        &mut self,
+        _width: u8,
+        _base: Variable,
+        _src: Variable,
+        _offset: i16,
+    ) -> bool {
+        false
+    }
+
     /// Append a line of C code (indented).
     fn write_line(&mut self, s: &str);
 

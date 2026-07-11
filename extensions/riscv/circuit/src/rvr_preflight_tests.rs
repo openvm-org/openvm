@@ -11,7 +11,7 @@ use openvm_circuit::{
         rvr::{
             preflight_compile_invocations_for_test, reset_preflight_compile_invocations_for_test,
             LogNativeAssemblerRegistry, RvrPreflightOutput, RvrPreflightRoute,
-            VmRvrLogNativeExtension, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
+            VmRvrLogNativeExtension,
         },
         verify_segments, ContinuationVmProver, ExecutionError, MatrixRecordArena, Streams,
         VirtualMachine, VmInstance,
@@ -329,11 +329,24 @@ fn inline_addsub_differential_exe() -> VmExe<F> {
         jal_lui(Rv64JalLuiOpcode::LUI, 29, 5),
         auipc(30, 0),    // x30 = this instruction's pc
         jalr(31, 30, 8), // jump to x30 + 8 = the next slot, link x31
-        // Mixed-mode coverage: loads/stores are not yet migrated and keep the
-        // verbose log + assembler path alive in the same segment.
-        addi(26, 0, 64), // aligned memory base for the log-path ops
+        // Family 4: loads/stores are now migrated (alu3 wire; block value +
+        // rs1 value + prev data), including sub-word widths, sign extension,
+        // and the suppressed rd = x0 write. Phantoms keep the unmigrated
+        // assembler path alive in the same segment (mixed mode).
+        addi(26, 0, 64), // aligned memory base
         store(Rv64LoadStoreOpcode::STORED, 2, 26, 0),
         load(Rv64LoadStoreOpcode::LOADD, 25, 26, 0),
+        store(Rv64LoadStoreOpcode::STOREB, 4, 26, 1),
+        load(Rv64LoadStoreOpcode::LOADBU, 25, 26, 1),
+        store(Rv64LoadStoreOpcode::STOREH, 4, 26, 2),
+        load(Rv64LoadStoreOpcode::LOADHU, 25, 26, 2),
+        store(Rv64LoadStoreOpcode::STOREW, 4, 26, 4),
+        load(Rv64LoadStoreOpcode::LOADWU, 25, 26, 4),
+        load(Rv64LoadStoreOpcode::LOADB, 25, 26, 1),
+        load(Rv64LoadStoreOpcode::LOADH, 25, 26, 2),
+        load(Rv64LoadStoreOpcode::LOADW, 25, 26, 4),
+        load(Rv64LoadStoreOpcode::LOADBU, 0, 26, 1), // rd = x0: suppressed write, tick kept
+        phantom(SysPhantom::Nop),
         // Phase-4 family 1: the Mul shapes share the compact alu3 record.
         mul(8, 1, 2),                             // x8 = x1 * x2
         mulh(MulHOpcode::MULH, 9, 1, 2),          // signed high word
@@ -919,7 +932,7 @@ fn assert_preflight_matches_interpreter_with_streams(
     );
 
     if label == "phantom_subword_read_dominant" {
-        assert_read_dominant_memory_aux(&rvr_output);
+        assert_read_dominant_memory_aux(&rvr_output, &exe);
     }
     if label == "load_to_x0" {
         assert_load_to_x0_timestamp_tick(&rvr_output);
@@ -1570,65 +1583,135 @@ fn assert_gpu_rvr_three_way_multi_segment(label: &str, exe: VmExe<F>, streams: S
     }
 }
 
-fn assert_read_dominant_memory_aux(output: &RvrPreflightOutput<F>) {
-    let block_ptr = 64 / 2;
-    let block_addr = (RV64_MEMORY_AS, block_ptr);
-    let block_accesses = output
-        .access_aux
-        .iter()
-        .filter(|aux| aux.block_addr == block_addr)
-        .collect::<Vec<_>>();
-    let write = block_accesses
-        .iter()
-        .find(|aux| aux.entry.kind == PREFLIGHT_MEMORY_KIND_WRITE)
-        .expect("store byte writes memory block");
-    let reads_after_write = block_accesses
-        .iter()
-        .filter(|aux| {
-            aux.entry.kind == PREFLIGHT_MEMORY_KIND_READ
-                && aux.entry.timestamp > write.entry.timestamp
-        })
-        .take(2)
-        .collect::<Vec<_>>();
-    assert_eq!(
-        reads_after_write.len(),
-        2,
-        "program must contain read-after-write followed by read-after-read"
-    );
+/// Test-side view of one 44-byte compact alu3 record (loads/stores share the
+/// shape: p2 = memory access prev_timestamp, pw = write prev_timestamp).
+struct CompactAlu3View {
+    from_pc: u64,
+    reads_prev: [u32; 2],
+    write_prev: u32,
+}
 
-    let expected_values = [
-        F::from_u32(0x5a00),
-        F::from_u32(0),
-        F::from_u32(0),
-        F::from_u32(0),
-    ];
+fn compact_alu3_records(output: &RvrPreflightOutput<F>, air_idx: usize) -> Vec<CompactAlu3View> {
+    let chip = output
+        .inline_records
+        .iter()
+        .find(|chip| chip.air_idx == air_idx)
+        .expect("air must have inline records");
+    assert_eq!(chip.record_size, 44, "expected the alu3 wire shape");
+    chip.bytes
+        .chunks_exact(44)
+        .map(|r| CompactAlu3View {
+            from_pc: u64::from(u32::from_le_bytes(r[0..4].try_into().unwrap())),
+            reads_prev: [
+                u32::from_le_bytes(r[8..12].try_into().unwrap()),
+                u32::from_le_bytes(r[12..16].try_into().unwrap()),
+            ],
+            write_prev: u32::from_le_bytes(r[16..20].try_into().unwrap()),
+        })
+        .collect()
+}
+
+fn program_ts_at_pc(output: &RvrPreflightOutput<F>, pc: u64, nth: usize) -> u32 {
+    output
+        .raw_logs
+        .program_log
+        .iter()
+        .filter(|entry| entry.pc == pc)
+        .nth(nth)
+        .expect("pc must be in the program log")
+        .timestamp
+}
+
+fn assert_read_dominant_memory_aux(output: &RvrPreflightOutput<F>, exe: &VmExe<F>) {
+    // The store and the two following reads of memory block 64 are migrated
+    // (inline compact records); the prev-timestamp chain that used to be
+    // asserted on the verbose log is asserted on the records instead:
+    // read-after-write chains to the store's write tick, read-after-read to
+    // the previous read's tick.
+    let loadstore_air = {
+        let (vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ImCpuBuilder,
+            Rv64ImConfig::default(),
+        )
+        .expect("vm init");
+        let pc_to_air_idx = vm.pc_to_air_idx(exe).expect("pc to air mapping");
+        let slot = exe
+            .program
+            .instructions_and_debug_infos
+            .iter()
+            .position(|s| {
+                s.as_ref().is_some_and(|(insn, _)| {
+                    insn.opcode == Rv64LoadStoreOpcode::STOREB.global_opcode()
+                })
+            })
+            .expect("fixture must contain STOREB");
+        pc_to_air_idx[slot].expect("STOREB maps to an air")
+    };
+    let records = compact_alu3_records(output, loadstore_air);
+    let pc_of = |opcode: openvm_instructions::VmOpcode, nth: usize| {
+        exe.program
+            .instructions_and_debug_infos
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.as_ref().is_some_and(|(insn, _)| insn.opcode == opcode))
+            .map(|(i, _)| u64::from(exe.program.pc_base) + (i as u64) * 4)
+            .nth(nth)
+            .expect("opcode occurrence")
+    };
+    let store_pc = pc_of(Rv64LoadStoreOpcode::STOREB.global_opcode(), 0);
+    let read1_pc = pc_of(Rv64LoadStoreOpcode::LOADBU.global_opcode(), 0);
+    let read2_pc = pc_of(Rv64LoadStoreOpcode::LOADBU.global_opcode(), 1);
+    let record_at = |pc: u64| {
+        records
+            .iter()
+            .find(|r| r.from_pc == pc)
+            .expect("record at pc")
+    };
+    let store_ts = program_ts_at_pc(output, store_pc, 0);
+    let read1_ts = program_ts_at_pc(output, read1_pc, 0);
+    let (store, read1, read2) = (
+        record_at(store_pc),
+        record_at(read1_pc),
+        record_at(read2_pc),
+    );
+    // Store's memory write happens at tick store_ts + 2; the first read's
+    // memory access (p2 slot) must chain to it, the second to the first
+    // read's memory tick (read1_ts + 1).
     assert_eq!(
-        reads_after_write[0].prev_timestamp, write.entry.timestamp,
-        "read-after-write prev_timestamp must chain to write access"
+        read1.reads_prev[1],
+        store_ts + 2,
+        "read-after-write prev_timestamp must chain to the store's write tick"
     );
     assert_eq!(
-        reads_after_write[0].prev_data, expected_values,
-        "read-after-write prev_data must contain the written byte"
-    );
-    assert_eq!(
-        reads_after_write[1].prev_timestamp, reads_after_write[0].entry.timestamp,
+        read2.reads_prev[1],
+        read1_ts + 1,
         "read-after-read prev_timestamp must chain to the previous read"
     );
-    assert_eq!(
-        reads_after_write[1].prev_data, expected_values,
-        "read-after-read prev_data must preserve the last written value"
+    assert!(
+        store.write_prev < store_ts + 2,
+        "store prev must precede it"
     );
 
+    let block_addr = (RV64_MEMORY_AS, 64 / 2);
     let touched = output
         .system_records
         .touched_memory
         .iter()
         .find(|(addr, _)| *addr == block_addr)
         .expect("block must be touched");
+    let read2_ts = program_ts_at_pc(output, read2_pc, 0);
     assert_eq!(
-        touched.1.timestamp, reads_after_write[1].entry.timestamp,
-        "touched_memory timestamp must be the trailing read timestamp"
+        touched.1.timestamp,
+        read2_ts + 1,
+        "touched_memory timestamp must be the trailing read's memory tick"
     );
+    let expected_values = [
+        F::from_u32(0x5a00),
+        F::from_u32(0),
+        F::from_u32(0),
+        F::from_u32(0),
+    ];
     assert_eq!(
         touched.1.values, expected_values,
         "touched_memory value must remain the last write"
@@ -1650,36 +1733,19 @@ fn assert_load_to_x0_timestamp_tick(output: &RvrPreflightOutput<F>) {
         3,
         "rd=x0 load must preserve the fixed 3-tick load invariant"
     );
-
-    let load_accesses = output
-        .raw_logs
-        .memory_log
+    // The load is migrated: its compact record must exist with the write
+    // fields zeroed (suppressed rd write still ticks, logs nothing, and the
+    // host selects the disabled branch from the instruction's enable flag).
+    let record = output
+        .inline_records
         .iter()
-        .filter(|entry| entry.timestamp >= load_timestamp && entry.timestamp < next_timestamp)
-        .collect::<Vec<_>>();
+        .flat_map(|chip| chip.bytes.chunks_exact(chip.record_size))
+        .find(|r| u32::from_le_bytes(r[0..4].try_into().unwrap()) == load_pc)
+        .expect("rd=x0 load must emit a compact record");
     assert_eq!(
-        load_accesses.len(),
-        2,
-        "rd=x0 load logs rs1 read + memory read, then ticks without a register-write log"
-    );
-    assert!(load_accesses.iter().any(|entry| {
-        entry.timestamp == load_timestamp
-            && entry.kind == PREFLIGHT_MEMORY_KIND_READ
-            && entry.addr_space == RV64_REGISTER_AS as u8
-            && entry.address == reg(1) as u64
-    }));
-    assert!(load_accesses.iter().any(|entry| {
-        entry.timestamp == load_timestamp + 1
-            && entry.kind == PREFLIGHT_MEMORY_KIND_READ
-            && entry.addr_space == RV64_MEMORY_AS as u8
-    }));
-    assert!(
-        !load_accesses.iter().any(|entry| {
-            entry.kind == PREFLIGHT_MEMORY_KIND_WRITE
-                && entry.addr_space == RV64_REGISTER_AS as u8
-                && entry.address == reg(0) as u64
-        }),
-        "rd=x0 load must not emit an AS_REGISTER[0] write"
+        u32::from_le_bytes(record[16..20].try_into().unwrap()),
+        0,
+        "suppressed rd write must record a zero write prev_timestamp"
     );
 }
 
@@ -1706,9 +1772,20 @@ fn assert_phantom_timestamp_tick(
         hint_entry.timestamp + 1,
         "{label}: Rv64 phantom must tick the shared timestamp before the following instruction"
     );
-    assert!(output.raw_logs.memory_log.iter().any(|entry| {
-        entry.timestamp >= next_entry.timestamp && entry.addr_space == RV64_MEMORY_AS as u8
-    }));
+    // The following memory instruction is migrated (inline compact record);
+    // its from_timestamp must be exactly the post-phantom tick, proving the
+    // phantom's tick landed before the memory access chain.
+    let record_from_ts = output
+        .inline_records
+        .iter()
+        .flat_map(|chip| chip.bytes.chunks_exact(chip.record_size))
+        .find(|r| u64::from(u32::from_le_bytes(r[0..4].try_into().unwrap())) == next_entry.pc)
+        .map(|r| u32::from_le_bytes(r[4..8].try_into().unwrap()))
+        .expect("instruction after the phantom must emit a compact record");
+    assert_eq!(
+        record_from_ts, next_entry.timestamp,
+        "{label}: the post-phantom instruction's record must start at the post-phantom tick"
+    );
 }
 
 #[test]
