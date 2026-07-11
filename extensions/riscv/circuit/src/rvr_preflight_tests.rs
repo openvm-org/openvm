@@ -315,6 +315,20 @@ fn inline_addsub_differential_exe() -> VmExe<F> {
         shift(ShiftOpcode::SRL, 22, 1, 1),
         shift(ShiftOpcode::SRA, 23, 5, 2), // arithmetic core, negative-ish value
         alu_r(BaseAluOpcode::ADD, 24, 21, 22), // consumes shift results
+        // Family 3: branches (branch2), JAL/LUI (wr1, incl. the suppressed
+        // x0 link write), AUIPC (wr1), JALR (rw1). Forward targets only; the
+        // loop-fixture differential covers the taken backward branch.
+        beq(2, 2, 8),                                  // taken: skips the dead slot
+        addi(27, 0, 1),                                // dead code (skipped)
+        branch_eq(BranchEqualOpcode::BNE, 2, 2, 8),    // untaken: falls through
+        branch_lt(BranchLessThanOpcode::BLT, 1, 2, 8), // untaken (199 < 100 is false)
+        jal_lui(Rv64JalLuiOpcode::JAL, 28, 8),         // link x28, skip dead slot
+        addi(27, 0, 2),                                // dead code (skipped)
+        jal_lui(Rv64JalLuiOpcode::JAL, 0, 8),          // jal x0: suppressed link write
+        addi(27, 0, 3),                                // dead code (skipped)
+        jal_lui(Rv64JalLuiOpcode::LUI, 29, 5),
+        auipc(30, 0),    // x30 = this instruction's pc
+        jalr(31, 30, 8), // jump to x30 + 8 = the next slot, link x31
         // Mixed-mode coverage: loads/stores are not yet migrated and keep the
         // verbose log + assembler path alive in the same segment.
         addi(26, 0, 64), // aligned memory base for the log-path ops

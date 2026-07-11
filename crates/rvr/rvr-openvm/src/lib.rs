@@ -14,7 +14,9 @@ pub mod toolchain;
 
 pub use constants::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 pub use emit::{
-    instr_emits_inline_record, CProject, EmitContext, InvalidRvrExecutionKind, RvrExecutionKind,
+    inline_record_shape_for_instr, inline_record_shape_for_terminator,
+    instr_emits_inline_record, CProject, EmitContext, InlineRecordShape,
+    InvalidRvrExecutionKind, RvrExecutionKind,
 };
 pub use toolchain::{
     default_addr2line_cmd, default_compiler, default_compiler_command, default_dwarfdump_cmd,

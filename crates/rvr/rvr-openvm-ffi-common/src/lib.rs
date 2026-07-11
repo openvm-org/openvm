@@ -61,6 +61,22 @@ pub const PREFLIGHT_CHIP_RECORD_BUF_ALIGN: usize = 8;
 /// mirror (see its rvr record-ABI guard).
 pub const PREFLIGHT_ADDSUB_RECORD_SIZE: usize = 44;
 
+/// Byte size of one compact branch record (R3): the 2-read-no-write dynamic
+/// witness — from_pc, from_timestamp, two read prev_timestamps, and the two
+/// operand values. Used by the BranchEq/BranchLt shapes.
+pub const PREFLIGHT_BRANCH2_RECORD_SIZE: usize = 32;
+
+/// Byte size of one compact write-only record (R3): from_pc, from_timestamp,
+/// the (conditional) rd write prev_timestamp, and the old rd block. Used by
+/// the JalLui and Auipc shapes; for a suppressed write (rd = x0) the write
+/// fields are zero and the host uses the instruction's enable flag.
+pub const PREFLIGHT_WR1_RECORD_SIZE: usize = 20;
+
+/// Byte size of one compact read+conditional-write record (R3): from_pc,
+/// from_timestamp, the rs1 read prev_timestamp and value, and the
+/// (conditional) rd write prev_timestamp and old rd block. Used by Jalr.
+pub const PREFLIGHT_RW1_RECORD_SIZE: usize = 32;
+
 const _: () = assert!(MEM_SIZE / WORD_SIZE <= u32::MAX as usize);
 
 extern "C" {

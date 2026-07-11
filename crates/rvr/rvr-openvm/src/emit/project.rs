@@ -885,6 +885,13 @@ impl CProject {
             );
             ctx.trace_pc(block.terminator_pc);
         }
+        if inline_records {
+            let chip_idx = match self.chip_idx_for_pc(block.terminator_pc) {
+                TraceChipIndex::Chip(air) => air.as_u32(),
+                TraceChipIndex::NoChip => u32::MAX,
+            };
+            ctx.set_current_instr(chip_idx, block.terminator_pc);
+        }
         let tc = TermCtx { valid_blocks };
         emit_terminator(&mut ctx, &block.terminator, block.terminator_pc, &tc);
         Self::emit_context_scope(&mut body, &mut ctx);
