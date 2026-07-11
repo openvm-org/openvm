@@ -121,7 +121,7 @@ pub type LogNativeInlineAssembler<F, RA> =
 /// crates keep a single import path.
 pub use rvr_openvm::{
     Alu3ArenaFieldOffsets, ArenaNativeGeometry, ArenaNativeLayout, Branch2ArenaFieldOffsets,
-    LoadStoreArenaFieldOffsets,
+    LoadStoreArenaFieldOffsets, Rw1ArenaFieldOffsets, Wr1ArenaFieldOffsets,
 };
 
 struct RegisteredInlineAssembler<F, RA> {

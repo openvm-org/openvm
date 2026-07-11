@@ -32,6 +32,25 @@ pub struct ArenaAlu3Baked {
     pub local_opcode: u8,
 }
 
+/// Program-redundant fields for a conditional one-write record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArenaWr1Baked {
+    pub rd_ptr: u32,
+    pub core_imm: u32,
+    pub rd_data: u64,
+    pub is_jal: u8,
+    pub core_from_pc: u32,
+}
+
+/// Program-redundant fields for a read/conditional-write JALR record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArenaRw1Baked {
+    pub rs1_ptr: u32,
+    pub rd_ptr: u32,
+    pub core_imm: u16,
+    pub core_imm_sign: u8,
+}
+
 /// Address space classification used by page-access metering.
 ///
 /// Main memory is distinct because generated metered code caches its current
@@ -111,7 +130,12 @@ pub trait ExtEmitCtx {
     }
 
     /// Emit a compact conditional single-register write.
-    fn emit_wr1_inline(&mut self, _rd: Option<Variable>, _value: &str) -> bool {
+    fn emit_wr1_inline(
+        &mut self,
+        _rd: Option<Variable>,
+        _value: &str,
+        _arena: Option<ArenaWr1Baked>,
+    ) -> bool {
         false
     }
 

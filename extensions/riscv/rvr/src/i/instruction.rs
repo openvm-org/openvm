@@ -1,8 +1,8 @@
 //! RV64I instruction nodes and C code generation.
 
 use rvr_openvm_ir::{
-    ArenaAlu3Baked, CfgBranchCond, CfgEffect, CfgIntWidth, CfgJumpKind, CfgOp, CfgOperand,
-    CfgResultWidth, CfgTerm, ExtEmitCtx, ExtInstr, InlineRecordShape, MemWidth,
+    ArenaAlu3Baked, ArenaWr1Baked, CfgBranchCond, CfgEffect, CfgIntWidth, CfgJumpKind, CfgOp,
+    CfgOperand, CfgResultWidth, CfgTerm, ExtEmitCtx, ExtInstr, InlineRecordShape, MemWidth,
 };
 
 use crate::instruction::{hex_u64, reg_operand, Reg, RA, ZERO};
@@ -105,6 +105,7 @@ pub(crate) enum Rv64IInstr {
         name: &'static str,
         rd: Reg,
         value: u64,
+        arena: ArenaWr1Baked,
     },
     /// Conditional branch.
     Branch {
@@ -288,9 +289,11 @@ impl ExtInstr for Rv64IInstr {
                 let value = ctx.read_var(*src);
                 ctx.write_mem(&base, *offset, &value, width.bytes());
             }
-            Self::Const { rd, value, .. } => {
+            Self::Const {
+                rd, value, arena, ..
+            } => {
                 let value = hex_u64(*value);
-                if !ctx.emit_wr1_inline(Some(*rd), &value) {
+                if !ctx.emit_wr1_inline(Some(*rd), &value, Some(*arena)) {
                     ctx.write_var(*rd, &value);
                 }
             }
