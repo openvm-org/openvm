@@ -10,8 +10,8 @@ use openvm_bigint_transpiler::{
 use openvm_circuit::{
     arch::{
         rvr::{
-            generate_record_arenas_from_logs, LogNativeAssemblerRegistry, RvrPreflightRoute,
-            VmRvrLogNativeExtension,
+            generate_record_arenas_from_logs, LogNativeAssemblerRegistry, RvrPreflightEngine,
+            RvrPreflightRoute, VmRvrLogNativeExtension,
         },
         verify_segments, ContinuationVmProver, MatrixRecordArena, Streams, VirtualMachine,
         VmInstance,
@@ -392,6 +392,9 @@ fn prove_and_verify(exe: VmExe<F>, config: Int256Rv64Config) -> usize {
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance =
         VmInstance::new(vm, Arc::new(exe), cached_program_trace).expect("instance init");
+    // CPU proving defaults to the interpreter engine; this fixture proves
+    // rvr-generated records, so pin the engine explicitly.
+    instance.set_rvr_preflight_engine(Some(RvrPreflightEngine::Rvr));
     let proof = ContinuationVmProver::prove(&mut instance, Streams::default()).expect("prove");
     verify_segments(&instance.vm.engine, &vk, &proof.per_segment).expect("verify segments");
     proof.per_segment.len()
