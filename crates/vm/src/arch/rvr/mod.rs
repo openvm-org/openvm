@@ -44,12 +44,12 @@ pub use pure::{
     RvrTrackedExecutionOutcome,
 };
 pub use preflight::{
-    ChipRecordBuf, MemoryLogEntry, PreflightRawLogs, PreflightTracer, PreflightTracerData,
-    ProgramLogEntry, RvrInlineChipRecords, RvrPreflightInstance, RvrPreflightOutput,
-    RvrPreflightRoute, TouchedBlock, PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
-    PREFLIGHT_INITIAL_TIMESTAMP, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH,
-    PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_RW1_RECORD_SIZE, PREFLIGHT_TRACER_KIND,
-    PREFLIGHT_WR1_RECORD_SIZE,
+    rvr_preflight_engine_env_override, ChipRecordBuf, MemoryLogEntry, PreflightRawLogs,
+    PreflightTracer, PreflightTracerData, ProgramLogEntry, RvrInlineChipRecords,
+    RvrPreflightEngine, RvrPreflightInstance, RvrPreflightOutput, RvrPreflightRoute, TouchedBlock,
+    PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE, PREFLIGHT_INITIAL_TIMESTAMP,
+    PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE,
+    PREFLIGHT_RW1_RECORD_SIZE, PREFLIGHT_TRACER_KIND, PREFLIGHT_WR1_RECORD_SIZE,
 };
 pub use preflight_normalizer::{
     build_preflight_replay, PreflightMemoryAccessAux, PreflightMemoryReplay,

@@ -46,11 +46,12 @@ use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
     compile_metered_cost, compile_metered_segment_boundary, compile_with_instret_tracking,
     classify_preflight_opcodes_with_extensions, compile_preflight_with_extensions,
-    load_compiled_from_path, preflight::execute_rvr_preflight, ChipMapping, GuestDebugMap,
-    LogNativeOpcodeAdmitter, RvrCompiled, RvrExecutionKind, RvrInitialImage,
-    RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
-    RvrPreflightInstance, RvrPreflightOpcodeClass, RvrPreflightOutput, RvrPreflightRoute,
-    RvrPureWithInstretTrackingInstance,
+    load_compiled_from_path, preflight::execute_rvr_preflight, rvr_preflight_engine_env_override,
+    ChipMapping, GuestDebugMap, LogNativeOpcodeAdmitter, RvrCompiled, RvrExecutionKind,
+    RvrInitialImage,
+    RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPreflightEngine,
+    RvrPreflightInstance, RvrPreflightOpcodeClass, RvrPureInstance,
+    RvrPreflightOutput, RvrPreflightRoute, RvrPureWithInstretTrackingInstance,
 };
 use super::{
     execution_mode::{
@@ -537,17 +538,17 @@ where
         assembler_admitter: &dyn LogNativeOpcodeAdmitter<F>,
     ) -> Result<RvrPreflightRoute<'_, F, VC::Executor>, StaticProgramError> {
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
-        // Benchmark/diagnostic escape hatch: force the interpreter preflight
-        // engine while keeping rvr metering (identical segment boundaries),
-        // for engine-only A/B comparisons.
-        let force_interpreter =
-            std::env::var("OPENVM_RVR_PREFLIGHT_FORCE_INTERPRETER").as_deref() == Ok("1");
+        // Pure capability routing: Rvr iff every opcode is on the rvr
+        // preflight surface. The backend-keyed engine DEFAULT (CPU →
+        // interpreter, GPU → rvr) is applied by the proving path in
+        // `VmInstance::prove_continuations`, not here, so this stays usable
+        // as a capability query and an explicit rvr constructor.
         match classify_preflight_opcodes_with_extensions(
             exe,
             extensions.lifters(),
             assembler_admitter,
         ) {
-            RvrPreflightOpcodeClass::Supported if !force_interpreter => {
+            RvrPreflightOpcodeClass::Supported => {
                 #[cfg(feature = "metrics")]
                 let _compilation_span =
                     tracing::info_span!("compile_preflight", backend = "rvr").entered();
@@ -573,7 +574,6 @@ where
                     &chips,
                 )))
             }
-            // Unsupported opcodes, or the forced-interpreter override.
             _ => {
                 #[cfg(feature = "metrics")]
                 let _compilation_span =
@@ -1671,6 +1671,8 @@ where
     pub interpreter: PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
     #[cfg(feature = "rvr")]
     rvr_preflight: Option<CachedRvrPreflight<Val<E::SC>>>,
+    #[cfg(feature = "rvr")]
+    rvr_preflight_engine: Option<RvrPreflightEngine>,
     #[getset(get = "pub")]
     program_commitment: <E::PB as ProverBackend>::Commitment,
     #[getset(get = "pub")]
@@ -1698,10 +1700,27 @@ where
             interpreter,
             #[cfg(feature = "rvr")]
             rvr_preflight: None,
+            #[cfg(feature = "rvr")]
+            rvr_preflight_engine: None,
             program_commitment,
             exe,
             state: Some(state),
         })
+    }
+
+    /// Per-instance preflight engine override, strongest in the resolution
+    /// order (instance override > `OPENVM_RVR_PREFLIGHT_ENGINE` > the
+    /// builder's backend-keyed default). `None` restores default resolution.
+    ///
+    /// Must be called before proving: the routed engine is cached at the
+    /// first proven segment and reused for the instance's lifetime.
+    #[cfg(feature = "rvr")]
+    pub fn set_rvr_preflight_engine(&mut self, engine: Option<RvrPreflightEngine>) {
+        assert!(
+            self.rvr_preflight.is_none(),
+            "preflight engine already resolved for this instance; set the override before proving"
+        );
+        self.rvr_preflight_engine = engine;
     }
 
     #[instrument(name = "vm.reset_state", level = "debug", skip_all)]
@@ -1782,18 +1801,30 @@ where
             let rvr_preflight = if let Some(rvr_preflight) = self.rvr_preflight.as_ref() {
                 rvr_preflight
             } else {
-                let cached = match vm.preflight_routed_instance(&self.exe)? {
-                    RvrPreflightRoute::Rvr(RvrPreflightInstance {
-                        runtime_hooks,
-                        compiled,
-                        chip_counts_len,
-                        ..
-                    }) => CachedRvrPreflight::Rvr(Box::new(CachedRvrCompiledPreflight {
-                        compiled,
-                        runtime_hooks,
-                        chip_counts_len,
-                    })),
-                    RvrPreflightRoute::Interpreter(_) => CachedRvrPreflight::Interpreter,
+                // Engine resolution: per-instance override, then the
+                // OPENVM_RVR_PREFLIGHT_ENGINE environment override, then the
+                // builder's backend-keyed default (CPU → interpreter, GPU →
+                // rvr; rationale on `RvrPreflightEngine`). `Rvr` remains
+                // subject to opcode-capability routing.
+                let engine = self
+                    .rvr_preflight_engine
+                    .or_else(rvr_preflight_engine_env_override)
+                    .unwrap_or_else(|| vm.builder.default_rvr_preflight_engine());
+                let cached = match engine {
+                    RvrPreflightEngine::Interpreter => CachedRvrPreflight::Interpreter,
+                    RvrPreflightEngine::Rvr => match vm.preflight_routed_instance(&self.exe)? {
+                        RvrPreflightRoute::Rvr(RvrPreflightInstance {
+                            runtime_hooks,
+                            compiled,
+                            chip_counts_len,
+                            ..
+                        }) => CachedRvrPreflight::Rvr(Box::new(CachedRvrCompiledPreflight {
+                            compiled,
+                            runtime_hooks,
+                            chip_counts_len,
+                        })),
+                        RvrPreflightRoute::Interpreter(_) => CachedRvrPreflight::Interpreter,
+                    },
                 };
                 self.rvr_preflight.insert(cached)
             };
