@@ -1,6 +1,6 @@
 //! Preflight tracer ABI mirror for rvr-generated native execution.
 
-use std::{mem::MaybeUninit, sync::Arc};
+use std::{collections::BTreeMap, mem::MaybeUninit, sync::Arc};
 
 use openvm_instructions::{
     exe::VmExe,
@@ -330,6 +330,11 @@ pub struct RvrPreflightOutput<F> {
     /// record — its memory-log entries are suppressed, so record assembly must
     /// skip the log assembler for it and consume `inline_records` instead.
     pub inline_pc_slots: Arc<Vec<bool>>,
+    /// R4: `(air_idx, written_bytes)` for airs whose records the C wrote
+    /// arena-native into caller-provided targets. Record assembly must skip
+    /// BOTH the log assembler and the inline assembler for these airs and
+    /// only verify the written length against expected row counts.
+    pub arena_native_written: Vec<(usize, u32)>,
 }
 
 pub struct RvrPreflightInstance<'a, F: PrimeField32> {
@@ -499,6 +504,7 @@ where
             state,
             num_insns,
             None,
+            None,
         )
     }
 
@@ -520,6 +526,33 @@ where
             state,
             num_insns,
             Some(record_capacity_rows),
+            None,
+        )
+    }
+
+    /// R4: [`Self::execute_preflight_from_state_with_capacities`] with
+    /// caller-provided arena-native record targets. Each `(air ->
+    /// ChipRecordBuf)` entry aims that air's records at a pre-allocated arena
+    /// backing (stride = row/record pitch, core_off per flavor, base
+    /// 32-aligned for Dense adopts); the output reports written byte counts
+    /// in `arena_native_written` instead of harvesting bytes.
+    pub fn execute_preflight_from_state_with_arena_targets(
+        &self,
+        state: VmState<F, GuestMemory>,
+        num_insns: Option<u64>,
+        record_capacity_rows: &[u32],
+        arena_targets: &BTreeMap<usize, ChipRecordBuf>,
+    ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
+        execute_rvr_preflight(
+            &self.exe,
+            &self.extensions,
+            &self.compiled,
+            self.chip_counts_len,
+            &self.pool,
+            state,
+            num_insns,
+            Some(record_capacity_rows),
+            Some(arena_targets),
         )
     }
 }
@@ -541,10 +574,15 @@ pub(crate) fn execute_rvr_preflight<F>(
     state: VmState<GuestMemory>,
     num_insns: Option<u64>,
     record_capacity_rows: Option<&[u32]>,
+    arena_targets: Option<&BTreeMap<usize, ChipRecordBuf>>,
 ) -> Result<RvrPreflightOutput<F>, ExecutionError>
 where
     F: PrimeField32,
 {
+    assert!(
+        arena_targets.is_none() || (num_insns.is_some() && record_capacity_rows.is_some()),
+        "arena-native targets require the single-shot proving path"
+    );
     let from_state = ExecutionState::new(state.pc(), PREFLIGHT_INITIAL_TIMESTAMP);
     // Per-address-space timestamp-shadow block counts (the C mirror of
     // `TracingMemory.meta`). Blocks are `WORD_SIZE` bytes = `BLOCK_FE_WIDTH`
@@ -655,6 +693,9 @@ where
             .airs
             .iter()
             .map(|&(air, record_size)| {
+                if arena_targets.is_some_and(|targets| targets.contains_key(&air)) {
+                    return Vec::new();
+                }
                 let rows = record_capacity_rows
                     .and_then(|heights| heights.get(air))
                     .map(|&height| height as usize)
@@ -665,6 +706,15 @@ where
         let mut chip_records = vec![ChipRecordBuf::default(); chip_counts_len.max(1)];
         for (&(air, record_size), buffer) in inline_meta.airs.iter().zip(record_bufs.iter_mut()) {
             debug_assert!(air < chip_records.len(), "inline air {air} out of range");
+            if let Some(target) = arena_targets.and_then(|targets| targets.get(&air)) {
+                assert_eq!(target.len, 0, "arena-native target cursor must start at 0");
+                assert!(
+                    target.stride > 0 && target.cap % target.stride == 0,
+                    "arena-native target cap must be a whole number of strides"
+                );
+                chip_records[air] = *target;
+                continue;
+            }
             chip_records[air] = ChipRecordBuf {
                 base: buffer.as_mut_ptr().cast(),
                 len: 0,
@@ -797,11 +847,20 @@ where
 
         // R3: harvest each migrated chip's inline records (the C-advanced
         // cursor gives the written length).
+        let mut arena_native_written: Vec<(usize, u32)> = Vec::new();
         let inline_records: Vec<RvrInlineChipRecords> = inline_meta
             .airs
             .iter()
             .zip(record_bufs.iter_mut())
             .map(|(&(air_idx, record_size), buffer)| {
+                if arena_targets.is_some_and(|targets| targets.contains_key(&air_idx)) {
+                    arena_native_written.push((air_idx, chip_records[air_idx].len));
+                    return RvrInlineChipRecords {
+                        air_idx,
+                        record_size,
+                        bytes: Vec::new(),
+                    };
+                }
                 let written = chip_records[air_idx].len as usize;
                 // SAFETY: the C tracer fully writes each emitted record and
                 // advances the cursor past it, so the first `written` bytes
@@ -828,6 +887,7 @@ where
             suspended: run_result.suspended,
             inline_records,
             inline_pc_slots: inline_meta.pc_slots.clone(),
+            arena_native_written,
         });
     }
 }

@@ -147,6 +147,7 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
             state,
             num_insns,
             record_capacity_rows,
+            None,
         )
     }
 

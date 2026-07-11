@@ -215,12 +215,21 @@ impl ExtInstr for Rv64IInstr {
                             });
                             ctx.emit_reg3_inline(*rd, *lhs, *rhs, arena, &result_template)
                         }
-                        CfgOperand::Const(imm) if *immediate => ctx.emit_reg2imm_inline(
-                            *rd,
-                            *lhs,
-                            *imm,
-                            &result_template,
-                        ),
+                        CfgOperand::Const(imm) if *immediate => {
+                            let arena = (*op == AluOp::Add).then_some(ArenaAlu3Baked {
+                                rs2_field: (*imm as u32) & 0x00ff_ffff,
+                                rs2_as: 0,
+                                rs2_imm_sign: (*imm as i64 < 0) as u8,
+                                local_opcode: 0,
+                            });
+                            ctx.emit_reg2imm_inline(
+                                *rd,
+                                *lhs,
+                                *imm,
+                                arena,
+                                &result_template,
+                            )
+                        }
                         CfgOperand::Const(_) => false,
                     };
                     if emitted {
