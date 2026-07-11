@@ -2556,8 +2556,9 @@ fn rvr_preflight_addsub_30ms_checkpoint() {
     };
 
     let mut best = f64::MAX;
+    let mut first = f64::MAX;
     let mut record_bytes = 0usize;
-    for _ in 0..5 {
+    for iteration in 0..5 {
         let init = instance.create_initial_state(Streams::default());
         let t0 = Instant::now();
         let output = instance
@@ -2570,12 +2571,20 @@ fn rvr_preflight_addsub_30ms_checkpoint() {
             .iter()
             .map(|chip| chip.bytes.len())
             .sum();
+        // Return the segment buffers like the proving loop does after record
+        // assembly, so iterations 2.. measure pooled steady state (iteration
+        // 1 stays the cold, pool-filling arm — reported separately).
+        instance.recycle_output(output);
+        if iteration == 0 {
+            first = dt;
+        }
         best = best.min(dt);
     }
     eprintln!(
         "checkpoint: dyn_insns={dyn_insns} inline_record_bytes={record_bytes} \
-         preflight_execute={:.2}ms record_stream={:.2}GB/s instr_rate={:.1}M/s",
+         preflight_execute={:.2}ms cold_iter={:.2}ms record_stream={:.2}GB/s instr_rate={:.1}M/s",
         best * 1e3,
+        first * 1e3,
         record_bytes as f64 / best / 1e9,
         dyn_insns as f64 / best / 1e6,
     );
