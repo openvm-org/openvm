@@ -47,6 +47,11 @@ pub fn inline_record_shape_for_instr(instr: &Instr) -> Option<InlineRecordShape>
         | Instr::MulDiv { .. }
         | Instr::MulDivW { .. } => Some(InlineRecordShape::Alu3),
         Instr::Lui { .. } | Instr::Auipc { .. } => Some(InlineRecordShape::Wr1),
+        // Main-memory loads/stores share the alu3 witness (rs1 value, block
+        // read value / rs2 value, previous rd / block value). Public-values
+        // stores (REVEAL) lift through the extension registry and stay on the
+        // verbose-log path.
+        Instr::Load { .. } | Instr::Store { .. } => Some(InlineRecordShape::Alu3),
         _ => None,
     }
 }
@@ -124,9 +129,13 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             rs1,
             offset,
         } => {
-            let base = ctx.read_reg(*rs1);
-            let val = ctx.read_mem(&base, *offset, width.bytes(), *signed);
-            ctx.write_reg(*rd, &val);
+            if ctx.inline_records_enabled() {
+                ctx.emit_load_inline(width.bytes(), *signed, *rd, *rs1, *offset);
+            } else {
+                let base = ctx.read_reg(*rs1);
+                let val = ctx.read_mem(&base, *offset, width.bytes(), *signed);
+                ctx.write_reg(*rd, &val);
+            }
         }
         Instr::Store {
             width,
@@ -134,9 +143,13 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             rs2,
             offset,
         } => {
-            let base = ctx.read_reg(*rs1);
-            let val = ctx.read_reg(*rs2);
-            ctx.write_mem(&base, *offset, &val, width.bytes());
+            if ctx.inline_records_enabled() {
+                ctx.emit_store_inline(width.bytes(), *rs1, *rs2, *offset);
+            } else {
+                let base = ctx.read_reg(*rs1);
+                let val = ctx.read_reg(*rs2);
+                ctx.write_mem(&base, *offset, &val, width.bytes());
+            }
         }
         Instr::AluWReg { op, rd, rs1, rs2 } => {
             let l = ctx.read_reg(*rs1);
