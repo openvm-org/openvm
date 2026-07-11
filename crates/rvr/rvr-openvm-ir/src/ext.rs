@@ -104,6 +104,7 @@ pub trait ExtEmitCtx {
         _rd: Variable,
         _rs1: Variable,
         _imm_value: u64,
+        _arena: Option<ArenaAlu3Baked>,
         _result_template: &str,
     ) -> bool {
         false
