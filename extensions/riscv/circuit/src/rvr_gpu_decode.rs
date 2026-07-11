@@ -21,8 +21,9 @@ use openvm_instructions::{
 };
 #[cfg(feature = "rvr")]
 use openvm_riscv_transpiler::{
-    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, Rv64AuipcOpcode,
-    Rv64JalLuiOpcode, Rv64JalrOpcode, ShiftOpcode,
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode,
+    LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode,
+    Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode,
 };
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -60,6 +61,13 @@ pub const OPERAND_FLAG_WRITE_ENABLED: u8 = 1 << 2;
 pub const OPERAND_FLAG_IS_JAL: u8 = 1 << 3;
 /// rw1 (Jalr): the immediate sign bit (`g != 0`).
 pub const OPERAND_FLAG_JALR_IMM_SIGN: u8 = 1 << 4;
+/// loadstore: the 16-bit immediate sign bit (`g != 0`).
+pub const OPERAND_FLAG_LS_IMM_SIGN: u8 = 1 << 5;
+/// loadstore: zero-extension load (vs store); per-format reuse of bit 3.
+pub const OPERAND_FLAG_LS_IS_LOAD: u8 = 1 << 3;
+/// loadstore (sign-extending): LOADB / LOADW selectors.
+pub const OPERAND_FLAG_LS_IS_BYTE: u8 = 1 << 6;
+pub const OPERAND_FLAG_LS_IS_WORD: u8 = 1 << 7;
 
 /// How a migrated AIR's records are fed to the GPU this segment (naming
 /// shared with the R4-fuse work).
@@ -170,23 +178,32 @@ impl RvrGpuDecodeState {
                 *table = Some(build_operand_table(exe, exe_key));
             }
         }
+        // An AIR is compact only if EVERY pc routed to it is device-decodable;
+        // a single non-decodable pc (e.g. a REVEAL store sharing the loadstore
+        // AIR) taints the AIR back to the expanded path, since its arena would
+        // otherwise mix wire records with log-assembled ones.
+        let mut tainted = HashSet::new();
         for (slot_idx, slot) in exe.program.instructions_and_debug_infos.iter().enumerate() {
             let Some((instruction, _)) = slot else {
                 continue;
             };
-            if gpu_decode_entry(instruction).is_none() {
+            let Some(air_idx) = pc_to_air_idx.get(slot_idx).copied().flatten() else {
                 continue;
-            }
-            if let Some(air_idx) = pc_to_air_idx.get(slot_idx).copied().flatten() {
+            };
+            if gpu_decode_entry(instruction).is_some() {
                 airs.insert(air_idx);
+            } else {
+                tainted.insert(air_idx);
             }
         }
-        // The supported formats map to exactly the nine decode-kernel AIRs
-        // (AddSub, LessThan, ShiftLogical, SRA, BranchEqual, BranchLessThan,
-        // JalLui, Auipc, Jalr); more means opcode->air routing changed.
+        for air in &tainted {
+            airs.remove(air);
+        }
+        // The supported formats map to at most the seventeen decode-kernel
+        // AIRs; more means opcode->air routing changed under us.
         assert!(
-            airs.len() <= 9,
-            "gpu-decode formats mapped to {} AIRs (expected <= 9)",
+            airs.len() <= 17,
+            "gpu-decode formats mapped to {} AIRs (expected <= 17)",
             airs.len()
         );
         *self.compact_mode.lock().unwrap() = if airs.is_empty() {
@@ -296,6 +313,105 @@ fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<Dev
             c: instruction.c.as_canonical_u32(),
             flags: OPERAND_FLAG_WRITE_ENABLED,
             local_opcode: 0,
+            _reserved: 0,
+        });
+    }
+
+    // alu3 over the Mult adapter: Mul, MulH class, DivRem class.
+    let mult_local = if opcode == MulOpcode::MUL.global_opcode_usize() {
+        Some(0u8)
+    } else if opcode == MulHOpcode::MULH.global_opcode_usize()
+        || opcode == MulHOpcode::MULHSU.global_opcode_usize()
+        || opcode == MulHOpcode::MULHU.global_opcode_usize()
+    {
+        Some((opcode - MulHOpcode::CLASS_OFFSET) as u8)
+    } else if opcode == DivRemOpcode::DIV.global_opcode_usize()
+        || opcode == DivRemOpcode::DIVU.global_opcode_usize()
+        || opcode == DivRemOpcode::REM.global_opcode_usize()
+        || opcode == DivRemOpcode::REMU.global_opcode_usize()
+    {
+        Some((opcode - DivRemOpcode::CLASS_OFFSET) as u8)
+    } else {
+        None
+    };
+    // alu3 over the MultW adapter: MulW, DivRemW class. The class-local index
+    // doubles as the device W-result kind for DivRemW (the kernel passes 0xFF
+    // for MULW itself).
+    let mult_w_local = if opcode == MulWOpcode::MULW.global_opcode_usize() {
+        Some(0u8)
+    } else if opcode == DivRemWOpcode::DIVW.global_opcode_usize()
+        || opcode == DivRemWOpcode::DIVUW.global_opcode_usize()
+        || opcode == DivRemWOpcode::REMW.global_opcode_usize()
+        || opcode == DivRemWOpcode::REMUW.global_opcode_usize()
+    {
+        Some((opcode - DivRemWOpcode::CLASS_OFFSET) as u8)
+    } else {
+        None
+    };
+    if let Some(local_opcode) = mult_local.or(mult_w_local) {
+        return Some(DeviceOperandEntry {
+            a: instruction.a.as_canonical_u32(),
+            b: instruction.b.as_canonical_u32(),
+            c: instruction.c.as_canonical_u32(),
+            flags: 0,
+            local_opcode,
+            _reserved: 0,
+        });
+    }
+
+    // alu3 over the byte adapter: Bitwise (XOR/OR/AND).
+    if opcode == BaseAluOpcode::XOR.global_opcode_usize()
+        || opcode == BaseAluOpcode::OR.global_opcode_usize()
+        || opcode == BaseAluOpcode::AND.global_opcode_usize()
+    {
+        let mut flags = 0u8;
+        if instruction.e.as_canonical_u32() != RV64_REGISTER_AS {
+            flags |= OPERAND_FLAG_RS2_IMM;
+        }
+        return Some(DeviceOperandEntry {
+            a: instruction.a.as_canonical_u32(),
+            b: instruction.b.as_canonical_u32(),
+            c: instruction.c.as_canonical_u32(),
+            flags,
+            local_opcode: (opcode - BaseAluOpcode::CLASS_OFFSET) as u8,
+            _reserved: 0,
+        });
+    }
+
+    // alu3 over the LoadStore adapter (zero-ext loads, stores, sign-ext loads).
+    // Only main-memory targets are device-decodable; REVEAL stores
+    // (e = PUBLIC_VALUES_AS) return None and taint their AIR to expanded.
+    let ls_local = opcode
+        .checked_sub(Rv64LoadStoreOpcode::CLASS_OFFSET)
+        .and_then(|local| Rv64LoadStoreOpcode::from_repr(local).map(|_| local as u8));
+    if let Some(local_opcode) = ls_local {
+        if instruction.e.as_canonical_u32() != openvm_instructions::riscv::RV64_MEMORY_AS {
+            return None;
+        }
+        let op = Rv64LoadStoreOpcode::from_repr(local_opcode as usize)
+            .expect("local index from the enum itself");
+        let mut flags = 0u8;
+        if !instruction.f.is_zero() {
+            flags |= OPERAND_FLAG_WRITE_ENABLED;
+        }
+        if !instruction.g.is_zero() {
+            flags |= OPERAND_FLAG_LS_IMM_SIGN;
+        }
+        match op {
+            Rv64LoadStoreOpcode::LOADD
+            | Rv64LoadStoreOpcode::LOADWU
+            | Rv64LoadStoreOpcode::LOADHU
+            | Rv64LoadStoreOpcode::LOADBU => flags |= OPERAND_FLAG_LS_IS_LOAD,
+            Rv64LoadStoreOpcode::LOADB => flags |= OPERAND_FLAG_LS_IS_BYTE,
+            Rv64LoadStoreOpcode::LOADW => flags |= OPERAND_FLAG_LS_IS_WORD,
+            _ => {}
+        }
+        return Some(DeviceOperandEntry {
+            a: instruction.a.as_canonical_u32(),
+            b: instruction.b.as_canonical_u32(),
+            c: instruction.c.as_canonical_u32(),
+            flags,
+            local_opcode,
             _reserved: 0,
         });
     }

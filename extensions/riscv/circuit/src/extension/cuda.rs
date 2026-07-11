@@ -68,6 +68,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(bitwise_logic);
 
@@ -129,6 +130,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(load_sign_extend_byte);
 
@@ -138,6 +140,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(load_byte);
 
@@ -334,6 +337,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
             timestamp_max_bits,
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(mult);
 
@@ -343,6 +347,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
             timestamp_max_bits,
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(mul_w);
 
@@ -352,6 +357,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
             timestamp_max_bits,
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(mul_h);
 
@@ -362,6 +368,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             range_tuple_checker.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(div_rem);
 
@@ -372,6 +379,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             range_tuple_checker.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(divrem_w);
 

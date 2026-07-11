@@ -330,6 +330,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         tester.bitwise_op_lookup(),
         tester.range_tuple_checker(),
         tester.timestamp_max_bits(),
+        Default::default(),
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
