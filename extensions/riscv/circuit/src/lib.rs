@@ -256,8 +256,15 @@ where
 }
 
 #[cfg(feature = "cuda")]
-#[derive(Clone)]
-pub struct Rv64IGpuBuilder;
+pub mod rvr_gpu_decode;
+
+#[cfg(feature = "cuda")]
+#[derive(Clone, Default)]
+pub struct Rv64IGpuBuilder {
+    /// M-GPUDEC shared producer/consumer state (device operand table +
+    /// per-segment emission modes); cloned into migrated GPU chips.
+    pub rvr_decode: std::sync::Arc<rvr_gpu_decode::RvrGpuDecodeState>,
+}
 
 #[cfg(feature = "cuda")]
 impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
@@ -286,13 +293,16 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
+        let prover_ext = Rv64ImGpuProverExt {
+            rvr_decode: self.rvr_decode.clone(),
+        };
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-            &Rv64ImGpuProverExt,
+            &prover_ext,
             &config.base,
             inventory,
         )?;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-            &Rv64ImGpuProverExt,
+            &prover_ext,
             &config.io,
             inventory,
         )?;
@@ -312,6 +322,29 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
         registry
     }
 
+    #[cfg(feature = "rvr")]
+    fn generate_rvr_record_arenas_from_logs(
+        &self,
+        config: &Self::VmConfig,
+        exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+        output: &mut openvm_circuit::arch::rvr::RvrPreflightOutput<Val<BabyBearPoseidon2Config>>,
+        capacities: &[(usize, usize)],
+        pc_to_air_idx: &[Option<usize>],
+    ) -> Result<Option<Vec<Self::RecordArena>>, openvm_circuit::arch::ExecutionError>
+    where
+        Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        let registry = self.create_rvr_log_native_assembler_registry(config);
+        generate_gpu_rvr_record_arenas(
+            &registry,
+            &self.rvr_decode,
+            exe,
+            output,
+            capacities,
+            pc_to_air_idx,
+        )
+    }
+
     /// GPU backend: default to the rvr inline preflight engine — the host
     /// compact→arena assembly pass that dominates the CPU path does not
     /// exist in the GPU shape, and compact records shrink the H2D payload.
@@ -321,9 +354,67 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
     }
 }
 
+/// Shared M-GPUDEC record-arena hook for the GPU builders: with
+/// `OPENVM_RVR_GPU_RECORDS=compact`, migrated AIRs' wire buffers bypass host
+/// expansion and are adopted into their arenas via one memcpy (the CUDA chips
+/// decode them on device); default keeps the gate-validated expanded path.
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[allow(clippy::type_complexity)]
+fn generate_gpu_rvr_record_arenas(
+    registry: &LogNativeAssemblerRegistry<Val<BabyBearPoseidon2Config>, DenseRecordArena>,
+    state: &rvr_gpu_decode::RvrGpuDecodeState,
+    exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+    output: &mut openvm_circuit::arch::rvr::RvrPreflightOutput<Val<BabyBearPoseidon2Config>>,
+    capacities: &[(usize, usize)],
+    pc_to_air_idx: &[Option<usize>],
+) -> Result<Option<Vec<DenseRecordArena>>, openvm_circuit::arch::ExecutionError> {
+    use openvm_circuit::arch::rvr::generate_record_arenas_from_logs_with_compact;
+
+    use crate::rvr_gpu_decode::{configured_emission_mode, InlineEmissionMode};
+    if registry.is_empty() {
+        return Ok(None);
+    }
+    let compact_airs = match configured_emission_mode() {
+        Some(InlineEmissionMode::CompactWire) => {
+            state.bind_alu_u16_compact_segment(exe, pc_to_air_idx)
+        }
+        _ => {
+            state.clear_segment_modes();
+            Default::default()
+        }
+    };
+    let (mut arenas, wire_buffers) = generate_record_arenas_from_logs_with_compact(
+        registry,
+        exe,
+        output,
+        capacities,
+        pc_to_air_idx,
+        &compact_airs,
+    )?;
+    for chip in wire_buffers {
+        let arena = arenas.get_mut(chip.air_idx).ok_or_else(|| {
+            openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                "compact air_idx {} out of arena range",
+                chip.air_idx
+            ))
+        })?;
+        // INC1 adoption: one memcpy of the wire buffer replaces the per-record
+        // host expansion pass; zero-copy rides the R4 batch-2 aligned backing.
+        let mut dense = DenseRecordArena::with_byte_capacity(chip.bytes.len());
+        dense
+            .alloc_bytes(chip.bytes.len())
+            .copy_from_slice(&chip.bytes);
+        *arena = dense;
+    }
+    Ok(Some(arenas))
+}
+
 #[cfg(feature = "cuda")]
-#[derive(Clone)]
-pub struct Rv64ImGpuBuilder;
+#[derive(Clone, Default)]
+pub struct Rv64ImGpuBuilder {
+    /// See [`Rv64IGpuBuilder::rvr_decode`]; one shared state per VM.
+    pub rvr_decode: std::sync::Arc<rvr_gpu_decode::RvrGpuDecodeState>,
+}
 
 #[cfg(feature = "cuda")]
 impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
@@ -346,14 +437,18 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
-            &Rv64IGpuBuilder,
+            &Rv64IGpuBuilder {
+                rvr_decode: self.rvr_decode.clone(),
+            },
             &config.rv64i,
             circuit,
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-            &Rv64ImGpuProverExt,
+            &Rv64ImGpuProverExt {
+                rvr_decode: self.rvr_decode.clone(),
+            },
             &config.mul,
             inventory,
         )?;
@@ -371,6 +466,29 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
         let mut registry = LogNativeAssemblerRegistry::new();
         config.extend_rvr_log_native(&mut registry);
         registry
+    }
+
+    #[cfg(feature = "rvr")]
+    fn generate_rvr_record_arenas_from_logs(
+        &self,
+        config: &Self::VmConfig,
+        exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+        output: &mut openvm_circuit::arch::rvr::RvrPreflightOutput<Val<BabyBearPoseidon2Config>>,
+        capacities: &[(usize, usize)],
+        pc_to_air_idx: &[Option<usize>],
+    ) -> Result<Option<Vec<Self::RecordArena>>, openvm_circuit::arch::ExecutionError>
+    where
+        Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        let registry = self.create_rvr_log_native_assembler_registry(config);
+        generate_gpu_rvr_record_arenas(
+            &registry,
+            &self.rvr_decode,
+            exe,
+            output,
+            capacities,
+            pc_to_air_idx,
+        )
     }
 
     /// GPU backend: default to the rvr inline preflight engine — the host
