@@ -4,6 +4,7 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "riscv/adapters/mul.cuh"
+#include "riscv/rvr_compact.cuh"
 
 using namespace riscv;
 
@@ -211,6 +212,88 @@ extern "C" int _mulh_tracegen(
         d_trace,
         height,
         d_records,
+        d_range_checker_ptr,
+        range_checker_bins,
+        d_bitwise_lookup_ptr,
+        d_range_tuple_checker_ptr,
+        range_tuple_checker_sizes,
+        timestamp_max_bits
+    );
+
+    return CHECK_KERNEL();
+}
+
+// M-GPUDEC (G2): compact-wire twin of the kernel above; decodes in registers
+// and calls the SAME fill methods.
+__global__ void mulh_tracegen_compact(
+    Fp *d_trace,
+    size_t height,
+    DeviceBufferConstView<RvrAlu3Compact> d_records,
+    RvrOperandEntry const *operand_table,
+    uint32_t pc_base,
+    uint32_t *d_range_checker_ptr,
+    size_t range_checker_bins,
+    uint32_t *d_bitwise_lookup_ptr,
+    uint32_t *d_range_tuple_checker_ptr,
+    uint2 range_tuple_checker_sizes,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(d_trace + idx, height);
+
+    if (idx < d_records.len()) {
+        RvrAlu3Compact const rec_c = d_records[idx];
+        RvrOperandEntry const entry = rvr_operand_entry(operand_table, pc_base, rec_c.from_pc);
+        MulHRecord full;
+        full.adapter = rvr_decode_alu3_mult(rec_c, entry);
+#pragma unroll
+        for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+            full.core.b[i] = rvr_u8_limb(rec_c.b, i);
+            full.core.c[i] = rvr_u8_limb(rec_c.c, i);
+        }
+        full.core.local_opcode = entry.local_opcode;
+
+        Rv64MultAdapter adapter(
+            VariableRangeChecker(d_range_checker_ptr, range_checker_bins), timestamp_max_bits
+        );
+        adapter.fill_trace_row(row, full.adapter);
+
+        MulHCore<RV64_REGISTER_NUM_LIMBS> core(
+            d_range_tuple_checker_ptr,
+            (uint32_t[2]){range_tuple_checker_sizes.x, range_tuple_checker_sizes.y},
+            BitwiseOperationLookup(d_bitwise_lookup_ptr)
+        );
+        core.fill_trace_row(row.slice_from(COL_INDEX(MulHCols, core)), full.core);
+    } else {
+        row.fill_zero(0, sizeof(MulHCols<uint8_t>));
+    }
+}
+
+extern "C" int _mulh_tracegen_compact(
+    Fp *d_trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<RvrAlu3Compact> d_records,
+    RvrOperandEntry const *operand_table,
+    uint32_t pc_base,
+    uint32_t *d_range_checker_ptr,
+    size_t range_checker_bins,
+    uint32_t *d_bitwise_lookup_ptr,
+    uint32_t *d_range_tuple_checker_ptr,
+    uint2 range_tuple_checker_sizes,
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
+) {
+    assert(width == sizeof(MulHCols<uint8_t>));
+
+    auto [grid, block] = kernel_launch_params(height, 512);
+
+    mulh_tracegen_compact<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        d_records,
+        operand_table,
+        pc_base,
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
