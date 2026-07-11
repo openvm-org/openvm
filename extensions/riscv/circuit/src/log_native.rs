@@ -1,9 +1,10 @@
 use openvm_circuit::{
     arch::{
         rvr::{
-            generate_record_arenas_from_logs, ArenaNativeGeometry, LogNativeAccessView,
-            LogNativeAssemblerRegistry, PreflightMemoryAccessAux, RvrPreflightOutput,
-            VmRvrLogNativeExtension, PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
+            generate_record_arenas_from_logs, Alu3ArenaFieldOffsets, ArenaNativeGeometry,
+            ArenaNativeLayout, LogNativeAccessView, LogNativeAssemblerRegistry,
+            PreflightMemoryAccessAux, RvrPreflightOutput, VmRvrLogNativeExtension,
+            PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
             PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_RW1_RECORD_SIZE,
             PREFLIGHT_WR1_RECORD_SIZE,
         },
@@ -680,6 +681,46 @@ where
                 core_align: align_of::<AddSubCoreRecord<BLOCK_FE_WIDTH>>(),
                 core_off_matrix: <Rv64BaseAluU16AdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
                     * size_of::<F>(),
+                layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(
+                        Rv64BaseAluU16AdapterRecord,
+                        from_timestamp
+                    ),
+                    rd_ptr: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rs1_ptr),
+                    rs2: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rs2),
+                    rs2_as: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rs2_as),
+                    rs2_imm_sign: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rs2_imm_sign),
+                    reads_aux0_prev_ts: core::mem::offset_of!(
+                        Rv64BaseAluU16AdapterRecord,
+                        reads_aux
+                    ) + core::mem::offset_of!(
+                        MemoryReadAuxRecord,
+                        prev_timestamp
+                    ),
+                    reads_aux1_prev_ts: core::mem::offset_of!(
+                        Rv64BaseAluU16AdapterRecord,
+                        reads_aux
+                    ) + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_data
+                        ),
+                    core_b: core::mem::offset_of!(AddSubCoreRecord<BLOCK_FE_WIDTH>, b),
+                    core_c: core::mem::offset_of!(AddSubCoreRecord<BLOCK_FE_WIDTH>, c),
+                    core_local_opcode: core::mem::offset_of!(
+                        AddSubCoreRecord<BLOCK_FE_WIDTH>,
+                        local_opcode
+                    ),
+                }),
             },
         );
         registry.register_inline(
