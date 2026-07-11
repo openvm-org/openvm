@@ -65,7 +65,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendChipGpu {
             unsafe {
                 crate::cuda_abi::load_sign_extend_cuda::tracegen_compact(
                     d_trace.buffer(),
-                    padded_height,
+                    trace_height,
                     trace_width,
                     &d_records,
                     &d_table,
