@@ -953,6 +953,9 @@ fn assert_preflight_matches_interpreter_with_streams(
     num_insns: Option<u64>,
     streams: Streams<F>,
 ) -> RvrPreflightOutput<F> {
+    // Direct execute without arena targets: compile compact (fused emission
+    // is default-on and has no target-less fallback).
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     let (vm, _) = VirtualMachine::new_with_keygen(
         test_cpu_engine(),
         Rv64ImCpuBuilder,
@@ -1037,6 +1040,9 @@ fn assert_trace_matches_interpreter(
     streams: Streams<F>,
     scope: TraceCompareScope,
 ) {
+    // Direct execute without arena targets: compile compact (fused emission
+    // is default-on and has no target-less fallback).
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     let (mut interp_vm, _) = VirtualMachine::new_with_keygen(
         test_cpu_engine(),
         Rv64ImCpuBuilder,
@@ -1962,6 +1968,8 @@ fn assert_phantom_timestamp_tick(
 
 #[test]
 fn rvr_preflight_differential_suite_system_records_full_rv64im_matrix() {
+    // Direct execute without arena targets (see the harness note).
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     let programs = [
         ("fibonacci", fibonacci_exe()),
         ("alu_vector", alu_vector_exe()),
@@ -2884,7 +2892,9 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_matrix() {
         .collect::<Vec<_>>();
     let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
 
-    // Arm A: compact wire + host assembler (arena-native left disabled).
+    // Arm A: compact wire + host assembler (fused emission opted out; arm F
+    // re-enables it below).
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     let mut a_output = {
         let RvrPreflightRoute::Rvr(instance) = rvr_vm
             .preflight_routed_instance(&exe)
