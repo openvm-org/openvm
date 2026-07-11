@@ -95,6 +95,8 @@ pub struct Alu3ArenaFieldOffsets {
     pub write_prev_data: usize,
     pub core_b: usize,
     pub core_c: usize,
+    /// `usize::MAX` when the family's core record has no local_opcode field
+    /// (single-opcode airs like SRA); the emitter then skips the store.
     pub core_local_opcode: usize,
 }
 
@@ -162,19 +164,27 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
                 // byte-compares against the host assembler). Other AluReg ops
                 // belong to airs without registered geometry, so `None`
                 // keeps them on the compact wire regardless.
+                // local_opcode per family enum order (AddSub: ADD=0/SUB=1;
+                // LessThan: SLT=0/SLTU=1; ShiftLogical: SLL=0/SRL=1; SRA has
+                // no local_opcode field — its layout carries the sentinel and
+                // the baked value is ignored). Bitwise ops use the byte
+                // adapter (different record) and stay compact for now.
+                let reg_alu3 = |local_opcode: u8| {
+                    Some(ArenaAlu3Baked {
+                        rs2_field: (*rs2 as u32) * 8,
+                        rs2_as: 1,
+                        rs2_imm_sign: 0,
+                        local_opcode,
+                    })
+                };
                 let arena = match op {
-                    AluOp::Add => Some(ArenaAlu3Baked {
-                        rs2_field: (*rs2 as u32) * 8,
-                        rs2_as: 1,
-                        rs2_imm_sign: 0,
-                        local_opcode: 0,
-                    }),
-                    AluOp::Sub => Some(ArenaAlu3Baked {
-                        rs2_field: (*rs2 as u32) * 8,
-                        rs2_as: 1,
-                        rs2_imm_sign: 0,
-                        local_opcode: 1,
-                    }),
+                    AluOp::Add => reg_alu3(0),
+                    AluOp::Sub => reg_alu3(1),
+                    AluOp::Slt => reg_alu3(0),
+                    AluOp::Sltu => reg_alu3(1),
+                    AluOp::Sll => reg_alu3(0),
+                    AluOp::Srl => reg_alu3(1),
+                    AluOp::Sra => reg_alu3(0),
                     _ => None,
                 };
                 ctx.emit_reg3_inline(*rd, *rs1, *rs2, arena, |l, r| alu_expr(*op, l, r));
@@ -189,13 +199,18 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
                 // R4 imm-form baking (ADDI only; there is no SUB-imm). The
                 // record's rs2 field is the 24-bit immediate encoding and
                 // rs2_imm_sign its 12-bit sign, matching the host assembler.
-                let arena = match op {
-                    AluOp::Add => Some(ArenaAlu3Baked {
+                let imm_alu3 = |local_opcode: u8| {
+                    Some(ArenaAlu3Baked {
                         rs2_field: (*imm as u32) & 0xFF_FFFF,
                         rs2_as: 0,
                         rs2_imm_sign: (*imm < 0) as u8,
-                        local_opcode: 0,
-                    }),
+                        local_opcode,
+                    })
+                };
+                let arena = match op {
+                    AluOp::Add => imm_alu3(0),
+                    AluOp::Slt => imm_alu3(0),
+                    AluOp::Sltu => imm_alu3(1),
                     _ => None,
                 };
                 ctx.emit_reg2imm_inline(*rd, *rs1, *imm as i64 as u64, arena, |l, v| {
@@ -212,7 +227,22 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             if ctx.inline_records_enabled() {
                 // The record's c value is the raw shift amount; the result
                 // expression uses the constant directly.
-                ctx.emit_reg2imm_inline(*rd, *rs1, u64::from(*shamt), None, |l, _| {
+                // Shift-immediate: the record's rs2 field is the raw shamt
+                // (positive, no sign), local_opcode per ShiftLogical order
+                // (SRA's layout carries the no-field sentinel).
+                let arena = match op {
+                    AluOp::Sll => Some(0),
+                    AluOp::Srl => Some(1),
+                    AluOp::Sra => Some(0),
+                    _ => None,
+                }
+                .map(|local_opcode| ArenaAlu3Baked {
+                    rs2_field: u32::from(*shamt),
+                    rs2_as: 0,
+                    rs2_imm_sign: 0,
+                    local_opcode,
+                });
+                ctx.emit_reg2imm_inline(*rd, *rs1, u64::from(*shamt), arena, |l, _| {
                     shift_imm_expr(*op, l, *shamt)
                 });
             } else {
