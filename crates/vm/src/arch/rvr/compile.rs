@@ -14,7 +14,10 @@ use openvm_instructions::{
     exe::VmExe, program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm::{instr_emits_inline_record, CProject, RvrExecutionKind};
+use rvr_openvm::{
+    inline_record_shape_for_instr, inline_record_shape_for_terminator, CProject, InlineRecordShape,
+    RvrExecutionKind,
+};
 use rvr_openvm_ir::Block;
 use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, opcode::lift_instruction, AirIndex,
@@ -416,31 +419,49 @@ fn collect_inline_records_meta<F: PrimeField32>(
     let num_slots = exe.program.instructions_and_debug_infos.len();
     let pc_base = u64::from(exe.program.pc_base);
     let mut pc_slots = vec![false; num_slots];
-    let mut airs = BTreeMap::new();
-    for instr_at in blocks.iter().flat_map(|block| &block.instructions) {
-        if !instr_emits_inline_record(instr_at.instr.as_ref()) {
-            continue;
-        }
-        let Some(offset) = instr_at.pc.checked_sub(pc_base) else {
-            continue;
+    let mut airs: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut record = |pc: u64, shape: InlineRecordShape| {
+        let Some(offset) = pc.checked_sub(pc_base) else {
+            return;
         };
         let slot = (offset / u64::from(DEFAULT_PC_STEP)) as usize;
         let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) else {
-            continue;
+            return;
         };
         if let Some(flag) = pc_slots.get_mut(slot) {
             *flag = true;
         }
-        // All migrated shapes so far share the 44-byte alu3 (2-read-1-write
-        // single-row) compact record.
-        airs.insert(
-            air.as_u32() as usize,
-            rvr_openvm_ext_ffi_common::PREFLIGHT_ADDSUB_RECORD_SIZE,
+        let size = inline_record_shape_size(shape);
+        let previous = airs.insert(air.as_u32() as usize, size);
+        assert!(
+            previous.is_none_or(|p| p == size),
+            "conflicting inline record sizes for air {air:?}: {previous:?} vs {size}"
         );
+    };
+    for block in blocks {
+        for instr_at in &block.instructions {
+            if let Some(shape) = inline_record_shape_for_instr(instr_at.instr.as_ref()) {
+                record(instr_at.pc, shape);
+            }
+        }
+        if let Some(shape) = inline_record_shape_for_terminator(&block.terminator) {
+            record(block.terminator_pc, shape);
+        }
     }
     RvrInlineRecordsMeta {
         pc_slots: Arc::new(pc_slots),
         airs: airs.into_iter().collect(),
+    }
+}
+
+/// Compact record stride per wire shape (the C-side `_Static_assert`s guard
+/// the layouts against these same constants).
+fn inline_record_shape_size(shape: InlineRecordShape) -> usize {
+    match shape {
+        InlineRecordShape::Alu3 => rvr_openvm_ext_ffi_common::PREFLIGHT_ADDSUB_RECORD_SIZE,
+        InlineRecordShape::Branch2 => rvr_openvm_ext_ffi_common::PREFLIGHT_BRANCH2_RECORD_SIZE,
+        InlineRecordShape::Wr1 => rvr_openvm_ext_ffi_common::PREFLIGHT_WR1_RECORD_SIZE,
+        InlineRecordShape::Rw1 => rvr_openvm_ext_ffi_common::PREFLIGHT_RW1_RECORD_SIZE,
     }
 }
 

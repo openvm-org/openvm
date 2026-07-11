@@ -1,6 +1,8 @@
 //! RV64M instruction nodes and C code generation.
 
-use rvr_openvm_ir::{CfgEffect, CfgOp, CfgResultWidth, ExtEmitCtx, ExtInstr};
+use rvr_openvm_ir::{
+    CfgEffect, CfgOp, CfgResultWidth, ExtEmitCtx, ExtInstr, InlineRecordShape,
+};
 
 use crate::instruction::{reg_operand, Reg};
 
@@ -68,6 +70,10 @@ impl ExtInstr for Rv64MInstr {
 
     fn accesses_memory(&self) -> bool {
         false
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Alu3)
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {

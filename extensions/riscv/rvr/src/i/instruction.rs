@@ -2,7 +2,7 @@
 
 use rvr_openvm_ir::{
     CfgBranchCond, CfgEffect, CfgIntWidth, CfgJumpKind, CfgOp, CfgOperand, CfgResultWidth, CfgTerm,
-    ExtEmitCtx, ExtInstr, MemWidth,
+    ExtEmitCtx, ExtInstr, InlineRecordShape, MemWidth,
 };
 
 use crate::instruction::{hex_u64, reg_operand, Reg, RA, ZERO};
@@ -167,6 +167,16 @@ impl ExtInstr for Rv64IInstr {
         }
     }
 
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        match self {
+            Self::Alu { word: false, .. } => Some(InlineRecordShape::Alu3),
+            Self::Const { .. } | Self::Jump { .. } => Some(InlineRecordShape::Wr1),
+            Self::Branch { .. } => Some(InlineRecordShape::Branch2),
+            Self::JumpIndirect { .. } => Some(InlineRecordShape::Rw1),
+            _ => None,
+        }
+    }
+
     fn accesses_memory(&self) -> bool {
         matches!(self, Self::Load { .. } | Self::Store { .. })
     }
@@ -239,7 +249,12 @@ impl ExtInstr for Rv64IInstr {
                 let value = ctx.read_var(*src);
                 ctx.write_mem(&base, *offset, &value, width.bytes());
             }
-            Self::Const { rd, value, .. } => ctx.write_var(*rd, &hex_u64(*value)),
+            Self::Const { rd, value, .. } => {
+                let value = hex_u64(*value);
+                if !ctx.emit_wr1_inline(Some(*rd), &value) {
+                    ctx.write_var(*rd, &value);
+                }
+            }
         }
     }
 

@@ -1,6 +1,6 @@
 //! Preflight tracer ABI mirror for rvr-generated native execution.
 
-use std::{collections::HashMap, mem::MaybeUninit, sync::Arc};
+use std::{mem::MaybeUninit, sync::Arc};
 
 use openvm_instructions::{
     exe::VmExe,
@@ -39,6 +39,11 @@ pub const PREFLIGHT_MEMORY_KIND_TOUCH: u8 = rvr_openvm_ext_ffi_common::PREFLIGHT
 /// `PreflightAddSubRecord`). Used to size the per-chip inline-record buffers.
 pub const PREFLIGHT_ADDSUB_RECORD_SIZE: usize =
     rvr_openvm_ext_ffi_common::PREFLIGHT_ADDSUB_RECORD_SIZE;
+/// R3 compact record strides for the branch / write-only / read+write shapes.
+pub const PREFLIGHT_BRANCH2_RECORD_SIZE: usize =
+    rvr_openvm_ext_ffi_common::PREFLIGHT_BRANCH2_RECORD_SIZE;
+pub const PREFLIGHT_WR1_RECORD_SIZE: usize = rvr_openvm_ext_ffi_common::PREFLIGHT_WR1_RECORD_SIZE;
+pub const PREFLIGHT_RW1_RECORD_SIZE: usize = rvr_openvm_ext_ffi_common::PREFLIGHT_RW1_RECORD_SIZE;
 
 /// C-compatible preflight program log entry.
 ///

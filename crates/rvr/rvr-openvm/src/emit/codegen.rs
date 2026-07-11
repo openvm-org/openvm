@@ -2,7 +2,10 @@
 use std::collections::HashSet;
 
 use openvm_instructions::program::DEFAULT_PC_STEP;
-use rvr_openvm_ir::{CfgBranchCond, CfgIntWidth, CfgOperand, CfgTerm, ExtEmitCtx, ExtInstr, Terminator};
+use rvr_openvm_ir::{
+    CfgBranchCond, CfgIntWidth, CfgOperand, CfgTerm, ExtEmitCtx, ExtInstr, InlineRecordShape,
+    Terminator, Variable,
+};
 
 use super::context::EmitContext;
 
@@ -12,45 +15,20 @@ pub struct TermCtx<'a> {
     pub valid_blocks: &'a HashSet<u64>,
 }
 
-/// Whether the current compact-record phase migrates this extension-owned
-/// instruction. #3059 moved RV64I into `ExtInstr` nodes, so the instruction's
-/// stable opcode name replaces the removed monolithic `Instr` enum match.
+pub fn inline_record_shape_for_instr(instr: &dyn ExtInstr) -> Option<InlineRecordShape> {
+    instr.inline_record_shape()
+}
+
+pub fn inline_record_shape_for_terminator(term: &Terminator) -> Option<InlineRecordShape> {
+    match term {
+        Terminator::Instruction { node, .. } => node.inline_record_shape(),
+        _ => None,
+    }
+}
+
+/// Whether the compact-record transport migrates this instruction.
 pub fn instr_emits_inline_record(instr: &dyn ExtInstr) -> bool {
-    matches!(
-        instr.opname(),
-        "add"
-            | "sub"
-            | "addi"
-            | "sll"
-            | "slt"
-            | "sltu"
-            | "xor"
-            | "srl"
-            | "sra"
-            | "or"
-            | "and"
-            | "slli"
-            | "slti"
-            | "sltiu"
-            | "xori"
-            | "srli"
-            | "srai"
-            | "ori"
-            | "andi"
-            | "mul"
-            | "mulh"
-            | "mulhsu"
-            | "mulhu"
-            | "div"
-            | "divu"
-            | "rem"
-            | "remu"
-            | "mulw"
-            | "divw"
-            | "divuw"
-            | "remw"
-            | "remuw"
-    )
+    inline_record_shape_for_instr(instr).is_some()
 }
 
 /// Emit C code for a terminator using tail calls between blocks.
@@ -61,13 +39,19 @@ pub fn instr_emits_inline_record(instr: &dyn ExtInstr) -> bool {
 pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &TermCtx) {
     let next_pc = pc.wrapping_add(u64::from(DEFAULT_PC_STEP));
     let args = ctx.tail_call_args();
+    let inline_shape = ctx
+        .inline_records_enabled()
+        .then(|| inline_record_shape_for_terminator(term))
+        .flatten();
 
     match term.cfg_term(pc, next_pc) {
         CfgTerm::FallThrough => emit_tail_call(ctx, next_pc, &args, tc.valid_blocks),
         CfgTerm::Jump {
             link_dst, target, ..
         } => {
-            if let Some(dst) = link_dst {
+            if inline_shape == Some(InlineRecordShape::Wr1) {
+                ctx.emit_wr1_inline(link_dst.map(variable_index), &hex_u64(next_pc));
+            } else if let Some(dst) = link_dst {
                 ctx.write_var(dst, &hex_u64(next_pc));
             } else {
                 ctx.trace_timestamp();
@@ -81,8 +65,18 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             target_mask,
             ..
         } => {
-            let base_value = match base_value {
-                CfgOperand::Var(base) => {
+            let base_value = if inline_shape == Some(InlineRecordShape::Rw1) {
+                let base = match base_value {
+                    CfgOperand::Var(base) => variable_index(base),
+                    CfgOperand::Const(0) => 0,
+                    CfgOperand::Const(_) => {
+                        unreachable!("RV64 JALR compact base must be a register or zero")
+                    }
+                };
+                ctx.emit_rw1_inline(link_dst.map(variable_index), base, &hex_u64(next_pc))
+            } else {
+                match base_value {
+                    CfgOperand::Var(base) => {
                     let value = ctx.read_var(base);
                     if link_dst.is_some_and(|dst| dst == base) {
                         // Save the base before writing the same variable as the link
@@ -91,13 +85,16 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                     } else {
                         value
                     }
+                    }
+                    CfgOperand::Const(value) => hex_u64(value),
                 }
-                CfgOperand::Const(value) => hex_u64(value),
             };
-            if let Some(dst) = link_dst {
-                ctx.write_var(dst, &hex_u64(next_pc));
-            } else {
-                ctx.trace_timestamp();
+            if inline_shape != Some(InlineRecordShape::Rw1) {
+                if let Some(dst) = link_dst {
+                    ctx.write_var(dst, &hex_u64(next_pc));
+                } else {
+                    ctx.trace_timestamp();
+                }
             }
             let target = indirect_target_expr(ctx, &base_value, offset, target_mask);
             ctx.write_line(&format!(
@@ -119,7 +116,9 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             known,
         } => {
             if let Some(taken) = known {
-                if ctx.traces_values() {
+                if inline_shape == Some(InlineRecordShape::Branch2) {
+                    ctx.emit_branch2_inline(variable_index(lhs), variable_index(rhs));
+                } else if ctx.traces_values() {
                     ctx.read_var(lhs);
                     ctx.read_var(rhs);
                 }
@@ -131,8 +130,11 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                 );
                 return;
             }
-            let lhs = ctx.read_var(lhs);
-            let rhs = ctx.read_var(rhs);
+            let (lhs, rhs) = if inline_shape == Some(InlineRecordShape::Branch2) {
+                ctx.emit_branch2_inline(variable_index(lhs), variable_index(rhs))
+            } else {
+                (ctx.read_var(lhs), ctx.read_var(rhs))
+            };
             let cmp = branch_cond_expr(cond, width, &lhs, &rhs);
             ctx.write_line(&format!("if ({cmp}) {{"));
             ctx.write_line(&format!(
@@ -152,6 +154,10 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             node.emit_c_term(ctx, &branch_to);
         }
     }
+}
+
+fn variable_index(var: Variable) -> u8 {
+    u8::try_from(var.index()).expect("RV64 register index must fit in u8")
 }
 
 fn indirect_target_expr(

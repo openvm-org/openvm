@@ -1,4 +1,4 @@
-use crate::{ExtEmitCtx, FixedTraceRows};
+use crate::{ExtEmitCtx, FixedTraceRows, InlineRecordShape};
 
 /// Opaque machine-state variable identifier.
 ///
@@ -188,6 +188,11 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
     /// The default is `"ext"`.
     fn opname(&self) -> &str {
         "ext"
+    }
+
+    /// Compact record shape emitted for this instruction, when migrated.
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        None
     }
 
     /// Report this instruction's additional variable writes.

@@ -437,6 +437,95 @@ impl<'a> EmitContext<'a> {
         ));
     }
 
+    /// R3: emit a (conditionally) written single-register instruction
+    /// (Lui/Auipc/JAL link) with an inline compact wr1 record. `rd = None` or
+    /// `Some(0)` suppresses the register write but still consumes the tick
+    /// (matching `write_reg(0)`); the record's write fields are then zero and
+    /// the host uses the instruction's enable flag.
+    pub(crate) fn emit_wr1_inline(&mut self, rd: Option<u8>, value: &str) {
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        match rd {
+            Some(rd) if rd != 0 => {
+                let tmp = self.next_var();
+                self.write_line(&format!("uint64_t {tmp} = {value};"));
+                let rdprev = self.next_var();
+                self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+                let pw = self.next_var();
+                self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
+                self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
+                self.write_line(&format!(
+                    "preflight_emit_wr1(state, {chip}u, {pc}, {fromts}, {pw}, {rdprev});"
+                ));
+            }
+            _ => {
+                self.write_line("trace_timestamp(state);");
+                self.write_line(&format!(
+                    "preflight_emit_wr1(state, {chip}u, {pc}, {fromts}, 0u, 0ull);"
+                ));
+            }
+        }
+    }
+
+    /// R3: emit the two touch-only branch operand reads plus the inline
+    /// compact branch2 record; returns the C value expressions for the
+    /// branch condition.
+    pub(crate) fn emit_branch2_inline(&mut self, rs1: u8, rs2: u8) -> (String, String) {
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        let (v2, p2) = self.reg_read_capture(rs2);
+        self.write_line(&format!(
+            "preflight_emit_branch2(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {v1}, {v2});"
+        ));
+        (v1, v2)
+    }
+
+    /// R3: emit the Jalr rs1 read + conditional link write with an inline
+    /// compact rw1 record; returns the C expression of the rs1 value for the
+    /// jump-target computation. `link_rd = None`/`Some(0)` suppresses the
+    /// write but still ticks.
+    pub(crate) fn emit_rw1_inline(
+        &mut self,
+        link_rd: Option<u8>,
+        rs1: u8,
+        link_value: &str,
+    ) -> String {
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        // The jump target must be computed from the PRE-write rs1 value when
+        // link_rd == rs1 (e.g. jalr ra, ra, 0).
+        let v1 = self.materialize_u64(&v1);
+        match link_rd {
+            Some(rd) if rd != 0 => {
+                let tmp = self.next_var();
+                self.write_line(&format!("uint64_t {tmp} = {link_value};"));
+                let rdprev = self.next_var();
+                self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+                let pw = self.next_var();
+                self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
+                self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
+                self.write_line(&format!(
+                    "preflight_emit_rw1(state, {chip}u, {pc}, {fromts}, {p1}, {pw}, {v1}, {rdprev});"
+                ));
+            }
+            _ => {
+                self.write_line("trace_timestamp(state);");
+                self.write_line(&format!(
+                    "preflight_emit_rw1(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {v1}, 0ull);"
+                ));
+            }
+        }
+        v1
+    }
+
     fn write_reg_direct(&mut self, idx: u8, val: &str) {
         if idx == 0 {
             return;
@@ -833,6 +922,14 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
                     .replace("__RVR_RHS__", rhs)
             },
         );
+        true
+    }
+
+    fn emit_wr1_inline(&mut self, rd: Option<Variable>, value: &str) -> bool {
+        if !self.inline_records_enabled() {
+            return false;
+        }
+        EmitContext::emit_wr1_inline(self, rd.map(reg_index), value);
         true
     }
 

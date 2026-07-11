@@ -12,6 +12,16 @@ pub struct FixedTraceRows {
     pub count: u32,
 }
 
+/// Compact inline-record wire shapes. Each migrated instruction stores its
+/// dynamic witness while the host re-derives program operands from PC.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InlineRecordShape {
+    Alu3,
+    Branch2,
+    Wr1,
+    Rw1,
+}
+
 /// Address space classification used by page-access metering.
 ///
 /// Main memory is distinct because generated metered code caches its current
@@ -85,6 +95,11 @@ pub trait ExtEmitCtx {
         _imm_value: u64,
         _result_template: &str,
     ) -> bool {
+        false
+    }
+
+    /// Emit a compact conditional single-register write.
+    fn emit_wr1_inline(&mut self, _rd: Option<Variable>, _value: &str) -> bool {
         false
     }
 

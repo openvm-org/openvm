@@ -438,6 +438,86 @@ static __attribute__((always_inline)) inline void preflight_emit_alu3(
   nt_store_u32(&words[10], (uint32_t)(rs2_val >> 32));
 }
 
+/* R3: claim `size` bytes from chip `chip_idx`'s inline record buffer, or
+ * NULL when the chip is unmigrated / the buffer is full (the host record
+ * assembly detects the resulting byte-count mismatch and rejects loudly). */
+static __attribute__((always_inline)) inline uint32_t* preflight_claim_record(
+    RvState* restrict state, uint32_t chip_idx, uint32_t size) {
+  Tracer* restrict t = state->tracer;
+  if (unlikely(t->chip_records == NULL || chip_idx >= t->chip_counts_len)) {
+    return NULL;
+  }
+  ChipRecordBuf* restrict buf = &t->chip_records[chip_idx];
+  if (buf->base == NULL) {
+    return NULL;
+  }
+  uint32_t off = buf->len;
+  if (unlikely(off + size > buf->cap)) {
+    return NULL;
+  }
+  buf->len = off + size;
+  return (uint32_t*)(buf->base + off);
+}
+
+/* R3: compact branch record (2 reads, no write); see PreflightBranch2 layout
+ * on the host side. */
+static __attribute__((always_inline)) inline void preflight_emit_branch2(
+    RvState* restrict state, uint32_t chip_idx, uint32_t from_pc,
+    uint32_t from_timestamp, uint32_t rs1_prev_ts, uint32_t rs2_prev_ts,
+    uint64_t rs1_val, uint64_t rs2_val) {
+  uint32_t* restrict words =
+      preflight_claim_record(state, chip_idx, PREFLIGHT_BRANCH2_RECORD_SIZE);
+  if (unlikely(words == NULL)) {
+    return;
+  }
+  nt_store_u32(&words[0], from_pc);
+  nt_store_u32(&words[1], from_timestamp);
+  nt_store_u32(&words[2], rs1_prev_ts);
+  nt_store_u32(&words[3], rs2_prev_ts);
+  nt_store_u32(&words[4], (uint32_t)rs1_val);
+  nt_store_u32(&words[5], (uint32_t)(rs1_val >> 32));
+  nt_store_u32(&words[6], (uint32_t)rs2_val);
+  nt_store_u32(&words[7], (uint32_t)(rs2_val >> 32));
+}
+
+/* R3: compact write-only record (JalLui/Auipc). For a suppressed write
+ * (rd = x0) the caller passes zeros; the host decides from the instruction's
+ * enable flag. */
+static __attribute__((always_inline)) inline void preflight_emit_wr1(
+    RvState* restrict state, uint32_t chip_idx, uint32_t from_pc,
+    uint32_t from_timestamp, uint32_t rd_prev_ts, uint64_t rd_prev_value) {
+  uint32_t* restrict words =
+      preflight_claim_record(state, chip_idx, PREFLIGHT_WR1_RECORD_SIZE);
+  if (unlikely(words == NULL)) {
+    return;
+  }
+  nt_store_u32(&words[0], from_pc);
+  nt_store_u32(&words[1], from_timestamp);
+  nt_store_u32(&words[2], rd_prev_ts);
+  nt_store_u32(&words[3], (uint32_t)rd_prev_value);
+  nt_store_u32(&words[4], (uint32_t)(rd_prev_value >> 32));
+}
+
+/* R3: compact read + conditional-write record (Jalr). */
+static __attribute__((always_inline)) inline void preflight_emit_rw1(
+    RvState* restrict state, uint32_t chip_idx, uint32_t from_pc,
+    uint32_t from_timestamp, uint32_t rs1_prev_ts, uint32_t rd_prev_ts,
+    uint64_t rs1_val, uint64_t rd_prev_value) {
+  uint32_t* restrict words =
+      preflight_claim_record(state, chip_idx, PREFLIGHT_RW1_RECORD_SIZE);
+  if (unlikely(words == NULL)) {
+    return;
+  }
+  nt_store_u32(&words[0], from_pc);
+  nt_store_u32(&words[1], from_timestamp);
+  nt_store_u32(&words[2], rs1_prev_ts);
+  nt_store_u32(&words[3], rd_prev_ts);
+  nt_store_u32(&words[4], (uint32_t)rs1_val);
+  nt_store_u32(&words[5], (uint32_t)(rs1_val >> 32));
+  nt_store_u32(&words[6], (uint32_t)rd_prev_value);
+  nt_store_u32(&words[7], (uint32_t)(rd_prev_value >> 32));
+}
+
 /* ── Trace-only memory reads ─────────────────────────────────────── */
 
 static __attribute__((always_inline)) inline void trace_rd_mem_u8(

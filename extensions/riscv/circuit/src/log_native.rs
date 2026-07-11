@@ -3,7 +3,9 @@ use openvm_circuit::{
         rvr::{
             generate_record_arenas_from_logs, LogNativeAccessView, LogNativeAssemblerRegistry,
             PreflightMemoryAccessAux, RvrPreflightOutput, VmRvrLogNativeExtension,
-            PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
+            PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
+            PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_RW1_RECORD_SIZE,
+            PREFLIGHT_WR1_RECORD_SIZE,
         },
         Arena, EmptyAdapterCoreLayout, EmptyMultiRowLayout, ExecutionError, MultiRowLayout,
         RecordArena, BLOCK_FE_WIDTH,
@@ -688,6 +690,31 @@ where
             PREFLIGHT_ADDSUB_RECORD_SIZE,
             assemble_shift_inline::<F, RA>,
         );
+        registry.register_inline(
+            BranchEqualOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_BRANCH2_RECORD_SIZE,
+            assemble_branch_eq_inline::<F, RA>,
+        );
+        registry.register_inline(
+            BranchLessThanOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_BRANCH2_RECORD_SIZE,
+            assemble_branch_lt_inline::<F, RA>,
+        );
+        registry.register_inline(
+            Rv64JalLuiOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_WR1_RECORD_SIZE,
+            assemble_jal_lui_inline::<F, RA>,
+        );
+        registry.register_inline(
+            Rv64AuipcOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_WR1_RECORD_SIZE,
+            assemble_auipc_inline::<F, RA>,
+        );
+        registry.register_inline(
+            Rv64JalrOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_RW1_RECORD_SIZE,
+            assemble_jalr_inline::<F, RA>,
+        );
         registry.register(
             [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
                 .map(|opcode| opcode.global_opcode()),
@@ -1011,6 +1038,252 @@ fn assemble_bitwise_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     core_record.local_opcode = instruction
         .opcode
         .local_opcode_idx(BaseAluOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+/// Little-endian field readers for the compact wire shapes (no alignment
+/// requirements; each `read_for_pc` also order-guards against the program
+/// log like [`PreflightAlu3Compact::read_for_pc`]).
+fn compact_u32_at(bytes: &[u8], at: usize) -> u32 {
+    u32::from_le_bytes(bytes[at..at + 4].try_into().expect("4-byte field"))
+}
+
+fn compact_u64_at(bytes: &[u8], at: usize) -> u64 {
+    u64::from_le_bytes(bytes[at..at + 8].try_into().expect("8-byte field"))
+}
+
+fn compact_order_guard(from_pc: u32, pc: u32) -> Result<(), ExecutionError> {
+    if from_pc != pc {
+        return Err(ExecutionError::RvrExecution(format!(
+            "inline record order mismatch: record from_pc {from_pc:#x} vs program-log pc {pc:#x}"
+        )));
+    }
+    Ok(())
+}
+
+/// Host mirror of the C branch2 record (2 reads, no write).
+struct PreflightBranch2Compact {
+    from_timestamp: u32,
+    reads_prev_timestamp: [u32; 2],
+    b: u64,
+    c: u64,
+}
+
+impl PreflightBranch2Compact {
+    fn read_for_pc(bytes: &[u8], pc: u32) -> Result<Self, ExecutionError> {
+        debug_assert_eq!(bytes.len(), PREFLIGHT_BRANCH2_RECORD_SIZE);
+        compact_order_guard(compact_u32_at(bytes, 0), pc)?;
+        Ok(Self {
+            from_timestamp: compact_u32_at(bytes, 4),
+            reads_prev_timestamp: [compact_u32_at(bytes, 8), compact_u32_at(bytes, 12)],
+            b: compact_u64_at(bytes, 16),
+            c: compact_u64_at(bytes, 24),
+        })
+    }
+}
+
+/// Host mirror of the C wr1 record (one conditional write).
+struct PreflightWr1Compact {
+    from_timestamp: u32,
+    write_prev_timestamp: u32,
+    write_prev_data: u64,
+}
+
+impl PreflightWr1Compact {
+    fn read_for_pc(bytes: &[u8], pc: u32) -> Result<Self, ExecutionError> {
+        debug_assert_eq!(bytes.len(), PREFLIGHT_WR1_RECORD_SIZE);
+        compact_order_guard(compact_u32_at(bytes, 0), pc)?;
+        Ok(Self {
+            from_timestamp: compact_u32_at(bytes, 4),
+            write_prev_timestamp: compact_u32_at(bytes, 8),
+            write_prev_data: compact_u64_at(bytes, 12),
+        })
+    }
+}
+
+/// Host mirror of the C rw1 record (one read + one conditional write).
+struct PreflightRw1Compact {
+    from_timestamp: u32,
+    read_prev_timestamp: u32,
+    write_prev_timestamp: u32,
+    b: u64,
+    write_prev_data: u64,
+}
+
+impl PreflightRw1Compact {
+    fn read_for_pc(bytes: &[u8], pc: u32) -> Result<Self, ExecutionError> {
+        debug_assert_eq!(bytes.len(), PREFLIGHT_RW1_RECORD_SIZE);
+        compact_order_guard(compact_u32_at(bytes, 0), pc)?;
+        Ok(Self {
+            from_timestamp: compact_u32_at(bytes, 4),
+            read_prev_timestamp: compact_u32_at(bytes, 8),
+            write_prev_timestamp: compact_u32_at(bytes, 12),
+            b: compact_u64_at(bytes, 16),
+            write_prev_data: compact_u64_at(bytes, 24),
+        })
+    }
+}
+
+/// Fill a branch adapter record from a compact branch2 record, mirroring
+/// [`fill_branch_adapter`].
+fn fill_branch_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightBranch2Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64BranchAdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = instruction.a.as_canonical_u32();
+    record.rs2_ptr = instruction.b.as_canonical_u32();
+    record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
+    record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
+}
+
+fn assemble_branch_eq_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightBranch2Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64BranchAdapterRecord,
+        &mut BranchEqualCoreRecord<BLOCK_FE_WIDTH>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BranchAdapterExecutor>::new());
+    fill_branch_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.a = u16x4(compact.b);
+    core_record.b = u16x4(compact.c);
+    core_record.imm = instruction.c.as_canonical_u32();
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(BranchEqualOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_branch_lt_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightBranch2Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64BranchAdapterRecord,
+        &mut BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BranchAdapterExecutor>::new());
+    fill_branch_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.a = u16x4(compact.b);
+    core_record.b = u16x4(compact.c);
+    core_record.imm = instruction.c.as_canonical_u32();
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(BranchLessThanOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+/// Fill a (conditional) rd-write adapter record from a compact wr1 record,
+/// mirroring [`fill_cond_rdwrite_adapter`] / [`fill_rdwrite_adapter`].
+fn fill_rdwrite_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightWr1Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    write_enabled: bool,
+    record: &mut Rv64RdWriteAdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    if write_enabled {
+        record.rd_ptr = instruction.a.as_canonical_u32();
+        record.rd_aux_record = MemoryWriteAuxRecord {
+            prev_timestamp: compact.write_prev_timestamp,
+            prev_data: u16x4(compact.write_prev_data),
+        };
+    } else {
+        record.rd_ptr = u32::MAX;
+    }
+}
+
+fn assemble_jal_lui_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightWr1Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (&mut Rv64RdWriteAdapterRecord, &mut Rv64JalLuiCoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64CondRdWriteAdapterExecutor>::new());
+    fill_rdwrite_adapter_from_compact(
+        &compact,
+        instruction,
+        pc,
+        instruction.f.is_one(),
+        adapter_record,
+    );
+    let local = instruction
+        .opcode
+        .local_opcode_idx(Rv64JalLuiOpcode::CLASS_OFFSET);
+    let is_jal = local == JAL;
+    let imm = instruction.c.as_canonical_u32();
+    let signed_imm = if is_jal {
+        if imm < (1 << 20) {
+            imm as i32
+        } else {
+            let neg_imm = F::ORDER_U32 - imm;
+            -(neg_imm as i32)
+        }
+    } else {
+        imm as i32
+    };
+    core_record.imm = imm;
+    core_record.rd_data = run_jal_lui_value(is_jal, pc, signed_imm);
+    core_record.is_jal = is_jal;
+    Ok(())
+}
+
+fn assemble_auipc_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightWr1Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (&mut Rv64RdWriteAdapterRecord, &mut Rv64AuipcCoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64RdWriteAdapterExecutor>::new());
+    fill_rdwrite_adapter_from_compact(&compact, instruction, pc, true, adapter_record);
+    core_record.from_pc = pc;
+    core_record.imm = instruction.c.as_canonical_u32();
+    Ok(())
+}
+
+fn assemble_jalr_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightRw1Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (&mut Rv64JalrAdapterRecord, &mut Rv64JalrCoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64JalrAdapterExecutor>::new());
+    adapter_record.from_pc = pc;
+    adapter_record.from_timestamp = compact.from_timestamp;
+    adapter_record.rs1_ptr = instruction.b.as_canonical_u32();
+    adapter_record.reads_aux = MemoryReadAuxRecord {
+        prev_timestamp: compact.read_prev_timestamp,
+    };
+    if instruction.f.is_one() {
+        adapter_record.rd_ptr = instruction.a.as_canonical_u32();
+        adapter_record.writes_aux = MemoryWriteAuxRecord {
+            prev_timestamp: compact.write_prev_timestamp,
+            prev_data: u16x4(compact.write_prev_data),
+        };
+    } else {
+        adapter_record.rd_ptr = u32::MAX;
+    }
+    core_record.imm = instruction.c.as_canonical_u32() as u16;
+    core_record.from_pc = pc;
+    core_record.rs1_val = compact.b as u32;
+    core_record.imm_sign = instruction.g.is_one();
     Ok(())
 }
 
