@@ -170,6 +170,20 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         ChipInventoryError,
     >;
 
+    /// Default preflight engine for the proving path when neither the
+    /// per-instance override nor `OPENVM_RVR_PREFLIGHT_ENGINE` is set.
+    ///
+    /// CPU prover builders keep the trait default (`Interpreter`): at reth
+    /// scale the interpreter's fused execute+arena-fill pass beats the rvr
+    /// inline path, whose host compact→arena assembly dominates its cost on
+    /// CPU (see [`crate::arch::rvr::RvrPreflightEngine`] for the measured
+    /// rationale). GPU builders override to `Rvr`: the assembly pass does not
+    /// exist in the GPU shape, and compact records shrink the H2D payload.
+    #[cfg(feature = "rvr")]
+    fn default_rvr_preflight_engine(&self) -> crate::arch::rvr::RvrPreflightEngine {
+        crate::arch::rvr::RvrPreflightEngine::Interpreter
+    }
+
     /// Build the registry used by rvr preflight routing and record assembly.
     ///
     /// A composed builder adds its inner config's registrations first, then

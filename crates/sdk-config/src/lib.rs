@@ -568,6 +568,14 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         config.extend_rvr_log_native(&mut registry);
         registry
     }
+
+    /// GPU backend: default to the rvr inline preflight engine — the host
+    /// compact→arena assembly pass that dominates the CPU path does not
+    /// exist in the GPU shape, and compact records shrink the H2D payload.
+    #[cfg(feature = "rvr")]
+    fn default_rvr_preflight_engine(&self) -> openvm_circuit::arch::rvr::RvrPreflightEngine {
+        openvm_circuit::arch::rvr::RvrPreflightEngine::Rvr
+    }
 }
 
 // ======================= Boilerplate ====================
