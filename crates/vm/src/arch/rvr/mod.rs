@@ -32,7 +32,7 @@ pub use execute::{
     execute_preflight, rv_execute, ExecuteError, RvrPreflightRunResult,
 };
 pub use log_native::{
-    generate_record_arenas_from_logs, LogNativeAccessView, LogNativeAssembler,
+    generate_record_arenas_from_logs, ArenaNativeGeometry, LogNativeAccessView, LogNativeAssembler,
     LogNativeAssemblerRegistry, LogNativeInlineAssembler, LogNativeOpcodeAdmitter,
     VmRvrLogNativeExtension,
 };
