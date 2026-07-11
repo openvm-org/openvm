@@ -211,6 +211,12 @@ pub struct CProject {
     /// R3: emit inline compact records (log-suppressed) for migrated opcodes.
     /// Preflight mode only; see [`Self::inline_records_enabled`].
     pub inline_records: bool,
+    /// R4: airs whose records the generated C writes arena-native — full
+    /// records at final arena positions, field offsets baked as literals
+    /// from the geometry's layout table. Airs absent here keep the compact
+    /// wire. Populated by the host compile pipeline from the assembler
+    /// registry; empty means pure R3 emission.
+    pub arena_native_airs: std::collections::BTreeMap<u32, crate::ArenaNativeGeometry>,
 }
 
 impl CProject {
@@ -232,6 +238,7 @@ impl CProject {
             num_airs: None,
             native_debug_info: false,
             inline_records: false,
+            arena_native_airs: std::collections::BTreeMap::new(),
         }
     }
 

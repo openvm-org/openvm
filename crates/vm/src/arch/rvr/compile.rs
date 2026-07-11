@@ -890,6 +890,11 @@ fn compile_impl<F: PrimeField32>(
                     chips,
                     opts.preflight_assembler_admitter,
                 );
+                project.arena_native_airs = inline_meta
+                    .arena_native_airs
+                    .iter()
+                    .map(|&(air, geometry)| (air as u32, geometry))
+                    .collect();
             }
         }
     }
