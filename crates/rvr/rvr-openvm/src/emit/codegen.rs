@@ -162,7 +162,21 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
         }
         Instr::AluImm { op, rd, rs1, imm } => {
             if ctx.inline_records_enabled() {
-                ctx.emit_reg2imm_inline(*rd, *rs1, *imm as i64 as u64, |l, v| alu_expr(*op, l, v));
+                // R4 imm-form baking (ADDI only; there is no SUB-imm). The
+                // record's rs2 field is the 24-bit immediate encoding and
+                // rs2_imm_sign its 12-bit sign, matching the host assembler.
+                let arena = match op {
+                    AluOp::Add => Some(ArenaAlu3Baked {
+                        rs2_field: (*imm as u32) & 0xFF_FFFF,
+                        rs2_as: 0,
+                        rs2_imm_sign: (*imm < 0) as u8,
+                        local_opcode: 0,
+                    }),
+                    _ => None,
+                };
+                ctx.emit_reg2imm_inline(*rd, *rs1, *imm as i64 as u64, arena, |l, v| {
+                    alu_expr(*op, l, v)
+                });
             } else {
                 let l = ctx.read_reg(*rs1);
                 ctx.trace_immediate();
@@ -174,7 +188,7 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             if ctx.inline_records_enabled() {
                 // The record's c value is the raw shift amount; the result
                 // expression uses the constant directly.
-                ctx.emit_reg2imm_inline(*rd, *rs1, u64::from(*shamt), |l, _| {
+                ctx.emit_reg2imm_inline(*rd, *rs1, u64::from(*shamt), None, |l, _| {
                     shift_imm_expr(*op, l, *shamt)
                 });
             } else {
