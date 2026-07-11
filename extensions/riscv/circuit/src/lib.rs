@@ -358,9 +358,11 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
 /// `OPENVM_RVR_GPU_RECORDS=compact`, migrated AIRs' wire buffers bypass host
 /// expansion and are adopted into their arenas via one memcpy (the CUDA chips
 /// decode them on device); default keeps the gate-validated expanded path.
+/// Public so composed-config GPU builders (e.g. the SDK builder) can opt their
+/// VMs into the same compact path with their own shared decode state.
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[allow(clippy::type_complexity)]
-fn generate_gpu_rvr_record_arenas(
+pub fn generate_gpu_rvr_record_arenas(
     registry: &LogNativeAssemblerRegistry<Val<BabyBearPoseidon2Config>, DenseRecordArena>,
     state: &rvr_gpu_decode::RvrGpuDecodeState,
     exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,

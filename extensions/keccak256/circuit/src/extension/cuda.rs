@@ -104,9 +104,21 @@ impl VmBuilder<E> for Keccak256Rv64GpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Rv64ImGpuProverExt::default(),
+            &config.rv64i,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Rv64ImGpuProverExt::default(),
+            &config.rv64m,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Rv64ImGpuProverExt::default(),
+            &config.io,
+            inventory,
+        )?;
         VmProverExtension::<E, _, _>::extend_prover(
             &Keccak256GpuProverExt,
             &config.keccak,

@@ -395,9 +395,21 @@ impl VmBuilder<E> for Rv64ModularHybridBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.base, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.mul, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Rv64ImGpuProverExt::default(),
+            &config.base,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Rv64ImGpuProverExt::default(),
+            &config.mul,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Rv64ImGpuProverExt::default(),
+            &config.io,
+            inventory,
+        )?;
         VmProverExtension::<E, _, _>::extend_prover(
             &AlgebraHybridProverExt,
             &config.modular,
