@@ -398,9 +398,22 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
         output.arena_native_written.iter().copied().collect();
     let mut arena_native_counts: HashMap<usize, u32> =
         arena_native_expected.keys().map(|&air| (air, 0)).collect();
+    // Compact-aware capacity map: airs whose arenas the caller substitutes —
+    // C-staged (arena-native or wire targets) or compact-adopted — get a
+    // zero-capacity placeholder. A full-size arena here would be allocated,
+    // zeroed, never written, and dropped at substitution (the measured G2
+    // "buffer #1" cost). A record wrongly routed at a placeholder still fails
+    // loudly on its capacity assert instead of writing.
     let mut arenas = capacities
         .iter()
-        .map(|&(height, width)| RA::with_capacity(height, width))
+        .enumerate()
+        .map(|(air_idx, &(height, width))| {
+            if arena_native_expected.contains_key(&air_idx) || compact_airs.contains(&air_idx) {
+                RA::with_capacity(0, width)
+            } else {
+                RA::with_capacity(height, width)
+            }
+        })
         .collect::<Vec<_>>();
     let access = LogNativeAccessView::new(&output.access_aux)?;
 
@@ -514,17 +527,16 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
     }
     drop(inline_bufs);
 
-    // The arenas hold expanded records now; hand the compact byte buffers
-    // back through the output so the caller can return them to the preflight
-    // buffer pool for the next segment.
-    output.inline_records = inline_records;
-
-    // Hand the compact-air wire buffers back to the caller for adoption.
-    drop(inline_bufs);
-    let wire_buffers = inline_records
-        .into_iter()
-        .filter(|chip| compact_airs.contains(&chip.air_idx))
-        .collect();
+    // Compact-air wire buffers are handed to the caller for adoption (GPU
+    // on-device decode); every other chip's byte buffer goes back through the
+    // output so the caller can return it to the preflight buffer pool for the
+    // next segment. A compact air that was C-staged (its records already sit
+    // in a caller-provided wire target) has only an empty placeholder here —
+    // that goes back to the pool, not to adoption.
+    let (wire_buffers, pooled): (Vec<_>, Vec<_>) = inline_records.into_iter().partition(|chip| {
+        compact_airs.contains(&chip.air_idx) && !arena_native_expected.contains_key(&chip.air_idx)
+    });
+    output.inline_records = pooled;
 
     Ok((arenas, wire_buffers))
 }

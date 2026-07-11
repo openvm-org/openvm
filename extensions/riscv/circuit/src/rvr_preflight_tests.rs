@@ -3245,3 +3245,412 @@ fn rvr_preflight_arena_native_reveal_mixed_air_proves_and_verifies() {
         "small mixed LoadStore/REVEAL program is single segment"
     );
 }
+
+/// G2 zero-copy oracle: the same compact-compiled program executed twice —
+/// arm A harvests the C-written wire records from the pooled record buffers
+/// (the unstaged path), arm B aims every migrated air at a Dense arena staged
+/// as a wire target (`stage_rvr_wire`: the C writes packed wire records
+/// straight into the 32-aligned backing; adoption is cursor bookkeeping). The
+/// staged arenas must be byte-identical to the pooled wire buffers over all
+/// four wire formats (the fixture covers alu3/branch2/wr1/rw1 plus the REVEAL
+/// loadstore row), must carry `rvr_wire`, and the generation loop's count
+/// oracle must accept the staged run.
+#[test]
+fn rvr_preflight_compact_wire_staged_matches_pooled() {
+    use openvm_circuit::arch::rvr::{preflight::RvrArenaNativeTarget, ChipRecordBuf};
+
+    // Both arms need the compact WIRE emission (the G2 shape): opt out of the
+    // default-on fused emission for the whole test; nextest isolates
+    // processes, so the mutation cannot leak.
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+
+    let exe = full_rv64im_matrix_exe();
+    let streams = hard_chip_streams(1);
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("rvr vm init");
+    let trace_heights = vec![4096u32; rvr_vm.num_airs()];
+    let capacities = trace_heights
+        .iter()
+        .zip(rvr_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+    let RvrPreflightRoute::Rvr(instance) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("routed preflight instance")
+    else {
+        panic!("program must route to RVR preflight");
+    };
+    let wire_airs = instance.compiled().inline_records().airs.clone();
+    assert!(
+        instance
+            .compiled()
+            .inline_records()
+            .arena_native_airs
+            .is_empty(),
+        "compact compile must not report arena-native airs"
+    );
+    // Wire staging requires that NO log-assembled record routes to the air —
+    // the CPU mirror of the GPU decode taint (`bind_compact_segment` never
+    // requests a mixed air). The fixture's REVEAL store keeps the loadstore
+    // air mixed (inline loads/stores + a log-assembled REVEAL row), so it
+    // must stay pooled; staging it would hand the log assembler a wire arena,
+    // which the placeholder capacity guard rejects loudly (pinned here).
+    let inline_pc_slots = instance.compiled().inline_records().pc_slots.clone();
+    let mixed_airs: std::collections::HashSet<usize> = pc_to_air_idx
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, air)| {
+            let air = (*air)?;
+            let is_wire_air = wire_airs.iter().any(|&(wire_air, _)| wire_air == air);
+            let is_inline_pc = inline_pc_slots.get(slot).copied().unwrap_or(false);
+            (is_wire_air && !is_inline_pc).then_some(air)
+        })
+        .collect();
+    assert!(
+        !mixed_airs.is_empty(),
+        "fixture must keep the REVEAL-mixed loadstore air unstageable"
+    );
+
+    // Arm A: pooled record buffers (target-less execute); the wire bytes are
+    // the C-written truth this oracle compares against.
+    let a_output = instance
+        .execute_preflight(streams.clone(), None)
+        .expect("pooled compact preflight execution");
+    let a_instret = a_output.instret;
+    let a_wire: BTreeMap<usize, Vec<u8>> = a_output
+        .inline_records
+        .iter()
+        .map(|chip| (chip.air_idx, chip.bytes.clone()))
+        .collect();
+    assert_eq!(a_wire.len(), wire_airs.len());
+    assert!(
+        a_wire.values().any(|bytes| !bytes.is_empty()),
+        "fixture must emit wire records"
+    );
+
+    // Arm B: every fully-inline migrated air staged as a wire target; the
+    // mixed loadstore air stays pooled.
+    let mut staged: Vec<(usize, usize, DenseRecordArena)> = Vec::new();
+    let mut targets: BTreeMap<usize, ChipRecordBuf> = BTreeMap::new();
+    for &(air, wire_size) in &wire_airs {
+        if mixed_airs.contains(&air) {
+            continue;
+        }
+        let (arena, buf) = <DenseRecordArena as RvrArenaNativeTarget>::stage_rvr_wire(
+            trace_heights[air] as usize,
+            wire_size,
+        );
+        targets.insert(air, buf);
+        staged.push((air, wire_size, arena));
+    }
+    assert!(
+        staged.len() >= 10,
+        "fixture must stage most migrated airs (got {})",
+        staged.len()
+    );
+    let b_state = rvr_vm.create_initial_state(&exe, streams);
+    let mut b_output = instance
+        .execute_preflight_from_state_with_arena_targets(
+            b_state,
+            Some(a_instret),
+            &trace_heights,
+            &targets,
+        )
+        .expect("staged wire preflight execution");
+
+    // Tick-model identity across arms.
+    assert_eq!(
+        a_output.raw_logs.program_log, b_output.raw_logs.program_log,
+        "program logs must be identical across arms"
+    );
+
+    // The staged run reports counts through the arena-target channel and the
+    // generation loop's count oracle must accept it (staged airs skip
+    // assembly; every other air assembles normally into full arenas).
+    let b_arenas =
+        crate::log_native::generate_rv64im_record_arenas_from_logs::<F, DenseRecordArena>(
+            &exe,
+            &mut b_output,
+            &capacities,
+            &pc_to_air_idx,
+        )
+        .expect("staged-path record arena generation (count oracle)");
+
+    for (air, wire_size, mut arena) in staged {
+        let bytes = &a_wire[&air];
+        assert_eq!(
+            bytes.len() % wire_size,
+            0,
+            "air {air}: pooled wire bytes must be whole records"
+        );
+        let written = b_output
+            .arena_native_written
+            .iter()
+            .find(|&&(written_air, _)| written_air == air)
+            .map(|&(_, count)| count as usize)
+            .expect("staged wire air must report a written count");
+        assert_eq!(
+            written,
+            bytes.len() / wire_size,
+            "air {air}: staged record count must match the pooled arm"
+        );
+        arena.finish_rvr_wire(written, wire_size);
+        assert!(arena.rvr_wire, "air {air}: staged arena must be wire-mode");
+        assert_eq!(
+            arena.allocated(),
+            bytes.as_slice(),
+            "air {air}: staged wire records must be byte-identical to pooled"
+        );
+        // The placeholder arena the generation loop returned for this air must
+        // be empty (the caller substitutes the staged arena).
+        assert!(
+            b_arenas[air].allocated().is_empty(),
+            "air {air}: generation must not write a staged air's arena"
+        );
+    }
+
+    // The mixed (unstaged) airs took the pooled path in arm B too: their wire
+    // bytes must match arm A's, and their arenas host-expand normally.
+    for &air in &mixed_airs {
+        let b_bytes = b_output
+            .inline_records
+            .iter()
+            .find(|chip| chip.air_idx == air)
+            .map(|chip| chip.bytes.as_slice())
+            .expect("mixed air must keep a pooled wire buffer");
+        assert_eq!(
+            b_bytes, a_wire[&air],
+            "air {air}: pooled wire bytes must match across arms"
+        );
+        assert!(
+            !b_arenas[air].allocated().is_empty(),
+            "air {air}: mixed air must host-expand into a real arena"
+        );
+    }
+}
+
+/// G2 fixture-scale host-write checkpoint (manual): one large AddSub-dominated
+/// segment (~8.2M inline records) on the single-shot proving path, three arms
+/// over the same program — G1 fused (full records C-written into a staged
+/// Dense arena), G2 staged wire (compact records C-written into a staged
+/// Dense arena, zero-copy), and the unstaged compact shape (pooled wire
+/// buffers + the alloc+memcpy adoption M-GPUDEC measured as INC1). Reports
+/// bytes written and wall time per arm. Manual:
+/// `cargo nextest run --cargo-profile=fast -p openvm-riscv-circuit \
+///  --features rvr --run-ignored only -- rvr_preflight_wire_staged_host_write_checkpoint`
+#[test]
+#[ignore = "manual G2 host-write checkpoint harness, not a correctness gate"]
+fn rvr_preflight_wire_staged_host_write_checkpoint() {
+    use std::time::Instant;
+
+    use openvm_circuit::arch::rvr::{preflight::RvrArenaNativeTarget, ChipRecordBuf};
+
+    let (iters_base, iters_shift, body_adds) = (1024usize, 3usize, 1000usize); // 8192 x 1002
+    let exe = checkpoint_loop_exe(iters_base, iters_shift, body_adds);
+    let dyn_insns = checkpoint_loop_dyn_insns(iters_base, iters_shift, body_adds);
+    const ITERS: usize = 5;
+
+    // Arm F (G1 fused): full records at dense stride, C-written into staged
+    // arena backings — the Phase C rvr-arm host shape.
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    {
+        let (rvr_vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ImCpuBuilder,
+            Rv64ImConfig::default(),
+        )
+        .expect("fused vm init");
+        let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+        let addsub_air = pc_to_air_idx[4].expect("body ADD maps to an air");
+        let branch_air = pc_to_air_idx[4 + body_adds + 1].expect("branch maps to an air");
+        let mut trace_heights = vec![1u32 << 10; rvr_vm.num_airs()];
+        trace_heights[addsub_air] = 1 << 24;
+        trace_heights[branch_air] = 1 << 14;
+        let RvrPreflightRoute::Rvr(instance) = rvr_vm
+            .preflight_routed_instance(&exe)
+            .expect("routed preflight instance")
+        else {
+            panic!("program must route to RVR preflight");
+        };
+        let arena_native = instance
+            .compiled()
+            .inline_records()
+            .arena_native_airs
+            .clone();
+        assert!(
+            !arena_native.is_empty(),
+            "fused compile must be arena-native"
+        );
+        let mut best = f64::MAX;
+        let mut bytes_written = 0usize;
+        for _ in 0..ITERS {
+            let mut stagings = Vec::new();
+            let mut targets = BTreeMap::new();
+            let t0 = Instant::now();
+            for &(air, geom) in &arena_native {
+                let stride = geom.stride_dense();
+                let (arena, buf) = <DenseRecordArena as RvrArenaNativeTarget>::stage_arena_native(
+                    trace_heights[air] as usize,
+                    0,
+                    &geom,
+                );
+                targets.insert(air, buf);
+                stagings.push((air, stride, arena));
+            }
+            let init = instance.create_initial_state(Streams::default());
+            let output = instance
+                .execute_preflight_from_state_with_arena_targets(
+                    init,
+                    Some(dyn_insns),
+                    &trace_heights,
+                    &targets,
+                )
+                .expect("fused preflight execution");
+            let dt = t0.elapsed().as_secs_f64();
+            bytes_written = output
+                .arena_native_written
+                .iter()
+                .map(|&(air, count)| {
+                    let stride = stagings
+                        .iter()
+                        .find(|&&(staged_air, ..)| staged_air == air)
+                        .map(|&(_, stride, _)| stride)
+                        .unwrap();
+                    count as usize * stride
+                })
+                .sum();
+            instance.recycle_output(output);
+            best = best.min(dt);
+        }
+        eprintln!(
+            "G2_CHECKPOINT arm=fused_staged(G1) dyn_insns={dyn_insns} bytes={bytes_written} \
+             wall_ms={:.2} write_rate={:.2}GB/s",
+            best * 1e3,
+            bytes_written as f64 / best / 1e9,
+        );
+    }
+
+    // Arms W (G2 staged wire, zero-copy) + P (pooled wire + adoption memcpy):
+    // compact compile.
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    {
+        let (rvr_vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ImCpuBuilder,
+            Rv64ImConfig::default(),
+        )
+        .expect("compact vm init");
+        let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+        let addsub_air = pc_to_air_idx[4].expect("body ADD maps to an air");
+        let branch_air = pc_to_air_idx[4 + body_adds + 1].expect("branch maps to an air");
+        let mut trace_heights = vec![1u32 << 10; rvr_vm.num_airs()];
+        trace_heights[addsub_air] = 1 << 24;
+        trace_heights[branch_air] = 1 << 14;
+        let RvrPreflightRoute::Rvr(instance) = rvr_vm
+            .preflight_routed_instance(&exe)
+            .expect("routed preflight instance")
+        else {
+            panic!("program must route to RVR preflight");
+        };
+        let wire_airs = instance.compiled().inline_records().airs.clone();
+
+        // Arm W: staged wire targets, records land in their final backing.
+        let mut best = f64::MAX;
+        let mut bytes_written = 0usize;
+        for _ in 0..ITERS {
+            let mut targets: BTreeMap<usize, ChipRecordBuf> = BTreeMap::new();
+            let mut staged: Vec<(usize, usize, DenseRecordArena)> = Vec::new();
+            let t0 = Instant::now();
+            for &(air, wire_size) in &wire_airs {
+                let (arena, buf) = <DenseRecordArena as RvrArenaNativeTarget>::stage_rvr_wire(
+                    trace_heights[air] as usize,
+                    wire_size,
+                );
+                targets.insert(air, buf);
+                staged.push((air, wire_size, arena));
+            }
+            let init = instance.create_initial_state(Streams::default());
+            let output = instance
+                .execute_preflight_from_state_with_arena_targets(
+                    init,
+                    Some(dyn_insns),
+                    &trace_heights,
+                    &targets,
+                )
+                .expect("staged wire preflight execution");
+            for (air, wire_size, mut arena) in staged {
+                let written = output
+                    .arena_native_written
+                    .iter()
+                    .find(|&&(written_air, _)| written_air == air)
+                    .map(|&(_, count)| count as usize)
+                    .unwrap();
+                arena.finish_rvr_wire(written, wire_size);
+                std::hint::black_box(&arena);
+            }
+            let dt = t0.elapsed().as_secs_f64();
+            bytes_written = output
+                .arena_native_written
+                .iter()
+                .map(|&(air, count)| {
+                    let wire_size = wire_airs
+                        .iter()
+                        .find(|&&(wire_air, _)| wire_air == air)
+                        .map(|&(_, size)| size)
+                        .unwrap();
+                    count as usize * wire_size
+                })
+                .sum();
+            instance.recycle_output(output);
+            best = best.min(dt);
+        }
+        eprintln!(
+            "G2_CHECKPOINT arm=wire_staged(G2) dyn_insns={dyn_insns} bytes={bytes_written} \
+             wall_ms={:.2} write_rate={:.2}GB/s",
+            best * 1e3,
+            bytes_written as f64 / best / 1e9,
+        );
+
+        // Arm P: pooled wire buffers + the alloc+memcpy adoption (the INC1
+        // shape whose fresh-buffer churn M-GPUDEC measured at +86%/seg).
+        let mut best = f64::MAX;
+        let mut bytes_written = 0usize;
+        for _ in 0..ITERS {
+            let init = instance.create_initial_state(Streams::default());
+            let t0 = Instant::now();
+            let output = instance
+                .execute_preflight_from_state_with_capacities(init, Some(dyn_insns), &trace_heights)
+                .expect("pooled compact preflight execution");
+            let mut adopted = Vec::new();
+            for chip in &output.inline_records {
+                let mut dense = DenseRecordArena::with_byte_capacity(chip.bytes.len());
+                dense
+                    .alloc_bytes(chip.bytes.len())
+                    .copy_from_slice(&chip.bytes);
+                dense.rvr_wire = true;
+                adopted.push(dense);
+            }
+            let dt = t0.elapsed().as_secs_f64();
+            bytes_written = output
+                .inline_records
+                .iter()
+                .map(|chip| chip.bytes.len())
+                .sum();
+            std::hint::black_box(&adopted);
+            drop(adopted);
+            instance.recycle_output(output);
+            best = best.min(dt);
+        }
+        eprintln!(
+            "G2_CHECKPOINT arm=wire_pooled_memcpy(INC1) dyn_insns={dyn_insns} bytes={bytes_written} \
+             wall_ms={:.2} write_rate={:.2}GB/s",
+            best * 1e3,
+            bytes_written as f64 / best / 1e9,
+        );
+    }
+}

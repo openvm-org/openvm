@@ -123,6 +123,10 @@ trait CachedRvrPreflightExecutor<F>: Send + Sync {
     );
     /// R4: airs whose records the compiled library writes arena-native.
     fn arena_native_airs(&self) -> &[(usize, ArenaNativeGeometry)];
+
+    /// R3/G2: `(air, packed wire record size)` for every air the compiled
+    /// library emits inline compact records for.
+    fn inline_wire_airs(&self) -> &[(usize, usize)];
 }
 
 /// The program-dependent, owned pieces of an rvr preflight instance.
@@ -166,6 +170,10 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
     }
     fn arena_native_airs(&self) -> &[(usize, ArenaNativeGeometry)] {
         &self.compiled.inline_records().arena_native_airs
+    }
+
+    fn inline_wire_airs(&self) -> &[(usize, usize)] {
+        &self.compiled.inline_records().airs
     }
 }
 
@@ -1261,6 +1269,7 @@ where
                 #[cfg(any(feature = "stark-debug", feature = "cuda"))]
                 let split_t0 = std::time::Instant::now();
                 let capacities = self.preflight_capacities(trace_heights);
+                let pc_to_air_idx = self.pc_to_air_idx(exe)?;
                 // R4: stage arena-native targets so the C writes those airs'
                 // full records directly into their final arena backings.
                 let arena_native = rvr_preflight.arena_native_airs().to_vec();
@@ -1275,6 +1284,48 @@ where
                     targets.insert(air, buf);
                     staged.push((air, geometry, arena));
                 }
+                // G2: stage compact WIRE targets for the airs the builder
+                // requests — the C writes packed wire records straight into
+                // the adopted backing (one alloc, no copy); the chips decode
+                // them (GPU on-device). A requested air must be compiled
+                // compact: wire-staging a fused-compiled air would hand the C
+                // a wire-stride descriptor for full-record emission, so the
+                // toggle mismatch fails here instead of corrupting records.
+                let wire_airs =
+                    self.builder
+                        .rvr_wire_record_airs(self.config(), exe, &pc_to_air_idx);
+                let mut staged_wire: Vec<(usize, usize, VB::RecordArena)> = Vec::new();
+                if !wire_airs.is_empty() {
+                    let inline_wire = rvr_preflight.inline_wire_airs().to_vec();
+                    for &air in wire_airs.iter().collect::<std::collections::BTreeSet<_>>() {
+                        if arena_native
+                            .iter()
+                            .any(|&(native_air, _)| native_air == air)
+                        {
+                            return Err(ExecutionError::RvrExecution(format!(
+                                "air {air} is compiled arena-native but the builder requested \
+                                 compact wire staging; recompile with the compact opt-in \
+                                 (OPENVM_RVR_GPU_RECORDS=compact) or drop the request"
+                            )));
+                        }
+                        let &(_, wire_size) = inline_wire
+                            .iter()
+                            .find(|&&(wire_air, _)| wire_air == air)
+                            .ok_or_else(|| {
+                                ExecutionError::RvrExecution(format!(
+                                    "builder requested wire staging for air {air} but the \
+                                     compiled library emits no inline records for it"
+                                ))
+                            })?;
+                        let (arena, buf) =
+                            <VB::RecordArena as RvrArenaNativeTarget>::stage_rvr_wire(
+                                capacities[air].0,
+                                wire_size,
+                            );
+                        targets.insert(air, buf);
+                        staged_wire.push((air, wire_size, arena));
+                    }
+                }
                 let mut rvr_output = rvr_preflight.execute(
                     exe,
                     state,
@@ -1284,7 +1335,6 @@ where
                 )?;
                 #[cfg(any(feature = "stark-debug", feature = "cuda"))]
                 let split_t1 = std::time::Instant::now();
-                let pc_to_air_idx = self.pc_to_air_idx(exe)?;
                 #[cfg(any(feature = "stark-debug", feature = "cuda"))]
                 let split_t2 = std::time::Instant::now();
                 #[cfg(feature = "stark-debug")]
@@ -1360,6 +1410,20 @@ where
                             ))
                         })?;
                     arena.finish_arena_native(written, &geometry);
+                    record_arenas[air] = arena;
+                }
+                for (air, wire_size, mut arena) in staged_wire {
+                    let written = rvr_output
+                        .arena_native_written
+                        .iter()
+                        .find(|&&(written_air, _)| written_air == air)
+                        .map(|&(_, count)| count as usize)
+                        .ok_or_else(|| {
+                            ExecutionError::RvrExecution(format!(
+                                "wire-staged air {air} reported no written count"
+                            ))
+                        })?;
+                    arena.finish_rvr_wire(written, wire_size);
                     record_arenas[air] = arena;
                 }
                 #[cfg(any(feature = "stark-debug", feature = "cuda"))]
