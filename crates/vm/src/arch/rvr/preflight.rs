@@ -1514,6 +1514,18 @@ pub trait RvrArenaNativeTarget: crate::arch::Arena + Sized {
         written_records: usize,
         geometry: &super::ArenaNativeGeometry,
     );
+
+    /// G2: stage this arena as a compact WIRE record target — the C writes
+    /// packed wire records (stride = `wire_size`) directly into the arena's
+    /// aligned backing, so adoption is cursor bookkeeping instead of an
+    /// alloc + memcpy. Only a dense byte arena can hold wire records (its
+    /// consumer decodes them, e.g. the GPU compact kernels); flavors whose
+    /// consumers expect expanded records must never be asked.
+    fn stage_rvr_wire(records_cap: usize, wire_size: usize) -> (Self, ChipRecordBuf);
+
+    /// Commit `written_records` C-written wire records and mark the arena as
+    /// wire-mode for its consumer.
+    fn finish_rvr_wire(&mut self, written_records: usize, wire_size: usize);
 }
 
 impl<F: openvm_stark_backend::p3_field::Field> RvrArenaNativeTarget
@@ -1540,6 +1552,17 @@ impl<F: openvm_stark_backend::p3_field::Field> RvrArenaNativeTarget
 
     fn finish_arena_native(&mut self, written_records: usize, _: &super::ArenaNativeGeometry) {
         self.trace_offset = written_records * self.width;
+    }
+
+    fn stage_rvr_wire(_records_cap: usize, _wire_size: usize) -> (Self, ChipRecordBuf) {
+        unreachable!(
+            "compact wire staging requires a dense record arena; the Matrix flavor's \
+             consumers expect expanded rows"
+        )
+    }
+
+    fn finish_rvr_wire(&mut self, _written_records: usize, _wire_size: usize) {
+        unreachable!("compact wire staging requires a dense record arena")
     }
 }
 
@@ -1581,5 +1604,38 @@ impl RvrArenaNativeTarget for crate::arch::DenseRecordArena {
         };
         self.records_buffer
             .set_position((offset + written_records * geometry.stride_dense()) as u64);
+    }
+
+    fn stage_rvr_wire(records_cap: usize, wire_size: usize) -> (Self, ChipRecordBuf) {
+        let mut arena = Self::with_byte_capacity(records_cap * wire_size);
+        let offset = arena.records_buffer.position() as usize;
+        debug_assert_eq!(
+            (arena.records_buffer.get_ref().as_ptr() as usize + offset) % 32,
+            0,
+            "dense wire base must be 32-aligned"
+        );
+        let base = unsafe { arena.records_buffer.get_mut().as_mut_ptr().add(offset) };
+        let buf = ChipRecordBuf {
+            base,
+            len: 0,
+            cap: (records_cap * wire_size) as u32,
+            // Compact wire: the stride IS the packed record size (the same
+            // descriptor shape the pooled record buffers use).
+            stride: wire_size as u32,
+            core_off: 0,
+        };
+        (arena, buf)
+    }
+
+    fn finish_rvr_wire(&mut self, written_records: usize, wire_size: usize) {
+        let offset = {
+            let ptr = self.records_buffer.get_ref().as_ptr() as usize;
+            (32 - ptr % 32) % 32
+        };
+        self.records_buffer
+            .set_position((offset + written_records * wire_size) as u64);
+        // The mode travels with the data: this routes the arena to the chips'
+        // compact-decode branch instead of the expanded-record kernels.
+        self.rvr_wire = true;
     }
 }
