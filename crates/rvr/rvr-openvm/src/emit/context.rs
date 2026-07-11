@@ -526,6 +526,87 @@ impl<'a> EmitContext<'a> {
         v1
     }
 
+    /// R3: emit a main-memory load with an inline compact alu3 record:
+    /// touch-only rs1 read and block touch, raw typed data read, conditional
+    /// rd write (rd = x0 ticks without writing, matching `write_reg(0)`).
+    /// The record's c value is the full block read value; the host derives
+    /// the aligned pointer and shift from the instruction and rs1 value.
+    pub(crate) fn emit_load_inline(
+        &mut self,
+        width: u8,
+        signed: bool,
+        rd: u8,
+        rs1: u8,
+        offset: i16,
+    ) {
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        let addr = self.materialize_u64(&Self::addr_expr(&v1, offset));
+        let blockaddr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+        let block = self.next_var();
+        self.write_line(&format!(
+            "uint64_t {block} = rd_mem_u64(memory, {blockaddr});"
+        ));
+        let p2 = self.next_var();
+        self.write_line(&format!(
+            "uint32_t {p2} = trace_mem_touch(state, {blockaddr});"
+        ));
+        if rd == 0 {
+            // The typed data read is only needed for the suppressed rd write;
+            // the record already carries the full block value.
+            self.write_line("trace_timestamp(state);");
+            self.write_line(&format!(
+                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, 0u, 0ull, \
+                 {v1}, {block});"
+            ));
+        } else {
+            let (data_func, _, var_ty) = Self::read_mem_helper(width, signed);
+            let val = self.next_var();
+            self.write_line(&format!("{var_ty} {val} = {data_func}(memory, {addr});"));
+            let rdprev = self.next_var();
+            self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+            let pw = self.next_var();
+            self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
+            self.write_line(&format!("reg_write(state, {rd}, {val});"));
+            self.write_line(&format!(
+                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, \
+                 {rdprev}, {v1}, {block});"
+            ));
+        }
+    }
+
+    /// R3: emit a main-memory store with an inline compact alu3 record:
+    /// touch-only rs1/rs2 reads and block touch, raw typed data write. The
+    /// record's c value is the full rs2 value and prev is the block's value
+    /// before the store (read here, before the raw write).
+    pub(crate) fn emit_store_inline(&mut self, width: u8, rs1: u8, rs2: u8, offset: i16) {
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        let (v2, p2) = self.reg_read_capture(rs2);
+        let addr = self.materialize_u64(&Self::addr_expr(&v1, offset));
+        let blockaddr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+        let prev = self.next_var();
+        self.write_line(&format!(
+            "uint64_t {prev} = rd_mem_u64(memory, {blockaddr});"
+        ));
+        let pw = self.next_var();
+        self.write_line(&format!(
+            "uint32_t {pw} = trace_mem_touch(state, {blockaddr});"
+        ));
+        let (wr_func, _, cast_ty) = Self::write_mem_helper(width);
+        self.write_line(&format!("{wr_func}(memory, {addr}, ({cast_ty})({v2}));"));
+        self.write_line(&format!(
+            "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {prev}, \
+             {v1}, {v2});"
+        ));
+    }
+
     fn write_reg_direct(&mut self, idx: u8, val: &str) {
         if idx == 0 {
             return;
@@ -930,6 +1011,48 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
             return false;
         }
         EmitContext::emit_wr1_inline(self, rd.map(reg_index), value);
+        true
+    }
+
+    fn emit_load_inline(
+        &mut self,
+        width: u8,
+        signed: bool,
+        rd: Option<Variable>,
+        base: Variable,
+        offset: i16,
+    ) -> bool {
+        if !self.inline_records_enabled() {
+            return false;
+        }
+        EmitContext::emit_load_inline(
+            self,
+            width,
+            signed,
+            rd.map_or(0, reg_index),
+            reg_index(base),
+            offset,
+        );
+        true
+    }
+
+    fn emit_store_inline(
+        &mut self,
+        width: u8,
+        base: Variable,
+        src: Variable,
+        offset: i16,
+    ) -> bool {
+        if !self.inline_records_enabled() {
+            return false;
+        }
+        EmitContext::emit_store_inline(
+            self,
+            width,
+            reg_index(base),
+            reg_index(src),
+            offset,
+        );
         true
     }
 

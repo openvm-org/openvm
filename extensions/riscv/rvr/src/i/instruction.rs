@@ -170,6 +170,7 @@ impl ExtInstr for Rv64IInstr {
     fn inline_record_shape(&self) -> Option<InlineRecordShape> {
         match self {
             Self::Alu { word: false, .. } => Some(InlineRecordShape::Alu3),
+            Self::Load { .. } | Self::Store { .. } => Some(InlineRecordShape::Alu3),
             Self::Const { .. } | Self::Jump { .. } => Some(InlineRecordShape::Wr1),
             Self::Branch { .. } => Some(InlineRecordShape::Branch2),
             Self::JumpIndirect { .. } => Some(InlineRecordShape::Rw1),
@@ -231,6 +232,9 @@ impl ExtInstr for Rv64IInstr {
                 base,
                 offset,
             } => {
+                if ctx.emit_load_inline(width.bytes(), *signed, *rd, *base, *offset) {
+                    return;
+                }
                 let base = ctx.read_var(*base);
                 let value = ctx.read_mem(&base, *offset, width.bytes(), *signed);
                 if let Some(rd) = rd {
@@ -245,6 +249,9 @@ impl ExtInstr for Rv64IInstr {
                 src,
                 offset,
             } => {
+                if ctx.emit_store_inline(width.bytes(), *base, *src, *offset) {
+                    return;
+                }
                 let base = ctx.read_var(*base);
                 let value = ctx.read_var(*src);
                 ctx.write_mem(&base, *offset, &value, width.bytes());
