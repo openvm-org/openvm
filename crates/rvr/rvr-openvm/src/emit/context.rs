@@ -92,6 +92,24 @@ pub struct EmitContext {
     current_chip_idx: u32,
     /// Program counter of the instruction currently being emitted.
     current_pc: u64,
+    /// R4: airs emitting arena-native full records (baked-offset stores at
+    /// final arena positions) instead of the compact wire.
+    arena_native_airs: std::collections::BTreeMap<u32, crate::ArenaNativeGeometry>,
+}
+
+/// R4: per-instruction baked operands for an arena-native alu3 record —
+/// exactly the program-redundant fields the compact wire strips and the host
+/// assembler re-derives. Supplied by the shape arm, which knows the opcode.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ArenaAlu3Baked {
+    /// `rs2` record field: register byte pointer (reg-form) or immediate.
+    pub rs2_field: u32,
+    /// 1 = rs2 was a register read, 0 = immediate.
+    pub rs2_as: u8,
+    /// Immediate sign bit (imm-form only).
+    pub rs2_imm_sign: u8,
+    /// The family's `local_opcode` ordinal as the core filler consumes it.
+    pub local_opcode: u8,
 }
 
 impl EmitContext {
@@ -106,12 +124,21 @@ impl EmitContext {
             inline_records: false,
             current_chip_idx: u32::MAX,
             current_pc: 0,
+            arena_native_airs: std::collections::BTreeMap::new(),
         }
     }
 
     /// R3: enable inline compact-record emission for migrated opcodes.
     pub(crate) fn set_inline_records(&mut self, enabled: bool) {
         self.inline_records = enabled;
+    }
+
+    /// R4: set the airs whose records are emitted arena-native.
+    pub(crate) fn set_arena_native_airs(
+        &mut self,
+        airs: std::collections::BTreeMap<u32, crate::ArenaNativeGeometry>,
+    ) {
+        self.arena_native_airs = airs;
     }
 
     /// Set the chip index and pc of the instruction about to be emitted.
@@ -317,6 +344,7 @@ impl EmitContext {
         rd: u8,
         rs1: u8,
         rs2: u8,
+        arena: Option<ArenaAlu3Baked>,
         result: impl FnOnce(&str, &str) -> String,
     ) {
         let chip = self.current_chip_idx;
@@ -333,10 +361,94 @@ impl EmitContext {
         let pw = self.next_var();
         self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
         self.write_line(&format!("reg_write(state, {rd}, {res});"));
+        if let Some(baked) = arena.filter(|_| self.arena_native_airs.contains_key(&chip)) {
+            let geom = self.arena_native_airs[&chip];
+            self.emit_arena_alu3_stores(
+                geom, baked, rd, rs1, &pc, &fromts, &p1, &p2, &pw, &rdprev, &v1, &v2,
+            );
+        } else {
+            self.write_line(&format!(
+                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {rdprev}, \
+                 {v1}, {v2});"
+            ));
+        }
+    }
+
+    /// R4: emit the arena-native alu3 full-record store sequence — claim one
+    /// slot (stride/core_off come from the ChipRecordBuf at runtime), store
+    /// dynamic fields from locals and program-redundant fields as baked
+    /// literals, all at `offset_of!`-derived literal offsets. u64-valued
+    /// fields expand to u16 byte-limbs via `arena_store_u64_le`
+    /// (4-byte-aligned stores only: Matrix rows are not 8-aligned).
+    #[allow(clippy::too_many_arguments)]
+    fn emit_arena_alu3_stores(
+        &mut self,
+        geom: crate::ArenaNativeGeometry,
+        baked: ArenaAlu3Baked,
+        rd: u8,
+        rs1: u8,
+        pc: &str,
+        fromts: &str,
+        p1: &str,
+        p2: &str,
+        pw: &str,
+        rdprev: &str,
+        v1: &str,
+        v2: &str,
+    ) {
+        let chip = self.current_chip_idx;
+        let crate::ArenaNativeLayout::Alu3(off) = geom.layout;
+        let rec = self.next_var();
         self.write_line(&format!(
-            "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {rdprev}, \
-             {v1}, {v2});"
+            "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
         ));
+        self.write_line(&format!("if ({rec}) {{"));
+        self.indent += 1;
+        let core = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {core} = {rec} + state->tracer->chip_records[{chip}].core_off;"
+        ));
+        let rd_ptr = (rd as u32) * 8;
+        let rs1_ptr = (rs1 as u32) * 8;
+        let stores = [
+            (off.from_pc, format!("{pc}")),
+            (off.from_timestamp, fromts.to_string()),
+            (off.rd_ptr, format!("{rd_ptr}u")),
+            (off.rs1_ptr, format!("{rs1_ptr}u")),
+            (off.rs2, format!("{}u", baked.rs2_field)),
+            (off.reads_aux0_prev_ts, p1.to_string()),
+            (off.reads_aux1_prev_ts, p2.to_string()),
+            (off.write_prev_ts, pw.to_string()),
+        ];
+        for (offset, value) in stores {
+            self.write_line(&format!("*(uint32_t*)({rec} + {offset}) = {value};"));
+        }
+        self.write_line(&format!(
+            "*(uint8_t*)({rec} + {}) = {}u;",
+            off.rs2_as, baked.rs2_as
+        ));
+        self.write_line(&format!(
+            "*(uint8_t*)({rec} + {}) = {}u;",
+            off.rs2_imm_sign, baked.rs2_imm_sign
+        ));
+        self.write_line(&format!(
+            "arena_store_u64_le({rec} + {}, {rdprev});",
+            off.write_prev_data
+        ));
+        self.write_line(&format!(
+            "arena_store_u64_le({core} + {}, {v1});",
+            off.core_b
+        ));
+        self.write_line(&format!(
+            "arena_store_u64_le({core} + {}, {v2});",
+            off.core_c
+        ));
+        self.write_line(&format!(
+            "*(uint8_t*)({core} + {}) = {}u;",
+            off.core_local_opcode, baked.local_opcode
+        ));
+        self.indent -= 1;
+        self.write_line("}");
     }
 
     /// R3: emit a register-immediate 2-read-1-write instruction with an
