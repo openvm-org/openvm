@@ -266,7 +266,14 @@ impl ExtInstr for HintSqrtInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.read_reg(self.rs1_reg);
+        // HintSqrt is a phantom: its `rs1` pointer read must NOT be traced. The
+        // reference executor reads it via untraced `GuestMemory` and advances the
+        // clock by a single `increment_timestamp()`, so no memory-bus interaction
+        // exists for the PhantomAir to consume. Using the tracing `read_reg` here
+        // logged an orphan register access, breaking MemoryBus balance (the read
+        // sat unconsumed between two AddSub writes to the same register). Mirror
+        // the sibling phantoms (PrintStr, HintRandom): untraced read + a bare tick.
+        let rs1 = ctx.read_reg_raw(self.rs1_reg);
         let mod_literal = format_c_byte_array(&self.modulus);
         let nqr_literal = format_c_byte_array(&self.non_qr_bytes);
         ctx.write_line("{");
@@ -278,6 +285,7 @@ impl ExtInstr for HintSqrtInstr {
             &["state", &rs1, &num_limbs, "mod_", "nqr"],
         );
         ctx.write_line("}");
+        ctx.trace_timestamp();
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -522,5 +530,128 @@ impl ModularRvrExtension {
             }
             None => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Minimal capturing [`ExtEmitCtx`]. A *traced* register read (`read_reg`)
+    /// records a `trace_reg_read(...)` line — in generated C this emits a
+    /// MemoryBus event; an *untraced* read (`read_reg_raw`) records nothing.
+    /// Tests can therefore assert whether a phantom logged a bus-visible
+    /// register access.
+    #[derive(Default)]
+    struct TestEmitCtx {
+        lines: Vec<String>,
+    }
+
+    impl ExtEmitCtx for TestEmitCtx {
+        fn read_reg(&mut self, idx: u8) -> String {
+            self.lines.push(format!("trace_reg_read(state, {idx});"));
+            format!("r{idx}")
+        }
+        fn read_reg_raw(&mut self, idx: u8) -> String {
+            format!("r{idx}")
+        }
+        fn write_reg(&mut self, _idx: u8, _val: &str) {}
+        fn write_reg_raw(&mut self, _idx: u8, _val: &str) {}
+        fn write_line(&mut self, s: &str) {
+            self.lines.push(s.to_string());
+        }
+        fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
+            let tmp = format!("tmp{}", self.lines.len());
+            self.write_line(&format!(
+                "uint32_t {tmp} = read_mem({base}, {offset}, {width}, {signed});"
+            ));
+            tmp
+        }
+        fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
+            self.write_line(&format!("write_mem({base}, {offset}, {val}, {width});"));
+        }
+        fn extern_call(&mut self, name: &str, args: &[&str]) {
+            self.write_line(&format!("{name}({});", args.join(", ")));
+        }
+        fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+            let tmp = format!("tmp{}", self.lines.len());
+            self.write_line(&format!("{ret_ty} {tmp} = {name}({});", args.join(", ")));
+            tmp
+        }
+        fn trace_chip(&mut self, chip_idx: u32, count_expr: &str) {
+            self.write_line(&format!("trace_chip(state, {chip_idx}u, {count_expr});"));
+        }
+        fn trace_mem_access(&mut self, addr: &str, addr_space: u32) {
+            self.write_line(&format!("trace_mem_access(state, {addr}, {addr_space}u);"));
+        }
+        fn trace_mem_access_u64_range(
+            &mut self,
+            base_addr: &str,
+            num_dwords: &str,
+            addr_space: u32,
+        ) {
+            self.write_line(&format!(
+                "trace_mem_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
+            ));
+        }
+        fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32) {
+            self.write_line(&format!(
+                "trace_wr_as_u64(state, {addr}, {val}, {addr_space}u);"
+            ));
+        }
+        fn trace_timestamp(&mut self) {
+            self.write_line("trace_timestamp(state);");
+        }
+    }
+
+    /// Regression guard for bug #2 (reth CPU seg-28 MemoryBus imbalance).
+    ///
+    /// `HintSqrt` is a phantom: the reference executor reads its pointer register
+    /// through untraced `GuestMemory` and advances the clock with a single
+    /// `increment_timestamp()`, so no MemoryBus interaction exists for the
+    /// memory-unconstrained `PhantomAir` to consume. Emitting a *traced* read
+    /// (`read_reg`) here logged an orphan register access that sat unconsumed
+    /// between two AddSub writes to the same register, leaving bus 1 one-sided
+    /// (+1 send at T, -1 receive at T+gap). The phantom must instead read
+    /// untraced and emit one bare timestamp tick, exactly like every other
+    /// phantom (PrintStr, HintRandom, HintFinalExp).
+    #[test]
+    fn hint_sqrt_phantom_reads_pointer_untraced_and_ticks_once() {
+        let mut ctx = TestEmitCtx::default();
+        HintSqrtInstr {
+            rs1_reg: 10,
+            num_limbs: 4,
+            modulus: vec![0u8; 32],
+            non_qr_bytes: vec![0u8; 32],
+        }
+        .emit_c(&mut ctx);
+
+        // A phantom must emit no traced (bus-visible) register access.
+        assert!(
+            !ctx.lines.iter().any(|l| l.contains("trace_reg_read")),
+            "HintSqrt emitted a traced register read (orphan MemoryBus access); \
+             phantoms must use read_reg_raw. lines: {:#?}",
+            ctx.lines
+        );
+        // The pointer still reaches the host callback via the untraced value r10.
+        assert!(
+            ctx.lines
+                .iter()
+                .any(|l| l.contains("rvr_ext_algebra_hint_sqrt(state, r10,")),
+            "expected untraced pointer r10 passed to hint_sqrt callback. lines: {:#?}",
+            ctx.lines
+        );
+        // The phantom still advances the clock by exactly one bare tick, matching
+        // the reference `increment_timestamp()` so downstream timestamps are
+        // byte-identical.
+        assert_eq!(
+            ctx.lines
+                .iter()
+                .filter(|l| l.as_str() == "trace_timestamp(state);")
+                .count(),
+            1,
+            "HintSqrt must emit exactly one bare timestamp tick. lines: {:#?}",
+            ctx.lines
+        );
     }
 }
