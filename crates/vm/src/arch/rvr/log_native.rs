@@ -386,6 +386,12 @@ pub fn generate_record_arenas_from_logs<F: PrimeField32, RA: Arena>(
             )));
         }
     }
+    drop(inline_bufs);
+
+    // The arenas hold expanded records now; hand the compact byte buffers
+    // back through the output so the caller can return them to the preflight
+    // buffer pool for the next segment.
+    output.inline_records = inline_records;
 
     Ok(arenas)
 }

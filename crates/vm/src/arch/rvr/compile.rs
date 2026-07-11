@@ -1025,7 +1025,7 @@ fn compile_impl<F: PrimeField32>(
     Ok(compiled)
 }
 
-fn env_flag_is_off(name: &str) -> bool {
+pub(crate) fn env_flag_is_off(name: &str) -> bool {
     std::env::var(name)
         .is_ok_and(|value| matches!(value.to_ascii_lowercase().as_str(), "0" | "false" | "off"))
 }

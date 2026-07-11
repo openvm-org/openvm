@@ -17,6 +17,7 @@ use super::{
     preflight_normalizer::{
         build_preflight_replay, PreflightMemoryAccessAux, PreflightShadowsView,
     },
+    preflight_pool::{scrub_shadows, RvrPreflightBufferPool},
     state::{TracerPayload, TracerPtr},
 };
 use crate::{
@@ -319,6 +320,9 @@ pub struct RvrPreflightInstance<'a, F: PrimeField32> {
     pub(crate) runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
     pub(crate) compiled: RvrCompiled,
     pub(crate) chip_counts_len: usize,
+    /// Cross-segment scratch-buffer pool; lives as long as the compiled
+    /// library so repeated preflight calls reuse their large allocations.
+    pub(crate) pool: RvrPreflightBufferPool,
 }
 
 /// Which engine the proving path uses for preflight execution.
@@ -399,7 +403,17 @@ where
             runtime_hooks,
             compiled,
             chip_counts_len: chip_counts_len(chips),
+            pool: RvrPreflightBufferPool::from_env(),
         }
+    }
+
+    /// Return a consumed output's large buffers to this instance's pool so
+    /// the next segment reuses them instead of re-faulting fresh mappings.
+    /// Callers that keep the output alive (differential tests) simply drop it
+    /// instead; the pool then refills lazily.
+    pub fn recycle_output(&self, output: RvrPreflightOutput<F>) {
+        self.pool
+            .recycle_segment_buffers(output.raw_logs, output.inline_records);
     }
 
     /// Calls [`VmState::initial`] for this fixed executable.
@@ -463,6 +477,7 @@ where
             &self.runtime_hooks,
             &self.compiled,
             self.chip_counts_len,
+            &self.pool,
             state,
             num_insns,
             None,
@@ -474,15 +489,16 @@ where
     /// proving loop uses.
     pub fn execute_preflight_from_state_with_capacities(
         &self,
-        state: VmState<F, GuestMemory>,
+        state: VmState<GuestMemory>,
         num_insns: Option<u64>,
         record_capacity_rows: &[u32],
     ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
         execute_rvr_preflight(
             &self.exe,
-            &self.extensions,
+            &self.runtime_hooks,
             &self.compiled,
             self.chip_counts_len,
+            &self.pool,
             state,
             num_insns,
             Some(record_capacity_rows),
@@ -494,13 +510,16 @@ where
 /// present, bounds each migrated chip's inline-record count for this segment
 /// (the metered per-AIR trace heights, indexed by AIR); without it the record
 /// buffers fall back to the one-record-per-instruction bound of the program
-/// log.
+/// log. `pool` supplies (and receives back) the large per-segment scratch
+/// buffers; capacities are still derived per segment exactly as below, so
+/// pooling changes allocation lifetime only, never the loud capacity checks.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn execute_rvr_preflight<F>(
     exe: &VmExe<F>,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     compiled: &RvrCompiled,
     chip_counts_len: usize,
+    pool: &RvrPreflightBufferPool,
     state: VmState<GuestMemory>,
     num_insns: Option<u64>,
     record_capacity_rows: Option<&[u32]>,
@@ -575,15 +594,19 @@ where
         // The log buffers are write-only from the C tracer and prefix-read by
         // the host, so they are allocated uninitialized: the zero-fill of
         // multi-GB capacities was a real per-call cost on large segments.
-        let mut program_log = vec_uninit::<ProgramLogEntry>(program_log_cap);
-        let mut memory_log = vec_uninit::<MemoryLogEntry>(memory_log_cap);
+        // They come from (and return to) the cross-segment pool: re-faulting
+        // hundreds of MB of fresh mappings per segment was the other measured
+        // per-call cost.
+        let mut program_log = pool.take_program_log(program_log_cap);
+        let mut memory_log = pool.take_memory_log(memory_log_cap);
         let mut chip_counts = vec![0u32; chip_counts_len.max(1)];
-        // Shadows are zeroed each run (0 = untouched this segment). Distinct
-        // touched blocks are bounded by the number of memory-log entries, so
-        // sizing `touched` to `memory_log_cap` guarantees it never overflows.
-        let mut shadow_register = vec![0u32; reg_shadow_blocks];
-        let mut shadow_memory = vec![0u32; mem_shadow_blocks];
-        let mut shadow_public_values = vec![0u32; pv_shadow_blocks];
+        // Shadows are all-zero at segment start (0 = untouched this segment);
+        // pooled reuse preserves that via the exact touched-list scrub below.
+        // Distinct touched blocks are bounded by the number of memory-log
+        // entries, so sizing `touched` to `memory_log_cap` guarantees it
+        // never overflows.
+        let (mut shadow_register, mut shadow_memory, mut shadow_public_values) =
+            pool.take_shadows(reg_shadow_blocks, mem_shadow_blocks, pv_shadow_blocks);
         // Inline (migrated) instructions touch without logging: register
         // touches are bounded by the register file, and each migrated
         // load/store row first-touches at most one memory block, bounded by
@@ -600,7 +623,7 @@ where
             })
             .sum::<usize>()
             + 64;
-        let mut touched = vec_uninit::<TouchedBlock>(memory_log_cap + inline_touch_slack);
+        let mut touched = pool.take_touched(memory_log_cap + inline_touch_slack);
         let pv_base = public_values_slice(&mut run_state.memory.memory).as_mut_ptr();
 
         // R3: per migrated chip, an inline compact-record buffer. Sized by the
@@ -618,7 +641,7 @@ where
                     .and_then(|heights| heights.get(air))
                     .map(|&height| height as usize)
                     .unwrap_or(program_log_cap);
-                vec_uninit::<u8>(rows * record_size)
+                pool.take_record_buf(rows * record_size)
             })
             .collect();
         let mut chip_records = vec![ChipRecordBuf::default(); chip_counts_len.max(1)];
@@ -693,6 +716,16 @@ where
             }
             program_log_cap = grow_capacity(program_log_cap, program_len);
             memory_log_cap = grow_capacity(memory_log_cap, memory_len.max(touched_len));
+            // Recycle for the grown retry: the log/touched buffers go back as
+            // uninit spares (content irrelevant; any spare smaller than the
+            // next take is dropped there), and the record buffers are
+            // height-sized and still fit. The shadows are dirty and the
+            // touched list that would scrub them may itself have overflowed,
+            // so they drop here and the retry takes fresh zeroed ones.
+            pool.recycle_raw_uninit(program_log, memory_log, touched);
+            for buf in record_bufs {
+                pool.recycle_record_buf(buf);
+            }
             continue;
         }
 
@@ -715,6 +748,20 @@ where
             .memory
             .memory
             .extend_touched_pages_from_touched(&replay.touched_memory);
+        // The shadows and the touched list are segment-lifetime scratch: scrub
+        // the shadows back to all-zero via the touched list (exact — every
+        // nonzero slot was recorded once on its 0→nonzero transition, and the
+        // overflow check above guarantees the list is complete) and return
+        // both to the pool. The escaping log/record buffers round-trip later
+        // through `recycle_segment_buffers` at the consumption seam.
+        scrub_shadows(
+            &mut shadow_register,
+            &mut shadow_memory,
+            &mut shadow_public_values,
+            &touched,
+        );
+        pool.recycle_shadows(shadow_register, shadow_memory, shadow_public_values);
+        pool.recycle_touched(touched);
         let filtered_exec_frequencies = filtered_exec_frequencies(exe, &program_log)?;
         let to_state = ExecutionState::new(run_state.pc(), tracer.timestamp);
         let system_records = SystemRecords {
@@ -834,14 +881,6 @@ fn grow_capacity(current: usize, needed: usize) -> usize {
         .saturating_mul(2)
         .max(needed.saturating_mul(2))
         .max(1)
-}
-
-/// Allocates an uninitialized buffer for an external (C) writer.
-fn vec_uninit<T>(cap: usize) -> Vec<MaybeUninit<T>> {
-    let mut buffer = Vec::with_capacity(cap);
-    // SAFETY: `MaybeUninit<T>` requires no initialization.
-    unsafe { buffer.set_len(cap) };
-    buffer
 }
 
 /// Converts the written prefix of an externally filled uninit buffer into an

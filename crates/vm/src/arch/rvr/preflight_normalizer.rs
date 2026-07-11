@@ -24,7 +24,7 @@ use crate::{
 /// Traced blocks are `WORD_BYTES` bytes; the C shadow indexes by
 /// `block_addr / WORD_BYTES`. All rvr-traced address spaces (register, memory,
 /// public values) use U16 cells, so this equals `BLOCK_FE_WIDTH` cells.
-const WORD_BYTES: usize = 8;
+pub(crate) const WORD_BYTES: usize = 8;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PreflightMemoryAccessAux<F> {
