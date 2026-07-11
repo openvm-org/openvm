@@ -45,6 +45,34 @@ impl ArenaNativeGeometry {
 pub enum ArenaNativeLayout {
     Alu3(Alu3ArenaFieldOffsets),
     Branch2(Branch2ArenaFieldOffsets),
+    LoadStore(LoadStoreArenaFieldOffsets),
+}
+
+/// Offsets for the load/store full record: the rs1-indexed memory adapter
+/// (rs1 pointer/value/aux, conditional rd-or-rs2 write slot, 16-bit imm with
+/// sign flag, target AS) plus either the zero-extend core (local_opcode) or
+/// the sign-extend core (is_byte/is_word) — the absent core fields carry the
+/// usize::MAX sentinel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LoadStoreArenaFieldOffsets {
+    pub from_pc: usize,
+    pub from_timestamp: usize,
+    pub rs1_ptr: usize,
+    pub rs1_val: usize,
+    pub rs1_aux_prev_ts: usize,
+    pub rd_rs2_ptr: usize,
+    pub read_data_aux_prev_ts: usize,
+    /// Stored as a u16.
+    pub imm: usize,
+    pub imm_sign: usize,
+    pub mem_as: usize,
+    pub write_prev_ts: usize,
+    pub core_local_opcode: usize,
+    pub core_is_byte: usize,
+    pub core_is_word: usize,
+    pub core_shift_amount: usize,
+    pub core_read_data: usize,
+    pub core_prev_data: usize,
 }
 
 /// BabyBear modulus used to field-canonicalize negative branch offsets.

@@ -2,11 +2,11 @@ use openvm_circuit::{
     arch::{
         rvr::{
             generate_record_arenas_from_logs, Alu3ArenaFieldOffsets, ArenaNativeGeometry,
-            ArenaNativeLayout, Branch2ArenaFieldOffsets, LogNativeAccessView,
-            LogNativeAssemblerRegistry, PreflightMemoryAccessAux, RvrPreflightOutput,
-            VmRvrLogNativeExtension, PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
-            PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_RW1_RECORD_SIZE,
-            PREFLIGHT_WR1_RECORD_SIZE,
+            ArenaNativeLayout, Branch2ArenaFieldOffsets, LoadStoreArenaFieldOffsets,
+            LogNativeAccessView, LogNativeAssemblerRegistry, PreflightMemoryAccessAux,
+            RvrPreflightOutput, VmRvrLogNativeExtension, PREFLIGHT_ADDSUB_RECORD_SIZE,
+            PREFLIGHT_BRANCH2_RECORD_SIZE, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
+            PREFLIGHT_RW1_RECORD_SIZE, PREFLIGHT_WR1_RECORD_SIZE,
         },
         AdapterTraceExecutor, Arena, EmptyAdapterCoreLayout, EmptyMultiRowLayout, ExecutionError,
         MultiRowLayout, RecordArena, BLOCK_FE_WIDTH,
@@ -992,19 +992,130 @@ where
             PREFLIGHT_RW1_RECORD_SIZE,
             assemble_jalr_inline::<F, RA>,
         );
-        registry.register_inline(
+        registry.register_inline_arena_native(
             Rv64LoadStoreOpcode::iter()
                 .take(Rv64LoadStoreOpcode::STOREB as usize + 1)
                 .map(|opcode| opcode.global_opcode()),
             PREFLIGHT_ADDSUB_RECORD_SIZE,
             assemble_loadstore_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64LoadStoreAdapterRecord>(),
+                adapter_align: align_of::<Rv64LoadStoreAdapterRecord>(),
+                core_size: size_of::<LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
+                core_align: align_of::<LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
+                core_off_matrix: <Rv64LoadStoreAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::LoadStore(LoadStoreArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(
+                        Rv64LoadStoreAdapterRecord,
+                        from_timestamp
+                    ),
+                    rs1_ptr: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, rs1_ptr),
+                    rs1_val: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, rs1_val),
+                    rs1_aux_prev_ts: core::mem::offset_of!(
+                        Rv64LoadStoreAdapterRecord,
+                        rs1_aux_record
+                    ) + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    rd_rs2_ptr: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, rd_rs2_ptr),
+                    read_data_aux_prev_ts: core::mem::offset_of!(
+                        Rv64LoadStoreAdapterRecord,
+                        read_data_aux
+                    ) + core::mem::offset_of!(
+                        MemoryReadAuxRecord,
+                        prev_timestamp
+                    ),
+                    imm: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, imm),
+                    imm_sign: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, imm_sign),
+                    mem_as: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, mem_as),
+                    write_prev_ts: core::mem::offset_of!(
+                        Rv64LoadStoreAdapterRecord,
+                        write_prev_timestamp
+                    ),
+                    core_local_opcode: core::mem::offset_of!(
+                        LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        local_opcode
+                    ),
+                    core_is_byte: usize::MAX,
+                    core_is_word: usize::MAX,
+                    core_shift_amount: core::mem::offset_of!(
+                        LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        shift_amount
+                    ),
+                    core_read_data: core::mem::offset_of!(
+                        LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        read_data
+                    ),
+                    core_prev_data: core::mem::offset_of!(
+                        LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        prev_data
+                    ),
+                }),
+            },
         );
-        registry.register_inline(
+        registry.register_inline_arena_native(
             Rv64LoadStoreOpcode::iter()
                 .skip(Rv64LoadStoreOpcode::STOREB as usize + 1)
                 .map(|opcode| opcode.global_opcode()),
             PREFLIGHT_ADDSUB_RECORD_SIZE,
             assemble_load_sign_extend_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64LoadStoreAdapterRecord>(),
+                adapter_align: align_of::<Rv64LoadStoreAdapterRecord>(),
+                core_size: size_of::<LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
+                core_align: align_of::<LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
+                core_off_matrix: <Rv64LoadStoreAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::LoadStore(LoadStoreArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(
+                        Rv64LoadStoreAdapterRecord,
+                        from_timestamp
+                    ),
+                    rs1_ptr: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, rs1_ptr),
+                    rs1_val: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, rs1_val),
+                    rs1_aux_prev_ts: core::mem::offset_of!(
+                        Rv64LoadStoreAdapterRecord,
+                        rs1_aux_record
+                    ) + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    rd_rs2_ptr: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, rd_rs2_ptr),
+                    read_data_aux_prev_ts: core::mem::offset_of!(
+                        Rv64LoadStoreAdapterRecord,
+                        read_data_aux
+                    ) + core::mem::offset_of!(
+                        MemoryReadAuxRecord,
+                        prev_timestamp
+                    ),
+                    imm: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, imm),
+                    imm_sign: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, imm_sign),
+                    mem_as: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, mem_as),
+                    write_prev_ts: core::mem::offset_of!(
+                        Rv64LoadStoreAdapterRecord,
+                        write_prev_timestamp
+                    ),
+                    core_local_opcode: usize::MAX,
+                    core_is_byte: core::mem::offset_of!(
+                        LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        is_byte
+                    ),
+                    core_is_word: core::mem::offset_of!(
+                        LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        is_word
+                    ),
+                    core_shift_amount: core::mem::offset_of!(
+                        LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        shift_amount
+                    ),
+                    core_read_data: core::mem::offset_of!(
+                        LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        read_data
+                    ),
+                    core_prev_data: core::mem::offset_of!(
+                        LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        prev_data
+                    ),
+                }),
+            },
         );
         registry.register(
             [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
