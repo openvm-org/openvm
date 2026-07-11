@@ -1398,8 +1398,13 @@ where
                 });
             }
         }
+        // OPENVM_SKIP_DEBUG=1 skips debug-mode constraint checking, consistent with its
+        // meaning in `stark_utils::air_test`; the checker otherwise dominates trace-only
+        // timing runs (~tens of seconds per segment at reth scale).
         #[cfg(feature = "stark-debug")]
-        self.debug_proving_ctx(&ctx);
+        if std::env::var("OPENVM_SKIP_DEBUG").as_deref() != Ok("1") {
+            self.debug_proving_ctx(&ctx);
+        }
 
         Ok(ctx)
     }
