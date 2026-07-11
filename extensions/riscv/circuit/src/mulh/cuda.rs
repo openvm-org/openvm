@@ -35,6 +35,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64MulHChipGpu {
             Rv64MultAdapterRecord,
             MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
         )>();
+        #[cfg(feature = "rvr")]
         let rvr_wire = arena.rvr_wire;
         let records = arena.allocated();
         if records.is_empty() {
@@ -50,6 +51,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64MulHChipGpu {
         let device_ctx = &self.range_checker.device_ctx;
         // M-GPUDEC (G2): this segment's arena carries compact wire records —
         // decode them on device against the per-exe operand table.
+        #[cfg(feature = "rvr")]
         if rvr_wire {
             use openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE;
             assert_eq!(
