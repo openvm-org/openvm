@@ -3144,3 +3144,17 @@ fn rvr_preflight_arena_native_proves_and_verifies() {
     let segments = prove_rvr_preflight_and_verify(exe, Rv64ImConfig::default());
     assert!(segments >= 1, "expected at least one proven segment");
 }
+
+/// R4 mixed-AIR regression: main-memory load/store instructions are emitted
+/// arena-native, while REVEAL instructions sharing the same LoadStore AIR are
+/// assembled from the verbose log. The prove-path arena must retain both.
+#[test]
+fn rvr_preflight_arena_native_reveal_mixed_air_proves_and_verifies() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    let exe = public_values_reveal_differential_exe();
+    let segments = prove_rvr_preflight_and_verify(exe, Rv64ImConfig::with_public_values_bytes(32));
+    assert_eq!(
+        segments, 1,
+        "small mixed LoadStore/REVEAL program is single segment"
+    );
+}
