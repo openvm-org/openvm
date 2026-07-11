@@ -305,7 +305,21 @@ fn inline_addsub_differential_exe() -> VmExe<F> {
         addi(5, 3, 0x00ff_ffff),            // x5 = x3 + (-1) = 104 (negative imm)
         alu_r(BaseAluOpcode::ADD, 1, 4, 5), // x1 = 199    (rewrites x1 → prev_ts chain)
         alu_r(BaseAluOpcode::SUB, 6, 1, 0), // x6 = x1 - x0 (rs2 = x0)
-        sltu(7, 2, 1),                      // non-migrated: stays on the log path
+        // Family 2: LessThan/Shift/Bitwise share the compact alu3 record.
+        sltu(7, 2, 1),
+        less_than(LessThanOpcode::SLT, 17, 1, 2),
+        alu_r(BaseAluOpcode::XOR, 18, 1, 2),
+        alu_r(BaseAluOpcode::OR, 19, 1, 2),
+        alu_r(BaseAluOpcode::AND, 20, 1, 2),
+        shift(ShiftOpcode::SLL, 21, 1, 3), // shamt-immediate form
+        shift(ShiftOpcode::SRL, 22, 1, 1),
+        shift(ShiftOpcode::SRA, 23, 5, 2), // arithmetic core, negative-ish value
+        alu_r(BaseAluOpcode::ADD, 24, 21, 22), // consumes shift results
+        // Mixed-mode coverage: loads/stores are not yet migrated and keep the
+        // verbose log + assembler path alive in the same segment.
+        addi(26, 0, 64), // aligned memory base for the log-path ops
+        store(Rv64LoadStoreOpcode::STORED, 2, 26, 0),
+        load(Rv64LoadStoreOpcode::LOADD, 25, 26, 0),
         // Phase-4 family 1: the Mul shapes share the compact alu3 record.
         mul(8, 1, 2),                             // x8 = x1 * x2
         mulh(MulHOpcode::MULH, 9, 1, 2),          // signed high word

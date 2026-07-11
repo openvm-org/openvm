@@ -27,13 +27,10 @@ impl InstrCodegen for Instr {
 pub fn instr_emits_inline_record(instr: &Instr) -> bool {
     matches!(
         instr,
-        Instr::AluReg {
-            op: AluOp::Add | AluOp::Sub,
-            ..
-        } | Instr::AluImm {
-            op: AluOp::Add | AluOp::Sub,
-            ..
-        } | Instr::MulDiv { .. }
+        Instr::AluReg { .. }
+            | Instr::AluImm { .. }
+            | Instr::ShiftImm { .. }
+            | Instr::MulDiv { .. }
             | Instr::MulDivW { .. }
     )
 }
@@ -42,8 +39,8 @@ pub fn instr_emits_inline_record(instr: &Instr) -> bool {
 pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
     match instr {
         Instr::AluReg { op, rd, rs1, rs2 } => {
-            if ctx.inline_records_enabled() && instr_emits_inline_record(instr) {
-                ctx.emit_addsub_reg(*op == AluOp::Sub, *rd, *rs1, *rs2);
+            if ctx.inline_records_enabled() {
+                ctx.emit_reg3_inline(*rd, *rs1, *rs2, |l, r| alu_expr(*op, l, r));
             } else {
                 let l = ctx.read_reg(*rs1);
                 let r = ctx.read_reg(*rs2);
@@ -51,8 +48,8 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             }
         }
         Instr::AluImm { op, rd, rs1, imm } => {
-            if ctx.inline_records_enabled() && instr_emits_inline_record(instr) {
-                ctx.emit_addsub_imm(*op == AluOp::Sub, *rd, *rs1, *imm);
+            if ctx.inline_records_enabled() {
+                ctx.emit_reg2imm_inline(*rd, *rs1, *imm as i64 as u64, |l, v| alu_expr(*op, l, v));
             } else {
                 let l = ctx.read_reg(*rs1);
                 ctx.trace_immediate();
@@ -61,9 +58,17 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             }
         }
         Instr::ShiftImm { op, rd, rs1, shamt } => {
-            let v = ctx.read_reg(*rs1);
-            ctx.trace_immediate();
-            ctx.write_reg(*rd, &shift_imm_expr(*op, &v, *shamt));
+            if ctx.inline_records_enabled() {
+                // The record's c value is the raw shift amount; the result
+                // expression uses the constant directly.
+                ctx.emit_reg2imm_inline(*rd, *rs1, u64::from(*shamt), |l, _| {
+                    shift_imm_expr(*op, l, *shamt)
+                });
+            } else {
+                let v = ctx.read_reg(*rs1);
+                ctx.trace_immediate();
+                ctx.write_reg(*rd, &shift_imm_expr(*op, &v, *shamt));
+            }
         }
         Instr::Lui { rd, value } => {
             ctx.write_reg(*rd, &sext32(*value));

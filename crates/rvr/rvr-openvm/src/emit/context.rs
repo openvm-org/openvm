@@ -314,39 +314,38 @@ impl EmitContext {
         ));
     }
 
-    /// R3: register-register base-ALU ADD/SUB via [`Self::emit_reg3_inline`].
-    /// `is_sub` selects SUB.
-    pub fn emit_addsub_reg(&mut self, is_sub: bool, rd: u8, rs1: u8, rs2: u8) {
-        let op = if is_sub { "-" } else { "+" };
-        self.emit_reg3_inline(rd, rs1, rs2, |l, r| format!("{l} {op} {r}"));
-    }
-
-    /// R3: emit a register-immediate base-ALU ADD/SUB with an inline compact
-    /// AddSub record (touch-only accesses; see [`Self::emit_addsub_reg`]). The
-    /// immediate occupies a timestamp slot without a memory touch (matching
-    /// `trace_immediate`), so `reads_aux[1].prev_timestamp` is 0.
-    pub fn emit_addsub_imm(&mut self, is_sub: bool, rd: u8, rs1: u8, imm: i32) {
+    /// R3: emit a register-immediate 2-read-1-write instruction with an
+    /// inline compact alu3 record (touch-only accesses; see
+    /// [`Self::emit_reg3_inline`]). The immediate occupies a timestamp slot
+    /// without a memory touch (matching `trace_immediate`), so
+    /// `reads_aux[1].prev_timestamp` is 0. `imm_value` is the value recorded
+    /// as the c operand (sign-extended immediate, or the raw shift amount);
+    /// `result` renders the C expression computing rd from the read value and
+    /// the materialized immediate variable.
+    pub(crate) fn emit_reg2imm_inline(
+        &mut self,
+        rd: u8,
+        rs1: u8,
+        imm_value: u64,
+        result: impl FnOnce(&str, &str) -> String,
+    ) {
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
-        let imm_u64 = imm as i64 as u64;
         let fromts = self.next_var();
         self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
         let (v1, p1) = self.reg_read_capture(rs1);
         // Immediate consumes a timestamp slot but touches no block.
         self.write_line("trace_timestamp(state);");
         let vimm = self.next_var();
-        self.write_line(&format!("uint64_t {vimm} = 0x{imm_u64:016x}ull;"));
-        let op = if is_sub { "-" } else { "+" };
+        self.write_line(&format!("uint64_t {vimm} = 0x{imm_value:016x}ull;"));
         let res = self.next_var();
-        self.write_line(&format!("uint64_t {res} = {v1} {op} {vimm};"));
+        let result_expr = result(&v1, &vimm);
+        self.write_line(&format!("uint64_t {res} = {result_expr};"));
         let rdprev = self.next_var();
         self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
         let pw = self.next_var();
         self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
         self.write_line(&format!("reg_write(state, {rd}, {res});"));
-        // The immediate's `c` limbs come from the sign-extended value; the raw
-        // immediate operand itself is program-redundant and re-derived from
-        // `from_pc` at host record assembly (rs2 read slot: prev_timestamp 0).
         self.write_line(&format!(
             "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {pw}, {rdprev}, \
              {v1}, {vimm});"
