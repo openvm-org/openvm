@@ -115,36 +115,11 @@ struct RegisteredAssembler<F, RA> {
 pub type LogNativeInlineAssembler<F, RA> =
     fn(&mut RA, &Instruction<F>, &[u8], u32) -> Result<(), ExecutionError>;
 
-/// R4 arena-native geometry for one opcode family's full (adapter + core)
-/// record, supplied at registration by the extension that owns the record
-/// structs (offsets/sizes come from `size_of`/`align_of` on the real types —
-/// never hand-derived).
-///
-/// Per-flavor placement derives from this plus attach-time data:
-/// - Matrix: core record sits `core_off_matrix` bytes into the row; the record stride is the arena
-///   row pitch (trace width × 4).
-/// - Dense: core sits at `adapter_size.next_multiple_of(core_align)`; the stride is that plus
-///   `core_size`, aligned back up to `adapter_align` (mirroring `DenseRecordArena`'s
-///   `AdapterCoreLayout` alloc).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ArenaNativeGeometry {
-    pub adapter_size: usize,
-    pub adapter_align: usize,
-    pub core_size: usize,
-    pub core_align: usize,
-    /// Core-record byte offset within a Matrix row (the adapter trace width).
-    pub core_off_matrix: usize,
-}
-
-impl ArenaNativeGeometry {
-    pub fn core_off_dense(&self) -> usize {
-        self.adapter_size.next_multiple_of(self.core_align)
-    }
-
-    pub fn stride_dense(&self) -> usize {
-        (self.core_off_dense() + self.core_size).next_multiple_of(self.adapter_align)
-    }
-}
+/// R4 arena-native geometry types live in `rvr_openvm` (codegen consumes
+/// them to bake literal store offsets); extensions supply the values from
+/// the real record types at registration. Re-exported here so extension
+/// crates keep a single import path.
+pub use rvr_openvm::{Alu3ArenaFieldOffsets, ArenaNativeGeometry, ArenaNativeLayout};
 
 struct RegisteredInlineAssembler<F, RA> {
     /// Compact record stride in bytes; must match the compile metadata.
