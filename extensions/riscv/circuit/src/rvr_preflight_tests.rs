@@ -3103,3 +3103,15 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_dense() {
         );
     }
 }
+
+/// R4 end-to-end: prove + verify multi-segment THROUGH the prove path with
+/// arena-native staging active (the C writes AddSub records into staged
+/// arenas inside prove_continuations; finish/substitution included). The
+/// strongest fused oracle: the proofs must verify.
+#[test]
+fn rvr_preflight_arena_native_proves_and_verifies() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    let exe = inline_addsub_differential_exe();
+    let segments = prove_rvr_preflight_and_verify(exe, Rv64ImConfig::default());
+    assert!(segments >= 1, "expected at least one proven segment");
+}

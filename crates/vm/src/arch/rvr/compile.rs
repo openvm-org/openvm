@@ -427,6 +427,13 @@ fn collect_inline_records_meta<F: PrimeField32>(
     let mut pc_slots = vec![false; num_slots];
     let mut airs: BTreeMap<usize, usize> = BTreeMap::new();
     let mut arena_native: BTreeMap<usize, Option<ArenaNativeGeometry>> = BTreeMap::new();
+    // R4 opt-in gate. The decision MUST be made here, in the metadata the
+    // host and codegen both consume: gating only the codegen copy leaves the
+    // host staging arena targets against a compact-compiled library — the C
+    // then writes 44-byte compact records at the arena row stride and the
+    // substituted rows are garbage (a real bus-imbalance bug caught by the
+    // prove fixtures). Default flips to ON after the full shape rollout.
+    let arena_native_enabled = std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() == Ok("1");
     let mut record = |pc: u64, shape: InlineRecordShape| {
         let Some(offset) = pc.checked_sub(pc_base) else {
             return;
@@ -447,13 +454,15 @@ fn collect_inline_records_meta<F: PrimeField32>(
         );
         // R4: every pc routed to one air must agree on the family's
         // arena-native geometry (present with equal values, or absent).
-        let geometry = admitter.and_then(|admitter| {
-            exe.program
-                .instructions_and_debug_infos
-                .get(slot)
-                .and_then(|entry| entry.as_ref())
-                .and_then(|(instruction, _)| admitter.inline_arena_geometry_for(instruction))
-        });
+        let geometry = admitter
+            .filter(|_| arena_native_enabled)
+            .and_then(|admitter| {
+                exe.program
+                    .instructions_and_debug_infos
+                    .get(slot)
+                    .and_then(|entry| entry.as_ref())
+                    .and_then(|(instruction, _)| admitter.inline_arena_geometry_for(instruction))
+            });
         let previous = arena_native.insert(air_idx, geometry);
         assert!(
             previous.is_none_or(|p| p == geometry),
@@ -890,18 +899,11 @@ fn compile_impl<F: PrimeField32>(
                     chips,
                     opts.preflight_assembler_admitter,
                 );
-                // R4 arena-native emission is opt-in until the host-side
-                // arena attach + harvest land (without them the C would
-                // write full records into compact-sized scratch): the
-                // default flips to ON once the fused-vs-assembler oracle is
-                // green end to end.
-                if std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() == Ok("1") {
-                    project.arena_native_airs = inline_meta
-                        .arena_native_airs
-                        .iter()
-                        .map(|&(air, geometry)| (air as u32, geometry))
-                        .collect();
-                }
+                project.arena_native_airs = inline_meta
+                    .arena_native_airs
+                    .iter()
+                    .map(|&(air, geometry)| (air as u32, geometry))
+                    .collect();
             }
         }
     }
