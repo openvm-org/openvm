@@ -15,6 +15,56 @@ pub struct TermCtx<'a> {
     pub valid_blocks: &'a HashSet<u64>,
 }
 
+/// R4 arena-native geometry for one air's full (adapter + core) record.
+/// Values are computed by the host from the real record types and baked into
+/// the generated per-air emitter, so the C side never mirrors Rust structs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArenaNativeGeometry {
+    pub adapter_size: usize,
+    pub adapter_align: usize,
+    pub core_size: usize,
+    pub core_align: usize,
+    /// Core-record byte offset within a Matrix row (the adapter trace width).
+    pub core_off_matrix: usize,
+    pub layout: ArenaNativeLayout,
+}
+
+impl ArenaNativeGeometry {
+    pub fn core_off_dense(&self) -> usize {
+        self.adapter_size.next_multiple_of(self.core_align)
+    }
+
+    pub fn stride_dense(&self) -> usize {
+        (self.core_off_dense() + self.core_size).next_multiple_of(self.adapter_align)
+    }
+}
+
+/// Per-shape field offsets. Adapter offsets are relative to the record start;
+/// core offsets are relative to the core record start.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArenaNativeLayout {
+    Alu3(Alu3ArenaFieldOffsets),
+}
+
+/// Field offsets for a two-read, one-u16-block-write ALU record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Alu3ArenaFieldOffsets {
+    pub from_pc: usize,
+    pub from_timestamp: usize,
+    pub rd_ptr: usize,
+    pub rs1_ptr: usize,
+    pub rs2: usize,
+    pub rs2_as: usize,
+    pub rs2_imm_sign: usize,
+    pub reads_aux0_prev_ts: usize,
+    pub reads_aux1_prev_ts: usize,
+    pub write_prev_ts: usize,
+    pub write_prev_data: usize,
+    pub core_b: usize,
+    pub core_c: usize,
+    pub core_local_opcode: usize,
+}
+
 pub fn inline_record_shape_for_instr(instr: &dyn ExtInstr) -> Option<InlineRecordShape> {
     instr.inline_record_shape()
 }
