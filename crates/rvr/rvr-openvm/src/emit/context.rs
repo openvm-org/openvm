@@ -412,10 +412,12 @@ impl EmitContext {
             "*(uint8_t*)({rec} + {}) = {}u;",
             off.rs2_as, baked.rs2_as
         ));
-        self.write_line(&format!(
-            "*(uint8_t*)({rec} + {}) = {}u;",
-            off.rs2_imm_sign, baked.rs2_imm_sign
-        ));
+        if off.rs2_imm_sign != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({rec} + {}) = {}u;",
+                off.rs2_imm_sign, baked.rs2_imm_sign
+            ));
+        }
         self.write_line(&format!(
             "arena_store_u64_le({rec} + {}, {rdprev});",
             off.write_prev_data
