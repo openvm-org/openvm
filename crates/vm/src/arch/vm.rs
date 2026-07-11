@@ -537,12 +537,17 @@ where
         assembler_admitter: &dyn LogNativeOpcodeAdmitter<F>,
     ) -> Result<RvrPreflightRoute<'_, F, VC::Executor>, StaticProgramError> {
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        // Benchmark/diagnostic escape hatch: force the interpreter preflight
+        // engine while keeping rvr metering (identical segment boundaries),
+        // for engine-only A/B comparisons.
+        let force_interpreter =
+            std::env::var("OPENVM_RVR_PREFLIGHT_FORCE_INTERPRETER").as_deref() == Ok("1");
         match classify_preflight_opcodes_with_extensions(
             exe,
             extensions.lifters(),
             assembler_admitter,
         ) {
-            RvrPreflightOpcodeClass::Supported => {
+            RvrPreflightOpcodeClass::Supported if !force_interpreter => {
                 #[cfg(feature = "metrics")]
                 let _compilation_span =
                     tracing::info_span!("compile_preflight", backend = "rvr").entered();
@@ -568,7 +573,8 @@ where
                     &chips,
                 )))
             }
-            RvrPreflightOpcodeClass::Unsupported { .. } => {
+            // Unsupported opcodes, or the forced-interpreter override.
+            _ => {
                 #[cfg(feature = "metrics")]
                 let _compilation_span =
                     tracing::info_span!("compile_preflight", backend = "interpreter").entered();
