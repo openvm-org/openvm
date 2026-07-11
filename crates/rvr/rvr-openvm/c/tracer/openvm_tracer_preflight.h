@@ -91,7 +91,9 @@ typedef struct ChipRecordBuf {
   uint32_t len;
   uint32_t cap;
   uint32_t stride;
-  uint32_t _pad0;
+  /* R4 arena-native: byte offset of the core record within each record slot
+   * (adapter fields sit at offset 0). Zero in compact-wire mode. */
+  uint32_t core_off;
 } ChipRecordBuf;
 
 typedef struct Tracer {
@@ -213,6 +215,8 @@ _Static_assert(offsetof(ChipRecordBuf, cap) == 12,
                "ChipRecordBuf cap offset drift");
 _Static_assert(offsetof(ChipRecordBuf, stride) == 16,
                "ChipRecordBuf stride offset drift");
+_Static_assert(offsetof(ChipRecordBuf, core_off) == 20,
+               "ChipRecordBuf core_off offset drift");
 
 /* R3 (L1+L5 compact): base-ALU AddSub record holding the dynamic witness
  * only. Program-redundant operands (rd_ptr/rs1_ptr/rs2/rs2_as/rs2_imm_sign/
