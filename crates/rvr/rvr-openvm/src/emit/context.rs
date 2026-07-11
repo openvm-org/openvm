@@ -73,6 +73,16 @@ pub struct EmitContext {
     arena_native_airs: std::collections::BTreeMap<u32, crate::ArenaNativeGeometry>,
 }
 
+/// R4: per-terminator baked operands for an arena-native branch2 record.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ArenaBranch2Baked {
+    pub rs1_ptr: u32,
+    pub rs2_ptr: u32,
+    /// Field-canonical branch immediate (P + imm when negative).
+    pub imm: u32,
+    pub local_opcode: u8,
+}
+
 /// R4: per-instruction baked operands for an arena-native alu3 record —
 /// exactly the program-redundant fields the compact wire strips and the host
 /// assembler re-derives. Supplied by the shape arm, which knows the opcode.
@@ -372,7 +382,9 @@ impl EmitContext {
         v2: &str,
     ) {
         let chip = self.current_chip_idx;
-        let crate::ArenaNativeLayout::Alu3(off) = geom.layout;
+        let crate::ArenaNativeLayout::Alu3(off) = geom.layout else {
+            panic!("alu3 air {chip} registered a non-alu3 layout");
+        };
         let rec = self.next_var();
         self.write_line(&format!(
             "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
@@ -510,16 +522,69 @@ impl EmitContext {
     /// R3: emit the two touch-only branch operand reads plus the inline
     /// compact branch2 record; returns the C value expressions for the
     /// branch condition.
-    pub(crate) fn emit_branch2_inline(&mut self, rs1: u8, rs2: u8) -> (String, String) {
+    pub(crate) fn emit_branch2_inline(
+        &mut self,
+        rs1: u8,
+        rs2: u8,
+        arena: Option<ArenaBranch2Baked>,
+    ) -> (String, String) {
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
         let fromts = self.next_var();
         self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
         let (v1, p1) = self.reg_read_capture(rs1);
         let (v2, p2) = self.reg_read_capture(rs2);
-        self.write_line(&format!(
-            "preflight_emit_branch2(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {v1}, {v2});"
-        ));
+        match arena.filter(|_| self.arena_native_airs.contains_key(&chip)) {
+            Some(baked) => {
+                let geom = self.arena_native_airs[&chip];
+                let crate::ArenaNativeLayout::Branch2(off) = geom.layout else {
+                    panic!("branch2 air {chip} registered a non-branch2 layout");
+                };
+                let rec = self.next_var();
+                self.write_line(&format!(
+                    "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
+                ));
+                self.write_line(&format!("if ({rec}) {{"));
+                self.indent += 1;
+                let core = self.next_var();
+                self.write_line(&format!(
+                    "uint8_t* {core} = {rec} + state->tracer->chip_records[{chip}].core_off;"
+                ));
+                for (offset, value) in [
+                    (off.from_pc, pc.clone()),
+                    (off.from_timestamp, fromts.clone()),
+                    (off.rs1_ptr, format!("{}u", baked.rs1_ptr)),
+                    (off.rs2_ptr, format!("{}u", baked.rs2_ptr)),
+                    (off.reads_aux0_prev_ts, p1.clone()),
+                    (off.reads_aux1_prev_ts, p2.clone()),
+                ] {
+                    self.write_line(&format!("*(uint32_t*)({rec} + {offset}) = {value};"));
+                }
+                self.write_line(&format!(
+                    "arena_store_u64_le({core} + {}, {v1});",
+                    off.core_a
+                ));
+                self.write_line(&format!(
+                    "arena_store_u64_le({core} + {}, {v2});",
+                    off.core_b
+                ));
+                self.write_line(&format!(
+                    "*(uint32_t*)({core} + {}) = {}u;",
+                    off.core_imm, baked.imm
+                ));
+                self.write_line(&format!(
+                    "*(uint8_t*)({core} + {}) = {}u;",
+                    off.core_local_opcode, baked.local_opcode
+                ));
+                self.indent -= 1;
+                self.write_line("}");
+            }
+            None => {
+                self.write_line(&format!(
+                    "preflight_emit_branch2(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {v1},                      {v2});"
+                ));
+            }
+        }
         (v1, v2)
     }
 

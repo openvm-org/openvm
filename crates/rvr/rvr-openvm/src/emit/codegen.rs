@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use openvm_instructions::program::DEFAULT_PC_STEP;
 use rvr_openvm_ir::*;
 
-use super::context::{ArenaAlu3Baked, EmitContext};
+use super::context::{ArenaAlu3Baked, ArenaBranch2Baked, EmitContext};
 
 /// Trait for instructions that can emit their own C code.
 pub trait InstrCodegen {
@@ -51,6 +51,30 @@ impl ArenaNativeGeometry {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArenaNativeLayout {
     Alu3(Alu3ArenaFieldOffsets),
+    Branch2(Branch2ArenaFieldOffsets),
+}
+
+/// BabyBear modulus, for baking field-canonical immediates (negative branch
+/// offsets encode as P + imm). rvr-openvm is OpenVM-specific, and the fused
+/// byte-equality oracle guards this value against the host encoding.
+pub const BABYBEAR_ORDER_U32: u32 = 0x7800_0001;
+
+/// Offsets for the branch2-class full record: a two-read no-write branch
+/// adapter + a comparison core with a/b operand limb arrays, a canonical
+/// imm, and a `local_opcode` byte (BranchEqual and BranchLessThan share
+/// this field shape).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Branch2ArenaFieldOffsets {
+    pub from_pc: usize,
+    pub from_timestamp: usize,
+    pub rs1_ptr: usize,
+    pub rs2_ptr: usize,
+    pub reads_aux0_prev_ts: usize,
+    pub reads_aux1_prev_ts: usize,
+    pub core_a: usize,
+    pub core_b: usize,
+    pub core_imm: usize,
+    pub core_local_opcode: usize,
 }
 
 /// Offsets for the alu3-class full record: a two-read one-u16-block-write
@@ -349,7 +373,32 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             target,
         } => {
             let (l, r) = if ctx.inline_records_enabled() {
-                ctx.emit_branch2_inline(*rs1, *rs2)
+                // R4 baked operands: register byte pointers, the
+                // field-canonical branch immediate (P + imm for negative
+                // offsets, matching the transpiler encoding the host
+                // assembler reads back), and the family local_opcode
+                // (BEQ=0/BNE=1; BLT=0/BLTU=1/BGE=2/BGEU=3).
+                let imm = *target as i64 - pc as i64;
+                let imm_canonical = if imm >= 0 {
+                    imm as u32
+                } else {
+                    (i64::from(BABYBEAR_ORDER_U32) + imm) as u32
+                };
+                let local_opcode = match cond {
+                    BranchCond::Eq => 0,
+                    BranchCond::Ne => 1,
+                    BranchCond::Lt => 0,
+                    BranchCond::Ltu => 1,
+                    BranchCond::Ge => 2,
+                    BranchCond::Geu => 3,
+                };
+                let baked = ArenaBranch2Baked {
+                    rs1_ptr: (*rs1 as u32) * 8,
+                    rs2_ptr: (*rs2 as u32) * 8,
+                    imm: imm_canonical,
+                    local_opcode,
+                };
+                ctx.emit_branch2_inline(*rs1, *rs2, Some(baked))
             } else {
                 (ctx.read_reg(*rs1), ctx.read_reg(*rs2))
             };
