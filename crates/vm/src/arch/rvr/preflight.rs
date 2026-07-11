@@ -590,6 +590,21 @@ where
         arena_targets.is_none() || (num_insns.is_some() && record_capacity_rows.is_some()),
         "arena-native targets require the single-shot proving path"
     );
+    // A fused-compiled library has NO compact fallback for its arena-native
+    // airs: executing without a target would write full records at the
+    // compact stride into scratch (garbage). Fail deterministically here
+    // instead of tripping the from_pc order guard downstream.
+    if let Some(&(air, _)) = compiled
+        .inline_records()
+        .arena_native_airs
+        .iter()
+        .find(|(air, _)| !arena_targets.is_some_and(|targets| targets.contains_key(air)))
+    {
+        return Err(ExecutionError::RvrExecution(format!(
+            "air {air} was compiled arena-native but no record target was provided; use the \
+             proving path, pass arena targets, or compile with OPENVM_RVR_ARENA_NATIVE=0"
+        )));
+    }
     let from_state = ExecutionState::new(state.pc(), PREFLIGHT_INITIAL_TIMESTAMP);
     // Per-address-space timestamp-shadow block counts (the C mirror of
     // `TracingMemory.meta`). Blocks are `WORD_SIZE` bytes = `BLOCK_FE_WIDTH`
