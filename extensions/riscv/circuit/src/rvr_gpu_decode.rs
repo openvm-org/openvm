@@ -9,10 +9,9 @@
 //! decoder is the only new derivation surface and the three-way differential
 //! pins it.
 
-use std::{
-    collections::HashSet,
-    sync::{Arc, Mutex},
-};
+#[cfg(feature = "rvr")]
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 #[cfg(feature = "rvr")]
@@ -93,6 +92,7 @@ pub fn configured_emission_mode() -> Option<InlineEmissionMode> {
 struct HostOperandTable {
     /// Identity of the bound exe: (pc_base, program slot count). A VM binds one
     /// exe in practice; this guard rebuilds the table if that ever changes.
+    #[cfg_attr(not(feature = "rvr"), allow(dead_code))]
     exe_key: (u32, usize),
     pc_base: u32,
     entries: Arc<Vec<DeviceOperandEntry>>,

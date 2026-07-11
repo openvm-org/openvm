@@ -54,6 +54,7 @@ pub mod auipc_cuda {
     /// M-GPUDEC (G2): tracegen from compact wire records + the per-exe
     /// device operand table.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -177,6 +178,7 @@ pub mod jalr_cuda {
     /// M-GPUDEC (G2): tracegen from compact wire records + the per-exe
     /// device operand table.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -254,6 +256,7 @@ pub mod less_than_cuda {
     /// M-GPUDEC (G2): tracegen from compact wire records + the per-exe
     /// device operand table.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -784,6 +787,7 @@ pub mod mul_cuda {
 
     /// M-GPUDEC (G2): compact-wire twin of `tracegen`.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -881,6 +885,7 @@ pub mod divrem_cuda {
 
     /// M-GPUDEC (G2): compact-wire twin of `tracegen`.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -972,6 +977,7 @@ pub mod shift_logical_cuda {
     /// M-GPUDEC (G2): tracegen from compact wire records + the per-exe
     /// device operand table.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1048,6 +1054,7 @@ pub mod shift_right_arithmetic_cuda {
     /// M-GPUDEC (G2): tracegen from compact wire records + the per-exe
     /// device operand table.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1123,6 +1130,7 @@ pub mod add_sub_cuda {
     /// M-GPUDEC (G2): tracegen from compact alu3 wire records + the per-exe
     /// device operand table.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1235,6 +1243,7 @@ pub mod bitwise_logic_cuda {
 
     /// M-GPUDEC (G2): compact-wire twin of `tracegen`.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1319,6 +1328,7 @@ pub mod jal_lui_cuda {
     /// M-GPUDEC (G2): tracegen from compact wire records + the per-exe
     /// device operand table.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1396,6 +1406,7 @@ pub mod beq_cuda {
     /// M-GPUDEC (G2): tracegen from compact wire records + the per-exe
     /// device operand table.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1473,6 +1484,7 @@ pub mod branch_lt_cuda {
     /// M-GPUDEC (G2): tracegen from compact wire records + the per-exe
     /// device operand table.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1555,6 +1567,7 @@ pub mod mulh_cuda {
 
     /// M-GPUDEC (G2): compact-wire twin of `tracegen`.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1755,6 +1768,7 @@ pub mod mul_w_cuda {
 
     /// M-GPUDEC (G2): compact-wire twin of `tracegen`.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -1852,6 +1866,7 @@ pub mod divrem_w_cuda {
 
     /// M-GPUDEC (G2): compact-wire twin of `tracegen`.
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "rvr")]
     pub unsafe fn tracegen_compact(
         d_trace: &DeviceBuffer<F>,
         height: usize,
