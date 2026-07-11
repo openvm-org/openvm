@@ -330,10 +330,10 @@ pub struct RvrPreflightOutput<F> {
     /// record — its memory-log entries are suppressed, so record assembly must
     /// skip the log assembler for it and consume `inline_records` instead.
     pub inline_pc_slots: Arc<Vec<bool>>,
-    /// R4: `(air_idx, written_bytes)` for airs whose records the C wrote
-    /// arena-native into caller-provided targets. Record assembly must skip
-    /// BOTH the log assembler and the inline assembler for these airs and
-    /// only verify the written length against expected row counts.
+    /// R4: `(air_idx, written_record_count)` for airs whose records the C
+    /// wrote arena-native into caller-provided targets. Record assembly must
+    /// skip BOTH the log assembler and the inline assembler for these airs
+    /// and only verify the count against the program log.
     pub arena_native_written: Vec<(usize, u32)>,
 }
 
@@ -854,7 +854,13 @@ where
             .zip(record_bufs.iter_mut())
             .map(|(&(air_idx, record_size), buffer)| {
                 if arena_targets.is_some_and(|targets| targets.contains_key(&air_idx)) {
-                    arena_native_written.push((air_idx, chip_records[air_idx].len));
+                    let buf = &chip_records[air_idx];
+                    assert_eq!(
+                        buf.len % buf.stride,
+                        0,
+                        "arena-native cursor for air {air_idx} is not a whole record count"
+                    );
+                    arena_native_written.push((air_idx, buf.len / buf.stride));
                     return RvrInlineChipRecords {
                         air_idx,
                         record_size,
