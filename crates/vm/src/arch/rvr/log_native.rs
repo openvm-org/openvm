@@ -334,11 +334,28 @@ where
 /// assembly on the same source of truth.
 pub trait LogNativeOpcodeAdmitter<F> {
     fn has_log_native_assembler(&self, instruction: &Instruction<F>) -> bool;
+
+    /// R4: the arena-native geometry for `instruction`'s family, if it has a
+    /// fused emitter. Compile metadata uses this to decide per air whether
+    /// the generated C emits full records at arena positions.
+    fn inline_arena_geometry_for(
+        &self,
+        _instruction: &Instruction<F>,
+    ) -> Option<ArenaNativeGeometry> {
+        None
+    }
 }
 
 impl<F, RA> LogNativeOpcodeAdmitter<F> for LogNativeAssemblerRegistry<F, RA> {
     fn has_log_native_assembler(&self, instruction: &Instruction<F>) -> bool {
         self.contains_instruction(instruction)
+    }
+
+    fn inline_arena_geometry_for(
+        &self,
+        instruction: &Instruction<F>,
+    ) -> Option<ArenaNativeGeometry> {
+        self.inline_arena_geometry(&instruction.opcode)
     }
 }
 

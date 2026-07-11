@@ -25,7 +25,7 @@ use rvr_openvm_lift::{
 };
 use sha2::{Digest, Sha256};
 
-use super::{debug::GuestDebugMap, LogNativeOpcodeAdmitter};
+use super::{debug::GuestDebugMap, ArenaNativeGeometry, LogNativeOpcodeAdmitter};
 use crate::arch::ExecutorInventory;
 
 /// A compiled rvr shared library ready for execution.
@@ -57,6 +57,11 @@ pub struct RvrInlineRecordsMeta {
     /// `(air_idx, record_size_bytes)` per chip receiving inline records,
     /// sorted by `air_idx`.
     pub airs: Vec<(usize, usize)>,
+    /// R4: `(air_idx, geometry)` for the subset of `airs` whose family has an
+    /// arena-native emitter (full records at final arena positions), sorted
+    /// by `air_idx`. Geometry comes from the assembler registry, which the
+    /// owning extension populated from the real record types.
+    pub arena_native_airs: Vec<(usize, ArenaNativeGeometry)>,
 }
 
 impl RvrInlineRecordsMeta {
@@ -415,11 +420,13 @@ fn collect_inline_records_meta<F: PrimeField32>(
     exe: &VmExe<F>,
     blocks: &[Block],
     chips: &ChipMapping,
+    admitter: Option<&dyn LogNativeOpcodeAdmitter<F>>,
 ) -> RvrInlineRecordsMeta {
     let num_slots = exe.program.instructions_and_debug_infos.len();
     let pc_base = u64::from(exe.program.pc_base);
     let mut pc_slots = vec![false; num_slots];
     let mut airs: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut arena_native: BTreeMap<usize, Option<ArenaNativeGeometry>> = BTreeMap::new();
     let mut record = |pc: u64, shape: InlineRecordShape| {
         let Some(offset) = pc.checked_sub(pc_base) else {
             return;
@@ -432,10 +439,25 @@ fn collect_inline_records_meta<F: PrimeField32>(
             *flag = true;
         }
         let size = inline_record_shape_size(shape);
-        let previous = airs.insert(air.as_u32() as usize, size);
+        let air_idx = air.as_u32() as usize;
+        let previous = airs.insert(air_idx, size);
         assert!(
             previous.is_none_or(|p| p == size),
             "conflicting inline record sizes for air {air:?}: {previous:?} vs {size}"
+        );
+        // R4: every pc routed to one air must agree on the family's
+        // arena-native geometry (present with equal values, or absent).
+        let geometry = admitter.and_then(|admitter| {
+            exe.program
+                .instructions_and_debug_infos
+                .get(slot)
+                .and_then(|entry| entry.as_ref())
+                .and_then(|(instruction, _)| admitter.inline_arena_geometry_for(instruction))
+        });
+        let previous = arena_native.insert(air_idx, geometry);
+        assert!(
+            previous.is_none_or(|p| p == geometry),
+            "conflicting arena-native geometry for air {air:?}: {previous:?} vs {geometry:?}"
         );
     };
     for block in blocks {
@@ -451,6 +473,10 @@ fn collect_inline_records_meta<F: PrimeField32>(
     RvrInlineRecordsMeta {
         pc_slots: Arc::new(pc_slots),
         airs: airs.into_iter().collect(),
+        arena_native_airs: arena_native
+            .into_iter()
+            .filter_map(|(air, geometry)| geometry.map(|g| (air, g)))
+            .collect(),
     }
 }
 
@@ -858,7 +884,12 @@ fn compile_impl<F: PrimeField32>(
             }
             if inline_records {
                 project.inline_records = true;
-                inline_meta = collect_inline_records_meta(exe, &blocks, chips);
+                inline_meta = collect_inline_records_meta(
+                    exe,
+                    &blocks,
+                    chips,
+                    opts.preflight_assembler_admitter,
+                );
             }
         }
     }
