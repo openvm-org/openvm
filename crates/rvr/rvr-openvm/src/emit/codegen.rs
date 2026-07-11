@@ -3,8 +3,8 @@ use std::collections::HashSet;
 
 use openvm_instructions::program::DEFAULT_PC_STEP;
 use rvr_openvm_ir::{
-    CfgBranchCond, CfgIntWidth, CfgOperand, CfgTerm, ExtEmitCtx, ExtInstr, InlineRecordShape,
-    Terminator, Variable,
+    ArenaRw1Baked, ArenaWr1Baked, CfgBranchCond, CfgIntWidth, CfgOperand, CfgTerm, ExtEmitCtx,
+    ExtInstr, InlineRecordShape, Terminator, Variable,
 };
 
 use super::context::{ArenaBranch2Baked, EmitContext};
@@ -46,6 +46,38 @@ pub enum ArenaNativeLayout {
     Alu3(Alu3ArenaFieldOffsets),
     Branch2(Branch2ArenaFieldOffsets),
     LoadStore(LoadStoreArenaFieldOffsets),
+    Wr1(Wr1ArenaFieldOffsets),
+    Rw1(Rw1ArenaFieldOffsets),
+}
+
+/// Field offsets for a conditional one-write JAL/LUI/AUIPC record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Wr1ArenaFieldOffsets {
+    pub from_pc: usize,
+    pub from_timestamp: usize,
+    pub rd_ptr: usize,
+    pub rd_prev_ts: usize,
+    pub rd_prev_data: usize,
+    pub core_imm: usize,
+    pub core_rd_data: usize,
+    pub core_is_jal: usize,
+    pub core_from_pc: usize,
+}
+
+/// Field offsets for a read/conditional-write JALR record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Rw1ArenaFieldOffsets {
+    pub from_pc: usize,
+    pub from_timestamp: usize,
+    pub rs1_ptr: usize,
+    pub rd_ptr: usize,
+    pub read_prev_ts: usize,
+    pub write_prev_ts: usize,
+    pub write_prev_data: usize,
+    pub core_imm: usize,
+    pub core_from_pc: usize,
+    pub core_rs1_val: usize,
+    pub core_imm_sign: usize,
 }
 
 /// Offsets for the load/store full record: the rs1-indexed memory adapter
@@ -150,7 +182,24 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             link_dst, target, ..
         } => {
             if inline_shape == Some(InlineRecordShape::Wr1) {
-                ctx.emit_wr1_inline(link_dst.map(variable_index), &hex_u64(next_pc));
+                let imm = target as i64 - pc as i64;
+                let core_imm = if imm >= 0 {
+                    imm as u32
+                } else {
+                    (i64::from(BABYBEAR_ORDER_U32) + imm) as u32
+                };
+                let baked = ArenaWr1Baked {
+                    rd_ptr: link_dst.map_or(u32::MAX, |rd| rd.index() * 8),
+                    core_imm,
+                    rd_data: next_pc,
+                    is_jal: 1,
+                    core_from_pc: 0,
+                };
+                ctx.emit_wr1_inline(
+                    link_dst.map(variable_index),
+                    &hex_u64(next_pc),
+                    Some(baked),
+                );
             } else if let Some(dst) = link_dst {
                 ctx.write_var(dst, &hex_u64(next_pc));
             } else {
@@ -173,7 +222,18 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                         unreachable!("RV64 JALR compact base must be a register or zero")
                     }
                 };
-                ctx.emit_rw1_inline(link_dst.map(variable_index), base, &hex_u64(next_pc))
+                let baked = ArenaRw1Baked {
+                    rs1_ptr: u32::from(base) * 8,
+                    rd_ptr: link_dst.map_or(u32::MAX, |rd| rd.index() * 8),
+                    core_imm: offset as u16,
+                    core_imm_sign: (offset < 0) as u8,
+                };
+                ctx.emit_rw1_inline(
+                    link_dst.map(variable_index),
+                    base,
+                    &hex_u64(next_pc),
+                    Some(baked),
+                )
             } else {
                 match base_value {
                     CfgOperand::Var(base) => {

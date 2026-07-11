@@ -1,6 +1,8 @@
 use std::{collections::HashSet, fmt::Write};
 
-use rvr_openvm_ir::{ArenaAlu3Baked, MemWidth, PageAddressSpace, Variable};
+use rvr_openvm_ir::{
+    ArenaAlu3Baked, ArenaRw1Baked, ArenaWr1Baked, MemWidth, PageAddressSpace, Variable,
+};
 use rvr_state::NUM_REGS;
 
 use super::codegen::hex_u32;
@@ -191,6 +193,11 @@ impl<'a> EmitContext<'a> {
     pub(crate) fn set_current_instr(&mut self, chip_idx: u32, pc: u64) {
         self.current_chip_idx = chip_idx;
         self.current_pc = pc;
+    }
+
+    /// PC of the instruction currently being emitted, as u32.
+    pub(crate) fn current_pc_u32(&self) -> u32 {
+        self.current_pc as u32
     }
 
     /// Whether the current instruction should emit an inline compact record
@@ -680,11 +687,17 @@ impl<'a> EmitContext<'a> {
     /// `Some(0)` suppresses the register write but still consumes the tick
     /// (matching `write_reg(0)`); the record's write fields are then zero and
     /// the host uses the instruction's enable flag.
-    pub(crate) fn emit_wr1_inline(&mut self, rd: Option<u8>, value: &str) {
+    pub(crate) fn emit_wr1_inline(
+        &mut self,
+        rd: Option<u8>,
+        value: &str,
+        arena: Option<ArenaWr1Baked>,
+    ) {
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
         let fromts = self.next_var();
         self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let arena = arena.filter(|_| self.arena_native_airs.contains_key(&chip));
         match rd {
             Some(rd) if rd != 0 => {
                 let tmp = self.next_var();
@@ -694,17 +707,99 @@ impl<'a> EmitContext<'a> {
                 let pw = self.next_var();
                 self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
                 self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
-                self.write_line(&format!(
-                    "preflight_emit_wr1(state, {chip}u, {pc}, {fromts}, {pw}, {rdprev});"
-                ));
+                if let Some(baked) = arena {
+                    self.emit_arena_wr1_stores(baked, &pc, &fromts, Some((&pw, &rdprev)));
+                } else {
+                    self.write_line(&format!(
+                        "preflight_emit_wr1(state, {chip}u, {pc}, {fromts}, {pw}, {rdprev});"
+                    ));
+                }
             }
             _ => {
                 self.write_line("trace_timestamp(state);");
-                self.write_line(&format!(
-                    "preflight_emit_wr1(state, {chip}u, {pc}, {fromts}, 0u, 0ull);"
-                ));
+                if let Some(baked) = arena {
+                    self.emit_arena_wr1_stores(baked, &pc, &fromts, None);
+                } else {
+                    self.write_line(&format!(
+                        "preflight_emit_wr1(state, {chip}u, {pc}, {fromts}, 0u, 0ull);"
+                    ));
+                }
             }
         }
+    }
+
+    /// R4: wr1 full-record stores. `write` is `(pw, rdprev)` for an enabled
+    /// link write; `None` stores the explicit u32::MAX rd_ptr sentinel and
+    /// leaves the zero-filled aux fields untouched. Core fields always store
+    /// (both cores are unconditional in the assemblers); the layout's
+    /// sentinels select the jal_lui vs auipc field set.
+    fn emit_arena_wr1_stores(
+        &mut self,
+        baked: ArenaWr1Baked,
+        pc: &str,
+        fromts: &str,
+        write: Option<(&str, &str)>,
+    ) {
+        let chip = self.current_chip_idx;
+        let geom = self.arena_native_airs[&chip];
+        let crate::ArenaNativeLayout::Wr1(off) = geom.layout else {
+            panic!("wr1 air {chip} registered a non-wr1 layout");
+        };
+        let rec = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
+        ));
+        self.write_line(&format!("if ({rec}) {{"));
+        self.indent += 1;
+        let core = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {core} = {rec} + state->tracer->chip_records[{chip}].core_off;"
+        ));
+        self.write_line(&format!("*(uint32_t*)({rec} + {}) = {pc};", off.from_pc));
+        self.write_line(&format!(
+            "*(uint32_t*)({rec} + {}) = {fromts};",
+            off.from_timestamp
+        ));
+        let rd_ptr = if write.is_some() {
+            baked.rd_ptr
+        } else {
+            u32::MAX
+        };
+        self.write_line(&format!(
+            "*(uint32_t*)({rec} + {}) = {rd_ptr}u;",
+            off.rd_ptr
+        ));
+        if let Some((pw, rdprev)) = write {
+            self.write_line(&format!("*(uint32_t*)({rec} + {}) = {pw};", off.rd_prev_ts));
+            self.write_line(&format!(
+                "arena_store_u64_le({rec} + {}, {rdprev});",
+                off.rd_prev_data
+            ));
+        }
+        self.write_line(&format!(
+            "*(uint32_t*)({core} + {}) = {}u;",
+            off.core_imm, baked.core_imm
+        ));
+        if off.core_rd_data != usize::MAX {
+            self.write_line(&format!(
+                "arena_store_u64_le({core} + {}, {}ull);",
+                off.core_rd_data, baked.rd_data
+            ));
+        }
+        if off.core_is_jal != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({core} + {}) = {}u;",
+                off.core_is_jal, baked.is_jal
+            ));
+        }
+        if off.core_from_pc != usize::MAX {
+            self.write_line(&format!(
+                "*(uint32_t*)({core} + {}) = {}u;",
+                off.core_from_pc, baked.core_from_pc
+            ));
+        }
+        self.indent -= 1;
+        self.write_line("}");
     }
 
     /// R3: emit the two touch-only branch operand reads plus the inline
@@ -783,6 +878,7 @@ impl<'a> EmitContext<'a> {
         link_rd: Option<u8>,
         rs1: u8,
         link_value: &str,
+        arena: Option<ArenaRw1Baked>,
     ) -> String {
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
@@ -792,6 +888,7 @@ impl<'a> EmitContext<'a> {
         // The jump target must be computed from the PRE-write rs1 value when
         // link_rd == rs1 (e.g. jalr ra, ra, 0).
         let v1 = self.materialize_u64(&v1);
+        let arena = arena.filter(|_| self.arena_native_airs.contains_key(&chip));
         match link_rd {
             Some(rd) if rd != 0 => {
                 let tmp = self.next_var();
@@ -801,18 +898,105 @@ impl<'a> EmitContext<'a> {
                 let pw = self.next_var();
                 self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
                 self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
-                self.write_line(&format!(
-                    "preflight_emit_rw1(state, {chip}u, {pc}, {fromts}, {p1}, {pw}, {v1}, {rdprev});"
-                ));
+                if let Some(baked) = arena {
+                    self.emit_arena_rw1_stores(baked, &pc, &fromts, &v1, &p1, Some((&pw, &rdprev)));
+                } else {
+                    self.write_line(&format!(
+                        "preflight_emit_rw1(state, {chip}u, {pc}, {fromts}, {p1}, {pw}, {v1}, \
+                         {rdprev});"
+                    ));
+                }
             }
             _ => {
                 self.write_line("trace_timestamp(state);");
-                self.write_line(&format!(
-                    "preflight_emit_rw1(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {v1}, 0ull);"
-                ));
+                if let Some(baked) = arena {
+                    self.emit_arena_rw1_stores(baked, &pc, &fromts, &v1, &p1, None);
+                } else {
+                    self.write_line(&format!(
+                        "preflight_emit_rw1(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {v1}, \
+                         0ull);"
+                    ));
+                }
             }
         }
         v1
+    }
+
+    /// R4: rw1 (Jalr) full-record stores; `write` as in wr1.
+    fn emit_arena_rw1_stores(
+        &mut self,
+        baked: ArenaRw1Baked,
+        pc: &str,
+        fromts: &str,
+        v1: &str,
+        p1: &str,
+        write: Option<(&str, &str)>,
+    ) {
+        let chip = self.current_chip_idx;
+        let geom = self.arena_native_airs[&chip];
+        let crate::ArenaNativeLayout::Rw1(off) = geom.layout else {
+            panic!("rw1 air {chip} registered a non-rw1 layout");
+        };
+        let rec = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
+        ));
+        self.write_line(&format!("if ({rec}) {{"));
+        self.indent += 1;
+        let core = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {core} = {rec} + state->tracer->chip_records[{chip}].core_off;"
+        ));
+        self.write_line(&format!("*(uint32_t*)({rec} + {}) = {pc};", off.from_pc));
+        self.write_line(&format!(
+            "*(uint32_t*)({rec} + {}) = {fromts};",
+            off.from_timestamp
+        ));
+        self.write_line(&format!(
+            "*(uint32_t*)({rec} + {}) = {}u;",
+            off.rs1_ptr, baked.rs1_ptr
+        ));
+        let rd_ptr = if write.is_some() {
+            baked.rd_ptr
+        } else {
+            u32::MAX
+        };
+        self.write_line(&format!(
+            "*(uint32_t*)({rec} + {}) = {rd_ptr}u;",
+            off.rd_ptr
+        ));
+        self.write_line(&format!(
+            "*(uint32_t*)({rec} + {}) = {p1};",
+            off.read_prev_ts
+        ));
+        if let Some((pw, rdprev)) = write {
+            self.write_line(&format!(
+                "*(uint32_t*)({rec} + {}) = {pw};",
+                off.write_prev_ts
+            ));
+            self.write_line(&format!(
+                "arena_store_u64_le({rec} + {}, {rdprev});",
+                off.write_prev_data
+            ));
+        }
+        self.write_line(&format!(
+            "*(uint16_t*)({core} + {}) = {}u;",
+            off.core_imm, baked.core_imm
+        ));
+        self.write_line(&format!(
+            "*(uint32_t*)({core} + {}) = {pc};",
+            off.core_from_pc
+        ));
+        self.write_line(&format!(
+            "*(uint32_t*)({core} + {}) = (uint32_t){v1};",
+            off.core_rs1_val
+        ));
+        self.write_line(&format!(
+            "*(uint8_t*)({core} + {}) = {}u;",
+            off.core_imm_sign, baked.core_imm_sign
+        ));
+        self.indent -= 1;
+        self.write_line("}");
     }
 
     /// R3: emit a main-memory load with an inline compact alu3 record:
@@ -1371,11 +1555,16 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         true
     }
 
-    fn emit_wr1_inline(&mut self, rd: Option<Variable>, value: &str) -> bool {
+    fn emit_wr1_inline(
+        &mut self,
+        rd: Option<Variable>,
+        value: &str,
+        arena: Option<ArenaWr1Baked>,
+    ) -> bool {
         if !self.inline_records_enabled() {
             return false;
         }
-        EmitContext::emit_wr1_inline(self, rd.map(reg_index), value);
+        EmitContext::emit_wr1_inline(self, rd.map(reg_index), value, arena);
         true
     }
 

@@ -4,9 +4,10 @@ use openvm_circuit::{
             generate_record_arenas_from_logs, Alu3ArenaFieldOffsets, ArenaNativeGeometry,
             ArenaNativeLayout, Branch2ArenaFieldOffsets, LoadStoreArenaFieldOffsets,
             LogNativeAccessView, LogNativeAssemblerRegistry, PreflightMemoryAccessAux,
-            RvrPreflightOutput, VmRvrLogNativeExtension, PREFLIGHT_ADDSUB_RECORD_SIZE,
-            PREFLIGHT_BRANCH2_RECORD_SIZE, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
-            PREFLIGHT_RW1_RECORD_SIZE, PREFLIGHT_WR1_RECORD_SIZE,
+            RvrPreflightOutput, Rw1ArenaFieldOffsets, VmRvrLogNativeExtension,
+            Wr1ArenaFieldOffsets, PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
+            PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_RW1_RECORD_SIZE,
+            PREFLIGHT_WR1_RECORD_SIZE,
         },
         AdapterTraceExecutor, Arena, EmptyAdapterCoreLayout, EmptyMultiRowLayout, ExecutionError,
         MultiRowLayout, RecordArena, BLOCK_FE_WIDTH,
@@ -977,20 +978,104 @@ where
                 }),
             },
         );
-        registry.register_inline(
+        registry.register_inline_arena_native(
             Rv64JalLuiOpcode::iter().map(|opcode| opcode.global_opcode()),
             PREFLIGHT_WR1_RECORD_SIZE,
             assemble_jal_lui_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64RdWriteAdapterRecord>(),
+                adapter_align: align_of::<Rv64RdWriteAdapterRecord>(),
+                core_size: size_of::<Rv64JalLuiCoreRecord>(),
+                core_align: align_of::<Rv64JalLuiCoreRecord>(),
+                core_off_matrix: <Rv64CondRdWriteAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Wr1(Wr1ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64RdWriteAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64RdWriteAdapterRecord, from_timestamp),
+                    rd_ptr: core::mem::offset_of!(Rv64RdWriteAdapterRecord, rd_ptr),
+                    rd_prev_ts: core::mem::offset_of!(Rv64RdWriteAdapterRecord, rd_aux_record)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_timestamp
+                        ),
+                    rd_prev_data: core::mem::offset_of!(Rv64RdWriteAdapterRecord, rd_aux_record)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_data
+                        ),
+                    core_imm: core::mem::offset_of!(Rv64JalLuiCoreRecord, imm),
+                    core_rd_data: core::mem::offset_of!(Rv64JalLuiCoreRecord, rd_data),
+                    core_is_jal: core::mem::offset_of!(Rv64JalLuiCoreRecord, is_jal),
+                    core_from_pc: usize::MAX,
+                }),
+            },
         );
-        registry.register_inline(
+        registry.register_inline_arena_native(
             Rv64AuipcOpcode::iter().map(|opcode| opcode.global_opcode()),
             PREFLIGHT_WR1_RECORD_SIZE,
             assemble_auipc_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64RdWriteAdapterRecord>(),
+                adapter_align: align_of::<Rv64RdWriteAdapterRecord>(),
+                core_size: size_of::<Rv64AuipcCoreRecord>(),
+                core_align: align_of::<Rv64AuipcCoreRecord>(),
+                core_off_matrix: <Rv64RdWriteAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Wr1(Wr1ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64RdWriteAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64RdWriteAdapterRecord, from_timestamp),
+                    rd_ptr: core::mem::offset_of!(Rv64RdWriteAdapterRecord, rd_ptr),
+                    rd_prev_ts: core::mem::offset_of!(Rv64RdWriteAdapterRecord, rd_aux_record)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_timestamp
+                        ),
+                    rd_prev_data: core::mem::offset_of!(Rv64RdWriteAdapterRecord, rd_aux_record)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_data
+                        ),
+                    core_imm: core::mem::offset_of!(Rv64AuipcCoreRecord, imm),
+                    core_rd_data: usize::MAX,
+                    core_is_jal: usize::MAX,
+                    core_from_pc: core::mem::offset_of!(Rv64AuipcCoreRecord, from_pc),
+                }),
+            },
         );
-        registry.register_inline(
+        registry.register_inline_arena_native(
             Rv64JalrOpcode::iter().map(|opcode| opcode.global_opcode()),
             PREFLIGHT_RW1_RECORD_SIZE,
             assemble_jalr_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64JalrAdapterRecord>(),
+                adapter_align: align_of::<Rv64JalrAdapterRecord>(),
+                core_size: size_of::<Rv64JalrCoreRecord>(),
+                core_align: align_of::<Rv64JalrCoreRecord>(),
+                core_off_matrix: <Rv64JalrAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Rw1(Rw1ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64JalrAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64JalrAdapterRecord, from_timestamp),
+                    rs1_ptr: core::mem::offset_of!(Rv64JalrAdapterRecord, rs1_ptr),
+                    rd_ptr: core::mem::offset_of!(Rv64JalrAdapterRecord, rd_ptr),
+                    read_prev_ts: core::mem::offset_of!(Rv64JalrAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64JalrAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64JalrAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_data
+                        ),
+                    core_imm: core::mem::offset_of!(Rv64JalrCoreRecord, imm),
+                    core_from_pc: core::mem::offset_of!(Rv64JalrCoreRecord, from_pc),
+                    core_rs1_val: core::mem::offset_of!(Rv64JalrCoreRecord, rs1_val),
+                    core_imm_sign: core::mem::offset_of!(Rv64JalrCoreRecord, imm_sign),
+                }),
+            },
         );
         registry.register_inline_arena_native(
             Rv64LoadStoreOpcode::iter()
