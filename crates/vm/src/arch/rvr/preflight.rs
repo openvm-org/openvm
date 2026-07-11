@@ -541,10 +541,23 @@ where
         let mut shadow_register = vec![0u32; reg_shadow_blocks];
         let mut shadow_memory = vec![0u32; mem_shadow_blocks];
         let mut shadow_public_values = vec![0u32; pv_shadow_blocks];
-        // Inline (migrated) instructions touch without logging; today every
-        // migrated shape is register-only, so the register file bounds their
-        // first-touch contribution. Revisit when load/store shapes migrate.
-        let mut touched = vec_uninit::<TouchedBlock>(memory_log_cap + 64);
+        // Inline (migrated) instructions touch without logging: register
+        // touches are bounded by the register file, and each migrated
+        // load/store row first-touches at most one memory block, bounded by
+        // that chip's metered height (fallback: one per instruction).
+        let inline_touch_slack: usize = compiled
+            .inline_records()
+            .airs
+            .iter()
+            .map(|&(air, _)| {
+                record_capacity_rows
+                    .and_then(|heights| heights.get(air))
+                    .map(|&height| height as usize)
+                    .unwrap_or(program_log_cap)
+            })
+            .sum::<usize>()
+            + 64;
+        let mut touched = vec_uninit::<TouchedBlock>(memory_log_cap + inline_touch_slack);
         let pv_base = public_values_slice(&mut run_state.memory.memory).as_mut_ptr();
 
         // R3: per migrated chip, an inline compact-record buffer. Sized by the

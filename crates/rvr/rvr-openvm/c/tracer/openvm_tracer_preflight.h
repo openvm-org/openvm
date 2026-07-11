@@ -382,6 +382,16 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_write(
                                  WORD_SIZE, new_val, state->regs[idx]);
 }
 
+/* Touch-only main-memory block access for migrated load/store opcodes (R3):
+ * identical timestamp/shadow/touched bookkeeping to the logging trace_rd/wr
+ * helpers, no MemoryLogEntry. `block_addr` must be block-aligned. Returns the
+ * block's previous-access timestamp. */
+static __attribute__((always_inline)) inline uint32_t trace_mem_touch(
+    RvState* restrict state, uint64_t block_addr) {
+  uint32_t timestamp;
+  return preflight_touch(state->tracer, AS_MEMORY, block_addr, &timestamp);
+}
+
 /* Touch-only register access for opcodes migrated to inline compact records
  * (R3): advances the timestamp and updates the shadow/touched bookkeeping
  * exactly like the logging `trace_reg_*` helpers, but appends no
