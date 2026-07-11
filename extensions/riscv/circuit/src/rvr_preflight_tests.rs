@@ -1336,6 +1336,58 @@ fn assert_host_trace_eq(
     );
 }
 
+/// MemoryMerkle rows are emitted in backend-specific order (the CPU walks the old/new
+/// tree traversal interleaved, the CUDA kernel writes rows at computed per-layer
+/// offsets), and the AIR admits any row order that satisfies its constraints — the
+/// all-segment stark-debug sweeps validate both orderings. Compare such traces as a
+/// row multiset; a genuine per-row value divergence still fails loudly.
+#[cfg(feature = "cuda")]
+fn assert_host_trace_rows_multiset_eq(
+    label: &str,
+    air_name: &str,
+    left_name: &str,
+    right_name: &str,
+    left: &HostTrace,
+    right: &HostTrace,
+) {
+    assert_eq!(
+        left.common_main.width(),
+        right.common_main.width(),
+        "{label}: {air_name} width differs between {left_name} and {right_name}"
+    );
+    assert_eq!(
+        left.common_main.height(),
+        right.common_main.height(),
+        "{label}: {air_name} height differs between {left_name} and {right_name}"
+    );
+    let sorted_rows = |trace: &HostTrace| -> Vec<Vec<u32>> {
+        let height = trace.common_main.height();
+        let width = trace.common_main.width();
+        let mut rows = (0..height)
+            .map(|i| {
+                (0..width)
+                    .map(|j| trace.common_main.values[j * height + i].as_canonical_u32())
+                    .collect::<Vec<u32>>()
+            })
+            .collect::<Vec<_>>();
+        rows.sort_unstable();
+        rows
+    };
+    let left_rows = sorted_rows(left);
+    let right_rows = sorted_rows(right);
+    if let Some(idx) = (0..left_rows.len()).find(|&i| left_rows[i] != right_rows[i]) {
+        panic!(
+            "{label}: {air_name} row multisets differ between {left_name} and {right_name}: \
+             first_sorted_mismatch={idx} left={:?} right={:?}",
+            left_rows[idx], right_rows[idx]
+        );
+    }
+    assert_eq!(
+        left.public_values, right.public_values,
+        "{label}: {air_name} public values differ between {left_name} and {right_name}"
+    );
+}
+
 #[cfg(feature = "cuda")]
 fn assert_trace_maps_eq(
     label: &str,
@@ -1589,15 +1641,34 @@ fn assert_gpu_rvr_three_way_from_state(
         &cpu_traces,
         &active_instruction_air_ids,
     );
-    assert_trace_maps_eq_for_air_ids(
-        label,
-        "gpu_from_record_arenas",
-        "cpu_interpreter",
-        &air_names,
-        &gpu_arena_traces,
-        &cpu_traces,
-        &system_compare_air_ids(&air_names),
-    );
+    for &air_idx in &system_compare_air_ids(&air_names) {
+        let air_name = air_names[air_idx].as_str();
+        let gpu_trace = gpu_arena_traces
+            .get(&air_idx)
+            .unwrap_or_else(|| panic!("{label}: gpu_from_record_arenas missing {air_name}"));
+        let cpu_trace = cpu_traces
+            .get(&air_idx)
+            .unwrap_or_else(|| panic!("{label}: cpu_interpreter missing {air_name}"));
+        if air_name.starts_with("MemoryMerkleAir<") {
+            assert_host_trace_rows_multiset_eq(
+                label,
+                air_name,
+                "gpu_from_record_arenas",
+                "cpu_interpreter",
+                gpu_trace,
+                cpu_trace,
+            );
+        } else {
+            assert_host_trace_eq(
+                label,
+                air_name,
+                "gpu_from_record_arenas",
+                "cpu_interpreter",
+                gpu_trace,
+                cpu_trace,
+            );
+        }
+    }
 
     rvr_to_state
 }
