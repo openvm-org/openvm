@@ -33,8 +33,9 @@ pub use execute::{
 };
 pub use log_native::{
     generate_record_arenas_from_logs, Alu3ArenaFieldOffsets, ArenaNativeGeometry,
-    ArenaNativeLayout, LogNativeAccessView, LogNativeAssembler, LogNativeAssemblerRegistry,
-    LogNativeInlineAssembler, LogNativeOpcodeAdmitter, VmRvrLogNativeExtension,
+    ArenaNativeLayout, Branch2ArenaFieldOffsets, LogNativeAccessView, LogNativeAssembler,
+    LogNativeAssemblerRegistry, LogNativeInlineAssembler, LogNativeOpcodeAdmitter,
+    VmRvrLogNativeExtension,
 };
 pub use metered::{
     RunToCompletion, RvrMeteredInstance, RvrMeteredInstanceWith, RvrMeteredResult,
