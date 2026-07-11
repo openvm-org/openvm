@@ -25,6 +25,7 @@ pub struct Rv64JalLuiChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for Rv64JalLuiChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(Rv64RdWriteAdapterRecord, Rv64JalLuiCoreRecord)>();
+        #[cfg(feature = "rvr")]
         let rvr_wire = arena.rvr_wire;
         let records = arena.allocated();
         if records.is_empty() {
@@ -37,6 +38,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64JalLuiChipGpu {
         let device_ctx = &self.range_checker.device_ctx;
         // M-GPUDEC (G2): this segment's arena carries compact wire records —
         // decode them on device against the per-exe operand table.
+        #[cfg(feature = "rvr")]
         if rvr_wire {
             use openvm_circuit::arch::rvr::PREFLIGHT_WR1_RECORD_SIZE;
             assert_eq!(
