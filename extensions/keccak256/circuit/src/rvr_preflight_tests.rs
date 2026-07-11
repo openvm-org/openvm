@@ -3,8 +3,9 @@ use std::{collections::BTreeMap, sync::Arc};
 use openvm_circuit::{
     arch::{
         rvr::{
-            generate_record_arenas_from_logs, RvrPreflightOutput, RvrPreflightRoute,
-            VmRvrLogNativeExtension, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
+            generate_record_arenas_from_logs, RvrPreflightEngine, RvrPreflightOutput,
+            RvrPreflightRoute, VmRvrLogNativeExtension, PREFLIGHT_MEMORY_KIND_READ,
+            PREFLIGHT_MEMORY_KIND_WRITE,
         },
         testing::assert_vm_states_equivalent,
         verify_segments, ContinuationVmProver, MatrixRecordArena, Streams, VirtualMachine,
@@ -484,6 +485,9 @@ fn rvr_preflight_keccak_multi_segment_proves_and_verifies() {
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance =
         VmInstance::new(vm, Arc::new(exe), cached_program_trace).expect("instance init");
+    // CPU proving defaults to the interpreter engine; pin rvr so the route
+    // assertion above matches what the prove actually exercises.
+    instance.set_rvr_preflight_engine(Some(RvrPreflightEngine::Rvr));
     let proof = ContinuationVmProver::prove(&mut instance, Streams::default()).expect("prove");
     assert!(
         proof.per_segment.len() > 1,

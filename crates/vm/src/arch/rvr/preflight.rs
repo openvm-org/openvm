@@ -321,6 +321,49 @@ pub struct RvrPreflightInstance<'a, F: PrimeField32> {
     pub(crate) chip_counts_len: usize,
 }
 
+/// Which engine the proving path uses for preflight execution.
+///
+/// The default is keyed off the prover backend via
+/// [`VmBuilder::default_rvr_preflight_engine`](crate::arch::VmBuilder::default_rvr_preflight_engine):
+/// CPU provers default to [`Interpreter`](Self::Interpreter), GPU provers to
+/// [`Rvr`](Self::Rvr). Rationale (reth block 23992138, 2026-07): the
+/// interpreter fuses execute + arena fill in one pass, while the rvr inline
+/// path pays a host compact→arena assembly pass that is 55–62% of its
+/// preflight time on CPU — 1.80× slower end-to-end at reth scale. On the GPU
+/// backend that assembly pass does not exist (compact records are the H2D
+/// payload; expansion happens on-device), so rvr remains the default there.
+///
+/// Overrides, strongest first:
+/// 1. [`VmInstance::set_rvr_preflight_engine`](crate::arch::VmInstance::set_rvr_preflight_engine) —
+///    programmatic, per instance.
+/// 2. `OPENVM_RVR_PREFLIGHT_ENGINE=interpreter|rvr` — environment; any other value panics (loudly,
+///    to avoid silently mismeasured benchmarks).
+///
+/// `Rvr` is a preference, not a guarantee: programs with opcodes outside the
+/// rvr preflight surface still fall back to the interpreter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RvrPreflightEngine {
+    Interpreter,
+    Rvr,
+}
+
+/// Reads the `OPENVM_RVR_PREFLIGHT_ENGINE` environment override.
+///
+/// Panics on an unrecognized value: a typo silently reverting to the default
+/// would invalidate any engine A/B measurement built on this knob.
+pub fn rvr_preflight_engine_env_override() -> Option<RvrPreflightEngine> {
+    match std::env::var("OPENVM_RVR_PREFLIGHT_ENGINE") {
+        Ok(value) => match value.as_str() {
+            "interpreter" => Some(RvrPreflightEngine::Interpreter),
+            "rvr" => Some(RvrPreflightEngine::Rvr),
+            other => panic!(
+                "OPENVM_RVR_PREFLIGHT_ENGINE must be \"interpreter\" or \"rvr\", got {other:?}"
+            ),
+        },
+        Err(_) => None,
+    }
+}
+
 pub enum RvrPreflightRoute<'a, F: PrimeField32, E> {
     Rvr(RvrPreflightInstance<'a, F>),
     Interpreter(PreflightInterpretedInstance<F, E>),
