@@ -107,9 +107,21 @@ impl VmBuilder<E> for Sha2Rv64GpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Rv64ImGpuProverExt::default(),
+            &config.rv64i,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Rv64ImGpuProverExt::default(),
+            &config.rv64m,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Rv64ImGpuProverExt::default(),
+            &config.io,
+            inventory,
+        )?;
         VmProverExtension::<E, _, _>::extend_prover(&Sha2GpuProverExt, &config.sha2, inventory)?;
         Ok(chip_complex)
     }
