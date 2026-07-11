@@ -1587,12 +1587,10 @@ fn assert_gpu_rvr_three_way_from_state(
         )
         .expect("gpu interpreter execution");
 
-    let (mut gpu_log_vm, _) = VirtualMachine::new_with_keygen(
-        test_gpu_engine(),
-        Rv64ImGpuBuilder::default(),
-        config.clone(),
-    )
-    .expect("gpu log vm init");
+    let gpu_log_builder = Rv64ImGpuBuilder::default();
+    let (mut gpu_log_vm, _) =
+        VirtualMachine::new_with_keygen(test_gpu_engine(), gpu_log_builder.clone(), config.clone())
+            .expect("gpu log vm init");
     let air_names = gpu_log_vm
         .air_names()
         .map(str::to_owned)
@@ -1631,7 +1629,7 @@ fn assert_gpu_rvr_three_way_from_state(
         .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
         .collect::<Vec<_>>();
     let pc_to_air_idx = gpu_log_vm.pc_to_air_idx(exe).expect("pc to air mapping");
-    let gpu_log_record_arenas = Rv64ImGpuBuilder::default()
+    let gpu_log_record_arenas = gpu_log_builder
         .generate_rvr_record_arenas_from_logs(
             config,
             exe,

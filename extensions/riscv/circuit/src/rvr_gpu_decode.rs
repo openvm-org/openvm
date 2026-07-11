@@ -103,22 +103,11 @@ struct HostOperandTable {
 #[derive(Default)]
 pub struct RvrGpuDecodeState {
     table: Mutex<Option<HostOperandTable>>,
-    /// Per-SEGMENT emission mode of the decode-kernel formats — all supported
-    /// AIRs toggle together. Refreshed on every
-    /// `generate_rvr_record_arenas_from_logs` call, so a segment produced by a
-    /// different route can never be misread. `None` = expanded.
-    compact_mode: Mutex<Option<InlineEmissionMode>>,
     /// Device copy of the operand table, keyed by the host table's identity.
     device_table: Mutex<Option<(usize, Arc<DeviceBuffer<u8>>)>>,
 }
 
 impl RvrGpuDecodeState {
-    /// The emission mode the current segment's alu_u16-family arenas were
-    /// built with, if any.
-    pub fn compact_segment_mode(&self) -> Option<InlineEmissionMode> {
-        *self.compact_mode.lock().unwrap()
-    }
-
     /// The device operand table (uploaded once per bound exe) + its pc base.
     pub fn device_operand_table(
         &self,
@@ -149,12 +138,6 @@ impl RvrGpuDecodeState {
     pub fn operand_table(&self) -> Option<(Arc<Vec<DeviceOperandEntry>>, u32)> {
         let table = self.table.lock().unwrap();
         table.as_ref().map(|t| (Arc::clone(&t.entries), t.pc_base))
-    }
-
-    /// Clear the per-segment mode (used when the toggle is off or the route
-    /// produced expanded arenas).
-    pub fn clear_segment_modes(&self) {
-        *self.compact_mode.lock().unwrap() = None;
     }
 
     /// Producer side: bind `exe` (building the alu_u16-family operand table if
@@ -206,11 +189,6 @@ impl RvrGpuDecodeState {
             "gpu-decode formats mapped to {} AIRs (expected <= 17)",
             airs.len()
         );
-        *self.compact_mode.lock().unwrap() = if airs.is_empty() {
-            None
-        } else {
-            Some(InlineEmissionMode::CompactWire)
-        };
         airs
     }
 }

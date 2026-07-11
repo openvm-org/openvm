@@ -173,6 +173,12 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
 
 pub struct DenseRecordArena {
     pub records_buffer: Cursor<Vec<u8>>,
+    /// M-GPUDEC: the buffer holds rvr compact WIRE records (natural per-format
+    /// stride) rather than expanded typed records. Set only by the GPU rvr
+    /// route's wire-buffer adoption; consumers (GPU chips) branch on it. Kept
+    /// on the arena so the mode travels WITH the data — a segment-global flag
+    /// can diverge from per-arena reality (tainted AIRs, multiple builders).
+    pub rvr_wire: bool,
 }
 
 const MAX_ALIGNMENT: usize = 32;
@@ -197,6 +203,7 @@ impl DenseRecordArena {
         cursor.set_position(offset as u64);
         Self {
             records_buffer: cursor,
+            rvr_wire: false,
         }
     }
 
@@ -320,6 +327,7 @@ impl DenseRecordArena {
         cursor.set_position((offset + written_bytes) as u64);
         Self {
             records_buffer: cursor,
+            rvr_wire: false,
         }
     }
 }
