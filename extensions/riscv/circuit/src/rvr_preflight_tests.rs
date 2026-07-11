@@ -2187,7 +2187,7 @@ fn rvr_preflight_dense_arena_capacity_undercount_panics() {
         .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
         .collect::<Vec<_>>();
     let pc_to_air_idx = vm.pc_to_air_idx(&exe).expect("pc to air mapping");
-    let rvr_output = {
+    let mut rvr_output = {
         let route = vm
             .preflight_routed_instance(&exe)
             .expect("routed preflight instance");
@@ -2200,7 +2200,7 @@ fn rvr_preflight_dense_arena_capacity_undercount_panics() {
     };
     let _ = crate::log_native::generate_rv64im_record_arenas_from_logs::<F, DenseRecordArena>(
         &exe,
-        &rvr_output,
+        &mut rvr_output,
         &capacities,
         &pc_to_air_idx,
     );
