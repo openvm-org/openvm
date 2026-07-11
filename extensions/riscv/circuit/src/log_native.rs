@@ -1,14 +1,14 @@
 use openvm_circuit::{
     arch::{
         rvr::{
-            generate_record_arenas_from_logs, LogNativeAccessView, LogNativeAssemblerRegistry,
-            PreflightMemoryAccessAux, RvrPreflightOutput, VmRvrLogNativeExtension,
-            PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
+            generate_record_arenas_from_logs, ArenaNativeGeometry, LogNativeAccessView,
+            LogNativeAssemblerRegistry, PreflightMemoryAccessAux, RvrPreflightOutput,
+            VmRvrLogNativeExtension, PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
             PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_RW1_RECORD_SIZE,
             PREFLIGHT_WR1_RECORD_SIZE,
         },
-        Arena, EmptyAdapterCoreLayout, EmptyMultiRowLayout, ExecutionError, MultiRowLayout,
-        RecordArena, BLOCK_FE_WIDTH,
+        AdapterTraceExecutor, Arena, EmptyAdapterCoreLayout, EmptyMultiRowLayout, ExecutionError,
+        MultiRowLayout, RecordArena, BLOCK_FE_WIDTH,
     },
     system::{
         memory::offline_checker::{
@@ -669,10 +669,18 @@ where
             [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|opcode| opcode.global_opcode()),
             assemble_add_sub::<F, RA>,
         );
-        registry.register_inline(
+        registry.register_inline_arena_native(
             [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|opcode| opcode.global_opcode()),
             PREFLIGHT_ADDSUB_RECORD_SIZE,
             assemble_add_sub_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64BaseAluU16AdapterRecord>(),
+                adapter_align: align_of::<Rv64BaseAluU16AdapterRecord>(),
+                core_size: size_of::<AddSubCoreRecord<BLOCK_FE_WIDTH>>(),
+                core_align: align_of::<AddSubCoreRecord<BLOCK_FE_WIDTH>>(),
+                core_off_matrix: <Rv64BaseAluU16AdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+            },
         );
         registry.register_inline(
             [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
