@@ -43,7 +43,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64AddSubChipGpu {
         // M-GPUDEC (G2): this segment's arena carries compact wire records —
         // decode them on device against the per-exe operand table.
         if matches!(
-            self.rvr_decode.alu_u16_segment_mode(),
+            self.rvr_decode.compact_segment_mode(),
             Some(crate::rvr_gpu_decode::InlineEmissionMode::CompactWire)
         ) {
             use openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE;
