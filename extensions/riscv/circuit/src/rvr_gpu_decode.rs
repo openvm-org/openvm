@@ -10,10 +10,11 @@
 //! pins it.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     sync::{Arc, Mutex},
 };
 
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 #[cfg(feature = "rvr")]
 use openvm_instructions::{exe::VmExe, program::DEFAULT_PC_STEP, LocalOpcode};
 #[cfg(feature = "rvr")]
@@ -83,17 +84,46 @@ struct HostOperandTable {
 #[derive(Default)]
 pub struct RvrGpuDecodeState {
     table: Mutex<Option<HostOperandTable>>,
-    /// Per-SEGMENT emission mode per AIR index; refreshed on every
-    /// `generate_rvr_record_arenas_from_logs` call (so a segment produced by a
-    /// different route can never be misread). Empty = everything expanded.
-    segment_modes: Mutex<HashMap<usize, InlineEmissionMode>>,
+    /// Per-SEGMENT emission mode of the alu_u16 (BaseAluU16 adapter) family —
+    /// all four AIRs toggle together. Refreshed on every
+    /// `generate_rvr_record_arenas_from_logs` call, so a segment produced by a
+    /// different route can never be misread. `None` = expanded.
+    alu_u16_mode: Mutex<Option<InlineEmissionMode>>,
+    /// Device copy of the operand table, keyed by the host table's identity.
+    device_table: Mutex<Option<(usize, Arc<DeviceBuffer<u8>>)>>,
 }
 
 impl RvrGpuDecodeState {
-    /// The emission mode the current segment's arena for `air_idx` was built
-    /// with, if any.
-    pub fn mode_for(&self, air_idx: usize) -> Option<InlineEmissionMode> {
-        self.segment_modes.lock().unwrap().get(&air_idx).copied()
+    /// The emission mode the current segment's alu_u16-family arenas were
+    /// built with, if any.
+    pub fn alu_u16_segment_mode(&self) -> Option<InlineEmissionMode> {
+        *self.alu_u16_mode.lock().unwrap()
+    }
+
+    /// The device operand table (uploaded once per bound exe) + its pc base.
+    pub fn device_operand_table(
+        &self,
+        device_ctx: &GpuDeviceCtx,
+    ) -> Option<(Arc<DeviceBuffer<u8>>, u32)> {
+        let (entries, pc_base) = self.operand_table()?;
+        let key = Arc::as_ptr(&entries) as usize;
+        let mut cache = self.device_table.lock().unwrap();
+        if let Some((cached_key, buf)) = cache.as_ref() {
+            if *cached_key == key {
+                return Some((Arc::clone(buf), pc_base));
+            }
+        }
+        // SAFETY: DeviceOperandEntry is repr(C), size 16, no padding invariants
+        // beyond the static asserts; reinterpreting as bytes for H2D is sound.
+        let bytes: &[u8] = unsafe {
+            std::slice::from_raw_parts(
+                entries.as_ptr() as *const u8,
+                entries.len() * size_of::<DeviceOperandEntry>(),
+            )
+        };
+        let buf = Arc::new(bytes.to_device_on(device_ctx).expect("operand table H2D"));
+        *cache = Some((key, Arc::clone(&buf)));
+        Some((buf, pc_base))
     }
 
     /// The bound exe's operand table + its pc base (consumer side).
@@ -102,10 +132,10 @@ impl RvrGpuDecodeState {
         table.as_ref().map(|t| (Arc::clone(&t.entries), t.pc_base))
     }
 
-    /// Clear all per-segment modes (used when the toggle is off or the route
+    /// Clear the per-segment mode (used when the toggle is off or the route
     /// produced expanded arenas).
     pub fn clear_segment_modes(&self) {
-        self.segment_modes.lock().unwrap().clear();
+        *self.alu_u16_mode.lock().unwrap() = None;
     }
 
     /// Producer side: bind `exe` (building the alu_u16-family operand table if
@@ -133,7 +163,13 @@ impl RvrGpuDecodeState {
             let Some((instruction, _)) = slot else {
                 continue;
             };
-            if alu_u16_local_opcode(instruction.opcode.as_usize()).is_none() {
+            // INC2a: only the AddSub AIR has its compact decode kernel so far;
+            // the other three family members extend this filter as their
+            // kernels land (the operand table already covers the full family).
+            let opcode = instruction.opcode.as_usize();
+            let is_add_sub = opcode == BaseAluOpcode::ADD.global_opcode_usize()
+                || opcode == BaseAluOpcode::SUB.global_opcode_usize();
+            if !is_add_sub {
                 continue;
             }
             if let Some(air_idx) = pc_to_air_idx.get(slot_idx).copied().flatten() {
@@ -147,11 +183,11 @@ impl RvrGpuDecodeState {
             "alu_u16 family mapped to {} AIRs (expected <= 4)",
             airs.len()
         );
-        let mut modes = self.segment_modes.lock().unwrap();
-        modes.clear();
-        for &air in &airs {
-            modes.insert(air, InlineEmissionMode::CompactWire);
-        }
+        *self.alu_u16_mode.lock().unwrap() = if airs.is_empty() {
+            None
+        } else {
+            Some(InlineEmissionMode::CompactWire)
+        };
         airs
     }
 }

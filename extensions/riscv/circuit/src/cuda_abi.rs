@@ -838,6 +838,45 @@ pub mod add_sub_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
+        fn _add_sub_tracegen_compact(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_operand_table: *const u8,
+            pc_base: u32,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    /// M-GPUDEC (G2): tracegen from compact alu3 wire records + the per-exe
+    /// device operand table.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn tracegen_compact(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_operand_table: &DeviceBuffer<u8>,
+        pc_base: u32,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_add_sub_tracegen_compact(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_operand_table.as_ptr(),
+            pc_base,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            timestamp_max_bits,
+            stream,
+        ))
     }
 
     pub unsafe fn tracegen(
