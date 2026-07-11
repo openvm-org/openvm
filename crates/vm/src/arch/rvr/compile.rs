@@ -480,6 +480,25 @@ fn collect_inline_records_meta<F: PrimeField32>(
             record(block.terminator_pc, shape);
         }
     }
+    drop(record);
+
+    // Arena-native targets replace an AIR's entire assembled arena after the
+    // log walk. They are therefore sound only when every program instruction
+    // routed to that AIR emits an inline record into the target. A REVEAL is
+    // the important mixed case: it shares the LoadStore AIR with inline
+    // main-memory loads/stores, but remains on the verbose log path because it
+    // writes PUBLIC_VALUES_AS. Staging that AIR would discard the log-assembled
+    // REVEAL rows at substitution. Taint mixed AIRs back to compact emission so
+    // the host assembler composes both record sources into one arena.
+    for (slot, entry) in exe.program.instructions_and_debug_infos.iter().enumerate() {
+        if entry.is_none() || pc_slots.get(slot).copied().unwrap_or(false) {
+            continue;
+        }
+        if let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) {
+            arena_native.remove(&(air.as_u32() as usize));
+        }
+    }
+
     RvrInlineRecordsMeta {
         pc_slots: Arc::new(pc_slots),
         airs: airs.into_iter().collect(),
