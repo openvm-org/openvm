@@ -723,11 +723,57 @@ where
                 }),
             },
         );
-        registry.register_inline(
+        registry.register_inline_arena_native(
             [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
                 .map(|opcode| opcode.global_opcode()),
             PREFLIGHT_ADDSUB_RECORD_SIZE,
             assemble_bitwise_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64BaseAluAdapterRecord>(),
+                adapter_align: align_of::<Rv64BaseAluAdapterRecord>(),
+                core_size: size_of::<BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
+                core_align: align_of::<BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
+                core_off_matrix:
+                    <Rv64BaseAluAdapterExecutor<RV64_BYTE_BITS> as AdapterTraceExecutor<F>>::WIDTH
+                        * size_of::<F>(),
+                layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64BaseAluAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64BaseAluAdapterRecord, from_timestamp),
+                    rd_ptr: core::mem::offset_of!(Rv64BaseAluAdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64BaseAluAdapterRecord, rs1_ptr),
+                    rs2: core::mem::offset_of!(Rv64BaseAluAdapterRecord, rs2),
+                    rs2_as: core::mem::offset_of!(Rv64BaseAluAdapterRecord, rs2_as),
+                    // The byte adapter has no imm-sign field.
+                    rs2_imm_sign: usize::MAX,
+                    reads_aux0_prev_ts: core::mem::offset_of!(Rv64BaseAluAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(Rv64BaseAluAdapterRecord, reads_aux)
+                        + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64BaseAluAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64BaseAluAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_data
+                        ),
+                    core_b: core::mem::offset_of!(
+                        BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        b
+                    ),
+                    core_c: core::mem::offset_of!(
+                        BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        c
+                    ),
+                    core_local_opcode: core::mem::offset_of!(
+                        BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        local_opcode
+                    ),
+                }),
+            },
         );
         registry.register_inline_arena_native(
             LessThanOpcode::iter().map(|opcode| opcode.global_opcode()),
