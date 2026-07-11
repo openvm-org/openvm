@@ -32,17 +32,17 @@
 
 #include "openvm_state.h"
 
-/* Non-temporal u32 store for the write-once compact-record stream: records
- * are consumed by the host after execution, never re-read by the writer, so
- * streaming them past the cache roughly doubles sustainable write bandwidth
- * at large-segment sizes and stops record emission from evicting the execute
- * working set. MOVNTI has no alignment requirement. The host issues the
- * corresponding sfence at the execution/harvest boundary before the buffers
- * are read (possibly from other threads). Non-x86 targets use a plain store
- * (byte-identical output either way). */
+/* Store for the write-once compact-record stream. Plain stores by default:
+ * per-dword MOVNTI at the 44-byte record stride, interleaved with the
+ * tracer's regular stores, leaves write-combining lines partially filled and
+ * measured 13x SLOWER end to end on Zen (partial WC-line flushes) — define
+ * OPENVM_RVR_NT_RECORDS to re-enable non-temporal stores only together with
+ * full-cache-line batching. The host issues an sfence at the
+ * execution/harvest boundary either way, before the buffers are read
+ * (possibly from other threads). Output is byte-identical in both modes. */
 static __attribute__((always_inline)) inline void nt_store_u32(
     uint32_t* restrict dst, uint32_t value) {
-#if defined(__x86_64__)
+#if defined(__x86_64__) && defined(OPENVM_RVR_NT_RECORDS)
   _mm_stream_si32((int*)dst, (int)value);
 #else
   *dst = value;
