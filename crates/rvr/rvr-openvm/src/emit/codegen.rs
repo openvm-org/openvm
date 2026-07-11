@@ -87,6 +87,8 @@ pub struct Alu3ArenaFieldOffsets {
     pub rd_ptr: usize,
     pub rs1_ptr: usize,
     pub rs2: usize,
+    /// `usize::MAX` when the adapter has no rs2_as field (Mult adapter,
+    /// whose rs2 is always a register pointer); the emitter skips the store.
     pub rs2_as: usize,
     /// `usize::MAX` when the adapter has no imm-sign field (byte adapter);
     /// the emitter then skips the store.
@@ -608,7 +610,27 @@ fn muldiv_expr(op: MulDivOp, l: &str, r: &str) -> String {
 
 fn emit_muldiv(ctx: &mut EmitContext, op: MulDivOp, rd: u8, rs1: u8, rs2: u8) {
     if ctx.inline_records_enabled() {
-        ctx.emit_reg3_inline(rd, rs1, rs2, None, |l, r| muldiv_expr(op, l, r));
+        // Baked consts per air: Mul core has no local_opcode (sentinel
+        // layout); MulH: MULH=0/MULHSU=1/MULHU=2; DivRem: DIV=0/DIVU=1/
+        // REM=2/REMU=3. The Mult adapter's rs2 is always a register
+        // pointer (rs2_as carries the layout sentinel).
+        let local_opcode = match op {
+            MulDivOp::Mul => 0,
+            MulDivOp::Mulh => 0,
+            MulDivOp::Mulhsu => 1,
+            MulDivOp::Mulhu => 2,
+            MulDivOp::Div => 0,
+            MulDivOp::Divu => 1,
+            MulDivOp::Rem => 2,
+            MulDivOp::Remu => 3,
+        };
+        let arena = Some(ArenaAlu3Baked {
+            rs2_field: (rs2 as u32) * 8,
+            rs2_as: 0,
+            rs2_imm_sign: 0,
+            local_opcode,
+        });
+        ctx.emit_reg3_inline(rd, rs1, rs2, arena, |l, r| muldiv_expr(op, l, r));
         return;
     }
     let l = ctx.read_reg(rs1);
