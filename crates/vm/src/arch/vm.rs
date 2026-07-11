@@ -1775,6 +1775,8 @@ where
                 };
                 self.rvr_preflight.insert(cached)
             };
+            #[cfg(feature = "stark-debug")]
+            let preflight_started = std::time::Instant::now();
             #[cfg(feature = "rvr")]
             let PreflightExecutionOutput {
                 system_records,
@@ -1799,12 +1801,24 @@ where
                 num_insns,
                 &trace_heights,
             )?;
+            #[cfg(feature = "stark-debug")]
+            let preflight_elapsed = preflight_started.elapsed();
             state = Some(to_state);
 
+            #[cfg(feature = "stark-debug")]
+            let tracegen_started = std::time::Instant::now();
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+            #[cfg(feature = "stark-debug")]
+            let tracegen_elapsed = tracegen_started.elapsed();
             modify_ctx(seg_idx, &mut ctx);
             #[cfg(feature = "stark-debug")]
             if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1") {
+                eprintln!(
+                    "OPENVM_STARK_DEBUG_SEGMENT_TIMING seg={seg_idx} insns={num_insns} \
+                     preflight_us={} tracegen_us={}",
+                    preflight_elapsed.as_micros(),
+                    tracegen_elapsed.as_micros()
+                );
                 eprintln!("OPENVM_STARK_DEBUG_SEGMENT_BALANCED={seg_idx}");
                 let stop_after = std::env::var("OPENVM_STARK_DEBUG_STOP_AFTER_SEGMENT")
                     .ok()
