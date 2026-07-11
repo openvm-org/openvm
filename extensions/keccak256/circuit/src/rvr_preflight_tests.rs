@@ -389,6 +389,9 @@ fn rvr_preflight_keccak_single_segment_traces_match_interpreter() {
 
 #[test]
 fn rvr_preflight_keccak_multi_segment_traces_and_system_records_match() {
+    // Direct execute without arena targets: compile compact (fused emission
+    // is default-on and has no target-less fallback).
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     let exe = keccak_multi_segment_exe(4, 400);
     let mut config = Keccak256Rv64Config::default();
     config.system.segmentation_max_memory = 1;
