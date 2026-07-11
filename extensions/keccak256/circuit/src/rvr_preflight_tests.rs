@@ -354,6 +354,7 @@ fn assert_keccakf_write_only_accesses(exe: &VmExe<F>, output: &RvrPreflightOutpu
 
 #[test]
 fn rvr_preflight_keccak_single_segment_system_records_and_timestamps_match() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     let exe = keccak_exe(2, false);
     let output = execute_single_segment_differential(
         "keccak_single_segment",
@@ -365,6 +366,7 @@ fn rvr_preflight_keccak_single_segment_system_records_and_timestamps_match() {
 
 #[test]
 fn rvr_preflight_keccak_single_segment_traces_match_interpreter() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     let exe = keccak_exe(2, false);
     let config = Keccak256Rv64Config::default();
     let (vm, _) =
