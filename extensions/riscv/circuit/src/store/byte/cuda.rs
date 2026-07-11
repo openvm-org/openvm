@@ -60,7 +60,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64StoreByteChipGpu {
             unsafe {
                 crate::cuda_abi::loadstore_cuda::tracegen_compact(
                     d_trace.buffer(),
-                    padded_height,
+                    trace_height,
                     trace_width,
                     &d_records,
                     &d_table,
