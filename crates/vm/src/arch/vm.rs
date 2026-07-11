@@ -1803,7 +1803,10 @@ where
                 let stop_after = std::env::var("OPENVM_STARK_DEBUG_STOP_AFTER_SEGMENT")
                     .ok()
                     .and_then(|value| value.parse::<usize>().ok());
-                if stop_after == Some(seg_idx) {
+                // Trace-only mode never produces proofs, so exit cleanly after the last
+                // segment (or an explicit early stop) instead of falling through to the
+                // proof-consuming code with an empty proof vector.
+                if stop_after == Some(seg_idx) || seg_idx + 1 == num_segments {
                     eprintln!("OPENVM_STARK_DEBUG_CHECKED_SEGMENTS={}", seg_idx + 1);
                     eprintln!("OPENVM_STARK_DEBUG_TRACE_ONLY_COMPLETE=1");
                     std::process::exit(0);
