@@ -115,7 +115,12 @@ pub struct ChipRecordBuf {
     pub len: u32,
     pub cap: u32,
     pub stride: u32,
-    pub _pad0: u32,
+    /// R4 arena-native: byte offset of the core record within each record
+    /// slot (adapter fields sit at offset 0); the per-flavor arena geometry
+    /// (Matrix: adapter trace width; Dense: aligned adapter record size) is
+    /// computed host-side, so one generated .so serves both arena flavors.
+    /// Zero in compact-wire mode.
+    pub core_off: u32,
 }
 
 impl Default for ChipRecordBuf {
@@ -125,7 +130,7 @@ impl Default for ChipRecordBuf {
             len: 0,
             cap: 0,
             stride: 0,
-            _pad0: 0,
+            core_off: 0,
         }
     }
 }
@@ -668,7 +673,7 @@ where
                 // arena-native mode (R4) instead points `base` into the arena
                 // backing and sets the row/record pitch here.
                 stride: record_size as u32,
-                _pad0: 0,
+                core_off: 0,
             };
         }
 
