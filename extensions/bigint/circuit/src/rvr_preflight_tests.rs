@@ -402,6 +402,9 @@ fn prove_and_verify(exe: VmExe<F>, config: Int256Rv64Config) -> usize {
 
 #[test]
 fn rvr_preflight_int256_trace_and_system_records_match_interpreter() {
+    // Direct execute without arena targets: compile compact (fused emission
+    // is default-on and has no target-less fallback).
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     let exe = int256_vector_exe();
     assert_single_segment_trace_matches_interpreter(exe.clone());
     assert_two_segment_system_records_match_interpreter(exe);
