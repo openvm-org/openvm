@@ -11,6 +11,7 @@ pub mod metered;
 pub mod metered_cost;
 pub mod preflight;
 pub mod preflight_normalizer;
+pub mod preflight_pool;
 pub mod pure;
 pub mod state;
 
@@ -55,6 +56,7 @@ pub use preflight_normalizer::{
     build_preflight_replay, PreflightMemoryAccessAux, PreflightMemoryReplay,
     PreflightNormalizeError, PreflightShadowsView,
 };
+pub use preflight_pool::RvrPreflightBufferPool;
 pub use pure::{RvrPureInstance, RvrPureResult};
 pub use rvr_openvm::{
     default_compiler as default_native_compiler, default_compiler_command, default_dwarfdump_cmd,

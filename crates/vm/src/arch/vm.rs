@@ -48,9 +48,10 @@ use super::rvr::{
     compile, compile_metered, compile_metered_cost, compile_metered_segment_boundary,
     compile_preflight_with_extensions, load_compiled_from_path, preflight::execute_rvr_preflight,
     rvr_preflight_engine_env_override, ChipMapping, GuestDebugMap, LogNativeOpcodeAdmitter,
-    RunToCompletion, RvrCompiled, RvrMeteredCostInstance, RvrMeteredInstance,
-    RvrMeteredSegmentInstance, RvrPreflightEngine, RvrPreflightInstance, RvrPreflightOpcodeClass,
-    RvrPreflightOutput, RvrPreflightRoute, RvrPureInstance, SegmentBoundary,
+    PreflightRawLogs, RunToCompletion, RvrCompiled, RvrInlineChipRecords, RvrMeteredCostInstance,
+    RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPreflightBufferPool, RvrPreflightEngine,
+    RvrPreflightInstance, RvrPreflightOpcodeClass, RvrPreflightOutput, RvrPreflightRoute,
+    RvrPureInstance, SegmentBoundary,
 };
 use super::{
     execution_mode::{
@@ -107,6 +108,15 @@ trait CachedRvrPreflightExecutor<F>: Send + Sync {
         num_insns: Option<u64>,
         record_capacity_rows: Option<&[u32]>,
     ) -> Result<RvrPreflightOutput<F>, ExecutionError>;
+
+    /// Return a consumed segment output's large buffers to the executor's
+    /// pool (the record arenas hold expanded copies by this point) so the
+    /// next segment's `execute` reuses them.
+    fn recycle_segment_buffers(
+        &self,
+        raw_logs: PreflightRawLogs,
+        inline_records: Vec<RvrInlineChipRecords>,
+    );
 }
 
 /// The program-dependent, owned pieces of an rvr preflight instance.
@@ -115,6 +125,7 @@ struct CachedRvrCompiledPreflight<F: PrimeField32> {
     compiled: RvrCompiled,
     extensions: ExtensionRegistry<F>,
     chip_counts_len: usize,
+    pool: RvrPreflightBufferPool,
 }
 
 #[cfg(feature = "rvr")]
@@ -131,10 +142,19 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
             &self.extensions,
             &self.compiled,
             self.chip_counts_len,
+            &self.pool,
             state,
             num_insns,
             record_capacity_rows,
         )
+    }
+
+    fn recycle_segment_buffers(
+        &self,
+        raw_logs: PreflightRawLogs,
+        inline_records: Vec<RvrInlineChipRecords>,
+    ) {
+        self.pool.recycle_segment_buffers(raw_logs, inline_records);
     }
 }
 
@@ -1229,10 +1249,22 @@ where
                     );
                 }
 
+                // The arenas hold expanded records; the raw logs and compact
+                // record bytes are dead — return them to the executor's pool
+                // so the next segment skips their fresh-mapping fault cost.
+                let RvrPreflightOutput {
+                    system_records,
+                    to_state,
+                    raw_logs,
+                    inline_records,
+                    ..
+                } = rvr_output;
+                rvr_preflight.recycle_segment_buffers(raw_logs, inline_records);
+
                 Ok(PreflightExecutionOutput {
-                    system_records: rvr_output.system_records,
+                    system_records,
                     record_arenas,
-                    to_state: rvr_output.to_state,
+                    to_state,
                 })
             }
             CachedRvrPreflight::Interpreter => {
@@ -1788,11 +1820,13 @@ where
                             extensions,
                             compiled,
                             chip_counts_len,
+                            pool,
                             ..
                         }) => CachedRvrPreflight::Rvr(Box::new(CachedRvrCompiledPreflight {
                             compiled,
                             extensions,
                             chip_counts_len,
+                            pool,
                         })),
                         RvrPreflightRoute::Interpreter(_) => CachedRvrPreflight::Interpreter,
                     },
