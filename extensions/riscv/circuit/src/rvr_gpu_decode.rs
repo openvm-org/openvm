@@ -16,9 +16,14 @@ use std::{
 
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 #[cfg(feature = "rvr")]
-use openvm_instructions::{exe::VmExe, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{
+    exe::VmExe, instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode,
+};
 #[cfg(feature = "rvr")]
-use openvm_riscv_transpiler::{BaseAluOpcode, LessThanOpcode, ShiftOpcode};
+use openvm_riscv_transpiler::{
+    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, Rv64AuipcOpcode,
+    Rv64JalLuiOpcode, Rv64JalrOpcode, ShiftOpcode,
+};
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -49,6 +54,12 @@ const _: () = assert!(align_of::<DeviceOperandEntry>() == 4);
 pub const OPERAND_FLAG_RS2_IMM: u8 = 1 << 0;
 /// The sign-extension bit for a 16-bit-signed immediate (`rs2_imm_sign`).
 pub const OPERAND_FLAG_RS2_IMM_SIGN: u8 = 1 << 1;
+/// wr1/rw1: the conditional rd write is enabled (`f != 0`; x0 suppression).
+pub const OPERAND_FLAG_WRITE_ENABLED: u8 = 1 << 2;
+/// wr1 (JalLui): the opcode is JAL (else LUI).
+pub const OPERAND_FLAG_IS_JAL: u8 = 1 << 3;
+/// rw1 (Jalr): the immediate sign bit (`g != 0`).
+pub const OPERAND_FLAG_JALR_IMM_SIGN: u8 = 1 << 4;
 
 /// How a migrated AIR's records are fed to the GPU this segment (naming
 /// shared with the R4-fuse work).
@@ -84,11 +95,11 @@ struct HostOperandTable {
 #[derive(Default)]
 pub struct RvrGpuDecodeState {
     table: Mutex<Option<HostOperandTable>>,
-    /// Per-SEGMENT emission mode of the alu_u16 (BaseAluU16 adapter) family —
-    /// all four AIRs toggle together. Refreshed on every
+    /// Per-SEGMENT emission mode of the decode-kernel formats — all supported
+    /// AIRs toggle together. Refreshed on every
     /// `generate_rvr_record_arenas_from_logs` call, so a segment produced by a
     /// different route can never be misread. `None` = expanded.
-    alu_u16_mode: Mutex<Option<InlineEmissionMode>>,
+    compact_mode: Mutex<Option<InlineEmissionMode>>,
     /// Device copy of the operand table, keyed by the host table's identity.
     device_table: Mutex<Option<(usize, Arc<DeviceBuffer<u8>>)>>,
 }
@@ -96,8 +107,8 @@ pub struct RvrGpuDecodeState {
 impl RvrGpuDecodeState {
     /// The emission mode the current segment's alu_u16-family arenas were
     /// built with, if any.
-    pub fn alu_u16_segment_mode(&self) -> Option<InlineEmissionMode> {
-        *self.alu_u16_mode.lock().unwrap()
+    pub fn compact_segment_mode(&self) -> Option<InlineEmissionMode> {
+        *self.compact_mode.lock().unwrap()
     }
 
     /// The device operand table (uploaded once per bound exe) + its pc base.
@@ -135,14 +146,14 @@ impl RvrGpuDecodeState {
     /// Clear the per-segment mode (used when the toggle is off or the route
     /// produced expanded arenas).
     pub fn clear_segment_modes(&self) {
-        *self.alu_u16_mode.lock().unwrap() = None;
+        *self.compact_mode.lock().unwrap() = None;
     }
 
     /// Producer side: bind `exe` (building the alu_u16-family operand table if
     /// this exe isn't already bound) and mark the family's AIRs as
     /// `CompactWire` for the CURRENT segment. Returns the compact AIR set.
     #[cfg(feature = "rvr")]
-    pub fn bind_alu_u16_compact_segment<F: PrimeField32>(
+    pub fn bind_compact_segment<F: PrimeField32>(
         &self,
         exe: &VmExe<F>,
         pc_to_air_idx: &[Option<usize>],
@@ -156,34 +167,29 @@ impl RvrGpuDecodeState {
             let mut table = self.table.lock().unwrap();
             let rebuild = table.as_ref().map(|t| t.exe_key != exe_key).unwrap_or(true);
             if rebuild {
-                *table = Some(build_alu_u16_operand_table(exe, exe_key));
+                *table = Some(build_operand_table(exe, exe_key));
             }
         }
         for (slot_idx, slot) in exe.program.instructions_and_debug_infos.iter().enumerate() {
             let Some((instruction, _)) = slot else {
                 continue;
             };
-            // INC2a: only the AddSub AIR has its compact decode kernel so far;
-            // the other three family members extend this filter as their
-            // kernels land (the operand table already covers the full family).
-            let opcode = instruction.opcode.as_usize();
-            let is_add_sub = opcode == BaseAluOpcode::ADD.global_opcode_usize()
-                || opcode == BaseAluOpcode::SUB.global_opcode_usize();
-            if !is_add_sub {
+            if gpu_decode_entry(instruction).is_none() {
                 continue;
             }
             if let Some(air_idx) = pc_to_air_idx.get(slot_idx).copied().flatten() {
                 airs.insert(air_idx);
             }
         }
-        // The family maps to exactly the four BaseAluU16-adapter AIRs; more
-        // means the opcode->air routing changed under us.
+        // The supported formats map to exactly the nine decode-kernel AIRs
+        // (AddSub, LessThan, ShiftLogical, SRA, BranchEqual, BranchLessThan,
+        // JalLui, Auipc, Jalr); more means opcode->air routing changed.
         assert!(
-            airs.len() <= 4,
-            "alu_u16 family mapped to {} AIRs (expected <= 4)",
+            airs.len() <= 9,
+            "gpu-decode formats mapped to {} AIRs (expected <= 9)",
             airs.len()
         );
-        *self.alu_u16_mode.lock().unwrap() = if airs.is_empty() {
+        *self.compact_mode.lock().unwrap() = if airs.is_empty() {
             None
         } else {
             Some(InlineEmissionMode::CompactWire)
@@ -192,35 +198,132 @@ impl RvrGpuDecodeState {
     }
 }
 
-/// Class-local opcode index if `opcode` belongs to the alu_u16 (BaseAluU16
-/// adapter) family: AddSub (ADD/SUB), LessThan (SLT/SLTU), ShiftLogical
-/// (SLL/SRL), ShiftRightArithmetic (SRA).
+/// The operand-table entry for one instruction, if its opcode belongs to a
+/// wire format with a device decode kernel. THE shared list: the table
+/// builder and the per-segment bind both consult this, so the compact air
+/// set and the table can never drift apart. Derivations mirror the host
+/// inline assemblers exactly (alu3 via `derive_base_alu_u16_operands`).
 #[cfg(feature = "rvr")]
-fn alu_u16_local_opcode(opcode: usize) -> Option<u8> {
-    if opcode == BaseAluOpcode::ADD.global_opcode_usize()
+fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<DeviceOperandEntry> {
+    use openvm_instructions::riscv::RV64_REGISTER_AS;
+    let opcode = instruction.opcode.as_usize();
+
+    // alu3 over the BaseAluU16 adapter: AddSub, LessThan, ShiftLogical, SRA.
+    let alu_u16_local = if opcode == BaseAluOpcode::ADD.global_opcode_usize()
         || opcode == BaseAluOpcode::SUB.global_opcode_usize()
     {
-        return Some((opcode - BaseAluOpcode::CLASS_OFFSET) as u8);
-    }
-    if opcode == LessThanOpcode::SLT.global_opcode_usize()
+        Some((opcode - BaseAluOpcode::CLASS_OFFSET) as u8)
+    } else if opcode == LessThanOpcode::SLT.global_opcode_usize()
         || opcode == LessThanOpcode::SLTU.global_opcode_usize()
     {
-        return Some((opcode - LessThanOpcode::CLASS_OFFSET) as u8);
-    }
-    if opcode == ShiftOpcode::SLL.global_opcode_usize()
+        Some((opcode - LessThanOpcode::CLASS_OFFSET) as u8)
+    } else if opcode == ShiftOpcode::SLL.global_opcode_usize()
         || opcode == ShiftOpcode::SRL.global_opcode_usize()
         || opcode == ShiftOpcode::SRA.global_opcode_usize()
     {
-        return Some((opcode - ShiftOpcode::CLASS_OFFSET) as u8);
+        Some((opcode - ShiftOpcode::CLASS_OFFSET) as u8)
+    } else {
+        None
+    };
+    if let Some(local_opcode) = alu_u16_local {
+        let operands = derive_base_alu_u16_operands(instruction);
+        let mut flags = 0u8;
+        if operands.rs2_as != RV64_REGISTER_AS as u8 {
+            flags |= OPERAND_FLAG_RS2_IMM;
+        }
+        if operands.rs2_imm_sign {
+            flags |= OPERAND_FLAG_RS2_IMM_SIGN;
+        }
+        return Some(DeviceOperandEntry {
+            a: operands.rd_ptr,
+            b: operands.rs1_ptr,
+            c: operands.rs2,
+            flags,
+            local_opcode,
+            _reserved: 0,
+        });
     }
+
+    // branch2: BranchEqual (BEQ/BNE), BranchLessThan (BLT/BLTU/BGE/BGEU).
+    let branch_local = if opcode == BranchEqualOpcode::BEQ.global_opcode_usize()
+        || opcode == BranchEqualOpcode::BNE.global_opcode_usize()
+    {
+        Some((opcode - BranchEqualOpcode::CLASS_OFFSET) as u8)
+    } else if opcode == BranchLessThanOpcode::BLT.global_opcode_usize()
+        || opcode == BranchLessThanOpcode::BLTU.global_opcode_usize()
+        || opcode == BranchLessThanOpcode::BGE.global_opcode_usize()
+        || opcode == BranchLessThanOpcode::BGEU.global_opcode_usize()
+    {
+        Some((opcode - BranchLessThanOpcode::CLASS_OFFSET) as u8)
+    } else {
+        None
+    };
+    if let Some(local_opcode) = branch_local {
+        return Some(DeviceOperandEntry {
+            a: instruction.a.as_canonical_u32(),
+            b: instruction.b.as_canonical_u32(),
+            c: instruction.c.as_canonical_u32(),
+            flags: 0,
+            local_opcode,
+            _reserved: 0,
+        });
+    }
+
+    // wr1: JalLui (conditional write via f) and Auipc (always written).
+    if opcode == Rv64JalLuiOpcode::JAL.global_opcode_usize()
+        || opcode == Rv64JalLuiOpcode::LUI.global_opcode_usize()
+    {
+        let mut flags = 0u8;
+        if !instruction.f.is_zero() {
+            flags |= OPERAND_FLAG_WRITE_ENABLED;
+        }
+        if opcode == Rv64JalLuiOpcode::JAL.global_opcode_usize() {
+            flags |= OPERAND_FLAG_IS_JAL;
+        }
+        return Some(DeviceOperandEntry {
+            a: instruction.a.as_canonical_u32(),
+            b: 0,
+            c: instruction.c.as_canonical_u32(),
+            flags,
+            local_opcode: 0,
+            _reserved: 0,
+        });
+    }
+    if opcode == Rv64AuipcOpcode::AUIPC.global_opcode_usize() {
+        return Some(DeviceOperandEntry {
+            a: instruction.a.as_canonical_u32(),
+            b: 0,
+            c: instruction.c.as_canonical_u32(),
+            flags: OPERAND_FLAG_WRITE_ENABLED,
+            local_opcode: 0,
+            _reserved: 0,
+        });
+    }
+
+    // rw1: Jalr (conditional write via f, imm sign via g).
+    if opcode == Rv64JalrOpcode::JALR.global_opcode_usize() {
+        let mut flags = 0u8;
+        if !instruction.f.is_zero() {
+            flags |= OPERAND_FLAG_WRITE_ENABLED;
+        }
+        if !instruction.g.is_zero() {
+            flags |= OPERAND_FLAG_JALR_IMM_SIGN;
+        }
+        return Some(DeviceOperandEntry {
+            a: instruction.a.as_canonical_u32(),
+            b: instruction.b.as_canonical_u32(),
+            c: instruction.c.as_canonical_u32(),
+            flags,
+            local_opcode: 0,
+            _reserved: 0,
+        });
+    }
+
     None
 }
 
 #[cfg(feature = "rvr")]
-fn build_alu_u16_operand_table<F: PrimeField32>(
-    exe: &VmExe<F>,
-    exe_key: (u32, usize),
-) -> HostOperandTable {
+fn build_operand_table<F: PrimeField32>(exe: &VmExe<F>, exe_key: (u32, usize)) -> HostOperandTable {
     let program = &exe.program;
     let mut entries =
         vec![DeviceOperandEntry::default(); program.instructions_and_debug_infos.len()];
@@ -228,25 +331,9 @@ fn build_alu_u16_operand_table<F: PrimeField32>(
         let Some((instruction, _)) = slot else {
             continue;
         };
-        let Some(local_opcode) = alu_u16_local_opcode(instruction.opcode.as_usize()) else {
-            continue;
-        };
-        let operands = derive_base_alu_u16_operands(instruction);
-        let mut flags = 0u8;
-        if operands.rs2_as != openvm_instructions::riscv::RV64_REGISTER_AS as u8 {
-            flags |= OPERAND_FLAG_RS2_IMM;
+        if let Some(entry) = gpu_decode_entry(instruction) {
+            entries[slot_idx] = entry;
         }
-        if operands.rs2_imm_sign {
-            flags |= OPERAND_FLAG_RS2_IMM_SIGN;
-        }
-        entries[slot_idx] = DeviceOperandEntry {
-            a: operands.rd_ptr,
-            b: operands.rs1_ptr,
-            c: operands.rs2,
-            flags,
-            local_opcode,
-            _reserved: 0,
-        };
     }
     let _ = DEFAULT_PC_STEP; // index = (from_pc - pc_base) / DEFAULT_PC_STEP
     HostOperandTable {
