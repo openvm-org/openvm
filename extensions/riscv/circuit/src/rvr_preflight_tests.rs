@@ -306,6 +306,16 @@ fn inline_addsub_differential_exe() -> VmExe<F> {
         alu_r(BaseAluOpcode::ADD, 1, 4, 5), // x1 = 199    (rewrites x1 → prev_ts chain)
         alu_r(BaseAluOpcode::SUB, 6, 1, 0), // x6 = x1 - x0 (rs2 = x0)
         sltu(7, 2, 1),                      // non-migrated: stays on the log path
+        // Phase-4 family 1: the Mul shapes share the compact alu3 record.
+        mul(8, 1, 2),                             // x8 = x1 * x2
+        mulh(MulHOpcode::MULH, 9, 1, 2),          // signed high word
+        mulh(MulHOpcode::MULHU, 10, 1, 2),        // unsigned high word
+        mul_w(11, 1, 2),                          // 32-bit product, sign-extended
+        divrem(DivRemOpcode::DIV, 12, 1, 2),      // signed division
+        divrem(DivRemOpcode::REM, 13, 1, 0),      // remainder by zero (rs2 = x0)
+        divrem(DivRemOpcode::DIVU, 14, 1, 0),     // division by zero
+        divrem_w(DivRemWOpcode::DIVW, 15, 1, 2),  // W division
+        divrem_w(DivRemWOpcode::REMUW, 16, 1, 0), // W remainder by zero
         terminate(),
     ])
 }
