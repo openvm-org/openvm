@@ -37,7 +37,7 @@ pub use log_native::{
     generate_record_arenas_from_logs, Alu3ArenaFieldOffsets, ArenaNativeGeometry,
     ArenaNativeLayout, Branch2ArenaFieldOffsets, LoadStoreArenaFieldOffsets, LogNativeAccessView,
     LogNativeAssembler, LogNativeAssemblerRegistry, LogNativeInlineAssembler,
-    LogNativeOpcodeAdmitter, VmRvrLogNativeExtension,
+    LogNativeOpcodeAdmitter, Rw1ArenaFieldOffsets, VmRvrLogNativeExtension, Wr1ArenaFieldOffsets,
 };
 pub use metered::{RvrMeteredExecutionOutcome, RvrMeteredInstance, RvrMeteredSegmentInstance};
 pub use metered_cost::{MeteredCostState, RvrMeteredCostInstance};
