@@ -87,6 +87,19 @@ pub trait ExtEmitCtx {
         false
     }
 
+    /// Emit a compact two-read/one-write record using a result expression
+    /// template. `__RVR_LHS__` and `__RVR_RHS__` are replaced with the traced
+    /// operand expressions by the concrete emitter.
+    fn emit_reg3_inline(
+        &mut self,
+        _rd: Variable,
+        _rs1: Variable,
+        _rs2: Variable,
+        _result_template: &str,
+    ) -> bool {
+        false
+    }
+
     /// Append a line of C code (indented).
     fn write_line(&mut self, s: &str);
 

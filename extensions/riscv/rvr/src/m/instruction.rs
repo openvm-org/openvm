@@ -71,6 +71,15 @@ impl ExtInstr for Rv64MInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let result_template = muldiv_expr(
+            self.op,
+            self.word,
+            "__RVR_LHS__",
+            "__RVR_RHS__",
+        );
+        if ctx.emit_reg3_inline(self.rd, self.lhs, self.rhs, &result_template) {
+            return;
+        }
         let lhs = ctx.read_var(self.lhs);
         let rhs = ctx.read_var(self.rhs);
         ctx.write_var(self.rd, &muldiv_expr(self.op, self.word, &lhs, &rhs));

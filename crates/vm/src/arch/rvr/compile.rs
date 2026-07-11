@@ -431,7 +431,8 @@ fn collect_inline_records_meta<F: PrimeField32>(
         if let Some(flag) = pc_slots.get_mut(slot) {
             *flag = true;
         }
-        // All Phase-1 migrated shapes are base-ALU ADD/SUB records.
+        // All migrated shapes so far share the 44-byte alu3 (2-read-1-write
+        // single-row) compact record.
         airs.insert(
             air.as_u32() as usize,
             rvr_openvm_ext_ffi_common::PREFLIGHT_ADDSUB_RECORD_SIZE,

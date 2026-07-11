@@ -365,31 +365,45 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    /// R3: emit a register-register base-ALU ADD/SUB with an inline compact
-    /// AddSub record. All three register accesses are touch-only (timestamp,
+    /// R3: emit a 2-read-1-write single-row instruction with an inline compact
+    /// alu3 record. All three register accesses are touch-only (timestamp,
     /// shadow, and touched updates identical to the logging helpers; no
-    /// memory-log entries) — the record carries the aux data and the host
-    /// consumes it directly instead of running the log assembler. `is_sub`
-    /// selects SUB.
-    pub fn emit_addsub_reg(&mut self, is_sub: bool, rd: u8, rs1: u8, rs2: u8) {
+    /// memory-log entries) — the 44-byte dynamic witness carries the aux data
+    /// and the host consumes it directly instead of running the log assembler.
+    /// `result` renders the C expression computing rd from the two read
+    /// values; per-op semantics (div-by-zero, overflow) live inside it.
+    pub(crate) fn emit_reg3_inline(
+        &mut self,
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        result: impl FnOnce(&str, &str) -> String,
+    ) {
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
         let fromts = self.next_var();
         self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
         let (v1, p1) = self.reg_read_capture(rs1);
         let (v2, p2) = self.reg_read_capture(rs2);
-        let op = if is_sub { "-" } else { "+" };
         let res = self.next_var();
-        self.write_line(&format!("uint64_t {res} = {v1} {op} {v2};"));
+        let result_expr = result(&v1, &v2);
+        self.write_line(&format!("uint64_t {res} = {result_expr};"));
         let rdprev = self.next_var();
         self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
         let pw = self.next_var();
         self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
         self.write_line(&format!("reg_write(state, {rd}, {res});"));
         self.write_line(&format!(
-            "preflight_emit_addsub(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {rdprev}, \
+            "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {rdprev}, \
              {v1}, {v2});"
         ));
+    }
+
+    /// R3: register-register base-ALU ADD/SUB via [`Self::emit_reg3_inline`].
+    /// `is_sub` selects SUB.
+    pub fn emit_addsub_reg(&mut self, is_sub: bool, rd: u8, rs1: u8, rs2: u8) {
+        let op = if is_sub { "-" } else { "+" };
+        self.emit_reg3_inline(rd, rs1, rs2, |l, r| format!("{l} {op} {r}"));
     }
 
     /// R3: emit a register-immediate base-ALU ADD/SUB with an inline compact
@@ -419,7 +433,7 @@ impl<'a> EmitContext<'a> {
         // immediate operand itself is program-redundant and re-derived from
         // `from_pc` at host record assembly (rs2 read slot: prev_timestamp 0).
         self.write_line(&format!(
-            "preflight_emit_addsub(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {pw}, {rdprev}, \
+            "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {pw}, {rdprev}, \
              {v1}, {vimm});"
         ));
     }
@@ -806,6 +820,30 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
             return false;
         }
         EmitContext::emit_addsub_imm(self, is_sub, reg_index(rd), reg_index(rs1), imm);
+        true
+    }
+
+    fn emit_reg3_inline(
+        &mut self,
+        rd: Variable,
+        rs1: Variable,
+        rs2: Variable,
+        result_template: &str,
+    ) -> bool {
+        if !self.inline_records_enabled() {
+            return false;
+        }
+        EmitContext::emit_reg3_inline(
+            self,
+            reg_index(rd),
+            reg_index(rs1),
+            reg_index(rs2),
+            |lhs, rhs| {
+                result_template
+                    .replace("__RVR_LHS__", lhs)
+                    .replace("__RVR_RHS__", rhs)
+            },
+        );
         true
     }
 
