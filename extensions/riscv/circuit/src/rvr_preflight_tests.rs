@@ -10,7 +10,7 @@ use openvm_circuit::{
     arch::{
         rvr::{
             preflight_compile_invocations_for_test, reset_preflight_compile_invocations_for_test,
-            LogNativeAssemblerRegistry, RvrPreflightOutput, RvrPreflightRoute,
+            LogNativeAssemblerRegistry, RvrPreflightEngine, RvrPreflightOutput, RvrPreflightRoute,
             VmRvrLogNativeExtension,
         },
         verify_segments, ContinuationVmProver, DenseRecordArena, ExecutionError, MatrixRecordArena,
@@ -900,6 +900,9 @@ fn prove_rvr_preflight_and_verify_with_streams(
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance =
         VmInstance::new(vm, Arc::new(exe), cached_program_trace).expect("instance init");
+    // CPU proving defaults to the interpreter engine; this fixture exists to
+    // prove rvr-generated records, so pin the engine explicitly.
+    instance.set_rvr_preflight_engine(Some(RvrPreflightEngine::Rvr));
     let proof = ContinuationVmProver::prove(&mut instance, streams).expect("prove");
     verify_segments(&instance.vm.engine, &vk, &proof.per_segment).expect("verify segments");
     proof.per_segment.len()
@@ -932,6 +935,9 @@ fn assert_rvr_route_and_proves(
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance =
         VmInstance::new(vm, Arc::new(exe), cached_program_trace).expect("instance init");
+    // Pin the rvr engine: the route assertion above is only meaningful if
+    // the prove below actually runs on the rvr preflight path.
+    instance.set_rvr_preflight_engine(Some(RvrPreflightEngine::Rvr));
     let proof = ContinuationVmProver::prove(&mut instance, streams).expect("prove");
     verify_segments(&instance.vm.engine, &vk, &proof.per_segment).expect("verify segments");
     proof.per_segment.len()
