@@ -545,14 +545,14 @@ where
     /// in `arena_native_written` instead of harvesting bytes.
     pub fn execute_preflight_from_state_with_arena_targets(
         &self,
-        state: VmState<F, GuestMemory>,
+        state: VmState<GuestMemory>,
         num_insns: Option<u64>,
         record_capacity_rows: &[u32],
         arena_targets: &BTreeMap<usize, ChipRecordBuf>,
     ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
         execute_rvr_preflight(
             &self.exe,
-            &self.extensions,
+            &self.runtime_hooks,
             &self.compiled,
             self.chip_counts_len,
             &self.pool,
@@ -1476,5 +1476,95 @@ mod tests {
             .all(|timestamp| !memory_log[..memory_len]
                 .iter()
                 .any(|entry| entry.timestamp == *timestamp)));
+    }
+}
+
+/// R4: how a record-arena flavor stages itself as a C arena-native write
+/// target and adopts the written records afterwards. The staged value must
+/// not reallocate between staging and finish (the ChipRecordBuf holds a raw
+/// pointer into its heap buffer; heap pointers are stable under moves).
+pub trait RvrArenaNativeTarget: crate::arch::Arena + Sized {
+    /// Allocate the arena/backing for `height` records and return the
+    /// descriptor aiming the generated C at it.
+    fn stage_arena_native(
+        height: usize,
+        width: usize,
+        geometry: &super::ArenaNativeGeometry,
+    ) -> (Self, ChipRecordBuf);
+
+    /// Commit `written_records` C-written records (cursor/offset bookkeeping
+    /// only — the bytes are already in place).
+    fn finish_arena_native(
+        &mut self,
+        written_records: usize,
+        geometry: &super::ArenaNativeGeometry,
+    );
+}
+
+impl<F: openvm_stark_backend::p3_field::Field> RvrArenaNativeTarget
+    for crate::arch::MatrixRecordArena<F>
+{
+    fn stage_arena_native(
+        height: usize,
+        width: usize,
+        geometry: &super::ArenaNativeGeometry,
+    ) -> (Self, ChipRecordBuf) {
+        use crate::arch::Arena;
+        let mut arena = Self::with_capacity(height, width);
+        let stride = (arena.width * std::mem::size_of::<F>()) as u32;
+        let cap_bytes = (arena.trace_buffer.len() * std::mem::size_of::<F>()) as u32;
+        let buf = ChipRecordBuf {
+            base: arena.trace_buffer.as_mut_ptr().cast(),
+            len: 0,
+            cap: cap_bytes - cap_bytes % stride,
+            stride,
+            core_off: geometry.core_off_matrix as u32,
+        };
+        (arena, buf)
+    }
+
+    fn finish_arena_native(&mut self, written_records: usize, _: &super::ArenaNativeGeometry) {
+        self.trace_offset = written_records * self.width;
+    }
+}
+
+impl RvrArenaNativeTarget for crate::arch::DenseRecordArena {
+    fn stage_arena_native(
+        height: usize,
+        _width: usize,
+        geometry: &super::ArenaNativeGeometry,
+    ) -> (Self, ChipRecordBuf) {
+        let stride = geometry.stride_dense();
+        let mut arena = Self::with_byte_capacity(height * stride);
+        // with_byte_capacity positions the cursor at the aligned start; the C
+        // writes from exactly there.
+        let offset = arena.records_buffer.position() as usize;
+        debug_assert_eq!(
+            (arena.records_buffer.get_ref().as_ptr() as usize + offset) % 32,
+            0,
+            "dense arena-native base must be 32-aligned"
+        );
+        let base = unsafe { arena.records_buffer.get_mut().as_mut_ptr().add(offset) };
+        let buf = ChipRecordBuf {
+            base,
+            len: 0,
+            cap: (height * stride) as u32,
+            stride: stride as u32,
+            core_off: geometry.core_off_dense() as u32,
+        };
+        (arena, buf)
+    }
+
+    fn finish_arena_native(
+        &mut self,
+        written_records: usize,
+        geometry: &super::ArenaNativeGeometry,
+    ) {
+        let offset = {
+            let ptr = self.records_buffer.get_ref().as_ptr() as usize;
+            (32 - ptr % 32) % 32
+        };
+        self.records_buffer
+            .set_position((offset + written_records * geometry.stride_dense()) as u64);
     }
 }

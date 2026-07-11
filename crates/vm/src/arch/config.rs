@@ -154,6 +154,11 @@ pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
 /// around Rust orphan rules.
 pub trait VmBuilder<E: StarkEngine>: Sized {
     type VmConfig: VmConfig<E::SC>;
+    /// With the rvr feature, arenas must also know how to stage themselves
+    /// as R4 arena-native write targets for the generated C.
+    #[cfg(feature = "rvr")]
+    type RecordArena: Arena + crate::arch::rvr::preflight::RvrArenaNativeTarget;
+    #[cfg(not(feature = "rvr"))]
     type RecordArena: Arena;
     type SystemChipInventory: SystemChipComplex<Self::RecordArena, E::PB>;
 
