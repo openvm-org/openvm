@@ -5,6 +5,7 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "riscv/adapters/loadstore.cuh"
+#include "riscv/rvr_compact.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -211,6 +212,92 @@ extern "C" int _rv64_load_store_tracegen(
         height,
         width,
         d_records,
+        pointer_max_bits,
+        d_range_checker,
+        range_checker_num_bins,
+        d_bitwise_lookup,
+        timestamp_max_bits
+    );
+    return CHECK_KERNEL();
+}
+
+// M-GPUDEC (G2): compact-wire twin of the kernel above.
+__global__ void rv64_load_store_tracegen_compact(
+    Fp *trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<RvrAlu3Compact> records,
+    RvrOperandEntry const *operand_table,
+    uint32_t pc_base,
+    size_t pointer_max_bits,
+    uint32_t *range_checker_ptr,
+    uint32_t range_checker_num_bins,
+    uint32_t *bitwise_lookup_ptr,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(trace + idx, height);
+    if (idx < records.len()) {
+        RvrAlu3Compact const rec_c = records[idx];
+        RvrOperandEntry const entry = rvr_operand_entry(operand_table, pc_base, rec_c.from_pc);
+        Rv64LoadStoreRecord full;
+        uint8_t shift_amount;
+        full.adapter = rvr_decode_alu3_loadstore_start(rec_c, entry, shift_amount);
+        bool const enabled = (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) != 0;
+        bool const is_load = (entry.flags & RVR_OPERAND_FLAG_LS_IS_LOAD) != 0;
+        if (!is_load || enabled) {
+            full.adapter.rd_rs2_ptr = entry.a;
+            full.adapter.write_prev_timestamp = rec_c.write_prev_timestamp;
+        }
+        bool const carry_prev = !is_load || enabled;
+#pragma unroll
+        for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+            full.core.read_data[i] = rvr_u8_limb(rec_c.c, i);
+            full.core.prev_data[i] = carry_prev ? rvr_u8_limb(rec_c.write_prev_data, i) : 0;
+        }
+        full.core.local_opcode = entry.local_opcode;
+        full.core.shift_amount = shift_amount;
+
+        auto adapter = Rv64LoadStoreAdapter(
+            pointer_max_bits,
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            timestamp_max_bits
+        );
+        adapter.fill_trace_row(row, full.adapter);
+
+        auto core = LoadStoreCore<RV64_REGISTER_NUM_LIMBS>(
+            BitwiseOperationLookup(bitwise_lookup_ptr)
+        );
+        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64LoadStoreCols, core)), full.core);
+    } else {
+        row.fill_zero(0, sizeof(Rv64LoadStoreCols<uint8_t>));
+    }
+}
+
+extern "C" int _rv64_load_store_tracegen_compact(
+    Fp *d_trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<RvrAlu3Compact> d_records,
+    RvrOperandEntry const *d_operand_table,
+    uint32_t pc_base,
+    size_t pointer_max_bits,
+    uint32_t *d_range_checker,
+    uint32_t range_checker_num_bins,
+    uint32_t *d_bitwise_lookup,
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
+) {
+    assert(width == sizeof(Rv64LoadStoreCols<uint8_t>));
+    auto [grid, block] = kernel_launch_params(height);
+
+    rv64_load_store_tracegen_compact<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        width,
+        d_records,
+        d_operand_table,
+        pc_base,
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,
