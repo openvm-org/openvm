@@ -427,13 +427,14 @@ fn collect_inline_records_meta<F: PrimeField32>(
     let mut pc_slots = vec![false; num_slots];
     let mut airs: BTreeMap<usize, usize> = BTreeMap::new();
     let mut arena_native: BTreeMap<usize, Option<ArenaNativeGeometry>> = BTreeMap::new();
-    // R4 opt-in gate. The decision MUST be made here, in the metadata the
-    // host and codegen both consume: gating only the codegen copy leaves the
-    // host staging arena targets against a compact-compiled library — the C
-    // then writes 44-byte compact records at the arena row stride and the
-    // substituted rows are garbage (a real bus-imbalance bug caught by the
-    // prove fixtures). Default flips to ON after the full shape rollout.
-    let arena_native_enabled = std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() == Ok("1");
+    // R4 gate, DEFAULT ON (OPENVM_RVR_ARENA_NATIVE=0 opts out for A/B
+    // measurement). The decision MUST be made here, in the metadata the host
+    // and codegen both consume: gating only the codegen copy leaves the host
+    // staging arena targets against a compact-compiled library — the C then
+    // writes compact records at the arena row stride and the substituted
+    // rows are garbage (a real bus-imbalance bug caught by the prove
+    // fixtures when this gate briefly lived on the codegen side only).
+    let arena_native_enabled = std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() != Ok("0");
     let mut record = |pc: u64, shape: InlineRecordShape| {
         let Some(offset) = pc.checked_sub(pc_base) else {
             return;
