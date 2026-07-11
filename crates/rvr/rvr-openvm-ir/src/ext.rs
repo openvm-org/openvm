@@ -63,30 +63,6 @@ pub trait ExtEmitCtx {
         self.write_var(var, val);
     }
 
-    /// Emit a compact ADD/SUB register record when the current transport owns
-    /// this instruction. Returns whether normal emission was replaced.
-    fn emit_addsub_reg(
-        &mut self,
-        _is_sub: bool,
-        _rd: Variable,
-        _rs1: Variable,
-        _rs2: Variable,
-    ) -> bool {
-        false
-    }
-
-    /// Emit a compact ADDI record when the current transport owns this
-    /// instruction. Returns whether normal emission was replaced.
-    fn emit_addsub_imm(
-        &mut self,
-        _is_sub: bool,
-        _rd: Variable,
-        _rs1: Variable,
-        _imm: i32,
-    ) -> bool {
-        false
-    }
-
     /// Emit a compact two-read/one-write record using a result expression
     /// template. `__RVR_LHS__` and `__RVR_RHS__` are replaced with the traced
     /// operand expressions by the concrete emitter.
@@ -95,6 +71,18 @@ pub trait ExtEmitCtx {
         _rd: Variable,
         _rs1: Variable,
         _rs2: Variable,
+        _result_template: &str,
+    ) -> bool {
+        false
+    }
+
+    /// Emit a compact register/immediate/write record. The result template
+    /// uses the same placeholders as [`Self::emit_reg3_inline`].
+    fn emit_reg2imm_inline(
+        &mut self,
+        _rd: Variable,
+        _rs1: Variable,
+        _imm_value: u64,
         _result_template: &str,
     ) -> bool {
         false

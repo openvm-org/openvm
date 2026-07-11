@@ -672,6 +672,22 @@ where
             PREFLIGHT_ADDSUB_RECORD_SIZE,
             assemble_add_sub_inline::<F, RA>,
         );
+        registry.register_inline(
+            [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
+                .map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_bitwise_inline::<F, RA>,
+        );
+        registry.register_inline(
+            LessThanOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_less_than_inline::<F, RA>,
+        );
+        registry.register_inline(
+            ShiftOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_shift_inline::<F, RA>,
+        );
         registry.register(
             [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
                 .map(|opcode| opcode.global_opcode()),
@@ -865,6 +881,136 @@ fn assemble_add_sub<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     core_record.b = rs1;
     core_record.c = rs2;
     core_record.local_opcode = local;
+    Ok(())
+}
+
+/// Fill a BaseAluU16 adapter record from a compact alu3 record, mirroring
+/// [`fill_base_alu_u16_adapter`]'s derivation from the log path (shared by
+/// the LessThan and Shift inline assemblers; AddSub keeps its own inline fill
+/// with identical semantics).
+fn fill_base_alu_u16_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64BaseAluU16AdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
+    record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
+    if instruction.e.as_canonical_u32() == RV64_REGISTER_AS {
+        record.rs2_as = RV64_REGISTER_AS as u8;
+        record.rs2_imm_sign = false;
+        record.rs2 = instruction.c.as_canonical_u32();
+    } else {
+        record.rs2_as = RV64_IMM_AS as u8;
+        let imm = instruction.c.as_canonical_u32();
+        record.rs2 = imm;
+        let imm64 = imm_to_rv64_u64(imm);
+        record.rs2_imm_sign = ((imm64 >> U16_BITS) as u16) != 0;
+    }
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: u16x4(compact.write_prev_data),
+    };
+}
+
+fn assemble_less_than_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64BaseAluU16AdapterRecord,
+        &mut LessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new());
+    fill_base_alu_u16_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.b = u16x4(compact.b);
+    core_record.c = u16x4(compact.c);
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(LessThanOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+/// Mirrors [`assemble_shift`]: SRA fills the arithmetic core (no
+/// local_opcode); SLL/SRL fill the logical core.
+fn assemble_shift_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let local_opcode = ShiftOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(ShiftOpcode::CLASS_OFFSET),
+    )
+    .expect("opcode already classified");
+    if local_opcode == ShiftOpcode::SRA {
+        let (adapter_record, core_record): (
+            &mut Rv64BaseAluU16AdapterRecord,
+            &mut ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+        ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new());
+        fill_base_alu_u16_from_compact(&compact, instruction, pc, adapter_record);
+        core_record.b = u16x4(compact.b);
+        core_record.c = u16x4(compact.c);
+    } else {
+        let (adapter_record, core_record): (
+            &mut Rv64BaseAluU16AdapterRecord,
+            &mut ShiftLogicalCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+        ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new());
+        fill_base_alu_u16_from_compact(&compact, instruction, pc, adapter_record);
+        core_record.b = u16x4(compact.b);
+        core_record.c = u16x4(compact.c);
+        core_record.local_opcode = local_opcode as u8;
+    }
+    Ok(())
+}
+
+/// Mirrors [`assemble_bitwise`] over the byte adapter (no `rs2_imm_sign`
+/// field; byte-limb operand views).
+fn assemble_bitwise_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64BaseAluAdapterRecord,
+        &mut BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<
+        F,
+        Rv64BaseAluAdapterExecutor<RV64_BYTE_BITS>,
+    >::new());
+    adapter_record.from_pc = pc;
+    adapter_record.from_timestamp = compact.from_timestamp;
+    adapter_record.rs1_ptr = instruction.b.as_canonical_u32();
+    adapter_record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
+    adapter_record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
+    if instruction.e.as_canonical_u32() == RV64_REGISTER_AS {
+        adapter_record.rs2_as = RV64_REGISTER_AS as u8;
+        adapter_record.rs2 = instruction.c.as_canonical_u32();
+    } else {
+        adapter_record.rs2_as = RV64_IMM_AS as u8;
+        adapter_record.rs2 = instruction.c.as_canonical_u32();
+    }
+    adapter_record.rd_ptr = instruction.a.as_canonical_u32();
+    adapter_record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: bytes8(compact.write_prev_data),
+    };
+    core_record.b = bytes8(compact.b);
+    core_record.c = bytes8(compact.c);
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(BaseAluOpcode::CLASS_OFFSET) as u8;
     Ok(())
 }
 
