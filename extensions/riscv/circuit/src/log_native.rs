@@ -715,6 +715,20 @@ where
             PREFLIGHT_RW1_RECORD_SIZE,
             assemble_jalr_inline::<F, RA>,
         );
+        registry.register_inline(
+            Rv64LoadStoreOpcode::iter()
+                .take(Rv64LoadStoreOpcode::STOREB as usize + 1)
+                .map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_loadstore_inline::<F, RA>,
+        );
+        registry.register_inline(
+            Rv64LoadStoreOpcode::iter()
+                .skip(Rv64LoadStoreOpcode::STOREB as usize + 1)
+                .map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_load_sign_extend_inline::<F, RA>,
+        );
         registry.register(
             [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
                 .map(|opcode| opcode.global_opcode()),
@@ -1284,6 +1298,129 @@ fn assemble_jalr_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     core_record.from_pc = pc;
     core_record.rs1_val = compact.b as u32;
     core_record.imm_sign = instruction.g.is_one();
+    Ok(())
+}
+
+/// Shared derivation for the load/store inline assemblers, mirroring
+/// [`fill_loadstore_start`]: rs1_val comes from the compact record; the
+/// pointer, alignment shift, and immediate fields come from the instruction.
+struct LoadStoreCompactStart {
+    shift_amount: u8,
+}
+
+fn fill_loadstore_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64LoadStoreAdapterRecord,
+) -> LoadStoreCompactStart {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    record.rs1_aux_record.prev_timestamp = compact.reads_prev_timestamp[0];
+    let rs1_val = compact.b as u32;
+    record.rs1_val = rs1_val;
+    record.imm = instruction.c.as_canonical_u32() as u16;
+    record.imm_sign = instruction.g.is_one();
+    let ptr = rs1_val.wrapping_add(sign_extend_imm16(record.imm as u32, record.imm_sign));
+    let shift_amount = (ptr & (RV64_REGISTER_NUM_LIMBS as u32 - 1)) as u8;
+    record.read_data_aux.prev_timestamp = compact.reads_prev_timestamp[1];
+    LoadStoreCompactStart { shift_amount }
+}
+
+/// Inline assembler for the zero-extension loads and the main-memory stores
+/// (the pcs the compile migrates: `Instr::Load`/`Instr::Store`, always
+/// `RV64_MEMORY_AS` — REVEAL lifts through the extension registry and stays
+/// on the log path). Mirrors [`assemble_loadstore`].
+fn assemble_loadstore_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let local_opcode = Rv64LoadStoreOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
+    )
+    .expect("assembler is registered only for RV64 load/store opcodes");
+    if instruction.e.as_canonical_u32() != RV64_MEMORY_AS {
+        return Err(ExecutionError::RvrExecution(format!(
+            "inline load/store at pc {pc:#x} must target main memory, got AS {}",
+            instruction.e.as_canonical_u32()
+        )));
+    }
+    let (adapter_record, core_record): (
+        &mut Rv64LoadStoreAdapterRecord,
+        &mut LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new());
+    let start = fill_loadstore_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    adapter_record.mem_as = RV64_MEMORY_AS as u8;
+    let enabled = instruction.f.is_one();
+    let is_load = matches!(
+        local_opcode,
+        Rv64LoadStoreOpcode::LOADD
+            | Rv64LoadStoreOpcode::LOADWU
+            | Rv64LoadStoreOpcode::LOADHU
+            | Rv64LoadStoreOpcode::LOADBU
+    );
+    let (read_data, prev_data) = if is_load {
+        let prev_data = if enabled {
+            adapter_record.rd_rs2_ptr = instruction.a.as_canonical_u32();
+            adapter_record.write_prev_timestamp = compact.write_prev_timestamp;
+            bytes8(compact.write_prev_data)
+        } else {
+            adapter_record.rd_rs2_ptr = u32::MAX;
+            [0; RV64_REGISTER_NUM_LIMBS]
+        };
+        (bytes8(compact.c), prev_data)
+    } else {
+        adapter_record.rd_rs2_ptr = instruction.a.as_canonical_u32();
+        adapter_record.write_prev_timestamp = compact.write_prev_timestamp;
+        (bytes8(compact.c), bytes8(compact.write_prev_data))
+    };
+    core_record.local_opcode = local_opcode as u8;
+    core_record.shift_amount = start.shift_amount;
+    core_record.read_data = read_data;
+    core_record.prev_data = prev_data;
+    Ok(())
+}
+
+/// Inline assembler for the sign-extending loads (LOADB/LOADH/LOADW),
+/// mirroring [`assemble_load_sign_extend`].
+fn assemble_load_sign_extend_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let local_opcode = Rv64LoadStoreOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
+    )
+    .expect("assembler is registered only for RV64 load/store opcodes");
+    let (adapter_record, core_record): (
+        &mut Rv64LoadStoreAdapterRecord,
+        &mut LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new());
+    let start = fill_loadstore_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    adapter_record.mem_as = RV64_MEMORY_AS as u8;
+    let prev_data = if instruction.f.is_one() {
+        adapter_record.rd_rs2_ptr = instruction.a.as_canonical_u32();
+        adapter_record.write_prev_timestamp = compact.write_prev_timestamp;
+        bytes8(compact.write_prev_data)
+    } else {
+        adapter_record.rd_rs2_ptr = u32::MAX;
+        [0; RV64_REGISTER_NUM_LIMBS]
+    };
+    core_record.is_byte = local_opcode == Rv64LoadStoreOpcode::LOADB;
+    core_record.is_word = local_opcode == Rv64LoadStoreOpcode::LOADW;
+    core_record.shift_amount = start.shift_amount;
+    core_record.read_data = bytes8(compact.c);
+    core_record.prev_data = prev_data;
     Ok(())
 }
 
