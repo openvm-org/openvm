@@ -46,9 +46,10 @@ use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
     compile_metered_cost, compile_metered_segment_boundary, compile_with_instret_tracking,
     classify_preflight_opcodes_with_extensions, compile_preflight_with_extensions,
-    load_compiled_from_path, preflight::execute_rvr_preflight, rvr_preflight_engine_env_override,
-    ChipMapping, GuestDebugMap, LogNativeOpcodeAdmitter, PreflightRawLogs, RvrCompiled,
-    RvrExecutionKind, RvrInitialImage, RvrInlineChipRecords,
+    load_compiled_from_path, preflight::execute_rvr_preflight,
+    preflight::{ChipRecordBuf, RvrArenaNativeTarget}, rvr_preflight_engine_env_override,
+    ArenaNativeGeometry, ChipMapping, GuestDebugMap, LogNativeOpcodeAdmitter, PreflightRawLogs,
+    RvrCompiled, RvrExecutionKind, RvrInitialImage, RvrInlineChipRecords,
     RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPreflightEngine,
     RvrPreflightBufferPool, RvrPreflightInstance, RvrPreflightOpcodeClass, RvrPureInstance,
     RvrPreflightOutput, RvrPreflightRoute, RvrPureWithInstretTrackingInstance,
@@ -102,12 +103,14 @@ type VmRvrPreflightRoute<'a, F, VC> =
 
 #[cfg(feature = "rvr")]
 trait CachedRvrPreflightExecutor<F>: Send + Sync {
+    #[allow(clippy::too_many_arguments)]
     fn execute(
         &self,
         exe: &VmExe<F>,
         state: VmState<GuestMemory>,
         num_insns: Option<u64>,
         record_capacity_rows: Option<&[u32]>,
+        arena_targets: Option<&std::collections::BTreeMap<usize, ChipRecordBuf>>,
     ) -> Result<RvrPreflightOutput<F>, ExecutionError>;
 
     /// Return a consumed segment output's large buffers to the executor's
@@ -118,6 +121,8 @@ trait CachedRvrPreflightExecutor<F>: Send + Sync {
         raw_logs: PreflightRawLogs,
         inline_records: Vec<RvrInlineChipRecords>,
     );
+    /// R4: airs whose records the compiled library writes arena-native.
+    fn arena_native_airs(&self) -> &[(usize, ArenaNativeGeometry)];
 }
 
 /// The program-dependent, owned pieces of an rvr preflight instance.
@@ -137,6 +142,7 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
         state: VmState<GuestMemory>,
         num_insns: Option<u64>,
         record_capacity_rows: Option<&[u32]>,
+        arena_targets: Option<&std::collections::BTreeMap<usize, ChipRecordBuf>>,
     ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
         execute_rvr_preflight(
             exe,
@@ -147,7 +153,7 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
             state,
             num_insns,
             record_capacity_rows,
-            None,
+            arena_targets,
         )
     }
 
@@ -157,6 +163,9 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
         inline_records: Vec<RvrInlineChipRecords>,
     ) {
         self.pool.recycle_segment_buffers(raw_logs, inline_records);
+    }
+    fn arena_native_airs(&self) -> &[(usize, ArenaNativeGeometry)] {
+        &self.compiled.inline_records().arena_native_airs
     }
 }
 
@@ -1241,15 +1250,34 @@ where
                 // ms), so it must not be paid twice.
                 #[cfg(feature = "stark-debug")]
                 let split_t0 = std::time::Instant::now();
-                let mut rvr_output =
-                    rvr_preflight.execute(exe, state, num_insns, Some(trace_heights))?;
+                let capacities = self.preflight_capacities(trace_heights);
+                // R4: stage arena-native targets so the C writes those airs'
+                // full records directly into their final arena backings.
+                let arena_native = rvr_preflight.arena_native_airs().to_vec();
+                let mut staged: Vec<(usize, ArenaNativeGeometry, VB::RecordArena)> = Vec::new();
+                let mut targets = std::collections::BTreeMap::new();
+                for &(air, geometry) in &arena_native {
+                    let (height, width) = capacities[air];
+                    let (arena, buf) =
+                        <VB::RecordArena as RvrArenaNativeTarget>::stage_arena_native(
+                            height, width, &geometry,
+                        );
+                    targets.insert(air, buf);
+                    staged.push((air, geometry, arena));
+                }
+                let mut rvr_output = rvr_preflight.execute(
+                    exe,
+                    state,
+                    num_insns,
+                    Some(trace_heights),
+                    (!targets.is_empty()).then_some(&targets),
+                )?;
                 #[cfg(feature = "stark-debug")]
                 let split_t1 = std::time::Instant::now();
-                let capacities = self.preflight_capacities(trace_heights);
                 let pc_to_air_idx = self.pc_to_air_idx(exe)?;
                 #[cfg(feature = "stark-debug")]
                 let split_t2 = std::time::Instant::now();
-                let record_arenas = self
+                let mut record_arenas = self
                     .builder
                     .generate_rvr_record_arenas_from_logs(
                         self.config(),
@@ -1264,6 +1292,20 @@ where
                                 .to_string(),
                         )
                     })?;
+                for (air, geometry, mut arena) in staged {
+                    let written = rvr_output
+                        .arena_native_written
+                        .iter()
+                        .find(|&&(written_air, _)| written_air == air)
+                        .map(|&(_, count)| count as usize)
+                        .ok_or_else(|| {
+                            ExecutionError::RvrExecution(format!(
+                                "arena-native air {air} reported no written count"
+                            ))
+                        })?;
+                    arena.finish_arena_native(written, &geometry);
+                    record_arenas[air] = arena;
+                }
                 #[cfg(feature = "stark-debug")]
                 if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1") {
                     let split_t3 = std::time::Instant::now();
