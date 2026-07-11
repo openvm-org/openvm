@@ -207,7 +207,9 @@ impl ExtInstr for Rv64IInstr {
                                 AluOp::Sub => Some(1),
                                 AluOp::Slt | AluOp::Sll | AluOp::Sra => Some(0),
                                 AluOp::Sltu | AluOp::Srl => Some(1),
-                                _ => None,
+                                AluOp::Xor => Some(2),
+                                AluOp::Or => Some(3),
+                                AluOp::And => Some(4),
                             }
                             .map(|local_opcode| ArenaAlu3Baked {
                                 rs2_field: rhs.index() * 8,
@@ -221,7 +223,10 @@ impl ExtInstr for Rv64IInstr {
                             let local_opcode = match op {
                                 AluOp::Add | AluOp::Slt | AluOp::Sll | AluOp::Sra => Some(0),
                                 AluOp::Sltu | AluOp::Srl => Some(1),
-                                _ => None,
+                                AluOp::Xor => Some(2),
+                                AluOp::Or => Some(3),
+                                AluOp::And => Some(4),
+                                AluOp::Sub => None,
                             };
                             let arena = local_opcode.map(|local_opcode| ArenaAlu3Baked {
                                 rs2_field: (*imm as u32) & 0x00ff_ffff,
