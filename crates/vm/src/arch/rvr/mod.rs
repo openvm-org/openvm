@@ -35,8 +35,9 @@ pub use execute::{
 pub use initial_image::RvrInitialImage;
 pub use log_native::{
     generate_record_arenas_from_logs, Alu3ArenaFieldOffsets, ArenaNativeGeometry,
-    ArenaNativeLayout, LogNativeAccessView, LogNativeAssembler, LogNativeAssemblerRegistry,
-    LogNativeInlineAssembler, LogNativeOpcodeAdmitter, VmRvrLogNativeExtension,
+    ArenaNativeLayout, Branch2ArenaFieldOffsets, LogNativeAccessView, LogNativeAssembler,
+    LogNativeAssemblerRegistry, LogNativeInlineAssembler, LogNativeOpcodeAdmitter,
+    VmRvrLogNativeExtension,
 };
 pub use metered::{RvrMeteredExecutionOutcome, RvrMeteredInstance, RvrMeteredSegmentInstance};
 pub use metered_cost::{MeteredCostState, RvrMeteredCostInstance};
