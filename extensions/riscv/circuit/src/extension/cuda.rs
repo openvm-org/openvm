@@ -34,7 +34,10 @@ use crate::{
     Rv64StoreHalfwordChipGpu, Rv64StoreWordAir, Rv64StoreWordChipGpu,
 };
 
-pub struct Rv64ImGpuProverExt;
+pub struct Rv64ImGpuProverExt {
+    /// M-GPUDEC shared decode state, cloned into migrated GPU chips.
+    pub rvr_decode: std::sync::Arc<crate::rvr_gpu_decode::RvrGpuDecodeState>,
+}
 
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
@@ -53,7 +56,11 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
         inventory.next_air::<Rv64AddSubAir>()?;
-        let add_sub = Rv64AddSubChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let add_sub = Rv64AddSubChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(add_sub);
 
         inventory.next_air::<Rv64BitwiseLogicAir>()?;
@@ -69,16 +76,27 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.add_executor_chip(add_sub_w);
 
         inventory.next_air::<Rv64LessThanAir>()?;
-        let lt = Rv64LessThanChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let lt = Rv64LessThanChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(lt);
 
         inventory.next_air::<Rv64ShiftLogicalAir>()?;
-        let shift_logical = Rv64ShiftLogicalChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let shift_logical = Rv64ShiftLogicalChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(shift_logical);
 
         inventory.next_air::<Rv64ShiftRightArithmeticAir>()?;
-        let shift_right_arithmetic =
-            Rv64ShiftRightArithmeticChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let shift_right_arithmetic = Rv64ShiftRightArithmeticChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(shift_right_arithmetic);
 
         inventory.next_air::<Rv64ShiftWLogicalAir>()?;

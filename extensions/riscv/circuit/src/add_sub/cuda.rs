@@ -20,6 +20,10 @@ use crate::{
 pub struct Rv64AddSubChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
+    /// M-GPUDEC shared decode state (device operand table + per-segment
+    /// emission mode). Consulted in INC2's compact-kernel branch.
+    #[allow(dead_code)]
+    pub rvr_decode: std::sync::Arc<crate::rvr_gpu_decode::RvrGpuDecodeState>,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64AddSubChipGpu {
