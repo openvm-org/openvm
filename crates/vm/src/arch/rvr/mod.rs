@@ -34,7 +34,7 @@ pub use execute::{
 };
 pub use initial_image::RvrInitialImage;
 pub use log_native::{
-    generate_record_arenas_from_logs, LogNativeAccessView, LogNativeAssembler,
+    generate_record_arenas_from_logs, ArenaNativeGeometry, LogNativeAccessView, LogNativeAssembler,
     LogNativeAssemblerRegistry, LogNativeInlineAssembler, LogNativeOpcodeAdmitter,
     VmRvrLogNativeExtension,
 };
