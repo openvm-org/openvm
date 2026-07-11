@@ -4,7 +4,9 @@ use std::collections::HashSet;
 use openvm_instructions::program::DEFAULT_PC_STEP;
 use rvr_openvm_ir::*;
 
-use super::context::{ArenaAlu3Baked, ArenaBranch2Baked, EmitContext};
+use super::context::{
+    ArenaAlu3Baked, ArenaBranch2Baked, ArenaRw1Baked, ArenaWr1Baked, EmitContext,
+};
 
 /// Trait for instructions that can emit their own C code.
 pub trait InstrCodegen {
@@ -53,6 +55,42 @@ pub enum ArenaNativeLayout {
     Alu3(Alu3ArenaFieldOffsets),
     Branch2(Branch2ArenaFieldOffsets),
     LoadStore(LoadStoreArenaFieldOffsets),
+    Wr1(Wr1ArenaFieldOffsets),
+    Rw1(Rw1ArenaFieldOffsets),
+}
+
+/// Offsets for the wr1-class full record (JalLui / Auipc): a conditional
+/// rd-write adapter plus either the jal_lui core (imm, rd_data, is_jal) or
+/// the auipc core (from_pc, imm) — absent fields carry usize::MAX.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Wr1ArenaFieldOffsets {
+    pub from_pc: usize,
+    pub from_timestamp: usize,
+    pub rd_ptr: usize,
+    pub rd_prev_ts: usize,
+    pub rd_prev_data: usize,
+    pub core_imm: usize,
+    pub core_rd_data: usize,
+    pub core_is_jal: usize,
+    pub core_from_pc: usize,
+}
+
+/// Offsets for the rw1-class full record (Jalr): rs1 read + conditional
+/// link write adapter, core with u16 imm / from_pc / dynamic rs1_val / sign.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Rw1ArenaFieldOffsets {
+    pub from_pc: usize,
+    pub from_timestamp: usize,
+    pub rs1_ptr: usize,
+    pub rd_ptr: usize,
+    pub read_prev_ts: usize,
+    pub write_prev_ts: usize,
+    pub write_prev_data: usize,
+    /// Stored as a u16.
+    pub core_imm: usize,
+    pub core_from_pc: usize,
+    pub core_rs1_val: usize,
+    pub core_imm_sign: usize,
 }
 
 /// Offsets for the load/store full record: the rs1-indexed memory adapter
@@ -291,14 +329,36 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
         }
         Instr::Lui { rd, value } => {
             if ctx.inline_records_enabled() {
-                ctx.emit_wr1_inline(Some(*rd), &sext32(*value));
+                // LUI: rd_data is the sign-extended (imm << 12); the record
+                // imm field is the raw 20-bit immediate.
+                let rd_data = (*value as i32) as i64 as u64;
+                let baked = ArenaWr1Baked {
+                    rd_ptr: (*rd as u32) * 8,
+                    core_imm: (*value >> 12) & 0xF_FFFF,
+                    rd_data,
+                    is_jal: 0,
+                    core_from_pc: 0,
+                };
+                ctx.emit_wr1_inline(Some(*rd), &sext32(*value), Some(baked));
             } else {
                 ctx.write_reg(*rd, &sext32(*value));
             }
         }
         Instr::Auipc { rd, value } => {
             if ctx.inline_records_enabled() {
-                ctx.emit_wr1_inline(Some(*rd), &hex_u64(*value));
+                // AUIPC record imm carries the instruction's c encoding:
+                // (upper20 << 12) >> 8, i.e. the shifted-upper form the lift
+                // decodes (value = pc + sext32(c << 8)).
+                let pc32 = ctx.current_pc_u32();
+                let upper = (value.wrapping_sub(u64::from(pc32))) as u32;
+                let baked = ArenaWr1Baked {
+                    rd_ptr: (*rd as u32) * 8,
+                    core_imm: upper >> 8,
+                    rd_data: 0,
+                    is_jal: 0,
+                    core_from_pc: pc32,
+                };
+                ctx.emit_wr1_inline(Some(*rd), &hex_u64(*value), Some(baked));
             } else {
                 ctx.write_reg(*rd, &hex_u64(*value));
             }
@@ -386,7 +446,22 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
         }
         Terminator::Jump { link_rd, target } => {
             if ctx.inline_records_enabled() {
-                ctx.emit_wr1_inline(*link_rd, &hex_u64(next_pc));
+                // JAL: rd_data is the link value (pc + 4); the record imm is
+                // the field-canonical jump offset (P + imm when negative).
+                let imm = *target as i64 - pc as i64;
+                let imm_canonical = if imm >= 0 {
+                    imm as u32
+                } else {
+                    (i64::from(BABYBEAR_ORDER_U32) + imm) as u32
+                };
+                let baked = ArenaWr1Baked {
+                    rd_ptr: link_rd.map_or(u32::MAX, |rd| (rd as u32) * 8),
+                    core_imm: imm_canonical,
+                    rd_data: next_pc,
+                    is_jal: 1,
+                    core_from_pc: 0,
+                };
+                ctx.emit_wr1_inline(*link_rd, &hex_u64(next_pc), Some(baked));
             } else {
                 ctx.write_reg(link_rd.unwrap_or(0), &hex_u64(next_pc));
             }
@@ -396,7 +471,13 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             link_rd, rs1, imm, ..
         } => {
             let base = if ctx.inline_records_enabled() {
-                ctx.emit_rw1_inline(*link_rd, *rs1, &hex_u64(next_pc))
+                let baked = ArenaRw1Baked {
+                    rs1_ptr: (*rs1 as u32) * 8,
+                    rd_ptr: link_rd.map_or(u32::MAX, |rd| (rd as u32) * 8),
+                    core_imm: *imm as u16,
+                    core_imm_sign: (*imm < 0) as u8,
+                };
+                ctx.emit_rw1_inline(*link_rd, *rs1, &hex_u64(next_pc), Some(baked))
             } else {
                 let base = ctx.read_reg(*rs1);
                 // Save base to a temporary when link_rd == rs1 to prevent
