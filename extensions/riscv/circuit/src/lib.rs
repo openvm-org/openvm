@@ -399,6 +399,9 @@ fn generate_gpu_rvr_record_arenas(
         dense
             .alloc_bytes(chip.bytes.len())
             .copy_from_slice(&chip.bytes);
+        // The mode travels with the data: this is what routes the arena to the
+        // chip's compact-decode branch instead of the expanded-record kernel.
+        dense.rvr_wire = true;
         *arena = dense;
     }
     Ok(Some(arenas))
