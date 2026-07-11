@@ -436,6 +436,7 @@ fn assert_final_digest(label: &str, state: &VmState<F>, expected: &[u8]) {
 
 #[test]
 fn rvr_preflight_sha256_single_and_multi_block_traces_match_interpreter() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     for (label, message) in [
         ("single_block", vec![0x42; 55]),
         ("multi_block", (0..120).map(|i| i as u8).collect()),
@@ -461,6 +462,7 @@ fn rvr_preflight_sha256_single_and_multi_block_traces_match_interpreter() {
 
 #[test]
 fn rvr_preflight_sha256_multi_segment_traces_match_interpreter() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     let message = (0..25_000).map(|i| (i * 31) as u8).collect::<Vec<_>>();
     let (exe, num_blocks) = sha256_message_exe(&message, true);
     assert!(
