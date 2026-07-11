@@ -46,11 +46,14 @@ pub const PREFLIGHT_TRACER_DATA_ALIGN: usize = 8;
 pub const PREFLIGHT_TOUCHED_BLOCK_SIZE: usize = 8;
 pub const PREFLIGHT_TOUCHED_BLOCK_ALIGN: usize = 4;
 
-// R3: inline compact records. `ChipRecordBuf` is one per-chip record-buffer
-// descriptor (base pointer + byte cursor + byte capacity); the tracer holds an
-// array of `chip_counts_len` of them. A null `base` means the chip is not
-// migrated to inline records (it uses the verbose memory log instead).
-pub const PREFLIGHT_CHIP_RECORD_BUF_SIZE: usize = 16;
+// R3/R4: inline records. `ChipRecordBuf` is one per-chip record-buffer
+// descriptor (base pointer + byte cursor + byte capacity + record stride);
+// the tracer holds an array of `chip_counts_len` of them. The cursor advances
+// by `stride` per record, so record i sits at `base + i*stride`; compact-wire
+// buffers use stride == packed record size, arena-native buffers use the
+// arena row/record pitch. A null `base` means the chip is not migrated to
+// inline records (it uses the verbose memory log instead).
+pub const PREFLIGHT_CHIP_RECORD_BUF_SIZE: usize = 24;
 pub const PREFLIGHT_CHIP_RECORD_BUF_ALIGN: usize = 8;
 /// Byte size of one compact base-ALU AddSub record as stored by the preflight
 /// tracer (R3 L1+L5): the dynamic witness only — from_pc, from_timestamp, the
