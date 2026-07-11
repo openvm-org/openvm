@@ -19,20 +19,53 @@ impl InstrCodegen for Instr {
     }
 }
 
-/// Whether preflight codegen migrates this instruction to an inline compact
-/// record (suppressing its memory-log entries) when inline records are enabled
-/// and the instruction maps to a chip. The single source of truth shared by
-/// [`emit_instr`] and the host-side compile metadata (`crates/vm` rvr
-/// `compile.rs`), which must skip the log assembler for exactly these pcs.
-pub fn instr_emits_inline_record(instr: &Instr) -> bool {
-    matches!(
-        instr,
+/// Compact inline-record wire shapes (R3). Each migrated instruction class
+/// stores exactly its dynamic witness; the host re-derives program-redundant
+/// operands from the instruction at `from_pc`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InlineRecordShape {
+    /// 2 reads + 1 write, single row (base ALU, Mul family): 44 bytes.
+    Alu3,
+    /// 2 reads, no write (branches): 32 bytes.
+    Branch2,
+    /// 1 (conditional) write (JalLui, Auipc): 20 bytes.
+    Wr1,
+    /// 1 read + 1 conditional write (Jalr): 32 bytes.
+    Rw1,
+}
+
+/// The compact shape preflight codegen emits for a body instruction, or
+/// `None` when the instruction stays on the verbose-log path. The single
+/// source of truth shared by [`emit_instr`] and the host-side compile
+/// metadata (`crates/vm` rvr `compile.rs`), which must skip the log assembler
+/// for exactly these pcs.
+pub fn inline_record_shape_for_instr(instr: &Instr) -> Option<InlineRecordShape> {
+    match instr {
         Instr::AluReg { .. }
-            | Instr::AluImm { .. }
-            | Instr::ShiftImm { .. }
-            | Instr::MulDiv { .. }
-            | Instr::MulDivW { .. }
-    )
+        | Instr::AluImm { .. }
+        | Instr::ShiftImm { .. }
+        | Instr::MulDiv { .. }
+        | Instr::MulDivW { .. } => Some(InlineRecordShape::Alu3),
+        Instr::Lui { .. } | Instr::Auipc { .. } => Some(InlineRecordShape::Wr1),
+        _ => None,
+    }
+}
+
+/// The compact shape preflight codegen emits for a block terminator (see
+/// [`inline_record_shape_for_instr`]).
+pub fn inline_record_shape_for_terminator(term: &Terminator) -> Option<InlineRecordShape> {
+    match term {
+        Terminator::Branch { .. } => Some(InlineRecordShape::Branch2),
+        Terminator::Jump { .. } => Some(InlineRecordShape::Wr1),
+        Terminator::JumpDyn { .. } => Some(InlineRecordShape::Rw1),
+        _ => None,
+    }
+}
+
+/// Whether preflight codegen migrates this instruction to an inline compact
+/// record (suppressing its memory-log entries).
+pub fn instr_emits_inline_record(instr: &Instr) -> bool {
+    inline_record_shape_for_instr(instr).is_some()
 }
 
 /// Emit C code for a body instruction.
@@ -71,10 +104,18 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             }
         }
         Instr::Lui { rd, value } => {
-            ctx.write_reg(*rd, &sext32(*value));
+            if ctx.inline_records_enabled() {
+                ctx.emit_wr1_inline(Some(*rd), &sext32(*value));
+            } else {
+                ctx.write_reg(*rd, &sext32(*value));
+            }
         }
         Instr::Auipc { rd, value } => {
-            ctx.write_reg(*rd, &hex_u64(*value));
+            if ctx.inline_records_enabled() {
+                ctx.emit_wr1_inline(Some(*rd), &hex_u64(*value));
+            } else {
+                ctx.write_reg(*rd, &hex_u64(*value));
+            }
         }
         Instr::Load {
             width,
@@ -150,21 +191,30 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             emit_tail_call(ctx, next_pc, &args, tc.valid_blocks);
         }
         Terminator::Jump { link_rd, target } => {
-            ctx.write_reg(link_rd.unwrap_or(0), &hex_u64(next_pc));
+            if ctx.inline_records_enabled() {
+                ctx.emit_wr1_inline(*link_rd, &hex_u64(next_pc));
+            } else {
+                ctx.write_reg(link_rd.unwrap_or(0), &hex_u64(next_pc));
+            }
             emit_tail_call(ctx, *target, &args, tc.valid_blocks);
         }
         Terminator::JumpDyn {
             link_rd, rs1, imm, ..
         } => {
-            let base = ctx.read_reg(*rs1);
-            // Save base to a temporary when link_rd == rs1 to prevent
-            // the link write from clobbering the jump target (e.g. jalr ra, ra, 0).
-            let base = if link_rd.is_some_and(|rd| rd == *rs1) {
-                ctx.materialize_u64(&base)
+            let base = if ctx.inline_records_enabled() {
+                ctx.emit_rw1_inline(*link_rd, *rs1, &hex_u64(next_pc))
             } else {
+                let base = ctx.read_reg(*rs1);
+                // Save base to a temporary when link_rd == rs1 to prevent
+                // the link write from clobbering the jump target (e.g. jalr ra, ra, 0).
+                let base = if link_rd.is_some_and(|rd| rd == *rs1) {
+                    ctx.materialize_u64(&base)
+                } else {
+                    base
+                };
+                ctx.write_reg(link_rd.unwrap_or(0), &hex_u64(next_pc));
                 base
             };
-            ctx.write_reg(link_rd.unwrap_or(0), &hex_u64(next_pc));
             let imm_val = *imm;
             let next_pc = if imm_val == 0 {
                 ctx.materialize_u64(&format!("{base} & ~0x0000000000000001ull"))
@@ -196,8 +246,11 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             rs2,
             target,
         } => {
-            let l = ctx.read_reg(*rs1);
-            let r = ctx.read_reg(*rs2);
+            let (l, r) = if ctx.inline_records_enabled() {
+                ctx.emit_branch2_inline(*rs1, *rs2)
+            } else {
+                (ctx.read_reg(*rs1), ctx.read_reg(*rs2))
+            };
             let cmp = branch_cond_expr(*cond, &l, &r);
             let target_call = if tc.valid_blocks.contains(target) {
                 format!("[[clang::musttail]] return block_0x{target:08x}({args});")
