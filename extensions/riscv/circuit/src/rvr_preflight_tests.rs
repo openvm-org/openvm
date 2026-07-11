@@ -2195,6 +2195,8 @@ fn rvr_preflight_block_aligned_partial_bound_matches_interpreter() {
 
 #[test]
 fn rvr_preflight_rejects_mid_block_partial_bound() {
+    // Direct execute without arena targets (see the harness note).
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     let (vm, _) = VirtualMachine::new_with_keygen(
         test_cpu_engine(),
         Rv64ImCpuBuilder,
@@ -2256,6 +2258,8 @@ fn rvr_preflight_standard_group_trace_matches_interpreter() {
 #[test]
 #[should_panic(expected = "failed to allocate")]
 fn rvr_preflight_dense_arena_capacity_undercount_panics() {
+    // Direct execute without arena targets (see the harness note).
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     let exe = standard_group_exe(1);
     let (vm, _) = VirtualMachine::new_with_keygen(
         test_cpu_engine(),
