@@ -375,9 +375,7 @@ fn generate_gpu_rvr_record_arenas(
         return Ok(None);
     }
     let compact_airs = match configured_emission_mode() {
-        Some(InlineEmissionMode::CompactWire) => {
-            state.bind_alu_u16_compact_segment(exe, pc_to_air_idx)
-        }
+        Some(InlineEmissionMode::CompactWire) => state.bind_compact_segment(exe, pc_to_air_idx),
         _ => {
             state.clear_segment_modes();
             Default::default()
