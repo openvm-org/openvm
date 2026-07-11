@@ -70,7 +70,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64DivRemChipGpu {
             unsafe {
                 crate::cuda_abi::divrem_cuda::tracegen_compact(
                     d_trace.buffer(),
-                    padded_height,
+                    trace_height,
                     trace_width,
                     &d_records,
                     &d_table,
