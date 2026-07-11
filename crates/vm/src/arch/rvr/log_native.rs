@@ -115,10 +115,46 @@ struct RegisteredAssembler<F, RA> {
 pub type LogNativeInlineAssembler<F, RA> =
     fn(&mut RA, &Instruction<F>, &[u8], u32) -> Result<(), ExecutionError>;
 
+/// R4 arena-native geometry for one opcode family's full (adapter + core)
+/// record, supplied at registration by the extension that owns the record
+/// structs (offsets/sizes come from `size_of`/`align_of` on the real types —
+/// never hand-derived).
+///
+/// Per-flavor placement derives from this plus attach-time data:
+/// - Matrix: core record sits `core_off_matrix` bytes into the row; the record stride is the arena
+///   row pitch (trace width × 4).
+/// - Dense: core sits at `adapter_size.next_multiple_of(core_align)`; the stride is that plus
+///   `core_size`, aligned back up to `adapter_align` (mirroring `DenseRecordArena`'s
+///   `AdapterCoreLayout` alloc).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArenaNativeGeometry {
+    pub adapter_size: usize,
+    pub adapter_align: usize,
+    pub core_size: usize,
+    pub core_align: usize,
+    /// Core-record byte offset within a Matrix row (the adapter trace width).
+    pub core_off_matrix: usize,
+}
+
+impl ArenaNativeGeometry {
+    pub fn core_off_dense(&self) -> usize {
+        self.adapter_size.next_multiple_of(self.core_align)
+    }
+
+    pub fn stride_dense(&self) -> usize {
+        (self.core_off_dense() + self.core_size).next_multiple_of(self.adapter_align)
+    }
+}
+
 struct RegisteredInlineAssembler<F, RA> {
     /// Compact record stride in bytes; must match the compile metadata.
     record_size: usize,
     assemble: LogNativeInlineAssembler<F, RA>,
+    /// Present iff this family has an R4 arena-native emitter: the generated
+    /// C then writes the full record at final arena positions and the host
+    /// skips `assemble` for it entirely. Families without geometry keep the
+    /// R3 compact wire + host expansion, so R4 rolls out shape by shape.
+    arena_native: Option<ArenaNativeGeometry>,
 }
 
 /// Opcode-keyed registry of log-native record assemblers.
@@ -146,6 +182,30 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
         record_size: usize,
         assembler: LogNativeInlineAssembler<F, RA>,
     ) {
+        self.register_inline_impl(opcodes, record_size, assembler, None)
+    }
+
+    /// Like [`Self::register_inline`], additionally declaring the family's
+    /// full-record arena geometry so the R4 arena-native emitter can place
+    /// records at final arena positions (the compact assembler stays
+    /// registered for compact-wire compiles).
+    pub fn register_inline_arena_native(
+        &mut self,
+        opcodes: impl IntoIterator<Item = VmOpcode>,
+        record_size: usize,
+        assembler: LogNativeInlineAssembler<F, RA>,
+        geometry: ArenaNativeGeometry,
+    ) {
+        self.register_inline_impl(opcodes, record_size, assembler, Some(geometry))
+    }
+
+    fn register_inline_impl(
+        &mut self,
+        opcodes: impl IntoIterator<Item = VmOpcode>,
+        record_size: usize,
+        assembler: LogNativeInlineAssembler<F, RA>,
+        arena_native: Option<ArenaNativeGeometry>,
+    ) {
         for opcode in opcodes {
             assert!(
                 self.inline_assemblers
@@ -153,13 +213,22 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
                         opcode,
                         RegisteredInlineAssembler {
                             record_size,
-                            assemble: assembler
+                            assemble: assembler,
+                            arena_native,
                         }
                     )
                     .is_none(),
                 "multiple inline record assemblers registered for opcode {opcode:?}"
             );
         }
+    }
+
+    /// R4: the arena-native geometry registered for `opcode`, if its family
+    /// has a fused emitter.
+    pub fn inline_arena_geometry(&self, opcode: &VmOpcode) -> Option<ArenaNativeGeometry> {
+        self.inline_assemblers
+            .get(opcode)
+            .and_then(|reg| reg.arena_native)
     }
 
     /// Register `assembler` for every opcode in `opcodes`.
