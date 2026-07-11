@@ -663,6 +663,9 @@ impl CProject {
         let mut ctx = EmitContext::new(self.hot_regs.clone(), mode);
         let inline_records = self.inline_records_enabled();
         ctx.set_inline_records(inline_records);
+        if inline_records && !self.arena_native_airs.is_empty() {
+            ctx.set_arena_native_airs(self.arena_native_airs.clone());
+        }
 
         writeln!(out, "    uint8_t* memory = state->memory;").unwrap();
 

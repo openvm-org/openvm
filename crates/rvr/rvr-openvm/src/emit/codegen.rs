@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use openvm_instructions::program::DEFAULT_PC_STEP;
 use rvr_openvm_ir::*;
 
-use super::context::EmitContext;
+use super::context::{ArenaAlu3Baked, EmitContext};
 
 /// Trait for instructions that can emit their own C code.
 pub trait InstrCodegen {
@@ -133,7 +133,27 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
     match instr {
         Instr::AluReg { op, rd, rs1, rs2 } => {
             if ctx.inline_records_enabled() {
-                ctx.emit_reg3_inline(*rd, *rs1, *rs2, |l, r| alu_expr(*op, l, r));
+                // R4 baked operands for the AddSub family (local_opcode must
+                // match BaseAluOpcode order: ADD=0, SUB=1; the fused oracle
+                // byte-compares against the host assembler). Other AluReg ops
+                // belong to airs without registered geometry, so `None`
+                // keeps them on the compact wire regardless.
+                let arena = match op {
+                    AluOp::Add => Some(ArenaAlu3Baked {
+                        rs2_field: (*rs2 as u32) * 8,
+                        rs2_as: 1,
+                        rs2_imm_sign: 0,
+                        local_opcode: 0,
+                    }),
+                    AluOp::Sub => Some(ArenaAlu3Baked {
+                        rs2_field: (*rs2 as u32) * 8,
+                        rs2_as: 1,
+                        rs2_imm_sign: 0,
+                        local_opcode: 1,
+                    }),
+                    _ => None,
+                };
+                ctx.emit_reg3_inline(*rd, *rs1, *rs2, arena, |l, r| alu_expr(*op, l, r));
             } else {
                 let l = ctx.read_reg(*rs1);
                 let r = ctx.read_reg(*rs2);
@@ -487,7 +507,7 @@ fn muldiv_expr(op: MulDivOp, l: &str, r: &str) -> String {
 
 fn emit_muldiv(ctx: &mut EmitContext, op: MulDivOp, rd: u8, rs1: u8, rs2: u8) {
     if ctx.inline_records_enabled() {
-        ctx.emit_reg3_inline(rd, rs1, rs2, |l, r| muldiv_expr(op, l, r));
+        ctx.emit_reg3_inline(rd, rs1, rs2, None, |l, r| muldiv_expr(op, l, r));
         return;
     }
     let l = ctx.read_reg(rs1);
@@ -509,7 +529,7 @@ fn muldiv_w_expr(op: MulDivOp, l: &str, r: &str) -> String {
 
 fn emit_muldiv_w(ctx: &mut EmitContext, op: MulDivOp, rd: u8, rs1: u8, rs2: u8) {
     if ctx.inline_records_enabled() {
-        ctx.emit_reg3_inline(rd, rs1, rs2, |l, r| muldiv_w_expr(op, l, r));
+        ctx.emit_reg3_inline(rd, rs1, rs2, None, |l, r| muldiv_w_expr(op, l, r));
         return;
     }
     let l = ctx.read_reg(rs1);
