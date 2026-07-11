@@ -2367,6 +2367,86 @@ fn rvr_preflight_addsub_30ms_checkpoint() {
     );
 }
 
+/// Mixed-mode residual harness for HintStore (the one unmigrated RV64IM
+/// shape): measures the verbose-log volume and host time attributable to
+/// HintStore-class instructions at a given word count. Manual; feeds the
+/// skip-vs-migrate decision for the multi-row shape.
+fn hintstore_residual_exe(bufs: usize, words_per_buf: usize) -> (VmExe<F>, Streams<F>, u64) {
+    let mut ins = vec![
+        addi(1, 0, 1024),          // ptr base
+        addi(2, 0, words_per_buf), // word count register
+    ];
+    for _ in 0..bufs {
+        ins.push(rv64_phantom(Rv64Phantom::HintInput));
+        ins.push(hint_store(Rv64HintStoreOpcode::HINT_BUFFER, 2, 1));
+    }
+    ins.push(terminate());
+    let dyn_insns = ins.len() as u64;
+    let hint = vec![F::from_u8(0xab); words_per_buf * 8];
+    let streams = Streams::from(vec![hint; bufs]);
+    (exe(&ins), streams, dyn_insns)
+}
+
+#[test]
+#[ignore = "manual mixed-mode residual harness, not a correctness gate"]
+fn rvr_preflight_hintstore_mixed_mode_residual() {
+    use std::time::Instant;
+
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("vm init");
+    for (bufs, words) in [(8usize, 1usize), (8, 1024)] {
+        let (exe, streams, dyn_insns) = hintstore_residual_exe(bufs, words);
+        let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+        let mut trace_heights = vec![1u32 << 8; rvr_vm.num_airs()];
+        let hint_air = pc_to_air_idx[3].expect("hint_store maps to an air");
+        trace_heights[hint_air] = ((bufs * words).next_power_of_two().max(256) * 2) as u32;
+        let capacities = trace_heights
+            .iter()
+            .zip(rvr_vm.pk().per_air.iter())
+            .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+            .collect::<Vec<_>>();
+        let route = rvr_vm
+            .preflight_routed_instance(&exe)
+            .expect("routed preflight instance");
+        let RvrPreflightRoute::Rvr(instance) = route else {
+            panic!("program must route to RVR preflight");
+        };
+        let mut best_exec = f64::MAX;
+        let mut best_gen = f64::MAX;
+        let mut log_entries = 0usize;
+        for _ in 0..9 {
+            let init = instance.create_initial_state(streams.clone());
+            let t0 = Instant::now();
+            let mut output = instance
+                .execute_preflight_from_state_with_capacities(init, Some(dyn_insns), &trace_heights)
+                .expect("rvr preflight execution");
+            let exec_s = t0.elapsed().as_secs_f64();
+            log_entries = output.raw_logs.memory_log.len();
+            let t1 = Instant::now();
+            let arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+                F,
+                MatrixRecordArena<F>,
+            >(&exe, &mut output, &capacities, &pc_to_air_idx)
+            .expect("generation");
+            let gen_s = t1.elapsed().as_secs_f64();
+            std::hint::black_box(&arenas);
+            best_exec = best_exec.min(exec_s);
+            best_gen = best_gen.min(gen_s);
+        }
+        eprintln!(
+            "hint_residual: bufs={bufs} words_per_buf={words} total_words={} \
+             memory_log_entries={log_entries} execute={:.3}ms generation={:.3}ms",
+            bufs * words,
+            best_exec * 1e3,
+            best_gen * 1e3,
+        );
+    }
+}
+
 /// R3 Phase-1 net timing harness: R1 (verbose log + host assembler) vs R3
 /// (log-suppressed inline records + host-adopted C buffers) on an
 /// AddSub-dominant program, end to end (preflight execute + record-arena
