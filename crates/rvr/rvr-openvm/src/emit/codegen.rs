@@ -19,6 +19,61 @@ impl InstrCodegen for Instr {
     }
 }
 
+/// R4 arena-native geometry for one air's full (adapter + core) record.
+/// Values are computed by the HOST (openvm-circuit / owning extension) from
+/// the real record types via `size_of`/`align_of`/`offset_of!` and handed to
+/// codegen, which bakes the offsets as literal stores in the generated
+/// per-air emitter — the C side never mirrors the record structs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArenaNativeGeometry {
+    pub adapter_size: usize,
+    pub adapter_align: usize,
+    pub core_size: usize,
+    pub core_align: usize,
+    /// Core-record byte offset within a Matrix row (the adapter trace width).
+    pub core_off_matrix: usize,
+    pub layout: ArenaNativeLayout,
+}
+
+impl ArenaNativeGeometry {
+    pub fn core_off_dense(&self) -> usize {
+        self.adapter_size.next_multiple_of(self.core_align)
+    }
+
+    pub fn stride_dense(&self) -> usize {
+        (self.core_off_dense() + self.core_size).next_multiple_of(self.adapter_align)
+    }
+}
+
+/// Per-shape field-offset tables (adapter offsets relative to the record
+/// start; core offsets relative to the core record start, which sits at the
+/// flavor's core offset carried in `ChipRecordBuf.core_off` at runtime).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArenaNativeLayout {
+    Alu3(Alu3ArenaFieldOffsets),
+}
+
+/// Offsets for the alu3-class full record: a two-read one-u16-block-write
+/// adapter record + an alu core record with b/c operand limb arrays and a
+/// `local_opcode` byte.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Alu3ArenaFieldOffsets {
+    pub from_pc: usize,
+    pub from_timestamp: usize,
+    pub rd_ptr: usize,
+    pub rs1_ptr: usize,
+    pub rs2: usize,
+    pub rs2_as: usize,
+    pub rs2_imm_sign: usize,
+    pub reads_aux0_prev_ts: usize,
+    pub reads_aux1_prev_ts: usize,
+    pub write_prev_ts: usize,
+    pub write_prev_data: usize,
+    pub core_b: usize,
+    pub core_c: usize,
+    pub core_local_opcode: usize,
+}
+
 /// Compact inline-record wire shapes (R3). Each migrated instruction class
 /// stores exactly its dynamic witness; the host re-derives program-redundant
 /// operands from the instruction at `from_pc`.
