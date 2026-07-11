@@ -489,10 +489,27 @@ where
     // (write-only from C), so the generous virtual capacity costs only
     // touched pages.
     let single_shot = num_insns.is_some() && record_capacity_rows.is_some();
-    let mut memory_log_cap = if let (Some(n), Some(heights)) = (num_insns, record_capacity_rows) {
-        let height_sum: usize = heights.iter().map(|&h| h as usize).sum();
-        initial_memory_log_cap(program_log_cap)
-            .max((n as usize).saturating_mul(64) + height_sum.saturating_mul(2) + 64)
+    // Single-shot bound: memory-log entries come only from non-migrated
+    // instructions, each belonging to a trace row of a NON-inline AIR, and no
+    // current chip logs more than 32 accesses per row (largest ~30 for
+    // mod-builder rows; multi-word HintStore logs ~1 per row). Inline AIRs
+    // are excluded so a migrated-heavy segment does not inflate the
+    // reservation (a measured page-table/fault hotspot). Violations error
+    // loudly below.
+    let mut memory_log_cap = if let (Some(_), Some(heights)) = (num_insns, record_capacity_rows) {
+        let inline_meta = compiled.inline_records();
+        let non_inline_height_sum: usize = heights
+            .iter()
+            .enumerate()
+            .filter(|(air, _)| {
+                !inline_meta
+                    .airs
+                    .iter()
+                    .any(|&(inline_air, _)| inline_air == *air)
+            })
+            .map(|(_, &h)| h as usize)
+            .sum();
+        initial_memory_log_cap(program_log_cap).max(non_inline_height_sum.saturating_mul(32) + 64)
     } else {
         initial_memory_log_cap(program_log_cap)
     };
@@ -519,14 +536,20 @@ where
         let mut shadow_register = vec![0u32; reg_shadow_blocks];
         let mut shadow_memory = vec![0u32; mem_shadow_blocks];
         let mut shadow_public_values = vec![0u32; pv_shadow_blocks];
-        let mut touched = vec_uninit::<TouchedBlock>(memory_log_cap);
+        // Inline (migrated) instructions touch without logging; today every
+        // migrated shape is register-only, so the register file bounds their
+        // first-touch contribution. Revisit when load/store shapes migrate.
+        let mut touched = vec_uninit::<TouchedBlock>(memory_log_cap + 64);
         let pv_base = public_values_slice(&mut run_state.memory.memory).as_mut_ptr();
 
         // R3: per migrated chip, an inline compact-record buffer. Sized by the
         // metered per-AIR trace heights when available, else by one record per
         // instruction.
         let inline_meta = compiled.inline_records();
-        let mut record_bufs: Vec<Vec<u8>> = inline_meta
+        // Record buffers are write-only from C (each record fully written,
+        // sequential prefix), so they are uninitialized like the logs: the
+        // kernel zero-fill of hundreds of MB per call was a measured hotspot.
+        let mut record_bufs: Vec<Vec<MaybeUninit<u8>>> = inline_meta
             .airs
             .iter()
             .map(|&(air, record_size)| {
@@ -534,14 +557,14 @@ where
                     .and_then(|heights| heights.get(air))
                     .map(|&height| height as usize)
                     .unwrap_or(program_log_cap);
-                vec![0u8; rows * record_size]
+                vec_uninit::<u8>(rows * record_size)
             })
             .collect();
         let mut chip_records = vec![ChipRecordBuf::default(); chip_counts_len.max(1)];
         for (&(air, _), buffer) in inline_meta.airs.iter().zip(record_bufs.iter_mut()) {
             debug_assert!(air < chip_records.len(), "inline air {air} out of range");
             chip_records[air] = ChipRecordBuf {
-                base: buffer.as_mut_ptr(),
+                base: buffer.as_mut_ptr().cast(),
                 len: 0,
                 cap: buffer.len() as u32,
             };
@@ -649,8 +672,10 @@ where
             .zip(record_bufs.iter_mut())
             .map(|(&(air_idx, record_size), buffer)| {
                 let written = chip_records[air_idx].len as usize;
-                let mut bytes = std::mem::take(buffer);
-                bytes.truncate(written);
+                // SAFETY: the C tracer fully writes each emitted record and
+                // advances the cursor past it, so the first `written` bytes
+                // are initialized (cap-checked on the C side).
+                let bytes = unsafe { assume_init_prefix(std::mem::take(buffer), written) };
                 RvrInlineChipRecords {
                     air_idx,
                     record_size,
@@ -680,27 +705,39 @@ fn filtered_exec_frequencies<F: Field>(
     exe: &VmExe<F>,
     program_log: &[ProgramLogEntry],
 ) -> Result<Vec<u32>, ExecutionError> {
-    let mut pc_to_filtered_idx = HashMap::new();
-    let mut idx = 0usize;
+    // Program slots are dense, so the pc -> filtered-index map is a direct
+    // array lookup; a hash probe per program-log entry (one per retired
+    // instruction) was a measured hotspot at large segment sizes.
+    let mut slot_to_filtered_idx = vec![u32::MAX; exe.program.instructions_and_debug_infos.len()];
+    let mut idx = 0u32;
     for (slot_idx, slot) in exe.program.instructions_and_debug_infos.iter().enumerate() {
         if slot.is_some() {
-            let pc = exe.program.pc_base + slot_idx as u32 * DEFAULT_PC_STEP;
-            pc_to_filtered_idx.insert(u64::from(pc), idx);
+            slot_to_filtered_idx[slot_idx] = idx;
             idx += 1;
         }
     }
 
-    let mut frequencies = vec![0u32; idx];
+    let pc_base = u64::from(exe.program.pc_base);
+    let step = u64::from(DEFAULT_PC_STEP);
+    let mut frequencies = vec![0u32; idx as usize];
     for entry in program_log {
-        let &filtered_idx = pc_to_filtered_idx.get(&entry.pc).ok_or_else(|| {
-            ExecutionError::RvrExecution(format!("program-log pc {:#x} is unreachable", entry.pc))
-        })?;
-        frequencies[filtered_idx] =
-            frequencies[filtered_idx]
-                .checked_add(1)
-                .ok_or(ExecutionError::RvrExecution(
-                    "program execution frequency overflowed u32".to_string(),
-                ))?;
+        let filtered_idx = entry
+            .pc
+            .checked_sub(pc_base)
+            .map(|offset| offset / step)
+            .and_then(|slot| slot_to_filtered_idx.get(slot as usize).copied())
+            .filter(|&fi| fi != u32::MAX)
+            .ok_or_else(|| {
+                ExecutionError::RvrExecution(format!(
+                    "program-log pc {:#x} is unreachable",
+                    entry.pc
+                ))
+            })?;
+        frequencies[filtered_idx as usize] = frequencies[filtered_idx as usize]
+            .checked_add(1)
+            .ok_or(ExecutionError::RvrExecution(
+                "program execution frequency overflowed u32".to_string(),
+            ))?;
     }
     Ok(frequencies)
 }
