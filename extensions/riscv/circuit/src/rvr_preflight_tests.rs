@@ -373,6 +373,10 @@ fn run_inline_addsub_differential_arm(
 ) {
     use openvm_circuit::arch::DenseRecordArena;
 
+    // This harness drives the COMPACT wire + host assembler without arena
+    // targets, so it opts out of the (default-on) fused emission. Fused
+    // arms re-enable it explicitly afterwards; nextest isolates processes.
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     let (rvr_vm, _) = VirtualMachine::new_with_keygen(
         test_cpu_engine(),
         Rv64ImCpuBuilder,
