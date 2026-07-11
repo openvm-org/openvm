@@ -464,6 +464,7 @@ impl EmitContext {
         rd: u8,
         rs1: u8,
         imm_value: u64,
+        arena: Option<ArenaAlu3Baked>,
         result: impl FnOnce(&str, &str) -> String,
     ) {
         let chip = self.current_chip_idx;
@@ -483,10 +484,20 @@ impl EmitContext {
         let pw = self.next_var();
         self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
         self.write_line(&format!("reg_write(state, {rd}, {res});"));
-        self.write_line(&format!(
-            "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {pw}, {rdprev}, \
-             {v1}, {vimm});"
-        ));
+        if let Some(baked) = arena.filter(|_| self.arena_native_airs.contains_key(&chip)) {
+            let geom = self.arena_native_airs[&chip];
+            // The immediate's read slot has no block touch: prev_ts = 0, and
+            // the core c operand is the sign-extended immediate value (the
+            // same values the compact wire carries for the imm form).
+            self.emit_arena_alu3_stores(
+                geom, baked, rd, rs1, &pc, &fromts, &p1, "0u", &pw, &rdprev, &v1, &vimm,
+            );
+        } else {
+            self.write_line(&format!(
+                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {pw}, {rdprev}, \
+                 {v1}, {vimm});"
+            ));
+        }
     }
 
     /// R3: emit a (conditionally) written single-register instruction
