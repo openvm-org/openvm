@@ -499,10 +499,12 @@ impl<'a> EmitContext<'a> {
             "arena_store_u64_le({core} + {}, {v2});",
             off.core_c
         ));
-        self.write_line(&format!(
-            "*(uint8_t*)({core} + {}) = {}u;",
-            off.core_local_opcode, baked.local_opcode
-        ));
+        if off.core_local_opcode != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({core} + {}) = {}u;",
+                off.core_local_opcode, baked.local_opcode
+            ));
+        }
         self.indent -= 1;
         self.write_line("}");
     }
