@@ -465,6 +465,13 @@ where
     /// commit/aggregation rather than producing a silent invalid proof. Exact
     /// per-instruction suspension would remove this pre-existing rvr metered
     /// segmentation limitation.
+    /// The compiled preflight library (compile metadata included), e.g. for
+    /// reading `inline_records().arena_native_airs` in tests and callers
+    /// that build arena-native record targets.
+    pub fn compiled(&self) -> &RvrCompiled {
+        &self.compiled
+    }
+
     pub fn execute_preflight(
         &self,
         inputs: impl Into<Streams>,
