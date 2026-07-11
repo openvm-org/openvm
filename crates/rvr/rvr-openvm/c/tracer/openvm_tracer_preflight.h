@@ -78,14 +78,20 @@ typedef struct TouchedBlock {
   uint32_t block_addr;
 } TouchedBlock;
 
-/* R3: one per-chip inline-record buffer descriptor. `base` points at a
- * host-allocated, metered-height-sized byte buffer of compact records for one
- * chip; `len` is the byte cursor; `cap` the byte capacity. A null `base` means
- * the chip is not migrated to inline records and uses the verbose memory log. */
+/* R3/R4: one per-chip inline-record buffer descriptor. `base` points at a
+ * host-provided byte buffer for one chip; `len` is the byte cursor, advancing
+ * by `stride` per record; `cap` the byte capacity (a multiple of `stride`).
+ * Record i therefore sits at `base + i*stride`. Compact-wire buffers set
+ * `stride` to the packed record size; arena-native buffers set it to the
+ * arena row/record pitch (base is then 32-aligned by host contract so a
+ * zero-copy DenseRecordArena adopt cannot slice a shifted range). A null
+ * `base` means the chip is not migrated and uses the verbose memory log. */
 typedef struct ChipRecordBuf {
   uint8_t* base;
   uint32_t len;
   uint32_t cap;
+  uint32_t stride;
+  uint32_t _pad0;
 } ChipRecordBuf;
 
 typedef struct Tracer {
@@ -205,6 +211,8 @@ _Static_assert(offsetof(ChipRecordBuf, len) == 8,
                "ChipRecordBuf len offset drift");
 _Static_assert(offsetof(ChipRecordBuf, cap) == 12,
                "ChipRecordBuf cap offset drift");
+_Static_assert(offsetof(ChipRecordBuf, stride) == 16,
+               "ChipRecordBuf stride offset drift");
 
 /* R3 (L1+L5 compact): base-ALU AddSub record holding the dynamic witness
  * only. Program-redundant operands (rd_ptr/rs1_ptr/rs2/rs2_as/rs2_imm_sign/
@@ -427,10 +435,10 @@ static __attribute__((always_inline)) inline void preflight_emit_alu3(
     return;
   }
   uint32_t off = buf->len;
-  if (unlikely(off + PREFLIGHT_ADDSUB_RECORD_SIZE > buf->cap)) {
+  if (unlikely(off + buf->stride > buf->cap)) {
     return;
   }
-  buf->len = off + PREFLIGHT_ADDSUB_RECORD_SIZE;
+  buf->len = off + buf->stride;
   /* The 44-byte record is exactly 11 u32 words: the u16 limb arrays are the
    * low/high halves of the u64 values they were split from, so the whole
    * record streams as non-temporal u32 stores (see nt_store_u32). */
@@ -448,11 +456,12 @@ static __attribute__((always_inline)) inline void preflight_emit_alu3(
   nt_store_u32(&words[10], (uint32_t)(rs2_val >> 32));
 }
 
-/* R3: claim `size` bytes from chip `chip_idx`'s inline record buffer, or
- * NULL when the chip is unmigrated / the buffer is full (the host record
- * assembly detects the resulting byte-count mismatch and rejects loudly). */
+/* R3/R4: claim one record slot (`stride` bytes) from chip `chip_idx`'s
+ * inline record buffer, or NULL when the chip is unmigrated / the buffer is
+ * full (the host record assembly detects the resulting byte-count mismatch
+ * and rejects loudly). */
 static __attribute__((always_inline)) inline uint32_t* preflight_claim_record(
-    RvState* restrict state, uint32_t chip_idx, uint32_t size) {
+    RvState* restrict state, uint32_t chip_idx) {
   Tracer* restrict t = state->tracer;
   if (unlikely(t->chip_records == NULL || chip_idx >= t->chip_counts_len)) {
     return NULL;
@@ -462,10 +471,10 @@ static __attribute__((always_inline)) inline uint32_t* preflight_claim_record(
     return NULL;
   }
   uint32_t off = buf->len;
-  if (unlikely(off + size > buf->cap)) {
+  if (unlikely(off + buf->stride > buf->cap)) {
     return NULL;
   }
-  buf->len = off + size;
+  buf->len = off + buf->stride;
   return (uint32_t*)(buf->base + off);
 }
 
@@ -476,7 +485,7 @@ static __attribute__((always_inline)) inline void preflight_emit_branch2(
     uint32_t from_timestamp, uint32_t rs1_prev_ts, uint32_t rs2_prev_ts,
     uint64_t rs1_val, uint64_t rs2_val) {
   uint32_t* restrict words =
-      preflight_claim_record(state, chip_idx, PREFLIGHT_BRANCH2_RECORD_SIZE);
+      preflight_claim_record(state, chip_idx);
   if (unlikely(words == NULL)) {
     return;
   }
@@ -497,7 +506,7 @@ static __attribute__((always_inline)) inline void preflight_emit_wr1(
     RvState* restrict state, uint32_t chip_idx, uint32_t from_pc,
     uint32_t from_timestamp, uint32_t rd_prev_ts, uint64_t rd_prev_value) {
   uint32_t* restrict words =
-      preflight_claim_record(state, chip_idx, PREFLIGHT_WR1_RECORD_SIZE);
+      preflight_claim_record(state, chip_idx);
   if (unlikely(words == NULL)) {
     return;
   }
@@ -514,7 +523,7 @@ static __attribute__((always_inline)) inline void preflight_emit_rw1(
     uint32_t from_timestamp, uint32_t rs1_prev_ts, uint32_t rd_prev_ts,
     uint64_t rs1_val, uint64_t rd_prev_value) {
   uint32_t* restrict words =
-      preflight_claim_record(state, chip_idx, PREFLIGHT_RW1_RECORD_SIZE);
+      preflight_claim_record(state, chip_idx);
   if (unlikely(words == NULL)) {
     return;
   }
