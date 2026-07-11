@@ -2,9 +2,9 @@ use openvm_circuit::{
     arch::{
         rvr::{
             generate_record_arenas_from_logs, Alu3ArenaFieldOffsets, ArenaNativeGeometry,
-            ArenaNativeLayout, LogNativeAccessView, LogNativeAssemblerRegistry,
-            PreflightMemoryAccessAux, RvrPreflightOutput, VmRvrLogNativeExtension,
-            PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
+            ArenaNativeLayout, Branch2ArenaFieldOffsets, LogNativeAccessView,
+            LogNativeAssemblerRegistry, PreflightMemoryAccessAux, RvrPreflightOutput,
+            VmRvrLogNativeExtension, PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
             PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_RW1_RECORD_SIZE,
             PREFLIGHT_WR1_RECORD_SIZE,
         },
@@ -739,15 +739,64 @@ where
             PREFLIGHT_ADDSUB_RECORD_SIZE,
             assemble_shift_inline::<F, RA>,
         );
-        registry.register_inline(
+        registry.register_inline_arena_native(
             BranchEqualOpcode::iter().map(|opcode| opcode.global_opcode()),
             PREFLIGHT_BRANCH2_RECORD_SIZE,
             assemble_branch_eq_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64BranchAdapterRecord>(),
+                adapter_align: align_of::<Rv64BranchAdapterRecord>(),
+                core_size: size_of::<BranchEqualCoreRecord<BLOCK_FE_WIDTH>>(),
+                core_align: align_of::<BranchEqualCoreRecord<BLOCK_FE_WIDTH>>(),
+                core_off_matrix: <Rv64BranchAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Branch2(Branch2ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64BranchAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64BranchAdapterRecord, from_timestamp),
+                    rs1_ptr: core::mem::offset_of!(Rv64BranchAdapterRecord, rs1_ptr),
+                    rs2_ptr: core::mem::offset_of!(Rv64BranchAdapterRecord, rs2_ptr),
+                    reads_aux0_prev_ts: core::mem::offset_of!(Rv64BranchAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(Rv64BranchAdapterRecord, reads_aux)
+                        + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    core_a: core::mem::offset_of!(BranchEqualCoreRecord<BLOCK_FE_WIDTH>, a),
+                    core_b: core::mem::offset_of!(BranchEqualCoreRecord<BLOCK_FE_WIDTH>, b),
+                    core_imm: core::mem::offset_of!(BranchEqualCoreRecord<BLOCK_FE_WIDTH>, imm),
+                    core_local_opcode: core::mem::offset_of!(
+                        BranchEqualCoreRecord<BLOCK_FE_WIDTH>,
+                        local_opcode
+                    ),
+                }),
+            },
         );
-        registry.register_inline(
+        registry.register_inline_arena_native(
             BranchLessThanOpcode::iter().map(|opcode| opcode.global_opcode()),
             PREFLIGHT_BRANCH2_RECORD_SIZE,
             assemble_branch_lt_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64BranchAdapterRecord>(),
+                adapter_align: align_of::<Rv64BranchAdapterRecord>(),
+                core_size: size_of::<BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>>(),
+                core_align: align_of::<BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>>(),
+                core_off_matrix: <Rv64BranchAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Branch2(Branch2ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64BranchAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64BranchAdapterRecord, from_timestamp),
+                    rs1_ptr: core::mem::offset_of!(Rv64BranchAdapterRecord, rs1_ptr),
+                    rs2_ptr: core::mem::offset_of!(Rv64BranchAdapterRecord, rs2_ptr),
+                    reads_aux0_prev_ts: core::mem::offset_of!(Rv64BranchAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(Rv64BranchAdapterRecord, reads_aux)
+                        + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    core_a: core::mem::offset_of!(BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, a),
+                    core_b: core::mem::offset_of!(BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, b),
+                    core_imm: core::mem::offset_of!(BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, imm),
+                    core_local_opcode: core::mem::offset_of!(BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, local_opcode),
+                }),
+            },
         );
         registry.register_inline(
             Rv64JalLuiOpcode::iter().map(|opcode| opcode.global_opcode()),

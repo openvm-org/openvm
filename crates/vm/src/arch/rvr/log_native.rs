@@ -119,7 +119,9 @@ pub type LogNativeInlineAssembler<F, RA> =
 /// them to bake literal store offsets); extensions supply the values from
 /// the real record types at registration. Re-exported here so extension
 /// crates keep a single import path.
-pub use rvr_openvm::{Alu3ArenaFieldOffsets, ArenaNativeGeometry, ArenaNativeLayout};
+pub use rvr_openvm::{
+    Alu3ArenaFieldOffsets, ArenaNativeGeometry, ArenaNativeLayout, Branch2ArenaFieldOffsets,
+};
 
 struct RegisteredInlineAssembler<F, RA> {
     /// Compact record stride in bytes; must match the compile metadata.

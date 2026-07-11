@@ -7,7 +7,7 @@ use rvr_openvm_ir::{
     Terminator, Variable,
 };
 
-use super::context::EmitContext;
+use super::context::{ArenaBranch2Baked, EmitContext};
 
 /// Context for terminator code generation and tail-call dispatch.
 pub struct TermCtx<'a> {
@@ -44,6 +44,25 @@ impl ArenaNativeGeometry {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArenaNativeLayout {
     Alu3(Alu3ArenaFieldOffsets),
+    Branch2(Branch2ArenaFieldOffsets),
+}
+
+/// BabyBear modulus used to field-canonicalize negative branch offsets.
+pub const BABYBEAR_ORDER_U32: u32 = 0x7800_0001;
+
+/// Field offsets for a two-read, no-write branch record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Branch2ArenaFieldOffsets {
+    pub from_pc: usize,
+    pub from_timestamp: usize,
+    pub rs1_ptr: usize,
+    pub rs2_ptr: usize,
+    pub reads_aux0_prev_ts: usize,
+    pub reads_aux1_prev_ts: usize,
+    pub core_a: usize,
+    pub core_b: usize,
+    pub core_imm: usize,
+    pub core_local_opcode: usize,
 }
 
 /// Field offsets for a two-read, one-u16-block-write ALU record.
@@ -165,9 +184,35 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             target,
             known,
         } => {
+            let branch_baked = || {
+                let imm = target as i64 - pc as i64;
+                let imm = if imm >= 0 {
+                    imm as u32
+                } else {
+                    (i64::from(BABYBEAR_ORDER_U32) + imm) as u32
+                };
+                let local_opcode = match cond {
+                    CfgBranchCond::Eq => 0,
+                    CfgBranchCond::Ne => 1,
+                    CfgBranchCond::LessThanSigned => 0,
+                    CfgBranchCond::LessThanUnsigned => 1,
+                    CfgBranchCond::GreaterEqualSigned => 2,
+                    CfgBranchCond::GreaterEqualUnsigned => 3,
+                };
+                ArenaBranch2Baked {
+                    rs1_ptr: lhs.index() * 8,
+                    rs2_ptr: rhs.index() * 8,
+                    imm,
+                    local_opcode,
+                }
+            };
             if let Some(taken) = known {
                 if inline_shape == Some(InlineRecordShape::Branch2) {
-                    ctx.emit_branch2_inline(variable_index(lhs), variable_index(rhs));
+                    ctx.emit_branch2_inline(
+                        variable_index(lhs),
+                        variable_index(rhs),
+                        Some(branch_baked()),
+                    );
                 } else if ctx.traces_values() {
                     ctx.read_var(lhs);
                     ctx.read_var(rhs);
@@ -181,7 +226,11 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                 return;
             }
             let (lhs, rhs) = if inline_shape == Some(InlineRecordShape::Branch2) {
-                ctx.emit_branch2_inline(variable_index(lhs), variable_index(rhs))
+                ctx.emit_branch2_inline(
+                    variable_index(lhs),
+                    variable_index(rhs),
+                    Some(branch_baked()),
+                )
             } else {
                 (ctx.read_var(lhs), ctx.read_var(rhs))
             };

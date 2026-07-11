@@ -2913,29 +2913,26 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_matrix() {
         .inline_records()
         .arena_native_airs
         .clone();
-    assert_eq!(
-        arena_native.len(),
-        1,
-        "exactly the AddSub air must be arena-native at this batch stage"
-    );
-    let (fused_air, geom) = arena_native[0];
-
-    let mut fused_arena =
-        MatrixRecordArena::<F>::with_capacity(capacities[fused_air].0, capacities[fused_air].1);
-    let stride = (fused_arena.width * size_of::<F>()) as u32;
-    assert_eq!(geom.core_off_matrix % 4, 0, "core offset must be 4-aligned");
-    let cap_bytes = (fused_arena.trace_buffer.len() * size_of::<F>()) as u32;
+    assert!(!arena_native.is_empty(), "arena-native airs must exist");
+    let mut fused_arenas: Vec<(usize, MatrixRecordArena<F>)> = Vec::new();
     let mut targets = BTreeMap::new();
-    targets.insert(
-        fused_air,
-        ChipRecordBuf {
-            base: fused_arena.trace_buffer.as_mut_ptr().cast(),
-            len: 0,
-            cap: cap_bytes - cap_bytes % stride,
-            stride,
-            core_off: geom.core_off_matrix as u32,
-        },
-    );
+    for &(air, geom) in &arena_native {
+        let mut arena = MatrixRecordArena::<F>::with_capacity(capacities[air].0, capacities[air].1);
+        let stride = (arena.width * size_of::<F>()) as u32;
+        assert_eq!(geom.core_off_matrix % 4, 0, "core offset must be 4-aligned");
+        let cap_bytes = (arena.trace_buffer.len() * size_of::<F>()) as u32;
+        targets.insert(
+            air,
+            ChipRecordBuf {
+                base: arena.trace_buffer.as_mut_ptr().cast(),
+                len: 0,
+                cap: cap_bytes - cap_bytes % stride,
+                stride,
+                core_off: geom.core_off_matrix as u32,
+            },
+        );
+        fused_arenas.push((air, arena));
+    }
     let f_state = rvr_vm.create_initial_state(&exe, Streams::default());
     let mut f_output = f_instance
         .execute_preflight_from_state_with_arena_targets(
@@ -2959,26 +2956,34 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_matrix() {
         "program logs must be identical across arms"
     );
 
-    // Byte-equality of the fused air's arena over every written row (both
+    // Byte-equality of every fused air's arena over every written row (both
     // buffers start zero-filled, so trailing row bytes match trivially).
-    let rows = a_arenas[fused_air].trace_offset / a_arenas[fused_air].width;
-    let written_rows = f_output
-        .arena_native_written
-        .iter()
-        .find(|&&(air, _)| air == fused_air)
-        .map(|&(_, count)| count as usize)
-        .expect("fused air must report a written count");
-    assert_eq!(written_rows, rows, "fused row count must match assembler");
-    let n = rows * a_arenas[fused_air].width;
-    assert_eq!(
-        &a_arenas[fused_air].trace_buffer[..n],
-        &fused_arena.trace_buffer[..n],
-        "fused AddSub arena must be byte-identical to the assembled arena"
-    );
+    let fused_air_set: std::collections::BTreeSet<usize> =
+        fused_arenas.iter().map(|&(air, _)| air).collect();
+    for (fused_air, fused_arena) in &fused_arenas {
+        let fused_air = *fused_air;
+        let rows = a_arenas[fused_air].trace_offset / a_arenas[fused_air].width;
+        let written_rows = f_output
+            .arena_native_written
+            .iter()
+            .find(|&&(air, _)| air == fused_air)
+            .map(|&(_, count)| count as usize)
+            .expect("fused air must report a written count");
+        assert_eq!(
+            written_rows, rows,
+            "air {fused_air}: fused row count must match assembler"
+        );
+        let n = rows * a_arenas[fused_air].width;
+        assert_eq!(
+            &a_arenas[fused_air].trace_buffer[..n],
+            &fused_arena.trace_buffer[..n],
+            "air {fused_air}: fused arena must be byte-identical to the assembled arena"
+        );
+    }
 
     // Every non-fused air must assemble identically across arms.
     for (air, (a, f)) in a_arenas.iter().zip(f_arenas.iter()).enumerate() {
-        if air == fused_air {
+        if fused_air_set.contains(&air) {
             continue;
         }
         assert_eq!(
@@ -3038,25 +3043,26 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_dense() {
         .inline_records()
         .arena_native_airs
         .clone();
-    assert_eq!(arena_native.len(), 1);
-    let (fused_air, geom) = arena_native[0];
-
-    let stride = geom.stride_dense();
-    let core_off = geom.core_off_dense();
-    let rows = trace_heights[fused_air] as usize;
-    let (mut backing, offset) = DenseRecordArena::backing_with_capacity(rows * stride);
-    let base = unsafe { backing.as_mut_ptr().add(offset) };
+    assert!(!arena_native.is_empty());
+    let mut stagings: Vec<(usize, usize, Vec<u8>, *const u8)> = Vec::new();
     let mut targets = BTreeMap::new();
-    targets.insert(
-        fused_air,
-        ChipRecordBuf {
-            base,
-            len: 0,
-            cap: (rows * stride) as u32,
-            stride: stride as u32,
-            core_off: core_off as u32,
-        },
-    );
+    for &(air, geom) in &arena_native {
+        let stride = geom.stride_dense();
+        let rows = trace_heights[air] as usize;
+        let (mut backing, offset) = DenseRecordArena::backing_with_capacity(rows * stride);
+        let base: *const u8 = unsafe { backing.as_mut_ptr().add(offset) };
+        targets.insert(
+            air,
+            ChipRecordBuf {
+                base: base.cast_mut(),
+                len: 0,
+                cap: (rows * stride) as u32,
+                stride: stride as u32,
+                core_off: geom.core_off_dense() as u32,
+            },
+        );
+        stagings.push((air, stride, backing, base));
+    }
     let f_state = rvr_vm.create_initial_state(&exe, Streams::default());
     let mut f_output = f_instance
         .execute_preflight_from_state_with_arena_targets(
@@ -3077,23 +3083,28 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_dense() {
         "program logs must be identical across arms"
     );
 
-    // Zero-copy adopt, then byte-compare against the assembler-path arena.
-    let written_rows = f_output
-        .arena_native_written
-        .iter()
-        .find(|&&(air, _)| air == fused_air)
-        .map(|&(_, count)| count as usize)
-        .expect("fused air must report a written count");
-    let fused_arena = DenseRecordArena::from_prewritten(backing, base, written_rows * stride);
-    assert_eq!(
-        a_arenas[fused_air].allocated(),
-        fused_arena.allocated(),
-        "fused Dense AddSub records must be byte-identical to the assembled ones"
-    );
+    // Zero-copy adopt each staged backing, then byte-compare against the
+    // assembler-path arenas.
+    let fused_air_set: std::collections::BTreeSet<usize> =
+        stagings.iter().map(|&(air, ..)| air).collect();
+    for (fused_air, stride, backing, base) in stagings {
+        let written_rows = f_output
+            .arena_native_written
+            .iter()
+            .find(|&&(air, _)| air == fused_air)
+            .map(|&(_, count)| count as usize)
+            .expect("fused air must report a written count");
+        let fused_arena = DenseRecordArena::from_prewritten(backing, base, written_rows * stride);
+        assert_eq!(
+            a_arenas[fused_air].allocated(),
+            fused_arena.allocated(),
+            "air {fused_air}: fused Dense records must be byte-identical to assembled"
+        );
+    }
 
     // Non-fused airs assemble identically across arms.
     for (air, (a, f)) in a_arenas.iter().zip(f_arenas.iter()).enumerate() {
-        if air == fused_air {
+        if fused_air_set.contains(&air) {
             continue;
         }
         assert_eq!(
