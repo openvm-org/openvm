@@ -88,6 +88,8 @@ pub struct Alu3ArenaFieldOffsets {
     pub rs1_ptr: usize,
     pub rs2: usize,
     pub rs2_as: usize,
+    /// `usize::MAX` when the adapter has no imm-sign field (byte adapter);
+    /// the emitter then skips the store.
     pub rs2_imm_sign: usize,
     pub reads_aux0_prev_ts: usize,
     pub reads_aux1_prev_ts: usize,
@@ -185,7 +187,10 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
                     AluOp::Sll => reg_alu3(0),
                     AluOp::Srl => reg_alu3(1),
                     AluOp::Sra => reg_alu3(0),
-                    _ => None,
+                    // Bitwise shares BaseAluOpcode's class offset.
+                    AluOp::Xor => reg_alu3(2),
+                    AluOp::Or => reg_alu3(3),
+                    AluOp::And => reg_alu3(4),
                 };
                 ctx.emit_reg3_inline(*rd, *rs1, *rs2, arena, |l, r| alu_expr(*op, l, r));
             } else {
@@ -211,6 +216,9 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
                     AluOp::Add => imm_alu3(0),
                     AluOp::Slt => imm_alu3(0),
                     AluOp::Sltu => imm_alu3(1),
+                    AluOp::Xor => imm_alu3(2),
+                    AluOp::Or => imm_alu3(3),
+                    AluOp::And => imm_alu3(4),
                     _ => None,
                 };
                 ctx.emit_reg2imm_inline(*rd, *rs1, *imm as i64 as u64, arena, |l, v| {
