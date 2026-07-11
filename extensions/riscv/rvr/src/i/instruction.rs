@@ -1,8 +1,8 @@
 //! RV64I instruction nodes and C code generation.
 
 use rvr_openvm_ir::{
-    CfgBranchCond, CfgEffect, CfgIntWidth, CfgJumpKind, CfgOp, CfgOperand, CfgResultWidth, CfgTerm,
-    ExtEmitCtx, ExtInstr, InlineRecordShape, MemWidth,
+    ArenaAlu3Baked, CfgBranchCond, CfgEffect, CfgIntWidth, CfgJumpKind, CfgOp, CfgOperand,
+    CfgResultWidth, CfgTerm, ExtEmitCtx, ExtInstr, InlineRecordShape, MemWidth,
 };
 
 use crate::instruction::{hex_u64, reg_operand, Reg, RA, ZERO};
@@ -202,7 +202,18 @@ impl ExtInstr for Rv64IInstr {
                     );
                     let emitted = match rhs {
                         CfgOperand::Var(rhs) => {
-                            ctx.emit_reg3_inline(*rd, *lhs, *rhs, &result_template)
+                            let arena = match op {
+                                AluOp::Add => Some(0),
+                                AluOp::Sub => Some(1),
+                                _ => None,
+                            }
+                            .map(|local_opcode| ArenaAlu3Baked {
+                                rs2_field: rhs.index() * 8,
+                                rs2_as: 1,
+                                rs2_imm_sign: 0,
+                                local_opcode,
+                            });
+                            ctx.emit_reg3_inline(*rd, *lhs, *rhs, arena, &result_template)
                         }
                         CfgOperand::Const(imm) if *immediate => ctx.emit_reg2imm_inline(
                             *rd,

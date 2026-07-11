@@ -890,11 +890,18 @@ fn compile_impl<F: PrimeField32>(
                     chips,
                     opts.preflight_assembler_admitter,
                 );
-                project.arena_native_airs = inline_meta
-                    .arena_native_airs
-                    .iter()
-                    .map(|&(air, geometry)| (air as u32, geometry))
-                    .collect();
+                // R4 arena-native emission is opt-in until the host-side
+                // arena attach + harvest land (without them the C would
+                // write full records into compact-sized scratch): the
+                // default flips to ON once the fused-vs-assembler oracle is
+                // green end to end.
+                if std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() == Ok("1") {
+                    project.arena_native_airs = inline_meta
+                        .arena_native_airs
+                        .iter()
+                        .map(|&(air, geometry)| (air as u32, geometry))
+                        .collect();
+                }
             }
         }
     }

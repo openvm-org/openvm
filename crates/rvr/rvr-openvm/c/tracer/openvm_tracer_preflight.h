@@ -460,6 +460,16 @@ static __attribute__((always_inline)) inline void preflight_emit_alu3(
   nt_store_u32(&words[10], (uint32_t)(rs2_val >> 32));
 }
 
+/* R4: store a u64 value at `dst` as two u32 stores. U16-cell blocks hold
+ * the value's little-endian [u16;4] limbs, which IS the raw u64 bytes, so
+ * this matches the host's u16x4 reinterpret exactly. Two u32 stores (not
+ * one u64) because Matrix rows are only 4-byte aligned. */
+static __attribute__((always_inline)) inline void arena_store_u64_le(
+    uint8_t* restrict dst, uint64_t v) {
+  *(uint32_t*)dst = (uint32_t)v;
+  *(uint32_t*)(dst + 4) = (uint32_t)(v >> 32);
+}
+
 /* R3/R4: claim one record slot (`stride` bytes) from chip `chip_idx`'s
  * inline record buffer, or NULL when the chip is unmigrated / the buffer is
  * full (the host record assembly detects the resulting byte-count mismatch

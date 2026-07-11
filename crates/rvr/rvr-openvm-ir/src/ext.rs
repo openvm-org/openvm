@@ -22,6 +22,16 @@ pub enum InlineRecordShape {
     Rw1,
 }
 
+/// Program-redundant fields required when an ALU compact record is emitted
+/// directly into its arena-native record layout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArenaAlu3Baked {
+    pub rs2_field: u32,
+    pub rs2_as: u8,
+    pub rs2_imm_sign: u8,
+    pub local_opcode: u8,
+}
+
 /// Address space classification used by page-access metering.
 ///
 /// Main memory is distinct because generated metered code caches its current
@@ -81,6 +91,7 @@ pub trait ExtEmitCtx {
         _rd: Variable,
         _rs1: Variable,
         _rs2: Variable,
+        _arena: Option<ArenaAlu3Baked>,
         _result_template: &str,
     ) -> bool {
         false

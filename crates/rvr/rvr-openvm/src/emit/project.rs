@@ -843,6 +843,9 @@ impl CProject {
         let mut body = String::new();
         let inline_records = self.inline_records_enabled();
         ctx.set_inline_records(inline_records);
+        if inline_records && !self.arena_native_airs.is_empty() {
+            ctx.set_arena_native_airs(self.arena_native_airs.clone());
+        }
 
         if matches!(
             mode,
