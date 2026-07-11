@@ -403,7 +403,7 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_touch(
  * chip / full buffer is a no-op: the chip then has a missing inline record,
  * which the host record assembly detects as a byte-count mismatch and rejects
  * loudly rather than silently corrupting. */
-static __attribute__((always_inline)) inline void preflight_emit_addsub(
+static __attribute__((always_inline)) inline void preflight_emit_alu3(
     RvState* restrict state, uint32_t chip_idx, uint32_t from_pc,
     uint32_t from_timestamp, uint32_t rs1_prev_ts, uint32_t rs2_prev_ts,
     uint32_t rd_prev_ts, uint64_t rd_prev_value, uint64_t rs1_val,

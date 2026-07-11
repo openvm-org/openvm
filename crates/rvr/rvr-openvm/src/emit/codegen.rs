@@ -16,7 +16,25 @@ pub struct TermCtx<'a> {
 /// instruction. #3059 moved RV64I into `ExtInstr` nodes, so the instruction's
 /// stable opcode name replaces the removed monolithic `Instr` enum match.
 pub fn instr_emits_inline_record(instr: &dyn ExtInstr) -> bool {
-    matches!(instr.opname(), "add" | "sub" | "addi")
+    matches!(
+        instr.opname(),
+        "add"
+            | "sub"
+            | "addi"
+            | "mul"
+            | "mulh"
+            | "mulhsu"
+            | "mulhu"
+            | "div"
+            | "divu"
+            | "rem"
+            | "remu"
+            | "mulw"
+            | "divw"
+            | "divuw"
+            | "remw"
+            | "remuw"
+    )
 }
 
 /// Emit C code for a terminator using tail calls between blocks.
