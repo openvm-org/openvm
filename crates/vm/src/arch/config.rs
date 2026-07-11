@@ -206,6 +206,29 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         LogNativeAssemblerRegistry::new()
     }
 
+    /// G2: airs whose inline records the proving path should stage as compact
+    /// WIRE write targets — the generated C writes packed wire records
+    /// straight into the arena backing that
+    /// [`Self::generate_rvr_record_arenas_from_logs`]'s result hands to the
+    /// chips (one alloc, no copy; the arena is marked wire-mode). Default:
+    /// none. Only meaningful for dense record arenas whose chips can consume
+    /// wire records (the GPU compact-decode path); a requested air must be
+    /// compiled compact (NOT arena-native) — the proving path errors loudly
+    /// on a mismatch instead of silently measuring the wrong emission.
+    #[cfg(feature = "rvr")]
+    #[allow(unused_variables)]
+    fn rvr_wire_record_airs(
+        &self,
+        config: &Self::VmConfig,
+        exe: &VmExe<Val<E::SC>>,
+        pc_to_air_idx: &[Option<usize>],
+    ) -> std::collections::HashSet<usize>
+    where
+        Val<E::SC>: PrimeField32,
+    {
+        Default::default()
+    }
+
     /// Optional rvr log-native record assembly hook.
     ///
     /// Builders normally customize this by overriding

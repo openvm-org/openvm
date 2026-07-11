@@ -603,6 +603,23 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         )
     }
 
+    /// G2: same wire-staging opt-in as the rv64im GPU builders, against this
+    /// builder's shared decode state (a composed builder that adopts compact
+    /// arenas without staging would silently fall back to the alloc+memcpy
+    /// path — the gate-#4 threading lesson).
+    #[cfg(feature = "rvr")]
+    fn rvr_wire_record_airs(
+        &self,
+        _config: &Self::VmConfig,
+        exe: &openvm_circuit::arch::instructions::exe::VmExe<Val<SC>>,
+        pc_to_air_idx: &[Option<usize>],
+    ) -> std::collections::HashSet<usize>
+    where
+        Val<SC>: PrimeField32,
+    {
+        openvm_riscv_circuit::rvr_gpu_wire_record_airs(&self.rvr_decode, exe, pc_to_air_idx)
+    }
+
     /// GPU backend: default to the rvr inline preflight engine — the host
     /// compact→arena assembly pass that dominates the CPU path does not
     /// exist in the GPU shape, and compact records shrink the H2D payload.

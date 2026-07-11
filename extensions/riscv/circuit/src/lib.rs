@@ -345,6 +345,19 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
         )
     }
 
+    #[cfg(feature = "rvr")]
+    fn rvr_wire_record_airs(
+        &self,
+        _config: &Self::VmConfig,
+        exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+        pc_to_air_idx: &[Option<usize>],
+    ) -> std::collections::HashSet<usize>
+    where
+        Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        rvr_gpu_wire_record_airs(&self.rvr_decode, exe, pc_to_air_idx)
+    }
+
     /// GPU backend: default to the rvr inline preflight engine — the host
     /// compact→arena assembly pass that dominates the CPU path does not
     /// exist in the GPU shape, and compact records shrink the H2D payload.
@@ -354,12 +367,35 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
     }
 }
 
+/// G2: the airs whose inline records the proving path should stage as compact
+/// wire targets for this shared decode `state` — the device-decodable set,
+/// bound per exe (taint keeps mixed programs correct). Empty unless
+/// `OPENVM_RVR_GPU_RECORDS=compact`. Shared by every wired GPU builder's
+/// `rvr_wire_record_airs` override, including composed-config builders.
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub fn rvr_gpu_wire_record_airs(
+    state: &rvr_gpu_decode::RvrGpuDecodeState,
+    exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+    pc_to_air_idx: &[Option<usize>],
+) -> std::collections::HashSet<usize> {
+    use crate::rvr_gpu_decode::{configured_emission_mode, InlineEmissionMode};
+    match configured_emission_mode() {
+        Some(InlineEmissionMode::CompactWire) => state.bind_compact_segment(exe, pc_to_air_idx),
+        _ => Default::default(),
+    }
+}
+
 /// Shared M-GPUDEC record-arena hook for the GPU builders: with
-/// `OPENVM_RVR_GPU_RECORDS=compact`, migrated AIRs' wire buffers bypass host
-/// expansion and are adopted into their arenas via one memcpy (the CUDA chips
-/// decode them on device); default keeps the gate-validated expanded path.
+/// `OPENVM_RVR_GPU_RECORDS=compact`, migrated AIRs' records stay in wire form
+/// for on-device decode; default keeps the gate-validated expanded path.
 /// Public so composed-config GPU builders (e.g. the SDK builder) can opt their
 /// VMs into the same compact path with their own shared decode state.
+///
+/// On the proving path the wire records already sit in C-staged arena
+/// backings (zero-copy — see [`rvr_gpu_wire_record_airs`]) and arrive here
+/// only as counts to verify; the adoption loop below is the UNSTAGED fallback
+/// (one alloc + memcpy per compact air), used by harnesses that execute
+/// without arena targets.
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[allow(clippy::type_complexity)]
 pub fn generate_gpu_rvr_record_arenas(
@@ -376,9 +412,14 @@ pub fn generate_gpu_rvr_record_arenas(
     if registry.is_empty() {
         return Ok(None);
     }
-    let compact_airs = match configured_emission_mode() {
-        Some(InlineEmissionMode::CompactWire) => state.bind_compact_segment(exe, pc_to_air_idx),
-        _ => Default::default(),
+    let compact_requested = matches!(
+        configured_emission_mode(),
+        Some(InlineEmissionMode::CompactWire)
+    );
+    let compact_airs = if compact_requested {
+        state.bind_compact_segment(exe, pc_to_air_idx)
+    } else {
+        Default::default()
     };
     let (mut arenas, wire_buffers) = generate_record_arenas_from_logs_with_compact(
         registry,
@@ -388,6 +429,26 @@ pub fn generate_gpu_rvr_record_arenas(
         pc_to_air_idx,
         &compact_airs,
     )?;
+    // Silent-mode guard (the gate-#4 class): under the compact opt-in every
+    // decodable air must be accounted for — either C-staged by the caller
+    // (reported in arena_native_written) or adopted below. An air that is
+    // neither ran a different emission than the label claims.
+    if compact_requested {
+        for &air in &compact_airs {
+            let staged = output
+                .arena_native_written
+                .iter()
+                .any(|&(written_air, _)| written_air == air);
+            let adopted = wire_buffers.iter().any(|chip| chip.air_idx == air);
+            if !staged && !adopted {
+                return Err(openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                    "compact air {air} was neither wire-staged nor adopted; the compiled \
+                     library did not emit compact wire records for it (fused-compiled \
+                     library under a compact opt-in?)"
+                )));
+            }
+        }
+    }
     for chip in wire_buffers {
         let arena = arenas.get_mut(chip.air_idx).ok_or_else(|| {
             openvm_circuit::arch::ExecutionError::RvrExecution(format!(
@@ -395,8 +456,8 @@ pub fn generate_gpu_rvr_record_arenas(
                 chip.air_idx
             ))
         })?;
-        // INC1 adoption: one memcpy of the wire buffer replaces the per-record
-        // host expansion pass; zero-copy rides the R4 batch-2 aligned backing.
+        // Unstaged fallback adoption: one alloc + memcpy of the wire buffer
+        // (NOT zero-copy — the zero-copy path is the staged one above).
         let mut dense = DenseRecordArena::with_byte_capacity(chip.bytes.len());
         dense
             .alloc_bytes(chip.bytes.len())
@@ -489,6 +550,19 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
             capacities,
             pc_to_air_idx,
         )
+    }
+
+    #[cfg(feature = "rvr")]
+    fn rvr_wire_record_airs(
+        &self,
+        _config: &Self::VmConfig,
+        exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+        pc_to_air_idx: &[Option<usize>],
+    ) -> std::collections::HashSet<usize>
+    where
+        Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        rvr_gpu_wire_record_airs(&self.rvr_decode, exe, pc_to_air_idx)
     }
 
     /// GPU backend: default to the rvr inline preflight engine — the host
