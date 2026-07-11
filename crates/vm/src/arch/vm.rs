@@ -1219,10 +1219,16 @@ where
                 // internally for its capacity-retry loop, and a guest-state
                 // clone is the dominant per-segment fixed cost (~hundreds of
                 // ms), so it must not be paid twice.
+                #[cfg(feature = "stark-debug")]
+                let split_t0 = std::time::Instant::now();
                 let mut rvr_output =
                     rvr_preflight.execute(exe, state, num_insns, Some(trace_heights))?;
+                #[cfg(feature = "stark-debug")]
+                let split_t1 = std::time::Instant::now();
                 let capacities = self.preflight_capacities(trace_heights);
                 let pc_to_air_idx = self.pc_to_air_idx(exe)?;
+                #[cfg(feature = "stark-debug")]
+                let split_t2 = std::time::Instant::now();
                 let record_arenas = self
                     .builder
                     .generate_rvr_record_arenas_from_logs(
@@ -1238,6 +1244,17 @@ where
                                 .to_string(),
                         )
                     })?;
+                #[cfg(feature = "stark-debug")]
+                if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1") {
+                    let split_t3 = std::time::Instant::now();
+                    eprintln!(
+                        "OPENVM_STARK_DEBUG_RVR_PREFLIGHT_SPLIT cexec_us={} setup_us={} \
+                         assembly_us={}",
+                        (split_t1 - split_t0).as_micros(),
+                        (split_t2 - split_t1).as_micros(),
+                        (split_t3 - split_t2).as_micros()
+                    );
+                }
 
                 Ok(PreflightExecutionOutput {
                     system_records: rvr_output.system_records,
