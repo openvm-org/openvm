@@ -97,19 +97,25 @@ pub struct TouchedBlock {
     pub block_addr: u32,
 }
 
-/// C-compatible per-chip inline-record buffer descriptor (R3).
+/// C-compatible per-chip inline-record buffer descriptor (R3/R4).
 ///
 /// Layout must match the C `ChipRecordBuf` in `openvm_tracer_preflight.h`.
-/// `base` points at a host-allocated, metered-height-sized byte buffer of
-/// compact records for one chip; `len` is the byte cursor the C advances; `cap`
-/// the byte capacity. A null `base` means the chip is not migrated to inline
-/// records (it uses the verbose memory log).
+/// `base` points at a host-provided byte buffer for one chip; `len` is the
+/// byte cursor the C advances by `stride` per record; `cap` the byte capacity
+/// (a multiple of `stride`), so record i sits at `base + i*stride`.
+/// Compact-wire buffers set `stride` to the packed record size; arena-native
+/// buffers set it to the arena row/record pitch, with `base` 32-aligned by
+/// host contract so a zero-copy [`DenseRecordArena`](crate::arch::DenseRecordArena)
+/// adopt cannot slice a shifted range. A null `base` means the chip is not
+/// migrated to inline records (it uses the verbose memory log).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct ChipRecordBuf {
     pub base: *mut u8,
     pub len: u32,
     pub cap: u32,
+    pub stride: u32,
+    pub _pad0: u32,
 }
 
 impl Default for ChipRecordBuf {
@@ -118,9 +124,16 @@ impl Default for ChipRecordBuf {
             base: std::ptr::null_mut(),
             len: 0,
             cap: 0,
+            stride: 0,
+            _pad0: 0,
         }
     }
 }
+
+const _: () = assert!(
+    std::mem::size_of::<ChipRecordBuf>()
+        == rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_BUF_SIZE
+);
 
 /// C-compatible preflight tracer data.
 ///
@@ -645,12 +658,17 @@ where
             })
             .collect();
         let mut chip_records = vec![ChipRecordBuf::default(); chip_counts_len.max(1)];
-        for (&(air, _), buffer) in inline_meta.airs.iter().zip(record_bufs.iter_mut()) {
+        for (&(air, record_size), buffer) in inline_meta.airs.iter().zip(record_bufs.iter_mut()) {
             debug_assert!(air < chip_records.len(), "inline air {air} out of range");
             chip_records[air] = ChipRecordBuf {
                 base: buffer.as_mut_ptr().cast(),
                 len: 0,
                 cap: buffer.len() as u32,
+                // Compact wire: the stride IS the packed record size. The
+                // arena-native mode (R4) instead points `base` into the arena
+                // backing and sets the row/record pitch here.
+                stride: record_size as u32,
+                _pad0: 0,
             };
         }
 
