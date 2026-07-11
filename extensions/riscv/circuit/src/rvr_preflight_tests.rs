@@ -2165,6 +2165,117 @@ fn rvr_preflight_carried_register_addsub_bus_balance_across_boundary() {
     );
 }
 
+/// Small looped RV64IM program: `iters` loop iterations of `body_adds` ADDs
+/// plus counter/branch, driving a large dynamic instruction count from a tiny
+/// static program (single compiled block set, backward branch).
+fn checkpoint_loop_exe(iters_base: usize, iters_shift: usize, body_adds: usize) -> VmExe<F> {
+    // x3 = iters_base << iters_shift loop iterations (iters_base <= 2047:
+    // the addi immediate sign-extends from 12 bits); x1 = step, x2 = counter.
+    let mut ins = vec![
+        addi(1, 0, 1),
+        addi(2, 0, 0),
+        addi(3, 0, iters_base),
+        shift(ShiftOpcode::SLL, 3, 3, iters_shift),
+    ];
+    let loop_start = ins.len(); // slot index of the first body instruction
+    for k in 0..body_adds {
+        ins.push(alu_r(BaseAluOpcode::ADD, 4 + (k % 20), 1, 2));
+    }
+    ins.push(addi(2, 2, 1));
+    let branch_slot = ins.len();
+    let offset = -(((branch_slot - loop_start) * 4) as isize);
+    ins.push(Instruction::from_isize(
+        BranchLessThanOpcode::BLTU.global_opcode(),
+        reg(2) as isize,
+        reg(3) as isize,
+        offset,
+        1,
+        1,
+    ));
+    ins.push(terminate());
+    exe(&ins)
+}
+
+/// Retired instruction count of [`checkpoint_loop_exe`].
+fn checkpoint_loop_dyn_insns(iters_base: usize, iters_shift: usize, body_adds: usize) -> u64 {
+    let iters = (iters_base as u64) << iters_shift;
+    5 + iters * (body_adds as u64 + 2)
+}
+
+/// Validates the looped fixture's backward-branch encoding and semantics
+/// against the interpreter at a small scale (the ignored checkpoint harness
+/// below scales the same program to millions of retired instructions).
+#[test]
+fn rvr_preflight_loop_fixture_matches_interpreter() {
+    let output = assert_preflight_matches_interpreter(
+        "checkpoint_loop_small",
+        checkpoint_loop_exe(16, 0, 5),
+        None,
+    );
+    assert_eq!(output.instret, checkpoint_loop_dyn_insns(16, 0, 5));
+}
+
+/// Phase-3 <30 ms checkpoint harness: preflight a large RV64IM-dominated
+/// segment (~8.2M retired instructions, ~8.2M inline AddSub records) on the
+/// single-shot proving path and report the wall time against the r4
+/// write-bandwidth model. Manual:
+/// `cargo nextest run --cargo-profile=fast -p openvm-riscv-circuit \
+///  --features rvr --run-ignored only -- rvr_preflight_addsub_30ms_checkpoint`
+#[test]
+#[ignore = "manual Phase-3 checkpoint harness, not a correctness gate"]
+fn rvr_preflight_addsub_30ms_checkpoint() {
+    use std::time::Instant;
+
+    let (iters_base, iters_shift, body_adds) = (1024usize, 3usize, 1000usize); // 8192 x 1002
+    let exe = checkpoint_loop_exe(iters_base, iters_shift, body_adds);
+    let dyn_insns = checkpoint_loop_dyn_insns(iters_base, iters_shift, body_adds);
+
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("vm init");
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+    let addsub_air = pc_to_air_idx[4].expect("body ADD maps to an air");
+    let branch_air = pc_to_air_idx[4 + body_adds + 1].expect("branch maps to an air");
+    let mut trace_heights = vec![1u32 << 10; rvr_vm.num_airs()];
+    trace_heights[addsub_air] = 1 << 24;
+    trace_heights[branch_air] = 1 << 14;
+
+    let route = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("routed preflight instance");
+    let RvrPreflightRoute::Rvr(instance) = route else {
+        panic!("program must route to RVR preflight");
+    };
+
+    let mut best = f64::MAX;
+    let mut record_bytes = 0usize;
+    for _ in 0..5 {
+        let init = instance.create_initial_state(Streams::default());
+        let t0 = Instant::now();
+        let output = instance
+            .execute_preflight_from_state_with_capacities(init, Some(dyn_insns), &trace_heights)
+            .expect("rvr preflight execution");
+        let dt = t0.elapsed().as_secs_f64();
+        assert_eq!(output.instret, dyn_insns);
+        record_bytes = output
+            .inline_records
+            .iter()
+            .map(|chip| chip.bytes.len())
+            .sum();
+        best = best.min(dt);
+    }
+    eprintln!(
+        "checkpoint: dyn_insns={dyn_insns} inline_record_bytes={record_bytes} \
+         preflight_execute={:.2}ms record_stream={:.2}GB/s instr_rate={:.1}M/s",
+        best * 1e3,
+        record_bytes as f64 / best / 1e9,
+        dyn_insns as f64 / best / 1e6,
+    );
+}
+
 /// R3 Phase-1 net timing harness: R1 (verbose log + host assembler) vs R3
 /// (log-suppressed inline records + host-adopted C buffers) on an
 /// AddSub-dominant program, end to end (preflight execute + record-arena
