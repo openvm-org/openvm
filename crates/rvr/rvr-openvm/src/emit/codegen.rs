@@ -81,6 +81,7 @@ pub struct Alu3ArenaFieldOffsets {
     pub write_prev_data: usize,
     pub core_b: usize,
     pub core_c: usize,
+    /// `usize::MAX` for single-opcode cores without this field.
     pub core_local_opcode: usize,
 }
 

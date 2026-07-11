@@ -205,6 +205,8 @@ impl ExtInstr for Rv64IInstr {
                             let arena = match op {
                                 AluOp::Add => Some(0),
                                 AluOp::Sub => Some(1),
+                                AluOp::Slt | AluOp::Sll | AluOp::Sra => Some(0),
+                                AluOp::Sltu | AluOp::Srl => Some(1),
                                 _ => None,
                             }
                             .map(|local_opcode| ArenaAlu3Baked {
@@ -216,11 +218,16 @@ impl ExtInstr for Rv64IInstr {
                             ctx.emit_reg3_inline(*rd, *lhs, *rhs, arena, &result_template)
                         }
                         CfgOperand::Const(imm) if *immediate => {
-                            let arena = (*op == AluOp::Add).then_some(ArenaAlu3Baked {
+                            let local_opcode = match op {
+                                AluOp::Add | AluOp::Slt | AluOp::Sll | AluOp::Sra => Some(0),
+                                AluOp::Sltu | AluOp::Srl => Some(1),
+                                _ => None,
+                            };
+                            let arena = local_opcode.map(|local_opcode| ArenaAlu3Baked {
                                 rs2_field: (*imm as u32) & 0x00ff_ffff,
                                 rs2_as: 0,
                                 rs2_imm_sign: (*imm as i64 < 0) as u8,
-                                local_opcode: 0,
+                                local_opcode,
                             });
                             ctx.emit_reg2imm_inline(
                                 *rd,
