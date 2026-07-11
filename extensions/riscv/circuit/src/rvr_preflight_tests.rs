@@ -2992,3 +2992,114 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_matrix() {
         );
     }
 }
+
+/// R4 fused oracle, Dense flavor (the G1 GPU-staging shape): the fused
+/// backing is allocated with `backing_with_capacity`, aimed at the C via
+/// `{base = aligned start, stride_dense, core_off_dense}`, adopted zero-copy
+/// with `from_prewritten`, and must be byte-identical to the assembler-path
+/// DenseRecordArena's `allocated()` region. Fully-C-written Dense records =
+/// the upgraded G1 emission.
+#[test]
+fn rvr_preflight_arena_native_addsub_matches_assembler_dense() {
+    use std::collections::BTreeMap;
+
+    use openvm_circuit::arch::{rvr::ChipRecordBuf, DenseRecordArena};
+
+    let exe = inline_addsub_differential_exe();
+
+    // Arm A: compact wire + host assembler into Dense arenas (existing
+    // harness; env untouched so the compile stays compact).
+    let (a_output, a_arenas, _) = run_inline_addsub_differential_arm(&exe);
+    let a_instret = a_output.instret;
+
+    // Arm F: fused compile aiming the AddSub air at a Dense backing.
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("fused vm init");
+    let trace_heights = vec![4096u32; rvr_vm.num_airs()];
+    let capacities = trace_heights
+        .iter()
+        .zip(rvr_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+    let RvrPreflightRoute::Rvr(f_instance) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("fused routed preflight instance")
+    else {
+        panic!("fused program must route to RVR preflight");
+    };
+    let arena_native = f_instance
+        .compiled()
+        .inline_records()
+        .arena_native_airs
+        .clone();
+    assert_eq!(arena_native.len(), 1);
+    let (fused_air, geom) = arena_native[0];
+
+    let stride = geom.stride_dense();
+    let core_off = geom.core_off_dense();
+    let rows = trace_heights[fused_air] as usize;
+    let (mut backing, offset) = DenseRecordArena::backing_with_capacity(rows * stride);
+    let base = unsafe { backing.as_mut_ptr().add(offset) };
+    let mut targets = BTreeMap::new();
+    targets.insert(
+        fused_air,
+        ChipRecordBuf {
+            base,
+            len: 0,
+            cap: (rows * stride) as u32,
+            stride: stride as u32,
+            core_off: core_off as u32,
+        },
+    );
+    let f_state = rvr_vm.create_initial_state(&exe, Streams::default());
+    let mut f_output = f_instance
+        .execute_preflight_from_state_with_arena_targets(
+            f_state,
+            Some(a_instret),
+            &trace_heights,
+            &targets,
+        )
+        .expect("fused preflight execution");
+    let f_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        openvm_circuit::arch::DenseRecordArena,
+    >(&exe, &mut f_output, &capacities, &pc_to_air_idx)
+    .expect("fused-path record arena generation (count oracle)");
+
+    assert_eq!(
+        a_output.raw_logs.program_log, f_output.raw_logs.program_log,
+        "program logs must be identical across arms"
+    );
+
+    // Zero-copy adopt, then byte-compare against the assembler-path arena.
+    let written_rows = f_output
+        .arena_native_written
+        .iter()
+        .find(|&&(air, _)| air == fused_air)
+        .map(|&(_, count)| count as usize)
+        .expect("fused air must report a written count");
+    let fused_arena = DenseRecordArena::from_prewritten(backing, base, written_rows * stride);
+    assert_eq!(
+        a_arenas[fused_air].allocated(),
+        fused_arena.allocated(),
+        "fused Dense AddSub records must be byte-identical to the assembled ones"
+    );
+
+    // Non-fused airs assemble identically across arms.
+    for (air, (a, f)) in a_arenas.iter().zip(f_arenas.iter()).enumerate() {
+        if air == fused_air {
+            continue;
+        }
+        assert_eq!(
+            a.allocated(),
+            f.allocated(),
+            "air {air} arenas must match across arms"
+        );
+    }
+}
