@@ -7,7 +7,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{PreflightMemoryAccessAux, RvrPreflightOutput};
+use super::{PreflightMemoryAccessAux, RvrInlineChipRecords, RvrPreflightOutput};
 use crate::arch::{Arena, ExecutionError};
 
 /// Timestamp-indexed view of normalized rvr preflight memory accesses.
@@ -362,6 +362,31 @@ pub fn generate_record_arenas_from_logs<F: PrimeField32, RA: Arena>(
     capacities: &[(usize, usize)],
     pc_to_air_idx: &[Option<usize>],
 ) -> Result<Vec<RA>, ExecutionError> {
+    let (arenas, _) = generate_record_arenas_from_logs_with_compact(
+        registry,
+        exe,
+        output,
+        capacities,
+        pc_to_air_idx,
+        &std::collections::HashSet::new(),
+    )?;
+    Ok(arenas)
+}
+
+/// [`generate_record_arenas_from_logs`] with a compact bypass: for AIRs in
+/// `compact_airs`, host expansion is skipped — the walk keeps the per-record
+/// `from_pc` order guard and the exact-consumption check, but the records stay
+/// in wire form and are returned as the second tuple element (those AIRs'
+/// arenas are left empty; the caller adopts the wire buffers into its concrete
+/// arena type, e.g. for GPU on-device decode or zero-copy full-record feeds).
+pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>(
+    registry: &LogNativeAssemblerRegistry<F, RA>,
+    exe: &VmExe<F>,
+    output: &mut RvrPreflightOutput<F>,
+    capacities: &[(usize, usize)],
+    pc_to_air_idx: &[Option<usize>],
+    compact_airs: &std::collections::HashSet<usize>,
+) -> Result<(Vec<RA>, Vec<RvrInlineChipRecords>), ExecutionError> {
     let inline_records = std::mem::take(&mut output.inline_records);
     let inline_pc_slots = output.inline_pc_slots.clone();
     // R4: airs whose records the C already wrote arena-native into
@@ -445,6 +470,18 @@ pub fn generate_record_arenas_from_logs<F: PrimeField32, RA: Arena>(
                 ))
             })?;
             *cursor = end;
+            if compact_airs.contains(&air_idx) {
+                // Compact bypass: keep the order guard, skip host expansion. Every
+                // wire format leads with `from_pc: u32` (little-endian).
+                let from_pc = u32::from_le_bytes(compact[0..4].try_into().expect("4-byte from_pc"));
+                if from_pc != pc {
+                    return Err(rvr_error(format!(
+                        "inline record order mismatch (compact bypass): record from_pc \
+                         {from_pc:#x} vs program-log pc {pc:#x}"
+                    )));
+                }
+                continue;
+            }
             (registered.assemble)(arena, instruction, compact, pc)?;
             continue;
         }
@@ -482,7 +519,14 @@ pub fn generate_record_arenas_from_logs<F: PrimeField32, RA: Arena>(
     // buffer pool for the next segment.
     output.inline_records = inline_records;
 
-    Ok(arenas)
+    // Hand the compact-air wire buffers back to the caller for adoption.
+    drop(inline_bufs);
+    let wire_buffers = inline_records
+        .into_iter()
+        .filter(|chip| compact_airs.contains(&chip.air_idx))
+        .collect();
+
+    Ok((arenas, wire_buffers))
 }
 
 /// `(instruction, air_idx, program_slot_idx)` for one program-log pc.

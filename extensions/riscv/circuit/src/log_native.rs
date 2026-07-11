@@ -417,27 +417,7 @@ fn assemble_add_sub_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
         &mut Rv64BaseAluU16AdapterRecord,
         &mut AddSubCoreRecord<BLOCK_FE_WIDTH>,
     ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new());
-    adapter_record.from_pc = pc;
-    adapter_record.from_timestamp = compact.from_timestamp;
-    adapter_record.rs1_ptr = instruction.b.as_canonical_u32();
-    adapter_record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
-    adapter_record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
-    if instruction.e.as_canonical_u32() == RV64_REGISTER_AS {
-        adapter_record.rs2_as = RV64_REGISTER_AS as u8;
-        adapter_record.rs2_imm_sign = false;
-        adapter_record.rs2 = instruction.c.as_canonical_u32();
-    } else {
-        adapter_record.rs2_as = RV64_IMM_AS as u8;
-        let imm = instruction.c.as_canonical_u32();
-        adapter_record.rs2 = imm;
-        let imm64 = imm_to_rv64_u64(imm);
-        adapter_record.rs2_imm_sign = ((imm64 >> U16_BITS) as u16) != 0;
-    }
-    adapter_record.rd_ptr = instruction.a.as_canonical_u32();
-    adapter_record.writes_aux = MemoryWriteAuxRecord {
-        prev_timestamp: compact.write_prev_timestamp,
-        prev_data: u16x4(compact.write_prev_data),
-    };
+    fill_base_alu_u16_from_compact(&compact, instruction, pc, adapter_record);
     core_record.b = u16x4(compact.b);
     core_record.c = u16x4(compact.c);
     core_record.local_opcode = instruction
@@ -1509,6 +1489,42 @@ fn assemble_add_sub<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     Ok(())
 }
 
+/// The program-redundant BaseAluU16 adapter operands, derived from an
+/// instruction. Single source of truth for host expansion AND the GPU
+/// device operand table (M-GPUDEC): both consumers call this; the CUDA
+/// decoder consumes the table entries it produces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BaseAluU16Operands {
+    pub rd_ptr: u32,
+    pub rs1_ptr: u32,
+    pub rs2: u32,
+    pub rs2_as: u8,
+    pub rs2_imm_sign: bool,
+}
+
+pub(crate) fn derive_base_alu_u16_operands<F: PrimeField32>(
+    instruction: &Instruction<F>,
+) -> BaseAluU16Operands {
+    let (rs2_as, rs2, rs2_imm_sign) = if instruction.e.as_canonical_u32() == RV64_REGISTER_AS {
+        (
+            RV64_REGISTER_AS as u8,
+            instruction.c.as_canonical_u32(),
+            false,
+        )
+    } else {
+        let imm = instruction.c.as_canonical_u32();
+        let imm64 = imm_to_rv64_u64(imm);
+        (RV64_IMM_AS as u8, imm, ((imm64 >> U16_BITS) as u16) != 0)
+    };
+    BaseAluU16Operands {
+        rd_ptr: instruction.a.as_canonical_u32(),
+        rs1_ptr: instruction.b.as_canonical_u32(),
+        rs2,
+        rs2_as,
+        rs2_imm_sign,
+    }
+}
+
 /// Fill a BaseAluU16 adapter record from a compact alu3 record, mirroring
 /// [`fill_base_alu_u16_adapter`]'s derivation from the log path (shared by
 /// the LessThan and Shift inline assemblers; AddSub keeps its own inline fill
@@ -1519,23 +1535,16 @@ fn fill_base_alu_u16_from_compact<F: PrimeField32>(
     pc: u32,
     record: &mut Rv64BaseAluU16AdapterRecord,
 ) {
+    let operands = derive_base_alu_u16_operands(instruction);
     record.from_pc = pc;
     record.from_timestamp = compact.from_timestamp;
-    record.rs1_ptr = instruction.b.as_canonical_u32();
+    record.rs1_ptr = operands.rs1_ptr;
     record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
     record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
-    if instruction.e.as_canonical_u32() == RV64_REGISTER_AS {
-        record.rs2_as = RV64_REGISTER_AS as u8;
-        record.rs2_imm_sign = false;
-        record.rs2 = instruction.c.as_canonical_u32();
-    } else {
-        record.rs2_as = RV64_IMM_AS as u8;
-        let imm = instruction.c.as_canonical_u32();
-        record.rs2 = imm;
-        let imm64 = imm_to_rv64_u64(imm);
-        record.rs2_imm_sign = ((imm64 >> U16_BITS) as u16) != 0;
-    }
-    record.rd_ptr = instruction.a.as_canonical_u32();
+    record.rs2_as = operands.rs2_as;
+    record.rs2 = operands.rs2;
+    record.rs2_imm_sign = operands.rs2_imm_sign;
+    record.rd_ptr = operands.rd_ptr;
     record.writes_aux = MemoryWriteAuxRecord {
         prev_timestamp: compact.write_prev_timestamp,
         prev_data: u16x4(compact.write_prev_data),

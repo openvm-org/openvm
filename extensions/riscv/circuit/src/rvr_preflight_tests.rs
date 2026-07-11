@@ -1524,8 +1524,8 @@ fn prove_gpu_rvr_preflight_and_verify_with_streams(
     streams: Streams<F>,
 ) -> usize {
     let engine = test_gpu_engine();
-    let (vm, pk) =
-        VirtualMachine::new_with_keygen(engine, Rv64ImGpuBuilder, config).expect("gpu vm init");
+    let (vm, pk) = VirtualMachine::new_with_keygen(engine, Rv64ImGpuBuilder::default(), config)
+        .expect("gpu vm init");
     let vk = pk.get_vk();
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance =
@@ -1561,9 +1561,12 @@ fn assert_gpu_rvr_three_way_from_state(
         )
         .expect("cpu interpreter execution");
 
-    let (mut gpu_arena_vm, _) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
-            .expect("gpu arena vm init");
+    let (mut gpu_arena_vm, _) = VirtualMachine::new_with_keygen(
+        test_gpu_engine(),
+        Rv64ImGpuBuilder::default(),
+        config.clone(),
+    )
+    .expect("gpu arena vm init");
     let gpu_arena_air_names = gpu_arena_vm
         .air_names()
         .map(str::to_owned)
@@ -1584,9 +1587,12 @@ fn assert_gpu_rvr_three_way_from_state(
         )
         .expect("gpu interpreter execution");
 
-    let (mut gpu_log_vm, _) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
-            .expect("gpu log vm init");
+    let (mut gpu_log_vm, _) = VirtualMachine::new_with_keygen(
+        test_gpu_engine(),
+        Rv64ImGpuBuilder::default(),
+        config.clone(),
+    )
+    .expect("gpu log vm init");
     let air_names = gpu_log_vm
         .air_names()
         .map(str::to_owned)
@@ -1625,7 +1631,7 @@ fn assert_gpu_rvr_three_way_from_state(
         .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
         .collect::<Vec<_>>();
     let pc_to_air_idx = gpu_log_vm.pc_to_air_idx(exe).expect("pc to air mapping");
-    let gpu_log_record_arenas = Rv64ImGpuBuilder
+    let gpu_log_record_arenas = Rv64ImGpuBuilder::default()
         .generate_rvr_record_arenas_from_logs(
             config,
             exe,
