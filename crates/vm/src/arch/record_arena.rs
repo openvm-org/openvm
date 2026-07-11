@@ -274,6 +274,54 @@ impl DenseRecordArena {
     pub fn get_record_seeker<R, L>(&mut self) -> RecordSeeker<'_, DenseRecordArena, R, L> {
         RecordSeeker::new(self.allocated_mut())
     }
+
+    /// Allocates a backing for an external record writer (e.g. the
+    /// rvr-generated C emitting arena-native records), returning the buffer
+    /// and the offset of its [`MAX_ALIGNMENT`]-aligned record start. The
+    /// writer must be handed exactly `backing.as_ptr() + offset` as its base;
+    /// [`Self::from_prewritten`] later re-derives and verifies the same
+    /// offset.
+    pub fn backing_with_capacity(size_bytes: usize) -> (Vec<u8>, usize) {
+        let buffer = vec![0; size_bytes + MAX_ALIGNMENT];
+        let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
+        (buffer, offset)
+    }
+
+    /// Zero-copy adopt of a backing whose record region was written by an
+    /// external writer (rvr-generated C at full-record stride).
+    ///
+    /// `written_base` must be exactly the aligned start handed to the writer
+    /// — `backing.as_ptr() + offset` from [`Self::backing_with_capacity`] —
+    /// and `written_bytes` the writer's final byte cursor. [`Self::allocated`]
+    /// re-derives the offset from the backing pointer alone, so a base
+    /// mismatch would silently slice a shifted range and corrupt every
+    /// record; both conditions abort loudly here instead.
+    pub fn from_prewritten(
+        backing: Vec<u8>,
+        written_base: *const u8,
+        written_bytes: usize,
+    ) -> Self {
+        let offset = (MAX_ALIGNMENT - (backing.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
+        assert_eq!(
+            written_base as usize % MAX_ALIGNMENT,
+            0,
+            "prewritten dense backing: writer base is not {MAX_ALIGNMENT}-byte aligned"
+        );
+        assert_eq!(
+            written_base as usize,
+            backing.as_ptr() as usize + offset,
+            "prewritten dense backing: writer base is not the arena-derived aligned start"
+        );
+        assert!(
+            offset + written_bytes <= backing.len(),
+            "prewritten dense backing: written region {written_bytes}B overruns the backing"
+        );
+        let mut cursor = Cursor::new(backing);
+        cursor.set_position((offset + written_bytes) as u64);
+        Self {
+            records_buffer: cursor,
+        }
+    }
 }
 
 #[cfg(feature = "cuda")]
@@ -733,5 +781,39 @@ where
         let core_record: C = core_buffer.custom_borrow(layout);
 
         (adapter_record, core_record)
+    }
+}
+
+#[cfg(test)]
+mod dense_prewritten_tests {
+    use super::*;
+
+    #[test]
+    fn from_prewritten_adopts_exactly_the_written_region() {
+        let (backing, offset) = DenseRecordArena::backing_with_capacity(256);
+        let base = unsafe { backing.as_ptr().add(offset) };
+        assert_eq!(base as usize % MAX_ALIGNMENT, 0);
+        // Simulate the external writer: 3 records of 24 bytes at the base.
+        let written = 3 * 24;
+        let mut backing = backing;
+        for i in 0..written {
+            backing[offset + i] = (i % 251) as u8;
+        }
+        let arena = DenseRecordArena::from_prewritten(backing, base, written);
+        let records = arena.allocated();
+        assert_eq!(records.len(), written);
+        for (i, &b) in records.iter().enumerate() {
+            assert_eq!(b, (i % 251) as u8, "byte {i} shifted");
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "arena-derived aligned start")]
+    fn from_prewritten_rejects_shifted_base() {
+        let (backing, offset) = DenseRecordArena::backing_with_capacity(64);
+        // A base 32 bytes past the aligned start is still 32-aligned but not
+        // the arena-derived start — allocated() would slice a shifted range.
+        let bad_base = unsafe { backing.as_ptr().add(offset + MAX_ALIGNMENT) };
+        DenseRecordArena::from_prewritten(backing, bad_base, 8);
     }
 }
