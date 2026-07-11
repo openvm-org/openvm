@@ -132,6 +132,21 @@ pub(crate) struct ArenaBranch2Baked {
     pub local_opcode: u8,
 }
 
+/// R4: baked operands for an arena-native load/store record. `rd_rs2_ptr`
+/// is `u32::MAX` for a suppressed rd write (load to x0) — stored explicitly
+/// because the assembler writes the sentinel, not zero.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ArenaLoadStoreBaked {
+    pub rs1_ptr: u32,
+    pub rd_rs2_ptr: u32,
+    pub imm: u16,
+    pub imm_sign: u8,
+    pub mem_as: u8,
+    pub local_opcode: u8,
+    pub is_byte: u8,
+    pub is_word: u8,
+}
+
 impl<'a> EmitContext<'a> {
     pub(crate) fn new(
         hot_regs: HashSet<u8>,
@@ -426,6 +441,104 @@ impl<'a> EmitContext<'a> {
                  {v1}, {v2});"
             ));
         }
+    }
+
+    /// R4: emit the arena-native load/store full-record store sequence.
+    /// `write_prev_ts`/`prev_data` are `None` for the suppressed-write path
+    /// (the zero-filled arena already matches the assembler's untouched
+    /// fields); `rd_rs2_ptr` always stores (the sentinel is explicit).
+    #[allow(clippy::too_many_arguments)]
+    fn emit_arena_loadstore_stores(
+        &mut self,
+        geom: crate::ArenaNativeGeometry,
+        baked: ArenaLoadStoreBaked,
+        pc: &str,
+        fromts: &str,
+        v1: &str,
+        p1: &str,
+        p2: &str,
+        addr: &str,
+        read_data: &str,
+        write_prev_ts: Option<&str>,
+        prev_data: Option<&str>,
+    ) {
+        let chip = self.current_chip_idx;
+        let crate::ArenaNativeLayout::LoadStore(off) = geom.layout else {
+            panic!("load/store air {chip} registered a non-loadstore layout");
+        };
+        let rec = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
+        ));
+        self.write_line(&format!("if ({rec}) {{"));
+        self.indent += 1;
+        let core = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {core} = {rec} + state->tracer->chip_records[{chip}].core_off;"
+        ));
+        for (offset, value) in [
+            (off.from_pc, pc.to_string()),
+            (off.from_timestamp, fromts.to_string()),
+            (off.rs1_ptr, format!("{}u", baked.rs1_ptr)),
+            (off.rs1_val, format!("(uint32_t){v1}")),
+            (off.rs1_aux_prev_ts, p1.to_string()),
+            (off.rd_rs2_ptr, format!("{}u", baked.rd_rs2_ptr)),
+            (off.read_data_aux_prev_ts, p2.to_string()),
+        ] {
+            self.write_line(&format!("*(uint32_t*)({rec} + {offset}) = {value};"));
+        }
+        self.write_line(&format!(
+            "*(uint16_t*)({rec} + {}) = {}u;",
+            off.imm, baked.imm
+        ));
+        self.write_line(&format!(
+            "*(uint8_t*)({rec} + {}) = {}u;",
+            off.imm_sign, baked.imm_sign
+        ));
+        self.write_line(&format!(
+            "*(uint8_t*)({rec} + {}) = {}u;",
+            off.mem_as, baked.mem_as
+        ));
+        if let Some(pw) = write_prev_ts {
+            self.write_line(&format!(
+                "*(uint32_t*)({rec} + {}) = {pw};",
+                off.write_prev_ts
+            ));
+        }
+        if off.core_local_opcode != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({core} + {}) = {}u;",
+                off.core_local_opcode, baked.local_opcode
+            ));
+        }
+        if off.core_is_byte != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({core} + {}) = {}u;",
+                off.core_is_byte, baked.is_byte
+            ));
+        }
+        if off.core_is_word != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({core} + {}) = {}u;",
+                off.core_is_word, baked.is_word
+            ));
+        }
+        self.write_line(&format!(
+            "*(uint8_t*)({core} + {}) = (uint8_t)({addr} & 7u);",
+            off.core_shift_amount
+        ));
+        self.write_line(&format!(
+            "arena_store_u64_le({core} + {}, {read_data});",
+            off.core_read_data
+        ));
+        if let Some(prev) = prev_data {
+            self.write_line(&format!(
+                "arena_store_u64_le({core} + {}, {prev});",
+                off.core_prev_data
+            ));
+        }
+        self.indent -= 1;
+        self.write_line("}");
     }
 
     /// R4: emit the arena-native alu3 full-record store sequence — claim one
@@ -730,14 +843,38 @@ impl<'a> EmitContext<'a> {
         self.write_line(&format!(
             "uint32_t {p2} = trace_mem_touch(state, {blockaddr});"
         ));
+        let arena_geom = self.arena_native_airs.get(&chip).copied();
+        let ls_baked = |rd_rs2_ptr: u32| ArenaLoadStoreBaked {
+            rs1_ptr: (rs1 as u32) * 8,
+            rd_rs2_ptr,
+            imm: offset as u16,
+            imm_sign: (offset < 0) as u8,
+            mem_as: 2,
+            local_opcode: match (signed, width) {
+                (false, 8) => 0, // LOADD
+                (false, 1) => 1, // LOADBU
+                (false, 2) => 2, // LOADHU
+                (false, 4) => 3, // LOADWU
+                _ => 0,          // sign-extend core: sentinel skips the store
+            },
+            is_byte: (signed && width == 1) as u8,
+            is_word: (signed && width == 4) as u8,
+        };
         if rd == 0 {
             // The typed data read is only needed for the suppressed rd write;
             // the record already carries the full block value.
             self.write_line("trace_timestamp(state);");
-            self.write_line(&format!(
-                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, 0u, 0ull, \
-                 {v1}, {block});"
-            ));
+            if let Some(geom) = arena_geom {
+                let baked = ls_baked(u32::MAX);
+                self.emit_arena_loadstore_stores(
+                    geom, baked, &pc, &fromts, &v1, &p1, &p2, &addr, &block, None, None,
+                );
+            } else {
+                self.write_line(&format!(
+                    "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, 0u, 0ull, \
+                     {v1}, {block});"
+                ));
+            }
         } else {
             let (data_func, _, var_ty) = Self::read_mem_helper(width, signed);
             let val = self.next_var();
@@ -747,10 +884,27 @@ impl<'a> EmitContext<'a> {
             let pw = self.next_var();
             self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
             self.write_line(&format!("reg_write(state, {rd}, {val});"));
-            self.write_line(&format!(
-                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, \
-                 {rdprev}, {v1}, {block});"
-            ));
+            if let Some(geom) = arena_geom {
+                let baked = ls_baked((rd as u32) * 8);
+                self.emit_arena_loadstore_stores(
+                    geom,
+                    baked,
+                    &pc,
+                    &fromts,
+                    &v1,
+                    &p1,
+                    &p2,
+                    &addr,
+                    &block,
+                    Some(&pw),
+                    Some(&rdprev),
+                );
+            } else {
+                self.write_line(&format!(
+                    "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, \
+                     {rdprev}, {v1}, {block});"
+                ));
+            }
         }
     }
 
@@ -777,10 +931,41 @@ impl<'a> EmitContext<'a> {
         ));
         let (wr_func, _, cast_ty) = Self::write_mem_helper(width);
         self.write_line(&format!("{wr_func}(memory, {addr}, ({cast_ty})({v2}));"));
-        self.write_line(&format!(
-            "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {prev}, \
-             {v1}, {v2});"
-        ));
+        if let Some(geom) = self.arena_native_airs.get(&chip).copied() {
+            let baked = ArenaLoadStoreBaked {
+                rs1_ptr: (rs1 as u32) * 8,
+                rd_rs2_ptr: (rs2 as u32) * 8,
+                imm: offset as u16,
+                imm_sign: (offset < 0) as u8,
+                mem_as: 2,
+                local_opcode: match width {
+                    8 => 4, // STORED
+                    4 => 5, // STOREW
+                    2 => 6, // STOREH
+                    _ => 7, // STOREB
+                },
+                is_byte: 0,
+                is_word: 0,
+            };
+            self.emit_arena_loadstore_stores(
+                geom,
+                baked,
+                &pc,
+                &fromts,
+                &v1,
+                &p1,
+                &p2,
+                &addr,
+                &v2,
+                Some(&pw),
+                Some(&prev),
+            );
+        } else {
+            self.write_line(&format!(
+                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {prev}, \
+                 {v1}, {v2});"
+            ));
+        }
     }
 
     fn write_reg_direct(&mut self, idx: u8, val: &str) {

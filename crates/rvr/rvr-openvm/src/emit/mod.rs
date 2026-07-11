@@ -5,6 +5,7 @@ mod project;
 pub use codegen::{
     inline_record_shape_for_instr, inline_record_shape_for_terminator, instr_emits_inline_record,
     Alu3ArenaFieldOffsets, ArenaNativeGeometry, ArenaNativeLayout, Branch2ArenaFieldOffsets,
+    LoadStoreArenaFieldOffsets,
 };
 pub use context::EmitContext;
 pub use project::{CProject, InvalidRvrExecutionKind, RvrExecutionKind};
