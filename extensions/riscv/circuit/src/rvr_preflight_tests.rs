@@ -2851,3 +2851,144 @@ fn rvr_preflight_inline_addsub_net_timing() {
         bests[0].total_matrix / bests[1].total_matrix,
     );
 }
+
+/// R4 fused oracle: the same program compiled twice — arena-native OFF
+/// (compact wire + host inline assembler) and ON (`OPENVM_RVR_ARENA_NATIVE=1`:
+/// the generated C writes full AddSub adapter+core records at final Matrix
+/// arena positions, offsets baked from `offset_of!`). The fused arena must be
+/// byte-identical to the assembled arena over every written row, and the
+/// generation loop's count oracle must accept the fused run. nextest gives
+/// each test its own process, so the env mutations are isolated.
+#[test]
+fn rvr_preflight_arena_native_addsub_matches_assembler_matrix() {
+    use std::collections::BTreeMap;
+
+    use openvm_circuit::arch::{rvr::ChipRecordBuf, Arena, MatrixRecordArena};
+
+    let exe = inline_addsub_differential_exe();
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("rvr vm init");
+    let trace_heights = vec![4096u32; rvr_vm.num_airs()];
+    let capacities = trace_heights
+        .iter()
+        .zip(rvr_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+
+    // Arm A: compact wire + host assembler (arena-native left disabled).
+    let mut a_output = {
+        let RvrPreflightRoute::Rvr(instance) = rvr_vm
+            .preflight_routed_instance(&exe)
+            .expect("routed preflight instance")
+        else {
+            panic!("program must route to RVR preflight");
+        };
+        instance
+            .execute_preflight(Streams::default(), None)
+            .expect("compact preflight execution")
+    };
+    let a_instret = a_output.instret;
+    let a_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        MatrixRecordArena<F>,
+    >(&exe, &mut a_output, &capacities, &pc_to_air_idx)
+    .expect("assembler-path record arena generation");
+
+    // Arm F: fused compile — the AddSub air's records land directly in a
+    // Matrix arena backing provided as the C record target.
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    let RvrPreflightRoute::Rvr(f_instance) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("fused routed preflight instance")
+    else {
+        panic!("fused program must route to RVR preflight");
+    };
+    let arena_native = f_instance
+        .compiled()
+        .inline_records()
+        .arena_native_airs
+        .clone();
+    assert_eq!(
+        arena_native.len(),
+        1,
+        "exactly the AddSub air must be arena-native at this batch stage"
+    );
+    let (fused_air, geom) = arena_native[0];
+
+    let mut fused_arena =
+        MatrixRecordArena::<F>::with_capacity(capacities[fused_air].0, capacities[fused_air].1);
+    let stride = (fused_arena.width * size_of::<F>()) as u32;
+    assert_eq!(geom.core_off_matrix % 4, 0, "core offset must be 4-aligned");
+    let cap_bytes = (fused_arena.trace_buffer.len() * size_of::<F>()) as u32;
+    let mut targets = BTreeMap::new();
+    targets.insert(
+        fused_air,
+        ChipRecordBuf {
+            base: fused_arena.trace_buffer.as_mut_ptr().cast(),
+            len: 0,
+            cap: cap_bytes - cap_bytes % stride,
+            stride,
+            core_off: geom.core_off_matrix as u32,
+        },
+    );
+    let f_state = rvr_vm.create_initial_state(&exe, Streams::default());
+    let mut f_output = f_instance
+        .execute_preflight_from_state_with_arena_targets(
+            f_state,
+            Some(a_instret),
+            &trace_heights,
+            &targets,
+        )
+        .expect("fused preflight execution");
+    // The generation loop must accept the fused run (count oracle) and
+    // assemble every other air identically.
+    let f_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        MatrixRecordArena<F>,
+    >(&exe, &mut f_output, &capacities, &pc_to_air_idx)
+    .expect("fused-path record arena generation (count oracle)");
+
+    // Tick-model identity across arms.
+    assert_eq!(
+        a_output.raw_logs.program_log, f_output.raw_logs.program_log,
+        "program logs must be identical across arms"
+    );
+
+    // Byte-equality of the fused air's arena over every written row (both
+    // buffers start zero-filled, so trailing row bytes match trivially).
+    let rows = a_arenas[fused_air].trace_offset / a_arenas[fused_air].width;
+    let written_rows = f_output
+        .arena_native_written
+        .iter()
+        .find(|&&(air, _)| air == fused_air)
+        .map(|&(_, count)| count as usize)
+        .expect("fused air must report a written count");
+    assert_eq!(written_rows, rows, "fused row count must match assembler");
+    let n = rows * a_arenas[fused_air].width;
+    assert_eq!(
+        &a_arenas[fused_air].trace_buffer[..n],
+        &fused_arena.trace_buffer[..n],
+        "fused AddSub arena must be byte-identical to the assembled arena"
+    );
+
+    // Every non-fused air must assemble identically across arms.
+    for (air, (a, f)) in a_arenas.iter().zip(f_arenas.iter()).enumerate() {
+        if air == fused_air {
+            continue;
+        }
+        assert_eq!(
+            a.trace_offset, f.trace_offset,
+            "air {air} row counts must match across arms"
+        );
+        assert_eq!(
+            &a.trace_buffer[..a.trace_offset],
+            &f.trace_buffer[..f.trace_offset],
+            "air {air} arenas must match across arms"
+        );
+    }
+}
